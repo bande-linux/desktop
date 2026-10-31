@@ -4,9 +4,9 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use bande_graphics::{Point, Scene};
 use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
 use rustix::pipe::{PipeFlags, pipe_with};
-use unbound_graphics::{Point, Scene};
 use wayland_client::protocol::wl_data_device::{self, WlDataDevice};
 use wayland_client::protocol::wl_data_device_manager::DndAction;
 use wayland_client::protocol::wl_data_offer::{self, WlDataOffer};
@@ -26,7 +26,7 @@ const PNG: &str = "image/png";
 const FINISH_WAIT: Duration = Duration::from_secs(2);
 
 pub(crate) fn own_type() -> String {
-    format!("application/x-unbound-toolkit-{}", std::process::id())
+    format!("application/x-bande-toolkit-{}", std::process::id())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -131,7 +131,7 @@ impl Transfer {
     }
 }
 
-pub use unbound_widgets::{ClipboardRequest, DragAction};
+pub use bande_widgets::{ClipboardRequest, DragAction};
 
 fn wire(action: DragAction) -> DndAction {
     match action {

@@ -14,24 +14,24 @@ use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, input_source_menu, sound_menu,
     system_menu, wifi_menu,
 };
-use unbound_config::{BUS_NAME, BarEdge, MenuBarPlacement, OBJECT_PATH};
-use unbound_datetime::DateFormats;
-use unbound_inbox::{Inbox, Outbox};
-use unbound_keyboard::Layouts;
-use unbound_status::clock::{follow_minutes, follow_zone};
-use unbound_status::dbusmenu::{APP_MENU_PATH, Node};
-use unbound_status::devices::{Control, SoundControl, follow_devices, follow_sound};
-use unbound_status::session::full_name;
-use unbound_status::status::{InputSource, InputSources};
-use unbound_status::tray::{Errand, TrayIcon, TrayItem, host, run_errands};
-use unbound_status::unread::follow_unread;
-use unbound_status::{Command, Update};
-use unbound_toolkit::ui::{Event, Menu, MenuItem, PointerButton};
-use unbound_toolkit::{
+use bande_config::{BUS_NAME, BarEdge, MenuBarPlacement, OBJECT_PATH};
+use bande_datetime::DateFormats;
+use bande_inbox::{Inbox, Outbox};
+use bande_keyboard::Layouts;
+use bande_status::clock::{follow_minutes, follow_zone};
+use bande_status::dbusmenu::{APP_MENU_PATH, Node};
+use bande_status::devices::{Control, SoundControl, follow_devices, follow_sound};
+use bande_status::session::full_name;
+use bande_status::status::{InputSource, InputSources};
+use bande_status::tray::{Errand, TrayIcon, TrayItem, host, run_errands};
+use bande_status::unread::follow_unread;
+use bande_status::{Command, Update};
+use bande_toolkit::ui::{Event, Menu, MenuItem, PointerButton};
+use bande_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Rect, Role, Scene,
     SessionEnd, TextSystem, Window, WindowEvent,
 };
-use unbound_xdg::{
+use bande_xdg::{
     DesktopEntry, ICON_THEMES, app_name, data_dirs, find_app, find_icon, launch_action,
     spawn_detached,
 };
@@ -43,13 +43,13 @@ use crate::surfaces::{Display, NotificationCenter};
 
 const TRAY_PIXELS: u32 = 32;
 const SCROLL_STEP: f32 = 1.0 / 16.0;
-const SETTINGS: &str = "org.unbound.Settings";
-const MONITOR: &str = "org.unbound.ActivityMonitor";
+const SETTINGS: &str = "org.bande.Settings";
+const MONITOR: &str = "org.bande.ActivityMonitor";
 const BRING_TO_FRONT: &str = "bring-to-front";
 const TRAY_ITEM: &str = "tray-item:";
 const MENU_BAR_NAMESPACE: &str = "menubar";
 const HEADER_ICON: f32 = 24.0;
-const CONFIG_INTERFACE: &str = "org.unbound.Config";
+const CONFIG_INTERFACE: &str = "org.bande.Config";
 
 pub type Restart = Rc<Cell<bool>>;
 
@@ -164,7 +164,7 @@ impl<V: StatusView> MenuBarClient<V> {
         std::env::current_exe()
             .ok()
             .and_then(|path| path.to_str().map(str::to_owned))
-            .unwrap_or_else(|| "unbound-shell".to_owned())
+            .unwrap_or_else(|| "bande-shell".to_owned())
     }
 
     fn control(&self, control: Control) {
@@ -178,11 +178,11 @@ impl<V: StatusView> MenuBarClient<V> {
         match command {
             Command::About => self.launch(window, DIALOGS, &[&myself, "--about"]),
             Command::Settings(pane) => match pane {
-                Some(pane) => self.launch(window, SETTINGS, &["unbound-settings", &pane]),
-                None => self.launch(window, SETTINGS, &["unbound-settings"]),
+                Some(pane) => self.launch(window, SETTINGS, &["bande-settings", &pane]),
+                None => self.launch(window, SETTINGS, &["bande-settings"]),
             },
             Command::ForceQuit => {
-                self.launch(window, MONITOR, &["unbound-monitor", "--force-quit"]);
+                self.launch(window, MONITOR, &["bande-monitor", "--force-quit"]);
             }
             Command::Restart => confirm_session_end(window, SessionEnd::Restart),
             Command::ShutDown => confirm_session_end(window, SessionEnd::ShutDown),
@@ -245,7 +245,7 @@ impl<V: StatusView> MenuBarClient<V> {
                     .and_then(|wifi| wifi.networks.iter().find(|network| network.ssid == ssid))
                     .is_some_and(|network| network.security.needs_password() && !network.known);
                 if needs_password {
-                    self.launch(window, SETTINGS, &["unbound-settings", "wifi"]);
+                    self.launch(window, SETTINGS, &["bande-settings", "wifi"]);
                 } else {
                     self.control(Control::Run(Command::Join(ssid)));
                 }
@@ -485,7 +485,7 @@ impl<V: StatusView> MenuBarClient<V> {
     fn pointer_down(
         &mut self,
         window: &mut Window,
-        position: unbound_toolkit::Point,
+        position: bande_toolkit::Point,
         button: PointerButton,
     ) {
         let Some(slot) = self.bar.slot_at(position, button) else {
@@ -685,10 +685,10 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 }
                 Update::ClockFormat(format) => {
                     self.dates = DateFormats::from_env().with_clock_format(&format);
-                    self.bar.set_time(&unbound_datetime::now(), &self.dates);
+                    self.bar.set_time(&bande_datetime::now(), &self.dates);
                 }
                 Update::Minute => {
-                    self.bar.set_time(&unbound_datetime::now(), &self.dates);
+                    self.bar.set_time(&bande_datetime::now(), &self.dates);
                 }
                 Update::AppMenuChanged => {
                     if !self.app_id.is_empty() {
@@ -809,7 +809,7 @@ impl<V: StatusView> MenuBarClient<V> {
             thread::spawn(move || run_errands(&session, &errand_queue, &outbox));
         }
         let dates = DateFormats::from_env();
-        view.set_time(&unbound_datetime::now(), &dates);
+        view.set_time(&bande_datetime::now(), &dates);
         Ok(Self {
             bar: view,
             display,

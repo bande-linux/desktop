@@ -1,6 +1,6 @@
 [package]
-name = "unbound-network"
-description = "Unbound NetworkManager client: Wi-Fi power, network list, joining and wired status"
+name = "bande-network"
+description = "Bande NetworkManager client: Wi-Fi power, network list, joining and wired status"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,7 +11,7 @@ repository.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
-unbound-test-bus.workspace = true
+bande-test-bus.workspace = true
 
 [lints]
 workspace = true

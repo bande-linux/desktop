@@ -1,4 +1,4 @@
-# Datum: a design language for Unbound
+# Datum: a design language for Bande
 
 Status: adopted by the owner on 2026-10-30. Implementation order: `docs/roadmap.md`, wave D.
 Mockups: `datum/` (SVG and PNG, rendered with resvg 0.49 from the workspace's own dependency). The generator scripts are in `datum/src/`, so every value below is the value used in the pictures.
@@ -6,7 +6,7 @@ Mockups: `datum/` (SVG and PNG, rendered with resvg 0.49 from the workspace's ow
 > **Datum**: a fixed reference point that everything else is measured from.
 > **Quiet surfaces. One signal. Exact edges.**
 
-Unbound should feel like a well-made instrument: a Braun radio or a Teenage Engineering synth rather than a pane of glass. Surfaces are solid, warm and calm. Exactly one colour, the *signal*, marks what is selected, focused or live. Edges, radii and spacing follow a few strict rules that anyone can check with a ruler. The smoothness stays macOS-level. The look is our own.
+Bande should feel like a well-made instrument: a Braun radio or a Teenage Engineering synth rather than a pane of glass. Surfaces are solid, warm and calm. Exactly one colour, the *signal*, marks what is selected, focused or live. Edges, radii and spacing follow a few strict rules that anyone can check with a ruler. The smoothness stays macOS-level. The look is our own.
 
 ---
 
@@ -24,7 +24,7 @@ Based on the goldens under `crates/**/tests/golden/`.
 | Inter at 13 pt with SF-like metrics, `Inter Display` for large sizes | `graphics/src/text.rs` | Inter is the closest free face to SF Pro, so it reads as "SF but not quite". |
 | Accent `#2F6FEB` / `#5B8DEF` | `tokens.rs` | Apple-system-blue territory. |
 | Big Sur squircle tiles with a gradient fill and a white letter, plus the gear Settings icon | `dock/src/lib.rs` (`#8E9AAF`→`#5C677D` fallback tile), Dock goldens | The macOS app icon grammar. |
-| Blue folders, pages with a dog-ear | Files, desktop goldens, `data/icons/Unbound/scalable/places` | Finder's folder colour and the paper metaphor. |
+| Blue folders, pages with a dog-ear | Files, desktop goldens, `data/icons/Bande/scalable/places` | Finder's folder colour and the paper metaphor. |
 | Translucent Dock and menus (`F7F8FA` at alpha 170 over blur) | `dock/src/lib.rs:1596-1609`, menu golden | Vibrancy. |
 | Alert layout (bold title, grey body, Cancel + blue default button bottom-right, window chrome around the alert) | `toolkit/platform/tests/golden/alert.png` | Matches NSAlert. Its title bar even reads "Documents", which is a bug. |
 | Segmented control with a raised white pill, the pop-up button with ⌃⌄ chevrons, and the ⌘ glyph in menus | controls and menu goldens | AppKit controls redrawn, down to the ⌘ symbol. |
@@ -182,7 +182,7 @@ Targets: body text Lc ≥ 90 (met); secondary Lc ≥ 60 at 12–13 pt medium (me
 **UI text: Inter** (already installed, `fonts-inter`, SIL OFL), set apart from SF with Inter 4's own features:
 `cv05` (lowercase l with tail: disambiguates Il1 in file names), `cv08` (capital I with serifs), `ss07` and `ss08` (square punctuation and quotes: the square motif at the size of a full stop), and `tnum` wherever numbers are in columns (tables, clock, sizes, sliders). parley already sets `FontFeatures`, so this is a one-line change in `text.rs`.
 
-**Display and voice: Manrope** (`fonts-manrope`, Debian main, SIL OFL; weights 200–800). It is a modern geometric grotesk with open apertures and a slightly wide stance, clearly not SF Pro Display. It is used from 15 pt up: window titles, page titles, alert headings, the lock screen and the expanded bar's clock. It is what makes a screenshot recognisable as Unbound.
+**Display and voice: Manrope** (`fonts-manrope`, Debian main, SIL OFL; weights 200–800). It is a modern geometric grotesk with open apertures and a slightly wide stance, clearly not SF Pro Display. It is used from 15 pt up: window titles, page titles, alert headings, the lock screen and the expanded bar's clock. It is what makes a screenshot recognisable as Bande.
 
 **Mono: JetBrains Mono** (`fonts-jetbrains-mono`, OFL; with `zero` slashed) replaces DejaVu Sans Mono in the terminal and code.
 
@@ -275,15 +275,15 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 
 **Folders**: a stone body (`#D9D3CA`) with an **accent tab**, so folders follow the user's accent while the folder itself stays neutral. Special folders have an engraved `ink2` symbol on the body (download arrow, picture, music, home).
 
-**Symbols** (sidebar, menus, bar status): a 16/18 pt grid with 1.5 strokes, round caps and joins, outline only. Accent only when selected. They are drawn in-code (as `SYM` paths in the mockup) or as an SVG set in `data/icons/Unbound/symbolic`. This replaces the Adwaita mix and follows roadmap C1.
+**Symbols** (sidebar, menus, bar status): a 16/18 pt grid with 1.5 strokes, round caps and joins, outline only. Accent only when selected. They are drawn in-code (as `SYM` paths in the mockup) or as an SVG set in `data/icons/Bande/symbolic`. This replaces the Adwaita mix and follows roadmap C1.
 
-**The theme** (`data/icons/Unbound`, step D3) is generated by `python3 data/icons/src/generate.py`, which needs `fonts-jetbrains-mono` for the label bands (outlines are baked into the SVGs) and also writes our apps' hicolor icons. Symbolic icons are 16 pt, 1.6 strokes converted to single-colour fills (`#201E1A`, with `opacity` for unlit parts and `class="warning"`/`"error"` for low battery), so GTK, Qt and our toolkit can recolour them with the text colour. The accent tab of folders comes from hidden sibling themes `Unbound-<Accent>` (`Inherits=Unbound`) that hold only the recoloured folders: the session selects the icon theme `Unbound-Teal` and so on for a non-default accent. `crates/shell/desktop/tests/icons.rs` renders every icon at 16–64 px through the toolkit (`icons-light.png`).
+**The theme** (`data/icons/Bande`, step D3) is generated by `python3 data/icons/src/generate.py`, which needs `fonts-jetbrains-mono` for the label bands (outlines are baked into the SVGs) and also writes our apps' hicolor icons. Symbolic icons are 16 pt, 1.6 strokes converted to single-colour fills (`#201E1A`, with `opacity` for unlit parts and `class="warning"`/`"error"` for low battery), so GTK, Qt and our toolkit can recolour them with the text colour. The accent tab of folders comes from hidden sibling themes `Bande-<Accent>` (`Inherits=Bande`) that hold only the recoloured folders: the session selects the icon theme `Bande-Teal` and so on for a non-default accent. `crates/shell/desktop/tests/icons.rs` renders every icon at 16–64 px through the toolkit (`icons-light.png`).
 
 ---
 
 ## 11. Motion signature
 
-Keep `unbound-spring` and the presets table in `docs/design/research/README.md` unchanged. Datum adds **how** things move, Material 3-style: *spatial* springs for position and size, *effects* springs (`fade`) for colour and opacity, never mixed.
+Keep `bande-spring` and the presets table in `docs/design/research/README.md` unchanged. Datum adds **how** things move, Material 3-style: *spatial* springs for position and size, *effects* springs (`fade`) for colour and opacity, never mixed.
 
 - **Axis-true:** objects travel in straight lines from their source. Minimise slides and scales into its exact bar slot along one straight path (`gentle`), with no genie distortion. Restore reverses it.
 - **Open / close:** the window scales 0.96 → 1 and fades in from the bar icon's side (`standard`); close is 1 → 0.98 + fade (`quick`).
@@ -330,7 +330,7 @@ All in `datum/`:
 ## 15. Migration plan
 
 ### Step 0: the design-system home
-Create **`crates/toolkit/design`** (crate `unbound-design`, no dependencies beyond `unbound-graphics`'s `Color`), or grow `graphics/src/tokens.rs` into a `tokens/` module if a new crate feels premature. It contains:
+Create **`crates/toolkit/design`** (crate `bande-design`, no dependencies beyond `bande-graphics`'s `Color`), or grow `graphics/src/tokens.rs` into a `tokens/` module if a new crate feels premature. It contains:
 - `palette.rs`: `Palette` with the full role set (`chassis, sheet, overlay, well, hairline, edge, ink, ink2, ink3, accent, accent_text, on_accent, accent_soft, focus, danger, warning, success, scrim`), generated by `Palette::generate(scheme, accent, contrast)` from OKLCH (port `oklch()` from `design/src/colors.py`); `Accent` enum with the 8 presets.
 - `radius.rs`: `Radius::{XS,S,M,L,XL}` and `fn concentric(outer, inset) -> f32`.
 - `spacing.rs`: the scale, `ControlSize::{Small, Regular, Large}` heights and row heights.
@@ -341,13 +341,13 @@ Create **`crates/toolkit/design`** (crate `unbound-design`, no dependencies beyo
 
 ### Order of work (each step ships with updated goldens, light and dark, 1× and 1.5×)
 1. **Tokens.** Expand `Palette` and add `Radius`, `TextRole` and `Elevation`. Keep the old field names as the first users migrate, then delete them in the same branch (no dead code).
-2. **Fonts.** Add `fonts-manrope` and `fonts-jetbrains-mono` to `unbound-desktop`'s Depends. In `graphics/src/text.rs`: `DISPLAY_FONT_FAMILY = "Manrope"` for TextRole ≥ 15 pt display roles, `MONOSPACE_FONT_FAMILY = "JetBrains Mono"`, and default features `cv05, cv08, ss07, ss08` plus `tnum` on `TextStyle::numeric()`.
+2. **Fonts.** Add `fonts-manrope` and `fonts-jetbrains-mono` to `bande-desktop`'s Depends. In `graphics/src/text.rs`: `DISPLAY_FONT_FAMILY = "Manrope"` for TextRole ≥ 15 pt display roles, `MONOSPACE_FONT_FAMILY = "JetBrains Mono"`, and default features `cv05, cv08, ss07, ss08` plus `tnum` on `TextStyle::numeric()`.
 3. **Title bar and window controls.** `graphics/src/title_bar.rs`: height 48 (40 SSD), the control well and glyphs, flush-left title, frame colour; `compositor/src/scene.rs` `CORNER_RADIUS` 14; `compositor/src/frame.rs` and `decoration.rs` use the same items for SSD; `toolkit/platform/src/chrome.rs` gains the frame/sheet split (an app declares a sidebar width; the toolkit paints the sheet).
 4. **Controls.** `widgets/src/{button,text_field,toggle,checkbox,radio_group,segmented,pop_up_button,stepper,slider,progress,tooltip,menu,sheet,table,scroll}.rs`: replace local `RADIUS` constants and `hex(0x…)` with tokens; implement the fader knob, segmented progress, square radio, Super glyph in `menu.rs`, gliding selection.
 5. **Alerts and sheets.** `widgets/src/sheet.rs` + `toolkit/platform` alert: the footer tray and scrim; fix the "Documents" title leak in the alert golden.
 6. **Shell.** `shell/dock` (or its successor, the combined bar): remove translucency and the 24 hard-coded colours, add the tick and square indicators; `shell/menubar` retires into the bar; `shell/notifications/src/card.rs` radius 14 → tokens; `shell/launcher` radius 14, scrim + blur, result rows on the list spec; `controlcenter`, `lock`, `greeter`, `screenshot/area.rs` to tokens.
 7. **Apps.** Files (frame + sheet, symbols, Sheet+label icons, accent-tab folders), Settings (sidebar on chassis, Manrope page titles, rows 44 on `sheet` without card outlines), Monitor (segmented control and tables to tokens, chart in accent + danger), Terminal (`theme.rs`: JetBrains Mono; the default profile uses `sheet` and `ink` as background and foreground, with ANSI colours derived from the accent set).
-8. **Icons (roadmap C1).** Produce `data/icons/Unbound/scalable/apps/*` (Disc), `mimetypes/*` (Sheet+label), `places/*` (stone + accent tab, recoloured at runtime from the accent, or as 8 pre-rendered variants), `symbolic/*` (the 16 pt line set). Remove the Adwaita fallbacks from the shipped theme's `Inherits` only once coverage is complete.
+8. **Icons (roadmap C1).** Produce `data/icons/Bande/scalable/apps/*` (Disc), `mimetypes/*` (Sheet+label), `places/*` (stone + accent tab, recoloured at runtime from the accent, or as 8 pre-rendered variants), `symbolic/*` (the 16 pt line set). Remove the Adwaita fallbacks from the shipped theme's `Inherits` only once coverage is complete.
 9. **Third-party apps.** Push the palette to GTK (`gtk.css` accent and named colours) and Qt (the kdeglobals colour scheme) through the portal and settings daemon (roadmap A1), so foreign apps pick up warm neutrals and the accent.
 10. **Settings ▸ Appearance.** Light/Dark/Auto, 8 accent swatches, "Tinted chassis", Increase Contrast, and the Larger/Hyperlegible text option. No other knobs (DESIGN §1).
 

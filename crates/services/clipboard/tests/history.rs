@@ -2,7 +2,7 @@
 
 use std::os::unix::fs::PermissionsExt;
 
-use unbound_clipboard::{Contents, History, KEPT_ITEMS, KEPT_SECONDS, MAX_ITEM_BYTES, summary};
+use bande_clipboard::{Contents, History, KEPT_ITEMS, KEPT_SECONDS, MAX_ITEM_BYTES, summary};
 
 const NOW: u64 = 1_800_000_000;
 const TEXT: &str = "text/plain;charset=utf-8";

@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use unbound_test_bus::SessionBus;
+use bande_test_bus::SessionBus;
 use zbus::blocking::fdo::DBusProxy;
 
 #[test]

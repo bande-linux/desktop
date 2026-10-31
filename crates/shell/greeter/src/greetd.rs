@@ -3,11 +3,11 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
-pub const SESSION: &str = "unbound-session";
+pub const SESSION: &str = "bande-session";
 pub const SESSION_ENVIRONMENT: [&str; 3] = [
     "XDG_SESSION_TYPE=wayland",
-    "XDG_CURRENT_DESKTOP=Unbound",
-    "XDG_SESSION_DESKTOP=unbound",
+    "XDG_CURRENT_DESKTOP=Bande",
+    "XDG_SESSION_DESKTOP=bande",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

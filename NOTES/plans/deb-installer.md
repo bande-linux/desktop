@@ -5,7 +5,7 @@ most distros provide" (`NOTES/gaps.md:9`).
 
 ## Summary
 
-Build a small **Package Installer** app (`unbound-installer`) that opens `.deb` files. It reads
+Build a small **Package Installer** app (`bande-installer`) that opens `.deb` files. It reads
 the file with `dpkg-deb`, checks the architecture itself, previews the change with a simulated
 PackageKit `InstallFiles`, then installs, upgrades, downgrades or removes through PackageKit
 with the existing polkit agent asking for the password. It uses the shared PackageKit client
@@ -26,7 +26,7 @@ with the existing polkit agent asking for the password. It uses the shared Packa
   app is found, the file goes to `unknown` (`:1743`) and on to `ask_open_with` (`:1752`).
 - `.deb` is not an archive to Files either. `crates/libs/fs/src/ops/archive.rs:40-53`
   (`SUFFIXES`) has no `.deb`, which is correct.
-- `packaging/unbound-desktop/unbound-mimeapps.list` has no `.deb` entry. No file in
+- `packaging/bande-desktop/bande-mimeapps.list` has no `.deb` entry. No file in
   `/usr/share/applications` lists that MIME type. The MIME database knows the type
   (`/usr/share/mime/globs2`: `*.deb`, `*.udeb`).
 - `Apps::apps_for`/`default_for` (`crates/libs/xdg/src/apps.rs:78-86`) also see `NoDisplay`
@@ -35,7 +35,7 @@ with the existing polkit agent asking for the password. It uses the shared Packa
 
 **PackageKit is not on the machine.**
 - `dpkg -l packagekit` says not installed (trixie candidate 1.3.1-1+deb13u1).
-- `unbound-settings` only Recommends it (`crates/apps/settings/Cargo.toml:55`).
+- `bande-settings` only Recommends it (`crates/apps/settings/Cargo.toml:55`).
 - Every dev install on the mini used `apt-get install --no-install-recommends ./target/debian/*.deb`
   (`/var/log/apt/history.log`). So do the images (`images/customize.sh:37`).
 - The app-store plan (`NOTES/plans/app-store.md`) found the same problem. The installer can't
@@ -49,7 +49,7 @@ with the existing polkit agent asking for the password. It uses the shared Packa
 - It keeps only the ErrorCode *text* (`:141-145`), not the code. The installer needs the code to
   tell dependency, lock, auth and file errors apart.
 - `crates/apps/settings/tests/updates.rs:38-130` has a fake PackageKit on the hermetic bus.
-- The app-store plan, milestone 2, moves this into `crates/libs/packages` (`unbound-packages`)
+- The app-store plan, milestone 2, moves this into `crates/libs/packages` (`bande-packages`)
   with `resolve`, `installed`, `install`, `remove`, `install_files` and a progress callback.
   The fake moves to `crates/testing/test-bus/src/packagekit.rs`. This plan uses that crate and
   that boundary. It adds only what local files need (milestone 2).
@@ -88,9 +88,9 @@ with the existing polkit agent asking for the password. It uses the shared Packa
   50 `CANNOT_INSTALL_REPO_UNSIGNED`. Exit 1 success, 3 cancelled.
 
 **polkit.**
-- The agent `unbound-polkit-agent` runs (`systemctl --user is-active`) and shows polkit's
+- The agent `bande-polkit-agent` runs (`systemctl --user is-active`) and shows polkit's
   message (`crates/services/polkit/src/agent.rs:312`).
-- `crates/apps/settings/data/50-unbound-settings.rules:9` grants only `system-update`. That is
+- `crates/apps/settings/data/50-bande-settings.rules:9` grants only `system-update`. That is
   the open decision in `NOTES/resume-2026-10-31.md:61` and `docs/debian-readiness.md:262`. This
   plan does not touch it and needs no new rule.
 - Debian patches PackageKit's policy (`debian/patches/policy.diff`: some `auth_admin_keep` become
@@ -112,7 +112,7 @@ with the existing polkit agent asking for the password. It uses the shared Packa
 
 | Option | For | Against |
 | :--- | :--- | :--- |
-| A. Own installer on PackageKit (shared `unbound-packages`) | apt's own dependency resolution; no root code of ours; progress, cancel and errors come with it; polkit and the agent already exist; same client as Software Update and the store | depends on PackageKit; wrong-architecture and dependency errors need our own wording; the API moves to file handles in a later release |
+| A. Own installer on PackageKit (shared `bande-packages`) | apt's own dependency resolution; no root code of ours; progress, cancel and errors come with it; polkit and the agent already exist; same client as Software Update and the store | depends on PackageKit; wrong-architecture and dependency errors need our own wording; the API moves to file handles in a later release |
 | B. Own root helper (pkexec + `apt-get install ./x.deb`, parse the output) | no PackageKit | we would write and audit a privileged helper and our own polkit action; parse apt's human output; no structured progress; a second package path next to Software Update |
 | C. Ship gdebi or GNOME Software for `.deb` | no code | GTK/Adwaita look; gdebi is barely maintained; GNOME Software brings its own update engine (store plan, option B) |
 | D. A sheet inside Files | no new app | Files would depend on PackageKit; Firefox and other apps open `.deb` through the default handler and need a desktop file anyway |
@@ -120,12 +120,12 @@ with the existing polkit agent asking for the password. It uses the shared Packa
 ## Recommendation
 
 Option A, as a standalone app:
-- **`crates/apps/installer`** builds package `unbound-installer` with binary
-  `unbound-installer` and desktop file `org.unbound.Installer.desktop`: `NoDisplay=true`,
-  `MimeType=application/vnd.debian.binary-package;`, `Exec=unbound-installer %f`. Each file
+- **`crates/apps/installer`** builds package `bande-installer` with binary
+  `bande-installer` and desktop file `org.bande.Installer.desktop`: `NoDisplay=true`,
+  `MimeType=application/vnd.debian.binary-package;`, `Exec=bande-installer %f`. Each file
   gets its own window. PackageKit queues concurrent transactions.
-- `Depends: packagekit, unbound-polkit`.
-- `unbound-desktop` Recommends it, and `unbound-mimeapps.list` makes it the default.
+- `Depends: packagekit, bande-polkit`.
+- `bande-desktop` Recommends it, and `bande-mimeapps.list` makes it the default.
 
 The flow:
 1. **Read.** `dpkg-deb --show --showformat=…` reads Package, Version, Architecture, Maintainer,
@@ -156,7 +156,7 @@ The flow:
    (Downloading, Installing, Running scripts). **Cancel** while `AllowCancel` is true.
 7. **Done.** Show "Installed". Find the package's desktop files with `GetFilesLocal`, filtered
    to `usr/share/applications/*.desktop` that are not NoDisplay, and offer **Open** through
-   `unbound-xdg`. If a reboot is required, show "Restart to finish".
+   `bande-xdg`. If a reboot is required, show "Restart to finish".
 8. **Errors**, as plain sentences:
    - auth refused or dismissed (48): back to the preview, no alarm;
    - lock (26): "Another installation is running. Try again when it finishes.";
@@ -224,7 +224,7 @@ workspace tests on the hermetic bus). "Mini" means checked live on the M2 mini.
      - amd64 fits when it is listed as foreign;
      - the recorded apt text from milestone 2 yields the missing names.
 4. **Installer model and worker** (`crates/apps/installer/src/{model,worker,lib}.rs`,
-   `locales/en-US/unbound-installer.ftl`).
+   `locales/en-US/bande-installer.ftl`).
    - The state machine is Reading → Refused(reason) | Ready(preview) | Present(version) →
      Installing(progress) → Done | Failed, plus Removing.
    - The worker thread uses the settings `follow` pattern.
@@ -236,7 +236,7 @@ workspace tests on the hermetic bus). "Mini" means checked live on the M2 mini.
      - code 26 gives the lock sentence;
      - the same installed version reaches Present.
 5. **Installer window** (`crates/apps/installer/src/{view,main}.rs`, `data/` desktop file and
-   icon, `[package.metadata.deb]` with `Depends: $auto, packagekit, unbound-polkit, fonts-inter`).
+   icon, `[package.metadata.deb]` with `Depends: $auto, packagekit, bande-polkit, fonts-inter`).
    - The layout: header (icon, name, version and size), summary, scrolling description, caution
      box, changes disclosure, buttons; a progress bar and Cancel while installing.
    - Tests:
@@ -244,18 +244,18 @@ workspace tests on the hermetic bus). "Mini" means checked live on the M2 mini.
        an apply `InstallFiles` on the fake, the progress value follows `Percentage`, and Open
        appears when `files_local` lists a desktop file;
      - goldens for ready, refused-architecture, dependency failure and installing, light and
-       dark (`unbound-golden`).
+       dark (`bande-golden`).
 6. **Remove and Open** (`model.rs`, `view.rs`, `worker.rs`).
    - The remove flow (resolve installed id, simulate, confirm, apply).
-   - Open launches the found desktop entry through `unbound_xdg::launch_with`.
+   - Open launches the found desktop entry through `bande_xdg::launch_with`.
    - Tests:
      - Remove lists a dependent package from the simulation before the apply call;
      - code 20 shows the system-package sentence;
      - Open picks the non-NoDisplay entry among two.
 7. **Wire up, then check on the mini.**
-   - `packaging/unbound-desktop/unbound-mimeapps.list` gets
-     `application/vnd.debian.binary-package=org.unbound.Installer.desktop;`.
-   - `packaging/unbound-desktop/debian/control` Recommends `unbound-installer (= ${binary:Version})`.
+   - `packaging/bande-desktop/bande-mimeapps.list` gets
+     `application/vnd.debian.binary-package=org.bande.Installer.desktop;`.
+   - `packaging/bande-desktop/debian/control` Recommends `bande-installer (= ${binary:Version})`.
    - `.github/workflows/ci.yml` gets the deb list (around `:102`, `:135`), an asset check like
      `:182-184`, and the Recommends check (`:312`).
    - `docs/architecture/packaging.md` gets the runtime stack line.

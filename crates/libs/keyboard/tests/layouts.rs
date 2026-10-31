@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use unbound_keyboard::{Area, Layouts, SHORTCUTS, shortcuts_in};
+use bande_keyboard::{Area, Layouts, SHORTCUTS, shortcuts_in};
 
 const RULES: &str = r#"<?xml version="1.0"?>
 <xkbConfigRegistry version="1.1">

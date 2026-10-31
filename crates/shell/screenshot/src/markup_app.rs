@@ -2,22 +2,22 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_fs::Trash;
-use unbound_screenshot::L10N;
-use unbound_screenshot::markup::{Command, Commanded, Markup, TOOLBAR_HEIGHT, Toolbar};
-use unbound_toolkit::ui::{Context, Event, FreeLayout, Key, Size, Ui, Widget, WidgetId};
-use unbound_toolkit::{
+use bande_fs::Trash;
+use bande_screenshot::L10N;
+use bande_screenshot::markup::{Command, Commanded, Markup, TOOLBAR_HEIGHT, Toolbar};
+use bande_toolkit::ui::{Context, Event, FreeLayout, Key, Size, Ui, Widget, WidgetId};
+use bande_toolkit::{
     App, Elevation, Image, Item, Palette, Point, Rect, Role, Scene, Scheme, Shape, Snapshot,
     TextSystem, Transfer, Window, WindowError, WindowEvent,
 };
-use unbound_xdg::file_uri;
+use bande_xdg::file_uri;
 
 const MOST_WIDTH: f32 = 1100.0;
 const MOST_HEIGHT: f32 = 720.0;
 const LEAST_WIDTH: f32 = 620.0;
 const MARGIN: f32 = 16.0;
 const CLIPBOARD_GRACE: Duration = Duration::from_millis(600);
-pub const APP_ID: &str = "org.unbound.Screenshot";
+pub const APP_ID: &str = "org.bande.Screenshot";
 
 struct MarkupApp {
     layout: WidgetId,
@@ -70,7 +70,7 @@ impl MarkupApp {
             let saved = self
                 .rendered()
                 .ok_or_else(|| std::io::Error::other("the picture cannot be drawn"))
-                .and_then(|image| unbound_screenshot::png(&image))
+                .and_then(|image| bande_screenshot::png(&image))
                 .and_then(|bytes| std::fs::write(&self.path, bytes));
             if let Err(error) = saved {
                 tracing::warn!("cannot save {}: {error}", self.path.display());
@@ -83,7 +83,7 @@ impl MarkupApp {
         let Some(image) = self.rendered() else {
             return;
         };
-        match unbound_screenshot::png(&image) {
+        match bande_screenshot::png(&image) {
             Ok(bytes) => {
                 window.copy_transfer(Transfer::uris(vec![file_uri(&self.path)]).with_png(bytes));
                 self.closing_at = Some(Instant::now() + CLIPBOARD_GRACE);
@@ -347,5 +347,5 @@ pub fn run(path: &Path) -> Result<(), WindowError> {
         dragging: false,
         closing_at: None,
     };
-    unbound_toolkit::run(&mut window, &mut app)
+    bande_toolkit::run(&mut window, &mut app)
 }

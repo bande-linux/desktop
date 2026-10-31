@@ -5,9 +5,9 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use unbound_controlcenter::media::{Playback, Player};
-use unbound_controlcenter::{Changes, Choice, PANEL_WIDTH, Status, panel, panel_items};
-use unbound_toolkit::{Color, CpuRenderer, Image, Palette, Rect, Scene, Scheme, TextSystem};
+use bande_controlcenter::media::{Playback, Player};
+use bande_controlcenter::{Changes, Choice, PANEL_WIDTH, Status, panel, panel_items};
+use bande_toolkit::{Color, CpuRenderer, Image, Palette, Rect, Scene, Scheme, TextSystem};
 
 const MARGIN: f32 = 24.0;
 const DESKTOP: Color = Color::hex(0x7C8698);
@@ -98,5 +98,5 @@ fn control_center_with_now_playing_matches_its_golden() {
         items: panel_items(&mut ui, &palette, rect),
     };
     let frame = CpuRenderer::new().render(&scene).expect("frame");
-    unbound_golden::assert_golden_rgba!("panel-light", (frame.width, frame.height), frame.rgba);
+    bande_golden::assert_golden_rgba!("panel-light", (frame.width, frame.height), frame.rgba);
 }

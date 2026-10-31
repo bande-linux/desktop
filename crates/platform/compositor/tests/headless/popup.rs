@@ -1,10 +1,10 @@
 use crate::support::*;
-use smithay::utils::{Logical, Point, Rectangle, Size};
-use unbound_compositor::{Compositor, OutputConfig};
-use unbound_test_wayland::{
+use bande_compositor::{Compositor, OutputConfig};
+use bande_test_wayland::{
     Anchor, BLUE, ConstraintAdjustment, GREEN, KeyboardInteractivity, Layer, LayerRequest,
     PopupRequest, RED, ShmImage, TestClient, roundtrip, roundtrip_until,
 };
+use smithay::utils::{Logical, Point, Rectangle, Size};
 use wayland_client::protocol::wl_shm::Format;
 
 const WINDOW: (i32, i32) = (64, 48);

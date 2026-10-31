@@ -4,9 +4,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use unbound_automount::{Automounter, UDISKS, UDISKS_PATH};
-use unbound_notify::{Notification, NotificationServer};
-use unbound_test_bus::SessionBus;
+use bande_automount::{Automounter, UDISKS, UDISKS_PATH};
+use bande_notify::{Notification, NotificationServer};
+use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedValue;
 

@@ -5,7 +5,7 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use unbound_xdg::{DesktopEntry, find_app, unit_app_ids};
+use bande_xdg::{DesktopEntry, find_app, unit_app_ids};
 use zbus::blocking::Connection;
 
 pub const SYSTEM_PRESSURE: &str = "/proc/pressure/memory";
@@ -210,7 +210,7 @@ mod tests {
         assert_eq!(
             app_slice(
                 root,
-                "0::/user.slice/user-1000.slice/user@1000.service/session.slice/unbound-compositor.service\n"
+                "0::/user.slice/user-1000.slice/user@1000.service/session.slice/bande-compositor.service\n"
             ),
             Some(root.join("user.slice/user-1000.slice/user@1000.service/app.slice"))
         );
@@ -245,25 +245,20 @@ mod tests {
         let slice = folder.path().join("app.slice");
         unit(
             &slice,
-            "app-unbound-org.example.Browser-10.scope",
+            "app-bande-org.example.Browser-10.scope",
             900,
             Some(300),
         );
+        unit(&slice, "app-bande-org.example.Browser-11.scope", 500, None);
         unit(
             &slice,
-            "app-unbound-org.example.Browser-11.scope",
-            500,
-            None,
-        );
-        unit(
-            &slice,
-            "app-unbound-org.example.Editor-12.scope",
+            "app-bande-org.example.Editor-12.scope",
             1_000,
             Some(0),
         );
         unit(&slice, "app-org.example.Tool@autostart.service", 50, None);
         unit(&slice, "dbus.socket", 1_000_000, None);
-        unit(&slice, "app-unbound-org.example.Tiny-13.scope", 10, None);
+        unit(&slice, "app-bande-org.example.Tiny-13.scope", 10, None);
 
         let apps = heaviest_apps(&slice, &entries, 3);
 

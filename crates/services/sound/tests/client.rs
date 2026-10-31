@@ -4,12 +4,12 @@ use std::sync::Mutex;
 use std::sync::mpsc::{self, Sender};
 use std::time::Duration;
 
-use unbound_sound::{BUS_NAME, OBJECT_PATH, play};
-use unbound_test_bus::SessionBus;
+use bande_sound::{BUS_NAME, OBJECT_PATH, play};
+use bande_test_bus::SessionBus;
 
 struct Player(Mutex<Sender<String>>);
 
-#[zbus::interface(name = "org.unbound.Sound")]
+#[zbus::interface(name = "org.bande.Sound")]
 impl Player {
     fn play(&self, name: &str) {
         let _ = self.0.lock().unwrap().send(name.to_owned());

@@ -2,11 +2,11 @@ use std::cell::RefCell;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use bande_graphics::{Scheme, TextRole};
+use bande_render::VulkanRenderer;
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::utils::{Logical, Point};
-use unbound_graphics::{Scheme, TextRole};
-use unbound_render::VulkanRenderer;
 
 use crate::L10N;
 use crate::label::{Label, LabelStyle, Look};
@@ -188,13 +188,13 @@ mod tests {
     fn a_start_failure_names_the_program_and_says_why_in_words() {
         let missing = io::Error::from(io::ErrorKind::NotFound);
         assert_eq!(
-            start_failure(Path::new("/usr/bin/unbound-shell"), &missing),
-            "unbound-shell could not start because it is not installed."
+            start_failure(Path::new("/usr/bin/bande-shell"), &missing),
+            "bande-shell could not start because it is not installed."
         );
         let denied = io::Error::from(io::ErrorKind::PermissionDenied);
         assert_eq!(
-            start_failure(Path::new("/usr/libexec/unbound-greeter"), &denied),
-            "unbound-greeter could not start because it may not be run."
+            start_failure(Path::new("/usr/libexec/bande-greeter"), &denied),
+            "bande-greeter could not start because it may not be run."
         );
     }
 }

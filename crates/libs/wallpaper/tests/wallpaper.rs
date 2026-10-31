@@ -2,12 +2,12 @@
 
 use std::path::{Path, PathBuf};
 
+use bande_wallpaper::{Choice, Fit, Variant, backdrop, bundled, render, render_cached};
 use image::{Rgba, RgbaImage};
-use unbound_wallpaper::{Choice, Fit, Variant, backdrop, bundled, render, render_cached};
 
 fn bundled_dir() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
-    let wallpapers = dir.path().join("unbound/wallpapers");
+    let wallpapers = dir.path().join("bande/wallpapers");
     std::fs::create_dir_all(&wallpapers).unwrap();
     for name in ["drift-light.svg", "drift-dark.svg"] {
         std::fs::copy(
@@ -50,7 +50,7 @@ fn the_default_follows_the_variant_and_a_choice_overrides_it() {
     let none = Choice::default();
     assert_eq!(
         none.path(Variant::Dark, None, &data),
-        Some(dir.path().join("unbound/wallpapers/drift-dark.svg"))
+        Some(dir.path().join("bande/wallpapers/drift-dark.svg"))
     );
     assert_eq!(bundled("missing", Variant::Light, &data), None);
     let home = Path::new("/home/ada");
@@ -77,7 +77,7 @@ fn the_default_follows_the_variant_and_a_choice_overrides_it() {
     };
     assert_eq!(
         relative.path(Variant::Light, Some(home), &data),
-        Some(dir.path().join("unbound/wallpapers/drift-light.svg"))
+        Some(dir.path().join("bande/wallpapers/drift-light.svg"))
     );
 }
 
@@ -93,7 +93,7 @@ fn photo(dir: &Path) -> PathBuf {
     path
 }
 
-fn pixel(picture: &unbound_wallpaper::Picture, x: u32, y: u32) -> [u8; 4] {
+fn pixel(picture: &bande_wallpaper::Picture, x: u32, y: u32) -> [u8; 4] {
     let at = ((y * picture.width + x) * 4) as usize;
     picture.rgba[at..at + 4].try_into().unwrap()
 }

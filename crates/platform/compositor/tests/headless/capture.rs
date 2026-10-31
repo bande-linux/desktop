@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::{BACKGROUND, Compositor, Renderer, Vblank};
-use unbound_test_wayland::{BLUE, CaptureOutcome, RED, ShmImage, TestClient, roundtrip};
+use bande_compositor::{BACKGROUND, Compositor, Renderer, Vblank};
+use bande_test_wayland::{BLUE, CaptureOutcome, RED, ShmImage, TestClient, roundtrip};
 use wayland_client::protocol::wl_shm::Format;
 
 const WINDOW: (i32, i32) = (64, 48);
@@ -226,7 +226,7 @@ fn the_shell_learns_where_the_windows_are_frontmost_first() {
     let windows = shell.list_windows(&mut server);
 
     assert_eq!(windows, expected);
-    assert!(!TestClient::connect(&mut server).advertises("unbound_capture_v1"));
+    assert!(!TestClient::connect(&mut server).advertises("bande_capture_v1"));
 }
 
 #[test]

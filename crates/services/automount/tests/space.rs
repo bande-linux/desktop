@@ -5,10 +5,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
-use unbound_automount::space::{Space, SpaceWatch, is_low, watch_space};
-use unbound_notify::client::NotificationCenter;
-use unbound_notify::{NotificationServer, Presentation};
-use unbound_test_bus::SessionBus;
+use bande_automount::space::{Space, SpaceWatch, is_low, watch_space};
+use bande_notify::client::NotificationCenter;
+use bande_notify::{NotificationServer, Presentation};
+use bande_test_bus::SessionBus;
 
 const GB: u64 = 1_000_000_000;
 

@@ -1,6 +1,6 @@
 [package]
-name = "unbound-sample"
-description = "Sample unbound-toolkit app whose start time and memory ci/perf measures"
+name = "bande-sample"
+description = "Sample bande-toolkit app whose start time and memory ci/perf measures"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,5 +10,5 @@ publish = false
 
 [dependencies]
 tracing.workspace = true
-unbound-log.workspace = true
-unbound-toolkit.workspace = true
+bande-log.workspace = true
+bande-toolkit.workspace = true

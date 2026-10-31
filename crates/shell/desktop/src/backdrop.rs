@@ -2,9 +2,9 @@ use std::path::PathBuf;
 
 use std::time::Instant;
 
-use unbound_toolkit::ui::{Animated, Spring};
-use unbound_toolkit::{Image, Item, Rect};
-use unbound_wallpaper::{Fit, Picture};
+use bande_toolkit::ui::{Animated, Spring};
+use bande_toolkit::{Image, Item, Rect};
+use bande_wallpaper::{Fit, Picture};
 
 use crate::model::Bounds;
 

@@ -3,7 +3,7 @@ set -euo pipefail
 
 here=$(dirname "$(realpath "$0")")
 out=$(realpath -m "${1:?usage: images.sh <output-dir>}")
-cache=${VM_IMAGE_CACHE:-/cache/unbound-vm}
+cache=${VM_IMAGE_CACHE:-/cache/bande-vm}
 
 recipe_hash() {
     (cd "$here" && sha256sum "$@") | sha256sum | cut -c1-16

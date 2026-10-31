@@ -1,9 +1,9 @@
 use accesskit::TreeUpdate;
-use unbound_graphics::{Color, Scene, TextSystem};
-use unbound_toolkit_platform::{
+use bande_graphics::{Color, Scene, TextSystem};
+use bande_toolkit_platform::{
     App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Window, WindowError, WindowEvent, run,
 };
-use unbound_widgets::{Alert, Context, FreeLayout, Ui};
+use bande_widgets::{Alert, Context, FreeLayout, Ui};
 
 struct Asking {
     ui: Ui,

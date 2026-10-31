@@ -5,15 +5,15 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_config::{BAR_ICON_SIZE_RANGE, BarEdge, DEFAULT_BAR_ICON_SIZE};
-use unbound_dock_model::{LauncherEntry, LauncherUpdate};
-use unbound_toolkit::ui::{
+use bande_config::{BAR_ICON_SIZE_RANGE, BarEdge, DEFAULT_BAR_ICON_SIZE};
+use bande_dock_model::{LauncherEntry, LauncherUpdate};
+use bande_toolkit::ui::{
     Animated, Context, Cursor, Event, Key as KeyboardKey, Modifiers, PointerButton, Size, Spring,
     Ui, Widget, WidgetId,
 };
 
 use crate::L10N;
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape,
     TextAlign, TextStyle, TextSystem,
 };

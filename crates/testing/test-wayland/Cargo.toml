@@ -1,6 +1,6 @@
 [package]
-name = "unbound-test-wayland"
-description = "Wayland test clients for Unbound compositor tests"
+name = "bande-test-wayland"
+description = "Wayland test clients for Bande compositor tests"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,8 +11,8 @@ publish = false
 [dependencies]
 rustix = { workspace = true, features = ["fs"] }
 tempfile.workspace = true
-unbound-compositor.workspace = true
-unbound-protocols = { workspace = true, features = ["client"] }
+bande-compositor.workspace = true
+bande-protocols = { workspace = true, features = ["client"] }
 wayland-client.workspace = true
 wayland-protocols.workspace = true
 wayland-protocols-wlr.workspace = true

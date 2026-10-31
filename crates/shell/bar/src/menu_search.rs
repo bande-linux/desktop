@@ -3,11 +3,11 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, TreeId};
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Animated, Context, Event, Key, Menu, MenuItem, Parts, ShortcutText, Size, Spring, TextField,
     Ui, Widget, WidgetId,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, Color, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextStyle,
     TextSystem,
 };
@@ -614,7 +614,7 @@ impl MenuSearch {
         std::mem::take(&mut self.model.borrow_mut().closing)
     }
 
-    pub fn cursor(&self) -> unbound_toolkit::ui::Cursor {
+    pub fn cursor(&self) -> bande_toolkit::ui::Cursor {
         self.ui.cursor()
     }
 

@@ -14,14 +14,14 @@ use std::sync::mpsc::TryRecvError;
 use std::time::{Duration, Instant};
 
 use accesskit::{ActionRequest, TreeUpdate};
-use unbound_graphics::{
+use bande_graphics::{
     Appearance, CpuRenderer, Cursor, Event, Point, Rect, Region, ResizeEdge, Scene, TextSize,
     TextSystem, damage, pixels,
 };
-use unbound_protocols::client::unbound_shell_v1::{
+use bande_protocols::client::bande_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
 };
-use unbound_widgets::{FrameTime, Ui};
+use bande_widgets::{FrameTime, Ui};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_data_device_manager::WlDataDeviceManager;

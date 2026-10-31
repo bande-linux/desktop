@@ -62,7 +62,7 @@ Sources fetched or searched in this session: Haiku, Unity/HUD, Windows 2026 task
 
 | # | Region | Collapsed (64 pt) | Expanded (248 pt) | Click | Right click |
 |---|---|---|---|---|---|
-| 1 | **Mark / launcher** (top corner) | Unbound mark, 64×52 cell touching the corner | Mark + search field "Search  ⟨Super Space⟩" | Opens the launcher (same as `Super+Space`; centred card as today) | System menu: About This Computer, System Settings…, Force Quit…, Sleep, Restart…, Shut Down…, Lock Screen, Log Out *user*… |
+| 1 | **Mark / launcher** (top corner) | Bande mark, 64×52 cell touching the corner | Mark + search field "Search  ⟨Super Space⟩" | Opens the launcher (same as `Super+Space`; centred card as today) | System menu: About This Computer, System Settings…, Force Quit…, Sleep, Restart…, Shut Down…, Lock Screen, Log Out *user*… |
 | 2 | **App header** | Active app icon 24 pt, bold 11 pt name caption (ellipsised), `›` | Icon, bold app name, menu glyph; below it the app's menu titles as rows (File, Edit, View, …) | Opens the **app menu** (§3.3) | Same menu (it is the app's) |
 | 3 | **Apps** | Kept apps, hairline, running apps not kept. Icon 40 pt in 48 pt cells. Running: 4 pt dot at the edge; active app: 3×20 pt pill at the edge | 30 pt icon + name, badge on the right; active app row tinted, its windows listed below it as 22 pt rows (up to 6, then "n more") | As today's Dock: open or bring forward | As today's Dock icon menu |
 | 4 | **Trash** | Fixed after the apps, pinned to the bottom group | "Trash" row | Opens Trash in Files | Open, Empty Trash… |
@@ -276,7 +276,7 @@ bar {
     names #false
     auto-hide #false
     menu-bar "in-bar"
-    apps "org.unbound.Files" "firefox" ...
+    apps "org.bande.Files" "firefox" ...
 }
 ```
 
@@ -284,26 +284,26 @@ bar {
 
 ### 5.1 Architecture
 
-- **One process, `unbound-bar` (`crates/shell/bar`)**, replacing the `unbound-dock` and
-  `unbound-menubar` binaries. Their logic is already mostly in libraries (`unbound_dock::{DockState,
-  arrange, …}` in `crates/shell/dock/src/lib.rs`; `unbound_menubar` lib with `status`, `tray`,
+- **One process, `bande-bar` (`crates/shell/bar`)**, replacing the `bande-dock` and
+  `bande-menubar` binaries. Their logic is already mostly in libraries (`bande_dock::{DockState,
+  arrange, …}` in `crates/shell/dock/src/lib.rs`; `bande_menubar` lib with `status`, `tray`,
   `dbusmenu`, `menus`, `session`, `devices`). Move the non-UI models that both orientations need
-  into `crates/libs` (`unbound-dock-model` for kept/running/arrange/badges/LauncherEntry,
-  `unbound-status` for network/sound/Bluetooth/battery/tray/session), keeping UI code in the bar.
+  into `crates/libs` (`bande-dock-model` for kept/running/arrange/badges/LauncherEntry,
+  `bande-status` for network/sound/Bluetooth/battery/tray/session), keeping UI code in the bar.
 - **One layer surface per output** (`zwlr_layer_shell_v1`, namespace `bar`), anchored to the
   edge, exclusive zone = width (or 0 with auto-hide), keyboard interactivity on demand (as the
   Dock layer already takes it). With "separate menu bar", a second surface per output, namespace
   `menubar`, exactly as today.
 - **Popups** (`xdg_popup` from the layer surface) for app menu, icon menus, tray menus — the
   toolkit's popup path already used by both clients.
-- **App menus**: unchanged transport — `com.canonical.dbusmenu` at `/org/unbound/MenuBar` on the
-  app's bus name (`unbound-app-menu`). The menu search flattens the same layout tree
+- **App menus**: unchanged transport — `com.canonical.dbusmenu` at `/org/bande/MenuBar` on the
+  app's bus name (`bande-app-menu`). The menu search flattens the same layout tree
   (`GetLayout` with full recursion, `AboutToShow` on open). Later, add
   `org_kde_kwin_appmenu` in the compositor so Qt/KDE apps' dbusmenu is found per window.
 - **Control Center / Notification Center** stay separate clients but read `bar { edge }` through
-  `org.unbound.Config` and an anchor rect from the bar to place themselves beside the item.
+  `org.bande.Config` and an anchor rect from the bar to place themselves beside the item.
 
-### 5.2 Protocol (`unbound_shell_v1` v10)
+### 5.2 Protocol (`bande_shell_v1` v10)
 
 | Need | Change |
 |---|---|
@@ -317,18 +317,18 @@ bar {
 ### 5.3 Migration
 
 - `config.kdl`: read `dock { apps size edge auto-hide }` when no `bar` block exists and write a
-  `bar` block on first change; `DockApps`/`DockEdge`/… on `org.unbound.Config` become aliases of
+  `bar` block on first change; `DockApps`/`DockEdge`/… on `org.bande.Config` become aliases of
   `BarApps`/`BarEdge`/… for one release.
 - Existing installs keep their layout: if a `dock` block exists, `menu-bar "separate"` is assumed
   (they get today's desktop); fresh installs get the combined left bar.
-- The compositor starts `unbound-bar` in place of both clients (`behaviour.md`, Shell clients);
-  `unbound-dock`/`unbound-menubar` packages become transitional dummies depending on `unbound-bar`.
+- The compositor starts `bande-bar` in place of both clients (`behaviour.md`, Shell clients);
+  `bande-dock`/`bande-menubar` packages become transitional dummies depending on `bande-bar`.
 - Goldens: today's dock and menu bar goldens survive as the "separate" mode goldens.
 
 ### 5.4 Order of work
 
 1. **Host both in one process** with no visual change (dock surface + menu bar surface in
-   `unbound-bar`); goldens identical; compositor starts one client. Low risk, unlocks the rest.
+   `bande-bar`); goldens identical; compositor starts one client. Low risk, unlocks the rest.
 2. **Vertical status region**: Control Center button (2×2), tray grid with overflow, clock block
    with unread dot, Trash and workspaces in the bottom group. Goldens light/dark at 1× and 1.5×.
 3. **App header + cascade menu** (A) with submenu safe-triangle, keyboard (`Super+F2`), right-click

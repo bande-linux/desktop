@@ -5,11 +5,11 @@ use std::os::unix::net::UnixStream;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use bande_compositor::{Compositor, Renderer, SessionRole};
+use bande_inbox::Inbox;
+use bande_screenshot::engine::{Engine, EngineEvent, Shot};
+use bande_test_wayland::{RED, ShmImage, TestClient, roundtrip};
 use smithay::utils::Size;
-use unbound_compositor::{Compositor, Renderer, SessionRole};
-use unbound_inbox::Inbox;
-use unbound_screenshot::engine::{Engine, EngineEvent, Shot};
-use unbound_test_wayland::{RED, ShmImage, TestClient, roundtrip};
 use wayland_client::Connection;
 use wayland_client::protocol::wl_shm::Format;
 

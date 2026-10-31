@@ -4,14 +4,14 @@ wait 600ms
 type "terminal"
 wait 500ms
 key enter
-wait-for-window "org.unbound.Terminal"
+wait-for-window "org.bande.Terminal"
 wait 1s
 note "Post a notification"
 type "gdbus call --session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications --method org.freedesktop.Notifications.Notify Terminal 0 utilities-terminal 'Build finished' 'All 412 tests passed in 38 seconds' [] {} 0\n"
 wait 1500ms
 shot "banner"
 note "A second one from the same app stacks"
-type "gdbus call --session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications --method org.freedesktop.Notifications.Notify Terminal 0 utilities-terminal 'Deploy done' 'unbound.example is live' [] {} 0\n"
+type "gdbus call --session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications --method org.freedesktop.Notifications.Notify Terminal 0 utilities-terminal 'Deploy done' 'bande.example is live' [] {} 0\n"
 wait 1500ms
 shot "stacked banner"
 note "Hover the banner shows the close button"

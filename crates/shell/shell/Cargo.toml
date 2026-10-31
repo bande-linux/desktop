@@ -1,6 +1,6 @@
 [package]
-name = "unbound-shell"
-description = "Unbound shell: the desktop, the bar, the notifications, Control Center and the launcher in one process"
+name = "bande-shell"
+description = "Bande shell: the desktop, the bar, the notifications, Control Center and the launcher in one process"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,38 +10,38 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 tracing.workspace = true
-unbound-bar.workspace = true
-unbound-bluetooth.workspace = true
-unbound-config.workspace = true
-unbound-controlcenter.workspace = true
-unbound-desktop-surface.workspace = true
-unbound-launcher.workspace = true
-unbound-log.workspace = true
-unbound-notifications.workspace = true
-unbound-status.workspace = true
-unbound-toolkit.workspace = true
-unbound-xdg.workspace = true
+bande-bar.workspace = true
+bande-bluetooth.workspace = true
+bande-config.workspace = true
+bande-controlcenter.workspace = true
+bande-desktop-surface.workspace = true
+bande-launcher.workspace = true
+bande-log.workspace = true
+bande-notifications.workspace = true
+bande-status.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
 smithay.workspace = true
 tempfile.workspace = true
-unbound-compositor.workspace = true
+bande-compositor.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter, fonts-noto-color-emoji, unbound-notify"
-conflicts = "unbound-bar, unbound-desktop-surface, unbound-launcher, unbound-notifications, unbound-controlcenter"
-replaces = "unbound-bar, unbound-desktop-surface, unbound-launcher, unbound-notifications, unbound-controlcenter"
-recommends = "upower, network-manager, network-manager-config-connectivity-debian, bluez, pipewire, wireplumber, unbound-tray, xdg-user-dirs, adwaita-icon-theme"
+depends = "$auto, fonts-inter, fonts-noto-color-emoji, bande-notify"
+conflicts = "bande-bar, bande-desktop-surface, bande-launcher, bande-notifications, bande-controlcenter"
+replaces = "bande-bar, bande-desktop-surface, bande-launcher, bande-notifications, bande-controlcenter"
+recommends = "upower, network-manager, network-manager-config-connectivity-debian, bluez, pipewire, wireplumber, bande-tray, xdg-user-dirs, adwaita-icon-theme"
 assets = [
-    ["target/release/unbound-shell", "usr/bin/", "755"],
-    ["../../../data/wallpapers/*.svg", "usr/share/unbound/wallpapers/", "644"],
-    ["../../../data/icons/Unbound*/**/*", "usr/share/icons/", "644"],
+    ["target/release/bande-shell", "usr/bin/", "755"],
+    ["../../../data/wallpapers/*.svg", "usr/share/bande/wallpapers/", "644"],
+    ["../../../data/icons/Bande*/**/*", "usr/share/icons/", "644"],
 ]
 extended-description = """\
-The shell of the Unbound desktop, one process for the whole session. On \
+The shell of the Bande desktop, one process for the whole session. On \
 every display it draws the desktop, the wallpaper in its light and dark \
 variants with the files of the Desktop folder and the plugged-in drives \
 as icons, and the bar: the apps kept in it and the running apps with \
@@ -51,9 +51,9 @@ Wi-Fi and battery, Control Center and the clock, which opens the \
 Notification Center. Shift+Super+/ searches the active app's menus. It \
 also shows notification banners, Control Center with the volume and \
 brightness HUD, and the launcher that Super+Space opens to find apps, \
-files and answers. unbound-compositor starts it and keeps it running. It \
-installs the Unbound wallpapers, which the lock screen and the login \
-window also show, and the Unbound icon theme."""
+files and answers. bande-compositor starts it and keeps it running. It \
+installs the Bande wallpapers, which the lock screen and the login \
+window also show, and the Bande icon theme."""
 
 [lints]
 workspace = true

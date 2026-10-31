@@ -14,7 +14,7 @@ Status: finished ([plans/settings-scroll-and-bluetooth-names.md](plans/settings-
 its not possible to install .deb files from Files, this needs an install tool like most distros provide
 Status: planned ([plans/deb-installer.md](plans/deb-installer.md))
 
-GTK apps do not fit with our window bar. Is that possible to solve so that all apps looks the same and adhere to unbound window bar theme, for example also claude desktop and vscode also do not use the unbound window bar
+GTK apps do not fit with our window bar. Is that possible to solve so that all apps looks the same and adhere to bande window bar theme, for example also claude desktop and vscode also do not use the bande window bar
 Status: planned ([plans/third-party-title-bars.md](plans/third-party-title-bars.md))
 
 it seems like some apps are not getting the correct taskbar icon? this could also be that they simply dont have one. So dont dwell too deeply in that.
@@ -44,7 +44,7 @@ Status: planned ([plans/sidebar-selection.md](plans/sidebar-selection.md))
 Files has no "settings" (and other inhouse apps who needs it), for example i want to show file extensions
 Status: planned ([plans/app-settings.md](plans/app-settings.md))
 
-we have no swap (granted this is not an official installation of debian) and it may not be up to unbound-desktop, but quickly review how that should work and if we should do anything or if that is soley up to the debian installer
+we have no swap (granted this is not an official installation of debian) and it may not be up to bande-desktop, but quickly review how that should work and if we should do anything or if that is soley up to the debian installer
 Status: planned ([plans/swap.md](plans/swap.md))
 
 review the CI, its performance and result has been abysmal. Right now it only starts on tags but still has not run successfully. I want tagged releases to build reliably, both arm64 and amd64. These builds are then picked up by the apt repo and published as installable packages correctly for debian users (make sure architecture works correctly)

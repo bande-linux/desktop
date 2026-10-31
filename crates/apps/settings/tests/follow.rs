@@ -3,9 +3,9 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use unbound_config::{ConfigService, ConfigStore};
-use unbound_settings::{Command, Feed, SettingId, Update, Value, feed, follow_config, worker};
-use unbound_test_bus::SessionBus;
+use bande_config::{ConfigService, ConfigStore};
+use bande_settings::{Command, Feed, SettingId, Update, Value, feed, follow_config, worker};
+use bande_test_bus::SessionBus;
 
 const WAIT: Duration = Duration::from_secs(5);
 
@@ -28,7 +28,7 @@ fn has(update: &Update, id: SettingId, value: &Value) -> bool {
 fn edits_from_anywhere_arrive_live_and_failed_writes_are_reported() {
     let bus = SessionBus::start().expect("dbus-daemon");
     let directory = tempfile::tempdir().expect("temp dir");
-    let path = directory.path().join("unbound").join("config.kdl");
+    let path = directory.path().join("bande").join("config.kdl");
     let service_connection = bus.connect().expect("service connection");
     let _service = ConfigService::start(
         &service_connection,

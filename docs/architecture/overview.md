@@ -2,7 +2,7 @@
 
 ## Goal
 
-Unbound (`unbound-desktop`) is a Linux desktop environment written in Rust for Debian 13 on
+Bande (`bande-desktop`) is a Linux desktop environment written in Rust for Debian 13 on
 arm64, with Apple Silicon as the primary hardware. It is its own desktop: macOS is the bar for
 how polished, smooth and finished it feels, and the main reference for which basics a modern
 desktop needs, but the structure, feature set and look are ours. The principles that decide
@@ -39,13 +39,13 @@ graph TB
 
     subgraph "Compositor process"
         SMITHAY[Smithay: DRM backend, input, Wayland protocols]
-        RENDER[unbound-render: Vulkan renderer on ash]
-        SPRING[unbound-spring: damped springs]
+        RENDER[bande-render: Vulkan renderer on ash]
+        SPRING[bande-spring: damped springs]
         SMITHAY --> RENDER
     end
 
     subgraph "Shell clients (started by the compositor)"
-        subgraph "unbound-shell"
+        subgraph "bande-shell"
             DESKTOP[Desktop]
             DOCK[Dock]
             MENUBAR[Menu bar]
@@ -66,17 +66,17 @@ graph TB
     end
 
     subgraph "Session services"
-        CONFIG[unbound-config: org.unbound.Config]
-        NOTIFY[unbound-notify]
-        POWER[unbound-power]
-        CLIP[unbound-clipboard]
-        TRAY[unbound-tray]
-        AUTOMOUNT[unbound-automount]
-        PORTAL[xdg-desktop-portal-unbound]
-        POLKIT[unbound-polkit]
+        CONFIG[bande-config: org.bande.Config]
+        NOTIFY[bande-notify]
+        POWER[bande-power]
+        CLIP[bande-clipboard]
+        TRAY[bande-tray]
+        AUTOMOUNT[bande-automount]
+        PORTAL[xdg-desktop-portal-bande]
+        POLKIT[bande-polkit]
     end
 
-    TOOLKIT[unbound-toolkit: Vello, Parley, AccessKit, Wayland windows]
+    TOOLKIT[bande-toolkit: Vello, Parley, AccessKit, Wayland windows]
 
     DRM & INPUT & SEAT --> SMITHAY
     DOCK & MENUBAR & LAUNCHER & CC & SHOT & LOCK & GREETER -->|Wayland| SMITHAY
@@ -88,25 +88,25 @@ graph TB
 ```
 
 The desktop, the Dock and the menu bar of every display, the notifications, Control Center and the
-launcher are one process, `unbound-shell` (`crates/shell/shell`), with one Wayland connection, one
+launcher are one process, `bande-shell` (`crates/shell/shell`), with one Wayland connection, one
 GPU device, one font database and one connection per D-Bus bus. Each part is a library crate
-(`unbound-desktop-surface`, `unbound-bar`, `unbound-notifications`, `unbound-controlcenter`,
-`unbound-launcher`) whose surfaces the shell hosts; the bar's models live in
-`unbound-dock-model` and `unbound-status` (`crates/libs`).
+(`bande-desktop-surface`, `bande-bar`, `bande-notifications`, `bande-controlcenter`,
+`bande-launcher`) whose surfaces the shell hosts; the bar's models live in
+`bande-dock-model` and `bande-status` (`crates/libs`).
 
 ## Process model
 
-Unbound has four kinds of component, split by the role a process plays, not by whether the user
+Bande has four kinds of component, split by the role a process plays, not by whether the user
 thinks of it as part of the system:
 
-- **Compositor.** One process, `unbound-compositor`, owns the display, input and every Wayland
-  surface. It renders with its own renderer (`unbound-render`); title bars and the rest of the
+- **Compositor.** One process, `bande-compositor`, owns the display, input and every Wayland
+  surface. It renders with its own renderer (`bande-render`); title bars and the rest of the
   visible UI are drawn by clients.
 - **Shell clients.** Wayland clients that make up the desktop around the apps: the shell (desktop,
   Dock, menu bar, notifications, launcher, Control Center), the screenshot tool, the lock screen
   and the greeter. The compositor starts them on
   socket pairs and restarts them when they exit; only these connections see the private
-  `unbound_shell_v1` protocol and `ext-foreign-toplevel-list-v1`
+  `bande_shell_v1` protocol and `ext-foreign-toplevel-list-v1`
   ([behaviour](behaviour.md)).
 - **Apps.** Ordinary Wayland clients started by the user: Files, Settings, Terminal, Activity
   Monitor. Settings and Activity Monitor are apps like any other; they have no special access.
@@ -114,23 +114,23 @@ thinks of it as part of the system:
   (configuration, notifications, power, clipboard, tray, automount, portal, polkit). They are
   started by systemd user units or D-Bus activation ([session](session.md)).
 
-Shared code that is not UI lives in libraries (`unbound-spring`, `unbound-xdg`,
-`unbound-audio`, `unbound-network`, `unbound-bluetooth`, `unbound-protocols`), and the shell
-and apps draw with `unbound-toolkit`.
+Shared code that is not UI lives in libraries (`bande-spring`, `bande-xdg`,
+`bande-audio`, `bande-network`, `bande-bluetooth`, `bande-protocols`), and the shell
+and apps draw with `bande-toolkit`.
 
 ## Inter-process communication
 
 - **Wayland** carries everything about surfaces, buffers, input, focus, clipboard and drag and
   drop. Buffers travel as `wl_shm` or `linux-dmabuf-v1` file descriptors; there is no separate
   data-plane socket. Desktop-specific requests between the compositor and the shell go through
-  `unbound_shell_v1` (`crates/platform/protocols`).
+  `bande_shell_v1` (`crates/platform/protocols`).
 - **D-Bus via `zbus`** carries policy, state and desktop integration: the `org.freedesktop.*`
-  standards and the `org.unbound.*` interfaces Unbound owns. Every interface can be inspected
+  standards and the `org.bande.*` interfaces Bande owns. Every interface can be inspected
   with `busctl`. The matrix is in [session.md](session.md#d-bus-integration).
 
 ## Pure Wayland: no X11
 
-Unbound is a Wayland-only desktop by design:
+Bande is a Wayland-only desktop by design:
 
 - **Rule**: No X11 code, X libraries, X server or XWayland bridge in any component: compositor,
   shell, toolkit, services or packaging.
@@ -143,7 +143,7 @@ Unbound is a Wayland-only desktop by design:
 ## Keyboard model
 
 Linux conflates clipboard copy with the terminal's `SIGINT` on `Ctrl+C` and works around it
-with `Ctrl+Shift+C`. Unbound gives each modifier one meaning across the whole desktop; Super
+with `Ctrl+Shift+C`. Bande gives each modifier one meaning across the whole desktop; Super
 acts as macOS's Command:
 
 | Modifier | Role | Examples |
@@ -165,18 +165,18 @@ control writes to it, and it can be edited by hand while the session runs.
 
 - **Design**: node-based, validated against a schema, reloaded live without restarting the
   session. A changed file is parsed into a shadow copy and swapped in atomically, and
-  subscribers are told through `org.unbound.Config`. A setting that is unknown or invalid is
+  subscribers are told through `org.bande.Config`. A setting that is unknown or invalid is
   skipped and reported with its line, column and message while every other setting applies;
   only a file that is not KDL at all keeps the active configuration as it was.
 - **Implemented schema (`crates/services/config`)**: KDL 2.0 syntax. The file is
-  `$XDG_CONFIG_HOME/unbound/config.kdl`, or `~/.config/unbound/config.kdl` when
+  `$XDG_CONFIG_HOME/bande/config.kdl`, or `~/.config/bande/config.kdl` when
   `XDG_CONFIG_HOME` is unset or relative. Every setting is optional; unknown settings,
   duplicates and out-of-range values are reported with the line and column of the offending
   node or value and ignored (the first of duplicates wins; an `idle` time shorter than the one
   before it is raised to match), so one mistake never costs the rest of the file. Names from
   earlier versions keep working: `panel { }` is read as `dock { }`, and `output "<connector>"
   { }` applies its display settings to whatever display is on that connector until a
-  `display` block names that display. When `unbound-config` starts it rewrites them in place,
+  `display` block names that display. When `bande-config` starts it rewrites them in place,
   keeping comments and layout: `panel` becomes `dock`, and an `output` block whose connector
   has a display connected (found in `/sys/class/drm`, named from its EDID exactly as the
   compositor names it) becomes `display "<name>"`, or is dropped if that display already has a
@@ -216,7 +216,7 @@ control writes to it, and it can be edited by hand while the session runs.
       alert-volume 0.75         // 0.0 to 1.0, scales every event sound
   }
   wallpaper {                   // absolute path or "~/..."; unset means the built-in picture
-      light "/usr/share/backgrounds/unbound/day.jpg"
+      light "/usr/share/backgrounds/bande/day.jpg"
       dark "~/Pictures/night.jpg"
   }
   display "Dell DELL U2720Q 7ZD5K53" {  // once per display, named by its EDID maker, model, serial
@@ -236,9 +236,9 @@ control writes to it, and it can be edited by hand while the session runs.
   wallpaper used is the one matching the current appearance; the desktop expands a leading `~/`.
   A section left empty by a Settings write is removed from the file. A readable file is parsed
   into a shadow `Config` and swapped in as one `Arc`, so readers see either the old or the new
-  configuration, never a mix. `ConfigService` owns `org.unbound.Config` on the session bus and
-  serves the active values as properties of interface `org.unbound.Config` at
-  `/org/unbound/Config` (`Appearance`, `DockEdge`, `IdleDimAfter`, `IdleLockAfter` and
+  configuration, never a mix. `ConfigService` owns `org.bande.Config` on the session bus and
+  serves the active values as properties of interface `org.bande.Config` at
+  `/org/bande/Config` (`Appearance`, `DockEdge`, `IdleDimAfter`, `IdleLockAfter` and
   `IdleSuspendAfter` in seconds, 0 meaning never, `IdleSuspendWithDisplay` true while
   `suspend-after` is unset and sleep follows the display (writing true removes the explicit
   value), `KeyRepeatRate` per second and
@@ -246,9 +246,9 @@ control writes to it, and it can be edited by hand while the session runs.
   meaning unset, `Displays` as `a{sa{sv}}` and `Arrangements` as `aa(siibs)`: name, x, y, main
   and the mirrored display's name, empty when it mirrors nothing). It watches the
   directory and reloads when the file is closed after writing or renamed into place;
-  `PropertiesChanged` lists only the properties that changed. The `unbound-config` daemon runs
+  `PropertiesChanged` lists only the properties that changed. The `bande-config` daemon runs
   the service for the session and posts the file's errors as one notification through
-  `unbound-notify` with the first error's line, column and message, how many more lines have
+  `bande-notify` with the first error's line, column and message, how many more lines have
   errors, and an "Open in Editor" action (`xdg-open` on the file). The same set of errors is
   posted once, even after the notification is dismissed and the file is reloaded; a different
   set replaces it and a file without errors closes it. The

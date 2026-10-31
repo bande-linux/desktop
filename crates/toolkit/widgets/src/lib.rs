@@ -35,6 +35,7 @@ use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 
+pub use bande_spring::Spring;
 pub use button::{BUTTON_HEIGHT, Button};
 pub use checkbox::{CHECKBOX_SIZE, CheckState, Checkbox};
 pub use clock::{FrameTime, frame_time, request_wake, set_frame_time, take_wake};
@@ -65,24 +66,23 @@ pub use text_view::TextView;
 pub use toggle::{SWITCH_SIZE, Toggle};
 pub use tooltip::TOOLTIP_DELAY;
 use tooltip::Tooltips;
-pub use unbound_spring::Spring;
 
-pub type Animated = unbound_spring::Animated<Instant>;
+pub type Animated = bande_spring::Animated<Instant>;
 
-use unbound_l10n::Localizer;
+use bande_l10n::Localizer;
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-widgets.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-widgets.ftl");
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-pub use control::{focus_ring, focus_ring_for};
-use unbound_graphics::{
+use bande_graphics::{
     Appearance, Color, ControlSize, Item, Palette, Point, Rect, Scene, TextAlign, TextStyle,
     TextSystem, grown_line,
 };
-pub use unbound_graphics::{
+pub use bande_graphics::{
     Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
 };
+pub use control::{focus_ring, focus_ring_for};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DragAction {
@@ -1181,7 +1181,7 @@ impl Ui {
         TreeUpdate {
             nodes,
             tree: Some(TreeInfo {
-                toolkit_name: Some("unbound-toolkit".to_owned()),
+                toolkit_name: Some("bande-toolkit".to_owned()),
                 toolkit_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
                 ..TreeInfo::new(self.root.id().node())
             }),
@@ -1245,7 +1245,7 @@ mod tests {
             include_str!("secure_field.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

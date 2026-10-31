@@ -1,6 +1,6 @@
-# Unbound
+# Bande
 
-Unbound is a Linux desktop environment written in Rust for Debian testing on arm64 and amd64,
+Bande is a Linux desktop environment written in Rust for Debian testing on arm64 and amd64,
 with Apple Silicon as its primary hardware. It is its own desktop, with its own compositor, shell, session
 services and apps, and it holds itself to the polish of macOS: every surface should feel as
 smooth, consistent and finished. It is pure Wayland, with no X11 or XWayland anywhere. The
@@ -8,7 +8,7 @@ compositor, renderer, toolkit, shell, apps and services all live in this one Car
 
 ## Status
 
-Unbound is early and not yet a daily driver.
+Bande is early and not yet a daily driver.
 
 - **Far along**: the compositor (Smithay with its own Vulkan renderer on `ash`, DRM/KMS output,
   frame pacing, fractional scaling, clipboard, session lock, idle, input methods, screen
@@ -30,15 +30,15 @@ them into role directories; the grouping below is that target.
 
 | Role | Crates |
 | :--- | :--- |
-| Platform | `unbound-compositor` (the Wayland compositor), `unbound-render` (its Vulkan renderer), `unbound-protocols` (private Wayland protocols for the shell) |
-| Toolkit | `unbound-toolkit` (tokens, Vello drawing, Parley text, Wayland windows, widgets, AccessKit) |
-| Shell | `unbound-shell` (one process hosting `unbound-desktop-surface`, `unbound-bar`, `unbound-notifications`, `unbound-controlcenter` and `unbound-launcher`), `unbound-screenshot`, `unbound-lock`, `unbound-greeter` |
-| Apps | `unbound-files`, `unbound-settings`, `unbound-term` |
-| Services | `unbound-config`, `unbound-notify`, `unbound-power`, `unbound-clipboard`, `unbound-tray`, `unbound-automount`, `xdg-desktop-portal-unbound`, `unbound-polkit` |
-| Libraries | `unbound-spring` (damped springs), `unbound-xdg` (desktop entries, icons, launching), `unbound-audio` (PipeWire), `unbound-network` (NetworkManager), `unbound-bluetooth` (BlueZ) |
-| Testing | `unbound-test-bus` (private D-Bus session buses), `unbound-test-wayland` (Wayland test clients), `unbound-bench` (performance measurements), `unbound-sample` (toolkit sample for `ci/perf`) |
+| Platform | `bande-compositor` (the Wayland compositor), `bande-render` (its Vulkan renderer), `bande-protocols` (private Wayland protocols for the shell) |
+| Toolkit | `bande-toolkit` (tokens, Vello drawing, Parley text, Wayland windows, widgets, AccessKit) |
+| Shell | `bande-shell` (one process hosting `bande-desktop-surface`, `bande-bar`, `bande-notifications`, `bande-controlcenter` and `bande-launcher`), `bande-screenshot`, `bande-lock`, `bande-greeter` |
+| Apps | `bande-files`, `bande-settings`, `bande-term` |
+| Services | `bande-config`, `bande-notify`, `bande-power`, `bande-clipboard`, `bande-tray`, `bande-automount`, `xdg-desktop-portal-bande`, `bande-polkit` |
+| Libraries | `bande-spring` (damped springs), `bande-xdg` (desktop entries, icons, launching), `bande-audio` (PipeWire), `bande-network` (NetworkManager), `bande-bluetooth` (BlueZ) |
+| Testing | `bande-test-bus` (private D-Bus session buses), `bande-test-wayland` (Wayland test clients), `bande-bench` (performance measurements), `bande-sample` (toolkit sample for `ci/perf`) |
 
-Other directories: `packaging/` holds the `unbound-desktop` and `unbound-os` meta-packages and
+Other directories: `packaging/` holds the `bande-desktop` and `bande-os` meta-packages and
 the APT source packages, `ci/` the scripts CI runs (release packages, install test, guest VM,
 hardware-in-the-loop), and `docs/` the documentation.
 
@@ -64,7 +64,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 Tests need no GPU and no display: rendering runs on lavapipe, the compositor tests run it
-headless, and D-Bus tests start their own session buses. `cargo run -p unbound-compositor --
+headless, and D-Bus tests start their own session buses. `cargo run -p bande-compositor --
 --headless` starts the compositor without a display.
 
 For every version tag on `main`, CI runs these checks in Debian testing, builds the packages
@@ -74,7 +74,7 @@ repository; the KVM guest, polkit and performance jobs run on demand. See
 
 ## Installing on Debian testing
 
-Unbound installs from its APT repository at <https://unbound-linux.github.io/apt> on Debian
+Bande installs from its APT repository at <https://bande-linux.github.io/apt> on Debian
 testing, arm64 or amd64. The repository has one rolling suite: every version tagged on `main`
 that passes CI is published. Its packages are built against Debian testing and do not install
 on Debian 13 (trixie).
@@ -84,31 +84,31 @@ on Debian 13 (trixie).
 
    ```bash
    cd /tmp
-   wget https://github.com/unbound-linux/apt/releases/latest/download/unbound-archive-keyring.deb \
-        https://github.com/unbound-linux/apt/releases/latest/download/unbound-apt-source.deb
-   sudo apt install ./unbound-archive-keyring.deb ./unbound-apt-source.deb
+   wget https://github.com/bande-linux/apt/releases/latest/download/bande-archive-keyring.deb \
+        https://github.com/bande-linux/apt/releases/latest/download/bande-apt-source.deb
+   sudo apt install ./bande-archive-keyring.deb ./bande-apt-source.deb
    ```
 2. Install the desktop alone, next to the desktop you have:
 
    ```bash
    sudo apt update
-   sudo apt install unbound-desktop
+   sudo apt install bande-desktop
    ```
 
-   Log out and choose **Unbound** at the login screen. You need a display manager that lists
+   Log out and choose **Bande** at the login screen. You need a display manager that lists
    Wayland sessions, such as GDM, SDDM or a greetd front-end.
 
-   Or turn the system into unbound-os, with Unbound's login window as the display manager,
+   Or turn the system into bande-os, with Bande's login window as the display manager,
    NetworkManager, PipeWire and compressed swap in memory:
 
    ```bash
    sudo apt update
-   sudo apt install unbound-os
+   sudo apt install bande-os
    ```
 
 Updates arrive with `sudo apt upgrade`. The APT source lists the `main` component, with the
-desktop and `unbound-os`, and the `apple` component, with the kernel for Apple Silicon Macs;
-its pin lets the repository provide only Unbound's own packages. The repository is signed with
+desktop and `bande-os`, and the `apple` component, with the kernel for Apple Silicon Macs;
+its pin lets the repository provide only Bande's own packages. The repository is signed with
 the key `6287 DE66 4599 29AA 1C01  E146 495A 6C19 8264 7E05`.
 
 ## Documentation

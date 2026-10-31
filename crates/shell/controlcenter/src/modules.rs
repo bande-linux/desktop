@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
-use unbound_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId, focus_ring_for};
-use unbound_toolkit::{
+use bande_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId, focus_ring_for};
+use bande_toolkit::{
     Image, Item, Palette, Paragraph, Point, Radius, Rect, Scheme, Shape, Spacing, TextAlign,
     TextRole, TextStyle,
 };
-use unbound_xdg::{ICON_THEMES, find_icon};
+use bande_xdg::{ICON_THEMES, find_icon};
 
 use crate::{Change, Changes};
 
@@ -244,7 +244,7 @@ impl Widget for Tile {
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
         let palette = &cx.palette;
         let room = self.width - 2.0 * MODULE_PADDING - DISC - Spacing::S as f32;
-        let fit = |text: &mut unbound_toolkit::TextSystem, line: &str, style: TextStyle| {
+        let fit = |text: &mut bande_toolkit::TextSystem, line: &str, style: TextStyle| {
             crate::now_playing::fitted(text, line, style, room)
         };
         self.title = Some(fit(

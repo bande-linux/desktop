@@ -4,7 +4,7 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use unbound_greeter::{AuthMessageType, Login, Response, Step, write_message};
+use bande_greeter::{AuthMessageType, Login, Response, Step, write_message};
 
 const MARKER: &[u8] = b"Qz7#";
 

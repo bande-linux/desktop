@@ -5,8 +5,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, NodeId, Role, TreeId};
-use unbound_graphics::{Color, Item, Paint, Palette, Point, Scheme, TextSystem};
-use unbound_widgets::{
+use bande_graphics::{Color, Item, Paint, Palette, Point, Scheme, TextSystem};
+use bande_widgets::{
     Cell, ClipboardRequest, Column, Context, Event, Key, Menu, MenuItem, Modifiers, Pointer,
     PointerButton, ROW_HEIGHT, Row, Size, Sort, Table, Ui, Widget, WidgetId,
 };

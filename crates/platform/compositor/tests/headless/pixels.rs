@@ -1,6 +1,6 @@
 use crate::support::*;
-use unbound_compositor::{BACKGROUND, Compositor, FrameStats, Renderer, Snapshot};
-use unbound_test_wayland::{BLUE, GREEN, Memory, RED, ShmImage, TestClient};
+use bande_compositor::{BACKGROUND, Compositor, FrameStats, Renderer, Snapshot};
+use bande_test_wayland::{BLUE, GREEN, Memory, RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
 
 fn render(renderer: &mut Renderer, server: &mut Compositor) -> (FrameStats, Snapshot) {

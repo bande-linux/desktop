@@ -1,8 +1,8 @@
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, SEGMENTED_HEIGHT, SearchField, SegmentedControl, TEXT_FIELD_HEIGHT,
     WidgetId,
 };
-use unbound_toolkit::{Header, Rect, WINDOW_HEADER_HEIGHT, window_controls_area};
+use bande_toolkit::{Header, Rect, WINDOW_HEADER_HEIGHT, window_controls_area};
 
 use crate::L10N;
 use crate::controls::{Signal, sender};

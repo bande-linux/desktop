@@ -1,7 +1,7 @@
 use crate::support::*;
-use unbound_compositor::Compositor;
-use unbound_test_wayland::clipboard::{TEXT, read_all};
-use unbound_test_wayland::{ShmImage, TestClient, quadrants, roundtrip};
+use bande_compositor::Compositor;
+use bande_test_wayland::clipboard::{TEXT, read_all};
+use bande_test_wayland::{ShmImage, TestClient, quadrants, roundtrip};
 use wayland_client::protocol::wl_shm::Format;
 
 fn focused_client(server: &mut Compositor) -> TestClient {

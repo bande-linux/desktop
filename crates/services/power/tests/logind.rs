@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use unbound_power::logind::SleepGuard;
-use unbound_test_bus::SessionBus;
+use bande_power::logind::SleepGuard;
+use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::OwnedObjectPath;

@@ -1,5 +1,5 @@
-use unbound_toolkit::Spacing;
-use unbound_toolkit::ui::{Axis, Button, Stack, Widget};
+use bande_toolkit::Spacing;
+use bande_toolkit::ui::{Axis, Button, Stack, Widget};
 use zbus::blocking::Connection;
 
 use crate::L10N;
@@ -7,8 +7,8 @@ use crate::pages::{Widgets, boxed};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
 
-const CLIPBOARD: &str = "org.unbound.Clipboard";
-const CLIPBOARD_PATH: &str = "/org/unbound/Clipboard";
+const CLIPBOARD: &str = "org.bande.Clipboard";
+const CLIPBOARD_PATH: &str = "/org/bande/Clipboard";
 const ASK: &str = "clear-clipboard";
 const CONFIRM: &str = "clear-clipboard-confirm";
 

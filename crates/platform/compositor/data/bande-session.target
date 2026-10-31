@@ -1,0 +1,6 @@
+[Unit]
+Description=Bande session services
+BindsTo=bande-compositor.service
+After=bande-compositor.service graphical-session.target
+PartOf=graphical-session.target
+Wants=xdg-desktop-autostart.target

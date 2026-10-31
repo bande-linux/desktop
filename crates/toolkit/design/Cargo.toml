@@ -1,6 +1,6 @@
 [package]
-name = "unbound-design"
-description = "Unbound design tokens (Datum): colour roles, radii, spacing, type roles and elevation"
+name = "bande-design"
+description = "Bande design tokens (Datum): colour roles, radii, spacing, type roles and elevation"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

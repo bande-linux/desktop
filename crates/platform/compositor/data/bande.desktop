@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Bande
+Comment=The Bande desktop
+Exec=bande-session
+TryExec=bande-session
+Type=Application
+DesktopNames=Bande

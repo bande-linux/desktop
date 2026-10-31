@@ -7,9 +7,9 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use bande_compositor::Compositor;
+use bande_test_wayland::{RED, SessionEnd, ShmImage, TestClient};
 use smithay::utils::Size;
-use unbound_compositor::Compositor;
-use unbound_test_wayland::{RED, SessionEnd, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
 
 const EDITOR: &str = "org.example.Editor";
@@ -47,7 +47,7 @@ fn every_session_ending_remembers_the_open_apps_once() {
         std::env::set_var("XDG_DATA_DIRS", data.path());
     }
     let state = tempfile::tempdir().expect("state dir");
-    let file = state.path().join("unbound/reopen");
+    let file = state.path().join("bande/reopen");
     let mut server = Compositor::new(Size::from((256, 192))).expect("headless compositor");
     server.remember_apps_to_reopen_in(file.clone());
     let mut editor = TestClient::connect(&mut server);

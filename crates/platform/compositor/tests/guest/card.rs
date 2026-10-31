@@ -100,7 +100,7 @@ pub struct Scanout {
 
 impl Scanout {
     pub fn save(&self, name: &str) {
-        let Some(directory) = std::env::var_os("UNBOUND_SCREENDUMPS") else {
+        let Some(directory) = std::env::var_os("BANDE_SCREENDUMPS") else {
             return;
         };
         let bytes: Vec<u8> = self.rgb.iter().flatten().copied().collect();

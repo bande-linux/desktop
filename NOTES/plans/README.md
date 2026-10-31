@@ -18,7 +18,7 @@ Plans share work. Land the shared pieces first:
 
 | Plan | Root cause in one line | Milestones |
 | --- | --- | --- |
-| [super-ctrl](super-ctrl.md) | App shortcuts use Super; Ctrl does nothing in Unbound text fields | 9 (+1 optional) |
+| [super-ctrl](super-ctrl.md) | App shortcuts use Super; Ctrl does nothing in Bande text fields | 9 (+1 optional) |
 | [keep-in-taskbar](keep-in-taskbar.md) | Bar reads app entries once at shell start; apps installed later can't be kept | 7 |
 | [taskbar-icons](taskbar-icons.md) | Same load-once bug; own dialogs have no entry | 3 |
 | [settings-scroll-and-bluetooth-names](settings-scroll-and-bluetooth-names.md) | Settings' own scroll widget ignores wheel and touchpad; rows show BlueZ Alias (the address) | 4 |

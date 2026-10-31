@@ -7,12 +7,12 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use smithay::utils::{Point, Size};
-use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
-use unbound_graphics::{Color, Event, Scene};
-use unbound_toolkit_platform::{
+use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
+use bande_graphics::{Color, Event, Scene};
+use bande_toolkit_platform::{
     Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Surfaces, Window, WindowEvent,
 };
+use smithay::utils::{Point, Size};
 
 const OUTPUT: (i32, i32) = (320, 240);
 const STRIP: u32 = 40;
@@ -85,7 +85,7 @@ fn open_pair(server: &mut Compositor) -> Receiver<(usize, WindowEvent)> {
             windows: vec![first, second],
             events,
         };
-        unbound_toolkit_platform::run_surfaces(&mut pair).expect("run loop");
+        bande_toolkit_platform::run_surfaces(&mut pair).expect("run loop");
     });
     received
 }
@@ -260,7 +260,7 @@ fn a_source_that_signals_only_priority_data_wakes_the_loop() {
             socket,
             ready,
         };
-        unbound_toolkit_platform::run_surfaces(&mut urgent).expect("run loop");
+        bande_toolkit_platform::run_surfaces(&mut urgent).expect("run loop");
     });
     for _ in 0..200 {
         desktop.pump(&events);

@@ -3,7 +3,7 @@ use accesskit::{ActionRequest, Node, Role};
 use super::control::paint_field;
 use super::editor::Editor;
 use super::{Context, Cursor, DragAction, Event, Menu, Parts, ScrollState, Size, Widget, WidgetId};
-use unbound_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use bande_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
 const FONT_SIZE: f32 = 13.0;
 const HORIZONTAL_PADDING: f32 = 8.0;

@@ -1,7 +1,7 @@
 use crate::support::*;
+use bande_compositor::{BACKGROUND, Compositor, Gesture, Renderer};
+use bande_test_wayland::{ClientGesture, RED, TestClient, roundtrip};
 use smithay::utils::Point;
-use unbound_compositor::{BACKGROUND, Compositor, Gesture, Renderer};
-use unbound_test_wayland::{ClientGesture, RED, TestClient, roundtrip};
 
 const WINDOW: i32 = 64;
 const CENTER: (f64, f64) = (128.0, 96.0);

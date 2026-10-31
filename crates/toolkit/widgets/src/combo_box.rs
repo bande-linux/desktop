@@ -1,5 +1,5 @@
 use accesskit::{Action, ActionRequest, HasPopup, Node, Role};
-use unbound_graphics::{Item, Point, Rect};
+use bande_graphics::{Item, Point, Rect};
 
 use super::control::chevron_down;
 use super::{

@@ -3,7 +3,7 @@ mod panel;
 mod tracker;
 
 use accesskit::NodeId;
-use unbound_graphics::{Radius, TextSize, grown_line};
+use bande_graphics::{Radius, TextSize, grown_line};
 
 pub use self::model::{Menu, MenuItem, Search};
 pub use self::panel::MenuPanel;

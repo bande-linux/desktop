@@ -1,11 +1,11 @@
 use std::sync::mpsc::{self, Sender};
 
-use unbound_notify::client::NotificationCenter;
+use bande_notify::client::NotificationCenter;
 use zbus::blocking::Connection;
 
-use unbound_settings_panes::PaneId;
-use unbound_toolkit::TextRole;
-use unbound_toolkit::ui::{Label, SegmentedControl, Toggle, Widget, WidgetId};
+use bande_settings_panes::PaneId;
+use bande_toolkit::TextRole;
+use bande_toolkit::ui::{Label, SegmentedControl, Toggle, Widget, WidgetId};
 
 use crate::L10N;
 use crate::failure::unexpected;

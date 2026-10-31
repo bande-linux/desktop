@@ -1,6 +1,6 @@
 [package]
-name = "unbound-preview"
-description = "Quick Look content of files and folders for Unbound: images, text and summaries"
+name = "bande-preview"
+description = "Quick Look content of files and folders for Bande: images, text and summaries"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 image = { workspace = true, features = ["gif", "jpeg", "webp"] }
-unbound-fs.workspace = true
+bande-fs.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

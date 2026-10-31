@@ -8,14 +8,14 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::Role;
-use unbound_bar::dock::{
+use bande_bar::dock::{
     DockAction, DockApp, DockState, ICON_SIZE, MenuTarget, Shared, dock_ui, scene, surface_size,
 };
-use unbound_config::BarEdge;
-use unbound_dock_model::LauncherUpdate;
-use unbound_dock_model::bus::launcher_update;
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton, Ui};
-use unbound_toolkit::{CpuRenderer, Image, Palette, Point, Rect, Scheme, TextSystem};
+use bande_config::BarEdge;
+use bande_dock_model::LauncherUpdate;
+use bande_dock_model::bus::launcher_update;
+use bande_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton, Ui};
+use bande_toolkit::{CpuRenderer, Image, Palette, Point, Rect, Scheme, TextSystem};
 use zbus::zvariant::{OwnedValue, Value};
 
 use support::check_golden;
@@ -37,7 +37,7 @@ fn app(app_id: &str, name: &str, kept: bool, running: bool) -> DockApp {
     DockApp {
         app_id: app_id.to_owned(),
         name: name.to_owned(),
-        icon: (app_id == "org.unbound.Terminal").then(blue_icon),
+        icon: (app_id == "org.bande.Terminal").then(blue_icon),
         kept,
         running,
     }
@@ -45,7 +45,7 @@ fn app(app_id: &str, name: &str, kept: bool, running: bool) -> DockApp {
 
 fn apps() -> Vec<DockApp> {
     vec![
-        app("org.unbound.Terminal", "Terminal", true, true),
+        app("org.bande.Terminal", "Terminal", true, true),
         app("org.example.Editor", "Editor", false, true),
     ]
 }
@@ -149,7 +149,7 @@ fn the_dock_matches_its_goldens_on_each_edge() {
     ] {
         let mut harness = Harness::new(edge);
         harness.state.borrow_mut().update_launcher(
-            "org.unbound.Terminal",
+            "org.bande.Terminal",
             LauncherUpdate {
                 count: Some(3),
                 count_visible: Some(true),
@@ -169,7 +169,7 @@ fn the_dock_matches_its_goldens_on_each_edge() {
 fn a_click_opens_the_app_or_the_trash_and_a_drag_off_cancels() {
     let mut harness = Harness::new(BarEdge::Left);
     let editor = harness.center("org.example.Editor");
-    let terminal = harness.center("org.unbound.Terminal");
+    let terminal = harness.center("org.bande.Terminal");
     let trash = {
         let rects = harness.state.borrow().panel();
         Point::new(rects.x + rects.width / 2.0, rects.y + rects.height - 30.0)
@@ -196,7 +196,7 @@ fn a_click_opens_the_app_or_the_trash_and_a_drag_off_cancels() {
         harness.state.borrow_mut().take_actions(),
         [
             DockAction::Open("org.example.Editor".to_owned()),
-            DockAction::Open("org.unbound.Terminal".to_owned()),
+            DockAction::Open("org.bande.Terminal".to_owned()),
             DockAction::OpenTrash
         ]
     );
@@ -204,8 +204,8 @@ fn a_click_opens_the_app_or_the_trash_and_a_drag_off_cancels() {
 
 fn three_apps() -> Vec<DockApp> {
     vec![
-        app("org.unbound.Terminal", "Terminal", true, true),
-        app("org.unbound.Files", "Files", true, false),
+        app("org.bande.Terminal", "Terminal", true, true),
+        app("org.bande.Files", "Files", true, false),
         app("org.example.Editor", "Editor", false, true),
     ]
 }
@@ -220,23 +220,23 @@ fn dragging_a_kept_icon_reorders_the_dock_and_its_neighbours_slide_aside() {
     let now = harness.clock.get();
     harness.state.borrow_mut().set_apps(three_apps(), now);
     harness.advance(Duration::from_secs(2));
-    let terminal = harness.rect("org.unbound.Terminal");
-    let files = harness.center("org.unbound.Files");
+    let terminal = harness.rect("org.bande.Terminal");
+    let files = harness.center("org.bande.Files");
 
     harness.ui.handle(&Event::PointerDown(Pointer::at(files)));
     let above = Point::new(files.x, terminal.y);
     harness.ui.handle(&Event::PointerMove(Pointer::at(above)));
     assert!(harness.state.borrow().is_dragging());
     harness.advance(Duration::from_millis(40));
-    assert!(harness.rect("org.unbound.Terminal").y > terminal.y);
+    assert!(harness.rect("org.bande.Terminal").y > terminal.y);
     harness.ui.handle(&Event::PointerUp(Pointer::at(above)));
 
     assert_eq!(
         harness.state.borrow_mut().take_actions(),
-        [kept(&["org.unbound.Files", "org.unbound.Terminal"])]
+        [kept(&["org.bande.Files", "org.bande.Terminal"])]
     );
     harness.advance(Duration::from_secs(2));
-    assert!(harness.rect("org.unbound.Files").y < harness.rect("org.unbound.Terminal").y);
+    assert!(harness.rect("org.bande.Files").y < harness.rect("org.bande.Terminal").y);
 }
 
 #[test]
@@ -245,7 +245,7 @@ fn dragging_a_kept_icon_off_the_dock_past_the_threshold_removes_it() {
     let now = harness.clock.get();
     harness.state.borrow_mut().set_apps(three_apps(), now);
     harness.advance(Duration::from_secs(2));
-    let files = harness.center("org.unbound.Files");
+    let files = harness.center("org.bande.Files");
 
     harness.drag(files, Point::new(100.0, files.y));
     assert_eq!(
@@ -257,7 +257,7 @@ fn dragging_a_kept_icon_off_the_dock_past_the_threshold_removes_it() {
     harness.drag(files, Point::new(200.0, files.y));
     assert_eq!(
         harness.state.borrow_mut().take_actions(),
-        [kept(&["org.unbound.Terminal"])]
+        [kept(&["org.bande.Terminal"])]
     );
     let mut apps = three_apps();
     apps.remove(1);
@@ -266,7 +266,7 @@ fn dragging_a_kept_icon_off_the_dock_past_the_threshold_removes_it() {
     harness.advance(Duration::from_secs(2));
     assert_eq!(harness.state.borrow().icon_rects().len(), 2);
 
-    let terminal = harness.center("org.unbound.Terminal");
+    let terminal = harness.center("org.bande.Terminal");
     harness.drag(terminal, Point::new(200.0, terminal.y));
     assert_eq!(harness.state.borrow_mut().take_actions(), [kept(&[])]);
 }
@@ -278,15 +278,15 @@ fn dragging_a_running_app_into_the_kept_group_keeps_it() {
     harness.state.borrow_mut().set_apps(three_apps(), now);
     harness.advance(Duration::from_secs(2));
     let editor = harness.center("org.example.Editor");
-    let terminal = harness.center("org.unbound.Terminal");
+    let terminal = harness.center("org.bande.Terminal");
 
     harness.drag(editor, Point::new(editor.x, terminal.y - 10.0));
     assert_eq!(
         harness.state.borrow_mut().take_actions(),
         [kept(&[
             "org.example.Editor",
-            "org.unbound.Terminal",
-            "org.unbound.Files"
+            "org.bande.Terminal",
+            "org.bande.Files"
         ])]
     );
 }
@@ -339,7 +339,7 @@ fn a_launching_app_pulses_until_its_window_maps_or_ten_seconds_pass() {
     harness
         .state
         .borrow_mut()
-        .launching("org.unbound.Terminal", now);
+        .launching("org.bande.Terminal", now);
     assert!(harness.state.borrow().pulsing(now));
     assert_eq!(harness.buttons()[0].1, "opening");
 
@@ -349,7 +349,7 @@ fn a_launching_app_pulses_until_its_window_maps_or_ten_seconds_pass() {
     harness
         .state
         .borrow_mut()
-        .launching("org.unbound.Terminal", now);
+        .launching("org.bande.Terminal", now);
     harness.state.borrow_mut().set_apps(stopped, now);
     harness.advance(Duration::from_secs(11));
     assert!(!harness.state.borrow().pulsing(harness.clock.get()));
@@ -359,7 +359,7 @@ fn a_launching_app_pulses_until_its_window_maps_or_ten_seconds_pass() {
 #[test]
 fn neighbours_slide_into_the_gap_a_quitting_app_leaves() {
     let mut harness = Harness::new(BarEdge::Left);
-    let before = harness.rect("org.unbound.Terminal");
+    let before = harness.rect("org.bande.Terminal");
     let mut quit = apps();
     quit.truncate(1);
     harness
@@ -367,9 +367,9 @@ fn neighbours_slide_into_the_gap_a_quitting_app_leaves() {
         .borrow_mut()
         .set_apps(quit, harness.clock.get());
     harness.advance(Duration::from_millis(60));
-    let moving = harness.rect("org.unbound.Terminal");
+    let moving = harness.rect("org.bande.Terminal");
     harness.advance(Duration::from_secs(2));
-    let after = harness.rect("org.unbound.Terminal");
+    let after = harness.rect("org.bande.Terminal");
 
     assert!(moving.y > before.y && moving.y < after.y);
     assert!(after.y > before.y);
@@ -493,7 +493,7 @@ fn the_icon_size_setting_resizes_the_dock_within_sensible_bounds() {
     assert!(!harness.state.borrow_mut().set_icon_size(52.0));
     harness.size = surface_size(BarEdge::Left, 52.0, OUTPUT);
     harness.frame();
-    assert_eq!(harness.rect("org.unbound.Terminal").width, 52.0);
+    assert_eq!(harness.rect("org.bande.Terminal").width, 52.0);
     assert_eq!(harness.state.borrow().panel().width, 68.0);
     assert_eq!(harness.state.borrow().exclusive_zone(), 80);
 
@@ -507,7 +507,7 @@ fn super_f3_lets_the_keyboard_walk_the_dock_open_apps_and_menus_and_give_the_key
     let now = harness.clock.get();
     let plain = Modifiers::default();
     let mut state = harness.state.borrow_mut();
-    state.start_navigation(Some("org.unbound.Terminal"), now);
+    state.start_navigation(Some("org.bande.Terminal"), now);
     assert!(state.is_navigating());
     assert!(state.navigate(Key::Down, plain, now));
     assert!(state.navigate(Key::Enter, plain, now));

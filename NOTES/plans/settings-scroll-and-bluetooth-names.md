@@ -51,7 +51,7 @@ and the device type (`Icon`) is read but never drawn. Fix: put Settings on the t
   Appearance (LE): `input-mouse`, `input-keyboard`, `input-tablet`, `input-gaming`,
   `audio-headphones`, `audio-headset`, `audio-card`, `phone`, `computer`, `camera-photo`,
   `camera-video`, `printer`, `scanner`, `modem`, `network-wireless`, `video-display`,
-  `multimedia-player`. All have `-symbolic` icons in the Unbound or Adwaita theme on this machine
+  `multimedia-player`. All have `-symbolic` icons in the Bande or Adwaita theme on this machine
   (checked under `/usr/share/icons`); `bluetooth-symbolic` is the fallback.
 - Nearby devices are sorted by name (`lib.rs:146-160`), so dashed addresses mix with real names.
 - Live state (`busctl`, read-only): BlueZ 5.82, adapter `hci0` powered, **no device objects** at
@@ -159,7 +159,7 @@ workspace tests, verified on the mini before merge.
 - `pages.rs:584-661`: pass `self.symbol(device.kind.symbol(), …)`; a paired device without a name
   shows its kind noun with the address in the detail line. If chosen, the muted "N devices without
   a name are not shown" caption under Nearby devices.
-- `crates/apps/settings/locales/en-US/unbound-settings.ftl`: kind nouns, "Unknown device", caption.
+- `crates/apps/settings/locales/en-US/bande-settings.ftl`: kind nouns, "Unknown device", caption.
 - `crates/apps/settings/src/state.rs`: hidden count in `BluetoothState` only if the caption is
   chosen.
 - Tests: extend `panes.rs` `bluetooth_pairs_after_the_code_is_confirmed_in_settings` to assert the

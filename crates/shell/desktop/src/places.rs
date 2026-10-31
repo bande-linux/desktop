@@ -3,8 +3,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use unbound_fs::is_hidden;
-use unbound_xdg::{Apps, DIRECTORY};
+use bande_fs::is_hidden;
+use bande_xdg::{Apps, DIRECTORY};
 
 use crate::model::{Item, Kind, Positions, Slot};
 
@@ -90,7 +90,7 @@ pub fn format_layouts(layouts: &Layouts) -> String {
 }
 
 pub fn layouts_path() -> Option<PathBuf> {
-    unbound_xdg::state_home().map(|state| state.join("unbound/desktop-layout.tsv"))
+    bande_xdg::state_home().map(|state| state.join("bande/desktop-layout.tsv"))
 }
 
 pub fn save_layouts(path: &Path, layouts: &Layouts) -> io::Result<()> {

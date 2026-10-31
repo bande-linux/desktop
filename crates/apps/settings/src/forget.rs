@@ -1,6 +1,6 @@
-use unbound_settings_panes::Permission;
-use unbound_toolkit::Spacing;
-use unbound_toolkit::ui::{Axis, Button, Stack, Widget};
+use bande_settings_panes::Permission;
+use bande_toolkit::Spacing;
+use bande_toolkit::ui::{Axis, Button, Stack, Widget};
 
 use crate::L10N;
 use crate::follow::Command;

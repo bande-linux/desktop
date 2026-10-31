@@ -214,7 +214,7 @@ mod tests {
     fn remembered_frames_survive_a_round_trip_and_bad_lines_are_skipped() {
         let frames = vec![Remembered {
             displays: "Apple Studio Display 123 + eDP-1".to_owned(),
-            app_id: "org.unbound.Files".to_owned(),
+            app_id: "org.bande.Files".to_owned(),
             frame: rect(-40, 30, 900, 600),
         }];
 

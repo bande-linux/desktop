@@ -3,7 +3,7 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 
-use unbound_fs::Trash;
+use bande_fs::Trash;
 
 use crate::failure::unexpected;
 use crate::follow::{Update, Updates, spawn};

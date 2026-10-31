@@ -1,0 +1,13 @@
+[Icon Theme]
+Name=Bande Plum
+Comment=Bande folders with the plum accent
+Inherits=Bande
+Directories=scalable/places
+Hidden=true
+
+[scalable/places]
+Context=Places
+Size=48
+MinSize=8
+MaxSize=512
+Type=Scalable

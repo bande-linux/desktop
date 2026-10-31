@@ -1,6 +1,6 @@
 [package]
-name = "unbound-bus"
-description = "D-Bus helpers for Unbound: serve until the bus goes away, follow the portal settings"
+name = "bande-bus"
+description = "D-Bus helpers for Bande: serve until the bus goes away, follow the portal settings"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,7 +11,7 @@ repository.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
-unbound-test-bus.workspace = true
+bande-test-bus.workspace = true
 
 [lints]
 workspace = true

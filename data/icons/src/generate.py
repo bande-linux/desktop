@@ -50,21 +50,21 @@ def main():
     directories = []
     for size in (16, 24):
         directory = f'{size}x{size}/mimetypes'
-        write('Unbound', directory, files.SMALL)
+        write('Bande', directory, files.SMALL)
         directories.append((directory, 'MimeTypes', size))
     for directory, (context, icons) in SCALABLE.items():
-        write('Unbound', directory, icons)
+        write('Bande', directory, icons)
         directories.append((directory, context, 48))
     for directory, (context, icons) in SYMBOLIC.items():
-        write('Unbound', directory, icons)
+        write('Bande', directory, icons)
         directories.append((directory, context, 16))
-    with open(os.path.join(ICONS, 'Unbound', 'index.theme'), 'w') as out:
-        out.write(index('Unbound', 'The Unbound desktop icons in the Datum language', 'Adwaita,hicolor', directories))
+    with open(os.path.join(ICONS, 'Bande', 'index.theme'), 'w') as out:
+        out.write(index('Bande', 'The Bande desktop icons in the Datum language', 'Adwaita,hicolor', directories))
     for accent, icons in places.ACCENT_VARIANTS.items():
-        theme = f'Unbound-{accent.capitalize()}'
+        theme = f'Bande-{accent.capitalize()}'
         write(theme, 'scalable/places', icons)
         with open(os.path.join(ICONS, theme, 'index.theme'), 'w') as out:
-            out.write(index(theme.replace('-', ' '), f'Unbound folders with the {accent} accent', 'Unbound',
+            out.write(index(theme.replace('-', ' '), f'Bande folders with the {accent} accent', 'Bande',
                             [('scalable/places', 'Places', 48)], hidden=True))
     for name, relative in apps.HICOLOR.items():
         with open(os.path.join(ROOT, relative), 'w') as out:

@@ -10,12 +10,12 @@ use std::rc::Rc;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use unbound_audio::{Level, VolumeKey};
-use unbound_l10n::Localizer;
-use unbound_toolkit::ui::{
+use bande_audio::{Level, VolumeKey};
+use bande_l10n::Localizer;
+use bande_toolkit::ui::{
     Axis, Context, LevelIndicator, Menu, MenuItem, PopUpButton, Size, Slider, Stack, Ui, Widget,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Color, DisplayEdge, Elevation, Image, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape,
     Spacing, TextAlign, TextRole, TextStyle, TextSystem,
 };
@@ -26,7 +26,7 @@ pub use client::{ControlCenter, role};
 use media::{Command, Player};
 pub use now_playing::clock;
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-controlcenter.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-controlcenter.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -489,7 +489,7 @@ mod tests {
             include_str!("now_playing.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

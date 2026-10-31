@@ -12,28 +12,26 @@ use crate::{
     layouts_path, list, parse_layouts, save_layouts,
 };
 use accesskit::TreeUpdate;
-use unbound_config::{BarEdge, Config, Wallpaper, WallpaperFit};
-use unbound_fs::{
-    Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash,
-};
-use unbound_inbox::Inbox;
-use unbound_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
-use unbound_toolkit::ui::frame_time;
-use unbound_toolkit::{
+use bande_config::{BarEdge, Config, Wallpaper, WallpaperFit};
+use bande_fs::{Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash};
+use bande_inbox::Inbox;
+use bande_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
+use bande_toolkit::ui::frame_time;
+use bande_toolkit::{
     App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
-use unbound_volumes::{eject, media_roots, mounted_volumes};
-use unbound_wallpaper::{Choice, Fit, Picture, Variant, choose, follow, render, render_cached};
-use unbound_xdg::{
+use bande_volumes::{eject, media_roots, mounted_volumes};
+use bande_wallpaper::{Choice, Fit, Picture, Variant, choose, follow, render, render_cached};
+use bande_xdg::{
     Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, cache_home, config_dirs,
     config_home, data_dirs, file_uri, find_icon, launch, launch_with, launch_with_arguments,
     path_from_file_uri, user_dir,
 };
 
 const PDF: &str = "application/pdf";
-const WALLPAPER_CACHE: &str = "unbound/wallpapers";
-const SETTINGS_APP: &str = "org.unbound.Settings";
+const WALLPAPER_CACHE: &str = "bande/wallpapers";
+const SETTINGS_APP: &str = "org.bande.Settings";
 const WALLPAPER_PANE: &str = "appearance";
 const FILES_INFO_FLAG: &str = "--info";
 
@@ -307,9 +305,9 @@ impl DesktopSurface {
 
     fn area(&self, size: (u32, u32)) -> Bounds {
         let (width, height) = (size.0 as f32, size.1 as f32);
-        let top = unbound_bar::menu_bar::HEIGHT as f32;
-        let dock = unbound_bar::dock::exclusive_zone(unbound_bar::dock::ICON_SIZE);
-        let bar = unbound_bar::rail::bar_width(unbound_bar::dock::ICON_SIZE);
+        let top = bande_bar::menu_bar::HEIGHT as f32;
+        let dock = bande_bar::dock::exclusive_zone(bande_bar::dock::ICON_SIZE);
+        let bar = bande_bar::rail::bar_width(bande_bar::dock::ICON_SIZE);
         let (left, right, bottom, top) = match (self.bar_edge, self.combined_bar) {
             (_, true) => (bar, 0.0, 0.0, 0.0),
             (BarEdge::Left, false) => (dock, 0.0, 0.0, top),
@@ -449,10 +447,10 @@ impl DesktopSurface {
     }
 
     fn change_wallpaper(&mut self, window: &mut Window) {
-        let settings = unbound_xdg::applications(
+        let settings = bande_xdg::applications(
             &self.data_dirs,
-            unbound_xdg::Locale::from_env().as_ref(),
-            &unbound_xdg::current_desktops(),
+            bande_xdg::Locale::from_env().as_ref(),
+            &bande_xdg::current_desktops(),
         )
         .into_iter()
         .find(|entry| entry.app_id() == SETTINGS_APP);
@@ -503,12 +501,12 @@ impl DesktopSurface {
                     },
                     Action::Move,
                 ),
-                Request::Rename { path, name } => match unbound_fs::rename(&path, &name) {
+                Request::Rename { path, name } => match bande_fs::rename(&path, &name) {
                     Ok(Some(change)) => self.operations.record(Action::Rename, vec![change]),
                     Ok(None) => {}
                     Err(error) => tracing::warn!("cannot rename {}: {error:?}", path.display()),
                 },
-                Request::NewFolder => match unbound_fs::new_folder(&self.desktop_dir) {
+                Request::NewFolder => match bande_fs::new_folder(&self.desktop_dir) {
                     Ok(change) => {
                         if let Change::Created(path) = &change {
                             self.view.rename_when_listed(path.clone());

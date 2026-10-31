@@ -3,14 +3,14 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use accesskit::{Node, Role};
-use unbound_fs::{
+use bande_fs::{
     Action, BatchItem, BatchProblem, Change, Numbering, RenameRule, new_name, plan_renames,
     rename_all,
 };
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, Context, PopUpButton, Size, TextField, Widget, WidgetId,
 };
-use unbound_toolkit::{Item, Paragraph, Point, Rect, TextAlign, TextRole, TextStyle};
+use bande_toolkit::{Item, Paragraph, Point, Rect, TextAlign, TextRole, TextStyle};
 
 use crate::L10N;
 use crate::controls::{Signal, sender};

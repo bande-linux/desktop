@@ -2,9 +2,9 @@
 
 use std::sync::{Arc, Mutex};
 
-use unbound_bluetooth::{Bluetooth, Kind, PairingPrompt, register_agent};
-use unbound_test_bus::SessionBus;
-use unbound_test_bus::bluez::{FakeBluez, HEADPHONES, MOUSE, NAMELESS, PHONE};
+use bande_bluetooth::{Bluetooth, Kind, PairingPrompt, register_agent};
+use bande_test_bus::SessionBus;
+use bande_test_bus::bluez::{FakeBluez, HEADPHONES, MOUSE, NAMELESS, PHONE};
 
 #[derive(Default)]
 struct Prompt {
@@ -64,7 +64,7 @@ fn start(accept: bool) -> Fixture {
 }
 
 impl Fixture {
-    fn named(&self, name: &str) -> unbound_bluetooth::Device {
+    fn named(&self, name: &str) -> bande_bluetooth::Device {
         self.client
             .paired_devices()
             .expect("paired")

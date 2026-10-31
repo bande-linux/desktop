@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use unbound_graphics::{
+use bande_graphics::{
     Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle, TextSystem,
 };
 

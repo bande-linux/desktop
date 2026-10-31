@@ -1,4 +1,0 @@
-[D-BUS Service]
-Name=org.freedesktop.ScreenSaver
-Exec=/usr/bin/unbound-power
-SystemdService=unbound-power.service

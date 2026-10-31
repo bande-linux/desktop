@@ -1,12 +1,12 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use accesskit::{Action, ActionRequest, TreeId};
+use bande_graphics::{CpuRenderer, Image, Palette, Scheme, TextSize, TextSystem, pixels};
 use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Instant;
-use unbound_graphics::{CpuRenderer, Image, Palette, Scheme, TextSize, TextSystem, pixels};
 
-use unbound_widgets::{
+use bande_widgets::{
     Axis, Button, CheckState, Checkbox, ComboBox, Context, Event, Pointer, PopUpButton,
     ProgressBar, RadioGroup, SearchField, SegmentedControl, Size, Slider, Spinner, Stack, Stepper,
     TOOLTIP_DELAY, TextField, TextView, Toggle, Ui, Widget, WidgetId,
@@ -39,7 +39,7 @@ fn shoot(
         CpuRenderer::new()
             .render_into(&scene, scale, &mut rgba)
             .expect("render");
-        unbound_golden::assert_golden_rgba!(
+        bande_golden::assert_golden_rgba!(
             &format!("{name}-{scheme_name}-{scale_name}"),
             (width, height),
             rgba,
@@ -178,7 +178,7 @@ fn controls_at(scheme: Scheme, text_size: TextSize, area: (u32, u32)) -> Ui {
     focus(&mut ui, typed_id);
     let frame = ui.widget(delete_id).expect("button").frame();
     ui.handle(&Event::PointerMove(Pointer::at(
-        unbound_graphics::Point::new(frame.x + 10.0, frame.y + 8.0),
+        bande_graphics::Point::new(frame.x + 10.0, frame.y + 8.0),
     )));
     clock.set(clock.get() + TOOLTIP_DELAY * 2);
     ui

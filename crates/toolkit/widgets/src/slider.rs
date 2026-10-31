@@ -2,7 +2,7 @@ use accesskit::{Action, ActionData, ActionRequest, Node, Role};
 
 use super::control::outline;
 use super::{Animated, Context, Event, Key, Size, Spring, Widget, WidgetId};
-use unbound_graphics::{Color, Item, Point, Rect, Shape};
+use bande_graphics::{Color, Item, Point, Rect, Shape};
 
 pub const SLIDER_HEIGHT: f32 = 20.0;
 const TRACK_HEIGHT: f32 = 4.0;

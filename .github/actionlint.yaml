@@ -1,4 +1,4 @@
 self-hosted-runner:
   labels:
-    - unbound
-    - unbound-kvm
+    - bande
+    - bande-kvm

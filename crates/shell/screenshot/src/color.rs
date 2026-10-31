@@ -1,5 +1,5 @@
-use unbound_toolkit::ui::{Event, Key};
-use unbound_toolkit::{
+use bande_toolkit::ui::{Event, Key};
+use bande_toolkit::{
     Color, Elevation, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape, TextAlign,
     TextRole, TextStyle, TextSystem,
 };
@@ -160,7 +160,7 @@ impl ColorPicker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use unbound_toolkit::ui::Pointer;
+    use bande_toolkit::ui::Pointer;
 
     #[test]
     fn a_click_picks_the_color_under_the_pointer_at_the_screen_scale() {

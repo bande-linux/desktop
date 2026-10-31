@@ -1,6 +1,6 @@
 [package]
-name = "unbound-protocols"
-description = "Unbound's private Wayland protocols between the compositor and its shell clients"
+name = "bande-protocols"
+description = "Bande's private Wayland protocols between the compositor and its shell clients"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -2,9 +2,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_graphics::Path;
-use unbound_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
-use unbound_toolkit::{
+use bande_graphics::Path;
+use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
+use bande_toolkit::{
     Color, CpuRenderer, Image, Item, Palette, Paragraph, Point, Radius, Rect, Scene, Scheme, Shape,
     Snapshot, TextAlign, TextStyle, TextSystem,
 };

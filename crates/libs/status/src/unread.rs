@@ -1,6 +1,6 @@
-use unbound_inbox::Outbox;
-use unbound_notify::WirePresentation;
-use unbound_notify::client::NotificationCenter;
+use bande_inbox::Outbox;
+use bande_notify::WirePresentation;
+use bande_notify::client::NotificationCenter;
 use zbus::blocking::Connection;
 
 use crate::Update;

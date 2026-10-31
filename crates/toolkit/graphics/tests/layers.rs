@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use unbound_graphics::{Color, CpuRenderer, Item, Path, Point, Rect, Scene, Shape, Snapshot};
+use bande_graphics::{Color, CpuRenderer, Item, Path, Point, Rect, Scene, Shape, Snapshot};
 
 const WHITE: Color = Color::hex(0xFFFFFF);
 const BLACK: Color = Color::hex(0x000000);

@@ -4,22 +4,22 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use unbound_inbox::Outbox;
+use bande_inbox::Outbox;
 use zbus::blocking::Connection;
 use zbus::message::Header;
 use zbus::zvariant::{OwnedValue, Value};
 
-use unbound_toolkit::Snapshot;
+use bande_toolkit::Snapshot;
 
 use crate::cast::Cast;
 use crate::engine::{Engine, Shot, Source};
 use crate::indicator::{Activity, Indicator};
 use crate::{L10N, shrunk};
 
-pub const BUS_NAME: &str = "org.unbound.Screenshot";
-pub const PATH: &str = "/org/unbound/Screenshot";
-pub const INTERFACE: &str = "org.unbound.Screenshot";
-pub const PORTAL: &str = "org.freedesktop.impl.portal.desktop.unbound";
+pub const BUS_NAME: &str = "org.bande.Screenshot";
+pub const PATH: &str = "/org/bande/Screenshot";
+pub const INTERFACE: &str = "org.bande.Screenshot";
+pub const PORTAL: &str = "org.freedesktop.impl.portal.desktop.bande";
 pub const SCREEN_ID: &str = "monitor:screen";
 pub const MONITOR: u32 = 1;
 pub const WINDOW: u32 = 2;
@@ -312,7 +312,7 @@ impl Service {
     }
 }
 
-#[zbus::interface(name = "org.unbound.Screenshot")]
+#[zbus::interface(name = "org.bande.Screenshot")]
 impl Service {
     async fn select_sources(
         &self,

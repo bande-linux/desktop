@@ -6,20 +6,20 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_config::LOGIN_PICTURES;
-use unbound_datetime::{DateFormats, MinuteTimer};
-use unbound_greeter::{
+use bande_config::LOGIN_PICTURES;
+use bande_datetime::{DateFormats, MinuteTimer};
+use bande_greeter::{
     L10N, Login, Rejection, Request, Step, last_user_file, login_picture, login_users, opened_path,
     read_message, remember_user, remembered_user, write_message,
 };
-use unbound_keyboard::Layouts;
-use unbound_lock::{
+use bande_keyboard::Layouts;
+use bande_lock::{
     BackdropSource, Devices, Inbox, LockScreen, Look, PowerAction, User, Variant, load_backdrop,
 };
-use unbound_status::devices::{powers, use_power};
-use unbound_status::status::{Battery, Wifi};
-use unbound_toolkit::ui::{Event, Key, frame_time};
-use unbound_toolkit::{
+use bande_status::devices::{powers, use_power};
+use bande_status::status::{Battery, Wifi};
+use bande_toolkit::ui::{Event, Key, frame_time};
+use bande_toolkit::{
     App, Appearance, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem,
     Window, WindowEvent,
 };
@@ -83,7 +83,7 @@ impl Greeter {
         LockScreen::new(
             user,
             DateFormats::from_env(),
-            &unbound_datetime::now(),
+            &bande_datetime::now(),
             Appearance::default(),
             text,
         )
@@ -301,7 +301,7 @@ impl App for Greeter {
             if let Err(error) = self.minutes.wait() {
                 tracing::warn!("cannot follow the clock: {error}");
             }
-            self.screen.set_clock(&unbound_datetime::now());
+            self.screen.set_clock(&bande_datetime::now());
             window.request_redraw();
             return;
         }
@@ -411,12 +411,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         devices: Devices::follow(),
         corner: (None, None),
     };
-    unbound_toolkit::run(&mut window, &mut greeter)?;
+    bande_toolkit::run(&mut window, &mut greeter)?;
     Ok(())
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-greeter");
+    bande_log::init("bande-greeter");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
@@ -428,7 +428,7 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use unbound_status::status::Power;
+    use bande_status::status::Power;
 
     use super::*;
 

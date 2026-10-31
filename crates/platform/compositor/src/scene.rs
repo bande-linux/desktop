@@ -18,8 +18,8 @@ use crate::state::OutputElement;
 use crate::state::mapped_size;
 use crate::tile::{Preview, TILED};
 use crate::window::Window;
-use unbound_graphics::{Color, Elevation, Palette, Radius, Scheme};
-use unbound_render::{
+use bande_graphics::{Color, Elevation, Palette, Radius, Scheme};
+use bande_render::{
     Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
 };
 
@@ -59,7 +59,7 @@ pub(crate) fn cast_shadows(
     alpha: f32,
 ) -> impl Iterator<Item = OutputElement> {
     let [key, ambient] = elevation.shadows(shading.scheme, shading.active);
-    let cast = |id: &Id, shadow: unbound_graphics::Shadow| {
+    let cast = |id: &Id, shadow: bande_graphics::Shadow| {
         let offset = (f64::from(shadow.offset) * scale) as f32;
         OutputElement::Shadow(ShadowElement::new(
             id.clone(),

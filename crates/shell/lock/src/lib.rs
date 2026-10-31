@@ -9,36 +9,36 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Node, Role, TreeId, TreeUpdate};
-use unbound_bar::symbols::{
+use bande_bar::symbols::{
     Symbol, Symbols, battery_items, natural_size, place_symbol, snap, wifi_symbol,
 };
-pub use unbound_datetime::DateFormats;
-use unbound_l10n::Localizer;
-use unbound_spring::State;
-pub use unbound_status::devices::PowerAction;
-use unbound_status::session::Ending;
-use unbound_status::status::{Battery, Wifi};
-use unbound_toolkit::ui::{
+pub use bande_datetime::DateFormats;
+use bande_l10n::Localizer;
+use bande_spring::State;
+pub use bande_status::devices::PowerAction;
+use bande_status::session::Ending;
+use bande_status::status::{Battery, Wifi};
+use bande_toolkit::ui::{
     Animated, Button, Context, Event, Key, SecureField, Size, Spring, Ui, Widget, WidgetId,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape, TextAlign,
     TextRole, TextStyle, TextSystem,
 };
 use zeroize::Zeroizing;
 
 pub use backdrop::{BackdropSource, Look, load_backdrop};
+pub use bande_inbox::Inbox;
+pub use bande_wallpaper::Variant;
 pub use devices::Devices;
 pub use pam::{AuthError, authenticate};
-pub use unbound_inbox::Inbox;
-pub use unbound_wallpaper::Variant;
 pub use user::{User, current as current_user, display_name};
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-lock.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-lock.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-pub const PAM_SERVICE: &str = "unbound-lock";
+pub const PAM_SERVICE: &str = "bande-lock";
 pub const SHAKE_DURATION: Duration = Duration::from_millis(480);
 const SHAKE_KICK: f64 = 600.0;
 const TIME_SIZE: f32 = 96.0;
@@ -804,7 +804,7 @@ mod tests {
     fn every_message_id_used_in_code_is_in_the_english_file() {
         let sources = [include_str!("lib.rs"), include_str!("main.rs")];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

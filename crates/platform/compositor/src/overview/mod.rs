@@ -3,13 +3,13 @@ mod paint;
 
 use std::time::Duration;
 
+use bande_spring::{Animated, Spring, State as Phase};
 use smithay::backend::renderer::element::Id;
 use smithay::desktop::{WindowSurfaceType, layer_map_for_output};
 use smithay::input::keyboard::keysyms;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle};
 use smithay::wayland::shell::wlr_layer::Layer;
-use unbound_spring::{Animated, Spring, State as Phase};
 
 use self::layout::lerp;
 pub(crate) use self::layout::{arrange, real_rect};

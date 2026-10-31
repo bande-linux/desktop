@@ -5,16 +5,16 @@ mod support;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Role, TreeId};
-use jiff::Timestamp;
-use support::{SIZE, WAIT, click, find, has_text, nodes};
-use unbound_settings::{
+use bande_settings::{
     Command, Feed, PaneId, Privilege, SettingId, SettingsView, TimeCommand, TimeState, Update,
     Value, feed, follow_time, parse_manual, zone_matches, zone_offset, zone_place,
 };
-use unbound_test_bus::SessionBus;
-use unbound_test_bus::timedate::FakeTimedate;
-use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Palette, Scheme, TextSystem};
+use bande_test_bus::SessionBus;
+use bande_test_bus::timedate::FakeTimedate;
+use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::{Palette, Scheme, TextSystem};
+use jiff::Timestamp;
+use support::{SIZE, WAIT, click, find, has_text, nodes};
 
 fn press(view: &mut SettingsView, key: Key) {
     view.handle(&Event::Key {

@@ -9,16 +9,16 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use serde::de::DeserializeOwned;
-use smithay::utils::Size;
-use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
-use unbound_graphics::{Palette, Point, Scene, Scheme, TextSystem};
-use unbound_test_bus::SessionBus;
-use unbound_toolkit_platform::{App, MenuPlacement, Role, Window, WindowEvent};
-use unbound_widgets::{
+use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
+use bande_graphics::{Palette, Point, Scene, Scheme, TextSystem};
+use bande_test_bus::SessionBus;
+use bande_toolkit_platform::{App, MenuPlacement, Role, Window, WindowEvent};
+use bande_widgets::{
     Axis, Button, Cell, Column, Context, Menu, MenuItem, PopUpButton, Row, Stack, Table, TextField,
     Ui,
 };
+use serde::de::DeserializeOwned;
+use smithay::utils::Size;
 use zbus::blocking::Connection;
 use zbus::zvariant::{DynamicType, OwnedObjectPath, OwnedValue, Value};
 
@@ -47,7 +47,7 @@ impl Drop for Launcher {
 }
 
 fn start_registry(session: &SessionBus) -> (Launcher, String) {
-    let runtime = std::env::temp_dir().join(format!("unbound-atspi-{}", std::process::id()));
+    let runtime = std::env::temp_dir().join(format!("bande-atspi-{}", std::process::id()));
     std::fs::create_dir_all(&runtime).expect("runtime directory");
     let launcher = Launcher {
         process: Command::new(BUS_LAUNCHER)
@@ -346,7 +346,7 @@ fn a_screen_reader_reads_and_operates_a_toolkit_window_through_atspi() {
     let (commands, app_commands) = UnixStream::pair().expect("command pipe");
     let (heard_sender, heard_events) = mpsc::channel();
     let app = thread::spawn(move || {
-        let role = Role::toplevel("Export", "org.unbound.ScreenReaderTest");
+        let role = Role::toplevel("Export", "org.bande.ScreenReaderTest");
         let mut window = Window::open_on(client_end, role, WINDOW).expect("window");
         let mut form = Form {
             ui: form(&heard_sender),
@@ -354,7 +354,7 @@ fn a_screen_reader_reads_and_operates_a_toolkit_window_through_atspi() {
             commands: app_commands,
             finished: false,
         };
-        unbound_toolkit_platform::run(&mut window, &mut form).expect("run loop");
+        bande_toolkit_platform::run(&mut window, &mut form).expect("run loop");
     });
     let reader = thread::spawn(move || {
         let reader = Reader {

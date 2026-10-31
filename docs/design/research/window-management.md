@@ -137,7 +137,7 @@ These are well known but unverified on fetched pages.
    scaled toward the target and cross-fade to the new buffer when the client commits the new
    size.
 
-## For Unbound
+## For Bande
 
 All of this is `crates/platform/compositor` unless noted.
 
@@ -164,8 +164,8 @@ All of this is `crates/platform/compositor` unless noted.
      proportional.
    - Add a Snap-bar equivalent later: dragging to the top edge and holding 300 ms drops a
      small layout bar from the menu bar (halves, quarters, fill), driven by `quick`.
-4. **Minimise into the icon** (now, compositor plus `unbound-dock`).
-   - The Dock reports each app icon's rectangle to the compositor via `unbound_shell_v1`
+4. **Minimise into the icon** (now, compositor plus `bande-dock`).
+   - The Dock reports each app icon's rectangle to the compositor via `bande_shell_v1`
      (`set_icon_rect(app_id, rect)`). `zwlr_foreign_toplevel_handle.set_rectangle` exists for
      the same purpose in wlr; `ext-foreign-toplevel-list` lacks it.
    - Minimise is Scale: scale and translate toward the rect plus fade, with `gentle`.
@@ -173,7 +173,7 @@ All of this is `crates/platform/compositor` unless noted.
      brand-neutral choice and costs nothing in the renderer.
 5. **Hide** (now). Fade all the app's windows with `fade`; no spatial motion. Unhide is the
    reverse.
-6. **App switcher** (now, compositor-drawn or `unbound-launcher`; windows.md already specifies
+6. **App switcher** (now, compositor-drawn or `bande-launcher`; windows.md already specifies
    it).
    - The overlay is delayed by 150 ms so quick switches never show it.
    - The selection ring moves with `quick`.

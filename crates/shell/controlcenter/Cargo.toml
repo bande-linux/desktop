@@ -1,6 +1,6 @@
 [package]
-name = "unbound-controlcenter"
-description = "Unbound Control Center: Wi-Fi, Bluetooth, Do Not Disturb and sound, and the volume and brightness HUD, as a part of unbound-shell"
+name = "bande-controlcenter"
+description = "Bande Control Center: Wi-Fi, Bluetooth, Do Not Disturb and sound, and the volume and brightness HUD, as a part of bande-shell"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,22 +10,22 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 tracing.workspace = true
-unbound-audio.workspace = true
-unbound-bluetooth.workspace = true
-unbound-inbox.workspace = true
-unbound-l10n.workspace = true
-unbound-network.workspace = true
-unbound-notify.workspace = true
-unbound-power.workspace = true
-unbound-sound.workspace = true
-unbound-status.workspace = true
-unbound-toolkit.workspace = true
-unbound-xdg.workspace = true
+bande-audio.workspace = true
+bande-bluetooth.workspace = true
+bande-inbox.workspace = true
+bande-l10n.workspace = true
+bande-network.workspace = true
+bande-notify.workspace = true
+bande-power.workspace = true
+bande-sound.workspace = true
+bande-status.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
-unbound-golden.workspace = true
-unbound-test-bus.workspace = true
+bande-golden.workspace = true
+bande-test-bus.workspace = true
 
 [lints]
 workspace = true

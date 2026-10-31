@@ -1,5 +1,5 @@
-const _SHELL_PROTOCOL_SOURCE: &str = include_str!("../protocols/unbound-shell-v1.xml");
-const _CAPTURE_PROTOCOL_SOURCE: &str = include_str!("../protocols/unbound-capture-v1.xml");
+const _SHELL_PROTOCOL_SOURCE: &str = include_str!("../protocols/bande-shell-v1.xml");
+const _CAPTURE_PROTOCOL_SOURCE: &str = include_str!("../protocols/bande-capture-v1.xml");
 
 #[cfg(feature = "client")]
 pub mod client {
@@ -10,23 +10,23 @@ pub mod client {
     pub mod __interfaces {
         use wayland_client::protocol::__interfaces::*;
         use wayland_protocols::xdg::shell::client::__interfaces::*;
-        wayland_scanner::generate_interfaces!("protocols/unbound-shell-v1.xml");
+        wayland_scanner::generate_interfaces!("protocols/bande-shell-v1.xml");
     }
     use self::__interfaces::*;
 
-    wayland_scanner::generate_client_code!("protocols/unbound-shell-v1.xml");
+    wayland_scanner::generate_client_code!("protocols/bande-shell-v1.xml");
 
-    pub use self::capture::unbound_capture_v1;
+    pub use self::capture::bande_capture_v1;
 
     mod capture {
         use wayland_client;
 
         pub mod __interfaces {
-            wayland_scanner::generate_interfaces!("protocols/unbound-capture-v1.xml");
+            wayland_scanner::generate_interfaces!("protocols/bande-capture-v1.xml");
         }
         use self::__interfaces::*;
 
-        wayland_scanner::generate_client_code!("protocols/unbound-capture-v1.xml");
+        wayland_scanner::generate_client_code!("protocols/bande-capture-v1.xml");
     }
 }
 
@@ -39,22 +39,22 @@ pub mod server {
     pub mod __interfaces {
         use wayland_protocols::xdg::shell::server::__interfaces::*;
         use wayland_server::protocol::__interfaces::*;
-        wayland_scanner::generate_interfaces!("protocols/unbound-shell-v1.xml");
+        wayland_scanner::generate_interfaces!("protocols/bande-shell-v1.xml");
     }
     use self::__interfaces::*;
 
-    wayland_scanner::generate_server_code!("protocols/unbound-shell-v1.xml");
+    wayland_scanner::generate_server_code!("protocols/bande-shell-v1.xml");
 
-    pub use self::capture::unbound_capture_v1;
+    pub use self::capture::bande_capture_v1;
 
     mod capture {
         use wayland_server;
 
         pub mod __interfaces {
-            wayland_scanner::generate_interfaces!("protocols/unbound-capture-v1.xml");
+            wayland_scanner::generate_interfaces!("protocols/bande-capture-v1.xml");
         }
         use self::__interfaces::*;
 
-        wayland_scanner::generate_server_code!("protocols/unbound-capture-v1.xml");
+        wayland_scanner::generate_server_code!("protocols/bande-capture-v1.xml");
     }
 }

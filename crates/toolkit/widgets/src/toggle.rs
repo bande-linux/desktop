@@ -1,7 +1,7 @@
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
 
 use super::{Animated, Context, Event, Key, Size, Spring, Widget, WidgetId};
-use unbound_graphics::{Color, Item, Point, Rect, Shape};
+use bande_graphics::{Color, Item, Point, Rect, Shape};
 
 pub const SWITCH_SIZE: Size = Size::new(36.0, 20.0);
 const KNOB_INSET: f32 = 2.5;

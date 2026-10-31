@@ -1,6 +1,6 @@
 [package]
-name = "unbound-widgets"
-description = "Unbound widgets: the UI tree, widgets, focus and accessibility nodes"
+name = "bande-widgets"
+description = "Bande widgets: the UI tree, widgets, focus and accessibility nodes"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,13 +10,13 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 parley.workspace = true
-unbound-graphics.workspace = true
-unbound-l10n.workspace = true
-unbound-spring.workspace = true
+bande-graphics.workspace = true
+bande-l10n.workspace = true
+bande-spring.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
-unbound-golden.workspace = true
+bande-golden.workspace = true
 
 [lints]
 workspace = true

@@ -1,18 +1,18 @@
 use std::os::fd::BorrowedFd;
 use std::sync::mpsc::{Sender, channel};
 
-use unbound_inbox::Inbox;
-use unbound_preview::Preview;
-use unbound_toolkit::Image;
+use bande_inbox::Inbox;
+use bande_preview::Preview;
+use bande_toolkit::Image;
 
 use crate::model::Clip;
 
 type Item = (u64, u64, String, Vec<String>);
 
 #[zbus::proxy(
-    interface = "org.unbound.Clipboard",
-    default_service = "org.unbound.Clipboard",
-    default_path = "/org/unbound/Clipboard"
+    interface = "org.bande.Clipboard",
+    default_service = "org.bande.Clipboard",
+    default_path = "/org/bande/Clipboard"
 )]
 trait Clipboard {
     fn items(&self) -> zbus::Result<Vec<Item>>;

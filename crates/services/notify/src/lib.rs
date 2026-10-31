@@ -61,7 +61,7 @@ pub fn do_not_disturb_path(xdg_state_home: Option<&Path>, home: Option<&Path>) -
         Some(state_home) => state_home.to_path_buf(),
         None => home?.join(".local").join("state"),
     };
-    Some(base.join("unbound").join("do-not-disturb"))
+    Some(base.join("bande").join("do-not-disturb"))
 }
 
 pub type WireApp = (String, String, bool, String, bool);
@@ -412,7 +412,7 @@ fn sounds(connection: &Connection) -> Sender<String> {
     let connection = connection.clone();
     thread::spawn(move || {
         for name in names {
-            unbound_sound::play(&connection, &name);
+            bande_sound::play(&connection, &name);
         }
     });
     sender
@@ -511,8 +511,8 @@ impl Notifications {
 
     fn get_server_information(&self) -> (String, String, String, String) {
         (
-            "Unbound".to_owned(),
-            "Unbound".to_owned(),
+            "Bande".to_owned(),
+            "Bande".to_owned(),
             env!("CARGO_PKG_VERSION").to_owned(),
             SPEC_VERSION.to_owned(),
         )
@@ -544,7 +544,7 @@ struct NotificationCenter {
     shared: Arc<Shared>,
 }
 
-#[zbus::interface(name = "org.unbound.NotificationCenter")]
+#[zbus::interface(name = "org.bande.NotificationCenter")]
 impl NotificationCenter {
     #[zbus(property)]
     fn do_not_disturb(&self) -> bool {

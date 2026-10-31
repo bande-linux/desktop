@@ -3,7 +3,7 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use unbound_fs::{
+use bande_fs::{
     Entry, FolderChanges, Listing, Sort, Trash, compare, is_hidden, list, list_trash, merge, sort,
 };
 

@@ -1,5 +1,5 @@
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
-use unbound_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use bande_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
 use super::checkbox::{CHECKBOX_SIZE, paint_box};
 use super::{Animated, Context, Event, Key, Parts, Size, Spring, Widget, WidgetId};

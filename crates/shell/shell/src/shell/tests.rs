@@ -4,10 +4,10 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use smithay::utils::Size;
-use unbound_compositor::{
+use bande_compositor::{
     Compositor, FrameClock, FrameScheduler, OutputConfig, REFRESH, Renderer, SessionRole,
 };
+use smithay::utils::Size;
 
 use super::*;
 
@@ -49,7 +49,7 @@ impl Session {
                 app_slice: None,
             };
             let mut shell = Shell::start(context, root, None).unwrap();
-            let _ = unbound_toolkit::run_surfaces(&mut shell);
+            let _ = bande_toolkit::run_surfaces(&mut shell);
         });
         let session = Session {
             server,

@@ -4,17 +4,17 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use unbound_fs::format_size;
-use unbound_status::memory::{AppMemory, force_quit, heaviest_apps};
-use unbound_toolkit::ui::{
+use bande_fs::format_size;
+use bande_status::memory::{AppMemory, force_quit, heaviest_apps};
+use bande_toolkit::ui::{
     Alert, BUTTON_HEIGHT, Button, Cell, Column, Context, Event, FreeLayout, Key, Row, Size, Table,
     Ui, Widget, WidgetId,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     App, Image, Item, Palette, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole,
     TextStyle, TextSystem, Window, WindowEvent,
 };
-use unbound_xdg::{
+use bande_xdg::{
     DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon, spawn_detached,
 };
 use zbus::blocking::Connection;
@@ -22,8 +22,8 @@ use zbus::blocking::Connection;
 use crate::L10N;
 
 pub const LOW_MEMORY_SIZE: (u32, u32) = (460, 410);
-pub const ACTIVITY_MONITOR: &str = "org.unbound.ActivityMonitor";
-const MONITOR_COMMAND: [&str; 2] = ["unbound-monitor", "--memory"];
+pub const ACTIVITY_MONITOR: &str = "org.bande.ActivityMonitor";
+const MONITOR_COMMAND: [&str; 2] = ["bande-monitor", "--memory"];
 const APPS_SHOWN: usize = 6;
 const REFRESH: Duration = Duration::from_secs(2);
 const PADDING: f32 = 20.0;

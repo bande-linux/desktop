@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use unbound_config::{
+use bande_config::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
     DisplaySettings, InputSource, LidOnPower, NightLight, NightSchedule, Placement, Rotation,
     Setting, Suspend, WallpaperFit, WallpaperVariant,
@@ -15,10 +15,10 @@ fn apply(setting: Setting, source: &str) -> String {
 
 #[test]
 fn changing_a_value_keeps_every_comment_and_line_around_it() {
-    let source = "// Unbound settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"left\" // near the dock\n}\n";
+    let source = "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"left\" // near the dock\n}\n";
     assert_eq!(
         apply(Setting::BarEdge(BarEdge::Top), source),
-        "// Unbound settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"top\" // near the dock\n}\n"
+        "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"top\" // near the dock\n}\n"
     );
 }
 
@@ -135,17 +135,16 @@ fn key_repeat_and_wallpapers_are_written_and_a_reset_wallpaper_leaves_no_trace()
 
 #[test]
 fn the_dock_apps_are_rewritten_in_place_keeping_comments() {
-    let source =
-        "bar {\n    edge \"left\" // near\n    apps \"org.unbound.Files\" // kept apps\n}\n";
+    let source = "bar {\n    edge \"left\" // near\n    apps \"org.bande.Files\" // kept apps\n}\n";
     assert_eq!(
         apply(
             Setting::BarApps(vec![
-                "org.unbound.Terminal".to_owned(),
+                "org.bande.Terminal".to_owned(),
                 "org.mozilla.firefox".to_owned()
             ]),
             source
         ),
-        "bar {\n    edge \"left\" // near\n    apps \"org.unbound.Terminal\" \"org.mozilla.firefox\" // kept apps\n}\n"
+        "bar {\n    edge \"left\" // near\n    apps \"org.bande.Terminal\" \"org.mozilla.firefox\" // kept apps\n}\n"
     );
     assert_eq!(
         apply(Setting::BarApps(Vec::new()), ""),

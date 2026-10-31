@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use unbound_search::{
+use bande_search::{
     EXACT, FILE_KEY, FileIndex, FileResults, PREFIX, Query, Usage, calculate, fold, recent_files,
     usage_path,
 };
@@ -137,18 +137,18 @@ fn usage_boosts_what_was_opened_often_and_lately_and_persists() {
     let long_ago = reloaded.boost("app:org.example.Long.Ago", now);
     assert!(often > once && once > long_ago && long_ago > 0);
     assert_eq!(reloaded.boost("app:org.example.Never", now), 0);
-    assert!(often <= unbound_search::MAX_BOOST);
+    assert!(often <= bande_search::MAX_BOOST);
 }
 
 #[test]
 fn usage_lives_in_the_state_folder() {
     assert_eq!(
         usage_path(None, Some(Path::new("/home/someone"))).unwrap(),
-        Path::new("/home/someone/.local/state/unbound/launcher-usage")
+        Path::new("/home/someone/.local/state/bande/launcher-usage")
     );
     assert_eq!(
         usage_path(Some(Path::new("relative")), Some(Path::new("/home/a"))).unwrap(),
-        Path::new("/home/a/.local/state/unbound/launcher-usage")
+        Path::new("/home/a/.local/state/bande/launcher-usage")
     );
 }
 
@@ -278,7 +278,7 @@ fn searching_a_large_index_is_fast() {
     let started = Instant::now();
     let results = wait_for(&mut index, 2, "dr 17", |results| !results.hits.is_empty());
     let elapsed = started.elapsed();
-    assert_eq!(results.hits.len(), unbound_search::MAX_HITS);
+    assert_eq!(results.hits.len(), bande_search::MAX_HITS);
     assert!(
         elapsed < Duration::from_millis(150),
         "{elapsed:?} for 20,100 entries"
@@ -293,7 +293,7 @@ fn recents_merge_the_shared_list_with_launcher_use_newest_first() {
         fs::write(root.join(name), "").unwrap();
     }
     fs::create_dir(root.join("Folder")).unwrap();
-    let uri = |name: &str| unbound_xdg::file_uri(&root.join(name)).replace('&', "&amp;");
+    let uri = |name: &str| bande_xdg::file_uri(&root.join(name)).replace('&', "&amp;");
     let bookmark = |name: &str, day: u32| {
         format!(
             "<bookmark href=\"{}\" added=\"2026-01-0{day}T10:00:00Z\" modified=\"2026-01-0{day}T10:00:00.5Z\" visited=\"2026-01-01T10:00:00Z\">\n</bookmark>\n",
@@ -318,9 +318,7 @@ fn recents_merge_the_shared_list_with_launcher_use_newest_first() {
             1_000,
         )
         .unwrap();
-    usage
-        .record("app:org.unbound.Files", 1_800_000_000)
-        .unwrap();
+    usage.record("app:org.bande.Files", 1_800_000_000).unwrap();
     assert_eq!(
         recent_files(Some(&xbel), &usage, 10),
         [notes, root.join("photo & sea.png"), root.join("report.pdf")]

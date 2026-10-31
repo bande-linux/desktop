@@ -4,16 +4,16 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
-use unbound_files::{Place, Row as SidebarRow};
-use unbound_fs::{Entry, SortBy, format_date, format_size};
-use unbound_toolkit::ui::{
+use bande_files::{Place, Row as SidebarRow};
+use bande_fs::{Entry, SortBy, format_date, format_size};
+use bande_toolkit::ui::{
     Alert, Axis, Button, Cell, Column, Context, Cursor, Event, Key, Label, PopUpButton, Row, Size,
     Sort, Stack, TEXT_FIELD_HEIGHT, Table, TextField, Ui, Widget, WidgetId,
 };
-use unbound_toolkit::{Appearance, Image, Item, Rect, Scene, Shape, TextSystem};
-use unbound_xdg::{OCTET_STREAM, UserDir, config_home, find_icon, user_dir};
-use xdg_desktop_portal_unbound::file_chooser::{Mode, Selection};
-use xdg_desktop_portal_unbound::settings::icon_theme;
+use bande_toolkit::{Appearance, Image, Item, Rect, Scene, Shape, TextSystem};
+use bande_xdg::{OCTET_STREAM, UserDir, config_home, find_icon, user_dir};
+use xdg_desktop_portal_bande::file_chooser::{Mode, Selection};
+use xdg_desktop_portal_bande::settings::icon_theme;
 
 use crate::L10N;
 use crate::model::{Accept, Chooser};
@@ -400,7 +400,7 @@ impl Icons {
     fn set_appearance(&mut self, appearance: Appearance) {
         let themes = vec![
             icon_theme(appearance.accent),
-            "Unbound".to_owned(),
+            "Bande".to_owned(),
             "Adwaita".to_owned(),
         ];
         if themes != self.themes {
@@ -446,7 +446,7 @@ pub struct ChooserView {
 
 fn place_key(place: &Place) -> Option<String> {
     match &place.location {
-        unbound_files::Location::Folder(path) => Some(format!("{PLACE_PREFIX}{}", path.display())),
+        bande_files::Location::Folder(path) => Some(format!("{PLACE_PREFIX}{}", path.display())),
         _ => None,
     }
 }
@@ -825,7 +825,7 @@ impl ChooserView {
     }
 
     fn go_to(&mut self, typed: &str) {
-        let path = unbound_fs::typed_location(typed, &self.home, self.chooser.folder());
+        let path = bande_fs::typed_location(typed, &self.home, self.chooser.folder());
         if path.is_dir() {
             self.go(path);
         } else if let Some(parent) = path.parent().filter(|_| path.exists()) {
@@ -933,7 +933,7 @@ impl ChooserView {
                         self.rebuild();
                     }
                     Intent::Sort(order) => {
-                        self.chooser.set_sort(unbound_fs::Sort {
+                        self.chooser.set_sort(bande_fs::Sort {
                             by: match order.column {
                                 1 => SortBy::Modified,
                                 2 => SortBy::Size,

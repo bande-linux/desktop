@@ -62,7 +62,7 @@ impl OutputConfig {
     pub fn virtual_display(name: &str, size: Size<i32, Physical>) -> Self {
         Self {
             name: name.to_owned(),
-            make: "Unbound".to_owned(),
+            make: "Bande".to_owned(),
             model: "Virtual Display".to_owned(),
             serial: name.to_owned(),
             physical_size_mm: (0, 0).into(),
@@ -74,7 +74,7 @@ impl OutputConfig {
     }
 
     pub fn identity(&self) -> String {
-        unbound_edid::identity(&self.make, &self.model, &self.serial)
+        bande_edid::identity(&self.make, &self.model, &self.serial)
     }
 
     pub fn preferred_mode(&self) -> Option<OutputMode> {

@@ -1,12 +1,12 @@
 use std::sync::mpsc::{self, Sender};
 
+use bande_datetime::timedate::{TimedateProxyBlocking, timedate_changes};
 use jiff::Timestamp;
 use jiff::civil::DateTime;
 use jiff::tz::TimeZone;
-use unbound_datetime::timedate::{TimedateProxyBlocking, timedate_changes};
 use zbus::blocking::Connection;
 
-use unbound_settings_panes::SettingId;
+use bande_settings_panes::SettingId;
 
 use crate::failure::failed;
 use crate::follow::{Update, Updates, spawn};

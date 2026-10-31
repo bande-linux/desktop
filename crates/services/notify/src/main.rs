@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use unbound_notify::{NotificationServer, do_not_disturb_path};
+use bande_notify::{NotificationServer, do_not_disturb_path};
 use zbus::blocking::Connection;
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-notify");
+    bande_log::init("bande-notify");
     let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let remembered = do_not_disturb_path(state_home.as_deref(), home.as_deref());
@@ -18,7 +18,7 @@ fn main() -> ExitCode {
     });
     match server {
         Ok((connection, _server)) => {
-            unbound_bus::serve_until_closed(&connection);
+            bande_bus::serve_until_closed(&connection);
             ExitCode::SUCCESS
         }
         Err(error) => {

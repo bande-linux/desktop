@@ -4,9 +4,9 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Duration;
 
-use unbound_fs::format_size;
-use unbound_notify::Urgency;
-use unbound_notify::client::{self, Request};
+use bande_fs::format_size;
+use bande_notify::Urgency;
+use bande_notify::client::{self, Request};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
@@ -18,7 +18,7 @@ const ALWAYS_LOW: u64 = GIGABYTE;
 const NEVER_LOW: u64 = 10 * GIGABYTE;
 const LOW_SHARE: u64 = 20;
 const MANAGE_STORAGE: &str = "manage-storage";
-const SETTINGS: &str = "org.unbound.Settings";
+const SETTINGS: &str = "org.bande.Settings";
 
 pub fn is_low(total: u64, available: u64) -> bool {
     total > 0
@@ -156,8 +156,8 @@ impl SpaceWatch {
 }
 
 pub fn open_storage_settings() {
-    let command = ["unbound-settings".to_owned(), "storage".to_owned()];
-    if let Err(error) = unbound_xdg::spawn_detached(SETTINGS, &command, None, None) {
+    let command = ["bande-settings".to_owned(), "storage".to_owned()];
+    if let Err(error) = bande_xdg::spawn_detached(SETTINGS, &command, None, None) {
         tracing::warn!("cannot open Storage settings: {error}");
     }
 }

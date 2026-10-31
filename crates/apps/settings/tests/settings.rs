@@ -4,15 +4,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use accesskit::{Action, ActionRequest, Node, Role, TreeId};
-use unbound_config::{
+use bande_config::{
     Appearance, BarEdge, CapsLock, Config, ConfigService, ConfigStore, MenuBarPlacement,
     SecondaryClick, Suspend, WallpaperFit,
 };
-use unbound_settings::{Command, Idle, PaneId, SettingId, SettingsClient, SettingsView, Value};
-use unbound_settings_panes::panes;
-use unbound_test_bus::SessionBus;
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
-use unbound_toolkit::{Palette, Point, Scheme, TextSystem};
+use bande_settings::{Command, Idle, PaneId, SettingId, SettingsClient, SettingsView, Value};
+use bande_settings_panes::panes;
+use bande_test_bus::SessionBus;
+use bande_toolkit::ui::{Event, Key, Modifiers, Pointer};
+use bande_toolkit::{Palette, Point, Scheme, TextSystem};
 
 const SIZE: (u32, u32) = (900, 720);
 
@@ -259,10 +259,10 @@ fn shortening_the_lock_time_also_shortens_dimming() {
 }
 
 #[test]
-fn changes_are_written_through_org_unbound_config() {
+fn changes_are_written_through_org_bande_config() {
     let bus = SessionBus::start().expect("dbus-daemon");
     let directory = tempfile::tempdir().expect("temp dir");
-    let path = directory.path().join("unbound").join("config.kdl");
+    let path = directory.path().join("bande").join("config.kdl");
     let service_connection = bus.connect().expect("service connection");
     let _service = ConfigService::start(
         &service_connection,
@@ -304,8 +304,8 @@ fn changes_are_written_through_org_unbound_config() {
         (
             SettingId::Wallpaper,
             Value::Pictures {
-                light: "/usr/share/unbound/wallpapers/aurora-light.svg".to_owned(),
-                dark: "/usr/share/unbound/wallpapers/aurora-dark.svg".to_owned(),
+                light: "/usr/share/bande/wallpapers/aurora-light.svg".to_owned(),
+                dark: "/usr/share/bande/wallpapers/aurora-dark.svg".to_owned(),
             },
         ),
     ] {
@@ -349,7 +349,7 @@ fn changes_are_written_through_org_unbound_config() {
     assert_eq!(
         written.wallpaper.dark.as_deref(),
         Some(std::path::Path::new(
-            "/usr/share/unbound/wallpapers/aurora-dark.svg"
+            "/usr/share/bande/wallpapers/aurora-dark.svg"
         ))
     );
 
@@ -361,8 +361,8 @@ fn changes_are_written_through_org_unbound_config() {
         keyword("with-display")
     );
     assert_eq!(
-        client.read(&unbound_settings::CONFIG_SETTINGS).len(),
-        unbound_settings::CONFIG_SETTINGS.len()
+        client.read(&bande_settings::CONFIG_SETTINGS).len(),
+        bande_settings::CONFIG_SETTINGS.len()
     );
 }
 

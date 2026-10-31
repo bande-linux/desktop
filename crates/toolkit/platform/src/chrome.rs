@@ -1,19 +1,19 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
-use unbound_graphics::{
+use bande_graphics::{
     Color, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene, Scheme, Shape,
     TextAlign, TextStyle, TextSystem, TitleBar, resize_edge, title_style, window_controls_area,
 };
 
 use std::time::Instant;
 
-use unbound_widgets::{Animated, Spring};
+use bande_widgets::{Animated, Spring};
 
 use crate::L10N;
 
-pub(crate) use unbound_graphics::RESIZE_MARGIN;
-pub use unbound_graphics::WINDOW_HEADER_HEIGHT;
+pub(crate) use bande_graphics::RESIZE_MARGIN;
+pub use bande_graphics::WINDOW_HEADER_HEIGHT;
 pub const SHEET_INSET: u32 = 6;
-pub(crate) use unbound_graphics::WindowControl as Control;
+pub(crate) use bande_graphics::WindowControl as Control;
 const RESIZE_BAND: f32 = RESIZE_MARGIN as f32;
 const TITLE_TRAILING_GAP: f32 = 12.0;
 

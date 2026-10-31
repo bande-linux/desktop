@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-pub use unbound_audio::{Capture, Sense};
-use unbound_network::Network;
+pub use bande_audio::{Capture, Sense};
+use bande_network::Network;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Power {

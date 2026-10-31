@@ -2,7 +2,7 @@
 
 mod support;
 
-use unbound_graphics::{
+use bande_graphics::{
     Color, CpuRenderer, Image, Item, Paint, Palette, Point, Rect, Scene, Scheme, Shape, Spacing,
     Stop, TextAlign, TextStyle, TextSystem, damage,
 };
@@ -94,7 +94,7 @@ fn settings_card(palette: &Palette, text: &mut TextSystem) -> Scene {
         10.0,
     );
     let title = text.paragraph(
-        "Unbound Settings",
+        "Bande Settings",
         TextStyle::new(20.0, palette.ink).weight(TextStyle::SEMIBOLD),
         None,
         TextAlign::Start,
@@ -205,7 +205,7 @@ fn cpu_frames_match_references_computed_from_the_scene() {
 #[cfg(feature = "gpu")]
 mod gpu {
     use super::*;
-    use unbound_graphics::GpuRenderer;
+    use bande_graphics::GpuRenderer;
 
     #[test]
     fn gpu_frames_match_the_same_references() {

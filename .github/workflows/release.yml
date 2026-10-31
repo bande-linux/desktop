@@ -139,7 +139,7 @@ jobs:
         run: df -h / && grep -E "MemTotal|MemAvailable" /proc/meminfo
       - uses: actions/upload-artifact@v7
         with:
-          name: unbound-debs-${{ matrix.arch }}
+          name: bande-debs-${{ matrix.arch }}
           path: target/debian/*.deb
           if-no-files-found: error
 
@@ -164,7 +164,7 @@ jobs:
       - run: ci/release/build-all.sh debs
       - uses: actions/upload-artifact@v7
         with:
-          name: unbound-debs-all
+          name: bande-debs-all
           path: debs/*.deb
           if-no-files-found: error
 
@@ -186,13 +186,13 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
         with:
-          name: unbound-debs-${{ matrix.arch }}
+          name: bande-debs-${{ matrix.arch }}
           path: install-debs
       - uses: actions/download-artifact@v7
         with:
-          name: unbound-debs-all
+          name: bande-debs-all
           path: install-debs
-      - name: Install unbound-desktop and unbound-os into a clean Debian testing
+      - name: Install bande-desktop and bande-os into a clean Debian testing
         run: |
           test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
           ci/deb/install-test/run.sh install-debs

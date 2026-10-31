@@ -4,15 +4,15 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use unbound_audio::Audio;
-use unbound_sound::{Alert, BUS_NAME, OBJECT_PATH, Policy, Sound, write_theme};
+use bande_audio::Audio;
+use bande_sound::{Alert, BUS_NAME, OBJECT_PATH, Policy, Sound, write_theme};
 use zbus::blocking::Connection;
 use zbus::object_server::SignalEmitter;
 
 #[zbus::proxy(
-    interface = "org.unbound.Config",
-    default_service = "org.unbound.Config",
-    default_path = "/org/unbound/Config",
+    interface = "org.bande.Config",
+    default_service = "org.bande.Config",
+    default_path = "/org/bande/Config",
     gen_async = false,
     blocking_name = "ConfigProxy"
 )]
@@ -67,7 +67,7 @@ impl SoundService {
         )
     }
 
-    fn output(&self, sound: Sound, gain: f32) -> Result<(), unbound_audio::Error> {
+    fn output(&self, sound: Sound, gain: f32) -> Result<(), bande_audio::Error> {
         let mut audio = locked(&self.audio);
         if audio
             .as_ref()
@@ -87,14 +87,14 @@ impl SoundService {
             return Ok(());
         }
         let result = connected.play(self.samples(sound), gain);
-        if result == Err(unbound_audio::Error::Disconnected) {
+        if result == Err(bande_audio::Error::Disconnected) {
             *audio = None;
         }
         result
     }
 }
 
-#[zbus::interface(name = "org.unbound.Sound")]
+#[zbus::interface(name = "org.bande.Sound")]
 impl SoundService {
     async fn play(&self, name: &str, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
         let policy = self.policy();
@@ -138,7 +138,7 @@ fn serve() -> Result<Connection, Box<dyn Error>> {
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-sound");
+    bande_log::init("bande-sound");
     let mut arguments = std::env::args().skip(1);
     if arguments.next().as_deref() == Some("--write-theme") {
         let directory = arguments
@@ -154,7 +154,7 @@ fn main() -> ExitCode {
     }
     match serve() {
         Ok(connection) => {
-            unbound_bus::serve_until_closed(&connection);
+            bande_bus::serve_until_closed(&connection);
             ExitCode::SUCCESS
         }
         Err(error) => {

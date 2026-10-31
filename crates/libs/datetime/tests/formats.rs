@@ -1,8 +1,8 @@
 #![allow(clippy::expect_used)]
 
+use bande_datetime::{DateFormats, posix_locale};
 use icu_locale_core::locale;
 use jiff::Zoned;
-use unbound_datetime::{DateFormats, posix_locale};
 
 fn at(text: &str) -> Zoned {
     format!("{text}[Europe/Stockholm]")

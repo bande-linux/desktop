@@ -1,10 +1,10 @@
-use smithay::backend::allocator::Fourcc;
-use smithay::backend::renderer::element::memory::MemoryRenderBuffer;
-use smithay::utils::{Logical, Size, Transform};
-use unbound_graphics::{
+use bande_graphics::{
     Color, CpuRenderer, Elevation, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape,
     TextAlign, TextRole, TextStyle, TextSystem,
 };
+use smithay::backend::allocator::Fourcc;
+use smithay::backend::renderer::element::memory::MemoryRenderBuffer;
+use smithay::utils::{Logical, Size, Transform};
 
 pub(crate) const TITLE: LabelStyle = LabelStyle {
     role: TextRole::Callout,
@@ -113,8 +113,8 @@ impl Labels {
 
     pub(crate) fn rasterise(&mut self, scene: &Scene, scale: f64) -> Option<(Vec<u8>, (i32, i32))> {
         let pixels = (
-            unbound_graphics::pixels(scene.width, scale),
-            unbound_graphics::pixels(scene.height, scale),
+            bande_graphics::pixels(scene.width, scale),
+            bande_graphics::pixels(scene.height, scale),
         );
         let mut rgba = vec![0; pixels.0 as usize * pixels.1 as usize * 4];
         if let Err(error) = self.renderer.render_into(scene, scale, &mut rgba) {

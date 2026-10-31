@@ -137,7 +137,7 @@ impl Screen {
         let stride = width * BYTES_PER_PIXEL;
         let length = u64::from(stride) * u64::from(height);
         let memory = File::from(
-            memfd_create("unbound-review-frame", MemfdFlags::CLOEXEC).map_err(io::Error::from)?,
+            memfd_create("bande-review-frame", MemfdFlags::CLOEXEC).map_err(io::Error::from)?,
         );
         memory.set_len(length)?;
         let side = |value: u32| {

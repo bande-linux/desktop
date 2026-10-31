@@ -7,8 +7,8 @@ use std::time::Instant;
 use accesskit::{
     Action, ActionData, ActionRequest, NodeId, Role, TextPosition, TextSelection, TreeId,
 };
-use unbound_graphics::{Item, Palette, Point, Rect, Scheme, TextSystem};
-use unbound_widgets::{
+use bande_graphics::{Item, Palette, Point, Rect, Scheme, TextSystem};
+use bande_widgets::{
     ClipboardRequest, Context, DragAction, Event, Key, Modifiers, Pointer, PointerButton,
     SearchField, Size, TextField, TextView, Ui, Widget, WidgetId,
 };
@@ -686,8 +686,8 @@ fn tabbing_into_a_field_selects_its_text_so_typing_replaces_it() {
     let second = TextField::new("Last", "Lovelace", |_| {});
     let second_id = second.id();
     let mut ui = Ui::new(
-        Box::new(unbound_widgets::Stack::new(
-            unbound_widgets::Axis::Vertical,
+        Box::new(bande_widgets::Stack::new(
+            bande_widgets::Axis::Vertical,
             8.0,
             0.0,
             vec![Box::new(first), Box::new(second)],
@@ -743,8 +743,8 @@ fn a_middle_click_pastes_the_primary_selection_where_it_lands_and_focuses_that_f
     let second = TextField::new("Second", "world", |_| {});
     let (first_id, second_id) = (first.id(), second.id());
     let mut ui = Ui::new(
-        Box::new(unbound_widgets::Stack::new(
-            unbound_widgets::Axis::Vertical,
+        Box::new(bande_widgets::Stack::new(
+            bande_widgets::Axis::Vertical,
             8.0,
             16.0,
             vec![Box::new(first), Box::new(second)],

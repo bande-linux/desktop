@@ -5,8 +5,8 @@ use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::{MatchRule, message};
 
-use unbound_notify::Urgency;
-use unbound_notify::client::{Request, notify};
+use bande_notify::Urgency;
+use bande_notify::client::{Request, notify};
 
 use crate::L10N;
 use crate::failure::{sentence, unexpected};
@@ -249,7 +249,7 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
         &Request {
             app_name: &app_name,
             replaces_id: 0,
-            app_icon: "org.unbound.Settings",
+            app_icon: "org.bande.Settings",
             summary: &title,
             body: &body,
             actions: &[("default", &show)],

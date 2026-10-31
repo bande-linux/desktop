@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use unbound_xdg::state_home;
+use bande_xdg::state_home;
 
 #[test]
 fn state_home_uses_an_absolute_xdg_state_home_and_otherwise_the_home_folder() {

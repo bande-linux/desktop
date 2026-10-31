@@ -4,8 +4,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use unbound_graphics::{Appearance, Item, Palette, Scheme, TextSystem};
-use unbound_widgets::{
+use bande_graphics::{Appearance, Item, Palette, Scheme, TextSystem};
+use bande_widgets::{
     Context, Event, FrameTime, Key, Modifiers, Toggle, Ui, Widget, set_frame_time,
 };
 

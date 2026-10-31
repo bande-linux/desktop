@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Sender};
 
-use unbound_settings_panes::{PaneId, Permission};
-use unbound_toolkit::ui::Toggle;
-use unbound_xdg::{DesktopEntry, Locale, app_name, applications, current_desktops, data_dirs};
+use bande_settings_panes::{PaneId, Permission};
+use bande_toolkit::ui::Toggle;
+use bande_xdg::{DesktopEntry, Locale, app_name, applications, current_desktops, data_dirs};
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;

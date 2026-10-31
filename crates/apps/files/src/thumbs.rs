@@ -3,9 +3,9 @@ use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use unbound_fs::Entry;
-use unbound_thumbnails::{Request, ThumbnailSize, Thumbnails};
-use unbound_toolkit::Image;
+use bande_fs::Entry;
+use bande_thumbnails::{Request, ThumbnailSize, Thumbnails};
+use bande_toolkit::Image;
 
 const KEPT: usize = 1500;
 

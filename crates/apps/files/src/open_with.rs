@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
 use accesskit::{Node, Role};
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Axis, Cell, CheckState, Checkbox, Column, Context, Row, SearchField, Size, Stack, Table,
     Widget, WidgetId,
 };
-use unbound_toolkit::{Item, Rect};
-use unbound_xdg::DesktopEntry;
+use bande_toolkit::{Item, Rect};
+use bande_xdg::DesktopEntry;
 
 use crate::L10N;
 use crate::controls::{Signal, sender};

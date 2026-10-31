@@ -1,8 +1,8 @@
+use bande_settings_panes::SettingId;
+use bande_toolkit::Spacing;
+use bande_toolkit::ui::{Axis, Button, SearchField, Stack, TextField, Widget};
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use unbound_settings_panes::SettingId;
-use unbound_toolkit::Spacing;
-use unbound_toolkit::ui::{Axis, Button, SearchField, Stack, TextField, Widget};
 
 use crate::L10N;
 use crate::pages::{Widgets, boxed, muted_row, submit};

@@ -209,7 +209,7 @@ def window(x, y, w, h, title, kind="files", active=True):
             o.append(text(x + 28, y + tb + 36 + i * 24, l, 18 if l.startswith("#") else 14, 600 if l.startswith("#") else 400, LABEL if active else MUTED))
     elif kind == "web":
         o.append(f'<rect x="{x+120}" y="{y+9}" width="{w-240}" height="26" rx="8" fill="#FFFFFF" stroke="#E3E5EA"/>')
-        o.append(text(x + w / 2, y + 27, "unbound.example/docs/bar", 12, 400, MUTED, "middle"))
+        o.append(text(x + w / 2, y + 27, "bande.example/docs/bar", 12, 400, MUTED, "middle"))
         o.append(f'<rect x="{x+40}" y="{y+tb+40}" width="{w*0.5}" height="26" rx="4" fill="#E9ECF2"/>')
         for i in range(9):
             if y + tb + 100 + i * 26 > y + h - 20:
@@ -217,7 +217,7 @@ def window(x, y, w, h, title, kind="files", active=True):
             o.append(f'<rect x="{x+40}" y="{y+tb+96+i*26}" width="{(w-80)*(0.92 if i%4 != 3 else 0.6)}" height="10" rx="4" fill="#EEF0F4"/>')
     elif kind == "term":
         o.append(f'<rect x="{x}" y="{y+tb+1}" width="{w}" height="{h-tb-1}" fill="#FFFFFF"/>')
-        for i, l in enumerate(["mikael@unbound ~ % cargo test -p unbound-bar", "   Compiling unbound-bar v0.1.0", "    Finished test profile in 4.2s", "     Running 38 tests", "test result: ok. 38 passed; 0 failed", "mikael@unbound ~ % "]):
+        for i, l in enumerate(["mikael@bande ~ % cargo test -p bande-bar", "   Compiling bande-bar v0.1.0", "    Finished test profile in 4.2s", "     Running 38 tests", "test result: ok. 38 passed; 0 failed", "mikael@bande ~ % "]):
             if y + tb + 30 + i * 20 > y + h - 10:
                 break
             o.append(f'<text x="{x+16}" y="{y+tb+26+i*20}" font-family="DejaVu Sans Mono" font-size="12" fill="{LABEL}">{esc(l)}</text>')
@@ -658,7 +658,7 @@ x0 = 248 + gap
 avail = Ww - x0 - gap
 w1 = int(avail * 0.30); w2 = int(avail * 0.40); w3 = avail - w1 - w2 - 2 * gap
 b += window(x0, gap, w1, Hw - 2 * gap, "Documents", "files", True)
-b += window(x0 + w1 + gap, gap, w2, Hw - 2 * gap, "Unbound docs", "web", False)
+b += window(x0 + w1 + gap, gap, w2, Hw - 2 * gap, "Bande docs", "web", False)
 b += window(x0 + w1 + w2 + 2 * gap, gap, w3, (Hw - 3 * gap) // 2, "Combined bar.md", "text", False)
 b += window(x0 + w1 + w2 + 2 * gap, gap + (Hw - 3 * gap) // 2 + gap, w3, (Hw - 3 * gap) // 2, "Terminal", "term", False)
 svg(Ww, Hw, b + rw, "07-wide-3440x1440.svg")

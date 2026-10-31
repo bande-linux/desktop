@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 
-use unbound_xdg::{
+use bande_xdg::{
     DesktopEntry, Locale, applications, autostart_dir, current_desktops, data_dirs, opens_at_login,
     set_open_at_login,
 };

@@ -8,14 +8,14 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, TreeId};
-use smithay::utils::Size;
-use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
-use unbound_test_wayland::{RED, ShmImage, TestClient};
-use unbound_toolkit::ui::{Context, Event, TextField, Ui, Widget};
-use unbound_toolkit::{
+use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
+use bande_test_wayland::{RED, ShmImage, TestClient};
+use bande_toolkit::ui::{Context, Event, TextField, Ui, Widget};
+use bande_toolkit::{
     App, Palette, Rect, Role, SHEET_INSET, Scene, Scheme, TextSystem, WINDOW_HEADER_HEIGHT, Window,
     WindowEvent,
 };
+use smithay::utils::Size;
 use wayland_client::protocol::wl_shm::Format;
 
 const OUTPUT: (i32, i32) = (320, 240);
@@ -88,7 +88,7 @@ fn an_input_method_composes_in_place_with_candidates_below_the_text_and_commits(
     let app = thread::spawn(move || {
         let mut window = Window::open_on(
             client_end,
-            Role::toplevel("Field", "unbound-toolkit-test"),
+            Role::toplevel("Field", "bande-toolkit-test"),
             (200, 60),
         )
         .expect("window");
@@ -113,7 +113,7 @@ fn an_input_method_composes_in_place_with_candidates_below_the_text_and_commits(
             text,
             composing,
         };
-        unbound_toolkit::run(&mut window, &mut app).expect("run the window");
+        bande_toolkit::run(&mut window, &mut app).expect("run the window");
         app.text.take()
     });
 

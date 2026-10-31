@@ -2,8 +2,8 @@ use std::os::fd::AsFd;
 use std::thread;
 use std::time::Duration;
 
+use bande_test_wayland::{Memory, RED, ShmImage, SwSyncTimeline};
 use smithay::reexports::drm::control::Device as ControlDevice;
-use unbound_test_wayland::{Memory, RED, ShmImage, SwSyncTimeline};
 use wayland_client::protocol::wl_shm::Format;
 
 use crate::card::{Scanout, card_with_driver};

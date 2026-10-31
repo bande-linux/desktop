@@ -7,12 +7,12 @@ use std::process::ExitCode;
 use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};
 
-use rustix::event::{PollFd, PollFlags, Timespec, poll};
-use rustix::process::{DumpableBehavior, set_dumpable_behavior};
-use unbound_clipboard::{
+use bande_clipboard::{
     BUS_NAME, ClipboardHistory, Contents, History, MAX_BYTES, OBJECT_PATH, Shared, is_sensitive,
     lock, now,
 };
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use wayland_client::backend::WaylandError;
 use wayland_client::globals::{GlobalListContents, registry_queue_init};
 use wayland_client::protocol::wl_registry::WlRegistry;
@@ -80,7 +80,7 @@ impl Daemon {
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-clipboard");
+    bande_log::init("bande-clipboard");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) if compositor_gone(error.as_ref()) => ExitCode::SUCCESS,
@@ -128,8 +128,8 @@ fn serve_history(
 }
 
 fn history() -> Shared {
-    let history = unbound_xdg::state_home()
-        .map(|state| state.join("unbound/clipboard"))
+    let history = bande_xdg::state_home()
+        .map(|state| state.join("bande/clipboard"))
         .map(|dir| History::load(dir, now()))
         .unwrap_or_default();
     Arc::new(Mutex::new(history))

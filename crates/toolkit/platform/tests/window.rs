@@ -3,13 +3,13 @@ use std::sync::{Once, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use smithay::utils::Size;
-use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
-use unbound_graphics::{Color, Item, Point, Scene, TextAlign, TextStyle, TextSystem};
-use unbound_test_wayland::{ShmImage, TestClient, quadrants};
-use unbound_toolkit_platform::{
+use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
+use bande_graphics::{Color, Item, Point, Scene, TextAlign, TextStyle, TextSystem};
+use bande_test_wayland::{ShmImage, TestClient, quadrants};
+use bande_toolkit_platform::{
     FramePath, RENDERER_VARIABLE, Role, SHEET_INSET, WINDOW_HEADER_HEIGHT, Window,
 };
+use smithay::utils::Size;
 use wayland_client::protocol::wl_shm::Format;
 
 const OUTPUT: (i32, i32) = (320, 240);
@@ -47,7 +47,7 @@ fn the_first_frame_is_drawn_on_the_cpu_and_later_frames_on_the_gpu() {
     let client = thread::spawn(move || {
         let mut window = Window::open_on(
             client_end,
-            Role::toplevel("toolkit test", "unbound-toolkit-test"),
+            Role::toplevel("toolkit test", "bande-toolkit-test"),
             WINDOW,
         )
         .expect("window");
@@ -179,7 +179,7 @@ fn on_a_2x_output_a_window_keeps_its_size_in_points_and_fills_twice_the_pixels()
     let client = thread::spawn(move || {
         let mut window = Window::open_on(
             client_end,
-            Role::toplevel("toolkit test", "unbound-toolkit-test"),
+            Role::toplevel("toolkit test", "bande-toolkit-test"),
             WINDOW,
         )
         .expect("window");
@@ -250,7 +250,7 @@ fn windows_sharing_the_gpu_resize_while_others_draw_and_stay_on_the_gpu() {
             thread::spawn(move || {
                 let mut window = Window::open_on(
                     client_end,
-                    Role::toplevel("toolkit test", "unbound-toolkit-test"),
+                    Role::toplevel("toolkit test", "bande-toolkit-test"),
                     WINDOW,
                 )
                 .expect("window");
@@ -309,7 +309,7 @@ fn windows_sharing_the_gpu_resize_while_others_draw_and_stay_on_the_gpu() {
 #[test]
 fn a_change_under_an_opaque_window_shades_only_the_window_on_top() {
     const BELOW: (usize, usize) = (300, 220);
-    const TOOLKIT: &str = "unbound-toolkit-test";
+    const TOOLKIT: &str = "bande-toolkit-test";
     let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut below = TestClient::connect(&mut server);
     let stride = BELOW.0 * 4;

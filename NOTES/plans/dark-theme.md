@@ -70,10 +70,10 @@ owner on side-by-side goldens and a live branch build before it merges.
 | Radix Slate (dark) | 1–2 `#111113`/`#18191B` | 3 `#212225` | 4–5 `#272A2D`/`#2E3135` | 12 `#EDEEF0` | |
 | Material 3 | tone-based: containers step up from tone 4 to 22 | | elevated = lighter | on-surface tone 90 | |
 | macOS (Sequoia/Tahoe) | window roughly 40–54 grey (measured, not documented) | content darker | lighter popovers | label = white at about 85 % | |
-| **Unbound now** | **`#141210` L .184, hue 67** | `#1D1B19` | `#272522` | `#F1F0ED` | **16.4, −97** |
+| **Bande now** | **`#141210` L .184, hue 67** | `#1D1B19` | `#272522` | `#F1F0ED` | **16.4, −97** |
 
-What these share, and what Unbound lacks:
-1. **No near-black for the base.** The base sits at L .24-.27. Unbound's .185 is darker than
+What these share, and what Bande lacks:
+1. **No near-black for the base.** The base sits at L .24-.27. Bande's .185 is darker than
    all of them except GitHub's high-contrast default and Linear.
 2. **Elevated means lighter.** Popovers, headers and cards step up to L .29-.33 (Material 3
    tone surfaces, Fluent layers, libadwaita popovers).
@@ -109,7 +109,7 @@ still has the pastel selection glare.
 
 **B. "Dusk slate" neutrals + dimmed text + lighter overlays (recommended core).**
 Cool hue 262, chroma .011-.013 on surfaces and .006 on text; base L .255; text at Lc −88.
-This is the 2026 mainstream shape, made Unbound's own in three ways:
+This is the 2026 mainstream shape, made Bande's own in three ways:
 - The hue sits between Breeze/GitHub (248-258) and GNOME (286), next to the Ultramarine
   accent (272) and the blue-violet wallpapers.
 - The tint is visible but subtle: more chroma than GNOME, less than GitHub.
@@ -218,7 +218,7 @@ chassis 3.3 and Lc 55, edge vs sheet 1.94. The light accents are untouched.
 ## Implementation plan
 Milestones 1-4 go on one branch, `day/dark-slate`. Each is its own commit, and the full gate
 runs after each one. The branch merges only after the owner approves the preview (milestone 5).
-All builds and tests run on the mini (`UNBOUND_UPDATE_GOLDENS=1` only for the named crates).
+All builds and tests run on the mini (`BANDE_UPDATE_GOLDENS=1` only for the named crates).
 The sidebar-selection plan (`NOTES/plans/sidebar-selection.md`) takes its dark values from
 here. Land it before or after this branch, never interleaved, so its goldens are regenerated
 once.
@@ -309,7 +309,7 @@ once.
      - `card-bg-color` moves to `well`, so libadwaita cards step up as on the desktop.
      - `headerbar-*` stays chassis.
      - Add `--accent-color` (the text tone) next to `accent-bg-color` (the fill).
-   - Write a GTK 3 `~/.config/gtk-3.0/unbound.css` with `@define-color theme_bg_color` /
+   - Write a GTK 3 `~/.config/gtk-3.0/bande.css` with `@define-color theme_bg_color` /
      `theme_base_color` / `theme_fg_color` / `theme_selected_bg_color` / `borders`, imported
      the same way as the GTK 4 file (reuse `with_import` and `replace`). GTK 3 apps then stop
      showing Adwaita-dark's `#353535`.

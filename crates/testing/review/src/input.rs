@@ -162,7 +162,7 @@ impl Keyboard {
         for key in 1..=KEY_MAX {
             device.enable::<UI_SET_KEYBIT>(key)?;
         }
-        device.create("unbound-review keyboard")?;
+        device.create("bande-review keyboard")?;
         Ok(Self(device))
     }
 
@@ -231,7 +231,7 @@ impl Pointer {
         for axis in [ABS_X, ABS_Y] {
             device.axis(axis, ABS_RANGE - 1, 0)?;
         }
-        device.create("unbound-review pointer")?;
+        device.create("bande-review pointer")?;
         Ok(Self {
             device,
             screen: (1, 1),
@@ -345,7 +345,7 @@ impl Touchpad {
         device.axis(ABS_MT_POSITION_Y, height, TOUCHPAD_UNITS_PER_MM)?;
         device.axis(ABS_MT_SLOT, MAX_FINGERS as i32 - 1, 0)?;
         device.axis(ABS_MT_TRACKING_ID, 0xffff, 0)?;
-        device.create("unbound-review touchpad")?;
+        device.create("bande-review touchpad")?;
         Ok(Self(device))
     }
 

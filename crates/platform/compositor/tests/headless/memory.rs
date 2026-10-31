@@ -1,16 +1,16 @@
 use std::path::Path;
 
 use crate::support::*;
+use bande_compositor::Compositor;
+use bande_test_wayland::{RED, TestClient, roundtrip};
 use smithay::utils::{Logical, Point, Rectangle, Size};
-use unbound_compositor::Compositor;
-use unbound_test_wayland::{RED, TestClient, roundtrip};
 
 const OUTPUT: (i32, i32) = (640, 400);
 const WINDOW: (i32, i32) = (120, 80);
 
 fn remembering(memory: &Path) -> Compositor {
     let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
-    server.remember_windows_in(memory.join("unbound/windows"));
+    server.remember_windows_in(memory.join("bande/windows"));
     server
 }
 
@@ -77,7 +77,7 @@ fn an_apps_first_window_opens_where_its_last_window_closed_even_after_a_restart(
 #[test]
 fn a_remembered_frame_off_the_current_displays_is_brought_back_into_view() {
     let state = tempfile::tempdir().expect("state directory");
-    let path = state.path().join("unbound/windows");
+    let path = state.path().join("bande/windows");
     std::fs::create_dir_all(path.parent().expect("parent")).expect("directory");
     let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let displays = server.main_output();

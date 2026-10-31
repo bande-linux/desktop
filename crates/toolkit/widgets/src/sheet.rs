@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use accesskit::{Node, Role};
-use unbound_graphics::{
+use bande_graphics::{
     ControlSize, Elevation, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign,
     TextRole, TextStyle,
 };

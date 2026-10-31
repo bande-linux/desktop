@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/tmp/claude-1000/-home-mikael-unbound-linux/c03b543e-455e-464d-abfa-484ad0a962a0/scratchpad/dl')
+sys.path.insert(0, '/tmp/claude-1000/-home-mikael-bande-linux/c03b543e-455e-464d-abfa-484ad0a962a0/scratchpad/dl')
 from colors import T
 
 UI = "Inter"

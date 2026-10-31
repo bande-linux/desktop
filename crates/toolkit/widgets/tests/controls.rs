@@ -5,10 +5,10 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, Toggled, TreeId};
-use unbound_graphics::{
+use bande_graphics::{
     Item, Palette, Point, Rect, Scheme, TextAlign, TextSize, TextStyle, TextSystem,
 };
-use unbound_widgets::{
+use bande_widgets::{
     Axis, BUTTON_HEIGHT, Button, CheckState, Checkbox, ComboBox, Context, Event, Key, Modifiers,
     Pointer, PopUpButton, ProgressBar, RadioGroup, SegmentedControl, Size, Spinner, Stack, Stepper,
     TOOLTIP_DELAY, TextField, Ui, Widget, WidgetId,

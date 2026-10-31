@@ -3,11 +3,11 @@ use std::sync::mpsc::{Sender, channel};
 use std::thread;
 use std::time::Duration;
 
+use bande_config::{Accessibility, BUS_NAME, OBJECT_PATH, SCREEN_READER};
+use bande_graphics::Palette;
+use bande_spring::{Animated, Spring};
 use rustix::process::{Pid, Signal, kill_process};
 use smithay::backend::renderer::element::Id;
-use unbound_config::{Accessibility, BUS_NAME, OBJECT_PATH, SCREEN_READER};
-use unbound_graphics::Palette;
-use unbound_spring::{Animated, Spring};
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::{OwnedValue, Value};
 
@@ -17,14 +17,14 @@ use crate::motion::SETTLED_ALPHA;
 use crate::scene::{FillElement, rounded};
 use crate::state::{Compositor, OutputElement, State};
 
-const SOUND_BUS_NAME: &str = "org.unbound.Sound";
-const SOUND_PATH: &str = "/org/unbound/Sound";
+const SOUND_BUS_NAME: &str = "org.bande.Sound";
+const SOUND_PATH: &str = "/org/bande/Sound";
 const FLASH_OPACITY: f64 = 0.45;
 
 type Remembered = (&'static str, OwnedValue);
 
 pub(crate) fn screen_reader_installed() -> bool {
-    unbound_xdg::find_executable(SCREEN_READER).is_some()
+    bande_xdg::find_executable(SCREEN_READER).is_some()
 }
 
 #[derive(Default)]

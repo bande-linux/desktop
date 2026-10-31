@@ -5,7 +5,7 @@ use std::ops::Range;
 use super::control::{field_focus, paint_field};
 use super::editor::Editor;
 use super::{Context, Cursor, DragAction, Event, Menu, Parts, Size, Widget, WidgetId};
-use unbound_graphics::{
+use bande_graphics::{
     Color, ControlSize, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
 

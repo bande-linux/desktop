@@ -1,1 +1,0 @@
-unbound-archive-keyring: package-installs-apt-preferences [etc/apt/preferences.d/unbound.pref]

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use unbound_graphics::{Color, Image};
+use bande_graphics::{Color, Image};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Column {

@@ -5,8 +5,8 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_xdg::find_executable;
 use image::DynamicImage;
-use unbound_xdg::find_executable;
 
 use crate::cache::{Cache, Picture, ThumbnailSize, modified, uri};
 
@@ -189,7 +189,7 @@ fn external(
 ) -> Option<Picture> {
     fs::create_dir_all(cache.root()).ok()?;
     let output = cache.root().join(format!(
-        ".unbound-{}-{:?}-{}.png",
+        ".bande-{}-{:?}-{}.png",
         std::process::id(),
         thread::current().id(),
         size.pixels()

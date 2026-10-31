@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::{BACKGROUND, Compositor, KeyboardSettings, Renderer};
-use unbound_config::{CapsLock, InputSource};
-use unbound_test_wayland::{BLUE, TestClient, roundtrip};
+use bande_compositor::{BACKGROUND, Compositor, KeyboardSettings, Renderer};
+use bande_config::{CapsLock, InputSource};
+use bande_test_wayland::{BLUE, TestClient, roundtrip};
 
 fn settings(codes: &[&str]) -> KeyboardSettings {
     KeyboardSettings {

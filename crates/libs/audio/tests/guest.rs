@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 use std::sync::Arc;
 use tempfile::TempDir;
 
-use unbound_audio::{Audio, Device, EFFECT_RATE, Level, Snapshot, VolumeKey};
-use unbound_test_bus::SessionBus;
+use bande_audio::{Audio, Device, EFFECT_RATE, Level, Snapshot, VolumeKey};
+use bande_test_bus::SessionBus;
 
 const WAIT: Duration = Duration::from_secs(10);
 
@@ -332,12 +332,10 @@ fn a_sound_effect_plays_without_being_listed_as_an_app_and_then_goes_away() {
     let samples: Arc<[f32]> = vec![0.0; EFFECT_RATE as usize * 2].into();
     session.audio().play(samples, 0.5).expect("play");
     eventually("the effect plays", || {
-        nodes_named("unbound-sound-effect") == 1
+        nodes_named("bande-sound-effect") == 1
     });
     assert!(session.audio().snapshot().apps.is_empty());
-    eventually("the effect ends", || {
-        nodes_named("unbound-sound-effect") == 0
-    });
+    eventually("the effect ends", || nodes_named("bande-sound-effect") == 0);
 }
 
 #[test]
@@ -349,11 +347,9 @@ fn a_level_meter_listens_while_it_is_kept() {
         .meter(&session.device("microphone"))
         .expect("meter");
     eventually("the meter listens", || {
-        nodes_named("unbound-level-meter") == 1
+        nodes_named("bande-level-meter") == 1
     });
     assert_eq!(meter.take_peak(), 0.0);
     drop(meter);
-    eventually("the meter stops", || {
-        nodes_named("unbound-level-meter") == 0
-    });
+    eventually("the meter stops", || nodes_named("bande-level-meter") == 0);
 }

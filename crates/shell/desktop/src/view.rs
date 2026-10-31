@@ -3,12 +3,12 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
-use unbound_fs::same_volume;
-use unbound_toolkit::ui::{
+use bande_fs::same_volume;
+use bande_toolkit::ui::{
     Animated, ClipboardRequest, Context, Event, FreeLayout, Key, Modifiers, Pointer, PointerButton,
     Size, Spring, TextField, Ui, Widget, WidgetId,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, Color, DragAction, DragIcon, Elevation, Image, Item as SceneItem, Palette,
     Paragraph, Point, Radius, Rect, Scene, Scheme, Shape, TextAlign, TextStyle, TextSystem,
 };
@@ -21,7 +21,7 @@ use crate::model::{
     icon_bounds, label_bounds,
 };
 use crate::places::Layouts;
-use unbound_xdg::path_from_file_uri;
+use bande_xdg::path_from_file_uri;
 
 const LABEL_SIZE: f32 = 12.0;
 const LABEL_LINES: usize = 2;
@@ -1450,7 +1450,7 @@ impl DesktopView {
         TreeUpdate {
             nodes,
             tree: Some(TreeInfo {
-                toolkit_name: Some("unbound-toolkit".to_owned()),
+                toolkit_name: Some("bande-toolkit".to_owned()),
                 toolkit_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
                 ..TreeInfo::new(ROOT_NODE)
             }),

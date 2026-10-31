@@ -2,11 +2,11 @@
 
 use std::time::{Duration, Instant};
 
-use unbound_screenshot::area::AreaSelection;
-use unbound_screenshot::palette::{Mode, Palette as CapturePalette};
-use unbound_screenshot::{Failure, L10N};
-use unbound_toolkit::ui::{Alert, Context, Event, FreeLayout, Pointer, Size, Ui, Widget};
-use unbound_toolkit::{
+use bande_screenshot::area::AreaSelection;
+use bande_screenshot::palette::{Mode, Palette as CapturePalette};
+use bande_screenshot::{Failure, L10N};
+use bande_toolkit::ui::{Alert, Context, Event, FreeLayout, Pointer, Size, Ui, Widget};
+use bande_toolkit::{
     Color, CpuRenderer, Item, Palette, Point, Rect, Scene, Scheme, Shape, TextSystem,
 };
 
@@ -21,7 +21,7 @@ fn backdrop() -> Item {
 
 fn check_golden(name: &str, scene: &Scene) {
     let frame = CpuRenderer::new().render(scene).expect("frame");
-    unbound_golden::assert_golden_rgba!(name, (frame.width, frame.height), frame.rgba);
+    bande_golden::assert_golden_rgba!(name, (frame.width, frame.height), frame.rgba);
 }
 
 #[test]

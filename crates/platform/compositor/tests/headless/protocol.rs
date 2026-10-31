@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use crate::support::*;
+use bande_compositor::Vblank;
+use bande_test_wayland::{ShmImage, TestClient, quadrants};
 use smithay::utils::{Point, Size};
-use unbound_compositor::Vblank;
-use unbound_test_wayland::{ShmImage, TestClient, quadrants};
 use wayland_client::protocol::wl_shm::Format;
 
 #[test]

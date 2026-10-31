@@ -1,4 +1,4 @@
-use unbound_render::{Rect, disjoint};
+use bande_render::{Rect, disjoint};
 
 const OUTPUT: Rect = Rect::new(0, 0, 100, 100);
 

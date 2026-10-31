@@ -1,7 +1,7 @@
 use crate::support::*;
+use bande_compositor::{Compositor, Renderer};
+use bande_test_wayland::{BLUE, GREEN, RED, roundtrip};
 use smithay::utils::{Logical, Rectangle, Size};
-use unbound_compositor::{Compositor, Renderer};
-use unbound_test_wayland::{BLUE, GREEN, RED, roundtrip};
 
 const OUTPUT: (i32, i32) = (480, 270);
 const WINDOW: (i32, i32) = (160, 100);
@@ -124,7 +124,7 @@ fn the_offer_matches_its_golden() {
 
     renderer.render(&mut server).expect("frame");
     let snapshot = renderer.snapshot(&server).expect("read back");
-    unbound_golden::assert_golden_rgba!(
+    bande_golden::assert_golden_rgba!(
         "other-half",
         (
             snapshot.size.w.unsigned_abs(),

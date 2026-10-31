@@ -1,8 +1,8 @@
 use std::sync::mpsc;
 use std::time::Duration;
 
+use bande_inbox::Inbox;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
-use unbound_inbox::Inbox;
 
 const SENDS: u32 = 200_000;
 

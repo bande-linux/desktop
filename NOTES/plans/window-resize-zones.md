@@ -2,11 +2,11 @@
 
 ## Summary
 
-The resize zone is a 6 pt strip that lies entirely outside the window. Nothing inside the visible edge resizes, and the corner target sits outside the rounded corner's bounding box, away from the curve you can see. Plan: one shared hit test in `unbound-graphics` with a band 8 pt outside plus 3 pt inside that follows the rounded corner, corners reaching 24 pt along each edge, used by both the toolkit chrome and the compositor frame. A compositor fallback band then covers client-side apps that leave no margin of their own. 3 milestones.
+The resize zone is a 6 pt strip that lies entirely outside the window. Nothing inside the visible edge resizes, and the corner target sits outside the rounded corner's bounding box, away from the curve you can see. Plan: one shared hit test in `bande-graphics` with a band 8 pt outside plus 3 pt inside that follows the rounded corner, corners reaching 24 pt along each edge, used by both the toolkit chrome and the compositor frame. A compositor fallback band then covers client-side apps that leave no margin of their own. 3 milestones.
 
 ## What the owner sees
 
-Aiming at a window's edge or corner often misses. One pixel too far in, the press moves the window (in-house apps) or clicks the app (server-side frames). Too far out, it clicks the window behind. At the bottom-right corner, the spot the eye picks, on the curve, does not resize at all. The owner's display is a 27" 2560×1440 at scale 1 (`~/.config/unbound/config.kdl`, about 109 ppi), so the 6 px band is about 1.4 mm wide.
+Aiming at a window's edge or corner often misses. One pixel too far in, the press moves the window (in-house apps) or clicks the app (server-side frames). Too far out, it clicks the window behind. At the bottom-right corner, the spot the eye picks, on the curve, does not resize at all. The owner's display is a 27" 2560×1440 at scale 1 (`~/.config/bande/config.kdl`, about 109 ppi), so the 6 px band is about 1.4 mm wide.
 
 ## Findings
 

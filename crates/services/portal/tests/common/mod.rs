@@ -3,8 +3,8 @@
 
 use std::collections::HashMap;
 
-use unbound_test_bus::SessionBus;
-use xdg_desktop_portal_unbound::{BUS_NAME, OBJECT_PATH};
+use bande_test_bus::SessionBus;
+use xdg_desktop_portal_bande::{BUS_NAME, OBJECT_PATH};
 use zbus::blocking::Connection;
 use zbus::export::serde::Serialize;
 use zbus::zvariant::{DynamicType, OwnedValue, Value};

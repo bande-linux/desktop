@@ -8,11 +8,11 @@ use std::rc::Rc;
 use std::thread;
 use std::time::{Duration, SystemTime};
 
+use bande_xdg::find_executable;
 use bzip2::read::MultiBzDecoder;
 use flate2::read::MultiGzDecoder;
 use lzma_rust2::XzReader;
 use ruzstd::decoding::StreamingDecoder;
-use unbound_xdg::find_executable;
 use zip::result::ZipError;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, DateTime, ZipArchive, ZipWriter};
@@ -152,7 +152,7 @@ impl<R: Read> Read for Counted<R> {
 fn zip_time(time: SystemTime) -> DateTime {
     jiff::Timestamp::try_from(time)
         .ok()
-        .map(|stamp| stamp.to_zoned(unbound_datetime::local_zone()))
+        .map(|stamp| stamp.to_zoned(bande_datetime::local_zone()))
         .and_then(|local| {
             DateTime::from_date_and_time(
                 u16::try_from(local.year()).ok()?,
@@ -179,7 +179,7 @@ fn system_time(time: DateTime) -> Option<SystemTime> {
         i8::try_from(time.second()).ok()?,
         0,
     );
-    let zoned = civil.to_zoned(unbound_datetime::local_zone()).ok()?;
+    let zoned = civil.to_zoned(bande_datetime::local_zone()).ok()?;
     Some(SystemTime::from(zoned.timestamp()))
 }
 

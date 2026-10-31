@@ -1,3 +1,9 @@
+use bande_graphics::{
+    Color, Elevation, Item, Paint, Palette, Radius, Rect, Scene, Shape, TextAlign, TextRole,
+    TextStyle,
+};
+use bande_render::VulkanRenderer;
+use bande_spring::Spring;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::backend::renderer::element::surface::{
     WaylandSurfaceRenderElement, render_elements_from_surface_tree,
@@ -5,12 +11,6 @@ use smithay::backend::renderer::element::surface::{
 use smithay::backend::renderer::element::{Id, Kind};
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Rectangle, Size};
-use unbound_graphics::{
-    Color, Elevation, Item, Paint, Palette, Radius, Rect, Scene, Shape, TextAlign, TextRole,
-    TextStyle,
-};
-use unbound_render::VulkanRenderer;
-use unbound_spring::Spring;
 
 use super::layout::fitted;
 use super::{App, Card, Content, Frame, NAME_ROW, OPEN_SCALE, Painted, Switcher};
@@ -55,7 +55,7 @@ pub(super) fn placeholder(
             paint: Paint::Solid(palette.ink2),
         },
         Item::Text {
-            origin: unbound_graphics::Point::new(rect.x, top),
+            origin: bande_graphics::Point::new(rect.x, top),
             paragraph,
         },
     ]
@@ -145,7 +145,7 @@ impl Switcher {
             items: vec![Item::Clip {
                 shape: Shape::rect(Rect::new(0.0, 0.0, row.size.w as f32, row.size.h as f32)),
                 items: vec![Item::Text {
-                    origin: unbound_graphics::Point::new(0.0, top),
+                    origin: bande_graphics::Point::new(0.0, top),
                     paragraph,
                 }],
             }],
@@ -317,8 +317,8 @@ impl State {
                 &painted.buffer,
                 Some(alpha),
                 Some(Rectangle::from_size(Size::from((
-                    f64::from(unbound_graphics::pixels(rect.size.w as u32, scale)),
-                    f64::from(unbound_graphics::pixels(rect.size.h as u32, scale)),
+                    f64::from(bande_graphics::pixels(rect.size.w as u32, scale)),
+                    f64::from(bande_graphics::pixels(rect.size.h as u32, scale)),
                 )))),
                 Some(shown.size.to_i32_round()),
                 Kind::Unspecified,

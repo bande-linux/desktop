@@ -5,17 +5,17 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use unbound_datetime::DateFormats;
+use bande_datetime::DateFormats;
 
 use crate::{Request, Screen, Sender};
-use unbound_inbox::{Inbox, Outbox};
-use unbound_notify::client::NotificationCenter;
-use unbound_notify::{BUS_NAME, Picture, Presentation};
-use unbound_toolkit::{
+use bande_inbox::{Inbox, Outbox};
+use bande_notify::client::NotificationCenter;
+use bande_notify::{BUS_NAME, Picture, Presentation};
+use bande_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Rect, Role, Scene,
     TextSystem, Window, WindowEvent,
 };
-use unbound_xdg::{
+use bande_xdg::{
     DesktopEntry, Locale, applications, current_desktops, data_dirs, find_app, find_icon, launch,
     path_from_file_uri, running_app,
 };
@@ -72,7 +72,7 @@ fn image_named(name: &str, directories: &[PathBuf]) -> Option<Image> {
 
 fn sender_lookup(
     entries: Vec<DesktopEntry>,
-) -> impl FnMut(&unbound_notify::Notification, &str) -> Sender {
+) -> impl FnMut(&bande_notify::Notification, &str) -> Sender {
     let mut icons: HashMap<String, Option<Image>> = HashMap::new();
     let mut pictures: HashMap<u32, (Picture, Option<Image>)> = HashMap::new();
     let directories = data_dirs();
@@ -264,7 +264,7 @@ impl App for Notifications {
             match message {
                 Message::Presentation(presentation) => self.screen.present(presentation, now),
                 Message::Toggle => {
-                    self.screen.set_today(unbound_datetime::now().date(), now);
+                    self.screen.set_today(bande_datetime::now().date(), now);
                     self.screen.toggle(now);
                 }
                 Message::Focus { app, token } => self.focus(window, &app, &token),
@@ -292,7 +292,7 @@ impl App for Notifications {
         }
         self.hide_pending = false;
         if self.next_refresh.is_some_and(|refresh| refresh <= now) {
-            self.screen.set_today(unbound_datetime::now().date(), now);
+            self.screen.set_today(bande_datetime::now().date(), now);
             self.screen.rebuild(now);
             self.sync(window);
         }

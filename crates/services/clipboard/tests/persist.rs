@@ -8,16 +8,16 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+use bande_clipboard::Item;
+use bande_compositor::{Compositor, SessionRole};
+use bande_test_bus::SessionBus;
+use bande_test_wayland::clipboard::{TEXT, read_all};
+use bande_test_wayland::{ShmImage, TestClient, quadrants, roundtrip, roundtrip_until};
 use rustix::io::{FdFlags, fcntl_setfd};
 use smithay::utils::Size;
-use unbound_clipboard::Item;
-use unbound_compositor::{Compositor, SessionRole};
-use unbound_test_bus::SessionBus;
-use unbound_test_wayland::clipboard::{TEXT, read_all};
-use unbound_test_wayland::{ShmImage, TestClient, quadrants, roundtrip, roundtrip_until};
 use wayland_client::protocol::wl_shm::Format;
 
-const DAEMON: &str = env!("CARGO_BIN_EXE_unbound-clipboard");
+const DAEMON: &str = env!("CARGO_BIN_EXE_bande-clipboard");
 
 fn server() -> Compositor {
     Compositor::new(Size::from((256, 192))).expect("headless compositor")
@@ -31,7 +31,7 @@ struct Daemon {
 impl Daemon {
     fn new(bus: Option<&SessionBus>) -> Self {
         let folder = tempfile::tempdir().expect("state folder");
-        let launcher = folder.path().join("unbound-clipboard");
+        let launcher = folder.path().join("bande-clipboard");
         let address = bus.map_or("unix:path=/nonexistent", SessionBus::address);
         std::fs::write(
             &launcher,
@@ -47,7 +47,7 @@ impl Daemon {
     }
 
     fn history(&self) -> PathBuf {
-        self.folder.path().join("unbound/clipboard")
+        self.folder.path().join("bande/clipboard")
     }
 }
 
@@ -55,7 +55,7 @@ fn server_with(daemon: &Daemon) -> Compositor {
     let mut server = server();
     server
         .start_session_client(&daemon.launcher, SessionRole::ClipboardDaemon)
-        .expect("start unbound-clipboard");
+        .expect("start bande-clipboard");
     server
 }
 
@@ -202,7 +202,7 @@ fn the_daemon_binary_on_an_ordinary_connection_gets_no_data_control() {
                 .map_err(std::io::Error::from)
         });
     }
-    let mut daemon = command.spawn().expect("exec unbound-clipboard");
+    let mut daemon = command.spawn().expect("exec bande-clipboard");
     drop(connected);
 
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -221,9 +221,9 @@ fn the_daemon_binary_on_an_ordinary_connection_gets_no_data_control() {
 }
 
 #[zbus::proxy(
-    interface = "org.unbound.Clipboard",
-    default_service = "org.unbound.Clipboard",
-    default_path = "/org/unbound/Clipboard"
+    interface = "org.bande.Clipboard",
+    default_service = "org.bande.Clipboard",
+    default_path = "/org/bande/Clipboard"
 )]
 trait Clipboard {
     fn items(&self) -> zbus::Result<Vec<Item>>;

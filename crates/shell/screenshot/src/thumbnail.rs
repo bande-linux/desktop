@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use unbound_toolkit::ui::{Animated, Event, Menu, MenuItem, Spring};
-use unbound_toolkit::{
+use bande_toolkit::ui::{Animated, Event, Menu, MenuItem, Spring};
+use bande_toolkit::{
     Color, Elevation, Image, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape,
 };
 
@@ -289,7 +289,7 @@ impl Thumbnail {
                 ),
                 paint: night.chassis.with_opacity(PLAY_DISC).into(),
             });
-            let path = unbound_graphics::Path::new()
+            let path = bande_graphics::Path::new()
                 .move_to(Point::new(center.x - 5.0, center.y - 8.0))
                 .line_to(Point::new(center.x + 9.0, center.y))
                 .line_to(Point::new(center.x - 5.0, center.y + 8.0))
@@ -334,7 +334,7 @@ impl Thumbnail {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use unbound_toolkit::ui::{Pointer, PointerButton};
+    use bande_toolkit::ui::{Pointer, PointerButton};
 
     fn thumbnail(now: Instant) -> Thumbnail {
         let image = Image::from_rgba(400, 200, vec![0xff; 400 * 200 * 4]).expect("image");

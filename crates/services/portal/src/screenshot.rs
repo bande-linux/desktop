@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use unbound_xdg::file_uri;
+use bande_xdg::file_uri;
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 

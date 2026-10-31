@@ -1,9 +1,9 @@
 #!/bin/sh
 set -eu
-export XDG_CURRENT_DESKTOP=Unbound
+export XDG_CURRENT_DESKTOP=Bande
 export XDG_CONFIG_HOME="$(mktemp -d)"
-mkdir -p "$XDG_CONFIG_HOME/unbound"
-echo 'appearance "dark"' > "$XDG_CONFIG_HOME/unbound/config.kdl"
+mkdir -p "$XDG_CONFIG_HOME/bande"
+echo 'appearance "dark"' > "$XDG_CONFIG_HOME/bande/config.kdl"
 exec dbus-run-session -- sh -eu -c '
     color_scheme() {
         dbus-send --session --print-reply --dest=org.freedesktop.portal.Desktop \
@@ -20,8 +20,8 @@ exec dbus-run-session -- sh -eu -c '
         return 1
     }
     wait_for 1
-    dbus-send --session --print-reply --dest=org.unbound.Config /org/unbound/Config \
-        org.freedesktop.DBus.Properties.Set string:org.unbound.Config string:Appearance \
+    dbus-send --session --print-reply --dest=org.bande.Config /org/bande/Config \
+        org.freedesktop.DBus.Properties.Set string:org.bande.Config string:Appearance \
         variant:string:light > /dev/null
     wait_for 2
     dbus-send --session --print-reply --dest=org.freedesktop.portal.Desktop \

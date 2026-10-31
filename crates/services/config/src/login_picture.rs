@@ -8,7 +8,7 @@ use std::thread;
 
 use crate::{Wallpaper, WallpaperVariant};
 
-pub const LOGIN_PICTURES: &str = "/var/lib/unbound-greeter/pictures";
+pub const LOGIN_PICTURES: &str = "/var/lib/bande-greeter/pictures";
 pub const LOGIN_PICTURE_LIMIT: u64 = 64 << 20;
 const SHARED_MODE: u32 = 0o640;
 

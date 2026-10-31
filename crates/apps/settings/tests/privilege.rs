@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 
-use unbound_settings::{Privilege, refused};
-use unbound_test_bus::SessionBus;
+use bande_settings::{Privilege, refused};
+use bande_test_bus::SessionBus;
 use zbus::zvariant::OwnedValue;
 
 struct Authority;

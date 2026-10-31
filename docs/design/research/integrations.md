@@ -123,13 +123,13 @@ Continuity covers Universal Clipboard, Handoff, AirDrop and Continuity Camera.
   <https://develop.kde.org/docs/plasma/krunner/>,
   <https://developer.gnome.org/documentation/tutorials/search-provider.html>
 - **Primary selection** (select, middle-click paste) is a Linux power feature macOS lacks.
-  Unbound already serves it (`zwp_primary_selection_v1`).
+  Bande already serves it (`zwp_primary_selection_v1`).
 - **Clipboard history on ext-data-control.** It existed on Linux long before macOS 26, though
   without privacy controls.
 
-## For Unbound
+## For Bande
 
-1. **Quick Look as a system service** (now, new `unbound-preview` or in `crates/apps/files`).
+1. **Quick Look as a system service** (now, new `bande-preview` or in `crates/apps/files`).
    - Implement `org.gnome.NautilusPreviewer`-compatible `ShowFile`, so GTK apps can call it,
      and a toolkit call `preview(uri, source_rect)`.
    - Space in every file view and in the file chooser portal.
@@ -142,8 +142,8 @@ Continuity covers Universal Clipboard, Handoff, AirDrop and Continuity Camera.
      `text/uri-list`. Super+click on the title shows the path menu.
    - It is one property for app authors and connects every document window to Files, Terminal
      and the Dock.
-3. **Context menu actions on typed data, our Services** (later, toolkit, `unbound-launcher`).
-   - Apps declare actions in their `.desktop` file (`Actions=`, plus `X-Unbound-Accepts=`
+3. **Context menu actions on typed data, our Services** (later, toolkit, `bande-launcher`).
+   - Apps declare actions in their `.desktop` file (`Actions=`, plus `X-Bande-Accepts=`
      MIME types).
    - The toolkit context menu for a selection shows matching actions under one "Actions"
      submenu, and the launcher indexes them.
@@ -161,7 +161,7 @@ Continuity covers Universal Clipboard, Handoff, AirDrop and Continuity Camera.
      so no promise is needed).
    - Click opens it in the preview with markup later.
 6. **Clipboard** (now in part).
-   - Persistence exists (`unbound-clipboard`, behaviour.md).
+   - Persistence exists (`bande-clipboard`, behaviour.md).
    - Add Paste and Match Style (`Super+Alt+Shift+V`), which pastes `text/plain` only, in the
      toolkit.
    - History (later) belongs in the launcher as a filter, opt-in, with retention choices, as
@@ -169,14 +169,14 @@ Continuity covers Universal Clipboard, Handoff, AirDrop and Continuity Camera.
 7. **Accessibility switches** (now).
    - `config.kdl` gets `appearance { reduce-motion; reduce-transparency; increase-contrast }`.
    - The portal serves `reduced-motion` and `contrast` (standard keys). Reduce Transparency has
-     no portal key: serve `org.unbound.appearance.reduce-transparency` and read it in the
+     no portal key: serve `org.bande.appearance.reduce-transparency` and read it in the
      toolkit.
    - The compositor reads `config.kdl` directly.
 8. **Keyboard reach** (now, compositor and shell).
    - `Super+F2` focuses the menu bar and `Super+F3` the Dock. Ctrl is the terminal's on
-     Unbound, so these use Super.
+     Bande, so these use Super.
    - Type-select in every toolkit list, with a 1 s reset (unverified macOS value).
-9. **Launcher as hub** (later). Calculator and unit conversion in `unbound-launcher`, plus
+9. **Launcher as hub** (later). Calculator and unit conversion in `bande-launcher`, plus
    `org.gnome.Shell.SearchProvider2`-compatible providers so existing apps contribute results.
 10. **Phone integration** (never, in the desktop core). Recommend KDE Connect-compatible apps; do
     not build Continuity.

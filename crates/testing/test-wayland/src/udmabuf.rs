@@ -40,7 +40,7 @@ unsafe impl Ioctl for Create {
 
 pub(crate) fn create(bytes: &[u8]) -> io::Result<OwnedFd> {
     let memfd = memfd_create(
-        "unbound-test-udmabuf",
+        "bande-test-udmabuf",
         MemfdFlags::CLOEXEC | MemfdFlags::ALLOW_SEALING,
     )?;
     let mut file = File::from(memfd);

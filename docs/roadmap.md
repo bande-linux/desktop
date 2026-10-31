@@ -34,9 +34,9 @@ fonts) so it restyles for free.
 
 | # | Step | Contents | Depends on |
 |---|---|---|---|
-| D1 | Tokens and window chrome | `unbound-design` crate: OKLCH palette generator with 8 accents, radii (4/6/8/10/14, concentric rule), spacing and control sizes, type roles, elevation, contrast tests (WCAG + APCA) that fail CI; fonts (Inter features cv05/cv08/ss07/ss08/tnum, Manrope, JetBrains Mono); the 48 pt frame header with flush-left title and the left control pill in the toolkit and the compositor's server-side frame; corner radius 14; frame/sheet split | — |
+| D1 | Tokens and window chrome | `bande-design` crate: OKLCH palette generator with 8 accents, radii (4/6/8/10/14, concentric rule), spacing and control sizes, type roles, elevation, contrast tests (WCAG + APCA) that fail CI; fonts (Inter features cv05/cv08/ss07/ss08/tnum, Manrope, JetBrains Mono); the 48 pt frame header with flush-left title and the left control pill in the toolkit and the compositor's server-side frame; corner radius 14; frame/sheet split | — |
 | D2 | Controls | Every widget on the tokens: buttons, fields, switches, checkbox, square radio, segmented, pop-up, stepper, fader slider, segmented progress, tooltips, tables with gliding selection, menus with the Super glyph, alerts with the footer tray, sheets, scroll bars | D1 |
-| D3 | Icons | The Unbound icon theme: rounded-square app icons in the style of `design/bar/01-desktop-left-collapsed.png` for our apps (and replacements for the default third-party apps), sheet+label file types, stone folders with an accent tab, the 16 pt symbol set; reproducible generators | — |
+| D3 | Icons | The Bande icon theme: rounded-square app icons in the style of `design/bar/01-desktop-left-collapsed.png` for our apps (and replacements for the default third-party apps), sheet+label file types, stone folders with an accent tab, the 16 pt symbol set; reproducible generators | — |
 | D4 | Apps | Files, Settings, Terminal (JetBrains Mono, accent-derived ANSI), Activity Monitor on frame and sheet with the toolbar in the header | D2 |
 | D5 | Shell surfaces | Launcher, notifications, Control Center, lock, greeter, screenshot, overview and HUDs on the tokens (opaque, scrim + blur only where Datum allows) | D2 |
 | D6 | Everyone else and choice | GTK and Qt receive the palette (gtk.css accent and named colours, Qt colour scheme); Settings ▸ Appearance: Light/Dark/Auto, 8 accent swatches, tinted frame, Increase Contrast, larger text | D2 |
@@ -45,7 +45,7 @@ fonts) so it restyles for free.
 
 | # | Step | Contents | Depends on |
 |---|---|---|---|
-| E1 | One bar process | `unbound-bar` hosts today's Dock and menu bar surfaces with no visual change; shared models move to `crates/libs`; the compositor starts one client | multiple displays on main |
+| E1 | One bar process | `bande-bar` hosts today's Dock and menu bar surfaces with no visual change; shared models move to `crates/libs`; the compositor starts one client | multiple displays on main |
 | E2 | Vertical bar | Bottom group: Trash, workspaces, tray grid with overflow, the Control Center button (2×2), clock with unread dot; launcher mark at the top corner (click: launcher, right-click: system menu) | E1 |
 | E3 | App header and cascade | Active app header; one cascade menu with the app row and each menu as a row, filtered by typing; `Super+F2`; right-click everywhere; fallback content for apps without menus | E2 |
 | E4 | Menu search | `Shift+Super+/` card that finds any menu item with its path and shortcut | E3 |
@@ -61,7 +61,7 @@ Datum styles the bar from E2 on; E1 changes nothing visible.
 | # | Area | What | Why |
 |---|---|---|---|
 | A1 | Third-party apps | Server-side title bars in our style for apps that ask for them (Qt, SDL, Electron, foot) instead of forcing client-side; register our FileChooser, Screenshot and ScreenCast portals (browser screen sharing); unlocked secret service at login (gnome-keyring + PAM); Qt follows dark mode and accent; GTK apps get our accent | Today such apps have **no title bar** and cannot be moved or closed; browsers and editors nag for the keyring; screen sharing fails |
-| A2 | Default apps | Recommend a browser, text editor, image viewer, PDF viewer, calculator, video player, clocks in `unbound-desktop`; recommend `unbound-monitor` (built but never installed) | A fresh install cannot open a PDF or a photo |
+| A2 | Default apps | Recommend a browser, text editor, image viewer, PDF viewer, calculator, video player, clocks in `bande-desktop`; recommend `bande-monitor` (built but never installed) | A fresh install cannot open a PDF or a photo |
 | A3 | Multiple displays | Hotplug, per-display scale and mode, arrangement, mirroring, move windows between displays (shortcut, drag, window menu), menu bar on every display, Dock on the main one, workspaces per display; Settings ▸ Displays arrangement and resolution | Only the first connector is driven; plugging in a monitor does nothing |
 | A4 | Keyboard and pointer | Input sources (xkb layouts and IMEs) with a menu bar indicator and switching shortcut; Settings ▸ Keyboard input sources and a shortcut list; Settings ▸ Trackpad & Mouse (tap to click, natural scrolling, speed, secondary click, three-finger drag later) | Anyone who types in more than one language, or wants tap-to-click, is stuck |
 | A5 | Text foundations | Undo/redo in every text field; visible IME pre-edit; a multi-line `TextView`; search field; missing controls: checkbox, radio, segmented control, pop-up button, stepper, progress bar and spinner, tooltip | Typing is the most common act on a computer; CJK input is effectively unusable |
@@ -71,7 +71,7 @@ Datum styles the bar from E2 on; E1 changes nothing visible.
 | # | Area | What |
 |---|---|---|
 | B1 | Window switching | Super+Tab overlay with live thumbnails (hold to browse, Q quits, H hides), Super+` cycles one app's windows, cascade new windows, restore each app's window frame on launch |
-| B2 | Files | Icon view with thumbnails (freedesktop thumbnailer spec, cached), tabs and multiple windows, recursive search over the `unbound-search` index with Recents, compress/extract (zip, tar.*), Open in Terminal, drag folders into the sidebar, Quick Look for PDF and video through thumbnailers |
+| B2 | Files | Icon view with thumbnails (freedesktop thumbnailer spec, cached), tabs and multiple windows, recursive search over the `bande-search` index with Recents, compress/extract (zip, tar.*), Open in Terminal, drag folders into the sidebar, Quick Look for PDF and video through thumbnailers |
 | B3 | Settings breadth | General (About This Computer, Storage, Software Update via PackageKit, Date & Time, Language & Region, Login Items), Network (wired, VPN import, proxy), Battery (power modes via power-profiles-daemon, lid behaviour), Notifications per app, Displays ▸ Night Light, Sound (per-app volume, input level, alert sound) |
 | B4 | Accessibility | Prove Orca end to end on every surface; zoom (magnifier in the compositor), increase contrast, reduce transparency, larger text, cursor size, sticky and slow keys; serve them through the portal so GTK/Qt apps follow |
 | B5 | Capture | Screenshot window mode (Space toggles), timer, floating thumbnail you can drag into apps or open for markup (crop, arrow, text, highlight); Super+Shift+5 palette with screen recording |

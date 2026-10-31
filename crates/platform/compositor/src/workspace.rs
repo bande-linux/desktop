@@ -1,12 +1,12 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use bande_protocols::server::bande_shell_v1::BandeShellV1;
+use bande_spring::{Animated, Spring, State as Phase};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::Point;
-use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
-use unbound_spring::{Animated, Spring, State as Phase};
 
 use crate::gesture::Tracker;
 use crate::motion::{Look, Tick, progress_precision};
@@ -692,7 +692,7 @@ impl State {
         self.announce_active_app(key.as_ref());
     }
 
-    pub(crate) fn send_workspaces(&self, shell: &UnboundShellV1) {
+    pub(crate) fn send_workspaces(&self, shell: &BandeShellV1) {
         let (count, active) = self.announced_workspaces;
         shell.workspaces(count as u32, active as u32);
     }

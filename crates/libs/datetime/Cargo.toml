@@ -1,5 +1,5 @@
 [package]
-name = "unbound-datetime"
+name = "bande-datetime"
 description = "Dates and times written the way the user's LC_TIME locale writes them"
 version.workspace = true
 edition.workspace = true
@@ -17,7 +17,7 @@ zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-unbound-test-bus.workspace = true
+bande-test-bus.workspace = true
 
 [lints]
 workspace = true

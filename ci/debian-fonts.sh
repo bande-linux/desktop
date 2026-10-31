@@ -3,7 +3,7 @@
 # runner's releases, which differ on Debian testing. Downloads are checked and cached.
 set -euo pipefail
 
-cache=${UNBOUND_FONT_CACHE:-/cache/debian-fonts}
+cache=${BANDE_FONT_CACHE:-/cache/debian-fonts}
 mirror=https://deb.debian.org/debian
 packages=(
     "f/fonts-dejavu/fonts-dejavu-mono_2.37-8_all.deb 3003e98a5debfdeadc7040a7f715fe9fe6fb67f68deacf6049b54e30f07fc014"

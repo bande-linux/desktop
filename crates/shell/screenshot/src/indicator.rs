@@ -1,4 +1,4 @@
-use unbound_notify::client::NotificationCenter;
+use bande_notify::client::NotificationCenter;
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedObjectPath;
 
@@ -35,8 +35,8 @@ impl Item {
     #[zbus(property)]
     fn id(&self) -> &str {
         match self.activity {
-            Activity::Sharing => "unbound-screen-sharing",
-            Activity::Recording => "unbound-screen-recording",
+            Activity::Sharing => "bande-screen-sharing",
+            Activity::Recording => "bande-screen-recording",
         }
     }
 

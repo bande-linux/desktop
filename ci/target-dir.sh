@@ -5,9 +5,9 @@
 # It is emptied when the toolchain changes, when it outgrows its budget or when the disk runs low.
 set -euo pipefail
 
-root=${UNBOUND_TARGET_ROOT:-/cache/target}/${RUNNER_NAME:-local}
-budget_gib=${UNBOUND_TARGET_BUDGET_GIB:-60}
-min_free_gib=${UNBOUND_TARGET_MIN_FREE_GIB:-20}
+root=${BANDE_TARGET_ROOT:-/cache/target}/${RUNNER_NAME:-local}
+budget_gib=${BANDE_TARGET_BUDGET_GIB:-60}
+min_free_gib=${BANDE_TARGET_MIN_FREE_GIB:-20}
 toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
 dir="$root/$toolchain"
 

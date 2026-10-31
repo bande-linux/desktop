@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use unbound_protocols::client::unbound_app_control_v1::{self, UnboundAppControlV1};
-use unbound_protocols::client::unbound_app_v1::{self, Placement, UnboundAppV1};
-use unbound_protocols::client::unbound_shell_v1::{self, SessionEnd, UnboundShellV1};
+use bande_protocols::client::bande_app_control_v1::{self, BandeAppControlV1};
+use bande_protocols::client::bande_app_v1::{self, BandeAppV1, Placement};
+use bande_protocols::client::bande_shell_v1::{self, BandeShellV1, SessionEnd};
 use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::{Connection, Dispatch, QueueHandle, WEnum, event_created_child};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::{
@@ -15,7 +15,7 @@ use wayland_protocols::xdg::activation::v1::client::xdg_activation_token_v1::{
     self, XdgActivationTokenV1,
 };
 
-use unbound_graphics::Rect;
+use bande_graphics::Rect;
 
 use crate::window::{State, Window, WindowError, WindowEvent};
 
@@ -37,10 +37,10 @@ pub struct AppWindow {
 
 #[derive(Default)]
 pub(crate) struct Shell {
-    pub(crate) protocol: Option<UnboundShellV1>,
-    pub(crate) app: Option<UnboundAppV1>,
+    pub(crate) protocol: Option<BandeShellV1>,
+    pub(crate) app: Option<BandeAppV1>,
     pub(crate) app_control_global: Option<(WlRegistry, u32)>,
-    app_control: Option<UnboundAppControlV1>,
+    app_control: Option<BandeAppControlV1>,
     toplevels: Vec<Toplevel>,
     processes: HashMap<String, u32>,
     minimized: Vec<String>,
@@ -49,20 +49,20 @@ pub(crate) struct Shell {
 }
 
 impl Window {
-    fn shell(&self) -> Result<&UnboundShellV1, WindowError> {
+    fn shell(&self) -> Result<&BandeShellV1, WindowError> {
         self.state
             .shell
             .protocol
             .as_ref()
-            .ok_or(WindowError::Missing("unbound_shell_v1"))
+            .ok_or(WindowError::Missing("bande_shell_v1"))
     }
 
-    fn app(&self) -> Result<&UnboundAppV1, WindowError> {
+    fn app(&self) -> Result<&BandeAppV1, WindowError> {
         self.state
             .shell
             .app
             .as_ref()
-            .ok_or(WindowError::Missing("unbound_app_v1"))
+            .ok_or(WindowError::Missing("bande_app_v1"))
     }
 
     pub fn displays(&self) -> &[String] {
@@ -111,20 +111,20 @@ impl Window {
         self.flush()
     }
 
-    fn app_control(&mut self) -> Result<&UnboundAppControlV1, WindowError> {
+    fn app_control(&mut self) -> Result<&BandeAppControlV1, WindowError> {
         let shell = &mut self.state.shell;
         if shell.app_control.is_none() {
             let (registry, name) = shell
                 .app_control_global
                 .as_ref()
-                .ok_or(WindowError::Missing("unbound_app_control_v1"))?;
+                .ok_or(WindowError::Missing("bande_app_control_v1"))?;
             shell.app_control = Some(registry.bind(*name, 1, &self.queue.handle(), ()));
         }
         self.state
             .shell
             .app_control
             .as_ref()
-            .ok_or(WindowError::Missing("unbound_app_control_v1"))
+            .ok_or(WindowError::Missing("bande_app_control_v1"))
     }
 
     pub fn force_quit_app(&mut self, app_id: &str) -> Result<(), WindowError> {
@@ -171,8 +171,8 @@ impl Window {
 
     pub fn set_panel_anchor(
         &mut self,
-        panel: unbound_shell_v1::Panel,
-        edge: unbound_shell_v1::Edge,
+        panel: bande_shell_v1::Panel,
+        edge: bande_shell_v1::Edge,
         rect: Rect,
     ) -> Result<(), WindowError> {
         self.shell()?.set_panel_anchor(
@@ -289,16 +289,16 @@ impl Window {
     }
 }
 
-impl Dispatch<UnboundAppControlV1, ()> for State {
+impl Dispatch<BandeAppControlV1, ()> for State {
     fn event(
         state: &mut Self,
-        _: &UnboundAppControlV1,
-        event: unbound_app_control_v1::Event,
+        _: &BandeAppControlV1,
+        event: bande_app_control_v1::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let unbound_app_control_v1::Event::AppResponding {
+        if let bande_app_control_v1::Event::AppResponding {
             pid,
             app_id,
             responding,
@@ -313,70 +313,70 @@ impl Dispatch<UnboundAppControlV1, ()> for State {
     }
 }
 
-impl Dispatch<UnboundAppV1, ()> for State {
+impl Dispatch<BandeAppV1, ()> for State {
     fn event(
         state: &mut Self,
-        _: &UnboundAppV1,
-        event: unbound_app_v1::Event,
+        _: &BandeAppV1,
+        event: bande_app_v1::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let unbound_app_v1::Event::QuitRequested = event {
+        if let bande_app_v1::Event::QuitRequested = event {
             state.events.push(WindowEvent::QuitRequested);
         }
     }
 }
 
-impl Dispatch<UnboundShellV1, ()> for State {
+impl Dispatch<BandeShellV1, ()> for State {
     fn event(
         state: &mut Self,
-        _: &UnboundShellV1,
-        event: unbound_shell_v1::Event,
+        _: &BandeShellV1,
+        event: bande_shell_v1::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
         match event {
-            unbound_shell_v1::Event::ShowLauncher => state.events.push(WindowEvent::ShowLauncher),
-            unbound_shell_v1::Event::ScrimPressed { surface } => {
+            bande_shell_v1::Event::ShowLauncher => state.events.push(WindowEvent::ShowLauncher),
+            bande_shell_v1::Event::ScrimPressed { surface } => {
                 if state.own_surface.as_ref() == Some(&surface) {
                     state.events.push(WindowEvent::ScrimPressed);
                 }
             }
-            unbound_shell_v1::Event::OpenLauncher {
+            bande_shell_v1::Event::OpenLauncher {
                 mode: WEnum::Value(mode),
                 text_field,
             } => state.events.push(WindowEvent::OpenLauncher {
                 mode,
                 text_field: text_field != 0,
             }),
-            unbound_shell_v1::Event::CaptureScreen => state.events.push(WindowEvent::CaptureScreen),
-            unbound_shell_v1::Event::CaptureArea => state.events.push(WindowEvent::CaptureArea),
-            unbound_shell_v1::Event::ActiveApp { app_id } => {
+            bande_shell_v1::Event::CaptureScreen => state.events.push(WindowEvent::CaptureScreen),
+            bande_shell_v1::Event::CaptureArea => state.events.push(WindowEvent::CaptureArea),
+            bande_shell_v1::Event::ActiveApp { app_id } => {
                 state.events.push(WindowEvent::ActiveApp(app_id));
             }
-            unbound_shell_v1::Event::VolumeKey {
+            bande_shell_v1::Event::VolumeKey {
                 key: WEnum::Value(key),
                 fine,
             } => state.events.push(WindowEvent::VolumeKey {
                 key,
                 fine: fine != 0,
             }),
-            unbound_shell_v1::Event::BrightnessKey {
+            bande_shell_v1::Event::BrightnessKey {
                 key: WEnum::Value(key),
                 fine,
             } => state.events.push(WindowEvent::BrightnessKey {
                 key,
                 fine: fine != 0,
             }),
-            unbound_shell_v1::Event::MediaKey {
+            bande_shell_v1::Event::MediaKey {
                 key: WEnum::Value(key),
             } => state.events.push(WindowEvent::MediaKey(key)),
-            unbound_shell_v1::Event::TogglePanel {
+            bande_shell_v1::Event::TogglePanel {
                 panel: WEnum::Value(panel),
             } => state.events.push(WindowEvent::TogglePanel(panel)),
-            unbound_shell_v1::Event::AppResponding {
+            bande_shell_v1::Event::AppResponding {
                 pid,
                 app_id,
                 responding,
@@ -385,7 +385,7 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 app_id,
                 responding: responding != 0,
             }),
-            unbound_shell_v1::Event::WindowMinimized {
+            bande_shell_v1::Event::WindowMinimized {
                 identifier,
                 minimized,
             } => {
@@ -396,22 +396,22 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 }
                 state.events.push(WindowEvent::AppsChanged);
             }
-            unbound_shell_v1::Event::AttentionRequested { app_id } => {
+            bande_shell_v1::Event::AttentionRequested { app_id } => {
                 state.events.push(WindowEvent::AttentionRequested(app_id));
             }
-            unbound_shell_v1::Event::FocusShell { namespace } => {
+            bande_shell_v1::Event::FocusShell { namespace } => {
                 state.events.push(WindowEvent::FocusShell(namespace));
             }
-            unbound_shell_v1::Event::ActiveOutput { name } => {
+            bande_shell_v1::Event::ActiveOutput { name } => {
                 state.events.push(WindowEvent::ActiveOutput(name));
             }
-            unbound_shell_v1::Event::Workspaces { count, active } => {
+            bande_shell_v1::Event::Workspaces { count, active } => {
                 state.events.push(WindowEvent::Workspaces {
                     count: count as usize,
                     active: active as usize,
                 });
             }
-            unbound_shell_v1::Event::PanelAnchor {
+            bande_shell_v1::Event::PanelAnchor {
                 panel: WEnum::Value(panel),
                 output,
                 edge: WEnum::Value(edge),
@@ -425,14 +425,14 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 edge,
                 rect: Rect::new(x as f32, y as f32, width as f32, height as f32),
             }),
-            unbound_shell_v1::Event::FullScreen {
+            bande_shell_v1::Event::FullScreen {
                 output,
                 full_screen,
             } => state.events.push(WindowEvent::FullScreen {
                 output,
                 full_screen: full_screen != 0,
             }),
-            unbound_shell_v1::Event::InputSources { sources, active } => {
+            bande_shell_v1::Event::InputSources { sources, active } => {
                 state.events.push(WindowEvent::InputSources {
                     sources: sources
                         .split(',')
@@ -442,7 +442,7 @@ impl Dispatch<UnboundShellV1, ()> for State {
                     active: active as usize,
                 });
             }
-            unbound_shell_v1::Event::Displays { names } => {
+            bande_shell_v1::Event::Displays { names } => {
                 state.shell.displays = names
                     .split(',')
                     .filter(|name| !name.is_empty())
@@ -452,12 +452,12 @@ impl Dispatch<UnboundShellV1, ()> for State {
                     .events
                     .push(WindowEvent::Displays(state.shell.displays.clone()));
             }
-            unbound_shell_v1::Event::AppsRunning { app_id, count } => {
+            bande_shell_v1::Event::AppsRunning { app_id, count } => {
                 state
                     .events
                     .push(WindowEvent::AppsRunning { app_id, count });
             }
-            unbound_shell_v1::Event::AppProcess { app_id, pid } => {
+            bande_shell_v1::Event::AppProcess { app_id, pid } => {
                 let Ok(pid) = u32::try_from(pid) else {
                     return;
                 };

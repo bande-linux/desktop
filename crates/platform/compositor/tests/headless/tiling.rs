@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use crate::support::*;
+use bande_compositor::{BACKGROUND, Compositor, Renderer};
+use bande_test_wayland::{BLUE, Placement, RED, ResizeEdge, TestClient, roundtrip};
 use smithay::utils::{Logical, Rectangle};
-use unbound_compositor::{BACKGROUND, Compositor, Renderer};
-use unbound_test_wayland::{BLUE, Placement, RED, ResizeEdge, TestClient, roundtrip};
 
 const WINDOW: (i32, i32) = (64, 48);
 const GRAB: (i32, i32) = (110, 80);

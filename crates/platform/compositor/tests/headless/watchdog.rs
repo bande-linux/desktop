@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use crate::support::*;
+use bande_compositor::{Compositor, Renderer, UNRESPONSIVE_AFTER};
+use bande_test_wayland::{RED, TestClient, roundtrip};
 use smithay::utils::Size;
-use unbound_compositor::{Compositor, Renderer, UNRESPONSIVE_AFTER};
-use unbound_test_wayland::{RED, TestClient, roundtrip};
 
 const WINDOW: i32 = 64;
 const CENTER: (f64, f64) = (128.0, 96.0);

@@ -1,7 +1,7 @@
-use unbound_compositor::SessionRole;
-use unbound_protocols::client::unbound_app_control_v1::{self, UnboundAppControlV1};
-use unbound_protocols::client::unbound_app_v1::{self, Placement, UnboundAppV1};
-use unbound_protocols::client::unbound_shell_v1::{self, UnboundShellV1};
+use bande_compositor::SessionRole;
+use bande_protocols::client::bande_app_control_v1::{self, BandeAppControlV1};
+use bande_protocols::client::bande_app_v1::{self, BandeAppV1, Placement};
+use bande_protocols::client::bande_shell_v1::{self, BandeShellV1};
 use wayland_client::protocol::wl_shm::Format;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{
@@ -41,18 +41,18 @@ pub(crate) struct Shell {
     preferred_scale: Option<u32>,
     fractional_scale: Option<WpFractionalScaleV1>,
     pub(crate) layers: Vec<(WlSurface, ZwlrLayerSurfaceV1)>,
-    shell: Option<UnboundShellV1>,
-    app_control: Option<UnboundAppControlV1>,
+    shell: Option<BandeShellV1>,
+    app_control: Option<BandeAppControlV1>,
     launcher_requests: usize,
     scrim_presses: usize,
-    launcher_modes: Vec<(unbound_shell_v1::LauncherMode, bool)>,
+    launcher_modes: Vec<(bande_shell_v1::LauncherMode, bool)>,
     capture_requests: usize,
     area_capture_requests: usize,
     active_apps: Vec<String>,
-    volume_keys: Vec<(unbound_shell_v1::VolumeKey, bool)>,
-    brightness_keys: Vec<(unbound_shell_v1::BrightnessKey, bool)>,
-    media_keys: Vec<unbound_shell_v1::MediaKey>,
-    panel_toggles: Vec<unbound_shell_v1::Panel>,
+    volume_keys: Vec<(bande_shell_v1::VolumeKey, bool)>,
+    brightness_keys: Vec<(bande_shell_v1::BrightnessKey, bool)>,
+    media_keys: Vec<bande_shell_v1::MediaKey>,
+    panel_toggles: Vec<bande_shell_v1::Panel>,
     responding: Vec<(i32, String, bool)>,
     minimized: Vec<(String, bool)>,
     attention: Vec<String>,
@@ -65,7 +65,7 @@ pub(crate) struct Shell {
     toplevel_updates: usize,
     workspaces: Option<(u32, u32)>,
     input_sources: Option<(String, u32)>,
-    panel_anchors: Vec<(unbound_shell_v1::Panel, (i32, i32, i32, i32))>,
+    panel_anchors: Vec<(bande_shell_v1::Panel, (i32, i32, i32, i32))>,
 }
 
 pub struct LayerRequest {
@@ -79,7 +79,7 @@ pub struct LayerRequest {
 
 impl TestClient {
     pub fn show_layer(&mut self, server: &mut Compositor, request: &LayerRequest) -> (u32, u32) {
-        self.show_named_layer(server, request, "unbound-test")
+        self.show_named_layer(server, request, "bande-test")
     }
 
     pub fn show_named_layer(
@@ -175,7 +175,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Compositor) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 1);
+        let shell: BandeShellV1 = self.bind("bande_shell_v1", 1);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -196,7 +196,7 @@ impl TestClient {
         self.globals.shell.launcher_requests
     }
 
-    pub fn launcher_modes(&self) -> &[(unbound_shell_v1::LauncherMode, bool)] {
+    pub fn launcher_modes(&self) -> &[(bande_shell_v1::LauncherMode, bool)] {
         &self.globals.shell.launcher_modes
     }
 
@@ -223,19 +223,19 @@ impl TestClient {
         &self.globals.shell.active_apps
     }
 
-    pub fn volume_keys(&self) -> &[(unbound_shell_v1::VolumeKey, bool)] {
+    pub fn volume_keys(&self) -> &[(bande_shell_v1::VolumeKey, bool)] {
         &self.globals.shell.volume_keys
     }
 
-    pub fn brightness_keys(&self) -> &[(unbound_shell_v1::BrightnessKey, bool)] {
+    pub fn brightness_keys(&self) -> &[(bande_shell_v1::BrightnessKey, bool)] {
         &self.globals.shell.brightness_keys
     }
 
-    pub fn media_keys(&self) -> &[unbound_shell_v1::MediaKey] {
+    pub fn media_keys(&self) -> &[bande_shell_v1::MediaKey] {
         &self.globals.shell.media_keys
     }
 
-    pub fn panel_toggles(&self) -> &[unbound_shell_v1::Panel] {
+    pub fn panel_toggles(&self) -> &[bande_shell_v1::Panel] {
         &self.globals.shell.panel_toggles
     }
 
@@ -262,8 +262,8 @@ impl TestClient {
         &mut self,
         server: &mut Compositor,
         layer: usize,
-        panel: unbound_shell_v1::Panel,
-        edge: unbound_shell_v1::Edge,
+        panel: bande_shell_v1::Panel,
+        edge: bande_shell_v1::Edge,
         rect: (i32, i32, i32, i32),
     ) {
         let shell = self.globals.shell.shell.as_ref().expect("joined the shell");
@@ -272,7 +272,7 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn panel_anchor(&self, panel: unbound_shell_v1::Panel) -> Option<(i32, i32, i32, i32)> {
+    pub fn panel_anchor(&self, panel: bande_shell_v1::Panel) -> Option<(i32, i32, i32, i32)> {
         self.globals
             .shell
             .panel_anchors
@@ -283,12 +283,12 @@ impl TestClient {
     }
 
     pub fn take_app_requests(&mut self, server: &mut Compositor) {
-        let _: UnboundAppV1 = self.bind("unbound_app_v1", 1);
+        let _: BandeAppV1 = self.bind("bande_app_v1", 1);
         self.exchange(server);
     }
 
     pub fn place_window(&mut self, server: &mut Compositor, index: usize, placement: Placement) {
-        let app: UnboundAppV1 = self.bind("unbound_app_v1", 1);
+        let app: BandeAppV1 = self.bind("bande_app_v1", 1);
         app.place_window(&self.windows[index].2, placement);
         self.exchange(server);
     }
@@ -299,13 +299,13 @@ impl TestClient {
         index: usize,
         workspace: Workspace,
     ) {
-        let app: UnboundAppV1 = self.bind("unbound_app_v1", 1);
+        let app: BandeAppV1 = self.bind("bande_app_v1", 1);
         app.move_to_workspace(&self.windows[index].2, workspace);
         self.exchange(server);
     }
 
     pub fn keep_on_top(&mut self, server: &mut Compositor, index: usize, keep: bool) {
-        let app: UnboundAppV1 = self.bind("unbound_app_v1", 1);
+        let app: BandeAppV1 = self.bind("bande_app_v1", 1);
         app.set_keep_on_top(&self.windows[index].2, u32::from(keep));
         self.exchange(server);
     }
@@ -331,13 +331,13 @@ impl TestClient {
         self.globals.shell.quit_requests
     }
 
-    fn shell_request(&mut self, server: &mut Compositor, request: impl FnOnce(&UnboundShellV1)) {
+    fn shell_request(&mut self, server: &mut Compositor, request: impl FnOnce(&BandeShellV1)) {
         request(self.globals.shell.shell.as_ref().expect("joined the shell"));
         self.exchange(server);
     }
 
     pub fn join_app_control(&mut self, server: &mut Compositor) {
-        self.globals.shell.app_control = Some(self.bind("unbound_app_control_v1", 1));
+        self.globals.shell.app_control = Some(self.bind("bande_app_control_v1", 1));
         self.exchange(server);
     }
 
@@ -361,7 +361,7 @@ impl TestClient {
     }
 
     pub fn quit_all_apps(&mut self, server: &mut Compositor) {
-        self.shell_request(server, UnboundShellV1::quit_all_apps);
+        self.shell_request(server, BandeShellV1::quit_all_apps);
     }
 
     pub fn confirm_session_end(&mut self, server: &mut Compositor, ending: SessionEnd) {
@@ -574,53 +574,53 @@ delegate_noop!(Globals: ignore WpViewporter);
 delegate_noop!(Globals: ignore WpViewport);
 delegate_noop!(Globals: ignore WpFractionalScaleManagerV1);
 
-impl Dispatch<UnboundShellV1, ()> for Globals {
+impl Dispatch<BandeShellV1, ()> for Globals {
     fn event(
         globals: &mut Self,
-        _: &UnboundShellV1,
-        event: unbound_shell_v1::Event,
+        _: &BandeShellV1,
+        event: bande_shell_v1::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
         match event {
-            unbound_shell_v1::Event::ShowLauncher => globals.shell.launcher_requests += 1,
-            unbound_shell_v1::Event::ScrimPressed { .. } => globals.shell.scrim_presses += 1,
-            unbound_shell_v1::Event::OpenLauncher {
+            bande_shell_v1::Event::ShowLauncher => globals.shell.launcher_requests += 1,
+            bande_shell_v1::Event::ScrimPressed { .. } => globals.shell.scrim_presses += 1,
+            bande_shell_v1::Event::OpenLauncher {
                 mode: WEnum::Value(mode),
                 text_field,
             } => globals.shell.launcher_modes.push((mode, text_field != 0)),
-            unbound_shell_v1::Event::CaptureScreen => globals.shell.capture_requests += 1,
-            unbound_shell_v1::Event::CaptureArea => globals.shell.area_capture_requests += 1,
-            unbound_shell_v1::Event::ActiveApp { app_id } => globals.shell.active_apps.push(app_id),
-            unbound_shell_v1::Event::VolumeKey {
+            bande_shell_v1::Event::CaptureScreen => globals.shell.capture_requests += 1,
+            bande_shell_v1::Event::CaptureArea => globals.shell.area_capture_requests += 1,
+            bande_shell_v1::Event::ActiveApp { app_id } => globals.shell.active_apps.push(app_id),
+            bande_shell_v1::Event::VolumeKey {
                 key: WEnum::Value(key),
                 fine,
             } => globals.shell.volume_keys.push((key, fine != 0)),
-            unbound_shell_v1::Event::BrightnessKey {
+            bande_shell_v1::Event::BrightnessKey {
                 key: WEnum::Value(key),
                 fine,
             } => globals.shell.brightness_keys.push((key, fine != 0)),
-            unbound_shell_v1::Event::MediaKey {
+            bande_shell_v1::Event::MediaKey {
                 key: WEnum::Value(key),
             } => globals.shell.media_keys.push(key),
-            unbound_shell_v1::Event::TogglePanel {
+            bande_shell_v1::Event::TogglePanel {
                 panel: WEnum::Value(panel),
             } => globals.shell.panel_toggles.push(panel),
-            unbound_shell_v1::Event::WindowMinimized {
+            bande_shell_v1::Event::WindowMinimized {
                 identifier,
                 minimized,
             } => globals.shell.minimized.push((identifier, minimized != 0)),
-            unbound_shell_v1::Event::AttentionRequested { app_id } => {
+            bande_shell_v1::Event::AttentionRequested { app_id } => {
                 globals.shell.attention.push(app_id);
             }
-            unbound_shell_v1::Event::InputSources { sources, active } => {
+            bande_shell_v1::Event::InputSources { sources, active } => {
                 globals.shell.input_sources = Some((sources, active));
             }
-            unbound_shell_v1::Event::Workspaces { count, active } => {
+            bande_shell_v1::Event::Workspaces { count, active } => {
                 globals.shell.workspaces = Some((count, active));
             }
-            unbound_shell_v1::Event::PanelAnchor {
+            bande_shell_v1::Event::PanelAnchor {
                 panel: WEnum::Value(panel),
                 x,
                 y,
@@ -631,16 +631,16 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
                 .shell
                 .panel_anchors
                 .push((panel, (x, y, width, height))),
-            unbound_shell_v1::Event::FocusShell { namespace } => {
+            bande_shell_v1::Event::FocusShell { namespace } => {
                 globals.shell.shell_focus.push(namespace);
             }
-            unbound_shell_v1::Event::AppsRunning { app_id, count } => {
+            bande_shell_v1::Event::AppsRunning { app_id, count } => {
                 globals.shell.apps_running.push((app_id, count));
             }
-            unbound_shell_v1::Event::AppProcess { app_id, pid } => {
+            bande_shell_v1::Event::AppProcess { app_id, pid } => {
                 globals.shell.app_processes.push((app_id, pid));
             }
-            unbound_shell_v1::Event::AppResponding {
+            bande_shell_v1::Event::AppResponding {
                 pid,
                 app_id,
                 responding,
@@ -653,31 +653,31 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
     }
 }
 
-impl Dispatch<UnboundAppV1, ()> for Globals {
+impl Dispatch<BandeAppV1, ()> for Globals {
     fn event(
         globals: &mut Self,
-        _: &UnboundAppV1,
-        event: unbound_app_v1::Event,
+        _: &BandeAppV1,
+        event: bande_app_v1::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let unbound_app_v1::Event::QuitRequested = event {
+        if let bande_app_v1::Event::QuitRequested = event {
             globals.shell.quit_requests += 1;
         }
     }
 }
 
-impl Dispatch<UnboundAppControlV1, ()> for Globals {
+impl Dispatch<BandeAppControlV1, ()> for Globals {
     fn event(
         globals: &mut Self,
-        _: &UnboundAppControlV1,
-        event: unbound_app_control_v1::Event,
+        _: &BandeAppControlV1,
+        event: bande_app_control_v1::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let unbound_app_control_v1::Event::AppResponding {
+        if let bande_app_control_v1::Event::AppResponding {
             pid,
             app_id,
             responding,

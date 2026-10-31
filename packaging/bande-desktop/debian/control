@@ -1,0 +1,70 @@
+Source: bande-desktop
+Section: metapackages
+Priority: optional
+Maintainer: Mikael Hug <mikaelhug@gmail.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+
+Package: bande-desktop
+Architecture: all
+Depends: bande-compositor (= ${binary:Version}),
+         bande-config (= ${binary:Version}),
+         bande-power (= ${binary:Version}),
+         bande-sound (= ${binary:Version}),
+         bande-notify (= ${binary:Version}),
+         bande-clipboard (= ${binary:Version}),
+         bande-shell (= ${binary:Version}),
+         bande-lock (= ${binary:Version}),
+         xdg-desktop-portal-bande (= ${binary:Version}),
+         xdg-desktop-portal,
+         dbus-user-session,
+         default-logind | logind,
+         libpam-systemd,
+         ${misc:Depends}
+Recommends: bande-term (= ${binary:Version}),
+            bande-screenshot (= ${binary:Version}),
+            bande-files (= ${binary:Version}),
+            bande-settings (= ${binary:Version}),
+            bande-tray (= ${binary:Version}),
+            bande-automount (= ${binary:Version}),
+            bande-monitor (= ${binary:Version}),
+            bande-file-chooser (= ${binary:Version}),
+            bande-polkit (= ${binary:Version}),
+            gnome-keyring,
+            libpam-gnome-keyring,
+            qt6-xdgdesktopportal-platformtheme,
+            firefox-esr,
+            gnome-text-editor,
+            loupe,
+            papers,
+            showtime,
+            gnome-calculator,
+            fonts-inter,
+            fonts-manrope,
+            fonts-jetbrains-mono,
+            fonts-noto-core,
+            fonts-noto-cjk,
+            cups,
+            xdg-user-dirs,
+            upower,
+            udisks2,
+            at-spi2-core,
+            systemd-oomd,
+            systemd-zram-generator
+Suggests: gnome-clocks
+Description: Bande desktop environment
+ The Bande desktop: a pure Wayland desktop with its own compositor, shell,
+ session services and applications. Installing this package adds "Bande"
+ to the sessions a display manager such as GDM, SDDM or greetd offers.
+ .
+ It recommends a browser, text editor, image viewer, PDF viewer, calculator
+ and video player, and opens files in them by default, an unlocked keyring
+ for the passwords browsers and editors keep, fallback fonts for every
+ script and the print service.
+ .
+ So that running out of memory never freezes the computer, it recommends
+ compressed swap in memory (zram, sized like Fedora's and compressed with
+ zstd) and systemd-oomd, and makes the apps' slice the place where
+ systemd-oomd closes an app when memory stays under pressure, so the
+ compositor and the session services keep running.

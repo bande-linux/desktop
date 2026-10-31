@@ -3,13 +3,13 @@ use std::os::fd::OwnedFd;
 use std::thread;
 use std::time::Duration;
 
+use bande_config::{Accessibility, BUS_NAME, OBJECT_PATH};
 use rustix::time::{
     Itimerspec, TimerfdClockId, TimerfdFlags, TimerfdTimerFlags, Timespec, timerfd_create,
     timerfd_settime,
 };
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{Interest, Mode, PostAction};
-use unbound_config::{Accessibility, BUS_NAME, OBJECT_PATH};
 use zbus::blocking::Connection;
 use zbus::zvariant::Value;
 

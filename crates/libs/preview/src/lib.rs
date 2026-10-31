@@ -2,7 +2,7 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::path::Path;
 
-use unbound_fs::{Entry, is_hidden};
+use bande_fs::{Entry, is_hidden};
 
 pub const TEXT_PREVIEW_BYTES: u64 = 64 * 1024;
 pub const IMAGE_PREVIEW_PIXELS: u32 = 2048;

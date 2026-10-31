@@ -7,11 +7,11 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
+use bande_config::{ConfigService, ConfigStore, EDIT_ACTION, ErrorNotifier};
+use bande_notify::client::NotificationCenter;
+use bande_notify::{Notification, NotificationServer};
+use bande_test_bus::SessionBus;
 use support::replace_file;
-use unbound_config::{ConfigService, ConfigStore, EDIT_ACTION, ErrorNotifier};
-use unbound_notify::client::NotificationCenter;
-use unbound_notify::{Notification, NotificationServer};
-use unbound_test_bus::SessionBus;
 
 const WAIT: Duration = Duration::from_secs(5);
 

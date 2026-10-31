@@ -1,0 +1,12 @@
+[Unit]
+Description=Bande polkit authentication agent
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Slice=session.slice
+ExecStart=/usr/bin/bande-polkit-agent
+Restart=on-failure
+
+[Install]
+WantedBy=bande-session.target

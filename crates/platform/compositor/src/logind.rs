@@ -76,7 +76,7 @@ pub fn follow_shutdown(connection: &Connection, sender: Sender<OwnedFd>) -> zbus
     let take = move || -> zbus::Result<OwnedFd> {
         let delay = manager.inhibit(
             "shutdown",
-            "Unbound",
+            "Bande",
             &crate::L10N.tr("remember-apps-before-shutdown"),
             "delay",
         )?;

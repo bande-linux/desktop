@@ -5,8 +5,8 @@ use std::os::unix::fs::FileExt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use bande_graphics::{CpuRenderer, Region, Scene, pixels};
 use rustix::fs::{MemfdFlags, memfd_create};
-use unbound_graphics::{CpuRenderer, Region, Scene, pixels};
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_shm::{self, WlShm};
@@ -239,7 +239,7 @@ fn create_buffer(
     let stride = clamp_i32(width.saturating_mul(4));
     let length = u64::from(width) * u64::from(height) * 4;
     let file =
-        File::from(memfd_create("unbound-toolkit", MemfdFlags::CLOEXEC).map_err(io::Error::from)?);
+        File::from(memfd_create("bande-toolkit", MemfdFlags::CLOEXEC).map_err(io::Error::from)?);
     file.set_len(length)?;
     let pool = shm.create_pool(
         file.as_fd(),

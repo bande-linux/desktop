@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
-use unbound_config::{BUS_NAME, BarEdge, OBJECT_PATH};
-use unbound_inbox::Outbox;
+use bande_config::{BUS_NAME, BarEdge, OBJECT_PATH};
+use bande_inbox::Outbox;
 use zbus::blocking::fdo::PropertiesProxy;
 use zbus::blocking::{Connection, MessageIterator, Proxy};
 use zbus::zvariant::OwnedValue;
@@ -12,7 +12,7 @@ use zbus::{MatchRule, message};
 use crate::LauncherUpdate;
 
 const LAUNCHER_INTERFACE: &str = "com.canonical.Unity.LauncherEntry";
-const CONFIG_INTERFACE: &str = "org.unbound.Config";
+const CONFIG_INTERFACE: &str = "org.bande.Config";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BusEvent {
@@ -150,7 +150,7 @@ fn follow_bar_settings(session: Connection, outbox: Outbox<BusEvent>) {
             Ok(())
         };
         if let Err(error) = follow() {
-            tracing::warn!("cannot follow the bar's settings in org.unbound.Config: {error}");
+            tracing::warn!("cannot follow the bar's settings in org.bande.Config: {error}");
         }
     });
 }
@@ -162,7 +162,7 @@ pub fn keep_writer(session: Connection) -> Sender<Vec<String>> {
         let config = match config {
             Ok(config) => config,
             Err(error) => {
-                tracing::warn!("cannot reach org.unbound.Config to keep apps: {error}");
+                tracing::warn!("cannot reach org.bande.Config to keep apps: {error}");
                 return;
             }
         };

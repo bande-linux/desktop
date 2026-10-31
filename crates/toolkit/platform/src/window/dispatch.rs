@@ -82,13 +82,13 @@ impl Dispatch<WlRegistry, ()> for State {
                             registry.bind(name, 4, handle, crate::lock::NamedOutput);
                     }
                 }
-                "unbound_shell_v1" => {
+                "bande_shell_v1" => {
                     state.shell.protocol = Some(registry.bind(name, 1, handle, ()));
                 }
-                "unbound_app_v1" => {
+                "bande_app_v1" => {
                     state.shell.app = Some(registry.bind(name, 1, handle, ()));
                 }
-                "unbound_app_control_v1" => {
+                "bande_app_control_v1" => {
                     state.shell.app_control_global = Some((registry.clone(), name));
                 }
                 "zwp_text_input_manager_v3" => {

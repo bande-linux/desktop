@@ -2,10 +2,10 @@ use std::fmt::Write as _;
 use std::io;
 use std::path::Path;
 
-use unbound_design::{Accent, Color, Contrast, Palette, Scheme};
+use bande_design::{Accent, Color, Contrast, Palette, Scheme};
 
-pub const STYLESHEET: &str = "unbound.css";
-pub const IMPORT: &str = "@import url(\"unbound.css\");";
+pub const STYLESHEET: &str = "bande.css";
+pub const IMPORT: &str = "@import url(\"bande.css\");";
 
 fn hex(color: Color) -> String {
     format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b)

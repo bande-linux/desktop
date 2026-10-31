@@ -1,10 +1,10 @@
 use crate::support::*;
-use smithay::utils::Point;
-use unbound_compositor::{BACKGROUND, Compositor, Renderer};
-use unbound_test_wayland::{
+use bande_compositor::{BACKGROUND, Compositor, Renderer};
+use bande_test_wayland::{
     Anchor, KeyboardInteractivity, Layer, LayerRequest, RED, SessionEnd, TestClient, ToplevelState,
     roundtrip,
 };
+use smithay::utils::Point;
 
 const WINDOW: i32 = 64;
 const KEY_F2: u32 = 60;
@@ -105,7 +105,7 @@ fn a_hidden_app_is_told_it_is_suspended_until_it_shows_again() {
 fn an_ordinary_app_can_ask_another_app_to_quit_without_seeing_the_shell() {
     let mut server = server();
     let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
-    let mut monitor = window_of(&mut server, RED, (WINDOW, WINDOW), "org.unbound.Monitor");
+    let mut monitor = window_of(&mut server, RED, (WINDOW, WINDOW), "org.bande.Monitor");
 
     monitor.join_app_control(&mut server);
     monitor.ask_app_to_quit(&mut server, EDITOR);
@@ -113,7 +113,7 @@ fn an_ordinary_app_can_ask_another_app_to_quit_without_seeing_the_shell() {
 
     assert!(editor.close_requested(0));
     assert!(!monitor.close_requested(0));
-    assert!(!monitor.advertises("unbound_shell_v1"));
+    assert!(!monitor.advertises("bande_shell_v1"));
 }
 
 #[test]

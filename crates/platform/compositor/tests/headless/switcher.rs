@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use crate::support::*;
+use bande_compositor::{Compositor, Renderer};
+use bande_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
 use smithay::utils::Size;
-use unbound_compositor::{Compositor, Renderer};
-use unbound_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
 
 const OUTPUT: (i32, i32) = (480, 270);
 const WINDOW: (i32, i32) = (160, 100);
@@ -202,7 +202,7 @@ fn clicking_an_icon_switches_to_its_app() {
 fn check_golden(name: &str, renderer: &mut Renderer, server: &mut Compositor) {
     renderer.render(server).expect("frame");
     let snapshot = renderer.snapshot(server).expect("read back");
-    unbound_golden::assert_golden_rgba!(
+    bande_golden::assert_golden_rgba!(
         name,
         (
             snapshot.size.w.unsigned_abs(),

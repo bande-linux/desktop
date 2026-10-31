@@ -11,16 +11,16 @@ use crate::{
     Request, SettingInfo, SystemCommand, Target,
 };
 use accesskit::TreeUpdate;
-use unbound_fs::Entry;
-use unbound_inbox::Inbox;
-use unbound_preview::{Preview, preview};
-use unbound_search::{FileIndex, Usage, recently_used_path, usage_path};
-use unbound_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
-use unbound_toolkit::{
+use bande_fs::Entry;
+use bande_inbox::Inbox;
+use bande_preview::{Preview, preview};
+use bande_search::{FileIndex, Usage, recently_used_path, usage_path};
+use bande_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
+use bande_toolkit::{
     App, Color, Edges, Image, KeyboardFocus, LauncherMode, LayerKind, LayerOptions, MenuPlacement,
     Rect, Role, Scene, SessionEnd, TextSystem, Window, WindowError, WindowEvent, ui::frame_time,
 };
-use unbound_xdg::{
+use bande_xdg::{
     Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, MimeDatabase, applications,
     config_dirs, current_desktops, data_dirs, find_icon, launch, launch_with,
     launch_with_arguments,
@@ -30,7 +30,7 @@ const FALLBACK_DOCUMENT: &str = "application-x-generic";
 const CLIP_TEXT: &str = "text-x-generic";
 const CLIP_IMAGE: &str = "image-x-generic";
 const CLIP_FILES: &str = "folder";
-const SETTINGS_APP: &str = "org.unbound.Settings";
+const SETTINGS_APP: &str = "org.bande.Settings";
 
 struct Library {
     apps: Rc<RefCell<Apps>>,
@@ -80,9 +80,9 @@ fn carry_out(window: &mut Window, command: SystemCommand) -> std::io::Result<()>
             std::thread::spawn(move || {
                 let result = zbus::blocking::Connection::system().and_then(|system| {
                     if command == SystemCommand::Sleep {
-                        unbound_status::devices::sleep(&system)
+                        bande_status::devices::sleep(&system)
                     } else {
-                        unbound_status::devices::lock_screen(&system)
+                        bande_status::devices::lock_screen(&system)
                     }
                 });
                 if let Err(error) = result {
@@ -483,7 +483,7 @@ fn app_icons(entries: &[DesktopEntry], data_dirs: &[PathBuf]) -> HashMap<String,
 }
 
 fn settings_panes() -> Vec<PaneInfo> {
-    unbound_settings_panes::panes()
+    bande_settings_panes::panes()
         .into_iter()
         .map(|pane| PaneInfo {
             keyword: pane.id.keyword().to_owned(),
@@ -535,7 +535,7 @@ impl LauncherShell {
                 .as_deref(),
             &home,
         );
-        let usage_file = usage_path(unbound_xdg::state_home().as_deref(), Some(&home));
+        let usage_file = usage_path(bande_xdg::state_home().as_deref(), Some(&home));
         let skin_tone = usage_file
             .as_deref()
             .and_then(Path::parent)

@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role, SortDirection};
-use unbound_graphics::{Item, Paragraph, Point, Rect, Shape, TextRole, TextStyle};
+use bande_graphics::{Item, Paragraph, Point, Rect, Shape, TextRole, TextStyle};
 
 pub use self::model::{Cell, Column, Row, Sort};
 use self::model::{Line, flatten};

@@ -3,6 +3,14 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ExitCode};
 use std::time::{Duration, Instant};
 
+use bande_compositor::{
+    CLIPBOARD_DAEMON, Compositor, CursorTheme, DrmBackend, DrmNotifiers, FrameClock, FrameOutput,
+    FrameScheduler, GREETER, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
+    SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
+    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
+    follow_session, follow_shutdown, follow_sleep, notify_ready, serve_keyboard_monitor,
+};
+use bande_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
 use smithay::backend::udev::{UdevBackend, UdevEvent};
 use smithay::reexports::calloop::channel::{self, Event};
@@ -11,14 +19,6 @@ use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAct
 use smithay::reexports::drm::control::crtc;
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
-use unbound_compositor::{
-    CLIPBOARD_DAEMON, Compositor, CursorTheme, DrmBackend, DrmNotifiers, FrameClock, FrameOutput,
-    FrameScheduler, GREETER, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
-    SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
-    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
-    follow_session, follow_shutdown, follow_sleep, notify_ready, serve_keyboard_monitor,
-};
-use unbound_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
@@ -83,7 +83,7 @@ enum Session {
 
 fn main() -> ExitCode {
     let started = now();
-    unbound_log::init("unbound-compositor");
+    bande_log::init("bande-compositor");
     let result = parse_args().and_then(|(backend, session)| {
         let buses = Buses::connect();
         match backend {
@@ -141,7 +141,7 @@ fn run_headless(session: Session, started: Duration, buses: Buses) -> Result<(),
 }
 
 fn window_memory() -> Option<PathBuf> {
-    unbound_xdg::state_home().map(|state| state.join("unbound/windows"))
+    bande_xdg::state_home().map(|state| state.join("bande/windows"))
 }
 
 fn display_config() -> Config {
@@ -505,7 +505,7 @@ fn start_user_session<O: 'static>(
             |app, SessionRequest::Lock| app.compositor.request_lock_screen(),
         )?;
     }
-    if let Some(file) = unbound_xdg::reopen_file() {
+    if let Some(file) = bande_xdg::reopen_file() {
         app.compositor.remember_apps_to_reopen_in(file);
         if let Some(system) = &system {
             follow(
@@ -516,7 +516,7 @@ fn start_user_session<O: 'static>(
             )?;
         }
     }
-    if std::env::var_os("UNBOUND_REVIEW_JOB").is_none() {
+    if std::env::var_os("BANDE_REVIEW_JOB").is_none() {
         return Ok(None);
     }
     match app.compositor.spawn_shell_client(Path::new(REVIEW)) {

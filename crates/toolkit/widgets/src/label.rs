@@ -1,7 +1,7 @@
 use accesskit::{Node, Role};
 
 use super::{Context, Size, Widget, WidgetId};
-use unbound_graphics::{Item, Paragraph, Point, Rect, TextAlign, TextStyle};
+use bande_graphics::{Item, Paragraph, Point, Rect, TextAlign, TextStyle};
 
 pub struct Label {
     id: WidgetId,

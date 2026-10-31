@@ -6,27 +6,27 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
 
 ## How to measure
 
-- **Shell clients:** `unbound-footprint` (`crates/testing/bench`) starts each client as a shell
-  client (so it sees `unbound_shell_v1`) on a headless compositor with a 2928×1818 output, lets it settle, optionally moves the pointer
+- **Shell clients:** `bande-footprint` (`crates/testing/bench`) starts each client as a shell
+  client (so it sees `bande_shell_v1`) on a headless compositor with a 2928×1818 output, lets it settle, optionally moves the pointer
   back and forth 40 times, and prints RSS + swap, Vulkan device memory (the
   `/memfd:allocation` mappings of lavapipe), threads and the client's CPU time per pointer
   move. Run it inside a private bus so that the live session is not touched:
 
   ```sh
-  cargo build --release -p unbound-bench -p unbound-shell
-  dbus-run-session -- target/release/unbound-footprint \
-      --hover 2864,70,2600,900 target/release/unbound-shell
+  cargo build --release -p bande-bench -p bande-shell
+  dbus-run-session -- target/release/bande-footprint \
+      --hover 2864,70,2600,900 target/release/bande-shell
   ```
 
   `--settle <seconds>` waits longer before measuring (40 s shows a hidden window after it has
   released its renderer).
-- **Session frame times:** `unbound-session-bench` runs the compositor in-process on a
+- **Session frame times:** `bande-session-bench` runs the compositor in-process on a
   headless 2928×1818 output at 1.5×, starts the shell (desktop, bar, launcher and the rest), Files
   (on a folder of 400 files) and the terminal from its own directory, and replays typical
   actions one refresh apart: the pointer moving over Files, dragging Files by its title bar,
   typing 60 characters into the terminal, scrolling the file list, opening and closing the
   launcher, the overview and a context menu of Files twice, and showing two notification
-  banners that expire after 1.5 s (it starts `unbound-notify` for them and sends them with
+  banners that expire after 1.5 s (it starts `bande-notify` for them and sends them with
   `gdbus`). For each it prints the compositor's frame time (p50, p99),
   its CPU time per frame (including lavapipe's threads), the clients' CPU time per frame, the
   cores kept busy and the pixels repainted per frame. Arguments filter the actions by name;
@@ -34,16 +34,16 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
   <dir>` writes the screen after each action as PPM. Run it inside the test bus:
 
   ```sh
-  cargo build --release -p unbound-bench -p unbound-shell -p unbound-files -p unbound-term \
-      -p unbound-notify
+  cargo build --release -p bande-bench -p bande-shell -p bande-files -p bande-term \
+      -p bande-notify
   dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- \
-      env -u WAYLAND_DISPLAY target/release/unbound-session-bench
+      env -u WAYLAND_DISPLAY target/release/bande-session-bench
   ```
 
   Other developers' builds share the VM's ten cores, so wall-clock frame times move with the
   load average the tool prints; compare runs taken back to back, and the CPU columns, which
   move less.
-- **Files at 100 000 items:** `unbound-files-bench` (`crates/testing/bench`) creates a folder of
+- **Files at 100 000 items:** `bande-files-bench` (`crates/testing/bench`) creates a folder of
   100 000 files and drives `FilesView` in-process, without a compositor: it opens the folder in
   the column view, switches to the list view, scrolls it 120 times, selects all and writes one
   new file into the folder, five times over. Every number is UI-thread time: the work between
@@ -51,14 +51,14 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
   not counted, so "open to fully listed" is wall-clock.
 
   ```sh
-  cargo build --release -p unbound-bench --bin unbound-files-bench
+  cargo build --release -p bande-bench --bin bande-files-bench
   dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- \
-      target/release/unbound-files-bench
+      target/release/bande-files-bench
   ```
 - **Idle wake-ups:** sum the `voluntary_ctxt_switches` and `nonvoluntary_ctxt_switches` of every
   thread in `/proc/<pid>/task/*/status` twice, some seconds apart, and divide the difference by
   the interval; the per-thread `comm` names show which thread wakes. Run the services inside the
-  test bus and the bar and Control Center under `unbound-footprint --settle <seconds>` (its
+  test bus and the bar and Control Center under `bande-footprint --settle <seconds>` (its
   headless compositor), with `XDG_RUNTIME_DIR` pointing at a private directory that links
   `pipewire-0` so that PipeWire is real but no client reaches the live session's display.
 - **Binary sizes:** `cargo build --profile dist -p <package>`; packages are built with this
@@ -92,7 +92,7 @@ needs a hidden or suspended signal from the toolkit, which it does not have yet.
 `Table` can hold unfilled rows (`set_row_count`) and names the ones around the visible rows that
 still lack cells (`unfilled_rows`); Files fills them before each frame instead of building all
 100 000 rows when the list is shown. Nested lists (open folders) still build every row.
-`unbound-files-bench`, medians of five runs (worst in brackets), release build, same VM, back to
+`bande-files-bench`, medians of five runs (worst in brackets), release build, same VM, back to
 back with other developers' builds running; before is `669fbf9`, after is `bb08f42`:
 
 | Action | before | after |
@@ -114,7 +114,7 @@ conversion and a Fluent call, kept marks in a vector searched linearly and passe
 the list as path strings. After: the first 2 000 entries are read at once and the rest on a
 listing thread in doubling chunks; inotify names are applied as row edits; marks are bisected and
 passed as row indices; sizes and dates are formatted once per value; sorting re-orders in memory.
-`unbound-files-bench`, medians of five runs (worst in brackets), release build, same VM, other
+`bande-files-bench`, medians of five runs (worst in brackets), release build, same VM, other
 developers' builds running:
 
 | Action | before | after |
@@ -134,7 +134,7 @@ when the list is shown. The next step is a `Table` that asks for the cells of vi
 
 ## 2026-10-30: menus, launcher and banners in motion
 
-Frames per action with `unbound-session-bench launcher menu notification`, `main` at `bef5145`
+Frames per action with `bande-session-bench launcher menu notification`, `main` at `bef5145`
 against `desktop/motion-polish`, run back to back twice, load average 4 to 5 (lavapipe, CPU
 clients). "Frames" counts every composed frame of the action, which runs twice.
 
@@ -147,7 +147,7 @@ clients). "Frames" counts every composed frame of the action, which runs twice.
 - **The launcher is as big as its card.** Its layer surface is the card plus 48 pt for the
   shadow (816 × 617 pt instead of the whole display), anchored to the top edge with the card's
   old position as margin. The dimmed backdrop is drawn by the compositor:
-  `unbound_shell_v1.set_scrim` (version 16) dims and, on a GPU, blurs the display behind a
+  `bande_shell_v1.set_scrim` (version 16) dims and, on a GPU, blurs the display behind a
   mapped layer surface, and a press on the scrim reaches nothing below it and is sent to the
   surface's client as `scrim_pressed`, which closes the launcher. Each launcher frame now
   uploads 4.5 MB instead of 21.3 MB and shades 13.3 Mpx instead of 17.5. Changing the dimming
@@ -179,14 +179,14 @@ above over 10 s before and 30 s after, debug builds, the bar on the real system 
 
 | Process | before | after | What woke it |
 | :--- | ---: | ---: | :--- |
-| unbound-bar | 23.7 (live session: 20.0) | 0 | status polling, the clock, the `blocking` pool |
-| unbound-controlcenter | 2.0 | 0.1 | the `blocking` pool; the 0.1 left is three one-off wake-ups of its main thread, not periodic |
-| unbound-sound | 2.0 | 0 | the `blocking` pool |
-| unbound-notify | 2.0 | 0 | the `blocking` pool |
-| unbound-config | 2.0 | 0 | the `blocking` pool |
-| unbound-power | 2.0 (live session) | 0 | the `blocking` pool |
-| unbound-tray | 2.0 | 0 | the `blocking` pool |
-| unbound-clipboard | 2.0 (live session) | — | the `blocking` pool |
+| bande-bar | 23.7 (live session: 20.0) | 0 | status polling, the clock, the `blocking` pool |
+| bande-controlcenter | 2.0 | 0.1 | the `blocking` pool; the 0.1 left is three one-off wake-ups of its main thread, not periodic |
+| bande-sound | 2.0 | 0 | the `blocking` pool |
+| bande-notify | 2.0 | 0 | the `blocking` pool |
+| bande-config | 2.0 | 0 | the `blocking` pool |
+| bande-power | 2.0 (live session) | 0 | the `blocking` pool |
+| bande-tray | 2.0 | 0 | the `blocking` pool |
+| bande-clipboard | 2.0 (live session) | — | the `blocking` pool |
 
 The clipboard daemon needs the privileged data-control global, which only the real compositor
 grants, so it was measured in the live session only (read-only, from `/proc`); its one waker was
@@ -203,7 +203,7 @@ compositor (2.1 in the live session, all from the same pool) likewise.
   the `async-io` reactor block in `epoll` without a timeout.
 - **Battery, Wi-Fi and Bluetooth by signal.** The bar re-read UPower, NetworkManager and BlueZ
   every 3 s (dozens of D-Bus calls each time, which also woke zbus's reader and the `async-io`
-  thread). `unbound_status::devices::follow_devices` now subscribes to every signal of the three
+  thread). `bande_status::devices::follow_devices` now subscribes to every signal of the three
   services and to their owner changes, and re-reads only the service that spoke, coalescing
   bursts (a scan that changes twenty access points is one read). Changes show at once instead of
   up to 3 s late; a service that starts or restarts is picked up from its `NameOwnerChanged`.
@@ -217,8 +217,8 @@ compositor (2.1 in the live session, all from the same pool) likewise.
   once a minute, at the minute, and at once when the clock is set or the machine resumes, so the
   time is right after suspend even though the bar's own timers do not run during it. The lock
   screen redrew every second for the same clock; it now uses the same timer (`MinuteTimer` in
-  `unbound-datetime`), one frame a minute instead of sixty.
-- **Locking before sleep without polling.** `unbound-power` asked logind for `LockedHint` every
+  `bande-datetime`), one frame a minute instead of sixty.
+- **Locking before sleep without polling.** `bande-power` asked logind for `LockedHint` every
   20 ms (up to 150 calls) while the lock screen came up before sleep; it now waits on the
   property's change signal.
 - **Status notifier items by narrow match rules.** The tray host subscribed to every signal on
@@ -230,7 +230,7 @@ compositor (2.1 in the live session, all from the same pool) likewise.
 The development VM's GPU is virtio-gpu without 3D, so the compositor and every toolkit client
 rendered through lavapipe on the CPU, at 1.5× on a 2928×1818 output (5.3 Mpx a frame). Real
 hardware renders on its GPU; VMs and machines without a usable GPU must still feel smooth.
-Measured with `unbound-session-bench`, two rounds each, back to back, load average 6.5 to 8.2
+Measured with `bande-session-bench`, two rounds each, back to back, load average 6.5 to 8.2
 on ten cores (`main` at `c2aa894` with the idle fix below, then this branch):
 
 | Action | Frame p50 before | after | Frame p99 before | after | Compositor CPU per frame before | after | Clients CPU per frame before | after |
@@ -264,11 +264,11 @@ scrolling 1.58 → 0.20 Mpx.
   `DeviceType::Cpu` or named llvmpipe or lavapipe stays on `vello_cpu` and presents `wl_shm`
   buffers with only the changed regions damaged, instead of rendering through lavapipe and
   presenting the whole surface through Vulkan's WSI. The probe runs once per process, on the
-  thread that used to start the GPU; later windows skip it. `UNBOUND_RENDERER=gpu` or `=cpu`
-  overrides the choice (the toolkit's GPU tests and `unbound-toolkit-bench` set `gpu`). This is
+  thread that used to start the GPU; later windows skip it. `BANDE_RENDERER=gpu` or `=cpu`
+  overrides the choice (the toolkit's GPU tests and `bande-toolkit-bench` set `gpu`). This is
   what took typing and scrolling below 2 ms. Clients on the CPU path start no lavapipe
   threads either.
-- **Reduced effects on a CPU renderer.** `unbound-render` reports a CPU device
+- **Reduced effects on a CPU renderer.** `bande-render` reports a CPU device
   (`DeviceInfo::software`) and then reduces effects: a blur region becomes a flat scrim of the
   sheet colour at 72 %, which does not depend on what lies beneath it, so a change under it
   repaints only the change (`with_reduced_effects_a_blur_region_is_a_flat_scrim…`). The bar is
@@ -347,7 +347,7 @@ buffers 62 MiB, libLLVM 51 MiB, decoded wallpapers and heap 94 MiB.
 
 ## 2026-10-30: one bar process
 
-`unbound-bar` hosts the Dock and the menu bar of a display in one process: one Wayland connection
+`bande-bar` hosts the Dock and the menu bar of a display in one process: one Wayland connection
 (the menu bar's surface opens the Dock's beside it with `Window::open_beside`, both driven by
 `run_surfaces`), one connection per D-Bus bus, one font database and one Vulkan device. Same
 headless setup as above, release build, the Dock and menu bar settled side by side:
@@ -355,30 +355,30 @@ headless setup as above, release build, the Dock and menu bar settled side by si
 | Client | RSS + swap | Device memory | Threads |
 | :--- | ---: | ---: | ---: |
 | Dock + menu bar before (two processes, table above) | 247.8 MiB | 15.4 MiB | 65 |
-| `unbound-bar` (one process) | 160.9 MiB | 14.5 MiB | 37 |
+| `bande-bar` (one process) | 160.9 MiB | 14.5 MiB | 37 |
 
 −87 MiB (−35 %) and 28 fewer threads per display.
 
 ## 2026-10-30: one shell process
 
-`unbound-shell` hosts the desktop surface, the bar, the menu search card, the notifications,
+`bande-shell` hosts the desktop surface, the bar, the menu search card, the notifications,
 Control Center and the launcher in one process: one Wayland connection, one GPU device, one
 font database and one connection per D-Bus bus, with the parts as library crates. Before: `main`
 at `bef5145`, five processes; after: `desktop/one-shell`. Release builds, each measured alone on
-the headless 2928×1818 compositor of `unbound-footprint` after 45 s (the launcher, Control
+the headless 2928×1818 compositor of `bande-footprint` after 45 s (the launcher, Control
 Center and notifications hidden), inside the test bus (no NetworkManager, BlueZ, UPower,
 config or notification daemon). Wake-ups per second are summed over every thread from second
 20 to 40.
 
 | Process | RSS + swap | Threads | Wake-ups/s |
 | :--- | ---: | ---: | ---: |
-| unbound-bar | 76.2 MiB | 17 | 24.3 |
-| unbound-desktop-surface | 150.1 MiB | 7 | 2.0 |
-| unbound-launcher | 106.9 MiB | 8 | 2.1 |
-| unbound-notifications | 67.9 MiB | 6 | 15.2 |
-| unbound-controlcenter | 70.8 MiB | 9 | 2.1 |
+| bande-bar | 76.2 MiB | 17 | 24.3 |
+| bande-desktop-surface | 150.1 MiB | 7 | 2.0 |
+| bande-launcher | 106.9 MiB | 8 | 2.1 |
+| bande-notifications | 67.9 MiB | 6 | 15.2 |
+| bande-controlcenter | 70.8 MiB | 9 | 2.1 |
 | **Five processes before** | **471.9 MiB** | **47** | **45.7** |
-| **`unbound-shell` after** | **204.4 MiB** | **31** | **12.6** |
+| **`bande-shell` after** | **204.4 MiB** | **31** | **12.6** |
 
 −268 MiB (−57 %), 16 fewer threads and a third of the wake-ups for the same surfaces, and four
 fewer processes for the compositor to supervise. lavapipe makes every toolkit window draw on the
@@ -388,23 +388,23 @@ their atlases. What the shell shares: the shared libraries' dirty pages and heap
 processes, one fontconfig scan and font collection instead of five (Control Center also built a
 new one each time its panel opened), one `blocking` pool and zbus executor per bus instead of
 one per process, and the Notification Center opens from the clock by a call inside the process
-instead of a D-Bus round trip (`org.unbound.NotificationScreen` is gone).
+instead of a D-Bus round trip (`org.bande.NotificationScreen` is gone).
 
 The wake-ups left come from the test bus: without `org.freedesktop.Notifications` the
 notifications retry every 2 s (each retry wakes the caller, zbus and `async-io`). In a session
-`unbound-notify` is D-Bus activated and nothing retries. Each Window still owns its own
+`bande-notify` is D-Bus activated and nothing retries. Each Window still owns its own
 accessibility adapter, as each surface is its own AT-SPI window.
 
 ## 2026-10-30: dependency trims
 
 | Package | Crates before | after | Change |
 | :--- | ---: | ---: | :--- |
-| unbound-search | 20 | 14 | `notify` replaced by `unbound-watch` (rustix inotify) |
-| unbound-config | 109 | 101 | same, plus `tracing-subscriber` without `env-filter` |
-| unbound-notify | 79 | 77 | `tracing-subscriber` without `env-filter` (regex) |
-| unbound-dock | 267 | 259 | both |
+| bande-search | 20 | 14 | `notify` replaced by `bande-watch` (rustix inotify) |
+| bande-config | 109 | 101 | same, plus `tracing-subscriber` without `env-filter` |
+| bande-notify | 79 | 77 | `tracing-subscriber` without `env-filter` (regex) |
+| bande-dock | 267 | 259 | both |
 
-`RUST_LOG` keeps working for levels and per-target directives (`warn,unbound_dock=debug`);
+`RUST_LOG` keeps working for levels and per-target directives (`warn,bande_dock=debug`);
 regex filters on span fields are gone.
 
 Kept on purpose:
@@ -425,8 +425,8 @@ or the session restarts it. Test and dev profiles are unchanged.
 
 | Binary (stripped) | release (`38999eb`) | release (this branch) | dist | Change |
 | :--- | ---: | ---: | ---: | ---: |
-| unbound-dock | 19.87 MB | 19.94 MB | 14.63 MB | −26.6 % |
-| unbound-config | 4.63 MB (installed) | 4.27 MB | 2.63 MB | −38.4 % |
+| bande-dock | 19.87 MB | 19.94 MB | 14.63 MB | −26.6 % |
+| bande-config | 4.63 MB (installed) | 4.27 MB | 2.63 MB | −38.4 % |
 
 Dock sections, release → dist: `.text` 12.03 → 9.09 MB, `.rodata` 4.19 → 3.94 MB,
 `.eh_frame` 1.59 → 0.72 MB, `.gcc_except_table` 0.63 → 0.01 MB. Linking the Dock with fat LTO
@@ -435,15 +435,15 @@ so the links run in parallel, then runs `cargo deb --no-build` per package.
 
 ## Stale daemons
 
-The four `unbound-config` processes and the portal from `session-6.scope` that the audit found
+The four `bande-config` processes and the portal from `session-6.scope` that the audit found
 were not left by logout. `session-6.scope` is the shell the developers' tools run in; test runs
 and measurements there use `dbus-run-session`, whose private bus D-Bus-activates the installed
 services directly (no systemd on that bus). When the bus went away the services kept running,
-because every daemon (`unbound-config`, `-notify`, `-power`, `-tray`, `-automount`,
-`xdg-desktop-portal-unbound`) parked its main thread forever. They now serve until their session
-bus connection closes (`unbound_bus::serve_until_closed`) and then exit. In a real session the
+because every daemon (`bande-config`, `-notify`, `-power`, `-tray`, `-automount`,
+`xdg-desktop-portal-bande`) parked its main thread forever. They now serve until their session
+bus connection closes (`bande_bus::serve_until_closed`) and then exit. In a real session the
 units are `PartOf=graphical-session.target` and are stopped with it, as before. Reproduced and
-checked: a `dbus-run-session` that activates the old `unbound-config` leaves it behind with
+checked: a `dbus-run-session` that activates the old `bande-config` leaves it behind with
 PPID 1; the new one exits with the bus.
 
 ## ICU segmentation data
@@ -456,7 +456,7 @@ line and word breaking, and Chinese and Japanese word selection), 15 binaries.
 | :--- | ---: | :--- |
 | Drop `complex-scripts` | 2.9 MB × 15 | Thai, Lao, Khmer and Burmese text no longer wraps between words (lines break only at spaces), double-click selects whole runs of CJK text. Unacceptable for a desktop that shows arbitrary file names and notifications. |
 | Enable it only in some packages | 2.9 MB per package left out | Any package that shows user text needs it (Files, notifications, launcher, Settings, terminal, dock tooltips), so little is saved. |
-| Load the data at run time from one ICU4X blob in `/usr/share/unbound/icu/` | 2.9 MB × 14, one shared page-cache copy | Needs a data-provider hook in Parley (`parley_engine` calls the compiled-data constructors directly); an upstream change. |
+| Load the data at run time from one ICU4X blob in `/usr/share/bande/icu/` | 2.9 MB × 14, one shared page-cache copy | Needs a data-provider hook in Parley (`parley_engine` calls the compiled-data constructors directly); an upstream change. |
 | One multicall binary for the GUI programs | the whole shared stack, about 15 MB × 14 | Packaging work; also fixes this. |
 
 Recommendation: keep the feature, propose the data-provider hook upstream to Linebender, and

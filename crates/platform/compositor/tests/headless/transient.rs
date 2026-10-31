@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use crate::support::*;
+use bande_compositor::{Compositor, Renderer};
+use bande_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
 use smithay::utils::{Logical, Point, Rectangle, Size};
-use unbound_compositor::{Compositor, Renderer};
-use unbound_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
 
 const OUTPUT: (i32, i32) = (480, 270);
 const PARENT: (i32, i32) = (200, 120);

@@ -1,5 +1,5 @@
 [package]
-name = "unbound-dock-model"
+name = "bande-dock-model"
 description = "The apps kept in the bar, their order, badges and progress"
 version.workspace = true
 edition.workspace = true
@@ -9,8 +9,8 @@ repository.workspace = true
 
 [dependencies]
 tracing.workspace = true
-unbound-config.workspace = true
-unbound-inbox.workspace = true
+bande-config.workspace = true
+bande-inbox.workspace = true
 zbus.workspace = true
 
 [lints]

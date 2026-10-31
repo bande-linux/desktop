@@ -1,6 +1,6 @@
 [package]
-name = "unbound-test-bus"
-description = "Private, hermetic dbus-daemon session buses for Unbound tests"
+name = "bande-test-bus"
+description = "Private, hermetic dbus-daemon session buses for Bande tests"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

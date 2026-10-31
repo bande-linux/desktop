@@ -2,8 +2,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use unbound_status::devices::{PowerAction, powers, use_power};
-use unbound_test_bus::SessionBus;
+use bande_status::devices::{PowerAction, powers, use_power};
+use bande_test_bus::SessionBus;
 
 type Calls = Arc<Mutex<Vec<(&'static str, bool)>>>;
 

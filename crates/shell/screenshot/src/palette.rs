@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
-use unbound_toolkit::{
+use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
+use bande_toolkit::{
     Color, Elevation, Item, Paragraph, Point, Radius, Rect, Scheme, Shape, TextAlign, TextRole,
     TextStyle,
 };
@@ -502,8 +502,8 @@ impl Widget for Palette {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use unbound_toolkit::ui::{FreeLayout, Modifiers, Ui};
-    use unbound_toolkit::{Appearance, TextSystem};
+    use bande_toolkit::ui::{FreeLayout, Modifiers, Ui};
+    use bande_toolkit::{Appearance, TextSystem};
 
     fn shown(mode: Mode) -> (Ui, Chosen) {
         let appearance = Appearance::default();

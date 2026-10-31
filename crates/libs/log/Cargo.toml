@@ -1,6 +1,6 @@
 [package]
-name = "unbound-log"
-description = "Logging setup for Unbound programs: the systemd journal or standard error"
+name = "bande-log"
+description = "Logging setup for Bande programs: the systemd journal or standard error"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

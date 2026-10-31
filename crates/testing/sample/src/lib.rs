@@ -1,4 +1,4 @@
-use unbound_toolkit::{
+use bande_toolkit::{
     Color, Item, Palette, Point, Rect, Scene, Shape, Spacing, TextAlign, TextStyle, TextSystem,
 };
 
@@ -7,7 +7,7 @@ pub const SIZE: (u32, u32) = (640, 400);
 const ROWS: [(&str, &str); 4] = [
     ("Displays", "Built-in Retina Display, 120 Hz"),
     ("Sound", "MacBook Pro Speakers"),
-    ("Network", "Wi-Fi connected to Unbound"),
+    ("Network", "Wi-Fi connected to Bande"),
     ("Keyboard", "Key repeat fast, delay short"),
 ];
 

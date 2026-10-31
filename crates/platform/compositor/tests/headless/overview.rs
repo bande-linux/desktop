@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::{BACKGROUND, Compositor, Gesture, Renderer, Snapshot};
-use unbound_test_wayland::{BLUE, RED, TestClient, roundtrip};
+use bande_compositor::{BACKGROUND, Compositor, Gesture, Renderer, Snapshot};
+use bande_test_wayland::{BLUE, RED, TestClient, roundtrip};
 
 const WINDOW: (i32, i32) = (64, 48);
 const ADD_WORKSPACE: (f64, f64) = (151.0, 25.0);

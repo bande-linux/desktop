@@ -1,6 +1,6 @@
 [package]
-name = "unbound-bar"
-description = "Unbound bar: the Dock and the menu bar, or both as one bar on a screen edge, as a part of unbound-shell"
+name = "bande-bar"
+description = "Bande bar: the Dock and the menu bar, or both as one bar on a screen edge, as a part of bande-shell"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,29 +11,29 @@ repository.workspace = true
 accesskit.workspace = true
 jiff.workspace = true
 tracing.workspace = true
-unbound-bluetooth.workspace = true
-unbound-config.workspace = true
-unbound-datetime.workspace = true
-unbound-dock-model.workspace = true
-unbound-fs.workspace = true
-unbound-inbox.workspace = true
-unbound-keyboard.workspace = true
-unbound-l10n.workspace = true
-unbound-sound.workspace = true
-unbound-status.workspace = true
-unbound-toolkit.workspace = true
-unbound-xdg.workspace = true
+bande-bluetooth.workspace = true
+bande-config.workspace = true
+bande-datetime.workspace = true
+bande-dock-model.workspace = true
+bande-fs.workspace = true
+bande-inbox.workspace = true
+bande-keyboard.workspace = true
+bande-l10n.workspace = true
+bande-sound.workspace = true
+bande-status.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
 image.workspace = true
 smithay.workspace = true
-unbound-compositor.workspace = true
-unbound-controlcenter.workspace = true
-unbound-golden.workspace = true
-unbound-launcher.workspace = true
-unbound-notifications.workspace = true
-unbound-test-wayland.workspace = true
+bande-compositor.workspace = true
+bande-controlcenter.workspace = true
+bande-golden.workspace = true
+bande-launcher.workspace = true
+bande-notifications.workspace = true
+bande-test-wayland.workspace = true
 wayland-client.workspace = true
 
 [lints]

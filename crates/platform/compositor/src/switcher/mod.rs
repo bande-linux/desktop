@@ -4,6 +4,11 @@ mod paint;
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
+use bande_graphics::Image;
+use bande_xdg::{
+    DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_app,
+    find_icon,
+};
 use smithay::backend::renderer::element::Id;
 use smithay::backend::renderer::element::memory::MemoryRenderBuffer;
 use smithay::input::keyboard::keysyms;
@@ -12,11 +17,6 @@ use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Size};
-use unbound_graphics::Image;
-use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_app,
-    find_icon,
-};
 
 use self::layout::{Layout, fitted, lay_out, step, thumbnail_tile};
 use crate::L10N;

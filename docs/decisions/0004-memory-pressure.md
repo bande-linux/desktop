@@ -101,14 +101,14 @@ Four layers, each with one job, and nothing outside Debian.
 
 | Layer | What | Owner |
 | :--- | :--- | :--- |
-| 1. More room | zram swap, `min(ram, 8192)`, zstd, ahead of any disk swap | `unbound-desktop` (drop-in for `systemd-zram-generator`) |
-| 2. Ask the user | at sustained memory stall, the shell's "running low on memory" window with the heaviest apps and Force Quit | `unbound-shell` |
-| 3. Act for the user | systemd-oomd kills the app with the most reclaim activity in `app.slice` | `unbound-desktop` (drop-in for `app.slice`) and Debian's `systemd-oomd` |
-| 4. Tell the user | a notification naming the app that was closed | `unbound-shell` through `unbound-xdg` |
+| 1. More room | zram swap, `min(ram, 8192)`, zstd, ahead of any disk swap | `bande-desktop` (drop-in for `systemd-zram-generator`) |
+| 2. Ask the user | at sustained memory stall, the shell's "running low on memory" window with the heaviest apps and Force Quit | `bande-shell` |
+| 3. Act for the user | systemd-oomd kills the app with the most reclaim activity in `app.slice` | `bande-desktop` (drop-in for `app.slice`) and Debian's `systemd-oomd` |
+| 4. Tell the user | a notification naming the app that was closed | `bande-shell` through `bande-xdg` |
 
 ### 1. zram
 
-`/usr/lib/systemd/zram-generator.conf.d/50-unbound.conf`:
+`/usr/lib/systemd/zram-generator.conf.d/50-bande.conf`:
 
 ```ini
 [zram0]
@@ -127,14 +127,14 @@ where `swappiness=180` is wrong.
 
 ### 2. Kill domain: `app.slice`, session protected
 
-- `/usr/lib/systemd/user/app.slice.d/50-unbound-oomd.conf`: `ManagedOOMMemoryPressure=kill`,
+- `/usr/lib/systemd/user/app.slice.d/50-bande-oomd.conf`: `ManagedOOMMemoryPressure=kill`,
   `ManagedOOMMemoryPressureLimit=40%`, with Debian's default duration of 20 s. The systemd manual
   suggests about 40 % for latency-sensitive user cgroups. The candidates are the apps' scopes
   only. Debian's own 50 % kill on `user@.service` stays as the backstop.
-- Every app already runs in its own `app-unbound-<id>-<pid>.scope` in `app.slice`
-  (`unbound_xdg::spawn_detached`).
+- Every app already runs in its own `app-bande-<id>-<pid>.scope` in `app.slice`
+  (`bande_xdg::spawn_detached`).
 - The compositor (and with it the shell and every session client it starts) runs in
-  `unbound-compositor.service` in `session.slice`, with `ManagedOOMPreference=avoid` and
+  `bande-compositor.service` in `session.slice`, with `ManagedOOMPreference=avoid` and
   `OOMScoreAdjust=100`. `avoid` is honoured because the candidate and the monitored
   `user@.service` cgroup have the same owner. `avoid` is not inherited, so it is set on the leaf
   unit itself.
@@ -159,7 +159,7 @@ agree. It is the system-wide file, because thrashing hurts the whole machine who
 unprivileged users. The fd sits in the shell's `poll()` set. Idle cost is zero: no timer, no
 reads, and the kernel only arms the trigger while memory stalls.
 
-Debounce (`unbound_status::memory::Streak`): each trigger event is one stalled window. Events
+Debounce (`bande_status::memory::Streak`): each trigger event is one stalled window. Events
 less than 5 s apart form a streak. When a streak lasts 10 s, the window opens. Closing it snoozes
 until memory has been calm for 60 s, so it never nags during one bad build.
 
@@ -173,13 +173,13 @@ short is exactly what must be avoided) is a toplevel kept on top:
   every 2 s while the window is open, and only then.
 - **Force Quit** asks first ("Force quit Terminal? Any unsaved changes in it are lost.") and
   then calls systemd's `KillUnit(scope, "all", SIGKILL)`, which kills the app's whole cgroup.
-- **Activity Monitor** opens it on the Memory tab (`unbound-monitor --memory`), where the
+- **Activity Monitor** opens it on the Memory tab (`bande-monitor --memory`), where the
   pressure graph is.
 - **Close** (Escape) dismisses it.
 
 ### 4. The notification
 
-`unbound_xdg::follow_oom_kills` subscribes to the user manager (`Subscribe`, because systemd
+`bande_xdg::follow_oom_kills` subscribes to the user manager (`Subscribe`, because systemd
 only sends unit signals while someone is subscribed) and watches `PropertiesChanged` on
 `/org/freedesktop/systemd1/unit/*`. Since systemd 248 both a kernel OOM kill and a systemd-oomd
 kill set a scope's or service's `Result` to `oom-kill`. The unit name is decoded from the bus

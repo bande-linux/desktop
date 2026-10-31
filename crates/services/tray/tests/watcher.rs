@@ -3,8 +3,8 @@
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
-use unbound_test_bus::SessionBus;
-use unbound_tray::{BUS_NAME, OBJECT_PATH, Watcher};
+use bande_test_bus::SessionBus;
+use bande_tray::{BUS_NAME, OBJECT_PATH, Watcher};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};

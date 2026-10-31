@@ -33,9 +33,9 @@ trait PowerProfiles {
 }
 
 #[zbus::proxy(
-    interface = "org.unbound.Config",
-    default_service = "org.unbound.Config",
-    default_path = "/org/unbound/Config"
+    interface = "org.bande.Config",
+    default_service = "org.bande.Config",
+    default_path = "/org/bande/Config"
 )]
 trait Config {
     #[zbus(property)]

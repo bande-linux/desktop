@@ -1,7 +1,7 @@
 use std::sync::mpsc::{self, Sender};
 
-use unbound_settings_panes::{SettingId, Value};
-use unbound_status::backlight::DisplayLight;
+use bande_settings_panes::{SettingId, Value};
+use bande_status::backlight::DisplayLight;
 use zbus::blocking::Connection;
 
 use crate::failure::failed;

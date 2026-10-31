@@ -17,14 +17,14 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+use bande_l10n::Localizer;
+use bande_toolkit::Snapshot;
+use bande_xdg::{Locale, applications, current_desktops, data_dirs, find_app};
 use image::imageops::FilterType;
 use image::{ImageBuffer, ImageFormat, Rgba};
 use jiff::civil::DateTime;
-use unbound_l10n::Localizer;
-use unbound_toolkit::Snapshot;
-use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_app};
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-screenshot.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-screenshot.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -150,7 +150,7 @@ mod tests {
             include_str!("markup.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(ENGLISH, &sources),
+            bande_l10n::missing_ids(ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

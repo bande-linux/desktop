@@ -61,6 +61,7 @@ mod zoom;
 
 pub use appearance::{SystemAppearance, follow_appearance};
 pub use assistive::follow_alerts;
+pub use bande_render::{DeviceInfo, RenderError};
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};
 pub use cursor::{
     ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,
@@ -82,14 +83,13 @@ pub use session::{
     SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRole, SessionUpkeep,
 };
 pub use state::{Compositor, OutputElement, REFRESH, ScanoutDevice};
-pub use unbound_render::{DeviceInfo, RenderError};
 pub use watchdog::UNRESPONSIVE_AFTER;
 pub use window::Window;
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-compositor.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-compositor.ftl");
 
-static L10N: std::sync::LazyLock<unbound_l10n::Localizer> =
-    std::sync::LazyLock::new(|| unbound_l10n::Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: std::sync::LazyLock<bande_l10n::Localizer> =
+    std::sync::LazyLock::new(|| bande_l10n::Localizer::new(&[("en-US", ENGLISH)]));
 
 #[cfg(test)]
 mod tests {
@@ -104,7 +104,7 @@ mod tests {
             include_str!("window_menu.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

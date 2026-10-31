@@ -11,9 +11,9 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::Duration;
 
+pub use bande_design::Accent;
+use bande_l10n::Localizer;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
-pub use unbound_design::Accent;
-use unbound_l10n::Localizer;
 
 pub use edit::Setting;
 pub use login_picture::{
@@ -26,7 +26,7 @@ pub use service::{
 };
 pub use store::{ConfigStore, Loaded, ReloadError};
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-config.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-config.ftl");
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -516,9 +516,9 @@ impl Wallpaper {
 }
 
 pub const DEFAULT_BAR_APPS: [&str; 3] = [
-    "org.unbound.Files",
-    "org.unbound.Terminal",
-    "org.unbound.Settings",
+    "org.bande.Files",
+    "org.bande.Terminal",
+    "org.bande.Settings",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -724,7 +724,7 @@ pub fn config_path(xdg_config_home: Option<&Path>, home: Option<&Path>) -> Optio
         Some(config_home) => config_home.to_path_buf(),
         None => home?.join(".config"),
     };
-    Some(base.join("unbound").join("config.kdl"))
+    Some(base.join("bande").join("config.kdl"))
 }
 
 impl Config {
@@ -1041,7 +1041,7 @@ impl Parser<'_> {
                 .ok_or_else(|| {
                     self.at_entry(
                         entry,
-                        "`bar apps` takes app IDs such as \"org.unbound.Files\"",
+                        "`bar apps` takes app IDs such as \"org.bande.Files\"",
                     )
                 })?;
             if apps.iter().any(|known| known == app) {
@@ -1533,7 +1533,7 @@ mod tests {
             include_str!("store.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

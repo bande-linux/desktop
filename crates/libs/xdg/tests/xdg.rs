@@ -4,15 +4,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use tempfile::TempDir;
-use unbound_xdg::{
+use bande_xdg::{
     DesktopEntry, ExecError, ICON_THEMES, Locale, TERMINAL, UserDir, app_name, applications,
     apps_to_reopen, autostart_dir, find_app, find_app_for_process, find_icon, launch,
     opens_at_login, remember_apps, running_app, set_open_at_login, take_apps_to_reopen, user_dir,
 };
+use tempfile::TempDir;
 
 fn desktops() -> Vec<String> {
-    vec!["Unbound".to_owned()]
+    vec!["Bande".to_owned()]
 }
 
 fn entry(text: &str) -> Option<DesktopEntry> {
@@ -174,9 +174,9 @@ fn hidden_entries_and_entries_for_other_desktops_are_not_listed() {
     assert!(entry(&format!("{base}NoDisplay=true\n")).is_none());
     assert!(entry(&format!("{base}Hidden=true\n")).is_none());
     assert!(entry(&format!("{base}OnlyShowIn=GNOME;KDE;\n")).is_none());
-    assert!(entry(&format!("{base}NotShowIn=Unbound;\n")).is_none());
-    assert!(entry(&format!("{base}OnlyShowIn=GNOME;Unbound;\n")).is_some());
-    assert!(entry(&format!("{base}TryExec=/nonexistent/unbound-app\n")).is_none());
+    assert!(entry(&format!("{base}NotShowIn=Bande;\n")).is_none());
+    assert!(entry(&format!("{base}OnlyShowIn=GNOME;Bande;\n")).is_some());
+    assert!(entry(&format!("{base}TryExec=/nonexistent/bande-app\n")).is_none());
     assert!(entry("[Desktop Entry]\nType=Link\nName=L\nURL=https://example.com\n").is_none());
 }
 
@@ -254,7 +254,7 @@ fn icons_are_found_by_size_through_inherited_themes() {
 }
 
 #[test]
-fn the_unbound_theme_draws_its_own_icons_and_adwaita_the_rest() {
+fn the_bande_theme_draws_its_own_icons_and_adwaita_the_rest() {
     let system = TempDir::new().expect("data dir");
     let adwaita = system.path().join("icons/Adwaita");
     write(
@@ -268,7 +268,7 @@ fn the_unbound_theme_draws_its_own_icons_and_adwaita_the_rest() {
     }
     let shipped = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../data");
     let dirs = vec![system.path().to_path_buf(), shipped.clone()];
-    let ours = shipped.join("icons/Unbound");
+    let ours = shipped.join("icons/Bande");
 
     for (name, directory) in [
         ("folder", "scalable/places"),
@@ -276,7 +276,7 @@ fn the_unbound_theme_draws_its_own_icons_and_adwaita_the_rest() {
         ("user-trash-full", "scalable/places"),
         ("text-x-generic", "scalable/mimetypes"),
         ("application-pdf", "scalable/mimetypes"),
-        ("org.unbound.Files", "scalable/apps"),
+        ("org.bande.Files", "scalable/apps"),
         ("org.gnome.Papers", "scalable/apps"),
         ("network-wireless-signal-good-symbolic", "symbolic/status"),
         ("go-previous-symbolic", "symbolic/actions"),
@@ -291,16 +291,11 @@ fn the_unbound_theme_draws_its_own_icons_and_adwaita_the_rest() {
         Some(adwaita.join("scalable/apps/computer.svg"))
     );
     assert_eq!(
-        find_icon("folder", 32, &["Unbound-Teal", "Unbound", "Adwaita"], &dirs),
-        Some(shipped.join("icons/Unbound-Teal/scalable/places/folder.svg"))
+        find_icon("folder", 32, &["Bande-Teal", "Bande", "Adwaita"], &dirs),
+        Some(shipped.join("icons/Bande-Teal/scalable/places/folder.svg"))
     );
     assert_eq!(
-        find_icon(
-            "user-trash",
-            32,
-            &["Unbound-Teal", "Unbound", "Adwaita"],
-            &dirs
-        ),
+        find_icon("user-trash", 32, &["Bande-Teal", "Bande", "Adwaita"], &dirs),
         Some(ours.join("scalable/places/user-trash.svg"))
     );
 }
@@ -409,8 +404,8 @@ fn window_app_ids_find_their_desktop_entry() {
         installed("firefox", "Exec=firefox %u"),
         installed("visual-studio-code", "Exec=/usr/share/code/code %F"),
         installed("org.gnome.Terminal", "Exec=gnome-terminal"),
-        installed("org.unbound.Files", "Exec=unbound-files"),
-        installed("org.unbound.files", "Exec=sh -c files"),
+        installed("org.bande.Files", "Exec=bande-files"),
+        installed("org.bande.files", "Exec=sh -c files"),
         installed("python-tool", "Exec=python3 tool.py"),
     ];
     let found = |app_id: &str| find_app(&entries, app_id).map(DesktopEntry::app_id);
@@ -420,8 +415,8 @@ fn window_app_ids_find_their_desktop_entry() {
     assert_eq!(found("signal"), Some("signal-desktop"));
     assert_eq!(found("org.mozilla.firefox"), Some("firefox"));
     assert_eq!(found("code"), Some("visual-studio-code"));
-    assert_eq!(found("org.unbound.files"), Some("org.unbound.files"));
-    assert_eq!(found("ORG.UNBOUND.FILES"), Some("org.unbound.Files"));
+    assert_eq!(found("org.bande.files"), Some("org.bande.files"));
+    assert_eq!(found("ORG.BANDE.FILES"), Some("org.bande.Files"));
     assert_eq!(found("org.example.Terminal"), None);
     assert_eq!(found("python3"), None);
     assert_eq!(found(""), None);
@@ -465,7 +460,7 @@ fn a_window_finds_its_app_through_its_own_scope_or_its_program() {
     executable(&editor);
     executable(&python);
     let entries = [
-        installed("org.unbound.Terminal", "Exec=true"),
+        installed("org.bande.Terminal", "Exec=true"),
         installed("com.example.Editor", "Exec=true"),
         installed("org.example.Paint", "Exec=true"),
         installed(
@@ -479,18 +474,8 @@ fn a_window_finds_its_app_through_its_own_scope_or_its_program() {
     ];
     let root = dir.path().join("proc");
     process(&root, 42, "app-com.example.Editor-42.scope", &python);
-    process(
-        &root,
-        43,
-        "app-unbound-org.unbound.Terminal-7.scope",
-        &editor,
-    );
-    process(
-        &root,
-        44,
-        "app-unbound-org.unbound.Terminal-7.scope",
-        &python,
-    );
+    process(&root, 43, "app-bande-org.bande.Terminal-7.scope", &editor);
+    process(&root, 44, "app-bande-org.bande.Terminal-7.scope", &python);
     process(&root, 45, "app-flatpak-org.example.Paint-99.scope", &python);
     let found = |pid| find_app_for_process(&entries, &root, pid).map(DesktopEntry::app_id);
 
@@ -505,18 +490,18 @@ fn a_window_finds_its_app_through_its_own_scope_or_its_program() {
 fn running_apps_are_remembered_once_by_desktop_id_and_reopened_only_once() {
     let entries = [
         installed("firefox", "Exec=firefox %u"),
-        installed("org.unbound.Files", "Exec=unbound-files"),
+        installed("org.bande.Files", "Exec=bande-files"),
     ];
-    let running: Vec<String> = ["firefox", "files", "firefox", "org.unbound.MenuBar"]
+    let running: Vec<String> = ["firefox", "files", "firefox", "org.bande.MenuBar"]
         .map(str::to_owned)
         .to_vec();
     let apps = apps_to_reopen(&entries, &running);
-    assert_eq!(apps, ["firefox", "org.unbound.Files"]);
+    assert_eq!(apps, ["firefox", "org.bande.Files"]);
 
     let state = TempDir::new().expect("temporary directory");
-    let file = state.path().join("unbound/reopen");
+    let file = state.path().join("bande/reopen");
     remember_apps(&file, &apps).expect("remember");
-    assert_eq!(take_apps_to_reopen(&file), ["firefox", "org.unbound.Files"]);
+    assert_eq!(take_apps_to_reopen(&file), ["firefox", "org.bande.Files"]);
     assert!(!file.exists());
     assert!(take_apps_to_reopen(&file).is_empty());
 }

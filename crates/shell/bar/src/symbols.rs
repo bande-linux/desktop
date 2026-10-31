@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use unbound_status::status::{Battery, Wifi, wifi_bars};
-use unbound_toolkit::{Color, Image, Item, Palette, Rect, Shape};
+use bande_status::status::{Battery, Wifi, wifi_bars};
+use bande_toolkit::{Color, Image, Item, Palette, Rect, Shape};
 
 const BATTERY_WIDTH: f32 = 23.0;
 const BATTERY_HEIGHT: f32 = 11.5;

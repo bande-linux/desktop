@@ -10,10 +10,10 @@ type "terminal"
 wait 800ms
 shot "launcher searching for terminal"
 key enter
-wait-for-window "org.unbound.Terminal"
+wait-for-window "org.bande.Terminal"
 wait 1500ms
 shot "terminal open"
 note "Typing a command into the new terminal"
-type "echo hello from unbound && ls /usr/share\n"
+type "echo hello from bande && ls /usr/share\n"
 wait 1500ms
 shot "terminal after the command"

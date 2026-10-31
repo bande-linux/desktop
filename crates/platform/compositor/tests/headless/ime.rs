@@ -1,7 +1,7 @@
 use crate::support::*;
+use bande_compositor::{Compositor, Renderer};
+use bande_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
 use smithay::utils::Size;
-use unbound_compositor::{Compositor, Renderer};
-use unbound_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
 
 const WINDOW: i32 = 64;
 

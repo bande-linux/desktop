@@ -8,15 +8,15 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::Duration;
 
+use bande_config::{BUS_NAME, ConfigService, ConfigStore, Loaded, OBJECT_PATH, ReloadError};
+use bande_test_bus::SessionBus;
 use support::replace_file;
-use unbound_config::{BUS_NAME, ConfigService, ConfigStore, Loaded, OBJECT_PATH, ReloadError};
-use unbound_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::{DBusProxy, PropertiesProxy};
 use zbus::names::InterfaceName;
 use zbus::zvariant::{OwnedValue, Value};
 
-const INTERFACE: &str = "org.unbound.Config";
+const INTERFACE: &str = "org.bande.Config";
 const SIGNAL_WAIT: Duration = Duration::from_secs(5);
 const QUIET_WAIT: Duration = Duration::from_millis(1500);
 
@@ -80,7 +80,7 @@ struct Fixture {
 fn start(initial: &str) -> Fixture {
     let bus = SessionBus::start().expect("dbus-daemon");
     let directory = tempfile::tempdir().expect("temp dir");
-    let path = directory.path().join("unbound").join("config.kdl");
+    let path = directory.path().join("bande").join("config.kdl");
     std::fs::create_dir_all(path.parent().expect("parent")).expect("config dir");
     std::fs::write(&path, initial).expect("initial config");
 
@@ -110,7 +110,7 @@ fn start(initial: &str) -> Fixture {
 
 #[test]
 fn the_service_owns_its_bus_name_and_exposes_the_loaded_file() {
-    let fixture = start("bar {\n    edge \"right\"\n    apps \"org.unbound.Files\"\n}\n");
+    let fixture = start("bar {\n    edge \"right\"\n    apps \"org.bande.Files\"\n}\n");
     let bus = DBusProxy::new(&fixture.client).expect("bus proxy");
     assert!(
         bus.name_has_owner(BUS_NAME.try_into().expect("bus name"))
@@ -122,7 +122,7 @@ fn the_service_owns_its_bus_name_and_exposes_the_loaded_file() {
     );
     assert_eq!(
         Vec::<String>::try_from(get(&fixture.client, "BarApps")).expect("app IDs"),
-        ["org.unbound.Files"]
+        ["org.bande.Files"]
     );
     assert_eq!(
         u64::try_from(get(&fixture.client, "IdleLockAfter")).expect("u64"),
@@ -301,7 +301,7 @@ fn set_display_writes_the_display_and_publishes_displays() {
     assert_eq!(f64::try_from(&display["scale"]).expect("d"), 1.25);
     assert!(bool::try_from(&display["variable-refresh-rate"]).expect("b"));
     let written =
-        unbound_config::Config::parse(&std::fs::read_to_string(&fixture.path).expect("read"))
+        bande_config::Config::parse(&std::fs::read_to_string(&fixture.path).expect("read"))
             .expect("valid file");
     assert_eq!(written.displays["BOE NE135A1M 0"].scale, Some(1.25));
 }
@@ -333,7 +333,7 @@ fn set_arrangement_writes_the_arrangement_and_publishes_arrangements() {
         changed.keys().map(String::as_str).collect::<Vec<_>>(),
         ["Arrangements"]
     );
-    let arrangements: Vec<Vec<unbound_config::ArrangedDisplay>> =
+    let arrangements: Vec<Vec<bande_config::ArrangedDisplay>> =
         get(&fixture.client, "Arrangements")
             .try_into()
             .expect("aa(siibs)");
@@ -467,13 +467,13 @@ fn night_light_is_written_whole_and_rejects_a_bad_time_schedule_or_warmth() {
 
 #[test]
 fn the_dock_apps_size_auto_hide_and_wallpaper_fit_are_writable_and_signalled() {
-    let fixture = start("bar {\n    apps \"org.unbound.Files\" // mine\n}\n");
+    let fixture = start("bar {\n    apps \"org.bande.Files\" // mine\n}\n");
     let changes = watch_changes(&fixture.client);
 
     set(
         &fixture.client,
         "BarApps",
-        Value::from(vec!["org.unbound.Terminal", "org.unbound.Files"]),
+        Value::from(vec!["org.bande.Terminal", "org.bande.Files"]),
     )
     .expect("Set");
     set(&fixture.client, "BarAutoHide", Value::from(true)).expect("Set");
@@ -490,7 +490,7 @@ fn the_dock_apps_size_auto_hide_and_wallpaper_fit_are_writable_and_signalled() {
     }
     assert_eq!(
         Vec::<String>::try_from(changed["BarApps"].try_clone().expect("clone")).expect("as"),
-        ["org.unbound.Terminal", "org.unbound.Files"]
+        ["org.bande.Terminal", "org.bande.Files"]
     );
     assert!(bool::try_from(get(&fixture.client, "BarAutoHide")).expect("b"));
     assert_eq!(
@@ -503,7 +503,7 @@ fn the_dock_apps_size_auto_hide_and_wallpaper_fit_are_writable_and_signalled() {
     );
     assert_eq!(
         std::fs::read_to_string(&fixture.path).expect("read"),
-        "bar {\n    apps \"org.unbound.Terminal\" \"org.unbound.Files\" // mine\n    auto-hide #true\n    size 52\n}\nwallpaper {\n    fit \"fit\"\n}\n"
+        "bar {\n    apps \"org.bande.Terminal\" \"org.bande.Files\" // mine\n    auto-hide #true\n    size 52\n}\nwallpaper {\n    fit \"fit\"\n}\n"
     );
     let too_big = set(&fixture.client, "BarIconSize", Value::from(200u32));
     assert!(

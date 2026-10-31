@@ -321,7 +321,7 @@ fn connect(
             *pw::keys::MEDIA_TYPE => "Video",
             *pw::keys::MEDIA_CATEGORY => "Capture",
             *pw::keys::MEDIA_ROLE => "Screen",
-            *pw::keys::NODE_NAME => "unbound-screen-cast",
+            *pw::keys::NODE_NAME => "bande-screen-cast",
             *pw::keys::NODE_DESCRIPTION => name,
         },
     )?;

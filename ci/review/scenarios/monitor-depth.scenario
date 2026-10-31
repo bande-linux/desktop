@@ -5,7 +5,7 @@ wait 600ms
 type "activity"
 wait 500ms
 key enter
-wait-for-window "org.unbound.ActivityMonitor"
+wait-for-window "org.bande.ActivityMonitor"
 wait 6s
 shot "cpu footer"
 note "Memory: pressure graph and what holds memory"

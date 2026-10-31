@@ -1,7 +1,7 @@
 use crate::support::*;
+use bande_compositor::{Compositor, Renderer};
+use bande_test_wayland::{CaptureOutcome, RED, TestClient, roundtrip};
 use smithay::utils::{Physical, Size};
-use unbound_compositor::{Compositor, Renderer};
-use unbound_test_wayland::{CaptureOutcome, RED, TestClient, roundtrip};
 
 const LOGICAL: (i32, i32) = (256, 192);
 const WINDOW: (i32, i32) = (64, 48);

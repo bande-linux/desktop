@@ -3,7 +3,7 @@
 use std::f64::consts::PI;
 use std::time::{Duration, Instant};
 
-use unbound_spring::{
+use bande_spring::{
     Animated, Decay, RUBBER_BAND_CONSTANT, Spring, SpringError, State, rubber_band,
 };
 

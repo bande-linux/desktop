@@ -1,6 +1,6 @@
 use crate::support::*;
-use unbound_compositor::Compositor;
-use unbound_test_wayland::{
+use bande_compositor::Compositor;
+use bande_test_wayland::{
     SeparateApp, ShmImage, TestClient, act_as_separate_app, quadrants, roundtrip, roundtrip_until,
 };
 use wayland_client::protocol::wl_shm::Format;

@@ -1,6 +1,6 @@
-use unbound_network::VpnState;
-use unbound_settings_panes::{SettingId, Value};
-use unbound_toolkit::ui::{Button, SegmentedControl, TextField, Widget};
+use bande_network::VpnState;
+use bande_settings_panes::{SettingId, Value};
+use bande_toolkit::ui::{Button, SegmentedControl, TextField, Widget};
 
 use crate::L10N;
 use crate::pages::{Widgets, boxed, muted_row};

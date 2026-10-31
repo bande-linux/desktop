@@ -3,9 +3,9 @@
 use std::io::Read;
 use std::time::{Duration, Instant};
 
+use bande_test_wayland::clipboard::TEXT;
+use bande_test_wayland::{GREEN, ShmImage, TestClient};
 use smithay::utils::{Logical, Point};
-use unbound_test_wayland::clipboard::TEXT;
-use unbound_test_wayland::{GREEN, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
 
 #[path = "support/desktop.rs"]

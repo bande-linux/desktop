@@ -1,9 +1,9 @@
-use unbound_keyboard::{Action, SHORTCUTS};
-use unbound_toolkit::ui::{Menu, MenuItem};
+use bande_keyboard::{Action, SHORTCUTS};
+use bande_toolkit::ui::{Menu, MenuItem};
 
-use unbound_status::Command;
-use unbound_status::dbusmenu::{Node, command};
-use unbound_status::status::{
+use bande_status::Command;
+use bande_status::dbusmenu::{Node, command};
+use bande_status::status::{
     Battery, Bluetooth, Capture, InputSources, Power, Sound, Wifi, hours_and_minutes,
 };
 

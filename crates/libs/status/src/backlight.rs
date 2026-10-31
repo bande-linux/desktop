@@ -3,12 +3,12 @@ use std::io;
 use std::os::unix::fs::FileExt;
 use std::path::Path;
 
+use bande_power::backlight::{Backlight, KeyboardBacklight, SYSFS_BACKLIGHT};
+use bande_power::logind::own_session;
 use rustix::event::{PollFd, PollFlags, poll};
-use unbound_power::backlight::{Backlight, KeyboardBacklight, SYSFS_BACKLIGHT};
-use unbound_power::logind::own_session;
 use zbus::blocking::Connection;
 
-pub use unbound_power::backlight::SYSFS_LEDS;
+pub use bande_power::backlight::SYSFS_LEDS;
 
 const READ_LIMIT: usize = 32;
 

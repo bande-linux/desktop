@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
-use unbound_status::session::{COUNTDOWN, Effect, Ending, QUIT_PATIENCE, SessionEnding, Stage};
+use bande_status::session::{COUNTDOWN, Effect, Ending, QUIT_PATIENCE, SessionEnding, Stage};
 
-const TERMINAL: &str = "org.unbound.Terminal";
+const TERMINAL: &str = "org.bande.Terminal";
 
 #[test]
 fn the_session_ends_only_once_every_app_has_closed_its_windows() {

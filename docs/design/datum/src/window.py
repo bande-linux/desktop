@@ -102,7 +102,7 @@ def files_window(p, x, y, w, h, active=True):
             ('Harbour at dusk.png', file_image(), 'Yesterday, 21:03', '6.1 MB', 'PNG image'),
             ('Notes from the workshop.txt', file_text(), '28 Oct, 16:20', '4 KB', 'Plain text'),
             ('Field recordings', 'folder', '27 Oct, 11:02', '—', 'Folder'),
-            ('unbound-src.zip', file_archive(), '24 Oct, 18:45', '88.2 MB', 'ZIP archive'),
+            ('bande-src.zip', file_archive(), '24 Oct, 18:45', '88.2 MB', 'ZIP archive'),
             ('Invoice 0142.pdf', file_pdf(), '19 Oct, 10:15', '310 KB', 'PDF document'),
             ('Moodboard.png', file_image(), '12 Oct, 14:38', '3.3 MB', 'PNG image')]
     for i, (n, ic, m, s, k) in enumerate(rows):

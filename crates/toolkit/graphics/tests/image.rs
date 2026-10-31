@@ -2,8 +2,8 @@
 
 use std::fs;
 
+use bande_graphics::{Color, Image};
 use tempfile::TempDir;
-use unbound_graphics::{Color, Image};
 
 const SQUARE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#ff0000"/></svg>"##;
 

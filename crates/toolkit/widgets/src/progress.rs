@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Node, Role};
-use unbound_graphics::{Item, Point, Rect, Shape};
+use bande_graphics::{Item, Point, Rect, Shape};
 
 use super::{Animated, Context, Size, Spring, Widget, WidgetId};
 

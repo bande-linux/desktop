@@ -1,6 +1,6 @@
 [package]
-name = "unbound-bluetooth"
-description = "Unbound BlueZ client: Bluetooth power, devices, connecting and pairing"
+name = "bande-bluetooth"
+description = "Bande BlueZ client: Bluetooth power, devices, connecting and pairing"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ blocking.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
-unbound-test-bus.workspace = true
+bande-test-bus.workspace = true
 
 [lints]
 workspace = true

@@ -26,7 +26,7 @@ use smithay::reexports::udev::MonitorBuilder;
 use smithay::reexports::wayland_protocols::wp::linux_dmabuf::zv1::server::zwp_linux_dmabuf_feedback_v1::TrancheFlags;
 use smithay::utils::{Clock, DeviceFd, Monotonic, Size};
 use smithay::wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder};
-use unbound_render::VulkanRenderer;
+use bande_render::VulkanRenderer;
 
 use crate::clock::{FrameOutput, Submission, Vblank};
 use crate::render::background;
@@ -123,7 +123,7 @@ fn sorted_modes(info: &connector::Info) -> Vec<Mode> {
     modes
 }
 
-fn edid_of(device: &DrmDevice, handle: connector::Handle) -> Option<unbound_edid::Edid> {
+fn edid_of(device: &DrmDevice, handle: connector::Handle) -> Option<bande_edid::Edid> {
     let properties = device.get_properties(handle).ok()?;
     properties.iter().find_map(|(property, value)| {
         let info = device.get_property(*property).ok()?;
@@ -133,11 +133,11 @@ fn edid_of(device: &DrmDevice, handle: connector::Handle) -> Option<unbound_edid
         let property::Value::Blob(blob) = info.value_type().convert_value(*value) else {
             return None;
         };
-        unbound_edid::parse(&device.get_property_blob(blob).ok()?)
+        bande_edid::parse(&device.get_property_blob(blob).ok()?)
     })
 }
 
-fn shows_another_display(known: &OutputConfig, edid: Option<unbound_edid::Edid>) -> bool {
+fn shows_another_display(known: &OutputConfig, edid: Option<bande_edid::Edid>) -> bool {
     edid.is_some_and(|edid| {
         edid.make != known.make || edid.model != known.model || edid.serial != known.serial
     })
@@ -691,8 +691,8 @@ impl FrameOutput for DrmBackend {
 
 #[cfg(test)]
 mod tests {
+    use bande_edid::Edid;
     use smithay::utils::Size;
-    use unbound_edid::Edid;
 
     use super::{shows_another_display, shows_connected_display};
     use crate::screen::OutputConfig;

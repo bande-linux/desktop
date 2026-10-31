@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use unbound_controlcenter::media::{self, Command, Playback, Player, Players};
-use unbound_inbox::Inbox;
-use unbound_test_bus::SessionBus;
+use bande_controlcenter::media::{self, Command, Playback, Player, Players};
+use bande_inbox::Inbox;
+use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 

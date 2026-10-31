@@ -1,8 +1,8 @@
 use crate::support::*;
 use std::time::Duration;
 
-use unbound_compositor::{BACKGROUND, Compositor, Renderer};
-use unbound_test_wayland::{
+use bande_compositor::{BACKGROUND, Compositor, Renderer};
+use bande_test_wayland::{
     Anchor, BLUE, KeyboardInteractivity, Layer, LayerRequest, RED, TestClient,
 };
 

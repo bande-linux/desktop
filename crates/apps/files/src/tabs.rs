@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use unbound_toolkit::ui::ScrollState;
-use unbound_toolkit::{Color, Item, Point, Radius, Rect, Shape, TextAlign, TextStyle};
+use bande_toolkit::ui::ScrollState;
+use bande_toolkit::{Color, Item, Point, Radius, Rect, Shape, TextAlign, TextStyle};
 
 use crate::L10N;
 use crate::browser::{Browser, Location};

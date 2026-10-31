@@ -347,8 +347,8 @@ scroll down 5
 pinch out 4
 wait 500ms
 wait 1.5s
-wait-for-window \"org.unbound.Terminal\"
-wait-for-window \"org.unbound.Files\" 3s
+wait-for-window \"org.bande.Terminal\"
+wait-for-window \"org.bande.Files\" 3s
 shot \"launcher open\"
 note \"Nothing happens yet\"
 ";
@@ -416,14 +416,14 @@ note \"Nothing happens yet\"
         assert_eq!(
             lines[11].step,
             Step::WaitForWindow {
-                app_id: "org.unbound.Terminal".to_owned(),
+                app_id: "org.bande.Terminal".to_owned(),
                 timeout: DEFAULT_WINDOW_TIMEOUT
             }
         );
         assert_eq!(
             lines[12].step,
             Step::WaitForWindow {
-                app_id: "org.unbound.Files".to_owned(),
+                app_id: "org.bande.Files".to_owned(),
                 timeout: Duration::from_secs(3)
             }
         );

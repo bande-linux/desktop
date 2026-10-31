@@ -6,15 +6,15 @@ use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 
 use accesskit::TreeUpdate;
-use rustix::event::{PollFd, PollFlags, poll};
-use unbound_inbox::{Inbox, Outbox};
-use unbound_polkit::agent::{Agent, Answer, Conversation, Notice, Request, Subject};
-use unbound_polkit::dialog::{Dialog, Message, Prompt};
-use unbound_polkit::helper::HELPER;
-use unbound_toolkit::{
+use bande_inbox::{Inbox, Outbox};
+use bande_polkit::agent::{Agent, Answer, Conversation, Notice, Request, Subject};
+use bande_polkit::dialog::{Dialog, Message, Prompt};
+use bande_polkit::helper::HELPER;
+use bande_toolkit::{
     App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem, Window,
     WindowError, WindowEvent, run,
 };
+use rustix::event::{PollFd, PollFlags, poll};
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::OwnedObjectPath;
 
@@ -227,7 +227,7 @@ fn serve() -> Result<(), Box<dyn Error>> {
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-polkit-agent");
+    bande_log::init("bande-polkit-agent");
     match serve() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

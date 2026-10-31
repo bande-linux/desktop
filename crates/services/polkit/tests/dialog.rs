@@ -6,10 +6,10 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Role, TreeId};
-use unbound_polkit::agent::{Answer, Identity, Notice};
-use unbound_polkit::dialog::{Dialog, Message, Prompt};
-use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Appearance, CpuRenderer, TextSystem};
+use bande_polkit::agent::{Answer, Identity, Notice};
+use bande_polkit::dialog::{Dialog, Message, Prompt};
+use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::{Appearance, CpuRenderer, TextSystem};
 
 const SIZE: (u32, u32) = (560, 340);
 const SETTLED: Duration = Duration::from_secs(3);
@@ -104,7 +104,7 @@ fn description(asking: &Asking) -> String {
 #[test]
 fn the_typed_password_is_sent_with_enter() {
     let (mut asking, answer) = Asking::new();
-    unbound_golden::assert_golden_rgba!("asking", SIZE, asking.settle());
+    bande_golden::assert_golden_rgba!("asking", SIZE, asking.settle());
     asking.type_text("hunter2");
     asking.press(Key::Enter);
     assert_eq!(answered(&answer), Some("hunter2".to_owned()));
@@ -151,7 +151,7 @@ fn a_wrong_password_shakes_clears_the_field_and_asks_again() {
         reply,
     });
     assert!(asking.dialog.ui().is_animating() || asking.dialog.ui().deadline().is_some());
-    unbound_golden::assert_golden_rgba!("wrong-password", SIZE, asking.settle());
+    bande_golden::assert_golden_rgba!("wrong-password", SIZE, asking.settle());
     asking.type_text("right");
     asking.press(Key::Enter);
     assert_eq!(answered(&second), Some("right".to_owned()));
@@ -191,7 +191,7 @@ fn the_dialog_names_the_user_by_full_name() {
 #[test]
 fn choosing_another_administrator_restarts_for_that_user() {
     let (mut asking, first) = Asking::with(two_admins());
-    unbound_golden::assert_golden_rgba!("choose-user", SIZE, asking.settle());
+    bande_golden::assert_golden_rgba!("choose-user", SIZE, asking.settle());
     let picker = asking
         .dialog
         .ui()

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use unbound_xdg::path_from_file_uri;
+use bande_xdg::path_from_file_uri;
 
 use crate::usage::Usage;
 

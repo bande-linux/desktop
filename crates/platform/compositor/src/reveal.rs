@@ -1,11 +1,11 @@
 use std::time::Duration;
 
+use bande_spring::{Animated, Spring};
 use smithay::desktop::layer_map_for_output;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Rectangle, Size};
 use smithay::wayland::compositor::{RectangleKind, SurfaceAttributes, with_states};
 use smithay::wayland::shell::wlr_layer::Layer;
-use unbound_spring::{Animated, Spring};
 
 use crate::motion::{BAR_NAMESPACE, SETTLED_ALPHA};
 use crate::state::{Compositor, MENU_BAR_NAMESPACE, State, is_mapped};

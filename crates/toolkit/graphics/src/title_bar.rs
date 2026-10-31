@@ -1,4 +1,4 @@
-use unbound_design::{Color, Palette, Radius, TextRole};
+use bande_design::{Color, Palette, Radius, TextRole};
 
 use crate::{Item, Paragraph, Path, Point, Rect, Shape, TextStyle};
 

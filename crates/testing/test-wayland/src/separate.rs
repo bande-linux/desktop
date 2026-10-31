@@ -4,14 +4,14 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::{ChildStdin, Command, Stdio};
 use std::time::{Duration, Instant};
 
+use bande_compositor::Compositor;
 use tempfile::TempDir;
-use unbound_compositor::Compositor;
 use wayland_client::Connection;
 use wayland_client::protocol::wl_shm::Format;
 
 use crate::{Globals, ShmImage, TestClient, quadrants};
 
-const SOCKET: &str = "UNBOUND_TEST_SEPARATE_APP_SOCKET";
+const SOCKET: &str = "BANDE_TEST_SEPARATE_APP_SOCKET";
 
 pub struct SeparateApp {
     orders: ChildStdin,

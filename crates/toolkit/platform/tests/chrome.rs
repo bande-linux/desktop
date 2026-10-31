@@ -2,12 +2,12 @@
 
 mod support;
 
-use support::{Shot, appearance_portal, shot};
-use unbound_graphics::{Point, TextSystem};
-use unbound_toolkit_platform::{
+use bande_graphics::{Point, TextSystem};
+use bande_toolkit_platform::{
     FrameRegions, MenuPlacement, SHEET_INSET, WINDOW_HEADER_HEIGHT, Window,
 };
-use unbound_widgets::{Alert, Cell, Column, Context, Menu, MenuItem, Row, Sort, Table, Ui, Widget};
+use bande_widgets::{Alert, Cell, Column, Context, Menu, MenuItem, Row, Sort, Table, Ui, Widget};
+use support::{Shot, appearance_portal, shot};
 
 const SORT_BY: i32 = 4 + 28 + 28 + 9 + 14;
 const LARGER_SORT_BY: i32 = 4 + 37 + 37 + 9 + 18;
@@ -62,15 +62,15 @@ fn show_long_menu(window: &mut Window) -> Option<Ui> {
 
 fn processes(window: &mut Window) -> Option<Ui> {
     let names = [
-        ("Files", "1.2", "84.3 MB", "unbound"),
-        ("Terminal", "12.8", "211.0 MB", "unbound"),
+        ("Files", "1.2", "84.3 MB", "bande"),
+        ("Terminal", "12.8", "211.0 MB", "bande"),
         (
             "compositor with an unusually long process name",
             "4.1",
             "96.5 MB",
-            "unbound",
+            "bande",
         ),
-        ("pipewire", "0.7", "12.4 MB", "unbound"),
+        ("pipewire", "0.7", "12.4 MB", "bande"),
         ("NetworkManager", "0.0", "18.9 MB", "root"),
         ("systemd", "0.1", "11.1 MB", "root"),
     ];

@@ -2,12 +2,12 @@
 
 use std::time::{Duration, Instant};
 
+use bande_datetime::{DateFormats, posix_locale};
 use jiff::civil::date;
-use unbound_datetime::{DateFormats, posix_locale};
 
-use unbound_notifications::{Screen, Sender};
-use unbound_notify::{Notification, Picture, Presentation, Stack};
-use unbound_toolkit::{Color, CpuRenderer, Image, Palette, Scene, Scheme, TextSystem};
+use bande_notifications::{Screen, Sender};
+use bande_notify::{Notification, Picture, Presentation, Stack};
+use bande_toolkit::{Color, CpuRenderer, Image, Palette, Scene, Scheme, TextSystem};
 
 const SIZE: (u32, u32) = (420, 460);
 const SETTLED: Duration = Duration::from_secs(2);
@@ -84,7 +84,7 @@ fn screen(presentation: Presentation, now: Instant) -> Screen {
 fn check_golden(name: &str, mut scene: Scene) {
     scene.background = DESKTOP;
     let frame = CpuRenderer::new().render(&scene).expect("frame");
-    unbound_golden::assert_golden_rgba!(name, (frame.width, frame.height), frame.rgba);
+    bande_golden::assert_golden_rgba!(name, (frame.width, frame.height), frame.rgba);
 }
 
 #[test]

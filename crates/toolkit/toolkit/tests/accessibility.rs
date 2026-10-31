@@ -8,11 +8,11 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
+use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
+use bande_test_bus::SessionBus;
+use bande_toolkit::ui::{Axis, Button, Context, Label, Stack, Ui};
+use bande_toolkit::{App, Palette, Role, Scene, Scheme, TextSystem, Window, WindowEvent};
 use smithay::utils::Size;
-use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
-use unbound_test_bus::SessionBus;
-use unbound_toolkit::ui::{Axis, Button, Context, Label, Stack, Ui};
-use unbound_toolkit::{App, Palette, Role, Scene, Scheme, TextSystem, Window, WindowEvent};
 use zbus::blocking::{Connection, Proxy, connection, proxy};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedObjectPath;
@@ -150,7 +150,7 @@ fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
     let app = thread::spawn(move || {
         let mut window = Window::open_on(
             client_end,
-            Role::toplevel("Greeting", "unbound-toolkit-test"),
+            Role::toplevel("Greeting", "bande-toolkit-test"),
             (200, 120),
         )
         .expect("window");
@@ -172,7 +172,7 @@ fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
             ),
             greeted,
         };
-        unbound_toolkit::run(&mut window, &mut greeting).expect("run the window");
+        bande_toolkit::run(&mut window, &mut greeting).expect("run the window");
         greeting.greeted.get()
     });
 

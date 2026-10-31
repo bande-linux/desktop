@@ -74,7 +74,7 @@ fn mimes<P: Proxy>(offer: &P) -> Vec<String> {
 }
 
 impl TestClient {
-    pub fn join_seat(&mut self, server: &mut unbound_compositor::Compositor) {
+    pub fn join_seat(&mut self, server: &mut bande_compositor::Compositor) {
         let qh = self.queue.handle();
         let seat: WlSeat = self.bind("wl_seat", 7);
         let data_manager: WlDataDeviceManager = self.bind("wl_data_device_manager", 3);
@@ -87,7 +87,7 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn join_data_control(&mut self, server: &mut unbound_compositor::Compositor) {
+    pub fn join_data_control(&mut self, server: &mut bande_compositor::Compositor) {
         let qh = self.queue.handle();
         let seat: WlSeat = self.bind("wl_seat", 7);
         let manager: ExtDataControlManagerV1 = self.bind("ext_data_control_manager_v1", 1);

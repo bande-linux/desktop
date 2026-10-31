@@ -1,13 +1,13 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
+use bande_protocols::server::bande_app_control_v1::BandeAppControlV1;
+use bande_protocols::server::bande_shell_v1::BandeShellV1;
 use smithay::input::pointer::CursorIcon;
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::utils::SERIAL_COUNTER;
 use smithay::wayland::shell::xdg::ShellClient;
-use unbound_protocols::server::unbound_app_control_v1::UnboundAppControlV1;
-use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
 
 use crate::shell::toplevel_names;
 use crate::state::{Compositor, State};
@@ -53,8 +53,8 @@ impl Watchdog {
 }
 
 fn announce(
-    shells: &[UnboundShellV1],
-    controls: &[UnboundAppControlV1],
+    shells: &[BandeShellV1],
+    controls: &[BandeAppControlV1],
     ping: &Ping,
     responding: bool,
 ) {
@@ -69,8 +69,8 @@ fn announce(
 impl State {
     pub(crate) fn announce_unresponsive(
         &self,
-        shell: Option<&UnboundShellV1>,
-        control: Option<&UnboundAppControlV1>,
+        shell: Option<&BandeShellV1>,
+        control: Option<&BandeAppControlV1>,
     ) {
         for ping in self.watchdog.pings.iter().filter(|ping| ping.unresponsive) {
             announce(

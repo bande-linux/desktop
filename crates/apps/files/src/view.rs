@@ -7,20 +7,20 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
 
-use unbound_fs::{
+use bande_fs::{
     Action, Answer, Change, Entry, Finished, FolderChanges, FolderWatch, Operations, Purpose,
     RenameError, Resolution, Step, Task, TrashItem, archive_path, can_extract,
 };
-use unbound_preview::Preview;
-use unbound_search::{Usage, recent_files};
-use unbound_thumbnails::Thumbnails;
-use unbound_toolkit::ui::{
+use bande_preview::Preview;
+use bande_search::{Usage, recent_files};
+use bande_thumbnails::Thumbnails;
+use bande_toolkit::ui::{
     ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, Modifiers, Pointer,
     PointerButton, Scroll, ScrollState, Slider, Ui, Widget, WidgetId,
 };
-use unbound_toolkit::{Appearance, Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem};
-use unbound_volumes::mounted_volumes;
-use unbound_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
+use bande_toolkit::{Appearance, Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem};
+use bande_volumes::mounted_volumes;
+use bande_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
 use crate::L10N;
 use crate::browser::{Browser, Location};
@@ -249,7 +249,7 @@ pub(crate) fn home() -> PathBuf {
 
 fn user_folder(dir: UserDir) -> PathBuf {
     let home = home();
-    let user_dirs = unbound_xdg::config_home()
+    let user_dirs = bande_xdg::config_home()
         .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
     user_dir(&home, user_dirs.as_deref(), dir)
 }
@@ -1419,7 +1419,7 @@ impl FilesView {
 
     fn go_to(&mut self, typed: &str) {
         let folder = self.browser.current_folder().unwrap_or_else(home);
-        let path = unbound_fs::typed_location(typed, &home(), &folder);
+        let path = bande_fs::typed_location(typed, &home(), &folder);
         if path.is_dir() {
             self.go(Location::Folder(path));
         } else if path.symlink_metadata().is_ok() {
@@ -1784,7 +1784,7 @@ impl FilesView {
     }
 
     pub(crate) fn rename_to(&mut self, path: &Path, name: &str) {
-        match unbound_fs::rename(path, name) {
+        match bande_fs::rename(path, name) {
             Ok(Some(change)) => {
                 if let Change::Moved { to, .. } = &change {
                     self.reveal_after_change(std::slice::from_ref(to));
@@ -1835,7 +1835,7 @@ impl FilesView {
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
             .filter(|name| !name.starts_with('.'))
             .collect::<Vec<_>>();
-        names.sort_by(|a, b| unbound_fs::finder_order(a, b));
+        names.sort_by(|a, b| bande_fs::finder_order(a, b));
         names
     }
 
@@ -1846,7 +1846,7 @@ impl FilesView {
         let Some(template) = self.templates.as_ref().map(|folder| folder.join(name)) else {
             return;
         };
-        match unbound_fs::new_document(&folder, &template) {
+        match bande_fs::new_document(&folder, &template) {
             Ok(change) => {
                 if let Change::Created(path) = &change {
                     self.reveal_after_change(std::slice::from_ref(path));
@@ -1875,7 +1875,7 @@ impl FilesView {
             return;
         };
         let folder = self.browser.current_folder().unwrap_or(folder);
-        match unbound_fs::new_folder(&folder) {
+        match bande_fs::new_folder(&folder) {
             Ok(change) => {
                 if let Change::Created(path) = &change {
                     self.reveal_after_change(std::slice::from_ref(path));

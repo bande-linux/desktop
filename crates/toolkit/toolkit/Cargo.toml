@@ -1,6 +1,6 @@
 [package]
-name = "unbound-toolkit"
-description = "Unbound UI toolkit: one entry point to graphics, widgets and the Wayland platform"
+name = "bande-toolkit"
+description = "Bande UI toolkit: one entry point to graphics, widgets and the Wayland platform"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,15 +9,15 @@ repository.workspace = true
 
 [dependencies]
 accesskit.workspace = true
-unbound-graphics = { workspace = true, features = ["gpu"] }
-unbound-toolkit-platform.workspace = true
-unbound-widgets.workspace = true
+bande-graphics = { workspace = true, features = ["gpu"] }
+bande-toolkit-platform.workspace = true
+bande-widgets.workspace = true
 
 [dev-dependencies]
 smithay.workspace = true
-unbound-compositor.workspace = true
-unbound-test-bus.workspace = true
-unbound-test-wayland.workspace = true
+bande-compositor.workspace = true
+bande-test-bus.workspace = true
+bande-test-wayland.workspace = true
 wayland-client.workspace = true
 zbus.workspace = true
 

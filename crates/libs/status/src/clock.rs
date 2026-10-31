@@ -1,8 +1,8 @@
 use std::thread;
 
-use unbound_datetime::MinuteTimer;
-use unbound_datetime::timedate::zone_changes;
-use unbound_inbox::Outbox;
+use bande_datetime::MinuteTimer;
+use bande_datetime::timedate::zone_changes;
+use bande_inbox::Outbox;
 use zbus::blocking::Connection;
 
 use crate::Update;

@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::Compositor;
-use unbound_test_wayland::{IdleEvent, RED, TestClient, roundtrip};
+use bande_compositor::Compositor;
+use bande_test_wayland::{IdleEvent, RED, TestClient, roundtrip};
 
 const SECOND: Duration = Duration::from_secs(1);
 

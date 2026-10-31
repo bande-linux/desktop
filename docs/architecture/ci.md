@@ -10,9 +10,9 @@ and the toolchain pinned in `rust-toolchain.toml` with Debian's `rustup`.
 
 The non-gating `extended.yml` keeps the jobs that need a KVM guest or a Docker engine on the
 organization's self-hosted runners, Docker containers on Apple Silicon (setup:
-[`unbound-linux/runners`](https://github.com/unbound-linux/runners)): `unbound-runner-1` and
-`unbound-runner-2` carry `self-hosted, Linux, ARM64, unbound`, and `unbound-runner-kvm`
-carries `unbound-kvm` and has `/dev/kvm`.
+[`bande-linux/runners`](https://github.com/bande-linux/runners)): `bande-runner-1` and
+`bande-runner-2` carry `self-hosted, Linux, ARM64, bande`, and `bande-runner-kvm`
+carries `bande-kvm` and has `/dev/kvm`.
 
 The repository will be public, so only maintainers start runs: `release.yml` runs on a version
 tag and on dispatch, `extended.yml` on dispatch only, and neither runs on pull requests.
@@ -61,9 +61,9 @@ Jobs:
   tests on lavapipe. D-Bus tests start a private `dbus-daemon` session bus each
   (`crates/testing/test-bus`) from `crates/testing/test-bus/data/session.conf`, which lists no
   service directories: a test bus never D-Bus-activates the services installed on the machine
-  (an installed `unbound-config` would read the developer's own `config.kdl` and post into the
+  (an installed `bande-config` would read the developer's own `config.kdl` and post into the
   test), so a test talks only to the services it starts itself. To run tests the same way on a
-  machine with a live Unbound session, wrap them in a bus from that file, which also keeps the
+  machine with a live Bande session, wrap them in a bus from that file, which also keeps the
   session's portal settings out of the goldens:
   `dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- cargo test -p <package>`.
   The toolkit's render tests use Inter (`fonts-inter`) and Noto Sans CJK (`fonts-noto-cjk`)
@@ -73,7 +73,7 @@ Jobs:
   renderers must match them. The apps' and shell's goldens are images rendered on Debian 13
   and do depend on the fonts, so `ci/debian-fonts.sh` installs Debian 13's own font packages
   (DejaVu, Inter, Manrope, JetBrains Mono, Noto Sans CJK, Noto Color Emoji), pinned by version
-  and checksum. Updating a pin means regenerating the goldens with `UNBOUND_UPDATE_GOLDENS=1`.
+  and checksum. Updating a pin means regenerating the goldens with `BANDE_UPDATE_GOLDENS=1`.
   On failure the job uploads the rendered frames.
 - `debs (arm64)`, `debs (amd64)`: each on its native runner, `ci/release/build-debs.sh` runs
   `cargo build --profile dist` for the crates in `ci/release/packages` and `cargo deb` for each
@@ -83,23 +83,23 @@ Jobs:
   at that version with no build paths inside, the D-Bus activation files, the user units, the
   portal backend's registration and the login session; `ci/release/smoke.sh` starts the
   packaged settings service on a private bus to read a property and the packaged compositor
-  headless. The job uploads `unbound-debs-<arch>`.
+  headless. The job uploads `bande-debs-<arch>`.
 - `deb-all`: `ci/release/build-all.sh` builds the architecture-independent packages
-  (`unbound-desktop`, `unbound-os`, the APT source and keyring), checks that the meta-packages
-  pin their packages at the build's version, that `unbound-desktop` never depends on
-  `unbound-os`, the APT source, pin and signing key, and lints them with `lintian`. It
-  uploads `unbound-debs-all`.
+  (`bande-desktop`, `bande-os`, the APT source and keyring), checks that the meta-packages
+  pin their packages at the build's version, that `bande-desktop` never depends on
+  `bande-os`, the APT source, pin and signing key, and lints them with `lintian`. It
+  uploads `bande-debs-all`.
 - `install (arm64)`, `install (amd64)`: in a clean `debian:testing` on the native runner,
-  `ci/deb/install-test/run.sh` installs `unbound-desktop` from that architecture's packages and
+  `ci/deb/install-test/run.sh` installs `bande-desktop` from that architecture's packages and
   the `all` packages alone, checks that every package has the same version, that every app it
   recommends has an installation candidate, that no X server, XWayland or X session came
   along, the greetd setup and the greeter's wallpaper permissions, that the installed
-  compositor serves Wayland clients, then installs `unbound-os` and checks the APT source.
+  compositor serves Wayland clients, then installs `bande-os` and checks the APT source.
   `crates/services/portal/tests/frontend/run.sh` then reads the colour scheme through Debian's
   `xdg-desktop-portal` and checks it follows `config.kdl`.
 The APT repository publishes on its own: every 30 minutes it looks for new green `release.yml`
-runs for tags and takes their `unbound-debs-arm64`, `unbound-debs-amd64` and
-`unbound-debs-all` artifacts into the `main` component of its `rolling` suite.
+runs for tags and takes their `bande-debs-arm64`, `bande-debs-amd64` and
+`bande-debs-all` artifacts into the `main` component of its `rolling` suite.
 
 Versions come from `ci/deb/version.sh`. A tag `vX.Y.Z` builds version `X.Y.Z` and must equal
 the `[workspace.package] version` in `Cargo.toml`, so a release is: bump the version, merge to
@@ -117,15 +117,15 @@ the fat-LTO links stay within the runner's memory.
 Dispatched by hand (`gh workflow run extended.yml --ref <branch>`), on the self-hosted runners;
 it gates nothing:
 
-- `ci/vm` (on an `unbound-kvm` runner): builds or reuses a guest kernel with vkms and a
+- `ci/vm` (on an `bande-kvm` runner): builds or reuses a guest kernel with vkms and a
   Debian 13 root image, and runs the workspace's `guest` test executables in a KVM guest with
   vkms and virtio-gpu, on real DRM. Guest screendumps are uploaded as artifacts.
-- `ci/polkit`: builds the `unbound-polkit` polkitd test, starts a Debian testing container
+- `ci/polkit`: builds the `bande-polkit` polkitd test, starts a Debian testing container
   (through the runner's Docker socket) with a system bus, polkitd, a test action and a user
   with a random password, and runs the test there: `pkcheck` must be authorized after the
   agent enters the password, after a wrong password and a retry, and must be refused when the
   dialog is cancelled.
-- `ci/perf`: builds the release binaries with `unbound-bench` and `unbound-sample`, and
+- `ci/perf`: builds the release binaries with `bande-bench` and `bande-sample`, and
   measures frame times (also while the overview opens and closes over 20 windows, when nothing
   but a window title may be uploaded), compositor start time and idle memory on lavapipe, for
   the compositor and for the toolkit sample; it gates the exact work counts and idle memory and
@@ -144,10 +144,10 @@ Mac over debug USB; they are not part of either workflow.
 
 - **Full login in the VM** (not built): boot the guest into `greetd`, log in through PAM with
   synthetic credentials, check that `pam_systemd` hands the seat over and that
-  `unbound-compositor` claims `seat0`, and grab the screen over QMP to check that the greeter
+  `bande-compositor` claims `seat0`, and grab the screen over QMP to check that the greeter
   and the shell render. Today `ci/vm` runs test executables in the guest instead of a full
   login.
-- **Real hardware**: boot tests on an Apple Silicon Mac running Unbound follow once the
+- **Real hardware**: boot tests on an Apple Silicon Mac running Bande follow once the
   hardware test rig has its own runner.
 
 ## Verification funnel

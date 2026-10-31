@@ -1,23 +1,23 @@
+use bande_protocols::server::bande_app_control_v1::{self, BandeAppControlV1};
+use bande_protocols::server::bande_app_v1::{self, BandeAppV1};
+use bande_protocols::server::bande_shell_v1::{self, BandeShellV1};
 use smithay::reexports::wayland_server::WEnum;
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
-use unbound_protocols::server::unbound_app_control_v1::{self, UnboundAppControlV1};
-use unbound_protocols::server::unbound_app_v1::{self, UnboundAppV1};
-use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
 
 use std::os::fd::OwnedFd;
 use std::path::PathBuf;
 
-use unbound_xdg::remember_running_apps;
+use bande_xdg::remember_running_apps;
 
 use crate::shell::{is_shell, toplevel_names};
 use crate::state::{Compositor, State};
 
 impl State {
     pub(crate) fn quit_app(&mut self, owner: Option<Client>) {
-        let bound: Vec<&UnboundAppV1> = self
+        let bound: Vec<&BandeAppV1> = self
             .app_resources
             .iter()
             .filter(|app| app.client() == owner)
@@ -28,7 +28,7 @@ impl State {
                 .filter(|window| window.toplevel.wl_surface().client() == owner)
                 .for_each(|window| window.toplevel.send_close());
         } else {
-            bound.into_iter().for_each(UnboundAppV1::quit_requested);
+            bound.into_iter().for_each(BandeAppV1::quit_requested);
         }
     }
 
@@ -66,7 +66,7 @@ impl State {
         }
     }
 
-    pub(crate) fn quit_all_apps(&mut self, requester: UnboundShellV1) {
+    pub(crate) fn quit_all_apps(&mut self, requester: BandeShellV1) {
         for (owner, _) in self.app_owners() {
             self.quit_app(Some(owner));
         }
@@ -112,12 +112,12 @@ impl Compositor {
     }
 }
 
-impl GlobalDispatch<UnboundAppV1, ()> for State {
+impl GlobalDispatch<BandeAppV1, ()> for State {
     fn bind(
         state: &mut Self,
         _display: &DisplayHandle,
         _client: &Client,
-        resource: New<UnboundAppV1>,
+        resource: New<BandeAppV1>,
         _global_data: &(),
         data_init: &mut DataInit<'_, Self>,
     ) {
@@ -125,24 +125,24 @@ impl GlobalDispatch<UnboundAppV1, ()> for State {
     }
 }
 
-impl Dispatch<UnboundAppV1, ()> for State {
+impl Dispatch<BandeAppV1, ()> for State {
     fn request(
         state: &mut Self,
         _client: &Client,
-        resource: &UnboundAppV1,
-        request: unbound_app_v1::Request,
+        resource: &BandeAppV1,
+        request: bande_app_v1::Request,
         _data: &(),
         _display: &DisplayHandle,
         _data_init: &mut DataInit<'_, Self>,
     ) {
         match request {
-            unbound_app_v1::Request::PlaceWindow {
+            bande_app_v1::Request::PlaceWindow {
                 toplevel,
                 placement: WEnum::Value(placement),
             } if toplevel.client() == resource.client() => {
                 state.place_window(&toplevel, placement);
             }
-            unbound_app_v1::Request::SetKeepOnTop { toplevel, keep }
+            bande_app_v1::Request::SetKeepOnTop { toplevel, keep }
                 if toplevel.client() == resource.client() =>
             {
                 if let Some(window) = state
@@ -155,7 +155,7 @@ impl Dispatch<UnboundAppV1, ()> for State {
                     state.refocus_pointer();
                 }
             }
-            unbound_app_v1::Request::MoveToWorkspace {
+            bande_app_v1::Request::MoveToWorkspace {
                 toplevel,
                 workspace: WEnum::Value(workspace),
             } if toplevel.client() == resource.client() => {
@@ -167,32 +167,32 @@ impl Dispatch<UnboundAppV1, ()> for State {
                 {
                     state.move_to_workspace(
                         &surface,
-                        workspace == unbound_app_v1::Workspace::Next,
+                        workspace == bande_app_v1::Workspace::Next,
                         false,
                     );
                 }
             }
-            unbound_app_v1::Request::ShowEmojiPicker => {
-                state.open_launcher(unbound_shell_v1::LauncherMode::Emoji);
+            bande_app_v1::Request::ShowEmojiPicker => {
+                state.open_launcher(bande_shell_v1::LauncherMode::Emoji);
             }
-            unbound_app_v1::Request::Destroy => {
+            bande_app_v1::Request::Destroy => {
                 state.app_resources.retain(|app| app != resource);
             }
             _ => {}
         }
     }
 
-    fn destroyed(state: &mut Self, _client: ClientId, resource: &UnboundAppV1, _data: &()) {
+    fn destroyed(state: &mut Self, _client: ClientId, resource: &BandeAppV1, _data: &()) {
         state.app_resources.retain(|app| app != resource);
     }
 }
 
-impl GlobalDispatch<UnboundAppControlV1, ()> for State {
+impl GlobalDispatch<BandeAppControlV1, ()> for State {
     fn bind(
         state: &mut Self,
         _display: &DisplayHandle,
         _client: &Client,
-        resource: New<UnboundAppControlV1>,
+        resource: New<BandeAppControlV1>,
         _global_data: &(),
         data_init: &mut DataInit<'_, Self>,
     ) {
@@ -202,25 +202,25 @@ impl GlobalDispatch<UnboundAppControlV1, ()> for State {
     }
 }
 
-impl Dispatch<UnboundAppControlV1, ()> for State {
+impl Dispatch<BandeAppControlV1, ()> for State {
     fn request(
         state: &mut Self,
         _client: &Client,
-        resource: &UnboundAppControlV1,
-        request: unbound_app_control_v1::Request,
+        resource: &BandeAppControlV1,
+        request: bande_app_control_v1::Request,
         _data: &(),
         _display: &DisplayHandle,
         _data_init: &mut DataInit<'_, Self>,
     ) {
         match request {
-            unbound_app_control_v1::Request::QuitApp { app_id } => {
+            bande_app_control_v1::Request::QuitApp { app_id } => {
                 for client in state.app_clients(&app_id) {
                     if !is_shell(&client) {
                         state.quit_app(Some(client));
                     }
                 }
             }
-            unbound_app_control_v1::Request::Destroy => {
+            bande_app_control_v1::Request::Destroy => {
                 state
                     .app_control_resources
                     .retain(|control| control != resource);
@@ -229,7 +229,7 @@ impl Dispatch<UnboundAppControlV1, ()> for State {
         }
     }
 
-    fn destroyed(state: &mut Self, _client: ClientId, resource: &UnboundAppControlV1, _data: &()) {
+    fn destroyed(state: &mut Self, _client: ClientId, resource: &BandeAppControlV1, _data: &()) {
         state
             .app_control_resources
             .retain(|control| control != resource);

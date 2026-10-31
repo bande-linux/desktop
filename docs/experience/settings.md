@@ -16,7 +16,7 @@ four parts:
 It applies `DESIGN.md`: settings only where people genuinely differ, one obvious way, and
 progressive disclosure. It also applies Datum: the sidebar (§8), the controls (§9) and the type
 roles (§7). macOS sets the quality bar but is not the template: the grouping and the page pattern
-are Unbound's own.
+are Bande's own.
 
 ## 1. What exists today
 
@@ -30,11 +30,11 @@ draws the panes (`pages.rs`, `view.rs`, `widgets.rs`) and talks to the services.
 | Wi-Fi | Wi-Fi switch; Networks (join, password, status) | NetworkManager through `libs/network` |
 | Bluetooth | Bluetooth switch; pairing request card; My devices (Connect, Disconnect); Nearby devices (Pair) | BlueZ through `libs/bluetooth`; the pairing agent lives in Settings |
 | Network | Ethernet status; Configure IPv4 (Automatic, Manual) with IP address, Router and DNS fields; VPNs (Connect, Disconnect); Import VPN… | NetworkManager through `libs/network` |
-| Notifications | Do Not Disturb; Application notifications, which expand inline to Allow, Banner style and Show in Notification Center | `org.unbound.NotificationCenter` (`services/notify`) |
+| Notifications | Do Not Disturb; Application notifications, which expand inline to Allow, Banner style and Show in Notification Center | `org.bande.NotificationCenter` (`services/notify`) |
 | Sound | Alert sound, Alert volume, interface sound effects, volume feedback; Output volume, Mute; Play sound through; Input volume, Mute microphone, Input level; Record sound from; Apps playing sound | the config for alerts and effects, played by `services/sound`; PipeWire through `libs/audio` for the rest |
 | General | a hub of rows leading to the six subpages below | — |
-| ↳ About | Name; Model, Chip, Memory, Storage, Unbound, System, Serial | hostnamed for the name; `/proc` and the device tree |
-| ↳ Software Update | status with Check Now, Install Now or Restart Now; the package list | PackageKit and logind; `unbound-update-check.timer` |
+| ↳ About | Name; Model, Chip, Memory, Storage, Bande, System, Serial | hostnamed for the name; `/proc` and the device tree |
+| ↳ Software Update | status with Check Now, Install Now or Restart Now; the package list | PackageKit and logind; `bande-update-check.timer` |
 | ↳ Storage | usage bar by category; Trash with Empty Trash…; Largest files with Show in Files | statvfs and Settings' own scan (`storage.rs`) |
 | ↳ Date & Time | Set time automatically; manual date and time; Time zone with a Change… picker; 24-hour time | timedated; the config's `clock-format` |
 | ↳ Language & Region | Language; Region with a formats preview | localed and the installed locales |
@@ -147,7 +147,7 @@ What already works well and stays:
 - "Highlight Changed Settings" marks values that differ from the default.
 - The 6.0 reorganisation avoided "a mega category with like 12 things in it".
 
-**What Unbound takes from this:**
+**What Bande takes from this:**
 
 1. Labelled groups read as order (Windows, Plasma). Unlabelled clusters read as arbitrary
    (macOS).
@@ -235,7 +235,7 @@ Inside a group, the panes people open most come first. About comes last, as ever
 | | About | `computer-symbolic` | name, this computer, summaries of Storage and Software Update | Storage, Software Update | always |
 
 The new symbols (`appearance`, `accessibility`, `trackpad`, `language-time`) belong to the 16 pt
-set of `data/icons/Unbound/symbolic` (roadmap D3). Until they exist, slice 1 uses
+set of `data/icons/Bande/symbolic` (roadmap D3). Until they exist, slice 1 uses
 `weather-clear-night`, `avatar-default`, `input-mouse` and `preferences-system`.
 
 **Changes from today.**
@@ -481,7 +481,7 @@ anywhere on the row operates the control: it flips a switch, opens a pop-up, foc
 | Keyboard ▸ Keyboard shortcuts (inline, long) | Keyboard ▸ Keyboard Shortcuts › subpage | the long list leaves the main page |
 | Trackpad & Mouse ▸ all rows | Trackpad & Mouse | primary button and acceleration added (slice 6) |
 | General (hub) | — | removed |
-| General ▸ About (Name, Model, Chip, Memory, Storage, Unbound, System, Serial) | About | top-level; the name is the hero; Storage and Software Update become disclosure rows with their summaries |
+| General ▸ About (Name, Model, Chip, Memory, Storage, Bande, System, Serial) | About | top-level; the name is the hero; Storage and Software Update become disclosure rows with their summaries |
 | General ▸ Storage (usage, Trash, Largest files) | About ▸ Storage | unchanged |
 | General ▸ Software Update | About ▸ Software Update, and the sidebar's attention row | unchanged on the page |
 | General ▸ Date & Time ▸ Set time automatically, date and time, Time zone | Language & Time ▸ Time | merged pane |
@@ -505,7 +505,7 @@ notifications per app.
 
 **Connections**
 
-| Option | Who | Unbound | Call | Backend and note |
+| Option | Who | Bande | Call | Backend and note |
 | :--- | :--- | :--- | :--- | :--- |
 | Forget a Wi-Fi network | M W G K | missing | now (slice 4) | NetworkManager `Settings.Connection.Delete` in `libs/network` |
 | Auto-join per network | M W G K | missing | later | connection `autoconnect`; S–M |
@@ -518,7 +518,7 @@ notifications per app.
 
 **Desktop**
 
-| Option | Who | Unbound | Call | Backend and note |
+| Option | Who | Bande | Call | Backend and note |
 | :--- | :--- | :--- | :--- | :--- |
 | Light, dark, automatic; accent | M W G K | have | — | — |
 | Wallpaper with fit | M W G K | own pane | now (slice 1) | merged into Appearance |
@@ -538,7 +538,7 @@ notifications per app.
 
 **Devices**
 
-| Option | Who | Unbound | Call | Backend and note |
+| Option | Who | Bande | Call | Backend and note |
 | :--- | :--- | :--- | :--- | :--- |
 | Built-in brightness | M W K | Control Center only | now (slice 4) | logind `Session.SetBrightness`, as Control Center does; the backlight helper moves to `libs/status` |
 | Night Light with schedule and warmth | M W G K | missing | now (slice 5) | compositor gamma ramp (maturity gaps #23); the sunset schedule reuses `services/portal/src/daylight.rs` |
@@ -565,7 +565,7 @@ notifications per app.
 
 **System**
 
-| Option | Who | Unbound | Call | Backend and note |
+| Option | Who | Bande | Call | Backend and note |
 | :--- | :--- | :--- | :--- | :--- |
 | Battery level, power modes, Power Saver on battery, lid | M W G K | have | — | moved to Power |
 | Dim, display off and lock, sleep timers | M W G K | under Lock Screen | now (slice 1) | moved to Power ▸ When inactive |
@@ -576,7 +576,7 @@ notifications per app.
 | Camera permission per app | M W G K | missing | now (slice 3) | permission store table `devices`, id `camera` |
 | Screenshot permission per app | M W | missing | now (slice 3) | table `screenshot`, id `screenshot` |
 | Remembered screen-sharing sources | — | missing | now (slice 3) | table `screencast` (restore tokens); our ScreenCast backend already restores sources |
-| Clipboard history: clear | W | always on | now (slice 3) | `org.unbound.Clipboard.Clear` exists |
+| Clipboard history: clear | W | always on | now (slice 3) | `org.bande.Clipboard.Clear` exists |
 | Clipboard history: off | W | always on | later | config key and `services/clipboard`; S |
 | Microphone permission | M W G | missing | later | no portal enforces it; needs a WirePlumber policy |
 | Location services | M W G | missing | later | no geoclue agent; Night Light uses the time zone |
@@ -673,7 +673,7 @@ Owns `libs/settings-panes`, `apps/settings` and one constant in `shell/desktop`.
 
 Owns `apps/settings` (including `data/` and `debian/`) and `ci/vm`.
 
-1. **Rules file.** Ship `data/50-unbound-settings.rules`, installed to
+1. **Rules file.** Ship `data/50-bande-settings.rules`, installed to
    `/usr/share/polkit-1/rules.d/`. It returns `YES` to local, active members of `sudo` for:
    - `org.freedesktop.timedate1.set-timezone`, `set-ntp` and `set-time`;
    - `org.freedesktop.locale1.set-locale`;
@@ -730,7 +730,7 @@ Owns `apps/settings` and `libs/settings-panes`. It reuses `libs/xdg`.
    - **Screen lock:** a disclosure row "Lock when the display turns off: after 10 min ›" that
      opens Power.
    - **Clipboard:** "Clear clipboard history…", which confirms inline and then calls
-     `org.unbound.Clipboard.Clear`.
+     `org.bande.Clipboard.Clear`.
 3. **Notifications.** Each app's row opens a subpage with Allow, Banner style and Show in
    Notification Center. The inline expander and `expanded_app` are deleted.
 4. **Proof.**
@@ -854,7 +854,7 @@ are new. Five or more choices are pop-ups. Sound runs Output, Input, Sound effec
 input source hint shows the real keys. Super+F focuses search, the View menu is grouped, the
 window opens at 900×720 and the desktop's "Change Wallpaper…" opens Appearance.
 
-**Slice 2.** `data/50-unbound-settings.rules` lets local, active members of `sudo` change the time
+**Slice 2.** `data/50-bande-settings.rules` lets local, active members of `sudo` change the time
 zone, automatic and manual time, the language, the computer name and install updates.
 Settings asks polkit once at start (without interaction) and shows the rows it may not change as
 values with "Only an administrator can change this." Failures show at their row in plain
@@ -868,7 +868,7 @@ notifying app opens its own page; the inline expander is gone.
 
 **Decisions.**
 
-- A polkit challenge counts as refused: Unbound ships no polkit agent yet, so nobody could
+- A polkit challenge counts as refused: Bande ships no polkit agent yet, so nobody could
   answer it.
 - Search ties go to the setting whose pane is also about the word ("lock" finds the lock timer
   in Power before the Caps Lock key).
@@ -888,7 +888,7 @@ the page into the off state with the fade preset, which stays under Reduce motio
 - **Night Light.** Displays ▸ Night Light › opens a subpage with the master switch in the
   header, Schedule (Sunset to sunrise, Custom) with From and To shown only when custom, and a
   Warmth slider from Less warm to More warm. The header and the Displays row say "On until
-  07:00" or "Off until 22:00". `NightLight` on `org.unbound.Config` is writable as a whole and
+  07:00" or "Off until 22:00". `NightLight` on `org.bande.Config` is writable as a whole and
   refuses a bad time, schedule or warmth. A typed time is normalised ("6:5" becomes "06:05") or
   refused at its row. Changing the warmth by day previews it at full strength for three seconds
   and then fades back (compositor). The daily window moved to `libs/datetime` as

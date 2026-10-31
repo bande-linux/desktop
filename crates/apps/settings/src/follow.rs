@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-use unbound_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
+use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
@@ -32,8 +32,8 @@ use crate::software::{SoftwareCommand, SoftwareState, follow_software};
 use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
-use unbound_network::import_vpn;
-use unbound_settings_panes::{SettingId, Value};
+use bande_network::import_vpn;
+use bande_settings_panes::{SettingId, Value};
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
@@ -43,14 +43,14 @@ pub enum Update {
     Values(Vec<(SettingId, Value)>),
     Displays(BTreeMap<String, DisplaySettings>),
     Arrangements(Vec<Vec<Placement>>),
-    Audio(Option<unbound_audio::Snapshot>),
+    Audio(Option<bande_audio::Snapshot>),
     Wifi(Option<WifiState>),
     Network(NetworkState),
     Joined(Vec<u8>, Joined),
     Bluetooth(Option<BluetoothState>),
     Pairing(Option<Question>),
     Pictures(Vec<(String, Pair)>),
-    Thumbnail(Pair, unbound_wallpaper::Picture),
+    Thumbnail(Pair, bande_wallpaper::Picture),
     About(About),
     Storage(Storage),
     Time(Option<TimeState>),
@@ -207,7 +207,7 @@ fn replaces(queued: &Command, command: &Command) -> bool {
         (Command::Set(queued, _), Command::Set(id, _)) => queued == id,
         (Command::Display(queued, _), Command::Display(identity, _)) => queued == identity,
         (Command::Arrangement(queued), Command::Arrangement(placements)) => {
-            unbound_config::same_displays(
+            bande_config::same_displays(
                 queued,
                 &placements
                     .iter()
@@ -301,7 +301,7 @@ impl Services {
             audio: follow_audio(updates.clone()),
             network: system.map(|system| follow_network(system, updates.clone())),
             bluetooth: system.map(|system| follow_bluetooth(system, updates.clone())),
-            pictures: follow_pictures(session, unbound_xdg::data_dirs(), updates.clone()),
+            pictures: follow_pictures(session, bande_xdg::data_dirs(), updates.clone()),
             about: system.map(|system| follow_about(system, updates.clone())),
             storage: follow_storage(updates.clone()),
             time: system.map(|system| follow_time(system, updates.clone())),

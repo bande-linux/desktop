@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use std::ops::Range;
 
+use bande_graphics::{Color, Paragraph, Point, Rect, TextStyle, TextSystem};
 use parley::{Affinity, Alignment, AlignmentOptions, Cursor, Layout, Selection as Span};
-use unbound_graphics::{Color, Paragraph, Point, Rect, TextStyle, TextSystem};
 
 use super::selection::{Position, Selection};
 use super::{CARET_WIDTH, Editor, Preedit, Unit};

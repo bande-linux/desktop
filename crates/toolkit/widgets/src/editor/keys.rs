@@ -1,5 +1,5 @@
+use bande_graphics::{Point, TextSystem};
 use parley::{Affinity, Selection as Span};
-use unbound_graphics::{Point, TextSystem};
 
 use super::history::EditKind;
 use super::selection::{Position, Selection};

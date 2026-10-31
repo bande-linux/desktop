@@ -5,12 +5,12 @@ mod support;
 use std::time::{Duration, Instant};
 
 use accesskit::Role;
+use bande_notify::client::{Request, notify};
+use bande_notify::{Banners, NotificationServer, Urgency};
+use bande_settings::{Command, Feed, PaneId, SettingsView, feed, follow_app_notifications};
+use bande_test_bus::SessionBus;
+use bande_toolkit::{Palette, Scheme, TextSystem};
 use support::{WAIT, click, find, nodes};
-use unbound_notify::client::{Request, notify};
-use unbound_notify::{Banners, NotificationServer, Urgency};
-use unbound_settings::{Command, Feed, PaneId, SettingsView, feed, follow_app_notifications};
-use unbound_test_bus::SessionBus;
-use unbound_toolkit::{Palette, Scheme, TextSystem};
 
 fn app_summary(view: &mut SettingsView) -> Option<String> {
     nodes(view)
@@ -22,7 +22,7 @@ fn app_summary(view: &mut SettingsView) -> Option<String> {
 fn pump(
     view: &mut SettingsView,
     feed: &Feed,
-    sender: &std::sync::mpsc::Sender<unbound_settings::NotificationCommand>,
+    sender: &std::sync::mpsc::Sender<bande_settings::NotificationCommand>,
     done: impl Fn(&mut SettingsView) -> bool,
 ) {
     let deadline = Instant::now() + WAIT;
@@ -67,8 +67,8 @@ fn each_app_that_notified_gets_its_own_rules() {
     let sender = follow_app_notifications(&client, updates);
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     view.set_value(
-        unbound_settings::SettingId::DoNotDisturb,
-        unbound_settings::Value::Flag(false),
+        bande_settings::SettingId::DoNotDisturb,
+        bande_settings::Value::Flag(false),
     );
     view.select_pane(PaneId::Notifications);
     pump(&mut view, &feed, &sender, |view| {

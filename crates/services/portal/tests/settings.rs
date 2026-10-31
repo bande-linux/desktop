@@ -8,16 +8,16 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
+use bande_config::{ConfigService, ConfigStore};
+use bande_datetime::daylight::{Sky, place_of, sky};
+use bande_datetime::timedate::TimedateProxyBlocking;
+use bande_design::{Accent, Color, Palette, Scheme};
+use bande_test_bus::timedate::FakeTimedate;
 use common::Portal;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use unbound_config::{ConfigService, ConfigStore};
-use unbound_datetime::daylight::{Sky, place_of, sky};
-use unbound_datetime::timedate::TimedateProxyBlocking;
-use unbound_design::{Accent, Color, Palette, Scheme};
-use unbound_test_bus::timedate::FakeTimedate;
-use xdg_desktop_portal_unbound::gtk;
-use xdg_desktop_portal_unbound::settings::{CursorSettings, Settings, UNBOUND_APPEARANCE};
+use xdg_desktop_portal_bande::gtk;
+use xdg_desktop_portal_bande::settings::{BANDE_APPEARANCE, CursorSettings, Settings};
 use zbus::blocking::MessageIterator;
 use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};
@@ -90,7 +90,7 @@ impl Fixture {
     }
 
     fn stylesheet(&self) -> String {
-        std::fs::read_to_string(self.gtk_home.join("gtk-4.0/unbound.css")).unwrap_or_default()
+        std::fs::read_to_string(self.gtk_home.join("gtk-4.0/bande.css")).unwrap_or_default()
     }
 }
 
@@ -248,8 +248,8 @@ fn the_interface_is_version_2() {
         .portal
         .client
         .call_method(
-            Some(xdg_desktop_portal_unbound::BUS_NAME),
-            xdg_desktop_portal_unbound::OBJECT_PATH,
+            Some(xdg_desktop_portal_bande::BUS_NAME),
+            xdg_desktop_portal_bande::OBJECT_PATH,
             Some("org.freedesktop.DBus.Properties"),
             "Get",
             &(INTERFACE, "version"),
@@ -268,12 +268,9 @@ fn the_display_accommodations_are_served_to_gtk_qt_and_the_toolkit() {
     );
     let all = fixture.read_all(&[]);
     assert_eq!(u32::try_from(&all[APPEARANCE]["contrast"]).expect("u"), 1);
-    let unbound = &all[UNBOUND_APPEARANCE];
-    assert_eq!(
-        u32::try_from(&unbound["reduce-transparency"]).expect("u"),
-        1
-    );
-    assert_eq!(u32::try_from(&unbound["text-size"]).expect("u"), 150);
+    let bande = &all[BANDE_APPEARANCE];
+    assert_eq!(u32::try_from(&bande["reduce-transparency"]).expect("u"), 1);
+    assert_eq!(u32::try_from(&bande["text-size"]).expect("u"), 150);
     assert_eq!(
         f64::try_from(&all[GNOME_INTERFACE]["text-scaling-factor"]).expect("d"),
         1.5
@@ -303,14 +300,14 @@ fn gtk_reads_the_color_scheme_and_cursor_from_the_gnome_interface_namespace() {
 }
 
 #[test]
-fn gtk_plays_its_event_sounds_from_the_unbound_sound_theme() {
+fn gtk_plays_its_event_sounds_from_the_bande_sound_theme() {
     let fixture = start("");
     let all = fixture.read_all(&["org.gnome.desktop.sound"]);
     let sound = &all["org.gnome.desktop.sound"];
 
     assert_eq!(
         String::try_from(sound["theme-name"].try_clone().expect("clone")).expect("s"),
-        "Unbound"
+        "Bande"
     );
     assert!(bool::try_from(&sound["event-sounds"]).expect("b"));
 }
@@ -352,7 +349,7 @@ fn switching_to_light_signals_the_gnome_color_scheme_and_gtk_theme() {
 }
 
 #[test]
-fn gtk_apps_get_the_unbound_fonts_theme_and_motion() {
+fn gtk_apps_get_the_bande_fonts_theme_and_motion() {
     let fixture = start("appearance \"dark\"\n");
     let interface = |key: &str| fixture.string(GNOME_INTERFACE, key);
     assert_eq!(interface("gtk-theme"), "Adwaita-dark");
@@ -404,10 +401,7 @@ fn the_chosen_accent_is_served_exactly_with_its_folder_icon_theme() {
         served_accent(&fixture),
         fractions(Accent::Teal.color(Scheme::Light))
     );
-    assert_eq!(
-        fixture.string(GNOME_INTERFACE, "icon-theme"),
-        "Unbound-Teal"
-    );
+    assert_eq!(fixture.string(GNOME_INTERFACE, "icon-theme"), "Bande-Teal");
 
     let changes = fixture.changes();
     fixture.write_config("appearance \"light\"\n");
@@ -423,7 +417,7 @@ fn the_chosen_accent_is_served_exactly_with_its_folder_icon_theme() {
     );
     assert_eq!(
         String::try_from(seen["icon-theme"].try_clone().expect("clone")).expect("s"),
-        "Unbound"
+        "Bande"
     );
 }
 
@@ -443,7 +437,7 @@ fn gtk_apps_get_the_accent_and_frame_tones_through_an_import_in_their_own_styles
     }
     assert_eq!(
         std::fs::read_to_string(fixture.gtk_home.join("gtk-4.0/gtk.css")).expect("gtk.css"),
-        "@import url(\"unbound.css\");\n"
+        "@import url(\"bande.css\");\n"
     );
 
     fixture.write_config("appearance \"dark\"\naccent \"moss\"\n");
@@ -464,7 +458,7 @@ fn gtk_apps_get_the_accent_and_frame_tones_through_an_import_in_their_own_styles
 fn a_users_own_gtk_stylesheet_keeps_its_rules_below_the_import() {
     let user = "window { font-size: 2em; }\n";
     let imported = gtk::with_import(user).expect("adds the import");
-    assert_eq!(imported, format!("@import url(\"unbound.css\");\n{user}"));
+    assert_eq!(imported, format!("@import url(\"bande.css\");\n{user}"));
     assert_eq!(gtk::with_import(&imported), None);
 }
 
@@ -490,9 +484,9 @@ fn a_tinted_frame_serves_the_wallpapers_average_colour() {
     );
     let fixture = start(&config);
     let tint = |fixture: &Fixture| {
-        let all = fixture.read_all(&[UNBOUND_APPEARANCE]);
+        let all = fixture.read_all(&[BANDE_APPEARANCE]);
         Vec::<f64>::try_from(
-            all[UNBOUND_APPEARANCE]["frame-tint"]
+            all[BANDE_APPEARANCE]["frame-tint"]
                 .try_clone()
                 .expect("clone"),
         )
@@ -505,7 +499,7 @@ fn a_tinted_frame_serves_the_wallpapers_average_colour() {
     let (namespace, key, _) = changes.recv_timeout(WAIT).expect("SettingChanged");
     assert_eq!(
         (namespace.as_str(), key.as_str()),
-        (UNBOUND_APPEARANCE, "frame-tint")
+        (BANDE_APPEARANCE, "frame-tint")
     );
     let served = tint(&fixture);
     assert_eq!(served.len(), 3);

@@ -3,11 +3,11 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::support::*;
-use smithay::utils::{Point, Size};
-use unbound_compositor::{
+use bande_compositor::{
     BACKGROUND, Compositor, CursorTheme, Renderer, Snapshot, UNRESPONSIVE_AFTER,
 };
-use unbound_test_wayland::{BLUE, CursorShape, RED, ShmImage, TestClient};
+use bande_test_wayland::{BLUE, CursorShape, RED, ShmImage, TestClient};
+use smithay::utils::{Point, Size};
 use wayland_client::protocol::wl_shm::Format;
 
 const POINTER: (i32, i32) = (100, 80);

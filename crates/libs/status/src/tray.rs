@@ -2,7 +2,7 @@ use std::process;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 
-use unbound_inbox::Outbox;
+use bande_inbox::Outbox;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::fdo::RequestNameFlags;

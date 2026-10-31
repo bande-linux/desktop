@@ -1,6 +1,6 @@
 # Toolkit
 
-Every Unbound shell client and app draws with one shared toolkit, `unbound-toolkit`, so that
+Every Bande shell client and app draws with one shared toolkit, `bande-toolkit`, so that
 look, shortcuts and accessibility are the same everywhere. It draws with Vello and lays out text
 with Parley ([`../decisions/0001-rendering.md`](../decisions/0001-rendering.md), Decision 2).
 How it grows to AppKit depth is decided in
@@ -8,18 +8,18 @@ How it grows to AppKit depth is decided in
 
 ## Crates
 
-- `unbound-design` (`crates/toolkit/design`): the [Datum](../design/datum.md) design tokens:
+- `bande-design` (`crates/toolkit/design`): the [Datum](../design/datum.md) design tokens:
   colours, radii, spacing, control sizes, type roles and elevation. No dependencies, so a
   service (the portal, a GTK/Qt theme exporter) can use the palette without the renderer.
-- `unbound-graphics` (`crates/toolkit/graphics`): scene, Vello CPU and GPU renderers, Parley
+- `bande-graphics` (`crates/toolkit/graphics`): scene, Vello CPU and GPU renderers, Parley
   text, the shared window header (`title_bar.rs`) and the input event types; it re-exports the
   tokens. No Wayland.
-- `unbound-widgets` (`crates/toolkit/widgets`): the widget tree and widgets, on graphics only,
+- `bande-widgets` (`crates/toolkit/widgets`): the widget tree and widgets, on graphics only,
   so widget tests need no compositor.
-- `unbound-toolkit-platform` (`crates/toolkit/platform`): Wayland windows and roles, seat input,
+- `bande-toolkit-platform` (`crates/toolkit/platform`): Wayland windows and roles, seat input,
   clipboard, text input, capture, the run loop, accessibility publication and appearance.
-- `unbound-toolkit` (`crates/toolkit/toolkit`): the facade apps depend on; `ui` is
-  `unbound-widgets`.
+- `bande-toolkit` (`crates/toolkit/toolkit`): the facade apps depend on; `ui` is
+  `bande-widgets`.
 
 CI fails when a service depends on the widgets, platform or facade, or when graphics or widgets
 depend on Wayland.
@@ -34,7 +34,7 @@ OKLab), so the palette never holds an untested colour. Apps never read `config.k
 
 ## Design tokens
 
-Every colour, radius, size and type style comes from `unbound-design`; no app or shell surface
+Every colour, radius, size and type style comes from `bande-design`; no app or shell surface
 writes a hex value, a corner radius or a font name of its own.
 
 - **Colours.** `Appearance::palette()` (or `Palette::generate(scheme, accent, contrast)`)
@@ -108,7 +108,7 @@ writes a hex value, a corner radius or a font name of its own.
   with serifs, `ss07`/`ss08` square punctuation and quotes); display text (window titles,
   headings, 20 pt and up) is Manrope; monospace is JetBrains Mono with a slashed zero. A missing
   face falls back (Manrope to Inter, JetBrains Mono to DejaVu Sans Mono, then fontconfig's
-  generic family), so nothing breaks without the fonts; `unbound-desktop` depends on
+  generic family), so nothing breaks without the fonts; `bande-desktop` depends on
   `fonts-inter`, `fonts-manrope` and `fonts-jetbrains-mono`. Baselines sit on whole pixels, as
   in AppKit.
 - **Windows.** `Window` opens an `xdg_toplevel`, a `zwlr_layer_surface_v1` or a session-lock
@@ -159,7 +159,7 @@ writes a hex value, a corner radius or a font name of its own.
     follows it. Goldens: `platform/tests/golden/window-frame-*.png`, including an inactive
     window behind a second one. When the only Vulkan device renders on the CPU (lavapipe or
   llvmpipe, as in VMs) every window stays on `CpuRenderer` and presents `wl_shm` buffers with
-  only the changed regions damaged; `UNBOUND_RENDERER=gpu` or `=cpu` overrides the choice. A
+  only the changed regions damaged; `BANDE_RENDERER=gpu` or `=cpu` overrides the choice. A
   window whose background is opaque declares its window rectangle as its opaque region, so
   the compositor shades nothing beneath it. `crates/testing/sample` is a settings card on the toolkit that `ci/perf` starts
   to measure.
@@ -246,7 +246,7 @@ writes a hex value, a corner radius or a font name of its own.
   set. `TextView` wraps, scrolls with a `ScrollState`, keeps the caret in view and can be
   read-only.
 - **Animation.** `ui::Animated` holds a value that springs to its target with a preset from
-  `unbound-spring` (`Spring::QUICK`, `STANDARD`, `GENTLE`, `FADE`, ...). A new target retargets
+  `bande-spring` (`Spring::QUICK`, `STANDARD`, `GENTLE`, `FADE`, ...). A new target retargets
   from the current position and velocity, so a reversed action never jumps or queues. Values
   are sampled at the frame's time; while any value moves, `Ui::is_animating` is true and an app
   returns it from `App::animating`, which asks for the next frame after each one drawn. With
@@ -273,4 +273,4 @@ writes a hex value, a corner radius or a font name of its own.
   app can keep its window open, ask first or close a tab instead; `Window::close` closes it.
 
 Since `wayland-backend` is built with `client_system`, every Wayland client in a workspace
-build, `unbound-test-wayland` included, goes through libwayland.
+build, `bande-test-wayland` included, goes through libwayland.

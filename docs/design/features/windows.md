@@ -4,7 +4,7 @@ Status: proposal, awaiting the owner's review.
 
 ## Purpose
 
-Windows are where all work happens. Unbound gives every window a single, consistent set of
+Windows are where all work happens. Bande gives every window a single, consistent set of
 gestures to move, resize, arrange, hide and find it again. Each gesture is animated and can
 be interrupted. The basics need no explanation and no setting. Power features (tiling,
 workspaces, the overview) are one modifier, one right-click or one shortcut away.
@@ -20,7 +20,7 @@ overview and no workspaces.
 
 | Feature | macOS | GNOME / KDE / Windows | Note |
 |---|---|---|---|
-| Window controls | Close, minimize and zoom at the top left. They are coloured on the key window and grey on other windows [10] | GNOME: close only by default (unverified) | Unbound keeps all three |
+| Window controls | Close, minimize and zoom at the top left. They are coloured on the key window and grey on other windows [10] | GNOME: close only by default (unverified) | Bande keeps all three |
 | Green button | Click enters full screen. Hover shows Move & Resize, Fill & Arrange and Full Screen [3][4] | Windows: hovering maximize shows Snap layouts [18] | The hover menu takes a second or two to appear, which reviewers criticise [4] |
 | Double-click title bar | Zooms (Fill) or minimizes, chosen in Desktop & Dock [2][9] | GNOME: maximize [14] | One fixed action is enough |
 | Move | Drag the title bar. A window snaps into alignment next to another window [2] | GNOME: drag the title bar | |
@@ -41,7 +41,7 @@ overview and no workspaces.
 | Multiple displays | With "Displays have separate Spaces", each display has its own menu bar and Spaces. Without it, a window can span displays [9][20] | | |
 | Motion | "Let people cancel motion"; "Make motion optional" [12] | | |
 
-## Proposed Unbound feature set
+## Proposed Bande feature set
 
 ### Now (essential)
 
@@ -51,7 +51,7 @@ except where it has controls.
 Inputs: left drag moves the window; double click zooms; right click opens the window menu
 (below); hover over the controls shows their glyphs.
 
-**Window controls** — close, minimize and zoom, in macOS order, in Unbound's own style. They
+**Window controls** — close, minimize and zoom, in macOS order, in Bande's own style. They
 are coloured on the key window and grey on others [10]. Hovering over the group shows
 all three glyphs.
 Inputs: left click acts. Alt+click on minimize minimizes all of the app's windows. Hover
@@ -80,7 +80,7 @@ Inputs: left drag. Alt+drag resizes symmetrically about the centre (macOS Option
 unverified). Double click on an edge extends that side to the screen edge [2].
 
 **Zoom** — toggles between the user's size and filling the visible area (outside the menu
-bar and the panel). This already exists. Unbound's green button zooms, not full screen,
+bar and the panel). This already exists. Bande's green button zooms, not full screen,
 because filling the screen is the common need (see open question 1).
 Inputs: click zoom; double click the title bar; `Ctrl+Super+Up`; drag the window to the top
 edge, under the menu bar [4].
@@ -121,7 +121,7 @@ screen, because apps such as video players use it themselves.
 Motion: the frame springs to the display bounds while the menu bar and panel slide out.
 
 **Focus and raising** — as already decided in `docs/architecture/behaviour.md`: click to focus and raise,
-no focus stealing, and close or hide focuses the app's next window. To this Unbound adds a
+no focus stealing, and close or hide focuses the app's next window. To this Bande adds a
 dimmed inactive state. Inactive windows have grey controls and a lighter shadow, so the key
 window reads as nearest [10].
 Inputs: left click anywhere in the window. A click that focuses a window also reaches the
@@ -185,7 +185,7 @@ active app (macOS's separate-Spaces model [9][20]). The panel stays on the prima
 A window that crosses displays belongs to the display holding most of it, and windows
 cannot span displays. When a display is disconnected its windows move to the remaining
 display. When it is reconnected they return to it (unverified as macOS behaviour; proposed
-as Unbound's).
+as Bande's).
 Inputs: drag across; window menu, Move to Display; `Ctrl+Alt+Super+Left/Right` moves the
 focused window to the neighbouring display.
 
@@ -200,7 +200,7 @@ offer this, unverified).
 
 - **Stage Manager** — a second window model that duplicates the switcher, workspaces and
   tiling. Two ways to do one thing breaks "one obvious way" [8].
-- **Genie effect** — one minimize motion is enough, and Scale reads better at Unbound's
+- **Genie effect** — one minimize motion is enough, and Scale reads better at Bande's
   speeds [9].
 - **Full-screen Split View spaces** — tiling two windows inside a full-screen workspace
   duplicates plain tiling. macOS itself now hides it in a submenu [4].
@@ -212,7 +212,7 @@ offer this, unverified).
   [7][16].
 - **Focus follows mouse, window shading, window opacity menus** — settings for the few that
   complicate the model for everyone.
-- **Tiling margins setting** — gaps are a taste that is not worth a setting. Unbound picks
+- **Tiling margins setting** — gaps are a taste that is not worth a setting. Bande picks
   zero, and windows' own shadows separate them [4].
 - **Custom tile-layout editor** — KDE's editor [19] is real power but a second
   configuration surface. Halves, quarters and the shared-edge resize cover most needs.

@@ -7,18 +7,18 @@ use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use smithay::backend::input::{Axis, AxisSource};
-use smithay::input::pointer::AxisFrame;
-use smithay::utils::Point;
-use unbound_graphics::{
+use bande_graphics::{
     Color, Event, Key, Modifiers, Palette, Pointer, PointerButton, Rect, Scene, Scheme,
     ScrollPhase, ScrollSource, TextSystem,
 };
-use unbound_toolkit_platform::{
+use bande_toolkit_platform::{
     App, Edges, FrameRegions, Header, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Role,
     SHEET_INSET, Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
-use unbound_widgets::{Context, ContextMenu, Label, Menu, MenuItem, Ui};
+use bande_widgets::{Context, ContextMenu, Label, Menu, MenuItem, Ui};
+use smithay::backend::input::{Axis, AxisSource};
+use smithay::input::pointer::AxisFrame;
+use smithay::utils::Point;
 
 #[path = "support/desktop.rs"]
 mod desktop;
@@ -80,7 +80,7 @@ fn menu_ui(events: Sender<WindowEvent>) -> Ui {
         Box::new(area),
         Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
     );
-    ui.layout(unbound_widgets::Size::new(WINDOW.0 as f32, WINDOW.1 as f32));
+    ui.layout(bande_widgets::Size::new(WINDOW.0 as f32, WINDOW.1 as f32));
     ui
 }
 

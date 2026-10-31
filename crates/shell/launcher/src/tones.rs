@@ -1,6 +1,6 @@
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_toolkit::ui::{Context, Event, Size, Widget, WidgetId};
-use unbound_toolkit::{Color, Item, Rect, Shape};
+use bande_toolkit::ui::{Context, Event, Size, Widget, WidgetId};
+use bande_toolkit::{Color, Item, Rect, Shape};
 
 use crate::L10N;
 use crate::rows::{SKIN_TONES, tone_name};

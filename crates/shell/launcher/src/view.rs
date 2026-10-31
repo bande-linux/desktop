@@ -6,15 +6,15 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_fs::Entry;
-use unbound_preview::Preview;
-use unbound_search::{FileResults, Usage};
-use unbound_toolkit::Appearance;
-use unbound_toolkit::ui::{
+use bande_fs::Entry;
+use bande_preview::Preview;
+use bande_search::{FileResults, Usage};
+use bande_toolkit::Appearance;
+use bande_toolkit::ui::{
     Animated, Context, Event, Key, Menu, Modifiers, ScrollState, Size, Spring, TextField, Ui,
     Widget, WidgetId,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Color, Elevation, Image, Item, Point, Radius, Rect, Scene, Scheme, Shape, TextAlign, TextRole,
     TextStyle, TextSystem,
 };
@@ -199,7 +199,7 @@ impl Card {
             TextAlign::Start,
         );
         let hint_x = footer.x + footer.width - 20.0 - TONES_WIDTH - 16.0 - hint.width();
-        let middle = |paragraph: &unbound_toolkit::Paragraph| {
+        let middle = |paragraph: &bande_toolkit::Paragraph| {
             (footer.y + (footer.height - paragraph.height()) / 2.0).round()
         };
         let mut items = Vec::new();

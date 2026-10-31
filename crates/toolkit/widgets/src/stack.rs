@@ -1,7 +1,7 @@
 use accesskit::{Node, Role};
 
 use super::{Context, Size, Widget, WidgetId};
-use unbound_graphics::{Item, Rect};
+use bande_graphics::{Item, Rect};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Axis {

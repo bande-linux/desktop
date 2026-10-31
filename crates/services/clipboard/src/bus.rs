@@ -6,8 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::history::{Contents, History, summary};
 
-pub const BUS_NAME: &str = "org.unbound.Clipboard";
-pub const OBJECT_PATH: &str = "/org/unbound/Clipboard";
+pub const BUS_NAME: &str = "org.bande.Clipboard";
+pub const OBJECT_PATH: &str = "/org/bande/Clipboard";
 
 pub type Shared = Arc<Mutex<History>>;
 pub type Item = (u64, u64, String, Vec<String>);
@@ -30,7 +30,7 @@ pub struct ClipboardHistory {
     pub wake: UnixStream,
 }
 
-#[zbus::interface(name = "org.unbound.Clipboard")]
+#[zbus::interface(name = "org.bande.Clipboard")]
 impl ClipboardHistory {
     fn items(&self) -> Vec<Item> {
         let mut history = lock(&self.history);

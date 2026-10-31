@@ -2,8 +2,8 @@
 
 mod common;
 
+use bande_screenshot::engine::{Frame, Source};
 use common::{Desktop, OUTPUT, WINDOW, rgba_at};
-use unbound_screenshot::engine::{Frame, Source};
 
 #[test]
 fn the_engine_lists_windows_with_their_names_and_frames() {

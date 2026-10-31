@@ -2,7 +2,7 @@
 Status: proposal, awaiting the owner's review.
 
 ## Purpose
-Files (`unbound-files`) is where people see, open, organise and move their documents, and it is
+Files (`bande-files`) is where people see, open, organise and move their documents, and it is
 the browser inside every Open and Save dialog through the portal FileChooser. It should feel as
 calm as the Finder and be faster to drive from the keyboard, with one obvious way to do each
 thing and the rest behind the context menu, a modifier or the inspector.
@@ -35,7 +35,7 @@ Option (not yet recorded in `docs/architecture/overview.md`). Ctrl is free in Fi
 | Eject | Command-E [3] | | |
 | Network | Connect to Server, Command-K [3] | GNOME: Other Locations | |
 
-## Proposed Unbound feature set
+## Proposed Bande feature set
 
 ### Now (essential)
 
@@ -139,7 +139,7 @@ Motion: added rows fade in, removed rows fade out.
 
 **Hidden files** — Super+Shift+. toggles (exists).
 
-**Removable media** — Volumes appear in the sidebar when mounted by `unbound-automount`;
+**Removable media** — Volumes appear in the sidebar when mounted by `bande-automount`;
 eject with the sidebar button, Super+E [3], the context menu or a drop on Trash. If a volume is
 busy, the message names the app holding it (unverified as feasible for every case).
 
@@ -226,7 +226,7 @@ the terminal; one kind of reference, the sidebar favourite, is enough for most p
 4. **Tags?** Extended attributes are lost on FAT drives, many network shares and most copy tools
    [20]. Recommendation: leave tags out until there is a clear need; favourites and search
    cover most uses.
-5. **Default view for new windows?** Recommendation: columns, Unbound's signature view and the
+5. **Default view for new windows?** Recommendation: columns, Bande's signature view and the
    one with the best keyboard story; list is one key away.
 
 ## Sources

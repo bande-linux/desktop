@@ -75,7 +75,7 @@ impl VirtualDevice {
             set_bit::<UI_SET_RELBIT>(&device, axis);
         }
         let mut name = [0u8; 80];
-        name[..19].copy_from_slice(b"unbound-test-uinput");
+        name[..19].copy_from_slice(b"bande-test-uinput");
         let setup = UinputSetup {
             bustype: BUS_VIRTUAL,
             vendor: 1,

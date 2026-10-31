@@ -4,15 +4,15 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, Toggled, TreeId};
+use bande_audio::Level;
 use std::time::{Duration, Instant};
-use unbound_audio::Level;
 
-use unbound_controlcenter::media::{Command, Playback, Player};
-use unbound_controlcenter::{
+use bande_controlcenter::media::{Command, Playback, Player};
+use bande_controlcenter::{
     Anchor, Change, Changes, Choice, Hud, SEGMENTS, Status, clock, panel, place_beside, stepped,
 };
-use unbound_toolkit::ui::Ui;
-use unbound_toolkit::{DisplayEdge, Palette, Rect, Scheme, TextSystem};
+use bande_toolkit::ui::Ui;
+use bande_toolkit::{DisplayEdge, Palette, Rect, Scheme, TextSystem};
 
 fn open(status: &Status) -> (Ui, f32, Changes) {
     let changes: Changes = Rc::new(RefCell::new(Vec::new()));

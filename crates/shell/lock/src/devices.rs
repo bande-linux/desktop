@@ -1,10 +1,10 @@
 use std::os::fd::BorrowedFd;
 use std::sync::mpsc::Sender;
 
-use unbound_inbox::Inbox;
-use unbound_status::Update;
-use unbound_status::devices::{Control, follow_devices};
-use unbound_status::status::{Battery, Wifi};
+use bande_inbox::Inbox;
+use bande_status::Update;
+use bande_status::devices::{Control, follow_devices};
+use bande_status::status::{Battery, Wifi};
 
 pub struct Devices {
     inbox: Inbox<Update>,

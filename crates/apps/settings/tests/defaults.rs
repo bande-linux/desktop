@@ -6,10 +6,10 @@ use std::fs;
 use std::path::Path;
 
 use accesskit::Role;
+use bande_settings::{PaneId, SettingsView, Update, choose_default, default_apps};
+use bande_toolkit::{Palette, Scheme, TextSystem};
+use bande_xdg::Apps;
 use support::{has_text, nodes};
-use unbound_settings::{PaneId, SettingsView, Update, choose_default, default_apps};
-use unbound_toolkit::{Palette, Scheme, TextSystem};
-use unbound_xdg::Apps;
 
 fn app(data: &Path, id: &str, name: &str, types: &str) {
     fs::write(

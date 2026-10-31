@@ -4,9 +4,9 @@ wait 600ms
 type "terminal"
 wait 500ms
 key enter
-wait-for-window "org.unbound.Terminal"
+wait-for-window "org.bande.Terminal"
 wait 1s
-type "cp ~/.config/unbound/config.kdl /tmp/config.kdl.review; echo 'output \"Virtual-1\" { scale 1.5; }' >> ~/.config/unbound/config.kdl; clear\n"
+type "cp ~/.config/bande/config.kdl /tmp/config.kdl.review; echo 'output \"Virtual-1\" { scale 1.5; }' >> ~/.config/bande/config.kdl; clear\n"
 wait 3s
 shot "scale 1.5 terminal"
 key super+space
@@ -14,7 +14,7 @@ wait 600ms
 type "files"
 wait 500ms
 key enter
-wait-for-window "org.unbound.Files"
+wait-for-window "org.bande.Files"
 wait 2s
 shot "scale 1.5 files"
 click right 1700 1300
@@ -34,9 +34,9 @@ click 1500 900
 wait 300ms
 key super+q
 wait 1500ms
-type "sed -i 's/scale 1.5/scale 1/' ~/.config/unbound/config.kdl; clear\n"
+type "sed -i 's/scale 1.5/scale 1/' ~/.config/bande/config.kdl; clear\n"
 wait 3s
 shot "scale 1"
-type "cp /tmp/config.kdl.review ~/.config/unbound/config.kdl\n"
+type "cp /tmp/config.kdl.review ~/.config/bande/config.kdl\n"
 wait 3s
 shot "scale restored"

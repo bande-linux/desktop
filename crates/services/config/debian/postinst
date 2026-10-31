@@ -2,10 +2,10 @@
 set -e
 if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
 	if [ -z "$DPKG_ROOT" ] ; then
-		if deb-systemd-helper --quiet --user was-enabled unbound-config.service ; then
-			deb-systemd-helper --user enable unbound-config.service >/dev/null || true
+		if deb-systemd-helper --quiet --user was-enabled bande-config.service ; then
+			deb-systemd-helper --user enable bande-config.service >/dev/null || true
 		else
-			deb-systemd-helper --user update-state unbound-config.service >/dev/null || true
+			deb-systemd-helper --user update-state bande-config.service >/dev/null || true
 		fi
 	fi
 fi

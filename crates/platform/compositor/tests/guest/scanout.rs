@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use unbound_compositor::Renderer;
-use unbound_test_wayland::{BLUE, GREEN, HALF_WHITE, Memory, RED, ShmImage, quadrants};
+use bande_compositor::Renderer;
+use bande_test_wayland::{BLUE, GREEN, HALF_WHITE, Memory, RED, ShmImage, quadrants};
 use wayland_client::protocol::wl_shm::Format;
 
 use crate::card::Scanout;

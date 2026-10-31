@@ -8,10 +8,10 @@ use std::slice;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_notify::Urgency;
+use bande_notify::client::{Request, notify};
 use rustix::fs::{Mode, OFlags};
 use rustix::process::Signal;
-use unbound_notify::Urgency;
-use unbound_notify::client::{Request, notify};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::{OwnedValue, Value};
 use zbus::{MatchRule, message};
@@ -24,7 +24,7 @@ use crate::identity::{app_name, find_app};
 use crate::units::{scope_name, unit_app_ids, unit_of_object_path};
 use crate::uri::file_uri;
 
-pub const TERMINAL: &str = "unbound-term";
+pub const TERMINAL: &str = "bande-term";
 pub const ACTIVATION_TOKEN: &str = "XDG_ACTIVATION_TOKEN";
 const APP_OOM_SCORE: &[u8] = b"200";
 
@@ -517,7 +517,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
-    use unbound_test_bus::SessionBus;
+    use bande_test_bus::SessionBus;
     use zbus::zvariant::OwnedObjectPath;
 
     use super::*;
@@ -677,17 +677,17 @@ mod tests {
                 .unwrap();
         };
         ended(
-            "app_2dunbound_2dorg_2eexample_2eEditor_2d41_2escope",
+            "app_2dbande_2dorg_2eexample_2eEditor_2d41_2escope",
             "org.freedesktop.systemd1.Scope",
             "oom-kill",
         );
         ended(
-            "app_2dunbound_2dorg_2eexample_2eViewer_2d42_2escope",
+            "app_2dbande_2dorg_2eexample_2eViewer_2d42_2escope",
             "org.freedesktop.systemd1.Scope",
             "signal",
         );
         ended(
-            "app_2dunbound_2dorg_2eexample_2eViewer_2d42_2escope",
+            "app_2dbande_2dorg_2eexample_2eViewer_2d42_2escope",
             "org.freedesktop.systemd1.Unit",
             "oom-kill",
         );
@@ -736,12 +736,12 @@ mod tests {
             *units.lock().unwrap(),
             [
                 (
-                    format!("app-unbound-org.example.Calm-{calm}.scope"),
+                    format!("app-bande-org.example.Calm-{calm}.scope"),
                     vec![calm],
                     "app.slice".to_owned()
                 ),
                 (
-                    format!("app-unbound-org.example.crash\\x2dtest-{crashed}.scope"),
+                    format!("app-bande-org.example.crash\\x2dtest-{crashed}.scope"),
                     vec![crashed],
                     "app.slice".to_owned()
                 ),

@@ -1,6 +1,6 @@
 [package]
-name = "unbound-sound"
-description = "Unbound event sounds: an original sound theme played through PipeWire"
+name = "bande-sound"
+description = "Bande event sounds: an original sound theme played through PipeWire"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,40 +9,40 @@ repository.workspace = true
 
 [features]
 default = ["service"]
-service = ["dep:unbound-audio", "dep:unbound-bus", "dep:unbound-log"]
+service = ["dep:bande-audio", "dep:bande-bus", "dep:bande-log"]
 
 [[bin]]
-name = "unbound-sound"
+name = "bande-sound"
 required-features = ["service"]
 
 [dependencies]
 tracing.workspace = true
-unbound-audio = { workspace = true, optional = true }
-unbound-bus = { workspace = true, optional = true }
-unbound-log = { workspace = true, optional = true }
+bande-audio = { workspace = true, optional = true }
+bande-bus = { workspace = true, optional = true }
+bande-log = { workspace = true, optional = true }
 zbus.workspace = true
 
 [dev-dependencies]
-unbound-config.workspace = true
-unbound-test-bus.workspace = true
+bande-config.workspace = true
+bande-test-bus.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpers (>= 1.66)"
-recommends = "pipewire, wireplumber, unbound-config"
+recommends = "pipewire, wireplumber, bande-config"
 extended-description = """\
-Plays the Unbound desktop's event sounds (alerts, notifications, the \
+Plays the Bande desktop's event sounds (alerts, notifications, the \
 volume tick, screenshots, emptying the Trash, plugging in power and low \
 battery) through PipeWire, following the sound settings in config.kdl, \
-and installs them as the Unbound XDG sound theme for other apps."""
+and installs them as the Bande XDG sound theme for other apps."""
 maintainer-scripts = "debian/"
 assets = [
-    ["target/release/unbound-sound", "usr/bin/", "755"],
-    ["data/unbound-sound.service", "usr/lib/systemd/user/", "644"],
-    ["data/org.unbound.Sound.service", "usr/share/dbus-1/services/", "644"],
-    ["../../../data/sounds/Unbound/index.theme", "usr/share/sounds/Unbound/", "644"],
-    ["../../../data/sounds/Unbound/stereo/*.wav", "usr/share/sounds/Unbound/stereo/", "644"],
+    ["target/release/bande-sound", "usr/bin/", "755"],
+    ["data/bande-sound.service", "usr/lib/systemd/user/", "644"],
+    ["data/org.bande.Sound.service", "usr/share/dbus-1/services/", "644"],
+    ["../../../data/sounds/Bande/index.theme", "usr/share/sounds/Bande/", "644"],
+    ["../../../data/sounds/Bande/stereo/*.wav", "usr/share/sounds/Bande/stereo/", "644"],
 ]
 
 [lints]

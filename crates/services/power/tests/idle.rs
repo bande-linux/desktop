@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use unbound_power::idle::{Command, IdleMachine, Policy, Stage};
+use bande_power::idle::{Command, IdleMachine, Policy, Stage};
 
 const MINUTE: Duration = Duration::from_secs(60);
 

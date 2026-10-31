@@ -9,9 +9,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 
 use common::{Options, Portal, get};
-use xdg_desktop_portal_unbound::OBJECT_PATH;
-use xdg_desktop_portal_unbound::request::Cancellation;
-use xdg_desktop_portal_unbound::screenshot::{Capture, Screenshot, ScreenshotUi};
+use xdg_desktop_portal_bande::OBJECT_PATH;
+use xdg_desktop_portal_bande::request::Cancellation;
+use xdg_desktop_portal_bande::screenshot::{Capture, Screenshot, ScreenshotUi};
 use zbus::zvariant::{ObjectPath, Value};
 
 const INTERFACE: &str = "org.freedesktop.impl.portal.Screenshot";

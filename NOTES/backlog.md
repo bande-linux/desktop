@@ -32,11 +32,11 @@ runs natively on Wayland in the guest.
 
 - [x] **M1** Headless Smithay compositor, wgpu offscreen render on lavapipe, golden-image
   test, arm64 `.deb`.
-- [x] **M2** `unbound-toolkit` (tokens, fills, text), `unbound-config` (KDL, atomic
-  apply), `unbound-spring`.
-- [x] **M3** `org.unbound.Config` on D-Bus with a file watcher, `unbound-notify`,
+- [x] **M2** `bande-toolkit` (tokens, fills, text), `bande-config` (KDL, atomic
+  apply), `bande-spring`.
+- [x] **M3** `org.bande.Config` on D-Bus with a file watcher, `bande-notify`,
   clipboard protocols.
-- [x] **M4** Compositor-started `unbound-clipboard` on a private socket, macOS focus
+- [x] **M4** Compositor-started `bande-clipboard` on a private socket, macOS focus
   rules, packaging, NVIDIA removed from the plan.
 
 ## Next
@@ -49,7 +49,7 @@ runs natively on Wayland in the guest.
   Baseline with the wgpu renderer on the runners: typical frame p50 11.4 ms / p99
   39.1 ms, full repaint p50 12.4 ms / p99 35.5 ms, start 2214 ms, idle RSS 93.6 MiB.
   Budgets are reported, not enforced, until M6.
-- [x] **M6 `unbound-render`: Vulkan (`ash`) compositor renderer** (`desktop/milestone-6`)
+- [x] **M6 `bande-render`: Vulkan (`ash`) compositor renderer** (`desktop/milestone-6`)
   Persistent per-surface textures, `wl_shm` uploads limited to buffer damage,
   damage-limited repaint of the output, readback only on request; the compositor drops
   `wgpu`. *Done when* the golden test passes on lavapipe, tests show that repainted
@@ -89,10 +89,10 @@ runs natively on Wayland in the guest.
   the host load, since the shared host moved unchanged code's p50 tenfold.
 - [x] **M10 DRM/KMS backend** (`desktop/milestone-10`)
   libseat session, atomic modesetting through Smithay's `DrmCompositor`,
-  `unbound-render` implementing Smithay's renderer traits, direct scanout and overlay
+  `bande-render` implementing Smithay's renderer traits, direct scanout and overlay
   planes. *Done when* the compositor drives VKMS in the guest, a fullscreen opaque
   window is scanned out directly, and the writeback/screendump matches the golden.
-  `unbound-render` now implements `Renderer`, `Frame`, `ImportMemWl`, `ImportDmaWl`,
+  `bande-render` now implements `Renderer`, `Frame`, `ImportMemWl`, `ImportDmaWl`,
   `Offscreen` and `Bind<Dmabuf>`; both outputs compose Smithay surface elements (headless
   through `OutputDamageTracker`, DRM through `DrmCompositor`), so the M6 exact metrics now
   cover the shipping path (perf unchanged: typical p50 0.28 ms). The DRM output renders
@@ -100,16 +100,16 @@ runs natively on Wayland in the guest.
   exports), linux-dmabuf v4 feedback names the card, and client dma-bufs are imported for
   scanout through GBM. Guest tests read the CRTC's framebuffer back through PRIME: a
   composed ARGB window matches the scene, and a fullscreen XRGB udmabuf window is put on
-  the primary plane and matches it. `unbound-compositor` defaults to DRM; `--headless`
+  the primary plane and matches it. `bande-compositor` defaults to DRM; `--headless`
   keeps the offscreen output for CI and the bench.
 - [x] **M11 First boot on the M2 Mac mini (hardware smoke test)**
-  The compositor on the real M2 mini through the `hil` service (unbound-linux/hil; the
+  The compositor on the real M2 mini through the `hil` service (bande-linux/hil; the
   host is the user's laptop, the mini on USB-C). The mini exposes the bootloader's
   framebuffer through `simpledrm` (no DCP, no GPU), so composition is lavapipe on the
   CPU, and `simpledrm` has one primary plane and no overlays, so `DrmCompositor` falls
   back to composing everything; the frame clock follows page-flip completion. The M9
   VM stays the gate on every push; this runs on demand and on milestone tips.
-  *Done when* the mini boots, `unbound-compositor` takes the display through libseat,
+  *Done when* the mini boots, `bande-compositor` takes the display through libseat,
   a test client maps a window, and a screendump or framebuffer readback matches the
   golden image within the SSIM bound.
   *Depends on* kernel work done by the user (not in this repo, nor the `hil` repo):
@@ -120,7 +120,7 @@ runs natively on Wayland in the guest.
   `hil-host/boot-kis.sh` under the mini lock, `scanout::a_composed_window_is_scanned_out`
   passed on simpledrm at 1920×1080: libseat took the card, lavapipe composed the window
   and the framebuffer read back through PRIME matched the scene. The screendump is at
-  `/Volumes/Unbound/hil/hw2/m11/mini-composed-window.png`. The upload runs at about
+  `/Volumes/Bande/hil/hw2/m11/mini-composed-window.png`. The upload runs at about
   60 KB/s, so the run takes about 12 minutes. Not automated in CI; input on the mini (K3)
   needs a person at the keyboard.
 - [x] **M12 Keyboard and pointer input** (`desktop/milestone-12`)
@@ -148,18 +148,18 @@ runs natively on Wayland in the guest.
   first-window focus stand-in stays until the launcher (M14) passes activation tokens,
   since without it apps started from a terminal would open unfocused.
 - [ ] **M14 Minimal shell: first usable desktop**
-  `unbound-panel` (left edge by default, from `config.kdl`) with app buttons and a
-  clock, `unbound-launcher` on `Super+Space` listing `.desktop` entries, and a minimal
-  `unbound-term` (PTY, scrollback, `Super+C`/`Super+V`), all on the current toolkit.
+  `bande-panel` (left edge by default, from `config.kdl`) with app buttons and a
+  clock, `bande-launcher` on `Super+Space` listing `.desktop` entries, and a minimal
+  `bande-term` (PTY, scrollback, `Super+C`/`Super+V`), all on the current toolkit.
   *Done when* golden tests cover each surface, a guest session test launches the
   terminal from the launcher and types into it, and the same works on the mini.
   Built on the Vello toolkit (`desktop/milestone-14`, on `desktop/integration`): toolkit
   windows as layer surfaces with seat input (xkb, repeat), clipboard, activation and images;
-  `unbound-apps` (desktop entries, theme icons, launching); compositor shell protocol,
+  `bande-apps` (desktop entries, theme icons, launching); compositor shell protocol,
   window list, exclusive-layer keyboard focus, layer frame callbacks, wheel scrolling; the
   three apps with goldens; `desktop::the_launcher_opens_a_terminal_that_takes_typing` in
   the guest. Not done: the mini (K3 input), live `PanelEdge`/appearance changes over
-  `org.unbound.Config` (read at start), kept apps from `config.kdl`, hover names on the
+  `org.bande.Config` (read at start), kept apps from `config.kdl`, hover names on the
   panel, locale time formats, terminal mouse reporting, AT-SPI publication.
 - [x] **M15 Window management** (`desktop/milestone-15`, CI green in run 40781875368)
   xdg move and resize grabs from the client's button press, zoom (maximize) into the
@@ -187,20 +187,20 @@ runs natively on Wayland in the guest.
   `ext-session-lock-v1` (only shell clients see it, as only loginwindow locks a Mac):
   locked after a blank frame, only the lock surface drawn and given input, focus
   restored on unlock, blank and still locked if the locker dies, a new locker may take
-  over a dead one's lock, Super shortcuts off while locked. `unbound-lock`: date, time,
-  initial, name and a secure field, PAM (`/etc/pam.d/unbound-lock`, libpam loaded at run
+  over a dead one's lock, Super shortcuts off while locked. `bande-lock`: date, time,
+  initial, name and a secure field, PAM (`/etc/pam.d/bande-lock`, libpam loaded at run
   time) off the UI thread, a rejected password clears and shakes the field (macOS).
   `Ctrl+Super+Q` (macOS Control-Command-Q) and logind's `Lock` signal start it; the
-  compositor sets logind's `LockedHint`, which `unbound-power` waits for before sleep.
+  compositor sets logind's `LockedHint`, which `bande-power` waits for before sleep.
   `ext-idle-notify-v1` v2 and `idle-inhibit-v1` (a visible inhibitor holds off ordinary
   idle, not input idle). Toolkit: `SecureField`, `Role::Lock`. Guest screendumps
-  `m17-lock-screen`, `m17-lock-rejected`, `m17-unlocked`. `unbound-power` watches
+  `m17-lock-screen`, `m17-lock-rejected`, `m17-unlocked`. `bande-power` watches
   `ext-idle-notify` (one notification per policy threshold) to dim, lock and sleep, and
   the compositor exports `WAYLAND_DISPLAY`, `XDG_CURRENT_DESKTOP` and `XDG_SESSION_TYPE`
   to systemd user units and D-Bus activation. Dimming sets the preferred backlight (`firmware`, then
   `platform`, then `raw`, as systemd and GNOME choose) to a quarter of its level through
   logind's `Session.SetBrightness` and restores it on activity; Do Not Disturb is kept in
-  `$XDG_STATE_HOME/unbound/do-not-disturb` across restarts, as a macOS Focus is. Not
+  `$XDG_STATE_HOME/bande/do-not-disturb` across restarts, as a macOS Focus is. Not
   done: the lock screen shows no wallpaper and no battery or network state; desktops
   without a backlight (external displays) do not dim, as DDC/CI is not used.
 - [ ] **M18 Full-screen screenshots** (`desktop/milestone-18`; ci/vm not green yet)
@@ -209,9 +209,9 @@ runs natively on Wayland in the guest.
   Recording permission; here the shell is the only trusted capturer and apps will go
   through the portal). The cursor is left out unless `paint_cursors` is asked for, as in
   macOS screenshots; a locked screen captures only the lock surface; pointer cursor
-  sessions report `stopped`. `unbound_shell_v1` v2 sends `capture_screen` on
+  sessions report `stopped`. `bande_shell_v1` v2 sends `capture_screen` on
   Super+Shift+3 (Command-Shift-3), matched on the unshifted key so it holds on any layout.
-  `unbound-screenshot`, a shell client the compositor keeps running, writes
+  `bande-screenshot`, a shell client the compositor keeps running, writes
   `Screenshot YYYY-MM-DD at HH.MM.SS.png` (macOS's name) into the XDG desktop folder
   through a hidden partial file, numbering a taken name ` (2)`. Toolkit:
   `Window::capture_screen`. Guest screendumps `m18-screenshot`,
@@ -219,7 +219,7 @@ runs natively on Wayland in the guest.
   window selection, Super+Shift+5, the shutter sound, dma-buf capture targets, toplevel
   sources, and the portal's `Screenshot` backed by this capture.
 - [ ] **M19 Area screenshots** (`desktop/milestone-19`; ci/vm not green yet)
-  Super+Shift+4 (Command-Shift-4) sends `capture_area`; `unbound-screenshot` shows a
+  Super+Shift+4 (Command-Shift-4) sends `capture_area`; `bande-screenshot` shows a
   full-screen overlay with a crosshair, the dragged-out selection and its size, then on
   release hides it, captures the screen and saves the area like a full-screen shot.
   Escape cancels, as on a Mac; a click without a drag takes no picture. Guest screendumps
@@ -236,7 +236,7 @@ runs natively on Wayland in the guest.
   guest's 6.12 kernel offers DRM syncobjs (virtio-gpu gains them in a later series), so the guest
   cannot test the protocol; the implicit-fence half can be tested now with `sw_sync`
   fences imported into a udmabuf (`DMA_BUF_IOCTL_IMPORT_SYNC_FILE`).
-- [ ] **M22 Files** (`desktop/milestone-22`; CI not run) `unbound-files`: Miller columns
+- [ ] **M22 Files** (`desktop/milestone-22`; CI not run) `bande-files`: Miller columns
   as the Finder's column view (Up/Down select, a selected folder opens in the next column,
   Right enters, Left returns with the folder still selected, Super+Up encloses,
   Super+Shift+. shows hidden files), names in Finder order, Quick Look on Space for
@@ -245,20 +245,20 @@ runs natively on Wayland in the guest.
   opening files with their default app, JPEG and other image formats, video, PDF,
   Markdown rendering and syntax highlighting in Quick Look, the inspector, batch rename,
   path bar, undo, Trash, watching folders for changes, drag and drop, AccessKit nodes.
-- [ ] **M23 System Settings** (`desktop/milestone-23`; CI not run) `unbound-settings`:
-  Appearance, Desktop & Dock and Lock Screen panes over `org.unbound.Config`, a search
+- [ ] **M23 System Settings** (`desktop/milestone-23`; CI not run) `bande-settings`:
+  Appearance, Desktop & Dock and Lock Screen panes over `org.bande.Config`, a search
   field that narrows the sidebar and outlines matching controls, keyboard and pointer.
   Not done: Displays, Sound, Network, Gestures & Shortcuts, following changes made
   elsewhere (PropertiesChanged), AccessKit nodes.
-- [ ] **M24 Greeter** (`desktop/milestone-24`; CI not run) `unbound-greeter` speaks greetd's
+- [ ] **M24 Greeter** (`desktop/milestone-24`; CI not run) `bande-greeter` speaks greetd's
   IPC (create, answer the secret prompt, acknowledge info, start, cancel after a refusal)
-  inside `unbound-compositor --greeter`, which runs only the greeter and exits with it;
+  inside `bande-compositor --greeter`, which runs only the greeter and exits with it;
   the package ships a greetd config. Guest screendump `m24-greeter`. Not done: a user
   picker (Up/Down switches for now), a second secret prompt (one-time codes are
-  refused), power and accessibility menus, wallpaper, `unbound-session` (greetd starts
-  `unbound-compositor` directly), installing the greetd config.
-- [ ] **M25 Menu bar** (`desktop/milestone-25`; CI not run) `unbound_shell_v1` v3
-  `active_app`; `unbound-menubar` names the active app and shows the date and time.
+  refused), power and accessibility menus, wallpaper, `bande-session` (greetd starts
+  `bande-compositor` directly), installing the greetd config.
+- [ ] **M25 Menu bar** (`desktop/milestone-25`; CI not run) `bande_shell_v1` v3
+  `active_app`; `bande-menubar` names the active app and shows the date and time.
   Not done: app menus (needs a menu export protocol), status items and tray, Control
   Center; the panel still shows its own clock.
 - [ ] **M26 Decorations and theming** (`desktop/milestone-26`; CI not run) phase 7:
@@ -271,15 +271,15 @@ runs natively on Wayland in the guest.
   writer for `color-scheme`, plus `gtk-application-prefer-dark-theme` for GTK 3); animated
   cursors show their first frame; cursors are not scaled for HiDPI outputs (phase 8
   fractional-scale work); phase 8 after that.
-- [ ] **Control Center and volume keys** (`desktop/control-center`) phase 5: `unbound_shell_v1`
+- [ ] **Control Center and volume keys** (`desktop/control-center`) phase 5: `bande_shell_v1`
   v4 sends `volume_key` for the mute and volume keys, without Super and on the lock screen
   too, fine when Option and Shift are held, and relays the menu bar's
-  `toggle_control_center`. `unbound-controlcenter`, a shell client the compositor starts,
+  `toggle_control_center`. `bande-controlcenter`, a shell client the compositor starts,
   owns one overlay anchored top-right below the menu bar: on a volume key it steps the
-  default output through `unbound-audio` and shows a 16-segment volume HUD for 1.5 s; from
+  default output through `bande-audio` and shows a 16-segment volume HUD for 1.5 s; from
   the menu bar's two-switches item it opens Control Center with switches for Wi-Fi
   (NetworkManager, shown when there is a Wi-Fi device), Bluetooth (BlueZ, shown when there
-  is an adapter) and Do Not Disturb (`org.unbound.NotificationCenter`), and a sound slider
+  is an adapter) and Do Not Disturb (`org.bande.NotificationCenter`), and a sound slider
   for the default output. Tests: volume keys reach the shell and not the app, the relay,
   the menu bar item's place and clicks, the panel showing only available controls and
   switching them, the HUD's segments. Not done: key repeat for held volume keys (the
@@ -321,15 +321,15 @@ runs natively on Wayland in the guest.
   Done: Vello CPU and GPU renderers for fills, strokes, gradients, rounded rectangles, clips
   and shadows; Parley text in Inter with fallback; goldens from exact coverage, both
   renderers within 2/255; `Window` with the first frame on the CPU in `wl_shm` and later
-  frames on a Vulkan surface; `unbound-sample` measured by `ci/perf`; widgets (stack, label,
+  frames on a Vulkan surface; `bande-sample` measured by `ci/perf`; widgets (stack, label,
   button, switch, slider, text field with the section 1.5 bindings) with AccessKit nodes and
   actions. Paused at 798fa67: lint, tests and clippy pass locally (`--locked`); CI for
   that commit was not awaited (earlier commits: lint/test/deb green at bd3c763).
   Next, in order: `wl_seat` pointer and keyboard in `Window` (xkbcommon keymap, map to
   `ui::Event`; test with `Headless::move_pointer_to`/`press_button`/`key`); drive a `Ui`
-  from `Window` and move `unbound-sample` onto widgets; publish `Ui::accessibility` on
-  AT-SPI with `accesskit_unix` (test on a private bus via `unbound-test-bus`); scroll view
-  on `unbound-spring` and tab view; damage-limited redraw with an exact-metric bench;
+  from `Window` and move `bande-sample` onto widgets; publish `Ui::accessibility` on
+  AT-SPI with `accesskit_unix` (test on a private bus via `bande-test-bus`); scroll view
+  on `bande-spring` and tab view; damage-limited redraw with an exact-metric bench;
   `wp_fractional_scale_v1`.
 - [ ] **Session lock and idle** `ext-session-lock-v1` with blank fallback,
   `ext-idle-notify-v1`, `idle-inhibit`, driven by the `idle` config.
@@ -341,31 +341,31 @@ Built beside M9–M14 without the screen work; each item is headless and tested 
 private buses.
 
 Paused at `adfee74`. Run 40687701440 (automount, d3a6bfe) was still queued, so
-`unbound-tray`, `unbound-automount` and `ci/portal` (its `download-artifact@v7`) are
+`bande-tray`, `bande-automount` and `ci/portal` (its `download-artifact@v7`) are
 green locally but not yet on CI; check that run first. `ci/perf` failures are the
 main track's. Next: the unchecked items below, then theming propagation (GTK
 `settings.ini`, cursor theme) and Do Not Disturb persistence.
 
 - [x] Notification presentation model: banners and Notification Center, stacking by
-  app, timeouts, urgency, `transient`, actions, Do Not Disturb (`unbound-notify`).
-- [x] Writable `org.unbound.Config` that edits `config.kdl` in place, the
-  `unbound-config` session daemon, and the invalid-file notification.
-- [x] `unbound-power`: lock before sleep through a logind delay inhibitor, UPower
+  app, timeouts, urgency, `transient`, actions, Do Not Disturb (`bande-notify`).
+- [x] Writable `org.bande.Config` that edits `config.kdl` in place, the
+  `bande-config` session daemon, and the invalid-file notification.
+- [x] `bande-power`: lock before sleep through a logind delay inhibitor, UPower
   battery alerts, `org.freedesktop.ScreenSaver` turned into logind idle inhibitors;
   the idle state machine as logic.
-- [x] `unbound-polkit` agent protocol, tested against Debian 13's polkitd (`ci/polkit`).
-- [x] Packaging of `unbound-config` and `unbound-power` as systemd user units with
+- [x] `bande-polkit` agent protocol, tested against Debian 13's polkitd (`ci/polkit`).
+- [x] Packaging of `bande-config` and `bande-power` as systemd user units with
   D-Bus activation, checked in `ci/deb`.
-- [x] `xdg-desktop-portal-unbound`: live `Settings`; `FileChooser`, `Screenshot` and
+- [x] `xdg-desktop-portal-bande`: live `Settings`; `FileChooser`, `Screenshot` and
   `ScreenCast` protocols over UI and capture traits; `ci/portal` against Debian 13's
   frontend.
-- [x] `unbound-tray` (`org.kde.StatusNotifierWatcher`) and `unbound-automount`
+- [x] `bande-tray` (`org.kde.StatusNotifierWatcher`) and `bande-automount`
   (UDisks2 mounting, "not ejected properly" warning).
-- [x] `unbound-network` (NetworkManager: Wi-Fi power, network list, joining with a
-  password, wired status) and `unbound-bluetooth` (BlueZ: power, paired and nearby
+- [x] `bande-network` (NetworkManager: Wi-Fi power, network list, joining with a
+  password, wired status) and `bande-bluetooth` (BlueZ: power, paired and nearby
   devices, connecting, pairing through a `KeyboardDisplay` agent), tested against
   D-Bus fakes that follow the published APIs.
-- [x] `unbound-audio` (PipeWire: outputs, inputs, default device through WirePlumber's
+- [x] `bande-audio` (PipeWire: outputs, inputs, default device through WirePlumber's
   metadata, volume and mute on the device route with `save`, the volume keys in
   sixteenths and Option-Shift quarter steps), guest-tested against pipewire and
   wireplumber with null devices.
@@ -383,9 +383,9 @@ main track's. Next: the unchecked items below, then theming propagation (GTK
   (M17) and count logind `idle` block inhibitors of
   other programs (`BlockInhibited`) as inhibition.
 - [x] `idle suspend-after`, by default when the display turns off as on a desktop
-  Mac, carried out by `unbound-power` through logind.
+  Mac, carried out by `bande-power` through logind.
 - [ ] Toolkit surfaces: notification banners and center, the polkit dialog (then
-  package `unbound-polkit`), each drawing the existing model.
+  package `bande-polkit`), each drawing the existing model.
 - [ ] Notification polish that waits for the UI: keep a banner while the pointer is
   over it, as macOS does; persist Do Not Disturb across daemon restarts; bound the
   center per app.
@@ -407,9 +407,9 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
   one late wake-up moves every deadline earlier for 16 frames (p50 latency rose from
   6.7 to 11.4 ms on the runners); a high percentile would track it with less latency.
 
-- `unbound-render` uploads through a staging buffer; `VK_EXT_host_image_copy` (on
+- `bande-render` uploads through a staging buffer; `VK_EXT_host_image_copy` (on
   lavapipe) would copy straight from the shm pool into the texture.
-- `unbound-bench` reuses `unbound-test-wayland`, whose helpers panic on failure; fine for
+- `bande-bench` reuses `bande-test-wayland`, whose helpers panic on failure; fine for
   a measuring tool, but its errors read as test assertions.
 - Overlay-plane assignment is enabled (vkms has eight overlays) but no test puts a
   non-fullscreen window on one yet; a guest test with a dma-buf window above a composed one
@@ -422,24 +422,24 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
 - `image-compare` 0.5.0's SSIM sums the window's (co)variances instead of averaging them,
   so its stabilising constant is 64 times too small and near-flat windows score low: two
   gradients differing by 1 per channel scored 0.968. The toolkit's tests compute SSIM
-  themselves; `unbound-compositor`'s golden test still uses the crate.
-- `unbound-term`'s goldens use DejaVu Sans Mono from `fonts-dejavu-core`, which
+  themselves; `bande-compositor`'s golden test still uses the crate.
+- `bande-term`'s goldens use DejaVu Sans Mono from `fonts-dejavu-core`, which
   `ci/lavapipe-test` installs.
 - The first-window focus stand-in (M13) is still in place; apps started from the terminal
   carry no activation token yet.
 - `ci/perf` fails on `frame_typical_p99` (16–23 ms against 8.33 ms) and once
   `frame_full_p99` while other jobs share the runners' Mac mini; the services branch
   does not touch the compositor, and milestone-8's tip passed with the runners idle.
-- `unbound-lock` keeps the password in a `String` until PAM's copy is zeroed; zeroize the
+- `bande-lock` keeps the password in a `String` until PAM's copy is zeroed; zeroize the
   field's buffer too.
 - The lock screen ignores logind's `Unlock` signal (`loginctl unlock-session`); decide
   whether an administrator's unlock should be honoured.
 - `ci/lavapipe-test` and `ci/vm` sometimes lose the linker to the OOM killer (`ld terminated
   with signal 9`) when two runs share the runners' Mac mini; a rerun passes. Limiting link
   jobs or giving the runners more memory would end it.
-- Since `unbound-screenshot` joined the session (M18), ci/vm fails intermittently in the
+- Since `bande-screenshot` joined the session (M18), ci/vm fails intermittently in the
   typing tests: run 40791212426 the lock test (desktop not back), 40793405279 the launcher
-  test (typed command not run), 40793466947 the lock test (`unbound-lock` still running
+  test (typed command not run), 40793466947 the lock test (`bande-lock` still running
   after a good password) and the M19 area test (no overlay in `m19-area-selection`,
   no file seen although the tool logged a save). The headless tests and the M18
   full-screen guest test pass. Suspects: a third hidden exclusive overlay layer and the
@@ -448,21 +448,21 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
 - Run 40804490664 (milestone-21 head 045eba7): the reworked lock test and the
   M18 test pass; three guest tests fail. `sync::a_dmabuf_window_waits_for_the_write_fence`
   maps the window only after the fence (correct) but draws it black
-  (`m20-implicit-fence-signalled`, in `/Volumes/Unbound/hil/hw2/desktop/m21/`), so a
+  (`m20-implicit-fence-signalled`, in `/Volumes/Bande/hil/hw2/desktop/m21/`), so a
   udmabuf is composed without its pixels; untested whether an unfenced udmabuf does the
   same. `sync::a_synced_commit` gets protocol error 3 on
   `wp_linux_drm_syncobj_surface_v1`, and card0 (vkms) reports no syncobj eventfd.
   The area test timed out with no overlay at all after Super+Shift+4 (the intermittent
   M19 failure above, now with the pointer pushed to the corner). Each needs a headless
   reproducer before another guest run.
-- `unbound-settings`, `unbound-files`, `unbound-launcher` and `unbound-lock` each read
+- `bande-settings`, `bande-files`, `bande-launcher` and `bande-lock` each read
   `config.kdl` for the appearance in their own `main`; a shared helper belongs in
-  `unbound-config`.
-- unbound-polkit needs the user's sign-off before it goes to main.
+  `bande-config`.
+- bande-polkit needs the user's sign-off before it goes to main.
 - PipeWire 1.4.2 ignores a Props change on a suspended adapter node that has no device
   (a null sink nobody plays to): `pw-cli s <sink> Props '{ channelVolumes: [ 0.5, 0.5 ] }'`
   leaves the volumes at 1.0, while the same change on the running sink applies.
-  `unbound-audio` sets such sinks' volume through the node, so its change is lost the
+  `bande-audio` sets such sinks' volume through the node, so its change is lost the
   same way; raise it upstream.
 - A null-audio-sink given `media.class = "Audio/Source"` stalls WirePlumber 0.5.8's event
   queue when it activates the node, after which no default node is chosen; virtual

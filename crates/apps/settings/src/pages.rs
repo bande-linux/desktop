@@ -1,15 +1,15 @@
 use std::rc::Rc;
 use std::time::Instant;
 
-use unbound_audio::Direction;
-use unbound_bluetooth::Kind as DeviceKind;
-use unbound_config::{ACCENTS, MAX_INPUT_SOURCES};
-use unbound_keyboard::{Action, SHORTCUTS, shortcuts_in};
-use unbound_toolkit::ui::{
+use bande_audio::Direction;
+use bande_bluetooth::Kind as DeviceKind;
+use bande_config::{ACCENTS, MAX_INPUT_SOURCES};
+use bande_keyboard::{Action, SHORTCUTS, shortcuts_in};
+use bande_toolkit::ui::{
     Axis, Button, Label, LevelIndicator, PopUpButton, ScrollView, SearchField, SecureField,
     SegmentedControl, Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
 };
-use unbound_toolkit::{Scheme, Spacing, TextRole};
+use bande_toolkit::{Scheme, Spacing, TextRole};
 
 use crate::L10N;
 use crate::arrangement::{Area, Arrangement, Screen};
@@ -24,9 +24,9 @@ use crate::widgets::{
     Caption, Captioned, Card, Check, Column, Fade, Row, SIDEBAR_SYMBOL, Signal, Swatch, Swatches,
     Text, Thumbnail, Thumbnails, Tone,
 };
-use unbound_config::Placement;
-use unbound_settings_panes::SettingHit;
-use unbound_settings_panes::{
+use bande_config::Placement;
+use bande_settings_panes::SettingHit;
+use bande_settings_panes::{
     AUTOMATIC, Choice, Kind, List, MAX_SEGMENTS, PaneId, Section, Setting, SettingId, Value,
 };
 
@@ -64,7 +64,7 @@ fn picture_name(name: &str) -> String {
 
 fn display_value(
     display: &Display,
-    output: Option<unbound_config::DisplaySettings>,
+    output: Option<bande_config::DisplaySettings>,
     id: SettingId,
 ) -> Option<Value> {
     let output = output.unwrap_or_default();
@@ -900,7 +900,7 @@ impl SettingsView {
 
     fn shortcut_cards(&mut self) -> Widgets {
         let mut page = Vec::new();
-        for area in unbound_keyboard::Area::ALL {
+        for area in bande_keyboard::Area::ALL {
             page.push(boxed(Caption::new(Text::label(&area.title()))));
             let rows = shortcuts_in(area)
                 .filter(|shortcut| {
@@ -931,7 +931,7 @@ impl SettingsView {
         let mut selected = if light.is_empty() {
             self.pictures
                 .iter()
-                .position(|(name, _)| name == unbound_wallpaper::DEFAULT_WALLPAPER)
+                .position(|(name, _)| name == bande_wallpaper::DEFAULT_WALLPAPER)
         } else {
             self.pictures
                 .iter()

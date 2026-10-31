@@ -1,14 +1,14 @@
 # Compositor
 
-`unbound-compositor` is a layered compositor, the architecture COSMIC and niri use: Smithay
+`bande-compositor` is a layered compositor, the architecture COSMIC and niri use: Smithay
 handles the kernel and the Wayland protocols, and everything that decides how frames look and
-when they reach the screen is Unbound's own.
+when they reach the screen is Bande's own.
 
 ## Layers
 
 - **Kernel and protocol abstraction**: `smithay` handles DRM/KMS atomic modesetting, libinput
   devices, dma-buf import and export, and dispatch of the standard Wayland protocols.
-- **Renderer**: Unbound's own Vulkan renderer on `ash` (`crates/platform/render`). The choice over
+- **Renderer**: Bande's own Vulkan renderer on `ash` (`crates/platform/render`). The choice over
   `wgpu` and Smithay's GLES renderer, and the performance targets, are recorded in
   [`../decisions/0001-rendering.md`](../decisions/0001-rendering.md). Planned on top of it:
   dual-pass Kawase blur, rounded-corner clipping and transforms. When the Vulkan device is a
@@ -45,7 +45,7 @@ when they reach the screen is Unbound's own.
   side; GTK and our toolkit draw their own and never bind it). The bar is the toolkit's: the
   same 28 pt height, traffic lights, centred semibold title, colours of the light or dark
   palette (followed from the portal's `color-scheme`) and active, inactive and hover states,
-  drawn by `unbound_graphics::TitleBar`, which `unbound-toolkit-platform` draws its own with.
+  drawn by `bande_graphics::TitleBar`, which `bande-toolkit-platform` draws its own with.
   It is rasterised on the CPU at its display's scale whenever its look changes (and stretched
   to fit while it is drawn on another display mid-drag or in a mirror) and becomes part
   of the window: inside its rounded clip and shadow, in the opening, closing and overview
@@ -61,7 +61,7 @@ when they reach the screen is Unbound's own.
   damaged rows are copied into the surface's texture, so any stride works on drivers without
   `VK_EXT_image_drm_format_modifier`. Explicit sync (`linux-drm-syncobj-v1`) is built; its guest
   tests do not pass yet (`NOTES/backlog.md`).
-- **DRM backend.** `unbound-compositor` opens the first card with a connected connector (or
+- **DRM backend.** `bande-compositor` opens the first card with a connected connector (or
   `--drm-device`) through a libseat session and drives every connected connector on its own
   CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into GBM
   buffers that the renderer binds as dma-bufs (copied out from its own image, so lavapipe and
@@ -74,7 +74,7 @@ when they reach the screen is Unbound's own.
   framebuffer back.
 - **Displays.** Every output lives in one logical coordinate space in points. Its mode, scale
   (fractional too), rotation and place come from `display` and `arrangement` in `config.kdl`
-  (followed live through `org.unbound.Config`): the arrangement remembered for exactly the
+  (followed live through `org.bande.Config`): the arrangement remembered for exactly the
   connected set, else the largest remembered subset with the rest placed to the right; a
   display nobody configured gets its preferred mode at its highest refresh rate, the automatic
   scale for its pixel density and a place to the right of the others, top-aligned with the main
@@ -105,7 +105,7 @@ when they reach the screen is Unbound's own.
   out upright in points and the renderer turns every quad, clip and shadow into the framebuffer.
   The desktop surface and the menu bar are drawn on every
   display: the compositor tells the shell the displays that show their own picture, the main one
-  first (`unbound_shell_v1.displays`, since 15, on binding and whenever a display comes, goes,
+  first (`bande_shell_v1.displays`, since 15, on binding and whenever a display comes, goes,
   starts or stops mirroring or the main display changes), and the shell opens a desktop and a bar
   on each of them in its one process; on every display but the main one the desktop shows only
   the wallpaper and no icons, and the Dock, the menu search and the notifications stay on the main
@@ -144,7 +144,7 @@ when they reach the screen is Unbound's own.
   invisible: within 0.25 physical pixel (1/512 for opacity) and slower than that per 20 ms.
   Opening grows from 96 % and fades in (`standard`); closing keeps the last frame's textures
   and shrinks to 98 % while fading out (`quick`); minimising scales
-  into the app's Dock icon, reported with `unbound_shell_v1.set_icon_rect`, or toward the
+  into the app's Dock icon, reported with `bande_shell_v1.set_icon_rect`, or toward the
   Dock's centre (the bottom edge without a Dock), drawn above the Dock (`gentle`); restoring
   plays it back. Zoom and full screen (`standard`) start at the request and stretch
   the current buffer until the app commits its new size. Each operation only sets a new
@@ -205,11 +205,11 @@ when they reach the screen is Unbound's own.
   carry the focused window along (the window stays put on screen while the row slides
   under it; past the last workspace a new one is made). A window being dragged by its title
   bar comes along to whichever workspace the user switches to. A switch started while the
-  row is still moving keeps its velocity. `unbound_app_v1.move_to_workspace`
+  row is still moving keeps its velocity. `bande_app_v1.move_to_workspace`
   (v3) moves a window from its menu without following it: it slides off the screen and the
   keyboard goes to the next window. Focusing a window anywhere (the Dock's activate app or
   window, Super+Tab, an activation token) shows its workspace first. Shell clients learn the
-  row through `unbound_shell_v1` v9: `workspaces(count, active)`, sent on binding and on
+  row through `bande_shell_v1` v9: `workspaces(count, active)`, sent on binding and on
   every change. With Reduce Motion a switch crossfades the two workspaces in place.
 - **Overview.** `Alt+Super+Up`, the Mission Control key (`XF86LaunchA`, F3 on Apple
   keyboards, without Super) or a three-finger swipe up (300 units for the whole way, tracked
@@ -223,7 +223,7 @@ when they reach the screen is Unbound's own.
   (wallpaper and windows, scaled from the same textures), the active one ringed, and a "+"
   that adds a workspace. The selected window (the key window at first, then the one under
   the pointer or reached with the arrow keys) is ringed and shows its title below it, drawn
-  with `unbound-graphics` once per title. A click on a window or `Return` focuses it, a click
+  with `bande-graphics` once per title. A click on a window or `Return` focuses it, a click
   on a thumbnail switches there and closes the overview, and dragging a window by 4 pt
   lifts it under the pointer: dropped on a thumbnail it moves to that workspace, on the "+"
   to a new one, elsewhere it springs back. Typing filters by title or app id (the others dim
@@ -233,16 +233,16 @@ when they reach the screen is Unbound's own.
   workspace with its own layout. Empty workspaces are kept until the overview closes. App
   windows (App Exposé) show only one app's windows from every workspace without the strip:
   `Alt+Super+Down` or a three-finger swipe down for the focused app, and
-  `unbound_shell_v1.show_windows(app_id)` (v9; an empty app id opens the plain overview) for
+  `bande_shell_v1.show_windows(app_id)` (v9; an empty app id opens the plain overview) for
   the Dock. With Reduce Motion the windows stay where they are and fade out while the
   overview fades in.
 - **Switcher, window memory and the other half.** `switcher.rs` holds the Super+Tab and
   Super+` session (behaviour.md has the rules): a dwell of 150 ms counted in vblank time, then
   a card laid out once per change (a row of tiles, shrunk uniformly to fit the display) whose
   frame and selection well are `FillElement`s driven by `Motion` on the `quick` spring, the
-  icons and name painted on the CPU with `unbound-graphics` into memory buffers at the output
+  icons and name painted on the CPU with `bande-graphics` into memory buffers at the output
   scale, and window thumbnails drawn from the windows' own textures as in the overview. App
-  names and icons come from desktop entries through `unbound-xdg`, cached, and reread at most
+  names and icons come from desktop entries through `bande-xdg`, cached, and reread at most
   every 30 s while an app is unknown. `access.rs` publishes the card through AccessKit (a
   window holding a list box whose selected option has the focus) only while it shows.
   `recall.rs` keeps the window memory file, `assist.rs` the free-half panel, which reuses the
@@ -251,14 +251,14 @@ when they reach the screen is Unbound's own.
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second).
   An app that has not answered after 3 s is not responding: its windows are veiled in a soft
   grey (24 %), the pointer over them is the theme's `wait` cursor, and shell clients get
-  `unbound_shell_v1.app_responding(pid, app_id, 0)` so Force Quit can mark it. The answer, or
+  `bande_shell_v1.app_responding(pid, app_id, 0)` so Force Quit can mark it. The answer, or
   the app's exit, lifts the veil and sends `responding 1`.
 - **Springs.** `crates/libs/spring` is the closed-form solution for under-, critically and
   overdamped springs, parameterised by angular frequency $\omega$ and damping ratio $\zeta$. A
   trajectory depends only on elapsed time, never on frame rate, and retargeting keeps position
   and velocity continuous.
 - **Session.** The compositor starts the shell clients and the clipboard daemon on socket pairs
-  and restarts them (see [behaviour](behaviour.md)); `unbound-compositor --greeter` runs only
+  and restarts them (see [behaviour](behaviour.md)); `bande-compositor --greeter` runs only
   the greeter ([session](session.md#display-manager-and-greeter)).
 
 ## Wayland protocol matrix
@@ -288,11 +288,11 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zxdg_decoration_manager_v1` | Decoration negotiation (server-side unless the client asks for client-side) | P1 | implemented |
 | `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | implemented (v4; enabled heads only, no custom modes) |
 | `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimised), shm buffers; a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
-| `unbound_capture_v1` (own, `unbound-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Super+Shift+5 | P1 | implemented, shell clients only |
+| `bande_capture_v1` (own, `bande-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Super+Shift+5 | P1 | implemented, shell clients only |
 | `wp_cursor_shape_v1` | Cursor shapes from the theme | P1 | implemented |
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
-| `unbound_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles, apps that stopped responding; for the Dock (v7): hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the Dock and menu bar; v9: workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
-| `unbound_app_v1` (own, in `unbound-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window; v2 `place_window` (halves, quarters, restore) for the window menu; v3 `move_to_workspace` (previous, next) for the window menu | P0 | implemented, every client |
+| `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles, apps that stopped responding; for the Dock (v7): hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the Dock and menu bar; v9: workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
+| `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window; v2 `place_window` (halves, quarters, restore) for the window menu; v3 `move_to_workspace` (previous, next) for the window menu | P0 | implemented, every client |
 | `ext-background-effect-v1` | Blur behind the launcher's scrim (the overview's scrim and blur are the compositor's own) | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

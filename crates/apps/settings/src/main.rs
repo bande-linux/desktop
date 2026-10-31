@@ -3,23 +3,23 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use unbound_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
-use unbound_settings::{
+use bande_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
+use bande_settings::{
     Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView,
     SoftwareCommand, UDEV_DATA, announce_updates, feed, sidebar_width,
 };
-use unbound_settings_panes::panes as panes_list;
-use unbound_toolkit::{
+use bande_settings_panes::panes as panes_list;
+use bande_toolkit::{
     App, FrameRegions, MenuPlacement, Rect, Role, Scene, TextSize, TextSystem, Window, WindowEvent,
 };
-use unbound_xdg::spawn_detached;
+use bande_xdg::spawn_detached;
 
-const APP_ID: &str = "org.unbound.Settings";
+const APP_ID: &str = "org.bande.Settings";
 const WINDOW_SIZE: (u32, u32) = (900, 720);
 const FEED: usize = 0;
 const PANE_ACTION: &str = "pane:";
-const FILES_APP_ID: &str = "org.unbound.Files";
-const FILES: &str = "unbound-files";
+const FILES_APP_ID: &str = "org.bande.Files";
+const FILES: &str = "bande-files";
 
 struct Settings {
     view: SettingsView,
@@ -232,7 +232,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     window.set_frame_regions(frame_regions(window.appearance().text_size));
     let mut view = SettingsView::new(window.appearance().palette(), TextSystem::new());
     view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
-    if unbound_xdg::find_executable(unbound_config::SCREEN_READER).is_none() {
+    if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
         view.hide_screen_reader();
     }
     let requested = std::env::args().nth(1);
@@ -255,12 +255,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         services,
         app_menu,
     };
-    unbound_toolkit::run(&mut window, &mut settings)?;
+    bande_toolkit::run(&mut window, &mut settings)?;
     Ok(())
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-settings");
+    bande_log::init("bande-settings");
     let checking = std::env::args().nth(1).as_deref() == Some(CHECK_UPDATES);
     match if checking { check_updates() } else { run() } {
         Ok(()) => ExitCode::SUCCESS,

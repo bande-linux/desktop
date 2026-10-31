@@ -1,4 +1,4 @@
-use unbound_graphics::{Color, Image, Item, Palette, Path, Point, Radius, Rect, Shape};
+use bande_graphics::{Color, Image, Item, Palette, Path, Point, Radius, Rect, Shape};
 
 use super::Context;
 

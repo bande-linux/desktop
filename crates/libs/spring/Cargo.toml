@@ -1,6 +1,6 @@
 [package]
-name = "unbound-spring"
-description = "Damped spring model for Unbound animations"
+name = "bande-spring"
+description = "Damped spring model for Bande animations"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

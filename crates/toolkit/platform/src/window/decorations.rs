@@ -1,7 +1,5 @@
 use accesskit::ActionRequest;
-use unbound_graphics::{
-    Cursor, Event, Modifiers, Point, Pointer, PointerButton, ResizeEdge, Scroll,
-};
+use bande_graphics::{Cursor, Event, Modifiers, Point, Pointer, PointerButton, ResizeEdge, Scroll};
 
 use super::{Window, WindowEvent};
 use crate::chrome::{Control, Frame, Zone, control_for_node};

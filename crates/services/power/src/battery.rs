@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
-use unbound_notify::Urgency;
-use unbound_notify::client::{self, Request};
+use bande_notify::Urgency;
+use bande_notify::client::{self, Request};
 use zbus::blocking::Connection;
 
 use crate::L10N;
@@ -114,7 +114,7 @@ pub fn chime_when_plugged_in(system: &Connection, session: &Connection) -> zbus:
                 continue;
             };
             if on_battery && !now {
-                unbound_sound::play(&session, "device-added");
+                bande_sound::play(&session, "device-added");
             }
             on_battery = now;
         }

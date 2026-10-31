@@ -89,7 +89,7 @@ The most useful public statement of Apple's motion philosophy.
 Apple publishes no number for any of these. The values are our proposals, reasoned from the
 principles above and from what other systems use.
 
-| Animation | macOS behaviour (observed, unverified) | Proposal for Unbound |
+| Animation | macOS behaviour (observed, unverified) | Proposal for Bande |
 |---|---|---|
 | Menu selection | The chosen item blinks once, then the menu fades | Blink one on-off cycle at about 60 ms, then fade 150 ms. The action fires at once and does not wait for the fade |
 | Menu dismiss without choice | Fades out | 120 ms opacity fade |
@@ -136,9 +136,9 @@ user is waiting. Our presets sit between the two.
   <https://docs.gtk.org/gtk4/property.Settings.gtk-interface-reduced-motion.html>
 - No portal key exists for reduced transparency (unverified).
 
-## For Unbound
+## For Bande
 
-1. **`unbound-spring` presets (now, `crates/libs/spring`).**
+1. **`bande-spring` presets (now, `crates/libs/spring`).**
    - Add `Spring::from_duration_bounce(duration, bounce)` (ω = 2π/d, ζ = 1 − b) and named
      constants. Keep the API in `ω` and `ζ`; designers speak duration and bounce.
    - Add `Animation::with_velocity` / `retarget_with_velocity` so gesture release can inject
@@ -158,7 +158,7 @@ user is waiting. Our presets sit between the two.
 4. **Reduce Motion (now).**
    - The compositor and toolkit read `reduced-motion` from the portal (the toolkit already
      reads `org.freedesktop.appearance` in `crates/toolkit/platform/src/appearance.rs`).
-   - `xdg-desktop-portal-unbound` serves it from `config.kdl` (`appearance { reduce-motion }`).
+   - `xdg-desktop-portal-bande` serves it from `config.kdl` (`appearance { reduce-motion }`).
    - With it on: spatial animations become a `fade` cross-fade, and gestures still track 1:1
      (content following the fingers is not "motion" to reduce) but release with `fade`.
 5. **Rule for overshoot.**
@@ -169,7 +169,7 @@ user is waiting. Our presets sit between the two.
 6. **Never gate input on animation.** The compositor sends configure, focus and keyboard to the
    destination window at the start of an animation (DESIGN §3, "Fast first").
 
-## Motion presets for `unbound-spring`
+## Motion presets for `bande-spring`
 
 Mass 1, `k = ω²`. "Settles" is the time to within 0.1 % of the distance, computed from the
 closed form. The perceptual duration is what the eye reads as done.

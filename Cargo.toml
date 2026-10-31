@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.95"
-repository = "https://github.com/unbound-linux/desktop"
+repository = "https://github.com/bande-linux/desktop"
 
 [workspace.lints.clippy]
 unwrap_used = "deny"
@@ -71,65 +71,65 @@ xkbcommon = "=0.8.0"
 zbus = "=5.19.0"
 zeroize = { version = "=1.8.1", features = ["serde"] }
 zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2"] }
-unbound-app-menu = { path = "crates/libs/app-menu" }
-unbound-audio = { path = "crates/libs/audio" }
-unbound-automount = { path = "crates/services/automount" }
-unbound-bar = { path = "crates/shell/bar" }
-unbound-bench = { path = "crates/testing/bench" }
-unbound-bluetooth = { path = "crates/libs/bluetooth" }
-unbound-bus = { path = "crates/libs/bus" }
-unbound-clipboard = { path = "crates/services/clipboard" }
-unbound-compositor = { path = "crates/platform/compositor" }
-unbound-config = { path = "crates/services/config" }
-unbound-controlcenter = { path = "crates/shell/controlcenter" }
-unbound-datetime = { path = "crates/libs/datetime" }
-unbound-design = { path = "crates/toolkit/design" }
-unbound-desktop-surface = { path = "crates/shell/desktop" }
-unbound-dock-model = { path = "crates/libs/dock-model" }
-unbound-edid = { path = "crates/libs/edid" }
-unbound-files = { path = "crates/apps/files" }
-unbound-fs = { path = "crates/libs/fs" }
-unbound-golden = { path = "crates/testing/golden" }
-unbound-graphics = { path = "crates/toolkit/graphics" }
-unbound-greeter = { path = "crates/shell/greeter" }
-unbound-inbox = { path = "crates/libs/inbox" }
-unbound-keyboard = { path = "crates/libs/keyboard" }
-unbound-l10n = { path = "crates/libs/l10n" }
-unbound-launcher = { path = "crates/shell/launcher" }
-unbound-lock = { path = "crates/shell/lock" }
-unbound-log = { path = "crates/libs/log" }
-unbound-monitor = { path = "crates/apps/monitor" }
-unbound-network = { path = "crates/libs/network" }
-unbound-notifications = { path = "crates/shell/notifications" }
-unbound-notify = { path = "crates/services/notify" }
-unbound-polkit = { path = "crates/services/polkit" }
-unbound-power = { path = "crates/services/power" }
-unbound-preview = { path = "crates/libs/preview" }
-unbound-protocols = { path = "crates/platform/protocols" }
-unbound-render = { path = "crates/platform/render" }
-unbound-review = { path = "crates/testing/review" }
-unbound-sample = { path = "crates/testing/sample" }
-unbound-screenshot = { path = "crates/shell/screenshot" }
-unbound-search = { path = "crates/libs/search" }
-unbound-settings = { path = "crates/apps/settings" }
-unbound-settings-panes = { path = "crates/libs/settings-panes" }
-unbound-shell = { path = "crates/shell/shell" }
-unbound-sound = { path = "crates/services/sound", default-features = false }
-unbound-spring = { path = "crates/libs/spring" }
-unbound-status = { path = "crates/libs/status" }
-unbound-term = { path = "crates/apps/terminal" }
-unbound-test-bus = { path = "crates/testing/test-bus" }
-unbound-test-wayland = { path = "crates/testing/test-wayland" }
-unbound-thumbnails = { path = "crates/libs/thumbnails" }
-unbound-toolkit = { path = "crates/toolkit/toolkit" }
-unbound-toolkit-platform = { path = "crates/toolkit/platform" }
-unbound-tray = { path = "crates/services/tray" }
-unbound-volumes = { path = "crates/libs/volumes" }
-unbound-wallpaper = { path = "crates/libs/wallpaper" }
-unbound-watch = { path = "crates/libs/watch" }
-unbound-widgets = { path = "crates/toolkit/widgets" }
-unbound-xdg = { path = "crates/libs/xdg" }
-xdg-desktop-portal-unbound = { path = "crates/services/portal" }
+bande-app-menu = { path = "crates/libs/app-menu" }
+bande-audio = { path = "crates/libs/audio" }
+bande-automount = { path = "crates/services/automount" }
+bande-bar = { path = "crates/shell/bar" }
+bande-bench = { path = "crates/testing/bench" }
+bande-bluetooth = { path = "crates/libs/bluetooth" }
+bande-bus = { path = "crates/libs/bus" }
+bande-clipboard = { path = "crates/services/clipboard" }
+bande-compositor = { path = "crates/platform/compositor" }
+bande-config = { path = "crates/services/config" }
+bande-controlcenter = { path = "crates/shell/controlcenter" }
+bande-datetime = { path = "crates/libs/datetime" }
+bande-design = { path = "crates/toolkit/design" }
+bande-desktop-surface = { path = "crates/shell/desktop" }
+bande-dock-model = { path = "crates/libs/dock-model" }
+bande-edid = { path = "crates/libs/edid" }
+bande-files = { path = "crates/apps/files" }
+bande-fs = { path = "crates/libs/fs" }
+bande-golden = { path = "crates/testing/golden" }
+bande-graphics = { path = "crates/toolkit/graphics" }
+bande-greeter = { path = "crates/shell/greeter" }
+bande-inbox = { path = "crates/libs/inbox" }
+bande-keyboard = { path = "crates/libs/keyboard" }
+bande-l10n = { path = "crates/libs/l10n" }
+bande-launcher = { path = "crates/shell/launcher" }
+bande-lock = { path = "crates/shell/lock" }
+bande-log = { path = "crates/libs/log" }
+bande-monitor = { path = "crates/apps/monitor" }
+bande-network = { path = "crates/libs/network" }
+bande-notifications = { path = "crates/shell/notifications" }
+bande-notify = { path = "crates/services/notify" }
+bande-polkit = { path = "crates/services/polkit" }
+bande-power = { path = "crates/services/power" }
+bande-preview = { path = "crates/libs/preview" }
+bande-protocols = { path = "crates/platform/protocols" }
+bande-render = { path = "crates/platform/render" }
+bande-review = { path = "crates/testing/review" }
+bande-sample = { path = "crates/testing/sample" }
+bande-screenshot = { path = "crates/shell/screenshot" }
+bande-search = { path = "crates/libs/search" }
+bande-settings = { path = "crates/apps/settings" }
+bande-settings-panes = { path = "crates/libs/settings-panes" }
+bande-shell = { path = "crates/shell/shell" }
+bande-sound = { path = "crates/services/sound", default-features = false }
+bande-spring = { path = "crates/libs/spring" }
+bande-status = { path = "crates/libs/status" }
+bande-term = { path = "crates/apps/terminal" }
+bande-test-bus = { path = "crates/testing/test-bus" }
+bande-test-wayland = { path = "crates/testing/test-wayland" }
+bande-thumbnails = { path = "crates/libs/thumbnails" }
+bande-toolkit = { path = "crates/toolkit/toolkit" }
+bande-toolkit-platform = { path = "crates/toolkit/platform" }
+bande-tray = { path = "crates/services/tray" }
+bande-volumes = { path = "crates/libs/volumes" }
+bande-wallpaper = { path = "crates/libs/wallpaper" }
+bande-watch = { path = "crates/libs/watch" }
+bande-widgets = { path = "crates/toolkit/widgets" }
+bande-xdg = { path = "crates/libs/xdg" }
+xdg-desktop-portal-bande = { path = "crates/services/portal" }
 
 [profile.dev]
 debug = "line-tables-only"

@@ -1,8 +1,8 @@
 #![allow(clippy::expect_used)]
 
+use bande_datetime::{DateFormats, Month, posix_locale};
 use jiff::Zoned;
 use jiff::civil::{Weekday, date};
-use unbound_datetime::{DateFormats, Month, posix_locale};
 
 fn formats(posix: &str) -> DateFormats {
     DateFormats::for_locale(&posix_locale(posix))

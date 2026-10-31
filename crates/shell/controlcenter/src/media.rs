@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
-use unbound_inbox::Outbox;
+use bande_inbox::Outbox;
 use zbus::blocking::fdo::{DBusProxy, PropertiesProxy};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::names::InterfaceName;

@@ -5,11 +5,11 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
+use bande_compositor::Compositor;
+use bande_power::controller::IdleController;
+use bande_power::idle::{Command, Policy};
+use bande_power::wayland::watch_idle;
 use smithay::utils::Size;
-use unbound_compositor::Compositor;
-use unbound_power::controller::IdleController;
-use unbound_power::idle::{Command, Policy};
-use unbound_power::wayland::watch_idle;
 
 const SECOND: Duration = Duration::from_secs(1);
 const KEY_A: u32 = 30;

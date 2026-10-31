@@ -1,6 +1,6 @@
 [package]
-name = "unbound-l10n"
-description = "Fluent localisation for Unbound programs"
+name = "bande-l10n"
+description = "Fluent localisation for Bande programs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use unbound_fs::{Action, Purpose, Task, same_volume};
-use unbound_toolkit::ui::Pointer;
-use unbound_toolkit::{
+use bande_fs::{Action, Purpose, Task, same_volume};
+use bande_toolkit::ui::Pointer;
+use bande_toolkit::{
     Color, DragAction, DragIcon, Item, Point, Radius, Rect, Scene, Shape, TextAlign, TextStyle,
 };
-use unbound_xdg::path_from_file_uri;
+use bande_xdg::path_from_file_uri;
 
 use crate::browser::Location;
 use crate::controls::Press;

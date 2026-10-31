@@ -1,11 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use unbound_fs::{Entry, Purpose, format_date, format_size};
-use unbound_preview::Preview;
-use unbound_thumbnails::ThumbnailSize;
-use unbound_toolkit::ui::{BUTTON_HEIGHT as CONTROL_HEIGHT, SWITCH_SIZE, Size};
-use unbound_toolkit::{
+use bande_fs::{Entry, Purpose, format_date, format_size};
+use bande_preview::Preview;
+use bande_thumbnails::ThumbnailSize;
+use bande_toolkit::ui::{BUTTON_HEIGHT as CONTROL_HEIGHT, SWITCH_SIZE, Size};
+use bande_toolkit::{
     Color, Elevation, Image, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign,
     TextRole, TextStyle,
 };
@@ -1322,16 +1322,16 @@ impl FilesView {
     }
 }
 
-fn action_id(action: unbound_fs::Action) -> &'static str {
+fn action_id(action: bande_fs::Action) -> &'static str {
     match action {
-        unbound_fs::Action::Copy => "copy",
-        unbound_fs::Action::Move => "move",
-        unbound_fs::Action::Duplicate => "duplicate",
-        unbound_fs::Action::Rename => "rename",
-        unbound_fs::Action::NewFolder | unbound_fs::Action::NewDocument => "new-folder",
-        unbound_fs::Action::Trash => "trash",
-        unbound_fs::Action::PutBack => "put-back",
-        unbound_fs::Action::Compress => "compress",
-        unbound_fs::Action::Extract => "extract",
+        bande_fs::Action::Copy => "copy",
+        bande_fs::Action::Move => "move",
+        bande_fs::Action::Duplicate => "duplicate",
+        bande_fs::Action::Rename => "rename",
+        bande_fs::Action::NewFolder | bande_fs::Action::NewDocument => "new-folder",
+        bande_fs::Action::Trash => "trash",
+        bande_fs::Action::PutBack => "put-back",
+        bande_fs::Action::Compress => "compress",
+        bande_fs::Action::Extract => "extract",
     }
 }

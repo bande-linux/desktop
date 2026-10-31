@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::thread;
 
-use unbound_inbox::{Inbox, Outbox};
-use unbound_watch::{Changes, FolderWatch};
+use bande_inbox::{Inbox, Outbox};
+use bande_watch::{Changes, FolderWatch};
 
 use crate::matcher::{Query, fold};
 

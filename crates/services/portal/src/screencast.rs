@@ -12,7 +12,7 @@ pub const VIRTUAL: u32 = 4;
 pub const CURSOR_HIDDEN: u32 = 1;
 pub const CURSOR_EMBEDDED: u32 = 2;
 pub const CURSOR_METADATA: u32 = 4;
-pub const RESTORE_VENDOR: &str = "unbound";
+pub const RESTORE_VENDOR: &str = "bande";
 pub const RESTORE_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

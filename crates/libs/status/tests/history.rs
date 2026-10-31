@@ -1,4 +1,4 @@
-use unbound_status::history::{ChargeSample, charge_samples, charging_spans, time_on_battery};
+use bande_status::history::{ChargeSample, charge_samples, charging_spans, time_on_battery};
 
 const CHARGING: u32 = 1;
 const DISCHARGING: u32 = 2;

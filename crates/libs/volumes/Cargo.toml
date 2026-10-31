@@ -1,6 +1,6 @@
 [package]
-name = "unbound-volumes"
-description = "Removable volumes for Unbound: which are mounted, and ejecting them through UDisks"
+name = "bande-volumes"
+description = "Removable volumes for Bande: which are mounted, and ejecting them through UDisks"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

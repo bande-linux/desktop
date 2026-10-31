@@ -1,5 +1,10 @@
 use std::time::{Duration, Instant};
 
+use bande_graphics::{Key, Modifiers, Palette, Scheme, TextSize, TextSystem, WindowControl};
+use bande_protocols::server::bande_app_v1::Placement;
+use bande_render::VulkanRenderer;
+use bande_spring::Spring;
+use bande_widgets::{MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::element::memory::{
     MemoryRenderBuffer, MemoryRenderBufferRenderElement,
@@ -13,11 +18,6 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Size};
 use smithay::wayland::shell::xdg::PositionerState;
-use unbound_graphics::{Key, Modifiers, Palette, Scheme, TextSize, TextSystem, WindowControl};
-use unbound_protocols::server::unbound_app_v1::Placement;
-use unbound_render::VulkanRenderer;
-use unbound_spring::Spring;
-use unbound_widgets::{MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
 
 use crate::L10N;
 use crate::label::Labels;
@@ -143,7 +143,7 @@ fn root_placement(
 
 fn submenu_placement(
     parent: Frame,
-    row: unbound_graphics::Rect,
+    row: bande_graphics::Rect,
     size: Size<i32, Logical>,
     area: Rectangle<i32, Logical>,
 ) -> Rectangle<i32, Logical> {
@@ -488,10 +488,7 @@ impl State {
         self.apply_placement(index, placement);
     }
 
-    fn panel_under(
-        &self,
-        location: Point<f64, Logical>,
-    ) -> Option<(usize, unbound_graphics::Point)> {
+    fn panel_under(&self, location: Point<f64, Logical>) -> Option<(usize, bande_graphics::Point)> {
         let open = self.window_menus.open.as_ref()?;
         open.panels
             .iter()
@@ -501,7 +498,7 @@ impl State {
             .map(|(level, panel)| {
                 (
                     level,
-                    unbound_graphics::Point::new(
+                    bande_graphics::Point::new(
                         (location.x - panel.rect.loc.x) as f32,
                         (location.y - panel.rect.loc.y) as f32,
                     ),
@@ -519,7 +516,7 @@ impl State {
             (None, Some(open)) => {
                 let deepest = open.panels.len().saturating_sub(1);
                 open.tracker
-                    .pointer_move(deepest, unbound_graphics::Point::new(-1.0, -1.0), now)
+                    .pointer_move(deepest, bande_graphics::Point::new(-1.0, -1.0), now)
             }
             (_, None) => MenuOutcome::Nothing,
         };
@@ -706,8 +703,8 @@ impl State {
                     f64::from(look.height) + 2.0 * margin,
                 ));
                 let pixels = (
-                    f64::from(unbound_graphics::pixels(size.w as u32, look.scale)),
-                    f64::from(unbound_graphics::pixels(size.h as u32, look.scale)),
+                    f64::from(bande_graphics::pixels(size.w as u32, look.scale)),
+                    f64::from(bande_graphics::pixels(size.h as u32, look.scale)),
                 );
                 let origin = shown.rect.loc - Point::from((margin, margin));
                 MemoryRenderBufferRenderElement::from_buffer(

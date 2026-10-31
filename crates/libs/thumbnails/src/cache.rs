@@ -8,7 +8,7 @@ use std::time::UNIX_EPOCH;
 use md5::{Digest, Md5};
 use png::{BitDepth, ColorType, Transformations};
 
-const SOFTWARE: &str = concat!("unbound-thumbnails-", env!("CARGO_PKG_VERSION"));
+const SOFTWARE: &str = concat!("bande-thumbnails-", env!("CARGO_PKG_VERSION"));
 const URI_KEY: &str = "Thumb::URI";
 const MTIME_KEY: &str = "Thumb::MTime";
 const SOFTWARE_KEY: &str = "Software";
@@ -210,7 +210,7 @@ impl Cache {
     }
 
     pub fn for_user() -> Option<Self> {
-        unbound_xdg::cache_home().map(|cache| Self::new(cache.join("thumbnails")))
+        bande_xdg::cache_home().map(|cache| Self::new(cache.join("thumbnails")))
     }
 
     pub fn root(&self) -> &Path {

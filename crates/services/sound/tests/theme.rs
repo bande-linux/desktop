@@ -2,12 +2,12 @@
 
 use std::path::PathBuf;
 
-use unbound_config::AlertSound;
-use unbound_sound::{Alert, Policy, RATE, Sound, theme_files};
+use bande_config::AlertSound;
+use bande_sound::{Alert, Policy, RATE, Sound, theme_files};
 
 fn installed(name: &str) -> Vec<u8> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../data/sounds/Unbound")
+        .join("../../../data/sounds/Bande")
         .join(name);
     std::fs::read(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()))
 }
@@ -28,7 +28,7 @@ fn the_shipped_theme_is_what_the_synthesiser_makes() {
         if !name.ends_with(".wav") {
             assert_eq!(
                 shipped, made,
-                "{name}: run unbound-sound --write-theme data/sounds/Unbound"
+                "{name}: run bande-sound --write-theme data/sounds/Bande"
             );
             continue;
         }
@@ -39,7 +39,7 @@ fn the_shipped_theme_is_what_the_synthesiser_makes() {
             .any(|(shipped, made)| shipped.abs_diff(made) > 1);
         assert!(
             !differs,
-            "{name} is stale: run unbound-sound --write-theme data/sounds/Unbound"
+            "{name} is stale: run bande-sound --write-theme data/sounds/Bande"
         );
     }
 }

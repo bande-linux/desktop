@@ -16,9 +16,9 @@ pub mod symbols;
 
 use std::sync::LazyLock;
 
-use unbound_l10n::Localizer;
+use bande_l10n::Localizer;
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-bar.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-bar.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -40,7 +40,7 @@ mod tests {
             include_str!("pairing.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

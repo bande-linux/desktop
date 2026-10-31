@@ -1,5 +1,5 @@
+use bande_config::{Config, DisplaySettings, Placement, Rotation};
 use smithay::utils::{Logical, Point, Rectangle, Transform};
-use unbound_config::{Config, DisplaySettings, Placement, Rotation};
 
 use crate::screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
 
@@ -15,7 +15,7 @@ pub(crate) fn identities(heads: &[OutputConfig]) -> Vec<String> {
         .iter()
         .map(|head| (head.name.as_str(), head.identity()))
         .collect();
-    unbound_edid::distinct_identities(&named)
+    bande_edid::distinct_identities(&named)
 }
 
 fn transform(rotation: Option<Rotation>) -> Transform {

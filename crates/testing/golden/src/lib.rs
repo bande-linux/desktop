@@ -36,7 +36,7 @@ pub fn from_rgba(width: u32, height: u32, rgba: Vec<u8>) -> RgbImage {
 
 pub fn check(manifest_dir: &str, scratch_dir: &str, name: &str, actual: &RgbImage) {
     let golden = Path::new(manifest_dir).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some()
+    if std::env::var_os("BANDE_UPDATE_GOLDENS").is_some()
         && let Err(error) = actual.save(&golden)
     {
         panic!("{}: {error}", golden.display());

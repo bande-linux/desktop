@@ -5,6 +5,9 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
+use bande_config::{ACCENTS, Accent};
+use bande_design::{Color, Scheme, Typeface};
+use bande_wallpaper::{Choice, Variant};
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, Zoned};
 use rustix::io::{Errno, read};
@@ -12,9 +15,6 @@ use rustix::time::{
     Itimerspec, TimerfdClockId, TimerfdFlags, TimerfdTimerFlags, Timespec, timerfd_create,
     timerfd_settime,
 };
-use unbound_config::{ACCENTS, Accent};
-use unbound_design::{Color, Scheme, Typeface};
-use unbound_wallpaper::{Choice, Variant};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 use zbus::object_server::SignalEmitter;
@@ -22,20 +22,20 @@ use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{OBJECT_PATH, gtk};
-use unbound_datetime::daylight::{Sky, place_of, sky};
-use unbound_datetime::local_zone;
-use unbound_datetime::timedate::zone_changes;
+use bande_datetime::daylight::{Sky, place_of, sky};
+use bande_datetime::local_zone;
+use bande_datetime::timedate::zone_changes;
 
 pub const APPEARANCE: &str = "org.freedesktop.appearance";
-pub const UNBOUND_APPEARANCE: &str = "org.unbound.appearance";
+pub const BANDE_APPEARANCE: &str = "org.bande.appearance";
 pub const GNOME_INTERFACE: &str = "org.gnome.desktop.interface";
 pub const GNOME_SOUND: &str = "org.gnome.desktop.sound";
-pub const SOUND_THEME: &str = "Unbound";
-pub const ICON_THEME: &str = "Unbound";
+pub const SOUND_THEME: &str = "Bande";
+pub const ICON_THEME: &str = "Bande";
 pub const VERSION: u32 = 2;
 
-const CONFIG_BUS_NAME: &str = "org.unbound.Config";
-const CONFIG_PATH: &str = "/org/unbound/Config";
+const CONFIG_BUS_NAME: &str = "org.bande.Config";
+const CONFIG_PATH: &str = "/org/bande/Config";
 const TINT_SAMPLE: u32 = 24;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,9 +127,9 @@ struct Look {
 }
 
 #[zbus::proxy(
-    interface = "org.unbound.Config",
-    default_service = "org.unbound.Config",
-    default_path = "/org/unbound/Config"
+    interface = "org.bande.Config",
+    default_service = "org.bande.Config",
+    default_path = "/org/bande/Config"
 )]
 trait Config {
     #[zbus(property)]
@@ -200,7 +200,7 @@ impl TintCache {
         {
             return *tint;
         }
-        let tint = unbound_wallpaper::render(&path, choice.fit, TINT_SAMPLE, TINT_SAMPLE)
+        let tint = bande_wallpaper::render(&path, choice.fit, TINT_SAMPLE, TINT_SAMPLE)
             .map_err(|error| tracing::warn!("cannot tint the frame from the wallpaper: {error}"))
             .ok()
             .and_then(|picture| average(&picture.rgba));
@@ -246,7 +246,7 @@ impl Reader {
             .tinted_frame()
             .unwrap_or(false)
             .then(|| {
-                let choice = unbound_wallpaper::read(&self.connection);
+                let choice = bande_wallpaper::read(&self.connection);
                 self.tints.tint(&choice, scheme)
             })
             .flatten();
@@ -298,7 +298,7 @@ fn namespaces(look: Look, cursor: &CursorSettings) -> Namespaces {
             ]),
         ),
         (
-            UNBOUND_APPEARANCE,
+            BANDE_APPEARANCE,
             owned(vec![
                 ("frame-tint", Value::from(tint)),
                 (
@@ -455,12 +455,12 @@ impl Settings {
             .build()?
             .receive_properties_changed()?;
         let mut reader = Reader::new(connection)?;
-        let (first, next) = reader.read(&unbound_datetime::now());
+        let (first, next) = reader.read(&bande_datetime::now());
         let style_gtk = move |look: Look| {
             if let Some(home) = &gtk_home
                 && let Err(error) = gtk::install(home, look.accent, look.scheme.scheme())
             {
-                tracing::warn!("cannot give GTK apps the Unbound colours: {error}");
+                tracing::warn!("cannot give GTK apps the Bande colours: {error}");
             }
         };
         style_gtk(first);

@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+use bande_protocols::server::bande_shell_v1::{self, BandeShellV1};
 use smithay::desktop::{WindowSurfaceType, layer_map_for_output};
 use smithay::reexports::wayland_server::WEnum;
 use smithay::reexports::wayland_server::backend::ClientId;
@@ -14,7 +15,6 @@ use smithay::wayland::foreign_toplevel_list::{
 };
 use smithay::wayland::shell::xdg::XdgToplevelSurfaceData;
 use smithay::wayland::text_input::TextInputSeat;
-use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
 
 use crate::session::SessionRole;
 use crate::state::{ClientState, State};
@@ -23,9 +23,9 @@ const INSERT_PATIENCE: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
 pub(crate) struct PanelAnchor {
-    panel: unbound_shell_v1::Panel,
+    panel: bande_shell_v1::Panel,
     output: String,
-    edge: unbound_shell_v1::Edge,
+    edge: bande_shell_v1::Edge,
     rect: Rectangle<i32, Logical>,
     zone: Point<i32, Logical>,
 }
@@ -71,7 +71,7 @@ pub(crate) fn toplevel_names(surface: &WlSurface) -> (String, String) {
 }
 
 impl State {
-    pub(crate) fn each_shell(&self, send: impl Fn(&UnboundShellV1)) {
+    pub(crate) fn each_shell(&self, send: impl Fn(&BandeShellV1)) {
         self.shell_resources.iter().for_each(send);
     }
 
@@ -87,7 +87,7 @@ impl State {
         }
     }
 
-    pub(crate) fn open_launcher(&mut self, mode: unbound_shell_v1::LauncherMode) {
+    pub(crate) fn open_launcher(&mut self, mode: bande_shell_v1::LauncherMode) {
         let mut text_field = false;
         self.seat
             .text_input()
@@ -134,27 +134,27 @@ impl State {
         self.each_shell(|shell| shell.capture_area());
     }
 
-    pub(crate) fn volume_key(&mut self, key: unbound_shell_v1::VolumeKey, fine: bool) {
+    pub(crate) fn volume_key(&mut self, key: bande_shell_v1::VolumeKey, fine: bool) {
         self.each_shell(|shell| shell.volume_key(key, u32::from(fine)));
     }
 
-    pub(crate) fn brightness_key(&mut self, key: unbound_shell_v1::BrightnessKey, fine: bool) {
+    pub(crate) fn brightness_key(&mut self, key: bande_shell_v1::BrightnessKey, fine: bool) {
         self.each_shell(|shell| shell.brightness_key(key, u32::from(fine)));
     }
 
-    pub(crate) fn media_key(&mut self, key: unbound_shell_v1::MediaKey) {
+    pub(crate) fn media_key(&mut self, key: bande_shell_v1::MediaKey) {
         self.each_shell(|shell| shell.media_key(key));
     }
 
-    pub(crate) fn toggle_panel(&mut self, panel: unbound_shell_v1::Panel) {
+    pub(crate) fn toggle_panel(&mut self, panel: bande_shell_v1::Panel) {
         self.each_shell(|shell| shell.toggle_panel(panel));
     }
 
     fn set_panel_anchor(
         &mut self,
         surface: &WlSurface,
-        panel: unbound_shell_v1::Panel,
-        edge: unbound_shell_v1::Edge,
+        panel: bande_shell_v1::Panel,
+        edge: bande_shell_v1::Edge,
         rect: Rectangle<i32, Logical>,
     ) {
         let Some(screen) = self.layer_screen(surface) else {
@@ -375,7 +375,7 @@ impl State {
         }
     }
 
-    fn announce_app_processes_to(&self, shell: &UnboundShellV1) {
+    fn announce_app_processes_to(&self, shell: &BandeShellV1) {
         for window in &self.windows {
             let surface = window.toplevel.wl_surface();
             if let (Some(handle), Some(pid)) = (&window.foreign, self.app_process(surface)) {
@@ -397,7 +397,7 @@ impl State {
 }
 
 impl State {
-    pub(crate) fn announce_input_sources_to(&self, shell: &UnboundShellV1) {
+    pub(crate) fn announce_input_sources_to(&self, shell: &BandeShellV1) {
         let sources = &self.input_sources;
         shell.input_sources(sources.codes().join(","), sources.active() as u32);
     }
@@ -409,12 +409,12 @@ impl State {
     }
 }
 
-impl GlobalDispatch<UnboundShellV1, ()> for State {
+impl GlobalDispatch<BandeShellV1, ()> for State {
     fn bind(
         state: &mut Self,
         _display: &DisplayHandle,
         _client: &Client,
-        resource: New<UnboundShellV1>,
+        resource: New<BandeShellV1>,
         _global_data: &(),
         data_init: &mut DataInit<'_, Self>,
     ) {
@@ -441,28 +441,28 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
     }
 }
 
-impl Dispatch<UnboundShellV1, ()> for State {
+impl Dispatch<BandeShellV1, ()> for State {
     fn request(
         state: &mut Self,
         _client: &Client,
-        resource: &UnboundShellV1,
-        request: unbound_shell_v1::Request,
+        resource: &BandeShellV1,
+        request: bande_shell_v1::Request,
         _data: &(),
         _display: &DisplayHandle,
         _data_init: &mut DataInit<'_, Self>,
     ) {
         match request {
-            unbound_shell_v1::Request::ActivateApp { app_id } => state.activate_app(&app_id),
-            unbound_shell_v1::Request::InsertText { text } => {
+            bande_shell_v1::Request::ActivateApp { app_id } => state.activate_app(&app_id),
+            bande_shell_v1::Request::InsertText { text } => {
                 if let Some(client) = resource.client() {
                     state.insert_text(text, client.id());
                 }
             }
-            unbound_shell_v1::Request::ToggleControlCenter => {
-                state.toggle_panel(unbound_shell_v1::Panel::ControlCenter);
+            bande_shell_v1::Request::ToggleControlCenter => {
+                state.toggle_panel(bande_shell_v1::Panel::ControlCenter);
             }
-            unbound_shell_v1::Request::ShowLauncher => state.show_launcher(),
-            unbound_shell_v1::Request::SetIconRect {
+            bande_shell_v1::Request::ShowLauncher => state.show_launcher(),
+            bande_shell_v1::Request::SetIconRect {
                 app_id,
                 surface,
                 x,
@@ -474,37 +474,37 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 surface,
                 Rectangle::new((x, y).into(), (width, height).into()),
             ),
-            unbound_shell_v1::Request::HideApp { app_id } => state.hide_app(&app_id),
-            unbound_shell_v1::Request::ShowApp { app_id } => {
+            bande_shell_v1::Request::HideApp { app_id } => state.hide_app(&app_id),
+            bande_shell_v1::Request::ShowApp { app_id } => {
                 state.show_app(&app_id);
                 state.needs_redraw = true;
             }
-            unbound_shell_v1::Request::QuitApp { app_id } => state.quit_app_named(&app_id),
-            unbound_shell_v1::Request::ForceQuitApp { app_id } => state.force_quit_app(&app_id),
-            unbound_shell_v1::Request::ActivateWindow { identifier } => {
+            bande_shell_v1::Request::QuitApp { app_id } => state.quit_app_named(&app_id),
+            bande_shell_v1::Request::ForceQuitApp { app_id } => state.force_quit_app(&app_id),
+            bande_shell_v1::Request::ActivateWindow { identifier } => {
                 state.activate_window(&identifier);
             }
-            unbound_shell_v1::Request::SetScrim { surface, opacity } => {
+            bande_shell_v1::Request::SetScrim { surface, opacity } => {
                 crate::effect::set_scrim(&surface, opacity);
                 state.needs_redraw = true;
             }
-            unbound_shell_v1::Request::SetCornerRadius { surface, radius } => {
+            bande_shell_v1::Request::SetCornerRadius { surface, radius } => {
                 crate::effect::set_corner_radius(&surface, radius);
                 state.needs_redraw = true;
             }
-            unbound_shell_v1::Request::ShowWindows { app_id } => {
+            bande_shell_v1::Request::ShowWindows { app_id } => {
                 state.toggle_overview(Some(app_id).filter(|app_id| !app_id.is_empty()));
             }
-            unbound_shell_v1::Request::SelectInputSource { index } => {
+            bande_shell_v1::Request::SelectInputSource { index } => {
                 state.select_input_source(index as usize);
             }
-            unbound_shell_v1::Request::SwitchWorkspace { index } => {
+            bande_shell_v1::Request::SwitchWorkspace { index } => {
                 let screen = state.pointer_screen();
                 if (index as usize) < state.screens[screen].workspaces.count() {
                     state.switch_workspace(screen, index as usize);
                 }
             }
-            unbound_shell_v1::Request::SetPanelAnchor {
+            bande_shell_v1::Request::SetPanelAnchor {
                 surface,
                 panel: WEnum::Value(panel),
                 edge: WEnum::Value(edge),
@@ -518,14 +518,14 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 edge,
                 Rectangle::new((x, y).into(), (width, height).into()),
             ),
-            unbound_shell_v1::Request::ConfirmSessionEnd {
+            bande_shell_v1::Request::ConfirmSessionEnd {
                 ending: WEnum::Value(ending),
             } => {
                 state.session_end_requested = Some(ending);
                 state.remember_apps_to_reopen(None);
             }
-            unbound_shell_v1::Request::QuitAllApps => state.quit_all_apps(resource.clone()),
-            unbound_shell_v1::Request::Destroy => {
+            bande_shell_v1::Request::QuitAllApps => state.quit_all_apps(resource.clone()),
+            bande_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);
                 state.quitting.retain(|(shell, _)| shell != resource);
             }
@@ -533,13 +533,13 @@ impl Dispatch<UnboundShellV1, ()> for State {
         }
     }
 
-    fn destroyed(state: &mut Self, _client: ClientId, resource: &UnboundShellV1, _data: &()) {
+    fn destroyed(state: &mut Self, _client: ClientId, resource: &BandeShellV1, _data: &()) {
         state.shell_resources.retain(|shell| shell != resource);
         state.quitting.retain(|(shell, _)| shell != resource);
     }
 }
 
-fn send_panel_anchor(shell: &UnboundShellV1, anchor: &PanelAnchor) {
+fn send_panel_anchor(shell: &BandeShellV1, anchor: &PanelAnchor) {
     shell.panel_anchor(
         anchor.panel,
         anchor.output.clone(),

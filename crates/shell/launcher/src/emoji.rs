@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
-use unbound_search::{Query, WORDS, fold};
+use bande_search::{Query, WORDS, fold};
 
 const DATA: &str = include_str!("../data/emoji.tsv");
 const SELECTOR: char = '\u{FE0F}';

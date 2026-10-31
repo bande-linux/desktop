@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use unbound_watch::{Changes, FolderWatch};
+use bande_watch::{Changes, FolderWatch};
 use zbus::blocking::Connection;
 use zbus::fdo::Error::{Failed, InvalidArgs};
 use zbus::object_server::SignalEmitter;
@@ -23,8 +23,8 @@ use crate::{
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
 pub type NightLightValue = (bool, String, String, String, u32);
 
-pub const BUS_NAME: &str = "org.unbound.Config";
-pub const OBJECT_PATH: &str = "/org/unbound/Config";
+pub const BUS_NAME: &str = "org.bande.Config";
+pub const OBJECT_PATH: &str = "/org/bande/Config";
 
 const STAGING_NAME: &str = ".config.kdl.new";
 
@@ -429,7 +429,7 @@ impl ConfigInterface {
     }
 }
 
-#[zbus::interface(name = "org.unbound.Config")]
+#[zbus::interface(name = "org.bande.Config")]
 impl ConfigInterface {
     #[zbus(property)]
     fn appearance(&self) -> String {

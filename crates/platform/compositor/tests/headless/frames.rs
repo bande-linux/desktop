@@ -1,12 +1,12 @@
 use std::io;
 use std::time::Duration;
 
-use smithay::utils::Size;
-use unbound_compositor::{
+use bande_compositor::{
     Compositor, FrameClock, FrameOutput, FrameScheduler, Poll, REFRESH, RenderError, Renderer,
     SAFETY_MARGIN, Submission, Vblank,
 };
-use unbound_test_wayland::{Presented, RED, ShmImage, TestClient};
+use bande_test_wayland::{Presented, RED, ShmImage, TestClient};
+use smithay::utils::Size;
 use wayland_client::protocol::wl_shm::Format;
 
 const SIDE: i32 = 16;

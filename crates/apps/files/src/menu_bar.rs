@@ -1,6 +1,6 @@
-use unbound_app_menu::{Entry, app_submenu, close_window, window_submenu};
-use unbound_files::{FilesView, L10N};
-use unbound_toolkit::ui::{Event, Key, Modifiers};
+use bande_app_menu::{Entry, app_submenu, close_window, window_submenu};
+use bande_files::{FilesView, L10N};
+use bande_toolkit::ui::{Event, Key, Modifiers};
 
 const KEY_ACTION: &str = "key:";
 

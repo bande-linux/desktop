@@ -27,18 +27,18 @@ Line numbers are for `2d497b1`.
   `panel`/`dock` to `bar` and migrates `output` nodes to `display` (task 3).
 - **Duplicated helpers:**
   - 18 copies of `contains(Rect, Point)`.
-  - About 25 hand-written XDG base-directory lookups. `unbound-xdg` has no `state_home` at all.
+  - About 25 hand-written XDG base-directory lookups. `bande-xdg` has no `state_home` at all.
   - 16 copies of write-then-rename.
-  - 10 hand-made clients of `org.unbound.Config`: 6 typed proxies and 4 that use property-name
+  - 10 hand-made clients of `org.bande.Config`: 6 typed proxies and 4 that use property-name
     strings.
   - 5 definitions each of the UPower and login1 proxies.
   - 3 `NotificationCenter` proxies, 2 of them in Settings alone.
-  - 6 hand-written wake pipes, while `unbound-inbox` already exists.
+  - 6 hand-written wake pipes, while `bande-inbox` already exists.
   - Two different types named `FolderWatch`.
   - 4 type-to-select implementations.
   - 5 readers of the user's passwd entry, one of which forks `getent`.
   - 2 "About this computer" fact readers, which give different answers.
-  - An identical byte formatter in `unbound-fs` and Monitor.
+  - An identical byte formatter in `bande-fs` and Monitor.
   - 24 copies of the `L10N` boilerplate.
   - 9 mutex `lock` helpers, 5 `report` helpers, 3 `snap` helpers and 2 `percent_decode`.
 - **Efficiency:**
@@ -71,9 +71,9 @@ Line numbers are for `2d497b1`.
       (`shell/bar/src/menu_bar_client.rs:171-684`, part of task 1).
 - **Layering:**
   - File Chooser depends on the Files app crate and on the portal service crate.
-  - The lock screen, and so the greeter, links all of `unbound-bar` for `symbols.rs`.
+  - The lock screen, and so the greeter, links all of `bande-bar` for `symbols.rs`.
   - Control Center links the power service.
-  - `unbound-polkit` is a library that nothing uses and that has no binary (task 22).
+  - `bande-polkit` is a library that nothing uses and that has no binary (task 22).
 - **Oversized modules:** 15 files are over 1000 lines. `shell/bar/src/dock.rs` holds a single
   1905-line `impl DockState` block (task 29).
 
@@ -99,7 +99,7 @@ with correctness and efficiency first.
     menu-bar layout.
   - Control Center makes yet another `Audio::connect` at `shell/controlcenter/src/client.rs:897`.
 - **Change:**
-  - Add a `StatusHub` in `unbound-status`. It starts the followers once per process, keeps the last
+  - Add a `StatusHub` in `bande-status`. It starts the followers once per process, keeps the last
     `Update` of each kind, and fans out to subscribed `Outbox<Update>`s; `Update` is already
     `Clone`.
   - The shell context owns the hub. Each bar subscribes to it and shares its control `Sender`s.
@@ -112,7 +112,7 @@ with correctness and efficiency first.
 - **Risk:** medium, because of the start-up order of the bars. `shell/bar/tests/live.rs` covers the
   fan-out.
 
-### 2. Cache icon-theme lookups in `unbound-xdg`
+### 2. Cache icon-theme lookups in `bande-xdg`
 
 - **Files:** `libs/xdg/src/icon.rs`.
   - `theme()` (line 131) reads and parses `index.theme` for every theme in the inherit chain on
@@ -174,18 +174,18 @@ with correctness and efficiency first.
   `apps/monitor/src/view.rs:72`.
 - **Change:**
   - Add `Rect::contains(self, Point)` in `toolkit/graphics/src/scene.rs`.
-  - Make `unbound_widgets::opens_menu` and `Pointer::is_secondary` public.
+  - Make `bande_widgets::opens_menu` and `Pointer::is_secondary` public.
   - Delete the copies, after checking that each body is the same half-open test.
 - **Saves:** about 110 lines.
 - **Risk:** very low.
 
-### 5. Add a base-directory module to `unbound-xdg`, with `state_home`
+### 5. Add a base-directory module to `bande-xdg`, with `state_home`
 
 - **Files:**
   - Move `config_home`, `data_home`, `cache_home` and `config_dirs` out of
     `libs/xdg/src/mimeapps.rs:14-45` into `libs/xdg/src/basedir.rs`.
-  - Add `state_home()` and `unbound_state(name) -> Option<PathBuf>` (that is,
-    `$XDG_STATE_HOME/unbound/<name>`).
+  - Add `state_home()` and `bande_state(name) -> Option<PathBuf>` (that is,
+    `$XDG_STATE_HOME/bande/<name>`).
   - Add `user_dirs_text()`, the read of `config_home/user-dirs.dirs` that is repeated 6 times, and
     `gtk_bookmarks_file()`, repeated twice.
 - **Sites to replace:**
@@ -212,12 +212,12 @@ with correctness and efficiency first.
   that take an `Option<&Path>` stay for tests.
 - **Bugs fixed:**
   - `shell/screenshot/src/main.rs:149, 1067-1072` accepts a relative `XDG_*_HOME`.
-  - Screenshot keeps its state and cache in `unbound-screenshot/` while everything else uses
-    `unbound/`; the greeter uses `unbound-greeter/`.
+  - Screenshot keeps its state and cache in `bande-screenshot/` while everything else uses
+    `bande/`; the greeter uses `bande-greeter/`.
 - **Saves:** about 140 lines.
 - **Risk:** low.
 
-### 6. One typed `org.unbound.Config` client
+### 6. One typed `org.bande.Config` client
 
 Do this as two tasks: 6a covers the services and Settings, 6b covers the shell and the libraries.
 
@@ -234,8 +234,8 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
     - `libs/dock-model/src/bus.rs:15, 98-112, 161-182`
 - **Change:**
   - Put one complete `ConfigProxy` with `gen_async = false` next to the interface, as
-    `unbound_config::client`. This mirrors `unbound_notify::client` and `unbound_sound`.
-  - Gate the daemon-only dependencies (`kdl`, `unbound-watch`, `unbound-notify`, `unbound-edid`)
+    `bande_config::client`. This mirrors `bande_notify::client` and `bande_sound`.
+  - Gate the daemon-only dependencies (`kdl`, `bande-watch`, `bande-notify`, `bande-edid`)
     behind a default `service` feature, the same way `services/sound/Cargo.toml` does. Light
     consumers then use `default-features = false`.
 - **Win:**
@@ -259,7 +259,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
   There are 16 `CacheProperties::No` proxies in all. `SettingsClient::read`
   (`apps/settings/src/client.rs:439-450`) makes 41 sequential `Get` calls for each signal.
 - **Change:**
-  - Add `unbound_bus::follow_properties(connection, destination, path, interface, FnMut(&HashMap<String, OwnedValue>) -> bool)`.
+  - Add `bande_bus::follow_properties(connection, destination, path, interface, FnMut(&HashMap<String, OwnedValue>) -> bool)`.
     It sends one `GetAll` first and then the `changed` dictionary of each signal.
   - Map the dictionary to updates, the way `libs/dock-model/src/bus.rs:33` already does for the
     launcher API.
@@ -321,7 +321,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
 - **Risk:** medium. This may take more than 2 h; if it does, split the catalog half from the
   connection half.
 
-### 10. Use `unbound_inbox::Inbox` instead of hand-written wake pipes
+### 10. Use `bande_inbox::Inbox` instead of hand-written wake pipes
 
 - **Files:**
   - `apps/settings/src/follow.rs:95-133` reimplements `Inbox`/`Outbox` completely, as
@@ -331,8 +331,8 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
   - `apps/terminal/src/app.rs:117-147`: `SettingsWatch`.
   - `services/clipboard/src/main.rs:115`.
   - `shell/lock/src/main.rs:208`: the PAM verdicts.
-- **Change:** use `Inbox<T>` and `Outbox<T>`. Add the `unbound-inbox` dependency to Settings,
-  Clipboard and `unbound-fs`.
+- **Change:** use `Inbox<T>` and `Outbox<T>`. Add the `bande-inbox` dependency to Settings,
+  Clipboard and `bande-fs`.
 - **Saves:** about 110 lines.
 - **Risk:** low.
 
@@ -349,12 +349,12 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
     no cache, on every focus change.
 - **Bug:** only File Chooser follows the accent icon theme
   (`services/portal/src/settings.rs:87 icon_theme`). Every other app uses the fixed
-  `ICON_THEMES = ["Unbound", "Adwaita"]` (`libs/xdg/src/icon.rs:5`), so folder colours differ
+  `ICON_THEMES = ["Bande", "Adwaita"]` (`libs/xdg/src/icon.rs:5`), so folder colours differ
   between File Chooser and Files.
 - **Change:**
-  - Add `unbound_toolkit::Icons` with `first(names, px)`, `symbol(names, px, color)` and
+  - Add `bande_toolkit::Icons` with `first(names, px)`, `symbol(names, px, color)` and
     `set_accent`.
-  - Move `icon_theme(accent)` into `unbound-xdg`.
+  - Move `icon_theme(accent)` into `bande-xdg`.
 - **Saves:** about 150 lines.
 - **Risk:** low to medium, because goldens can change.
 
@@ -362,8 +362,8 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
 
 - **Files:**
   - `apps/settings/src/client.rs:201-212` and `apps/settings/src/notifications.rs:18-31` duplicate
-    `services/notify/src/client.rs:54-84`. Settings already depends on `unbound-notify`.
-- **Change:** add `get_apps` and `set_app_rule` to `unbound_notify::client::NotificationCenter`, and
+    `services/notify/src/client.rs:54-84`. Settings already depends on `bande-notify`.
+- **Change:** add `get_apps` and `set_app_rule` to `bande_notify::client::NotificationCenter`, and
   delete both copies.
 - **Saves:** about 30 lines.
 - **Risk:** very low. This takes 30 min.
@@ -373,11 +373,11 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
 - **Files:**
   - `shell/greeter/src/main.rs:25, 314-330`. A `CLOCK_TICK` of 1 s plus an unconditional
     `request_redraw` repaints the login screen every second for an HH:MM clock. Use
-    `unbound_datetime::MinuteTimer`, as `shell/lock/src/main.rs:37, 225` does.
+    `bande_datetime::MinuteTimer`, as `shell/lock/src/main.rs:37, 225` does.
   - `libs/thumbnails/src/generate.rs:101-112` polls `try_wait` every 20 ms for up to 15 s, and
     `libs/fs/src/ops/archive.rs:420-440` polls every 50 ms. Add one shared
     `wait_child(child, deadline, cancelled)` on `pidfd_open` + `poll`. It could live in
-    `unbound-inbox`, next to the threading helpers.
+    `bande-inbox`, next to the threading helpers.
 - **Win:** an idle greeter wakes 60× less and stops repainting. Thumbnailer waits stop costing
   50 wakeups a second each.
 - **Saves:** about 10 lines.
@@ -399,7 +399,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
   - `libs/xdg/src/mimeapps.rs:232-239`
   - `libs/wallpaper/src/cache.rs:45-53`
   - `libs/thumbnails/src/cache.rs:190-199`
-- **Change:** add `unbound_xdg::replace_file(path, bytes)`. It creates the parent, writes to a
+- **Change:** add `bande_xdg::replace_file(path, bytes)`. It creates the parent, writes to a
   sibling staging file, calls `sync_all` and renames. Only `login_picture.rs:56` syncs today, so a
   power loss can leave `config.kdl` empty on some filesystems.
 - **Saves:** about 90 lines.
@@ -415,7 +415,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
     its threads show up unnamed in `top -H`.
   - The logging spawn helper exists twice: `apps/settings/src/follow.rs:135` and
     `libs/dock-model/src/bus.rs:54`.
-- **Change:** add `unbound_inbox::spawn(name, work) -> bool` and replace all the sites.
+- **Change:** add `bande_inbox::spawn(name, work) -> bool` and replace all the sites.
 - **Saves:** about 0 lines.
 - **Risk:** very low.
 
@@ -441,11 +441,11 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
     - `libs/status/src/devices.rs:32-52`
   - `login1.Manager` is defined in `services/power/src/logind.rs:12`, `apps/settings/src/software.rs:33`,
     `apps/monitor/src/inhibitors.rs:9` and `libs/status/src/devices.rs:59`.
-  - `PowerProfiles` is defined twice. `bluez.Device1` is defined twice in `unbound-bluetooth`
+  - `PowerProfiles` is defined twice. `bluez.Device1` is defined twice in `bande-bluetooth`
     (`lib.rs:28`, `agent.rs:40`).
   - 37 of the 46 `#[zbus::proxy]` blocks in scope generate async proxies that nothing uses.
 - **Change:**
-  - Move the UPower, login1 and PowerProfiles proxies into `unbound-bus` (`upower`, `login1`),
+  - Move the UPower, login1 and PowerProfiles proxies into `bande-bus` (`upower`, `login1`),
     blocking only.
   - Merge the bluez `Device1`.
   - Add `gen_async = false` wherever no `.await` is involved.
@@ -474,9 +474,9 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
   Desktop and Files. `libs/watch/src/lib.rs` is a thread plus a callback; it is used by the config
   daemon, search and Terminal. The two types share a name and work differently.
 - **Change:**
-  - Keep the fd-based type in `unbound-watch`.
+  - Keep the fd-based type in `bande-watch`.
   - Make `spawn(changes, callback)` a small adapter over it.
-  - `unbound-fs` re-exports or depends on it.
+  - `bande-fs` re-exports or depends on it.
   - Terminal can then register the fd directly and drop its wake pair.
 - **Saves:** about 80 lines.
 - **Risk:** low.
@@ -489,7 +489,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
   - Settings › About uses `apps/settings/src/about.rs:55-200`: chip from device-tree `compatible`,
     memory rounded up to GB×1e9.
 - **Bug:** the two can show a different chip and memory size for the same Mac.
-- **Change:** move one `Facts` reader into `unbound-status` and use it in both places.
+- **Change:** move one `Facts` reader into `bande-status` and use it in both places.
 - **Saves:** about 50 lines.
 - **Risk:** low, but goldens will change.
 
@@ -507,7 +507,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
 - **Saves:** about 60 lines.
 - **Risk:** low.
 
-### 22. Decide what happens to `unbound-polkit`
+### 22. Decide what happens to `bande-polkit`
 
 - **Files:** `crates/services/polkit`: 440 production lines and 444 test lines.
   - It has no binary, and no crate depends on it.
@@ -523,17 +523,17 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
 Do this as three tasks.
 
 - **a.** File Chooser depends on the Files app crate (`apps/file-chooser/Cargo.toml`) only for the
-  sidebar model: `unbound_files::{rows, sidebar_file, with_volumes, Place, Row, Location}`. It also
+  sidebar model: `bande_files::{rows, sidebar_file, with_volumes, Place, Row, Location}`. It also
   depends on the portal service for `dialog_process` and the `file_chooser` types. Move
-  `apps/files/src/sidebar.rs` into a library (for example `unbound-fs::places`), and move the dialog
+  `apps/files/src/sidebar.rs` into a library (for example `bande-fs::places`), and move the dialog
   wire protocol into a small library shared by the portal and File Chooser.
-- **b.** `shell/lock/src/lib.rs:11` links all of `unbound-bar`, and through it the greeter does too,
+- **b.** `shell/lock/src/lib.rs:11` links all of `bande-bar`, and through it the greeter does too,
   for `symbols.rs`. Move `shell/bar/src/symbols.rs` (247 lines) to `toolkit/widgets`.
 - **c.** Control Center links the power service for `backlight` and `logind::own_session`
   (`shell/controlcenter/src/client.rs:20-21`). Move both into a library.
 
-  Also review `libs/xdg` → `unbound-notify` (launch-failure notices) and `libs/dock-model` →
-  `unbound-config`. Task 6 settles the second.
+  Also review `libs/xdg` → `bande-notify` (launch-failure notices) and `libs/dock-model` →
+  `bande-config`. Task 6 settles the second.
 - **Risk:** low. These are moves only.
 
 ### 24. Make localization boilerplate one macro
@@ -544,7 +544,7 @@ Do this as three tasks.
   - The coverage tests list source files by hand (`apps/settings/src/lib.rs:76-100`), so a new file
     is silently left uncovered.
 - **Change:**
-  - Add `unbound_l10n::localizer!()`, which builds the path from `CARGO_MANIFEST_DIR` and
+  - Add `bande_l10n::localizer!()`, which builds the path from `CARGO_MANIFEST_DIR` and
     `CARGO_PKG_NAME`.
   - Add a `missing_ids_in_crate()` test helper that walks `src/` at run time.
   - A second language then becomes a change in one place, which matters for Debian translators.
@@ -558,7 +558,7 @@ Do this as three tasks.
   - `apps/files/src/view.rs:46, 201, 1257-1270`
   - `toolkit/widgets/src/table.rs:26, 807-820`
   - `toolkit/widgets/src/menu.rs:37, 1208-1225`
-- **Change:** add `unbound_widgets::TypeSelect { typed, at }` with `push(char, now) -> &str` and
+- **Change:** add `bande_widgets::TypeSelect { typed, at }` with `push(char, now) -> &str` and
   `deadline()`.
 - **Saves:** about 50 lines.
 - **Risk:** low.
@@ -591,7 +591,7 @@ Do these as one batch.
 
 - **`report(what, result)`:** `shell/bar/src/menu_bar_client.rs:79`, `shell/bar/src/dialogs.rs:25`,
   `shell/notifications/src/client.rs:53`, `shell/controlcenter/src/client.rs:72` and
-  `libs/status/src/devices.rs:198`. Move it to `unbound_log::report`.
+  `libs/status/src/devices.rs:198`. Move it to `bande_log::report`.
 - **Mutex `lock` helpers:**
   - `shell/screenshot/src/service.rs:103`
   - `services/clipboard/src/bus.rs:21`
@@ -603,14 +603,14 @@ Do these as one batch.
   - `services/notify/src/lib.rs:127`
   - `services/sound/src/main.rs:36`
 
-  Make one generic `unbound_bus::lock`.
+  Make one generic `bande_bus::lock`.
 - **`snap`:** `shell/bar/src/rail.rs:113`, `shell/bar/src/symbols.rs:142` and
-  `apps/terminal/src/render.rs:33`. Move it to `unbound-graphics`.
-- **`percent_decode`:** `apps/terminal/src/process.rs:151` duplicates `unbound_xdg::percent_decode`
+  `apps/terminal/src/render.rs:33`. Move it to `bande-graphics`.
+- **`percent_decode`:** `apps/terminal/src/process.rs:151` duplicates `bande_xdg::percent_decode`
   (`libs/xdg/src/uri.rs:25`).
 - **Byte formatting:** `apps/monitor/src/format.rs:3-27` has the same body as
   `libs/fs/src/listing.rs:159-183`, with duplicate FTL strings. Move it to
-  `unbound_l10n::format_bytes`.
+  `bande_l10n::format_bytes`.
 - **Desktop › Change Wallpaper** (`shell/desktop/src/client.rs:452`) rescans every entry to find
   Settings, although `self.apps` is already loaded.
 - **Saves:** about 90 lines.
@@ -650,9 +650,9 @@ There is no behaviour change. Do one task per file.
   - `md-5` comes before `kdl`;
   - `serde` comes before `ruzstd`;
   - the block from `naga` to `wgpu` is unordered;
-  - `unbound-datetime` comes before `unbound-controlcenter`.
-- **Package names that differ from their folders:** `unbound-term` lives in `apps/terminal`, and
-  `unbound-desktop-surface` lives in `shell/desktop`.
+  - `bande-datetime` comes before `bande-controlcenter`.
+- **Package names that differ from their folders:** `bande-term` lives in `apps/terminal`, and
+  `bande-desktop-surface` lives in `shell/desktop`.
 - **Bar module names:** `menubar.rs` sits next to `menu_bar_client.rs`.
 - **Saves:** about 0 lines.
 - **Risk:** very low.
@@ -663,7 +663,7 @@ Do these as one batch.
 
 - **Dead:**
   - `BarEdge::is_vertical` (`services/config/src/lib.rs:119`)
-  - `unbound_sound::THEME_NAME` (`services/sound/src/lib.rs:13`)
+  - `bande_sound::THEME_NAME` (`services/sound/src/lib.rs:13`)
 - **Used only by their own tests:**
   - `Idle::preparing_for_sleep` (`services/power/src/idle.rs:126`). The lock before sleep goes
     through `logind.rs:138-155` instead.
@@ -685,7 +685,7 @@ Do these as one batch.
   - `services/notify/src/alarm.rs`, which uses the boot-time clock plus an eventfd. That is a
     different clock, so keep it.
 - **Change:**
-  - Generalize `unbound_datetime::WallClockTimer::at(Timestamp)` and build `MinuteTimer` on it.
+  - Generalize `bande_datetime::WallClockTimer::at(Timestamp)` and build `MinuteTimer` on it.
   - The portal polls the timer fd and the bus in one thread.
 - **Saves:** about 40 lines and two threads.
 - **Risk:** low.
@@ -694,15 +694,15 @@ Do these as one batch.
 
 1. **One status hub per shell process** (task 1). Today every display's bar runs its own PipeWire
    client, device follower, tray host and about 8 threads.
-2. **Cache icon-theme lookups in `unbound-xdg`** (task 2). Every `find_icon` call parses
+2. **Cache icon-theme lookups in `bande-xdg`** (task 2). Every `find_icon` call parses
    `index.theme` again and can make hundreds of stat() calls.
 3. **Delete the config migration and legacy section names** (task 3). This follows the no-legacy
    rule and removes about 350 lines.
 4. **`Rect::contains`, `opens_menu` and `is_secondary` in the toolkit** (task 4). This removes 18
    plus 4 copies.
-5. **A base-directory module in `unbound-xdg`, with `state_home`** (task 5). This removes about 25
+5. **A base-directory module in `bande-xdg`, with `state_home`** (task 5). This removes about 25
    hand-written lookups and fixes Screenshot's spec bug and path layout.
-6. **One typed `org.unbound.Config` client** (task 6). This replaces 10 hand-made clients and makes
+6. **One typed `org.bande.Config` client** (task 6). This replaces 10 hand-made clients and makes
    property names compile-checked.
 7. **One `follow_properties` helper that reads `GetAll` and the signal's changes** (task 7). Settings
    makes 41 round trips per change today.

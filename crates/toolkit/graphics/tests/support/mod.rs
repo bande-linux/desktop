@@ -4,8 +4,8 @@
 use std::path::Path;
 
 use ab_glyph::{Font as _, FontRef, GlyphId, OutlineCurve};
+use bande_graphics::{Color, Item, Paint, Rect, Scene, Shape, Snapshot};
 use image::{RgbImage, buffer::ConvertBuffer};
-use unbound_graphics::{Color, Item, Paint, Rect, Scene, Shape, Snapshot};
 
 pub const MIN_SSIM: f64 = 0.995;
 pub const MAX_CHANNEL_DELTA: u8 = 2;

@@ -1,6 +1,6 @@
 [package]
-name = "unbound-search"
-description = "Search for Unbound: fuzzy matching, usage ranking, a home folder index and a calculator"
+name = "bande-search"
+description = "Search for Bande: fuzzy matching, usage ranking, a home folder index and a calculator"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,9 +10,9 @@ repository.workspace = true
 [dependencies]
 jiff.workspace = true
 tracing.workspace = true
-unbound-inbox.workspace = true
-unbound-watch.workspace = true
-unbound-xdg.workspace = true
+bande-inbox.workspace = true
+bande-watch.workspace = true
+bande-xdg.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

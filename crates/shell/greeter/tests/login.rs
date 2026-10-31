@@ -76,9 +76,9 @@ struct Entry {
 
 fn journal() -> Vec<Entry> {
     let identifiers = [
-        "unbound-login-test",
-        "unbound-greeter",
-        "unbound-compositor",
+        "bande-login-test",
+        "bande-greeter",
+        "bande-compositor",
         "systemd",
     ]
     .map(|identifier| format!("SYSLOG_IDENTIFIER={identifier}"));
@@ -115,7 +115,7 @@ fn compositor_active(person: &str) -> bool {
             "--user",
             &format!("--machine={person}@"),
             "is-active",
-            "unbound-compositor.service",
+            "bande-compositor.service",
         ],
     )
     .is_some_and(|state| state == "active")
@@ -123,8 +123,8 @@ fn compositor_active(person: &str) -> bool {
 
 #[test]
 #[ignore = "needs the ci/vm guest booted with systemd, greetd and the test person"]
-fn greetd_signs_a_person_in_to_the_unbound_session_with_the_system_keyboard_layout() {
-    wait_for("the login window", STARTUP, || running("unbound-greeter"));
+fn greetd_signs_a_person_in_to_the_bande_session_with_the_system_keyboard_layout() {
+    wait_for("the login window", STARTUP, || running("bande-greeter"));
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     thread::sleep(Duration::from_secs(3));
 
@@ -136,7 +136,7 @@ fn greetd_signs_a_person_in_to_the_unbound_session_with_the_system_keyboard_layo
         "a wrong password signed in"
     );
     assert!(
-        running("unbound-greeter"),
+        running("bande-greeter"),
         "the login window left after a wrong password"
     );
 
@@ -144,11 +144,11 @@ fn greetd_signs_a_person_in_to_the_unbound_session_with_the_system_keyboard_layo
         keyboard.tap(key);
     }
     Command::new("systemd-cat")
-        .args(["--identifier=unbound-login-test", "echo", SUBMITTED])
+        .args(["--identifier=bande-login-test", "echo", SUBMITTED])
         .status()
         .expect("systemd-cat");
     keyboard.tap(KEY_ENTER);
-    wait_for("the Unbound session", STARTUP, || compositor_active(PERSON));
+    wait_for("the Bande session", STARTUP, || compositor_active(PERSON));
     wait_for("the desktop", STARTUP, || {
         journal()
             .iter()
@@ -161,12 +161,12 @@ fn greetd_signs_a_person_in_to_the_unbound_session_with_the_system_keyboard_layo
         .expect("the submission is in the journal")
         .at;
     let milestone = |identifier: &str, start: &str| after(&entries, submitted, identifier, start);
-    let signed_in = milestone("unbound-greeter", "signed in");
-    let handed_over = milestone("unbound-compositor", "leaving the last frame");
+    let signed_in = milestone("bande-greeter", "signed in");
+    let handed_over = milestone("bande-compositor", "leaving the last frame");
     let user_manager = milestone("systemd", "Startup finished");
-    let compositor = milestone("systemd", "Starting unbound-compositor.service");
-    let first_frame = milestone("unbound-compositor", "the first frame is on");
-    let shown = milestone("unbound-compositor", SHOWN);
+    let compositor = milestone("systemd", "Starting bande-compositor.service");
+    let first_frame = milestone("bande-compositor", "the first frame is on");
+    let shown = milestone("bande-compositor", SHOWN);
     for (what, at) in [
         ("greetd accepted the password", signed_in),
         (
@@ -184,7 +184,7 @@ fn greetd_signs_a_person_in_to_the_unbound_session_with_the_system_keyboard_layo
         );
     }
     assert_eq!(
-        milestone("unbound-compositor", "the desktop is shown after"),
+        milestone("bande-compositor", "the desktop is shown after"),
         None,
         "the session gave up waiting for its shell"
     );
@@ -202,6 +202,6 @@ fn greetd_signs_a_person_in_to_the_unbound_session_with_the_system_keyboard_layo
     );
     assert_eq!(
         session_property(&session, "Desktop").as_deref(),
-        Some("unbound")
+        Some("bande")
     );
 }

@@ -1,7 +1,7 @@
 use crate::support::*;
+use bande_compositor::{ARROW_FILL, ARROW_OUTLINE, BACKGROUND, Compositor, Renderer};
+use bande_test_wayland::{RED, TestClient, roundtrip};
 use smithay::utils::{Logical, Point, Size};
-use unbound_compositor::{ARROW_FILL, ARROW_OUTLINE, BACKGROUND, Compositor, Renderer};
-use unbound_test_wayland::{RED, TestClient, roundtrip};
 
 const KEY_W: u32 = 17;
 
@@ -305,7 +305,7 @@ fn the_compositor_draws_an_arrow_where_the_pointer_is_once_it_moves() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("Vulkan renderer");
     renderer.render(&mut server).expect("first frame");
-    let rgba = |snapshot: &unbound_compositor::Snapshot, x: i32, y: i32| {
+    let rgba = |snapshot: &bande_compositor::Snapshot, x: i32, y: i32| {
         let at = ((y * snapshot.size.w + x) * 4) as usize;
         [
             snapshot.rgba[at],

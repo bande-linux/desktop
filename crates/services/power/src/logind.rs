@@ -128,7 +128,7 @@ impl SleepGuard {
                 inhibit(
                     &system,
                     "sleep",
-                    "Unbound",
+                    "Bande",
                     &L10N.tr("lock-before-sleep"),
                     "delay",
                 )

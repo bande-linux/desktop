@@ -4,7 +4,7 @@ use std::process::{Command, ExitCode};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
-use unbound_config::{ConfigService, ConfigStore, ErrorNotifier, config_path, share_login_picture};
+use bande_config::{ConfigService, ConfigStore, ErrorNotifier, config_path, share_login_picture};
 use zbus::blocking::Connection;
 
 fn open_in_editor(path: &Path) {
@@ -40,7 +40,7 @@ fn serve(path: &Path) -> Result<(ConfigService, Connection), Box<dyn Error>> {
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-config");
+    bande_log::init("bande-config");
     let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
     let Some(path) = config_path(config_home.as_deref(), std::env::home_dir().as_deref()) else {
         tracing::error!("neither XDG_CONFIG_HOME nor HOME is set");
@@ -48,7 +48,7 @@ fn main() -> ExitCode {
     };
     match serve(&path) {
         Ok((_service, connection)) => {
-            unbound_bus::serve_until_closed(&connection);
+            bande_bus::serve_until_closed(&connection);
             ExitCode::SUCCESS
         }
         Err(error) => {

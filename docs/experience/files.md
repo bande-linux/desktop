@@ -35,7 +35,7 @@ Checked in `crates/apps/files/src`, `crates/libs/fs`, `crates/libs/preview` and 
 | Drag and drop | Drag to any app; drop on folders, sidebar, tabs and path bar segments; spring-loading after 0.9 s; Alt copies and Super moves (the compositor picks the action) | `drag.rs`, `platform/compositor/src/drag.rs` |
 | Quick Look | Space toggles, arrows move the selection under it: images, text (first lines), folder counts, other files through installed thumbnailers (PDF, video) | `paint.rs`, `libs/preview` |
 | Inspector | Super+I shows one panel that follows the selection: preview, kind, size (folders counted in the background), modified, where, permissions as text, link target, Open With with Use for All | `paint.rs`, `view.rs` |
-| Search | Super+F; fuzzy name search over the `unbound-search` index; scope "this folder" or Home; results in a list with a Where column; Recents (Shift+Super+F) | `search.rs` |
+| Search | Super+F; fuzzy name search over the `bande-search` index; scope "this folder" or Home; results in a list with a Where column; Recents (Shift+Super+F) | `search.rs` |
 | Go | Back, Forward, Enclosing Folder, Desktop, Documents, Downloads, Home, Recents, Go to Folder (Shift+Super+G, relative paths and `~`) | `menu_bar.rs`, `view.rs` |
 | Watching | inotify on shown folders, settled for 80 ms, then the whole folder is read again | `libs/fs/src/watch.rs`, `browser.rs` |
 
@@ -96,7 +96,7 @@ it, and on Select All in the list view. Slice F1 measures it; F2–F4 remove it.
 | Folders are read on the UI thread | Opening a big Downloads, a photo dump or `/usr/lib` freezes the window; the Finder shows the first items at once | now | S |
 | A change reads the whole folder again | A download or a build writing into a big folder makes the window stutter every 80 ms | now | S |
 | Selection and list rows scale with the folder | Super+A, Shift-click and switching to the list view hitch on big folders | now | S |
-| No number for big folders | `unbound-session-bench` measures Files on 400 files only; regressions go unseen | now | S |
+| No number for big folders | `bande-session-bench` measures Files on 400 files only; regressions go unseen | now | S |
 
 ### Views
 
@@ -208,14 +208,14 @@ better on its own. Tests are behaviour tests that fail without the change (CLAUD
 tautologies). "Goldens" are headless renders in `crates/apps/files/tests/golden/`, light and dark.
 "Review" means steps and `shot` lines appended to one growing scenario,
 `ci/review/scenarios/files-depth.scenario`, recorded with `ci/review/run.sh` and copied to
-`/home/mikael/.cache/unbound-agents/report/<branch>/`. Crates: `apps/files` unless named.
+`/home/mikael/.cache/bande-agents/report/<branch>/`. Crates: `apps/files` unless named.
 
 ### Built (2026-10-31, `night/files-depth-1`)
 
-- **F1.** `unbound-files-bench` (`crates/testing/bench`) drives `FilesView` in-process on a folder of
+- **F1.** `bande-files-bench` (`crates/testing/bench`) drives `FilesView` in-process on a folder of
   100 000 files: open, list view, scrolling, Select All and one external change. It measures the
   UI-thread work that F2–F4 change; the frame time of the session stays with
-  `unbound-session-bench`. Numbers in [`../architecture/performance.md`](../architecture/performance.md).
+  `bande-session-bench`. Numbers in [`../architecture/performance.md`](../architecture/performance.md).
 - **F2.** The first 2 000 entries are read at once and shown; a `Lister` thread (socket-pair
   wake-up like `Loader`) reads the rest in doubling chunks that merge in sort order. Selection,
   reveal and Go to Folder follow the entries as they arrive; leaving the folder drops the
@@ -250,10 +250,10 @@ tautologies). "Goldens" are headless renders in `crates/apps/files/tests/golden/
   screen. Escape leaves full screen first and closes on the second press: one key never loses
   the item the user was looking at. Goldens `quick-look-text`, `quick-look-several`.
 - **F9.** The inspector shows Created, Dimensions (read from the image header on the preview
-  worker, `unbound_preview::image_size`) and, for items you own, a Sharing & Permissions
+  worker, `bande_preview::image_size`) and, for items you own, a Sharing & Permissions
   section: "Allow running as a program" (a toolkit `Toggle`) and You, Group and Everyone pop-ups
   (Read & Write, Read only, No Access). Folders keep the search bit with read access. The
-  permission rules live in `unbound_fs` (`Access`, `Class`, `with_access`, `with_runnable`).
+  permission rules live in `bande_fs` (`Access`, `Class`, `with_access`, `with_runnable`).
   Several items show the count, total size and their kinds. The inspector scrolls; controls are
   real widgets, so they are keyboard and screen-reader reachable. Goldens `inspector-file`,
   `inspector-several`.
@@ -268,7 +268,7 @@ tautologies). "Goldens" are headless renders in `crates/apps/files/tests/golden/
   "Redo Move to Trash"; batch renames read "Undo Rename" (a rename chain is undone through
   staging names, so its change count is not the item count). The menu bar is re-exported when
   the titles change (`AppMenu::update` skips unchanged menus).
-- **F12.** `unbound_fs::plan_renames` turns items and a `RenameRule` (Replace Text, Add Text
+- **F12.** `bande_fs::plan_renames` turns items and a `RenameRule` (Replace Text, Add Text
   before or after, Format: name and index or five-digit counter, before or after, from a start
   number) into a plan, keeps extensions, and reports empty names, slashes, two items with one
   name and a name taken in the folder before anything changes. `rename_all` renames in one go,
@@ -279,7 +279,7 @@ tautologies). "Goldens" are headless renders in `crates/apps/files/tests/golden/
   is disabled. The renamed items stay selected. Golden `batch-rename`.
 - **F14.** The search bar has Kind (Any, Folder, Document, Image, Audio, Video, Archive; by MIME
   type from the name) and Date Modified (Any Time, Today, Last 7 Days, Last 30 Days, This Year;
-  `unbound_fs::Recency`, from local midnight) pop-ups. The view switch is dimmed and ignores
+  `bande_fs::Recency`, from local midnight) pop-ups. The view switch is dimmed and ignores
   Super+1/3 while searching; Escape restores the view. Golden `search` updated.
 - **Lazy list rows.** `Table::set_row_count` makes unfilled flat rows, `unfilled_rows` names the
   rows around the visible ones (and the cursor) without cells, `fill_row` fills them. Files
@@ -287,12 +287,12 @@ tautologies). "Goldens" are headless renders in `crates/apps/files/tests/golden/
   100 000. Switching to the list at 100 000 items: 12.7 ms median (32.9 worst) before, 1.4 ms
   (4.7) after; Select All 4.3 ms to 1.1 ms (`../architecture/performance.md`). Type-select in the list goes through Files' own entries, which are always complete.
   Nested lists (open folders) still build every row.
-- **Go to Folder** uses `unbound_fs::typed_location`, shared with the file chooser: "~" and
+- **Go to Folder** uses `bande_fs::typed_location`, shared with the file chooser: "~" and
   "~/…" expand, "~name" is a name in the shown folder.
 
 ### F1. Measure big folders
 
-Add a "big folder" set to `unbound-session-bench`: open a generated folder of 100 000 files, scroll
+Add a "big folder" set to `bande-session-bench`: open a generated folder of 100 000 files, scroll
 its list view, Select All, create one file in it while it is shown. Record the numbers as a row in
 `docs/architecture/performance.md`. No change to Files.
 
@@ -569,7 +569,7 @@ as its second consumer.
 Files owns `org.freedesktop.FileManager1` on the session bus: `ShowFolders` opens windows,
 `ShowItems` opens the parent and selects the items, `ShowItemProperties` selects them with the
 inspector shown. A D-Bus activation file in `data/` starts Files when it is not running; a second
-`unbound-files <path>` hands its path to the running instance. Activity Monitor's "Show in Files"
+`bande-files <path>` hands its path to the running instance. Activity Monitor's "Show in Files"
 then selects the executable.
 
 - Tests (hermetic bus): `ShowItems` with two files in one folder opens one window with both
@@ -589,7 +589,7 @@ then selects the executable.
 - Nothing new blocks the UI thread; anything that touches the disk runs on a worker with a
   generation check, like `Loader`.
 - Long and right-to-left names truncate in the middle and keep the extension visible.
-- Strings go through `unbound-l10n`; the message-id test covers every new file.
+- Strings go through `bande-l10n`; the message-id test covers every new file.
 
 ## 8. Needs from other crates
 

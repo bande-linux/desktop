@@ -1,4 +1,4 @@
-use unbound_lock::{User, display_name};
+use bande_lock::{User, display_name};
 
 const FIRST_USER_ID: u32 = 1000;
 const LAST_USER_ID: u32 = 59999;

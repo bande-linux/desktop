@@ -22,7 +22,7 @@ Mac variants out of reach. The login screen always uses US.
   likely reason the owner found no way to add layouts. The flow itself works: it is tested, and the installed build
   (`0.0.0+git20261031.4b292c7`, installed 06:43) has it.
 - **Login screen:** always US, whatever the user picked, because the greeter reads only `/etc/default/keyboard`.
-- **UI language:** even with a language set, Unbound's own apps stay in English. Only `en-US` `.ftl` files exist.
+- **UI language:** even with a language set, Bande's own apps stay in English. Only `en-US` `.ftl` files exist.
   Which languages to translate is a separate owner decision, already open.
 
 ## Findings
@@ -44,11 +44,11 @@ Live system (read-only checks):
 - `/etc/default/locale` is a symlink to `/etc/locale.conf` (from `images/rootfs/etc/locale.conf`), so PAM's `pam_env`
   for greetd and localed read and write the same file.
 - Fonts: only dejavu, inter, manrope, jetbrains-mono, noto-color-emoji, noto-mono and urw are installed.
-  `fonts-noto-core` and `fonts-noto-cjk` are Recommends of `unbound-desktop`
-  (`packaging/unbound-desktop/debian/control:44-45`), but the image installs the desktop with
+  `fonts-noto-core` and `fonts-noto-cjk` are Recommends of `bande-desktop`
+  (`packaging/bande-desktop/debian/control:44-45`), but the image installs the desktop with
   `--no-install-recommends` (`images/customize.sh:37`), so Arabic, Thai, Indic and CJK text has no font.
 - `org.freedesktop.locale1.set-locale` is already allowed for local active `sudo` members
-  (`crates/apps/settings/data/50-unbound-settings.rules:6`). `set-keyboard` is not, and is `auth_admin_keep`.
+  (`crates/apps/settings/data/50-bande-settings.rules:6`). `set-keyboard` is not, and is `auth_admin_keep`.
 
 Code:
 
@@ -60,7 +60,7 @@ Code:
 - `locale.rs:107-121` writes `LANG`, `LANGUAGE=<ll_CC>:<ll>` and the five `LC_*` region categories through
   `SetLocale(…, interactive=true)` (`:199`). Settings already does this right; only the list is wrong.
 - Root cause (languages): the image's package list (`images/build.sh:44-48`, minbase) and the Settings package
-  (`crates/apps/settings/Cargo.toml:43`, `depends = "$auto, fonts-inter, unbound-config"`) never pull in `locales`.
+  (`crates/apps/settings/Cargo.toml:43`, `depends = "$auto, fonts-inter, bande-config"`) never pull in `locales`.
 - `crates/libs/keyboard/src/layouts.rs:23-63` parses `/usr/share/X11/xkb/rules/evdev.xml` (590 layouts and
   variants). It keeps the name, description and short label, but drops `countryList` and `languageList`, and keeps the
   `custom` layout. `search` (`:99-113`) matches the whole query as one substring, so "swedish mac" matches nothing.
@@ -68,7 +68,7 @@ Code:
   The input source picker is its own mechanism (`adding_source`, `Anchor::SourceSearch`, `Intent::AddingSource`,
   `Intent::SourceQuery` and a special Enter handler, `view.rs:836-844` and `:1082-1107`). It duplicates the generic
   `Picker` used for time zones and login items (`view.rs:100-112`, `:651-663`, `:1134-1144`, `clock.rs:53-113`).
-- Live reload already works: Settings writes `InputSources` through `org.unbound.Config`
+- Live reload already works: Settings writes `InputSources` through `org.bande.Config`
   (`crates/services/config/src/service.rs:789-815`). The compositor follows PropertiesChanged and re-reads the
   config (`crates/platform/compositor/src/input_settings.rs:48-70`). `keymap.rs:116-154` sets the new XKB
   layout,variant list, keeps the active source, and the HUD, Alt+Super+Space cycling and the bar menu
@@ -120,10 +120,10 @@ Code:
 
 ## Recommendation
 
-- **Languages:** option A. Make `unbound-settings` depend on `locales`, and list every UTF-8 locale in
+- **Languages:** option A. Make `bande-settings` depend on `locales`, and list every UTF-8 locale in
   `/usr/share/i18n/SUPPORTED` with a search picker like the time zone one. localed generates the chosen locale.
   Keep the language system-wide, as it is now.
-- **Fonts:** make `unbound-desktop` depend on `fonts-noto-core`, so the no-recommends image gets it.
+- **Fonts:** make `bande-desktop` depend on `fonts-noto-core`, so the no-recommends image gets it.
 - **Keyboard:** move input sources onto the generic `Picker`, with word-wise search, country and language matching,
   all results and region-based suggestions. Hide `custom`. Add "Use at Login Screen", which calls localed
   `SetX11Keyboard`, and have the config read `/etc/vconsole.conf` first.
@@ -135,9 +135,9 @@ Each step is one short branch from `main`, gated by fmt, workspace clippy `-D wa
 checked on the mini before merge.
 
 1. **Ship `locales` and the Noto fonts** (about 1 h)
-   - `crates/apps/settings/Cargo.toml`: `depends = "$auto, fonts-inter, unbound-config, locales"`, and mention
+   - `crates/apps/settings/Cargo.toml`: `depends = "$auto, fonts-inter, bande-config, locales"`, and mention
      languages in `extended-description`.
-   - `packaging/unbound-desktop/debian/control`: move `fonts-noto-core` (and `fonts-noto-cjk` if the owner agrees)
+   - `packaging/bande-desktop/debian/control`: move `fonts-noto-core` (and `fonts-noto-cjk` if the owner agrees)
      from Recommends to Depends.
    - `images/build.sh:44-48`: add `locales` so minbase has it before the desktop debs.
    - On the mini: `sudo apt install locales fonts-noto-core`. Run `busctl call org.freedesktop.locale1
@@ -155,7 +155,7 @@ checked on the mini before merge.
    - `language.rs`: drop the `PopUpButton` menus. Each row shows the current name and "Change…" (only when
      `allowed`) and opens the inline search, as `clock.rs` `zone_rows` does. Region gets a first result row,
      "Same as Language", which sends `Region(None)`. Keep the formats preview.
-   - `locales/en-US/unbound-settings.ftl`: `no-locales` becomes "Language support is not installed". Add
+   - `locales/en-US/bande-settings.ftl`: `no-locales` becomes "Language support is not installed". Add
      `search-languages`, `choose-language`, `choose-region` and `same-as-language` (already exists, reuse it).
    - Tests: in `tests/general.rs`, replace `languages_come_from_installed_locales…` with a `supported_locales` test
      on a real `SUPPORTED` excerpt: UTF-8 only, `@latin` kept, names from a sample source file, sorted and
@@ -166,11 +166,11 @@ checked on the mini before merge.
    - `locale.rs` worker: before `set_locale`, send an update that marks the chosen code as pending. The row's detail
      reads "Setting up Swedish…" until the PropertiesChanged arrives, or until the error comes back, which then
      shows under the row (existing `failed`).
-   - `language.rs`: when the language has no Unbound translation, the caption under the language row says
-     "Unbound's own apps stay in English for now; other apps use this language." That needs
-     `unbound_l10n::translated()`, which returns the tags the workspace ships (`["en-US"]` today). Keep the
+   - `language.rs`: when the language has no Bande translation, the caption under the language row says
+     "Bande's own apps stay in English for now; other apps use this language." That needs
+     `bande_l10n::translated()`, which returns the tags the workspace ships (`["en-US"]` today). Keep the
      "next time you log in" caption.
-   - Tests: a fake `org.freedesktop.locale1` on `unbound-test-bus` (as `tests/privilege.rs` fakes polkit) that
+   - Tests: a fake `org.freedesktop.locale1` on `bande-test-bus` (as `tests/privilege.rs` fakes polkit) that
      records `SetLocale`. Check: the assignments keep unrelated `LC_*` entries; pending shows and clears when the
      fake emits `Locale`; a fake error reverts the row and shows the sentence.
 4. **A layout picker that finds everything** (about 2 h)
@@ -196,7 +196,7 @@ checked on the mini before merge.
      variants, "", convert=false, interactive=true)` and the `X11Layout`/`X11Variant` properties. The Input Sources
      list ends with "Use at Login Screen" when the system layouts differ from the user's, or "The login screen uses
      these layouts" when they match. Add `Privilege::Keyboard` (`org.freedesktop.locale1.set-keyboard`) and add
-     that action to `data/50-unbound-settings.rules`. `software-update.md` edits the same file; merge, don't
+     that action to `data/50-bande-settings.rules`. `software-update.md` edits the same file; merge, don't
      overwrite.
    - Tests: a config unit test where `vconsole.conf` wins over `default/keyboard` and both fall back to `us`. A
      Settings test against the fake locale1 from step 3: the button sends `("se,us", "", "mac,", "")`, and the row
@@ -230,5 +230,5 @@ checked on the mini before merge.
 2. **CJK fonts always or on demand.** Recommended: always (`fonts-noto-cjk` as a Depends, 91 MB). On demand needs
    PackageKit and a package-install grant.
 3. **Input methods (fcitx5) in Settings now or later.** Recommended: later, after layouts and languages land.
-4. Which languages Unbound's own UI ships first is already an open decision. This plan does not need it, but the
+4. Which languages Bande's own UI ships first is already an open decision. This plan does not need it, but the
    step-3 caption keeps saying "English" until then.

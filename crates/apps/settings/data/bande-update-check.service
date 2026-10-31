@@ -1,0 +1,7 @@
+[Unit]
+Description=Check for software updates and tell the user when some are available
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/bande-settings --check-updates

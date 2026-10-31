@@ -3,7 +3,7 @@ set -e
 DISPLAY_MANAGER=/etc/systemd/system/display-manager.service
 GREETD=/usr/lib/systemd/system/greetd.service
 DEFAULT_DISPLAY_MANAGER=/etc/X11/default-display-manager
-PICTURES=/var/lib/unbound-greeter/pictures
+PICTURES=/var/lib/bande-greeter/pictures
 if [ "$1" = "configure" ] && [ -z "$DPKG_ROOT" ]; then
 	if [ -z "$2" ] && [ ! -e "$DISPLAY_MANAGER" ] && [ ! -L "$DISPLAY_MANAGER" ]; then
 		ln -s "$GREETD" "$DISPLAY_MANAGER"

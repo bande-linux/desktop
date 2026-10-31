@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use bande_render::{Blur, RoundedRect, Shadow, VulkanFrame, VulkanRenderer};
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::{Bind, Color32F, Frame, ImportMem, Offscreen, Renderer};
 use smithay::utils::{Physical, Rectangle, Size, Transform};
-use unbound_render::{Blur, RoundedRect, Shadow, VulkanFrame, VulkanRenderer};
 
 const SIZE: (i32, i32) = (80, 80);
 const WHITE: [u8; 4] = [255, 255, 255, 255];

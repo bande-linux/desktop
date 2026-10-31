@@ -12,7 +12,7 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use unbound_test_bus::SessionBus;
+    use bande_test_bus::SessionBus;
 
     use super::serve_until_closed;
 

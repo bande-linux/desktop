@@ -4,14 +4,14 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 
+use bande_graphics::{DrawError, GpuDevice, GpuRenderer, Region, Scene, pixels};
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
-use unbound_graphics::{DrawError, GpuDevice, GpuRenderer, Region, Scene, pixels};
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Proxy};
 
-pub const RENDERER_VARIABLE: &str = "UNBOUND_RENDERER";
+pub const RENDERER_VARIABLE: &str = "BANDE_RENDERER";
 
 pub(super) struct GpuSurface {
     gpu: Arc<GpuDevice>,

@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
-use unbound_compositor::Compositor;
-use unbound_test_wayland::{RED, ShmImage, TestClient};
+use bande_compositor::Compositor;
+use bande_test_wayland::{RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
 
 use crate::session::Session;

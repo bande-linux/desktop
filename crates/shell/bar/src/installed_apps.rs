@@ -2,8 +2,8 @@ use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use unbound_fs::FolderWatch;
-use unbound_xdg::{DesktopEntry, Locale, applications, current_desktops, data_dirs, data_home};
+use bande_fs::FolderWatch;
+use bande_xdg::{DesktopEntry, Locale, applications, current_desktops, data_dirs, data_home};
 
 pub struct InstalledApps {
     entries: Vec<DesktopEntry>,

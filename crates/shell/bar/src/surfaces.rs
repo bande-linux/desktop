@@ -1,8 +1,8 @@
 use std::path::Path;
 use std::rc::Rc;
 
-use unbound_config::Config;
-use unbound_toolkit::{App, TextSystem, Window};
+use bande_config::Config;
+use bande_toolkit::{App, TextSystem, Window};
 use zbus::blocking::Connection;
 
 use crate::combined_client::{CombinedClient, combined_role};
@@ -70,7 +70,7 @@ pub fn open(
             let view = RailView::new(
                 window.appearance().palette(),
                 text.sharing_fonts(),
-                unbound_xdg::data_dirs(),
+                bande_xdg::data_dirs(),
                 icon_size,
             );
             let status = MenuBarClient::with_view(view, place, buses, layout)?;

@@ -23,7 +23,7 @@ env:
 jobs:
   vm:
     name: ci/vm
-    runs-on: [self-hosted, unbound-kvm]
+    runs-on: [self-hosted, bande-kvm]
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
@@ -49,7 +49,7 @@ jobs:
 
   polkit:
     name: ci/polkit
-    runs-on: [self-hosted, unbound]
+    runs-on: [self-hosted, bande]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -57,13 +57,13 @@ jobs:
       - run: ci/target-dir.sh
       - name: Build the polkitd test
         run: |
-          cargo test --package unbound-polkit --test polkitd --locked --no-run --message-format=json \
+          cargo test --package bande-polkit --test polkitd --locked --no-run --message-format=json \
             | jq -r 'select(.reason == "compiler-artifact" and .target.name == "polkitd") | .executable // empty' \
             > polkitd-test-path
           test -s polkitd-test-path
       - name: Authenticate through the agent against polkitd on Debian 13
         run: |
-          image=unbound-polkit-test:${{ github.sha }}
+          image=bande-polkit-test:${{ github.sha }}
           docker build --quiet --tag "$image" crates/services/polkit/tests/polkitd
           container=$(docker create "$image")
           trap 'docker rm --force "$container" >/dev/null; docker rmi "$image" >/dev/null' EXIT
@@ -72,7 +72,7 @@ jobs:
 
   perf:
     name: ci/perf
-    runs-on: [self-hosted, unbound]
+    runs-on: [self-hosted, bande]
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
@@ -85,12 +85,12 @@ jobs:
           CARGO_BUILD_JOBS: '1'
         run: |
           mapfile -t packages < ci/release/packages
-          cargo build --profile dist --locked "${packages[@]/#/--package=}" --package unbound-bench --package unbound-sample
+          cargo build --profile dist --locked "${packages[@]/#/--package=}" --package bande-bench --package bande-sample
       - name: Measure against the budgets in docs/decisions/0001-rendering.md
         shell: bash
         run: |
-          target/dist/unbound-bench \
-            --compositor target/dist/unbound-compositor --json perf.json \
+          target/dist/bande-bench \
+            --compositor target/dist/bande-compositor --json perf.json \
             | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         if: always()
@@ -101,8 +101,8 @@ jobs:
       - name: Measure the toolkit sample against the budgets in docs/decisions/0001-rendering.md
         shell: bash
         run: |
-          target/dist/unbound-toolkit-bench \
-            --sample target/dist/unbound-sample --json perf-toolkit.json \
+          target/dist/bande-toolkit-bench \
+            --sample target/dist/bande-sample --json perf-toolkit.json \
             | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         if: always()
@@ -119,7 +119,7 @@ jobs:
           mkdir -m 700 "$home/run"
           env -i PATH=/usr/bin:/bin HOME="$home" XDG_RUNTIME_DIR="$home/run" LANG=C.UTF-8 \
             dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- \
-            target/dist/unbound-idle --json perf-idle.json | tee -a "$GITHUB_STEP_SUMMARY"
+            target/dist/bande-idle --json perf-idle.json | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         if: always()
         with:

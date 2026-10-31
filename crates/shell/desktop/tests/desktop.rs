@@ -4,18 +4,18 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use unbound_desktop_surface::{
+use bande_desktop_surface::{
     Artwork, Bounds, Desktop, DesktopView, Direction, Grid, Item, Kind, Layer, Layouts, Luma,
     MenuApp, Positions, Request, Selection, Slot, SortBy, WallpaperKey, command, desktop_menu,
     fitted_label, format_layouts, items_menu, parse_layouts,
 };
-use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
-use unbound_toolkit::{
+use bande_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
+use bande_toolkit::{
     Appearance, Color, CpuRenderer, DragAction, Image, Item as SceneItem, Point, Scheme, TextAlign,
     TextStyle, TextSystem,
 };
-use unbound_wallpaper::{Fit, render};
-use unbound_xdg::file_uri;
+use bande_wallpaper::{Fit, render};
+use bande_xdg::file_uri;
 
 const SCREEN: (f32, f32) = (720.0, 480.0);
 
@@ -308,7 +308,7 @@ fn wallpaper_at(view: &mut DesktopView, scheme: Scheme, now: Instant) {
 fn check_golden(name: &str, view: &mut DesktopView) {
     let scene = view.scene(Instant::now() + Duration::from_secs(5));
     let frame = CpuRenderer::new().render(&scene).unwrap();
-    unbound_golden::assert_golden_rgba!(name, (frame.width, frame.height), frame.rgba);
+    bande_golden::assert_golden_rgba!(name, (frame.width, frame.height), frame.rgba);
 }
 
 fn at(view: &DesktopView, name: &str) -> Point {
@@ -671,13 +671,13 @@ fn dragging_several_icons_carries_a_count_badge_and_one_icon_does_not() {
             &Event::PointerMove(Pointer::at(Point::new(first.x - 20.0, first.y))),
             Instant::now(),
         );
-        let danger = unbound_toolkit::Palette::for_scheme(Scheme::Light).danger;
+        let danger = bande_toolkit::Palette::for_scheme(Scheme::Light).danger;
         let icon = view.drag_icon();
-        let [unbound_toolkit::Item::Translate { items, .. }] = icon.scene.items.as_slice() else {
+        let [bande_toolkit::Item::Translate { items, .. }] = icon.scene.items.as_slice() else {
             panic!("the drag icon is one translated group");
         };
         items.iter().any(|item| {
-            matches!(item, unbound_toolkit::Item::Fill { paint, .. } if *paint == danger.into())
+            matches!(item, bande_toolkit::Item::Fill { paint, .. } if *paint == danger.into())
         })
     };
     assert!(badged(&["Notes.txt", "Projects"]));

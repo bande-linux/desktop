@@ -1,5 +1,5 @@
 use crate::support::*;
-use unbound_test_wayland::{LINEAR, RED, ShmImage, TestClient};
+use bande_test_wayland::{LINEAR, RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
 use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_buffer_params_v1::Error;
 

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use unbound_settings_panes::SettingId;
+use bande_settings_panes::SettingId;
 use zbus::blocking::Connection;
 use zbus::zvariant::Value;
 

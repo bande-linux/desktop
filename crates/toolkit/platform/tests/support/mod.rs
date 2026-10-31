@@ -7,17 +7,17 @@ use std::sync::{Arc, Once, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
+use bande_graphics::Scene;
+use bande_test_bus::SessionBus;
+use bande_toolkit_platform::{App, RENDERER_VARIABLE, Role, Window, WindowEvent, run};
+use bande_widgets::Ui;
 use smithay::utils::{Point, Size};
-use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
-use unbound_graphics::Scene;
-use unbound_test_bus::SessionBus;
-use unbound_toolkit_platform::{App, RENDERER_VARIABLE, Role, Window, WindowEvent, run};
-use unbound_widgets::Ui;
 use zbus::zvariant::{OwnedValue, Value};
 
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
 const APPEARANCE: &str = "org.freedesktop.appearance";
-const UNBOUND_APPEARANCE: &str = "org.unbound.appearance";
+const BANDE_APPEARANCE: &str = "org.bande.appearance";
 
 static DARK: AtomicBool = AtomicBool::new(false);
 static TEXT_SIZE: AtomicU32 = AtomicU32::new(100);
@@ -30,13 +30,13 @@ impl Settings {
         let owned = |value: u32| OwnedValue::try_from(Value::from(value)).expect("owned value");
         let scheme = if DARK.load(Ordering::SeqCst) { 1 } else { 2 };
         let appearance = HashMap::from([("color-scheme".to_owned(), owned(scheme))]);
-        let unbound = HashMap::from([(
+        let bande = HashMap::from([(
             "text-size".to_owned(),
             owned(TEXT_SIZE.load(Ordering::SeqCst)),
         )]);
         HashMap::from([
             (APPEARANCE.to_owned(), appearance),
-            (UNBOUND_APPEARANCE.to_owned(), unbound),
+            (BANDE_APPEARANCE.to_owned(), bande),
         ])
     }
 }
@@ -148,7 +148,7 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
     let client = thread::spawn(move || {
         let mut window = Window::open_on(
             client_end,
-            Role::toplevel(title, "unbound-toolkit-test"),
+            Role::toplevel(title, "bande-toolkit-test"),
             (360, 200),
         )
         .expect("window");
@@ -167,10 +167,7 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
         window.request_redraw();
         let _companion = companion.map(|title| {
             let mut beside = window
-                .open_beside(
-                    Role::toplevel(title, "unbound-toolkit-companion"),
-                    (240, 120),
-                )
+                .open_beside(Role::toplevel(title, "bande-toolkit-companion"), (240, 120))
                 .expect("second window");
             beside.wait_for_gpu();
             let scene = Scene {
@@ -244,7 +241,7 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
         pump(&mut server, &mut scheduler, &mut renderer);
     }
     client.join().expect("client thread");
-    unbound_golden::assert_golden_rgba!(
+    bande_golden::assert_golden_rgba!(
         name,
         (snapshot.size.w as u32, snapshot.size.h as u32),
         snapshot.rgba,

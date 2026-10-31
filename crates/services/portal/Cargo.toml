@@ -1,6 +1,6 @@
 [package]
-name = "xdg-desktop-portal-unbound"
-description = "Unbound backend for xdg-desktop-portal"
+name = "xdg-desktop-portal-bande"
+description = "Bande backend for xdg-desktop-portal"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,39 +12,39 @@ blocking.workspace = true
 jiff.workspace = true
 rustix = { workspace = true, features = ["time"] }
 tracing.workspace = true
-unbound-bus.workspace = true
-unbound-config.workspace = true
-unbound-datetime.workspace = true
-unbound-design.workspace = true
-unbound-log.workspace = true
-unbound-wallpaper.workspace = true
-unbound-xdg.workspace = true
+bande-bus.workspace = true
+bande-config.workspace = true
+bande-datetime.workspace = true
+bande-design.workspace = true
+bande-log.workspace = true
+bande-wallpaper.workspace = true
+bande-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-unbound-test-bus.workspace = true
+bande-test-bus.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, xdg-desktop-portal (>= 1.18), dbus-session-bus | default-dbus-session-bus"
-recommends = "unbound-config, unbound-file-chooser, unbound-screenshot, xdg-desktop-portal-gtk"
+recommends = "bande-config, bande-file-chooser, bande-screenshot, xdg-desktop-portal-gtk"
 extended-description = """\
 Implements xdg-desktop-portal's Settings, FileChooser, Screenshot and \
-ScreenCast backends for the Unbound desktop: the colour scheme, accent \
+ScreenCast backends for the Bande desktop: the colour scheme, accent \
 colour, folder icons and Reduce Motion follow config.kdl, so GTK, \
-libadwaita and Qt apps follow them; Open and Save dialogs are the Unbound \
+libadwaita and Qt apps follow them; Open and Save dialogs are the Bande \
 file dialogs, with the GTK backend as fallback; and browsers and video \
-call apps can share the screen or a window through the Unbound screenshot \
+call apps can share the screen or a window through the Bande screenshot \
 tool. The other interfaces come from the GTK backend, and secrets from \
 GNOME Keyring."""
 assets = [
-    ["target/release/xdg-desktop-portal-unbound", "usr/libexec/", "755"],
-    ["data/xdg-desktop-portal-unbound.service", "usr/lib/systemd/user/", "644"],
-    ["data/org.freedesktop.impl.portal.desktop.unbound.service", "usr/share/dbus-1/services/", "644"],
-    ["data/unbound.portal", "usr/share/xdg-desktop-portal/portals/", "644"],
-    ["data/unbound-portals.conf", "usr/share/xdg-desktop-portal/", "644"],
+    ["target/release/xdg-desktop-portal-bande", "usr/libexec/", "755"],
+    ["data/xdg-desktop-portal-bande.service", "usr/lib/systemd/user/", "644"],
+    ["data/org.freedesktop.impl.portal.desktop.bande.service", "usr/share/dbus-1/services/", "644"],
+    ["data/bande.portal", "usr/share/xdg-desktop-portal/portals/", "644"],
+    ["data/bande-portals.conf", "usr/share/xdg-desktop-portal/", "644"],
 ]
 
 [lints]

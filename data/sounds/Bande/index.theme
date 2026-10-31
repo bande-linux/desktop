@@ -1,0 +1,8 @@
+[Sound Theme]
+Name=Bande
+Comment=Dry, short wooden sounds of the Bande desktop
+Inherits=freedesktop
+Directories=stereo
+
+[stereo]
+OutputProfile=stereo

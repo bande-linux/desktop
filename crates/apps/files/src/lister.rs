@@ -5,7 +5,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Weak};
 use std::thread;
 
-use unbound_fs::{Entry, Listing, Sort, sort};
+use bande_fs::{Entry, Listing, Sort, sort};
 
 pub(crate) const FIRST_CHUNK: usize = 2_000;
 

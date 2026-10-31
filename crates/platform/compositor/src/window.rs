@@ -9,7 +9,7 @@ use smithay::wayland::shell::xdg::{SurfaceCachedState, ToplevelSurface};
 
 use smithay::backend::renderer::element::Id;
 
-use unbound_spring::Spring;
+use bande_spring::Spring;
 
 use crate::frame::Frame;
 use crate::motion::{Look, Motion};
@@ -54,7 +54,7 @@ const RIGHT: u32 = 8;
 
 fn title_bar_height(mode: Option<DecorationMode>, fullscreen: bool) -> i32 {
     if mode == Some(DecorationMode::ServerSide) && !fullscreen {
-        unbound_graphics::FRAME_HEADER_HEIGHT as i32
+        bande_graphics::FRAME_HEADER_HEIGHT as i32
     } else {
         0
     }

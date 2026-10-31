@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use accesskit::{Node, NodeId};
-use unbound_graphics::Point;
+use bande_graphics::Point;
 
 use super::menu_node;
 use super::model::Menu;

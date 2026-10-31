@@ -1,0 +1,14 @@
+[Unit]
+Description=Bande compositor
+BindsTo=graphical-session.target
+Before=graphical-session.target
+Wants=graphical-session-pre.target bande-session.target
+After=graphical-session-pre.target
+
+[Service]
+Slice=session.slice
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/bin/bande-compositor
+OOMScoreAdjust=100
+ManagedOOMPreference=avoid

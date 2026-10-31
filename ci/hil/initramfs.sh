@@ -13,12 +13,12 @@ full=$work/full
 root=$work/root
 mkdir "$full" "$root"
 debugfs -R "rdump / $full" "$rootfs" 2> /dev/null
-mkdir -p "$full/unbound"
-strip -o "$full/unbound/guest" "$binary"
+mkdir -p "$full/bande"
+strip -o "$full/bande/guest" "$binary"
 
 cd "$full"
 lib=usr/lib/aarch64-linux-gnu
-programs=(unbound/guest usr/bin/dash usr/bin/base64 usr/bin/sleep usr/bin/ls usr/bin/mount usr/sbin/seatd)
+programs=(bande/guest usr/bin/dash usr/bin/base64 usr/bin/sleep usr/bin/ls usr/bin/mount usr/sbin/seatd)
 modules=("$lib"/libvulkan.so.1 "$lib"/libvulkan_lvp.so)
 data=(usr/share/vulkan/icd.d usr/share/X11/xkb usr/share/drirc.d etc/passwd etc/group)
 

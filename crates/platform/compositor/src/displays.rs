@@ -1,10 +1,10 @@
+use bande_spring::Spring;
 use smithay::desktop::layer_map_for_output;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Size};
 use smithay::wayland::compositor::{TraversalAction, with_surface_tree_downward};
 use smithay::wayland::fractional_scale::with_fractional_scale;
-use unbound_spring::Spring;
 
 use crate::motion::{Look, OPENING_SCALE};
 use crate::screen::{OutputConfig, OutputSettings, Screen};
@@ -534,7 +534,7 @@ impl Compositor {
         }
     }
 
-    pub fn set_display_config(&mut self, config: unbound_config::Config) {
+    pub fn set_display_config(&mut self, config: bande_config::Config) {
         self.state.night_light.configure(config.night_light);
         self.state.display_config = config;
         self.state.arrange_screens();

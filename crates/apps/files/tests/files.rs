@@ -5,25 +5,25 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use rustix::event::{PollFd, PollFlags, Timespec, poll};
-use tempfile::TempDir;
-use unbound_files::{
+use bande_files::{
     BookmarkEdit, Browser, FilesView, ListColumn, Location, PATH_BAR_HEIGHT, ROW_HEIGHT, Request,
     Row, SIDEBAR_WIDTH, Sheet, SidebarEdit, TAB_BAR_HEIGHT, TOOLBAR_HEIGHT, ViewMemory, ViewMode,
     hidden_places, permissions, rows, with_bookmarks, with_volumes, without_bookmark,
 };
-use unbound_fs::{FolderChanges, Sort, SortBy, Trash, list};
-use unbound_preview::Preview;
-use unbound_thumbnails::{Cache, Thumbnailers, Thumbnails};
-use unbound_toolkit::ui::{
+use bande_fs::{FolderChanges, Sort, SortBy, Trash, list};
+use bande_preview::Preview;
+use bande_thumbnails::{Cache, Thumbnailers, Thumbnails};
+use bande_toolkit::ui::{
     ClipboardRequest, Event, Key, Menu, Modifiers, Pointer, PointerButton, ROW_HEIGHT as LIST_ROW,
     Table,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     CpuRenderer, DragAction, FrameRegions, Image, Item, Palette, Point, SHEET_INSET, Scheme,
     TextSystem, framed_scene,
 };
-use unbound_xdg::{Apps, file_uri};
+use bande_xdg::{Apps, file_uri};
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use tempfile::TempDir;
 
 fn names(folder: &Path, show_hidden: bool) -> Vec<String> {
     list(folder, show_hidden, Sort::default())
@@ -390,7 +390,7 @@ fn space_shows_the_selected_image_in_quick_look_and_closes_it_again() {
     });
     let scene = view.scene(1000, 600);
     let panel = view.quick_look_frame();
-    fn picture_rect(items: &[Item]) -> Option<unbound_toolkit::Rect> {
+    fn picture_rect(items: &[Item]) -> Option<bande_toolkit::Rect> {
         items.iter().find_map(|item| match item {
             Item::Image { rect, .. } if rect.width == 40.0 => Some(*rect),
             Item::Clip { items, .. } => picture_rect(items),
@@ -1204,7 +1204,7 @@ fn dragging_a_group_of_rows_in_the_list_view_drags_all_of_them() {
     );
 }
 
-fn names_of(entries: Vec<&unbound_fs::Entry>) -> Vec<String> {
+fn names_of(entries: Vec<&bande_fs::Entry>) -> Vec<String> {
     entries
         .into_iter()
         .map(|entry| entry.name.clone())
@@ -1308,10 +1308,10 @@ fn dragging_on_empty_space_in_the_icon_view_selects_the_icons_it_touches() {
 const GOLDEN_SIZE: (u32, u32) = (900, 560);
 
 fn check_golden(name: &str, rgba: Vec<u8>) {
-    let whole = unbound_golden::from_rgba(GOLDEN_SIZE.0, GOLDEN_SIZE.1, rgba);
+    let whole = bande_golden::from_rgba(GOLDEN_SIZE.0, GOLDEN_SIZE.1, rgba);
     let steady = GOLDEN_SIZE.1 - (PATH_BAR_HEIGHT + SHEET_INSET as f32).round() as u32;
     let steady = image::imageops::crop_imm(&whole, 0, 0, GOLDEN_SIZE.0, steady).to_image();
-    unbound_golden::assert_golden!(name, &steady);
+    bande_golden::assert_golden!(name, &steady);
 }
 
 impl Place {
@@ -1333,9 +1333,9 @@ impl Place {
         }
         let icons = self.root.path().join("data/icons");
         fs::create_dir_all(&icons).expect("icons");
-        let theme = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../data/icons/Unbound");
-        if !icons.join("Unbound").exists() {
-            std::os::unix::fs::symlink(theme, icons.join("Unbound")).expect("icon theme");
+        let theme = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../data/icons/Bande");
+        if !icons.join("Bande").exists() {
+            std::os::unix::fs::symlink(theme, icons.join("Bande")).expect("icon theme");
         }
         let mut view = FilesView::new(
             self.browser(),
@@ -1805,7 +1805,7 @@ fn templates_make_new_documents_and_folders_open_in_the_terminal() {
 #[test]
 fn hiding_the_status_bar_is_remembered_for_the_next_window() {
     let place = Place::new();
-    let file = place.root.path().join("state/unbound/files-status-bar");
+    let file = place.root.path().join("state/bande/files-status-bar");
     let mut view = place.view();
     view.set_status_bar_file(file.clone());
     let with_bar = view.content_frame().height;
@@ -2465,7 +2465,7 @@ fn quick_look_opens_its_item_with_the_default_app() {
     view.handle(&command(Key::Character('y'), false));
     view.scene(1000, 600);
     let button = view
-        .hit_frame(&unbound_files::Hit::QuickLookOpen)
+        .hit_frame(&bande_files::Hit::QuickLookOpen)
         .expect("an Open with button");
 
     view.handle(&Event::PointerDown(Pointer::at(Point::new(
@@ -2942,7 +2942,7 @@ fn photos(place: &Place) -> FilesView {
     view
 }
 
-fn batch_state(view: &FilesView) -> unbound_files::BatchRename {
+fn batch_state(view: &FilesView) -> bande_files::BatchRename {
     match view.sheet() {
         Some(Sheet::Rename(state)) => state.clone(),
         other => panic!("{other:?}"),
@@ -3121,9 +3121,9 @@ fn files_follows_the_text_size() {
     view.handle(&command(Key::Character('2'), false));
     let regular = widest_text(&view.scene(1000, 600).items);
 
-    view.set_appearance(unbound_toolkit::Appearance {
-        text_size: unbound_toolkit::TextSize::LARGEST,
-        ..unbound_toolkit::Appearance::default()
+    view.set_appearance(bande_toolkit::Appearance {
+        text_size: bande_toolkit::TextSize::LARGEST,
+        ..bande_toolkit::Appearance::default()
     });
 
     assert!(widest_text(&view.scene(1000, 600).items) > regular * 1.5);

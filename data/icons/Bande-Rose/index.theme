@@ -1,0 +1,13 @@
+[Icon Theme]
+Name=Bande Rose
+Comment=Bande folders with the rose accent
+Inherits=Bande
+Directories=scalable/places
+Hidden=true
+
+[scalable/places]
+Context=Places
+Size=48
+MinSize=8
+MaxSize=512
+Type=Scalable

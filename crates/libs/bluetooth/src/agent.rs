@@ -3,7 +3,7 @@ use std::sync::Arc;
 use zbus::blocking::Connection;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath};
 
-pub const AGENT_PATH: &str = "/org/unbound/bluetooth/agent";
+pub const AGENT_PATH: &str = "/org/bande/bluetooth/agent";
 const CAPABILITY: &str = "KeyboardDisplay";
 
 pub trait PairingPrompt: Send + Sync {

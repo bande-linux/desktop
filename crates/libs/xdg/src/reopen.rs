@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::entry::{DesktopEntry, Locale, applications, current_desktops, data_dirs};
 use crate::identity::find_app;
 
-const REOPEN_FILE: &str = "unbound/reopen";
+const REOPEN_FILE: &str = "bande/reopen";
 
 pub fn reopen_file() -> Option<PathBuf> {
     env::var_os("XDG_STATE_HOME")

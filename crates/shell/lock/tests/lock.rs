@@ -2,13 +2,13 @@
 
 use std::time::{Duration, Instant};
 
-use unbound_datetime::{DateFormats, posix_locale};
-use unbound_lock::{
+use bande_datetime::{DateFormats, posix_locale};
+use bande_lock::{
     LockScreen, PowerAction, SHAKE_DURATION, User, clock_texts, display_name, shake_offset,
 };
-use unbound_status::status::{Battery, Power, Wifi};
-use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Appearance, CpuRenderer, Image, Item, TextSystem};
+use bande_status::status::{Battery, Power, Wifi};
+use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::{Appearance, CpuRenderer, Image, Item, TextSystem};
 
 const OUTPUT: (u32, u32) = (1024, 768);
 const NONE: Modifiers = Modifiers {
@@ -74,7 +74,7 @@ fn wallpaper() -> Image {
 fn render(screen: &mut LockScreen, name: &str) {
     let scene = screen.scene(OUTPUT.0, OUTPUT.1);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
-    unbound_golden::assert_golden_rgba!(name, OUTPUT, frame.rgba);
+    bande_golden::assert_golden_rgba!(name, OUTPUT, frame.rgba);
 }
 
 #[test]
@@ -189,7 +189,7 @@ fn texts(screen: &mut LockScreen) -> usize {
         .scene(OUTPUT.0, OUTPUT.1)
         .items
         .iter()
-        .filter(|item| matches!(item, unbound_toolkit::Item::Text { .. }))
+        .filter(|item| matches!(item, bande_toolkit::Item::Text { .. }))
         .count()
 }
 

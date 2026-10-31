@@ -7,7 +7,7 @@ use zbus::blocking::fdo::PropertiesProxy;
 use crate::failure::failed;
 use crate::follow::{Update, Updates, spawn};
 use crate::storage::disk;
-use unbound_settings_panes::SettingId;
+use bande_settings_panes::SettingId;
 
 const HOSTNAME: &str = "org.freedesktop.hostname1";
 const HOSTNAME_PATH: &str = "/org/freedesktop/hostname1";
@@ -42,7 +42,7 @@ pub struct About {
     pub memory: u64,
     pub capacity: u64,
     pub available: u64,
-    pub unbound: String,
+    pub bande: String,
     pub system: String,
     pub serial: Option<String>,
 }
@@ -188,7 +188,7 @@ fn read_about(hostname: &HostnameProxyBlocking<'_>) -> About {
         memory: memory_bytes(&read("/proc/meminfo").unwrap_or_default()),
         capacity,
         available,
-        unbound: env!("CARGO_PKG_VERSION").to_owned(),
+        bande: env!("CARGO_PKG_VERSION").to_owned(),
         system: system_version(
             &read("/etc/os-release").unwrap_or_default(),
             read("/etc/debian_version").as_deref(),

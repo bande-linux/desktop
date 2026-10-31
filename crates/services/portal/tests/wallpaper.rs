@@ -6,12 +6,12 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use bande_config::{ConfigService, ConfigStore};
+use bande_xdg::file_uri;
 use common::Portal;
-use unbound_config::{ConfigService, ConfigStore};
-use unbound_xdg::file_uri;
-use xdg_desktop_portal_unbound::OBJECT_PATH;
-use xdg_desktop_portal_unbound::request::Cancellation;
-use xdg_desktop_portal_unbound::wallpaper::{Wallpaper, WallpaperUi};
+use xdg_desktop_portal_bande::OBJECT_PATH;
+use xdg_desktop_portal_bande::request::Cancellation;
+use xdg_desktop_portal_bande::wallpaper::{Wallpaper, WallpaperUi};
 use zbus::zvariant::{ObjectPath, Value};
 
 const INTERFACE: &str = "org.freedesktop.impl.portal.Wallpaper";
@@ -102,7 +102,7 @@ impl Fixture {
     }
 
     fn wallpaper(&self) -> (Option<PathBuf>, Option<PathBuf>) {
-        let choice = unbound_wallpaper::read(&self.portal.client);
+        let choice = bande_wallpaper::read(&self.portal.client);
         (choice.light, choice.dark)
     }
 

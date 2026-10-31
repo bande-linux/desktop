@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use unbound_inbox::{Inbox, Outbox};
+use bande_inbox::{Inbox, Outbox};
 
 use crate::cache::{Cache, Picture, ThumbnailSize};
 use crate::generate::{Thumbnailers, thumbnail};

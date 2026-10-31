@@ -3,9 +3,9 @@
 use std::sync::mpsc;
 use std::time::Duration;
 
-use unbound_datetime::timedate::{TimedateProxyBlocking, zone_changes};
-use unbound_test_bus::SessionBus;
-use unbound_test_bus::timedate::{FakeTimedate, REFUSED_ZONE};
+use bande_datetime::timedate::{TimedateProxyBlocking, zone_changes};
+use bande_test_bus::SessionBus;
+use bande_test_bus::timedate::{FakeTimedate, REFUSED_ZONE};
 
 const WAIT: Duration = Duration::from_secs(5);
 

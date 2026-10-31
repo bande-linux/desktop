@@ -1,7 +1,7 @@
+use bande_datetime::daylight::{Place, Sky, sky, within_daily};
+use bande_settings_panes::{SettingId, Value};
 use jiff::Zoned;
 use jiff::civil::Time;
-use unbound_datetime::daylight::{Place, Sky, sky, within_daily};
-use unbound_settings_panes::{SettingId, Value};
 
 use crate::L10N;
 use crate::view::SettingsView;
@@ -76,7 +76,7 @@ impl SettingsView {
             .flatten();
         let place = self
             .place
-            .get_or_init(unbound_datetime::daylight::system_place);
+            .get_or_init(bande_datetime::daylight::system_place);
         Some(night_summary(*on, custom, &(self.clock)(), *place))
     }
 }

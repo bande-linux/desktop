@@ -5,17 +5,17 @@ mod support;
 use std::path::{Path, PathBuf};
 
 use accesskit::{Action, ActionRequest, Role, TreeId};
-use support::{SIZE, click, find, has_text, nodes};
-use unbound_settings::{
+use bande_settings::{
     About, AboutCommand, App, Category, Command, DefaultAppCommand, InstalledLocale, LocaleState,
     LoginCommand, LoginItems, NetworkCommand, Package, PaneId, SettingId, SettingsView,
     SoftwareState, Storage, StorageCommand, Update, Value, WifiState, assignments, categorize,
     chip_name, installed_locales, locale_name, login_items, login_matches, memory_bytes,
     parse_assignments, static_hostname, system_version, tally,
 };
-use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Item, Palette, Scheme, TextSystem};
-use unbound_xdg::DesktopEntry;
+use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::{Item, Palette, Scheme, TextSystem};
+use bande_xdg::DesktopEntry;
+use support::{SIZE, click, find, has_text, nodes};
 
 fn key(view: &mut SettingsView, key: Key, modifiers: Modifiers) {
     view.handle(&Event::Key { key, modifiers });
@@ -30,7 +30,7 @@ fn about() -> About {
         memory: 16_000_000_000,
         capacity: 494_000_000_000,
         available: 210_000_000_000,
-        unbound: "0.1.0".to_owned(),
+        bande: "0.1.0".to_owned(),
         system: "Debian 13.7 (trixie)".to_owned(),
         serial: Some("C02XL0GHJGH5".to_owned()),
     }
@@ -370,11 +370,11 @@ fn login_items_are_added_by_name_and_removed_from_their_row() {
         ]
     );
     view.apply(Update::Login(LoginItems {
-        items: vec![app("org.unbound.Terminal.desktop", "Terminal")],
+        items: vec![app("org.bande.Terminal.desktop", "Terminal")],
         apps: vec![
             app("org.mozilla.firefox.desktop", "Firefox"),
-            app("org.unbound.Files.desktop", "Files"),
-            app("org.unbound.Terminal.desktop", "Terminal"),
+            app("org.bande.Files.desktop", "Files"),
+            app("org.bande.Terminal.desktop", "Terminal"),
         ],
     }));
     let add = find(&mut view, Role::Button, "Add App…").expect("Add App…");
@@ -396,7 +396,7 @@ fn login_items_are_added_by_name_and_removed_from_their_row() {
     assert_eq!(
         view.take_commands(),
         [Command::Login(LoginCommand::Remove(
-            "org.unbound.Terminal.desktop".to_owned()
+            "org.bande.Terminal.desktop".to_owned()
         ))]
     );
 }
@@ -449,9 +449,9 @@ fn login_items_list_what_opens_at_login_and_search_skips_them() {
     assert!(login_matches(&state, "chat", 8).is_empty());
 }
 
-fn network_state() -> unbound_settings::NetworkState {
-    unbound_settings::NetworkState {
-        ethernet: Some(unbound_network::Ethernet {
+fn network_state() -> bande_settings::NetworkState {
+    bande_settings::NetworkState {
+        ethernet: Some(bande_network::Ethernet {
             interface: "end0".to_owned(),
             cable: true,
             managed: true,
@@ -461,10 +461,10 @@ fn network_state() -> unbound_settings::NetworkState {
             dns: vec!["192.168.1.1".to_owned()],
             manual: false,
         }),
-        vpns: vec![unbound_network::Vpn {
+        vpns: vec![bande_network::Vpn {
             path: "/org/freedesktop/NetworkManager/Settings/7".to_owned(),
             name: "Office".to_owned(),
-            state: unbound_network::VpnState::Off,
+            state: bande_network::VpnState::Off,
         }],
     }
 }

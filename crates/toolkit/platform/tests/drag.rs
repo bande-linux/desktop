@@ -6,13 +6,11 @@ use std::os::unix::net::UnixStream;
 use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
+use bande_compositor::OutputConfig;
+use bande_graphics::{Color, Event, PointerButton, Scene};
+use bande_test_wayland::{GREEN, ShmImage, TestClient};
+use bande_toolkit_platform::{App, DragAction, DragEvent, DragIcon, Transfer, Window, WindowEvent};
 use smithay::utils::{Logical, Point, Size};
-use unbound_compositor::OutputConfig;
-use unbound_graphics::{Color, Event, PointerButton, Scene};
-use unbound_test_wayland::{GREEN, ShmImage, TestClient};
-use unbound_toolkit_platform::{
-    App, DragAction, DragEvent, DragIcon, Transfer, Window, WindowEvent,
-};
 use wayland_client::protocol::wl_shm::Format;
 
 #[path = "support/desktop.rs"]
@@ -62,7 +60,7 @@ impl App for Shelf {
                         background: Color::hex(0xE0A030),
                         items: Vec::new(),
                     },
-                    hotspot: unbound_graphics::Point::new(8.0, 8.0),
+                    hotspot: bande_graphics::Point::new(8.0, 8.0),
                 };
                 window
                     .start_drag(

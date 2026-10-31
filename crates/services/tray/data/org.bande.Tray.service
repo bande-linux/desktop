@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.kde.StatusNotifierWatcher
+Exec=/usr/bin/bande-tray
+SystemdService=bande-tray.service

@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::{Compositor, Renderer, Snapshot};
-use unbound_test_wayland::{
+use bande_compositor::{Compositor, Renderer, Snapshot};
+use bande_test_wayland::{
     Anchor, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, TestClient, roundtrip,
 };
 
@@ -112,13 +112,13 @@ fn restoring_mid_flight_turns_back_from_where_the_window_is() {
     let (mut server, mut renderer, mut editor) = settled_window();
     let mut shell = TestClient::connect_as_shell(&mut server);
     shell.join_shell(&mut server);
-    editor.set_app_id(&mut server, 0, "org.unbound.Editor");
+    editor.set_app_id(&mut server, 0, "org.bande.Editor");
     let start = SETTLED + ms(100);
     minimize(&mut server, &mut editor);
     frame(&mut renderer, &mut server, start);
     let fleeing = reddish(&frame(&mut renderer, &mut server, start + ms(120))).expect("shown");
 
-    shell.activate_app(&mut server, "org.unbound.Editor");
+    shell.activate_app(&mut server, "org.bande.Editor");
     let turning = reddish(&frame(&mut renderer, &mut server, start + ms(136))).expect("shown");
 
     assert!(
@@ -216,8 +216,8 @@ fn a_window_minimizes_into_its_apps_dock_icon() {
             color: GREEN,
         },
     );
-    editor.set_app_id(&mut server, 0, "org.unbound.Editor");
-    dock.set_icon_rect(&mut server, "org.unbound.Editor", 0, (8, 140, 32, 32));
+    editor.set_app_id(&mut server, 0, "org.bande.Editor");
+    dock.set_icon_rect(&mut server, "org.bande.Editor", 0, (8, 140, 32, 32));
     let start = SETTLED + ms(100);
 
     minimize(&mut server, &mut editor);

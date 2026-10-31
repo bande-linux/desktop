@@ -410,7 +410,7 @@ impl VulkanRenderer {
     pub fn new() -> Result<Self, RenderError> {
         let entry = unsafe { ash::Entry::load() }?;
         let application = vk::ApplicationInfo::default()
-            .application_name(c"unbound-compositor")
+            .application_name(c"bande-compositor")
             .api_version(vk::API_VERSION_1_3);
         let instance = unsafe {
             entry.create_instance(

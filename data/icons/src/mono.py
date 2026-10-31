@@ -1,7 +1,7 @@
 import os
 import struct
 
-FONT = os.environ.get('UNBOUND_MONO_FONT', '/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Bold.ttf')
+FONT = os.environ.get('BANDE_MONO_FONT', '/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Bold.ttf')
 
 
 class Font:

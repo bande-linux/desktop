@@ -5,11 +5,11 @@ use std::fs;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use tempfile::TempDir;
-use unbound_xdg::{
+use bande_xdg::{
     DesktopEntry, Locale, MimeApps, MimeDatabase, file_uri, handlers, mimeapps_paths,
     path_from_file_uri, set_default_app,
 };
+use tempfile::TempDir;
 
 fn write(path: &Path, bytes: impl AsRef<[u8]>) {
     fs::create_dir_all(path.parent().expect("parent")).expect("directories");
@@ -247,7 +247,7 @@ fn handler_data() -> (TempDir, Vec<DesktopEntry>) {
     app("helper", "MimeType=image/png;\nNoDisplay=true\n");
     app("archiver", "");
     app("gone", "MimeType=image/png;\nHidden=true\n");
-    let found = handlers(&[data.path().to_path_buf()], None, &["Unbound".to_owned()]);
+    let found = handlers(&[data.path().to_path_buf()], None, &["Bande".to_owned()]);
     (data, found)
 }
 
@@ -286,7 +286,7 @@ fn defaults_follow_list_precedence_and_associations() {
     let config = lists.path().join("config");
     let system = lists.path().join("system");
     write(
-        &config.join("unbound-mimeapps.list"),
+        &config.join("bande-mimeapps.list"),
         "[Default Applications]\nimage/png=missing.desktop;painter.desktop;\n",
     );
     write(
@@ -297,7 +297,7 @@ fn defaults_follow_list_precedence_and_associations() {
         &system.join("applications/mimeapps.list"),
         "[Added Associations]\nimage/png=helper.desktop;\ntext/x-csrc=archiver.desktop;\n",
     );
-    let paths = mimeapps_paths(&[config], &[system], &["Unbound".to_owned()]);
+    let paths = mimeapps_paths(&[config], &[system], &["Bande".to_owned()]);
     let apps = MimeApps::load(&paths);
     let png = ancestry(&["image/png"]);
 
@@ -367,7 +367,7 @@ fn entry_with(exec: &str) -> DesktopEntry {
         Path::new("/usr/share/applications/app.desktop"),
         &format!("[Desktop Entry]\nType=Application\nName=App\nExec={exec}\n"),
         None,
-        &["Unbound".to_owned()],
+        &["Bande".to_owned()],
     )
     .expect("entry")
 }

@@ -13,4 +13,4 @@ useradd --create-home tester
 password=$(head -c 18 /dev/urandom | base64)
 echo "tester:$password" | chpasswd
 chmod 755 /polkitd-test
-exec runuser -u tester -- env UNBOUND_POLKIT_PASSWORD="$password" /polkitd-test --ignored --test-threads=1 "$@"
+exec runuser -u tester -- env BANDE_POLKIT_PASSWORD="$password" /polkitd-test --ignored --test-threads=1 "$@"

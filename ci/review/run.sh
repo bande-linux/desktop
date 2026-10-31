@@ -4,13 +4,13 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 cargo=${REVIEW_CARGO:-cargo}
 packages=(
-    unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power unbound-sound
-    xdg-desktop-portal-unbound unbound-file-chooser unbound-tray unbound-automount unbound-polkit
-    unbound-shell unbound-term unbound-lock unbound-screenshot unbound-files
-    unbound-settings unbound-monitor unbound-greeter
+    bande-compositor bande-notify bande-clipboard bande-config bande-power bande-sound
+    xdg-desktop-portal-bande bande-file-chooser bande-tray bande-automount bande-polkit
+    bande-shell bande-term bande-lock bande-screenshot bande-files
+    bande-settings bande-monitor bande-greeter
 )
-screenshot=/usr/bin/unbound-screenshot
-runtime="${XDG_RUNTIME_DIR:?needs a user session}/unbound-review"
+screenshot=/usr/bin/bande-screenshot
+runtime="${XDG_RUNTIME_DIR:?needs a user session}/bande-review"
 build=1
 take_over=0
 fps=30
@@ -56,26 +56,26 @@ if [ "$build" = 1 ]; then
     done
     sudo apt-get install -y --allow-downgrades --reinstall "${debs[@]}"
     systemctl --user daemon-reload
-    systemctl --user try-restart unbound-config unbound-power unbound-sound unbound-tray unbound-automount unbound-polkit-agent \
-        xdg-desktop-portal-unbound
-    pkill -u "$(id -u)" -x unbound-notify || true
+    systemctl --user try-restart bande-config bande-power bande-sound bande-tray bande-automount bande-polkit-agent \
+        xdg-desktop-portal-bande
+    pkill -u "$(id -u)" -x bande-notify || true
 fi
-$cargo build --release --locked --package unbound-review
-review="$repo/target/release/unbound-review"
+$cargo build --release --locked --package bande-review
+review="$repo/target/release/bande-review"
 
 stop_session() {
-    if systemctl --user --quiet is-active unbound-compositor.service; then
+    if systemctl --user --quiet is-active bande-compositor.service; then
         echo "Stopping the running session"
-        systemctl --user stop unbound-compositor.service
+        systemctl --user stop bande-compositor.service
     fi
-    if pgrep -u "$(id -u)" -x unbound-composi >/dev/null; then
+    if pgrep -u "$(id -u)" -x bande-composi >/dev/null; then
         if [ "$take_over" != 1 ]; then
-            echo "run.sh: an Unbound compositor runs outside the session service (the console session);" >&2
+            echo "run.sh: an Bande compositor runs outside the session service (the console session);" >&2
             echo "run.sh: pass --take-over to stop it for the recording" >&2
             exit 1
         fi
-        echo "Stopping the Unbound compositor started outside the session service"
-        pkill -TERM -u "$(id -u)" -x unbound-composi
+        echo "Stopping the Bande compositor started outside the session service"
+        pkill -TERM -u "$(id -u)" -x bande-composi
     fi
 }
 
@@ -109,8 +109,8 @@ record() {
 
     stop_session
     wait_for 30 "the old session to stop" \
-        bash -c '! systemctl --user --quiet is-active unbound-compositor.service && ! pgrep -u "$(id -u)" -x unbound-composi >/dev/null'
-    cp "$screenshot" "$runtime/unbound-screenshot"
+        bash -c '! systemctl --user --quiet is-active bande-compositor.service && ! pgrep -u "$(id -u)" -x bande-composi >/dev/null'
+    cp "$screenshot" "$runtime/bande-screenshot"
     {
         printf 'REVIEW_BIN=%q\n' "$review"
         printf 'SCENARIO=%q\n' "$scenario"
@@ -122,13 +122,13 @@ record() {
 
     cursor=$(journalctl --user -n 0 --show-cursor --no-pager | sed -n 's/^-- cursor: //p')
     systemctl --user set-environment LIBSEAT_BACKEND=seatd
-    setsid -f unbound-session > "$out/session.log" 2>&1 < /dev/null 8>&-
-    wait_for 60 "the session to start unbound-review" bash -c "[ ! -e '$runtime/job' ]"
+    setsid -f bande-session > "$out/session.log" 2>&1 < /dev/null 8>&-
+    wait_for 60 "the session to start bande-review" bash -c "[ ! -e '$runtime/job' ]"
     sudo umount --lazy "$screenshot"
 
     wait_for 1800 "the scenario to finish" test -e "$out/exit-status"
     sudo chown root:root /dev/uinput
-    journalctl --user --after-cursor "$cursor" --no-pager -o cat -t unbound-review > "$out/review.log" || true
+    journalctl --user --after-cursor "$cursor" --no-pager -o cat -t bande-review > "$out/review.log" || true
     journalctl --user --after-cursor "$cursor" --no-pager -o short-monotonic > "$out/journal.log" || true
     if [ "$(cat "$out/exit-status")" != 0 ]; then
         echo "run.sh: $name did not finish cleanly; see $out/review.log" >&2
@@ -138,9 +138,9 @@ record() {
     echo "Review: $out/index.html"
 }
 
-exec 8> /tmp/unbound-live-session.lock
+exec 8> /tmp/bande-live-session.lock
 if ! flock -n 8; then
-    echo "Waiting for the live session lock (/tmp/unbound-live-session.lock)"
+    echo "Waiting for the live session lock (/tmp/bande-live-session.lock)"
     flock 8
 fi
 

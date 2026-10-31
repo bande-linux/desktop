@@ -18,7 +18,7 @@ use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_captu
     self, ExtImageCopyCaptureSessionV1,
 };
 
-use unbound_protocols::client::unbound_capture_v1::{self, UnboundCaptureV1};
+use bande_protocols::client::bande_capture_v1::{self, BandeCaptureV1};
 
 use crate::{Compositor, Globals, TestClient};
 
@@ -42,7 +42,7 @@ pub(crate) struct Capture {
     constraints: CaptureConstraints,
     memory: Option<File>,
     outcome: Option<CaptureOutcome>,
-    shell: Option<UnboundCaptureV1>,
+    shell: Option<BandeCaptureV1>,
     windows: Vec<(String, (i32, i32, i32, i32))>,
     windows_done: bool,
     option_requests: usize,
@@ -139,7 +139,7 @@ impl TestClient {
     }
 
     pub fn join_capture(&mut self, server: &mut Compositor) {
-        let capture: UnboundCaptureV1 = self.bind("unbound_capture_v1", 1);
+        let capture: BandeCaptureV1 = self.bind("bande_capture_v1", 1);
         self.globals.capture.shell = Some(capture);
         self.exchange(server);
     }
@@ -219,26 +219,26 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, ()> for Globals {
     }
 }
 
-impl Dispatch<UnboundCaptureV1, ()> for Globals {
+impl Dispatch<BandeCaptureV1, ()> for Globals {
     fn event(
         globals: &mut Self,
-        _: &UnboundCaptureV1,
-        event: unbound_capture_v1::Event,
+        _: &BandeCaptureV1,
+        event: bande_capture_v1::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
         let capture = &mut globals.capture;
         match event {
-            unbound_capture_v1::Event::Window {
+            bande_capture_v1::Event::Window {
                 identifier,
                 x,
                 y,
                 width,
                 height,
             } => capture.windows.push((identifier, (x, y, width, height))),
-            unbound_capture_v1::Event::WindowsDone => capture.windows_done = true,
-            unbound_capture_v1::Event::ShowOptions => capture.option_requests += 1,
+            bande_capture_v1::Event::WindowsDone => capture.windows_done = true,
+            bande_capture_v1::Event::ShowOptions => capture.option_requests += 1,
             _ => {}
         }
     }

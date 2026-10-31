@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
-use unbound_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
-use unbound_toolkit::{
+use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
+use bande_toolkit::{
     Image, Item, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
     TextSystem,
 };

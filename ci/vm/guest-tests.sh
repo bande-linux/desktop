@@ -25,15 +25,15 @@ cargo_json build --workspace --locked --bins
 jq -r 'select(.reason == "compiler-artifact" and .executable != null and .target.kind == ["bin"]) | .executable' \
     "$share/cargo.json" > "$share/apps"
 mkdir -p "$share/usr/bin" "$share/usr/share/applications" "$share/usr/share/icons/hicolor/scalable/apps"
-for app in unbound-compositor unbound-clipboard unbound-shell unbound-term unbound-lock unbound-screenshot unbound-files unbound-greeter; do
+for app in bande-compositor bande-clipboard bande-shell bande-term bande-lock bande-screenshot bande-files bande-greeter; do
     cp "$(grep "/$app\$" "$share/apps")" "$share/usr/bin/"
 done
 mkdir -p "$share/etc/pam.d"
-cp crates/shell/lock/data/unbound-lock.pam "$share/etc/pam.d/unbound-lock"
-cp crates/apps/terminal/data/org.unbound.Terminal.desktop "$share/usr/share/applications/"
-cp crates/apps/terminal/data/org.unbound.Terminal.svg "$share/usr/share/icons/hicolor/scalable/apps/"
-cp crates/apps/files/data/org.unbound.Files.desktop "$share/usr/share/applications/"
-cp crates/apps/files/data/org.unbound.Files.svg "$share/usr/share/icons/hicolor/scalable/apps/"
+cp crates/shell/lock/data/bande-lock.pam "$share/etc/pam.d/bande-lock"
+cp crates/apps/terminal/data/org.bande.Terminal.desktop "$share/usr/share/applications/"
+cp crates/apps/terminal/data/org.bande.Terminal.svg "$share/usr/share/icons/hicolor/scalable/apps/"
+cp crates/apps/files/data/org.bande.Files.desktop "$share/usr/share/applications/"
+cp crates/apps/files/data/org.bande.Files.svg "$share/usr/share/icons/hicolor/scalable/apps/"
 
 mkdir "$share/bin"
 while read -r executable; do
@@ -42,7 +42,7 @@ done < "$share/executables"
 
 cat > "$share/run" <<'GUEST'
 set -u
-export RUST_BACKTRACE=1 UNBOUND_SCREENDUMPS=/share/screendumps
+export RUST_BACKTRACE=1 BANDE_SCREENDUMPS=/share/screendumps
 echo "Guest kernel $(uname -r)"
 ls -l /dev/dri
 cp -rs /share/usr /share/etc /

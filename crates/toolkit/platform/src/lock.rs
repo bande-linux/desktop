@@ -11,7 +11,7 @@ use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_v1::{
 
 use crate::window::{State, WindowError, WindowEvent};
 
-const OUTPUT_VARIABLE: &str = "UNBOUND_OUTPUT";
+const OUTPUT_VARIABLE: &str = "BANDE_OUTPUT";
 
 #[derive(Default)]
 pub(crate) struct SessionLock {

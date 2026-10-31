@@ -2,7 +2,7 @@
 
 ## Summary
 
-Today Super does the job of macOS's Command key in Unbound's own apps, and Ctrl does nothing
+Today Super does the job of macOS's Command key in Bande's own apps, and Ctrl does nothing
 there. Every third-party app the owner uses expects Ctrl. Make Ctrl the app-shortcut key in the
 toolkit and in every in-house app, as GNOME and KDE do, and keep Super for the compositor and
 shell. The compositor hardly changes, and third-party apps need no change at all.
@@ -10,8 +10,8 @@ shell. The compositor hardly changes, and third-party apps need no change at all
 ## What the owner sees
 
 - Copy is `Super+C` in Files, Terminal, Settings and the launcher, but `Ctrl+C` in VS Code,
-  Zed, Claude and Firefox. All four are pinned in the bar (`~/.config/unbound/config.kdl`).
-- In an Unbound text field, `Ctrl+C`, `Ctrl+V`, `Ctrl+A` and `Ctrl+Z` do nothing.
+  Zed, Claude and Firefox. All four are pinned in the bar (`~/.config/bande/config.kdl`).
+- In an Bande text field, `Ctrl+C`, `Ctrl+V`, `Ctrl+A` and `Ctrl+Z` do nothing.
   `Ctrl+Left` does not move by a word.
 - In lists, Ctrl+click opens the context menu instead of adding the item to the selection.
 - The keyboard is a Microsoft PC keyboard, not an Apple one (`/proc/bus/input/devices`:
@@ -24,11 +24,11 @@ shell. The compositor hardly changes, and third-party apps need no change at all
   model): "Super acts as macOS's Command" in every app and in the terminal, and Ctrl is left to
   terminals and readline. The decision is repeated in `docs/design/DESIGN.md:30,34-35,68,81`
   and `docs/architecture/toolkit.md:202,233-238`. `docs/architecture/session.md:292-293`
-  argues that Super is ⌘ on "the Apple keyboards Unbound runs on", which does not match the
+  argues that Super is ⌘ on "the Apple keyboards Bande runs on", which does not match the
   keyboard the owner actually uses.
 - **The compositor translates nothing.** `docs/experience/maturity-gaps.md:106` lists this as
   a major gap waiting on an owner decision. Plan item 11 there (`:316-322`) would translate
-  Super+key to Ctrl+key, or Ctrl+Shift+key in terminals, for clients that are not Unbound's,
+  Super+key to Ctrl+key, or Ctrl+Shift+key in terminals, for clients that are not Bande's,
   with Firefox's `ui.key.accelKey` as the fallback. The resume notes repeat this as an open
   choice (`NOTES/resume-2026-10-31.md:48`). The owner's note picks neither option. It asks for
   the opposite direction.
@@ -81,8 +81,8 @@ shell. The compositor hardly changes, and third-party apps need no change at all
   - **Screenshot**: `markup_app.rs:151-175`, `picker.rs:291`.
   - **Bar**: `menus.rs:40,248-252`, `menu_search.rs:591`, `dock.rs:2373`.
   - **Strings in the `.ftl` files**:
-    - `launcher/locales/.../unbound-launcher.ftl:30,33,55,78`: copy and paste hints.
-    - `settings/.../unbound-settings.ftl:117`: "Go back (Super+[)".
+    - `launcher/locales/.../bande-launcher.ftl:30,33,55,78`: copy and paste hints.
+    - `settings/.../bande-settings.ftl:117`: "Go back (Super+[)".
 - **Tests and goldens that encode Super**: 23 test files (the toolkit's `text.rs`, `table.rs`,
   `menu.rs`, `ui.rs`, `controls.rs`, `input.rs`, `chrome.rs`; and `files.rs`, `term.rs`,
   `view.rs`, `inspector.rs`, `cascade.rs`, `menu_bar.rs`, `menu_search.rs`, `rail.rs`,
@@ -103,13 +103,13 @@ shell. The compositor hardly changes, and third-party apps need no change at all
   remappers, show how fragile it is to translate Super into Ctrl per app
   (maturity-gaps.md:106).
 
-**Root cause:** Unbound copied the macOS modifier model for Apple keyboards, but the owner types
+**Root cause:** Bande copied the macOS modifier model for Apple keyboards, but the owner types
 on a PC keyboard and lives in Ctrl-based third-party apps. Since the compositor translates
 nothing, two modifier conventions run side by side.
 
 ## Options
 
-1. **Ctrl is the app key in Unbound's own apps, Super is the system key (GNOME/KDE).**
+1. **Ctrl is the app key in Bande's own apps, Super is the system key (GNOME/KDE).**
    - One convention everywhere, and Linux users already know it.
    - Third-party apps already behave this way, so nothing needs translating.
    - Cost: the toolkit, seven apps and the shell need new bindings. The terminal moves to
@@ -177,7 +177,7 @@ Linux convention differs:
 
 Land milestones 2 to 7 back to back, since `main` mixes the two conventions in between. Run
 each crate's tests on the mini. Each milestone refreshes its goldens with
-`UNBOUND_UPDATE_GOLDENS=1` and reviews every changed PNG by eye.
+`BANDE_UPDATE_GOLDENS=1` and reviews every changed PNG by eye.
 
 1. **One shortcut-string parser** (about 1 h).
    - Move Files' `key_event` parser (`apps/files/src/menu_bar.rs:104-135`) into

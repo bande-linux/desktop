@@ -1,4 +1,4 @@
-use unbound_power::adapter::{AdapterPolicy, POWER_SAVER, Situation};
+use bande_power::adapter::{AdapterPolicy, POWER_SAVER, Situation};
 
 fn on(battery: bool, low_power: bool) -> Situation {
     Situation {

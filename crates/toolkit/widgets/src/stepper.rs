@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_graphics::{
+use bande_graphics::{
     ControlSize, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
 

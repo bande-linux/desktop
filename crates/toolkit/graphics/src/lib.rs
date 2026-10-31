@@ -10,6 +10,10 @@ mod scene;
 mod text;
 mod title_bar;
 
+pub use bande_design::{
+    Accent, Appearance, Color, Contrast, ControlSize, Elevation, Palette, Radius, Scheme, Shadow,
+    Spacing, TextRole, TextSize, Typeface, grown_line,
+};
 pub use cpu::CpuRenderer;
 pub use damage::{Region, damage};
 #[cfg(feature = "gpu")]
@@ -24,8 +28,4 @@ pub use text::{GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextStyle, TextS
 pub use title_bar::{
     FRAME_HEADER_HEIGHT, RESIZE_CORNER, RESIZE_MARGIN, ResizeEdge, TitleBar, WINDOW_HEADER_HEIGHT,
     WindowControl, resize_edge, title_style, window_controls_area,
-};
-pub use unbound_design::{
-    Accent, Appearance, Color, Contrast, ControlSize, Elevation, Palette, Radius, Scheme, Shadow,
-    Spacing, TextRole, TextSize, Typeface, grown_line,
 };

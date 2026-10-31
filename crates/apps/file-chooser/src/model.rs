@@ -1,9 +1,9 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use unbound_fs::{Entry, Sort, list, sort};
-use unbound_xdg::{MimeDatabase, file_uri, path_from_file_uri};
-use xdg_desktop_portal_unbound::file_chooser::{Dialog, Filter, Mode, Pattern, Selection};
+use bande_fs::{Entry, Sort, list, sort};
+use bande_xdg::{MimeDatabase, file_uri, path_from_file_uri};
+use xdg_desktop_portal_bande::file_chooser::{Dialog, Filter, Mode, Pattern, Selection};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Accept {

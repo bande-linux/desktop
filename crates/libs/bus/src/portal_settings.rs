@@ -4,7 +4,7 @@ use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::OwnedValue;
 
 pub const APPEARANCE: &str = "org.freedesktop.appearance";
-pub const UNBOUND_APPEARANCE: &str = "org.unbound.appearance";
+pub const BANDE_APPEARANCE: &str = "org.bande.appearance";
 pub const PREFER_DARK: u32 = 1;
 
 const PORTAL: &str = "org.freedesktop.portal.Desktop";

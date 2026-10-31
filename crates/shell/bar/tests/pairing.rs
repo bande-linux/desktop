@@ -2,8 +2,8 @@
 
 mod support;
 
-use unbound_bar::pairing::{Question, pairing_scene};
-use unbound_toolkit::{CpuRenderer, Palette, Scheme};
+use bande_bar::pairing::{Question, pairing_scene};
+use bande_toolkit::{CpuRenderer, Palette, Scheme};
 
 use support::check_golden;
 

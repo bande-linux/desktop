@@ -4,8 +4,8 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, Toggled, TreeId};
-use unbound_graphics::{Palette, Point, Rect, Scheme, TextSystem};
-use unbound_widgets::{
+use bande_graphics::{Palette, Point, Rect, Scheme, TextSystem};
+use bande_widgets::{
     Axis, BUTTON_HEIGHT, Button, ClipboardRequest, Context, ContextMenu, Cursor, DISCLOSURE_HEIGHT,
     Disclosure, Event, FreeLayout, Key, Label, Menu, MenuItem, Modifiers, Pointer, PointerButton,
     SWITCH_SIZE, Scroll, SecureField, Size, Slider, Stack, TEXT_FIELD_HEIGHT, TextField, Toggle,
@@ -604,7 +604,7 @@ impl Widget for Probe {
         self.frame
     }
 
-    fn paint(&self, _cx: &Context, _items: &mut Vec<unbound_graphics::Item>) {}
+    fn paint(&self, _cx: &Context, _items: &mut Vec<bande_graphics::Item>) {}
 
     fn access(&self, _cx: &Context) -> Node {
         Node::new(Role::GenericContainer)

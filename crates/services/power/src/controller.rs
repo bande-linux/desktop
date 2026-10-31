@@ -12,9 +12,9 @@ use crate::idle::{Command, IdleMachine, Policy};
 use crate::logind::{self, ManagerProxyBlocking, SessionProxyBlocking};
 
 #[zbus::proxy(
-    interface = "org.unbound.Config",
-    default_service = "org.unbound.Config",
-    default_path = "/org/unbound/Config"
+    interface = "org.bande.Config",
+    default_service = "org.bande.Config",
+    default_path = "/org/bande/Config"
 )]
 pub trait Config {
     #[zbus(property)]

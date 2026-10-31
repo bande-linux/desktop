@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const FALLBACK_THEME: &str = "hicolor";
-pub const ICON_THEMES: [&str; 2] = ["Unbound", "Adwaita"];
+pub const ICON_THEMES: [&str; 2] = ["Bande", "Adwaita"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {

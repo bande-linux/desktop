@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use unbound_notify::{
+use bande_notify::{
     App, AppRule, BANNER_DURATION, Banners, Center, Notification, Timeout, Urgency, read_apps,
     write_apps,
 };

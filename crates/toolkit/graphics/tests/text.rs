@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use bande_graphics::{Color, GlyphRun, Paragraph, TextAlign, TextRole, TextStyle, TextSystem};
 use skrifa::{FontRef, MetadataProvider};
-use unbound_graphics::{Color, GlyphRun, Paragraph, TextAlign, TextRole, TextStyle, TextSystem};
 
 const INTER: &str = "/usr/share/fonts/opentype/inter";
 const MANROPE: &str = "/usr/share/fonts/truetype/manrope";

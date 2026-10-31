@@ -12,9 +12,9 @@ forbid() {
 }
 for manifest in crates/services/*/Cargo.toml; do
     [ "$manifest" = crates/services/polkit/Cargo.toml ] && continue
-    forbid "$manifest" 'unbound-widgets|unbound-toolkit|unbound-toolkit-platform'
+    forbid "$manifest" 'bande-widgets|bande-toolkit|bande-toolkit-platform'
 done
 for manifest in crates/toolkit/graphics/Cargo.toml crates/toolkit/widgets/Cargo.toml; do
-    forbid "$manifest" 'wayland-[a-z-]+|unbound-toolkit-platform'
+    forbid "$manifest" 'wayland-[a-z-]+|bande-toolkit-platform'
 done
 echo "lint passed"

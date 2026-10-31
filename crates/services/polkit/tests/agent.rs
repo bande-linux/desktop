@@ -7,8 +7,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use unbound_polkit::agent::{Agent, Answer, Conversation, Notice, OBJECT_PATH, Request, Subject};
-use unbound_test_bus::SessionBus;
+use bande_polkit::agent::{Agent, Answer, Conversation, Notice, OBJECT_PATH, Request, Subject};
+use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::zvariant::{OwnedValue, Value};
 use zeroize::Zeroizing;

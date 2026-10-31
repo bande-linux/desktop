@@ -40,10 +40,10 @@ use smithay::wayland::shell::wlr_layer::Layer;
 use smithay::wayland::shm::with_buffer_contents;
 use smithay::wayland::xdg_activation::XdgActivationToken;
 use smithay::reexports::wayland_protocols::ext::background_effect::v1::server::ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1;
-use unbound_protocols::server::unbound_app_control_v1::UnboundAppControlV1;
-use unbound_protocols::server::unbound_app_v1::UnboundAppV1;
-use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
-use unbound_render::VulkanRenderer;
+use bande_protocols::server::bande_app_control_v1::BandeAppControlV1;
+use bande_protocols::server::bande_app_v1::BandeAppV1;
+use bande_protocols::server::bande_shell_v1::BandeShellV1;
+use bande_render::VulkanRenderer;
 
 use crate::clock::Vblank;
 use crate::cursor::{self, Cursor, CursorTheme};
@@ -84,7 +84,7 @@ pub struct State {
     pub(crate) blockers: smithay::reexports::calloop::LoopHandle<'static, State>,
     pub(crate) screens: Vec<Screen>,
     pub(crate) departed: Vec<crate::displays::Departed>,
-    pub(crate) display_config: unbound_config::Config,
+    pub(crate) display_config: bande_config::Config,
     pub(crate) night_light: crate::night::NightLight,
     pub(crate) output_managers: Vec<crate::management::Manager>,
     pub(crate) output_serial: u32,
@@ -96,12 +96,11 @@ pub struct State {
     pending_activation: Option<WlSurface>,
     pub(crate) windowless_app: Option<(Client, String)>,
     pub(crate) key_behind_layer: Option<WlSurface>,
-    pub(crate) shell_resources: Vec<UnboundShellV1>,
-    pub(crate) capture_resources:
-        Vec<unbound_protocols::server::unbound_capture_v1::UnboundCaptureV1>,
+    pub(crate) shell_resources: Vec<BandeShellV1>,
+    pub(crate) capture_resources: Vec<bande_protocols::server::bande_capture_v1::BandeCaptureV1>,
     pub(crate) pending_insert: Option<crate::shell::PendingInsert>,
-    pub(crate) app_resources: Vec<UnboundAppV1>,
-    pub(crate) app_control_resources: Vec<UnboundAppControlV1>,
+    pub(crate) app_resources: Vec<BandeAppV1>,
+    pub(crate) app_control_resources: Vec<BandeAppControlV1>,
     pub(crate) exclusive_layer: Option<ExclusiveLayer>,
     exclusive_candidates: Vec<(WlSurface, Layer)>,
     pub(crate) seat: Seat<State>,
@@ -109,9 +108,8 @@ pub struct State {
     pub(crate) popups: PopupManager,
     pub(crate) lock_screen_requested: bool,
     pub(crate) force_quit_requested: bool,
-    pub(crate) session_end_requested:
-        Option<unbound_protocols::server::unbound_shell_v1::SessionEnd>,
-    pub(crate) quitting: Vec<(UnboundShellV1, Option<(String, u32)>)>,
+    pub(crate) session_end_requested: Option<bande_protocols::server::bande_shell_v1::SessionEnd>,
+    pub(crate) quitting: Vec<(BandeShellV1, Option<(String, u32)>)>,
     pub(crate) refused_tokens: Vec<XdgActivationToken>,
     pub(crate) drag: Option<crate::drag::Drag>,
     pub(crate) slide_back: Option<crate::scene::SlideBack>,
@@ -203,9 +201,9 @@ impl Compositor {
         crate::idle::create_global(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, UnboundShellV1, ()>(1, ());
-        handle.create_global::<State, UnboundAppV1, ()>(1, ());
-        handle.create_global::<State, UnboundAppControlV1, ()>(1, ());
+        handle.create_global::<State, BandeShellV1, ()>(1, ());
+        handle.create_global::<State, BandeAppV1, ()>(1, ());
+        handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
         State::create_capture_globals(&handle);
@@ -216,7 +214,7 @@ impl Compositor {
             blockers: fences.handle(),
             screens: vec![screen],
             departed: Vec::new(),
-            display_config: unbound_config::Config::default(),
+            display_config: bande_config::Config::default(),
             night_light: crate::night::NightLight::default(),
             output_managers: Vec::new(),
             output_serial: 0,

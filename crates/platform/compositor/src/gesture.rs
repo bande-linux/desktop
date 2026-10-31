@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
+use bande_spring::{Animated, Decay, Spring, State as Phase, rubber_band};
 use smithay::delegate_pointer_gestures;
 use smithay::input::pointer::{
     GestureHoldBeginEvent, GestureHoldEndEvent, GesturePinchBeginEvent, GesturePinchEndEvent,
@@ -8,7 +9,6 @@ use smithay::input::pointer::{
 };
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, SERIAL_COUNTER};
-use unbound_spring::{Animated, Decay, Spring, State as Phase, rubber_band};
 
 use crate::motion::Tick;
 use crate::state::{Compositor, State};

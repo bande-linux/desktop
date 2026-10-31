@@ -3,7 +3,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use unbound_fs::{Sort, SortBy};
+use bande_fs::{Sort, SortBy};
 
 pub const DEFAULT_ICON_SIZE: u32 = 64;
 pub const ICON_SIZES: (u32, u32) = (32, 256);
@@ -83,7 +83,7 @@ fn state_file(state_home: Option<&Path>, home: &Path, name: &str) -> PathBuf {
     state_home
         .filter(|path| path.is_absolute())
         .map_or_else(|| home.join(".local/state"), Path::to_path_buf)
-        .join("unbound")
+        .join("bande")
         .join(name)
 }
 

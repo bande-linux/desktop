@@ -10,7 +10,7 @@ mod watch;
 
 use std::sync::LazyLock;
 
-use unbound_l10n::Localizer;
+use bande_l10n::Localizer;
 
 pub use batch::{
     BatchItem, BatchProblem, Numbering, RenameRule, new_name, plan_renames, rename_all,
@@ -31,7 +31,7 @@ pub use trash::{Trash, TrashDir, TrashItem};
 pub use undo::{Action, History, Step};
 pub use watch::{FolderChanges, FolderWatch};
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-fs.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-fs.ftl");
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -45,7 +45,7 @@ mod tests {
             include_str!("ops/archive.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

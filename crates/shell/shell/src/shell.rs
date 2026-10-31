@@ -7,22 +7,22 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use unbound_bar::dialogs::DIALOGS;
-use unbound_bar::low_memory::{LOW_MEMORY_SIZE, LowMemory};
-use unbound_bar::pairing::PairingDialogs;
-use unbound_bar::surfaces::{self, Display, Restart, Services};
-use unbound_bluetooth::register_agent;
-use unbound_config::{Config, config_path};
-use unbound_controlcenter::ControlCenter;
-use unbound_desktop_surface::DesktopSurface;
-use unbound_launcher::LauncherShell;
-use unbound_notifications::Notifications;
-use unbound_status::captive::{follow_captive_portal, open_page};
-use unbound_status::memory::{
+use bande_bar::dialogs::DIALOGS;
+use bande_bar::low_memory::{LOW_MEMORY_SIZE, LowMemory};
+use bande_bar::pairing::PairingDialogs;
+use bande_bar::surfaces::{self, Display, Restart, Services};
+use bande_bluetooth::register_agent;
+use bande_config::{Config, config_path};
+use bande_controlcenter::ControlCenter;
+use bande_desktop_surface::DesktopSurface;
+use bande_launcher::LauncherShell;
+use bande_notifications::Notifications;
+use bande_status::captive::{follow_captive_portal, open_page};
+use bande_status::memory::{
     CGROUP_ROOT, OWN_CGROUP, PressureTrigger, SYSTEM_PRESSURE, Streak, app_slice,
 };
-use unbound_toolkit::{App, Rect, Role, Scene, Surfaces, TextSystem, Window, WindowEvent};
-use unbound_xdg::{
+use bande_toolkit::{App, Rect, Role, Scene, Surfaces, TextSystem, Window, WindowEvent};
+use bande_xdg::{
     Locale, applications, current_desktops, data_dirs, find_app, follow_oom_kills, launch,
     reopen_file, take_apps_to_reopen,
 };
@@ -103,12 +103,12 @@ impl Context {
     ) -> Result<(Opened, Option<Restart>), Box<dyn Error>> {
         match place {
             Place::Notifications => {
-                let mut window = beside.open_beside(unbound_notifications::role(), (0, 0))?;
+                let mut window = beside.open_beside(bande_notifications::role(), (0, 0))?;
                 let part = self.notifications(&mut window)?;
                 Ok((vec![(window, part)], None))
             }
             Place::ControlCenter => {
-                let mut window = beside.open_beside(unbound_controlcenter::role(), (0, 0))?;
+                let mut window = beside.open_beside(bande_controlcenter::role(), (0, 0))?;
                 window.share_fonts(&self.text);
                 let part = ControlCenter::new(
                     &mut window,
@@ -119,14 +119,14 @@ impl Context {
                 Ok((vec![(window, Box::new(part))], None))
             }
             Place::Launcher => {
-                let mut window = beside.open_beside(unbound_launcher::role(), (0, 0))?;
+                let mut window = beside.open_beside(bande_launcher::role(), (0, 0))?;
                 let part = self.launcher(&mut window)?;
                 Ok((vec![(window, part)], None))
             }
             Place::Desktop(display) => {
                 let mut window = beside.open_beside_on(
                     &display.output,
-                    unbound_desktop_surface::role(),
+                    bande_desktop_surface::role(),
                     (0, 0),
                 )?;
                 window.share_fonts(&self.text);
@@ -143,7 +143,7 @@ impl Context {
                 Ok((bar.surfaces, Some(bar.restart)))
             }
             Place::LowMemory => {
-                let title = unbound_bar::L10N.tr("low-memory-window");
+                let title = bande_bar::L10N.tr("low-memory-window");
                 let mut window =
                     beside.open_beside(Role::toplevel(&title, DIALOGS), LOW_MEMORY_SIZE)?;
                 window.share_fonts(&self.text);
@@ -427,8 +427,8 @@ fn own_app_slice() -> Option<PathBuf> {
     app_slice(Path::new(CGROUP_ROOT), &cgroup)
 }
 
-fn root_role() -> unbound_toolkit::Role {
-    unbound_launcher::role()
+fn root_role() -> bande_toolkit::Role {
+    bande_launcher::role()
 }
 
 pub fn run() -> Result<(), Box<dyn Error>> {
@@ -447,7 +447,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         }
     }
     let mut shell = Shell::start(context, root, pressure_trigger())?;
-    unbound_toolkit::run_surfaces(&mut shell)?;
+    bande_toolkit::run_surfaces(&mut shell)?;
     Ok(())
 }
 

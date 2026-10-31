@@ -2,9 +2,9 @@
 
 use std::fs;
 
+use bande_fs::{Kind, Sort, list};
+use bande_preview::{Preview, image_size, preview};
 use tempfile::TempDir;
-use unbound_fs::{Kind, Sort, list};
-use unbound_preview::{Preview, image_size, preview};
 
 fn dimensions(width: u32, height: u32, _: Vec<u8>) -> Option<(u32, u32)> {
     Some((width, height))

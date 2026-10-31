@@ -20,7 +20,7 @@ The write works:
   The user journal shows Settings (pid 265229) open from 10:42:17 to 10:49:17, so the change
   was made from Settings and written.
 - `timedatectl status` shows `Europe/Stockholm (CET, +0100)`.
-- `/usr/share/polkit-1/rules.d/50-unbound-settings.rules` returns YES for
+- `/usr/share/polkit-1/rules.d/50-bande-settings.rules` returns YES for
   `org.freedesktop.timedate1.set-timezone` for local, active members of `sudo`. The owner is
   in `sudo`. `pkcheck --action-id org.freedesktop.timedate1.set-timezone` returns 0. No
   password prompt is needed, and the polkit agent is not involved.
@@ -71,7 +71,7 @@ row, only the error after trying.
 
 ## Options
 
-1. **Own uncached zone read, plus a timedated listener (recommended).** `unbound_datetime::now()`
+1. **Own uncached zone read, plus a timedated listener (recommended).** `bande_datetime::now()`
    reads the `/etc/localtime` symlink on each call: one `readlink` plus jiff's per-name db
    lookup, which is cached. Long-lived processes subscribe to timedate1 PropertiesChanged and
    redraw at once. The change shows within a second and works for `timedatectl` too. Cost:
@@ -138,7 +138,7 @@ verified on the mini.
      for each item from `zone_changes`.
    - `menu_bar_client.rs:766`: spawn it when the system bus is present, next to
      `follow_minutes`.
-   - Replace `jiff::Zoned::now()` with `unbound_datetime::now()` in the bar, the notification
+   - Replace `jiff::Zoned::now()` with `bande_datetime::now()` in the bar, the notification
      centre, the lock screen, the greeter, compositor `night.rs:238` and screenshot.
    - Replace `TimeZone::system()` with `local_zone()` in `libs/fs` `listing.rs` and
      `archive.rs`.
@@ -152,7 +152,7 @@ verified on the mini.
 4. **The portal re-plans automatic appearance on a zone change** (~1-1.5 h)
    - `crates/services/portal/src/settings.rs`: `serve` takes an optional system connection.
      A thread follows `zone_changes` and sends on the existing `wake` channel.
-   - `read` uses `unbound_datetime::now()`. Pass the system bus in from the portal's `main`.
+   - `read` uses `bande_datetime::now()`. Pass the system bus in from the portal's `main`.
    - Test, in `crates/services/portal/tests/settings.rs`: with appearance `auto` and the fake
      timedated, a zone change triggers a fresh `SettingChanged` or `ReadAll` with the zone's
      schedule, without waiting for the armed boundary. Pick two zones where it is day in one

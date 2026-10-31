@@ -2,11 +2,11 @@
 
 use std::time::{Duration, Instant};
 
+use bande_inbox::Inbox;
+use bande_status::Update;
+use bande_status::devices::{Devices, follow_devices};
+use bande_test_bus::SessionBus;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
-use unbound_inbox::Inbox;
-use unbound_status::Update;
-use unbound_status::devices::{Devices, follow_devices};
-use unbound_test_bus::SessionBus;
 
 const DISPLAY_DEVICE: &str = "/org/freedesktop/UPower/devices/DisplayDevice";
 const PROMPTLY: Duration = Duration::from_millis(1500);

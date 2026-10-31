@@ -5,14 +5,14 @@ use std::process::ExitCode;
 use std::thread;
 
 use accesskit::TreeUpdate;
-use unbound_datetime::{DateFormats, MinuteTimer};
-use unbound_keyboard::Layouts;
-use unbound_lock::{
+use bande_datetime::{DateFormats, MinuteTimer};
+use bande_keyboard::Layouts;
+use bande_lock::{
     BackdropSource, Devices, Inbox, LockScreen, Look, PAM_SERVICE, User, Variant, authenticate,
     current_user, load_backdrop,
 };
-use unbound_toolkit::ui::frame_time;
-use unbound_toolkit::{
+use bande_toolkit::ui::frame_time;
+use bande_toolkit::{
     App, Image, Role, Scene, Scheme, TextSystem, Window, WindowError, WindowEvent,
 };
 use zeroize::Zeroizing;
@@ -118,7 +118,7 @@ impl App for Locker {
             if let Err(error) = self.minutes.wait() {
                 tracing::warn!("cannot follow the clock: {error}");
             }
-            self.screen.set_clock(&unbound_datetime::now());
+            self.screen.set_clock(&bande_datetime::now());
             window.request_redraw();
             return;
         }
@@ -175,9 +175,9 @@ fn clock_format() -> zbus::Result<String> {
     let session = zbus::blocking::Connection::session()?;
     zbus::blocking::Proxy::new(
         &session,
-        "org.unbound.Config",
-        "/org/unbound/Config",
-        "org.unbound.Config",
+        "org.bande.Config",
+        "/org/bande/Config",
+        "org.bande.Config",
     )?
     .get_property("ClockFormat")
 }
@@ -194,7 +194,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     .inspect_err(|error| tracing::warn!("no clock format: {error}"))
                     .unwrap_or_default(),
             ),
-            &unbound_datetime::now(),
+            &bande_datetime::now(),
             window.appearance(),
             TextSystem::new(),
         ),
@@ -208,11 +208,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         layouts: Layouts::load(),
         unlocked: false,
     };
-    unbound_toolkit::run(&mut window, &mut locker).map_err(|error: WindowError| error.into())
+    bande_toolkit::run(&mut window, &mut locker).map_err(|error: WindowError| error.into())
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-lock");
+    bande_log::init("bande-lock");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

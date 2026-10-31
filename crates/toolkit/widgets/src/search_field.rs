@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_graphics::{Color, Item, Path, Point, Rect, Shape};
+use bande_graphics::{Color, Item, Path, Point, Rect, Shape};
 
 use super::{
     Context, Cursor, DragAction, Event, Key, Menu, Parts, Size, TextField, Widget, WidgetId,

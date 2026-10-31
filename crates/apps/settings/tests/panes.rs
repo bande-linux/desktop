@@ -8,20 +8,20 @@ use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, NodeId, Role, TreeId};
-use support::{SIZE, WAIT, click, find, has_text, nodes};
-use unbound_audio::{AppStream, Device, Direction, Level, Snapshot};
-use unbound_config::{DisplaySettings, Placement};
-use unbound_keyboard::Layouts;
-use unbound_settings::{
+use bande_audio::{AppStream, Device, Direction, Level, Snapshot};
+use bande_config::{DisplaySettings, Placement};
+use bande_keyboard::Layouts;
+use bande_settings::{
     Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, Mode, NetworkCommand, Pair,
     PaneId, PictureCommand, PointingDevices, SettingId, SettingsView, Update, Value, bundled_pairs,
     feed, follow_bluetooth, follow_network,
 };
-use unbound_test_bus::SessionBus;
-use unbound_test_bus::bluez::{FakeBluez, PHONE};
-use unbound_test_bus::networkmanager::FakeNetworkManager;
-use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Palette, Scheme, TextSystem};
+use bande_test_bus::SessionBus;
+use bande_test_bus::bluez::{FakeBluez, PHONE};
+use bande_test_bus::networkmanager::FakeNetworkManager;
+use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::{Palette, Scheme, TextSystem};
+use support::{SIZE, WAIT, click, find, has_text, nodes};
 
 fn view() -> SettingsView {
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
@@ -545,8 +545,8 @@ fn a_display_is_made_main_and_a_new_resolution_comes_back_unless_kept() {
 
 fn pair(name: &str) -> Pair {
     Pair {
-        light: PathBuf::from(format!("/usr/share/unbound/wallpapers/{name}-light.svg")),
-        dark: PathBuf::from(format!("/usr/share/unbound/wallpapers/{name}-dark.svg")),
+        light: PathBuf::from(format!("/usr/share/bande/wallpapers/{name}-light.svg")),
+        dark: PathBuf::from(format!("/usr/share/bande/wallpapers/{name}-dark.svg")),
     }
 }
 
@@ -585,8 +585,8 @@ fn the_wallpaper_pane_offers_the_bundled_pairs_and_a_picture_of_ones_own() {
         data: None,
     });
     let chosen = Value::Pictures {
-        light: "/usr/share/unbound/wallpapers/aurora-light.svg".to_owned(),
-        dark: "/usr/share/unbound/wallpapers/aurora-dark.svg".to_owned(),
+        light: "/usr/share/bande/wallpapers/aurora-light.svg".to_owned(),
+        dark: "/usr/share/bande/wallpapers/aurora-dark.svg".to_owned(),
     };
     assert_eq!(
         view.take_commands(),
@@ -624,7 +624,7 @@ fn the_wallpaper_pane_offers_the_bundled_pairs_and_a_picture_of_ones_own() {
 #[test]
 fn bundled_wallpapers_are_the_pictures_that_come_as_a_light_and_dark_pair() {
     let data = tempfile::tempdir().expect("data dir");
-    let folder = data.path().join("unbound/wallpapers");
+    let folder = data.path().join("bande/wallpapers");
     std::fs::create_dir_all(&folder).expect("folder");
     for file in [
         "sea-light.svg",

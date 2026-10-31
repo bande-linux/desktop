@@ -6,16 +6,16 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Role, TreeId};
-use support::{SIZE, WAIT, click, find, has_text, nodes};
-use unbound_config::{Config, ConfigService, ConfigStore, NightSchedule};
-use unbound_settings::{
+use bande_config::{Config, ConfigService, ConfigStore, NightSchedule};
+use bande_settings::{
     Command, Feed, Grant, PaneId, PermissionCommand, SettingId, SettingsClient, SettingsView,
     Update, Value, clock_text, feed, follow_permissions, night_summary,
 };
-use unbound_settings_panes::Permission;
-use unbound_test_bus::SessionBus;
-use unbound_test_bus::permission_store::FakePermissionStore;
-use unbound_toolkit::{Palette, Scheme, TextSystem};
+use bande_settings_panes::Permission;
+use bande_test_bus::SessionBus;
+use bande_test_bus::permission_store::FakePermissionStore;
+use bande_toolkit::{Palette, Scheme, TextSystem};
+use support::{SIZE, WAIT, click, find, has_text, nodes};
 
 fn view() -> SettingsView {
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
@@ -35,10 +35,10 @@ fn act(view: &mut SettingsView, role: Role, label: &str, action: Action, data: O
 }
 
 #[test]
-fn night_light_round_trips_through_org_unbound_config() {
+fn night_light_round_trips_through_org_bande_config() {
     let bus = SessionBus::start().expect("dbus-daemon");
     let directory = tempfile::tempdir().expect("temp dir");
-    let path = directory.path().join("unbound").join("config.kdl");
+    let path = directory.path().join("bande").join("config.kdl");
     let _service = ConfigService::start(
         &bus.connect().expect("service connection"),
         &path,
@@ -110,7 +110,7 @@ fn the_times_show_only_for_a_custom_schedule_and_a_warmth_change_is_written() {
         (SettingId::NightTo, Value::Text("07:00".to_owned())),
         (SettingId::NightWarmth, Value::Number(50)),
     ]));
-    view.set_displays(vec![unbound_settings::Display::default()]);
+    view.set_displays(vec![bande_settings::Display::default()]);
     view.select_pane(PaneId::NightLight);
     view.scene(SIZE.0, SIZE.1);
     assert!(!has_text(&mut view, "22:00"));
@@ -133,7 +133,7 @@ fn the_times_show_only_for_a_custom_schedule_and_a_warmth_change_is_written() {
 #[test]
 fn the_brightness_slider_sets_the_backlight_and_hides_without_one() {
     let mut view = view();
-    view.set_displays(vec![unbound_settings::Display::default()]);
+    view.set_displays(vec![bande_settings::Display::default()]);
     view.select_pane(PaneId::Displays);
     view.scene(SIZE.0, SIZE.1);
     assert!(find(&mut view, Role::Slider, "Brightness").is_none());

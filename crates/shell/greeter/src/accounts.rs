@@ -3,9 +3,9 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
-use unbound_config::{LOGIN_PICTURE_LIMIT, login_picture_file};
+use bande_config::{LOGIN_PICTURE_LIMIT, login_picture_file};
 
-const LAST_USER: &str = "unbound-greeter/last-user";
+const LAST_USER: &str = "bande-greeter/last-user";
 
 pub fn login_picture(folder: &Path, uid: u32) -> Option<File> {
     let path = login_picture_file(folder, uid);

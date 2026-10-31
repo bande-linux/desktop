@@ -4,16 +4,16 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
-use jiff::Zoned;
-use std::time::{Duration, Instant};
-use unbound_audio::{Direction, Snapshot, meter_level};
-use unbound_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
-use unbound_datetime::daylight::Place;
-use unbound_toolkit::ui::{
+use bande_audio::{Direction, Snapshot, meter_level};
+use bande_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
+use bande_datetime::daylight::Place;
+use bande_toolkit::ui::{
     Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui, Widget,
     WidgetId,
 };
-use unbound_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, TextSystem};
+use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, TextSystem};
+use jiff::Zoned;
+use std::time::{Duration, Instant};
 
 use crate::L10N;
 use crate::about::{About, AboutCommand};
@@ -37,9 +37,9 @@ use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Questi
 use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::widgets::{Column, Crossfade, Root};
-use unbound_keyboard::Layouts;
-use unbound_settings_panes::{AUTOMATIC, Pane, PaneId, Permission, SettingId, Value, panes};
-use unbound_settings_panes::{PaneHit, search};
+use bande_keyboard::Layouts;
+use bande_settings_panes::{AUTOMATIC, Pane, PaneId, Permission, SettingId, Value, panes};
+use bande_settings_panes::{PaneHit, search};
 
 const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
@@ -298,10 +298,10 @@ impl SettingsView {
             crossfade: Rc::default(),
             shown: None,
             sidebar_scroll: Rc::default(),
-            icon_dirs: unbound_xdg::data_dirs(),
+            icon_dirs: bande_xdg::data_dirs(),
             symbols: HashMap::new(),
             place: OnceCell::new(),
-            clock: Box::new(unbound_datetime::now),
+            clock: Box::new(bande_datetime::now),
         };
         view.rebuild();
         view
@@ -1149,7 +1149,7 @@ impl SettingsView {
     fn device_command(
         &mut self,
         address: String,
-        command: fn(unbound_bluetooth::Device) -> BluetoothCommand,
+        command: fn(bande_bluetooth::Device) -> BluetoothCommand,
     ) {
         let device = self.bluetooth.as_ref().and_then(|bluetooth| {
             bluetooth
@@ -1356,7 +1356,7 @@ impl SettingsView {
                 Some(Value::Text(text)) => text.clone(),
                 _ => String::new(),
             };
-            let manual = unbound_network::parse_manual(
+            let manual = bande_network::parse_manual(
                 &text(SettingId::EthernetAddress),
                 &text(SettingId::EthernetRouter),
                 &text(SettingId::EthernetDns),
@@ -1487,7 +1487,7 @@ impl SettingsView {
         let known = self
             .arrangements
             .iter()
-            .find(|placements| unbound_config::same_displays(placements, &identities));
+            .find(|placements| bande_config::same_displays(placements, &identities));
         self.displays
             .iter()
             .map(|display| {

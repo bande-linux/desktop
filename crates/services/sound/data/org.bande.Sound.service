@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.bande.Sound
+Exec=/usr/bin/bande-sound
+SystemdService=bande-sound.service

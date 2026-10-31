@@ -3,8 +3,8 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use unbound_graphics::{Palette, Scheme, TextSystem};
-use unbound_widgets::{Context, Event, Key, Modifiers, SecureField, Widget};
+use bande_graphics::{Palette, Scheme, TextSystem};
+use bande_widgets::{Context, Event, Key, Modifiers, SecureField, Widget};
 
 const MARKER: &[u8] = b"Qz7#";
 

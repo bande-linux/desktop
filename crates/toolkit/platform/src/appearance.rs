@@ -5,8 +5,8 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Duration;
 
-use unbound_bus::portal_settings::{self, APPEARANCE, PREFER_DARK, UNBOUND_APPEARANCE};
-use unbound_graphics::{Accent, Appearance, Color, Contrast, Scheme, TextSize};
+use bande_bus::portal_settings::{self, APPEARANCE, BANDE_APPEARANCE, PREFER_DARK};
+use bande_graphics::{Accent, Appearance, Color, Contrast, Scheme, TextSize};
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedValue;
 
@@ -63,7 +63,7 @@ impl AppearanceWatch {
 fn follow(sender: &Sender<Appearance>, mut wake: &UnixStream) -> zbus::Result<()> {
     portal_settings::follow(
         &Connection::session()?,
-        &[APPEARANCE, UNBOUND_APPEARANCE],
+        &[APPEARANCE, BANDE_APPEARANCE],
         Appearance::default(),
         apply,
         |appearance| sender.send(appearance).is_ok() && wake.write_all(&[0]).is_ok(),
@@ -93,11 +93,11 @@ fn apply(appearance: &mut Appearance, namespace: &str, key: &str, value: OwnedVa
         (APPEARANCE, "reduced-motion") => {
             appearance.reduce_motion = u32::try_from(&value) == Ok(REDUCE);
         }
-        (UNBOUND_APPEARANCE, "text-size") => {
+        (BANDE_APPEARANCE, "text-size") => {
             appearance.text_size =
                 u32::try_from(&value).map_or(TextSize::DEFAULT, TextSize::from_percent);
         }
-        (UNBOUND_APPEARANCE, "frame-tint") => {
+        (BANDE_APPEARANCE, "frame-tint") => {
             appearance.frame_tint = Vec::<f64>::try_from(value)
                 .ok()
                 .and_then(|channels| color(&channels));

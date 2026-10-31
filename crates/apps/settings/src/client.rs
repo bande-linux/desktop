@@ -1,18 +1,18 @@
 use std::collections::{BTreeMap, HashMap};
 
-use unbound_config::{ArrangedDisplay, DisplaySettings, NightLightValue, Placement, Rotation};
-use unbound_datetime::DateFormats;
-use unbound_notify::client::NotificationCenter;
+use bande_config::{ArrangedDisplay, DisplaySettings, NightLightValue, Placement, Rotation};
+use bande_datetime::DateFormats;
+use bande_notify::client::NotificationCenter;
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
 
-use unbound_settings_panes::{POINTER_SPEEDS, SettingId, Value, WITH_DISPLAY};
+use bande_settings_panes::{POINTER_SPEEDS, SettingId, Value, WITH_DISPLAY};
 
 #[zbus::proxy(
-    interface = "org.unbound.Config",
-    default_service = "org.unbound.Config",
-    default_path = "/org/unbound/Config"
+    interface = "org.bande.Config",
+    default_service = "org.bande.Config",
+    default_path = "/org/bande/Config"
 )]
 pub trait Config {
     #[zbus(property)]
@@ -558,7 +558,7 @@ impl SettingsClient {
             (SettingId::CapsLock, Value::Keyword(keyword)) => self.config.set_caps_lock(keyword),
             (SettingId::AlertSound, Value::Keyword(keyword)) => {
                 self.config.set_alert_sound(keyword)?;
-                unbound_sound::play(
+                bande_sound::play(
                     self.config.inner().connection(),
                     &format!("alert-{keyword}"),
                 );

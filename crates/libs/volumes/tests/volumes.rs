@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use unbound_volumes::mounted_volumes;
+use bande_volumes::mounted_volumes;
 
 #[test]
 fn removable_volumes_come_from_the_mount_table() {

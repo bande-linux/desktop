@@ -1,10 +1,10 @@
 use crate::support::*;
-use smithay::utils::Rectangle;
-use unbound_compositor::{Compositor, Renderer};
-use unbound_test_wayland::{
+use bande_compositor::{Compositor, Renderer};
+use bande_test_wayland::{
     Anchor, BLUE, ConstraintAdjustment, GREEN, KeyboardInteractivity, Layer, LayerRequest,
     PopupRequest, RED, ResizeEdge, TestClient, ToplevelState, roundtrip,
 };
+use smithay::utils::Rectangle;
 
 const WINDOW: (i32, i32) = (64, 48);
 const CENTERED: (i32, i32) = (96, 72);

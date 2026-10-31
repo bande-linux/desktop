@@ -8,9 +8,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use common::{Options, Portal, Results, get};
-use xdg_desktop_portal_unbound::OBJECT_PATH;
-use xdg_desktop_portal_unbound::request::Cancellation;
-use xdg_desktop_portal_unbound::screencast::{
+use xdg_desktop_portal_bande::OBJECT_PATH;
+use xdg_desktop_portal_bande::request::Cancellation;
+use xdg_desktop_portal_bande::screencast::{
     CURSOR_EMBEDDED, CURSOR_HIDDEN, CURSOR_METADATA, MONITOR, ScreenCast, ScreenCastBackend,
     Source, SourceRequest, Stream, VIRTUAL, WINDOW, close_sessions_streaming,
 };
@@ -270,7 +270,7 @@ fn the_available_types_and_cursor_modes_are_the_backends() {
             .portal
             .client
             .call_method(
-                Some(xdg_desktop_portal_unbound::BUS_NAME),
+                Some(xdg_desktop_portal_bande::BUS_NAME),
                 OBJECT_PATH,
                 Some("org.freedesktop.DBus.Properties"),
                 "Get",

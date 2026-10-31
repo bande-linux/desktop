@@ -5,16 +5,16 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::Duration;
 
-use unbound_notify::client::NotificationCenter;
-use unbound_notify::{MAX_PICTURE, NotificationServer, Picture, Presentation, Urgency};
-use unbound_test_bus::SessionBus;
+use bande_notify::client::NotificationCenter;
+use bande_notify::{MAX_PICTURE, NotificationServer, Picture, Presentation, Urgency};
+use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 use zbus::names::InterfaceName;
 use zbus::zvariant::{OwnedValue, Value};
 
 const WAIT: Duration = Duration::from_secs(5);
-const CENTER: &str = "org.unbound.NotificationCenter";
+const CENTER: &str = "org.bande.NotificationCenter";
 
 #[zbus::proxy(
     interface = "org.freedesktop.Notifications",
@@ -182,9 +182,9 @@ fn clicking_a_notification_without_a_default_action_removes_it() {
 
 fn center_properties_on(connection: &Connection) -> PropertiesProxy<'static> {
     PropertiesProxy::builder(connection)
-        .destination(unbound_notify::BUS_NAME)
+        .destination(bande_notify::BUS_NAME)
         .expect("destination")
-        .path(unbound_notify::OBJECT_PATH)
+        .path(bande_notify::OBJECT_PATH)
         .expect("path")
         .build()
         .expect("properties proxy")
@@ -193,7 +193,7 @@ fn center_properties_on(connection: &Connection) -> PropertiesProxy<'static> {
 #[test]
 fn do_not_disturb_is_remembered_across_restarts() {
     let state = tempfile::tempdir().expect("state directory");
-    let file = state.path().join("unbound").join("do-not-disturb");
+    let file = state.path().join("bande").join("do-not-disturb");
     let interface = InterfaceName::from_static_str_unchecked(CENTER);
 
     let first_session = SessionBus::start().expect("dbus-daemon");

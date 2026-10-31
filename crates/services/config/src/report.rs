@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use unbound_notify::client::{self, Request};
-use unbound_notify::{BUS_NAME as NOTIFICATIONS, OBJECT_PATH as NOTIFICATIONS_PATH, Urgency};
+use bande_notify::client::{self, Request};
+use bande_notify::{BUS_NAME as NOTIFICATIONS, OBJECT_PATH as NOTIFICATIONS_PATH, Urgency};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
@@ -134,7 +134,7 @@ impl ErrorNotifier {
         let reply = client::notify(
             &self.connection,
             &Request {
-                app_name: "Unbound",
+                app_name: "Bande",
                 replaces_id: shown.unwrap_or(0),
                 app_icon: "preferences-system",
                 summary: &summary,

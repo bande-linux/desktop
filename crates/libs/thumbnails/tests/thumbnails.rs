@@ -5,10 +5,10 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
-use tempfile::TempDir;
-use unbound_thumbnails::{
+use bande_thumbnails::{
     Cache, Request, ThumbnailSize, Thumbnailed, Thumbnailers, Thumbnails, modified, thumbnail, uri,
 };
+use tempfile::TempDir;
 
 struct Place {
     root: TempDir,

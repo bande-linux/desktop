@@ -6,23 +6,23 @@ use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
-use jiff::civil::Date;
-use unbound_datetime::{DateFormats, Month};
-use unbound_l10n::Localizer;
-use unbound_notify::{Notification, Presentation, Stack};
-use unbound_spring::rubber_band;
-use unbound_toolkit::ui::{Animated, Event, Key, Spring, focus_ring_for};
-use unbound_toolkit::{
+use bande_datetime::{DateFormats, Month};
+use bande_l10n::Localizer;
+use bande_notify::{Notification, Presentation, Stack};
+use bande_spring::rubber_band;
+use bande_toolkit::ui::{Animated, Event, Key, Spring, focus_ring_for};
+use bande_toolkit::{
     Color, ControlSize, DisplayEdge, Elevation, Item, Palette, Paragraph, Point, Radius, Rect,
     Scene, Scheme, Shape, Spacing, TextAlign, TextRole, TextStyle, TextSystem,
 };
+use jiff::civil::Date;
 
 use calendar::{Calendar, Turn};
 use card::CLOSE_REACH;
 pub use card::{Card, DEFAULT_ACTION, Part, Sender, age_label};
 pub use client::{Notifications, role};
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-notifications.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-notifications.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -146,7 +146,7 @@ fn hidden_offset(width: f32) -> f32 {
 
 impl Screen {
     pub fn new(palette: Palette, text: TextSystem, senders: Senders, dates: DateFormats) -> Self {
-        let now = unbound_datetime::now();
+        let now = bande_datetime::now();
         let today = now.date();
         Self {
             palette,
@@ -290,7 +290,7 @@ impl Screen {
             .get(&notification.id)
             .map(|seen| now.saturating_duration_since(*seen))
             .unwrap_or_default();
-        let wall = unbound_datetime::now();
+        let wall = bande_datetime::now();
         let age = age_label(&wall.saturating_sub(age), &wall, &self.dates);
         let (width, lines) = if wide {
             (CENTER_WIDTH - 2.0 * CENTER_PADDING, CENTER_BODY_LINES)
@@ -1295,7 +1295,7 @@ mod tests {
             include_str!("client.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

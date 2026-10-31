@@ -2,10 +2,10 @@ use std::io;
 use std::path::PathBuf;
 use std::thread;
 
-use unbound_inbox::Inbox;
-use unbound_toolkit::Image;
-use unbound_wallpaper::{Choice, Variant, backdrop, read, render};
-use unbound_xdg::data_dirs;
+use bande_inbox::Inbox;
+use bande_toolkit::Image;
+use bande_wallpaper::{Choice, Variant, backdrop, read, render};
+use bande_xdg::data_dirs;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BackdropSource {

@@ -3,15 +3,15 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::thread;
 
-use unbound_xdg::{config_home, data_home};
-use xdg_desktop_portal_unbound::capture::{ScreenshotService, ScreenshotTool};
-use xdg_desktop_portal_unbound::dialog_process::{DIALOG_PROGRAM, DialogProcess};
-use xdg_desktop_portal_unbound::file_chooser::FileChooser;
-use xdg_desktop_portal_unbound::screencast::{ScreenCast, close_sessions_streaming};
-use xdg_desktop_portal_unbound::screenshot::Screenshot;
-use xdg_desktop_portal_unbound::settings::{CursorSettings, Settings};
-use xdg_desktop_portal_unbound::wallpaper::{BACKGROUNDS, Wallpaper};
-use xdg_desktop_portal_unbound::{BUS_NAME, OBJECT_PATH};
+use bande_xdg::{config_home, data_home};
+use xdg_desktop_portal_bande::capture::{ScreenshotService, ScreenshotTool};
+use xdg_desktop_portal_bande::dialog_process::{DIALOG_PROGRAM, DialogProcess};
+use xdg_desktop_portal_bande::file_chooser::FileChooser;
+use xdg_desktop_portal_bande::screencast::{ScreenCast, close_sessions_streaming};
+use xdg_desktop_portal_bande::screenshot::Screenshot;
+use xdg_desktop_portal_bande::settings::{CursorSettings, Settings};
+use xdg_desktop_portal_bande::wallpaper::{BACKGROUNDS, Wallpaper};
+use xdg_desktop_portal_bande::{BUS_NAME, OBJECT_PATH};
 use zbus::blocking::Connection;
 
 fn close_sessions_when_sharing_ends(
@@ -74,10 +74,10 @@ fn serve() -> zbus::Result<Connection> {
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("xdg-desktop-portal-unbound");
+    bande_log::init("xdg-desktop-portal-bande");
     match serve() {
         Ok(connection) => {
-            unbound_bus::serve_until_closed(&connection);
+            bande_bus::serve_until_closed(&connection);
             ExitCode::SUCCESS
         }
         Err(error) => {

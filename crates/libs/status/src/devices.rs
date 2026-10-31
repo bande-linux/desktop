@@ -3,10 +3,10 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
-use unbound_audio::{Audio, Level, Snapshot};
-use unbound_bluetooth::Bluetooth as BlueZ;
-use unbound_inbox::Outbox;
-use unbound_network::NetworkManager;
+use bande_audio::{Audio, Level, Snapshot};
+use bande_bluetooth::Bluetooth as BlueZ;
+use bande_inbox::Outbox;
+use bande_network::NetworkManager;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::names::BusName;
@@ -203,7 +203,7 @@ fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
     }
 }
 
-fn paired(bluez: &BlueZ, address: &str) -> Option<unbound_bluetooth::Device> {
+fn paired(bluez: &BlueZ, address: &str) -> Option<bande_bluetooth::Device> {
     bluez
         .paired_devices()
         .unwrap_or_default()
@@ -438,7 +438,7 @@ pub fn sound_of(snapshot: &Snapshot) -> Option<Sound> {
     })
 }
 
-fn control_sound(audio: &Audio, control: SoundControl) -> Result<(), unbound_audio::Error> {
+fn control_sound(audio: &Audio, control: SoundControl) -> Result<(), bande_audio::Error> {
     let snapshot = audio.snapshot();
     match control {
         SoundControl::UseOutput(name) => match snapshot.device(&name) {

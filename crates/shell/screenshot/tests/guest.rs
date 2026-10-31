@@ -11,6 +11,13 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_inbox::Inbox;
+use bande_screenshot::area::Region;
+use bande_screenshot::cast::Cast;
+use bande_screenshot::engine::Source;
+use bande_screenshot::record::{Container, Recording};
+use bande_screenshot::service::{self, Casting, UiRequest};
+use bande_test_bus::SessionBus;
 use common::{Desktop, OUTPUT, WAIT, WINDOW};
 use pipewire as pw;
 use pw::spa;
@@ -21,16 +28,9 @@ use pw::spa::pod::Pod;
 use pw::spa::utils::{Fraction, Rectangle, SpaTypes};
 use pw::stream::{StreamBox, StreamFlags};
 use tempfile::TempDir;
-use unbound_inbox::Inbox;
-use unbound_screenshot::area::Region;
-use unbound_screenshot::cast::Cast;
-use unbound_screenshot::engine::Source;
-use unbound_screenshot::record::{Container, Recording};
-use unbound_screenshot::service::{self, Casting, UiRequest};
-use unbound_test_bus::SessionBus;
-use xdg_desktop_portal_unbound::capture::ScreenshotTool;
-use xdg_desktop_portal_unbound::screencast::ScreenCast;
-use xdg_desktop_portal_unbound::{BUS_NAME, OBJECT_PATH};
+use xdg_desktop_portal_bande::capture::ScreenshotTool;
+use xdg_desktop_portal_bande::screencast::ScreenCast;
+use xdg_desktop_portal_bande::{BUS_NAME, OBJECT_PATH};
 use zbus::MatchRule;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
@@ -434,17 +434,17 @@ fn an_app_shares_the_screen_through_xdg_desktop_portal() {
     let config = TempDir::new().expect("portal config");
     std::fs::create_dir_all(config.path().join("portals")).expect("portals dir");
     std::fs::write(
-        config.path().join("portals/unbound.portal"),
-        include_str!("../../../services/portal/data/unbound.portal"),
+        config.path().join("portals/bande.portal"),
+        include_str!("../../../services/portal/data/bande.portal"),
     )
     .expect("portal file");
     std::fs::write(
-        config.path().join("portals/unbound-portals.conf"),
-        include_str!("../../../services/portal/data/unbound-portals.conf"),
+        config.path().join("portals/bande-portals.conf"),
+        include_str!("../../../services/portal/data/bande-portals.conf"),
     )
     .expect("portals conf");
     let mut frontend = Command::new("/usr/libexec/xdg-desktop-portal")
-        .env("XDG_CURRENT_DESKTOP", "Unbound")
+        .env("XDG_CURRENT_DESKTOP", "Bande")
         .env("XDG_DESKTOP_PORTAL_DIR", config.path().join("portals"))
         .env("DBUS_SESSION_BUS_ADDRESS", pipewire.bus.address())
         .spawn()

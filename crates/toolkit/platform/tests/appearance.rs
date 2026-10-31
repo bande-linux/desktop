@@ -6,11 +6,11 @@ use std::sync::mpsc::{self, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
+use bande_graphics::{Accent, Appearance, Color, Contrast, Scene, Scheme, TextSize};
+use bande_test_bus::SessionBus;
+use bande_toolkit_platform::{App, Role, Window, WindowEvent};
 use smithay::utils::Size;
-use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
-use unbound_graphics::{Accent, Appearance, Color, Contrast, Scene, Scheme, TextSize};
-use unbound_test_bus::SessionBus;
-use unbound_toolkit_platform::{App, Role, Window, WindowEvent};
 use zbus::zvariant::{OwnedValue, Value};
 
 const OUTPUT: (i32, i32) = (320, 240);
@@ -18,7 +18,7 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
 const SETTINGS: &str = "org.freedesktop.portal.Settings";
 const APPEARANCE: &str = "org.freedesktop.appearance";
-const UNBOUND_APPEARANCE: &str = "org.unbound.appearance";
+const BANDE_APPEARANCE: &str = "org.bande.appearance";
 const TINT: [f64; 3] = [0.2, 0.4, 0.6];
 const ACCENT: (f64, f64, f64) = (0.8, 0.2, 0.4);
 
@@ -32,13 +32,13 @@ impl Settings {
             ("color-scheme".to_owned(), owned(Value::from(1u32))),
             ("accent-color".to_owned(), owned(Value::from(ACCENT))),
         ]);
-        let unbound = HashMap::from([
+        let bande = HashMap::from([
             ("frame-tint".to_owned(), owned(Value::from(TINT.to_vec()))),
             ("text-size".to_owned(), owned(Value::from(150u32))),
         ]);
         HashMap::from([
             (APPEARANCE.to_owned(), appearance),
-            (UNBOUND_APPEARANCE.to_owned(), unbound),
+            (BANDE_APPEARANCE.to_owned(), bande),
         ])
         .into_iter()
         .filter(|(namespace, _)| namespaces.is_empty() || namespaces.contains(namespace))
@@ -107,7 +107,7 @@ fn the_window_follows_the_portal_colour_scheme_accent_contrast_motion_and_text_s
     let app = thread::spawn(move || {
         let mut window = Window::open_on(
             client_end,
-            Role::toplevel("Appearance", "unbound-toolkit-test"),
+            Role::toplevel("Appearance", "bande-toolkit-test"),
             (120, 80),
         )
         .expect("window");
@@ -115,7 +115,7 @@ fn the_window_follows_the_portal_colour_scheme_accent_contrast_motion_and_text_s
             seen: Vec::new(),
             report,
         };
-        unbound_toolkit_platform::run(&mut window, &mut follower).expect("run the window");
+        bande_toolkit_platform::run(&mut window, &mut follower).expect("run the window");
         follower.seen
     });
 
@@ -140,11 +140,11 @@ fn the_window_follows_the_portal_colour_scheme_accent_contrast_motion_and_text_s
                     change(APPEARANCE, "accent-color", Value::from((-1.0, -1.0, -1.0)));
                     change(APPEARANCE, "reduced-motion", Value::from(1u32));
                     change(
-                        UNBOUND_APPEARANCE,
+                        BANDE_APPEARANCE,
                         "frame-tint",
                         Value::from(Vec::<f64>::new()),
                     );
-                    change(UNBOUND_APPEARANCE, "text-size", Value::from(300u32));
+                    change(BANDE_APPEARANCE, "text-size", Value::from(300u32));
                 }
                 2 => change(APPEARANCE, "color-scheme", Value::from(0u32)),
                 _ => {}

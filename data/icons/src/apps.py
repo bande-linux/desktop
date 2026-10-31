@@ -149,13 +149,13 @@ def clocks():
 
 
 ICONS = {
-    'org.unbound.Files': files,
-    'org.unbound.Terminal': terminal,
-    'org.unbound.Settings': settings,
-    'org.unbound.ActivityMonitor': monitor,
-    'org.unbound.Launcher': launcher,
-    'org.unbound.About': about,
-    'org.unbound.Screenshot': screenshot,
+    'org.bande.Files': files,
+    'org.bande.Terminal': terminal,
+    'org.bande.Settings': settings,
+    'org.bande.ActivityMonitor': monitor,
+    'org.bande.Launcher': launcher,
+    'org.bande.About': about,
+    'org.bande.Screenshot': screenshot,
     'org.gnome.TextEditor': text_editor,
     'org.gnome.Loupe': image_viewer,
     'org.gnome.Papers': document_viewer,
@@ -165,8 +165,8 @@ ICONS = {
 }
 
 HICOLOR = {
-    'org.unbound.Files': 'crates/apps/files/data/org.unbound.Files.svg',
-    'org.unbound.Terminal': 'crates/apps/terminal/data/org.unbound.Terminal.svg',
-    'org.unbound.Settings': 'crates/apps/settings/data/org.unbound.Settings.svg',
-    'org.unbound.ActivityMonitor': 'crates/apps/monitor/data/org.unbound.ActivityMonitor.svg',
+    'org.bande.Files': 'crates/apps/files/data/org.bande.Files.svg',
+    'org.bande.Terminal': 'crates/apps/terminal/data/org.bande.Terminal.svg',
+    'org.bande.Settings': 'crates/apps/settings/data/org.bande.Settings.svg',
+    'org.bande.ActivityMonitor': 'crates/apps/monitor/data/org.bande.ActivityMonitor.svg',
 }

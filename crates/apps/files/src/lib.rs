@@ -23,7 +23,7 @@ mod views;
 
 use std::sync::LazyLock;
 
-use unbound_l10n::Localizer;
+use bande_l10n::Localizer;
 
 pub use batch_rename::{BatchRename, RuleKind};
 pub use browser::{Browser, Column, Location, RowEdit};
@@ -46,7 +46,7 @@ pub use views::{
     views_file,
 };
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-files.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-files.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -74,7 +74,7 @@ mod tests {
             include_str!("toolbar.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

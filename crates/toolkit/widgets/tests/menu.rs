@@ -2,8 +2,8 @@
 
 use std::time::{Duration, Instant};
 
-use unbound_graphics::{Key, Modifiers, Palette, Point, Scheme, TextSize, TextSystem};
-use unbound_widgets::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
+use bande_graphics::{Key, Modifiers, Palette, Point, Scheme, TextSize, TextSystem};
+use bande_widgets::{Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
 
 fn app_menus() -> Menu {
     Menu::new(vec![

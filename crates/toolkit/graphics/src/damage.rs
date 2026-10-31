@@ -301,7 +301,7 @@ fn bounds(item: &Item) -> Option<Rect> {
 mod tests {
     use super::{Region, damage};
     use crate::scene::{Item, Point, Rect, Scene, Shape};
-    use unbound_design::Color;
+    use bande_design::Color;
 
     fn fill(x: f32, color: u32) -> Item {
         Item::Fill {

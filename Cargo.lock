@@ -3715,44 +3715,44 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-app-menu"
+name = "bande-app-menu"
 version = "0.1.0"
 dependencies = [
- "unbound-inbox",
- "unbound-l10n",
- "unbound-test-bus",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-test-bus",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-audio"
+name = "bande-audio"
 version = "0.1.0"
 dependencies = [
  "pipewire",
  "serde_json",
  "tempfile",
  "tracing",
- "unbound-test-bus",
+ "bande-test-bus",
 ]
 
 [[package]]
-name = "unbound-automount"
+name = "bande-automount"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
  "tracing",
- "unbound-bus",
- "unbound-fs",
- "unbound-l10n",
- "unbound-log",
- "unbound-notify",
- "unbound-test-bus",
- "unbound-xdg",
+ "bande-bus",
+ "bande-fs",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-test-bus",
+ "bande-xdg",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-bar"
+name = "bande-bar"
 version = "0.1.0"
 dependencies = [
  "accesskit",
@@ -3760,77 +3760,77 @@ dependencies = [
  "jiff",
  "smithay",
  "tracing",
- "unbound-bluetooth",
- "unbound-compositor",
- "unbound-config",
- "unbound-controlcenter",
- "unbound-datetime",
- "unbound-dock-model",
- "unbound-fs",
- "unbound-golden",
- "unbound-inbox",
- "unbound-keyboard",
- "unbound-l10n",
- "unbound-launcher",
- "unbound-notifications",
- "unbound-sound",
- "unbound-status",
- "unbound-test-wayland",
- "unbound-toolkit",
- "unbound-xdg",
+ "bande-bluetooth",
+ "bande-compositor",
+ "bande-config",
+ "bande-controlcenter",
+ "bande-datetime",
+ "bande-dock-model",
+ "bande-fs",
+ "bande-golden",
+ "bande-inbox",
+ "bande-keyboard",
+ "bande-l10n",
+ "bande-launcher",
+ "bande-notifications",
+ "bande-sound",
+ "bande-status",
+ "bande-test-wayland",
+ "bande-toolkit",
+ "bande-xdg",
  "wayland-client",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-bench"
+name = "bande-bench"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
  "smithay",
  "tempfile",
  "tracing",
- "unbound-compositor",
- "unbound-files",
- "unbound-fs",
- "unbound-log",
- "unbound-sample",
- "unbound-test-wayland",
- "unbound-toolkit",
- "unbound-xdg",
+ "bande-compositor",
+ "bande-files",
+ "bande-fs",
+ "bande-log",
+ "bande-sample",
+ "bande-test-wayland",
+ "bande-toolkit",
+ "bande-xdg",
  "wayland-client",
 ]
 
 [[package]]
-name = "unbound-bluetooth"
+name = "bande-bluetooth"
 version = "0.1.0"
 dependencies = [
  "blocking",
- "unbound-test-bus",
+ "bande-test-bus",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-bus"
+name = "bande-bus"
 version = "0.1.0"
 dependencies = [
- "unbound-test-bus",
+ "bande-test-bus",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-clipboard"
+name = "bande-clipboard"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
  "smithay",
  "tempfile",
  "tracing",
- "unbound-compositor",
- "unbound-log",
- "unbound-test-bus",
- "unbound-test-wayland",
- "unbound-xdg",
+ "bande-compositor",
+ "bande-log",
+ "bande-test-bus",
+ "bande-test-wayland",
+ "bande-xdg",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
@@ -3838,7 +3838,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-compositor"
+name = "bande-compositor"
 version = "0.1.0"
 dependencies = [
  "accesskit",
@@ -3850,69 +3850,69 @@ dependencies = [
  "smithay",
  "tempfile",
  "tracing",
- "unbound-bus",
- "unbound-config",
- "unbound-datetime",
- "unbound-edid",
- "unbound-golden",
- "unbound-graphics",
- "unbound-greeter",
- "unbound-keyboard",
- "unbound-l10n",
- "unbound-log",
- "unbound-protocols",
- "unbound-render",
- "unbound-spring",
- "unbound-test-bus",
- "unbound-test-wayland",
- "unbound-widgets",
- "unbound-xdg",
+ "bande-bus",
+ "bande-config",
+ "bande-datetime",
+ "bande-edid",
+ "bande-golden",
+ "bande-graphics",
+ "bande-greeter",
+ "bande-keyboard",
+ "bande-l10n",
+ "bande-log",
+ "bande-protocols",
+ "bande-render",
+ "bande-spring",
+ "bande-test-bus",
+ "bande-test-wayland",
+ "bande-widgets",
+ "bande-xdg",
  "wayland-client",
  "wayland-protocols",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-config"
+name = "bande-config"
 version = "0.1.0"
 dependencies = [
  "kdl",
  "tempfile",
  "tracing",
- "unbound-bus",
- "unbound-design",
- "unbound-l10n",
- "unbound-log",
- "unbound-notify",
- "unbound-test-bus",
- "unbound-watch",
+ "bande-bus",
+ "bande-design",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-test-bus",
+ "bande-watch",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-controlcenter"
+name = "bande-controlcenter"
 version = "0.1.0"
 dependencies = [
  "accesskit",
  "tracing",
- "unbound-audio",
- "unbound-bluetooth",
- "unbound-golden",
- "unbound-inbox",
- "unbound-l10n",
- "unbound-network",
- "unbound-notify",
- "unbound-power",
- "unbound-sound",
- "unbound-status",
- "unbound-test-bus",
- "unbound-toolkit",
- "unbound-xdg",
+ "bande-audio",
+ "bande-bluetooth",
+ "bande-golden",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-network",
+ "bande-notify",
+ "bande-power",
+ "bande-sound",
+ "bande-status",
+ "bande-test-bus",
+ "bande-toolkit",
+ "bande-xdg",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-datetime"
+name = "bande-datetime"
 version = "0.1.0"
 dependencies = [
  "icu_calendar",
@@ -3921,68 +3921,68 @@ dependencies = [
  "jiff",
  "rustix 1.1.6",
  "tempfile",
- "unbound-test-bus",
+ "bande-test-bus",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-design"
+name = "bande-design"
 version = "0.1.0"
 
 [[package]]
-name = "unbound-desktop-surface"
+name = "bande-desktop-surface"
 version = "0.1.0"
 dependencies = [
  "accesskit",
  "tracing",
- "unbound-bar",
- "unbound-config",
- "unbound-fs",
- "unbound-golden",
- "unbound-inbox",
- "unbound-l10n",
- "unbound-thumbnails",
- "unbound-toolkit",
- "unbound-volumes",
- "unbound-wallpaper",
- "unbound-xdg",
+ "bande-bar",
+ "bande-config",
+ "bande-fs",
+ "bande-golden",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-thumbnails",
+ "bande-toolkit",
+ "bande-volumes",
+ "bande-wallpaper",
+ "bande-xdg",
 ]
 
 [[package]]
-name = "unbound-dock-model"
+name = "bande-dock-model"
 version = "0.1.0"
 dependencies = [
  "tracing",
- "unbound-config",
- "unbound-inbox",
+ "bande-config",
+ "bande-inbox",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-edid"
+name = "bande-edid"
 version = "0.1.0"
 
 [[package]]
-name = "unbound-file-chooser"
+name = "bande-file-chooser"
 version = "0.1.0"
 dependencies = [
  "accesskit",
  "tempfile",
  "tracing",
- "unbound-files",
- "unbound-fs",
- "unbound-golden",
- "unbound-l10n",
- "unbound-log",
- "unbound-toolkit",
- "unbound-volumes",
- "unbound-wallpaper",
- "unbound-xdg",
- "xdg-desktop-portal-unbound",
+ "bande-files",
+ "bande-fs",
+ "bande-golden",
+ "bande-l10n",
+ "bande-log",
+ "bande-toolkit",
+ "bande-volumes",
+ "bande-wallpaper",
+ "bande-xdg",
+ "xdg-desktop-portal-bande",
 ]
 
 [[package]]
-name = "unbound-files"
+name = "bande-files"
 version = "0.1.0"
 dependencies = [
  "accesskit",
@@ -3990,23 +3990,23 @@ dependencies = [
  "rustix 1.1.6",
  "tempfile",
  "tracing",
- "unbound-app-menu",
- "unbound-fs",
- "unbound-golden",
- "unbound-l10n",
- "unbound-log",
- "unbound-preview",
- "unbound-search",
- "unbound-sound",
- "unbound-thumbnails",
- "unbound-toolkit",
- "unbound-volumes",
- "unbound-xdg",
+ "bande-app-menu",
+ "bande-fs",
+ "bande-golden",
+ "bande-l10n",
+ "bande-log",
+ "bande-preview",
+ "bande-search",
+ "bande-sound",
+ "bande-thumbnails",
+ "bande-toolkit",
+ "bande-volumes",
+ "bande-xdg",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-fs"
+name = "bande-fs"
 version = "0.1.0"
 dependencies = [
  "bzip2",
@@ -4017,14 +4017,14 @@ dependencies = [
  "ruzstd",
  "tar",
  "tempfile",
- "unbound-datetime",
- "unbound-l10n",
- "unbound-xdg",
+ "bande-datetime",
+ "bande-l10n",
+ "bande-xdg",
  "zip",
 ]
 
 [[package]]
-name = "unbound-golden"
+name = "bande-golden"
 version = "0.1.0"
 dependencies = [
  "image",
@@ -4032,7 +4032,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-graphics"
+name = "bande-graphics"
 version = "0.1.0"
 dependencies = [
  "ab_glyph",
@@ -4044,14 +4044,14 @@ dependencies = [
  "skrifa",
  "tempfile",
  "tracing",
- "unbound-design",
+ "bande-design",
  "vello_cpu",
  "vello_gpu",
  "wgpu",
 ]
 
 [[package]]
-name = "unbound-greeter"
+name = "bande-greeter"
 version = "0.1.0"
 dependencies = [
  "accesskit",
@@ -4062,35 +4062,35 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tracing",
- "unbound-config",
- "unbound-datetime",
- "unbound-keyboard",
- "unbound-l10n",
- "unbound-lock",
- "unbound-log",
- "unbound-status",
- "unbound-toolkit",
+ "bande-config",
+ "bande-datetime",
+ "bande-keyboard",
+ "bande-l10n",
+ "bande-lock",
+ "bande-log",
+ "bande-status",
+ "bande-toolkit",
  "zbus",
  "zeroize",
 ]
 
 [[package]]
-name = "unbound-inbox"
+name = "bande-inbox"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
 ]
 
 [[package]]
-name = "unbound-keyboard"
+name = "bande-keyboard"
 version = "0.1.0"
 dependencies = [
  "roxmltree",
- "unbound-l10n",
+ "bande-l10n",
 ]
 
 [[package]]
-name = "unbound-l10n"
+name = "bande-l10n"
 version = "0.1.0"
 dependencies = [
  "fluent-bundle",
@@ -4099,7 +4099,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-launcher"
+name = "bande-launcher"
 version = "0.1.0"
 dependencies = [
  "accesskit",
@@ -4107,22 +4107,22 @@ dependencies = [
  "rustix 1.1.6",
  "tempfile",
  "tracing",
- "unbound-fs",
- "unbound-golden",
- "unbound-inbox",
- "unbound-l10n",
- "unbound-preview",
- "unbound-search",
- "unbound-settings-panes",
- "unbound-status",
- "unbound-thumbnails",
- "unbound-toolkit",
- "unbound-xdg",
+ "bande-fs",
+ "bande-golden",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-preview",
+ "bande-search",
+ "bande-settings-panes",
+ "bande-status",
+ "bande-thumbnails",
+ "bande-toolkit",
+ "bande-xdg",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-lock"
+name = "bande-lock"
 version = "0.1.0"
 dependencies = [
  "accesskit",
@@ -4131,24 +4131,24 @@ dependencies = [
  "libloading",
  "rustix 1.1.6",
  "tracing",
- "unbound-bar",
- "unbound-datetime",
- "unbound-golden",
- "unbound-inbox",
- "unbound-keyboard",
- "unbound-l10n",
- "unbound-log",
- "unbound-spring",
- "unbound-status",
- "unbound-toolkit",
- "unbound-wallpaper",
- "unbound-xdg",
+ "bande-bar",
+ "bande-datetime",
+ "bande-golden",
+ "bande-inbox",
+ "bande-keyboard",
+ "bande-l10n",
+ "bande-log",
+ "bande-spring",
+ "bande-status",
+ "bande-toolkit",
+ "bande-wallpaper",
+ "bande-xdg",
  "zbus",
  "zeroize",
 ]
 
 [[package]]
-name = "unbound-log"
+name = "bande-log"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
@@ -4158,65 +4158,65 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-monitor"
+name = "bande-monitor"
 version = "0.1.0"
 dependencies = [
  "accesskit",
  "rustix 1.1.6",
  "tempfile",
  "tracing",
- "unbound-app-menu",
- "unbound-golden",
- "unbound-l10n",
- "unbound-log",
- "unbound-status",
- "unbound-test-bus",
- "unbound-toolkit",
- "unbound-xdg",
+ "bande-app-menu",
+ "bande-golden",
+ "bande-l10n",
+ "bande-log",
+ "bande-status",
+ "bande-test-bus",
+ "bande-toolkit",
+ "bande-xdg",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-network"
+name = "bande-network"
 version = "0.1.0"
 dependencies = [
- "unbound-test-bus",
+ "bande-test-bus",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-notifications"
+name = "bande-notifications"
 version = "0.1.0"
 dependencies = [
  "jiff",
  "tracing",
- "unbound-datetime",
- "unbound-golden",
- "unbound-inbox",
- "unbound-l10n",
- "unbound-notify",
- "unbound-spring",
- "unbound-toolkit",
- "unbound-xdg",
+ "bande-datetime",
+ "bande-golden",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-notify",
+ "bande-spring",
+ "bande-toolkit",
+ "bande-xdg",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-notify"
+name = "bande-notify"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
  "tempfile",
  "tracing",
- "unbound-bus",
- "unbound-log",
- "unbound-sound",
- "unbound-test-bus",
+ "bande-bus",
+ "bande-log",
+ "bande-sound",
+ "bande-test-bus",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-polkit"
+name = "bande-polkit"
 version = "0.1.0"
 dependencies = [
  "accesskit",
@@ -4224,48 +4224,48 @@ dependencies = [
  "rustix 1.1.6",
  "tempfile",
  "tracing",
- "unbound-golden",
- "unbound-inbox",
- "unbound-l10n",
- "unbound-log",
- "unbound-test-bus",
- "unbound-toolkit",
+ "bande-golden",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-log",
+ "bande-test-bus",
+ "bande-toolkit",
  "zbus",
  "zeroize",
 ]
 
 [[package]]
-name = "unbound-power"
+name = "bande-power"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
  "smithay",
  "tempfile",
  "tracing",
- "unbound-bus",
- "unbound-compositor",
- "unbound-config",
- "unbound-l10n",
- "unbound-log",
- "unbound-notify",
- "unbound-sound",
- "unbound-test-bus",
+ "bande-bus",
+ "bande-compositor",
+ "bande-config",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-sound",
+ "bande-test-bus",
  "wayland-client",
  "wayland-protocols",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-preview"
+name = "bande-preview"
 version = "0.1.0"
 dependencies = [
  "image",
  "tempfile",
- "unbound-fs",
+ "bande-fs",
 ]
 
 [[package]]
-name = "unbound-protocols"
+name = "bande-protocols"
 version = "0.1.0"
 dependencies = [
  "wayland-backend",
@@ -4276,7 +4276,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-render"
+name = "bande-render"
 version = "0.1.0"
 dependencies = [
  "ash",
@@ -4285,7 +4285,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-review"
+name = "bande-review"
 version = "0.1.0"
 dependencies = [
  "image",
@@ -4293,22 +4293,22 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
- "unbound-log",
+ "bande-log",
  "wayland-client",
  "wayland-protocols",
 ]
 
 [[package]]
-name = "unbound-sample"
+name = "bande-sample"
 version = "0.1.0"
 dependencies = [
  "tracing",
- "unbound-log",
- "unbound-toolkit",
+ "bande-log",
+ "bande-toolkit",
 ]
 
 [[package]]
-name = "unbound-screenshot"
+name = "bande-screenshot"
 version = "0.1.0"
 dependencies = [
  "accesskit",
@@ -4321,41 +4321,41 @@ dependencies = [
  "smithay",
  "tempfile",
  "tracing",
- "unbound-compositor",
- "unbound-datetime",
- "unbound-fs",
- "unbound-golden",
- "unbound-graphics",
- "unbound-inbox",
- "unbound-l10n",
- "unbound-log",
- "unbound-notify",
- "unbound-protocols",
- "unbound-sound",
- "unbound-test-bus",
- "unbound-test-wayland",
- "unbound-toolkit",
- "unbound-xdg",
+ "bande-compositor",
+ "bande-datetime",
+ "bande-fs",
+ "bande-golden",
+ "bande-graphics",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-protocols",
+ "bande-sound",
+ "bande-test-bus",
+ "bande-test-wayland",
+ "bande-toolkit",
+ "bande-xdg",
  "wayland-client",
  "wayland-protocols",
- "xdg-desktop-portal-unbound",
+ "xdg-desktop-portal-bande",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-search"
+name = "bande-search"
 version = "0.1.0"
 dependencies = [
  "jiff",
  "tempfile",
  "tracing",
- "unbound-inbox",
- "unbound-watch",
- "unbound-xdg",
+ "bande-inbox",
+ "bande-watch",
+ "bande-xdg",
 ]
 
 [[package]]
-name = "unbound-settings"
+name = "bande-settings"
 version = "0.1.0"
 dependencies = [
  "accesskit",
@@ -4363,122 +4363,122 @@ dependencies = [
  "rustix 1.1.6",
  "tempfile",
  "tracing",
- "unbound-app-menu",
- "unbound-audio",
- "unbound-bluetooth",
- "unbound-compositor",
- "unbound-config",
- "unbound-datetime",
- "unbound-fs",
- "unbound-golden",
- "unbound-keyboard",
- "unbound-l10n",
- "unbound-log",
- "unbound-network",
- "unbound-notify",
- "unbound-settings-panes",
- "unbound-sound",
- "unbound-status",
- "unbound-test-bus",
- "unbound-toolkit",
- "unbound-wallpaper",
- "unbound-xdg",
+ "bande-app-menu",
+ "bande-audio",
+ "bande-bluetooth",
+ "bande-compositor",
+ "bande-config",
+ "bande-datetime",
+ "bande-fs",
+ "bande-golden",
+ "bande-keyboard",
+ "bande-l10n",
+ "bande-log",
+ "bande-network",
+ "bande-notify",
+ "bande-settings-panes",
+ "bande-sound",
+ "bande-status",
+ "bande-test-bus",
+ "bande-toolkit",
+ "bande-wallpaper",
+ "bande-xdg",
  "wayland-client",
  "wayland-protocols-wlr",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-settings-panes"
+name = "bande-settings-panes"
 version = "0.1.0"
 dependencies = [
- "unbound-l10n",
+ "bande-l10n",
 ]
 
 [[package]]
-name = "unbound-shell"
+name = "bande-shell"
 version = "0.1.0"
 dependencies = [
  "accesskit",
  "smithay",
  "tempfile",
  "tracing",
- "unbound-bar",
- "unbound-bluetooth",
- "unbound-compositor",
- "unbound-config",
- "unbound-controlcenter",
- "unbound-desktop-surface",
- "unbound-launcher",
- "unbound-log",
- "unbound-notifications",
- "unbound-status",
- "unbound-toolkit",
- "unbound-xdg",
+ "bande-bar",
+ "bande-bluetooth",
+ "bande-compositor",
+ "bande-config",
+ "bande-controlcenter",
+ "bande-desktop-surface",
+ "bande-launcher",
+ "bande-log",
+ "bande-notifications",
+ "bande-status",
+ "bande-toolkit",
+ "bande-xdg",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-sound"
+name = "bande-sound"
 version = "0.1.0"
 dependencies = [
  "tracing",
- "unbound-audio",
- "unbound-bus",
- "unbound-config",
- "unbound-log",
- "unbound-test-bus",
+ "bande-audio",
+ "bande-bus",
+ "bande-config",
+ "bande-log",
+ "bande-test-bus",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-spring"
+name = "bande-spring"
 version = "0.1.0"
 
 [[package]]
-name = "unbound-status"
+name = "bande-status"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
  "tempfile",
  "tracing",
- "unbound-app-menu",
- "unbound-audio",
- "unbound-bluetooth",
- "unbound-datetime",
- "unbound-inbox",
- "unbound-l10n",
- "unbound-network",
- "unbound-notify",
- "unbound-power",
- "unbound-test-bus",
- "unbound-xdg",
+ "bande-app-menu",
+ "bande-audio",
+ "bande-bluetooth",
+ "bande-datetime",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-network",
+ "bande-notify",
+ "bande-power",
+ "bande-test-bus",
+ "bande-xdg",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-term"
+name = "bande-term"
 version = "0.1.0"
 dependencies = [
  "accesskit",
  "alacritty_terminal",
  "tempfile",
  "tracing",
- "unbound-app-menu",
- "unbound-design",
- "unbound-golden",
- "unbound-l10n",
- "unbound-log",
- "unbound-notify",
- "unbound-spring",
- "unbound-toolkit",
- "unbound-watch",
- "unbound-xdg",
+ "bande-app-menu",
+ "bande-design",
+ "bande-golden",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-spring",
+ "bande-toolkit",
+ "bande-watch",
+ "bande-xdg",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-test-bus"
+name = "bande-test-bus"
 version = "0.1.0"
 dependencies = [
  "tempfile",
@@ -4486,13 +4486,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-test-wayland"
+name = "bande-test-wayland"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
  "tempfile",
- "unbound-compositor",
- "unbound-protocols",
+ "bande-compositor",
+ "bande-protocols",
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-misc",
@@ -4500,7 +4500,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-thumbnails"
+name = "bande-thumbnails"
 version = "0.1.0"
 dependencies = [
  "image",
@@ -4508,28 +4508,28 @@ dependencies = [
  "png",
  "tempfile",
  "tracing",
- "unbound-inbox",
- "unbound-xdg",
+ "bande-inbox",
+ "bande-xdg",
 ]
 
 [[package]]
-name = "unbound-toolkit"
+name = "bande-toolkit"
 version = "0.1.0"
 dependencies = [
  "accesskit",
  "smithay",
- "unbound-compositor",
- "unbound-graphics",
- "unbound-test-bus",
- "unbound-test-wayland",
- "unbound-toolkit-platform",
- "unbound-widgets",
+ "bande-compositor",
+ "bande-graphics",
+ "bande-test-bus",
+ "bande-test-wayland",
+ "bande-toolkit-platform",
+ "bande-widgets",
  "wayland-client",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-toolkit-platform"
+name = "bande-toolkit-platform"
 version = "0.1.0"
 dependencies = [
  "accesskit",
@@ -4540,15 +4540,15 @@ dependencies = [
  "serde",
  "smithay",
  "tracing",
- "unbound-bus",
- "unbound-compositor",
- "unbound-golden",
- "unbound-graphics",
- "unbound-l10n",
- "unbound-protocols",
- "unbound-test-bus",
- "unbound-test-wayland",
- "unbound-widgets",
+ "bande-bus",
+ "bande-compositor",
+ "bande-golden",
+ "bande-graphics",
+ "bande-l10n",
+ "bande-protocols",
+ "bande-test-bus",
+ "bande-test-wayland",
+ "bande-widgets",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
@@ -4559,18 +4559,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-tray"
+name = "bande-tray"
 version = "0.1.0"
 dependencies = [
  "tracing",
- "unbound-bus",
- "unbound-log",
- "unbound-test-bus",
+ "bande-bus",
+ "bande-log",
+ "bande-test-bus",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-volumes"
+name = "bande-volumes"
 version = "0.1.0"
 dependencies = [
  "tracing",
@@ -4578,19 +4578,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-wallpaper"
+name = "bande-wallpaper"
 version = "0.1.0"
 dependencies = [
  "image",
  "resvg",
  "tempfile",
  "tracing",
- "unbound-inbox",
+ "bande-inbox",
  "zbus",
 ]
 
 [[package]]
-name = "unbound-watch"
+name = "bande-watch"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
@@ -4598,29 +4598,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "unbound-widgets"
+name = "bande-widgets"
 version = "0.1.0"
 dependencies = [
  "accesskit",
  "parley",
- "unbound-golden",
- "unbound-graphics",
- "unbound-l10n",
- "unbound-spring",
+ "bande-golden",
+ "bande-graphics",
+ "bande-l10n",
+ "bande-spring",
  "zeroize",
 ]
 
 [[package]]
-name = "unbound-xdg"
+name = "bande-xdg"
 version = "0.1.0"
 dependencies = [
  "image",
  "rustix 1.1.6",
  "tempfile",
  "tracing",
- "unbound-l10n",
- "unbound-notify",
- "unbound-test-bus",
+ "bande-l10n",
+ "bande-notify",
+ "bande-test-bus",
  "zbus",
 ]
 
@@ -5492,7 +5492,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "xdg-desktop-portal-unbound"
+name = "xdg-desktop-portal-bande"
 version = "0.1.0"
 dependencies = [
  "blocking",
@@ -5500,14 +5500,14 @@ dependencies = [
  "rustix 1.1.6",
  "tempfile",
  "tracing",
- "unbound-bus",
- "unbound-config",
- "unbound-datetime",
- "unbound-design",
- "unbound-log",
- "unbound-test-bus",
- "unbound-wallpaper",
- "unbound-xdg",
+ "bande-bus",
+ "bande-config",
+ "bande-datetime",
+ "bande-design",
+ "bande-log",
+ "bande-test-bus",
+ "bande-wallpaper",
+ "bande-xdg",
  "zbus",
 ]
 

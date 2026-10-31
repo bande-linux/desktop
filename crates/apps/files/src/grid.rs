@@ -1,9 +1,9 @@
 use std::ops::Range;
 
-use unbound_fs::Entry;
-use unbound_thumbnails::ThumbnailSize;
-use unbound_toolkit::ui::{Key, Modifiers, Pointer, Scroll, ScrollState};
-use unbound_toolkit::{
+use bande_fs::Entry;
+use bande_thumbnails::ThumbnailSize;
+use bande_toolkit::ui::{Key, Modifiers, Pointer, Scroll, ScrollState};
+use bande_toolkit::{
     Color, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
 

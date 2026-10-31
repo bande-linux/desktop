@@ -4,12 +4,12 @@ use std::thread;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
-use unbound_inbox::Outbox;
+use bande_inbox::Outbox;
 
 pub const DEFAULT_WALLPAPER: &str = "drift";
 
-const CONFIG_BUS_NAME: &str = "org.unbound.Config";
-const CONFIG_PATH: &str = "/org/unbound/Config";
+const CONFIG_BUS_NAME: &str = "org.bande.Config";
+const CONFIG_PATH: &str = "/org/bande/Config";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Variant {
@@ -51,7 +51,7 @@ pub fn bundled(name: &str, variant: Variant, data_dirs: &[PathBuf]) -> Option<Pa
     data_dirs
         .iter()
         .map(|dir| {
-            dir.join("unbound/wallpapers")
+            dir.join("bande/wallpapers")
                 .join(format!("{name}-{}.svg", variant.keyword()))
         })
         .find(|path| path.is_file())
@@ -76,9 +76,9 @@ impl Choice {
 }
 
 #[zbus::proxy(
-    interface = "org.unbound.Config",
-    default_service = "org.unbound.Config",
-    default_path = "/org/unbound/Config"
+    interface = "org.bande.Config",
+    default_service = "org.bande.Config",
+    default_path = "/org/bande/Config"
 )]
 trait Config {
     #[zbus(property)]
@@ -149,7 +149,7 @@ pub fn follow(choices: Outbox<Choice>) {
             Ok(())
         };
         if let Err(error) = follow() {
-            tracing::warn!("cannot follow the wallpaper in org.unbound.Config: {error}");
+            tracing::warn!("cannot follow the wallpaper in org.bande.Config: {error}");
             if !sent {
                 choices.send(Choice::default());
             }

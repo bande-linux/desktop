@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
-use unbound_network::VpnState;
-use unbound_settings_panes::{Group, Pane, PaneId, SettingId, Value};
-use unbound_toolkit::ui::{ScrollView, Toggle, Widget};
-use unbound_toolkit::{Color, Image, TextRole};
-use unbound_xdg::{ICON_THEMES, find_icon};
+use bande_network::VpnState;
+use bande_settings_panes::{Group, Pane, PaneId, SettingId, Value};
+use bande_toolkit::ui::{ScrollView, Toggle, Widget};
+use bande_toolkit::{Color, Image, TextRole};
+use bande_xdg::{ICON_THEMES, find_icon};
 
 use crate::L10N;
 use crate::pages::{Widgets, boxed};
@@ -36,7 +36,7 @@ impl SettingsView {
             .clone()
     }
 
-    pub(crate) fn palette(&mut self) -> unbound_toolkit::Palette {
+    pub(crate) fn palette(&mut self) -> bande_toolkit::Palette {
         self.ui().context().palette
     }
 

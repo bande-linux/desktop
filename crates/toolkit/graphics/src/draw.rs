@@ -10,7 +10,7 @@ use vello_cpu::{Glyph, ImageId, ImageSource, PaintType};
 use crate::outline::{GlyphOutlines, TOLERANCE};
 use crate::scene::{Image, Item, Paint, Path, PathElement, Shape};
 use crate::text::GlyphRun;
-use unbound_design::Color;
+use bande_design::Color;
 
 pub(crate) trait Canvas {
     fn set_paint(&mut self, paint: PaintType);

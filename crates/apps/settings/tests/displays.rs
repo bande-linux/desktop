@@ -3,8 +3,8 @@
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use unbound_compositor::{Compositor, OutputConfig, OutputMode};
-use unbound_settings::Displays;
+use bande_compositor::{Compositor, OutputConfig, OutputMode};
+use bande_settings::Displays;
 use wayland_client::Connection;
 
 #[test]

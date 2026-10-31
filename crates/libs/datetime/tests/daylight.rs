@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use bande_datetime::daylight::{Place, Sky, place, sky, within_daily};
 use jiff::civil::{Time, date};
 use jiff::{Timestamp, Zoned};
-use unbound_datetime::daylight::{Place, Sky, place, sky, within_daily};
 
 const ZONE_TAB: &str = "# comment\nSE\t+5920+01803\tEurope/Stockholm\nNO\t+5955+01045\tEurope/Oslo\nUS\t+404251-0740023\tAmerica/New_York\tEastern (most areas)\n";
 

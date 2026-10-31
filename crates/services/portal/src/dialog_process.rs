@@ -10,7 +10,7 @@ use crate::file_chooser::{Dialog, FileChooserUi, Filter, Mode, Outcome, Pattern,
 use crate::request::Cancellation;
 use crate::wallpaper::WallpaperUi;
 
-pub const DIALOG_PROGRAM: &str = "/usr/libexec/unbound-file-chooser";
+pub const DIALOG_PROGRAM: &str = "/usr/libexec/bande-file-chooser";
 pub const CHOSEN: u8 = 0;
 pub const CANCELLED: u8 = 1;
 

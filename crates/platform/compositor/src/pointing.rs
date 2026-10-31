@@ -1,7 +1,7 @@
+use bande_config::{Mouse, SecondaryClick, Trackpad};
 use smithay::backend::input::InputEvent;
 use smithay::backend::libinput::LibinputInputBackend;
 use smithay::reexports::input::{ClickMethod, Device, DeviceCapability, DeviceConfigResult};
-use unbound_config::{Mouse, SecondaryClick, Trackpad};
 
 use crate::state::Compositor;
 

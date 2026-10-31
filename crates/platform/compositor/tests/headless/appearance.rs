@@ -2,16 +2,16 @@ use std::collections::HashMap;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use unbound_compositor::{SystemAppearance, follow_appearance};
-use unbound_graphics::TextSize;
-use unbound_test_bus::SessionBus;
+use bande_compositor::{SystemAppearance, follow_appearance};
+use bande_graphics::TextSize;
+use bande_test_bus::SessionBus;
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 const PORTAL: &str = "org.freedesktop.portal.Desktop";
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
 const APPEARANCE: &str = "org.freedesktop.appearance";
-const UNBOUND_APPEARANCE: &str = "org.unbound.appearance";
+const BANDE_APPEARANCE: &str = "org.bande.appearance";
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 struct Settings;
@@ -53,7 +53,7 @@ fn reduce_motion_dark_mode_and_text_size_follow_the_portals_appearance_keys() {
     for (namespace, key, value) in [
         (APPEARANCE, "color-scheme", 1u32),
         (APPEARANCE, "reduced-motion", 0u32),
-        (UNBOUND_APPEARANCE, "text-size", 150u32),
+        (BANDE_APPEARANCE, "text-size", 150u32),
     ] {
         zbus::block_on(Settings::setting_changed(
             &emitter,

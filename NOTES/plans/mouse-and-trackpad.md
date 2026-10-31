@@ -14,7 +14,7 @@ Each device class already keeps its own scroll direction and speed in the config
 
 **Config (`crates/services/config`)**
 - `Trackpad` has `tap_to_click`, `natural_scrolling`, `speed`, `secondary_click`, `disable_while_typing` (`src/lib.rs:378-397`). `Mouse` has `natural_scrolling` and `speed` (`src/lib.rs:399-403`). They are parsed at `src/lib.rs:1192-1212` and `1233-1244`, with defaults like a Mac: trackpad natural on, mouse natural off.
-- Each value is a `Setting` variant (`src/edit.rs:36-42`, written at `187-228`), a D-Bus property on `org.unbound.Config` (`src/service.rs:829-947`), and a change signal (`src/service.rs:244-264`). The compositor applies a change only when the signal fires, so every new property needs its own line there.
+- Each value is a `Setting` variant (`src/edit.rs:36-42`, written at `187-228`), a D-Bus property on `org.bande.Config` (`src/service.rs:829-947`), and a change signal (`src/service.rs:244-264`). The compositor applies a change only when the signal fires, so every new property needs its own line there.
 
 **Compositor (`crates/platform/compositor`)**
 - `pointing.rs:20-22` treats a device as a touchpad when `config_tap_finger_count() > 0`; anything else with the Pointer capability gets the mouse settings (`pointing.rs:24-51`).
@@ -50,7 +50,7 @@ Each device class already keeps its own scroll direction and speed in the config
 - Pro: no new interface, and it reuses the udev scan and the existing config flow.
 - Con: a row can be dead on unusual hardware, for example Secondary click on a touchpad with physical buttons.
 
-**B. The compositor publishes device capabilities over D-Bus.** A new `org.unbound.Pointing` with a `Devices` property; Settings hides unsupported rows and gets hot-plug from the signal.
+**B. The compositor publishes device capabilities over D-Bus.** A new `org.bande.Pointing` with a `Devices` property; Settings hides unsupported rows and gets hot-plug from the signal.
 - Pro: exact, and it could also feed device names elsewhere.
 - Con: a new bus name and interface in the compositor (on the `keyboard_monitor.rs` pattern), a second source of truth beside udev, and more test setup. It is not needed for the hardware this desktop targets (Apple and laptop clickpads, ordinary mice).
 
@@ -100,7 +100,7 @@ Each milestone is one branch from `main`, merged when the local gate is green. S
    - Check on the mini: toggle each option from `busctl --user set-property`, then `sudo libinput list-devices` shows "Left-handed: enabled" and "Accel profile: flat" on the Logitech mouse.
 3. **Settings: split the pane into Mouse and Trackpad.**
    - Replace `PaneId::TrackpadMouse` with `Mouse` (`input-mouse-symbolic`, keyword `mouse`) and `Trackpad` (`input-touchpad-symbolic`, keyword `trackpad`), in that order in Devices.
-   - Each pane gets its own summary and keywords in `settings-panes/locales/en-US/unbound-settings-panes.ftl`.
+   - Each pane gets its own summary and keywords in `settings-panes/locales/en-US/bande-settings-panes.ftl`.
    - `view.rs` `available()` uses `pointing.mouse` or `pointing.trackpad`. Delete the per-section device arms in `pages.rs:979-988`, and update `header.rs:244`.
    - Update `docs/experience/settings.md`: sidebar, pane table, slice 6, now 17 panes.
    - Tests:
@@ -116,7 +116,7 @@ Each milestone is one branch from `main`, merged when the local gate is green. S
      - Dragging disappears when Tap to click turns off;
      - the goldens are refreshed.
 5. **Settings: hot-plug.**
-   - In `main.rs`/`follow.rs`, an `unbound_watch::FolderWatch` (`Changes::Any`) on `/run/udev/data` rescans when a `c13:` entry changes and sends a new `Update::Pointing(PointingDevices)` through the feed. Drop the focus-in rescan.
+   - In `main.rs`/`follow.rs`, an `bande_watch::FolderWatch` (`Changes::Any`) on `/run/udev/data` rescans when a `c13:` entry changes and sends a new `Update::Pointing(PointingDevices)` through the feed. Drop the focus-in rescan.
    - `PointingDevices::scan` counts `ID_INPUT_POINTINGSTICK` as a mouse.
    - Tests in `tests/follow.rs`:
      - `scan` on a temp dir with a touchpad entry, a mouse entry and a keyboard entry gives the right flags;

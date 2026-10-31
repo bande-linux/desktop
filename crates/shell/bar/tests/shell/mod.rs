@@ -6,13 +6,13 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use bande_bar::surfaces::{self, Display, Services};
+use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
+use bande_config::Config;
+use bande_notifications::Notifications;
+use bande_test_wayland::{RED, ShmImage, TestClient};
+use bande_toolkit::{App, Scene, Surfaces, TextSystem, Window, WindowEvent};
 use smithay::utils::Size;
-use unbound_bar::surfaces::{self, Display, Services};
-use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
-use unbound_config::Config;
-use unbound_notifications::Notifications;
-use unbound_test_wayland::{RED, ShmImage, TestClient};
-use unbound_toolkit::{App, Scene, Surfaces, TextSystem, Window, WindowEvent};
 use wayland_client::protocol::wl_shm::Format;
 
 const OUTPUT: (i32, i32) = (1024, 720);
@@ -107,7 +107,7 @@ impl Surfaces for Shell {
 fn shell(stream: UnixStream, labels: Sender<Vec<String>>) {
     let text = TextSystem::new();
     let mut root =
-        Window::open_on(stream, unbound_notifications::role(), (0, 0)).expect("notifications");
+        Window::open_on(stream, bande_notifications::role(), (0, 0)).expect("notifications");
     root.share_fonts(&text);
     let notifications =
         Notifications::new(&mut root, text.sharing_fonts(), None).expect("notifications");
@@ -138,7 +138,7 @@ fn shell(stream: UnixStream, labels: Sender<Vec<String>>) {
         labels,
         _text: text,
     };
-    unbound_toolkit::run_surfaces(&mut shell).expect("run loop");
+    bande_toolkit::run_surfaces(&mut shell).expect("run loop");
 }
 
 pub struct Desktop {

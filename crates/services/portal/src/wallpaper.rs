@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use unbound_xdg::path_from_file_uri;
+use bande_xdg::path_from_file_uri;
 use zbus::blocking::Connection;
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{ObjectPath, OwnedValue};
@@ -48,7 +48,7 @@ impl Wallpaper {
         }
         let chosen = keep(&picture, &self.folder)
             .map_err(zbus::Error::from)
-            .and_then(|kept| unbound_wallpaper::set(&self.session, &kept));
+            .and_then(|kept| bande_wallpaper::set(&self.session, &kept));
         match chosen {
             Ok(()) => SUCCESS,
             Err(error) => {

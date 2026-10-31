@@ -6,11 +6,11 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
+use bande_xdg::{percent_decode, percent_encode};
 use jiff::civil::DateTime;
 use rustix::fs::{
     AtFlags, CWD, Dir, FileType, Mode, OFlags, StatxFlags, openat, statat, statx, unlinkat,
 };
-use unbound_xdg::{percent_decode, percent_encode};
 
 const INFO_SUFFIX: &str = ".trashinfo";
 const INFO_HEADER: &str = "[Trash Info]";
@@ -401,7 +401,7 @@ impl Trash {
         }
         let path = std::path::absolute(path)?;
         self.dir_for(&path)?
-            .put(&path, unbound_datetime::now().datetime())
+            .put(&path, bande_datetime::now().datetime())
     }
 
     fn dirs(&self) -> Vec<TrashDir> {

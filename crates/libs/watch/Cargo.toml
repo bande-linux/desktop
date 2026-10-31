@@ -1,6 +1,6 @@
 [package]
-name = "unbound-watch"
-description = "Folder change notifications for Unbound through inotify"
+name = "bande-watch"
+description = "Folder change notifications for Bande through inotify"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

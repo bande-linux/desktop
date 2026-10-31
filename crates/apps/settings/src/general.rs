@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use unbound_fs::format_size;
-use unbound_settings_panes::{PaneId, SettingId, Value, duration_label};
-use unbound_toolkit::Spacing;
-use unbound_toolkit::ui::{Axis, Button, Label, SearchField, Stack, Widget};
+use bande_fs::format_size;
+use bande_settings_panes::{PaneId, SettingId, Value, duration_label};
+use bande_toolkit::Spacing;
+use bande_toolkit::ui::{Axis, Button, Label, SearchField, Stack, Widget};
 
 use crate::L10N;
 use crate::pages::{Widgets, boxed, muted_row, submit};
@@ -106,7 +106,7 @@ impl SettingsView {
             info_row(&L10N.tr("about-model"), &about.model),
             info_row(&L10N.tr("about-chip"), &about.chip),
             info_row(&L10N.tr("about-memory"), &format_size(about.memory)),
-            info_row(&L10N.tr("about-unbound"), &about.unbound),
+            info_row(&L10N.tr("about-bande"), &about.bande),
             info_row(&L10N.tr("about-system"), &about.system),
         ];
         if let Some(serial) = &about.serial {

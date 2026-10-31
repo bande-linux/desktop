@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use crate::support::*;
+use bande_compositor::{Compositor, OutputConfig, Renderer};
+use bande_test_wayland::{BLUE, GREEN, RED, ShmImage, TestClient, roundtrip};
 use smithay::utils::{Point, Size};
-use unbound_compositor::{Compositor, OutputConfig, Renderer};
-use unbound_test_wayland::{BLUE, GREEN, RED, ShmImage, TestClient, roundtrip};
 use wayland_client::protocol::wl_data_device_manager::DndAction;
 use wayland_client::protocol::wl_shm::Format;
 

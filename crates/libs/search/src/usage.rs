@@ -39,7 +39,7 @@ pub fn usage_path(state_home: Option<&Path>, home: Option<&Path>) -> Option<Path
         .filter(|path| path.is_absolute())
         .map(Path::to_path_buf)
         .or_else(|| home.map(|home| home.join(".local/state")))?;
-    Some(state.join("unbound/launcher-usage"))
+    Some(state.join("bande/launcher-usage"))
 }
 
 impl Usage {

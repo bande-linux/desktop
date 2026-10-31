@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use smithay::utils::{Logical, Point, Rectangle, Size};
-use unbound_compositor::{Compositor, Renderer, Snapshot};
-use unbound_test_wayland::{
+use bande_compositor::{Compositor, Renderer, Snapshot};
+use bande_test_wayland::{
     Anchor, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage, TestClient, roundtrip,
 };
+use smithay::utils::{Logical, Point, Rectangle, Size};
 use wayland_client::protocol::wl_shm::Format;
 
 pub const OUTPUT: (i32, i32) = (256, 192);

@@ -1,9 +1,9 @@
 use smithay::utils::{Logical, Point, Rectangle, Size};
 use std::time::Duration;
 
-use unbound_compositor::{Compositor, OutputConfig, OutputMode, Renderer};
-use unbound_config::Config;
-use unbound_test_wayland::{
+use bande_compositor::{Compositor, OutputConfig, OutputMode, Renderer};
+use bande_config::Config;
+use bande_test_wayland::{
     Anchor, BLUE, ConstraintAdjustment, DecorationMode, GREEN, KeyboardInteractivity, Layer,
     LayerRequest, Placement, PopupRequest, RED, ShmImage, TestClient, quadrants, roundtrip,
 };

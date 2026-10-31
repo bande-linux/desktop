@@ -2,6 +2,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
+use bande_render::{RenderError, VulkanRenderer};
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::damage::OutputDamageTracker;
 use smithay::backend::renderer::element::RenderElement;
@@ -27,7 +28,6 @@ use smithay::reexports::wayland_server::{
 use smithay::utils::{Clock, Monotonic, Physical, Point, Rectangle, Size, Transform};
 use smithay::wayland::foreign_toplevel_list::ForeignToplevelHandle;
 use smithay::wayland::shm::with_buffer_contents_mut;
-use unbound_render::{RenderError, VulkanRenderer};
 
 use crate::element::ScreenElement;
 use crate::motion::Look;

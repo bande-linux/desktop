@@ -1,6 +1,10 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 pub mod clipboard;
+pub use bande_protocols::client::bande_app_v1::{Placement, Workspace};
+pub use bande_protocols::client::bande_shell_v1::{
+    BrightnessKey, Edge as PanelEdge, LauncherMode, MediaKey, Panel, SessionEnd, VolumeKey,
+};
 pub use capture::{CaptureConstraints, CaptureOutcome};
 pub use cursor::CursorShape;
 pub use decoration::DecorationMode;
@@ -10,10 +14,6 @@ pub use idle::IdleEvent;
 pub use separate::{SeparateApp, act_as_separate_app};
 pub use shell::{Anchor, KeyboardInteractivity, Layer, LayerRequest};
 pub use toplevel::{Configured, PopupRequest};
-pub use unbound_protocols::client::unbound_app_v1::{Placement, Workspace};
-pub use unbound_protocols::client::unbound_shell_v1::{
-    BrightnessKey, Edge as PanelEdge, LauncherMode, MediaKey, Panel, SessionEnd, VolumeKey,
-};
 pub use wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment;
 pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State as ToplevelState};
 mod capture;
@@ -38,7 +38,7 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
 
-use unbound_compositor::{Compositor, SessionRole};
+use bande_compositor::{Compositor, SessionRole};
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_callback::{self, WlCallback};
 use wayland_client::protocol::wl_compositor::WlCompositor;

@@ -1,8 +1,8 @@
-# Unbound design principles
+# Bande design principles
 
 Status: draft, awaiting the owner's edit.
 
-Unbound is its own desktop. macOS is the bar for quality: how elegant, smooth and finished
+Bande is its own desktop. macOS is the bar for quality: how elegant, smooth and finished
 things feel. It is also the main reference for which basics a modern desktop needs. The
 structure, the feature set and the look are ours. Where a spec is silent, these principles
 decide; where they do not, look at how macOS handles it and ask whether the simpler answer is
@@ -10,7 +10,7 @@ better.
 
 ## 1. Simple yet powerful
 
-- **Few concepts, done thoroughly.** A feature that is in Unbound works everywhere it should,
+- **Few concepts, done thoroughly.** A feature that is in Bande works everywhere it should,
   with every input, in light and dark, at every scale. A feature we cannot finish to that
   standard waits.
 - **One obvious way.** Each task has one primary path that a new user finds without help.
@@ -41,7 +41,7 @@ better.
 - **Every state change is animated, and every animation is interruptible.** Windows open,
   close, minimise, zoom and move between spaces with motion that shows where they come from
   and go to. Starting a new action mid-animation retargets it from the current position and
-  velocity (`unbound-spring`), never jumps or queues.
+  velocity (`bande-spring`), never jumps or queues.
 - **Springs, not curves.** Motion is driven by critically or slightly underdamped springs with
   a small set of named presets (quick, standard, gentle), so the whole desktop moves alike.
 - **Fast first.** Feedback to input starts on the next frame. An animation never delays the
@@ -73,7 +73,7 @@ better.
 - **Accessible by construction.** Every widget publishes its role, name and actions; a screen
   reader can operate everything the pointer can.
 
-## 6. Where Unbound deliberately differs from macOS
+## 6. Where Bande deliberately differs from macOS
 
 - One combined bar ([bar](features/bar.md)) on the left edge by default holds the launcher mark,
   the active app's menus, the apps, status and the clock; a separate top menu bar is an option.

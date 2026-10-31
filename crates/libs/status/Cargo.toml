@@ -1,5 +1,5 @@
 [package]
-name = "unbound-status"
+name = "bande-status"
 description = "Battery, Wi-Fi, sound, Bluetooth, status notifier items, app menus, session endings and memory pressure for the shell"
 version.workspace = true
 edition.workspace = true
@@ -10,22 +10,22 @@ repository.workspace = true
 [dependencies]
 rustix.workspace = true
 tracing.workspace = true
-unbound-app-menu.workspace = true
-unbound-audio.workspace = true
-unbound-bluetooth.workspace = true
-unbound-datetime.workspace = true
-unbound-inbox.workspace = true
-unbound-l10n.workspace = true
-unbound-network.workspace = true
-unbound-notify.workspace = true
-unbound-power.workspace = true
-unbound-xdg.workspace = true
+bande-app-menu.workspace = true
+bande-audio.workspace = true
+bande-bluetooth.workspace = true
+bande-datetime.workspace = true
+bande-inbox.workspace = true
+bande-l10n.workspace = true
+bande-network.workspace = true
+bande-notify.workspace = true
+bande-power.workspace = true
+bande-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
 rustix = { workspace = true, features = ["event"] }
 tempfile.workspace = true
-unbound-test-bus.workspace = true
+bande-test-bus.workspace = true
 
 [lints]
 workspace = true

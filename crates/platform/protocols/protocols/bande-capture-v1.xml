@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="bande_capture_v1">
+  <interface name="bande_capture_v1" version="1">
+    <description summary="what the screenshot tool needs beyond image capture">
+      Offered only on the connections of the shell clients the compositor starts
+      itself. Tells the screenshot tool where the windows on the screen are, so
+      it can highlight the one under the pointer, and when the user asks for the
+      capture options.
+    </description>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="list_windows">
+      <description summary="ask where the windows on the screen are">
+        The compositor answers with one window event per window shown on the
+        current workspace, frontmost first, followed by windows_done.
+      </description>
+    </request>
+
+    <event name="window">
+      <description summary="a window shown on the screen">
+        The identifier is the one of the window's ext_foreign_toplevel_handle_v1.
+        The rectangle is the window's frame, title bar included and shadow
+        excluded, in logical output coordinates.
+      </description>
+      <arg name="identifier" type="string"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </event>
+
+    <event name="windows_done">
+      <description summary="every window of the last list_windows was sent"/>
+    </event>
+
+    <event name="show_options">
+      <description summary="the user pressed the capture options shortcut">
+        Sent for Super+Shift+5, as Command-Shift-5 opens the screenshot and
+        screen recording toolbar on a Mac.
+      </description>
+    </event>
+  </interface>
+</protocol>

@@ -1,10 +1,8 @@
 use std::path::PathBuf;
 
 use accesskit::{Node, Role};
-use unbound_toolkit::ui::{BUTTON_HEIGHT, Button, Context, Size, Widget, WidgetId};
-use unbound_toolkit::{
-    Item, Paragraph, Point, Rect, Shape, Spacing, TextAlign, TextRole, TextStyle,
-};
+use bande_toolkit::ui::{BUTTON_HEIGHT, Button, Context, Size, Widget, WidgetId};
+use bande_toolkit::{Item, Paragraph, Point, Rect, Shape, Spacing, TextAlign, TextRole, TextStyle};
 
 use crate::modules::symbol;
 use crate::now_playing::fitted;

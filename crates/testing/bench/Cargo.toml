@@ -1,6 +1,6 @@
 [package]
-name = "unbound-bench"
-description = "Performance measurements for Unbound, run by ci/perf"
+name = "bande-bench"
+description = "Performance measurements for Bande, run by ci/perf"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,12 +13,12 @@ rustix = { workspace = true, features = ["event"] }
 smithay.workspace = true
 tempfile.workspace = true
 tracing.workspace = true
-unbound-compositor.workspace = true
-unbound-files.workspace = true
-unbound-fs.workspace = true
-unbound-log.workspace = true
-unbound-sample.workspace = true
-unbound-test-wayland.workspace = true
-unbound-toolkit.workspace = true
-unbound-xdg.workspace = true
+bande-compositor.workspace = true
+bande-files.workspace = true
+bande-fs.workspace = true
+bande-log.workspace = true
+bande-sample.workspace = true
+bande-test-wayland.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
 wayland-client.workspace = true

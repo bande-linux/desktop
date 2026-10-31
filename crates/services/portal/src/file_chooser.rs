@@ -4,7 +4,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
-use unbound_xdg::file_uri;
+use bande_xdg::file_uri;
 use zbus::Connection;
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
@@ -267,7 +267,7 @@ impl FileChooser {
         call: Call,
     ) -> (u32, Results) {
         tracing::warn!(
-            "the Unbound file dialog cannot start, so {} shows it",
+            "the Bande file dialog cannot start, so {} shows it",
             self.fallback
         );
         let server = connection.object_server();

@@ -1,13 +1,13 @@
 use accesskit::{Action, Node as AccessNode, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
-use jiff::Zoned;
-use unbound_datetime::DateFormats;
-use unbound_toolkit::ui::PointerButton;
-use unbound_toolkit::{
+use bande_datetime::DateFormats;
+use bande_toolkit::ui::PointerButton;
+use bande_toolkit::{
     Color, DisplayEdge, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape,
     TextAlign, TextStyle, TextSystem,
 };
+use jiff::Zoned;
 
-use unbound_status::status::{Status, speaker_waves};
+use bande_status::status::{Status, speaker_waves};
 
 use crate::L10N;
 use crate::rail::{control_center_label, in_use_dot};

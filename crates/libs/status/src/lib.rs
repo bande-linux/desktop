@@ -14,13 +14,13 @@ mod command;
 
 use std::sync::LazyLock;
 
-use unbound_l10n::Localizer;
+use bande_l10n::Localizer;
 
 pub use crate::command::Command;
 use crate::dbusmenu::Node;
 use crate::tray::TrayItem;
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-status.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-status.ftl");
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -28,7 +28,7 @@ static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", E
 pub enum Update {
     Devices(devices::Devices),
     Sound(Option<status::Sound>),
-    Capturing(Vec<unbound_audio::Capture>),
+    Capturing(Vec<bande_audio::Capture>),
     Tray(Vec<TrayItem>),
     Menu { menu: String, root: Node },
     AppMenu { app: String, root: Option<Node> },
@@ -45,7 +45,7 @@ mod tests {
     #[test]
     fn every_message_id_used_in_code_is_in_the_english_file() {
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &[include_str!("session.rs")]),
+            bande_l10n::missing_ids(super::ENGLISH, &[include_str!("session.rs")]),
             Vec::<&str>::new()
         );
     }

@@ -1,10 +1,10 @@
 use std::time::{Duration, Instant};
 
 use crate::support::*;
+use bande_compositor::{Compositor, Renderer};
+use bande_graphics::TextSize;
+use bande_test_wayland::{BLUE, DecorationMode, TestClient, ToplevelState, roundtrip};
 use smithay::utils::{Logical, Point, Size};
-use unbound_compositor::{Compositor, Renderer};
-use unbound_graphics::TextSize;
-use unbound_test_wayland::{BLUE, DecorationMode, TestClient, ToplevelState, roundtrip};
 
 const SCREEN: (i32, i32) = (640, 480);
 const WINDOW: (i32, i32) = (200, 120);
@@ -229,7 +229,7 @@ fn the_window_menu_matches_its_golden() {
 
     renderer.render(&mut server).expect("frame");
     let snapshot = renderer.snapshot(&server).expect("read back");
-    unbound_golden::assert_golden_rgba!(
+    bande_golden::assert_golden_rgba!(
         "window-menu",
         (
             snapshot.size.w.unsigned_abs(),
@@ -259,7 +259,7 @@ fn the_window_menu_follows_the_text_size_and_matches_its_golden() {
 
     renderer.render(&mut server).expect("frame");
     let snapshot = renderer.snapshot(&server).expect("read back");
-    unbound_golden::assert_golden_rgba!(
+    bande_golden::assert_golden_rgba!(
         "window-menu-150",
         (
             snapshot.size.w.unsigned_abs(),

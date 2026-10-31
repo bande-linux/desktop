@@ -3,21 +3,21 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use unbound_bar::menu_bar::{MenuBar, Slot};
-use unbound_bar::menus::{
+use bande_bar::menu_bar::{MenuBar, Slot};
+use bande_bar::menus::{
     app_menu, battery_menu, bluetooth_menu, input_source_menu, sound_menu, system_menu, wifi_menu,
 };
-use unbound_status::Command;
-use unbound_status::dbusmenu::{Node, tree, without_mnemonics};
-use unbound_status::devices::battery_of;
-use unbound_status::session::{Ending, facts};
-use unbound_status::status::{
+use bande_status::Command;
+use bande_status::dbusmenu::{Node, tree, without_mnemonics};
+use bande_status::devices::battery_of;
+use bande_status::session::{Ending, facts};
+use bande_status::status::{
     Battery, Bluetooth, Capture, Gadget, InputSource, InputSources, Output, Power, Sense, Sound,
     Wifi,
 };
-use unbound_status::tray::{TrayIcon, pixmap_rgba, split};
-use unbound_toolkit::ui::{Menu, MenuItem};
-use unbound_toolkit::{Item, Palette, Point, Scheme, TextSystem};
+use bande_status::tray::{TrayIcon, pixmap_rgba, split};
+use bande_toolkit::ui::{Menu, MenuItem};
+use bande_toolkit::{Item, Palette, Point, Scheme, TextSystem};
 use zbus::zvariant::{OwnedValue, Structure, Value};
 
 fn bar() -> MenuBar {
@@ -474,8 +474,8 @@ fn an_app_menu_shows_shortcuts_and_leaves_about_and_hiding_to_the_menu_bar() {
             1,
             &[
                 ("label", Value::from("About Files")),
-                ("x-unbound-shell-action", Value::from("about")),
-                ("x-unbound-version", Value::from("0.4.0")),
+                ("x-bande-shell-action", Value::from("about")),
+                ("x-bande-version", Value::from("0.4.0")),
             ],
             Vec::new(),
         ),
@@ -484,7 +484,7 @@ fn an_app_menu_shows_shortcuts_and_leaves_about_and_hiding_to_the_menu_bar() {
             &[
                 ("label", Value::from("Hide Files")),
                 ("shortcut", Value::from(vec![vec!["Super", "H"]])),
-                ("x-unbound-shell-action", Value::from("hide")),
+                ("x-bande-shell-action", Value::from("hide")),
             ],
             Vec::new(),
         ),
@@ -505,7 +505,7 @@ fn an_app_menu_shows_shortcuts_and_leaves_about_and_hiding_to_the_menu_bar() {
             .map(|entry| OwnedValue::try_from(Value::Value(Box::new(entry))).expect("owned"))
             .collect(),
     );
-    let converted = app_menu(&tree(root), ":1.9/org/unbound/MenuBar");
+    let converted = app_menu(&tree(root), ":1.9/org/bande/MenuBar");
 
     let actions: Vec<_> = converted
         .items
@@ -518,7 +518,7 @@ fn an_app_menu_shows_shortcuts_and_leaves_about_and_hiding_to_the_menu_bar() {
             Some(Command::AboutApp("0.4.0".to_owned())),
             Some(Command::HideApp),
             Some(Command::Item {
-                item: ":1.9/org/unbound/MenuBar".to_owned(),
+                item: ":1.9/org/bande/MenuBar".to_owned(),
                 id: 3
             }),
         ]

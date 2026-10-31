@@ -1,10 +1,10 @@
 use std::time::{Duration, Instant};
 
-use unbound_graphics::{
+use bande_graphics::{
     Color, Item, Palette, Point, Radius, Rect, Shape, TextAlign, TextStyle, TextSystem,
 };
 
-use unbound_spring::Spring;
+use bande_spring::Spring;
 
 use super::{Animated, Size, WidgetId};
 

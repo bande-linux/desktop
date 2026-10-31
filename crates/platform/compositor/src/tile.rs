@@ -1,11 +1,11 @@
 use std::time::Duration;
 
+use bande_protocols::server::bande_app_v1;
+use bande_spring::Spring;
 use smithay::backend::renderer::element::Id;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle};
-use unbound_protocols::server::unbound_app_v1;
-use unbound_spring::Spring;
 
 use crate::motion::{Look, Motion, Tick};
 use crate::scene::Casting;
@@ -231,7 +231,7 @@ impl State {
     pub(crate) fn place_window(
         &mut self,
         toplevel: &xdg_toplevel::XdgToplevel,
-        placement: unbound_app_v1::Placement,
+        placement: bande_app_v1::Placement,
     ) {
         if let Some(index) = self
             .windows
@@ -242,18 +242,18 @@ impl State {
         }
     }
 
-    pub(crate) fn apply_placement(&mut self, index: usize, placement: unbound_app_v1::Placement) {
+    pub(crate) fn apply_placement(&mut self, index: usize, placement: bande_app_v1::Placement) {
         if self.windows[index].has_state(xdg_toplevel::State::Fullscreen) {
             return;
         }
         let tile = match placement {
-            unbound_app_v1::Placement::Left => Tile::Left,
-            unbound_app_v1::Placement::Right => Tile::Right,
-            unbound_app_v1::Placement::TopLeft => Tile::TopLeft,
-            unbound_app_v1::Placement::TopRight => Tile::TopRight,
-            unbound_app_v1::Placement::BottomLeft => Tile::BottomLeft,
-            unbound_app_v1::Placement::BottomRight => Tile::BottomRight,
-            unbound_app_v1::Placement::NextDisplay => {
+            bande_app_v1::Placement::Left => Tile::Left,
+            bande_app_v1::Placement::Right => Tile::Right,
+            bande_app_v1::Placement::TopLeft => Tile::TopLeft,
+            bande_app_v1::Placement::TopRight => Tile::TopRight,
+            bande_app_v1::Placement::BottomLeft => Tile::BottomLeft,
+            bande_app_v1::Placement::BottomRight => Tile::BottomRight,
+            bande_app_v1::Placement::NextDisplay => {
                 let surface = self.windows[index].surface().clone();
                 self.move_to_next_screen(&surface);
                 return;

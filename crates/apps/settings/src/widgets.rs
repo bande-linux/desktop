@@ -4,10 +4,10 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Animated, Context, Event, Key, Size, Spring, Widget, WidgetId, focus_ring,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Color, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Scheme, Shape, Spacing,
     TextAlign, TextRole, TextSize, TextStyle,
 };

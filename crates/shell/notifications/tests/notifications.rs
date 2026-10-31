@@ -2,13 +2,13 @@
 
 use std::time::{Duration, Instant};
 
+use bande_datetime::{DateFormats, posix_locale};
+use bande_notifications::{BANNER_WIDTH, CENTER_WIDTH, Request, Screen, Sender, age_label};
+use bande_notify::{Notification, Presentation, Stack};
+use bande_toolkit::ui::{Event, Key, Modifiers, Pointer};
+use bande_toolkit::{DisplayEdge, Palette, Point, Rect, Scheme, TextSystem};
 use jiff::Zoned;
 use jiff::civil::date;
-use unbound_datetime::{DateFormats, posix_locale};
-use unbound_notifications::{BANNER_WIDTH, CENTER_WIDTH, Request, Screen, Sender, age_label};
-use unbound_notify::{Notification, Presentation, Stack};
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer};
-use unbound_toolkit::{DisplayEdge, Palette, Point, Rect, Scheme, TextSystem};
 
 const WIDTH: u32 = 1280;
 const HEIGHT: u32 = 776;

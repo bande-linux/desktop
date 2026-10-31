@@ -8,9 +8,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-use unbound_fs::Entry;
-use unbound_preview::{Preview, image_size, preview};
-use unbound_toolkit::Image;
+use bande_fs::Entry;
+use bande_preview::{Preview, image_size, preview};
+use bande_toolkit::Image;
 
 #[derive(Debug)]
 enum Request {

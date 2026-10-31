@@ -5,7 +5,7 @@ wait 600ms
 type "files"
 wait 500ms
 key enter
-wait-for-window "org.unbound.Files"
+wait-for-window "org.bande.Files"
 wait 1500ms
 shot "files"
 click right 1500 900
@@ -25,7 +25,7 @@ wait 600ms
 type "settings"
 wait 500ms
 key enter
-wait-for-window "org.unbound.Settings"
+wait-for-window "org.bande.Settings"
 wait 1500ms
 shot "settings"
 note "Activity Monitor"
@@ -34,7 +34,7 @@ wait 600ms
 type "activity"
 wait 500ms
 key enter
-wait-for-window "org.unbound.ActivityMonitor"
+wait-for-window "org.bande.ActivityMonitor"
 wait 2s
 shot "activity monitor"
 click right 1500 700
@@ -48,7 +48,7 @@ wait 600ms
 type "terminal"
 wait 500ms
 key enter
-wait-for-window "org.unbound.Terminal"
+wait-for-window "org.bande.Terminal"
 wait 1500ms
 type "ls -la /etc | head -30\n"
 wait 1s

@@ -1,6 +1,6 @@
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_graphics::{Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle};
-use unbound_spring::Spring;
+use bande_graphics::{Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle};
+use bande_spring::Spring;
 
 use super::{Animated, Context, Event, Key, Size, Widget, WidgetId};
 

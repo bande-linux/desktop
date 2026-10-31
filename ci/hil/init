@@ -8,20 +8,20 @@ mount -t tmpfs tmpfs /dev/shm
 mount -t tmpfs tmpfs /run
 mount -t tmpfs tmpfs /tmp
 export HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin XDG_RUNTIME_DIR=/run/user/0
-export RUST_BACKTRACE=1 UNBOUND_TEST_DRIVER=${UNBOUND_TEST_DRIVER:-simpledrm} UNBOUND_SCREENDUMPS=/tmp/screendumps
+export RUST_BACKTRACE=1 BANDE_TEST_DRIVER=${BANDE_TEST_DRIVER:-simpledrm} BANDE_SCREENDUMPS=/tmp/screendumps
 mkdir -p -m 0700 "$XDG_RUNTIME_DIR"
-echo UNBOUND-SMOKE-START
+echo BANDE-SMOKE-START
 ls -l /dev/dri
 SEATD_VTBOUND=0 seatd -l error &
 sleep 1
-/unbound/guest --ignored --exact --test-threads=1 scanout::a_composed_window_is_scanned_out
-echo "UNBOUND-SMOKE-STATUS $?"
+/bande/guest --ignored --exact --test-threads=1 scanout::a_composed_window_is_scanned_out
+echo "BANDE-SMOKE-STATUS $?"
 for png in /tmp/screendumps/*.png; do
     [ -f "$png" ] || continue
-    echo "UNBOUND-PNG-BEGIN ${png##*/}"
+    echo "BANDE-PNG-BEGIN ${png##*/}"
     base64 -w 0 "$png"
     echo
-    echo UNBOUND-PNG-END
+    echo BANDE-PNG-END
 done
-echo UNBOUND-SMOKE-DONE
+echo BANDE-SMOKE-DONE
 while true; do sleep 3600; done

@@ -1,7 +1,7 @@
 use std::time::Instant;
 
-use unbound_graphics::{Appearance, Event, Point, Rect, TextSystem};
-use unbound_widgets::{FrameTime, Menu, MenuItem, MenuOutcome};
+use bande_graphics::{Appearance, Event, Point, Rect, TextSystem};
+use bande_widgets::{FrameTime, Menu, MenuItem, MenuOutcome};
 
 use super::{ShellSurface, Window, WindowError, WindowEvent};
 use crate::L10N;
@@ -113,7 +113,7 @@ impl Window {
     }
 
     fn window_menu_action(&mut self, action: &str) -> Result<(), WindowError> {
-        use unbound_protocols::client::unbound_app_v1::Placement;
+        use bande_protocols::client::bande_app_v1::Placement;
         match action {
             "minimize" => self.minimize(),
             "zoom" => self.toggle_zoom(),

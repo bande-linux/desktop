@@ -5,12 +5,12 @@ use std::time::Duration;
 
 use std::path::Path;
 
-use unbound_power::adapter;
-use unbound_power::backlight::{Backlight, KeyboardBacklight, SYSFS_BACKLIGHT, SYSFS_LEDS};
-use unbound_power::battery::{self, BatteryNotifier};
-use unbound_power::controller::{self, IdleController};
-use unbound_power::logind::{self, ManagerProxyBlocking, SleepGuard};
-use unbound_power::screensaver::InhibitionService;
+use bande_power::adapter;
+use bande_power::backlight::{Backlight, KeyboardBacklight, SYSFS_BACKLIGHT, SYSFS_LEDS};
+use bande_power::battery::{self, BatteryNotifier};
+use bande_power::controller::{self, IdleController};
+use bande_power::logind::{self, ManagerProxyBlocking, SleepGuard};
+use bande_power::screensaver::InhibitionService;
 use zbus::blocking::Connection;
 
 const LOCK_WAIT: Duration = Duration::from_secs(3);
@@ -55,7 +55,7 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     controller::follow_lock(&system, &idle)?;
     match wayland_client::Connection::connect_to_env() {
         Ok(connection) => {
-            if let Err(error) = unbound_power::wayland::watch_idle(connection, Arc::clone(&idle)) {
+            if let Err(error) = bande_power::wayland::watch_idle(connection, Arc::clone(&idle)) {
                 tracing::warn!("cannot watch for idle: {error}");
             }
         }
@@ -65,10 +65,10 @@ fn serve() -> Result<Services, Box<dyn Error>> {
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-power");
+    bande_log::init("bande-power");
     match serve() {
         Ok((_guard, _inhibitions, _idle, session)) => {
-            unbound_bus::serve_until_closed(&session);
+            bande_bus::serve_until_closed(&session);
             ExitCode::SUCCESS
         }
         Err(error) => {

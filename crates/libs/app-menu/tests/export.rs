@@ -3,15 +3,13 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use unbound_app_menu::{
-    AppMenu, Entry, MENU_PATH, SHELL_ACTION_PROPERTY, ShellAction, app_submenu,
-};
-use unbound_test_bus::SessionBus;
+use bande_app_menu::{AppMenu, Entry, MENU_PATH, SHELL_ACTION_PROPERTY, ShellAction, app_submenu};
+use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::zvariant::{OwnedValue, Value};
 
-const APP: &str = "org.unbound.Example";
+const APP: &str = "org.bande.Example";
 
 type Layout = (i32, HashMap<String, OwnedValue>, Vec<OwnedValue>);
 

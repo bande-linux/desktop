@@ -1,6 +1,6 @@
-use unbound_fs::format_size;
-use unbound_settings_panes::SettingId;
-use unbound_toolkit::ui::{Button, Label, ProgressBar, Spinner, Widget};
+use bande_fs::format_size;
+use bande_settings_panes::SettingId;
+use bande_toolkit::ui::{Button, Label, ProgressBar, Spinner, Widget};
 
 use crate::L10N;
 use crate::pages::{Widgets, boxed};

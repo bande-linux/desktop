@@ -7,13 +7,13 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Role, TreeId};
-use support::{WAIT, find, has_text};
-use unbound_settings::{
+use bande_settings::{
     BatteryCommand, Charge, Command, PaneId, SettingId, SettingsView, Value, bucket_levels,
     charge_of, charge_text, feed, follow_battery,
 };
-use unbound_test_bus::SessionBus;
-use unbound_toolkit::{Palette, Scheme, TextSystem};
+use bande_test_bus::SessionBus;
+use bande_toolkit::{Palette, Scheme, TextSystem};
+use support::{WAIT, find, has_text};
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 

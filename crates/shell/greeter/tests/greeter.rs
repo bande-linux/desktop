@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use unbound_greeter::{
+use bande_greeter::{
     AuthMessageType, ErrorType, Login, Rejection, Request, Response, Step, last_user_file,
     login_picture, login_users, read_message, remember_user, remembered_user, write_message,
 };
@@ -60,7 +60,7 @@ fn auth_error() -> Response {
 }
 
 #[test]
-fn the_right_password_starts_the_unbound_session_as_a_wayland_session() {
+fn the_right_password_starts_the_bande_session_as_a_wayland_session() {
     let (mut login, first) = Login::begin("ada", "kåäö1".to_owned().into());
     assert_eq!(
         first,
@@ -73,11 +73,11 @@ fn the_right_password_starts_the_unbound_session_as_a_wayland_session() {
     assert_eq!(
         login.respond(Response::Success),
         [Step::Send(Request::StartSession {
-            cmd: vec!["unbound-session".to_owned()],
+            cmd: vec!["bande-session".to_owned()],
             env: vec![
                 "XDG_SESSION_TYPE=wayland".to_owned(),
-                "XDG_CURRENT_DESKTOP=Unbound".to_owned(),
-                "XDG_SESSION_DESKTOP=unbound".to_owned(),
+                "XDG_CURRENT_DESKTOP=Bande".to_owned(),
+                "XDG_SESSION_DESKTOP=bande".to_owned(),
             ],
         })]
     );
@@ -198,7 +198,7 @@ fn the_login_window_remembers_who_signed_in_last_in_its_state_folder() {
         .expect("state file");
     assert_eq!(
         file,
-        home.path().join(".local/state/unbound-greeter/last-user")
+        home.path().join(".local/state/bande-greeter/last-user")
     );
     assert_eq!(remembered_user(&file), None);
     remember_user(&file, "ada").expect("remember");

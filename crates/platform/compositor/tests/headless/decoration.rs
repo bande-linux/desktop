@@ -1,7 +1,7 @@
 use crate::support::*;
+use bande_compositor::{Compositor, Renderer};
+use bande_test_wayland::{DecorationMode, RED, TestClient, ToplevelState, roundtrip};
 use smithay::utils::Size;
-use unbound_compositor::{Compositor, Renderer};
-use unbound_test_wayland::{DecorationMode, RED, TestClient, ToplevelState, roundtrip};
 
 const WINDOW: (i32, i32) = (120, 40);
 const BAR: i32 = 40;

@@ -1,0 +1,585 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="bande_shell_v1">
+  <interface name="bande_shell_v1" version="1">
+    <description summary="requests and events between the compositor and the shell">
+      Offered only on the connections of the shell clients the compositor starts
+      itself (the shell and the screenshot tool), never on the listening socket.
+    </description>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="activate_app">
+      <description summary="bring an app forward">
+        Focuses and raises the frontmost window of the app with this app id and
+        raises its other windows behind it, as clicking a running app in the Dock
+        does. Ignored when the app has no mapped window.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <event name="show_launcher">
+      <description summary="the user pressed the launcher shortcut"/>
+    </event>
+
+    <event name="capture_screen">
+      <description summary="the user pressed the full-screen capture shortcut">
+        Sent for Super+Shift+3, as Command-Shift-3 takes a picture of the whole
+        screen on a Mac.
+      </description>
+    </event>
+
+    <event name="capture_area">
+      <description summary="the user pressed the area capture shortcut">
+        Sent for Super+Shift+4, as Command-Shift-4 lets the user drag out the part
+        of the screen to take a picture of on a Mac.
+      </description>
+    </event>
+
+    <event name="active_app">
+      <description summary="the app of the key window changed">
+        Sent on binding and whenever the window with keyboard focus changes to
+        one of another app, with that app's app id, as the macOS menu bar names
+        the active app. An empty app id means no window has the keyboard, as
+        when the user clicks the empty desktop.
+      </description>
+      <arg name="app_id" type="string"/>
+    </event>
+
+    <enum name="volume_key">
+      <entry name="mute" value="0" summary="the mute key"/>
+      <entry name="down" value="1" summary="the volume down key"/>
+      <entry name="up" value="2" summary="the volume up key"/>
+    </enum>
+
+    <event name="volume_key">
+      <description summary="the user pressed a volume key">
+        Sent for the mute, volume down and volume up keys, with or without Super
+        and also while the session is locked, as a Mac's volume keys always work.
+        Fine is 1 when Option and Shift are held, which on a Mac changes the
+        volume in quarter steps.
+      </description>
+      <arg name="key" type="uint" enum="volume_key"/>
+      <arg name="fine" type="uint"/>
+    </event>
+
+    <request name="toggle_control_center">
+      <description summary="open or close Control Center">
+        Sent by the menu bar when its Control Center item is clicked. The
+        compositor relays it to every shell client as toggle_panel.
+      </description>
+    </request>
+
+    <request name="set_icon_rect">
+      <description summary="say where an app's icon is shown">
+        Tells the compositor where the Dock shows the icon of the app with this
+        app id, as a rectangle in the surface coordinates of the given surface.
+        The compositor minimises the app's windows into this rectangle and
+        restores them out of it. A width or height of 0 forgets the rectangle,
+        as when the icon leaves the Dock. The rectangle is also forgotten when
+        the surface is destroyed.
+      </description>
+      <arg name="app_id" type="string"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </request>
+
+    <event name="app_responding">
+      <description summary="an app stopped or started answering">
+        The compositor pings an app through xdg_wm_base whenever the user
+        interacts with one of its windows, and every app with a window when
+        Force Quit is opened. Sent with responding 0 when an app has not
+        answered for 3 seconds, and with responding 1 when it answers again or
+        exits. Also sent on binding for every app that is not responding, so
+        Force Quit can mark it. Pid is the process on the other end of the
+        app's connection, app id the app id of its windows.
+      </description>
+      <arg name="pid" type="int"/>
+      <arg name="app_id" type="string"/>
+      <arg name="responding" type="uint"/>
+    </event>
+
+    <request name="hide_app">
+      <description summary="hide every window of an app">
+        Fades out every window of the app with this app id, as Hide in a Mac's
+        Dock menu or Command-H does. The windows take no input while hidden.
+        activate_app, activate_window or an activation request from the app shows
+        them again.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <request name="quit_app">
+      <description summary="ask an app to quit">
+        Asks the app with this app id to quit, as Super+Q does: through
+        bande_app_v1.quit_requested when the app has bound it, otherwise by
+        asking each of its windows to close. The app may ask the user first.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <request name="force_quit_app">
+      <description summary="end an app at once">
+        Kills every process on the other end of a connection with a window of
+        the app with this app id, without asking. Shell clients are never
+        killed.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <request name="activate_window">
+      <description summary="bring one window forward">
+        Shows, restores if minimised, raises and focuses the window whose
+        ext_foreign_toplevel_handle_v1 identifier is given, as picking a window
+        from a Dock icon's menu does. The Dock lists the windows, their titles
+        and app ids through ext_foreign_toplevel_list_v1.
+      </description>
+      <arg name="identifier" type="string"/>
+    </request>
+
+    <event name="window_minimized">
+      <description summary="a window was minimised or restored">
+        Sent whenever the window with this ext_foreign_toplevel_handle_v1
+        identifier is minimised (1) or restored (0), and on binding for every
+        minimised window, so the Dock icon menu can mark minimised windows.
+      </description>
+      <arg name="identifier" type="string"/>
+      <arg name="minimized" type="uint"/>
+    </event>
+
+    <event name="attention_requested">
+      <description summary="an app wants the user's attention">
+        Sent when an app asks to be activated without a valid activation token,
+        for example when it finishes work in the background. The compositor does
+        not raise it; the Dock bounces its icon instead.
+      </description>
+      <arg name="app_id" type="string"/>
+    </event>
+
+    <request name="set_corner_radius">
+      <description summary="round the background effect of a surface">
+        Rounds each blur region the surface set through
+        ext_background_effect_surface_v1 with this radius, in surface
+        coordinates, so a rounded Dock or menu blurs exactly behind its shape.
+        0 means square corners, the default.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="radius" type="uint"/>
+    </request>
+
+    <event name="focus_shell">
+      <description summary="the user asked to reach a shell element from the keyboard">
+        Sent with the layer namespace "dock" for Super+F3, "menubar" for
+        Super+F2 and "menu-search" for Shift+Super+/, after the compositor gave
+        the keyboard to the layer surface with that namespace or, when there is
+        none, to the bar or the Dock.
+        The client shows its keyboard selection. To give the keyboard back, for
+        example on Escape, it calls activate_app with the active app.
+      </description>
+      <arg name="namespace" type="string"/>
+    </event>
+
+    <request name="show_app">
+      <description summary="show the hidden windows of an app">
+        Fades the windows of the app with this app id back in after hide_app,
+        without raising them or moving the keyboard focus, as Show All in a
+        Mac's app menu does.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <enum name="brightness_key">
+      <entry name="display_down" value="0" summary="the display brightness down key"/>
+      <entry name="display_up" value="1" summary="the display brightness up key"/>
+      <entry name="keyboard_down" value="2" summary="the keyboard backlight down key"/>
+      <entry name="keyboard_up" value="3" summary="the keyboard backlight up key"/>
+    </enum>
+
+    <event name="brightness_key">
+      <description summary="the user pressed a brightness key">
+        Sent for the display and keyboard brightness keys, with or without
+        Super and also while the session is locked, as volume_key is. Fine is 1
+        when Option and Shift are held, for quarter steps.
+      </description>
+      <arg name="key" type="uint" enum="brightness_key"/>
+      <arg name="fine" type="uint"/>
+    </event>
+
+    <event name="workspaces">
+      <description summary="the row of workspaces changed">
+        Sent on binding and whenever workspaces are added, removed or another
+        one becomes active. Workspaces form one row, counted from 0 on the
+        left; a full-screen window has a workspace of its own.
+      </description>
+      <arg name="count" type="uint"/>
+      <arg name="active" type="uint"/>
+    </event>
+
+    <request name="show_windows">
+      <description summary="open the overview">
+        Opens the overview of the active workspace. With an app id it shows
+        only that app's windows on every workspace, as App Exposé does; an
+        empty app id shows every window of the active workspace. Asking again
+        for what is already shown closes it.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <event name="input_sources">
+      <description summary="the keyboard input sources or the active one changed">
+        Sent on binding and whenever the list of input sources or the active
+        one changes. Sources is a comma-separated list of xkb layouts, each
+        optionally followed by its variant in parentheses, such as
+        "se,de(nodeadkeys)", in the order the user arranged them; active
+        counts from 0.
+      </description>
+      <arg name="sources" type="string"/>
+      <arg name="active" type="uint"/>
+    </event>
+
+    <request name="select_input_source">
+      <description summary="make an input source active">
+        Makes the input source at this position of the list sent with
+        input_sources active for the whole session. An index past the end is
+        ignored.
+      </description>
+      <arg name="index" type="uint"/>
+    </request>
+
+    <enum name="media_key">
+      <entry name="play_pause" value="0" summary="the play/pause key"/>
+      <entry name="pause" value="1" summary="the pause key"/>
+      <entry name="next" value="2" summary="the next track key"/>
+      <entry name="previous" value="3" summary="the previous track key"/>
+    </enum>
+
+    <event name="media_key">
+      <description summary="the user pressed a media key">
+        Sent for the play/pause, pause, next and previous keys, with or without
+        Super and also while the session is locked, as a Mac's media keys
+        always control what is playing.
+      </description>
+      <arg name="key" type="uint" enum="media_key"/>
+    </event>
+
+    <event name="active_output">
+      <description summary="the display holding the key window">
+        Sent on binding and whenever the key window is on another display than
+        before, with the name of that display's wl_output; empty when no window
+        has the keyboard. The bar dims the active app's header on the other
+        displays.
+      </description>
+      <arg name="name" type="string"/>
+    </event>
+
+    <request name="show_launcher">
+      <description summary="open the launcher">
+        Sent by the bar when its Bande mark is clicked. The compositor sends
+        show_launcher to the shell clients, as Super+Space does.
+      </description>
+    </request>
+
+    <enum name="launcher_mode">
+      <entry name="clipboard" value="0" summary="the clipboard history"/>
+      <entry name="emoji" value="1" summary="the emoji and symbols picker"/>
+    </enum>
+
+    <event name="open_launcher">
+      <description summary="the user asked for one of the launcher's modes">
+        Sent for Super+Shift+V (clipboard), Ctrl+Super+Space (emoji) and when
+        an app asks for the emoji picker. Text field is 1 when the window that
+        had the keyboard has an enabled text input, so that insert_text can
+        type into it.
+      </description>
+      <arg name="mode" type="uint" enum="launcher_mode"/>
+      <arg name="text_field" type="uint"/>
+    </event>
+
+    <request name="insert_text">
+      <description summary="type text into the window the launcher covered">
+        Commits the text through text-input-v3 into the text field of the
+        window that gets the keyboard back after the shell surface closes, as
+        the macOS character viewer inserts into the frontmost app. Dropped if
+        no other client's text input becomes active within a second.
+      </description>
+      <arg name="text" type="string"/>
+    </request>
+
+    <request name="switch_workspace">
+      <description summary="show another workspace">
+        Slides to the workspace at this position of the row sent with
+        workspaces on the display under the pointer, as clicking one of the
+        bar's workspace dots does, and focuses its frontmost window. An index
+        past the end is ignored.
+      </description>
+      <arg name="index" type="uint"/>
+    </request>
+
+    <enum name="panel">
+      <entry name="control_center" value="0" summary="Control Center"/>
+      <entry name="notification_center" value="1" summary="the Notification Center"/>
+    </enum>
+
+    <enum name="edge">
+      <entry name="left" value="0" summary="the left edge of the display"/>
+      <entry name="bottom" value="1" summary="the bottom edge"/>
+      <entry name="right" value="2" summary="the right edge"/>
+      <entry name="top" value="3" summary="the top edge"/>
+    </enum>
+
+    <request name="set_panel_anchor">
+      <description summary="say where the item that opens a panel is">
+        Tells the compositor where the bar shows the item that opens this
+        panel, as a rectangle in the surface coordinates of the given surface,
+        and on which display edge the bar lies. The compositor relays it to
+        every shell client as panel_anchor in the coordinates of the usable
+        area of that surface's display, so the panel opens beside its item.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="panel" type="uint" enum="panel"/>
+      <arg name="edge" type="uint" enum="edge"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </request>
+
+    <event name="panel_anchor">
+      <description summary="where the item that opens a panel is">
+        Sent on binding for every known anchor, whenever the bar reports a
+        new one and whenever the usable area of its display moves, with the
+        item's rectangle in the coordinates of the usable area of the display
+        named by output (the area left beside the exclusive zones of bars,
+        where a layer surface with an exclusive zone of 0 is placed) and the
+        edge the bar lies on. An item inside a bar therefore has a negative
+        coordinate on the bar's side. Control Center and the Notification
+        Center open beside it, away from that edge.
+      </description>
+      <arg name="panel" type="uint" enum="panel"/>
+      <arg name="output" type="string"/>
+      <arg name="edge" type="uint" enum="edge"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </event>
+
+    <event name="full_screen">
+      <description summary="a display shows a full-screen window or stops">
+        Sent on binding for every display and whenever the active workspace of
+        the display with this wl_output name becomes or stops being the space
+        of a full-screen window. Full-screen windows are drawn above the top
+        layer, so the bar moves to the overlay layer and hides until the
+        pointer pushes against its edge.
+      </description>
+      <arg name="output" type="string"/>
+      <arg name="full_screen" type="uint"/>
+    </event>
+
+    <event name="displays">
+      <description summary="the displays the shell draws on">
+        Sent on binding and whenever a display is connected, disconnected,
+        starts or stops mirroring another, or another display becomes the main
+        one. Names is a comma-separated list of the wl_output names of the
+        displays that show their own picture, the main display first. The
+        shell puts a desktop and a bar on each of them.
+      </description>
+      <arg name="names" type="string"/>
+    </event>
+
+    <request name="set_scrim">
+      <description summary="dim the display behind a layer surface">
+        While this layer surface is mapped, the compositor dims the whole
+        display behind it with the scrim colour at the given opacity (0 to 1),
+        blurred where the renderer allows, so that a centred panel such as the
+        launcher need only be as big as itself. A pointer press on the scrim
+        reaches nothing below it: the compositor sends scrim_pressed instead.
+        The opacity applies at once; send it right before the surface's commit
+        to animate it with the surface.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="opacity" type="fixed"/>
+    </request>
+
+    <event name="scrim_pressed">
+      <description summary="the pointer pressed on a scrim">
+        Sent to the client whose layer surface set the scrim when a pointer
+        button is pressed on the scrim outside the surface and its popups.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </event>
+
+    <enum name="session_end">
+      <entry name="log_out" value="0" summary="end the user's session"/>
+      <entry name="restart" value="1" summary="restart the computer"/>
+      <entry name="shut_down" value="2" summary="turn the computer off"/>
+    </enum>
+
+    <request name="confirm_session_end">
+      <description summary="ask the user before the session ends">
+        Opens the confirmation for logging out, restarting or shutting down:
+        the compositor starts the shell's session dialog as a shell client, or
+        brings forward the one already open.
+      </description>
+      <arg name="ending" type="uint" enum="session_end"/>
+    </request>
+
+    <request name="quit_all_apps">
+      <description summary="ask every app to quit before the session ends">
+        Asks every app with a window to quit, as quit_app does for each; apps
+        with unsaved work may ask the user first. Windows of shell clients are
+        left alone. From then on the compositor sends apps_running on this
+        object until it is destroyed.
+      </description>
+    </request>
+
+    <event name="apps_running">
+      <description summary="an app still holds a window">
+        Sent after quit_all_apps and again whenever the answer changes: how
+        many apps still hold a window, and the app id of the frontmost of
+        them. A count of 0 means every app has closed its windows.
+      </description>
+      <arg name="app_id" type="string"/>
+      <arg name="count" type="uint"/>
+    </event>
+
+    <event name="toggle_panel">
+      <description summary="the user asked to open or close a panel">
+        Sent to every shell client when the menu bar asks for Control Center
+        or a keyboard shortcut asks for Control Center or the Notification
+        Center. The client that draws the panel opens it, or closes it when
+        it is open.
+      </description>
+      <arg name="panel" type="uint" enum="panel"/>
+    </event>
+
+    <event name="app_process">
+      <description summary="the process behind an app's windows">
+        Sent before the window list first shows a window with this app id, or
+        shows a window's new app id, and on binding for every listed window.
+        Pid is the process on the other end of the window's connection, so
+        the shell can find the app a window belongs to when its app id names
+        no installed app.
+      </description>
+      <arg name="app_id" type="string"/>
+      <arg name="pid" type="int"/>
+    </event>
+  </interface>
+
+  <interface name="bande_app_v1" version="1">
+    <description summary="requests from the desktop to a whole app">
+      Offered to every client. A client that binds it takes over app-level
+      requests that the compositor would otherwise express per window: while
+      it is bound, the compositor sends quit_requested instead of closing each
+      of the client's toplevels.
+    </description>
+
+    <request name="destroy" type="destructor"/>
+
+    <event name="quit_requested">
+      <description summary="the user asked to quit the app">
+        Sent for Super+Q, as Command-Q quits an app on a Mac. The app should
+        quit: close all its windows and exit, asking the user once first if
+        something would be lost, as a terminal with running programs does. If
+        the user cancels, the app keeps running and nothing is closed.
+      </description>
+    </event>
+
+    <enum name="placement">
+      <entry name="left" value="0" summary="the left half of the usable area"/>
+      <entry name="right" value="1" summary="the right half"/>
+      <entry name="top_left" value="2" summary="the top left quarter"/>
+      <entry name="top_right" value="3" summary="the top right quarter"/>
+      <entry name="bottom_left" value="4" summary="the bottom left quarter"/>
+      <entry name="bottom_right" value="5" summary="the bottom right quarter"/>
+      <entry name="restore" value="6" summary="the size and place the window had before it was tiled or zoomed"/>
+      <entry name="next_display" value="7" summary="the next display, keeping its place there"/>
+    </enum>
+
+    <request name="place_window">
+      <description summary="tile one of the app's windows">
+        Places the toplevel as the window menu's Move and Resize items do, with
+        the same animation and tiled states as dragging the window to a screen
+        edge or pressing Ctrl+Super+Arrows. Restore undoes tiling and zoom. Zoom,
+        full screen and minimise use xdg_toplevel's own requests. Ignored for a
+        toplevel of another client and in full screen.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="placement" type="uint" enum="placement"/>
+    </request>
+
+    <enum name="workspace">
+      <entry name="previous" value="0" summary="the workspace to the left"/>
+      <entry name="next" value="1" summary="the workspace to the right, a new one past the last"/>
+    </enum>
+
+    <request name="move_to_workspace">
+      <description summary="move one of the app's windows to a neighbouring workspace">
+        Moves the toplevel to the workspace beside the active one, as the
+        window menu's Move to Workspace items do: the window slides off the
+        screen and keeps its place and size there, and the keyboard goes to the
+        next window. Moving past the last workspace adds one. Previous does
+        nothing on the first workspace. Ignored for a toplevel of another client
+        and in full screen.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="workspace" type="uint" enum="workspace"/>
+    </request>
+
+    <request name="set_keep_on_top">
+      <description summary="keep one of the app's windows above the others">
+        Sets or clears the window menu's Keep on Top toggle for the toplevel.
+        While set, the window stays in front of every window without it on
+        its workspace, even when another window is focused, and still below
+        the menu bar, the Dock and other shell surfaces. Windows that keep on
+        top stack among themselves by focus as usual. The state lasts until
+        it is cleared or the window closes. Ignored for a toplevel of another
+        client.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="keep" type="uint" summary="1 to keep the window on top, 0 to stop"/>
+    </request>
+
+    <request name="show_emoji_picker">
+      <description summary="open the emoji and symbols picker">
+        Sent by a text field's Emoji and Symbols item. The compositor opens the
+        launcher's emoji mode as Ctrl+Super+Space does, and the chosen
+        character is typed into the app's focused text field.
+      </description>
+    </request>
+  </interface>
+  <interface name="bande_app_control_v1" version="1">
+    <description summary="quitting apps and watching them answer, for Activity Monitor">
+      Offered to every client. It carries only what an app may already do to
+      another app of the same user, politely: ask it to quit and learn whether
+      it answers. It lists no windows and types no text. A client that binds
+      it receives app_responding until it destroys it.
+    </description>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="quit_app">
+      <description summary="ask an app to quit">
+        Asks the app with this app id to quit, as Super+Q does: through
+        bande_app_v1.quit_requested when the app has bound it, otherwise by
+        asking each of its windows to close. The app may ask the user first.
+        Shell clients are never asked.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <event name="app_responding">
+      <description summary="an app stopped or started answering">
+        As bande_shell_v1.app_responding: sent with responding 0 when an app
+        has not answered a ping for 3 seconds and with responding 1 when it
+        answers again or exits, and on binding for every app that is not
+        responding.
+      </description>
+      <arg name="pid" type="int"/>
+      <arg name="app_id" type="string"/>
+      <arg name="responding" type="uint"/>
+    </event>
+  </interface>
+</protocol>

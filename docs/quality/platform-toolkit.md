@@ -4,9 +4,9 @@ Scope: `crates/platform/{compositor,render,protocols}`, `crates/toolkit/{design,
 That is about 70,500 lines of Rust in 230 files.
 
 This was a read-only review: no cargo runs, because the build slots were full.
-Evidence comes from reading the code, a token-level scan for unused `pub` items across the whole workspace, a scan for functions defined more than once, and `strings` on the installed `/usr/bin/unbound-compositor`.
+Evidence comes from reading the code, a token-level scan for unused `pub` items across the whole workspace, a scan for functions defined more than once, and `strings` on the installed `/usr/bin/bande-compositor`.
 Line savings are counted from the source.
-Performance wins are estimates; each perf task names the bench that should confirm it (`crates/testing/bench`: `unbound-footprint`, `unbound-session-bench`, `unbound-toolkit-bench`, `tests/headless/frames.rs`).
+Performance wins are estimates; each perf task names the bench that should confirm it (`crates/testing/bench`: `bande-footprint`, `bande-session-bench`, `bande-toolkit-bench`, `tests/headless/frames.rs`).
 
 What is already clean:
 - no code comments; the only `///` is a required `# Safety` section at `graphics/src/gpu.rs:56`;
@@ -45,7 +45,7 @@ Each task below is sized for one agent in at most 1 to 2 hours, unless it says o
 - **Win:**
   - Halves hit-testing cost at once.
   - With the allocation-free `scene()`: about 40,000 fewer allocations/s and about 8,000 fewer mutex locks/s at a 1000 Hz pointer.
-  - Measure with a criterion-free loop in `unbound-session-bench`: 10,000 `move_pointer_to` calls over 12 windows.
+  - Measure with a criterion-free loop in `bande-session-bench`: 10,000 `move_pointer_to` calls over 12 windows.
 - **Lines:** about −20.
 - **Risk:** low. Ordering semantics are unchanged; `tests/headless/{input,window,popup,dnd}.rs` cover it.
 
@@ -67,21 +67,21 @@ Each task below is sized for one agent in at most 1 to 2 hours, unless it says o
   - Estimated 4 to 12 MB less RSS: four fewer font collections and glyph caches.
   - No repeated fontconfig scan on the first Alt+Tab, overview or HUD.
   - The swap loop is a full per-pixel pass on every title and label repaint (230,400 pixels for a 1440 pt window title at 2×); it goes away.
-  - Measure with `unbound-footprint`.
+  - Measure with `bande-footprint`.
 - **Lines:** about −60.
 - **Risk:** low. Goldens in `tests/headless/{switcher,decoration}.rs` catch channel mistakes.
 
 ### 3. Reset the private protocols to version 1 and delete 49 version gates
 - **Evidence:**
-  - `unbound-shell-v1.xml:3` is at `version="17"` and `unbound_app_v1` (`:463`) at `version="5"`, with 51 `since=` attributes.
+  - `bande-shell-v1.xml:3` is at `version="17"` and `bande_app_v1` (`:463`) at `version="5"`, with 51 `since=` attributes.
   - The compositor and its clients are always built and shipped from one tree, and no backward compatibility is kept. Even so, the code checks versions in 49 places:
     - compositor: `shell.rs` (18), `dock.rs` (4), `workspace.rs` (3), `watchdog.rs` (1);
     - toolkit: `toolkit/platform/src/shell.rs` (23), plus the `shell_since` helper at `shell.rs:44-51`.
   - Binds hard-code versions too: `state.rs:307` (`17`), `toolkit/platform/src/window.rs:2387-2390` (`version.min(17)`, `min(5)`) and `test-wayland/src/shell.rs:176,284-295` (1, 2, 3).
 - **Change:**
   - Set both interfaces to version 1, strip every `since`, bind at version 1 and delete every `*_SINCE` check.
-  - Replace the 18 copies of `for shell in &self.shell_resources { if shell.version() >= X { shell.event(..) } }` with one `fn each_shell(&self, f: impl Fn(&UnboundShellV1))`.
-  - `shell_since` becomes `fn shell(&self) -> Result<&UnboundShellV1, WindowError>`.
+  - Replace the 18 copies of `for shell in &self.shell_resources { if shell.version() >= X { shell.event(..) } }` with one `fn each_shell(&self, f: impl Fn(&BandeShellV1))`.
+  - `shell_since` becomes `fn shell(&self) -> Result<&BandeShellV1, WindowError>`.
 - **Lines:** about −150 Rust, −51 XML attributes.
 - **Risk:** low. It is mechanical; every shell and app crate rebuilds against the new XML in the same merge.
 
@@ -97,21 +97,21 @@ Each task below is sized for one agent in at most 1 to 2 hours, unless it says o
   - `frame_scene(.., content: Scene)` moves the items into the frame.
   - After rendering by reference, move the drawn scene into `shown_scene`.
   - Also update `framed_scene` (public, `chrome.rs`) and `Window::draw` callers in `testing/sample`.
-- **Win:** two whole-tree clones per frame go away: for a Files window with 500 visible items, roughly 1,000 allocations per frame. Measure with `unbound-toolkit-bench`.
+- **Win:** two whole-tree clones per frame go away: for a Files window with 500 visible items, roughly 1,000 allocations per frame. Measure with `bande-toolkit-bench`.
 - **Lines:** about −5.
 - **Risk:** low.
 
 ### 5. Keep wgpu and vello_gpu out of the compositor binary
 - **Evidence:**
-  - The compositor uses only CPU and text items from `unbound-graphics`: `CpuRenderer`, `TextSystem`, `Palette`, `TitleBar`, `pixels`.
+  - The compositor uses only CPU and text items from `bande-graphics`: `CpuRenderer`, `TextSystem`, `Palette`, `TitleBar`, `pixels`.
   - Even so, `wgpu`, `vello_gpu`, `pollster` and wgpu's `naga` are compiled and linked into it (`graphics/Cargo.toml` lists them unconditionally).
-  - `strings /usr/bin/unbound-compositor` (19.0 MB) shows 33 `wgpu` and 2 `vello_gpu` source paths.
+  - `strings /usr/bin/bande-compositor` (19.0 MB) shows 33 `wgpu` and 2 `vello_gpu` source paths.
 - **Change:**
-  - Add a `gpu` feature to `unbound-graphics` that gates `gpu.rs`, `GpuDevice`/`GpuRenderer`, `wgpu`, `vello_gpu` and `pollster`.
-  - `unbound-toolkit-platform` enables it; the compositor and `shell/screenshot` (CPU only) do not.
+  - Add a `gpu` feature to `bande-graphics` that gates `gpu.rs`, `GpuDevice`/`GpuRenderer`, `wgpu`, `vello_gpu` and `pollster`.
+  - `bande-toolkit-platform` enables it; the compositor and `shell/screenshot` (CPU only) do not.
 - **Win:**
   - Smaller compositor binary, estimated −2 to −5 MB before strip and LTO; to be measured.
-  - `-p unbound-compositor` builds skip wgpu and naga, so CI and Debian per-package builds get faster.
+  - `-p bande-compositor` builds skip wgpu and naga, so CI and Debian per-package builds get faster.
 - **Lines:** about +10 (cfg attributes).
 - **Risk:** low.
 
@@ -124,14 +124,14 @@ All the items below were checked by a whole-workspace search: each has zero call
 | --- | --- | --- |
 | `Window::capture_screen` and its whole `ext-image-copy-capture` client | `toolkit/platform/src/capture.rs:46-173`; registry binds at `window.rs:2392-2397`. The screenshot app has its own full client in `shell/screenshot/src/engine.rs`. | −170 |
 | `Window::set_background_blur` and the whole `BackgroundEffect` client | `toolkit/platform/src/effect.rs`, 48 lines; `window.rs:66,345,2368-2370`. No app requests blur; the compositor keeps serving the standard protocol for third-party clients. | −55 |
-| `set_corner_radius` | Toolkit wrapper `toolkit/platform/src/shell.rs:181`. Private protocol request `SetCornerRadius`: compositor `shell.rs:515`, `effect.rs:58-66`. No Unbound client calls it, and third-party clients cannot reach the private protocol. | −40 |
-| `window_workspace` event | `unbound-shell-v1.xml:224-232`. Sent at `compositor/src/workspace.rs:690,720`; only `test-wayland/src/shell.rs:605` reads it. | −35 |
+| `set_corner_radius` | Toolkit wrapper `toolkit/platform/src/shell.rs:181`. Private protocol request `SetCornerRadius`: compositor `shell.rs:515`, `effect.rs:58-66`. No Bande client calls it, and third-party clients cannot reach the private protocol. | −40 |
+| `window_workspace` event | `bande-shell-v1.xml:224-232`. Sent at `compositor/src/workspace.rs:690,720`; only `test-wayland/src/shell.rs:605` reads it. | −35 |
 | `Shape::bands` | `graphics/src/scene.rs:70-99` | −30 |
 | `Window::gpu_ready`, `Window::toplevel_state` | `toolkit/platform/src/window.rs:965,764` | −8 |
 | `Toggle::is_on` | `widgets/src/toggle.rs:33` | −3 |
 | `Headless::output_config`, `usable_area_on`, `set_main_output`, `output_scale` | `compositor/src/displays.rs:499,503,558`, `state.rs:578` | −16 |
-| `pollster` dependency of `unbound-toolkit-platform` | `toolkit/platform/Cargo.toml:11`; never imported | −1 |
-| `accesskit` listed twice in `unbound-toolkit` | `toolkit/toolkit/Cargo.toml`: `[dependencies]` and `[dev-dependencies]` | −1 |
+| `pollster` dependency of `bande-toolkit-platform` | `toolkit/platform/Cargo.toml:11`; never imported | −1 |
+| `accesskit` listed twice in `bande-toolkit` | `toolkit/toolkit/Cargo.toml`: `[dependencies]` and `[dev-dependencies]` | −1 |
 
 **`pub` but used only in their own file, make private:**
 - `widgets/src/menu.rs`: `SUBMENU_DELAY` (`:26`), `at_least_as_wide_as` (`:358`), `fit_height` (`:365`), `scroll_by` (`:434`), `open_submenus_left` (`:455`);
@@ -141,7 +141,7 @@ All the items below were checked by a whole-workspace search: each has zero call
 - `compositor/src/clock.rs:60` `predicted_render`;
 - compositor re-exports `DEFAULT_CURSOR_THEME`, `DESKTOP_NAME`, `session_environment` (`lib.rs:62-70`).
 
-**Afterwards:** `ScreenImage` duplicates `unbound_graphics::Snapshot` (`width`, `height`, `rgba`). Once the capture client is gone, the screenshot app should use `Snapshot`, or own `ScreenImage` itself.
+**Afterwards:** `ScreenImage` duplicates `bande_graphics::Snapshot` (`width`, `height`, `rgba`). Once the capture client is gone, the screenshot app should use `Snapshot`, or own `ScreenImage` itself.
 
 - **Lines:** about −360.
 - **Risk:** low. Check with the owner before removing `set_corner_radius`, in case the shell plans to adopt it.
@@ -186,7 +186,7 @@ All the items below were checked by a whole-workspace search: each has zero call
   - The resize-edge classification (corner reach, then a −1/0/1 grid, then `ResizeEdge`) is written twice: `compositor/src/frame.rs:111-135` and `toolkit/platform/src/chrome.rs:180-204`.
   - The compositor's own `state::Rect { location, size }` (`state.rs:1137`) is smithay's `Rectangle<i32, Logical>` under another name. It is used in 65 places, and `tests/headless/popup.rs:514` and `toolkit/platform/tests/input.rs:1227` re-implement `contains` for it.
 - **Change:**
-  - Add `Rect::contains(self, Point) -> bool` to `unbound-graphics` (`scene.rs`).
+  - Add `Rect::contains(self, Point) -> bool` to `bande-graphics` (`scene.rs`).
   - Add `pub fn resize_edge(window: Rect, point: Point, corner: f32) -> Option<Edge>` with a protocol-neutral `Edge` to `title_bar.rs`, next to `RESIZE_CORNER`. The compositor and the toolkit map `Edge` to their `ResizeEdge` and cursor.
   - Replace `state::Rect` with `Rectangle<i32, Logical>`, which gives `contains`, `overlaps` and `intersection` for free.
 - **Lines:** about −90.
@@ -204,7 +204,7 @@ All the items below were checked by a whole-workspace search: each has zero call
 - **Win:**
   - The compositor thread is freed for the GPU time per frame (estimated 2 to 6 ms on AGX at 2560×1600 with blur).
   - Lower input latency under load.
-  - Measure with `tests/headless/frames.rs` and `unbound-session-bench` frame stats.
+  - Measure with `tests/headless/frames.rs` and `bande-session-bench` frame stats.
 - **Lines:** about +60.
 - **Risk:** high (resource lifetime against the graveyard, staging reuse). Budget 2 hours; split off the fence export if it runs over.
 
@@ -213,7 +213,7 @@ All the items below were checked by a whole-workspace search: each has zero call
   - `compositor/src/appearance.rs` and `toolkit/platform/src/appearance.rs` both hold the same portal constants (`PORTAL`, `PORTAL_PATH`, `SETTINGS`, `NAMESPACE`, `PREFER_DARK`) and the same `ReadOne`/`ReadAll` plus `SettingChanged` loop.
   - The compositor opens six separate session connections (`main.rs:137,355,446`, `access_keys.rs:184`, `assistive.rs:48,123`) and two system connections (`logind.rs:42,64`). Each connection costs a socket plus zbus executor threads.
 - **Change:**
-  - Move a `portal_settings` module (`read_all(namespaces)`, `follow(namespaces, FnMut(ns, key, OwnedValue) -> bool)`) into `crates/libs/bus` (`unbound-bus`, already the zbus helper crate). Both appearance modules become thin key mappers.
+  - Move a `portal_settings` module (`read_all(namespaces)`, `follow(namespaces, FnMut(ns, key, OwnedValue) -> bool)`) into `crates/libs/bus` (`bande-bus`, already the zbus helper crate). Both appearance modules become thin key mappers.
   - In `main.rs`, open one session and one system `Connection` and pass clones everywhere.
 - **Lines:** about −50.
 - **Risk:** low.
@@ -258,20 +258,20 @@ Also:
 ### 15. Localisation coverage tests
 - **Evidence:**
   - The compositor's `every_message_id_used_in_code_is_in_the_english_file` (`compositor/src/lib.rs:94-103`) scans only `switcher.rs`. `access_keys.rs:189-200` uses eight IDs that are never checked.
-  - `unbound-widgets` (`L10N` in `secure_field.rs`, `editor.rs`, `combo_box.rs`, `search_field.rs`, `lib.rs`) and `unbound-toolkit-platform` (`window.rs:784-835`, `chrome.rs`) have no such test at all.
-- **Change:** add `access_keys.rs` to the compositor list, and add the same `unbound_l10n::missing_ids` test to the widgets and toolkit-platform `lib.rs`.
+  - `bande-widgets` (`L10N` in `secure_field.rs`, `editor.rs`, `combo_box.rs`, `search_field.rs`, `lib.rs`) and `bande-toolkit-platform` (`window.rs:784-835`, `chrome.rs`) have no such test at all.
+- **Change:** add `access_keys.rs` to the compositor list, and add the same `bande_l10n::missing_ids` test to the widgets and toolkit-platform `lib.rs`.
 - **Lines:** about +25.
 - **Risk:** none.
 
 ### 16. Naming collisions and consistency with the Rust API guidelines
 - **`HEADER_HEIGHT` means two things through one facade:**
-  - window header, 48: `graphics/src/title_bar.rs:5`, re-exported as `unbound_toolkit::HEADER_HEIGHT`;
-  - table header, 28: `widgets/src/table.rs:18`, re-exported as `unbound_toolkit::ui::HEADER_HEIGHT`.
+  - window header, 48: `graphics/src/title_bar.rs:5`, re-exported as `bande_toolkit::HEADER_HEIGHT`;
+  - table header, 28: `widgets/src/table.rs:18`, re-exported as `bande_toolkit::ui::HEADER_HEIGHT`.
   - Rename them `WINDOW_HEADER_HEIGHT` and `Table::HEADER_HEIGHT` (associated constant); update `apps/monitor/src/{monitor_view,inspector}.rs`.
-- **`RenderError`:** exists in both `unbound-render` and `unbound-graphics`, and the compositor re-exports the first. Rename the graphics one `DrawError`, or the render one `VulkanError`.
+- **`RenderError`:** exists in both `bande-render` and `bande-graphics`, and the compositor re-exports the first. Rename the graphics one `DrawError`, or the render one `VulkanError`.
 - **Type naming:**
   - `Headless` (see task 8);
-  - `ToggleFullscreen` against `ToggleFullScreen`: `compositor/src/input.rs` `Shortcut::ToggleFullscreen` against `unbound_keyboard::Action::ToggleFullScreen`.
+  - `ToggleFullscreen` against `ToggleFullScreen`: `compositor/src/input.rs` `Shortcut::ToggleFullscreen` against `bande_keyboard::Action::ToggleFullScreen`.
 - **Parallel `_on` methods on `Headless`:** `take_redraw`/`take_redraw_on`, `latch`/`latch_on`, `present`/`present_on`, `render_elements`/`render_elements_on` (`state.rs:470-612`). Keep only the `_on(output)` forms, or index by screen.
 - **Small cleanups:** a stray blank line in the `mod` list (`compositor/src/lib.rs:21`); `test-wayland/Cargo.toml` lacks `[lints] workspace = true` (add it with a crate-level `allow` for `expect_used` in test support).
 - **Lines:** about −20.
@@ -283,7 +283,7 @@ Also:
 - **Stale package description:** `compositor/Cargo.toml` `extended-description` still says "Headless Wayland compositor ... renders ... offscreen". Rewrite it for the DRM session compositor.
 - **Unsorted dependencies:** the root `[workspace.dependencies]` are not sorted, against ADR 0003.
   - External: `alacritty_terminal` before `accesskit`, `image` before `flate2`, `md-5`/`kdl`, `serde`/`ruzstd`, the `naga`/`fontique`/`parley` block.
-  - Internal: `unbound-datetime` before `unbound-controlcenter`.
+  - Internal: `bande-datetime` before `bande-controlcenter`.
 - **Lines:** about +40.
 - **Risk:** none.
 
@@ -295,8 +295,8 @@ Also:
   - `read_all` is written three times (`compositor/tests/headless/clipboard.rs:29`, `toolkit/platform/tests/appearance.rs:29`, `toolkit/platform/tests/support/mod.rs:27`).
 - **Change:**
   - Call `support::window`/`window_of` directly.
-  - Add `unbound_golden::assert_golden_rgba!(name, (w, h), rgba)`.
-  - Move `read_all` into `unbound-test-wayland`.
+  - Add `bande_golden::assert_golden_rgba!(name, (w, h), rgba)`.
+  - Move `read_all` into `bande-test-wayland`.
 - **Lines:** about −80.
 - **Risk:** none.
 
@@ -322,9 +322,9 @@ Pure moves; tests stay where they are.
 ### 21. Two spring-animation models
 - **Evidence:**
   - Widgets use time-based `Animated` (`widgets/src/animation.rs`: `state_at(start, target, elapsed)`, interruptible).
-  - The compositor uses step-based `unbound_spring::Animation` advanced by frame deltas, in `gesture.rs:169`, `overview.rs:129`, `workspace.rs:153,172`, `reveal.rs:76`, `assistive.rs:157`, `zoom.rs:33`, `motion.rs:94-158` and `keymap.rs:78`.
+  - The compositor uses step-based `bande_spring::Animation` advanced by frame deltas, in `gesture.rs:169`, `overview.rs:129`, `workspace.rs:153,172`, `reveal.rs:76`, `assistive.rs:157`, `zoom.rs:33`, `motion.rs:94-158` and `keymap.rs:78`.
   - Both sit on the same `Spring`. Step integration drifts with irregular vblanks.
-- **Change:** move `Animated` (minus the `Context` glue) into `unbound-spring` and migrate the compositor channels one module at a time.
+- **Change:** move `Animated` (minus the `Context` glue) into `bande-spring` and migrate the compositor channels one module at a time.
 - **Size:** larger than 2 hours as a whole; do one module per task, starting with `zoom.rs` and `reveal.rs`.
 - **Risk:** medium (motion feel); the `tests/headless/motion.rs` timings guard it.
 
@@ -352,7 +352,7 @@ Pure moves; tests stay where they are.
 | 2 | One `Labels`/`TextSystem` for all compositor overlays; Abgr8888 upload (task 2) | 5 font collections and glyph caches in one process; duplicated paint and swizzle | −60 lines; estimated −4 to −12 MB RSS | low |
 | 3 | Private protocols back to v1; delete the version gates (task 3) | Pure rot under the no-backward-compatibility rule | −150 lines, −51 XML attributes | low |
 | 4 | `Window::draw(Scene)` by value (task 4) | Two whole-tree scene clones per toolkit frame | −5 lines; about −1,000 allocations per frame in large views | low |
-| 5 | `gpu` feature in `unbound-graphics` (task 5) | wgpu and vello_gpu are linked into a compositor that never uses them | estimated −2 to −5 MB binary; faster `-p` builds | low |
+| 5 | `gpu` feature in `bande-graphics` (task 5) | wgpu and vello_gpu are linked into a compositor that never uses them | estimated −2 to −5 MB binary; faster `-p` builds | low |
 | 6 | Dead-code and dependency purge (task 6) | Dead toolkit capture and blur clients, unused API, a stray dependency | −360 lines | low |
 | 7 | Switcher I/O off the compositor thread (task 7) | `.desktop` parsing and SVG rasterising on the frame thread | estimated −10 to −60 ms first-Alt+Tab stall | medium |
 | 8 | Split `state.rs`; `Headless` becomes `Compositor`; test probes into `probe.rs` (task 8) | 1,794-line god module; misleading core name | `state.rs` under 500 lines | low (moves) |

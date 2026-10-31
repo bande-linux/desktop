@@ -1,0 +1,12 @@
+[Unit]
+Description=Bande removable media mounting
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Slice=session.slice
+ExecStart=/usr/bin/bande-automount
+Restart=on-failure
+
+[Install]
+WantedBy=bande-session.target

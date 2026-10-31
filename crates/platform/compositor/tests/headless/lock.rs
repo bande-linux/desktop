@@ -1,9 +1,9 @@
 use std::time::{Duration, Instant};
 
 use crate::support::*;
+use bande_compositor::{BACKGROUND, Compositor, Renderer, Vblank};
+use bande_test_wayland::{BLUE, RED, TestClient, roundtrip};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
-use unbound_compositor::{BACKGROUND, Compositor, Renderer, Vblank};
-use unbound_test_wayland::{BLUE, RED, TestClient, roundtrip};
 
 const WINDOW: (i32, i32) = (64, 48);
 const INSIDE_WINDOW: (i32, i32) = (100, 80);

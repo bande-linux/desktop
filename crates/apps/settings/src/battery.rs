@@ -1,6 +1,6 @@
 use std::sync::mpsc::{self, Sender};
 
-use unbound_status::history::charge_history;
+use bande_status::history::charge_history;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};

@@ -3,11 +3,11 @@ use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
 use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, TreeId};
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Animated, BUTTON_HEIGHT, Button, Context, Event, FreeLayout, Key, Modifiers, PopUpButton,
     SecureField, Size, Spring, Ui, Widget, WidgetId,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, Color, Item, Paragraph, Path, Point, Radius, Rect, Scene, Shape, TextAlign,
     TextRole, TextStyle, TextSystem,
 };

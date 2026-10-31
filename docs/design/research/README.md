@@ -1,14 +1,14 @@
 # Research: how macOS feels in motion and how its parts connect
 
-Research for Unbound's developers. macOS is the quality bar here, not the blueprint; each file
-ends with a **For Unbound** section saying what to build, where, and when. Sources are linked
+Research for Bande's developers. macOS is the quality bar here, not the blueprint; each file
+ends with a **For Bande** section saying what to build, where, and when. Sources are linked
 inline in each file, and "unverified" marks what we could not check against a primary source.
 Apple publishes almost no system animation timings, so where numbers are missing we propose
 values and give the reasoning.
 
 | File | Topic |
 |---|---|
-| [animations.md](animations.md) | Apple's spring model and presets, WWDC18 principles, unpublished macOS timings with proposals, other desktops' values, Reduce Motion, **the preset table for `unbound-spring`** |
+| [animations.md](animations.md) | Apple's spring model and presets, WWDC18 principles, unpublished macOS timings with proposals, other desktops' values, Reduce Motion, **the preset table for `bande-spring`** |
 | [gestures.md](gestures.md) | Trackpad gestures, 1:1 tracking, velocity hand-off, rubber band, kinetic scrolling, libinput and `zwp_pointer_gestures_v1` |
 | [drag-and-drop.md](drag-and-drop.md) | Where DnD works on macOS, visuals, modifiers, spring-loading, `wl_data_device` actions, `xdg-toplevel-drag-v1` |
 | [window-management.md](window-management.md) | Tiling, zoom, full screen, minimise, hide, switcher, Mission Control, Snap Layouts, niri and KWin |
@@ -56,15 +56,15 @@ values and give the reasoning.
     can.
 13. **One shared system per concern.** Quick Look, the text system (spelling, look up,
     substitutions), the clipboard and Reduce Motion are each one service every app gets for
-    free. Unbound's equivalents live in the toolkit and session services, never per app.
+    free. Bande's equivalents live in the toolkit and session services, never per app.
 14. **Reduce Motion swaps space for opacity; it does not remove feedback.** Slides and zooms
     become cross-fades, and gestures still track the fingers. Read `reduced-motion` from the
     `org.freedesktop.appearance` portal (xdg-desktop-portal 1.21).
 
-## Motion presets for `unbound-spring`
+## Motion presets for `bande-spring`
 
 Mass 1, k = ω². "Settles" is the time to within 0.1 % of the distance. Details and reasoning
-are in [animations.md](animations.md#motion-presets-for-unbound-spring).
+are in [animations.md](animations.md#motion-presets-for-bande-spring).
 
 | Name | Use | Parameters | Feel |
 |---|---|---|---|
@@ -87,10 +87,10 @@ are in [animations.md](animations.md#motion-presets-for-unbound-spring).
 - **Scrolling.** `crates/toolkit/platform/src/seat.rs` reads `wl_pointer.axis` only. Without
   `axis_source` and `axis_stop` there can be no kinetic scrolling and no rubber band, and there
   is no scroll view widget yet.
-- **Springs.** `unbound-spring` has no named presets, no duration and bounce constructor, no
+- **Springs.** `bande-spring` has no named presets, no duration and bounce constructor, no
   velocity injection on retarget and no decay. Nothing outside the crate uses it yet.
 - **Drag and drop.** The DnD grab handlers are Smithay defaults. We found no drag-icon
   rendering, no modifier-to-action mapping (DESIGN's Alt-copy) and no slide-back.
   `xdg-toplevel-drag-v1` is not in Smithay.
 - **Shell to compositor geometry.** Minimise into the icon needs the Dock to tell the
-  compositor where each icon is. `unbound_shell_v1` needs a `set_icon_rect` request.
+  compositor where each icon is. `bande_shell_v1` needs a `set_icon_rect` request.

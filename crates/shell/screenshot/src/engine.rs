@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::fs::{MemfdFlags, memfd_create};
-use unbound_inbox::{Inbox, Outbox};
-use unbound_protocols::client::unbound_capture_v1::{self, UnboundCaptureV1};
+use bande_inbox::{Inbox, Outbox};
+use bande_protocols::client::bande_capture_v1::{self, BandeCaptureV1};
 use wayland_client::backend::WaylandError;
 use wayland_client::globals::{GlobalListContents, registry_queue_init};
 use wayland_client::protocol::wl_buffer::WlBuffer;
@@ -267,7 +267,7 @@ struct Capture {
     output_sources: Option<ExtOutputImageCaptureSourceManagerV1>,
     toplevel_sources: Option<ExtForeignToplevelImageCaptureSourceManagerV1>,
     copy: Option<ExtImageCopyCaptureManagerV1>,
-    shell: Option<UnboundCaptureV1>,
+    shell: Option<BandeCaptureV1>,
     toplevels: Vec<Toplevel>,
     listed: Vec<(String, Frame)>,
     listings: VecDeque<Sender<Vec<WindowInfo>>>,
@@ -590,7 +590,7 @@ fn allocate(
 ) -> io::Result<Buffer> {
     let stride = width * BYTES_PER_PIXEL;
     let length = u64::from(stride) * u64::from(height);
-    let memory = File::from(memfd_create("unbound-capture", MemfdFlags::CLOEXEC)?);
+    let memory = File::from(memfd_create("bande-capture", MemfdFlags::CLOEXEC)?);
     memory.set_len(length)?;
     let pool: WlShmPool = shm.create_pool(
         memory.as_fd(),
@@ -678,17 +678,17 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, u64> for Capture {
     }
 }
 
-impl Dispatch<UnboundCaptureV1, ()> for Capture {
+impl Dispatch<BandeCaptureV1, ()> for Capture {
     fn event(
         capture: &mut Self,
-        _: &UnboundCaptureV1,
-        event: unbound_capture_v1::Event,
+        _: &BandeCaptureV1,
+        event: bande_capture_v1::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
         match event {
-            unbound_capture_v1::Event::Window {
+            bande_capture_v1::Event::Window {
                 identifier,
                 x,
                 y,
@@ -703,13 +703,13 @@ impl Dispatch<UnboundCaptureV1, ()> for Capture {
                     height,
                 },
             )),
-            unbound_capture_v1::Event::WindowsDone => {
+            bande_capture_v1::Event::WindowsDone => {
                 let listed = std::mem::take(&mut capture.listed);
                 if let Some(reply) = capture.listings.pop_front() {
                     let _ = reply.send(capture.window_infos(&listed));
                 }
             }
-            unbound_capture_v1::Event::ShowOptions => {
+            bande_capture_v1::Event::ShowOptions => {
                 capture.events.send(EngineEvent::ShowOptions);
             }
             _ => {}

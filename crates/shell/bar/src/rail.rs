@@ -2,15 +2,15 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use accesskit::{Action, Node as AccessNode, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
-use jiff::Zoned;
-use unbound_datetime::DateFormats;
-use unbound_status::status::{Battery, Capture, Sense, Status, speaker_waves};
-use unbound_toolkit::ui::PointerButton;
-use unbound_toolkit::{
+use bande_datetime::DateFormats;
+use bande_status::status::{Battery, Capture, Sense, Status, speaker_waves};
+use bande_toolkit::ui::PointerButton;
+use bande_toolkit::{
     Color, DisplayEdge, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape,
     TextAlign, TextStyle, TextSystem,
 };
-use unbound_xdg::{ICON_THEMES, find_icon};
+use bande_xdg::{ICON_THEMES, find_icon};
+use jiff::Zoned;
 
 use crate::L10N;
 use crate::dock::{Rail as AppsRegion, WELL_ALPHA};
@@ -47,8 +47,8 @@ const IN_USE_DOT: f32 = 6.0;
 const HOVER_ALPHA: u8 = 18;
 const OPEN_ALPHA: u8 = 30;
 const NODE_BASE: u64 = 1 << 40;
-const CONTROL_CENTER_GLYPH: &str = "unbound-control-center-symbolic";
-const MARK_GLYPH: &str = "unbound-symbolic";
+const CONTROL_CENTER_GLYPH: &str = "bande-control-center-symbolic";
+const MARK_GLYPH: &str = "bande-symbolic";
 const SEARCH_GLYPH: &str = "system-search-symbolic";
 pub const EXPANDED_WIDTH: f32 = 248.0;
 const ROW_INSET: f32 = 8.0;
@@ -146,8 +146,8 @@ fn snap(value: f32, scale: f64) -> f32 {
 fn battery_glyph(battery: Battery) -> String {
     let level = ((battery.percent / 10.0).round() * 10.0).clamp(0.0, 100.0) as u32;
     let suffix = match battery.power {
-        unbound_status::status::Power::Full if level == 100 => "-charged",
-        unbound_status::status::Power::Charging { .. } => "-charging",
+        bande_status::status::Power::Full if level == 100 => "-charged",
+        bande_status::status::Power::Charging { .. } => "-charging",
         _ => "",
     };
     format!("battery-level-{level}{suffix}-symbolic")

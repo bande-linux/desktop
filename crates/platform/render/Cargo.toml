@@ -1,6 +1,6 @@
 [package]
-name = "unbound-render"
-description = "Unbound's Vulkan compositor renderer"
+name = "bande-render"
+description = "Bande's Vulkan compositor renderer"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

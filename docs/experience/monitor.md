@@ -23,10 +23,10 @@ Checked in `crates/apps/monitor/src` and its goldens.
 | :--- | :--- | :--- |
 | Tabs | CPU, Memory, Disk, Network, and GPU once DRM `fdinfo` reports use; Super+1 to Super+5 | `model.rs`, `monitor_view.rs` |
 | Rows | Processes grouped by app (desktop entry or systemd unit), expandable to their processes; kernel threads in one group; other users' processes included | `apps.rs`, `model.rs` |
-| Columns | Per tab, chosen by right-clicking the header, remembered in `~/.local/state/unbound/monitor`; sort by header, the selection stays on its row while numbers reorder | `model.rs`, `menu.rs` |
+| Columns | Per tab, chosen by right-clicking the header, remembered in `~/.local/state/bande/monitor`; sort by header, the selection stays on its row while numbers reorder | `model.rs`, `menu.rs` |
 | Measures | % CPU, CPU time, threads, PID, user, proportional memory (only while shown), resident, disk read and write per second and in total, GPU %, GPU time, GPU memory; network per interface | `sampler.rs`, `system.rs`, `proc.rs` |
 | Footer | Up to three rows of label and value per column (CPU: System, User, Idle, Processes, Threads; Memory: Physical, Used, Cached Files, Swap, Compressed (zram), Pressure as a %) and a 240 × 88 pt bar graph of the last 60 samples | `monitor_view.rs` |
-| Actions | Quit (SIGTERM to the group's roots) and Force Quit (SIGKILL to all, Alt) with an alert; several rows at once; other users' processes refused; Inspect (Super+I, double click); Show in Files (Shift+Super+R, starts `unbound-files <path>`); Copy Name, Copy PID; Super+F searches names and PIDs | `menu.rs`, `signal.rs`, `view.rs` |
+| Actions | Quit (SIGTERM to the group's roots) and Force Quit (SIGKILL to all, Alt) with an alert; several rows at once; other users' processes refused; Inspect (Super+I, double click); Show in Files (Shift+Super+R, starts `bande-files <path>`); Copy Name, Copy PID; Super+F searches names and PIDs | `menu.rs`, `signal.rs`, `view.rs` |
 | Inspector | A window per process: Info (parent, children, state, user, command, executable, running for, CPU, threads, resident, virtual), Threads, Open Files, Memory Map | `inspector.rs`, `inspect.rs` |
 | Force Quit | Alt+Super+Esc window listing your apps, Not Responding in red, Force Quit | `force_quit.rs` |
 | Sampling | Every 2 s (first after 0.5 s), PSS and GPU only while a column needs them; every window is asked to redraw on every tick | `main.rs` |
@@ -120,7 +120,7 @@ How the graphs and readouts should look, so every slice draws the same way:
 | Process tree by parent (Hierarchically) | App grouping plus Parent and Children in the inspector cover most uses | later | S |
 | An update-frequency setting | 2 s while shown is right; the answer is to be cheap, not configurable | never | — |
 | Startup apps, App history, Users, Services pages | Login items belong to Settings; the rest needs daemons or has no user on a one-person laptop | never | — |
-| Custom dashboard pages (KDE) | One designed view per tab is the Unbound answer | never | — |
+| Custom dashboard pages (KDE) | One designed view per tab is the Bande answer | never | — |
 
 ### Inspector
 
@@ -166,11 +166,11 @@ behaviour tests that fail without the change; the sampler reads a fixture `/proc
 today (`tests/fixture`). "Goldens" are headless renders in `crates/apps/monitor/tests/golden/`,
 light and dark. "Review" appends steps and `shot` lines to one growing scenario,
 `ci/review/scenarios/monitor-depth.scenario`, recorded with `ci/review/run.sh` and copied to
-`/home/mikael/.cache/unbound-agents/report/<branch>/`. Crate: `apps/monitor` unless named.
+`/home/mikael/.cache/bande-agents/report/<branch>/`. Crate: `apps/monitor` unless named.
 
 ### M1. The Monitor's own cost
 
-Measure with `unbound-footprint` (or a small harness) the Monitor's CPU time per sample and its RSS
+Measure with `bande-footprint` (or a small harness) the Monitor's CPU time per sample and its RSS
 on this VM with the session's processes, then remove the waste: redraw a window only when a sample
 arrived for it or it animates; skip formatting rows for tabs that are not shown. If the toolkit
 reports a hidden window, sample only `/proc/stat`, `/proc/meminfo`, `/proc/diskstats` and
@@ -321,7 +321,7 @@ or inspect a process, Escape to close the inspector) gets one end-to-end test so
   decimal.
 - Nothing new reads `/proc/<pid>` files unless a shown column needs them.
 - Light and dark goldens for every visible change; 1× and 1.5×.
-- Strings through `unbound-l10n`; the message-id test covers new files.
+- Strings through `bande-l10n`; the message-id test covers new files.
 
 ## 8. Needs from other crates
 
@@ -352,9 +352,9 @@ or inspect a process, Escape to close the inspector) gets one end-to-end test so
 - **M6.** View ▸ All Processes, My Processes, Apps; remembered. The filter is named in the search
   field's placeholder ("Search My Processes") instead of a label beside it: a label there pushed
   the tabs into the window title at 860 pt. The View menu shows them as plain items because
-  `unbound-app-menu` has no radio items yet.
+  `bande-app-menu` has no radio items yet.
 - **M7.** Quit on an app row asks the compositor to quit the app (`Window::quit_app`) and falls back
-  to SIGTERM of its roots when the window has no `unbound_shell_v1`, which is the case for the main
+  to SIGTERM of its roots when the window has no `bande_shell_v1`, which is the case for the main
   window today; process rows still get SIGTERM. The compositor side (§8) is open.
 - **M8.** Wake-ups/s from `voluntary_ctxt_switches` of every task, read only while a column needs
   it; Energy tab when `/sys/class/power_supply` has a battery; Energy Impact as decision 3.
@@ -365,11 +365,11 @@ or inspect a process, Escape to close the inspector) gets one end-to-end test so
 
 ## 10. Built on 2026-10-31, second pass
 
-- **M7, compositor side.** A new global, `unbound_app_control_v1`, offered to every client, carries
+- **M7, compositor side.** A new global, `bande_app_control_v1`, offered to every client, carries
   only `quit_app(app_id)` and the `app_responding` event; it lists no windows and types no text, so
   ordinary apps get no more than they could do to another app of the same user. Shell clients are
   never asked to quit through it. `Window::quit_app` uses it when the window has no
-  `unbound_shell_v1`, and `Window::watch_apps` binds it on demand, so apps that never ask receive
+  `bande_shell_v1`, and `Window::watch_apps` binds it on demand, so apps that never ask receive
   no events. The Monitor's main window watches apps: Quit on an app row is the polite Super+Q path
   and hung apps are marked Not Responding in the list.
 - **M1, hidden sampling.** The compositor sets xdg_toplevel `suspended` (xdg_wm_base 6) on
@@ -377,7 +377,7 @@ or inspect a process, Escape to close the inspector) gets one end-to-end test so
   Monitor window is suspended the sampler reads only `/proc/stat`, `meminfo`, `diskstats` and
   `net/dev`, keeps the last process list and skips redraws; on showing it samples at once and
   re-baselines processes so no CPU spike appears.
-- **M6, radio items.** `unbound-app-menu` has `Entry::radio(selected)` (dbusmenu
+- **M6, radio items.** `bande-app-menu` has `Entry::radio(selected)` (dbusmenu
   `toggle-type` radio); the menu bar already draws the checkmark. View ▸ All Processes, My
   Processes and Apps are radio items and the Monitor republishes its menus when the filter changes.
 - **M5, cell style.** Table cells take `.label()` (Label role) and `.tabular()`; the inspector's
@@ -404,7 +404,7 @@ or inspect a process, Escape to close the inspector) gets one end-to-end test so
   `success` band along the bottom, and "12 hr" in the corner; the accessibility description names
   the charge. A worker reads the display device each sample and the history at most once a minute,
   only while the Energy tab is shown. `GetHistory` and the battery lookup live in
-  `unbound_status::history`, which Settings' Battery pane now uses too.
+  `bande_status::history`, which Settings' Battery pane now uses too.
 
 ## Sources
 

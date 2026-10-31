@@ -1,13 +1,13 @@
 use std::time::Duration;
 
+use bande_config::{CapsLock, InputSource, Keyboard};
+use bande_graphics::TextRole;
+use bande_render::VulkanRenderer;
+use bande_spring::{Animated, Spring};
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::input::keyboard::{Layout, XkbConfig};
 use smithay::utils::{Logical, Point};
-use unbound_config::{CapsLock, InputSource, Keyboard};
-use unbound_graphics::TextRole;
-use unbound_render::VulkanRenderer;
-use unbound_spring::{Animated, Spring};
 
 use crate::label::{Label, LabelStyle, Look};
 use crate::state::{Compositor, OutputElement, State};

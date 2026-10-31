@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use unbound_app_menu::{SHELL_ACTION_PROPERTY, ShellAction, VERSION_PROPERTY};
+use bande_app_menu::{SHELL_ACTION_PROPERTY, ShellAction, VERSION_PROPERTY};
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::Command;
 
-pub use unbound_app_menu::MENU_PATH as APP_MENU_PATH;
+pub use bande_app_menu::MENU_PATH as APP_MENU_PATH;
 
 pub type Layout = (i32, HashMap<String, OwnedValue>, Vec<OwnedValue>);
 

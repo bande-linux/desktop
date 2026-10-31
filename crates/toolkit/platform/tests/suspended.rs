@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use unbound_toolkit_platform::WindowEvent;
+use bande_toolkit_platform::WindowEvent;
 
 #[allow(dead_code)]
 #[path = "support/desktop.rs"]

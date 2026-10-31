@@ -1,8 +1,8 @@
 use std::io;
 use std::sync::mpsc::{self, Sender};
 
-use unbound_toolkit::ui::{Label, PopUpButton, Widget};
-use unbound_xdg::{Apps, config_dirs, data_dirs};
+use bande_toolkit::ui::{Label, PopUpButton, Widget};
+use bande_xdg::{Apps, config_dirs, data_dirs};
 
 use crate::L10N;
 use crate::failure::unexpected;

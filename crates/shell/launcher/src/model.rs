@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use unbound_search::{FileHit, FileResults, Query, Usage, calculate, fold, recent_files};
-use unbound_xdg::path_from_file_uri;
+use bande_search::{FileHit, FileResults, Query, Usage, calculate, fold, recent_files};
+use bande_xdg::path_from_file_uri;
 
 use crate::emoji::EMOJI;
 
@@ -62,14 +62,14 @@ impl IndexedApp {
             .described
             .iter()
             .filter_map(|text| query.score(text))
-            .filter(|score| *score >= unbound_search::WORDS)
+            .filter(|score| *score >= bande_search::WORDS)
             .max()
             .map(|score| score - DESCRIBED_PENALTY);
         let commented = self
             .comment
             .as_ref()
             .and_then(|comment| query.score(comment))
-            .filter(|score| *score >= unbound_search::WORDS)
+            .filter(|score| *score >= bande_search::WORDS)
             .map(|score| score - COMMENT_PENALTY);
         named.max(described).max(commented)
     }
@@ -104,7 +104,7 @@ fn word_match(query: &Query, texts: &[String]) -> Option<u32> {
     texts
         .iter()
         .filter_map(|text| query.score(text))
-        .filter(|score| *score >= unbound_search::WORDS)
+        .filter(|score| *score >= bande_search::WORDS)
         .max()
 }
 
@@ -133,7 +133,7 @@ impl IndexedPane {
             .filter_map(|((label, keywords), setting)| {
                 let labelled = query
                     .score(label)
-                    .filter(|score| *score >= unbound_search::WORDS)
+                    .filter(|score| *score >= bande_search::WORDS)
                     .map(|score| score - SETTING_LABEL_PENALTY);
                 let keyworded =
                     word_match(query, keywords).map(|score| score - SETTING_KEYWORD_PENALTY);
@@ -284,7 +284,7 @@ impl IndexedCommand {
     fn score(&self, query: &Query) -> Option<u32> {
         let named = query
             .score(&self.name)
-            .filter(|score| *score >= unbound_search::WORDS);
+            .filter(|score| *score >= bande_search::WORDS);
         let described = word_match(query, &self.keywords).map(|score| score - DESCRIBED_PENALTY);
         named.max(described)
     }

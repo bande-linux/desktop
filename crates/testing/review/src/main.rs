@@ -31,7 +31,7 @@ struct Arguments {
 }
 
 fn arguments() -> Result<Arguments, String> {
-    let usage = "usage: unbound-review <scenario> --out <directory> [--fps <frames per second>]";
+    let usage = "usage: bande-review <scenario> --out <directory> [--fps <frames per second>]";
     let mut scenario = None;
     let mut out = None;
     let mut fps = DEFAULT_FPS;
@@ -60,7 +60,7 @@ fn arguments() -> Result<Arguments, String> {
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-review");
+    bande_log::init("bande-review");
     match arguments()
         .map_err(Into::into)
         .and_then(|arguments| review(&arguments))
@@ -68,7 +68,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!("{error}");
-            eprintln!("unbound-review: {error}");
+            eprintln!("bande-review: {error}");
             ExitCode::FAILURE
         }
     }

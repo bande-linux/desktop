@@ -1,8 +1,8 @@
 # Dock
-Status: superseded by the [combined bar](bar.md) (owner, 2026-10-30), which is the default since E5: the bar holds the app menus, status items, tray, workspaces and clock, and "Clock, tray icons, workspace switcher in the Dock: never" below is reversed. There is no `unbound-dock` binary or package any more and Settings ▸ Dock became Settings ▸ Bar. The rules below still hold for the apps area of the bar and for the "separate menu bar" layout.
+Status: superseded by the [combined bar](bar.md) (owner, 2026-10-30), which is the default since E5: the bar holds the app menus, status items, tray, workspaces and clock, and "Clock, tray icons, workspace switcher in the Dock: never" below is reversed. There is no `bande-dock` binary or package any more and Settings ▸ Dock became Settings ▸ Bar. The rules below still hold for the apps area of the bar and for the "separate menu bar" layout.
 
 ## Purpose
-The Dock (`unbound-dock`) is where apps are started, found again and quit. It shows the apps a
+The Dock (`bande-dock`) is where apps are started, found again and quit. It shows the apps a
 person keeps, the apps that are running, and the Trash, and every icon answers a left click, a
 right click, a drag and a dropped file. It does one job well: it is not a window list, a clock,
 a system tray or a launcher grid, all of which have their own homes (menu bar, launcher,
@@ -36,7 +36,7 @@ in for Option (not yet recorded in `docs/architecture/overview.md`).
 | Drop file on icon | Opens the file in that app [1] | | |
 | Keyboard | Fn-Control-F3 focuses the Dock, arrows move, Return opens [1] | | |
 
-## Proposed Unbound feature set
+## Proposed Bande feature set
 
 ### Now (essential)
 

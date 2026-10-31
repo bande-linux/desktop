@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use unbound_fs::{Access, Class, access, runnable, set_mode, with_access, with_runnable};
-use unbound_toolkit::ui::{PopUpButton, Toggle, WidgetId};
+use bande_fs::{Access, Class, access, runnable, set_mode, with_access, with_runnable};
+use bande_toolkit::ui::{PopUpButton, Toggle, WidgetId};
 
 use crate::L10N;
 use crate::controls::{Signal, sender};

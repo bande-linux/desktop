@@ -9,8 +9,8 @@ use std::ops::Range;
 use accesskit::{
     Action, ActionData, ActionRequest, Node, NodeId, Role, TextPosition, TextSelection,
 };
+use bande_graphics::{Color, Item, Paint, Point, Rect, Shape, TextSystem};
 use parley::{Affinity, Cursor, Selection as Span};
-use unbound_graphics::{Color, Item, Paint, Point, Rect, Shape, TextSystem};
 
 use self::history::{Edit, EditKind, History};
 use self::layout::{Block, bounds};

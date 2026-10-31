@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
-use unbound_config::{
+use bande_config::{
     AlertSound, Appearance, BarEdge, CapsLock, Config, ConfigError, ConfigStore, DEFAULT_BAR_APPS,
     DisplaySettings, InputSource, MenuBarPlacement, NightLight, NightSchedule, Placement,
     ReloadError, Rotation, SecondaryClick, Suspend, WallpaperFit, WallpaperVariant, config_path,
@@ -82,7 +82,7 @@ fn every_setting_is_read() {
 appearance "dark"
 bar {
     edge "bottom"
-    apps "org.unbound.Terminal" "org.mozilla.firefox"
+    apps "org.bande.Terminal" "org.mozilla.firefox"
 }
 idle {
     dim-after "90s"
@@ -113,7 +113,7 @@ arrangement {
     assert_eq!(config.bar.edge, BarEdge::Bottom);
     assert_eq!(
         config.bar.apps,
-        ["org.unbound.Terminal", "org.mozilla.firefox"]
+        ["org.bande.Terminal", "org.mozilla.firefox"]
     );
     assert_eq!(config.idle.dim_after, Duration::from_secs(90));
     assert_eq!(config.idle.lock_after, Duration::from_secs(3600));
@@ -410,15 +410,15 @@ fn the_file_lives_under_the_xdg_config_home() {
     let home = Path::new("/home/ada");
     assert_eq!(
         config_path(None, Some(home)),
-        Some(Path::new("/home/ada/.config/unbound/config.kdl").to_path_buf())
+        Some(Path::new("/home/ada/.config/bande/config.kdl").to_path_buf())
     );
     assert_eq!(
         config_path(Some(Path::new("/srv/config")), Some(home)),
-        Some(Path::new("/srv/config/unbound/config.kdl").to_path_buf())
+        Some(Path::new("/srv/config/bande/config.kdl").to_path_buf())
     );
     assert_eq!(
         config_path(Some(Path::new("relative/config")), Some(home)),
-        Some(Path::new("/home/ada/.config/unbound/config.kdl").to_path_buf())
+        Some(Path::new("/home/ada/.config/bande/config.kdl").to_path_buf())
     );
     assert_eq!(config_path(None, None), None);
 }

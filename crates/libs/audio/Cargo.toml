@@ -1,6 +1,6 @@
 [package]
-name = "unbound-audio"
-description = "Unbound PipeWire client: output and input devices, volume, mute and the volume keys"
+name = "bande-audio"
+description = "Bande PipeWire client: output and input devices, volume, mute and the volume keys"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,7 +14,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-unbound-test-bus.workspace = true
+bande-test-bus.workspace = true
 
 [lints]
 workspace = true

@@ -1,6 +1,6 @@
-use unbound_datetime::{DateFormats, posix_locale};
-use unbound_settings_panes::SettingId;
-use unbound_toolkit::ui::{Label, PopUpButton, Widget};
+use bande_datetime::{DateFormats, posix_locale};
+use bande_settings_panes::SettingId;
+use bande_toolkit::ui::{Label, PopUpButton, Widget};
 
 use crate::L10N;
 use crate::locale::{InstalledLocale, LocaleCommand};

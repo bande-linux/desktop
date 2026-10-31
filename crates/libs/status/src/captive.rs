@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use unbound_network::NetworkManager;
-use unbound_notify::Urgency;
-use unbound_notify::client::{self, Request};
+use bande_network::NetworkManager;
+use bande_notify::Urgency;
+use bande_notify::client::{self, Request};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};
@@ -172,7 +172,7 @@ pub fn follow_captive_portal(
 
 pub fn open_page(page: &str) {
     let command = ["xdg-open".to_owned(), page.to_owned()];
-    if let Err(error) = unbound_xdg::spawn_detached("", &command, None, None) {
+    if let Err(error) = bande_xdg::spawn_detached("", &command, None, None) {
         tracing::warn!("cannot open the sign-in page: {error}");
     }
 }

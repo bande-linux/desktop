@@ -4,7 +4,7 @@ mod users;
 
 use std::sync::LazyLock;
 
-use unbound_l10n::Localizer;
+use bande_l10n::Localizer;
 
 pub use accounts::{last_user_file, login_picture, opened_path, remember_user, remembered_user};
 pub use greetd::{
@@ -13,7 +13,7 @@ pub use greetd::{
 };
 pub use users::login_users;
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-greeter.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-greeter.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -23,7 +23,7 @@ mod tests {
     fn every_message_id_used_in_code_is_in_the_english_file() {
         let sources = [include_str!("main.rs")];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

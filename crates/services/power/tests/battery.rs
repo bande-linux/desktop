@@ -3,9 +3,9 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use unbound_notify::{Notification, NotificationServer, Urgency};
-use unbound_power::battery::{self, Alert, BatteryNotifier};
-use unbound_test_bus::SessionBus;
+use bande_notify::{Notification, NotificationServer, Urgency};
+use bande_power::battery::{self, Alert, BatteryNotifier};
+use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 
 const WAIT: Duration = Duration::from_secs(5);

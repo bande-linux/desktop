@@ -1,4 +1,4 @@
-use unbound_design::{Accent, Appearance, Color, Contrast, Palette, Scheme, apca, wcag};
+use bande_design::{Accent, Appearance, Color, Contrast, Palette, Scheme, apca, wcag};
 
 fn every_palette() -> impl Iterator<Item = (String, Palette)> {
     [Scheme::Light, Scheme::Dark]

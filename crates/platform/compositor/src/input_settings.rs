@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::thread;
 
-use unbound_config::{
+use bande_config::{
     Accessibility, BUS_NAME, Config, OBJECT_PATH, config_path, read_system_input_sources,
 };
 use zbus::blocking::Connection;

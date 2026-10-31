@@ -1,6 +1,6 @@
 [package]
-name = "unbound-graphics"
-description = "Unbound graphics: scene, Vello renderers and Parley text on the Datum design tokens"
+name = "bande-graphics"
+description = "Bande graphics: scene, Vello renderers and Parley text on the Datum design tokens"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,7 +15,7 @@ pollster = { workspace = true, optional = true }
 resvg.workspace = true
 skrifa.workspace = true
 tracing.workspace = true
-unbound-design.workspace = true
+bande-design.workspace = true
 vello_cpu.workspace = true
 vello_gpu = { workspace = true, optional = true }
 wgpu = { workspace = true, optional = true }

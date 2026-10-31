@@ -13,7 +13,7 @@ use spa::sys;
 
 use crate::Error;
 
-pub const INTERNAL_PREFIX: &str = "unbound-";
+pub const INTERNAL_PREFIX: &str = "bande-";
 pub const EFFECT_RATE: u32 = 48_000;
 const SAMPLE_BYTES: usize = size_of::<f32>();
 
@@ -62,13 +62,13 @@ pub(crate) fn play(
 ) -> Result<Running, Error> {
     let stream = StreamRc::new(
         core.clone(),
-        "unbound-sound-effect",
+        "bande-sound-effect",
         properties(&[
             (*pw::keys::MEDIA_TYPE, "Audio"),
             (*pw::keys::MEDIA_CATEGORY, "Playback"),
             (*pw::keys::MEDIA_ROLE, "Event"),
-            (*pw::keys::NODE_NAME, "unbound-sound-effect"),
-            (*pw::keys::APP_NAME, "Unbound"),
+            (*pw::keys::NODE_NAME, "bande-sound-effect"),
+            (*pw::keys::APP_NAME, "Bande"),
             (*pw::keys::NODE_LATENCY, "256/48000"),
         ]),
     )?;
@@ -127,13 +127,13 @@ pub(crate) fn meter(
 ) -> Result<Running, Error> {
     let stream = StreamRc::new(
         core.clone(),
-        "unbound-level-meter",
+        "bande-level-meter",
         properties(&[
             (*pw::keys::MEDIA_TYPE, "Audio"),
             (*pw::keys::MEDIA_CATEGORY, "Capture"),
             (*pw::keys::MEDIA_ROLE, "DSP"),
-            (*pw::keys::NODE_NAME, "unbound-level-meter"),
-            (*pw::keys::APP_NAME, "Unbound"),
+            (*pw::keys::NODE_NAME, "bande-level-meter"),
+            (*pw::keys::APP_NAME, "Bande"),
             ("target.object", device),
             (*pw::keys::NODE_LATENCY, "1024/48000"),
         ]),

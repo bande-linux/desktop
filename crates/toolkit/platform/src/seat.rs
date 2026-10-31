@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use unbound_graphics::{
+use bande_graphics::{
     Cursor, Event, Key, Modifiers, Point, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
 };
 use wayland_client::protocol::wl_keyboard::{self, KeymapFormat, WlKeyboard};
@@ -24,7 +24,7 @@ const BTN_EXTRA: u32 = 0x114;
 const BTN_FORWARD: u32 = 0x115;
 const BTN_BACK: u32 = 0x116;
 const EVDEV_OFFSET: u32 = 8;
-pub use unbound_graphics::DOUBLE_CLICK_INTERVAL;
+pub use bande_graphics::DOUBLE_CLICK_INTERVAL;
 pub const CLICK_SLOP: f32 = 4.0;
 
 struct Keymap {

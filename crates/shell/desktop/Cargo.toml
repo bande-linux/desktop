@@ -1,6 +1,6 @@
 [package]
-name = "unbound-desktop-surface"
-description = "Unbound desktop surface: the wallpaper and the files on the desktop, as a part of unbound-shell"
+name = "bande-desktop-surface"
+description = "Bande desktop surface: the wallpaper and the files on the desktop, as a part of bande-shell"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,19 +10,19 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 tracing.workspace = true
-unbound-bar.workspace = true
-unbound-config.workspace = true
-unbound-fs.workspace = true
-unbound-inbox.workspace = true
-unbound-l10n.workspace = true
-unbound-thumbnails.workspace = true
-unbound-toolkit.workspace = true
-unbound-volumes.workspace = true
-unbound-wallpaper.workspace = true
-unbound-xdg.workspace = true
+bande-bar.workspace = true
+bande-config.workspace = true
+bande-fs.workspace = true
+bande-inbox.workspace = true
+bande-l10n.workspace = true
+bande-thumbnails.workspace = true
+bande-toolkit.workspace = true
+bande-volumes.workspace = true
+bande-wallpaper.workspace = true
+bande-xdg.workspace = true
 
 [dev-dependencies]
-unbound-golden.workspace = true
+bande-golden.workspace = true
 
 [lints]
 workspace = true

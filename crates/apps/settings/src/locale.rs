@@ -7,7 +7,7 @@ use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::failure::{failed, unexpected};
 use crate::follow::{Update, Updates, spawn};
-use unbound_settings_panes::SettingId;
+use bande_settings_panes::SettingId;
 
 const LOCALE: &str = "org.freedesktop.locale1";
 const LOCALE_PATH: &str = "/org/freedesktop/locale1";

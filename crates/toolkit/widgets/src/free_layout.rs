@@ -1,5 +1,5 @@
 use accesskit::{Node, Role};
-use unbound_graphics::{Item, Rect, TextSize};
+use bande_graphics::{Item, Rect, TextSize};
 
 use super::{Context, Size, Widget, WidgetId};
 

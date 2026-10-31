@@ -1,6 +1,6 @@
 #!/bin/sh
 set -u
-dir="$XDG_RUNTIME_DIR/unbound-review"
+dir="$XDG_RUNTIME_DIR/bande-review"
 if [ -f "$dir/job" ]; then
     . "$dir/job"
     rm -f "$dir/job"
@@ -9,4 +9,4 @@ if [ -f "$dir/job" ]; then
     echo "$status" > "$OUT/exit-status"
     exit 0
 fi
-exec "$dir/unbound-screenshot" "$@"
+exec "$dir/bande-screenshot" "$@"

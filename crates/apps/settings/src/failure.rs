@@ -1,4 +1,4 @@
-use unbound_settings_panes::SettingId;
+use bande_settings_panes::SettingId;
 use zbus::DBusError;
 
 use crate::L10N;

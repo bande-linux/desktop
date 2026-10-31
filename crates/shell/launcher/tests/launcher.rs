@@ -3,15 +3,15 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use unbound_fs::Entry;
-use unbound_launcher::{
+use bande_fs::Entry;
+use bande_launcher::{
     Action, AppInfo, Catalog, Clip, Heading, Hit, Kind, Launcher, Loaded, Mode, PaneInfo,
     SettingInfo, SystemCommand, Target,
 };
-use unbound_preview::preview;
-use unbound_search::{EXACT, FileHit, FileResults, PREFIX, Usage, WORD, usage_path};
-use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
-use unbound_toolkit::{Appearance, Color, CpuRenderer, Image, Point, Scene, Scheme, TextSystem};
+use bande_preview::preview;
+use bande_search::{EXACT, FileHit, FileResults, PREFIX, Usage, WORD, usage_path};
+use bande_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
+use bande_toolkit::{Appearance, Color, CpuRenderer, Image, Point, Scene, Scheme, TextSystem};
 
 const SCREEN: (u32, u32) = (1024, 720);
 const HOME: &str = "/home/someone";
@@ -51,7 +51,7 @@ fn apps() -> Vec<AppInfo> {
             &["math"],
         ),
         app(
-            "org.unbound.Terminal",
+            "org.bande.Terminal",
             "Terminal",
             Some("Terminal Emulator"),
             &["shell", "prompt"],
@@ -519,13 +519,13 @@ fn reduce_motion_fades_the_card_in_without_moving_it() {
     let shown = Instant::now();
     launcher.appear(shown);
     let scene = scene(&mut launcher, shown + Duration::from_millis(30));
-    let [unbound_toolkit::Item::Opacity { items, .. }] = scene.items.as_slice() else {
+    let [bande_toolkit::Item::Opacity { items, .. }] = scene.items.as_slice() else {
         panic!("the card fades in");
     };
     assert!(
         !items
             .iter()
-            .any(|item| matches!(item, unbound_toolkit::Item::Translate { .. }))
+            .any(|item| matches!(item, bande_toolkit::Item::Translate { .. }))
     );
 }
 
@@ -540,7 +540,7 @@ fn the_card_appears_with_a_quick_fade_and_settles() {
     let scene = scene(&mut launcher, shown + Duration::from_millis(30));
     assert!(matches!(
         scene.items.as_slice(),
-        [unbound_toolkit::Item::Opacity { alpha, .. }] if *alpha > 0.0 && *alpha < 1.0
+        [bande_toolkit::Item::Opacity { alpha, .. }] if *alpha > 0.0 && *alpha < 1.0
     ));
 }
 
@@ -611,7 +611,7 @@ fn render(launcher: &mut Launcher, name: &str) {
     let mut scene = scene(launcher, Instant::now());
     scene.background = Color::hex(0x5A6B7D);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
-    unbound_golden::assert_golden_rgba!(name, (scene.width, scene.height), frame.rgba);
+    bande_golden::assert_golden_rgba!(name, (scene.width, scene.height), frame.rgba);
 }
 
 #[test]
@@ -622,7 +622,7 @@ fn the_launcher_matches_its_goldens() {
     std::fs::write(folder.path().join("Holiday plans.txt"), "Rome").unwrap();
     let xbel = recently_used_xbel(&[&folder.path().join("Holiday plans.txt")]);
     let mut usage = Usage::default();
-    usage.record("app:org.unbound.Terminal", NOW).unwrap();
+    usage.record("app:org.bande.Terminal", NOW).unwrap();
     let mut launcher = launcher_with(usage, Scheme::Light);
     launcher.set_now(NOW);
     launcher.set_recently_used(Some(&xbel));
@@ -690,7 +690,7 @@ fn an_empty_query_shows_recent_apps_and_documents_then_every_app_alphabetically(
     let report = folder.path().join("report.pdf");
     std::fs::write(&report, "pdf").unwrap();
     let mut usage = Usage::default();
-    usage.record("app:org.unbound.Terminal", NOW - 60).unwrap();
+    usage.record("app:org.bande.Terminal", NOW - 60).unwrap();
     usage.record("app:org.example.Fonts", NOW).unwrap();
     usage.record("app:org.example.Removed", NOW).unwrap();
     let mut launcher = launcher_with(usage, Scheme::Light);
@@ -804,10 +804,10 @@ fn a_long_list_scrolls_to_keep_the_selection_in_view() {
         scroll(&mut launcher);
     }
     assert!(scroll(&mut launcher) > 500.0);
-    launcher.handle(&Event::Scroll(unbound_toolkit::ui::Scroll {
+    launcher.handle(&Event::Scroll(bande_toolkit::ui::Scroll {
         position: Point::new(400.0, 300.0),
         delta: Point::new(0.0, -10_000.0),
-        ..unbound_toolkit::ui::Scroll::default()
+        ..bande_toolkit::ui::Scroll::default()
     }));
     assert_eq!(scroll(&mut launcher), 0.0);
 }

@@ -1,6 +1,6 @@
-/usr/bin/unbound-clipboard
-/usr/bin/unbound-lock
-/usr/bin/unbound-screenshot
-/usr/bin/unbound-shell
-/usr/bin/unbound-greeter
-/usr/bin/unbound-monitor
+/usr/bin/bande-clipboard
+/usr/bin/bande-lock
+/usr/bin/bande-screenshot
+/usr/bin/bande-shell
+/usr/bin/bande-greeter
+/usr/bin/bande-monitor

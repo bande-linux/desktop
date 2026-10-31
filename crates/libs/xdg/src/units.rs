@@ -33,7 +33,7 @@ pub(crate) fn scope_name(app_id: &str, pid: u32) -> String {
             escaped.push_str(&format!("\\x{byte:02x}"));
         }
     }
-    format!("app-unbound-{escaped}-{pid}.scope")
+    format!("app-bande-{escaped}-{pid}.scope")
 }
 
 pub fn unit_app_ids(unit: &str) -> Vec<String> {
@@ -70,14 +70,14 @@ mod tests {
     #[test]
     fn a_launched_app_is_found_again_from_its_scope_and_its_bus_path() {
         let unit = scope_name("org.example.crash-test", 42);
-        assert_eq!(unit, "app-unbound-org.example.crash\\x2dtest-42.scope");
+        assert_eq!(unit, "app-bande-org.example.crash\\x2dtest-42.scope");
         assert_eq!(
             unit_app_ids(&unit),
-            ["unbound-org.example.crash-test", "org.example.crash-test"]
+            ["bande-org.example.crash-test", "org.example.crash-test"]
         );
         assert_eq!(
             unit_of_object_path(
-                "/org/freedesktop/systemd1/unit/app_2dunbound_2dorg_2eexample_2ecrash_5cx2dtest_2d42_2escope"
+                "/org/freedesktop/systemd1/unit/app_2dbande_2dorg_2eexample_2ecrash_5cx2dtest_2d42_2escope"
             )
             .as_deref(),
             Some(unit.as_str())

@@ -9,9 +9,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use unbound_compositor::BACKGROUND;
-use unbound_graphics::{Palette, Scheme};
-use unbound_test_bus::SessionBus;
+use bande_compositor::BACKGROUND;
+use bande_graphics::{Palette, Scheme};
+use bande_test_bus::SessionBus;
 use zbus::object_server::SignalEmitter;
 
 use crate::card::{Scanout, card_with_driver};
@@ -21,9 +21,9 @@ use crate::uinput::{
     VirtualDevice,
 };
 
-const COMPOSITOR: &str = "/usr/bin/unbound-compositor";
+const COMPOSITOR: &str = "/usr/bin/bande-compositor";
 const RUNTIME_DIR: &str = "/run/user/0";
-const TYPED: &str = "/tmp/typed-in-unbound-term";
+const TYPED: &str = "/tmp/typed-in-bande-term";
 const STARTUP: Duration = Duration::from_secs(60);
 const LAUNCHER_SELECTION_PIXELS: usize = 2000;
 
@@ -42,7 +42,7 @@ impl Drop for Desktop {
 }
 
 fn current_scanout() -> Option<Scanout> {
-    card_with_driver(&std::env::var("UNBOUND_TEST_DRIVER").unwrap_or_else(|_| "vkms".to_owned()))
+    card_with_driver(&std::env::var("BANDE_TEST_DRIVER").unwrap_or_else(|_| "vkms".to_owned()))
         .current_scanout()
 }
 
@@ -137,7 +137,7 @@ fn wait_for_settled(what: &str, drawn: impl Fn(&Scanout) -> bool) -> Scanout {
 
 fn wait_for_shell() -> Scanout {
     wait_for_settled("the shell to settle on the desktop and the bar", |now| {
-        running("unbound-shell")
+        running("bande-shell")
             && pixel(now, 32, 200) != BACKGROUND
             && pixel(now, now.width / 2, now.height / 2) != BACKGROUND
     })
@@ -158,13 +158,13 @@ fn start_desktop_with_arguments(arguments: &[&str], environment: &[(&str, &str)]
     let mut child = Command::new(COMPOSITOR)
         .args(arguments)
         .env("XDG_RUNTIME_DIR", RUNTIME_DIR)
-        .env("XDG_CURRENT_DESKTOP", "Unbound")
+        .env("XDG_CURRENT_DESKTOP", "Bande")
         .env("HOME", "/root")
         .env("SHELL", "/bin/bash")
         .envs(environment.iter().copied())
         .stdout(Stdio::piped())
         .spawn()
-        .expect("start unbound-compositor");
+        .expect("start bande-compositor");
     let stdout = child.stdout.take().expect("compositor stdout");
     let mut line = String::new();
     BufReader::new(stdout)
@@ -211,7 +211,7 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     scanout().save("m14-launcher-results");
 
     keyboard.tap(KEY_ENTER);
-    wait_for("the terminal", STARTUP, || running("unbound-term"));
+    wait_for("the terminal", STARTUP, || running("bande-term"));
     let palette = Palette::for_scheme(Scheme::Light);
     let (sheet, accent) = (palette.sheet, palette.accent);
     let accent_pixels = |scanout: &Scanout| {
@@ -231,7 +231,7 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     });
     thread::sleep(Duration::from_secs(2));
 
-    keyboard.type_text("echo typed from the keyboard > /tmp/typed-in-unbound-term\n");
+    keyboard.type_text("echo typed from the keyboard > /tmp/typed-in-bande-term\n");
     wait_for("the shell to run the typed command", STARTUP, || {
         fs::read_to_string(TYPED).is_ok_and(|text| text.trim() == "typed from the keyboard")
     });
@@ -279,7 +279,7 @@ impl Drop for Firefox {
 }
 
 const PROFILE: &str = "/tmp/firefox-profile";
-const PAGE: &str = "/tmp/unbound-page.html";
+const PAGE: &str = "/tmp/bande-page.html";
 const FIRST_RUN_OFF: &str = r#"user_pref("browser.aboutwelcome.enabled", false);
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
@@ -345,7 +345,7 @@ fn firefox_runs_on_wayland_and_opens_a_context_menu() {
     scanout().save("m16-firefox-full-screen");
 }
 
-const GUEST_PASSWORD: &str = "unbound-test";
+const GUEST_PASSWORD: &str = "bande-test";
 
 #[derive(Clone, Default)]
 struct LockedHint(Arc<Mutex<Option<bool>>>);
@@ -441,7 +441,7 @@ fn ctrl_super_q_locks_and_the_password_unlocks() {
 
     keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_Q);
     wait_for("the session to lock", STARTUP, || {
-        locked_hint.get() == Some(true) && running("unbound-lock")
+        locked_hint.get() == Some(true) && running("bande-lock")
     });
     wait_for("the lock screen to draw", STARTUP, || {
         current_scanout().is_some_and(|scanout| lock_screen_drawn(&scanout))
@@ -465,7 +465,7 @@ fn ctrl_super_q_locks_and_the_password_unlocks() {
         "a wrong password leaves the session locked"
     );
     assert!(
-        running("unbound-lock"),
+        running("bande-lock"),
         "a wrong password leaves the lock screen up"
     );
 
@@ -475,7 +475,7 @@ fn ctrl_super_q_locks_and_the_password_unlocks() {
         locked_hint.get() == Some(false)
     });
     wait_for("the lock screen to exit", STARTUP, || {
-        !running("unbound-lock")
+        !running("bande-lock")
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m17-unlocked");
@@ -490,7 +490,7 @@ fn the_lock_screen_is_on_screen_before_sleep_and_takes_the_password_after_wake()
     let _desktop = start_desktop_with(&[("DBUS_SYSTEM_BUS_ADDRESS", bus.address())]);
     let icon = (32, 33);
     wait_for("the Dock", STARTUP, || {
-        running("unbound-shell")
+        running("bande-shell")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
     });
     thread::sleep(Duration::from_secs(1));
@@ -566,7 +566,7 @@ fn super_shift_3_saves_the_screen_to_the_desktop() {
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let _desktop = start_desktop();
     wait_for("the screenshot tool", STARTUP, || {
-        running("unbound-screenshot")
+        running("bande-screenshot")
     });
     let screen = wait_for_shell();
 
@@ -609,7 +609,7 @@ fn super_shift_3_saves_the_screen_to_the_desktop() {
             .count()
     };
     let differing = differing(&screen).min(differing(&after));
-    let cursor = (unbound_compositor::ARROW_WIDTH * unbound_compositor::ARROW_HEIGHT) as usize;
+    let cursor = (bande_compositor::ARROW_WIDTH * bande_compositor::ARROW_HEIGHT) as usize;
     assert!(
         differing <= cursor,
         "{differing} pixels differ from the screen"
@@ -637,7 +637,7 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
     let mut mouse = VirtualDevice::keyboard_and_mouse();
     let _desktop = start_desktop();
     wait_for("the screenshot tool", STARTUP, || {
-        running("unbound-screenshot")
+        running("bande-screenshot")
     });
     wait_for_shell();
     for _ in 0..20 {
@@ -646,7 +646,7 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
     let before = wait_for_settled("the pointer to rest in the corner", |_| true);
 
     mouse.chord(&[KEY_LEFTMETA, KEY_LEFTSHIFT], KEY_4);
-    let cursor = (unbound_compositor::ARROW_WIDTH * unbound_compositor::ARROW_HEIGHT) as usize;
+    let cursor = (bande_compositor::ARROW_WIDTH * bande_compositor::ARROW_HEIGHT) as usize;
     wait_for("the crosshair of the area overlay", STARTUP, || {
         mouse.frame(&[(EV_REL, REL_X, 1), (EV_REL, REL_Y, 1)]);
         mouse.frame(&[(EV_REL, REL_X, -50), (EV_REL, REL_Y, -50)]);
@@ -743,7 +743,7 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
     );
 }
 
-const FILES: &str = "/usr/bin/unbound-files";
+const FILES: &str = "/usr/bin/bande-files";
 const BAR_HEADER: (usize, usize) = (64, 120);
 
 #[test]
@@ -767,7 +767,7 @@ fn files_drills_into_a_folder_and_quick_looks_a_picture() {
         .env("XDG_RUNTIME_DIR", RUNTIME_DIR)
         .env("HOME", "/root")
         .spawn()
-        .expect("start unbound-files");
+        .expect("start bande-files");
     let centre = |scanout: &Scanout| pixel(scanout, scanout.width / 2, scanout.height / 2);
     wait_for("the files window", STARTUP, || {
         centre(&scanout()) != centre(&without_files)
@@ -779,7 +779,7 @@ fn files_drills_into_a_folder_and_quick_looks_a_picture() {
             .collect::<Vec<_>>()
     };
     wait_for("the bar to name Files", STARTUP, || {
-        running("unbound-shell") && bar_header(&scanout()) != bar_header(&without_files)
+        running("bande-shell") && bar_header(&scanout()) != bar_header(&without_files)
     });
     thread::sleep(Duration::from_secs(1));
 
@@ -848,12 +848,12 @@ impl Drop for SystemKeyboard {
 #[test]
 #[ignore = "needs the ci/vm guest"]
 fn the_greeter_takes_a_password_typed_in_the_system_layout_after_a_refusal_and_hands_over() {
-    use std::os::unix::net::UnixListener;
-    use std::sync::mpsc;
-    use unbound_greeter::{
+    use bande_greeter::{
         AuthMessageType, ErrorType, Request, Response, SESSION, SESSION_ENVIRONMENT, read_message,
         write_message,
     };
+    use std::os::unix::net::UnixListener;
+    use std::sync::mpsc;
 
     let passwd = fs::read_to_string("/etc/passwd").expect("passwd");
     if !passwd.contains(GREETER_USER) {
@@ -899,7 +899,7 @@ fn the_greeter_takes_a_password_typed_in_the_system_layout_after_a_refusal_and_h
         &[("GREETD_SOCK", socket.to_str().expect("socket path"))],
     );
     wait_for_settled("the greeter's prompt to be drawn and settle", |now| {
-        running("unbound-greeter")
+        running("bande-greeter")
             && now
                 .rgb
                 .iter()
@@ -908,10 +908,7 @@ fn the_greeter_takes_a_password_typed_in_the_system_layout_after_a_refusal_and_h
                 > now.rgb.len() / 2
     });
     scanout().save("m24-greeter");
-    assert!(
-        !running("unbound-shell"),
-        "the greeter session has no panel"
-    );
+    assert!(!running("bande-shell"), "the greeter session has no panel");
 
     keyboard.type_text("fel\n");
     cancel_seen

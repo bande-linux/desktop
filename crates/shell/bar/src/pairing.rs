@@ -6,9 +6,9 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use unbound_bluetooth::PairingPrompt;
-use unbound_toolkit::ui::{Axis, Button, Event, Key, Label, Stack, TextField, Ui, Widget};
-use unbound_toolkit::{App, Palette, Rect, Role, Scene, TextSystem, Window, WindowEvent};
+use bande_bluetooth::PairingPrompt;
+use bande_toolkit::ui::{Axis, Button, Event, Key, Label, Stack, TextField, Ui, Widget};
+use bande_toolkit::{App, Palette, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 
 use crate::L10N;
 use crate::dialogs::DIALOGS;
@@ -300,7 +300,7 @@ impl Dialog {
         rows.push(Box::new(Stack::new(Axis::Horizontal, 12.0, 0.0, buttons)));
         let mut ui = Ui::new(
             Box::new(Stack::new(Axis::Vertical, 10.0, 20.0, rows)),
-            unbound_toolkit::ui::Context::new(TextSystem::new(), palette),
+            bande_toolkit::ui::Context::new(TextSystem::new(), palette),
         );
         if let Some(field) = field {
             ui.set_focus(field);
@@ -327,7 +327,7 @@ pub fn run_pairing(arguments: &[&str]) -> Result<bool, Box<dyn std::error::Error
         question.size(),
     )?;
     let mut dialog = Dialog::new(&question, window.appearance().palette());
-    unbound_toolkit::run(&mut window, &mut dialog)?;
+    bande_toolkit::run(&mut window, &mut dialog)?;
     Ok(dialog.choice.get() == Choice::Accept)
 }
 

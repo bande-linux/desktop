@@ -1,9 +1,9 @@
 use crate::support::*;
-use smithay::utils::Size;
-use unbound_compositor::{Compositor, Renderer, Snapshot};
-use unbound_test_wayland::{
+use bande_compositor::{Compositor, Renderer, Snapshot};
+use bande_test_wayland::{
     Anchor, KeyboardInteractivity, Layer, LayerRequest, ShmImage, TestClient, roundtrip,
 };
+use smithay::utils::Size;
 use wayland_client::protocol::wl_shm::Format;
 
 const BELOW: (i32, i32) = (128, 96);
@@ -158,12 +158,12 @@ fn a_shell_surface_with_a_corner_radius_blurs_only_inside_its_rounded_shape() {
 #[test]
 fn reduce_transparency_puts_an_opaque_chassis_behind_a_surface_instead_of_blur() {
     let (mut server, mut renderer, _below, _glass) = scene(true, Effects::Full);
-    server.apply_accessibility(unbound_config::Accessibility {
+    server.apply_accessibility(bande_config::Accessibility {
         reduce_transparency: true,
-        ..unbound_config::Accessibility::default()
+        ..bande_config::Accessibility::default()
     });
     renderer.render(&mut server).expect("frame");
-    let chassis = unbound_graphics::Palette::for_scheme(unbound_graphics::Scheme::Light).chassis;
+    let chassis = bande_graphics::Palette::for_scheme(bande_graphics::Scheme::Light).chassis;
     let solid = row(&renderer.snapshot(&server).expect("read back"));
     assert!(solid.iter().all(|value| *value == chassis.r), "{solid:?}");
 }

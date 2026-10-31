@@ -7,22 +7,22 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use unbound_file_chooser::{
+use bande_file_chooser::{
     Chooser, ChooserView, Finished, Icons, L10N, initial_folder, remember, remembered_folder,
 };
-use unbound_files::{rows, sidebar_file, with_volumes};
-use unbound_toolkit::ui::Alert;
-use unbound_toolkit::{App, Image, Role, Scene, TextSystem, Window, WindowEvent};
-use unbound_volumes::{media_roots, mounted_volumes};
-use unbound_wallpaper::Fit;
-use unbound_xdg::{
+use bande_files::{rows, sidebar_file, with_volumes};
+use bande_toolkit::ui::Alert;
+use bande_toolkit::{App, Image, Role, Scene, TextSystem, Window, WindowEvent};
+use bande_volumes::{media_roots, mounted_volumes};
+use bande_wallpaper::Fit;
+use bande_xdg::{
     Locale, MimeDatabase, UserDir, app_name, applications, config_home, current_desktops,
     data_dirs, state_home, user_dir,
 };
-use xdg_desktop_portal_unbound::dialog_process::{CANCELLED, CHOSEN, SET_WALLPAPER, encode, parse};
-use xdg_desktop_portal_unbound::file_chooser::{Dialog, Mode, Selection};
+use xdg_desktop_portal_bande::dialog_process::{CANCELLED, CHOSEN, SET_WALLPAPER, encode, parse};
+use xdg_desktop_portal_bande::file_chooser::{Dialog, Mode, Selection};
 
-const APP_ID: &str = "org.unbound.FileChooser";
+const APP_ID: &str = "org.bande.FileChooser";
 const WINDOW_SIZE: (u32, u32) = (820, 520);
 const UNAVAILABLE: u8 = 2;
 const PREVIEW_SIZE: f64 = 36.0;
@@ -84,7 +84,7 @@ impl App for FileDialog {
 }
 
 fn memory_file() -> Option<PathBuf> {
-    unbound_xdg::state_home().map(|state| state.join("unbound/file-chooser-folders"))
+    bande_xdg::state_home().map(|state| state.join("bande/file-chooser-folders"))
 }
 
 fn read(path: Option<PathBuf>) -> Option<String> {
@@ -194,7 +194,7 @@ fn run(dialog: Dialog) -> ExitCode {
         TextSystem::new(),
     );
     let mut app = FileDialog { view, chosen: None };
-    if let Err(error) = unbound_toolkit::run(&mut window, &mut app) {
+    if let Err(error) = bande_toolkit::run(&mut window, &mut app) {
         tracing::error!("{error}");
     }
     match app.chosen {
@@ -219,7 +219,7 @@ fn confirm_wallpaper(picture: &Path, app_id: &str) -> ExitCode {
         .unwrap_or_default();
     let confirmed = Rc::new(Cell::new(false));
     let chosen = confirmed.clone();
-    let asked = unbound_toolkit::ask("wallpaper-confirmation", |window| {
+    let asked = bande_toolkit::ask("wallpaper-confirmation", |window| {
         let pixels = (PREVIEW_SIZE * window.scale().max(2.0)).ceil() as u32;
         let alert = Alert::new(
             &L10N.tr_args("wallpaper-title", [("picture", name.into())]),
@@ -228,7 +228,7 @@ fn confirm_wallpaper(picture: &Path, app_id: &str) -> ExitCode {
         )
         .cancel(&L10N.tr("button-cancel"), "cancel")
         .primary(&L10N.tr("button-set-wallpaper"), SET);
-        let preview = unbound_wallpaper::render(picture, Fit::Fill, pixels, pixels)
+        let preview = bande_wallpaper::render(picture, Fit::Fill, pixels, pixels)
             .ok()
             .and_then(|picture| Image::from_rgba(picture.width, picture.height, picture.rgba));
         match preview {
@@ -247,7 +247,7 @@ fn confirm_wallpaper(picture: &Path, app_id: &str) -> ExitCode {
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-file-chooser");
+    bande_log::init("bande-file-chooser");
     let arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
     if let [flag, picture, app_flag, app_id] = arguments.as_slice()
         && flag == SET_WALLPAPER

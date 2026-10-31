@@ -1,7 +1,7 @@
 use std::fmt;
 use std::io;
 
-use unbound_graphics::DrawError;
+use bande_graphics::DrawError;
 use wayland_client::backend::WaylandError;
 use wayland_client::{ConnectError, DispatchError};
 

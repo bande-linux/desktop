@@ -1,5 +1,5 @@
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
-use unbound_graphics::{
+use bande_graphics::{
     Color, ControlSize, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
 

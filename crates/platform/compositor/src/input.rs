@@ -1,5 +1,9 @@
 use std::io;
 
+use bande_graphics::Modifiers;
+use bande_protocols::server::bande_shell_v1::{
+    BrightnessKey, LauncherMode, MediaKey, Panel, VolumeKey,
+};
 use smithay::backend::input::{
     AbsolutePositionEvent, Axis, AxisSource, ButtonState, Event, GestureBeginEvent,
     GestureEndEvent, GesturePinchUpdateEvent, GestureSwipeUpdateEvent, InputBackend, InputEvent,
@@ -13,10 +17,6 @@ use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
 use smithay::wayland::keyboard_shortcuts_inhibit::{
     KeyboardShortcutsInhibitHandler, KeyboardShortcutsInhibitState, KeyboardShortcutsInhibitor,
     KeyboardShortcutsInhibitorSeat,
-};
-use unbound_graphics::Modifiers;
-use unbound_protocols::server::unbound_shell_v1::{
-    BrightnessKey, LauncherMode, MediaKey, Panel, VolumeKey,
 };
 
 use crate::frame::Target;
@@ -884,9 +884,9 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+    use bande_keyboard::{Action, SHORTCUTS};
+    use bande_protocols::server::bande_shell_v1::{LauncherMode, Panel};
     use smithay::input::keyboard::keysyms;
-    use unbound_keyboard::{Action, SHORTCUTS};
-    use unbound_protocols::server::unbound_shell_v1::{LauncherMode, Panel};
 
     use super::{Shortcut, shortcut, without_super};
     use crate::motion::DOCK_NAMESPACE;

@@ -98,9 +98,9 @@ mod tests {
 
     #[test]
     fn rust_log_directives_set_the_level_per_target() {
-        let filter = targets(Some("warn,unbound_dock=debug"));
+        let filter = targets(Some("warn,bande_dock=debug"));
         assert_eq!(filter.default_level(), Some(LevelFilter::WARN));
-        assert!(filter.would_enable("unbound_dock::view", &tracing::Level::DEBUG));
+        assert!(filter.would_enable("bande_dock::view", &tracing::Level::DEBUG));
         assert!(!filter.would_enable("zbus", &tracing::Level::INFO));
     }
 

@@ -2,13 +2,13 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::support::*;
-use smithay::utils::{Point, Size};
-use unbound_compositor::{
+use bande_compositor::{
     Compositor, KEYBOARD_MONITOR_NAME, Renderer, Snapshot, serve_keyboard_monitor,
 };
-use unbound_config::Accessibility;
-use unbound_test_bus::SessionBus;
-use unbound_test_wayland::roundtrip;
+use bande_config::Accessibility;
+use bande_test_bus::SessionBus;
+use bande_test_wayland::roundtrip;
+use smithay::utils::{Point, Size};
 use zbus::blocking::MessageIterator;
 use zbus::{MatchRule, message};
 

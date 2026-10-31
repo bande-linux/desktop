@@ -8,7 +8,7 @@ use resvg::{tiny_skia, usvg};
 use vello_cpu::{PixelMetadata, Pixmap};
 
 use crate::text::Paragraph;
-use unbound_design::{Color, Elevation, Scheme};
+use bande_design::{Color, Elevation, Scheme};
 
 const SYMBOLIC_INK: &str = "#201E1A";
 

@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
-use unbound_settings::SettingsView;
+use bande_settings::SettingsView;
 
 pub const SIZE: (u32, u32) = (900, 720);
 pub const WAIT: Duration = Duration::from_secs(5);

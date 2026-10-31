@@ -3,14 +3,14 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Sender};
 
-use unbound_wallpaper::{Fit, Picture, render};
+use bande_wallpaper::{Fit, Picture, render};
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
 use crate::failure::unexpected;
 use crate::follow::{Update, Updates, spawn};
 use crate::{L10N, SettingsClient};
-use unbound_settings_panes::{SettingId, Value as SettingValue};
+use bande_settings_panes::{SettingId, Value as SettingValue};
 
 pub const THUMBNAIL_SIZE: (u32, u32) = (288, 180);
 const PORTAL: &str = "org.freedesktop.portal.Desktop";
@@ -40,7 +40,7 @@ pub enum PictureCommand {
 pub fn bundled_pairs(data_dirs: &[PathBuf]) -> Vec<(String, Pair)> {
     let mut pairs: Vec<(String, Pair)> = Vec::new();
     for dir in data_dirs {
-        let folder = dir.join("unbound/wallpapers");
+        let folder = dir.join("bande/wallpapers");
         let Ok(entries) = std::fs::read_dir(&folder) else {
             continue;
         };
@@ -119,7 +119,7 @@ pub(crate) fn choose_file(
 ) -> zbus::Result<Option<PathBuf>> {
     static REQUESTS: AtomicU32 = AtomicU32::new(0);
     let token = format!(
-        "unbound_settings_{}_{}",
+        "bande_settings_{}_{}",
         std::process::id(),
         REQUESTS.fetch_add(1, Ordering::Relaxed)
     );
@@ -149,7 +149,7 @@ pub(crate) fn choose_file(
         .unwrap_or_default();
     Ok(uris
         .first()
-        .and_then(|uri| unbound_xdg::path_from_file_uri(uri)))
+        .and_then(|uri| bande_xdg::path_from_file_uri(uri)))
 }
 
 fn choose_picture(session: &Connection) -> zbus::Result<Option<PathBuf>> {

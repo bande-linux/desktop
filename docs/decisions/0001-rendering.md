@@ -5,7 +5,7 @@ toolkit and apps draw, and which performance numbers every change is held to.
 
 ## Context
 
-- Unbound targets Apple Silicon. The Asahi GPU stack ships Honeykrisp, a Vulkan 1.4
+- Bande targets Apple Silicon. The Asahi GPU stack ships Honeykrisp, a Vulkan 1.4
   conformant Mesa driver [5]. Until the agx kernel driver is usable in our images,
   everything renders on lavapipe (Mesa's CPU Vulkan) on the CI runners and in VMs.
 - The runners (Ubuntu 24.04, Mesa 25.2.8, probed on 2026-10-28) expose lavapipe with
@@ -19,7 +19,7 @@ toolkit and apps draw, and which performance numbers every change is held to.
 
 ## Decision 1: the compositor renders with its own Vulkan renderer on `ash`
 
-A new crate, `unbound-render`, owns a Vulkan 1.3 device through `ash` and is the only
+A new crate, `bande-render`, owns a Vulkan 1.3 device through `ash` and is the only
 renderer in the compositor. Smithay stays the kernel and protocol layer.
 
 | Need | `wgpu` | Smithay GLES renderer | Own Vulkan (`ash`) |
@@ -34,7 +34,7 @@ Smithay ships GLES, pixman and multi-GPU renderers but no Vulkan renderer [6], a
 `wgpu` would hide exactly the parts that decide latency: when a buffer is read, which
 fence is waited on, and whether a frame is repainted at all.
 
-Design rules for `unbound-render`:
+Design rules for `bande-render`:
 1. **Persistent textures.** A surface's texture lives as long as the surface; a commit
    uploads only the buffer's damaged rows (`wl_shm`) or rebinds an imported image (dmabuf).
 2. **Damage-limited repaint.** Each frame repaints only the union of damaged output
@@ -59,7 +59,7 @@ case where they are not.
 
 ## Decision 2: the toolkit draws with Vello and lays out text with Parley
 
-`unbound-toolkit` replaces its rectangle-and-atlas renderer with Linebender's Vello
+`bande-toolkit` replaces its rectangle-and-atlas renderer with Linebender's Vello
 sparse-strips renderers and Parley.
 
 - **Vello** [7]: `vello_cpu` (multithreaded, SIMD, currently the most mature) and
@@ -93,7 +93,7 @@ Targets on hardware (Apple Silicon, 120 Hz ProMotion panel, refresh interval 8.3
 | Memory | compositor ≤ 64 MB RSS with 8 windows; toolkit app ≤ 30 MB RSS |
 
 CI cannot measure photons or a real GPU, so `ci/perf` measures on lavapipe with
-`unbound-bench` on every push to `main` (and on a branch commit whose message contains
+`bande-bench` on every push to `main` (and on a branch commit whose message contains
 `[perf]`) and splits metrics into two kinds:
 
 - **Exact metrics**, independent of machine load, compared exactly: pixels repainted per
@@ -119,14 +119,14 @@ CI cannot measure photons or a real GPU, so `ci/perf` measures on lavapipe with
   LLVM JIT included). Each run writes `perf.json` as an artifact and a table to the job
   summary so trends are visible per commit. The exact metrics also count pixels shaded,
   which an opaque window above a damaged area keeps to that area.
-- **Toolkit sample** (`crates/testing/sample`, measured by `unbound-toolkit-bench` in the
+- **Toolkit sample** (`crates/testing/sample`, measured by `bande-toolkit-bench` in the
   same job): exec to first committed frame, median of five starts against the 100 ms target
   (reported); resident memory when the first frame is mapped and after the GPU path is up,
   against the 30 MB target (reported, since lavapipe's LLVM alone adds about 100 MiB); the
-  same app kept on the CPU path with `UNBOUND_RENDERER=cpu`, which is the toolkit's own
+  same app kept on the CPU path with `BANDE_RENDERER=cpu`, which is the toolkit's own
   memory (gated at 30 MiB); and the sample scene's frame time on `vello_cpu` and on
   `vello_gpu` including readback (reported).
-- **Idle wakeups** (`unbound-idle`, same job, gated): a whole session runs headless on a
+- **Idle wakeups** (`bande-idle`, same job, gated): a whole session runs headless on a
   private session bus (the compositor in-process, the shell, the clipboard and screenshot
   daemons, every session service, and Files, Settings, Terminal and Activity Monitor) and
   sits untouched for 60 s three times: windows open, windows minimised, screen locked. Each

@@ -16,7 +16,7 @@ publish.
 ## What the owner sees
 
 - "Only starts on tags but still has not run successfully": it has never started. No tags or
-  releases exist in `unbound-linux/desktop` (`gh api repos/unbound-linux/desktop/tags` is empty).
+  releases exist in `bande-linux/desktop` (`gh api repos/bande-linux/desktop/tags` is empty).
   Since `81a5e22e` (2026-10-31 07:18) only stale branches still run CI: a push to a branch with
   the old `ci.yml` still triggers it, for example run 41186754177 on `wip/userland-efficiency` at
   08:58.
@@ -24,7 +24,7 @@ publish.
   failure, 380 cancelled. After the fat-LTO `dist` profile landed (2026-10-30 08:12) there were
   185 runs: 2 success, 24 failure, 159 cancelled. Both successes were lint-only branch runs.
   `ci/vm` has not passed since then.
-- `https://unbound-linux.github.io/apt/dists/trixie/InRelease` returns 404. The apt `publish`
+- `https://bande-linux.github.io/apt/dists/trixie/InRelease` returns 404. The apt `publish`
   workflow has never run; the apt repo shows only two `check` runs, from 2026-10-29.
 
 ## Findings
@@ -46,13 +46,13 @@ publish.
    8-CPU VM (STATUS.md: "more ran the 12 GB Docker VMs out of memory"). lint, the test build, the
    dist build and the KVM guest all run in it at the same time.
    - Run 41132776728 `ci/deb`, 03:28:30: `sccache: Compile terminated by signal 9` while
-     compiling `unbound-settings` with `-C lto=fat -C codegen-units=1`, `CARGO_BUILD_JOBS: 2`.
+     compiling `bande-settings` with `-C lto=fat -C codegen-units=1`, `CARGO_BUILD_JOBS: 2`.
    - Run 41127744241 `ci/vm`: `collect2: fatal error: ld terminated with signal 9 [Killed]`.
-   - Run 41106135202 `ci/lavapipe-test`: the same `ld` kill on `unbound-desktop-surface`.
+   - Run 41106135202 `ci/lavapipe-test`: the same `ld` kill on `bande-desktop-surface`.
    - `main` now builds the dist binaries with one job (`CARGO_BUILD_JOBS: '1'`), but the other
      jobs still share the VM.
-2. **Queueing.** Since Oct 30 only `unbound-runner-1`, `unbound-runner-2` and
-   `unbound-runner-kvm` took jobs (the laptop was off), and every branch push started a full
+2. **Queueing.** Since Oct 30 only `bande-runner-1`, `bande-runner-2` and
+   `bande-runner-kvm` took jobs (the laptop was off), and every branch push started a full
    run. Run 41132776728 (dispatch on `desktop/ci-green`) was created 21:40 and ended 05:40,
    8 h in all. Its jobs started this late:
 
@@ -78,7 +78,7 @@ publish.
 4. **`main` is red at lint.** In runs 41175256578 and 41186754177, the job
    `Keep services off the widget crates...` prints
    `crates/services/polkit/Cargo.toml must not depend on the crates above`. Cause: `a38b0dfc`
-   gave the polkit agent a toolkit dialog (`unbound-toolkit.workspace = true`). A tag pushed
+   gave the polkit agent a toolkit dialog (`bande-toolkit.workspace = true`). A tag pushed
    today fails on this first.
 5. **No amd64 at all.**
    - There are no x86 runners; every runner is arm64 in a Mac.
@@ -99,8 +99,8 @@ publish.
      refuses it with "already in ... with different contents", so a retry needs the original
      artifacts.
 7. **Images consume a dead artifact.** `images/.github/workflows/build.yml` downloads an
-   artifact named `unbound-debs` from the pinned run 40739365836 (Oct 28). The artifact is now
-   called `unbound-debs-arm64`, and the run's artifacts expire after 90 days.
+   artifact named `bande-debs` from the pinned run 40739365836 (Oct 28). The artifact is now
+   called `bande-debs-arm64`, and the run's artifacts expire after 90 days.
 8. **Stale docs.** `docs/architecture/ci.md` still says jobs run on Ubuntu 24.04 and that
    `ci/perf` runs on `main`. The runner image is `debian:trixie` (runners/README.md).
 
@@ -158,8 +158,8 @@ Option B (or C if the owner makes `desktop` public), with this shape.
 - **testing** (`trixie-testing`) is fed by `gh workflow run release.yml --ref main`, with
   version `X.Y.Z+gitDATE.N.sha`, the same formula as local builds.
 - An optional nightly schedule on `main` (only when `main` moved) is an owner decision.
-- Software Update follows whichever `unbound-apt-source(-testing)` package is installed. The
-  mini can install `unbound-apt-source-testing` and stop relying on hand-built `0.0.0+git`
+- Software Update follows whichever `bande-apt-source(-testing)` package is installed. The
+  mini can install `bande-apt-source-testing` and stop relying on hand-built `0.0.0+git`
   debs.
 
 **`desktop/.github/workflows/release.yml`**, triggered by `push: tags: ['v[0-9]+.[0-9]+.[0-9]+']`
@@ -170,8 +170,8 @@ and `workflow_dispatch`:
 | `lint` | `ubuntu-24.04-arm`, `container: debian:trixie` | fmt, clippy `-D warnings`, the dependency rules |
 | `test` | `ubuntu-24.04-arm`, trixie container | `cargo test --workspace --locked` on lavapipe (`mesa-vulkan-drivers`), Debian 13 fonts from apt (the goldens are arm64/Debian 13), each test on its hermetic `crates/testing/test-bus` session bus (needs `dbus-daemon`) |
 | `debs` | matrix `{arm64: ubuntu-24.04-arm, amd64: ubuntu-24.04}` | see below |
-| `deb-all` | any | builds `unbound-desktop` (all), keyring and source packages; lintian |
-| `install` | matrix, native arch | `docker run debian:trixie` installs `unbound-desktop` from the debs alone (`ci/deb/install-test`), plus the portal check |
+| `deb-all` | any | builds `bande-desktop` (all), keyring and source packages; lintian |
+| `install` | matrix, native arch | `docker run debian:trixie` installs `bande-desktop` from the debs alone (`ci/deb/install-test`), plus the portal check |
 | `release` | tags only | creates GitHub release `vX.Y.Z` with all debs and `SHA256SUMS`: durable, the same bytes on retry |
 | `publish` | | dispatches `apt/publish.yml` with `run_id` and the tag (or empty for testing from `main`) |
 
@@ -186,7 +186,7 @@ and `workflow_dispatch`:
   - `ci/release/check-debs.sh`: architecture equals `dpkg --print-architecture`, the version,
     the D-Bus, unit and portal checks from today's `ci/deb`, and the headless compositor smoke
     test on lavapipe.
-- Uploads `unbound-debs-<arch>`.
+- Uploads `bande-debs-<arch>`.
 
 **Caching:** `Swatinem/rust-cache` keyed per arch and job, saved only from `main` (`save-if`),
 since tags can't share caches. Watch the 10 GB repository limit. No sccache on hosted runners.
@@ -194,7 +194,7 @@ since tags can't share caches. Watch the 10 GB repository limit. No sccache on h
 **Versioning:**
 - `ci/deb/version.sh` stays. A tag must equal the `[workspace.package] version`, so a release
   means bump, commit, tag.
-- The release job writes a `debian/changelog` stanza for `unbound-desktop` from the tag with
+- The release job writes a `debian/changelog` stanza for `bande-desktop` from the tag with
   `dch`, instead of `DEB_VERSION_OVERRIDE` alone.
 
 **APT repository:**
@@ -210,10 +210,10 @@ since tags can't share caches. Watch the 10 GB repository limit. No sccache on h
   `container: debian:trixie` (apt is public, so these runners are free and 4 vCPU):
   - follow the site's install steps for the channel just published, retrying while Pages
     propagates;
-  - `apt-get install unbound-desktop`;
-  - assert `dpkg-query -W -f '${Architecture}' unbound-compositor` equals
+  - `apt-get install bande-desktop`;
+  - assert `dpkg-query -W -f '${Architecture}' bande-compositor` equals
     `dpkg --print-architecture`, and that the version equals the published version;
-  - run `unbound-compositor --headless` on lavapipe.
+  - run `bande-compositor --headless` on lavapipe.
 
 ## Implementation plan
 
@@ -224,9 +224,9 @@ first tag (M-final).
 ### desktop
 
 **D1. Make `main` release-clean.**
-- Fix the lint rule failure: exempt `unbound-polkit` as an agent with UI, or move it under
+- Fix the lint rule failure: exempt `bande-polkit` as an agent with UI, or move it under
   `crates/shell/`. This is an owner decision; default to exempting it.
-- Add `unbound-polkit` to `unbound-desktop` Recommends. It is packaged but nothing pulls it in.
+- Add `bande-polkit` to `bande-desktop` Recommends. It is packaged but nothing pulls it in.
 - Measure peak RSS of `cargo build --profile dist -j1` per binary on the mini with
   `/usr/bin/time -v` and record it in `docs/architecture/ci.md`. If any binary exceeds about
   6 GB, propose `lto = "thin"` for `dist`.
@@ -241,7 +241,7 @@ first tag (M-final).
 **D3. Add `release.yml` (lint, test, debs matrix, deb-all, install matrix).**
 - No publish yet. `actionlint` locally.
 - Verify (CI): `gh workflow run release.yml --ref ci/release`. Both
-  `unbound-debs-{arm64,amd64}` artifacts are produced with matching `Architecture` fields, and
+  `bande-debs-{arm64,amd64}` artifacts are produced with matching `Architecture` fields, and
   both install jobs are green. Record each job's wall time and the host's `df` and peak memory.
 
 **D4. The `release` and `publish` jobs.**
@@ -254,7 +254,7 @@ first tag (M-final).
 
 **D5. Retire `ci.yml`.**
 - Move `vm`, `polkit` and `perf` into `extended.yml` (`workflow_dispatch` only,
-  `[self-hosted, unbound]` and `[self-hosted, unbound-kvm]`, not gating).
+  `[self-hosted, bande]` and `[self-hosted, bande-kvm]`, not gating).
 - Delete `ci.yml` and rewrite `docs/architecture/ci.md` (hosted runners, channels, release
   steps).
 - Delete or merge `main` into stale branches that still carry the old `ci.yml`, so pushes stop
@@ -278,7 +278,7 @@ first tag (M-final).
   - stable needs a run on the tag itself;
   - testing needs a `workflow_dispatch` on `main`.
 - Drop the main-to-release promote path.
-- Require `unbound-debs-arm64`, `unbound-debs-amd64` and `unbound-debs-all`. The publisher
+- Require `bande-debs-arm64`, `bande-debs-amd64` and `bande-debs-all`. The publisher
   job name becomes `publish`.
 - Verify: `tests/fetch-run-test.sh` updated and green on the mini.
 
@@ -293,9 +293,9 @@ first tag (M-final).
 ### images
 
 **I1. Take desktop packages from the archive.**
-- `build.yml` installs `unbound-desktop` from the apt stable channel (or downloads the desktop
-  release assets of a given tag) instead of the `unbound-debs` artifact of run 40739365836.
-- Verify: on the owner's go-ahead, a dispatch on the `unbound-kvm` runner (it boots a guest),
+- `build.yml` installs `bande-desktop` from the apt stable channel (or downloads the desktop
+  release assets of a given tag) instead of the `bande-debs` artifact of run 40739365836.
+- Verify: on the owner's go-ahead, a dispatch on the `bande-kvm` runner (it boots a guest),
   or a local `build.sh` dry run on the mini.
 
 ### runners
@@ -310,7 +310,7 @@ first tag (M-final).
 
 - The owner approves the tag (Cargo.toml already says 0.1.0) and the stable approval.
 - Verify: the `release.yml` tag run is green; `apt/publish` deploys `trixie` with both
-  architectures and `verify` is green; then `apt install unbound-desktop` on the mini from
+  architectures and `verify` is green; then `apt install bande-desktop` on the mini from
   stable, with Software Update following it.
 
 ## Risks
@@ -334,14 +334,14 @@ first tag (M-final).
 
 ## Decisions for the owner
 
-1. Make `unbound-linux/desktop` public (4 vCPU, 16 GB, free minutes), or keep it private and
+1. Make `bande-linux/desktop` public (4 vCPU, 16 GB, free minutes), or keep it private and
    use 2-vCPU hosted runners with paid minutes beyond 2000 per month?
 2. Release gate: lint, lavapipe tests, packages and install tests, with the KVM guest, perf
    and polkit moved to a non-gating dispatch workflow. Agree?
 3. Testing channel: manual `main` dispatch only, or also nightly when `main` changed?
 4. `dist` profile: keep fat LTO if it fits in memory, or switch to thin LTO for reliable builds
    on 8 GB runners?
-5. `unbound-polkit` and the lint rule: exempt it as an agent with UI, or move the crate under
+5. `bande-polkit` and the lint rule: exempt it as an agent with UI, or move the crate under
    `crates/shell/`?
 6. Keep the reviewer approval for every stable publish?
 

@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
+use bande_widgets::FrameTime;
 use rustix::time::{ClockId, clock_gettime};
-use unbound_widgets::FrameTime;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle};
 use wayland_protocols::wp::presentation_time::client::wp_presentation::{self, WpPresentation};

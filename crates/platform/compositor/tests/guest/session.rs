@@ -2,12 +2,12 @@
 
 use std::time::{Duration, Instant};
 
+use bande_compositor::{Compositor, DrmBackend, DrmNotifiers, FrameOutput, Submission};
+use bande_test_wayland::TestClient;
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
 use smithay::backend::session::libseat::LibSeatSessionNotifier;
 use smithay::reexports::calloop::EventLoop;
 use smithay::reexports::drm::control::crtc;
-use unbound_compositor::{Compositor, DrmBackend, DrmNotifiers, FrameOutput, Submission};
-use unbound_test_wayland::TestClient;
 
 use crate::card::{Card, Scanout, card_path};
 
@@ -29,7 +29,7 @@ pub struct Session {
 
 impl Session {
     pub fn open() -> Self {
-        Self::on(&std::env::var("UNBOUND_TEST_DRIVER").unwrap_or_else(|_| "vkms".to_owned()))
+        Self::on(&std::env::var("BANDE_TEST_DRIVER").unwrap_or_else(|_| "vkms".to_owned()))
     }
 
     pub fn on(driver: &str) -> Self {

@@ -7,21 +7,21 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use unbound_bar::dock::{DockAction, DockApp, DockState, MenuTarget, Shared, dock_ui, scene};
-use unbound_bar::menu_bar::{Slot, StatusView};
-use unbound_bar::menus::{AppMenus, bluetooth_menu, cascade, wifi_menu};
-use unbound_bar::rail::{RailView, bar_width, surface_size};
-use unbound_config::BarEdge;
-use unbound_datetime::{DateFormats, posix_locale};
-use unbound_dock_model::LauncherUpdate;
-use unbound_status::dbusmenu::Node;
-use unbound_status::status::{
+use bande_bar::dock::{DockAction, DockApp, DockState, MenuTarget, Shared, dock_ui, scene};
+use bande_bar::menu_bar::{Slot, StatusView};
+use bande_bar::menus::{AppMenus, bluetooth_menu, cascade, wifi_menu};
+use bande_bar::rail::{RailView, bar_width, surface_size};
+use bande_config::BarEdge;
+use bande_datetime::{DateFormats, posix_locale};
+use bande_dock_model::LauncherUpdate;
+use bande_status::dbusmenu::Node;
+use bande_status::status::{
     Battery, Bluetooth, Capture, Gadget, InputSource, InputSources, Power, Sense, Sound, Wifi,
 };
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     Event, Key, MenuOutcome, MenuPanel, MenuTracker, Modifiers, Pointer, PointerButton, Ui,
 };
-use unbound_toolkit::{
+use bande_toolkit::{
     Appearance, Color, CpuRenderer, Elevation, Image, Item, MenuPlacement, Palette, Point, Rect,
     Scene, Scheme, Shape, TextSystem,
 };
@@ -38,7 +38,7 @@ fn data() -> PathBuf {
 fn app_icon(name: &str, scale: f64) -> Option<Image> {
     let pixels = (f64::from(ICON) * scale).round() as u32;
     Image::load(
-        &data().join(format!("icons/Unbound/scalable/apps/{name}.svg")),
+        &data().join(format!("icons/Bande/scalable/apps/{name}.svg")),
         pixels,
     )
 }
@@ -55,9 +55,9 @@ fn app(app_id: &str, name: &str, kept: bool, running: bool, scale: f64) -> DockA
 
 fn apps(scale: f64) -> Vec<DockApp> {
     vec![
-        app("org.unbound.Files", "Files", true, true, scale),
-        app("org.unbound.Terminal", "Terminal", true, true, scale),
-        app("org.unbound.Settings", "Settings", true, false, scale),
+        app("org.bande.Files", "Files", true, true, scale),
+        app("org.bande.Terminal", "Terminal", true, true, scale),
+        app("org.bande.Settings", "Settings", true, false, scale),
         app("org.gnome.TextEditor", "Text Editor", false, true, scale),
     ]
 }
@@ -149,7 +149,7 @@ impl Rail {
         view.set_unread(true);
         view.set_app("Files");
         view.set_app_icon(Image::load(
-            &data().join("icons/Unbound/scalable/apps/org.unbound.Files.svg"),
+            &data().join("icons/Bande/scalable/apps/org.bande.Files.svg"),
             (24.0 * scale).round() as u32,
         ));
         view.set_workspaces(3, 0);
@@ -164,13 +164,13 @@ impl Rail {
         });
         state.borrow_mut().set_rail(view.apps_region(height as f32));
         let pixels = (f64::from(ICON) * scale).round() as u32;
-        let trash = data().join("icons/Unbound/scalable/places/user-trash.svg");
+        let trash = data().join("icons/Bande/scalable/places/user-trash.svg");
         state
             .borrow_mut()
             .set_trash_icons(Image::load(&trash, pixels), None);
         let clock = Rc::new(Cell::new(Instant::now()));
         state.borrow_mut().set_apps(apps, clock.get());
-        state.borrow_mut().activated("org.unbound.Files");
+        state.borrow_mut().activated("org.bande.Files");
         let mut ui = dock_ui(state.clone(), palette, TextSystem::new());
         let time = clock.clone();
         ui.set_clock(move || time.get());
@@ -218,7 +218,7 @@ fn the_combined_bar_matches_its_goldens_in_light_and_dark_and_at_one_and_a_half(
     ] {
         let mut rail = Rail::at_scale(scheme, HEIGHT, apps(scale), scale);
         rail.state.borrow_mut().update_launcher(
-            "org.unbound.Terminal",
+            "org.bande.Terminal",
             LauncherUpdate {
                 count: Some(3),
                 count_visible: Some(true),
@@ -453,7 +453,7 @@ fn the_expanded_bar_matches_its_golden() {
         .borrow_mut()
         .set_rail(rail.view.apps_region(HEIGHT as f32));
     rail.state.borrow_mut().update_launcher(
-        "org.unbound.Terminal",
+        "org.bande.Terminal",
         LauncherUpdate {
             count: Some(3),
             count_visible: Some(true),
@@ -553,7 +553,7 @@ fn open_cascade(query: &str) -> (Vec<u8>, (u32, u32)) {
     let menu = cascade(&AppMenus {
         name: "Files",
         root: Some(&root),
-        item: ":1.7/org/unbound/MenuBar",
+        item: ":1.7/org/bande/MenuBar",
         actions: &[],
         windows: &[],
     });
@@ -578,7 +578,7 @@ fn open_cascade(query: &str) -> (Vec<u8>, (u32, u32)) {
     let bar = rail.view.scene(size.0, size.1, 1.0);
     let outline = Shape::rounded(
         Rect::new(0.0, 0.0, panel.size().width, panel.size().height),
-        unbound_toolkit::ui::MENU_RADIUS,
+        bande_toolkit::ui::MENU_RADIUS,
     );
     let mut menu = Item::shadows(outline, Elevation::Overlay, scheme, true).to_vec();
     menu.extend(panel.paint(&palette, true));
@@ -647,7 +647,7 @@ fn the_bluetooth_and_wifi_menus_show_batteries_forget_and_sign_in() {
         let panel = MenuPanel::new(menu, &mut text, &palette);
         let outline = Shape::rounded(
             Rect::new(0.0, 0.0, panel.size().width, panel.size().height),
-            unbound_toolkit::ui::MENU_RADIUS,
+            bande_toolkit::ui::MENU_RADIUS,
         );
         let mut drawn = Item::shadows(outline, Elevation::Overlay, scheme, true).to_vec();
         drawn.extend(panel.paint(&palette, false));

@@ -4,11 +4,11 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use unbound_notify::client::NotificationCenter;
-use unbound_notify::{NotificationServer, Presentation};
-use unbound_status::captive::follow_captive_portal;
-use unbound_test_bus::SessionBus;
-use unbound_test_bus::networkmanager::{CHECK_URI, CONNECTIVITY_PORTAL, FakeNetworkManager};
+use bande_notify::client::NotificationCenter;
+use bande_notify::{NotificationServer, Presentation};
+use bande_status::captive::follow_captive_portal;
+use bande_test_bus::SessionBus;
+use bande_test_bus::networkmanager::{CHECK_URI, CONNECTIVITY_PORTAL, FakeNetworkManager};
 
 const PROMPTLY: Duration = Duration::from_secs(3);
 const CONNECTIVITY_FULL: u32 = 4;

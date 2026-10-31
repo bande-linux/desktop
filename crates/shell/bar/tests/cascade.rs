@@ -1,9 +1,9 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
-use unbound_bar::menus::{AppMenus, cascade};
-use unbound_status::Command;
-use unbound_status::dbusmenu::Node;
-use unbound_toolkit::ui::Menu;
+use bande_bar::menus::{AppMenus, cascade};
+use bande_status::Command;
+use bande_status::dbusmenu::Node;
+use bande_toolkit::ui::Menu;
 
 fn node(id: i32, label: &str, children: Vec<Node>) -> Node {
     Node {
@@ -38,7 +38,7 @@ fn an_exporting_app_gets_its_bold_app_row_then_each_menu_as_a_row_and_type_to_se
     let menu = cascade(&AppMenus {
         name: "Files",
         root: Some(&root),
-        item: ":1.7/org/unbound/MenuBar",
+        item: ":1.7/org/bande/MenuBar",
         actions: &[],
         windows: &[],
     });
@@ -52,7 +52,7 @@ fn an_exporting_app_gets_its_bold_app_row_then_each_menu_as_a_row_and_type_to_se
     assert_eq!(
         Command::parse(&copy.action),
         Some(Command::Item {
-            item: ":1.7/org/unbound/MenuBar".to_owned(),
+            item: ":1.7/org/bande/MenuBar".to_owned(),
             id: 30
         })
     );

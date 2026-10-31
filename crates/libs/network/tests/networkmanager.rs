@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use unbound_network::{Error, JoinOutcome, NetworkManager, Security, Wired};
-use unbound_test_bus::SessionBus;
-use unbound_test_bus::networkmanager::{CHECK_URI, CONNECTIVITY_PORTAL, FakeNetworkManager};
+use bande_network::{Error, JoinOutcome, NetworkManager, Security, Wired};
+use bande_test_bus::SessionBus;
+use bande_test_bus::networkmanager::{CHECK_URI, CONNECTIVITY_PORTAL, FakeNetworkManager};
 
 struct Fixture {
     fake: FakeNetworkManager,
@@ -22,7 +22,7 @@ fn start() -> Fixture {
 }
 
 impl Fixture {
-    fn network(&self, name: &str) -> unbound_network::Network {
+    fn network(&self, name: &str) -> bande_network::Network {
         self.client
             .networks()
             .expect("networks")

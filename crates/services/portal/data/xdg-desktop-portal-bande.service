@@ -1,0 +1,10 @@
+[Unit]
+Description=Portal service (Bande implementation)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Slice=session.slice
+Type=dbus
+BusName=org.freedesktop.impl.portal.desktop.bande
+ExecStart=/usr/libexec/xdg-desktop-portal-bande

@@ -1,11 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use unbound_fs::Recency;
-use unbound_search::{FUZZY, FileIndex};
-use unbound_toolkit::ui::{
-    BUTTON_HEIGHT, PopUpButton, SEGMENTED_HEIGHT, SegmentedControl, WidgetId,
-};
-use unbound_toolkit::{Item, Point, Rect, TextAlign, TextStyle};
+use bande_fs::Recency;
+use bande_search::{FUZZY, FileIndex};
+use bande_toolkit::ui::{BUTTON_HEIGHT, PopUpButton, SEGMENTED_HEIGHT, SegmentedControl, WidgetId};
+use bande_toolkit::{Item, Point, Rect, TextAlign, TextStyle};
 
 use crate::L10N;
 use crate::browser::Location;

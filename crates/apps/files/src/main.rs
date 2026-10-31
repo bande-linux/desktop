@@ -6,26 +6,26 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use unbound_app_menu::{AppMenu, Standard};
-use unbound_files::{
+use bande_app_menu::{AppMenu, Standard};
+use bande_files::{
     BookmarkEdit, Browser, FilesView, Location, Request, Row, SIDEBAR_WIDTH, SidebarEdit,
     TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file, rows, sidebar_file,
     status_bar_file, views_file, with_bookmarks, without_bookmark,
 };
-use unbound_fs::Trash;
-use unbound_search::{recently_used_path, usage_path};
-use unbound_thumbnails::Thumbnails;
-use unbound_toolkit::{
+use bande_fs::Trash;
+use bande_search::{recently_used_path, usage_path};
+use bande_thumbnails::Thumbnails;
+use bande_toolkit::{
     App, Appearance, DragAction, DragEvent, FrameRegions, Header, MenuPlacement, Rect, Role, Scene,
     TextSystem, Transfer, Window, WindowEvent,
 };
-use unbound_volumes::{eject, media_roots};
-use unbound_xdg::{
+use bande_volumes::{eject, media_roots};
+use bande_xdg::{
     Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
     path_from_file_uri, spawn_detached, state_home, user_dir,
 };
 
-const APP_ID: &str = "org.unbound.Files";
+const APP_ID: &str = "org.bande.Files";
 const WINDOW_SIZE: (u32, u32) = (1040, 620);
 
 struct Files {
@@ -333,7 +333,7 @@ impl App for Files {
 }
 
 const INFO_FLAG: &str = "--info";
-const TERMINAL_APP_ID: &str = "org.unbound.Terminal";
+const TERMINAL_APP_ID: &str = "org.bande.Terminal";
 const TERMINAL_DIRECTORY: &str = "--working-directory";
 const TRASH_URI: &str = "trash:///";
 const RECENTS_URI: &str = "recent:///";
@@ -349,7 +349,7 @@ fn play_sound(name: &'static str) {
     let played = std::thread::Builder::new()
         .name("sound".to_owned())
         .spawn(move || match zbus::blocking::Connection::session() {
-            Ok(session) => unbound_sound::play(&session, name),
+            Ok(session) => bande_sound::play(&session, name),
             Err(error) => tracing::debug!("cannot play {name}: {error}"),
         });
     if let Err(error) = played {
@@ -465,12 +465,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         home,
         app_menu,
     };
-    unbound_toolkit::run(&mut window, &mut files)?;
+    bande_toolkit::run(&mut window, &mut files)?;
     Ok(())
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-files");
+    bande_log::init("bande-files");
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

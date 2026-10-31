@@ -50,7 +50,7 @@ specs = [
     ('Body strong 13/18 · Inter Semibold', 'Copy finished', 13, 600, UI),
     ('Callout 12/16 · Inter Regular', '8 items · 110.4 GB free · 14:32', 12, 400, UI),
     ('Label 10.5/14 · Inter Semibold caps +0.07em', 'PLACES · NAME · MODIFIED', 10.5, 600, UI),
-    ('Mono 13/18 · JetBrains Mono', 'mikael@unbound:~$ cargo test -p toolkit', 13, 400, MONO),
+    ('Mono 13/18 · JetBrains Mono', 'mikael@bande:~$ cargo test -p toolkit', 13, 400, MONO),
 ]
 yy = y + 22
 for meta, sample, size, wgt, fam in specs:

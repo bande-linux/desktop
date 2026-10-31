@@ -3,12 +3,12 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
-use unbound_file_chooser::{Chooser, ChooserView, Finished, Icons};
-use unbound_files::rows;
-use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Appearance, CpuRenderer, TextSystem};
-use unbound_xdg::MimeDatabase;
-use xdg_desktop_portal_unbound::file_chooser::{Dialog, Filter, Mode, Pattern};
+use bande_file_chooser::{Chooser, ChooserView, Finished, Icons};
+use bande_files::rows;
+use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::{Appearance, CpuRenderer, TextSystem};
+use bande_xdg::MimeDatabase;
+use xdg_desktop_portal_bande::file_chooser::{Dialog, Filter, Mode, Pattern};
 
 const SIZE: (u32, u32) = (820, 520);
 
@@ -101,7 +101,7 @@ fn the_open_and_save_dialogs_match_their_goldens() {
             directory: false,
         },
     );
-    unbound_golden::assert_golden_rgba!("open", SIZE, render(&mut open));
+    bande_golden::assert_golden_rgba!("open", SIZE, render(&mut open));
     let mut save = view(
         &home.home,
         Mode::Save {
@@ -109,7 +109,7 @@ fn the_open_and_save_dialogs_match_their_goldens() {
             file: None,
         },
     );
-    unbound_golden::assert_golden_rgba!("save", SIZE, render(&mut save));
+    bande_golden::assert_golden_rgba!("save", SIZE, render(&mut save));
 }
 
 #[test]
@@ -191,7 +191,7 @@ fn typing_a_path_goes_to_its_folder_and_selects_a_file_there() {
         render(&mut view);
         std::thread::sleep(Duration::from_millis(16));
     }
-    unbound_golden::assert_golden_rgba!("go-to", SIZE, render(&mut view));
+    bande_golden::assert_golden_rgba!("go-to", SIZE, render(&mut view));
     key(&mut view, Key::Backspace);
     type_text(&mut view, "~/Documents/Letter.txt");
     key(&mut view, Key::Enter);

@@ -1,9 +1,9 @@
 use std::time::Duration;
 
+use bande_config::{ClockTime, NightLight as Settings, NightSchedule};
+use bande_datetime::daylight::{Place, Sky, sky, system_place, within_daily};
 use jiff::civil::Time;
 use jiff::{Timestamp, Zoned};
-use unbound_config::{ClockTime, NightLight as Settings, NightSchedule};
-use unbound_datetime::daylight::{Place, Sky, sky, system_place, within_daily};
 
 use crate::state::Compositor;
 
@@ -235,7 +235,7 @@ impl Compositor {
     pub fn night_light_tick(&mut self, now: Duration) -> NightTick {
         self.state
             .night_light
-            .advance(now, || (unbound_datetime::now(), system_place()))
+            .advance(now, || (bande_datetime::now(), system_place()))
     }
 }
 
@@ -243,9 +243,9 @@ impl Compositor {
 mod tests {
     use std::time::Duration;
 
+    use bande_config::{ClockTime, NightLight as Settings, NightSchedule};
+    use bande_datetime::daylight::Place;
     use jiff::Zoned;
-    use unbound_config::{ClockTime, NightLight as Settings, NightSchedule};
-    use unbound_datetime::daylight::Place;
 
     use super::{NEUTRAL, NightLight, NightTick, matrix, ramp, scheduled_night, temperature};
 

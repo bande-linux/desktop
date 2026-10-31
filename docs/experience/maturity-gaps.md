@@ -1,7 +1,7 @@
-# Maturity gaps: Unbound against a mature desktop
+# Maturity gaps: Bande against a mature desktop
 
 Audit of 2026-10-30. The question: what would a picky user who has lived with macOS 15,
-Windows 11, GNOME 48 and Plasma 6 expect from Unbound that it lacks or does poorly? Nothing was
+Windows 11, GNOME 48 and Plasma 6 expect from Bande that it lacks or does poorly? Nothing was
 built or run. The method:
 
 - Read the docs: `architecture/behaviour.md`, `architecture/session.md`,
@@ -18,7 +18,7 @@ what has happened since: **Done** with the commit where it landed, **Partly** wi
 left, **Open**, or **Owner decision** for items that wait on the owner. Rows without a commit
 landed on the `day/maturity-next` branch.
 
-**Where Unbound already meets the bar.** These need no more than polish:
+**Where Bande already meets the bar.** These need no more than polish:
 
 - the app switcher and same-app window cycling;
 - the overview and App Exposé;
@@ -80,7 +80,7 @@ Rows that touch these areas say "(→ that work)" and name only what lies outsid
 | :--- | :--- | :---: | :---: | :--- | :--- |
 | Log Out, Restart and Shut Down end the session without asking apps to quit. `end_session` (`libs/status/src/devices.rs`) calls logind's `Reboot`, `PowerOff` or `Terminate` at once, so every app gets SIGTERM | Unsaved work is lost without a save prompt: a Text Editor document, a Firefox form, a LibreOffice file. macOS asks every app to quit, and an app with unsaved changes cancels the logout. GNOME and Windows list the apps that hold it up | blocker | M | `shell/shell`, `platform/compositor`, `libs/status` | Done (`b8088c9`) |
 | No polkit authentication agent runs, and no polkit rules let administrators skip the prompt. `services/polkit` is a library only ("until then no agent binary is packaged", `session.md`) | Settings calls timedated, localed, hostnamed and PackageKit with `interactive=true` (`apps/settings/src/time.rs`, `locale.rs`, `about.rs`, `software.rs`). Without an agent or rules, each of these calls that needs `auth_admin` fails, and so do NetworkManager system connections, mounting internal disks and system-wide Flatpak installs | blocker | S (rules) + M (agent) | packaging of `apps/settings`, `services/polkit` | Done: agent (`a38b0df`) and rules for administrators (`3cc1848`) |
-| Nothing reopens at login after a restart | macOS reopens apps and windows ("Reopen windows when logging back in", on by default), and Plasma restores the session. Unbound already remembers window frames (`platform/compositor/src/recall.rs`) but not which apps were open | major | M | `shell/shell`, `libs/xdg` | Done (`29edf99`) |
+| Nothing reopens at login after a restart | macOS reopens apps and windows ("Reopen windows when logging back in", on by default), and Plasma restores the session. Bande already remembers window frames (`platform/compositor/src/recall.rs`) but not which apps were open | major | M | `shell/shell`, `libs/xdg` | Done (`29edf99`) |
 | A failed launch or a crash is silent. `spawn_detached` (`libs/xdg/src/launch.rs`) waits on the child in a thread and drops its exit status, and the bar's launch pulse just stops after 10 s | macOS says "X can't be opened" and "X quit unexpectedly", with a Reopen button. On a pure Wayland desktop, an X11-only app (Steam, an old Electron app) simply never appears | major | S | `libs/xdg`, `shell/bar`, `shell/launcher` | Done (`79d0b41`) |
 | Apps are not placed in systemd scopes (`app-<launcher>-<id>-<random>.scope` in `app.slice`, as systemd.io/DESKTOP_ENVIRONMENTS asks); they run inside the compositor's unit | There is no per-app memory protection or OOM order, and the journal cannot say which app logged what. Activity Monitor and a crash notice cannot tell apps apart. GNOME and Plasma both use scopes | major | S | `libs/xdg` | Done (`79d0b41`) |
 | A compositor crash ends the session and every app | macOS' WindowServer behaves the same, but Plasma 6's Qt apps survive a KWin crash | minor | L | `platform/compositor`, `toolkit/platform` | Open |
@@ -103,7 +103,7 @@ Rows that touch these areas say "(→ that work)" and name only what lies outsid
 
 | Gap | Why a picky user notices | Severity | Effort | Owner | Status |
 | :--- | :--- | :---: | :---: | :--- | :--- |
-| Super acts as Command only in Unbound's own apps. Firefox, GTK, Qt and Electron apps keep `Ctrl+C`, `V`, `Z`, `S`, `F` and `T`, because the compositor translates nothing (`architecture/overview.md`, keyboard model) | The keyboard model promises that `Super+C` copies in every app. In practice copy is `Super+C` in Files and `Ctrl+C` in Firefox, and in a third-party terminal `Ctrl+C` interrupts. On a Mac, Command works everywhere, and Toshy and Kinto exist because Linux breaks this. For Firefox alone, `ui.key.accelKey` can be set to Super instead, but editing keys did not follow it until Firefox 157 (Mozilla bug 2069698) | major | M | `platform/compositor`; owner decision | Owner decision |
+| Super acts as Command only in Bande's own apps. Firefox, GTK, Qt and Electron apps keep `Ctrl+C`, `V`, `Z`, `S`, `F` and `T`, because the compositor translates nothing (`architecture/overview.md`, keyboard model) | The keyboard model promises that `Super+C` copies in every app. In practice copy is `Super+C` in Files and `Ctrl+C` in Firefox, and in a third-party terminal `Ctrl+C` interrupts. On a Mac, Command works everywhere, and Toshy and Kinto exist because Linux breaks this. For Firefox alone, `ui.key.accelKey` can be set to Super instead, but editing keys did not follow it until Firefox 157 (Mozilla bug 2069698) | major | M | `platform/compositor`; owner decision | Owner decision |
 | No custom shortcuts (to launch an app or run a command) and no rebinding. Settings ▸ Keyboard lists the shortcuts read-only, and `services/config` has no shortcut section | All four reference desktops allow both | major | M | `services/config`, `platform/compositor` (+ Settings options) | Open |
 | No shortcut opens Notification Center or Control Center | macOS has Fn-N and Fn-C, Windows Win+N and Win+A, GNOME Super+V and Super+S. Someone who works only with the keyboard cannot read their notifications | major | S | `platform/compositor`, `platform/protocols`, `shell/bar` | Done (`2efda70`) |
 | The shortcut table (`libs/keyboard/src/shortcuts.rs`) leaves out shortcuts that are bound: `Shift+Super+5`, `Alt+Shift+Super+arrows` (move to the next display), ``Shift+Super+` `` and the Mission Control key | The list in Settings is the only cheat sheet, so a missing row hides the feature | minor | S | `libs/keyboard` | Done (`13ae4fe`) |
@@ -117,7 +117,7 @@ Rows that touch these areas say "(→ that work)" and name only what lies outsid
 | Emoji & Symbols types its character only when an input method runs; otherwise it copies it ("Return to copy, then paste with Super+V", `shell/launcher` strings) | macOS inserts the character into the field, and so does Windows' Win+. picker. Copying and then pasting feels broken | major | M | `platform/compositor` (commit through text-input itself), `shell/launcher` | Done: types into any focused text field through text-input; copies only without one |
 | Input methods are not offered as input sources (`behaviour.md`), and fcitx5 is only Suggested | A Chinese, Japanese or Korean user must install and set up fcitx5 by hand before typing a word. GNOME and Plasma list input methods next to the layouts | major (CJK) | M | `platform/compositor`, `apps/settings`, packaging | Open |
 | No press-and-hold accent picker | Typing é, ü or ø on a US layout this way is a macOS signature | minor | M | `platform/compositor` | Open |
-| No fallback fonts for other scripts: `fonts-noto-core` and `fonts-noto-cjk` are in no package's Depends or Recommends (`packaging.md` lists them as not yet pulled in) | Arabic, Hebrew, Thai, Devanagari and CJK file names, notifications and launcher results show tofu boxes | major | S | `packaging/unbound-desktop` | Done: `fonts-noto-core` and `fonts-noto-cjk` recommended |
+| No fallback fonts for other scripts: `fonts-noto-core` and `fonts-noto-cjk` are in no package's Depends or Recommends (`packaging.md` lists them as not yet pulled in) | Arabic, Hebrew, Thai, Devanagari and CJK file names, notifications and launcher results show tofu boxes | major | S | `packaging/bande-desktop` | Done: `fonts-noto-core` and `fonts-noto-cjk` recommended |
 | No spell checking in toolkit text views | Little impact: our apps take little prose, and the default editor checks spelling itself | minor | M | `toolkit/widgets` | Open |
 | No Paste and Match Style | macOS has Option-Shift-Command-V | minor | S | `toolkit/widgets` | Open |
 | Sizes and numbers ignore the region: `format_size` (`libs/fs/src/listing.rs`) always writes "110.37" | With the region set to Sweden, a Swede expects "110,37 GB" | minor | S | `libs/fs`, `libs/l10n` | Open |
@@ -163,7 +163,7 @@ polish).
 | Gap | Why a picky user notices | Severity | Effort | Owner | Status |
 | :--- | :--- | :---: | :---: | :--- | :--- |
 | A window's app id is matched to its desktop entry only exactly (`entry` in `shell/bar/src/dock_client.rs` and `menu_bar_client.rs`): no `StartupWMClass`, no case-insensitive match, no fallback to the last reverse-DNS part or the `Exec` name | GIMP 3 (`gimp` against `org.gimp.GIMP`), Slack, Signal, JetBrains IDEs and many Electron apps get a letter placeholder and show their raw id in the bar header (the review capture `night/bar-reliability/mark-right-click.png` shows "org.…"). They also get a second icon next to the kept one, and no About or desktop actions | major | S | `libs/xdg`, `shell/bar`, `platform/compositor` (switcher), `shell/launcher` | Done (`79d0b41`) |
-| No app opens audio files: `unbound-mimeapps.list` has no `audio/*` entry and no audio player is recommended (Decibels is not packaged in Debian 13) | Double-clicking an MP3 does nothing useful; every reference desktop plays it | major | S | `packaging/unbound-desktop` | Owner decision |
+| No app opens audio files: `bande-mimeapps.list` has no `audio/*` entry and no audio player is recommended (Decibels is not packaged in Debian 13) | Double-clicking an MP3 does nothing useful; every reference desktop plays it | major | S | `packaging/bande-desktop` | Owner decision |
 | No mail client and no `mailto:` handler | Clicking an email link does nothing. That is fine if the desktop says why | minor | S | packaging, `libs/xdg` | Open |
 | Nowhere to choose the default browser, mail, music or video app (→ Settings options) | macOS has Desktop & Dock ▸ Default web browser, and GNOME and Windows have Default Apps | major | S | `apps/settings` | Done (`3cc1848`) |
 
@@ -192,9 +192,9 @@ polish).
 
 | Gap | Why a picky user notices | Severity | Effort | Owner | Status |
 | :--- | :--- | :---: | :---: | :--- | :--- |
-| The hardware power key turns the computer off at once. Unbound holds only `handle-lid-switch` (`services/power/src/adapter.rs`), so logind's default `HandlePowerKey=poweroff` applies | On a Mac with Touch ID, a press of that key locks the screen. Here an accidental tap loses all open work | blocker | S | `services/power`, `platform/compositor` | Done: the key puts the computer to sleep (`dcb97a0`) |
+| The hardware power key turns the computer off at once. Bande holds only `handle-lid-switch` (`services/power/src/adapter.rs`), so logind's default `HandlePowerKey=poweroff` applies | On a Mac with Touch ID, a press of that key locks the screen. Here an accidental tap loses all open work | blocker | S | `services/power`, `platform/compositor` | Done: the key puts the computer to sleep (`dcb97a0`) |
 | No low disk space warning | macOS says "Your disk is almost full", Windows has Storage Sense, GNOME's housekeeping warns. A full disk breaks logins and updates | major | S | `services/automount` | Done (`8a3ff11`) |
-| No printing: cups is not recommended, there is no Printers pane, and the Print portal is GTK's | A home or office user cannot print a PDF from Papers until they find and install cups | major | S (packaging) + L (Printers pane, Later) | `packaging/unbound-desktop`, `apps/settings` | Partly: `cups` recommended; no Printers pane |
+| No printing: cups is not recommended, there is no Printers pane, and the Print portal is GTK's | A home or office user cannot print a PDF from Papers until they find and install cups | major | S (packaging) + L (Printers pane, Later) | `packaging/bande-desktop`, `apps/settings` | Partly: `cups` recommended; no Printers pane |
 | No charge limit to preserve the battery (Asahi exposes `charge_control_end_threshold`) | macOS has Optimised Battery Charging, GNOME 48 "Preserve Battery Health" | minor | S–M | `services/power`, `apps/settings` | Open |
 | The keyboard backlight stays on when idle, and idle times are the same on battery and on power | macOS turns the keyboard light off after a while of inactivity, and macOS and GNOME treat battery and power separately | minor | S | `services/power` | Partly: the keyboard light goes dark with the display; one set of idle times |
 | Updates only install live (`apps/settings/src/software.rs`). There is no offline update at restart, no switch for automatic security updates and no list of what changes, and session services are not restarted after an update (`session.md`: "planned") | GNOME Software installs at reboot, and macOS shows what an update contains | minor | M | `apps/settings` | Open |
@@ -203,8 +203,8 @@ polish).
 
 | Gap | Why a picky user notices | Severity | Effort | Owner | Status |
 | :--- | :--- | :---: | :---: | :--- | :--- |
-| GTK apps miss the appearance. The portal serves no `gtk-theme`, `font-name`, `document-font-name`, `monospace-font-name` or `enable-animations`. Unsandboxed GTK 3 apps read GSettings rather than the portal (`gdk_should_use_portal` in GTK 3's `gdkscreen-wayland.c`), and nothing writes dconf | GIMP 3, Inkscape, LibreOffice and Evolution stay light in dark mode, keep the Adwaita icons and ignore larger text. GTK 4 apps draw in DejaVu Sans next to our Inter, which is visible in every screenshot that holds both | major | S | `services/portal`, `platform/compositor` (`data/unbound-session`) | Done (`ee4896a`) |
-| The portal covers Settings, FileChooser, Screenshot, ScreenCast and Secret, and everything else falls to GTK. Wallpaper, GlobalShortcuts, RemoteDesktop, InputCapture, Background and Clipboard are not implemented (`crates/services/portal/data/unbound-portals.conf`) | "Set as Background" in Loupe or Firefox changes GNOME's setting, and nothing changes on screen. Push-to-talk in Discord or OBS gets no global shortcut | major | S (Wallpaper), M (each other) | `services/portal` | Partly: Wallpaper (`da88ae2`); the others open |
+| GTK apps miss the appearance. The portal serves no `gtk-theme`, `font-name`, `document-font-name`, `monospace-font-name` or `enable-animations`. Unsandboxed GTK 3 apps read GSettings rather than the portal (`gdk_should_use_portal` in GTK 3's `gdkscreen-wayland.c`), and nothing writes dconf | GIMP 3, Inkscape, LibreOffice and Evolution stay light in dark mode, keep the Adwaita icons and ignore larger text. GTK 4 apps draw in DejaVu Sans next to our Inter, which is visible in every screenshot that holds both | major | S | `services/portal`, `platform/compositor` (`data/bande-session`) | Done (`ee4896a`) |
+| The portal covers Settings, FileChooser, Screenshot, ScreenCast and Secret, and everything else falls to GTK. Wallpaper, GlobalShortcuts, RemoteDesktop, InputCapture, Background and Clipboard are not implemented (`crates/services/portal/data/bande-portals.conf`) | "Set as Background" in Loupe or Firefox changes GNOME's setting, and nothing changes on screen. Push-to-talk in Discord or OBS gets no global shortcut | major | S (Wallpaper), M (each other) | `services/portal` | Partly: Wallpaper (`da88ae2`); the others open |
 | Portal permissions cannot be reviewed or revoked: the screenshot "Allow", remembered screen-share sources, Flatpak background and notification rights (→ Settings structure) | macOS has Privacy & Security, and GNOME the Apps and Privacy panes | major | M | `apps/settings` | Open |
 | Portal dialogs are not attached to their app's window, because `xdg-foreign` is missing: the file chooser, the screenshot permission, the share picker (→ file chooser polish for the chooser) | They can open behind the app or on another workspace, and they do not follow it | major | M | `platform/compositor`, `services/portal` | Open |
 | Third-party apps use protocols the compositor lacks: `xdg-toplevel-icon` (an app sets its own icon), `xdg-toplevel-drag` (tearing off a browser tab), `content-type` and `tearing-control` (games and video), `single-pixel-buffer` and `security-context` (Flatpak isolation) | Small seams, one at a time | minor | S each | `platform/compositor` | Open |
@@ -222,7 +222,7 @@ polish).
 
 | Gap | Why a picky user notices | Severity | Effort | Owner | Status |
 | :--- | :--- | :---: | :---: | :--- | :--- |
-| English only: 24 `.ftl` files hold about 1,140 strings, all `en-US`. Settings ▸ Language changes the system locale, but Unbound's own interface stays in English | A Swedish, German or French user gets Firefox and the GNOME apps in their language, and Unbound's own shell in English | blocker (non-English) | L (S per language per group of crates) | every crate's `locales/`, `libs/l10n` | Owner decision |
+| English only: 24 `.ftl` files hold about 1,140 strings, all `en-US`. Settings ▸ Language changes the system locale, but Bande's own interface stays in English | A Swedish, German or French user gets Firefox and the GNOME apps in their language, and Bande's own shell in English | blocker (non-English) | L (S per language per group of crates) | every crate's `locales/`, `libs/l10n` | Owner decision |
 | No pseudo-locale and no string length check in CI | Truncated text and hard-coded strings slip through | minor | S | `libs/l10n`, `ci` | Open |
 | No right-to-left mirroring (roadmap: later) | | minor | L | `toolkit` | Open |
 | No measured budget for login to a usable desktop, or for an app's first frame (Files, Settings): `performance.md` measures memory and frames, not cold starts | "Fast" is never checked | minor | S | `testing/bench` | Partly: time to desktop measured (`418ed6d`); app first frames open |
@@ -268,19 +268,19 @@ and M as 2. Items with the same score are ordered by impact.
      `signal`/`signal-desktop`), and a bar golden in which a mismatched id shows its own icon
      and name.
 4. **GTK apps follow the appearance and the fonts** (`services/portal`, `platform/compositor`
-   `data/unbound-session`; S).
+   `data/bande-session`; S).
    - Add `gtk-theme` (Adwaita or Adwaita-dark), `font-name`, `document-font-name` (Inter),
      `monospace-font-name` (JetBrains Mono) and `enable-animations` (off under Reduce Motion)
      to the portal's `org.gnome.desktop.interface`.
    - Make unsandboxed GTK 3 apps read the same values: either `GTK_USE_PORTAL=1` in
-     `unbound-session` (which also sends their Open and Save dialogs to our chooser) or a write
+     `bande-session` (which also sends their Open and Save dialogs to our chooser) or a write
      to dconf. Decide by testing GIMP and gnome-text-editor on Debian 13.
    - Proof: a portal test of the keys before and after a switch, and `ci/portal` screenshots.
-5. **A fresh install reads every script, prints and plays music** (`packaging/unbound-desktop`;
+5. **A fresh install reads every script, prints and plays music** (`packaging/bande-desktop`;
    S).
    - Recommend `fonts-noto-core`, `fonts-noto-cjk` and `cups`.
    - Recommend an audio player available in Debian 13 (Totem or Rhythmbox; check Showtime's
-     MIME types first), and add the `audio/*` defaults to `unbound-mimeapps.list`.
+     MIME types first), and add the `audio/*` defaults to `bande-mimeapps.list`.
    - Proof: a `lintian`-clean build, and a review screenshot of an Arabic and a Japanese file
      name in Files.
 6. **Apps are asked to quit before Log Out, Restart and Shut Down** (`platform/compositor`,
@@ -293,7 +293,7 @@ and M as 2. Items with the same score are ordered by impact.
 7. **Low disk space warning** (`services/automount`; S).
    - Check `statvfs` of `/` and of the home folder every 10 minutes and after each mount.
    - Below 5 % or 1 GB, post a notification with Manage Storage… that opens
-     `unbound-settings storage`. Repeat only after the space recovers.
+     `bande-settings storage`. Repeat only after the space recovers.
    - Proof: a unit test of the threshold rule, and a notification test on the test bus.
 8. **Notifications show pictures** (`services/notify`, `shell/notifications`; S).
    - Read `image-data` (iiibiiay), `image-path` and the old `icon_data`.
@@ -301,7 +301,7 @@ and M as 2. Items with the same score are ordered by impact.
    - Proof: a model test for each hint, and a notification golden with a sender picture.
 9. **No banners while the screen is shared or recorded** (`services/notify`, `services/portal`,
    `shell/screenshot`; S).
-   - The portal's ScreenCast sessions and the recorder tell `unbound-notify` that sharing is
+   - The portal's ScreenCast sessions and the recorder tell `bande-notify` that sharing is
      on.
    - While it is on, the center behaves as under Do Not Disturb: critical notifications still
      show, and nothing is replayed afterwards.
@@ -314,7 +314,7 @@ and M as 2. Items with the same score are ordered by impact.
     - Proof: a greeter test against a fake logind (as `services/power/tests/logind.rs` serves
       one), and light and dark goldens.
 11. **Command works in third-party apps** (`platform/compositor`; M; owner decision first).
-    - For clients that never bind `unbound_app_v1`, send `Super+letter` and `Super+digit` that
+    - For clients that never bind `bande_app_v1`, send `Super+letter` and `Super+digit` that
       the compositor does not use itself as `Ctrl` with the same key.
     - For apps whose desktop entry has `Categories=TerminalEmulator`, send `Ctrl+Shift` instead.
     - Proof: a headless test with a non-toolkit client that receives `Ctrl+C` for `Super+C`,
@@ -324,7 +324,7 @@ and M as 2. Items with the same score are ordered by impact.
     M).
     - Add `sv-SE` `.ftl` files for the bar, launcher, notifications, Control Center, lock
       screen, login window, desktop and toolkit strings.
-    - Proof: an `unbound-l10n` test that every `sv-SE` key exists in `en-US` and resolves, and
+    - Proof: an `bande-l10n` test that every `sv-SE` key exists in `en-US` and resolves, and
       a review screenshot of the bar and launcher.
     - Owner: the owner's language first; the same task repeats per language and group of
       crates.
@@ -351,7 +351,7 @@ and M as 2. Items with the same score are ordered by impact.
     - Proof: a `libs/datetime` test of week starts for en-US and sv-SE, and light and dark
       goldens.
 17. **Apps run in their own systemd scopes** (`libs/xdg`; S).
-    - After spawning, move the pid into `app-unbound-<id>-<random>.scope` in `app.slice`
+    - After spawning, move the pid into `app-bande-<id>-<random>.scope` in `app.slice`
       through `org.freedesktop.systemd1.Manager.StartTransientUnit`.
     - Skip this quietly without a user manager.
     - Proof: a unit test of the unit name (no `-` in the id part, as systemd requires), and a
@@ -359,13 +359,13 @@ and M as 2. Items with the same score are ordered by impact.
 18. **"Set as Background" works** (`services/portal`; S).
     - Implement `org.freedesktop.impl.portal.Wallpaper.SetWallpaperURI`: copy the picture as
       Settings ▸ Wallpaper's "Add Picture" does, write it to the config, and add it to
-      `unbound.portal` and `unbound-portals.conf`.
-    - Proof: a portal test that calls it and reads back `org.unbound.Config`.
+      `bande.portal` and `bande-portals.conf`.
+    - Proof: a portal test that calls it and reads back `org.bande.Config`.
 19. **Shortcuts for Show Desktop, the Notification Center and Control Center**
     (`platform/compositor`, `platform/protocols`, `shell/bar`, `libs/keyboard`; S–M).
     - Bind keys the owner approves (proposal: `Super+F11` and Super with the Mission Control
       key for Show Desktop, `Alt+Super+N`, `Alt+Super+C`).
-    - Add an `unbound_shell_v1` event that toggles a panel.
+    - Add an `bande_shell_v1` event that toggles a panel.
     - Complete the shortcut table with every bound shortcut (§4).
     - Proof: compositor tests, and the existing table-against-handler test.
 20. **A tiling menu on the zoom control** (`toolkit/platform`, `platform/compositor`; S–M).
@@ -382,7 +382,7 @@ and M as 2. Items with the same score are ordered by impact.
     - Proof: tests on the BlueZ fake of `testing/test-bus`.
 22. **Reopen apps at login** (`shell/shell`, `libs/xdg`; M).
     - When the session ends through the confirmation, save the ids of the running apps to
-      `$XDG_STATE_HOME/unbound/reopen`.
+      `$XDG_STATE_HOME/bande/reopen`.
     - Launch them once at the next session start, leaving out the shell's own surfaces; window
       memory then puts the frames back.
     - Proof: a model test of the file, and a VM check.

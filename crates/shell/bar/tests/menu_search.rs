@@ -6,12 +6,12 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use unbound_bar::menu_search::MenuSearch;
-use unbound_bar::menus::{AppMenus, cascade};
-use unbound_status::Command;
-use unbound_status::dbusmenu::Node;
-use unbound_toolkit::ui::{Event, Key, Menu, Modifiers};
-use unbound_toolkit::{Appearance, CpuRenderer, TextSystem};
+use bande_bar::menu_search::MenuSearch;
+use bande_bar::menus::{AppMenus, cascade};
+use bande_status::Command;
+use bande_status::dbusmenu::Node;
+use bande_toolkit::ui::{Event, Key, Menu, Modifiers};
+use bande_toolkit::{Appearance, CpuRenderer, TextSystem};
 
 use support::check_golden;
 
@@ -66,7 +66,7 @@ fn menus() -> Menu {
     cascade(&AppMenus {
         name: "Files",
         root: Some(&root),
-        item: ":1.7/org/unbound/MenuBar",
+        item: ":1.7/org/bande/MenuBar",
         actions: &[],
         windows: &[],
     })
@@ -128,7 +128,7 @@ fn typing_ranks_items_that_start_with_the_query_first_and_return_runs_the_select
     assert_eq!(
         Command::parse(&chosen),
         Some(Command::Item {
-            item: ":1.7/org/unbound/MenuBar".to_owned(),
+            item: ":1.7/org/bande/MenuBar".to_owned(),
             id: 31
         })
     );

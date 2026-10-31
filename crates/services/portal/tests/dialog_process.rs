@@ -3,11 +3,11 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use xdg_desktop_portal_unbound::dialog_process::{DialogProcess, arguments, decode, encode, parse};
-use xdg_desktop_portal_unbound::file_chooser::{
+use xdg_desktop_portal_bande::dialog_process::{DialogProcess, arguments, decode, encode, parse};
+use xdg_desktop_portal_bande::file_chooser::{
     Choice, Dialog, FileChooserUi, Filter, Mode, Outcome, Pattern, Selection,
 };
-use xdg_desktop_portal_unbound::request::Cancellation;
+use xdg_desktop_portal_bande::request::Cancellation;
 
 fn dialog(mode: Mode) -> Dialog {
     let images = Filter {

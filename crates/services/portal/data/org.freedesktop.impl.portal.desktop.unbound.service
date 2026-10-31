@@ -1,4 +1,0 @@
-[D-BUS Service]
-Name=org.freedesktop.impl.portal.desktop.unbound
-Exec=/usr/libexec/xdg-desktop-portal-unbound
-SystemdService=xdg-desktop-portal-unbound.service

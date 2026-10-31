@@ -1,3 +1,5 @@
+use bande_graphics::Palette;
+use bande_render::VulkanRenderer;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::backend::renderer::element::surface::{
     WaylandSurfaceRenderElement, render_elements_from_surface_tree,
@@ -5,8 +7,6 @@ use smithay::backend::renderer::element::surface::{
 use smithay::backend::renderer::element::{Id, Kind};
 use smithay::utils::{Logical, Point, Rectangle};
 use smithay::wayland::shell::wlr_layer::Layer;
-use unbound_graphics::Palette;
-use unbound_render::VulkanRenderer;
 
 use super::layout::{inflate, real_rect};
 use super::{BACKDROP_IDS, Frame, Hit, Press};

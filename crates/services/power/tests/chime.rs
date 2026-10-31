@@ -4,8 +4,8 @@ use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 
-use unbound_power::battery;
-use unbound_test_bus::SessionBus;
+use bande_power::battery;
+use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 
 const UPOWER_PATH: &str = "/org/freedesktop/UPower";
@@ -24,7 +24,7 @@ impl FakeUPower {
 
 struct Sounds(Mutex<Sender<String>>);
 
-#[zbus::interface(name = "org.unbound.Sound")]
+#[zbus::interface(name = "org.bande.Sound")]
 impl Sounds {
     fn play(&self, name: &str) {
         let _ = self.0.lock().unwrap().send(name.to_owned());
@@ -53,9 +53,9 @@ fn start() -> (SessionBus, Connection, Connection, Receiver<String>) {
     let (sender, played) = mpsc::channel();
     let sounds = zbus::blocking::connection::Builder::address(bus.address())
         .expect("address")
-        .name("org.unbound.Sound")
+        .name("org.bande.Sound")
         .expect("name")
-        .serve_at("/org/unbound/Sound", Sounds(Mutex::new(sender)))
+        .serve_at("/org/bande/Sound", Sounds(Mutex::new(sender)))
         .expect("serve")
         .build()
         .expect("sounds");

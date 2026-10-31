@@ -1,7 +1,7 @@
 # UI Toolkit: Decision Record
 
-Status: **accepted** (2026-10-29, Option A: extend `unbound-toolkit`). Scope: which widget
-layer Unbound's own apps and shell (panel, menu bar, launcher, Files, Settings, Terminal,
+Status: **accepted** (2026-10-29, Option A: extend `bande-toolkit`). Scope: which widget
+layer Bande's own apps and shell (panel, menu bar, launcher, Files, Settings, Terminal,
 lock screen, greeter, Control Center) are built on, and in which order it grows to AppKit
 depth. Rendering (Vello, Parley) is settled by [`0001-rendering.md`](0001-rendering.md) Decision 2 and is not
 reopened here.
@@ -24,7 +24,7 @@ What `crates/toolkit/toolkit` has today (about 8,300 lines with tests):
   then `vello_gpu`; fractional scale and viewporter; text-input v3; clipboard; AccessKit
   published on AT-SPI; the `Scene` API with a text pipeline tuned past Vello's defaults
   (0.004 px flattening, unhinted `skrifa` outlines, Inter/Inter Display switch, baselines
-  on whole pixels); tokens; the `unbound-spring` crate (analytic damped spring with
+  on whole pixels); tokens; the `bande-spring` crate (analytic damped spring with
   `retarget`, not yet used by any crate).
 - **Thin:** `ui` has `Stack`, `Label`, `Button`, `Toggle`, `Slider`, `TextField`,
   `SecureField` and a WIP `TitleBar`. `ui::Event` is `PointerDown/Move/Up(Point)` with no
@@ -80,13 +80,13 @@ What `crates/toolkit/toolkit` has today (about 8,300 lines with tests):
 
 ## Comparison
 
-| Need | A. Extend `unbound-toolkit` | B. Masonry under our `Window` | C. libcosmic / Slint / GTK4 |
+| Need | A. Extend `bande-toolkit` | B. Masonry under our `Window` | C. libcosmic / Slint / GTK4 |
 | :--- | :--- | :--- | :--- |
 | Renders through our `Scene`, first frame on CPU | yes, unchanged | needs an `imaging` sink to our `Scene` and a bridge from Parley 0.8 glyph runs to our text path | no: own renderers and text stacks |
 | Vello/Parley/AccessKit versions | ours, bumped when we choose | lock-step with Masonry, which trails by 3–4 minor versions; a fork to keep ours | not applicable |
 | Pointer model | to build (about 1.5 weeks) | `ui-events` covers buttons, count, enter/leave; scroll phases still ours | GTK4 complete; others partial |
 | Retained tree, hit test, focus, hover, capture, IME, a11y per widget | partly there; core rewrite about 3 weeks | present and tested | present |
-| Spring animation, momentum, elastic scroll | to build on `unbound-spring` | to build, inside widgets we do not own | GTK4 kinetic scroll, own curves |
+| Spring animation, momentum, elastic scroll | to build on `bande-spring` | to build, inside widgets we do not own | GTK4 kinetic scroll, own curves |
 | Menus as `xdg_popup`, popovers, tooltips | to build (multi-surface `Window`) | layers are in-window; mapping `NewLayer` to popups is ours | GTK4 yes; others partial |
 | Tables, outline, icon grid, selection, rubber band, DnD, toolbars, tabs, sheets | to build | to build (only `VirtualScroll` helps) | GTK4 yes |
 | Layer-shell surfaces | yes, today | through our host | libcosmic via its Wayland backend; Slint no built-in support [14]; GTK4 via `gtk4-layer-shell` [17] |
@@ -96,7 +96,7 @@ What `crates/toolkit/toolkit` has today (about 8,300 lines with tests):
 
 ## Recommendation
 
-**Option A: extend `unbound-toolkit`**, taking Masonry's architecture as a reference
+**Option A: extend `bande-toolkit`**, taking Masonry's architecture as a reference
 rather than as a dependency.
 
 1. **Masonry does not have what is expensive.** Of the feature list, Masonry saves the
@@ -145,7 +145,7 @@ exact perf metrics green.
    `Window` damage. Masonry's passes (event, update, layout, compose, paint, access) are
    the reference design [4][5].
 3. **Animation.** A property animator for `f32`, points, rects and colours on
-   `unbound-spring`, driven by `wl_surface.frame` with presentation time, interruptible
+   `bande-spring`, driven by `wl_surface.frame` with presentation time, interruptible
    by `retarget` with the current velocity, and honouring a reduce-motion setting.
 4. **Popups.** `Window` owns several surfaces: `xdg_popup` with positioner, grab and
    `reposition` from toplevels, and `get_popup` from layer surfaces [17]. Then menus
@@ -178,7 +178,7 @@ exact perf metrics green.
   versions, adopting its core later stays possible because our input vocabulary mirrors
   `ui-events`. Revisit at Masonry's next release.
 - **Budgets.** More widgets and animation state must keep app start ≤ 100 ms and
-  ≤ 30 MB RSS on the CPU path. Contain: `unbound-sample` grows to exercise the new core
+  ≤ 30 MB RSS on the CPU path. Contain: `bande-sample` grows to exercise the new core
   and stays under the existing gate.
 
 ## Sources

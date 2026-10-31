@@ -3,9 +3,9 @@
 use std::time::Duration;
 
 use accesskit::{Node, Role, TreeUpdate};
-use unbound_settings::{PaneId, SettingId, SettingsView, Update, Value, sidebar_width};
-use unbound_toolkit::ui::{Event, Key, Modifiers, Scroll, ScrollPhase, ScrollSource};
-use unbound_toolkit::{Appearance, Palette, Point, Scheme, TextSize, TextSystem};
+use bande_settings::{PaneId, SettingId, SettingsView, Update, Value, sidebar_width};
+use bande_toolkit::ui::{Event, Key, Modifiers, Scroll, ScrollPhase, ScrollSource};
+use bande_toolkit::{Appearance, Palette, Point, Scheme, TextSize, TextSystem};
 
 const PAGE: Point = Point::new(600.0, 100.0);
 const SIDEBAR: Point = Point::new(100.0, 100.0);
@@ -120,9 +120,9 @@ impl Window {
 }
 
 fn last_shortcut() -> String {
-    unbound_keyboard::Area::ALL
+    bande_keyboard::Area::ALL
         .into_iter()
-        .flat_map(unbound_keyboard::shortcuts_in)
+        .flat_map(bande_keyboard::shortcuts_in)
         .last()
         .expect("a shortcut")
         .action

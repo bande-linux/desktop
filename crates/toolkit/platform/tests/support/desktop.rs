@@ -3,9 +3,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
+use bande_toolkit_platform::{App, Role, Window, WindowEvent};
 use smithay::utils::Size;
-use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
-use unbound_toolkit_platform::{App, Role, Window, WindowEvent};
 
 pub struct Client {
     pub events: Receiver<WindowEvent>,
@@ -59,7 +59,7 @@ impl Desktop {
         let thread = thread::spawn(move || {
             let mut window = Window::open_on(client_end, role, size).expect("window");
             let mut app = app(events, app_commands);
-            unbound_toolkit_platform::run(&mut window, &mut app).expect("run loop");
+            bande_toolkit_platform::run(&mut window, &mut app).expect("run loop");
         });
         Client {
             events: received,

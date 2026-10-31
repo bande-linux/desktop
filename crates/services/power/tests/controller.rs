@@ -4,11 +4,11 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use unbound_config::{ConfigService, ConfigStore};
-use unbound_power::backlight::{Backlight, KeyboardBacklight};
-use unbound_power::controller::{self, IdleController};
-use unbound_power::logind::{self, ManagerProxyBlocking};
-use unbound_test_bus::SessionBus;
+use bande_config::{ConfigService, ConfigStore};
+use bande_power::backlight::{Backlight, KeyboardBacklight};
+use bande_power::controller::{self, IdleController};
+use bande_power::logind::{self, ManagerProxyBlocking};
+use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedObjectPath;
 

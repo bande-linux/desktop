@@ -5,7 +5,7 @@ Status: proposal, awaiting the owner's review.
 ## Purpose
 
 The desktop is the surface behind every window. It shows the wallpaper and the files in the
-Desktop folder, and it is the place where screenshots and drops land. In Unbound it is a
+Desktop folder, and it is the place where screenshots and drops land. In Bande it is a
 calm, mostly empty place. Files on it behave exactly as they do in Files, and everything
 on it can be reached with a right click or from the keyboard.
 
@@ -32,12 +32,12 @@ desktop surface is needed before users can see them without opening Files.
 | Open Desktop folder | `Shift-Command-D` [6] | | |
 | Hot corners | Show Desktop is among the actions, with an optional modifier [11] | | |
 
-## Proposed Unbound feature set
+## Proposed Bande feature set
 
 ### Now (essential)
 
 **Wallpaper** — one image fills every display (scaled to cover, cropped at the centre). The
-default is an Unbound image with a light and a dark variant that follows the system
+default is an Bande image with a light and a dark variant that follows the system
 appearance, so light and dark mode both look intended [1]. Settings > Wallpaper offers the
 bundled set, about six solid colours and Add Picture (a file or a whole folder).
 Inputs: right click on the desktop > Change Wallpaper; right click on an image in Files >
@@ -153,7 +153,7 @@ differ, mostly for eyesight.
 - **Home, Computer and Network icons** — the panel and Files already reach these, so the
   icons would be a second way to the same thing.
 - **Grid spacing, label position and text size options** — rarely changed, and a source of
-  settings clutter [2][3]. Unbound picks good values instead.
+  settings clutter [2][3]. Bande picks good values instead.
 - **Widgets on the desktop** — they are hidden behind windows most of the time. Glanceable
   information lives in the menu bar and Notification Center (open question 4) [4].
 - **Animated or aerial wallpapers** — they cost power, distract and need a large download
@@ -180,8 +180,8 @@ differ, mostly for eyesight.
    and calendar belong in the menu bar and Notification Center, so there is one place to
    glance. Revisit if Notification Center gains widgets.
 5. **Which process draws the desktop?** Recommendation: a small shell client,
-   `unbound-desktop`, on the background layer. The compositor starts and restarts it as it
-   does the panel. It reuses the file model, menus and Quick Look from `unbound-files` as a
+   `bande-desktop`, on the background layer. The compositor starts and restarts it as it
+   does the panel. It reuses the file model, menus and Quick Look from `bande-files` as a
    library, so a Files crash does not take the desktop down, and the desktop never needs a
    Files window open.
 

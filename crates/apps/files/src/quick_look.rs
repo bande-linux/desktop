@@ -1,11 +1,11 @@
-use unbound_fs::{Entry, format_size};
-use unbound_preview::Preview;
-use unbound_thumbnails::ThumbnailSize;
-use unbound_toolkit::ui::{Key, Modifiers, Scroll, ScrollState};
-use unbound_toolkit::{
+use bande_fs::{Entry, format_size};
+use bande_preview::Preview;
+use bande_thumbnails::ThumbnailSize;
+use bande_toolkit::ui::{Key, Modifiers, Scroll, ScrollState};
+use bande_toolkit::{
     Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
 };
-use unbound_xdg::DesktopEntry;
+use bande_xdg::DesktopEntry;
 
 use crate::L10N;
 use crate::view::{FilesView, Hit, Request};

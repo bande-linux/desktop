@@ -1,6 +1,6 @@
 [package]
-name = "unbound-clipboard"
-description = "Unbound clipboard daemon: keeps the selection after the copying app quits and remembers recent copies"
+name = "bande-clipboard"
+description = "Bande clipboard daemon: keeps the selection after the copying app quits and remembers recent copies"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,8 +10,8 @@ repository.workspace = true
 [dependencies]
 rustix.workspace = true
 tracing.workspace = true
-unbound-log.workspace = true
-unbound-xdg.workspace = true
+bande-log.workspace = true
+bande-xdg.workspace = true
 wayland-backend.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
@@ -20,9 +20,9 @@ zbus.workspace = true
 [dev-dependencies]
 smithay.workspace = true
 tempfile.workspace = true
-unbound-compositor.workspace = true
-unbound-test-bus.workspace = true
-unbound-test-wayland.workspace = true
+bande-compositor.workspace = true
+bande-test-bus.workspace = true
+bande-test-wayland.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
@@ -31,9 +31,9 @@ extended-description = """\
 Takes over each new clipboard and primary selection through \
 ext-data-control-v1 and serves it after the copying application has \
 quit. It also keeps the last 100 copies of the past week (never ones \
-marked as passwords) in ~/.local/state/unbound/clipboard, readable by \
+marked as passwords) in ~/.local/state/bande/clipboard, readable by \
 the user only, and offers them to the launcher on the session bus as \
-org.unbound.Clipboard. unbound-compositor starts it on a socket pair and \
+org.bande.Clipboard. bande-compositor starts it on a socket pair and \
 offers ext-data-control on that connection only."""
 
 [lints]

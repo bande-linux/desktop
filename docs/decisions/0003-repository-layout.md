@@ -36,12 +36,12 @@ data/        shared assets (wallpapers, icons, sounds)
   `platform` holds the Wayland window, seat, clipboard, text input, layer and xdg shell
   surfaces, and the accessibility adapter. `widgets` holds the UI tree, the widgets and
   animation.
-- **`shell/`**: one crate per shell client or shell part. `shell` is `unbound-shell`, the one
+- **`shell/`**: one crate per shell client or shell part. `shell` is `bande-shell`, the one
   process that hosts the parts `desktop`, `bar`, `notifications`, `controlcenter` and `launcher`
   (library crates, see [overview](../architecture/overview.md)); `screenshot`, `lock` and
   `greeter` stay processes of their own.
 - **`apps/`**: one crate per app.
-- **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-unbound`.
+- **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-bande`.
 - **`libs/`**: shared logic without UI. `xdg` holds desktop entries, icons, MIME types,
   `mimeapps.list`, user directories and `Apps`, the one answer to "which apps open this path";
   `fs` holds folder listings and their sort order, size and date formatting, the trash, file
@@ -54,9 +54,9 @@ data/        shared assets (wallpapers, icons, sounds)
 Rules:
 
 1. **Names.** Directory names are short. Package, binary and Debian package names stay
-   `unbound-*` (and `xdg-desktop-portal-unbound`), so nothing installed changes name.
+   `bande-*` (and `xdg-desktop-portal-bande`), so nothing installed changes name.
 2. **One crate per process.** Each app, shell client and service is its own crate; each part
-   hosted by `unbound-shell` is its own library crate.
+   hosted by `bande-shell` is its own library crate.
 3. **Dependency direction.** `libs` ← `toolkit` ← `shell` and `apps`. Services never depend on
    the widget crates; CI checks this.
 4. **Crate structure.** In each app and shell crate, `main.rs` is thin, model modules hold no
@@ -65,7 +65,7 @@ Rules:
 5. **Installable files.** Everything a crate installs (desktop files, icons, units, D-Bus
    activation files, PAM configuration) lives in that crate's `data/`.
 6. **App IDs.** Reverse-DNS IDs, one per app, used for the desktop file, the icon, the Wayland
-   `app_id` and the D-Bus name: `org.unbound.Files` for Files.
+   `app_id` and the D-Bus name: `org.bande.Files` for Files.
 7. **No panics.** `[workspace.lints]` denies `unwrap`, `expect` and `panic` outside tests.
 8. **Logging.** Through `tracing`, to the journal, set up by `libs/log`.
 9. **Localization.** Every user-visible string goes through Fluent (`libs/l10n`), with

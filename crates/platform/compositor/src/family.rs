@@ -1,3 +1,4 @@
+use bande_spring::Spring;
 use smithay::delegate_xdg_dialog;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -5,7 +6,6 @@ use smithay::utils::{Logical, Point, Rectangle};
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::shell::xdg::dialog::XdgDialogHandler;
 use smithay::wayland::shell::xdg::{ToplevelSurface, XdgToplevelSurfaceData};
-use unbound_spring::Spring;
 
 use crate::motion::Look;
 use crate::recall::clamp_into;

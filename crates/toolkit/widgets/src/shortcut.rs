@@ -1,5 +1,5 @@
 use accesskit::{Node, Role};
-use unbound_graphics::{
+use bande_graphics::{
     Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
 };
 

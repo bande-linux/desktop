@@ -9,16 +9,16 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use bande_bar::L10N;
+use bande_bar::surfaces::{self, Display, Services};
+use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
+use bande_config::Config;
+use bande_controlcenter::ControlCenter;
+use bande_launcher::LauncherShell;
+use bande_notifications::Notifications;
+use bande_test_wayland::{RED, ShmImage, TestClient};
+use bande_toolkit::{App, Scene, Surfaces, TextSystem, Window, WindowEvent};
 use smithay::utils::{Point, Size};
-use unbound_bar::L10N;
-use unbound_bar::surfaces::{self, Display, Services};
-use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
-use unbound_config::Config;
-use unbound_controlcenter::ControlCenter;
-use unbound_launcher::LauncherShell;
-use unbound_notifications::Notifications;
-use unbound_test_wayland::{RED, ShmImage, TestClient};
-use unbound_toolkit::{App, Scene, Surfaces, TextSystem, Window, WindowEvent};
 use wayland_client::protocol::wl_shm::Format;
 
 const OUTPUT: (i32, i32) = (1024, 720);
@@ -152,7 +152,7 @@ fn install_apps() {
             std::fs::write(
                 applications.join(format!("{id}.desktop")),
                 format!(
-                    "[Desktop Entry]\nType=Application\nName={name}\nExec=true\nIcon=org.unbound.Files\n"
+                    "[Desktop Entry]\nType=Application\nName={name}\nExec=true\nIcon=org.bande.Files\n"
                 ),
             )
             .expect("desktop entry");
@@ -183,7 +183,7 @@ fn shell(
 ) {
     let text = TextSystem::new();
     let mut root =
-        Window::open_on(stream, unbound_notifications::role(), (0, 0)).expect("notifications");
+        Window::open_on(stream, bande_notifications::role(), (0, 0)).expect("notifications");
     root.share_fonts(&text);
     let notifications =
         Notifications::new(&mut root, text.sharing_fonts(), None).expect("notifications");
@@ -208,13 +208,13 @@ fn shell(
     };
     let bar = surfaces::open(&root, &display, &config, &services).expect("bar");
     let mut control_center = root
-        .open_beside(unbound_controlcenter::role(), (0, 0))
+        .open_beside(bande_controlcenter::role(), (0, 0))
         .expect("control center");
     control_center.share_fonts(&text);
     let control =
         ControlCenter::new(&mut control_center, text.sharing_fonts(), None, None).expect("panel");
     let mut launcher = root
-        .open_beside(unbound_launcher::role(), (0, 0))
+        .open_beside(bande_launcher::role(), (0, 0))
         .expect("launcher");
     launcher.share_fonts(&text);
     let search = LauncherShell::new(&mut launcher, text.sharing_fonts(), None).expect("launcher");
@@ -234,7 +234,7 @@ fn shell(
         targets,
         _text: text,
     };
-    unbound_toolkit::run_surfaces(&mut shell).expect("run loop");
+    bande_toolkit::run_surfaces(&mut shell).expect("run loop");
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -561,7 +561,7 @@ impl Desktop {
             snapshot.rgba,
         )
         .expect("frame");
-        let folder = std::env::var_os("UNBOUND_REPORT")
+        let folder = std::env::var_os("BANDE_REPORT")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(env!("CARGO_TARGET_TMPDIR")));
         std::fs::create_dir_all(&folder).expect("report folder");

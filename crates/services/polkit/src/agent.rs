@@ -12,7 +12,7 @@ use zbus::zvariant::{OwnedValue, Value};
 use crate::helper::{Canceller, HelperSession, Line};
 use zeroize::Zeroizing;
 
-pub const OBJECT_PATH: &str = "/org/unbound/PolicyKit1/AuthenticationAgent";
+pub const OBJECT_PATH: &str = "/org/bande/PolicyKit1/AuthenticationAgent";
 const AUTHORITY: &str = "org.freedesktop.PolicyKit1";
 const AUTHORITY_PATH: &str = "/org/freedesktop/PolicyKit1/Authority";
 const AUTHORITY_INTERFACE: &str = "org.freedesktop.PolicyKit1.Authority";

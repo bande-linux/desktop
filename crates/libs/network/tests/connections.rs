@@ -3,7 +3,7 @@
 use std::net::Ipv4Addr;
 use std::path::Path;
 
-use unbound_network::{ManualIpv4, ipv4_settings, parse_manual, vpn_type_of};
+use bande_network::{ManualIpv4, ipv4_settings, parse_manual, vpn_type_of};
 use zbus::zvariant::OwnedValue;
 
 #[test]

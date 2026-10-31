@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use unbound_toolkit::{Color, Image};
-use unbound_xdg::{ICON_THEMES, find_icon};
+use bande_toolkit::{Color, Image};
+use bande_xdg::{ICON_THEMES, find_icon};
 
 pub struct Icons {
     data_dirs: Vec<PathBuf>,

@@ -1,7 +1,7 @@
-use unbound_toolkit::ui::{Event, Key};
+use bande_toolkit::ui::{Event, Key};
 
 use crate::engine::Frame;
-use unbound_toolkit::{
+use bande_toolkit::{
     Color, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape, Snapshot, Spacing, TextAlign,
     TextRole, TextStyle, TextSystem,
 };
@@ -246,7 +246,7 @@ pub fn crop(image: &Snapshot, region: Region) -> Option<Snapshot> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use unbound_toolkit::ui::{Modifiers, Pointer};
+    use bande_toolkit::ui::{Modifiers, Pointer};
 
     #[test]
     fn a_drag_either_way_chooses_the_rectangle_between_press_and_release_and_a_click_cancels() {

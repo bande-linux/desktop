@@ -3,18 +3,18 @@
 mod support;
 
 use accesskit::{NodeId, Role};
-use support::{SIZE, click, has_text, nodes};
-use unbound_bluetooth::Bluetooth;
-use unbound_network::NetworkManager;
-use unbound_settings::{
+use bande_bluetooth::Bluetooth;
+use bande_network::NetworkManager;
+use bande_settings::{
     BluetoothCommand, BluetoothState, Command, NetworkCommand, PaneId, SettingsView, Update,
     WifiState,
 };
-use unbound_test_bus::SessionBus;
-use unbound_test_bus::bluez::FakeBluez;
-use unbound_test_bus::networkmanager::FakeNetworkManager;
-use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Palette, Scheme, TextSystem};
+use bande_test_bus::SessionBus;
+use bande_test_bus::bluez::FakeBluez;
+use bande_test_bus::networkmanager::FakeNetworkManager;
+use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::{Palette, Scheme, TextSystem};
+use support::{SIZE, click, has_text, nodes};
 
 fn view() -> SettingsView {
     SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new())

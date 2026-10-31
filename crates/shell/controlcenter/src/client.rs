@@ -11,22 +11,22 @@ use crate::{
     chooser_menu, hud, panel, panel_items, place_beside, scene, slide_from, stepped,
 };
 use accesskit::TreeUpdate;
-use unbound_audio::{Audio, Level, Meter, meter_level};
-use unbound_bluetooth::Bluetooth;
-use unbound_inbox::Inbox;
-use unbound_network::NetworkManager;
-use unbound_notify::client::NotificationCenter;
-use unbound_power::logind::own_session;
-use unbound_status::backlight::{DisplayLight, KeyboardLight, SYSFS_LEDS};
-use unbound_status::captive::open_page;
-use unbound_status::session::full_name;
-use unbound_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
-use unbound_toolkit::{
+use bande_audio::{Audio, Level, Meter, meter_level};
+use bande_bluetooth::Bluetooth;
+use bande_inbox::Inbox;
+use bande_network::NetworkManager;
+use bande_notify::client::NotificationCenter;
+use bande_power::logind::own_session;
+use bande_status::backlight::{DisplayLight, KeyboardLight, SYSFS_LEDS};
+use bande_status::captive::open_page;
+use bande_status::session::full_name;
+use bande_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
+use bande_toolkit::{
     App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
     MenuPlacement, Palette, Panel, Point, Rect, Role, Scene, SessionEnd, TextSystem, VolumeKey,
     Window, WindowEvent,
 };
-use unbound_xdg::{
+use bande_xdg::{
     DesktopEntry, ICON_THEMES, applications, current_desktops, data_dirs, find_icon,
     path_from_file_uri, running_app, spawn_detached,
 };
@@ -75,11 +75,11 @@ fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
     }
 }
 
-fn audio_key(key: VolumeKey) -> Option<unbound_audio::VolumeKey> {
+fn audio_key(key: VolumeKey) -> Option<bande_audio::VolumeKey> {
     match key {
-        VolumeKey::Mute => Some(unbound_audio::VolumeKey::Mute),
-        VolumeKey::Down => Some(unbound_audio::VolumeKey::Down),
-        VolumeKey::Up => Some(unbound_audio::VolumeKey::Up),
+        VolumeKey::Mute => Some(bande_audio::VolumeKey::Mute),
+        VolumeKey::Down => Some(bande_audio::VolumeKey::Down),
+        VolumeKey::Up => Some(bande_audio::VolumeKey::Up),
         _ => None,
     }
 }
@@ -325,11 +325,7 @@ impl ControlCenter {
             return;
         };
         if found.security.needs_password() && !found.known {
-            self.launch(
-                window,
-                "org.unbound.Settings",
-                &["unbound-settings", "wifi"],
-            );
+            self.launch(window, "org.bande.Settings", &["bande-settings", "wifi"]);
             self.dismiss(window);
             return;
         }
@@ -422,7 +418,7 @@ impl ControlCenter {
                 );
             }
             Change::Settings => {
-                self.launch(window, "org.unbound.Settings", &["unbound-settings"]);
+                self.launch(window, "org.bande.Settings", &["bande-settings"]);
                 self.dismiss(window);
             }
             Change::Player(bus_name) => {
@@ -450,7 +446,7 @@ impl ControlCenter {
     fn end_session(&mut self, window: &mut Window, keyword: &str) {
         if keyword == "sleep" {
             if let Some(system) = &self.system {
-                report("sleep", unbound_status::devices::sleep(system));
+                report("sleep", bande_status::devices::sleep(system));
             }
         } else {
             let ending = match keyword {
@@ -595,7 +591,7 @@ impl ControlCenter {
                 if !level.muted
                     && let Some(session) = &self.session
                 {
-                    unbound_sound::play(session, "audio-volume-change");
+                    bande_sound::play(session, "audio-volume-change");
                 }
                 self.show_hud(window, Hud::Volume(level));
             }

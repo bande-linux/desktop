@@ -1,5 +1,5 @@
 [package]
-name = "unbound-keyboard"
+name = "bande-keyboard"
 description = "Readable names of the xkb keyboard layouts and the desktop's keyboard shortcuts"
 version.workspace = true
 edition.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 roxmltree.workspace = true
-unbound-l10n.workspace = true
+bande-l10n.workspace = true
 
 [lints]
 workspace = true

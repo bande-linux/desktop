@@ -4,8 +4,8 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use unbound_graphics::{Palette, Point, Scheme, TextSystem};
-use unbound_widgets::{
+use bande_graphics::{Palette, Point, Scheme, TextSystem};
+use bande_widgets::{
     Axis, Context, Event, Key, Modifiers, Pointer, Scroll, ScrollPhase, ScrollSource, ScrollState,
     ScrollView, Size, Stack, TEXT_FIELD_HEIGHT, TextField, Ui, Widget, WidgetId,
 };

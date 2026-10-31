@@ -6,13 +6,13 @@ use std::rc::Rc;
 use std::time::{Instant, SystemTime};
 
 use accesskit::{Action, ActionRequest, TreeId};
-use unbound_fs::{Entry, Sort, SortBy, format_date, format_list_date, format_size};
-use unbound_toolkit::ui::{
+use bande_fs::{Entry, Sort, SortBy, format_date, format_list_date, format_size};
+use bande_toolkit::ui::{
     Alert, Cell, Column, Event, FreeLayout, Key, Menu, MenuItem, Modifiers, Pointer, PointerButton,
     Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField, Toggle, Widget,
     WidgetId,
 };
-use unbound_toolkit::{Image, Point, Rect};
+use bande_toolkit::{Image, Point, Rect};
 
 use crate::L10N;
 use crate::browser::{Location, RowEdit};
@@ -63,7 +63,7 @@ pub(crate) enum Signal {
     OpenWithActivate,
     RenameField(crate::batch_rename::RenameField, String),
     RenameChoice(crate::batch_rename::RenameChoice, usize),
-    Access(unbound_fs::Class, usize),
+    Access(bande_fs::Class, usize),
 }
 
 pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;

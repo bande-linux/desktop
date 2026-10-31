@@ -4,9 +4,9 @@ use std::time::Instant;
 
 use accesskit::TreeUpdate;
 
+use bande_graphics::{Rect, Scene};
+use bande_widgets::{set_frame_time, take_wake};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
-use unbound_graphics::{Rect, Scene};
-use unbound_widgets::{set_frame_time, take_wake};
 use wayland_client::backend::{ReadEventsGuard, WaylandError};
 use wayland_client::protocol::wl_surface::WlSurface;
 

@@ -3,7 +3,7 @@ use accesskit::{Action, ActionData, ActionRequest, Node, Role};
 use super::control::paint_field;
 use super::{Context, Cursor, Event, Key, Size, Widget, WidgetId};
 use crate::L10N;
-use unbound_graphics::{
+use bande_graphics::{
     ControlSize, Item, Paragraph, Path, Point, Rect, Shape, TextAlign, TextStyle,
 };
 use zeroize::Zeroizing;

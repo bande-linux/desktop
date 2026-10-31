@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
+use bande_compositor::{Compositor, FrameClock, FrameScheduler, FrameStats, REFRESH, Renderer};
+use bande_test_wayland::{ShmImage, TestClient, quadrants};
 use smithay::utils::{Clock, Monotonic, Size};
-use unbound_compositor::{Compositor, FrameClock, FrameScheduler, FrameStats, REFRESH, Renderer};
-use unbound_test_wayland::{ShmImage, TestClient, quadrants};
 use wayland_client::protocol::wl_shm::Format;
 
 const OUTPUT: (i32, i32) = (1920, 1080);
@@ -53,7 +53,7 @@ struct Options {
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-bench");
+    bande_log::init("bande-bench");
     match run() {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
@@ -432,7 +432,7 @@ fn markdown(metrics: &[Metric], adapter: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ");
     let mut table = format!(
-        "### unbound-bench on {adapter}\n\nHost load average (1, 5, 15 min): {load}\n\n| Metric | Value | Budget | |\n| :--- | ---: | ---: | :---: |\n"
+        "### bande-bench on {adapter}\n\nHost load average (1, 5, 15 min): {load}\n\n| Metric | Value | Budget | |\n| :--- | ---: | ---: | :---: |\n"
     );
     for metric in metrics {
         table += &format!(

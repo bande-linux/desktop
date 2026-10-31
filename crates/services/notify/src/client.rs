@@ -52,7 +52,7 @@ pub fn notify(connection: &Connection, request: &Request<'_>) -> zbus::Result<u3
 }
 
 #[zbus::proxy(
-    interface = "org.unbound.NotificationCenter",
+    interface = "org.bande.NotificationCenter",
     default_service = "org.freedesktop.Notifications",
     default_path = "/org/freedesktop/Notifications",
     gen_async = false,

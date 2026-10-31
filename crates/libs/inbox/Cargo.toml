@@ -1,5 +1,5 @@
 [package]
-name = "unbound-inbox"
+name = "bande-inbox"
 description = "Hands values from worker threads to a poll-driven run loop"
 version.workspace = true
 edition.workspace = true

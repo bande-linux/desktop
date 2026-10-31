@@ -1,7 +1,7 @@
 use std::thread;
 
-use unbound_bus::portal_settings::{self, APPEARANCE, PREFER_DARK, UNBOUND_APPEARANCE};
-use unbound_graphics::TextSize;
+use bande_bus::portal_settings::{self, APPEARANCE, BANDE_APPEARANCE, PREFER_DARK};
+use bande_graphics::TextSize;
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedValue;
 
@@ -20,7 +20,7 @@ impl SystemAppearance {
                 self.reduce_motion = value.is_some_and(|reduce| reduce != 0);
             }
             (APPEARANCE, "color-scheme") => self.dark = value == Some(PREFER_DARK),
-            (UNBOUND_APPEARANCE, "text-size") => {
+            (BANDE_APPEARANCE, "text-size") => {
                 self.text_size = value.map_or(TextSize::DEFAULT, TextSize::from_percent);
             }
             _ => {}
@@ -35,7 +35,7 @@ pub fn follow_appearance(
     thread::spawn(move || {
         let followed = portal_settings::follow(
             &connection,
-            &[APPEARANCE, UNBOUND_APPEARANCE],
+            &[APPEARANCE, BANDE_APPEARANCE],
             SystemAppearance::default(),
             SystemAppearance::apply,
             publish,

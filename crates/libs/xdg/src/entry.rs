@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::mimeapps::data_home;
 
-pub const CURRENT_DESKTOP: &str = "Unbound";
+pub const CURRENT_DESKTOP: &str = "Bande";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Locale {

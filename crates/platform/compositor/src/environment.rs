@@ -9,7 +9,7 @@ use zbus::blocking::Connection;
 
 use crate::CursorTheme;
 
-const DESKTOP_NAME: &str = "Unbound";
+const DESKTOP_NAME: &str = "Bande";
 
 #[zbus::proxy(
     interface = "org.freedesktop.systemd1.Manager",

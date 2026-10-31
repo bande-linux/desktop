@@ -5,7 +5,7 @@ wait 600ms
 type "terminal"
 wait 500ms
 key enter
-wait-for-window "org.unbound.Terminal"
+wait-for-window "org.bande.Terminal"
 wait 1s
 note "Open Files"
 key super+space
@@ -13,7 +13,7 @@ wait 600ms
 type "files"
 wait 500ms
 key enter
-wait-for-window "org.unbound.Files"
+wait-for-window "org.bande.Files"
 wait 1200ms
 shot "two apps open, Files in front"
 note "Super+Tab brings Terminal to the front"

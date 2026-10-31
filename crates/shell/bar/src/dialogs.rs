@@ -3,20 +3,20 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use crate::L10N;
-use unbound_status::devices::end_session;
-use unbound_status::session::{Effect, Ending, SessionEnding, Stage, facts, quitting_apps};
-use unbound_toolkit::ui::{Axis, Button, Event, Key, Label, Stack, Ui, Widget};
-use unbound_toolkit::{
+use bande_status::devices::end_session;
+use bande_status::session::{Effect, Ending, SessionEnding, Stage, facts, quitting_apps};
+use bande_toolkit::ui::{Axis, Button, Event, Key, Label, Stack, Ui, Widget};
+use bande_toolkit::{
     App, Image, Item, Palette, Point, Rect, Role, Scene, TextAlign, TextStyle, TextSystem, Window,
     WindowEvent,
 };
-use unbound_xdg::{
+use bande_xdg::{
     Locale, applications, current_desktops, data_dirs, find_app, find_icon, reopen_file,
     take_apps_to_reopen,
 };
 use zbus::blocking::Connection;
 
-pub const DIALOGS: &str = "org.unbound.MenuBar";
+pub const DIALOGS: &str = "org.bande.MenuBar";
 pub const CONFIRMATION_SIZE: (u32, u32) = (420, 130);
 const ABOUT_SIZE: (u32, u32) = (280, 190);
 const ABOUT_ICON: f32 = 64.0;
@@ -54,7 +54,7 @@ fn dialog_ui(lines: Widgets, buttons: Widgets, palette: Palette) -> Ui {
     }
     Ui::new(
         Box::new(Stack::new(Axis::Vertical, 10.0, 20.0, rows)),
-        unbound_toolkit::ui::Context::new(TextSystem::new(), palette),
+        bande_toolkit::ui::Context::new(TextSystem::new(), palette),
     )
 }
 
@@ -234,7 +234,7 @@ pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>
         choice: Rc::new(Cell::new(Choice::Undecided)),
     };
     confirmation.rebuild(&mut window, now);
-    unbound_toolkit::run(&mut window, &mut confirmation)?;
+    bande_toolkit::run(&mut window, &mut confirmation)?;
     Ok(())
 }
 
@@ -295,10 +295,10 @@ pub fn run_about() -> Result<(), Box<dyn std::error::Error>> {
     lines.push(row(&L10N.tr("about-memory"), &facts.memory));
     lines.push(row(
         &L10N.tr("about-desktop"),
-        &format!("Unbound {}", env!("CARGO_PKG_VERSION")),
+        &format!("Bande {}", env!("CARGO_PKG_VERSION")),
     ));
     let ui = dialog_ui(lines, Vec::new(), window.appearance().palette());
-    unbound_toolkit::run(&mut window, &mut About { ui })?;
+    bande_toolkit::run(&mut window, &mut About { ui })?;
     Ok(())
 }
 
@@ -404,6 +404,6 @@ pub fn run_about_app(app_id: &str, version: &str) -> Result<(), Box<dyn std::err
         palette: window.appearance().palette(),
         text: TextSystem::new(),
     };
-    unbound_toolkit::run(&mut window, &mut about)?;
+    bande_toolkit::run(&mut window, &mut about)?;
     Ok(())
 }

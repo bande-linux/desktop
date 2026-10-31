@@ -29,50 +29,50 @@ for package in "${packages[@]}"; do
     [ "$(dpkg-deb --field "$deb" Section)" = misc ]
     [ "$(dpkg-deb --fsys-tarfile "$deb" | tar -xO | grep -ac -e "$PWD" -e "${CARGO_HOME:-$HOME/.cargo}")" = 0 ]
 done
-field unbound-compositor Depends | grep -F 'mesa-vulkan-drivers | vulkan-icd'
+field bande-compositor Depends | grep -F 'mesa-vulkan-drivers | vulkan-icd'
 
 echo "== the notification daemon is D-Bus activatable"
-root=$(extract unbound-notify)
-service="$root/usr/share/dbus-1/services/org.unbound.Notify.service"
+root=$(extract bande-notify)
+service="$root/usr/share/dbus-1/services/org.bande.Notify.service"
 grep -qx 'Name=org.freedesktop.Notifications' "$service"
 test -x "$root$(sed -n 's/^Exec=//p' "$service")"
 
 echo "== the clipboard daemon's package"
-contains unbound-clipboard usr/bin/unbound-clipboard
-field unbound-compositor Recommends | grep -qw unbound-clipboard
+contains bande-clipboard usr/bin/bande-clipboard
+field bande-compositor Recommends | grep -qw bande-clipboard
 
 echo "== the shell's packages"
-for package in unbound-shell unbound-term unbound-lock unbound-screenshot unbound-files unbound-settings; do
-    field unbound-compositor Recommends | grep -q "$package"
+for package in bande-shell bande-term bande-lock bande-screenshot bande-files bande-settings; do
+    field bande-compositor Recommends | grep -q "$package"
     contains "$package" "usr/bin/$package"
 done
 for variant in light dark; do
-    contains unbound-shell "usr/share/unbound/wallpapers/drift-$variant.svg"
+    contains bande-shell "usr/share/bande/wallpapers/drift-$variant.svg"
 done
-root=$(extract unbound-term)
-grep -qx 'Exec=unbound-term' "$root/usr/share/applications/org.unbound.Terminal.desktop"
-grep -qx 'Icon=org.unbound.Terminal' "$root/usr/share/applications/org.unbound.Terminal.desktop"
-test -s "$root/usr/share/icons/hicolor/scalable/apps/org.unbound.Terminal.svg"
-root=$(extract unbound-files)
-grep -qx 'Exec=unbound-files' "$root/usr/share/applications/org.unbound.Files.desktop"
-test -s "$root/usr/share/icons/hicolor/scalable/apps/org.unbound.Files.svg"
-root=$(extract unbound-settings)
-grep -qx 'Exec=unbound-settings' "$root/usr/share/applications/org.unbound.Settings.desktop"
-root=$(extract unbound-monitor)
-test -x "$root/usr/bin/unbound-monitor"
-grep -qx 'Exec=unbound-monitor' "$root/usr/share/applications/org.unbound.ActivityMonitor.desktop"
-root=$(extract unbound-greeter)
-grep -qx 'command = "/usr/bin/unbound-compositor --greeter"' "$root/usr/share/unbound-greeter/greetd-config.toml"
-field unbound-greeter Depends | grep -qw greetd
-root=$(extract unbound-lock)
-grep -qx '@include common-auth' "$root/etc/pam.d/unbound-lock"
-field unbound-lock Depends | grep -q libpam0g
+root=$(extract bande-term)
+grep -qx 'Exec=bande-term' "$root/usr/share/applications/org.bande.Terminal.desktop"
+grep -qx 'Icon=org.bande.Terminal' "$root/usr/share/applications/org.bande.Terminal.desktop"
+test -s "$root/usr/share/icons/hicolor/scalable/apps/org.bande.Terminal.svg"
+root=$(extract bande-files)
+grep -qx 'Exec=bande-files' "$root/usr/share/applications/org.bande.Files.desktop"
+test -s "$root/usr/share/icons/hicolor/scalable/apps/org.bande.Files.svg"
+root=$(extract bande-settings)
+grep -qx 'Exec=bande-settings' "$root/usr/share/applications/org.bande.Settings.desktop"
+root=$(extract bande-monitor)
+test -x "$root/usr/bin/bande-monitor"
+grep -qx 'Exec=bande-monitor' "$root/usr/share/applications/org.bande.ActivityMonitor.desktop"
+root=$(extract bande-greeter)
+grep -qx 'command = "/usr/bin/bande-compositor --greeter"' "$root/usr/share/bande-greeter/greetd-config.toml"
+field bande-greeter Depends | grep -qw greetd
+root=$(extract bande-lock)
+grep -qx '@include common-auth' "$root/etc/pam.d/bande-lock"
+field bande-lock Depends | grep -q libpam0g
 
 echo "== the session services' user units and D-Bus activation"
-for entry in unbound-config:org.unbound.Config:org.unbound.Config \
-    unbound-power:org.unbound.Power:org.freedesktop.ScreenSaver \
-    unbound-sound:org.unbound.Sound:org.unbound.Sound \
-    unbound-tray:org.unbound.Tray:org.kde.StatusNotifierWatcher; do
+for entry in bande-config:org.bande.Config:org.bande.Config \
+    bande-power:org.bande.Power:org.freedesktop.ScreenSaver \
+    bande-sound:org.bande.Sound:org.bande.Sound \
+    bande-tray:org.bande.Tray:org.kde.StatusNotifierWatcher; do
     IFS=: read -r package file name <<< "$entry"
     root=$(extract "$package")
     service="$root/usr/share/dbus-1/services/$file.service"
@@ -80,50 +80,50 @@ for entry in unbound-config:org.unbound.Config:org.unbound.Config \
     grep -qx "Name=$name" "$service"
     grep -qx "SystemdService=$package.service" "$service"
     grep -qx "BusName=$name" "$unit"
-    grep -qx 'WantedBy=unbound-session.target' "$unit"
+    grep -qx 'WantedBy=bande-session.target' "$unit"
     test -x "$root$(sed -n 's/^Exec=//p' "$service")"
     test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
     dpkg-deb --ctrl-tarfile "$debs/${package}_${version}_$architecture.deb" | tar -t | grep -qx './postinst'
 done
 
 echo "== the automount service's user unit"
-root=$(extract unbound-automount)
-unit="$root/usr/lib/systemd/user/unbound-automount.service"
-grep -qx 'WantedBy=unbound-session.target' "$unit"
+root=$(extract bande-automount)
+unit="$root/usr/lib/systemd/user/bande-automount.service"
+grep -qx 'WantedBy=bande-session.target' "$unit"
 test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
-field unbound-automount Depends | grep -q udisks2
+field bande-automount Depends | grep -q udisks2
 
 echo "== the login session"
 root="$scratch/session"
 mkdir -p "$root"
-for package in unbound-compositor unbound-config unbound-power unbound-tray unbound-automount; do
+for package in bande-compositor bande-config bande-power bande-tray bande-automount; do
     dpkg-deb --extract "$debs/${package}_${version}_$architecture.deb" "$root"
 done
-session="$root/usr/share/wayland-sessions/unbound.desktop"
+session="$root/usr/share/wayland-sessions/bande.desktop"
 grep -qx 'Type=Application' "$session"
-grep -qx 'Name=Unbound' "$session"
-grep -qx 'Exec=unbound-session' "$session"
-grep -qx 'DesktopNames=Unbound' "$session"
-test -x "$root/usr/bin/unbound-session"
-sh -n "$root/usr/bin/unbound-session"
+grep -qx 'Name=Bande' "$session"
+grep -qx 'Exec=bande-session' "$session"
+grep -qx 'DesktopNames=Bande' "$session"
+test -x "$root/usr/bin/bande-session"
+sh -n "$root/usr/bin/bande-session"
 units="$scratch/units"
 mkdir -p "$units"
 cp "$root"/usr/lib/systemd/user/* "$units/"
 sed -i "s|^ExecStart=/|ExecStart=$root/|" "$units"/*
-grep -qx 'Type=notify' "$units/unbound-compositor.service"
-grep -qx 'BindsTo=graphical-session.target' "$units/unbound-compositor.service"
-grep -qx 'Wants=xdg-desktop-autostart.target' "$units/unbound-session.target"
+grep -qx 'Type=notify' "$units/bande-compositor.service"
+grep -qx 'BindsTo=graphical-session.target' "$units/bande-compositor.service"
+grep -qx 'Wants=xdg-desktop-autostart.target' "$units/bande-session.target"
 [ -z "$(grep -l 'WantedBy=graphical-session.target' "$units"/* || true)" ]
 findings=$(cd "$units" && XDG_RUNTIME_DIR=$(mktemp -d -p "$scratch") SYSTEMD_LOG_LEVEL=warning systemd-analyze --user verify ./* 2>&1) || true
 echo "$findings"
 test -z "$findings"
 
 echo "== the portal backend's registration"
-root=$(extract xdg-desktop-portal-unbound)
-portal="$root/usr/share/xdg-desktop-portal/portals/unbound.portal"
-service="$root/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.unbound.service"
-grep -qx 'DBusName=org.freedesktop.impl.portal.desktop.unbound' "$portal"
-grep -qx 'Name=org.freedesktop.impl.portal.desktop.unbound' "$service"
+root=$(extract xdg-desktop-portal-bande)
+portal="$root/usr/share/xdg-desktop-portal/portals/bande.portal"
+service="$root/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.bande.service"
+grep -qx 'DBusName=org.freedesktop.impl.portal.desktop.bande' "$portal"
+grep -qx 'Name=org.freedesktop.impl.portal.desktop.bande' "$service"
 test -x "$root$(sed -n 's/^Exec=//p' "$service")"
-grep -q '^org.freedesktop.impl.portal.Settings=unbound;' "$root/usr/share/xdg-desktop-portal/unbound-portals.conf"
+grep -q '^org.freedesktop.impl.portal.Settings=bande;' "$root/usr/share/xdg-desktop-portal/bande-portals.conf"
 echo "the $architecture packages passed"

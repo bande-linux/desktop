@@ -4,25 +4,25 @@ mod support;
 
 use std::path::PathBuf;
 
-use support::SIZE;
-use unbound_audio::{Device, Direction, Level, Snapshot};
-use unbound_bluetooth::Bluetooth;
-use unbound_keyboard::Layouts;
-use unbound_settings::sidebar_width;
-use unbound_settings::{
+use bande_audio::{Device, Direction, Level, Snapshot};
+use bande_bluetooth::Bluetooth;
+use bande_keyboard::Layouts;
+use bande_settings::sidebar_width;
+use bande_settings::{
     About, App, AppNotifications, BatteryState, BluetoothState, Category, Charge, DefaultApp,
     Display, Grant, InstalledLocale, LocaleState, LoginItems, Mode, Package, Pair, PaneId,
     PointingDevices, SettingId, SettingsView, SoftwareState, Storage, TimeState, Update, Value,
     WifiState, thumbnail,
 };
-use unbound_settings_panes::Permission;
-use unbound_test_bus::SessionBus;
-use unbound_test_bus::bluez::FakeBluez;
-use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{
+use bande_settings_panes::Permission;
+use bande_test_bus::SessionBus;
+use bande_test_bus::bluez::FakeBluez;
+use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::{
     Appearance, CpuRenderer, FrameRegions, Palette, Scene, Scheme, TextSize, TextSystem,
     WINDOW_HEADER_HEIGHT, framed_scene,
 };
+use support::SIZE;
 
 type Build = fn(Scheme) -> SettingsView;
 
@@ -330,7 +330,7 @@ fn general(scheme: Scheme, pane: PaneId) -> SettingsView {
         memory: 16_000_000_000,
         capacity: 494_000_000_000,
         available: 210_000_000_000,
-        unbound: "0.1.0".to_owned(),
+        bande: "0.1.0".to_owned(),
         system: "Debian 13.7 (trixie)".to_owned(),
         serial: Some("C02XL0GHJGH5".to_owned()),
     }));
@@ -445,8 +445,8 @@ fn apps(scheme: Scheme) -> SettingsView {
         name: name.to_owned(),
     };
     view.apply(Update::Login(LoginItems {
-        items: vec![app("org.unbound.Terminal", "Terminal")],
-        apps: vec![app("org.unbound.Terminal", "Terminal")],
+        items: vec![app("org.bande.Terminal", "Terminal")],
+        apps: vec![app("org.bande.Terminal", "Terminal")],
     }));
     let role = |role: &'static str, apps: Vec<App>| DefaultApp {
         role,
@@ -461,15 +461,12 @@ fn apps(scheme: Scheme) -> SettingsView {
         role("mail", Vec::new()),
         role("music", Vec::new()),
         role("video", vec![app("mpv.desktop", "mpv Media Player")]),
-        role("pictures", vec![app("org.unbound.Files.desktop", "Files")]),
+        role("pictures", vec![app("org.bande.Files.desktop", "Files")]),
         role(
             "pdf",
             vec![app("org.gnome.Evince.desktop", "Document Viewer")],
         ),
-        role(
-            "text",
-            vec![app("org.unbound.Editor.desktop", "Text Editor")],
-        ),
+        role("text", vec![app("org.bande.Editor.desktop", "Text Editor")]),
     ]));
     view.select_pane(PaneId::Apps);
     view
@@ -604,8 +601,8 @@ fn software_update(scheme: Scheme) -> SettingsView {
 
 fn network(scheme: Scheme) -> SettingsView {
     let mut view = new_view(scheme);
-    view.apply(Update::Network(unbound_settings::NetworkState {
-        ethernet: Some(unbound_network::Ethernet {
+    view.apply(Update::Network(bande_settings::NetworkState {
+        ethernet: Some(bande_network::Ethernet {
             interface: "end0".to_owned(),
             cable: true,
             managed: true,
@@ -616,15 +613,15 @@ fn network(scheme: Scheme) -> SettingsView {
             manual: true,
         }),
         vpns: vec![
-            unbound_network::Vpn {
+            bande_network::Vpn {
                 path: "/a".to_owned(),
                 name: "Home WireGuard".to_owned(),
-                state: unbound_network::VpnState::Connected,
+                state: bande_network::VpnState::Connected,
             },
-            unbound_network::Vpn {
+            bande_network::Vpn {
                 path: "/b".to_owned(),
                 name: "Office".to_owned(),
-                state: unbound_network::VpnState::Off,
+                state: bande_network::VpnState::Off,
             },
         ],
     }));
@@ -687,7 +684,7 @@ fn the_panes_match_their_goldens() {
                 CpuRenderer::new()
                     .render_into(&scene, scale, &mut rgba)
                     .expect("frame");
-                unbound_golden::assert_golden_rgba!(name, pixels, rgba);
+                bande_golden::assert_golden_rgba!(name, pixels, rgba);
             });
         }
     });
@@ -717,5 +714,5 @@ fn long_row_labels_wrap_beside_their_control_at_large_text() {
     CpuRenderer::new()
         .render_into(&scene, 1.0, &mut rgba)
         .expect("frame");
-    unbound_golden::assert_golden_rgba!("accessibility-150-narrow-light", NARROW, rgba);
+    bande_golden::assert_golden_rgba!("accessibility-150-narrow-light", NARROW, rgba);
 }

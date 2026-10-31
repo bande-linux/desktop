@@ -14,9 +14,9 @@ use crate::screenshot::{Capture, ScreenshotUi};
 const MONITOR_PREFIX: &str = "monitor:";
 
 #[zbus::proxy(
-    interface = "org.unbound.Screenshot",
-    default_service = "org.unbound.Screenshot",
-    default_path = "/org/unbound/Screenshot",
+    interface = "org.bande.Screenshot",
+    default_service = "org.bande.Screenshot",
+    default_path = "/org/bande/Screenshot",
     gen_async = false,
     blocking_name = "ScreenshotService"
 )]

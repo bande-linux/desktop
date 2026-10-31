@@ -8,7 +8,7 @@ mod view;
 
 use std::sync::LazyLock;
 
-use unbound_l10n::Localizer;
+use bande_l10n::Localizer;
 
 pub use backdrop::{Key as WallpaperKey, Layer, Luma};
 pub use client::{DesktopSurface, confirm, role};
@@ -23,7 +23,7 @@ pub use places::{
 };
 pub use view::{Artwork, DesktopView, Request, fitted_label};
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-desktop-surface.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-desktop-surface.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -38,7 +38,7 @@ mod tests {
             include_str!("client.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

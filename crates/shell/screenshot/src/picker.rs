@@ -2,10 +2,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_toolkit::ui::{
+use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for,
 };
-use unbound_toolkit::{Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use bande_toolkit::{Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
 use crate::L10N;
 use crate::service::Choice;
@@ -499,8 +499,8 @@ impl Widget for Picker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use unbound_toolkit::ui::{FreeLayout, Modifiers, Ui};
-    use unbound_toolkit::{Appearance, TextSystem};
+    use bande_toolkit::ui::{FreeLayout, Modifiers, Ui};
+    use bande_toolkit::{Appearance, TextSystem};
 
     fn choice(id: &str, title: &str) -> Choice {
         Choice {

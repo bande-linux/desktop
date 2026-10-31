@@ -4,7 +4,7 @@ wait 600ms
 type "terminal"
 wait 500ms
 key enter
-wait-for-window "org.unbound.Terminal"
+wait-for-window "org.bande.Terminal"
 wait 1s
 note "Lock the screen"
 key super+ctrl+q

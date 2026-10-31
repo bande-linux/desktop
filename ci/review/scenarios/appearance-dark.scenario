@@ -4,9 +4,9 @@ wait 600ms
 type "terminal"
 wait 500ms
 key enter
-wait-for-window "org.unbound.Terminal"
+wait-for-window "org.bande.Terminal"
 wait 1s
-type "cp ~/.config/unbound/config.kdl /tmp/config.kdl.review; sed -i '/^appearance/d' ~/.config/unbound/config.kdl; echo 'appearance \"dark\"' >> ~/.config/unbound/config.kdl; clear\n"
+type "cp ~/.config/bande/config.kdl /tmp/config.kdl.review; sed -i '/^appearance/d' ~/.config/bande/config.kdl; echo 'appearance \"dark\"' >> ~/.config/bande/config.kdl; clear\n"
 wait 2500ms
 shot "dark terminal and shell"
 key super+space
@@ -14,7 +14,7 @@ wait 600ms
 type "files"
 wait 500ms
 key enter
-wait-for-window "org.unbound.Files"
+wait-for-window "org.bande.Files"
 wait 1500ms
 shot "dark files"
 click 170 22
@@ -49,6 +49,6 @@ click 1500 900
 wait 300ms
 key super+q
 wait 1500ms
-type "cp /tmp/config.kdl.review ~/.config/unbound/config.kdl\n"
+type "cp /tmp/config.kdl.review ~/.config/bande/config.kdl\n"
 wait 2s
 shot "back to the previous appearance"

@@ -5,9 +5,9 @@ use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 
-use unbound_notify::NotificationServer;
-use unbound_notify::client::NotificationCenter;
-use unbound_test_bus::SessionBus;
+use bande_notify::NotificationServer;
+use bande_notify::client::NotificationCenter;
+use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::zvariant::Value;
 
@@ -16,7 +16,7 @@ const QUIET: Duration = Duration::from_millis(400);
 
 struct Sounds(Mutex<Sender<String>>);
 
-#[zbus::interface(name = "org.unbound.Sound")]
+#[zbus::interface(name = "org.bande.Sound")]
 impl Sounds {
     fn play(&self, name: &str) {
         let _ = self.0.lock().unwrap().send(name.to_owned());
@@ -37,9 +37,9 @@ fn start() -> Fixture {
     let (sender, played) = mpsc::channel();
     let sounds = zbus::blocking::connection::Builder::address(bus.address())
         .expect("address")
-        .name("org.unbound.Sound")
+        .name("org.bande.Sound")
         .expect("name")
-        .serve_at("/org/unbound/Sound", Sounds(Mutex::new(sender)))
+        .serve_at("/org/bande/Sound", Sounds(Mutex::new(sender)))
         .expect("serve")
         .build()
         .expect("sounds");

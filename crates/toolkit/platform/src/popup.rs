@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::time::Instant;
 
-use unbound_graphics::{Appearance, CpuRenderer, Event, Palette, Point, Rect, Scene, TextSystem};
-use unbound_widgets::{
+use bande_graphics::{Appearance, CpuRenderer, Event, Palette, Point, Rect, Scene, TextSystem};
+use bande_widgets::{
     Animated, FrameTime, MENU_SHADOW_MARGIN, Menu, MenuOutcome, MenuPanel, MenuTracker, Spring,
 };
 use wayland_client::protocol::wl_callback::{self, WlCallback};

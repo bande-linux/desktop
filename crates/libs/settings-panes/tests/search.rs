@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use unbound_settings_panes::{Group, Kind, PaneId, SettingId, panes, search};
+use bande_settings_panes::{Group, Kind, PaneId, SettingId, panes, search};
 
 fn found(query: &str) -> Vec<PaneId> {
     search(&panes(), query)

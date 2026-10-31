@@ -50,7 +50,7 @@ fn overlay(title: &str, items: &[String], selected: usize) -> TreeUpdate {
     TreeUpdate {
         nodes,
         tree: Some(TreeInfo {
-            toolkit_name: Some("unbound-compositor".to_owned()),
+            toolkit_name: Some("bande-compositor".to_owned()),
             toolkit_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
             ..TreeInfo::new(WINDOW)
         }),

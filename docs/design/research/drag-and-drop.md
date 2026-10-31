@@ -80,7 +80,7 @@ destination object and hovering or force-clicking to activate the destination ob
   - **The compositor chooses the action.**
     - The spec says Shift selects move and Control selects copy.
     - Otherwise it is "implementation-dependent".
-    - This is where we put Unbound's Alt-copy rule.
+    - This is where we put Bande's Alt-copy rule.
 - **MIME types that matter:**
   - `text/uri-list` (files, RFC 2483).
   - `text/plain;charset=utf-8`.
@@ -116,7 +116,7 @@ destination object and hovering or force-clicking to activate the destination ob
   <https://github.com/YaLTeR/niri/wiki/Configuration:-Gestures> (via the gestures research,
   partly unverified). This is the Wayland-native form of "drag between Spaces".
 
-## Current state in Unbound
+## Current state in Bande
 
 - `wl_data_device_manager` is served (`state.rs`). The client and server DnD grab handlers use
   Smithay's defaults (`impl ClientDndGrabHandler for State {}`).
@@ -126,7 +126,7 @@ destination object and hovering or force-clicking to activate the destination ob
 - The toolkit has no drag source or target, no hover per widget and no right button
   (`docs/architecture/toolkit.md`).
 
-## For Unbound
+## For Bande
 
 1. **Compositor drag session** (now, `crates/platform/compositor`).
    - Render the client's drag icon surface at the pointer, above everything, including layer
@@ -138,7 +138,7 @@ destination object and hovering or force-clicking to activate the destination ob
        Wayland has no link action, so it waits until Files needs it (later).
      - No modifier means the target's preferred action.
    - Re-evaluate on every modifier change and send `action` events immediately.
-   - The Wayland spec suggests Control for copy. Unbound reserves Ctrl for terminals, so use
+   - The Wayland spec suggests Control for copy. Bande reserves Ctrl for terminals, so use
      Alt and document the deviation in `behaviour.md`.
    - **Slide-back:** on `cancelled`, or a drop with action none, animate the icon from the
      pointer back to the drag origin with `standard`, then fade it with `fade`. The compositor
@@ -172,7 +172,7 @@ destination object and hovering or force-clicking to activate the destination ob
 6. **Clippings and file promises** (later, Files).
    - Accept `text/plain` and `image/png` drops into a folder by writing
      `Text Clipping – <first words>.txt` or `Image <date>.png`.
-   - For promises between our apps, define `application/x-unbound-file-promise` (the source
+   - For promises between our apps, define `application/x-bande-file-promise` (the source
      writes into a directory the target names in a follow-up exchange). Mail and screenshot
      thumbnails need it.
 7. **Multi-item drag image** (now, toolkit). Up to 3 stacked thumbnails, offset 3 px, a count

@@ -5,8 +5,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use unbound_status::backlight::{DisplayLight, KeyboardLight};
-use unbound_test_bus::SessionBus;
+use bande_status::backlight::{DisplayLight, KeyboardLight};
+use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedObjectPath;
 

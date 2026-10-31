@@ -3,13 +3,13 @@ use std::fmt;
 use std::ops::Range;
 use std::sync::Arc;
 
+use bande_design::{Color, TextRole, TextSize, Typeface};
 use parley::fontique::GenericFamily;
 use parley::{
     Affinity, Alignment, AlignmentOptions, Cursor, FontContext, FontData, FontFamily,
     FontFamilyName, FontWeight, Layout, LayoutContext, LineHeight, PositionedLayoutItem,
     RangedBuilder, Selection, StyleProperty,
 };
-use unbound_design::{Color, TextRole, TextSize, Typeface};
 
 use crate::Rect;
 

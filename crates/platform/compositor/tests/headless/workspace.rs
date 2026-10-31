@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::{BACKGROUND, Compositor, Gesture, Renderer};
-use unbound_test_wayland::{BLUE, RED, TestClient, Workspace, roundtrip};
+use bande_compositor::{BACKGROUND, Compositor, Gesture, Renderer};
+use bande_test_wayland::{BLUE, RED, TestClient, Workspace, roundtrip};
 
 const WINDOW: (i32, i32) = (64, 48);
 

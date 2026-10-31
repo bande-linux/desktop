@@ -51,7 +51,7 @@ On the mini (one 2560×1440 display at scale 1, `bar { … }` with the default l
 | KDE Plasma | "near notification icon" by default: out of the panel, on the tray's half | tray applet popup | tray icon | yes [3] |
 | ChromeOS | above the status area | notification bubble anchored to the shelf corner | status area (clock) | the status area moves with the shelf [4] |
 
-In every system, banners appear near the clock that opens their history, and the history opens from that clock. Unbound's left taskbar is the only layout where banners and their history sit in opposite corners.
+In every system, banners appear near the clock that opens their history, and the history opens from that clock. Bande's left taskbar is the only layout where banners and their history sit in opposite corners.
 
 ## Options
 
@@ -101,7 +101,7 @@ Each milestone is one short branch from `main`, gated by fmt, workspace clippy `
    - Docs: bar.md §3.5 (the rule above) and §6 (drop "banners at the far corner"), and `docs/architecture/behaviour.md:34` ("top right below the menu bar" becomes the clock-corner rule).
 
 3. **One panel at a time, both through the compositor** (~2 h)
-   - `crates/platform/protocols/protocols/unbound-shell-v1.xml`: replace the request `toggle_control_center` with `toggle_panel(panel)`. The protocol is at version 1 with no version checks, so it is changed in place.
+   - `crates/platform/protocols/protocols/bande-shell-v1.xml`: replace the request `toggle_control_center` with `toggle_panel(panel)`. The protocol is at version 1 with no version checks, so it is changed in place.
    - `crates/platform/compositor/src/shell.rs:433`: call `toggle_panel(panel)`. `crates/toolkit/platform/src/shell.rs`: `Window::toggle_panel(Panel)` in place of `toggle_control_center`.
    - `bar/src/menu_bar_client.rs:396-399`: the clock calls `toggle_panel(NotificationCenter)`. Delete the in-process closure: `NotificationCenter` and `Services::notification_center` (`bar/src/surfaces.rs`), `Context::notification_center` (`shell/src/shell.rs`), `Notifications::toggle`, `Message::Toggle` (`notifications/src/client.rs`), and its use in `bar/tests/live.rs:203`.
    - Control Center's client dismisses itself on `TogglePanel(NotificationCenter)`. The notifications client closes the centre and puts banners away on `TogglePanel(ControlCenter)` (new `Screen::make_way(now)`).
@@ -112,9 +112,9 @@ Each milestone is one short branch from `main`, gated by fmt, workspace clippy `
    - Docs: behaviour.md:36 and the resolved line in `NOTES/resume-2026-10-31.md`.
 
 4. **Clock menu and the Do Not Disturb mark** (~1.5-2 h)
-   - `bar/src/menu_bar_client.rs`: a right click (and Hold) on the clock opens a local menu with Do Not Disturb (checkable), Notifications Settings… and Date & Time Settings…. The two settings items use `unbound-settings <pane>`, as `:180` already does.
-   - The toggle sets the `DoNotDisturb` property through `unbound_notify::client`, as Control Center does (`controlcenter/src/client.rs:359-361`).
-   - `crates/libs/status/src/unread.rs`: follow `(unread, do_not_disturb)` from the same presentation. `bar/src/rail.rs` and `menu_bar.rs` draw a muted moon in place of the dot while it is on, and the accessible label says so (`clock-unread` gets a sibling in `bar/locales/en-US/unbound-bar.ftl`).
+   - `bar/src/menu_bar_client.rs`: a right click (and Hold) on the clock opens a local menu with Do Not Disturb (checkable), Notifications Settings… and Date & Time Settings…. The two settings items use `bande-settings <pane>`, as `:180` already does.
+   - The toggle sets the `DoNotDisturb` property through `bande_notify::client`, as Control Center does (`controlcenter/src/client.rs:359-361`).
+   - `crates/libs/status/src/unread.rs`: follow `(unread, do_not_disturb)` from the same presentation. `bar/src/rail.rs` and `menu_bar.rs` draw a muted moon in place of the dot while it is on, and the accessible label says so (`clock-unread` gets a sibling in `bar/locales/en-US/bande-bar.ftl`).
    - Tests:
      - `bar/tests/live.rs` `shared_cases`: `Clock, Secondary` and `Clock, Hold` expect `Menu`.
      - `bar/tests/rail.rs`: the clock's node name says "Do Not Disturb" when set, and the rail goldens gain a moon case. A unit test in `libs/status` covers the `(unread, quiet)` mapping from a presentation.

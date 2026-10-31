@@ -8,12 +8,12 @@ use std::process::{Child, Command};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use bande_protocols::server::bande_shell_v1::SessionEnd;
 use rustix::io::{FdFlags, fcntl_setfd};
 use rustix::process::{Pid, PidfdFlags, pidfd_open};
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{Interest, Mode, PostAction};
 use smithay::reexports::wayland_server::Client;
-use unbound_protocols::server::unbound_shell_v1::SessionEnd;
 
 use crate::environment::cursor_environment;
 use crate::state::{ClientState, Compositor};
@@ -24,13 +24,13 @@ pub enum SessionRole {
     Shell,
 }
 
-pub const CLIPBOARD_DAEMON: &str = "/usr/bin/unbound-clipboard";
-pub const LOCK_SCREEN: &str = "/usr/bin/unbound-lock";
-pub const SCREENSHOT: &str = "/usr/bin/unbound-screenshot";
-pub const SHELL: &str = "/usr/bin/unbound-shell";
-pub const GREETER: &str = "/usr/bin/unbound-greeter";
-pub const REVIEW: &str = "/usr/bin/unbound-review";
-pub const MONITOR: &str = "/usr/bin/unbound-monitor";
+pub const CLIPBOARD_DAEMON: &str = "/usr/bin/bande-clipboard";
+pub const LOCK_SCREEN: &str = "/usr/bin/bande-lock";
+pub const SCREENSHOT: &str = "/usr/bin/bande-screenshot";
+pub const SHELL: &str = "/usr/bin/bande-shell";
+pub const GREETER: &str = "/usr/bin/bande-greeter";
+pub const REVIEW: &str = "/usr/bin/bande-review";
+pub const MONITOR: &str = "/usr/bin/bande-monitor";
 const FORCE_QUIT_ARGUMENT: &str = "--force-quit";
 const CONFIRM_ARGUMENT: &str = "--confirm";
 
@@ -43,7 +43,7 @@ pub(crate) struct SessionClient {
     last_restart: Option<Instant>,
 }
 
-pub const OUTPUT_VARIABLE: &str = "UNBOUND_OUTPUT";
+pub const OUTPUT_VARIABLE: &str = "BANDE_OUTPUT";
 
 pub(crate) struct LockScreen {
     executable: PathBuf,

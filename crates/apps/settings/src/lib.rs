@@ -36,9 +36,10 @@ mod widgets;
 
 use std::sync::LazyLock;
 
-use unbound_l10n::Localizer;
+use bande_l10n::Localizer;
 
 pub use about::{About, AboutCommand, chip_name, memory_bytes, static_hostname, system_version};
+pub use bande_settings_panes::{PaneId, SettingId, Value};
 pub use battery::{BatteryCommand, BatteryState, Charge, charge_of, follow_battery};
 pub use client::{CONFIG_SETTINGS, SettingsClient};
 pub use defaults::{DefaultApp, DefaultAppCommand, choose_default, default_apps};
@@ -68,11 +69,10 @@ pub use storage::{Category, Storage, StorageCommand, Tally, categorize, tally};
 pub use time::{
     TimeCommand, TimeState, follow_time, parse_manual, zone_matches, zone_offset, zone_place,
 };
-pub use unbound_settings_panes::{PaneId, SettingId, Value};
 pub use view::SettingsView;
 pub use widgets::{bucket_levels, sidebar_width};
 
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-settings.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-settings.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -105,7 +105,7 @@ mod tests {
             include_str!("view.rs"),
         ];
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &sources),
+            bande_l10n::missing_ids(super::ENGLISH, &sources),
             Vec::<&str>::new()
         );
     }

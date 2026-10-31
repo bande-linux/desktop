@@ -4,10 +4,10 @@ use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc::Sender;
 
+use bande_graphics::{Color, Event, Palette, Scene, Scheme, TextSystem};
+use bande_toolkit_platform::{App, Role, SHEET_INSET, WINDOW_HEADER_HEIGHT, Window, WindowEvent};
+use bande_widgets::{Context, TextField, Ui};
 use smithay::utils::{Logical, Point};
-use unbound_graphics::{Color, Event, Palette, Scene, Scheme, TextSystem};
-use unbound_toolkit_platform::{App, Role, SHEET_INSET, WINDOW_HEADER_HEIGHT, Window, WindowEvent};
-use unbound_widgets::{Context, TextField, Ui};
 
 use crate::desktop::{Client, Desktop};
 
@@ -48,7 +48,7 @@ pub fn note(
             Box::new(field),
             Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
         );
-        ui.layout(unbound_widgets::Size::new(WINDOW.0 as f32, WINDOW.1 as f32));
+        ui.layout(bande_widgets::Size::new(WINDOW.0 as f32, WINDOW.1 as f32));
         Note {
             events,
             commands,

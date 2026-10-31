@@ -1,3 +1,4 @@
+use bande_spring::Spring;
 use smithay::input::Seat;
 use smithay::input::SeatHandler;
 use smithay::input::pointer::{
@@ -12,7 +13,6 @@ use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, Rectangle, SERIAL_COUNTER, Serial};
-use unbound_spring::Spring;
 
 use crate::motion::Look;
 use crate::state::State;

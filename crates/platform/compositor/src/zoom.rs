@@ -1,8 +1,8 @@
 use std::time::Duration;
 
+use bande_config::ZOOM_RANGE;
+use bande_spring::{Animated, Spring};
 use smithay::utils::{Logical, Physical, Point};
-use unbound_config::ZOOM_RANGE;
-use unbound_spring::{Animated, Spring};
 use zbus::zvariant::Value;
 
 use crate::state::{Compositor, State};

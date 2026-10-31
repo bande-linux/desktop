@@ -137,7 +137,7 @@ principles.
   - GNOME's duration scaling by pages crossed makes multi-page flicks feel fast without making
     one-page settles abrupt.
 
-## Current state in Unbound
+## Current state in Bande
 
 - `crates/platform/compositor/src/input.rs` handles keys, pointer motion, buttons and axis
   frames. **libinput gesture events fall through to `_ => return Ok(())` and are dropped.**
@@ -148,7 +148,7 @@ principles.
   It ignores `axis_source` and `axis_stop`, so it cannot tell a finger scroll from a wheel and
   cannot start or stop inertia. There is no scroll view widget yet.
 
-## For Unbound
+## For Bande
 
 1. **Compositor gesture router** (now, `crates/platform/compositor`).
    - Handle `InputEvent::GestureSwipe*`, `GesturePinch*` and `GestureHold*`. The compositor

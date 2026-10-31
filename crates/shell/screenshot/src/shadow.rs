@@ -1,4 +1,4 @@
-use unbound_toolkit::Snapshot;
+use bande_toolkit::Snapshot;
 
 const BLUR: f64 = 22.0;
 const DROP: f64 = 12.0;

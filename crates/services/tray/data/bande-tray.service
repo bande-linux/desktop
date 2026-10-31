@@ -1,0 +1,14 @@
+[Unit]
+Description=Bande tray icon registry
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Slice=session.slice
+Type=dbus
+BusName=org.kde.StatusNotifierWatcher
+ExecStart=/usr/bin/bande-tray
+Restart=on-failure
+
+[Install]
+WantedBy=bande-session.target

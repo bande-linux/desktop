@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use unbound_toolkit::{Color, CpuRenderer, Image, Item, Rect, Scene};
-use unbound_xdg::{ICON_THEMES, find_icon};
+use bande_toolkit::{Color, CpuRenderer, Image, Item, Rect, Scene};
+use bande_xdg::{ICON_THEMES, find_icon};
 
 const SIZES: [u32; 5] = [16, 24, 32, 48, 64];
 const GAP: f32 = 8.0;
@@ -17,7 +17,7 @@ fn data() -> PathBuf {
 }
 
 fn theme() -> PathBuf {
-    data().join("icons/Unbound")
+    data().join("icons/Bande")
 }
 
 fn directories(theme: &Path) -> Vec<String> {
@@ -60,7 +60,7 @@ fn accent_themes() -> Vec<String> {
     let mut themes: Vec<String> = fs::read_dir(data().join("icons"))
         .unwrap()
         .filter_map(|entry| entry.unwrap().file_name().into_string().ok())
-        .filter(|name| name.starts_with("Unbound-"))
+        .filter(|name| name.starts_with("Bande-"))
         .collect();
     themes.sort();
     themes
@@ -101,13 +101,13 @@ fn contact_sheet(icons: &[(String, String)]) -> Scene {
 
 fn check_golden(name: &str, scene: &Scene) {
     let frame = CpuRenderer::new().render(scene).unwrap();
-    unbound_golden::assert_golden_rgba!(name, (frame.width, frame.height), frame.rgba);
+    bande_golden::assert_golden_rgba!(name, (frame.width, frame.height), frame.rgba);
 }
 
 fn every_icon() -> Vec<(String, String)> {
     let mut all: Vec<(String, String)> = icons(&theme())
         .iter()
-        .map(|path| ("Unbound".to_owned(), name(path).to_owned()))
+        .map(|path| ("Bande".to_owned(), name(path).to_owned()))
         .collect();
     all.extend(
         accent_themes()

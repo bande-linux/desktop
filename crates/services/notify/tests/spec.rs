@@ -5,9 +5,9 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::Duration;
 
-use unbound_notify::NotificationServer;
-use unbound_notify::client::NotificationCenter;
-use unbound_test_bus::SessionBus;
+use bande_notify::NotificationServer;
+use bande_notify::client::NotificationCenter;
+use bande_test_bus::SessionBus;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::Value;
 use zbus::{MatchRule, message};

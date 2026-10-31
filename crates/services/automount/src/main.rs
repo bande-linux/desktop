@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use unbound_automount::Automounter;
-use unbound_automount::space::{SpaceWatch, free_space, open_storage_settings, watch_space};
+use bande_automount::Automounter;
+use bande_automount::space::{SpaceWatch, free_space, open_storage_settings, watch_space};
 use zbus::blocking::Connection;
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-automount");
+    bande_log::init("bande-automount");
     let started = Connection::system().and_then(|system| {
         let session = Connection::session()?;
         Ok((Automounter::start(&system, &session)?, session))
@@ -19,7 +19,7 @@ fn main() -> ExitCode {
                 SpaceWatch::new(&session, &volumes, free_space),
                 open_storage_settings,
             );
-            unbound_bus::serve_until_closed(&session);
+            bande_bus::serve_until_closed(&session);
             ExitCode::SUCCESS
         }
         Err(error) => {

@@ -13,23 +13,23 @@ use crate::dock::{
 use crate::installed_apps::InstalledApps;
 use crate::rail::surface_size as rail_surface_size;
 use accesskit::TreeUpdate;
-use unbound_config::{Bar as BarConfig, BarEdge};
-use unbound_dock_model::arrange;
-use unbound_dock_model::bus::{self, BusEvent};
-use unbound_fs::{FolderWatch, Trash};
-use unbound_inbox::Inbox;
-use unbound_toolkit::ui::{Event, Menu, MenuItem, Ui};
-use unbound_toolkit::{
+use bande_config::{Bar as BarConfig, BarEdge};
+use bande_dock_model::arrange;
+use bande_dock_model::bus::{self, BusEvent};
+use bande_fs::{FolderWatch, Trash};
+use bande_inbox::Inbox;
+use bande_toolkit::ui::{Event, Menu, MenuItem, Ui};
+use bande_toolkit::{
     App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowEvent,
 };
-use unbound_xdg::{
+use bande_xdg::{
     DesktopEntry, ICON_THEMES, app_name, autostart_dir, data_dirs, find_app, find_app_for_process,
     find_icon, launch_with_arguments, opens_at_login, path_from_file_uri, set_open_at_login,
 };
 use zbus::blocking::Connection;
 
-const FILES: &str = "org.unbound.Files";
+const FILES: &str = "org.bande.Files";
 const PROC: &str = "/proc";
 const TRASH_URI: &str = "trash:///";
 const MENU_OPEN: &str = "open";
@@ -264,7 +264,7 @@ impl Dock {
             return;
         };
         let token = window.activation_token(app_id).ok();
-        match unbound_xdg::launch(&entry, token.as_deref()) {
+        match bande_xdg::launch(&entry, token.as_deref()) {
             Ok(_) => self.state.borrow_mut().launching(app_id, Instant::now()),
             Err(error) => tracing::warn!("cannot open {}: {error}", entry.name),
         }
@@ -278,7 +278,7 @@ impl Dock {
             return;
         };
         let token = window.activation_token(app_id).ok();
-        match unbound_xdg::launch_action(&entry, action, token.as_deref()) {
+        match bande_xdg::launch_action(&entry, action, token.as_deref()) {
             Ok(_) if !self.running.iter().any(|running| running == app_id) => {
                 self.state.borrow_mut().launching(app_id, Instant::now());
             }
@@ -382,7 +382,7 @@ impl Dock {
             return;
         }
         let token = window.activation_token(app_id).ok();
-        match unbound_xdg::launch_with(&entry, files, token.as_deref()) {
+        match bande_xdg::launch_with(&entry, files, token.as_deref()) {
             Ok(()) => {
                 if !self.running.iter().any(|running| running == app_id) {
                     self.state.borrow_mut().launching(app_id, Instant::now());
@@ -475,7 +475,7 @@ impl Dock {
             .name("empty-trash".to_owned())
             .spawn(move || {
                 if let Some(session) = session {
-                    unbound_sound::play(&session, "trash-empty");
+                    bande_sound::play(&session, "trash-empty");
                 }
                 if let Err(error) = trash.empty() {
                     tracing::warn!("cannot empty the Trash: {error}");

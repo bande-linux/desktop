@@ -3,8 +3,8 @@ use std::os::linux::net::SocketAddrExt;
 use std::os::unix::net::{SocketAddr, UnixDatagram};
 use std::sync::{Arc, Mutex};
 
-use unbound_compositor::{CursorTheme, export_session_environment, notify_ready};
-use unbound_test_bus::SessionBus;
+use bande_compositor::{CursorTheme, export_session_environment, notify_ready};
+use bande_test_bus::SessionBus;
 
 struct Systemd {
     assignments: Arc<Mutex<Vec<String>>>,
@@ -49,7 +49,7 @@ fn the_wayland_socket_desktop_and_cursor_theme_reach_the_user_services_environme
         *assignments.lock().expect("assignments"),
         [
             "WAYLAND_DISPLAY=wayland-1",
-            "XDG_CURRENT_DESKTOP=Unbound",
+            "XDG_CURRENT_DESKTOP=Bande",
             "XDG_SESSION_TYPE=wayland",
             "XCURSOR_THEME=Adwaita",
             "XCURSOR_SIZE=32"
@@ -65,7 +65,7 @@ fn received(socket: &UnixDatagram) -> String {
 
 #[test]
 fn readiness_reaches_a_notify_socket_at_a_path() {
-    let path = std::env::temp_dir().join(format!("unbound-notify-{}", std::process::id()));
+    let path = std::env::temp_dir().join(format!("bande-notify-{}", std::process::id()));
     let _ = std::fs::remove_file(&path);
     let socket = UnixDatagram::bind(&path).expect("notify socket");
     notify_ready(Some(path.as_os_str())).expect("notified");
@@ -75,7 +75,7 @@ fn readiness_reaches_a_notify_socket_at_a_path() {
 
 #[test]
 fn readiness_reaches_an_abstract_notify_socket() {
-    let name = format!("unbound-notify-abstract-{}", std::process::id());
+    let name = format!("bande-notify-abstract-{}", std::process::id());
     let address = SocketAddr::from_abstract_name(name.as_bytes()).expect("abstract address");
     let socket = UnixDatagram::bind_addr(&address).expect("notify socket");
     notify_ready(Some(OsStr::new(&format!("@{name}")))).expect("notified");

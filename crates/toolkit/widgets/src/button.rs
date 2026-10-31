@@ -2,7 +2,7 @@ use accesskit::{Action, ActionRequest, Node, Role};
 
 use super::control::{Symbol, focus_ring};
 use super::{Context, Event, Key, Size, Widget, WidgetId};
-use unbound_graphics::{
+use bande_graphics::{
     Color, ControlSize, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
 

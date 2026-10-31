@@ -1,10 +1,10 @@
 use crate::support::*;
-use smithay::utils::{Point, Size};
-use unbound_compositor::{Compositor, Renderer, automatic_scale};
-use unbound_test_wayland::{
+use bande_compositor::{Compositor, Renderer, automatic_scale};
+use bande_test_wayland::{
     Anchor, BLUE, BrightnessKey, GREEN, KeyboardInteractivity, LauncherMode, Layer, LayerRequest,
     MediaKey, Panel, PanelEdge, RED, TestClient, VolumeKey, roundtrip,
 };
+use smithay::utils::{Point, Size};
 
 fn panel(layer: Layer, anchor: Anchor, size: (u32, u32), exclusive_zone: i32) -> LayerRequest {
     LayerRequest {
@@ -368,9 +368,9 @@ fn the_shell_protocol_and_the_window_list_are_hidden_from_apps() {
     let app = TestClient::connect(&mut server);
     let shell = TestClient::connect_as_shell(&mut server);
 
-    assert!(!app.advertises("unbound_shell_v1"));
+    assert!(!app.advertises("bande_shell_v1"));
     assert!(!app.advertises("ext_foreign_toplevel_list_v1"));
-    assert!(shell.advertises("unbound_shell_v1"));
+    assert!(shell.advertises("bande_shell_v1"));
     assert!(shell.advertises("ext_foreign_toplevel_list_v1"));
 }
 
@@ -540,7 +540,7 @@ fn the_shell_sees_running_apps_and_brings_one_forward() {
     let mut shell = TestClient::connect_as_shell(&mut server);
     shell.join_shell(&mut server);
     let mut editor = window_of(&mut server, RED, (32, 32), "org.example.Editor");
-    let mut terminal = window_of(&mut server, RED, (32, 32), "org.unbound.Terminal");
+    let mut terminal = window_of(&mut server, RED, (32, 32), "org.bande.Terminal");
     let token = terminal.activation_token(&mut server);
     terminal.activate(&mut server, 0, &token);
     roundtrip(&mut server, &mut [&mut shell, &mut editor, &mut terminal]);
@@ -548,7 +548,7 @@ fn the_shell_sees_running_apps_and_brings_one_forward() {
 
     let mut running = shell.running_app_ids();
     running.sort();
-    assert_eq!(running, ["org.example.Editor", "org.unbound.Terminal"]);
+    assert_eq!(running, ["org.bande.Terminal", "org.example.Editor"]);
 
     shell.activate_app(&mut server, "org.example.Editor");
     roundtrip(&mut server, &mut [&mut shell, &mut editor, &mut terminal]);
@@ -557,7 +557,7 @@ fn the_shell_sees_running_apps_and_brings_one_forward() {
 
     editor.close_window(&mut server, 0);
     roundtrip(&mut server, &mut [&mut shell, &mut editor, &mut terminal]);
-    assert_eq!(shell.running_app_ids(), ["org.unbound.Terminal"]);
+    assert_eq!(shell.running_app_ids(), ["org.bande.Terminal"]);
 }
 
 #[test]
@@ -628,7 +628,7 @@ fn layer_surfaces_receive_frame_callbacks() {
     server
         .present_on(
             &server.main_output(),
-            unbound_compositor::Vblank {
+            bande_compositor::Vblank {
                 time: std::time::Duration::from_millis(8),
                 sequence: 1,
             },

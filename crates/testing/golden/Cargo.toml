@@ -1,6 +1,6 @@
 [package]
-name = "unbound-golden"
-description = "Golden image comparison for Unbound rendering tests"
+name = "bande-golden"
+description = "Golden image comparison for Bande rendering tests"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

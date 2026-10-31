@@ -1,6 +1,6 @@
 [package]
-name = "unbound-wallpaper"
-description = "Wallpaper choice, decoding, fitting and the blurred backdrop for Unbound"
+name = "bande-wallpaper"
+description = "Wallpaper choice, decoding, fitting and the blurred backdrop for Bande"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,7 +10,7 @@ repository.workspace = true
 [dependencies]
 image.workspace = true
 resvg.workspace = true
-unbound-inbox.workspace = true
+bande-inbox.workspace = true
 tracing.workspace = true
 zbus.workspace = true
 

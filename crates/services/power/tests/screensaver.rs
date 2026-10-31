@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use unbound_power::screensaver::{BUS_NAME, InhibitionService};
-use unbound_test_bus::SessionBus;
+use bande_power::screensaver::{BUS_NAME, InhibitionService};
+use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 
 const WAIT: Duration = Duration::from_secs(5);

@@ -1,8 +1,8 @@
 use std::time::Duration;
 
+use bande_spring::{Animated, Spring, State as Phase};
 use smithay::desktop::layer_map_for_output;
 use smithay::utils::{Logical, Physical, Point, Rectangle, Size};
-use unbound_spring::{Animated, Spring, State as Phase};
 
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;

@@ -2,11 +2,11 @@
 
 use std::path::{Path, PathBuf};
 
-use unbound_file_chooser::{
+use bande_file_chooser::{
     Accept, Chooser, glob_matches, initial_folder, initial_name, remember, remembered_folder,
 };
-use unbound_xdg::MimeDatabase;
-use xdg_desktop_portal_unbound::file_chooser::{Dialog, Filter, Mode, Pattern};
+use bande_xdg::MimeDatabase;
+use xdg_desktop_portal_bande::file_chooser::{Dialog, Filter, Mode, Pattern};
 
 fn dialog(mode: Mode, filters: Vec<Filter>) -> Dialog {
     Dialog {

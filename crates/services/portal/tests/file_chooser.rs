@@ -9,11 +9,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use common::{Options, Portal, get};
-use xdg_desktop_portal_unbound::OBJECT_PATH;
-use xdg_desktop_portal_unbound::file_chooser::{
+use xdg_desktop_portal_bande::OBJECT_PATH;
+use xdg_desktop_portal_bande::file_chooser::{
     Dialog, FileChooser, FileChooserUi, Filter, Mode, Outcome, Pattern, Selection,
 };
-use xdg_desktop_portal_unbound::request::Cancellation;
+use xdg_desktop_portal_bande::request::Cancellation;
 use zbus::zvariant::{ObjectPath, Value};
 
 const INTERFACE: &str = "org.freedesktop.impl.portal.FileChooser";
@@ -245,7 +245,7 @@ fn closing_the_request_closes_the_dialog() {
     let pending = std::thread::spawn(move || {
         client
             .call_method(
-                Some(xdg_desktop_portal_unbound::BUS_NAME),
+                Some(xdg_desktop_portal_bande::BUS_NAME),
                 OBJECT_PATH,
                 Some(INTERFACE),
                 "OpenFile",
@@ -291,7 +291,7 @@ impl FakeGtk {
 }
 
 #[test]
-fn when_the_unbound_dialog_cannot_start_the_gtk_backend_answers_instead() {
+fn when_the_bande_dialog_cannot_start_the_gtk_backend_answers_instead() {
     let (asked_sender, asked) = mpsc::channel();
     let (shown_sender, _shown) = mpsc::channel();
     let (cancelled_sender, _cancelled) = mpsc::channel();

@@ -1,5 +1,5 @@
-use unbound_bluetooth::Device;
-use unbound_network::Network;
+use bande_bluetooth::Device;
+use bande_network::Network;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WifiState {
@@ -9,8 +9,8 @@ pub struct WifiState {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NetworkState {
-    pub ethernet: Option<unbound_network::Ethernet>,
-    pub vpns: Vec<unbound_network::Vpn>,
+    pub ethernet: Option<bande_network::Ethernet>,
+    pub vpns: Vec<bande_network::Vpn>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

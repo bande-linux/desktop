@@ -1,5 +1,5 @@
 [Unit]
-Description=Unbound login test
+Description=Bande login test
 After=systemd-logind.service systemd-user-sessions.service dbus.service systemd-udev-settle.service
 Wants=systemd-logind.service systemd-udev-settle.service
 

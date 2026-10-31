@@ -5,13 +5,13 @@ use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
-use rustix::event::{PollFd, PollFlags, Timespec, poll};
-use tempfile::TempDir;
-use unbound_fs::{
+use bande_fs::{
     Action, Answer, Change, Entry, FolderChanges, FolderWatch, History, Job, Outcome, RenameError,
     Report, Resolution, Sort, Task, Trash, TrashDir, duplicate_name, format_size, keep_both_name,
     list, list_date, merge, new_folder, rename, untitled_folder,
 };
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use tempfile::TempDir;
 
 struct Place {
     dir: TempDir,
@@ -662,19 +662,19 @@ fn allowing_a_script_to_run_sets_execute_for_whoever_can_read() {
     fs::write(&script, "#!/bin/sh\n").unwrap();
     fs::set_permissions(&script, fs::Permissions::from_mode(0o640)).unwrap();
     let mode = fs::metadata(&script).unwrap().permissions().mode();
-    assert!(!unbound_fs::runnable(mode));
+    assert!(!bande_fs::runnable(mode));
 
-    unbound_fs::set_mode(&script, unbound_fs::with_runnable(mode, true)).unwrap();
+    bande_fs::set_mode(&script, bande_fs::with_runnable(mode, true)).unwrap();
 
     let mode = fs::metadata(&script).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o750);
-    assert!(unbound_fs::runnable(mode));
-    assert_eq!(unbound_fs::with_runnable(mode, false) & 0o777, 0o640);
+    assert!(bande_fs::runnable(mode));
+    assert_eq!(bande_fs::with_runnable(mode, false) & 0o777, 0o640);
 }
 
 #[test]
 fn access_changes_only_the_chosen_class() {
-    use unbound_fs::{Access, Class, access, with_access};
+    use bande_fs::{Access, Class, access, with_access};
     let mode = 0o100_764;
     assert_eq!(access(mode, Class::Owner), Access::ReadWrite);
     assert_eq!(access(mode, Class::Group), Access::ReadWrite);
@@ -698,12 +698,12 @@ fn access_changes_only_the_chosen_class() {
     );
 }
 
-fn batch_items(folder: &Path, names: &[&str]) -> Vec<unbound_fs::BatchItem> {
+fn batch_items(folder: &Path, names: &[&str]) -> Vec<bande_fs::BatchItem> {
     names
         .iter()
         .map(|name| {
             let path = folder.join(name);
-            unbound_fs::BatchItem {
+            bande_fs::BatchItem {
                 folder: path.is_dir(),
                 path,
             }
@@ -730,7 +730,7 @@ fn batch_folder(names: &[&str]) -> TempDir {
 
 #[test]
 fn batch_rename_rules_change_the_names_and_keep_extensions() {
-    use unbound_fs::{Numbering, RenameRule, plan_renames};
+    use bande_fs::{Numbering, RenameRule, plan_renames};
     let folder = batch_folder(&["IMG_0001.jpg", "IMG_0002.jpg", "Trip.v2/", "notes.txt"]);
     let items = batch_items(folder.path(), &["IMG_0001.jpg", "IMG_0002.jpg", "Trip.v2"]);
 
@@ -786,7 +786,7 @@ fn batch_rename_rules_change_the_names_and_keep_extensions() {
 
 #[test]
 fn batch_rename_reports_clashes_before_changing_anything() {
-    use unbound_fs::{BatchProblem, RenameRule, plan_renames};
+    use bande_fs::{BatchProblem, RenameRule, plan_renames};
     let folder = batch_folder(&["a.txt", "b.txt", "a copy.txt"]);
     let items = batch_items(folder.path(), &["a.txt", "b.txt"]);
 
@@ -817,7 +817,7 @@ fn batch_rename_reports_clashes_before_changing_anything() {
 
 #[test]
 fn a_batch_rename_is_one_step_that_undoes_every_name() {
-    use unbound_fs::{Numbering, Operations, RenameRule, plan_renames, rename_all};
+    use bande_fs::{Numbering, Operations, RenameRule, plan_renames, rename_all};
     let place = Place::new();
     let folder = place.dir.path().join("photos");
     fs::create_dir(&folder).unwrap();
@@ -865,7 +865,7 @@ fn a_batch_rename_is_one_step_that_undoes_every_name() {
 
 #[test]
 fn recency_windows_start_at_local_midnight() {
-    use unbound_fs::Recency;
+    use bande_fs::Recency;
     let zone = jiff::tz::TimeZone::UTC;
     let at = |text: &str| SystemTime::from(text.parse::<jiff::Timestamp>().unwrap());
     let now = at("2026-03-15T10:00:00Z");
@@ -892,21 +892,21 @@ fn recency_windows_start_at_local_midnight() {
 fn typed_locations_expand_the_home_folder_and_resolve_against_the_shown_one() {
     let home = Path::new("/home/anna");
     let shown = Path::new("/home/anna/Documents");
-    assert_eq!(unbound_fs::typed_location(" ~ ", home, shown), home);
+    assert_eq!(bande_fs::typed_location(" ~ ", home, shown), home);
     assert_eq!(
-        unbound_fs::typed_location("~/Pictures/", home, shown),
+        bande_fs::typed_location("~/Pictures/", home, shown),
         home.join("Pictures")
     );
     assert_eq!(
-        unbound_fs::typed_location("/etc", home, shown),
+        bande_fs::typed_location("/etc", home, shown),
         Path::new("/etc")
     );
     assert_eq!(
-        unbound_fs::typed_location("Receipts", home, shown),
+        bande_fs::typed_location("Receipts", home, shown),
         shown.join("Receipts")
     );
     assert_eq!(
-        unbound_fs::typed_location("~bob", home, shown),
+        bande_fs::typed_location("~bob", home, shown),
         shown.join("~bob")
     );
 }

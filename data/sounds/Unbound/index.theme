@@ -1,8 +1,0 @@
-[Sound Theme]
-Name=Unbound
-Comment=Dry, short wooden sounds of the Unbound desktop
-Inherits=freedesktop
-Directories=stereo
-
-[stereo]
-OutputProfile=stereo

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use unbound_xdg::{UserDir, file_uri, path_from_file_uri, user_dir};
+use bande_xdg::{UserDir, file_uri, path_from_file_uri, user_dir};
 
 use crate::L10N;
 use crate::browser::Location;

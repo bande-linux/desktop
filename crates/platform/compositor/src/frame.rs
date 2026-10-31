@@ -1,5 +1,10 @@
 use std::time::Duration;
 
+use bande_graphics::{
+    Color, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_MARGIN, Rect, ResizeEdge, Scene, Scheme,
+    TextAlign, TitleBar, WindowControl, resize_edge, title_style, window_controls_area,
+};
+use bande_render::{VulkanRenderer, VulkanTexture};
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::element::Id;
 use smithay::backend::renderer::{ContextId, ImportMem, Renderer, Texture};
@@ -9,11 +14,6 @@ use smithay::input::pointer::{CursorIcon, CursorImageStatus};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle};
-use unbound_graphics::{
-    Color, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_MARGIN, Rect, ResizeEdge, Scene, Scheme,
-    TextAlign, TitleBar, WindowControl, resize_edge, title_style, window_controls_area,
-};
-use unbound_render::{VulkanRenderer, VulkanTexture};
 
 use crate::label::Labels;
 use crate::scene::Piece;
@@ -110,8 +110,8 @@ fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
 fn local_point(
     rect: Rectangle<i32, Logical>,
     location: Point<f64, Logical>,
-) -> unbound_graphics::Point {
-    unbound_graphics::Point::new(
+) -> bande_graphics::Point {
+    bande_graphics::Point::new(
         (location.x - f64::from(rect.loc.x)) as f32,
         (location.y - f64::from(rect.loc.y)) as f32,
     )
@@ -450,8 +450,8 @@ impl Window {
             f64::from(painted.texture.height()),
         );
         let size = (
-            unbound_graphics::pixels(painted.look.width.unsigned_abs(), scale) as i32,
-            unbound_graphics::pixels(bar.unsigned_abs(), scale) as i32,
+            bande_graphics::pixels(painted.look.width.unsigned_abs(), scale) as i32,
+            bande_graphics::pixels(bar.unsigned_abs(), scale) as i32,
         );
         let location: Point<i32, Physical> =
             self.location.to_f64().to_physical(scale).to_i32_round();

@@ -6,7 +6,7 @@ to show file extensions".
 ## Summary
 
 Take Terminal's settings window, which already works, and turn it into a shared pattern: a
-small per-app file under `~/.config/unbound/`, saved as you change it and followed live by every
+small per-app file under `~/.config/bande/`, saved as you change it and followed live by every
 window, plus one shared form widget and one shared "Settings…" menu entry. Files gets a settings
 window first. Terminal moves onto the shared code. No other app needs one yet.
 Files already shows every extension. Long names are cut at the end in list and column rows, and
@@ -34,14 +34,14 @@ that is what hides the extension. Truncating in the middle fixes it.
 ## Findings
 
 **Terminal has the only app settings window, and it is a good base.**
-- Storage: `key = value` lines in `$XDG_CONFIG_HOME/unbound/terminal.conf`. Unknown or broken
+- Storage: `key = value` lines in `$XDG_CONFIG_HOME/bande/terminal.conf`. Unknown or broken
   values fall back to the defaults, and the file is written atomically (stage, then rename)
   (`crates/apps/terminal/src/settings.rs:11,84-151`).
-- Window: a separate process, `unbound-term --settings`, with the same app id
+- Window: a separate process, `bande-term --settings`, with the same app id
   (`terminal/src/main.rs:49`, `preferences.rs:76-89`). Super+, starts it through `spawn_self`
   (`app.rs:880`, `app.rs:1893`). The window saves after every event if anything changed
   (`preferences.rs:30-43`).
-- Live apply: each Terminal process watches the folder with `unbound_watch::FolderWatch`
+- Live apply: each Terminal process watches the folder with `bande_watch::FolderWatch`
   (`Changes::Saved`), keeps a wake socket among its sources and reloads the file when woken
   (`app.rs:117-147, 1109-1124, 1723, 1746-1749`).
 - Layout: a private `Form` widget with three kinds of line: Heading, Row (label on the left,
@@ -60,16 +60,16 @@ Files, Monitor and System Settings pass no items (`files/src/menu_bar.rs:27`,
 the app row (`docs/design/features/bar.md:114`). `Super+,` is the documented shortcut
 (`docs/architecture/overview.md:151`).
 
-**org.unbound.Config is for system settings and costs a lot per key.** Every setting is a
+**org.bande.Config is for system settings and costs a lot per key.** Every setting is a
 field on `Config`, a KDL parse and edit, and a D-Bus property with a setter
 (`crates/services/config/src/lib.rs:645-664`, `service.rs:432-620`). It has no generic per-app
 store.
 
 **Files keeps its UI state in loose files and applies no settings.**
-- State files under `$XDG_STATE_HOME/unbound/`: `files-views` (view per folder),
+- State files under `$XDG_STATE_HOME/bande/`: `files-views` (view per folder),
   `files-sidebar` (order, plus hidden places as `-token` lines), `files-columns` and
   `files-status-bar` (`files/src/views.rs:82-160`, `sidebar.rs:65,145-210`).
-- Every window is its own process. New Window runs `unbound-files <path>`
+- Every window is its own process. New Window runs `bande-files <path>`
   (`main.rs:178, 372-387`), and one-process windows are planned in F24
   (`docs/experience/files.md:547`). Live apply therefore has to reach other processes. A file
   watch does that, and it keeps working after F24.
@@ -77,7 +77,7 @@ store.
   (`browser.rs:274, 1103`; `view.rs:1503, 1615`).
 - Default view: Columns for any folder without a remembered view (`views.rs:12-18`,
   `view.rs:344`).
-- Folders always come first. This is hard-coded in `unbound_fs::compare`
+- Folders always come first. This is hard-coded in `bande_fs::compare`
   (`libs/fs/src/listing.rs:91`).
 - Start location: Home unless a path is given (`main.rs:390-401`).
 - Empty Trash always asks (`controls.rs:1030-1036`, `context.rs:227`).
@@ -113,14 +113,14 @@ store.
 ## Options
 
 **Storage**
-- **A. One file per app**: `~/.config/unbound/<app>.conf` with `key = value` lines, followed by
+- **A. One file per app**: `~/.config/bande/<app>.conf` with `key = value` lines, followed by
   inotify (the Terminal model). It needs no service, works when the bus or the config service
   is down, and is proven in daily use. The cost is a second format next to `config.kdl`.
-- **B. Typed sections in `config.kdl` through org.unbound.Config.** Everything lives in one
+- **B. Typed sections in `config.kdl` through org.bande.Config.** Everything lives in one
   file. But each Files setting needs a `Config` field, KDL parse and edit code, a D-Bus property
   and a client proxy, and Files would depend on the service at start-up. That is about four
   times the code per setting.
-- **C. A generic `app "org.unbound.Files" { … }` block in `config.kdl`**, with string-typed
+- **C. A generic `app "org.bande.Files" { … }` block in `config.kdl`**, with string-typed
   `AppSettings`/`SetAppSetting` methods and a change signal. This is one file without code per
   key, but it is a new service API, still needs the bus, and loses typing at the boundary.
 
@@ -162,8 +162,8 @@ Each milestone is one branch from `main` and leaves it green. Files milestones 5
    Tests: a long name truncated to a row width ends with its extension and fits the width; a
    short name is unchanged; a folder name is truncated in the middle too. Update the column and
    list goldens with one long name.
-2. **`unbound-app-settings` lib: file and watch.** New `crates/libs/app-settings` with
-   `settings_file(name)` (`$XDG_CONFIG_HOME/unbound/<name>.conf`), `read`, `write` (stage, then
+2. **`bande-app-settings` lib: file and watch.** New `crates/libs/app-settings` with
+   `settings_file(name)` (`$XDG_CONFIG_HOME/bande/<name>.conf`), `read`, `write` (stage, then
    rename), `pairs(text)` and `flag(value)` (moved from `terminal/src/settings.rs:76-118`), and
    `SettingsWatch` (moved from `terminal/src/app.rs:117-147`, filtered to one file name). Move
    Terminal onto it and delete the copies. Add it to the workspace `Cargo.toml`.
@@ -171,7 +171,7 @@ Each milestone is one branch from `main` and leaves it green. Files milestones 5
    after `write` no staging file is left and `read` returns the text. The existing terminal
    settings test stays green.
 3. **`Form` widget in the toolkit.** Move Terminal's `Form` (`settings_view.rs:27-229`) to
-   `crates/toolkit/widgets/src/form.rs`, export it through `unbound_toolkit::ui`, with lines
+   `crates/toolkit/widgets/src/form.rs`, export it through `bande_toolkit::ui`, with lines
    `Heading(text)`, `Row(label, control)` and `Wide(widget)`. Terminal's preview becomes a
    `Wide` child widget in `terminal/src/settings_view.rs`.
    Tests: `term-settings` and `term-settings-150` goldens are unchanged; a row whose label
@@ -201,7 +201,7 @@ Each milestone is one branch from `main` and leaves it green. Files milestones 5
    and `Super+Shift+.` now writes the setting), the default view for folders without memory
    (`view.rs:344`), and the new-window location in `start_location` (`main.rs:390`; "Last"
    reads the most recent `files-views` entry). Folders first: add `folders_first` to
-   `unbound_fs::Sort`, which is not stored per folder (`libs/fs/src/listing.rs:79-96`); the
+   `bande_fs::Sort`, which is not stored per folder (`libs/fs/src/listing.rs:79-96`); the
    file chooser keeps `true`.
    Tests: `libs/fs/tests/fs.rs`, with folders first off, sorts by name across files and folders;
    `files/tests/files.rs`: a browser opened with show-hidden lists dotfiles; `Super+Shift+.`
@@ -221,7 +221,7 @@ Each milestone is one branch from `main` and leaves it green. Files milestones 5
    Tests: turning Desktop off writes `-desktop` and `rows()` leaves it out; turning it back on
    restores it in its old position; a sidebar file changed by another process is reloaded.
 9. **Remove items from the Trash after 30 days** (default off). Add
-   `unbound_fs::purge_trash(trash, now, Duration)`, which deletes items whose `deleted` date is
+   `bande_fs::purge_trash(trash, now, Duration)`, which deletes items whose `deleted` date is
    older than the limit and keeps items without a date. Files runs it on a worker at start and
    once a day while it runs, when the setting is on. Update `docs/experience/files.md` (the gap
    rows and a short "Settings" section) and `docs/architecture/behaviour.md` (the app settings
@@ -233,7 +233,7 @@ Each milestone is one branch from `main` and leaves it green. Files milestones 5
 
 - Conflicts with `wip/files-depth-3` in `browser.rs`, `paint.rs`, `controls.rs` and
   `search.rs`. Land milestone 1 and milestones 5 to 9 after it merges.
-- A watch wake comes from any save in `~/.config/unbound/` (for example `config.kdl`). It is
+- A watch wake comes from any save in `~/.config/bande/` (for example `config.kdl`). It is
   filtered by file name, as Terminal does, and a reload that changes nothing is a no-op.
 - Two settings processes can be open at once. Both follow the file, so they agree (last write
   wins).
@@ -248,8 +248,8 @@ Each milestone is one branch from `main` and leaves it green. Files milestones 5
 
 1. **Extensions**: always show them and truncate in the middle (recommended), or also add a
    "Show all filename extensions" toggle that hides known extensions when off?
-2. **Storage**: one small file per app in `~/.config/unbound/` (recommended), or app sections in
-   `config.kdl` through org.unbound.Config?
+2. **Storage**: one small file per app in `~/.config/bande/` (recommended), or app sections in
+   `config.kdl` through org.bande.Config?
 3. **Show hidden files**: one remembered setting that `Super+Shift+.` flips for every window, as
    in the Finder (recommended), or keep it per window and only set the starting value?
 4. **Trash after 30 days**: run it only while Files is running (recommended), or as a small

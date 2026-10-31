@@ -5,13 +5,13 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use unbound_polkit::agent::{Agent, Answer, Conversation, Notice, Request, Subject};
-use unbound_polkit::helper::HELPER;
+use bande_polkit::agent::{Agent, Answer, Conversation, Notice, Request, Subject};
+use bande_polkit::helper::HELPER;
 use zbus::blocking::Connection;
 use zeroize::Zeroizing;
 
-const ACTION: &str = "org.unbound.polkit-test";
-const MESSAGE: &str = "Authentication is required to run the Unbound agent test";
+const ACTION: &str = "org.bande.polkit-test";
+const MESSAGE: &str = "Authentication is required to run the Bande agent test";
 
 struct Scripted {
     answers: Mutex<Vec<Option<String>>>,
@@ -55,7 +55,7 @@ impl Drop for Target {
 }
 
 fn password() -> String {
-    std::env::var("UNBOUND_POLKIT_PASSWORD").expect("UNBOUND_POLKIT_PASSWORD")
+    std::env::var("BANDE_POLKIT_PASSWORD").expect("BANDE_POLKIT_PASSWORD")
 }
 
 fn check(answers: Vec<Option<String>>) -> (bool, Receiver<String>) {

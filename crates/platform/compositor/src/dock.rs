@@ -1,10 +1,10 @@
+use bande_protocols::server::bande_shell_v1::BandeShellV1;
+use bande_spring::Spring;
 use rustix::process::{Pid, Signal, kill_process};
 use smithay::desktop::layer_map_for_output;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Resource};
 use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
-use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
-use unbound_spring::Spring;
 
 use crate::motion::{BAR_NAMESPACE, DOCK_NAMESPACE, Look};
 use crate::shell::{is_shell, toplevel_names};
@@ -130,7 +130,7 @@ impl State {
         self.each_shell(|shell| shell.window_minimized(handle.identifier(), u32::from(minimized)));
     }
 
-    pub(crate) fn announce_minimized_windows(&self, shell: &UnboundShellV1) {
+    pub(crate) fn announce_minimized_windows(&self, shell: &BandeShellV1) {
         for window in self
             .windows
             .iter()

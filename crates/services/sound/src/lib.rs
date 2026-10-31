@@ -8,12 +8,12 @@ pub use theme::{Alert, RATE, Sound, wav};
 use zbus::blocking::Connection;
 use zbus::message::{Flags, Message};
 
-pub const BUS_NAME: &str = "org.unbound.Sound";
-pub const OBJECT_PATH: &str = "/org/unbound/Sound";
+pub const BUS_NAME: &str = "org.bande.Sound";
+pub const OBJECT_PATH: &str = "/org/bande/Sound";
 
 const INDEX_THEME: &str = "[Sound Theme]
-Name=Unbound
-Comment=Dry, short wooden sounds of the Unbound desktop
+Name=Bande
+Comment=Dry, short wooden sounds of the Bande desktop
 Inherits=freedesktop
 Directories=stereo
 

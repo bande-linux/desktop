@@ -3,8 +3,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use unbound_graphics::{Item, Point, Rect, Scroll, ScrollPhase, ScrollSource, Shape};
-use unbound_spring::Spring;
+use bande_graphics::{Item, Point, Rect, Scroll, ScrollPhase, ScrollSource, Shape};
+use bande_spring::Spring;
 
 use super::{Animated, Context, Event, Size, Widget, WidgetId};
 

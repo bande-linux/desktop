@@ -10,34 +10,32 @@ use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use unbound_fs::Trash;
-use unbound_inbox::{Inbox, Outbox};
-use unbound_screenshot::area::{AreaOutcome, AreaSelection, Region, crop};
-use unbound_screenshot::color::ColorPicker;
-use unbound_screenshot::engine::{Engine, EngineEvent, Shot, Source};
-use unbound_screenshot::indicator::{Activity, Indicator};
-use unbound_screenshot::options::{CaptureOptions, Destination, TIMERS};
-use unbound_screenshot::palette::{Chosen, Mode as PaletteMode, Palette, PaletteAction};
-use unbound_screenshot::picker::{Outcome, Picker};
-use unbound_screenshot::record::{Container, Recording};
-use unbound_screenshot::service::{self, Casting, SCREEN_ID, UiRequest};
-use unbound_screenshot::shadow::with_shadow;
-use unbound_screenshot::thumbnail::{self, Thumbnail, ThumbnailAction};
-use unbound_screenshot::{Failure, L10N, app_name, free_path, png, recording_stem, save, shrunk};
-use unbound_toolkit::ui::{
-    Alert, Context, FreeLayout, Menu, MenuItem, Size, Ui, Widget, frame_time,
-};
-use unbound_toolkit::{
+use bande_fs::Trash;
+use bande_inbox::{Inbox, Outbox};
+use bande_screenshot::area::{AreaOutcome, AreaSelection, Region, crop};
+use bande_screenshot::color::ColorPicker;
+use bande_screenshot::engine::{Engine, EngineEvent, Shot, Source};
+use bande_screenshot::indicator::{Activity, Indicator};
+use bande_screenshot::options::{CaptureOptions, Destination, TIMERS};
+use bande_screenshot::palette::{Chosen, Mode as PaletteMode, Palette, PaletteAction};
+use bande_screenshot::picker::{Outcome, Picker};
+use bande_screenshot::record::{Container, Recording};
+use bande_screenshot::service::{self, Casting, SCREEN_ID, UiRequest};
+use bande_screenshot::shadow::with_shadow;
+use bande_screenshot::thumbnail::{self, Thumbnail, ThumbnailAction};
+use bande_screenshot::{Failure, L10N, app_name, free_path, png, recording_stem, save, shrunk};
+use bande_toolkit::ui::{Alert, Context, FreeLayout, Menu, MenuItem, Size, Ui, Widget, frame_time};
+use bande_toolkit::{
     App, Color, DragAction, DragIcon, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Rect, Role, Scene, Shape, Snapshot, TextAlign, TextStyle, TextSystem,
     Transfer, Window, WindowError, WindowEvent,
 };
-use unbound_xdg::{UserDir, config_home, file_uri, spawn_detached, state_home, user_dir};
+use bande_xdg::{UserDir, config_home, file_uri, spawn_detached, state_home, user_dir};
 use zbus::blocking::Connection;
 
 const MARKUP_FLAG: &str = "--markup";
-const FILES: &str = "unbound-files";
-const FILES_APP_ID: &str = "org.unbound.Files";
+const FILES: &str = "bande-files";
+const FILES_APP_ID: &str = "org.bande.Files";
 const PALETTE_BOTTOM: f32 = 96.0;
 const COUNTDOWN_SIZE: f32 = 132.0;
 const THUMBNAIL_SIDE: u32 = 480;
@@ -152,7 +150,7 @@ impl Screenshots {
         std::env::var_os("XDG_CACHE_HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|| self.home.join(".cache"))
-            .join("unbound-screenshot")
+            .join("bande-screenshot")
     }
 
     fn destination_dir(&self) -> PathBuf {
@@ -164,7 +162,7 @@ impl Screenshots {
 
     fn play_shutter(&self) {
         if let Some(session) = &self.session {
-            unbound_sound::play(session, "screen-capture");
+            bande_sound::play(session, "screen-capture");
         }
     }
 
@@ -239,7 +237,7 @@ impl Screenshots {
         self.ui.present_dialog(dialog);
     }
 
-    fn windows(&self) -> Vec<(String, unbound_screenshot::engine::Frame)> {
+    fn windows(&self) -> Vec<(String, bande_screenshot::engine::Frame)> {
         let Some(engine) = &self.engine else {
             return Vec::new();
         };
@@ -254,7 +252,7 @@ impl Screenshots {
                 let frame = window.frame?;
                 Some((
                     window.identifier,
-                    unbound_screenshot::engine::Frame {
+                    bande_screenshot::engine::Frame {
                         x: frame.x - left,
                         y: frame.y - top,
                         ..frame
@@ -345,7 +343,7 @@ impl Screenshots {
             return;
         }
         let dir = self.destination_dir();
-        let taken = unbound_datetime::now().datetime();
+        let taken = bande_datetime::now().datetime();
         match save(&image, &dir, taken) {
             Ok(path) => {
                 tracing::info!("saved {}", path.display());
@@ -408,7 +406,7 @@ impl Screenshots {
             Target::RecordArea(region) => Some(scaled(*region, window.scale())),
             _ => None,
         };
-        let taken = unbound_datetime::now().datetime();
+        let taken = bande_datetime::now().datetime();
         let dir = self.destination_dir();
         if let Err(error) = std::fs::create_dir_all(&dir) {
             tracing::warn!("cannot create {}: {error}", dir.display());
@@ -496,8 +494,8 @@ impl Screenshots {
             ),
         );
         self.ui = ui_with(window, layout);
-        self.ui.handle(&unbound_toolkit::ui::Event::Key {
-            key: unbound_toolkit::ui::Key::Tab,
+        self.ui.handle(&bande_toolkit::ui::Event::Key {
+            key: bande_toolkit::ui::Key::Tab,
             modifiers: Default::default(),
         });
         self.thumbnail = None;
@@ -701,7 +699,7 @@ impl Screenshots {
     ) {
         let path = self.shoot(window, target).and_then(|image| {
             let dir = self.portal_dir();
-            save(&image, &dir, unbound_datetime::now().datetime())
+            save(&image, &dir, bande_datetime::now().datetime())
                 .inspect_err(|error| tracing::warn!("cannot save to {}: {error}", dir.display()))
                 .ok()
         });
@@ -870,7 +868,7 @@ impl Screenshots {
         true
     }
 
-    fn thumbnail_event(&mut self, window: &mut Window, input: &unbound_toolkit::ui::Event) {
+    fn thumbnail_event(&mut self, window: &mut Window, input: &bande_toolkit::ui::Event) {
         let screen = window.size();
         let now = frame_time().on_screen();
         let Some(thumbnail) = self.thumbnail.as_mut() else {
@@ -1157,7 +1155,7 @@ fn run() -> Result<(), WindowError> {
     let config_home = config_home().unwrap_or_else(|| home.join(".config"));
     let options_path = state_home()
         .unwrap_or_else(|| home.join(".local/state"))
-        .join("unbound-screenshot/options");
+        .join("bande-screenshot/options");
     let mut window = Window::open(
         Role::Layer(LayerOptions {
             layer: LayerKind::Overlay,
@@ -1202,11 +1200,11 @@ fn run() -> Result<(), WindowError> {
             .inspect_err(|error| tracing::warn!("no shutter sound without a session bus: {error}"))
             .ok(),
     };
-    unbound_toolkit::run(&mut window, &mut screenshots)
+    bande_toolkit::run(&mut window, &mut screenshots)
 }
 
 fn main() -> ExitCode {
-    unbound_log::init("unbound-screenshot");
+    bande_log::init("bande-screenshot");
     let arguments: Vec<String> = std::env::args().collect();
     let outcome = match arguments.as_slice() {
         [_, flag, path] if flag == MARKUP_FLAG => markup_app::run(Path::new(path)),

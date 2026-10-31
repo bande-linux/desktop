@@ -1,7 +1,7 @@
 use accesskit::{Node, Role};
 
 use super::{Context, Menu, Size, Widget, WidgetId};
-use unbound_graphics::{Item, Point, Rect};
+use bande_graphics::{Item, Point, Rect};
 
 pub struct ContextMenu {
     id: WidgetId,

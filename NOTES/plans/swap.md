@@ -4,7 +4,7 @@
 
 Swap is not only the installer's job. The desktop already ships its part: a zram-generator
 drop-in and `Recommends: systemd-zram-generator, systemd-oomd` (commit 117500a1, today). It does
-nothing here for three reasons. The unbound kernel has no `CONFIG_ZRAM` and no `CONFIG_PSI`. The
+nothing here for three reasons. The bande kernel has no `CONFIG_ZRAM` and no `CONFIG_PSI`. The
 images install the desktop with `--no-install-recommends`. The installed desktop package predates
 the commit. Fix the kernel and the image. Ship no disk swap by default.
 
@@ -12,10 +12,10 @@ the commit. Fix the kernel and the image. Ship no disk swap by default.
 
 - **This machine**: 15 GB RAM, `/proc/swaps` empty. One ext4 root (nvme0n1p6) beside the macOS
   APFS partitions, no swap partition. `systemd-zram-generator` and `systemd-oomd` are not
-  installed. The installed `unbound-desktop` (…1083.4b292c7) does not contain 117500a1, so it
-  has neither `/usr/lib/systemd/zram-generator.conf.d/50-unbound.conf` nor the `app.slice.d`
+  installed. The installed `bande-desktop` (…1083.4b292c7) does not contain 117500a1, so it
+  has neither `/usr/lib/systemd/zram-generator.conf.d/50-bande.conf` nor the `app.slice.d`
   oomd drop-in.
-- **Kernel** (`/proc/config.gz`, built as `make defconfig unbound-headless.config [unbound-dev.config]`
+- **Kernel** (`/proc/config.gz`, built as `make defconfig bande-headless.config [bande-dev.config]`
   per `linux/.github/workflows/build.yml`): `# CONFIG_ZRAM is not set`, `# CONFIG_ZSWAP is not set`,
   `# CONFIG_PSI is not set`, `CONFIG_CRYPTO_ZSTD=m`, `CONFIG_HIBERNATION=y` (from the arm64
   defconfig). None of the fragments mention ZRAM or PSI. Without PSI, three layers of decision
@@ -31,7 +31,7 @@ the commit. Fix the kernel and the image. Ship no disk swap by default.
 - **Debian installer**: guided partitioning creates a swap partition by default. The trixie
   manual suggests about RAM-sized swap, at least 512 MB [1]. d-i sets up no zram. Debian ships
   `systemd-zram-generator` (default `min(ram/2, 4096)`, lz4) and `systemd-oomd` as opt-in
-  packages. A d-i install of `unbound-desktop` would get a swap partition plus our Recommends.
+  packages. A d-i install of `bande-desktop` would get a swap partition plus our Recommends.
 - **Fedora Workstation**: zram by default since F33 (`min(ram, 8192)`, zstd), no disk swap, oomd
   on. **Ubuntu**: a swapfile (`/swap.img`) at install, no zram, oomd swap kill dropped (see 0004).
 - **Fedora Asahi Remix** (the nearest reference, same hardware): zram plus an 8 GB swapfile on 8
@@ -48,7 +48,7 @@ the commit. Fix the kernel and the image. Ship no disk swap by default.
 - **NVMe wear**: zram writes nothing to the SSD. A swapfile on Apple's NVMe gets real but modest
   write traffic. macOS itself swaps to that disk all the time, so it is acceptable if wanted. It
   is not needed at 16 GB with zram + oomd.
-- **Debian policy**: shipping `/usr/lib/systemd/zram-generator.conf.d/50-unbound.conf` is the
+- **Debian policy**: shipping `/usr/lib/systemd/zram-generator.conf.d/50-bande.conf` is the
   generator's documented vendor drop-in mechanism. It changes no other package's conffile, admins
   override it in `/etc/systemd/zram-generator.conf[.d]`, and with zram-generator absent it is
   inert. Recommends, not Depends, is right: whoever already has a swap layout keeps it. No policy
@@ -59,15 +59,15 @@ the commit. Fix the kernel and the image. Ship no disk swap by default.
 
 | Owner | Job |
 | :--- | :--- |
-| **Kernel** (`linux`, `unbound-headless.config`) | `PSI=y`, `ZRAM=m` with the zstd backend, `ZSMALLOC`, `ZSWAP=y` (default off), so it matches Debian's kernel. This is the blocker. |
+| **Kernel** (`linux`, `bande-headless.config`) | `PSI=y`, `ZRAM=m` with the zstd backend, `ZSMALLOC`, `ZSWAP=y` (default off), so it matches Debian's kernel. This is the blocker. |
 | **Images** (`images/customize.sh`) | Install `systemd-zram-generator` and `systemd-oomd` explicitly (keep `--no-install-recommends` for the rest). No swap partition, no swapfile. |
 | **Installer** (`installer/`) | Nothing for now. No swap partition. A swapfile, if ever, comes from a first-boot script, not from partitioning. |
-| **Desktop** (`unbound-desktop`) | Already done (drop-in + Recommends + oomd slice). Only a doc caveat in 0004. |
+| **Desktop** (`bande-desktop`) | Already done (drop-in + Recommends + oomd slice). Only a doc caveat in 0004. |
 | **Debian installer** | Its business for d-i installs: a swap partition plus our zram (priority 100) in front. Acceptable. |
 
 ## Implementation steps
 
-1. **linux**: append to `arch/arm64/configs/unbound-headless.config`:
+1. **linux**: append to `arch/arm64/configs/bande-headless.config`:
    `CONFIG_PSI=y`, `# CONFIG_PSI_DEFAULT_DISABLED is not set`, `CONFIG_ZSMALLOC=y`,
    `CONFIG_ZRAM=m`, `CONFIG_ZRAM_BACKEND_ZSTD=y`, `CONFIG_ZRAM_BACKEND_LZ4=y`,
    `CONFIG_CRYPTO_ZSTD=y` (the default compressor does not matter, because the drop-in sets zstd),
@@ -77,7 +77,7 @@ the commit. Fix the kernel and the image. Ship no disk swap by default.
 2. **images**: in `customize.sh`, add `systemd-zram-generator systemd-oomd` to the desktop
    `apt-get install` line (or a separate one). Verify in a built image that
    `systemctl status dev-zram0.swap` and `systemd-oomd` are active after boot.
-3. **This mini** (main agent, with root): install the new kernel, upgrade `unbound-desktop`, and
+3. **This mini** (main agent, with root): install the new kernel, upgrade `bande-desktop`, and
    `apt install systemd-zram-generator systemd-oomd`. Reboot. Check `zramctl` (zram0 about 8 GB,
    zstd), `swapon --show`, `oomctl` (app.slice monitored at 40 %).
 4. **desktop**: in `docs/decisions/0004-memory-pressure.md` §1, add one sentence: with a disk

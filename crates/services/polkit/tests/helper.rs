@@ -1,4 +1,4 @@
-use unbound_polkit::helper::{Line, parse};
+use bande_polkit::helper::{Line, parse};
 
 #[test]
 fn prompts_carry_their_text_and_whether_to_echo() {

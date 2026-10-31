@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use std::sync::mpsc::RecvTimeoutError;
 
-use unbound_audio::{Audio, Direction, Level, Meter};
-use unbound_bluetooth::{Bluetooth, PairingPrompt, register_agent};
-use unbound_network::{JoinOutcome, ManualIpv4, NetworkManager};
+use bande_audio::{Audio, Direction, Level, Meter};
+use bande_bluetooth::{Bluetooth, PairingPrompt, register_agent};
+use bande_network::{JoinOutcome, ManualIpv4, NetworkManager};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
@@ -34,8 +34,8 @@ pub enum AudioCommand {
 pub enum NetworkCommand {
     Power(bool),
     Scan,
-    Join(unbound_network::Network, Option<String>),
-    Forget(unbound_network::Network),
+    Join(bande_network::Network, Option<String>),
+    Forget(bande_network::Network),
     ConfigureEthernet(Option<ManualIpv4>),
     ConnectVpn(String),
     DisconnectVpn(String),
@@ -45,10 +45,10 @@ pub enum NetworkCommand {
 pub enum BluetoothCommand {
     Power(bool),
     Discover(bool),
-    Connect(unbound_bluetooth::Device),
-    Disconnect(unbound_bluetooth::Device),
-    Pair(unbound_bluetooth::Device),
-    Forget(unbound_bluetooth::Device),
+    Connect(bande_bluetooth::Device),
+    Disconnect(bande_bluetooth::Device),
+    Pair(bande_bluetooth::Device),
+    Forget(bande_bluetooth::Device),
 }
 
 fn report<E: std::fmt::Display>(updates: &Updates, result: Result<(), E>) {
@@ -65,7 +65,7 @@ fn same_kind(a: &AudioCommand, b: &AudioCommand) -> bool {
     }
 }
 
-fn audio_device(audio: &Audio, direction: Direction) -> Option<unbound_audio::Device> {
+fn audio_device(audio: &Audio, direction: Direction) -> Option<bande_audio::Device> {
     let snapshot = audio.snapshot();
     match direction {
         Direction::Output => snapshot.default_output().cloned(),
@@ -73,9 +73,8 @@ fn audio_device(audio: &Audio, direction: Direction) -> Option<unbound_audio::De
     }
 }
 
-fn run_audio(audio: &Audio, command: AudioCommand) -> Result<(), unbound_audio::Error> {
-    let device =
-        |direction| audio_device(audio, direction).ok_or(unbound_audio::Error::NoSuchDevice);
+fn run_audio(audio: &Audio, command: AudioCommand) -> Result<(), bande_audio::Error> {
+    let device = |direction| audio_device(audio, direction).ok_or(bande_audio::Error::NoSuchDevice);
     match command {
         AudioCommand::Volume(direction, volume) => audio.set_level(
             &device(direction)?,
@@ -89,7 +88,7 @@ fn run_audio(audio: &Audio, command: AudioCommand) -> Result<(), unbound_audio::
             let snapshot = audio.snapshot();
             let device = snapshot
                 .device(&name)
-                .ok_or(unbound_audio::Error::NoSuchDevice)?;
+                .ok_or(bande_audio::Error::NoSuchDevice)?;
             audio.set_default(device)
         }
         AudioCommand::App(name, volume) => {
@@ -98,7 +97,7 @@ fn run_audio(audio: &Audio, command: AudioCommand) -> Result<(), unbound_audio::
                 .apps
                 .iter()
                 .find(|app| app.name == name)
-                .ok_or(unbound_audio::Error::NoSuchDevice)?;
+                .ok_or(bande_audio::Error::NoSuchDevice)?;
             audio.set_app_level(
                 app,
                 Level {
@@ -302,7 +301,7 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                         Ok(JoinOutcome::Joined) => Joined::Joined,
                         Ok(JoinOutcome::WrongPassword) => Joined::WrongPassword,
                         Ok(JoinOutcome::Failed { reason }) => Joined::Failed(reason.to_string()),
-                        Err(unbound_network::Error::PasswordRequired) => Joined::WrongPassword,
+                        Err(bande_network::Error::PasswordRequired) => Joined::WrongPassword,
                         Err(error) => Joined::Failed(error.to_string()),
                     };
                     updates.send(Update::Joined(target.ssid.clone(), outcome));

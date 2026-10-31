@@ -3,18 +3,18 @@ use std::io;
 use std::os::fd::BorrowedFd;
 use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 
-use unbound_inbox::{Inbox, Outbox};
-use unbound_l10n::Localizer;
+use bande_inbox::{Inbox, Outbox};
+use bande_l10n::Localizer;
 use zbus::blocking::Connection;
 use zbus::fdo::RequestNameFlags;
 use zbus::zvariant::{OwnedValue, Structure, Value};
 
-pub const MENU_PATH: &str = "/org/unbound/MenuBar";
-pub const SHELL_ACTION_PROPERTY: &str = "x-unbound-shell-action";
-pub const VERSION_PROPERTY: &str = "x-unbound-version";
+pub const MENU_PATH: &str = "/org/bande/MenuBar";
+pub const SHELL_ACTION_PROPERTY: &str = "x-bande-shell-action";
+pub const VERSION_PROPERTY: &str = "x-bande-version";
 const INTERFACE: &str = "com.canonical.dbusmenu";
 const ROOT: i32 = 0;
-const ENGLISH: &str = include_str!("../locales/en-US/unbound-app-menu.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-app-menu.ftl");
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
@@ -453,7 +453,7 @@ mod tests {
     #[test]
     fn every_message_id_used_in_code_is_in_the_english_file() {
         assert_eq!(
-            unbound_l10n::missing_ids(super::ENGLISH, &[include_str!("lib.rs")]),
+            bande_l10n::missing_ids(super::ENGLISH, &[include_str!("lib.rs")]),
             Vec::<&str>::new()
         );
     }

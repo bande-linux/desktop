@@ -1,4 +1,4 @@
-use unbound_graphics::Rect;
+use bande_graphics::Rect;
 use wayland_protocols_wlr::layer_shell::v1::client::{zwlr_layer_shell_v1, zwlr_layer_surface_v1};
 
 use super::{ShellSurface, Window, WindowError};

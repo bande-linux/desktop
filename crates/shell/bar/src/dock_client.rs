@@ -24,12 +24,13 @@ use unbound_toolkit::{
     MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, app_name, autostart_dir, data_dirs, find_app, find_icon,
-    launch_with_arguments, opens_at_login, path_from_file_uri, running_app, set_open_at_login,
+    DesktopEntry, ICON_THEMES, app_name, autostart_dir, data_dirs, find_app, find_app_for_process,
+    find_icon, launch_with_arguments, opens_at_login, path_from_file_uri, set_open_at_login,
 };
 use zbus::blocking::Connection;
 
 const FILES: &str = "org.unbound.Files";
+const PROC: &str = "/proc";
 const TRASH_URI: &str = "trash:///";
 const MENU_OPEN: &str = "open";
 const MENU_KEEP: &str = "keep";
@@ -82,7 +83,7 @@ pub struct Dock {
     ui: Ui,
     apps: InstalledApps,
     kept: Vec<String>,
-    windows: Vec<String>,
+    windows: Vec<(String, String)>,
     running: Vec<String>,
     icons: HashMap<String, Option<Image>>,
     icon_scale: f64,
@@ -126,23 +127,43 @@ impl Dock {
     }
 
     fn identity(&self, window_app: &str) -> String {
-        self.entry(window_app)
-            .map_or(window_app, DesktopEntry::app_id)
+        self.windows
+            .iter()
+            .find(|(known, _)| known == window_app)
+            .map(|(_, identity)| identity.as_str())
+            .or_else(|| self.entry(window_app).map(DesktopEntry::app_id))
+            .unwrap_or(window_app)
             .to_owned()
     }
 
     fn window_app(&self, app_id: &str) -> String {
-        running_app(self.apps.entries(), &self.windows, app_id)
-            .unwrap_or(app_id)
+        self.windows
+            .iter()
+            .find(|(window_app, _)| window_app == app_id)
+            .or_else(|| self.windows.iter().find(|(_, identity)| identity == app_id))
+            .map_or(app_id, |(window_app, _)| window_app)
             .to_owned()
     }
 
-    fn follow_windows(&mut self, windows: Vec<String>) {
+    fn follow_windows(&mut self, window: &Window) {
+        let entries = self.apps.entries();
+        let windows: Vec<(String, String)> = window
+            .running_apps()
+            .into_iter()
+            .map(|window_app| {
+                let identity = find_app(entries, &window_app)
+                    .or_else(|| {
+                        let pid = window.app_pid(&window_app)?;
+                        find_app_for_process(entries, Path::new(PROC), pid)
+                    })
+                    .map_or_else(|| window_app.clone(), |entry| entry.app_id().to_owned());
+                (window_app, identity)
+            })
+            .collect();
         let mut running = Vec::new();
-        for window_app in &windows {
-            let app_id = self.identity(window_app);
-            if !running.contains(&app_id) {
-                running.push(app_id);
+        for (_, app_id) in &windows {
+            if !running.contains(app_id) {
+                running.push(app_id.clone());
             }
         }
         self.windows = windows;
@@ -195,7 +216,7 @@ impl Dock {
         }
         self.icons.clear();
         self.load_trash_icons();
-        self.follow_windows(self.windows.clone());
+        self.follow_windows(window);
         self.sync();
         window.request_redraw();
     }
@@ -869,7 +890,7 @@ impl App for Dock {
                 self.run_actions(window);
             }
             WindowEvent::AppsChanged => {
-                self.follow_windows(window.running_apps());
+                self.follow_windows(window);
                 let running = &self.running;
                 self.unresponsive.retain(|app_id| running.contains(app_id));
                 self.sync();
@@ -1051,7 +1072,7 @@ impl Dock {
             names: config.names,
             output: output.to_owned(),
         };
-        dock.follow_windows(window.running_apps());
+        dock.follow_windows(window);
         dock.load_trash_icons();
         dock.sync();
         Ok(dock)

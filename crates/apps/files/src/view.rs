@@ -4,11 +4,11 @@ use std::io;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use unbound_fs::{
-    Action, Answer, Change, Entry, Finished, FolderWatch, Operations, Purpose, RenameError,
-    Resolution, Task, TrashItem, archive_path, can_extract,
+    Action, Answer, Change, Entry, Finished, FolderChanges, FolderWatch, Operations, Purpose,
+    RenameError, Resolution, Task, TrashItem, archive_path, can_extract,
 };
 use unbound_preview::Preview;
 use unbound_search::{Usage, recent_files};
@@ -23,7 +23,7 @@ use unbound_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
 use crate::L10N;
 use crate::browser::{Browser, Location};
-use crate::controls::{Press, Signals};
+use crate::controls::{Formats, Press, Signals};
 use crate::grid::Band;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
@@ -32,10 +32,13 @@ use crate::sidebar::{Place, PlaceKind, Row, SidebarEdit, with_volumes};
 use crate::tabs::{Tab, location_title};
 use crate::thumbs::Thumbs;
 use crate::toolbar::{TOOLBAR_HEIGHT, Toolbar};
-use crate::views::{DEFAULT_ICON_SIZE, FolderView, ICON_SIZES, ViewMemory, ViewMode};
+use crate::views::{
+    DEFAULT_ICON_SIZE, FolderView, ICON_SIZES, ListColumn, ViewMemory, ViewMode, load_list_columns,
+};
 
 pub const COLUMN_WIDTH: f32 = 240.0;
-pub const ROW_HEIGHT: f32 = 28.0;
+pub const ROW_HEIGHT: f32 = 32.0;
+pub const PREVIEW_WIDTH: f32 = 280.0;
 pub const SIDEBAR_WIDTH: f32 = 200.0;
 pub const INSPECTOR_WIDTH: f32 = 260.0;
 pub const PATH_BAR_HEIGHT: f32 = 28.0;
@@ -52,6 +55,7 @@ const TRASH_SOUND: &str = "trash-empty";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Source {
     Watch,
+    Listing,
     Loader,
     Thumbnails,
     Index,
@@ -60,6 +64,15 @@ enum Source {
 
 pub struct QuickLook {
     pub entry: Entry,
+    pub preview: Option<Preview<Image>>,
+}
+
+pub struct ColumnPreview {
+    pub entry: Option<Entry>,
+    pub count: usize,
+    pub bytes: u64,
+    pub kind: String,
+    pub created: Option<SystemTime>,
     pub preview: Option<Preview<Image>>,
 }
 
@@ -105,6 +118,7 @@ pub enum Hit {
     ChooseApp(usize),
     OpenWithChosen,
     UseForAll,
+    MoreInfo,
     Tab(usize),
     CloseTab(usize),
     NewTab,
@@ -148,10 +162,12 @@ pub struct FilesView {
     pub(crate) host: WidgetId,
     pub(crate) table: WidgetId,
     pub(crate) signals: Signals,
-    pub(crate) table_revision: Option<u64>,
-    pub(crate) table_keys: HashMap<String, usize>,
+    pub(crate) table_synced: Option<(u64, usize)>,
+    pub(crate) table_formats: Formats,
     pub(crate) table_revealed: Option<usize>,
-    pub(crate) table_found: bool,
+    pub(crate) table_shape: (bool, Vec<ListColumn>),
+    pub(crate) list_columns: Vec<ListColumn>,
+    pub(crate) list_columns_file: Option<PathBuf>,
     pub(crate) press: Option<Press>,
     pub(crate) drag_sources: Vec<PathBuf>,
     pub(crate) reordering: Option<Location>,
@@ -167,6 +183,7 @@ pub struct FilesView {
     pub(crate) quick_look: Option<QuickLook>,
     pub(crate) inspector: bool,
     pub(crate) info: Option<Info>,
+    pub(crate) column_preview: Option<ColumnPreview>,
     pub(crate) rename: Option<Rename>,
     pub(crate) sheet: Option<Sheet>,
     pub(crate) notice: Option<(String, Instant)>,
@@ -258,10 +275,12 @@ impl FilesView {
             host: host_id,
             table: table_id,
             signals,
-            table_revision: None,
-            table_keys: HashMap::new(),
+            table_synced: None,
+            table_formats: Formats::default(),
             table_revealed: None,
-            table_found: false,
+            table_shape: (false, ListColumn::DEFAULT.to_vec()),
+            list_columns: ListColumn::DEFAULT.to_vec(),
+            list_columns_file: None,
             press: None,
             drag_sources: Vec::new(),
             reordering: None,
@@ -277,6 +296,7 @@ impl FilesView {
             quick_look: None,
             inspector: false,
             info: None,
+            column_preview: None,
             rename: None,
             sheet: None,
             notice: None,
@@ -440,6 +460,59 @@ impl FilesView {
         self.info.as_ref()
     }
 
+    pub fn column_preview(&self) -> Option<&ColumnPreview> {
+        self.column_preview.as_ref()
+    }
+
+    fn update_column_preview(&mut self) {
+        let column = self.browser.active_column();
+        let shown = self.mode == ViewMode::Columns
+            && !self.browser.single()
+            && self.browser.active() + 1 == self.browser.columns().len()
+            && !column.marked.is_empty()
+            && self
+                .browser
+                .selected()
+                .is_none_or(|entry| !entry.is_folder());
+        if !shown {
+            self.column_preview = None;
+            return;
+        }
+        let entry = self.browser.selected().cloned();
+        let kept = self
+            .column_preview
+            .take()
+            .filter(|kept| kept.entry.is_some() && kept.entry == entry);
+        if let Some(kept) = kept {
+            self.column_preview = Some(kept);
+            return;
+        }
+        let bytes = column
+            .marked
+            .iter()
+            .filter_map(|row| column.entries.get(*row))
+            .filter(|entry| !entry.is_folder())
+            .map(|entry| entry.size)
+            .sum();
+        let count = column.marked.len();
+        let kind = entry.as_ref().map_or_else(String::new, |entry| {
+            self.apps.kind_for_name(&entry.name, entry.is_folder())
+        });
+        let created = entry.as_ref().and_then(|entry| {
+            std::fs::metadata(&entry.path)
+                .and_then(|metadata| metadata.created())
+                .ok()
+        });
+        self.column_preview = Some(ColumnPreview {
+            entry,
+            count,
+            bytes,
+            kind,
+            created,
+            preview: None,
+        });
+    }
+
     pub fn renaming(&self) -> Option<&Path> {
         self.rename.as_ref().map(|rename| rename.path.as_path())
     }
@@ -514,6 +587,9 @@ impl FilesView {
         };
         if let Some(view) = self.views.get(folder) {
             self.icon_size = view.icon_size;
+            if view.sort != self.browser.sort() {
+                self.browser.set_sort(view.sort);
+            }
             if view.mode != self.mode {
                 self.mode = view.mode;
                 self.browser.set_single(view.mode != ViewMode::Columns);
@@ -525,13 +601,14 @@ impl FilesView {
         }
     }
 
-    fn remember_view(&mut self) {
+    pub(crate) fn remember_view(&mut self) {
         let Location::Folder(folder) = self.browser.root().clone() else {
             return;
         };
         let view = FolderView {
             mode: self.mode,
             icon_size: self.icon_size,
+            sort: self.browser.sort(),
         };
         if let Err(error) = self.views.remember(&folder, view) {
             tracing::warn!("cannot remember the view of {}: {error}", folder.display());
@@ -539,10 +616,9 @@ impl FilesView {
     }
 
     fn sources(&self) -> Vec<(Source, BorrowedFd<'_>)> {
-        let mut sources = vec![
-            (Source::Watch, self.watch.fd()),
-            (Source::Loader, self.loader.fd()),
-        ];
+        let mut sources = vec![(Source::Watch, self.watch.fd())];
+        sources.extend(self.browser.listing_fd().map(|fd| (Source::Listing, fd)));
+        sources.push((Source::Loader, self.loader.fd()));
         sources.extend(self.thumbs.fd().map(|fd| (Source::Thumbnails, fd)));
         sources.extend(self.search_index_fd().map(|fd| (Source::Index, fd)));
         sources.extend(
@@ -568,6 +644,7 @@ impl FilesView {
                 self.watch.read();
                 false
             }
+            Source::Listing => self.listed(),
             Source::Loader => self.loaded(),
             Source::Thumbnails => self.thumbs.take(),
             Source::Index => self.search_results(),
@@ -600,9 +677,9 @@ impl FilesView {
     }
 
     pub fn tick(&mut self, now: Instant) -> bool {
-        let changed = self.watch.take_changed(now);
-        if !changed.is_empty() {
-            self.refresh(&changed);
+        let changes = self.watch.take_changed(now);
+        if !changes.is_empty() {
+            self.apply_changes(&changes);
         }
         if self
             .notice
@@ -627,15 +704,27 @@ impl FilesView {
     }
 
     pub fn refresh(&mut self, changed: &[PathBuf]) {
-        if changed
+        self.apply_changes(&FolderChanges {
+            folders: changed.to_vec(),
+            entries: Vec::new(),
+        });
+    }
+
+    fn apply_changes(&mut self, changes: &FolderChanges) {
+        let folders = changes
+            .folders
             .iter()
+            .map(PathBuf::as_path)
+            .chain(changes.entries.iter().filter_map(|path| path.parent()));
+        if folders
+            .into_iter()
             .any(|path| self.media.iter().any(|root| root.starts_with(path)))
         {
             self.refresh_volumes();
         }
         let editing = self.rename.as_ref().map(|rename| rename.path.clone());
         self.trash_full = !self.browser.trash().is_empty();
-        self.browser.refresh(changed);
+        self.browser.apply(changes);
         if let Some(path) = editing
             && path.symlink_metadata().is_err()
         {
@@ -648,11 +737,26 @@ impl FilesView {
         self.notice = Some((text, Instant::now()));
     }
 
+    fn listed(&mut self) -> bool {
+        match self.browser.take_listed() {
+            (_, true) => self.selection_changed(),
+            (true, false) => self.sync_table(),
+            (false, false) => return false,
+        }
+        true
+    }
+
     fn loaded(&mut self) -> bool {
         let mut changed = false;
         for loaded in self.loader.take() {
             match loaded {
                 Loaded::Preview(path, preview) => {
+                    if let Some(shown) = &mut self.column_preview
+                        && shown.entry.as_ref().is_some_and(|entry| entry.path == path)
+                    {
+                        shown.preview = Some(preview.clone());
+                        changed = true;
+                    }
                     if let Some(quick_look) = &mut self.quick_look
                         && quick_look.entry.path == path
                     {
@@ -687,6 +791,7 @@ impl FilesView {
 
     pub(crate) fn selection_changed(&mut self) {
         self.apply_remembered_view();
+        self.browser.set_nesting(self.mode == ViewMode::List);
         self.watch.watch(&self.watched());
         self.loader.forget_pending();
         let entry = self.browser.selected().cloned();
@@ -701,8 +806,13 @@ impl FilesView {
         } else {
             self.info = None;
         }
+        self.update_column_preview();
+        let column_preview = self
+            .column_preview
+            .as_ref()
+            .is_some_and(|shown| shown.entry.is_some() && shown.preview.is_none());
         if let Some(entry) = entry
-            && (self.quick_look.is_some() || self.inspector)
+            && (self.quick_look.is_some() || self.inspector || column_preview)
         {
             self.loader.preview(entry.clone());
             if self.inspector && entry.is_folder() {
@@ -803,6 +913,16 @@ impl FilesView {
         }
     }
 
+    pub fn set_list_columns_file(&mut self, file: PathBuf) {
+        self.list_columns = load_list_columns(&file);
+        self.list_columns_file = Some(file);
+        self.sync_table();
+    }
+
+    pub fn list_columns(&self) -> &[ListColumn] {
+        &self.list_columns
+    }
+
     pub fn set_status_bar_file(&mut self, file: PathBuf) {
         self.status_bar = std::fs::read_to_string(&file).map_or(true, |text| text.trim() != HIDDEN);
         self.status_bar_file = Some(file);
@@ -846,7 +966,11 @@ impl FilesView {
     pub(crate) fn first_visible_column(&self) -> usize {
         let columns = self.browser.columns().len();
         let last = (self.browser.active() + 1).min(columns - 1);
-        let fit = ((self.content_frame().width / COLUMN_WIDTH).floor() as usize).max(1);
+        let preview = match self.column_preview {
+            Some(_) => PREVIEW_WIDTH,
+            None => 0.0,
+        };
+        let fit = (((self.content_frame().width - preview) / COLUMN_WIDTH).floor() as usize).max(1);
         (last + 1).saturating_sub(fit)
     }
 
@@ -1069,6 +1193,7 @@ impl FilesView {
             }
             Hit::OpenWithChosen => self.open_with_chosen(),
             Hit::UseForAll => self.use_chosen_for_all(),
+            Hit::MoreInfo => self.show_inspector(),
             Hit::Inspector | Hit::Sidebar => return false,
             Hit::Tab(index) => self.select_tab(index),
             Hit::CloseTab(index) => {

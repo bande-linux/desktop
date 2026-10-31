@@ -5,7 +5,7 @@ use unbound_compositor::{Headless, OutputConfig, OutputMode, Rect, Renderer};
 use unbound_config::Config;
 use unbound_test_wayland::{
     Anchor, BLUE, ConstraintAdjustment, DecorationMode, GREEN, KeyboardInteractivity, Layer,
-    LayerRequest, PopupRequest, RED, ShmImage, TestClient, quadrants, roundtrip,
+    LayerRequest, Placement, PopupRequest, RED, ShmImage, TestClient, quadrants, roundtrip,
 };
 
 use crate::support::*;
@@ -167,6 +167,23 @@ fn a_shortcut_moves_the_focused_window_to_the_neighbouring_display_keeping_its_p
 
     assert_eq!(server.output_of(&server.windows()[0]), MAIN);
     assert_eq!(geometry(&server), rect(96, 72, 64, 48));
+}
+
+#[test]
+fn the_tiling_menus_next_display_moves_the_window_round_the_displays() {
+    let mut server = two_displays();
+    let mut app = app(&mut server);
+
+    app.place_window(&mut server, 0, Placement::NextDisplay);
+    roundtrip(&mut server, &mut [&mut app]);
+    let first = server.output_of(&server.windows()[0]);
+    app.place_window(&mut server, 0, Placement::NextDisplay);
+    roundtrip(&mut server, &mut [&mut app]);
+
+    assert_eq!(first, SIDE);
+    assert_eq!(server.output_of(&server.windows()[0]), MAIN);
+    assert_eq!(geometry(&server), rect(96, 72, 64, 48));
+    assert!(app.keyboard_focus_on(0));
 }
 
 #[test]

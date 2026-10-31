@@ -62,6 +62,16 @@ impl Adapter {
         let _ = self.discovering_changed(&emitter).await;
     }
 
+    async fn remove_device(
+        &self,
+        device: OwnedObjectPath,
+        #[zbus(object_server)] server: &zbus::ObjectServer,
+    ) -> zbus::fdo::Result<()> {
+        let _ = server.remove::<Battery, _>(&device).await;
+        server.remove::<Device, _>(&device).await?;
+        Ok(())
+    }
+
     #[zbus(property)]
     fn powered(&self) -> bool {
         self.powered
@@ -84,6 +94,18 @@ enum BluezError {
     #[zbus(error)]
     ZBus(zbus::Error),
     AuthenticationRejected(String),
+}
+
+struct Battery {
+    percentage: u8,
+}
+
+#[zbus::interface(name = "org.bluez.Battery1")]
+impl Battery {
+    #[zbus(property)]
+    fn percentage(&self) -> u8 {
+        self.percentage
+    }
 }
 
 struct Device {
@@ -245,6 +267,7 @@ impl FakeBluez {
                 },
             )?;
         }
+        server.at(HEADPHONES, Battery { percentage: 80 })?;
         bluez.request_name("org.bluez")?;
         Ok(Self { bluez, capability })
     }
@@ -263,6 +286,13 @@ impl FakeBluez {
 
     pub fn discovering(&self) -> zbus::Result<bool> {
         Ok(self.adapter()?.get().discovering)
+    }
+
+    pub fn has_device(&self, path: &str) -> bool {
+        self.bluez
+            .object_server()
+            .interface::<_, Device>(path)
+            .is_ok()
     }
 
     pub fn device(&self, path: &str) -> zbus::Result<DeviceState> {

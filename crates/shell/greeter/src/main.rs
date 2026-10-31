@@ -13,8 +13,9 @@ use unbound_greeter::{
 };
 use unbound_keyboard::Layouts;
 use unbound_lock::{
-    BackdropSource, DateFormats, Inbox, LockScreen, Look, User, Variant, load_backdrop,
+    BackdropSource, DateFormats, Inbox, LockScreen, Look, PowerAction, User, Variant, load_backdrop,
 };
+use unbound_status::devices::{powers, use_power};
 use unbound_toolkit::ui::{Event, Key, frame_time};
 use unbound_toolkit::{
     App, Appearance, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem,
@@ -70,6 +71,8 @@ struct Greeter {
     input_source: Option<String>,
     started: bool,
     text: TextSystem,
+    system: Option<zbus::blocking::Connection>,
+    powers: Vec<PowerAction>,
 }
 
 impl Greeter {
@@ -95,6 +98,7 @@ impl Greeter {
         };
         self.screen = Self::screen_for(&self.users[self.user], self.text.sharing_fonts());
         self.screen.set_position(self.user, count);
+        self.screen.offer_power(&self.powers);
         self.screen.set_input_source(self.input_source.clone());
         self.screen.set_caps_lock(self.caps_lock);
         self.picture = login_picture(Path::new(LOGIN_PICTURES), self.users[self.user].uid);
@@ -266,6 +270,12 @@ impl App for Greeter {
             if let Some(password) = self.screen.take_password() {
                 self.sign_in(password);
             }
+            if let Some(power) = self.screen.take_power()
+                && let Some(system) = &self.system
+                && let Err(error) = use_power(system, power)
+            {
+                tracing::warn!("cannot {power:?}: {error}");
+            }
         }
     }
 
@@ -346,6 +356,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let text = TextSystem::new();
     let mut screen = Greeter::screen_for(chosen, text.sharing_fonts());
     screen.set_position(user, users.len());
+    let system = zbus::blocking::Connection::system()
+        .inspect_err(|error| tracing::warn!("no system bus: {error}"))
+        .ok();
+    let powers = system
+        .as_ref()
+        .map(|system| {
+            powers(system)
+                .inspect_err(|error| tracing::warn!("cannot ask logind about power: {error}"))
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    screen.offer_power(&powers);
     let picture = login_picture(Path::new(LOGIN_PICTURES), chosen.uid);
     let mut window = Window::open(
         Role::Layer(LayerOptions {
@@ -373,6 +395,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         input_source: None,
         started: false,
         text,
+        system,
+        powers,
     };
     unbound_toolkit::run(&mut window, &mut greeter)?;
     Ok(())

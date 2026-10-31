@@ -2,8 +2,7 @@
 
 use jiff::civil::date;
 use jiff::{Timestamp, Zoned};
-use unbound_design::Scheme;
-use xdg_desktop_portal_unbound::daylight::{Place, automatic_scheme, place};
+use unbound_datetime::daylight::{Place, Sky, place, sky};
 
 const ZONE_TAB: &str = "# comment\nSE\t+5920+01803\tEurope/Stockholm\nNO\t+5955+01045\tEurope/Oslo\nUS\t+404251-0740023\tAmerica/New_York\tEastern (most areas)\n";
 
@@ -40,16 +39,15 @@ fn a_zone_is_placed_at_its_main_city_in_the_zone_table() {
 }
 
 #[test]
-fn automatic_turns_dark_at_sunset_and_light_at_sunrise() {
+fn night_falls_at_sunset_and_day_breaks_at_sunrise() {
     let stockholm = place(ZONE_TAB, "Europe/Stockholm");
-    let (scheme, sunset) =
-        automatic_scheme(&at("2026-06-21T12:00[Europe/Stockholm]"), stockholm).expect("day");
-    assert_eq!(scheme, Scheme::Light);
+    let (scheme, sunset) = sky(&at("2026-06-21T12:00[Europe/Stockholm]"), stockholm).expect("day");
+    assert_eq!(scheme, Sky::Day);
     assert!(near(&local(sunset, "Europe/Stockholm"), "22:08"));
 
     let (scheme, sunrise) =
-        automatic_scheme(&at("2026-12-21T23:30[Europe/Stockholm]"), stockholm).expect("night");
-    assert_eq!(scheme, Scheme::Dark);
+        sky(&at("2026-12-21T23:30[Europe/Stockholm]"), stockholm).expect("night");
+    assert_eq!(scheme, Sky::Night);
     assert_eq!(
         sunrise.in_tz("Europe/Stockholm").expect("zone").date(),
         date(2026, 12, 22)
@@ -57,8 +55,8 @@ fn automatic_turns_dark_at_sunset_and_light_at_sunrise() {
     assert!(near(&local(sunrise, "Europe/Stockholm"), "08:44"));
 
     let (scheme, sunrise) =
-        automatic_scheme(&at("2026-12-21T06:00[Europe/Stockholm]"), stockholm).expect("dawn");
-    assert_eq!(scheme, Scheme::Dark);
+        sky(&at("2026-12-21T06:00[Europe/Stockholm]"), stockholm).expect("dawn");
+    assert_eq!(scheme, Sky::Night);
     assert!(near(&local(sunrise, "Europe/Stockholm"), "08:43"));
 }
 
@@ -68,25 +66,20 @@ fn above_the_arctic_circle_midsummer_stays_light_and_midwinter_dark() {
         latitude: 69.65,
         longitude: 18.96,
     });
-    let (scheme, next) =
-        automatic_scheme(&at("2026-06-21T01:00[Europe/Oslo]"), tromso).expect("summer");
-    assert_eq!(scheme, Scheme::Light);
+    let (scheme, next) = sky(&at("2026-06-21T01:00[Europe/Oslo]"), tromso).expect("summer");
+    assert_eq!(scheme, Sky::Day);
     assert_eq!(local(next, "Europe/Oslo"), "00:00");
-    let (scheme, _) =
-        automatic_scheme(&at("2026-12-21T12:00[Europe/Oslo]"), tromso).expect("winter");
-    assert_eq!(scheme, Scheme::Dark);
+    let (scheme, _) = sky(&at("2026-12-21T12:00[Europe/Oslo]"), tromso).expect("winter");
+    assert_eq!(scheme, Sky::Night);
 }
 
 #[test]
 fn without_a_known_place_evenings_from_seven_are_dark() {
-    let (scheme, next) = automatic_scheme(&at("2026-03-01T18:59[UTC]"), None).expect("day");
+    let (scheme, next) = sky(&at("2026-03-01T18:59[UTC]"), None).expect("day");
+    assert_eq!((scheme, local(next, "UTC")), (Sky::Day, "19:00".to_owned()));
+    let (scheme, next) = sky(&at("2026-03-01T19:00[UTC]"), None).expect("evening");
     assert_eq!(
         (scheme, local(next, "UTC")),
-        (Scheme::Light, "19:00".to_owned())
-    );
-    let (scheme, next) = automatic_scheme(&at("2026-03-01T19:00[UTC]"), None).expect("evening");
-    assert_eq!(
-        (scheme, local(next, "UTC")),
-        (Scheme::Dark, "07:00".to_owned())
+        (Sky::Night, "07:00".to_owned())
     );
 }

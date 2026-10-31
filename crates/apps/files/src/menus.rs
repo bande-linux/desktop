@@ -40,7 +40,7 @@ pub enum Command {
 const OPEN_WITH: &str = "open-with:";
 const NEW_DOCUMENT: &str = "new-document:";
 
-const ACTIONS: [(&str, Command); 29] = [
+const ACTIONS: &[(&str, Command)] = &[
     ("open", Command::Open),
     ("open-in-new-tab", Command::OpenInNewTab),
     ("open-in-terminal", Command::OpenInTerminal),
@@ -61,6 +61,7 @@ const ACTIONS: [(&str, Command); 29] = [
     ("sort:name", Command::Sort(SortBy::Name)),
     ("sort:modified", Command::Sort(SortBy::Modified)),
     ("sort:size", Command::Sort(SortBy::Size)),
+    ("sort:kind", Command::Sort(SortBy::Kind)),
     ("icons", Command::Icons),
     ("columns", Command::Columns),
     ("list", Command::List),
@@ -72,8 +73,9 @@ const ACTIONS: [(&str, Command); 29] = [
     ("eject", Command::Eject),
 ];
 
-const SORTS: [(SortBy, &str); 3] = [
+const SORTS: [(SortBy, &str); 4] = [
     (SortBy::Name, "column-name"),
+    (SortBy::Kind, "column-kind"),
     (SortBy::Modified, "column-modified"),
     (SortBy::Size, "column-size"),
 ];

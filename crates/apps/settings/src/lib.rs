@@ -3,9 +3,13 @@ mod arrangement;
 mod battery;
 mod client;
 mod clock;
+mod defaults;
 mod displays;
+mod failure;
 mod follow;
+mod forget;
 mod general;
+mod header;
 mod idle;
 mod language;
 mod locale;
@@ -16,6 +20,8 @@ mod pages;
 mod pictures;
 mod pointing;
 mod power;
+mod privacy;
+mod privilege;
 mod services;
 mod software;
 mod state;
@@ -32,6 +38,7 @@ use unbound_l10n::Localizer;
 pub use about::{About, AboutCommand, chip_name, memory_bytes, static_hostname, system_version};
 pub use battery::{BatteryCommand, BatteryState, Charge, charge_of, follow_battery};
 pub use client::{CONFIG_SETTINGS, SettingsClient};
+pub use defaults::{DefaultApp, DefaultAppCommand, choose_default, default_apps};
 pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};
 pub use idle::Idle;
@@ -44,6 +51,7 @@ pub use notifications::{AppNotifications, NotificationCommand, follow_app_notifi
 pub use pictures::{Pair, PictureCommand, bundled_pairs, thumbnail};
 pub use pointing::{PointingDevices, UDEV_DATA};
 pub use power::charge_text;
+pub use privilege::Privilege;
 pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };
@@ -74,6 +82,10 @@ mod tests {
             include_str!("clock.rs"),
             include_str!("follow.rs"),
             include_str!("general.rs"),
+            include_str!("header.rs"),
+            include_str!("defaults.rs"),
+            include_str!("failure.rs"),
+            include_str!("privacy.rs"),
             include_str!("language.rs"),
             include_str!("network.rs"),
             include_str!("notifications.rs"),

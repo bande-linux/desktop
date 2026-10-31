@@ -6,6 +6,9 @@ use jiff::tz::TimeZone;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
+use unbound_settings_panes::SettingId;
+
+use crate::failure::failed;
 use crate::follow::{Update, Updates, spawn};
 
 const TIMEDATE: &str = "org.freedesktop.timedate1";
@@ -165,8 +168,13 @@ pub fn follow_time(system: &Connection, updates: Updates) -> Sender<TimeCommand>
         };
         let mut zones = Vec::new();
         for command in receiver {
+            let setting = match command {
+                TimeCommand::Automatic(_) => SettingId::AutomaticTime,
+                TimeCommand::Zone(_) => SettingId::TimeZone,
+                TimeCommand::Set(_) => SettingId::DateAndTime,
+            };
             if let Err(error) = run(&timedate, command) {
-                updates.send(Update::Failed(error.to_string()));
+                updates.send(failed(setting, &error, "service-time"));
                 updates.send(Update::Time(read(&timedate, &mut zones)));
             }
         }

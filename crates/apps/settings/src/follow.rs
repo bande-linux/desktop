@@ -15,10 +15,14 @@ use crate::L10N;
 use crate::about::{About, AboutCommand, follow_about};
 use crate::battery::{BatteryCommand, BatteryState, follow_battery};
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
+use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
+use crate::failure::{sentence, unexpected};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
 use crate::notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
 use crate::pictures::{Pair, PictureCommand, choose_file, follow_pictures};
+use crate::privacy::clear_clipboard;
+use crate::privilege::{Privilege, follow_privileges};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
 };
@@ -54,7 +58,9 @@ pub enum Update {
     Software(SoftwareState),
     Locale(Option<LocaleState>),
     InputLevel(f32),
-    Failed(String),
+    Failed(Option<SettingId>, String),
+    Refused(Vec<Privilege>),
+    DefaultApps(Vec<DefaultApp>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -75,8 +81,10 @@ pub enum Command {
     Notifications(NotificationCommand),
     Software(SoftwareCommand),
     Locale(LocaleCommand),
+    DefaultApp(DefaultAppCommand),
     Reveal(PathBuf),
     ImportVpn,
+    ClearClipboard,
 }
 
 pub struct Feed {
@@ -235,7 +243,10 @@ pub fn worker(session: &Connection, updates: Updates) -> Sender<Command> {
                     _ => (Ok(()), Vec::new()),
                 };
                 if let Err(error) = result {
-                    updates.send(Update::Failed(error.to_string()));
+                    updates.send(Update::Failed(
+                        restore.first().copied(),
+                        sentence(&error, "service-desktop"),
+                    ));
                     updates.send(Update::Values(client.read(&restore)));
                     if let Ok(displays) = client.displays() {
                         updates.send(Update::Displays(displays));
@@ -266,12 +277,16 @@ pub struct Services {
     notifications: Sender<NotificationCommand>,
     software: Option<Sender<SoftwareCommand>>,
     locale: Option<Sender<LocaleCommand>>,
+    default_apps: Sender<DefaultAppCommand>,
 }
 
 impl Services {
     pub fn start(session: &Connection, system: Option<&Connection>, updates: &Updates) -> Self {
         follow_config(session, updates.clone());
         follow_notifications(session, updates.clone());
+        if let Some(system) = system {
+            follow_privileges(system, updates.clone());
+        }
         Self {
             connection: session.clone(),
             updates: updates.clone(),
@@ -288,6 +303,7 @@ impl Services {
             notifications: follow_app_notifications(session, updates.clone()),
             software: system.map(|system| follow_software(system, updates.clone())),
             locale: system.map(|system| follow_locale(system, updates.clone())),
+            default_apps: follow_default_apps(updates.clone()),
         }
     }
 
@@ -321,6 +337,7 @@ impl Services {
                 .as_ref()
                 .is_some_and(|time| time.send(command).is_ok()),
             Command::Login(command) => self.login.send(command).is_ok(),
+            Command::DefaultApp(command) => self.default_apps.send(command).is_ok(),
             Command::Notifications(command) => self.notifications.send(command).is_ok(),
             Command::Locale(command) => self
                 .locale
@@ -335,6 +352,15 @@ impl Services {
                 .as_ref()
                 .is_some_and(|battery| battery.send(command).is_ok()),
             Command::Reveal(_) => false,
+            Command::ClearClipboard => {
+                let (session, updates) = (self.connection.clone(), self.updates.clone());
+                spawn("clear-clipboard", move || {
+                    if let Err(error) = clear_clipboard(&session) {
+                        updates.send(unexpected(error));
+                    }
+                });
+                true
+            }
             Command::ImportVpn => {
                 let (session, updates) = (self.connection.clone(), self.updates.clone());
                 spawn("import-vpn", move || {
@@ -352,7 +378,7 @@ impl Services {
                         Err(error) => Err(error.to_string()),
                     };
                     if let Err(error) = imported {
-                        updates.send(Update::Failed(error));
+                        updates.send(Update::Failed(None, error));
                     }
                 });
                 true

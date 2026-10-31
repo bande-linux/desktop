@@ -1,54 +1,108 @@
 use crate::L10N;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Group {
+    Connections,
+    Desktop,
+    Devices,
+    System,
+}
+
+impl Group {
+    pub fn label(self) -> String {
+        L10N.tr(match self {
+            Self::Connections => "group-connections",
+            Self::Desktop => "group-desktop",
+            Self::Devices => "group-devices",
+            Self::System => "group-system",
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PaneId {
     Wifi,
     Bluetooth,
     Network,
-    Battery,
-    Notifications,
-    Sound,
     Appearance,
-    Accessibility,
-    Wallpaper,
     Bar,
+    Notifications,
+    Accessibility,
     Displays,
-    LockScreen,
+    Sound,
     Keyboard,
+    KeyboardShortcuts,
     TrackpadMouse,
-    General,
+    Power,
+    PrivacySecurity,
+    Apps,
+    LanguageTime,
     About,
     Storage,
-    DateTime,
-    LoginItems,
     SoftwareUpdate,
-    LanguageRegion,
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 21] = [
+    const KEYWORDS: [(Self, &'static str); 19] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
-        (Self::Battery, "battery"),
-        (Self::Notifications, "notifications"),
-        (Self::Sound, "sound"),
         (Self::Appearance, "appearance"),
-        (Self::Accessibility, "accessibility"),
-        (Self::Wallpaper, "wallpaper"),
         (Self::Bar, "bar"),
+        (Self::Notifications, "notifications"),
+        (Self::Accessibility, "accessibility"),
         (Self::Displays, "displays"),
-        (Self::LockScreen, "lock-screen"),
+        (Self::Sound, "sound"),
         (Self::Keyboard, "keyboard"),
+        (Self::KeyboardShortcuts, "keyboard-shortcuts"),
         (Self::TrackpadMouse, "trackpad-mouse"),
-        (Self::General, "general"),
+        (Self::Power, "power"),
+        (Self::PrivacySecurity, "privacy-security"),
+        (Self::Apps, "apps"),
+        (Self::LanguageTime, "language-time"),
         (Self::About, "about"),
         (Self::Storage, "storage"),
-        (Self::DateTime, "date-time"),
-        (Self::LoginItems, "login-items"),
         (Self::SoftwareUpdate, "software-update"),
-        (Self::LanguageRegion, "language-region"),
     ];
+
+    pub fn group(self) -> Option<Group> {
+        match self {
+            Self::Wifi | Self::Bluetooth | Self::Network => Some(Group::Connections),
+            Self::Appearance | Self::Bar | Self::Notifications | Self::Accessibility => {
+                Some(Group::Desktop)
+            }
+            Self::Displays | Self::Sound | Self::Keyboard | Self::TrackpadMouse => {
+                Some(Group::Devices)
+            }
+            Self::Power | Self::PrivacySecurity | Self::Apps | Self::LanguageTime | Self::About => {
+                Some(Group::System)
+            }
+            Self::KeyboardShortcuts | Self::Storage | Self::SoftwareUpdate => None,
+        }
+    }
+
+    pub fn symbol(self) -> &'static str {
+        match self {
+            Self::Wifi => "network-wireless-symbolic",
+            Self::Bluetooth => "bluetooth-symbolic",
+            Self::Network => "network-wired-symbolic",
+            Self::Appearance => "weather-clear-night-symbolic",
+            Self::Bar => "view-sidebar-start-symbolic",
+            Self::Notifications => "preferences-system-notifications-symbolic",
+            Self::Accessibility => "avatar-default-symbolic",
+            Self::Displays => "video-display-symbolic",
+            Self::Sound => "audio-volume-high-symbolic",
+            Self::Keyboard | Self::KeyboardShortcuts => "input-keyboard-symbolic",
+            Self::TrackpadMouse => "input-mouse-symbolic",
+            Self::Power => "system-shutdown-symbolic",
+            Self::PrivacySecurity => "changes-prevent-symbolic",
+            Self::Apps => "view-app-grid-symbolic",
+            Self::LanguageTime => "preferences-system-symbolic",
+            Self::About => "computer-symbolic",
+            Self::Storage => "drive-harddisk-symbolic",
+            Self::SoftwareUpdate => "view-refresh-symbolic",
+        }
+    }
 
     pub fn keyword(self) -> &'static str {
         Self::KEYWORDS
@@ -66,12 +120,8 @@ impl PaneId {
 
     pub fn parent(self) -> Option<Self> {
         match self {
-            Self::About
-            | Self::SoftwareUpdate
-            | Self::Storage
-            | Self::DateTime
-            | Self::LanguageRegion
-            | Self::LoginItems => Some(Self::General),
+            Self::Storage | Self::SoftwareUpdate => Some(Self::About),
+            Self::KeyboardShortcuts => Some(Self::Keyboard),
             _ => None,
         }
     }
@@ -160,6 +210,12 @@ pub enum SettingId {
     Vpns,
     Language,
     Region,
+    StoragePage,
+    SoftwareUpdatePage,
+    ShortcutsPage,
+    ScreenLock,
+    ClipboardHistory,
+    DefaultApps,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -198,6 +254,8 @@ pub enum List {
     Vpns,
     Languages,
     Regions,
+    DefaultApps,
+    Clipboard,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -230,6 +288,7 @@ pub enum Kind {
     Swatches(Vec<Choice>),
     Text,
     List(List),
+    Page(PaneId),
 }
 
 impl Kind {
@@ -247,7 +306,8 @@ impl Kind {
             | Self::DisplayUses
             | Self::Pictures
             | Self::Text
-            | Self::List(_) => &[],
+            | Self::List(_)
+            | Self::Page(_) => &[],
         }
     }
 
@@ -272,7 +332,15 @@ pub struct Setting {
     pub id: SettingId,
     pub label: String,
     pub keywords: Vec<String>,
+    pub description: Option<String>,
     pub kind: Kind,
+}
+
+impl Setting {
+    fn described(mut self, description: &str) -> Self {
+        self.description = Some(L10N.tr(description));
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -285,7 +353,9 @@ pub struct Section {
 pub struct Pane {
     pub id: PaneId,
     pub name: String,
+    pub summary: String,
     pub keywords: Vec<String>,
+    pub master: Option<SettingId>,
     pub sections: Vec<Section>,
 }
 
@@ -294,6 +364,11 @@ impl Pane {
         self.sections
             .iter()
             .flat_map(|section| section.settings.iter())
+    }
+
+    fn with_master(mut self, master: SettingId) -> Self {
+        self.master = Some(master);
+        self
     }
 }
 
@@ -309,6 +384,7 @@ fn setting(id: SettingId, label: String, keywords: String, kind: Kind) -> Settin
         id,
         label,
         keywords: words(&keywords),
+        description: None,
         kind,
     }
 }
@@ -317,13 +393,36 @@ fn section(title: Option<String>, settings: Vec<Setting>) -> Section {
     Section { title, settings }
 }
 
-fn pane(id: PaneId, name: String, keywords: String, sections: Vec<Section>) -> Pane {
+fn pane(id: PaneId, sections: Vec<Section>) -> Pane {
+    let name = id.keyword();
     Pane {
         id,
-        name,
-        keywords: words(&keywords),
+        name: L10N.tr(name),
+        summary: L10N.tr(&format!("{name}-summary")),
+        keywords: words(&L10N.tr(&format!("{name}-keywords"))),
+        master: None,
         sections,
     }
+}
+
+pub const MAX_SEGMENTS: usize = 4;
+
+fn choice(choices: Vec<Choice>) -> Kind {
+    if choices.len() > MAX_SEGMENTS {
+        Kind::Menu(choices)
+    } else {
+        Kind::Choices(choices)
+    }
+}
+
+fn page(id: SettingId, pane: PaneId) -> Setting {
+    let name = pane.keyword();
+    setting(
+        id,
+        L10N.tr(name),
+        L10N.tr(&format!("{name}-keywords")),
+        Kind::Page(pane),
+    )
 }
 
 fn keyword_choices(choices: Vec<(String, &str)>) -> Vec<Choice> {
@@ -410,506 +509,92 @@ const BAR_SIZES: (u32, u32) = (32, 56);
 
 const SCALES: [u32; 5] = [100, 125, 150, 175, 200];
 
-fn connectivity_panes() -> Vec<Pane> {
+fn list(id: SettingId, name: &str, list: List) -> Setting {
+    setting(
+        id,
+        L10N.tr(name),
+        L10N.tr(&format!("{name}-keywords")),
+        Kind::List(list),
+    )
+}
+
+fn switch(id: SettingId, name: &str) -> Setting {
+    setting(
+        id,
+        L10N.tr(name),
+        L10N.tr(&format!("{name}-keywords")),
+        Kind::Switch,
+    )
+}
+
+fn level(id: SettingId, name: &str) -> Setting {
+    setting(
+        id,
+        L10N.tr(name),
+        L10N.tr(&format!("{name}-keywords")),
+        Kind::Level,
+    )
+}
+
+fn connection_panes() -> Vec<Pane> {
     vec![
         pane(
             PaneId::Wifi,
-            L10N.tr("wifi"),
-            L10N.tr("wifi-keywords"),
             vec![
-                section(
-                    None,
-                    vec![setting(
-                        SettingId::WifiPower,
-                        L10N.tr("wifi"),
-                        L10N.tr("wifi-power-keywords"),
-                        Kind::Switch,
-                    )],
-                ),
+                section(None, vec![switch(SettingId::WifiPower, "wifi-power")]),
                 section(
                     Some(L10N.tr("networks")),
-                    vec![setting(
-                        SettingId::Networks,
-                        L10N.tr("networks"),
-                        L10N.tr("networks-keywords"),
-                        Kind::List(List::Networks),
-                    )],
+                    vec![list(SettingId::Networks, "networks", List::Networks)],
                 ),
             ],
-        ),
+        )
+        .with_master(SettingId::WifiPower),
         pane(
             PaneId::Bluetooth,
-            L10N.tr("bluetooth"),
-            L10N.tr("bluetooth-keywords"),
             vec![
                 section(
                     None,
-                    vec![setting(
-                        SettingId::BluetoothPower,
-                        L10N.tr("bluetooth"),
-                        L10N.tr("bluetooth-power-keywords"),
-                        Kind::Switch,
-                    )],
+                    vec![switch(SettingId::BluetoothPower, "bluetooth-power")],
                 ),
                 section(
                     Some(L10N.tr("my-devices")),
-                    vec![setting(
+                    vec![list(
                         SettingId::PairedDevices,
-                        L10N.tr("my-devices"),
-                        L10N.tr("my-devices-keywords"),
-                        Kind::List(List::PairedDevices),
+                        "my-devices",
+                        List::PairedDevices,
                     )],
                 ),
                 section(
                     Some(L10N.tr("nearby-devices")),
-                    vec![setting(
+                    vec![list(
                         SettingId::NearbyDevices,
-                        L10N.tr("nearby-devices"),
-                        L10N.tr("nearby-devices-keywords"),
-                        Kind::List(List::NearbyDevices),
+                        "nearby-devices",
+                        List::NearbyDevices,
                     )],
                 ),
             ],
-        ),
+        )
+        .with_master(SettingId::BluetoothPower),
         pane(
             PaneId::Network,
-            L10N.tr("network"),
-            L10N.tr("network-keywords"),
             vec![
                 section(
                     Some(L10N.tr("ethernet")),
-                    vec![setting(
-                        SettingId::Ethernet,
-                        L10N.tr("ethernet"),
-                        L10N.tr("ethernet-keywords"),
-                        Kind::List(List::Ethernet),
-                    )],
+                    vec![list(SettingId::Ethernet, "ethernet", List::Ethernet)],
                 ),
                 section(
                     Some(L10N.tr("vpn")),
-                    vec![setting(
-                        SettingId::Vpns,
-                        L10N.tr("vpn"),
-                        L10N.tr("vpn-keywords"),
-                        Kind::List(List::Vpns),
-                    )],
-                ),
-            ],
-        ),
-        pane(
-            PaneId::Notifications,
-            L10N.tr("notifications"),
-            L10N.tr("notifications-keywords"),
-            vec![
-                section(
-                    None,
-                    vec![setting(
-                        SettingId::DoNotDisturb,
-                        L10N.tr("do-not-disturb"),
-                        L10N.tr("do-not-disturb-keywords"),
-                        Kind::Switch,
-                    )],
-                ),
-                section(
-                    Some(L10N.tr("app-notifications")),
-                    vec![setting(
-                        SettingId::AppNotifications,
-                        L10N.tr("app-notifications"),
-                        L10N.tr("app-notifications-keywords"),
-                        Kind::List(List::NotificationApps),
-                    )],
-                ),
-            ],
-        ),
-        pane(
-            PaneId::Sound,
-            L10N.tr("sound"),
-            L10N.tr("sound-keywords"),
-            vec![
-                section(
-                    Some(L10N.tr("sound-effects")),
-                    vec![
-                        setting(
-                            SettingId::AlertSound,
-                            L10N.tr("alert-sound"),
-                            L10N.tr("alert-sound-keywords"),
-                            Kind::Menu(keyword_choices(vec![
-                                (L10N.tr("alert-mallet"), "mallet"),
-                                (L10N.tr("alert-knock"), "knock"),
-                                (L10N.tr("alert-low"), "low"),
-                                (L10N.tr("alert-tick"), "tick"),
-                            ])),
-                        ),
-                        setting(
-                            SettingId::AlertVolume,
-                            L10N.tr("alert-volume"),
-                            L10N.tr("alert-volume-keywords"),
-                            Kind::Level,
-                        ),
-                        setting(
-                            SettingId::SoundEffects,
-                            L10N.tr("interface-sounds"),
-                            L10N.tr("interface-sounds-keywords"),
-                            Kind::Switch,
-                        ),
-                        setting(
-                            SettingId::VolumeFeedback,
-                            L10N.tr("volume-feedback"),
-                            L10N.tr("volume-feedback-keywords"),
-                            Kind::Switch,
-                        ),
-                    ],
-                ),
-                section(
-                    Some(L10N.tr("output")),
-                    vec![
-                        setting(
-                            SettingId::OutputVolume,
-                            L10N.tr("output-volume"),
-                            L10N.tr("output-volume-keywords"),
-                            Kind::Level,
-                        ),
-                        setting(
-                            SettingId::OutputMuted,
-                            L10N.tr("mute"),
-                            L10N.tr("mute-keywords"),
-                            Kind::Switch,
-                        ),
-                    ],
-                ),
-                section(
-                    Some(L10N.tr("output-device")),
-                    vec![setting(
-                        SettingId::OutputDevice,
-                        L10N.tr("output-device"),
-                        L10N.tr("output-device-keywords"),
-                        Kind::List(List::OutputDevices),
-                    )],
-                ),
-                section(
-                    Some(L10N.tr("input")),
-                    vec![
-                        setting(
-                            SettingId::InputVolume,
-                            L10N.tr("input-volume"),
-                            L10N.tr("input-volume-keywords"),
-                            Kind::Level,
-                        ),
-                        setting(
-                            SettingId::InputMuted,
-                            L10N.tr("mute-input"),
-                            L10N.tr("mute-input-keywords"),
-                            Kind::Switch,
-                        ),
-                        setting(
-                            SettingId::InputLevel,
-                            L10N.tr("input-level"),
-                            L10N.tr("input-level-keywords"),
-                            Kind::List(List::InputLevel),
-                        ),
-                    ],
-                ),
-                section(
-                    Some(L10N.tr("input-device")),
-                    vec![setting(
-                        SettingId::InputDevice,
-                        L10N.tr("input-device"),
-                        L10N.tr("input-device-keywords"),
-                        Kind::List(List::InputDevices),
-                    )],
-                ),
-                section(
-                    Some(L10N.tr("app-volumes")),
-                    vec![setting(
-                        SettingId::AppVolumes,
-                        L10N.tr("app-volumes"),
-                        L10N.tr("app-volumes-keywords"),
-                        Kind::List(List::AppVolumes),
-                    )],
+                    vec![list(SettingId::Vpns, "vpn", List::Vpns)],
                 ),
             ],
         ),
     ]
-}
-
-fn displays_pane() -> Pane {
-    pane(
-        PaneId::Displays,
-        L10N.tr("displays"),
-        L10N.tr("displays-keywords"),
-        vec![section(
-            None,
-            vec![
-                setting(
-                    SettingId::DisplayUse,
-                    L10N.tr("display-use"),
-                    L10N.tr("display-use-keywords"),
-                    Kind::DisplayUses,
-                ),
-                setting(
-                    SettingId::DisplayResolution,
-                    L10N.tr("display-resolution"),
-                    L10N.tr("display-resolution-keywords"),
-                    Kind::Resolutions,
-                ),
-                setting(
-                    SettingId::DisplayScale,
-                    L10N.tr("display-scale"),
-                    L10N.tr("display-scale-keywords"),
-                    Kind::Choices(scale_choices()),
-                ),
-                setting(
-                    SettingId::RefreshRate,
-                    L10N.tr("refresh-rate"),
-                    L10N.tr("refresh-rate-keywords"),
-                    Kind::RefreshRates,
-                ),
-                setting(
-                    SettingId::DisplayRotation,
-                    L10N.tr("display-rotation"),
-                    L10N.tr("display-rotation-keywords"),
-                    Kind::Choices(rotation_choices()),
-                ),
-                setting(
-                    SettingId::VariableRefreshRate,
-                    L10N.tr("variable-refresh-rate"),
-                    L10N.tr("variable-refresh-rate-keywords"),
-                    Kind::Switch,
-                ),
-            ],
-        )],
-    )
-}
-
-fn general_panes() -> Vec<Pane> {
-    vec![
-        pane(
-            PaneId::General,
-            L10N.tr("general"),
-            L10N.tr("general-keywords"),
-            Vec::new(),
-        ),
-        pane(
-            PaneId::About,
-            L10N.tr("about"),
-            L10N.tr("about-keywords"),
-            vec![
-                section(
-                    None,
-                    vec![setting(
-                        SettingId::ComputerName,
-                        L10N.tr("computer-name"),
-                        L10N.tr("computer-name-keywords"),
-                        Kind::Text,
-                    )],
-                ),
-                section(
-                    None,
-                    vec![setting(
-                        SettingId::AboutThisComputer,
-                        L10N.tr("about"),
-                        L10N.tr("about-this-computer-keywords"),
-                        Kind::List(List::About),
-                    )],
-                ),
-            ],
-        ),
-        pane(
-            PaneId::SoftwareUpdate,
-            L10N.tr("software-update"),
-            L10N.tr("software-update-keywords"),
-            vec![section(
-                None,
-                vec![setting(
-                    SettingId::SoftwareUpdates,
-                    L10N.tr("software-update"),
-                    L10N.tr("software-updates-keywords"),
-                    Kind::List(List::SoftwareUpdates),
-                )],
-            )],
-        ),
-        pane(
-            PaneId::Storage,
-            L10N.tr("storage"),
-            L10N.tr("storage-keywords"),
-            vec![
-                section(
-                    None,
-                    vec![setting(
-                        SettingId::StorageUsage,
-                        L10N.tr("storage"),
-                        L10N.tr("storage-usage-keywords"),
-                        Kind::List(List::Storage),
-                    )],
-                ),
-                section(
-                    Some(L10N.tr("large-files")),
-                    vec![setting(
-                        SettingId::LargeFiles,
-                        L10N.tr("large-files"),
-                        L10N.tr("large-files-keywords"),
-                        Kind::List(List::LargeFiles),
-                    )],
-                ),
-            ],
-        ),
-        date_time_pane(),
-        pane(
-            PaneId::LanguageRegion,
-            L10N.tr("language-region"),
-            L10N.tr("language-region-keywords"),
-            vec![
-                section(
-                    None,
-                    vec![setting(
-                        SettingId::Language,
-                        L10N.tr("language"),
-                        L10N.tr("language-keywords"),
-                        Kind::List(List::Languages),
-                    )],
-                ),
-                section(
-                    Some(L10N.tr("formats")),
-                    vec![setting(
-                        SettingId::Region,
-                        L10N.tr("region"),
-                        L10N.tr("region-keywords"),
-                        Kind::List(List::Regions),
-                    )],
-                ),
-            ],
-        ),
-        pane(
-            PaneId::LoginItems,
-            L10N.tr("login-items"),
-            L10N.tr("login-items-keywords"),
-            vec![section(
-                None,
-                vec![setting(
-                    SettingId::LoginItems,
-                    L10N.tr("open-at-login"),
-                    L10N.tr("open-at-login-keywords"),
-                    Kind::List(List::LoginItems),
-                )],
-            )],
-        ),
-    ]
-}
-
-fn battery_pane() -> Pane {
-    pane(
-        PaneId::Battery,
-        L10N.tr("battery"),
-        L10N.tr("battery-keywords"),
-        vec![
-            section(
-                None,
-                vec![setting(
-                    SettingId::BatteryLevel,
-                    L10N.tr("battery-level"),
-                    L10N.tr("battery-level-keywords"),
-                    Kind::List(List::BatteryHistory),
-                )],
-            ),
-            section(
-                None,
-                vec![
-                    setting(
-                        SettingId::PowerMode,
-                        L10N.tr("power-mode"),
-                        L10N.tr("power-mode-keywords"),
-                        Kind::Choices(keyword_choices(vec![
-                            (L10N.tr("power-saver"), "power-saver"),
-                            (L10N.tr("balanced"), "balanced"),
-                            (L10N.tr("performance"), "performance"),
-                        ])),
-                    ),
-                    setting(
-                        SettingId::LowPowerOnBattery,
-                        L10N.tr("low-power-on-battery"),
-                        L10N.tr("low-power-on-battery-keywords"),
-                        Kind::Switch,
-                    ),
-                ],
-            ),
-            section(
-                Some(L10N.tr("on-power-adapter")),
-                vec![setting(
-                    SettingId::LidOnPower,
-                    L10N.tr("lid-on-power"),
-                    L10N.tr("lid-on-power-keywords"),
-                    Kind::Menu(keyword_choices(vec![
-                        (L10N.tr("lid-sleep"), "sleep"),
-                        (L10N.tr("lid-keep-running"), "keep-running"),
-                    ])),
-                )],
-            ),
-        ],
-    )
-}
-
-fn date_time_pane() -> Pane {
-    pane(
-        PaneId::DateTime,
-        L10N.tr("date-time"),
-        L10N.tr("date-time-keywords"),
-        vec![
-            section(
-                None,
-                vec![setting(
-                    SettingId::AutomaticTime,
-                    L10N.tr("automatic-time"),
-                    L10N.tr("automatic-time-keywords"),
-                    Kind::Switch,
-                )],
-            ),
-            section(
-                None,
-                vec![setting(
-                    SettingId::DateAndTime,
-                    L10N.tr("date-and-time"),
-                    L10N.tr("date-and-time-keywords"),
-                    Kind::List(List::Clock),
-                )],
-            ),
-            section(
-                Some(L10N.tr("time-zone")),
-                vec![setting(
-                    SettingId::TimeZone,
-                    L10N.tr("time-zone"),
-                    L10N.tr("time-zone-keywords"),
-                    Kind::List(List::TimeZones),
-                )],
-            ),
-            section(
-                Some(L10N.tr("clock")),
-                vec![setting(
-                    SettingId::Clock24Hour,
-                    L10N.tr("clock-24-hour"),
-                    L10N.tr("clock-24-hour-keywords"),
-                    Kind::Switch,
-                )],
-            ),
-        ],
-    )
-}
-
-pub fn panes() -> Vec<Pane> {
-    let mut panes = connectivity_panes();
-    panes.extend(general_panes());
-    panes.extend(desktop_panes());
-    panes.push(battery_pane());
-    panes.push(keyboard_pane());
-    panes.push(trackpad_mouse_pane());
-    panes
 }
 
 fn desktop_panes() -> Vec<Pane> {
     vec![
         pane(
             PaneId::Appearance,
-            L10N.tr("appearance"),
-            L10N.tr("appearance-keywords"),
             vec![
                 section(
                     None,
@@ -926,65 +611,47 @@ fn desktop_panes() -> Vec<Pane> {
                 ),
                 section(
                     None,
-                    vec![
-                        setting(
-                            SettingId::Accent,
-                            L10N.tr("accent"),
-                            L10N.tr("accent-keywords"),
-                            Kind::Swatches(keyword_choices(vec![
-                                (L10N.tr("accent-ultramarine"), "ultramarine"),
-                                (L10N.tr("accent-teal"), "teal"),
-                                (L10N.tr("accent-moss"), "moss"),
-                                (L10N.tr("accent-amber"), "amber"),
-                                (L10N.tr("accent-ember"), "ember"),
-                                (L10N.tr("accent-rose"), "rose"),
-                                (L10N.tr("accent-plum"), "plum"),
-                                (L10N.tr("accent-graphite"), "graphite"),
-                            ])),
-                        ),
-                        setting(
-                            SettingId::TintedFrame,
-                            L10N.tr("tinted-frame"),
-                            L10N.tr("tinted-frame-keywords"),
-                            Kind::Switch,
-                        ),
-                    ],
-                ),
-            ],
-        ),
-        accessibility_pane(),
-        pane(
-            PaneId::Wallpaper,
-            L10N.tr("wallpaper"),
-            L10N.tr("wallpaper-keywords"),
-            vec![
-                section(
-                    None,
                     vec![setting(
-                        SettingId::Wallpaper,
-                        L10N.tr("wallpaper"),
-                        L10N.tr("wallpaper-picture-keywords"),
-                        Kind::Pictures,
-                    )],
-                ),
-                section(
-                    None,
-                    vec![setting(
-                        SettingId::WallpaperFit,
-                        L10N.tr("wallpaper-fit"),
-                        L10N.tr("wallpaper-fit-keywords"),
-                        Kind::Choices(keyword_choices(vec![
-                            (L10N.tr("wallpaper-fill"), "fill"),
-                            (L10N.tr("wallpaper-fit-whole"), "fit"),
+                        SettingId::Accent,
+                        L10N.tr("accent"),
+                        L10N.tr("accent-keywords"),
+                        Kind::Swatches(keyword_choices(vec![
+                            (L10N.tr("accent-ultramarine"), "ultramarine"),
+                            (L10N.tr("accent-teal"), "teal"),
+                            (L10N.tr("accent-moss"), "moss"),
+                            (L10N.tr("accent-amber"), "amber"),
+                            (L10N.tr("accent-ember"), "ember"),
+                            (L10N.tr("accent-rose"), "rose"),
+                            (L10N.tr("accent-plum"), "plum"),
+                            (L10N.tr("accent-graphite"), "graphite"),
                         ])),
                     )],
+                ),
+                section(
+                    Some(L10N.tr("wallpaper")),
+                    vec![
+                        setting(
+                            SettingId::Wallpaper,
+                            L10N.tr("wallpaper"),
+                            L10N.tr("wallpaper-picture-keywords"),
+                            Kind::Pictures,
+                        ),
+                        setting(
+                            SettingId::WallpaperFit,
+                            L10N.tr("wallpaper-fit"),
+                            L10N.tr("wallpaper-fit-keywords"),
+                            Kind::Choices(keyword_choices(vec![
+                                (L10N.tr("wallpaper-fill"), "fill"),
+                                (L10N.tr("wallpaper-fit-whole"), "fit"),
+                            ])),
+                        ),
+                        switch(SettingId::TintedFrame, "tinted-frame"),
+                    ],
                 ),
             ],
         ),
         pane(
             PaneId::Bar,
-            L10N.tr("bar"),
-            L10N.tr("bar-keywords"),
             vec![section(
                 None,
                 vec![
@@ -1010,18 +677,8 @@ fn desktop_panes() -> Vec<Pane> {
                             high: L10N.tr("large"),
                         },
                     ),
-                    setting(
-                        SettingId::BarNames,
-                        L10N.tr("bar-names"),
-                        L10N.tr("bar-names-keywords"),
-                        Kind::Switch,
-                    ),
-                    setting(
-                        SettingId::BarAutoHide,
-                        L10N.tr("bar-auto-hide"),
-                        L10N.tr("bar-auto-hide-keywords"),
-                        Kind::Switch,
-                    ),
+                    switch(SettingId::BarNames, "bar-names"),
+                    switch(SettingId::BarAutoHide, "bar-auto-hide"),
                     setting(
                         SettingId::BarMenuBar,
                         L10N.tr("bar-menu-bar"),
@@ -1034,69 +691,33 @@ fn desktop_panes() -> Vec<Pane> {
                 ],
             )],
         ),
-        displays_pane(),
         pane(
-            PaneId::LockScreen,
-            L10N.tr("lock-screen"),
-            L10N.tr("lock-screen-keywords"),
-            vec![section(
-                Some(L10N.tr("when-inactive")),
-                vec![
-                    setting(
-                        SettingId::DimAfter,
-                        L10N.tr("dim-after"),
-                        L10N.tr("dim-after-keywords"),
-                        Kind::Choices(durations(&DIM_CHOICES)),
-                    ),
-                    setting(
-                        SettingId::LockAfter,
-                        L10N.tr("lock-after"),
-                        L10N.tr("lock-after-keywords"),
-                        Kind::Choices(durations(&LOCK_CHOICES)),
-                    ),
-                    setting(
-                        SettingId::SleepAfter,
-                        L10N.tr("sleep-after"),
-                        L10N.tr("sleep-after-keywords"),
-                        Kind::Choices(sleep_choices()),
-                    ),
-                ],
-            )],
+            PaneId::Notifications,
+            vec![
+                section(
+                    None,
+                    vec![
+                        switch(SettingId::DoNotDisturb, "do-not-disturb")
+                            .described("do-not-disturb-description"),
+                    ],
+                ),
+                section(
+                    Some(L10N.tr("app-notifications")),
+                    vec![list(
+                        SettingId::AppNotifications,
+                        "app-notifications",
+                        List::NotificationApps,
+                    )],
+                ),
+            ],
         ),
+        accessibility_pane(),
     ]
-}
-
-pub fn pointer_speed_choices() -> Vec<Choice> {
-    numbers(&(0..=POINTER_SPEEDS).collect::<Vec<_>>())
-}
-
-fn speed(id: SettingId, keywords: String) -> Setting {
-    setting(
-        id,
-        L10N.tr("pointer-speed"),
-        keywords,
-        Kind::Stops {
-            stops: pointer_speed_choices(),
-            low: L10N.tr("slow"),
-            high: L10N.tr("fast"),
-        },
-    )
-}
-
-fn switch(id: SettingId, name: &str) -> Setting {
-    setting(
-        id,
-        L10N.tr(name),
-        L10N.tr(&format!("{name}-keywords")),
-        Kind::Switch,
-    )
 }
 
 fn accessibility_pane() -> Pane {
     pane(
         PaneId::Accessibility,
-        L10N.tr("accessibility"),
-        L10N.tr("accessibility-keywords"),
         vec![
             section(
                 Some(L10N.tr("vision")),
@@ -1125,10 +746,122 @@ fn accessibility_pane() -> Pane {
             section(
                 Some(L10N.tr("motor")),
                 vec![
-                    switch(SettingId::StickyKeys, "sticky-keys"),
-                    switch(SettingId::SlowKeys, "slow-keys"),
-                    switch(SettingId::BounceKeys, "bounce-keys"),
+                    switch(SettingId::StickyKeys, "sticky-keys")
+                        .described("sticky-keys-description"),
+                    switch(SettingId::SlowKeys, "slow-keys").described("slow-keys-description"),
+                    switch(SettingId::BounceKeys, "bounce-keys")
+                        .described("bounce-keys-description"),
                 ],
+            ),
+        ],
+    )
+}
+
+fn device_panes() -> Vec<Pane> {
+    vec![
+        displays_pane(),
+        sound_pane(),
+        keyboard_pane(),
+        pane(
+            PaneId::KeyboardShortcuts,
+            vec![section(
+                None,
+                vec![list(SettingId::Shortcuts, "shortcuts", List::Shortcuts)],
+            )],
+        ),
+        trackpad_mouse_pane(),
+    ]
+}
+
+fn displays_pane() -> Pane {
+    pane(
+        PaneId::Displays,
+        vec![section(
+            None,
+            vec![
+                setting(
+                    SettingId::DisplayUse,
+                    L10N.tr("display-use"),
+                    L10N.tr("display-use-keywords"),
+                    Kind::DisplayUses,
+                ),
+                setting(
+                    SettingId::DisplayResolution,
+                    L10N.tr("display-resolution"),
+                    L10N.tr("display-resolution-keywords"),
+                    Kind::Resolutions,
+                ),
+                setting(
+                    SettingId::DisplayScale,
+                    L10N.tr("display-scale"),
+                    L10N.tr("display-scale-keywords"),
+                    choice(scale_choices()),
+                ),
+                setting(
+                    SettingId::RefreshRate,
+                    L10N.tr("refresh-rate"),
+                    L10N.tr("refresh-rate-keywords"),
+                    Kind::RefreshRates,
+                ),
+                setting(
+                    SettingId::DisplayRotation,
+                    L10N.tr("display-rotation"),
+                    L10N.tr("display-rotation-keywords"),
+                    choice(rotation_choices()),
+                ),
+                switch(SettingId::VariableRefreshRate, "variable-refresh-rate"),
+            ],
+        )],
+    )
+}
+
+fn sound_pane() -> Pane {
+    pane(
+        PaneId::Sound,
+        vec![
+            section(
+                Some(L10N.tr("output")),
+                vec![
+                    list(
+                        SettingId::OutputDevice,
+                        "output-device",
+                        List::OutputDevices,
+                    ),
+                    level(SettingId::OutputVolume, "output-volume"),
+                    switch(SettingId::OutputMuted, "mute"),
+                ],
+            ),
+            section(
+                Some(L10N.tr("input")),
+                vec![
+                    list(SettingId::InputDevice, "input-device", List::InputDevices),
+                    level(SettingId::InputVolume, "input-volume"),
+                    switch(SettingId::InputMuted, "mute-input"),
+                    list(SettingId::InputLevel, "input-level", List::InputLevel),
+                ],
+            ),
+            section(
+                Some(L10N.tr("sound-effects")),
+                vec![
+                    setting(
+                        SettingId::AlertSound,
+                        L10N.tr("alert-sound"),
+                        L10N.tr("alert-sound-keywords"),
+                        Kind::Menu(keyword_choices(vec![
+                            (L10N.tr("alert-mallet"), "mallet"),
+                            (L10N.tr("alert-knock"), "knock"),
+                            (L10N.tr("alert-low"), "low"),
+                            (L10N.tr("alert-tick"), "tick"),
+                        ])),
+                    ),
+                    level(SettingId::AlertVolume, "alert-volume"),
+                    switch(SettingId::SoundEffects, "interface-sounds"),
+                    switch(SettingId::VolumeFeedback, "volume-feedback"),
+                ],
+            ),
+            section(
+                Some(L10N.tr("app-volumes")),
+                vec![list(SettingId::AppVolumes, "app-volumes", List::AppVolumes)],
             ),
         ],
     )
@@ -1137,16 +870,13 @@ fn accessibility_pane() -> Pane {
 fn keyboard_pane() -> Pane {
     pane(
         PaneId::Keyboard,
-        L10N.tr("keyboard"),
-        L10N.tr("keyboard-keywords"),
         vec![
             section(
                 Some(L10N.tr("input-sources")),
-                vec![setting(
+                vec![list(
                     SettingId::InputSources,
-                    L10N.tr("input-sources"),
-                    L10N.tr("input-sources-keywords"),
-                    Kind::List(List::InputSources),
+                    "input-sources",
+                    List::InputSources,
                 )],
             ),
             section(
@@ -1190,33 +920,38 @@ fn keyboard_pane() -> Pane {
                 )],
             ),
             section(
-                Some(L10N.tr("shortcuts")),
-                vec![setting(
-                    SettingId::Shortcuts,
-                    L10N.tr("shortcuts"),
-                    L10N.tr("shortcuts-keywords"),
-                    Kind::List(List::Shortcuts),
-                )],
+                None,
+                vec![page(SettingId::ShortcutsPage, PaneId::KeyboardShortcuts)],
             ),
         ],
+    )
+}
+
+pub fn pointer_speed_choices() -> Vec<Choice> {
+    numbers(&(0..=POINTER_SPEEDS).collect::<Vec<_>>())
+}
+
+fn speed(id: SettingId, keywords: String) -> Setting {
+    setting(
+        id,
+        L10N.tr("pointer-speed"),
+        keywords,
+        Kind::Stops {
+            stops: pointer_speed_choices(),
+            low: L10N.tr("slow"),
+            high: L10N.tr("fast"),
+        },
     )
 }
 
 fn trackpad_mouse_pane() -> Pane {
     pane(
         PaneId::TrackpadMouse,
-        L10N.tr("trackpad-mouse"),
-        L10N.tr("trackpad-mouse-keywords"),
         vec![
             section(
                 Some(L10N.tr("trackpad")),
                 vec![
-                    setting(
-                        SettingId::TrackpadTapToClick,
-                        L10N.tr("tap-to-click"),
-                        L10N.tr("tap-to-click-keywords"),
-                        Kind::Switch,
-                    ),
+                    switch(SettingId::TrackpadTapToClick, "tap-to-click"),
                     setting(
                         SettingId::TrackpadSecondaryClick,
                         L10N.tr("secondary-click"),
@@ -1226,18 +961,11 @@ fn trackpad_mouse_pane() -> Pane {
                             (L10N.tr("secondary-click-corner"), "corner"),
                         ])),
                     ),
-                    setting(
-                        SettingId::TrackpadNaturalScrolling,
-                        L10N.tr("natural-scrolling"),
-                        L10N.tr("natural-scrolling-keywords"),
-                        Kind::Switch,
-                    ),
+                    switch(SettingId::TrackpadNaturalScrolling, "natural-scrolling"),
                     speed(SettingId::TrackpadSpeed, L10N.tr("trackpad-speed-keywords")),
-                    setting(
+                    switch(
                         SettingId::TrackpadDisableWhileTyping,
-                        L10N.tr("disable-while-typing"),
-                        L10N.tr("disable-while-typing-keywords"),
-                        Kind::Switch,
+                        "disable-while-typing",
                     ),
                 ],
             ),
@@ -1255,4 +983,220 @@ fn trackpad_mouse_pane() -> Pane {
             ),
         ],
     )
+}
+
+fn system_panes() -> Vec<Pane> {
+    vec![
+        power_pane(),
+        pane(
+            PaneId::PrivacySecurity,
+            vec![
+                section(
+                    Some(L10N.tr("screen-lock")),
+                    vec![setting(
+                        SettingId::ScreenLock,
+                        L10N.tr("lock-when-off"),
+                        L10N.tr("screen-lock-keywords"),
+                        Kind::Page(PaneId::Power),
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("clipboard")),
+                    vec![list(
+                        SettingId::ClipboardHistory,
+                        "clipboard-history",
+                        List::Clipboard,
+                    )],
+                ),
+            ],
+        ),
+        pane(
+            PaneId::Apps,
+            vec![
+                section(
+                    Some(L10N.tr("default-apps")),
+                    vec![list(
+                        SettingId::DefaultApps,
+                        "default-apps",
+                        List::DefaultApps,
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("open-at-login")),
+                    vec![list(
+                        SettingId::LoginItems,
+                        "open-at-login",
+                        List::LoginItems,
+                    )],
+                ),
+            ],
+        ),
+        language_time_pane(),
+        about_pane(),
+        pane(
+            PaneId::Storage,
+            vec![
+                section(
+                    None,
+                    vec![list(
+                        SettingId::StorageUsage,
+                        "storage-usage",
+                        List::Storage,
+                    )],
+                ),
+                section(
+                    Some(L10N.tr("large-files")),
+                    vec![list(SettingId::LargeFiles, "large-files", List::LargeFiles)],
+                ),
+            ],
+        ),
+        pane(
+            PaneId::SoftwareUpdate,
+            vec![section(
+                None,
+                vec![list(
+                    SettingId::SoftwareUpdates,
+                    "software-updates",
+                    List::SoftwareUpdates,
+                )],
+            )],
+        ),
+    ]
+}
+
+fn power_pane() -> Pane {
+    pane(
+        PaneId::Power,
+        vec![
+            section(
+                Some(L10N.tr("battery")),
+                vec![list(
+                    SettingId::BatteryLevel,
+                    "battery-level",
+                    List::BatteryHistory,
+                )],
+            ),
+            section(
+                Some(L10N.tr("energy")),
+                vec![
+                    setting(
+                        SettingId::PowerMode,
+                        L10N.tr("power-mode"),
+                        L10N.tr("power-mode-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("power-saver"), "power-saver"),
+                            (L10N.tr("balanced"), "balanced"),
+                            (L10N.tr("performance"), "performance"),
+                        ])),
+                    ),
+                    switch(SettingId::LowPowerOnBattery, "low-power-on-battery"),
+                ],
+            ),
+            section(
+                Some(L10N.tr("when-inactive")),
+                vec![
+                    setting(
+                        SettingId::DimAfter,
+                        L10N.tr("dim-after"),
+                        L10N.tr("dim-after-keywords"),
+                        choice(durations(&DIM_CHOICES)),
+                    ),
+                    setting(
+                        SettingId::LockAfter,
+                        L10N.tr("lock-after"),
+                        L10N.tr("lock-after-keywords"),
+                        choice(durations(&LOCK_CHOICES)),
+                    ),
+                    setting(
+                        SettingId::SleepAfter,
+                        L10N.tr("sleep-after"),
+                        L10N.tr("sleep-after-keywords"),
+                        choice(sleep_choices()),
+                    ),
+                ],
+            ),
+            section(
+                Some(L10N.tr("on-power-adapter")),
+                vec![setting(
+                    SettingId::LidOnPower,
+                    L10N.tr("lid-on-power"),
+                    L10N.tr("lid-on-power-keywords"),
+                    Kind::Menu(keyword_choices(vec![
+                        (L10N.tr("lid-sleep"), "sleep"),
+                        (L10N.tr("lid-keep-running"), "keep-running"),
+                    ])),
+                )],
+            ),
+        ],
+    )
+}
+
+fn language_time_pane() -> Pane {
+    pane(
+        PaneId::LanguageTime,
+        vec![
+            section(
+                Some(L10N.tr("language")),
+                vec![list(SettingId::Language, "language", List::Languages)],
+            ),
+            section(
+                Some(L10N.tr("formats")),
+                vec![
+                    list(SettingId::Region, "region", List::Regions),
+                    switch(SettingId::Clock24Hour, "clock-24-hour"),
+                ],
+            ),
+            section(
+                Some(L10N.tr("time")),
+                vec![
+                    switch(SettingId::AutomaticTime, "automatic-time"),
+                    list(SettingId::DateAndTime, "date-and-time", List::Clock),
+                ],
+            ),
+            section(
+                Some(L10N.tr("time-zone")),
+                vec![list(SettingId::TimeZone, "time-zone", List::TimeZones)],
+            ),
+        ],
+    )
+}
+
+fn about_pane() -> Pane {
+    pane(
+        PaneId::About,
+        vec![
+            section(
+                None,
+                vec![setting(
+                    SettingId::ComputerName,
+                    L10N.tr("computer-name"),
+                    L10N.tr("computer-name-keywords"),
+                    Kind::Text,
+                )],
+            ),
+            section(
+                None,
+                vec![list(
+                    SettingId::AboutThisComputer,
+                    "about-this-computer",
+                    List::About,
+                )],
+            ),
+            section(
+                None,
+                vec![
+                    page(SettingId::StoragePage, PaneId::Storage),
+                    page(SettingId::SoftwareUpdatePage, PaneId::SoftwareUpdate),
+                ],
+            ),
+        ],
+    )
+}
+
+pub fn panes() -> Vec<Pane> {
+    let mut panes = connection_panes();
+    panes.extend(desktop_panes());
+    panes.extend(device_panes());
+    panes.extend(system_panes());
+    panes
 }

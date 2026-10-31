@@ -170,10 +170,10 @@ impl State {
         }
     }
 
-    fn toggle_control_center(&mut self) {
+    pub(crate) fn toggle_panel(&mut self, panel: unbound_shell_v1::Panel) {
         for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_TOGGLE_CONTROL_CENTER_SINCE {
-                shell.toggle_control_center();
+            if shell.version() >= unbound_shell_v1::EVT_TOGGLE_PANEL_SINCE {
+                shell.toggle_panel(panel);
             }
         }
     }
@@ -484,7 +484,9 @@ impl Dispatch<UnboundShellV1, ()> for State {
                     state.insert_text(text, client.id());
                 }
             }
-            unbound_shell_v1::Request::ToggleControlCenter => state.toggle_control_center(),
+            unbound_shell_v1::Request::ToggleControlCenter => {
+                state.toggle_panel(unbound_shell_v1::Panel::ControlCenter);
+            }
             unbound_shell_v1::Request::ShowLauncher => state.show_launcher(),
             unbound_shell_v1::Request::SetIconRect {
                 app_id,
@@ -542,8 +544,13 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 edge,
                 Rectangle::new((x, y).into(), (width, height).into()),
             ),
+            unbound_shell_v1::Request::ConfirmSessionEnd {
+                ending: WEnum::Value(ending),
+            } => state.session_end_requested = Some(ending),
+            unbound_shell_v1::Request::QuitAllApps => state.quit_all_apps(resource.clone()),
             unbound_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);
+                state.quitting.retain(|(shell, _)| shell != resource);
             }
             _ => {}
         }
@@ -551,6 +558,7 @@ impl Dispatch<UnboundShellV1, ()> for State {
 
     fn destroyed(state: &mut Self, _client: ClientId, resource: &UnboundShellV1, _data: &()) {
         state.shell_resources.retain(|shell| shell != resource);
+        state.quitting.retain(|(shell, _)| shell != resource);
     }
 }
 

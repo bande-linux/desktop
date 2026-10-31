@@ -5,7 +5,9 @@ use std::sync::mpsc::{self, Sender};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
+use crate::failure::{failed, unexpected};
 use crate::follow::{Update, Updates, spawn};
+use unbound_settings_panes::SettingId;
 
 const LOCALE: &str = "org.freedesktop.locale1";
 const LOCALE_PATH: &str = "/org/freedesktop/locale1";
@@ -166,28 +168,38 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
     });
     let system = system.clone();
     spawn("locale-worker", move || {
-        let Ok(locale) = LocaleProxyBlocking::new(&system) else {
+        let Ok(locale) = LocaleProxyBlocking::builder(&system)
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()
+        else {
             return;
         };
         for command in receiver {
             let current = match locale.locale() {
                 Ok(current) => current,
                 Err(error) => {
-                    updates.send(Update::Failed(error.to_string()));
+                    updates.send(unexpected(error));
                     continue;
                 }
             };
             let (language, region) = parse_assignments(&current);
-            let mut wanted = match command {
-                LocaleCommand::Language(language) => assignments(&language, region.as_deref()),
-                LocaleCommand::Region(region) => assignments(&language, region.as_deref()),
+            let (setting, mut wanted) = match command {
+                LocaleCommand::Language(language) => (
+                    SettingId::Language,
+                    assignments(&language, region.as_deref()),
+                ),
+                LocaleCommand::Region(region) => {
+                    (SettingId::Region, assignments(&language, region.as_deref()))
+                }
             };
             wanted.extend(current.into_iter().filter(|assignment| {
                 let name = assignment.split_once('=').map_or("", |(name, _)| name);
                 name != "LANG" && name != "LANGUAGE" && !REGION_CATEGORIES.contains(&name)
             }));
             if let Err(error) = locale.set_locale(wanted, true) {
-                updates.send(Update::Failed(error.to_string()));
+                updates.send(failed(setting, &error, "service-locale"));
+                let installed = installed_locales(&listing(), Path::new(LOCALE_SOURCES));
+                updates.send(Update::Locale(read(&locale, &installed)));
             }
         }
     });

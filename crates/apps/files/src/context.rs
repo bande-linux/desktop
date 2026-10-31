@@ -5,13 +5,14 @@ use unbound_toolkit::ui::Menu;
 use crate::browser::Location;
 use std::path::PathBuf;
 
+use crate::controls::COLUMN_ACTION;
 use crate::menus::{
     App, Command, Folder, Place, Selection, command, folder_menu, items_menu, place_menu,
     sidebar_menu,
 };
 use crate::sidebar::{BookmarkEdit, PlaceKind, Row, SidebarEdit, favourites, layout_text};
 use crate::view::{FilesView, Hit, Request};
-use crate::views::ViewMode;
+use crate::views::{ListColumn, ViewMode};
 
 impl FilesView {
     pub(crate) fn context_click(&mut self, hit: Hit, at: Point) -> bool {
@@ -165,6 +166,14 @@ impl FilesView {
     }
 
     pub fn menu_action(&mut self, action: &str) -> bool {
+        if let Some(column) = action.strip_prefix(COLUMN_ACTION).and_then(|name| {
+            ListColumn::ALL
+                .into_iter()
+                .find(|known| known.name() == name)
+        }) {
+            self.toggle_list_column(column);
+            return true;
+        }
         let Some(command) = command(action) else {
             let handled = self.ui.menu_action(action);
             self.after_ui();
@@ -200,6 +209,7 @@ impl FilesView {
                         by,
                         descending: false,
                     });
+                    self.remember_view();
                     self.selection_changed();
                 }
             }

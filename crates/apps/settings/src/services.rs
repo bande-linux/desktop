@@ -10,6 +10,7 @@ use unbound_network::{JoinOutcome, ManualIpv4, NetworkManager};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
+use crate::failure::unexpected;
 use crate::follow::Update;
 use crate::follow::{Updates, spawn};
 use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiState};
@@ -34,6 +35,7 @@ pub enum NetworkCommand {
     Power(bool),
     Scan,
     Join(unbound_network::Network, Option<String>),
+    Forget(unbound_network::Network),
     ConfigureEthernet(Option<ManualIpv4>),
     ConnectVpn(String),
     DisconnectVpn(String),
@@ -46,11 +48,12 @@ pub enum BluetoothCommand {
     Connect(unbound_bluetooth::Device),
     Disconnect(unbound_bluetooth::Device),
     Pair(unbound_bluetooth::Device),
+    Forget(unbound_bluetooth::Device),
 }
 
 fn report<E: std::fmt::Display>(updates: &Updates, result: Result<(), E>) {
     if let Err(error) = result {
-        updates.send(Update::Failed(error.to_string()));
+        updates.send(unexpected(error));
     }
 }
 
@@ -288,6 +291,7 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                 NetworkCommand::DisconnectVpn(path) => {
                     report(&updates, network.disconnect_vpn(&path));
                 }
+                NetworkCommand::Forget(target) => report(&updates, network.forget(&target)),
                 NetworkCommand::Scan => {
                     if let Err(error) = network.scan() {
                         tracing::debug!("scan not started: {error}");
@@ -410,6 +414,7 @@ pub fn follow_bluetooth(
                 }
                 BluetoothCommand::Connect(device) => bluetooth.connect(&device),
                 BluetoothCommand::Disconnect(device) => bluetooth.disconnect(&device),
+                BluetoothCommand::Forget(device) => bluetooth.forget(&device),
                 BluetoothCommand::Pair(device) => {
                     let result = bluetooth.pair(&device);
                     updates.send(Update::Pairing(None));

@@ -10,6 +10,7 @@ const SECTION: u32 = 30;
 const PANE_KEYWORD: u32 = 30;
 const WORD_START: u32 = 20;
 const LABEL_START: u32 = 50;
+const PANE_CONTEXT: u32 = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SettingHit {
@@ -129,8 +130,12 @@ fn setting_hit(
     let mut own = false;
     for word in words {
         let mine = best(setting_fields(section, setting), word);
+        let context = best(pane_fields(pane), word);
         own |= mine.is_some();
-        total += mine.or_else(|| best(pane_fields(pane), word))?;
+        total += match (mine, context) {
+            (Some(mine), Some(_)) => mine + PANE_CONTEXT,
+            (mine, context) => mine.or(context)?,
+        };
     }
     if !own {
         return None;

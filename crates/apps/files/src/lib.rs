@@ -4,6 +4,7 @@ mod controls;
 mod drag;
 mod grid;
 mod icons;
+mod lister;
 mod loader;
 mod menus;
 mod paint;
@@ -20,7 +21,7 @@ use std::sync::LazyLock;
 
 use unbound_l10n::Localizer;
 
-pub use browser::{Browser, Column, Location};
+pub use browser::{Browser, Column, Location, RowEdit};
 pub use paint::permissions;
 pub use search::SEARCH_HEIGHT;
 pub use sidebar::{
@@ -30,10 +31,13 @@ pub use sidebar::{
 pub use tabs::TAB_BAR_HEIGHT;
 pub use toolbar::TOOLBAR_HEIGHT;
 pub use view::{
-    COLUMN_WIDTH, FilesView, Hit, Info, PATH_BAR_HEIGHT, QuickLook, ROW_HEIGHT, Rename, Request,
-    SIDEBAR_WIDTH, Sheet,
+    COLUMN_WIDTH, ColumnPreview, FilesView, Hit, Info, PATH_BAR_HEIGHT, PREVIEW_WIDTH, QuickLook,
+    ROW_HEIGHT, Rename, Request, SIDEBAR_WIDTH, Sheet,
 };
-pub use views::{FolderView, ViewMemory, ViewMode, sidebar_file, status_bar_file, views_file};
+pub use views::{
+    FolderView, ListColumn, ViewMemory, ViewMode, list_columns_file, sidebar_file, status_bar_file,
+    views_file,
+};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-files.ftl");
 

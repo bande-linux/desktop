@@ -17,7 +17,9 @@ unbound-keyboard.workspace = true
 unbound-l10n.workspace = true
 unbound-lock.workspace = true
 unbound-log.workspace = true
+unbound-status.workspace = true
 unbound-toolkit.workspace = true
+zbus.workspace = true
 
 [dev-dependencies]
 rustix.workspace = true

@@ -6,6 +6,7 @@ use unbound_xdg::{
     set_open_at_login,
 };
 
+use crate::failure::unexpected;
 use crate::follow::{Update, Updates, spawn};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,7 +117,7 @@ pub fn follow_login_items(updates: Updates) -> Sender<LoginCommand> {
             }
             let apps = apps.get_or_insert_with(load);
             if let Err(error) = run(&dir, apps, command) {
-                updates.send(Update::Failed(error.to_string()));
+                updates.send(unexpected(error));
             }
             let state = LoginItems {
                 items: login_items(&dir, apps),

@@ -92,7 +92,7 @@ use crate::scene::{
     preview_elements, scrim, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
 };
 use crate::screen::{OutputConfig, OutputSettings, Screen};
-use crate::session::{ForceQuit, LockScreen, SessionClient, SessionRole};
+use crate::session::{LockScreen, SessionClient, SessionRole, Summoned};
 use crate::shell;
 use crate::tile::{Preview, SnapDrag};
 use crate::window::Window;
@@ -148,6 +148,7 @@ pub struct State {
     pub(crate) screens: Vec<Screen>,
     pub(crate) departed: Vec<crate::displays::Departed>,
     pub(crate) display_config: unbound_config::Config,
+    pub(crate) night_light: crate::night::NightLight,
     pub(crate) output_managers: Vec<crate::management::Manager>,
     pub(crate) output_serial: u32,
     pub(crate) announced_workspaces: (usize, usize),
@@ -194,6 +195,9 @@ pub struct State {
     pub(crate) popups: PopupManager,
     pub(crate) lock_screen_requested: bool,
     pub(crate) force_quit_requested: bool,
+    pub(crate) session_end_requested:
+        Option<unbound_protocols::server::unbound_shell_v1::SessionEnd>,
+    pub(crate) quitting: Vec<(UnboundShellV1, Option<(String, u32)>)>,
     pub(crate) refused_tokens: Vec<XdgActivationToken>,
     pub(crate) drag: Option<crate::drag::Drag>,
     pub(crate) slide_back: Option<crate::scene::SlideBack>,
@@ -249,7 +253,8 @@ pub struct Headless {
     pub(crate) state: State,
     pub(crate) session_clients: Vec<SessionClient>,
     pub(crate) lock_screen: LockScreen,
-    pub(crate) force_quit: ForceQuit,
+    pub(crate) force_quit: Summoned,
+    pub(crate) session_dialog: Summoned,
     pub(crate) socket_name: Option<OsString>,
 }
 
@@ -302,8 +307,8 @@ impl Headless {
         };
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, UnboundShellV1, ()>(16, ());
-        handle.create_global::<State, UnboundAppV1, ()>(5, ());
+        handle.create_global::<State, UnboundShellV1, ()>(18, ());
+        handle.create_global::<State, UnboundAppV1, ()>(6, ());
         handle.create_global::<State, UnboundAppControlV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
@@ -316,6 +321,7 @@ impl Headless {
             screens: vec![screen],
             departed: Vec::new(),
             display_config: unbound_config::Config::default(),
+            night_light: crate::night::NightLight::default(),
             output_managers: Vec::new(),
             output_serial: 0,
             announced_workspaces: (1, 0),
@@ -373,6 +379,8 @@ impl Headless {
             popups: PopupManager::default(),
             lock_screen_requested: false,
             force_quit_requested: false,
+            session_end_requested: None,
+            quitting: Vec::new(),
             refused_tokens: Vec::new(),
             drag: None,
             slide_back: None,
@@ -432,7 +440,8 @@ impl Headless {
             state,
             session_clients: Vec::new(),
             lock_screen: LockScreen::new(),
-            force_quit: ForceQuit::new(),
+            force_quit: Summoned::new(crate::session::MONITOR),
+            session_dialog: Summoned::new(crate::session::SHELL),
             socket_name: None,
         })
     }
@@ -452,6 +461,7 @@ impl Headless {
         self.display.dispatch_clients(&mut self.state)?;
         self.state.deliver_pending_insert();
         self.state.activate_next_app_if_the_windowless_one_quit();
+        self.state.announce_apps_running();
         self.state.popups.cleanup();
         self.state.end_orphaned_drag();
         self.state.keep_families_together();

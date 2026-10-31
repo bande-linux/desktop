@@ -5,9 +5,9 @@ use smithay::reexports::wayland_server::{
 };
 use unbound_protocols::server::unbound_app_control_v1::{self, UnboundAppControlV1};
 use unbound_protocols::server::unbound_app_v1::{self, UnboundAppV1};
-use unbound_protocols::server::unbound_shell_v1;
+use unbound_protocols::server::unbound_shell_v1::{self, UnboundShellV1};
 
-use crate::shell::is_shell;
+use crate::shell::{is_shell, toplevel_names};
 use crate::state::State;
 
 impl State {
@@ -24,6 +24,48 @@ impl State {
                 .for_each(|window| window.toplevel.send_close());
         } else {
             bound.into_iter().for_each(UnboundAppV1::quit_requested);
+        }
+    }
+
+    fn app_owners(&self) -> Vec<(Client, String)> {
+        let mut owners: Vec<(Client, String)> = Vec::new();
+        for window in self.windows.iter().rev() {
+            let surface = window.toplevel.wl_surface();
+            if let Some(client) = surface.client()
+                && !is_shell(&client)
+                && !owners.iter().any(|(known, _)| *known == client)
+            {
+                owners.push((client, toplevel_names(surface).1));
+            }
+        }
+        owners
+    }
+
+    pub(crate) fn quit_all_apps(&mut self, requester: UnboundShellV1) {
+        for (owner, _) in self.app_owners() {
+            self.quit_app(Some(owner));
+        }
+        self.quitting.push((requester, None));
+        self.announce_apps_running();
+    }
+
+    pub(crate) fn announce_apps_running(&mut self) {
+        if self.quitting.is_empty() {
+            return;
+        }
+        let owners = self.app_owners();
+        let running = (
+            owners
+                .first()
+                .map(|(_, app_id)| app_id.clone())
+                .unwrap_or_default(),
+            u32::try_from(owners.len()).unwrap_or(u32::MAX),
+        );
+        for (shell, announced) in &mut self.quitting {
+            if announced.as_ref() != Some(&running) {
+                shell.apps_running(running.0.clone(), running.1);
+                *announced = Some(running.clone());
+            }
         }
     }
 }

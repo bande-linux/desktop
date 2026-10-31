@@ -6,10 +6,13 @@ use std::path::PathBuf;
 
 use support::SIZE;
 use unbound_audio::{Device, Direction, Level, Snapshot};
+use unbound_keyboard::Layouts;
 use unbound_settings::SIDEBAR_WIDTH;
 use unbound_settings::{
-    About, AppNotifications, BatteryState, Category, Charge, Display, Mode, Package, Pair, PaneId,
-    SettingId, SettingsView, SoftwareState, Storage, Update, Value, thumbnail,
+    About, App, AppNotifications, BatteryState, BluetoothState, Category, Charge, DefaultApp,
+    Display, InstalledLocale, LocaleState, LoginItems, Mode, Package, Pair, PaneId,
+    PointingDevices, SettingId, SettingsView, SoftwareState, Storage, TimeState, Update, Value,
+    WifiState, thumbnail,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
 use unbound_toolkit::{
@@ -32,12 +35,20 @@ fn framed(view: &mut SettingsView, scheme: Scheme) -> Scene {
     )
 }
 
+fn new_view(scheme: Scheme) -> SettingsView {
+    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+    view.set_icon_dirs(vec![
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data"),
+    ]);
+    view
+}
+
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
     unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(size.0, size.1, rgba));
 }
 
-fn lock_screen_search(scheme: Scheme) -> SettingsView {
-    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+fn sleep_search(scheme: Scheme) -> SettingsView {
+    let mut view = new_view(scheme);
     view.set_value(SettingId::DimAfter, Value::Seconds(300));
     view.set_value(SettingId::LockAfter, Value::Seconds(600));
     view.set_value(
@@ -80,7 +91,7 @@ fn device(id: u32, name: &str, description: &str, direction: Direction, volume: 
 }
 
 fn sound(scheme: Scheme) -> SettingsView {
-    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+    let mut view = new_view(scheme);
     for (id, value) in [
         (SettingId::AlertSound, Value::Keyword("mallet".to_owned())),
         (SettingId::AlertVolume, Value::Fraction(0.75)),
@@ -118,7 +129,7 @@ fn sound(scheme: Scheme) -> SettingsView {
 }
 
 fn displays(scheme: Scheme) -> SettingsView {
-    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+    let mut view = new_view(scheme);
     let modes: Vec<Mode> = [120, 60]
         .into_iter()
         .map(|hertz| Mode {
@@ -162,7 +173,7 @@ fn displays(scheme: Scheme) -> SettingsView {
 }
 
 fn accessibility(scheme: Scheme) -> SettingsView {
-    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+    let mut view = new_view(scheme);
     for (id, on) in [
         (SettingId::ScreenReader, false),
         (SettingId::Zoom, true),
@@ -181,7 +192,7 @@ fn accessibility(scheme: Scheme) -> SettingsView {
     view
 }
 
-fn wallpaper(scheme: Scheme) -> SettingsView {
+fn appearance(scheme: Scheme) -> SettingsView {
     let wallpapers = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../data/wallpapers");
     let pairs: Vec<(String, Pair)> = ["aurora", "drift", "horizon"]
         .into_iter()
@@ -195,7 +206,7 @@ fn wallpaper(scheme: Scheme) -> SettingsView {
             )
         })
         .collect();
-    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+    let mut view = new_view(scheme);
     view.apply(Update::Pictures(pairs.clone()));
     for (_, pair) in &pairs {
         let picture = thumbnail(pair).expect("thumbnail");
@@ -208,13 +219,21 @@ fn wallpaper(scheme: Scheme) -> SettingsView {
             dark: String::new(),
         },
     );
-    view.set_value(SettingId::WallpaperFit, Value::Keyword("fill".to_owned()));
-    open(&mut view, "wallpaper");
+    view.apply(Update::Values(vec![
+        (SettingId::WallpaperFit, Value::Keyword("fill".to_owned())),
+        (
+            SettingId::Appearance,
+            Value::Keyword("automatic".to_owned()),
+        ),
+        (SettingId::Accent, Value::Keyword("teal".to_owned())),
+        (SettingId::TintedFrame, Value::Flag(false)),
+    ]));
+    view.select_pane(PaneId::Appearance);
     view
 }
 
 fn general(scheme: Scheme, pane: PaneId) -> SettingsView {
-    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+    let mut view = new_view(scheme);
     view.apply(Update::About(About {
         name: "Studio".to_owned(),
         model: "Apple MacBook Pro (14-inch, M1 Pro, 2021)".to_owned(),
@@ -230,18 +249,165 @@ fn general(scheme: Scheme, pane: PaneId) -> SettingsView {
     view
 }
 
-fn appearance(scheme: Scheme) -> SettingsView {
-    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+fn about(scheme: Scheme) -> SettingsView {
+    let mut view = general(scheme, PaneId::About);
+    view.apply(Update::Software(SoftwareState::UpToDate));
+    view
+}
+
+fn wifi_off(scheme: Scheme) -> SettingsView {
+    let mut view = new_view(scheme);
+    view.apply(Update::Wifi(Some(WifiState {
+        enabled: false,
+        networks: Vec::new(),
+    })));
+    view.select_pane(PaneId::Wifi);
+    view
+}
+
+fn bluetooth(scheme: Scheme) -> SettingsView {
+    let mut view = new_view(scheme);
+    view.apply(Update::Bluetooth(Some(BluetoothState {
+        powered: true,
+        paired: Vec::new(),
+        nearby: Vec::new(),
+    })));
+    view.select_pane(PaneId::Bluetooth);
+    view
+}
+
+fn bar(scheme: Scheme) -> SettingsView {
+    let mut view = new_view(scheme);
+    view.apply(Update::Values(vec![
+        (SettingId::BarEdge, Value::Keyword("left".to_owned())),
+        (SettingId::BarIconSize, Value::Number(44)),
+        (SettingId::BarNames, Value::Flag(false)),
+        (SettingId::BarAutoHide, Value::Flag(false)),
+        (SettingId::BarMenuBar, Value::Keyword("in-bar".to_owned())),
+    ]));
+    view.select_pane(PaneId::Bar);
+    view
+}
+
+fn keyboard(scheme: Scheme, pane: PaneId) -> SettingsView {
+    let mut view = new_view(scheme);
+    view.set_layouts(Layouts::parse(
+        r#"<xkbConfigRegistry><layoutList>
+<layout><configItem><name>se</name><shortDescription>sv</shortDescription><description>Swedish</description></configItem></layout>
+<layout><configItem><name>us</name><shortDescription>en</shortDescription><description>English (US)</description></configItem></layout>
+</layoutList></xkbConfigRegistry>"#,
+    ));
     view.apply(Update::Values(vec![
         (
-            SettingId::Appearance,
-            Value::Keyword("automatic".to_owned()),
+            SettingId::InputSources,
+            Value::Codes(vec!["us".to_owned(), "se".to_owned()]),
         ),
-        (SettingId::Accent, Value::Keyword("teal".to_owned())),
-        (SettingId::TintedFrame, Value::Flag(false)),
-        (SettingId::ReduceMotion, Value::Flag(false)),
+        (SettingId::KeyRepeatRate, Value::Number(30)),
+        (SettingId::KeyRepeatDelay, Value::Number(450)),
+        (SettingId::CapsLock, Value::Keyword("caps-lock".to_owned())),
     ]));
-    view.select_pane(PaneId::Appearance);
+    view.select_pane(pane);
+    view
+}
+
+fn keyboard_pane(scheme: Scheme) -> SettingsView {
+    keyboard(scheme, PaneId::Keyboard)
+}
+
+fn keyboard_shortcuts(scheme: Scheme) -> SettingsView {
+    keyboard(scheme, PaneId::KeyboardShortcuts)
+}
+
+fn trackpad(scheme: Scheme) -> SettingsView {
+    let mut view = new_view(scheme);
+    view.set_pointing_devices(PointingDevices {
+        trackpad: true,
+        mouse: true,
+    });
+    view.apply(Update::Values(vec![
+        (SettingId::TrackpadTapToClick, Value::Flag(true)),
+        (
+            SettingId::TrackpadSecondaryClick,
+            Value::Keyword("two-fingers".to_owned()),
+        ),
+        (SettingId::TrackpadNaturalScrolling, Value::Flag(true)),
+        (SettingId::TrackpadSpeed, Value::Number(5)),
+        (SettingId::TrackpadDisableWhileTyping, Value::Flag(true)),
+        (SettingId::MouseNaturalScrolling, Value::Flag(false)),
+        (SettingId::MouseSpeed, Value::Number(5)),
+    ]));
+    view.select_pane(PaneId::TrackpadMouse);
+    view
+}
+
+fn privacy(scheme: Scheme) -> SettingsView {
+    let mut view = new_view(scheme);
+    view.set_value(SettingId::LockAfter, Value::Seconds(600));
+    view.select_pane(PaneId::PrivacySecurity);
+    view
+}
+
+fn apps(scheme: Scheme) -> SettingsView {
+    let mut view = new_view(scheme);
+    let app = |id: &str, name: &str| App {
+        id: id.to_owned(),
+        name: name.to_owned(),
+    };
+    view.apply(Update::Login(LoginItems {
+        items: vec![app("org.unbound.Terminal", "Terminal")],
+        apps: vec![app("org.unbound.Terminal", "Terminal")],
+    }));
+    let role = |role: &'static str, apps: Vec<App>| DefaultApp {
+        role,
+        current: apps.first().map(|app| app.id.clone()),
+        apps,
+    };
+    view.apply(Update::DefaultApps(vec![
+        role(
+            "web-browser",
+            vec![app("firefox-esr.desktop", "Firefox ESR")],
+        ),
+        role("mail", Vec::new()),
+        role("music", Vec::new()),
+        role("video", vec![app("mpv.desktop", "mpv Media Player")]),
+        role("pictures", vec![app("org.unbound.Files.desktop", "Files")]),
+        role(
+            "pdf",
+            vec![app("org.gnome.Evince.desktop", "Document Viewer")],
+        ),
+        role(
+            "text",
+            vec![app("org.unbound.Editor.desktop", "Text Editor")],
+        ),
+    ]));
+    view.select_pane(PaneId::Apps);
+    view
+}
+
+fn language_time(scheme: Scheme) -> SettingsView {
+    let mut view = new_view(scheme);
+    view.apply(Update::Locale(Some(LocaleState {
+        installed: vec![
+            InstalledLocale {
+                code: "en_US.UTF-8".to_owned(),
+                name: "English (US)".to_owned(),
+            },
+            InstalledLocale {
+                code: "sv_SE.UTF-8".to_owned(),
+                name: "Swedish (Sweden)".to_owned(),
+            },
+        ],
+        language: "en_US.UTF-8".to_owned(),
+        region: Some("sv_SE.UTF-8".to_owned()),
+    })));
+    view.apply(Update::Time(Some(TimeState {
+        automatic: true,
+        can_automatic: true,
+        zone: "Atlantic/Reykjavik".to_owned(),
+        zones: vec!["Atlantic/Reykjavik".to_owned()],
+    })));
+    view.set_value(SettingId::Clock24Hour, Value::Flag(true));
+    view.select_pane(PaneId::LanguageTime);
     view
 }
 
@@ -267,8 +433,8 @@ fn storage(scheme: Scheme) -> SettingsView {
     view
 }
 
-fn battery(scheme: Scheme) -> SettingsView {
-    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+fn power(scheme: Scheme) -> SettingsView {
+    let mut view = new_view(scheme);
     let history = (0..=48u32)
         .map(|step| {
             let level = if step < 30 {
@@ -290,12 +456,12 @@ fn battery(scheme: Scheme) -> SettingsView {
     })));
     view.set_value(SettingId::LowPowerOnBattery, Value::Flag(true));
     view.set_value(SettingId::LidOnPower, Value::Keyword("sleep".to_owned()));
-    view.select_pane(PaneId::Battery);
+    view.select_pane(PaneId::Power);
     view
 }
 
 fn notifications(scheme: Scheme) -> SettingsView {
-    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+    let mut view = new_view(scheme);
     view.set_value(SettingId::DoNotDisturb, Value::Flag(false));
     let app =
         |group: &str, name: &str, allow: bool, banners: &str, in_center: bool| AppNotifications {
@@ -346,7 +512,7 @@ fn software_update(scheme: Scheme) -> SettingsView {
 }
 
 fn network(scheme: Scheme) -> SettingsView {
-    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+    let mut view = new_view(scheme);
     view.apply(Update::Network(unbound_settings::NetworkState {
         ethernet: Some(unbound_network::Ethernet {
             interface: "end0".to_owned(),
@@ -377,18 +543,34 @@ fn network(scheme: Scheme) -> SettingsView {
 
 #[test]
 fn the_panes_match_their_goldens() {
-    let panes: [(&str, Scheme, Build, f64); 13] = [
+    let panes: [(&str, Scheme, Build, f64); 24] = [
         ("appearance-light", Scheme::Light, appearance, 1.0),
         ("appearance-dark", Scheme::Dark, appearance, 1.0),
         ("appearance-light@1.5x", Scheme::Light, appearance, 1.5),
-        ("search-sleep-light", Scheme::Light, lock_screen_search, 1.0),
-        ("accessibility-light", Scheme::Light, accessibility, 1.0),
-        ("wallpaper-light", Scheme::Light, wallpaper, 1.0),
-        ("sound-light", Scheme::Light, sound, 1.0),
-        ("displays-dark", Scheme::Dark, displays, 1.0),
+        ("search-sleep-light", Scheme::Light, sleep_search, 1.0),
+        ("wifi-off-light", Scheme::Light, wifi_off, 1.0),
+        ("bluetooth-light", Scheme::Light, bluetooth, 1.0),
         ("network-light", Scheme::Light, network, 1.0),
+        ("bar-light", Scheme::Light, bar, 1.0),
         ("notifications-light", Scheme::Light, notifications, 1.0),
-        ("battery-light", Scheme::Light, battery, 1.0),
+        ("accessibility-light", Scheme::Light, accessibility, 1.0),
+        ("displays-light", Scheme::Light, displays, 1.0),
+        ("displays-dark", Scheme::Dark, displays, 1.0),
+        ("sound-light", Scheme::Light, sound, 1.0),
+        ("keyboard-light", Scheme::Light, keyboard_pane, 1.0),
+        (
+            "keyboard-shortcuts-light",
+            Scheme::Light,
+            keyboard_shortcuts,
+            1.0,
+        ),
+        ("trackpad-mouse-light", Scheme::Light, trackpad, 1.0),
+        ("power-light", Scheme::Light, power, 1.0),
+        ("privacy-security-light", Scheme::Light, privacy, 1.0),
+        ("apps-light", Scheme::Light, apps, 1.0),
+        ("language-time-light", Scheme::Light, language_time, 1.0),
+        ("about-light", Scheme::Light, about, 1.0),
+        ("about-dark", Scheme::Dark, about, 1.0),
         ("storage-light", Scheme::Light, storage, 1.0),
         ("software-update-light", Scheme::Light, software_update, 1.0),
     ];

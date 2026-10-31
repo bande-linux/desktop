@@ -23,8 +23,8 @@ use unbound_toolkit::{
 
 type Build = fn(Scheme) -> SettingsView;
 
-fn framed(view: &mut SettingsView, scheme: Scheme, text: TextSize) -> Scene {
-    let content = view.scene(SIZE.0, SIZE.1 - HEADER_HEIGHT);
+fn framed(view: &mut SettingsView, scheme: Scheme, text: TextSize, size: (u32, u32)) -> Scene {
+    let content = view.scene(size.0, size.1 - HEADER_HEIGHT);
     framed_scene(
         &content,
         "Settings",
@@ -250,6 +250,15 @@ fn large_text(scheme: Scheme) -> SettingsView {
 }
 
 const LARGE_TEXT: u32 = 150;
+
+fn larger_power(scheme: Scheme) -> SettingsView {
+    let mut view = power(scheme);
+    view.set_appearance(Appearance {
+        text_size: TextSize::from_percent(LARGE_TEXT),
+        ..Appearance::default()
+    });
+    view
+}
 
 fn accessibility(scheme: Scheme) -> SettingsView {
     let mut view = new_view(scheme);
@@ -623,7 +632,7 @@ fn network(scheme: Scheme) -> SettingsView {
 
 #[test]
 fn the_panes_match_their_goldens() {
-    let panes: [(&str, Scheme, Build, f64); 28] = [
+    let panes: [(&str, Scheme, Build, f64); 29] = [
         ("appearance-light", Scheme::Light, appearance, 1.0),
         ("appearance-dark", Scheme::Dark, appearance, 1.0),
         ("appearance-light@1.5x", Scheme::Light, appearance, 1.5),
@@ -650,6 +659,7 @@ fn the_panes_match_their_goldens() {
         ),
         ("trackpad-mouse-light", Scheme::Light, trackpad, 1.0),
         ("power-light", Scheme::Light, power, 1.0),
+        ("power-150-light", Scheme::Light, larger_power, 1.0),
         ("privacy-security-light", Scheme::Light, privacy, 1.0),
         ("apps-light", Scheme::Light, apps, 1.0),
         ("language-time-light", Scheme::Light, language_time, 1.0),
@@ -666,7 +676,7 @@ fn the_panes_match_their_goldens() {
                     true => TextSize::from_percent(LARGE_TEXT),
                     false => TextSize::DEFAULT,
                 };
-                let scene = framed(&mut view, scheme, text);
+                let scene = framed(&mut view, scheme, text, SIZE);
                 let pixels = (
                     (f64::from(SIZE.0) * scale).round() as u32,
                     (f64::from(SIZE.1) * scale).round() as u32,
@@ -679,4 +689,31 @@ fn the_panes_match_their_goldens() {
             });
         }
     });
+}
+
+#[test]
+fn long_row_labels_wrap_beside_their_control_at_large_text() {
+    const NARROW: (u32, u32) = (660, 720);
+    let mut view = large_text(Scheme::Light);
+    let scene = framed(
+        &mut view,
+        Scheme::Light,
+        TextSize::from_percent(LARGE_TEXT),
+        NARROW,
+    );
+    let nodes = view.accessibility().nodes;
+    let row_height = |label: &str| {
+        nodes
+            .iter()
+            .find(|(_, node)| node.role() == accesskit::Role::Row && node.label() == Some(label))
+            .and_then(|(_, node)| node.bounds())
+            .map(|bounds| bounds.height())
+            .unwrap_or_else(|| panic!("no row {label:?}"))
+    };
+    assert!(row_height("Flash the screen when an alert sound plays") > row_height("Zoom"));
+    let mut rgba = vec![0; NARROW.0 as usize * NARROW.1 as usize * 4];
+    CpuRenderer::new()
+        .render_into(&scene, 1.0, &mut rgba)
+        .expect("frame");
+    check_golden("accessibility-150-narrow-light", NARROW, rgba);
 }

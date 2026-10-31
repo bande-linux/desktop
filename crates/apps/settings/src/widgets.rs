@@ -34,6 +34,7 @@ pub(crate) const NOTICE_SYMBOL: f32 = 48.0;
 const NOTICE_PADDING: f32 = Spacing::XL as f32;
 const ROW_PADDING: f32 = Spacing::M as f32;
 const ROW_MIN_HEIGHT: f32 = 44.0;
+const ROW_GAP: f32 = Spacing::M as f32;
 const CONTROL_WIDTH: f32 = 320.0;
 const SCROLL_BAR_WIDTH: f32 = 6.0;
 const UNBOUNDED: f32 = 1.0e6;
@@ -70,7 +71,7 @@ pub struct Text {
     weight: f32,
     role: Option<TextRole>,
     tone: Tone,
-    runs: Vec<(f32, Paragraph, bool)>,
+    paragraph: Option<Paragraph>,
     measured: Size,
 }
 
@@ -83,7 +84,7 @@ impl Text {
             weight: TextStyle::REGULAR,
             role: None,
             tone,
-            runs: Vec::new(),
+            paragraph: None,
             measured: Size::default(),
         }
     }
@@ -115,49 +116,31 @@ impl Text {
         Self::new(text, Tone::Faint).role(TextRole::Label)
     }
 
-    fn segments(&self) -> Vec<(&str, bool)> {
-        let mut segments = Vec::new();
-        let mut at = 0;
-        for range in &self.highlights {
-            if range.start > at {
-                segments.push((&self.text[at..range.start], false));
-            }
-            segments.push((&self.text[range.clone()], true));
-            at = range.end;
-        }
-        if at < self.text.len() || segments.is_empty() {
-            segments.push((&self.text[at..], false));
-        }
-        segments
+    pub fn measure(&mut self, cx: &mut Context) -> Size {
+        self.measure_within(cx, None)
     }
 
-    pub fn measure(&mut self, cx: &mut Context) -> Size {
+    pub fn measure_within(&mut self, cx: &mut Context, max_width: Option<f32>) -> Size {
         let color = match self.tone {
             Tone::Primary => cx.palette.ink,
             Tone::Muted => cx.palette.ink2,
             Tone::Faint => cx.palette.ink3,
             Tone::Danger => cx.palette.danger,
         };
-        let mut x = 0.0;
-        let mut height: f32 = 0.0;
-        let mut runs = Vec::new();
-        for (segment, highlighted) in self.segments() {
-            let style = match self.role {
-                Some(role) => TextStyle::role(role, color),
-                None => TextStyle::new(self.size, color).weight(self.weight),
-            };
-            let style = match highlighted {
-                true => style.weight(TextStyle::SEMIBOLD),
-                false => style,
-            };
-            let paragraph = cx.text.paragraph(segment, style, None, TextAlign::Start);
-            let width = paragraph.width();
-            height = height.max(paragraph.height());
-            runs.push((x, paragraph, highlighted));
-            x += width;
-        }
-        self.runs = runs;
-        self.measured = Size::new(x.ceil(), height.ceil());
+        let style = match self.role {
+            Some(role) => TextStyle::role(role, color),
+            None => TextStyle::new(self.size, color).weight(self.weight),
+        };
+        let emphasis: Vec<_> = self
+            .highlights
+            .iter()
+            .map(|range| (range.clone(), TextStyle::SEMIBOLD))
+            .collect();
+        let paragraph =
+            cx.text
+                .emphasized(&self.text, style, &emphasis, max_width, TextAlign::Start);
+        self.measured = Size::new(paragraph.width().ceil(), paragraph.height().ceil());
+        self.paragraph = Some(paragraph);
         self.measured
     }
 
@@ -166,27 +149,30 @@ impl Text {
     }
 
     pub fn paint(&self, cx: &Context, origin: Point, items: &mut Vec<Item>) {
-        for (x, paragraph, highlighted) in &self.runs {
-            let at = Point::new((origin.x + x).round(), origin.y.round());
-            if *highlighted {
+        let Some(paragraph) = &self.paragraph else {
+            return;
+        };
+        let at = Point::new(origin.x.round(), origin.y.round());
+        for range in &self.highlights {
+            for rect in paragraph.span_rects(range.clone()) {
                 items.push(Item::Fill {
                     shape: Shape::rounded(
                         Rect::new(
-                            at.x - 1.0,
-                            at.y,
-                            paragraph.width() + 2.0,
-                            paragraph.height(),
+                            at.x + rect.x - 1.0,
+                            at.y + rect.y,
+                            rect.width + 2.0,
+                            rect.height,
                         ),
                         Radius::XS,
                     ),
                     paint: cx.palette.accent_soft.into(),
                 });
             }
-            items.push(Item::Text {
-                origin: at,
-                paragraph: paragraph.clone(),
-            });
         }
+        items.push(Item::Text {
+            origin: at,
+            paragraph: paragraph.clone(),
+        });
     }
 
     pub fn as_str(&self) -> &str {
@@ -580,14 +566,20 @@ impl Widget for Header {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        self.title.measure(cx);
-        self.summary.measure(cx);
         self.control = self
             .children
             .iter_mut()
             .map(|child| child.measure(cx, Size::new(CONTROL_WIDTH, UNBOUNDED)))
             .next()
             .unwrap_or_default();
+        let beside_control = match self.control.width > 0.0 {
+            true => self.control.width + ROW_PADDING + ROW_GAP,
+            false => 0.0,
+        };
+        let text_width =
+            Some((available.width - HEADER_TILE - Spacing::M as f32 - beside_control).max(0.0));
+        self.title.measure_within(cx, text_width);
+        self.summary.measure_within(cx, text_width);
         let height = HEADER_TILE.max(self.text_height()).max(self.control.height);
         Size::new(available.width, height.ceil() + HEADER_GAP)
     }
@@ -1075,10 +1067,6 @@ impl Widget for Row {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        self.label.measure(cx);
-        if let Some(detail) = &mut self.detail {
-            detail.measure(cx);
-        }
         let control_width = CONTROL_WIDTH.min(available.width / 2.0);
         self.control = self
             .children
@@ -1086,6 +1074,15 @@ impl Widget for Row {
             .map(|child| child.measure(cx, Size::new(control_width, UNBOUNDED)))
             .next()
             .unwrap_or_default();
+        let beside_control = match self.control.width > 0.0 {
+            true => self.control.width + ROW_GAP,
+            false => 0.0,
+        };
+        let text_width = Some((available.width - 2.0 * ROW_PADDING - beside_control).max(0.0));
+        self.label.measure_within(cx, text_width);
+        if let Some(detail) = &mut self.detail {
+            detail.measure_within(cx, text_width);
+        }
         let height = (self.text_height().max(self.control.height) + 2.0 * Spacing::S as f32)
             .max(ROW_MIN_HEIGHT);
         Size::new(available.width, height.ceil())

@@ -7,7 +7,7 @@ use rustix::process::{Pid, Signal, kill_process};
 use smithay::backend::renderer::element::Id;
 use unbound_config::{Accessibility, BUS_NAME, OBJECT_PATH, SCREEN_READER};
 use unbound_graphics::Palette;
-use unbound_spring::{Animation, Spring, State as Phase};
+use unbound_spring::{Animated, Spring};
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::{OwnedValue, Value};
 
@@ -38,8 +38,8 @@ pub(crate) struct Assistive {
 
 struct Flash {
     id: Id,
-    opacity: Animation,
-    last: Option<Duration>,
+    opacity: Animated<Duration>,
+    now: Duration,
 }
 
 fn remembering(connection: Connection, first: Remembered) -> Option<Sender<Remembered>> {
@@ -154,15 +154,8 @@ impl State {
             .map_or_else(Id::new, |flash| flash.id);
         self.assistive.flash = Some(Flash {
             id,
-            opacity: Animation::new(
-                Spring::GENTLE,
-                Phase {
-                    position: FLASH_OPACITY,
-                    velocity: 0.0,
-                },
-                0.0,
-            ),
-            last: None,
+            opacity: Animated::new(FLASH_OPACITY),
+            now: Duration::ZERO,
         });
         self.needs_redraw = true;
     }
@@ -171,12 +164,9 @@ impl State {
         let Some(flash) = self.assistive.flash.as_mut() else {
             return;
         };
-        let step = flash
-            .last
-            .map_or(Duration::ZERO, |last| time.saturating_sub(last));
-        flash.last = Some(time);
-        flash.opacity.advance(step.as_secs_f64());
-        if flash.opacity.is_at_rest(SETTLED_ALPHA) {
+        flash.opacity.animate_at(time, false, 0.0, Spring::GENTLE);
+        flash.now = time;
+        if flash.opacity.is_at_rest(time, SETTLED_ALPHA) {
             self.assistive.flash = None;
         }
     }
@@ -189,7 +179,7 @@ impl State {
         let Some(flash) = &self.assistive.flash else {
             return Vec::new();
         };
-        let opacity = flash.opacity.state().position.clamp(0.0, 1.0) as f32;
+        let opacity = flash.opacity.state_at(flash.now).position.clamp(0.0, 1.0) as f32;
         let rect = self.screen_rect(screen);
         let area = rect.to_f64().to_physical(scale);
         vec![OutputElement::Fill(FillElement::new(

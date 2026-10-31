@@ -69,9 +69,6 @@ pub(crate) enum Intent {
     Forget,
     Answer(Answer),
     ChoosePicture,
-    AddingSource(bool),
-    SourceQuery(String),
-    AddSource(String),
     RemoveSource(usize),
     MoveSource(usize, bool),
     Back,
@@ -100,6 +97,7 @@ pub(crate) enum Intent {
 pub(crate) enum Picker {
     Zone,
     LoginApp,
+    InputSource,
 }
 
 impl Picker {
@@ -107,6 +105,7 @@ impl Picker {
         match self {
             Self::Zone => SettingId::TimeZone,
             Self::LoginApp => SettingId::LoginItems,
+            Self::InputSource => SettingId::InputSources,
         }
     }
 }
@@ -119,7 +118,6 @@ pub(crate) enum Anchor {
     Setting(SettingId, Option<String>),
     Item(String),
     Password,
-    SourceSearch,
     Picker,
     Back,
 }
@@ -181,7 +179,6 @@ pub struct SettingsView {
     pub(crate) hits: Vec<PaneHit>,
     pub(crate) pane: PaneId,
     pub(crate) layouts: Option<Layouts>,
-    pub(crate) adding_source: Option<String>,
     pub(crate) pointing: PointingDevices,
     pub(crate) about: Option<About>,
     pub(crate) storage: Option<Storage>,
@@ -260,7 +257,6 @@ impl SettingsView {
             hits: Vec::new(),
             pane: PaneId::Appearance,
             layouts: None,
-            adding_source: None,
             pointing: PointingDevices::default(),
             about: None,
             storage: None,
@@ -373,8 +369,8 @@ impl SettingsView {
             .any(|setting| setting.id == SettingId::ScreenReader)
     }
 
-    pub fn adding_source(&self) -> Option<&str> {
-        self.adding_source.as_deref()
+    pub fn picking(&self) -> Option<&str> {
+        self.picking.as_ref().map(|(_, query)| query.as_str())
     }
 
     pub(crate) fn input_sources(&self) -> Vec<String> {
@@ -652,7 +648,10 @@ impl SettingsView {
             .any(|(anchor, id)| anchor == wanted && Some(*id) == focus)
     }
 
-    pub(crate) fn pick_results(&self) -> Vec<String> {
+    pub(crate) fn pick_results(&mut self) -> Vec<String> {
+        if let Some((Picker::InputSource, query)) = self.picking.clone() {
+            return self.source_matches(&query);
+        }
         match (&self.picking, &self.time) {
             (Some((Picker::Zone, query)), Some(time)) => {
                 zone_matches(&time.zones, query, PICK_RESULTS)
@@ -802,13 +801,6 @@ impl SettingsView {
             Event::Key {
                 key: Key::Escape,
                 modifiers,
-            } if plain(modifiers) && self.adding_source.is_some() => {
-                self.intents.borrow_mut().push(Intent::AddingSource(false));
-                true
-            }
-            Event::Key {
-                key: Key::Escape,
-                modifiers,
             } if plain(modifiers) && self.pairing.is_some() => {
                 self.intents
                     .borrow_mut()
@@ -833,16 +825,6 @@ impl SettingsView {
             } if self.search_focused() => {
                 let step = if *key == Key::Up { -1 } else { 1 };
                 self.intents.borrow_mut().push(Intent::StepPane(step));
-                true
-            }
-            Event::Key {
-                key: Key::Enter, ..
-            } if self.anchor_focused(&Anchor::SourceSearch) => {
-                let query = self.adding_source.clone().unwrap_or_default();
-                let added = self.input_sources();
-                if let Some((code, _)) = self.source_matches(&query, &added).into_iter().next() {
-                    self.intents.borrow_mut().push(Intent::AddSource(code));
-                }
                 true
             }
             Event::Key {
@@ -1082,29 +1064,6 @@ impl SettingsView {
                 Intent::ChoosePicture => {
                     self.commands.push(Command::Picture(PictureCommand::Choose));
                 }
-                Intent::AddingSource(adding) => {
-                    self.adding_source = adding.then(String::new);
-                    self.focus_next = Some(if adding {
-                        Anchor::SourceSearch
-                    } else {
-                        Anchor::Setting(SettingId::InputSources, None)
-                    });
-                }
-                Intent::SourceQuery(query) => {
-                    if self.adding_source.is_some() {
-                        self.adding_source = Some(query);
-                        self.focus_next = Some(Anchor::SourceSearch);
-                    }
-                }
-                Intent::AddSource(code) => {
-                    self.adding_source = None;
-                    self.focus_next = Some(Anchor::Item(code.clone()));
-                    self.edit_sources(|sources| {
-                        if !sources.contains(&code) {
-                            sources.push(code);
-                        }
-                    });
-                }
                 Intent::RemoveSource(index) => {
                     self.focus_next = Some(Anchor::Setting(SettingId::InputSources, None));
                     self.edit_sources(|sources| {
@@ -1143,6 +1102,14 @@ impl SettingsView {
                 self.commands.push(Command::Time(TimeCommand::Zone(key)));
             }
             Picker::LoginApp => self.commands.push(Command::Login(LoginCommand::Add(key))),
+            Picker::InputSource => {
+                self.focus_next = Some(Anchor::Item(key.clone()));
+                self.edit_sources(|sources| {
+                    if !sources.contains(&key) {
+                        sources.push(key);
+                    }
+                });
+            }
         }
     }
 
@@ -1232,7 +1199,6 @@ impl SettingsView {
             _ => {}
         }
         self.pane = pane;
-        self.adding_source = None;
         self.confirming_empty_trash = false;
         self.confirming_clear_clipboard = false;
         self.picking = None;
@@ -1630,7 +1596,6 @@ impl SettingsView {
             children[Root::CONTENT] = content;
         }
         let typed = match &focused {
-            Some(Anchor::SourceSearch) => Some(self.adding_source.clone().unwrap_or_default()),
             Some(Anchor::Picker) => self.picking.as_ref().map(|(_, query)| query.clone()),
             Some(Anchor::Setting(setting, _)) => self.drafts.get(setting).cloned(),
             _ => None,
@@ -1652,12 +1617,9 @@ impl SettingsView {
                     target,
                     Some(ActionData::Value(text.into())),
                 ));
-                self.intents.borrow_mut().retain(|intent| {
-                    !matches!(
-                        intent,
-                        Intent::SourceQuery(_) | Intent::PickQuery(_) | Intent::Draft(..)
-                    )
-                });
+                self.intents
+                    .borrow_mut()
+                    .retain(|intent| !matches!(intent, Intent::PickQuery(_) | Intent::Draft(..)));
             }
         }
         self.stale = false;

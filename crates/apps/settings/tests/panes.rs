@@ -12,9 +12,9 @@ use bande_audio::{AppStream, Device, Direction, Level, Snapshot};
 use bande_config::{DisplaySettings, Placement};
 use bande_keyboard::Layouts;
 use bande_settings::{
-    Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, Mode, NetworkCommand, Pair,
-    PaneId, PictureCommand, PointingDevices, SettingId, SettingsView, Update, Value, bundled_pairs,
-    feed, follow_bluetooth, follow_network,
+    Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, LocaleState, Mode,
+    NetworkCommand, Pair, PaneId, PictureCommand, PointingDevices, SettingId, SettingsView, Update,
+    Value, bundled_pairs, feed, follow_bluetooth, follow_network,
 };
 use bande_test_bus::SessionBus;
 use bande_test_bus::bluez::{FakeBluez, PHONE};
@@ -674,10 +674,12 @@ fn the_bar_pane_has_position_size_names_auto_hide_and_the_menu_bar() {
 }
 
 const RULES: &str = r#"<xkbConfigRegistry><layoutList>
-<layout><configItem><name>se</name><shortDescription>sv</shortDescription><description>Swedish</description></configItem></layout>
+<layout><configItem><name>se</name><shortDescription>sv</shortDescription><description>Swedish</description><countryList><iso3166Id>SE</iso3166Id></countryList></configItem>
+<variantList><variant><configItem><name>mac</name><description>Swedish (Macintosh)</description></configItem></variant></variantList></layout>
 <layout><configItem><name>us</name><shortDescription>en</shortDescription><description>English (US)</description></configItem>
 <variantList><variant><configItem><name>dvorak</name><description>English (Dvorak)</description></configItem></variant></variantList></layout>
-<layout><configItem><name>de</name><shortDescription>de</shortDescription><description>German</description></configItem></layout>
+<layout><configItem><name>de</name><shortDescription>de</shortDescription><description>German</description></configItem>
+<variantList><variant><configItem><name>mac</name><description>German (Macintosh)</description></configItem></variant></variantList></layout>
 </layoutList></xkbConfigRegistry>"#;
 
 fn keyboard_view(codes: &[&str]) -> SettingsView {
@@ -721,14 +723,45 @@ fn a_layout_is_added_by_searching_its_name_and_pressing_return() {
     for character in "germ".chars() {
         press(&mut view, Key::Character(character));
     }
-    assert_eq!(view.adding_source(), Some("germ"));
-    assert!(has_text(&mut view, "German"));
+    assert_eq!(view.picking(), Some("germ"));
+    assert!(has_text(&mut view, "German (Macintosh)"));
     assert!(!has_text(&mut view, "English (Dvorak)"));
-    assert_eq!(view.adding_source(), Some("germ"));
 
     press(&mut view, Key::Enter);
     assert_eq!(view.take_commands(), [codes(&["se", "de"])]);
-    assert_eq!(view.adding_source(), None);
+    assert_eq!(view.picking(), None);
+}
+
+#[test]
+fn the_layout_search_suggests_the_region_and_finds_every_word() {
+    let mut view = keyboard_view(&["us"]);
+    view.apply(Update::Locale(Some(LocaleState {
+        installed: Vec::new(),
+        language: "en_US.UTF-8".to_owned(),
+        region: Some("sv_SE.UTF-8".to_owned()),
+    })));
+    let add = find(&mut view, Role::Button, "Add Input Source…").expect("add button");
+    click(&mut view, add);
+    let shown: Vec<String> = nodes(&mut view)
+        .into_iter()
+        .filter(|(_, node)| node.role() == Role::Button)
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .filter(|label| label.contains(", "))
+        .collect();
+    assert_eq!(shown, ["Swedish, se", "Swedish (Macintosh), se(mac)"]);
+    assert!(!has_text(&mut view, "German"));
+    assert!(has_text(
+        &mut view,
+        "Type a language, country or layout name"
+    ));
+
+    for character in "mac ger".chars() {
+        press(&mut view, Key::Character(character));
+    }
+    assert!(!has_text(&mut view, "Swedish (Macintosh)"));
+    let german = find(&mut view, Role::Button, "German (Macintosh)").expect("German (Macintosh)");
+    click(&mut view, german);
+    assert_eq!(view.take_commands(), [codes(&["us", "de(mac)"])]);
 }
 
 #[test]
@@ -737,7 +770,7 @@ fn escape_stops_adding_a_layout_and_a_full_list_offers_no_more() {
     let add = find(&mut view, Role::Button, "Add Input Source…").expect("add button");
     click(&mut view, add);
     press(&mut view, Key::Escape);
-    assert_eq!(view.adding_source(), None);
+    assert_eq!(view.picking(), None);
     assert!(view.take_commands().is_empty());
 
     let mut full = keyboard_view(&["se", "us", "de", "us(dvorak)"]);

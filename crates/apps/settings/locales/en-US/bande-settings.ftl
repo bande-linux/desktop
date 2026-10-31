@@ -127,6 +127,7 @@ more-input-sources = Type in more than one language or layout
 input-sources-full = Up to { $count } input sources can be used
 search-layouts = Search layouts
 no-layouts = No keyboard layout matches
+layout-hint = Type a language, country or layout name
 back-to = ‹ { $pane }
 back-tooltip = Go back (Super+[)
 available-of = { $available } available of { $capacity }

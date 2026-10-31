@@ -18,7 +18,7 @@ use crate::forget::Forget;
 use crate::pictures::{Pair, PictureCommand, expand};
 use crate::state::{Answer, Display, Question};
 use crate::view::{
-    Anchor, Intent, Intents, MIRROR_PREFIX, SettingsView, USE_EXTENDED, USE_MAIN, intent,
+    Anchor, Intent, Intents, MIRROR_PREFIX, Picker, SettingsView, USE_EXTENDED, USE_MAIN, intent,
 };
 use crate::widgets::{
     Caption, Captioned, Card, Check, Column, Fade, Row, SIDEBAR_SYMBOL, Signal, Swatch, Swatches,
@@ -35,7 +35,6 @@ const PAGE_SPACING: f32 = Spacing::S as f32;
 const ROW_INSET: f32 = Spacing::M as f32;
 const VOLUME_STEP: f64 = 1.0 / 16.0;
 const FIELD_SIZE: f32 = 13.0;
-const SOURCE_RESULTS: usize = 8;
 
 pub(crate) type Widgets = Vec<Box<dyn Widget>>;
 
@@ -830,10 +829,14 @@ impl SettingsView {
                 .detail(Text::new(&short, Tone::Muted).caption());
             rows.push(self.item_row(code.clone(), row));
         }
-        match self.adding_source.clone() {
-            Some(query) => rows.extend(self.source_search_rows(&query, &sources)),
+        let picking = self
+            .picking
+            .clone()
+            .filter(|(picker, _)| *picker == Picker::InputSource);
+        match picking {
+            Some((_, query)) => rows.extend(self.source_search_rows(&query)),
             None if count < MAX_INPUT_SOURCES => {
-                let mut add = intent(&self.intents, |()| Intent::AddingSource(true));
+                let mut add = intent(&self.intents, |()| Intent::Pick(Some(Picker::InputSource)));
                 let button = Button::new(&L10N.tr("add-input-source"), move || add(()));
                 self.anchors
                     .push((Anchor::Setting(SettingId::InputSources, None), button.id()));
@@ -849,28 +852,33 @@ impl SettingsView {
         rows
     }
 
-    pub(crate) fn source_matches(
-        &mut self,
-        query: &str,
-        added: &[String],
-    ) -> Vec<(String, String)> {
-        self.layouts()
-            .search(query)
+    pub(crate) fn source_matches(&mut self, query: &str) -> Vec<String> {
+        let added = self.input_sources();
+        let territory = self
+            .locale
+            .as_ref()
+            .and_then(|locale| locale.territory().map(str::to_owned));
+        let layouts = self.layouts();
+        let found = if query.trim().is_empty() {
+            territory.map_or_else(Vec::new, |territory| layouts.suggested(&territory))
+        } else {
+            layouts.search(query)
+        };
+        found
             .into_iter()
             .filter(|layout| !added.contains(&layout.code))
-            .take(SOURCE_RESULTS)
-            .map(|layout| (layout.code.clone(), layout.name.clone()))
+            .map(|layout| layout.code.clone())
             .collect()
     }
 
-    fn source_search_rows(&mut self, query: &str, added: &[String]) -> Widgets {
+    fn source_search_rows(&mut self, query: &str) -> Widgets {
         let field = SearchField::new(
             &L10N.tr("search-layouts"),
             query,
-            submit(&self.intents, Intent::SourceQuery),
+            submit(&self.intents, Intent::PickQuery),
         );
-        self.anchors.push((Anchor::SourceSearch, field.id()));
-        let mut cancel = intent(&self.intents, |()| Intent::AddingSource(false));
+        self.anchors.push((Anchor::Picker, field.id()));
+        let mut cancel = intent(&self.intents, |()| Intent::Pick(None));
         let mut rows = vec![boxed(Row::new(
             Text::new(&L10N.tr("add-input-source"), Tone::Primary),
             Some(boxed(Stack::new(
@@ -879,21 +887,26 @@ impl SettingsView {
                 0.0,
                 vec![
                     boxed(field),
-                    boxed(Button::new(&L10N.tr("cancel"), move || cancel(()))),
+                    boxed(Button::new(&L10N.tr("cancel"), move || cancel(())).cancel()),
                 ],
             ))),
         ))];
-        let matches = self.source_matches(query, added);
-        if matches.is_empty() {
+        let typed = !query.trim().is_empty();
+        let matches = self.pick_results();
+        if typed && matches.is_empty() {
             rows.push(muted_row(&L10N.tr("no-layouts")));
         }
-        for (code, name) in matches {
-            let mut add = intent(&self.intents, Intent::AddSource);
+        for code in matches {
+            let name = self.layouts().name(&code);
+            let mut add = intent(&self.intents, Intent::Picked);
             let chosen = code.clone();
             let row = Row::new(Text::new(&name, Tone::Primary), None)
                 .detail(Text::new(&code, Tone::Muted).caption())
                 .on_activate(move || add(chosen.clone()));
             rows.push(self.item_row(format!("add:{code}"), row));
+        }
+        if !typed {
+            rows.push(muted_row(&L10N.tr("layout-hint")));
         }
         rows
     }

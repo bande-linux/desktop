@@ -5,8 +5,7 @@ mod now_playing;
 mod person;
 
 use std::cell::{Cell, RefCell};
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -383,45 +382,6 @@ impl Hud {
     pub fn segment_fills(self) -> [f32; SEGMENTS] {
         let filled = self.level().clamp(0.0, 1.0) * SEGMENTS as f32;
         std::array::from_fn(|index| (filled - index as f32).clamp(0.0, 1.0))
-    }
-}
-
-pub const SYSFS_LEDS: &str = "/sys/class/leds";
-const KEYBOARD_LIGHT: &str = "kbd_backlight";
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct KeyboardLight {
-    pub name: String,
-    directory: PathBuf,
-}
-
-fn read_number(path: &Path) -> Option<u32> {
-    fs::read_to_string(path).ok()?.trim().parse().ok()
-}
-
-impl KeyboardLight {
-    pub fn find(leds: &Path) -> Option<Self> {
-        let mut names: Vec<String> = fs::read_dir(leds)
-            .ok()?
-            .filter_map(Result::ok)
-            .filter_map(|entry| entry.file_name().into_string().ok())
-            .filter(|name| name.contains(KEYBOARD_LIGHT))
-            .collect();
-        names.sort();
-        let name = names.into_iter().next()?;
-        Some(Self {
-            directory: leds.join(&name),
-            name,
-        })
-    }
-
-    pub fn maximum(&self) -> Option<u32> {
-        read_number(&self.directory.join("max_brightness")).filter(|maximum| *maximum > 0)
-    }
-
-    pub fn level(&self) -> Option<f32> {
-        let maximum = self.maximum()?;
-        Some(read_number(&self.directory.join("brightness"))? as f32 / maximum as f32)
     }
 }
 

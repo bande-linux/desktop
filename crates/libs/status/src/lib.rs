@@ -1,3 +1,4 @@
+pub mod backlight;
 pub mod captive;
 pub mod clock;
 pub mod dbusmenu;

@@ -9,8 +9,7 @@ use unbound_audio::Level;
 
 use unbound_controlcenter::media::{Command, Playback, Player};
 use unbound_controlcenter::{
-    Anchor, Change, Changes, Choice, Hud, KeyboardLight, SEGMENTS, Status, clock, panel,
-    place_beside, stepped,
+    Anchor, Change, Changes, Choice, Hud, SEGMENTS, Status, clock, panel, place_beside, stepped,
 };
 use unbound_toolkit::ui::Ui;
 use unbound_toolkit::{DisplayEdge, Palette, Rect, Scheme, TextSystem};
@@ -314,22 +313,6 @@ fn brightness_keys_move_one_of_sixteen_steps_and_stop_at_the_ends() {
     assert_eq!(stepped(0.3, false, false), 4.0 / 16.0);
     assert_eq!(stepped(1.0, true, false), 1.0);
     assert_eq!(stepped(0.0, false, false), 0.0);
-}
-
-#[test]
-fn the_keyboard_backlight_is_found_among_the_leds() {
-    let leds = tempfile::tempdir().expect("temporary directory");
-    for (name, brightness) in [("input3::capslock", "1"), ("kbd_backlight", "128")] {
-        let directory = leds.path().join(name);
-        std::fs::create_dir_all(&directory).expect("directory");
-        std::fs::write(directory.join("brightness"), brightness).expect("brightness");
-        std::fs::write(directory.join("max_brightness"), "255\n").expect("maximum");
-    }
-
-    let light = KeyboardLight::find(leds.path()).expect("a keyboard backlight");
-    assert_eq!(light.name, "kbd_backlight");
-    assert_eq!(light.level(), Some(128.0 / 255.0));
-    assert_eq!(KeyboardLight::find(&leds.path().join("missing")), None);
 }
 
 #[test]

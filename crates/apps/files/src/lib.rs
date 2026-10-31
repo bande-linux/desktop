@@ -9,6 +9,7 @@ mod loader;
 mod menus;
 mod paint;
 mod prompt;
+mod quick_look;
 mod search;
 mod sidebar;
 mod tabs;
@@ -23,6 +24,7 @@ use unbound_l10n::Localizer;
 
 pub use browser::{Browser, Column, Location, RowEdit};
 pub use paint::permissions;
+pub use quick_look::QuickLook;
 pub use search::SEARCH_HEIGHT;
 pub use sidebar::{
     BookmarkEdit, Place, PlaceKind, Row, SidebarEdit, favourites, hidden_places, layout_text, rows,
@@ -31,8 +33,8 @@ pub use sidebar::{
 pub use tabs::TAB_BAR_HEIGHT;
 pub use toolbar::TOOLBAR_HEIGHT;
 pub use view::{
-    COLUMN_WIDTH, ColumnPreview, FilesView, Hit, Info, PATH_BAR_HEIGHT, PREVIEW_WIDTH, QuickLook,
-    ROW_HEIGHT, Rename, Request, SIDEBAR_WIDTH, Sheet,
+    COLUMN_WIDTH, ColumnPreview, FilesView, Hit, Info, PATH_BAR_HEIGHT, PREVIEW_WIDTH, ROW_HEIGHT,
+    Rename, Request, SIDEBAR_WIDTH, Sheet,
 };
 pub use views::{
     FolderView, ListColumn, ViewMemory, ViewMode, list_columns_file, sidebar_file, status_bar_file,
@@ -58,6 +60,7 @@ mod tests {
             include_str!("sidebar.rs"),
             include_str!("view.rs"),
             include_str!("grid.rs"),
+            include_str!("quick_look.rs"),
             include_str!("tabs.rs"),
             include_str!("search.rs"),
             include_str!("toolbar.rs"),

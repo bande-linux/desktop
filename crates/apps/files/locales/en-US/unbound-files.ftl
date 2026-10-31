@@ -84,6 +84,9 @@ error-default-app = The default app couldn’t be changed: { $error }
 
 menu-open-with = Open With
 menu-quick-look = Quick Look
+menu-quick-look-full-screen = Quick Look in Full Screen
+quick-look-position = { $at } of { $count }
+quick-look-open-with = Open with { $app }
 menu-get-info = Get Info
 menu-show-in-enclosing-folder = Show in Enclosing Folder
 menu-rename = Rename

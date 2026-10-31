@@ -63,7 +63,8 @@ pub fn app_menus() -> Vec<Entry> {
                 Entry::separator(),
                 shortcut("menu-show-hidden-files", "Shift+Super+."),
                 shortcut("menu-status-bar", "Super+/"),
-                shortcut("menu-quick-look", "Space"),
+                shortcut("menu-quick-look", "Super+Y"),
+                shortcut("menu-quick-look-full-screen", "Alt+Super+Y"),
             ],
         ),
         submenu(

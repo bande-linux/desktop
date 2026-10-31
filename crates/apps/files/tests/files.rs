@@ -390,14 +390,14 @@ fn space_shows_the_selected_image_in_quick_look_and_closes_it_again() {
     });
     let scene = view.scene(1000, 600);
     let panel = view.quick_look_frame();
-    let image = scene.items.iter().find_map(|item| match item {
-        Item::Clip { items, .. } => items.iter().find_map(|item| match item {
+    fn picture_rect(items: &[Item]) -> Option<unbound_toolkit::Rect> {
+        items.iter().find_map(|item| match item {
             Item::Image { rect, .. } if rect.width == 40.0 => Some(*rect),
+            Item::Clip { items, .. } => picture_rect(items),
             _ => None,
-        }),
-        _ => None,
-    });
-    let image = image.expect("the picture is drawn");
+        })
+    }
+    let image = picture_rect(&scene.items).expect("the picture is drawn");
     assert_eq!((image.width, image.height), (40.0, 30.0));
     assert!(image.x > panel.x && image.x + image.width < panel.x + panel.width);
 
@@ -2404,4 +2404,187 @@ fn the_list_with_an_open_folder_matches_its_golden() {
     view.handle(&press(Key::Down));
     view.handle(&press(Key::Down));
     shoot("list-expanded", &mut view);
+}
+
+fn alt_command(key: Key) -> Event {
+    Event::Key {
+        key,
+        modifiers: Modifiers {
+            logo: true,
+            alt: true,
+            ..Modifiers::default()
+        },
+    }
+}
+
+fn quick_look_position(view: &FilesView) -> Option<(String, Option<(usize, usize)>)> {
+    view.quick_look()
+        .map(|shown| (shown.entry.name.clone(), shown.position()))
+}
+
+#[test]
+fn quick_look_steps_through_a_selection_without_changing_it() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Down));
+    view.handle(&shift(Key::Down));
+    view.handle(&shift(Key::Down));
+    let selected = names_of(view.browser().selection());
+    assert_eq!(selected.len(), 3);
+
+    view.handle(&press(Key::Space));
+    assert_eq!(
+        quick_look_position(&view),
+        Some(("Documents".to_owned(), Some((1, 3))))
+    );
+    view.handle(&press(Key::Right));
+    assert_eq!(
+        quick_look_position(&view),
+        Some(("Empty".to_owned(), Some((2, 3))))
+    );
+    view.handle(&press(Key::Right));
+    view.handle(&press(Key::Right));
+    assert_eq!(
+        quick_look_position(&view),
+        Some(("notes.txt".to_owned(), Some((3, 3))))
+    );
+    view.handle(&press(Key::Left));
+    assert_eq!(
+        quick_look_position(&view),
+        Some(("Empty".to_owned(), Some((2, 3))))
+    );
+    assert_eq!(names_of(view.browser().selection()), selected);
+}
+
+#[test]
+fn quick_look_opens_its_item_with_the_default_app() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Up));
+    view.handle(&command(Key::Character('y'), false));
+    view.scene(1000, 600);
+    let button = view
+        .hit_frame(&unbound_files::Hit::QuickLookOpen)
+        .expect("an Open with button");
+
+    view.handle(&Event::PointerDown(Pointer::at(Point::new(
+        button.x + button.width / 2.0,
+        button.y + button.height / 2.0,
+    ))));
+
+    let requests = view.take_requests();
+    let [Request::Open { app, files }] = requests.as_slice() else {
+        panic!("{requests:?}");
+    };
+    assert_eq!(app.id, "editor.desktop");
+    assert_eq!(files, &[place.home().join("notes.txt")]);
+    assert!(view.quick_look().is_some());
+}
+
+#[test]
+fn page_down_scrolls_a_long_text_in_quick_look() {
+    let place = Place::new();
+    let text = (1..=400)
+        .map(|line| format!("line {line}\n"))
+        .collect::<String>();
+    fs::write(place.home().join("notes.txt"), text).expect("long text");
+    let mut view = place.view();
+    view.handle(&press(Key::Up));
+    view.handle(&press(Key::Space));
+    run_until(&mut view, |view| {
+        view.quick_look()
+            .is_some_and(|shown| matches!(shown.preview, Some(Preview::Text(_))))
+    });
+    view.scene(1000, 600);
+
+    assert!(view.handle(&press(Key::PageDown)));
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while view.quick_look_scrolled() < 100.0 {
+        assert!(Instant::now() < deadline, "the text did not scroll");
+        std::thread::sleep(Duration::from_millis(20));
+        view.scene(1000, 600);
+    }
+    assert_eq!(selected_name(view.browser()).as_deref(), Some("notes.txt"));
+}
+
+#[test]
+fn quick_look_in_full_screen_covers_the_window_and_escape_returns() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&press(Key::Up));
+    view.handle(&press(Key::Space));
+    let panel = view.quick_look_frame();
+    assert!(panel.width < 1000.0);
+
+    view.handle(&alt_command(Key::Character('y')));
+    let full = view.quick_look_frame();
+    assert_eq!(
+        (full.x, full.y, full.width, full.height),
+        (0.0, 0.0, 1000.0, 600.0)
+    );
+
+    view.handle(&press(Key::Escape));
+    assert_eq!(view.quick_look_frame(), panel);
+    assert!(view.quick_look().is_some());
+    view.handle(&press(Key::Escape));
+    assert!(view.quick_look().is_none());
+}
+
+#[test]
+fn super_plus_zooms_a_quick_look_picture_instead_of_the_icons() {
+    let place = Place::new();
+    picture(&place.home().join("picture.png"), 80, 60);
+    let mut view = place.view();
+    view.handle(&command(Key::Character('1'), false));
+    let icon_size = view.icon_size();
+    view.handle(&press(Key::Right));
+    while selected_name(view.browser()).as_deref() != Some("picture.png") {
+        view.handle(&press(Key::Right));
+    }
+    view.handle(&press(Key::Space));
+    run_until(&mut view, |view| {
+        view.quick_look()
+            .is_some_and(|shown| matches!(shown.preview, Some(Preview::Image(_))))
+    });
+
+    view.handle(&command(Key::Character('='), false));
+    view.handle(&command(Key::Character('='), false));
+
+    assert!(view.quick_look().is_some_and(|shown| shown.zoom > 1.5));
+    assert_eq!(view.icon_size(), icon_size);
+    for _ in 0..3 {
+        view.handle(&command(Key::Character('-'), false));
+    }
+    assert!(view.quick_look().is_some_and(|shown| shown.zoom == 1.0));
+}
+
+#[test]
+fn quick_look_matches_its_goldens() {
+    let place = Place::new();
+    fs::write(
+        place.home().join("notes.txt"),
+        "# Notes\n\nQuick Look shows the first lines of a text file\nin a monospaced face, and Page Down scrolls it.\n\n- one\n- two\n- three\n",
+    )
+    .expect("text");
+    picture(&place.home().join("Lake.png"), 640, 400);
+    picture(&place.home().join("Mountain.png"), 300, 450);
+    let mut view = place.themed_view();
+    view.handle(&press(Key::Up));
+    view.handle(&press(Key::Space));
+    run_until(&mut view, |view| {
+        view.quick_look()
+            .is_some_and(|shown| shown.preview.is_some())
+    });
+    shoot("quick-look-text", &mut view);
+
+    view.handle(&press(Key::Escape));
+    view.handle(&press(Key::Up));
+    view.handle(&shift(Key::Up));
+    view.handle(&press(Key::Space));
+    run_until(&mut view, |view| {
+        view.quick_look()
+            .is_some_and(|shown| shown.preview.is_some() && shown.position().is_some())
+    });
+    shoot("quick-look-several", &mut view);
 }

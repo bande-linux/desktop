@@ -333,7 +333,8 @@ impl FilesView {
                 self.ui.handle(event) | self.leave()
             }
             Event::Scroll(scroll) => {
-                self.ui.handle(event)
+                self.quick_look_scroll(scroll)
+                    || self.ui.handle(event)
                     || (!self.over_control(scroll.position) && self.files_scroll(scroll))
             }
             _ => self.ui.handle(event),
@@ -346,6 +347,9 @@ impl FilesView {
         }
         if self.search_focused() {
             return self.search_key(key, modifiers);
+        }
+        if self.quick_look.is_some() && self.quick_look_key(key, modifiers) {
+            return true;
         }
         if self.mode == ViewMode::List
             && table_key(key, modifiers)
@@ -377,6 +381,10 @@ impl FilesView {
         let at = pointer.position;
         if matches!(pointer.button, PointerButton::Back | PointerButton::Forward) {
             self.press = None;
+            return self.files_pointer_down(pointer);
+        }
+        if self.quick_look.is_some() && contains(self.quick_look_frame(), at) {
+            self.press = Some(Press::Files);
             return self.files_pointer_down(pointer);
         }
         if let Some(field) = self.rename.as_ref().map(|rename| rename.field) {

@@ -27,6 +27,7 @@ use crate::controls::{Formats, Press, Signals};
 use crate::grid::Band;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
+use crate::quick_look::QuickLook;
 use crate::search::{Index, SEARCH_HEIGHT, Searching};
 use crate::sidebar::{Place, PlaceKind, Row, SidebarEdit, with_volumes};
 use crate::tabs::{Tab, location_title};
@@ -60,11 +61,6 @@ enum Source {
     Thumbnails,
     Index,
     Job(usize),
-}
-
-pub struct QuickLook {
-    pub entry: Entry,
-    pub preview: Option<Preview<Image>>,
 }
 
 pub struct ColumnPreview {
@@ -122,6 +118,9 @@ pub enum Hit {
     Tab(usize),
     CloseTab(usize),
     NewTab,
+    QuickLook,
+    QuickLookOpen,
+    QuickLookFullScreen,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -201,7 +200,7 @@ pub struct FilesView {
     media: Vec<PathBuf>,
     pub(crate) favourites: Vec<Row>,
     watch: FolderWatch,
-    loader: Loader,
+    pub(crate) loader: Loader,
     pub(crate) thumbs: Thumbs,
     pub(crate) mode: ViewMode,
     pub(crate) icon_size: u32,
@@ -795,12 +794,12 @@ impl FilesView {
         self.watch.watch(&self.watched());
         self.loader.forget_pending();
         let entry = self.browser.selected().cloned();
-        if self.quick_look.is_some() {
-            self.quick_look = entry.clone().map(|entry| QuickLook {
-                entry,
-                preview: None,
-            });
-        }
+        self.follow_selection_in_quick_look(entry.as_ref());
+        let quick_look = self
+            .quick_look
+            .as_ref()
+            .filter(|shown| shown.preview.is_none())
+            .map(|shown| shown.entry.clone());
         if self.inspector {
             self.update_info();
         } else {
@@ -811,10 +810,16 @@ impl FilesView {
             .column_preview
             .as_ref()
             .is_some_and(|shown| shown.entry.is_some() && shown.preview.is_none());
+        let quick_look_path = quick_look.as_ref().map(|shown| shown.path.clone());
+        if let Some(shown) = quick_look {
+            self.loader.preview(shown);
+        }
         if let Some(entry) = entry
-            && (self.quick_look.is_some() || self.inspector || column_preview)
+            && (self.inspector || column_preview)
         {
-            self.loader.preview(entry.clone());
+            if quick_look_path.as_ref() != Some(&entry.path) {
+                self.loader.preview(entry.clone());
+            }
             if self.inspector && entry.is_folder() {
                 self.loader.folder_size(entry.path);
             }
@@ -1063,6 +1068,14 @@ impl FilesView {
             .is_some_and(|(_, state)| state.scroll(cx, scroll))
     }
 
+    pub fn hit_frame(&self, hit: &Hit) -> Option<Rect> {
+        self.hits
+            .iter()
+            .rev()
+            .find(|(_, known)| known == hit)
+            .map(|(rect, _)| *rect)
+    }
+
     pub(crate) fn hit(&self, at: Point) -> Option<Hit> {
         self.hits
             .iter()
@@ -1200,6 +1213,9 @@ impl FilesView {
                 self.close_tab(index);
             }
             Hit::NewTab => self.open_tab(self.browser.root().clone()),
+            Hit::QuickLookOpen => self.open_quick_look_item(),
+            Hit::QuickLookFullScreen => self.toggle_quick_look_full_screen(),
+            Hit::QuickLook => {}
         }
         true
     }
@@ -1275,6 +1291,8 @@ impl FilesView {
                     | Hit::Tab(_)
                     | Hit::CloseTab(_)
                     | Hit::NewTab
+                    | Hit::QuickLookOpen
+                    | Hit::QuickLookFullScreen
             )
         });
         let changed = hover != self.hover;
@@ -1415,7 +1433,8 @@ impl FilesView {
         let alt = modifiers.alt;
         match key {
             Key::Space if !command => self.toggle_quick_look(),
-            Key::Escape if self.quick_look.is_some() => self.quick_look = None,
+            Key::Character('y' | 'Y') if command && !alt => self.toggle_quick_look(),
+            Key::Character('y' | 'Y') if command => self.toggle_quick_look_full_screen(),
             Key::Escape if self.searching.is_some() => self.end_search(),
             Key::Character('f' | 'F') if command && shift => self.go(Location::Recents),
             Key::Character('f' | 'F') if command => self.focus_search(),
@@ -1609,19 +1628,6 @@ impl FilesView {
             _ => return self.ui.handle(&Event::Key { key, modifiers }),
         }
         true
-    }
-
-    pub(crate) fn toggle_quick_look(&mut self) {
-        self.quick_look = match self.quick_look.take() {
-            Some(_) => None,
-            None => self.browser.selected().cloned().map(|entry| QuickLook {
-                entry,
-                preview: None,
-            }),
-        };
-        if let Some(quick_look) = &self.quick_look {
-            self.loader.preview(quick_look.entry.clone());
-        }
     }
 
     pub(crate) fn start(&mut self, task: Task, purpose: Purpose) {

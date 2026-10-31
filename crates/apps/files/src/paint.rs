@@ -16,7 +16,7 @@ use crate::sidebar::{PlaceKind, Row};
 use crate::toolbar::TOOLBAR_HEIGHT;
 use crate::view::{
     COLUMN_WIDTH, ColumnPreview, FilesView, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PREVIEW_WIDTH,
-    PROGRESS_HEIGHT, QuickLook, ROW_HEIGHT, SIDEBAR_WIDTH,
+    PROGRESS_HEIGHT, ROW_HEIGHT, SIDEBAR_WIDTH,
 };
 use crate::views::ViewMode;
 
@@ -33,8 +33,6 @@ const SIDEBAR_INSET: f32 = 8.0;
 const SIDEBAR_TEXT_X: f32 = 20.0;
 const PROGRESS_CELLS: usize = 24;
 const PROGRESS_GAP: f32 = 2.0;
-const QUICK_LOOK_SHARE: f32 = 0.8;
-const QUICK_LOOK_HEADER: f32 = 36.0;
 const PADDING: f32 = 16.0;
 const BUTTON_HEIGHT: f32 = 24.0;
 const PREVIEW_SIDE: f32 = 256.0;
@@ -160,12 +158,10 @@ impl FilesView {
 
     fn want_thumbnails(&mut self) {
         let mut wanted = Vec::new();
-        if let Some(QuickLook {
-            entry,
-            preview: Some(Preview::Other { .. }),
-        }) = &self.quick_look
+        if let Some(shown) = &self.quick_look
+            && let Some(Preview::Other { .. }) = shown.preview
         {
-            wanted.push((entry, ThumbnailSize::XLarge));
+            wanted.push((&shown.entry, ThumbnailSize::XLarge));
         }
         if let Some(info) = &self.info
             && let ([entry], Some(Preview::Other { .. })) = (info.entries.as_slice(), &info.preview)
@@ -1140,15 +1136,6 @@ impl FilesView {
         });
     }
 
-    pub fn quick_look_frame(&self) -> Rect {
-        let sheet = self.sheet_frame();
-        centred(
-            sheet,
-            (sheet.width * QUICK_LOOK_SHARE).round(),
-            (sheet.height * QUICK_LOOK_SHARE).round(),
-        )
-    }
-
     fn overlay_shadows(&self, shape: Shape, items: &mut Vec<Item>) {
         items.extend(
             Elevation::Overlay
@@ -1163,7 +1150,7 @@ impl FilesView {
         );
     }
 
-    fn panel(&self, panel: Rect, items: &mut Vec<Item>) -> Shape {
+    pub(crate) fn panel(&self, panel: Rect, items: &mut Vec<Item>) -> Shape {
         let shape = Shape::rounded(panel, Radius::XL);
         self.overlay_shadows(shape, items);
         items.push(Item::Fill {
@@ -1173,93 +1160,7 @@ impl FilesView {
         shape
     }
 
-    fn paint_quick_look(&mut self, items: &mut Vec<Item>) {
-        let Some(quick_look) = self.quick_look.take() else {
-            return;
-        };
-        let panel = self.quick_look_frame();
-        let shape = self.panel(panel, items);
-        let primary = self.palette.ink;
-        let title = self.text().paragraph(
-            &quick_look.entry.name,
-            TextStyle::new(NAME_SIZE, primary).weight(TextStyle::SEMIBOLD),
-            Some(panel.width - 2.0 * PADDING),
-            TextAlign::Center,
-        );
-        let title_y = panel.y + ((QUICK_LOOK_HEADER - title.height()) / 2.0).round();
-        let mut content = vec![Item::Text {
-            origin: Point::new(panel.x + PADDING, title_y),
-            paragraph: title,
-        }];
-        let area = Rect::new(
-            panel.x + PADDING,
-            panel.y + QUICK_LOOK_HEADER,
-            panel.width - 2.0 * PADDING,
-            panel.height - QUICK_LOOK_HEADER - PADDING,
-        );
-        match &quick_look.preview {
-            Some(Preview::Image(image)) => content.push(Item::Image {
-                rect: fitted(area, image),
-                image: image.clone(),
-            }),
-            Some(Preview::Text(text)) => {
-                let lines = (area.height / CODE_SIZE).ceil() as usize + 1;
-                let shown = text.lines().take(lines).collect::<Vec<_>>().join("\n");
-                let paragraph = self.text().paragraph(
-                    &shown,
-                    TextStyle::new(CODE_SIZE, primary).monospace(),
-                    None,
-                    TextAlign::Start,
-                );
-                content.push(Item::Clip {
-                    shape: Shape::rect(area),
-                    items: vec![Item::Text {
-                        origin: Point::new(area.x, area.y),
-                        paragraph,
-                    }],
-                });
-            }
-            Some(Preview::Folder { items: count }) => {
-                let summary = L10N.tr_args("item-count", [("count", (*count).into())]);
-                self.summary(
-                    &quick_look.entry,
-                    area,
-                    &L10N.tr("folder"),
-                    &summary,
-                    &mut content,
-                );
-            }
-            Some(Preview::Other { .. })
-                if let Some(image) = self.thumbs.get(&quick_look.entry, ThumbnailSize::XLarge) =>
-            {
-                content.push(Item::Image {
-                    rect: fitted(area, &image),
-                    image,
-                });
-            }
-            Some(Preview::Other { size }) => {
-                let mime = self.apps.mime_for(&quick_look.entry.path);
-                let kind = self.apps.kind(&mime);
-                self.summary(
-                    &quick_look.entry,
-                    area,
-                    &kind,
-                    &format_size(*size),
-                    &mut content,
-                );
-            }
-            None => {
-                self.summary(&quick_look.entry, area, "", "", &mut content);
-            }
-        }
-        items.push(Item::Clip {
-            shape,
-            items: content,
-        });
-        self.quick_look = Some(quick_look);
-    }
-
-    fn summary(
+    pub(crate) fn summary(
         &mut self,
         entry: &Entry,
         area: Rect,

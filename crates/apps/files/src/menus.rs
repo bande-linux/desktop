@@ -130,7 +130,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
                 .shortcut("Alt+Super+Backspace"),
         );
         items.push(MenuItem::separator());
-        items.push(item("menu-quick-look", &Command::QuickLook).enabled(count == 1));
+        items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
         items.push(item("menu-get-info", &Command::Info).shortcut("Super+I"));
         return Menu::new(items);
     }
@@ -153,11 +153,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
         ));
     }
     items.push(MenuItem::separator());
-    items.push(
-        item("menu-quick-look", &Command::QuickLook)
-            .shortcut("Space")
-            .enabled(count == 1),
-    );
+    items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
     items.push(item("menu-get-info", &Command::Info).shortcut("Super+I"));
     if selection.searching {
         items.push(item(

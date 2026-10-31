@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use unbound_file_chooser::{
     Accept, Chooser, glob_matches, initial_folder, initial_name, remember, remembered_folder,
-    typed_location,
 };
 use unbound_xdg::MimeDatabase;
 use xdg_desktop_portal_unbound::file_chooser::{Dialog, Filter, Mode, Pattern};
@@ -244,21 +243,4 @@ fn the_dialog_starts_in_the_apps_folder_then_the_remembered_one_then_a_default()
         Vec::new(),
     );
     assert_eq!(initial_folder(&save, None, home, documents), documents);
-}
-
-#[test]
-fn typed_locations_expand_the_home_folder_and_resolve_against_the_shown_one() {
-    let home = Path::new("/home/anna");
-    let shown = Path::new("/home/anna/Documents");
-    assert_eq!(typed_location(" ~ ", home, shown), home);
-    assert_eq!(
-        typed_location("~/Pictures/", home, shown),
-        home.join("Pictures")
-    );
-    assert_eq!(typed_location("/etc", home, shown), Path::new("/etc"));
-    assert_eq!(
-        typed_location("Receipts", home, shown),
-        shown.join("Receipts")
-    );
-    assert_eq!(typed_location("~bob", home, shown), shown.join("~bob"));
 }

@@ -293,6 +293,45 @@ pub fn list_date(time: SystemTime, now: SystemTime, zone: &jiff::tz::TimeZone) -
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Recency {
+    AnyTime,
+    Today,
+    LastWeek,
+    LastMonth,
+    ThisYear,
+}
+
+impl Recency {
+    pub const ALL: [Self; 5] = [
+        Self::AnyTime,
+        Self::Today,
+        Self::LastWeek,
+        Self::LastMonth,
+        Self::ThisYear,
+    ];
+
+    pub fn start(self, now: SystemTime, zone: &jiff::tz::TimeZone) -> Option<SystemTime> {
+        let now = jiff::Timestamp::try_from(now).ok()?.to_zoned(zone.clone());
+        let today = now.start_of_day().ok()?;
+        let start = match self {
+            Self::AnyTime => return None,
+            Self::Today => today,
+            Self::LastWeek => today.checked_sub(jiff::Span::new().days(6)).ok()?,
+            Self::LastMonth => today.checked_sub(jiff::Span::new().days(29)).ok()?,
+            Self::ThisYear => today.first_of_year().ok()?,
+        };
+        Some(SystemTime::from(start.timestamp()))
+    }
+
+    pub fn includes(self, time: Option<SystemTime>) -> bool {
+        match self.start(SystemTime::now(), &jiff::tz::TimeZone::system()) {
+            None => true,
+            Some(start) => time.is_some_and(|time| time >= start),
+        }
+    }
+}
+
 pub fn format_date(time: SystemTime) -> String {
     jiff::Timestamp::try_from(time)
         .map(|timestamp| {

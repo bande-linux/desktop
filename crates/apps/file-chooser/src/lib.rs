@@ -7,7 +7,6 @@ use unbound_l10n::Localizer;
 
 pub use model::{
     Accept, Chooser, glob_matches, initial_folder, initial_name, remember, remembered_folder,
-    typed_location,
 };
 pub use view::{ChooserView, Finished, Icons};
 

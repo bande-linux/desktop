@@ -101,17 +101,6 @@ pub fn initial_folder(
         .unwrap_or_else(|| fallback.to_path_buf())
 }
 
-pub fn typed_location(typed: &str, home: &Path, folder: &Path) -> PathBuf {
-    let typed = typed.trim();
-    let expanded = match typed.strip_prefix('~') {
-        Some(rest) if rest.is_empty() || rest.starts_with('/') => {
-            home.join(rest.trim_start_matches('/'))
-        }
-        _ => PathBuf::from(typed),
-    };
-    folder.join(expanded)
-}
-
 pub fn initial_name(dialog: &Dialog) -> String {
     match &dialog.mode {
         Mode::Save {

@@ -16,7 +16,7 @@ use xdg_desktop_portal_unbound::file_chooser::{Mode, Selection};
 use xdg_desktop_portal_unbound::settings::icon_theme;
 
 use crate::L10N;
-use crate::model::{Accept, Chooser, typed_location};
+use crate::model::{Accept, Chooser};
 
 const SIDEBAR_WIDTH: f32 = 184.0;
 const BAR_HEIGHT: f32 = 44.0;
@@ -825,7 +825,7 @@ impl ChooserView {
     }
 
     fn go_to(&mut self, typed: &str) {
-        let path = typed_location(typed, &self.home, self.chooser.folder());
+        let path = unbound_fs::typed_location(typed, &self.home, self.chooser.folder());
         if path.is_dir() {
             self.go(path);
         } else if let Some(parent) = path.parent().filter(|_| path.exists()) {

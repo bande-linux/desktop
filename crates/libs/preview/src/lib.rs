@@ -54,6 +54,15 @@ fn image<I>(path: &Path, picture: impl FnOnce(u32, u32, Vec<u8>) -> Option<I>) -
     picture(width, height, rgba.into_raw())
 }
 
+pub fn image_size(path: &Path) -> Option<(u32, u32)> {
+    image::ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?
+        .into_dimensions()
+        .ok()
+}
+
 pub fn preview<I>(
     entry: &Entry,
     picture: impl FnOnce(u32, u32, Vec<u8>) -> Option<I>,

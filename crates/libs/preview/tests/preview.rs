@@ -4,7 +4,7 @@ use std::fs;
 
 use tempfile::TempDir;
 use unbound_fs::{Kind, Sort, list};
-use unbound_preview::{Preview, preview};
+use unbound_preview::{Preview, image_size, preview};
 
 fn dimensions(width: u32, height: u32, _: Vec<u8>) -> Option<(u32, u32)> {
     Some((width, height))
@@ -46,4 +46,22 @@ fn quick_look_previews_images_text_folders_and_other_files() {
         preview(entry("data.bin"), dimensions),
         Preview::Other { size: 5 }
     ));
+}
+
+#[test]
+fn image_sizes_come_from_png_and_jpeg_headers() {
+    let root = TempDir::new().expect("temporary folder");
+    let png = root.path().join("wide.png");
+    let jpeg = root.path().join("photo.jpg");
+    image::RgbaImage::from_pixel(64, 20, image::Rgba([0, 0, 255, 255]))
+        .save(&png)
+        .expect("png");
+    image::RgbImage::from_pixel(30, 48, image::Rgb([200, 10, 10]))
+        .save(&jpeg)
+        .expect("jpeg");
+    fs::write(root.path().join("notes.txt"), "not an image").expect("text");
+
+    assert_eq!(image_size(&png), Some((64, 20)));
+    assert_eq!(image_size(&jpeg), Some((30, 48)));
+    assert_eq!(image_size(&root.path().join("notes.txt")), None);
 }

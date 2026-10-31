@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::L10N;
 
-fn split_extension(name: &str, is_dir: bool) -> (&str, &str) {
+pub(crate) fn split_extension(name: &str, is_dir: bool) -> (&str, &str) {
     match name.rfind('.') {
         Some(dot) if dot > 0 && !is_dir => name.split_at(dot),
         _ => (name, ""),
@@ -58,4 +58,15 @@ pub fn untitled_folder(folder: &Path) -> PathBuf {
         folder,
         std::iter::once(name.clone()).chain((2u64..).map(|number| format!("{name} {number}"))),
     )
+}
+
+pub fn typed_location(typed: &str, home: &Path, folder: &Path) -> PathBuf {
+    let typed = typed.trim();
+    let expanded = match typed.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with('/') => {
+            home.join(rest.trim_start_matches('/'))
+        }
+        _ => PathBuf::from(typed),
+    };
+    folder.join(expanded)
 }

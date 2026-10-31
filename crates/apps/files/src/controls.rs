@@ -56,6 +56,15 @@ pub(crate) enum Signal {
     Back,
     Forward,
     Expand(Vec<String>, bool, bool),
+    Runnable(bool),
+    SearchKind(usize),
+    SearchDate(usize),
+    OpenWithSearch(String),
+    OpenWithAlways(bool),
+    OpenWithActivate,
+    RenameField(crate::batch_rename::RenameField, String),
+    RenameChoice(crate::batch_rename::RenameChoice, usize),
+    Access(unbound_fs::Class, usize),
 }
 
 pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
@@ -220,7 +229,6 @@ fn table_key(key: Key, modifiers: Modifiers) -> bool {
     match key {
         Key::Up | Key::Down | Key::Home | Key::End | Key::PageUp | Key::PageDown => !modifiers.logo,
         Key::Character('a' | 'A') if modifiers.logo => !modifiers.shift && !modifiers.alt,
-        Key::Character(_) => !modifiers.logo && !modifiers.control && !modifiers.alt,
         _ => false,
     }
 }
@@ -244,7 +252,7 @@ fn request(action: Action, target: accesskit::NodeId) -> ActionRequest {
 }
 
 impl FilesView {
-    fn host_mut(&mut self) -> Option<&mut FreeLayout> {
+    pub(crate) fn host_mut(&mut self) -> Option<&mut FreeLayout> {
         self.ui.widget_as::<FreeLayout>(self.host)
     }
 
@@ -303,12 +311,21 @@ impl FilesView {
             Some(self.toolbar.view),
             Some(self.toolbar.search),
             self.size_slider,
-            self.searching
-                .as_ref()
-                .map(|searching| searching.scope_control),
         ]
         .into_iter()
         .flatten()
+        .chain(self.searching.iter().flat_map(|searching| {
+            [
+                searching.scope_control,
+                searching.kind_control,
+                searching.date_control,
+            ]
+        }))
+        .chain(
+            self.inspector_controls
+                .iter()
+                .flat_map(crate::inspector::InspectorControls::ids),
+        )
         .collect()
     }
 
@@ -333,7 +350,8 @@ impl FilesView {
                 self.ui.handle(event) | self.leave()
             }
             Event::Scroll(scroll) => {
-                self.ui.handle(event)
+                self.quick_look_scroll(scroll)
+                    || self.ui.handle(event)
                     || (!self.over_control(scroll.position) && self.files_scroll(scroll))
             }
             _ => self.ui.handle(event),
@@ -346,6 +364,9 @@ impl FilesView {
         }
         if self.search_focused() {
             return self.search_key(key, modifiers);
+        }
+        if self.quick_look.is_some() && self.quick_look_key(key, modifiers) {
+            return true;
         }
         if self.mode == ViewMode::List
             && table_key(key, modifiers)
@@ -377,6 +398,10 @@ impl FilesView {
         let at = pointer.position;
         if matches!(pointer.button, PointerButton::Back | PointerButton::Forward) {
             self.press = None;
+            return self.files_pointer_down(pointer);
+        }
+        if self.quick_look.is_some() && contains(self.quick_look_frame(), at) {
+            self.press = Some(Press::Files);
             return self.files_pointer_down(pointer);
         }
         if let Some(field) = self.rename.as_ref().map(|rename| rename.field) {
@@ -537,6 +562,24 @@ impl FilesView {
                     Signal::Search(text) => self.search_changed(&text),
                     Signal::View(index) => self.view_chosen(index),
                     Signal::Back => self.back(),
+                    Signal::Runnable(on) => self.set_runnable(on),
+                    Signal::SearchKind(index) => self.set_search_kind(index),
+                    Signal::SearchDate(index) => self.set_search_date(index),
+                    Signal::OpenWithSearch(text) => self.filter_open_with(&text),
+                    Signal::RenameField(field, text) => self.batch_field(field, text),
+                    Signal::RenameChoice(choice, index) => self.batch_choice(choice, index),
+                    Signal::OpenWithAlways(on) => {
+                        if let Some(Sheet::OpenWith(open_with)) = &mut self.sheet {
+                            open_with.always = on;
+                        }
+                    }
+                    Signal::OpenWithActivate => {
+                        if let Some(Sheet::OpenWith(open_with)) = self.sheet.take() {
+                            self.open_with_chosen_app(open_with);
+                        }
+                        self.dismiss_sheet();
+                    }
+                    Signal::Access(class, index) => self.set_access(class, index),
                     Signal::Forward => self.forward(),
                     Signal::Scope(everywhere) => self.set_scope(everywhere),
                     Signal::IconSize(size) => self.set_icon_size(size.round() as u32),
@@ -706,7 +749,18 @@ impl FilesView {
         let (revision, edits) = (column.revision, column.edits.len());
         let patchable = !column.is_nested()
             && matches!(self.table_synced, Some((shown, applied)) if shown == revision && applied <= edits);
-        if !patchable {
+        if !patchable && !self.browser.columns()[0].is_nested() {
+            self.table_formats = Formats::default();
+            let column = &self.browser.columns()[0];
+            let count = column.entries.len();
+            let outline = matches!(self.browser.root(), Location::Folder(_))
+                && column.entries.iter().any(Entry::is_folder);
+            if let Some(table) = self.table() {
+                table.set_expanded_rows(Vec::new());
+                table.set_row_count(count, outline, true);
+            }
+            self.table_revealed = None;
+        } else if !patchable {
             self.table_formats = Formats::default();
             let count = self.browser.columns()[0].entries.len();
             let rows = self
@@ -715,10 +769,7 @@ impl FilesView {
                 .map(|(_, row)| row)
                 .collect::<Vec<_>>();
             let column = &self.browser.columns()[0];
-            let rows = match column.is_nested() {
-                true => nested_rows(rows, &column.depths),
-                false => rows,
-            };
+            let rows = nested_rows(rows, &column.depths);
             let expanded = column
                 .entries
                 .iter()
@@ -751,6 +802,25 @@ impl FilesView {
             }
         }
         self.table_synced = Some((revision, edits));
+    }
+
+    pub(crate) fn fill_table(&mut self) {
+        if self.mode != ViewMode::List {
+            return;
+        }
+        let mut wanted = Vec::new();
+        self.ui.update_widget(self.table, |table: &mut Table, cx| {
+            wanted = table.unfilled_rows(cx);
+        });
+        if wanted.is_empty() {
+            return;
+        }
+        let rows = self.table_rows(wanted);
+        if let Some(table) = self.table() {
+            for (index, row) in rows {
+                table.fill_row(index, row);
+            }
+        }
     }
 
     pub(crate) fn sync_table(&mut self) {
@@ -860,7 +930,7 @@ impl FilesView {
             true => content,
             false => Rect::default(),
         };
-        let search = self.toolbar_frames().into_iter().chain(self.scope_frame());
+        let search = self.toolbar_frames().into_iter().chain(self.scope_frames());
         let rename = self
             .rename
             .as_ref()
@@ -889,6 +959,10 @@ impl FilesView {
 
     pub fn start_rename(&mut self) {
         if self.browser.in_trash() && self.browser.active() == 0 {
+            return;
+        }
+        if self.browser.selection().len() > 1 {
+            self.ask_batch_rename();
             return;
         }
         let Some(entry) = self.browser.selected() else {
@@ -945,7 +1019,7 @@ impl FilesView {
         self.size_slider = Some(self.insert(slider));
     }
 
-    fn choice(&self) -> impl Fn(&str) + 'static {
+    pub(crate) fn choice(&self) -> impl Fn(&str) + 'static {
         let send = sender(&self.signals);
         move |action: &str| send(Signal::Choice(action.to_owned()))
     }
@@ -970,12 +1044,14 @@ impl FilesView {
             )
             .cancel(&L10N.tr("cancel"), "cancel")
             .primary(&L10N.tr("delete"), "confirm"),
-            Sheet::Conflict { .. } | Sheet::GoTo(_) => return,
+            Sheet::Conflict { .. } | Sheet::GoTo(_) | Sheet::OpenWith(_) | Sheet::Rename(_) => {
+                return;
+            }
         };
         self.show_sheet(alert, sheet, None);
     }
 
-    fn show_sheet(
+    pub(crate) fn show_sheet(
         &mut self,
         widget: impl Widget + 'static,
         sheet: Sheet,

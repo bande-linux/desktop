@@ -34,8 +34,9 @@ impl Session {
 
     pub fn on(driver: &str) -> Self {
         let path = card_path(driver);
-        let (output, DrmNotifiers { session, device }) =
-            DrmBackend::open(Some(&path)).expect("the compositor takes the card through libseat");
+        let (output, DrmNotifiers { session, device }) = DrmBackend::open(Some(&path))
+            .expect("the compositor takes the card through libseat")
+            .expect("the card drives a connected display");
         let first = output
             .outputs()
             .into_iter()

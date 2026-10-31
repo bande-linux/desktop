@@ -15,11 +15,14 @@ use smithay::backend::renderer::ImportDma;
 use smithay::backend::session::libseat::{LibSeatSession, LibSeatSessionNotifier};
 use smithay::backend::session::{Event as SessionEvent, Session};
 use smithay::output::OutputModeSource;
+use smithay::reexports::calloop::generic::Generic;
+use smithay::reexports::calloop::{EventLoop, Interest, Mode as Trigger, PostAction};
 use smithay::reexports::drm::control::{
     Device as ControlDevice, Mode, ModeTypeFlags, connector, crtc, property,
 };
 use smithay::reexports::input::Libinput;
 use smithay::reexports::rustix::fs::OFlags;
+use smithay::reexports::udev::MonitorBuilder;
 use smithay::reexports::wayland_protocols::wp::linux_dmabuf::zv1::server::zwp_linux_dmabuf_feedback_v1::TrancheFlags;
 use smithay::utils::{Clock, DeviceFd, Monotonic, Size};
 use smithay::wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder};
@@ -179,6 +182,21 @@ fn cards() -> Result<Vec<PathBuf>, DrmBackendError> {
     Ok(cards)
 }
 
+fn shows_connected_display(connectors: &Path) -> bool {
+    let read = |connector: &Path, attribute: &str| {
+        std::fs::read_to_string(connector.join(attribute)).unwrap_or_default()
+    };
+    std::fs::read_dir(connectors)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .any(|connector| {
+            read(&connector, "status").trim() == "connected"
+                && !read(&connector, "modes").trim().is_empty()
+        })
+}
+
 fn event_time(metadata: Option<DrmEventMetadata>) -> Duration {
     match metadata.map(|metadata| metadata.time) {
         Some(DrmEventTime::Monotonic(time)) => time,
@@ -197,7 +215,33 @@ fn connected(device: &DrmDevice) -> Result<Vec<connector::Info>, DrmBackendError
 }
 
 impl DrmBackend {
-    pub fn open(path: Option<&Path>) -> Result<(Self, DrmNotifiers), DrmBackendError> {
+    pub fn wait_for_display(after_next_change: bool) -> Result<(), DrmBackendError> {
+        let connectors = Path::new("/sys/class/drm");
+        let monitor = MonitorBuilder::new()?.match_subsystem("drm")?.listen()?;
+        if !after_next_change && shows_connected_display(connectors) {
+            return Ok(());
+        }
+        tracing::info!("waiting for a display to be connected");
+        let mut event_loop: EventLoop<bool> = EventLoop::try_new()?;
+        event_loop
+            .handle()
+            .insert_source(
+                Generic::new(monitor, Interest::READ, Trigger::Level),
+                |_, monitor, connected| {
+                    monitor.as_ref().iter().for_each(drop);
+                    *connected = shows_connected_display(connectors);
+                    Ok(PostAction::Continue)
+                },
+            )
+            .map_err(|inserted| inserted.error)?;
+        let mut connected = false;
+        while !connected {
+            event_loop.dispatch(None, &mut connected)?;
+        }
+        Ok(())
+    }
+
+    pub fn open(path: Option<&Path>) -> Result<Option<(Self, DrmNotifiers)>, DrmBackendError> {
         let (mut session, session_notifier) = LibSeatSession::new()?;
         let candidates = match path {
             Some(path) => vec![path.to_path_buf()],
@@ -210,18 +254,26 @@ impl DrmBackend {
                     let mut backend = Self::with_device(session, candidate, device)?;
                     backend.rescan()?;
                     if backend.heads.is_empty() {
-                        return Err("no connected connector with a mode and a CRTC".into());
+                        tracing::warn!(
+                            "{} cannot drive any connected display yet",
+                            backend.path.display()
+                        );
+                        return Ok(None);
                     }
                     let notifiers = DrmNotifiers {
                         session: session_notifier,
                         device: notifier,
                     };
-                    return Ok((backend, notifiers));
+                    return Ok(Some((backend, notifiers)));
                 }
                 Err(error) => failures.push(format!("{}: {error}", candidate.display())),
             }
         }
-        Err(format!("no usable DRM device ({})", failures.join("; ")).into())
+        tracing::warn!(
+            "no DRM device can drive a display yet ({})",
+            failures.join("; ")
+        );
+        Ok(None)
     }
 
     fn open_card(
@@ -642,7 +694,7 @@ mod tests {
     use smithay::utils::Size;
     use unbound_edid::Edid;
 
-    use super::shows_another_display;
+    use super::{shows_another_display, shows_connected_display};
     use crate::screen::OutputConfig;
 
     fn display(serial: &str) -> Edid {
@@ -669,5 +721,31 @@ mod tests {
         assert!(!shows_another_display(&desk, Some(display("A1"))));
         assert!(shows_another_display(&desk, Some(display("B2"))));
         assert!(!shows_another_display(&desk, None));
+    }
+
+    fn connector(root: &std::path::Path, name: &str, status: &str, modes: &str) {
+        let connector = root.join(name);
+        std::fs::create_dir_all(&connector).expect("connector directory");
+        std::fs::write(connector.join("status"), status).expect("status");
+        std::fs::write(connector.join("modes"), modes).expect("modes");
+    }
+
+    #[test]
+    fn only_a_connected_connector_with_modes_shows_a_display() {
+        let sysfs = tempfile::tempdir().expect("sysfs directory");
+        std::fs::create_dir(sysfs.path().join("card1")).expect("card directory");
+        connector(sysfs.path(), "card2-HDMI-A-1", "disconnected\n", "");
+        assert!(!shows_connected_display(sysfs.path()));
+
+        connector(sysfs.path(), "card2-HDMI-A-1", "connected\n", "");
+        assert!(!shows_connected_display(sysfs.path()));
+
+        connector(
+            sysfs.path(),
+            "card2-HDMI-A-1",
+            "connected\n",
+            "2560x1440\n1920x1080\n",
+        );
+        assert!(shows_connected_display(sysfs.path()));
     }
 }

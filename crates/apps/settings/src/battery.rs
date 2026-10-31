@@ -1,14 +1,14 @@
 use std::sync::mpsc::{self, Sender};
 
+use unbound_status::history::charge_history;
 use zbus::blocking::{Connection, MessageIterator};
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};
 
 use crate::failure::unexpected;
 use crate::follow::{Update, Updates, spawn};
 
 const UPOWER_PATH: &str = "/org/freedesktop/UPower";
-const BATTERY_TYPE: u32 = 2;
 const CHARGING: u32 = 1;
 const FULL: u32 = 4;
 const PENDING_CHARGE: u32 = 5;
@@ -16,24 +16,11 @@ const HISTORY_SECONDS: u32 = 24 * 3600;
 const HISTORY_POINTS: u32 = 96;
 
 #[zbus::proxy(
-    interface = "org.freedesktop.UPower",
-    default_service = "org.freedesktop.UPower",
-    default_path = "/org/freedesktop/UPower"
-)]
-trait UPower {
-    fn enumerate_devices(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
-}
-
-#[zbus::proxy(
     interface = "org.freedesktop.UPower.Device",
     default_service = "org.freedesktop.UPower",
     default_path = "/org/freedesktop/UPower/devices/DisplayDevice"
 )]
 trait Device {
-    #[zbus(property, name = "Type")]
-    fn kind(&self) -> zbus::Result<u32>;
-    #[zbus(property)]
-    fn power_supply(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn is_present(&self) -> zbus::Result<bool>;
     #[zbus(property)]
@@ -44,12 +31,6 @@ trait Device {
     fn time_to_empty(&self) -> zbus::Result<i64>;
     #[zbus(property)]
     fn time_to_full(&self) -> zbus::Result<i64>;
-    fn get_history(
-        &self,
-        kind: &str,
-        timespan: u32,
-        resolution: u32,
-    ) -> zbus::Result<Vec<(u32, f64, u32)>>;
 }
 
 #[zbus::proxy(
@@ -104,19 +85,6 @@ pub fn charge_of(state: u32, to_empty: i64, to_full: i64) -> Charge {
     }
 }
 
-fn battery_device<'a>(system: &'a Connection) -> zbus::Result<Option<DeviceProxyBlocking<'a>>> {
-    for path in UPowerProxyBlocking::new(system)?.enumerate_devices()? {
-        let device = DeviceProxyBlocking::builder(system)
-            .path(path)?
-            .cache_properties(zbus::proxy::CacheProperties::No)
-            .build()?;
-        if device.kind()? == BATTERY_TYPE && device.power_supply().unwrap_or(false) {
-            return Ok(Some(device));
-        }
-    }
-    Ok(None)
-}
-
 fn profile_names(profiles: &PowerProfilesProxyBlocking<'_>) -> Vec<String> {
     profiles
         .profiles()
@@ -134,18 +102,10 @@ fn read(system: &Connection) -> Option<BatteryState> {
     if !display.is_present().ok()? {
         return None;
     }
-    let history = battery_device(system)
-        .ok()
-        .flatten()
-        .and_then(|device| {
-            device
-                .get_history("charge", HISTORY_SECONDS, HISTORY_POINTS)
-                .ok()
-        })
+    let history = charge_history(system, HISTORY_SECONDS, HISTORY_POINTS)
         .unwrap_or_default()
         .into_iter()
-        .filter(|(time, level, _)| *time > 0 && *level > 0.0)
-        .map(|(time, level, _)| (time, level))
+        .map(|sample| (sample.at, sample.percent))
         .collect();
     let profiles = PowerProfilesProxyBlocking::builder(system)
         .cache_properties(zbus::proxy::CacheProperties::No)

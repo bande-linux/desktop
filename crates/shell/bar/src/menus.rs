@@ -87,6 +87,11 @@ pub fn battery_menu(battery: &Battery, percentage_shown: bool) -> Menu {
 pub fn wifi_menu(wifi: &Wifi) -> Menu {
     let mut items =
         vec![item(&L10N.tr("wifi"), &Command::SetWifi(!wifi.enabled)).checked(wifi.enabled)];
+    if wifi.sign_in {
+        items.push(MenuItem::separator());
+        items.push(note(&L10N.tr("sign-in-required")));
+        items.push(item(&L10N.tr("sign-in"), &Command::SignIn));
+    }
     if wifi.enabled {
         let mut networks: Vec<_> = wifi.networks.iter().collect();
         networks.sort_by(|a, b| {
@@ -158,11 +163,30 @@ pub fn bluetooth_menu(bluetooth: &Bluetooth) -> Menu {
         items.push(MenuItem::separator());
         items.push(note(&L10N.tr("devices")));
         for gadget in &bluetooth.devices {
+            let title = match gadget.battery {
+                Some(percent) => L10N.tr_args(
+                    "device-battery",
+                    [
+                        ("name", gadget.name.clone().into()),
+                        ("percent", percent.into()),
+                    ],
+                ),
+                None => gadget.name.clone(),
+            };
             items.push(
-                item(&gadget.name, &Command::ToggleGadget(gadget.address.clone()))
+                item(&title, &Command::ToggleGadget(gadget.address.clone()))
                     .checked(gadget.connected),
             );
         }
+        let forgettable = bluetooth
+            .devices
+            .iter()
+            .map(|gadget| item(&gadget.name, &Command::ForgetGadget(gadget.address.clone())))
+            .collect();
+        items.push(MenuItem::submenu(
+            &L10N.tr("forget-device"),
+            Menu::new(forgettable),
+        ));
     }
     items.push(MenuItem::separator());
     items.push(settings("bluetooth"));

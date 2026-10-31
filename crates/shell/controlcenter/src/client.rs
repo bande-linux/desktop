@@ -19,6 +19,7 @@ use unbound_network::NetworkManager;
 use unbound_notify::client::NotificationCenter;
 use unbound_power::backlight::{Backlight, SYSFS_BACKLIGHT};
 use unbound_power::logind::own_session;
+use unbound_status::captive::open_page;
 use unbound_status::session::full_name;
 use unbound_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
 use unbound_toolkit::{
@@ -28,7 +29,7 @@ use unbound_toolkit::{
 };
 use unbound_xdg::{
     DesktopEntry, ICON_THEMES, applications, current_desktops, data_dirs, find_icon,
-    path_from_file_uri, running_app, spawn_detached,
+    path_from_file_uri, remember_running_apps, running_app, spawn_detached,
 };
 use zbus::blocking::Connection;
 
@@ -194,6 +195,10 @@ impl ControlCenter {
             .and_then(|network| network.networks().ok())
             .and_then(|networks| networks.into_iter().find(|found| found.current))
             .map(|current| current.name());
+        let sign_in = self
+            .network
+            .as_ref()
+            .is_some_and(|network| matches!(network.sign_in_page(), Ok(Some(_))));
         let bluetooth = self.bluetooth.as_ref().and_then(|bluetooth| {
             bluetooth
                 .available()
@@ -229,6 +234,7 @@ impl ControlCenter {
         Status {
             wifi,
             network,
+            sign_in,
             bluetooth,
             do_not_disturb,
             volume: output.map(|output| output.level.volume),
@@ -294,10 +300,15 @@ impl ControlCenter {
         );
     }
 
-    fn choose_network(&self, window: &mut Window) {
+    fn choose_network(&mut self, window: &mut Window) {
         let Some(network) = &self.network else {
             return;
         };
+        if let Ok(Some(page)) = network.sign_in_page() {
+            open_page(&page);
+            self.dismiss(window);
+            return;
+        }
         let _ = network.scan();
         let choices: Vec<_> = network
             .networks()
@@ -468,6 +479,7 @@ impl ControlCenter {
                 "shut-down" => SessionEnd::ShutDown,
                 _ => SessionEnd::LogOut,
             };
+            remember_running_apps(&window.running_apps());
             if let Err(error) = window.confirm_session_end(ending) {
                 tracing::warn!("cannot ask to end the session: {error}");
             }

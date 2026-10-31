@@ -7,6 +7,7 @@ mod identity;
 mod launch;
 mod mime;
 mod mimeapps;
+mod reopen;
 mod uri;
 
 use std::sync::LazyLock;
@@ -34,5 +35,8 @@ pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN};
 pub use mimeapps::{
     MimeApps, cache_home, config_dirs, config_home, data_home, mimeapps_paths, set_default_app,
     state_home,
+};
+pub use reopen::{
+    apps_to_reopen, remember_apps, remember_running_apps, reopen_file, take_apps_to_reopen,
 };
 pub use uri::{file_uri, path_from_file_uri, percent_decode, percent_encode};

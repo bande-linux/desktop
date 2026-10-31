@@ -30,6 +30,7 @@ impl Battery {
 pub struct Wifi {
     pub enabled: bool,
     pub networks: Vec<Network>,
+    pub sign_in: bool,
 }
 
 impl Wifi {
@@ -57,6 +58,7 @@ pub struct Gadget {
     pub address: String,
     pub name: String,
     pub connected: bool,
+    pub battery: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

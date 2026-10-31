@@ -2,7 +2,7 @@
 
 use unbound_network::{Error, JoinOutcome, NetworkManager, Security, Wired};
 use unbound_test_bus::SessionBus;
-use unbound_test_bus::networkmanager::FakeNetworkManager;
+use unbound_test_bus::networkmanager::{CHECK_URI, CONNECTIVITY_PORTAL, FakeNetworkManager};
 
 struct Fixture {
     fake: FakeNetworkManager,
@@ -176,5 +176,19 @@ fn wired_status_reports_cable_and_connection() {
             cable: true,
             connected: false
         })
+    );
+}
+
+#[test]
+fn a_captive_portal_asks_to_sign_in_at_the_check_page() {
+    let fixture = start();
+    assert_eq!(fixture.client.sign_in_page().expect("full"), None);
+    fixture
+        .fake
+        .set_connectivity(CONNECTIVITY_PORTAL)
+        .expect("portal");
+    assert_eq!(
+        fixture.client.sign_in_page().expect("portal"),
+        Some(CHECK_URI.to_owned())
     );
 }

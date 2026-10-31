@@ -9,6 +9,7 @@ repository.workspace = true
 accesskit.workspace = true
 jiff.workspace = true
 tracing.workspace = true
+unbound-bluetooth.workspace = true
 unbound-config.workspace = true
 unbound-datetime.workspace = true
 unbound-dock-model.workspace = true

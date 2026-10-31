@@ -1,3 +1,4 @@
+pub mod captive;
 pub mod clock;
 pub mod dbusmenu;
 pub mod devices;

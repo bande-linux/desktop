@@ -120,8 +120,8 @@ impl SegmentedControl {
         let offset = target.x - self.frame.x;
         match &mut self.pill {
             Some((x, width)) => {
-                x.animate_to(cx, offset, Spring::QUICK);
-                width.animate_to(cx, target.width, Spring::QUICK);
+                cx.animate(x, offset, Spring::QUICK);
+                cx.animate(width, target.width, Spring::QUICK);
             }
             None => self.pill = Some((Animated::points(offset), Animated::points(target.width))),
         }
@@ -132,7 +132,7 @@ impl SegmentedControl {
         let index = self.selected?;
         let target = self.segment(index);
         let (x, width) = match &self.pill {
-            Some((x, width)) => (self.frame.x + x.value(cx), width.value(cx)),
+            Some((x, width)) => (self.frame.x + cx.sample(x), cx.sample(width)),
             None => (target.x, target.width),
         };
         Some(Rect::new(x, self.frame.y, width, self.frame.height).inset(INSET))

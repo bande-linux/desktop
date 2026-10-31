@@ -1,4 +1,3 @@
-mod animation;
 mod button;
 mod checkbox;
 mod clock;
@@ -36,7 +35,6 @@ use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 
-pub use animation::Animated;
 pub use button::{BUTTON_HEIGHT, Button};
 pub use checkbox::{CHECKBOX_SIZE, CheckState, Checkbox};
 pub use clock::{FrameTime, frame_time, request_wake, set_frame_time, take_wake};
@@ -68,6 +66,8 @@ pub use toggle::{SWITCH_SIZE, Toggle};
 pub use tooltip::TOOLTIP_DELAY;
 use tooltip::Tooltips;
 pub use unbound_spring::Spring;
+
+pub type Animated = unbound_spring::Animated<Instant>;
 
 use unbound_l10n::Localizer;
 
@@ -208,8 +208,18 @@ impl Context {
         self.now
     }
 
-    pub fn animation_start(&self) -> Instant {
-        self.start
+    pub fn animate(&self, animated: &mut Animated, target: f32, spring: Spring) {
+        if animated.animate_at(self.start, self.reduce_motion, target, spring) {
+            self.animating.set(true);
+        }
+    }
+
+    pub fn sample(&self, animated: &Animated) -> f32 {
+        let (value, moving) = animated.value_at(self.now);
+        if moving {
+            self.animating.set(true);
+        }
+        value
     }
 
     pub fn wake_at(&self, at: Instant) {
@@ -564,7 +574,7 @@ impl Ui {
         self.captured = None;
         let previous_focus = self.cx.focus.take();
         let mut shown = Animated::new(0.0);
-        shown.animate_to(&self.cx, 1.0, Spring::QUICK);
+        self.cx.animate(&mut shown, 1.0, Spring::QUICK);
         self.sheet = Some(Sheet {
             widget,
             shown,
@@ -600,7 +610,7 @@ impl Ui {
             return;
         }
         sheet.closing = true;
-        sheet.shown.animate_to(&self.cx, 0.0, Spring::QUICK);
+        self.cx.animate(&mut sheet.shown, 0.0, Spring::QUICK);
         self.cx.focus = sheet.previous_focus;
         self.hovered.clear();
         self.captured = None;
@@ -612,7 +622,7 @@ impl Ui {
             .place(&mut self.cx, Rect::new(0.0, 0.0, size.width, size.height));
         if let Some(sheet) = &mut self.sheet {
             let measured = sheet.widget.measure(&mut self.cx, size);
-            let shown = sheet.shown.value(&self.cx);
+            let shown = self.cx.sample(&sheet.shown);
             let y = match sheet.floating {
                 true => {
                     ((size.height - measured.height) / 3.0).round() - DIALOG_RISE * (1.0 - shown)
@@ -674,7 +684,7 @@ impl Ui {
         self.root.paint(&self.cx, &mut items);
         let mut above = Vec::new();
         if let Some(sheet) = &self.sheet {
-            let shown = sheet.shown.value(&self.cx);
+            let shown = self.cx.sample(&sheet.shown);
             if sheet.closing && shown <= 0.001 {
                 self.sheet = None;
             } else {

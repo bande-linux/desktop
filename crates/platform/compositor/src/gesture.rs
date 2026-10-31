@@ -8,7 +8,7 @@ use smithay::input::pointer::{
 };
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, SERIAL_COUNTER};
-use unbound_spring::{Animation, Decay, Spring, State as Phase, rubber_band};
+use unbound_spring::{Animated, Decay, Spring, State as Phase, rubber_band};
 
 use crate::motion::Tick;
 use crate::state::{Compositor, State};
@@ -146,8 +146,7 @@ impl Tracker {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ShowDesktop {
     tracker: Option<Tracker>,
-    settle: Option<Animation>,
-    last: Option<Duration>,
+    settle: Option<Animated<Duration>>,
     progress: f64,
     target: f64,
     focus_before: Option<WlSurface>,
@@ -165,14 +164,13 @@ impl ShowDesktop {
     fn settle_to(&mut self, target: f64, velocity: f64, spring: Spring) {
         self.tracker = None;
         self.target = target;
-        self.last = None;
-        self.settle = Some(Animation::new(
-            spring,
+        self.settle = Some(Animated::released(
             Phase {
                 position: self.progress,
                 velocity,
             },
             target,
+            spring,
         ));
     }
 }
@@ -235,13 +233,11 @@ impl State {
         let Some(settle) = desktop.settle.as_mut() else {
             return;
         };
-        let step = tick.step_since(desktop.last);
-        desktop.last = Some(tick.time);
-        desktop.progress = settle.advance(step).position;
-        if settle.is_at_rest(precision) {
+        let now = tick.drive(settle);
+        desktop.progress = settle.state_at(now).position;
+        if settle.is_at_rest(now, precision) {
             desktop.progress = desktop.target;
             desktop.settle = None;
-            desktop.last = None;
         }
         self.needs_redraw = true;
     }
@@ -250,7 +246,6 @@ impl State {
         let was_shown = self.desktop.target != 0.0;
         self.close_menus();
         self.desktop.settle = None;
-        self.desktop.last = None;
         self.desktop.tracker = Some(Tracker::new(self.desktop.progress, time, 1.0));
         self.refocus_pointer();
         Route::Desktop {

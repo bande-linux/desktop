@@ -276,7 +276,7 @@ impl Widget for Card {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let shown = self.appear.value(cx).clamp(0.0, 1.0);
+        let shown = cx.sample(&self.appear).clamp(0.0, 1.0);
         let shape = Shape::rounded(self.frame, Radius::XL);
         let mut card = vec![
             Item::Shadow {

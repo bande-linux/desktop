@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use smithay::desktop::layer_map_for_output;
 use smithay::utils::{Logical, Physical, Point, Rectangle, Size};
-use unbound_spring::{Animation, Spring, State as Phase};
+use unbound_spring::{Animated, Spring, State as Phase};
 
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -24,10 +24,13 @@ pub(crate) struct Tick {
 }
 
 impl Tick {
-    pub(crate) fn step_since(&self, last: Option<Duration>) -> f64 {
-        last.map_or(self.refresh.as_secs_f64(), |last| {
-            self.time.as_secs_f64() - last.as_secs_f64()
-        })
+    fn lead(&self) -> Duration {
+        self.time + self.refresh
+    }
+
+    pub(crate) fn drive(&self, animated: &mut Animated<Duration>) -> Duration {
+        animated.start_at(self.time);
+        self.lead()
     }
 }
 
@@ -80,89 +83,92 @@ impl Look {
 #[derive(Debug, Clone)]
 pub(crate) struct Motion {
     spring: Spring,
-    channels: [Animation; 5],
-    last: Option<Duration>,
+    channels: [Animated<Duration>; 5],
+    targets: [f64; 5],
+    now: Option<Duration>,
     at_rest: bool,
+}
+
+fn still(value: f64) -> Phase {
+    Phase {
+        position: value,
+        velocity: 0.0,
+    }
 }
 
 impl Motion {
     pub(crate) fn new(spring: Spring, from: Look, to: Look) -> Self {
-        let (from, to) = (from.values(), to.values());
+        let (from, targets) = (from.values(), to.values());
         Self {
             spring,
             channels: std::array::from_fn(|index| {
-                Animation::new(
-                    spring,
-                    Phase {
-                        position: from[index],
-                        velocity: 0.0,
-                    },
-                    to[index],
-                )
+                Animated::released(still(from[index]), targets[index], spring)
             }),
-            last: None,
+            targets,
+            now: None,
             at_rest: false,
         }
     }
 
+    fn state(&self, index: usize) -> Phase {
+        self.channels[index].state_at(self.now.unwrap_or_default())
+    }
+
     pub(crate) fn look(&self) -> Look {
-        Look::from_values(
-            self.channels
-                .each_ref()
-                .map(|channel| channel.state().position),
-        )
+        Look::from_values(std::array::from_fn(|index| self.state(index).position))
     }
 
     pub(crate) fn shown(&self) -> Option<Look> {
-        self.last.map(|_| self.look())
+        self.now.map(|_| self.look())
+    }
+
+    fn restart(&mut self, index: usize, from: Phase) {
+        self.channels[index] = Animated::released(from, self.targets[index], self.spring);
+        if let Some(now) = self.now {
+            self.channels[index].start_at(now);
+        }
+        self.at_rest = false;
     }
 
     pub(crate) fn retarget(&mut self, to: Look) {
-        for (channel, target) in self.channels.iter_mut().zip(to.values()) {
-            if channel.target() != target {
-                channel.retarget(target);
-                self.at_rest = false;
+        for (index, target) in to.values().into_iter().enumerate() {
+            if self.targets[index] != target {
+                self.targets[index] = target;
+                self.restart(index, self.state(index));
             }
         }
     }
 
     pub(crate) fn translate(&mut self, dx: f64) {
-        let channel = &mut self.channels[0];
-        let state = channel.state();
-        *channel = Animation::new(
-            self.spring,
+        let state = self.state(0);
+        self.restart(
+            0,
             Phase {
                 position: state.position + dx,
                 velocity: state.velocity,
             },
-            channel.target(),
         );
-        self.at_rest = false;
     }
 
     pub(crate) fn advance(&mut self, tick: Tick) {
-        let step = tick.step_since(self.last);
-        self.last = Some(tick.time);
         for channel in &mut self.channels {
-            channel.advance(step);
+            channel.start_at(tick.time);
         }
+        let now = tick.lead();
+        self.now = Some(now);
         let [x, y, w, h, alpha] = &self.channels;
         let pixel = SETTLED_PIXELS / tick.scale;
-        self.at_rest = [x, y, w, h].iter().all(|channel| channel.is_at_rest(pixel))
-            && alpha.is_at_rest(SETTLED_ALPHA);
+        self.at_rest = [x, y, w, h]
+            .iter()
+            .all(|channel| channel.is_at_rest(now, pixel))
+            && alpha.is_at_rest(now, SETTLED_ALPHA);
     }
 
     pub(crate) fn place(&mut self, rect: Rectangle<f64, Logical>) {
         let values = Look::shown(rect).values();
-        for (channel, value) in self.channels.iter_mut().zip(values).take(4) {
-            *channel = Animation::new(
-                Spring::STANDARD,
-                Phase {
-                    position: value,
-                    velocity: 0.0,
-                },
-                value,
-            );
+        for (index, value) in values.into_iter().enumerate().take(4) {
+            self.targets[index] = value;
+            self.channels[index] = Animated::released(still(value), value, Spring::STANDARD);
         }
     }
 
@@ -408,7 +414,7 @@ impl State {
             || self.switcher.is_animating()
             || self.assist.is_animating()
             || self.window_menus.is_animating()
-            || self.zoom.is_animating(self.progress_precision())
+            || self.zoom.is_animating()
             || self.is_flashing()
             || self.is_revealing()
             || self.windows.iter().any(|window| window.motion.is_some())

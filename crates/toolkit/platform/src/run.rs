@@ -54,7 +54,6 @@ pub trait App {
     }
 }
 
-const BUILT_IN_SOURCES: usize = 3;
 const SOURCE_EVENTS: PollFlags = PollFlags::IN.union(PollFlags::PRI);
 
 fn earliest(deadlines: impl IntoIterator<Item = Option<Instant>>) -> Option<Instant> {
@@ -66,152 +65,6 @@ fn read_events(guard: ReadEventsGuard) -> Result<(), WindowError> {
         Ok(_) => Ok(()),
         Err(WaylandError::Io(error)) if error.kind() == io::ErrorKind::WouldBlock => Ok(()),
         Err(error) => Err(error.into()),
-    }
-}
-
-pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
-    loop {
-        let guard = loop {
-            match window.queue.prepare_read() {
-                Some(guard) => break guard,
-                None => window.dispatch_pending()?,
-            }
-        };
-        read_events(guard)?;
-        window.dispatch_pending()?;
-        window.fire_repeats(Instant::now());
-        set_frame_time(window.frame_time());
-        for event in window.take_events() {
-            match event {
-                WindowEvent::CloseRequested => {
-                    if app.should_close(window) {
-                        window.close();
-                    }
-                    window.closed_by_button = false;
-                    continue;
-                }
-                WindowEvent::QuitRequested => {
-                    if app.should_quit(window) {
-                        window.close();
-                    }
-                    continue;
-                }
-                WindowEvent::Focus(focused) => window.accessibility.set_window_focused(focused),
-                _ => {}
-            }
-            app.event(window, event);
-        }
-        if window.is_closed() || app.finished() {
-            return Ok(());
-        }
-        let frame_drawn = window.wants_frame();
-        if frame_drawn {
-            set_frame_time(window.plan_frame());
-            let scene = app.scene(window);
-            window.draw(scene)?;
-            window.wake_ui_at(take_wake());
-            if app.animating() {
-                window.request_redraw();
-            }
-        }
-        window.set_text_input_area(app.text_input_area());
-        if window.accessibility.wants_tree(frame_drawn)
-            && let Some(tree) = app.accessibility()
-        {
-            window.publish_accessibility(tree);
-        }
-        window.flush()?;
-        let Some(guard) = window.queue.prepare_read() else {
-            continue;
-        };
-
-        let window_deadline = window.deadline();
-        let app_deadline = app.deadline();
-        let deadline = earliest([
-            window.state.input.repeat_deadline(),
-            window_deadline,
-            app_deadline,
-        ]);
-        let (wayland_ready, accessibility_ready, appearance_ready, pastes_ready, sources_ready) = {
-            let connection = guard.connection_fd();
-            let accessibility = window.accessibility.fd();
-            let appearance = window.appearance.borrow();
-            let appearance = appearance.fd();
-            let pastes = window.transfer_fds();
-            let sources = app.sources();
-            let mut fds = Vec::with_capacity(BUILT_IN_SOURCES + pastes.len() + sources.len());
-            fds.push(PollFd::new(&connection, PollFlags::IN));
-            fds.push(PollFd::new(&accessibility, PollFlags::IN));
-            fds.push(PollFd::new(&appearance, PollFlags::IN));
-            for fd in &pastes {
-                fds.push(PollFd::new(fd, PollFlags::IN));
-            }
-            for fd in &sources {
-                fds.push(PollFd::new(fd, SOURCE_EVENTS));
-            }
-            let timeout = deadline.map(|deadline| {
-                let wait = deadline.saturating_duration_since(Instant::now());
-                Timespec {
-                    tv_sec: i64::try_from(wait.as_secs()).unwrap_or(i64::MAX),
-                    tv_nsec: i64::from(wait.subsec_nanos()),
-                }
-            });
-            match poll(&mut fds, timeout.as_ref()) {
-                Ok(_) | Err(rustix::io::Errno::INTR) => {}
-                Err(error) => return Err(io::Error::from(error).into()),
-            }
-            let ready = |fd: &PollFd| !fd.revents().is_empty();
-            let wayland_ready = ready(&fds[0]);
-            let accessibility_ready = ready(&fds[1]);
-            let appearance_ready = ready(&fds[2]);
-            let pastes_ready = (0..pastes.len())
-                .filter(|index| ready(&fds[BUILT_IN_SOURCES + index]))
-                .collect::<Vec<_>>();
-            let sources_ready = (0..sources.len())
-                .filter(|index| ready(&fds[BUILT_IN_SOURCES + pastes.len() + index]))
-                .collect::<Vec<_>>();
-            (
-                wayland_ready,
-                accessibility_ready,
-                appearance_ready,
-                pastes_ready,
-                sources_ready,
-            )
-        };
-        if wayland_ready {
-            read_events(guard)?;
-        } else {
-            drop(guard);
-        }
-        set_frame_time(window.frame_time());
-        if accessibility_ready {
-            for request in window.accessibility.take_requests() {
-                if !window.perform_window_action(&request) {
-                    app.event(window, WindowEvent::Accessibility(request));
-                }
-            }
-        }
-        let change = appearance_ready
-            .then(|| window.appearance.borrow_mut().take_change())
-            .flatten();
-        if let Some(appearance) = change {
-            window.request_redraw();
-            let appearance = window.for_role(appearance);
-            app.event(window, WindowEvent::AppearanceChanged(appearance));
-        }
-        for index in pastes_ready.into_iter().rev() {
-            window.read_transfer(index);
-        }
-        for index in sources_ready {
-            app.source_ready(window, index);
-        }
-        let now = Instant::now();
-        if window_deadline.is_some_and(|deadline| deadline <= now) {
-            window.tick(now);
-        }
-        if app_deadline.is_some_and(|deadline| deadline <= now) {
-            app.tick(window, now);
-        }
     }
 }
 
@@ -253,6 +106,78 @@ pub trait Surfaces {
     }
 }
 
+struct Single<'a, A> {
+    window: &'a mut Window,
+    app: &'a mut A,
+}
+
+impl<A: App> Surfaces for Single<'_, A> {
+    fn windows(&self) -> &[Window] {
+        std::slice::from_ref(self.window)
+    }
+
+    fn windows_mut(&mut self) -> &mut [Window] {
+        std::slice::from_mut(self.window)
+    }
+
+    fn scene(&mut self, _index: usize) -> Scene {
+        self.app.scene(self.window)
+    }
+
+    fn event(&mut self, _index: usize, event: WindowEvent) {
+        match event {
+            WindowEvent::CloseRequested => {
+                if self.app.should_close(self.window) {
+                    self.window.close();
+                }
+                self.window.closed_by_button = false;
+            }
+            WindowEvent::QuitRequested => {
+                if self.app.should_quit(self.window) {
+                    self.window.close();
+                }
+            }
+            event => self.app.event(self.window, event),
+        }
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        self.app.sources()
+    }
+
+    fn source_ready(&mut self, index: usize) {
+        self.app.source_ready(self.window, index);
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.app.deadline()
+    }
+
+    fn tick(&mut self, now: Instant) {
+        self.app.tick(self.window, now);
+    }
+
+    fn animating(&self, _index: usize) -> bool {
+        self.app.animating()
+    }
+
+    fn accessibility(&self, _index: usize) -> Option<TreeUpdate> {
+        self.app.accessibility()
+    }
+
+    fn text_input_area(&self, _index: usize) -> Option<Rect> {
+        self.app.text_input_area()
+    }
+
+    fn closed(&mut self) -> bool {
+        self.window.is_closed() || self.app.finished()
+    }
+}
+
+pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
+    run_surfaces(&mut Single { window, app })
+}
+
 fn surfaces(app: &impl Surfaces) -> Vec<WlSurface> {
     app.windows()
         .iter()
@@ -266,7 +191,18 @@ fn position(app: &impl Surfaces, surface: &WlSurface) -> Option<usize> {
         .position(|window| window.surface == *surface)
 }
 
+fn read_arrived(window: &mut Window) -> Result<(), WindowError> {
+    let guard = loop {
+        match window.queue.prepare_read() {
+            Some(guard) => break guard,
+            None => window.dispatch_pending()?,
+        }
+    };
+    read_events(guard)
+}
+
 fn deliver(app: &mut impl Surfaces) -> Result<bool, WindowError> {
+    read_arrived(&mut app.windows_mut()[0])?;
     let now = Instant::now();
     for surface in surfaces(app) {
         let Some(index) = position(app, &surface) else {

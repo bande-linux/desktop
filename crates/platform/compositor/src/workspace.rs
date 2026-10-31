@@ -6,7 +6,7 @@ use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::Point;
 use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
-use unbound_spring::{Animation, Spring, State as Phase};
+use unbound_spring::{Animated, Spring, State as Phase};
 
 use crate::gesture::Tracker;
 use crate::motion::{Look, Tick, progress_precision};
@@ -33,8 +33,8 @@ pub(crate) struct Workspaces {
     spaces: Vec<Space>,
     active: usize,
     view: f64,
-    settle: Option<Animation>,
-    last: Option<Duration>,
+    settle: Option<Animated<Duration>>,
+    now: Option<Duration>,
     tracker: Option<Tracker>,
 }
 
@@ -48,7 +48,7 @@ impl Default for Workspaces {
             active: 0,
             view: 0.0,
             settle: None,
-            last: None,
+            now: None,
             tracker: None,
         }
     }
@@ -68,8 +68,8 @@ impl Workspaces {
     }
 
     pub(crate) fn shown_view(&self) -> f64 {
-        match (&self.settle, self.last) {
-            (Some(settle), None) => settle.target(),
+        match (&self.settle, self.now) {
+            (Some(_), None) => self.active as f64,
             _ => self.view,
         }
     }
@@ -137,7 +137,7 @@ impl Workspaces {
             .unwrap_or(self.active.min(self.spaces.len() - 1));
         self.view = self.active as f64;
         self.settle = None;
-        self.last = None;
+        self.now = None;
         self.tracker = None;
         taken
     }
@@ -149,33 +149,38 @@ impl Workspaces {
     fn shift_view(&mut self, by: f64) {
         self.view += by;
         if let Some(settle) = &mut self.settle {
-            let state = settle.state();
-            *settle = Animation::new(
-                Spring::STANDARD,
+            let state = settle.state_at(self.now.unwrap_or_default());
+            *settle = Animated::released(
                 Phase {
                     position: state.position + by,
                     velocity: state.velocity,
                 },
-                settle.target() + by,
+                self.active as f64,
+                Spring::STANDARD,
             );
+            if let Some(now) = self.now {
+                settle.start_at(now);
+            }
         }
     }
 
     fn settle_to(&mut self, index: usize, velocity: f64, spring: Spring) {
         let velocity = match &self.settle {
-            Some(settle) if velocity == 0.0 => settle.state().velocity,
+            Some(settle) if velocity == 0.0 => {
+                settle.state_at(self.now.unwrap_or_default()).velocity
+            }
             _ => velocity,
         };
         self.tracker = None;
         self.active = index;
-        self.last = None;
-        self.settle = Some(Animation::new(
-            spring,
+        self.now = None;
+        self.settle = Some(Animated::released(
             Phase {
                 position: self.view,
                 velocity,
             },
             index as f64,
+            spring,
         ));
     }
 }
@@ -584,13 +589,13 @@ impl State {
             let Some(settle) = workspaces.settle.as_mut() else {
                 continue;
             };
-            let step = tick.step_since(workspaces.last);
-            workspaces.last = Some(tick.time);
-            workspaces.view = settle.advance(step).position;
-            if settle.is_at_rest(precision) {
+            let now = tick.drive(settle);
+            workspaces.now = Some(now);
+            workspaces.view = settle.state_at(now).position;
+            if settle.is_at_rest(now, precision) {
                 workspaces.view = workspaces.active as f64;
                 workspaces.settle = None;
-                workspaces.last = None;
+                workspaces.now = None;
                 settled = true;
             }
             self.needs_redraw = true;
@@ -611,7 +616,7 @@ impl State {
         let screen = self.pointer_screen();
         let workspaces = &mut self.screens[screen].workspaces;
         workspaces.settle = None;
-        workspaces.last = None;
+        workspaces.now = None;
         let last = (workspaces.count() - 1) as f64;
         workspaces.tracker = Some(Tracker::new(workspaces.view, time, last));
     }

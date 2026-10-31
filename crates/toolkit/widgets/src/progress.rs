@@ -73,7 +73,7 @@ impl ProgressBar {
         let value = value.map(|value| value.clamp(0.0, 1.0));
         match (self.value, value) {
             (None, Some(value)) => self.shown.jump_to(value),
-            (_, Some(value)) => self.shown.animate_to(cx, value, Spring::QUICK),
+            (_, Some(value)) => cx.animate(&mut self.shown, value, Spring::QUICK),
             _ => {}
         }
         self.value = value;
@@ -121,7 +121,7 @@ impl Widget for ProgressBar {
         match self.value {
             None => paint_cells(cx, self.frame, self.sweep(cx), items),
             Some(_) => {
-                let lit = self.shown.value(cx) * CELLS as f32;
+                let lit = cx.sample(&self.shown) * CELLS as f32;
                 paint_cells(cx, self.frame, |cell| lit - cell, items);
             }
         }

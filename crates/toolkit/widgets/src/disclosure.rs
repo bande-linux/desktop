@@ -51,8 +51,11 @@ impl Disclosure {
             return false;
         }
         self.expanded = expanded;
-        self.turn
-            .animate_to(cx, if expanded { 1.0 } else { 0.0 }, Spring::QUICK);
+        cx.animate(
+            &mut self.turn,
+            if expanded { 1.0 } else { 0.0 },
+            Spring::QUICK,
+        );
         (self.on_toggle)(expanded);
         true
     }
@@ -103,7 +106,7 @@ impl Widget for Disclosure {
             (available.height - self.header_height - GAP).max(0.0),
         );
         self.content_size = self.content[0].measure(cx, below);
-        let shown = self.turn.value(cx);
+        let shown = cx.sample(&self.turn);
         let content = (self.content_size.height + GAP) * shown;
         Size::new(available.width, self.header_height + content.ceil())
     }
@@ -117,7 +120,7 @@ impl Widget for Disclosure {
             self.content_size.height,
         );
         let hidden = Rect::new(frame.x, frame.y + self.header_height, 0.0, 0.0);
-        let shown = self.expanded || self.turn.value(cx) > 0.0;
+        let shown = self.expanded || cx.sample(&self.turn) > 0.0;
         self.content[0].place(cx, if shown { content } else { hidden });
     }
 
@@ -127,7 +130,7 @@ impl Widget for Disclosure {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let header = self.header();
-        let turn = self.turn.value(cx);
+        let turn = cx.sample(&self.turn);
         let centre = Point::new(header.x + 7.0, header.y + header.height / 2.0);
         chevron(centre, turn, cx.palette.ink2, items);
         if let Some(paragraph) = &self.paragraph {

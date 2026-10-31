@@ -1,8 +1,12 @@
 use std::f64::consts::TAU;
 use std::fmt;
+use std::ops::Sub;
+use std::time::Duration;
 
 const CRITICAL_BAND: f64 = 1e-6;
 const REST_HORIZON: f64 = 0.02;
+const UNIT_PRECISION: f64 = 1.0 / 512.0;
+const POINT_PRECISION: f64 = 0.05;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct State {
@@ -120,47 +124,114 @@ impl Spring {
     }
 }
 
+fn is_settled(state: State, target: f64, precision: f64) -> bool {
+    (state.position - target).abs() <= precision && state.velocity.abs() * REST_HORIZON <= precision
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Animation {
+pub struct Animated<T> {
     spring: Spring,
     start: State,
     target: f64,
-    elapsed: f64,
+    since: Option<T>,
+    precision: f64,
 }
 
-impl Animation {
-    pub fn new(spring: Spring, start: State, target: f64) -> Self {
+impl<T> Default for Animated<T> {
+    fn default() -> Self {
+        Self::new(0.0)
+    }
+}
+
+impl<T> Animated<T> {
+    pub fn new(value: impl Into<f64>) -> Self {
+        Self::with_precision(value.into(), UNIT_PRECISION)
+    }
+
+    pub fn points(value: impl Into<f64>) -> Self {
+        Self::with_precision(value.into(), POINT_PRECISION)
+    }
+
+    const fn with_precision(value: f64, precision: f64) -> Self {
+        Self {
+            spring: Spring::QUICK,
+            start: State {
+                position: value,
+                velocity: 0.0,
+            },
+            target: value,
+            since: None,
+            precision,
+        }
+    }
+
+    pub fn released(start: State, target: f64, spring: Spring) -> Self {
         Self {
             spring,
             start,
             target,
-            elapsed: 0.0,
+            since: None,
+            precision: UNIT_PRECISION,
         }
     }
 
-    pub fn state(&self) -> State {
-        self.spring.state_at(self.start, self.target, self.elapsed)
+    pub fn target(&self) -> f32 {
+        self.target as f32
     }
 
-    pub fn target(&self) -> f64 {
-        self.target
+    pub fn start_at(&mut self, now: T) {
+        self.since.get_or_insert(now);
     }
 
-    pub fn advance(&mut self, seconds: f64) -> State {
-        self.elapsed += seconds;
-        self.state()
+    pub fn jump_to(&mut self, value: impl Into<f64>) {
+        *self = Self::with_precision(value.into(), self.precision);
+    }
+}
+
+impl<T: Copy + PartialOrd + Sub<Output = Duration>> Animated<T> {
+    pub fn state_at(&self, now: T) -> State {
+        match self.since {
+            Some(since) if now > since => {
+                self.spring
+                    .state_at(self.start, self.target, (now - since).as_secs_f64())
+            }
+            _ => self.start,
+        }
     }
 
-    pub fn retarget(&mut self, target: f64) {
-        self.start = self.state();
+    pub fn animate_at(
+        &mut self,
+        now: T,
+        reduce_motion: bool,
+        target: impl Into<f64>,
+        spring: Spring,
+    ) -> bool {
+        let target = target.into();
+        if target == self.target {
+            return false;
+        }
+        if reduce_motion && spring != Spring::FADE {
+            self.jump_to(target);
+            return false;
+        }
+        self.start = self.state_at(now);
+        self.spring = spring;
         self.target = target;
-        self.elapsed = 0.0;
+        self.since = Some(now);
+        true
     }
 
-    pub fn is_at_rest(&self, precision: f64) -> bool {
-        let state = self.state();
-        (state.position - self.target).abs() <= precision
-            && state.velocity.abs() * REST_HORIZON <= precision
+    pub fn is_at_rest(&self, now: T, precision: f64) -> bool {
+        is_settled(self.state_at(now), self.target, precision)
+    }
+
+    pub fn value_at(&self, now: T) -> (f32, bool) {
+        let state = self.state_at(now);
+        if is_settled(state, self.target, self.precision) {
+            (self.target as f32, false)
+        } else {
+            (state.position as f32, true)
+        }
     }
 }
 

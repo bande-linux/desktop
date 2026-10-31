@@ -5,7 +5,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Rectangle, Size};
 use smithay::wayland::compositor::{RectangleKind, SurfaceAttributes, with_states};
 use smithay::wayland::shell::wlr_layer::Layer;
-use unbound_spring::{Animation, Spring, State as Phase};
+use unbound_spring::{Animated, Spring};
 
 use crate::motion::{BAR_NAMESPACE, SETTLED_ALPHA};
 use crate::state::{Compositor, MENU_BAR_NAMESPACE, State, is_mapped};
@@ -19,8 +19,8 @@ pub(crate) enum Reveal {
         deadline: Duration,
     },
     Fading {
-        opacity: Animation,
-        last: Option<Duration>,
+        opacity: Animated<Duration>,
+        now: Duration,
     },
 }
 
@@ -72,29 +72,21 @@ impl State {
         }
         self.reveal = match self.reduce_motion {
             true => Reveal::Shown,
-            false => Reveal::Fading {
-                opacity: Animation::new(
-                    Spring::STANDARD,
-                    Phase {
-                        position: 0.0,
-                        velocity: 0.0,
-                    },
-                    1.0,
-                ),
-                last: None,
-            },
+            false => {
+                let mut opacity = Animated::new(0.0);
+                opacity.animate_at(now, false, 1.0, Spring::STANDARD);
+                Reveal::Fading { opacity, now }
+            }
         };
         self.needs_redraw = true;
     }
 
     pub(crate) fn animate_reveal(&mut self, time: Duration) {
-        let Reveal::Fading { opacity, last } = &mut self.reveal else {
+        let Reveal::Fading { opacity, now } = &mut self.reveal else {
             return;
         };
-        let step = last.map_or(Duration::ZERO, |last| time.saturating_sub(last));
-        *last = Some(time);
-        opacity.advance(step.as_secs_f64());
-        if opacity.is_at_rest(SETTLED_ALPHA) {
+        *now = time;
+        if opacity.is_at_rest(time, SETTLED_ALPHA) {
             self.reveal = Reveal::Shown;
         }
     }
@@ -107,7 +99,9 @@ impl State {
         match &self.reveal {
             Reveal::Shown => 1.0,
             Reveal::Holding { .. } => 0.0,
-            Reveal::Fading { opacity, .. } => opacity.state().position.clamp(0.0, 1.0) as f32,
+            Reveal::Fading { opacity, now } => {
+                opacity.state_at(*now).position.clamp(0.0, 1.0) as f32
+            }
         }
     }
 }

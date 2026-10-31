@@ -1132,8 +1132,8 @@ impl DockState {
                 cell.height,
             ),
             None => Rect::new(
-                cell.x + slot.shift.0.value(cx),
-                cell.y + slot.shift.1.value(cx),
+                cell.x + cx.sample(&slot.shift.0),
+                cell.y + cx.sample(&slot.shift.1),
                 cell.width,
                 cell.height,
             ),
@@ -1677,7 +1677,7 @@ impl DockState {
                 }
                 continue;
             }
-            let presence = slot.presence.value(cx).clamp(0.0, 1.0);
+            let presence = cx.sample(&slot.presence).clamp(0.0, 1.0);
             if presence <= 0.0 || slot.hidden {
                 continue;
             }
@@ -1689,7 +1689,7 @@ impl DockState {
                 Key::More => {}
                 Key::Trash => {
                     self.paint_name(slot, cell, &mut slot_items);
-                    let rect = scaled(self.icon_rect(cell), slot.press.value(cx));
+                    let rect = scaled(self.icon_rect(cell), cx.sample(&slot.press));
                     let image = if self.trash.is_full {
                         self.trash.full.as_ref().or(self.trash.empty.as_ref())
                     } else {
@@ -1747,7 +1747,7 @@ impl DockState {
         let Some(ghost) = &self.ghost else {
             return;
         };
-        let fade = ghost.fade.value(cx).clamp(0.0, 1.0);
+        let fade = cx.sample(&ghost.fade).clamp(0.0, 1.0);
         if fade <= 0.0 {
             return;
         }
@@ -1912,7 +1912,7 @@ impl DockState {
         }
         self.paint_name(slot, cell, items);
         let base = self.icon_rect(cell);
-        let mut factor = slot.press.value(cx);
+        let mut factor = cx.sample(&slot.press);
         let mut alpha = 1.0;
         if !self.reduce_motion {
             if let Some(since) = self.launching.get(app_id) {
@@ -1959,7 +1959,7 @@ impl DockState {
                 paint: cx.palette.warning.into(),
             });
         }
-        let dot = slot.dot.value(cx);
+        let dot = cx.sample(&slot.dot);
         if self.rail.is_some() {
             self.paint_rail_indicators(cx, base, app_id, dot, items);
         } else if dot > 0.0 {
@@ -1978,7 +1978,7 @@ impl DockState {
         }
         let entry = self.launcher.get(app_id).copied().unwrap_or_default();
         if entry.progress().is_some() {
-            let progress = slot.progress.value(cx).clamp(0.0, 1.0);
+            let progress = cx.sample(&slot.progress).clamp(0.0, 1.0);
             let track = Rect::new(
                 base.x + base.width * 0.12,
                 base.y + base.height - PROGRESS_HEIGHT - base.height * 0.08,
@@ -1995,7 +1995,7 @@ impl DockState {
                 paint: cx.palette.accent.into(),
             });
         }
-        let badge = slot.badge.value(cx).max(0.0);
+        let badge = cx.sample(&slot.badge).max(0.0);
         if badge > 0.0
             && let Some((_, text)) = &slot.badge_text
         {
@@ -2125,14 +2125,14 @@ impl DockState {
     }
 
     fn paint_label(&self, cx: &Context, items: &mut Vec<Item>) {
-        let opacity = self.label.opacity.value(cx).clamp(0.0, 1.0);
+        let opacity = cx.sample(&self.label.opacity).clamp(0.0, 1.0);
         if opacity <= 0.0 {
             return;
         }
         let Some((_, _, text)) = &self.label.text else {
             return;
         };
-        let along = self.label.along.value(cx);
+        let along = cx.sample(&self.label.along);
         let width = (text.width() + 20.0).ceil();
         let height = (text.height() + 10.0).ceil();
         let panel = self.panel;
@@ -2224,8 +2224,11 @@ impl Tile {
         let mut state = self.state.borrow_mut();
         if let Some(slot) = state.slots.iter_mut().find(|slot| slot.key == self.key) {
             slot.pressed = pressed;
-            slot.press
-                .animate_to(cx, if shown { PRESSED_SCALE } else { 1.0 }, Spring::QUICK);
+            cx.animate(
+                &mut slot.press,
+                if shown { PRESSED_SCALE } else { 1.0 },
+                Spring::QUICK,
+            );
         }
     }
 
@@ -2490,7 +2493,7 @@ impl Widget for Dock {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let state = self.state.borrow();
-        state.reveal.value(cx);
+        cx.sample(&state.reveal);
         state.paint(cx, items);
     }
 

@@ -99,7 +99,8 @@ mod tests {
             include_str!("access_keys.rs"),
             include_str!("alert.rs"),
             include_str!("logind.rs"),
-            include_str!("switcher.rs"),
+            include_str!("switcher/mod.rs"),
+            include_str!("switcher/paint.rs"),
             include_str!("window_menu.rs"),
         ];
         assert_eq!(

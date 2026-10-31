@@ -100,7 +100,7 @@ impl Headless {
         unaccelerated: Point<f64, Logical>,
         utime: u64,
     ) {
-        let time = u32::try_from(utime / 1000 % u64::from(u32::MAX)).unwrap_or_default();
+        let time = u32::try_from((utime / 1000) & u64::from(u32::MAX)).unwrap_or_default();
         let from = self.state.pointer_location;
         let Some(pointer) = self.state.seat.get_pointer() else {
             self.move_pointer_to(from + delta, time);

@@ -187,30 +187,28 @@ impl State {
         self.start_grab(start, surface, Operation::Resize, Undo::Resize, serial);
     }
 
-    pub(crate) fn drag_from_anywhere(&mut self, surface: &WlSurface, button: u32) -> bool {
+    pub(crate) fn drag_from_anywhere(&mut self, surface: &WlSurface, button: u32) {
         let held = self
             .seat
             .get_keyboard()
             .map(|keyboard| keyboard.modifier_state())
             .is_some_and(|held| held.ctrl && held.logo && !held.alt && !held.shift);
         if !held {
-            return false;
+            return;
         }
         match button {
             BTN_LEFT => self.move_from_title_bar(surface, button),
             BTN_RIGHT => {
-                let Some(rect) = self
+                if let Some(rect) = self
                     .window_index(surface)
                     .and_then(|index| self.windows[index].geometry())
-                else {
-                    return false;
-                };
-                let edge = edge_toward(rect, whole(self.pointer_location));
-                self.resize_from_frame(surface, edge, button);
+                {
+                    let edge = edge_toward(rect, whole(self.pointer_location));
+                    self.resize_from_frame(surface, edge, button);
+                }
             }
-            _ => return false,
+            _ => {}
         }
-        self.held_window.is_some()
     }
 
     fn start_grab(

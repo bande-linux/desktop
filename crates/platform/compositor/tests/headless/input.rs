@@ -158,6 +158,49 @@ fn a_window_that_inhibits_shortcuts_gets_super_w_instead_of_closing() {
 }
 
 #[test]
+fn control_super_drag_moves_a_window_from_anywhere_inside_it() {
+    let mut server = server();
+    let mut client = client_with_window(&mut server, 64);
+    client.exchange(&mut server);
+    let before = geometry(&server);
+    let inside = before.location + Point::from((32, 32));
+
+    server.key(KEY_LEFTCTRL, true, 0);
+    server.key(KEY_LEFTMETA, true, 0);
+    server.move_pointer_to(inside.to_f64(), 1);
+    server.press_button(BTN_LEFT, true, 2);
+    server.move_pointer_to((inside + Point::from((20, 15))).to_f64(), 3);
+    server.press_button(BTN_LEFT, false, 4);
+    server.key(KEY_LEFTMETA, false, 5);
+    server.key(KEY_LEFTCTRL, false, 5);
+    client.exchange(&mut server);
+
+    assert_eq!(
+        geometry(&server).location,
+        before.location + Point::from((20, 15))
+    );
+    assert!(!client.buttons().contains(&(BTN_LEFT, true)));
+}
+
+#[test]
+fn a_plain_drag_inside_a_window_reaches_the_app_and_leaves_the_window_in_place() {
+    let mut server = server();
+    let mut client = client_with_window(&mut server, 64);
+    client.exchange(&mut server);
+    let before = geometry(&server);
+    let inside = before.location + Point::from((32, 32));
+
+    server.move_pointer_to(inside.to_f64(), 1);
+    server.press_button(BTN_LEFT, true, 2);
+    server.move_pointer_to((inside + Point::from((20, 15))).to_f64(), 3);
+    server.press_button(BTN_LEFT, false, 4);
+    client.exchange(&mut server);
+
+    assert_eq!(geometry(&server).location, before.location);
+    assert!(client.buttons().contains(&(BTN_LEFT, true)));
+}
+
+#[test]
 fn super_q_asks_every_window_of_the_focused_app_to_close() {
     let mut server = server();
     let mut other = client_with_window(&mut server, 128);

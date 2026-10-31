@@ -51,6 +51,34 @@ pub(crate) struct WindowGrab {
     held: Option<(WlSurface, Operation)>,
 }
 
+const BTN_LEFT: u32 = 0x110;
+const BTN_RIGHT: u32 = 0x111;
+
+fn edge_toward(window: Rect, point: Point<i32, Logical>) -> ResizeEdge {
+    let third = |start: i32, length: i32, at: i32| {
+        let offset = at - start;
+        if offset * 3 < length {
+            -1
+        } else if offset * 3 > length * 2 {
+            1
+        } else {
+            0
+        }
+    };
+    let horizontal = third(window.location.x, window.size.w, point.x);
+    let vertical = third(window.location.y, window.size.h, point.y);
+    match (horizontal, vertical) {
+        (-1, -1) => ResizeEdge::TopLeft,
+        (-1, 1) => ResizeEdge::BottomLeft,
+        (1, -1) => ResizeEdge::TopRight,
+        (-1, _) => ResizeEdge::Left,
+        (1, 0) => ResizeEdge::Right,
+        (0, -1) => ResizeEdge::Top,
+        (0, 1) => ResizeEdge::Bottom,
+        _ => ResizeEdge::BottomRight,
+    }
+}
+
 fn whole(point: Point<f64, Logical>) -> Point<i32, Logical> {
     (point.x.round() as i32, point.y.round() as i32).into()
 }
@@ -157,6 +185,32 @@ impl State {
         };
         let serial = SERIAL_COUNTER.next_serial();
         self.start_grab(start, surface, Operation::Resize, Undo::Resize, serial);
+    }
+
+    pub(crate) fn drag_from_anywhere(&mut self, surface: &WlSurface, button: u32) -> bool {
+        let held = self
+            .seat
+            .get_keyboard()
+            .map(|keyboard| keyboard.modifier_state())
+            .is_some_and(|held| held.ctrl && held.logo && !held.alt && !held.shift);
+        if !held {
+            return false;
+        }
+        match button {
+            BTN_LEFT => self.move_from_title_bar(surface, button),
+            BTN_RIGHT => {
+                let Some(rect) = self
+                    .window_index(surface)
+                    .and_then(|index| self.windows[index].geometry())
+                else {
+                    return false;
+                };
+                let edge = edge_toward(rect, whole(self.pointer_location));
+                self.resize_from_frame(surface, edge, button);
+            }
+            _ => return false,
+        }
+        self.held_window.is_some()
     }
 
     fn start_grab(
@@ -410,5 +464,31 @@ impl PointerGrab<State> for WindowGrab {
             Operation::Resize => data.end_resize(surface),
             Operation::Move { .. } => data.finish_move(surface),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge;
+
+    use super::edge_toward;
+    use crate::state::Rect;
+
+    #[test]
+    fn the_resize_edge_follows_the_third_of_the_window_under_the_pointer() {
+        let window = Rect {
+            location: (100, 100).into(),
+            size: (300, 300).into(),
+        };
+        let edge = |x, y| edge_toward(window, (x, y).into());
+        assert_eq!(edge(110, 110), ResizeEdge::TopLeft);
+        assert_eq!(edge(250, 110), ResizeEdge::Top);
+        assert_eq!(edge(390, 110), ResizeEdge::TopRight);
+        assert_eq!(edge(110, 250), ResizeEdge::Left);
+        assert_eq!(edge(390, 250), ResizeEdge::Right);
+        assert_eq!(edge(110, 390), ResizeEdge::BottomLeft);
+        assert_eq!(edge(250, 390), ResizeEdge::Bottom);
+        assert_eq!(edge(390, 390), ResizeEdge::BottomRight);
+        assert_eq!(edge(250, 250), ResizeEdge::BottomRight);
     }
 }

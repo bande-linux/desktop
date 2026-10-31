@@ -656,11 +656,15 @@ impl Headless {
                                 state.swallowed_button = Some(button);
                                 return;
                             }
-                            if let Some(focusable) = state
-                                .toplevel_of(&surface)
+                            let toplevel = state.toplevel_of(&surface);
+                            if let Some(focusable) = toplevel
+                                .clone()
                                 .or_else(|| state.focusable_layer_of(&surface))
                             {
                                 state.focus(Some(focusable));
+                            }
+                            if let Some(toplevel) = toplevel {
+                                state.drag_from_anywhere(&toplevel, button);
                             }
                         }
                         None => state.focus(None),

@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use bande_graphics::{
-    Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle, TextSystem,
+    Color, Cut, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
+    TextSystem, shortened,
 };
 
 use super::model::{Cell, Line};
@@ -12,7 +13,6 @@ use crate::{Animated, Context, Spring};
 const SELECTION_INSET: (f32, f32) = (4.0, 1.0);
 const ICON_GAP: f32 = 6.0;
 const TEXT_SIZE: f32 = 13.0;
-const ELLIPSIS: char = '…';
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) struct TextKey {
@@ -22,6 +22,7 @@ pub(super) struct TextKey {
     width: u32,
     label: bool,
     tabular: bool,
+    cut: Cut,
 }
 
 impl Table {
@@ -31,33 +32,14 @@ impl Table {
         content: &str,
         style: TextStyle,
         width: f32,
+        cut: Cut,
     ) -> Paragraph {
-        let paragraph = text.paragraph(content, style, None, TextAlign::Start);
-        if paragraph.width() <= width {
-            return paragraph;
-        }
-        let characters = content.chars().collect::<Vec<_>>();
-        let (mut low, mut high) = (0, characters.len());
-        while low < high {
-            let middle = (low + high).div_ceil(2);
-            let candidate = characters[..middle].iter().collect::<String>() + &ELLIPSIS.to_string();
-            if text
-                .paragraph(&candidate, style, None, TextAlign::Start)
+        let shown = shortened(content, cut, |candidate| {
+            text.paragraph(candidate, style, None, TextAlign::Start)
                 .width()
                 <= width
-            {
-                low = middle;
-            } else {
-                high = middle - 1;
-            }
-        }
-        let shortened = characters[..low]
-            .iter()
-            .collect::<String>()
-            .trim_end()
-            .to_owned()
-            + &ELLIPSIS.to_string();
-        text.paragraph(&shortened, style, None, TextAlign::Start)
+        });
+        text.paragraph(&shown, style, None, TextAlign::Start)
     }
 
     pub(super) fn text_key(
@@ -85,6 +67,7 @@ impl Table {
             width: width.to_bits(),
             label: cell.label,
             tabular: cell.tabular || self.columns[column].numeric,
+            cut: cell.cut,
         }
     }
 
@@ -121,7 +104,13 @@ impl Table {
                             true => style.tabular(),
                             false => style,
                         };
-                        self.text(&mut cx.text, &key.text, style, f32::from_bits(key.width))
+                        self.text(
+                            &mut cx.text,
+                            &key.text,
+                            style,
+                            f32::from_bits(key.width),
+                            key.cut,
+                        )
                     }
                 };
                 texts.insert(key, paragraph);

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use bande_graphics::{Color, Image};
+use bande_graphics::{Color, Cut, Image};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Column {
@@ -52,6 +52,7 @@ pub struct Cell {
     pub tint: Option<Color>,
     pub label: bool,
     pub tabular: bool,
+    pub cut: Cut,
 }
 
 impl Cell {
@@ -63,6 +64,7 @@ impl Cell {
             tint: None,
             label: false,
             tabular: false,
+            cut: Cut::End,
         }
     }
 
@@ -94,6 +96,13 @@ impl Cell {
     pub fn tabular(self) -> Self {
         Self {
             tabular: true,
+            ..self
+        }
+    }
+
+    pub fn cut_in_middle(self) -> Self {
+        Self {
+            cut: Cut::Middle,
             ..self
         }
     }

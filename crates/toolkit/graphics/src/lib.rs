@@ -24,7 +24,9 @@ pub use input::{
 };
 pub use render::{DrawError, Snapshot, pixels};
 pub use scene::{Image, Item, Paint, Path, Point, Rect, Scene, Shape, Stop};
-pub use text::{GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextStyle, TextSystem};
+pub use text::{
+    Cut, GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextStyle, TextSystem, shortened,
+};
 pub use title_bar::{
     FRAME_HEADER_HEIGHT, RESIZE_CORNER, RESIZE_MARGIN, ResizeEdge, TitleBar, WINDOW_HEADER_HEIGHT,
     WindowControl, resize_edge, title_style, window_controls_area,

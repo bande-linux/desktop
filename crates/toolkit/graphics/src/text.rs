@@ -14,6 +14,47 @@ use parley::{
 use crate::Rect;
 
 const DISPLAY_SIZE: f32 = 20.0;
+const ELLIPSIS: char = '\u{2026}';
+const KEPT_TAIL: usize = 7;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Cut {
+    #[default]
+    End,
+    Middle,
+}
+
+pub fn shortened(text: &str, cut: Cut, mut fits: impl FnMut(&str) -> bool) -> String {
+    if fits(text) {
+        return text.to_owned();
+    }
+    let characters = text.chars().collect::<Vec<_>>();
+    let tail = match cut {
+        Cut::End => 0,
+        Cut::Middle => KEPT_TAIL.min(characters.len() / 3),
+    };
+    let tail_from = characters.len() - tail;
+    let candidate = |kept: usize| {
+        characters[..kept]
+            .iter()
+            .collect::<String>()
+            .trim_end()
+            .chars()
+            .chain([ELLIPSIS])
+            .chain(characters[tail_from..].iter().copied())
+            .collect::<String>()
+    };
+    let (mut low, mut high) = (0, tail_from);
+    while low < high {
+        let middle = (low + high).div_ceil(2);
+        if fits(&candidate(middle)) {
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+    candidate(low)
+}
 
 static INTERFACE_FAMILIES: [FontFamilyName<'static>; 2] = [
     FontFamilyName::named(Typeface::Interface.family()),

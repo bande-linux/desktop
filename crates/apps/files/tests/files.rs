@@ -1306,6 +1306,7 @@ fn dragging_on_empty_space_in_the_icon_view_selects_the_icons_it_touches() {
 }
 
 const GOLDEN_SIZE: (u32, u32) = (900, 560);
+const LONG_NAME: &str = "quarterly-report-final-version-2-for-the-board.pdf";
 
 fn check_golden(name: &str, rgba: Vec<u8>) {
     let whole = bande_golden::from_rgba(GOLDEN_SIZE.0, GOLDEN_SIZE.1, rgba);
@@ -1466,6 +1467,7 @@ fn the_list_view_with_tabs_matches_its_golden() {
 fn the_column_view_matches_its_golden() {
     let place = Place::new();
     date_files(&[place.home().join("Documents/a.txt")]);
+    fs::write(place.home().join("Documents").join(LONG_NAME), "report\n").expect("file");
     let mut view = place.themed_view();
     view.handle(&command(Key::Character('3'), false));
     view.handle(&press(Key::Down));
@@ -2385,6 +2387,7 @@ fn a_selection_across_levels_drags_all_its_paths() {
 #[test]
 fn the_list_with_an_open_folder_matches_its_golden() {
     let place = Place::new();
+    fs::write(place.home().join(LONG_NAME), "report\n").expect("file");
     let noon = std::time::UNIX_EPOCH + Duration::from_secs(1_741_953_600);
     for path in [
         place.home().join("Documents"),
@@ -2392,6 +2395,7 @@ fn the_list_with_an_open_folder_matches_its_golden() {
         place.home().join("Documents/a.txt"),
         place.home().join("Empty"),
         place.home().join("notes.txt"),
+        place.home().join(LONG_NAME),
     ] {
         fs::File::open(path)
             .and_then(|file| file.set_modified(noon))

@@ -1,6 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use bande_graphics::{Color, GlyphRun, Paragraph, TextAlign, TextRole, TextStyle, TextSystem};
+use bande_graphics::{
+    Color, Cut, GlyphRun, Paragraph, TextAlign, TextRole, TextStyle, TextSystem, shortened,
+};
 use skrifa::{FontRef, MetadataProvider};
 
 const INTER: &str = "/usr/share/fonts/opentype/inter";
@@ -203,5 +205,31 @@ fn centred_text_has_equal_space_on_both_sides() {
     assert!(
         (first - (96.0 - natural) / 2.0).abs() < 0.01,
         "first glyph at {first}, natural width {natural}"
+    );
+}
+
+#[test]
+fn a_name_cut_in_the_middle_keeps_its_extension_and_fits_the_width() {
+    let mut text = TextSystem::new();
+    let style = TextStyle::new(13.0, Color::hex(0x000000));
+    let mut width_of = |content: &str| {
+        text.paragraph(content, style, None, TextAlign::Start)
+            .width()
+    };
+    let long = "quarterly-report-final-version-2-for-the-board.pdf";
+    let shown = shortened(long, Cut::Middle, |candidate| width_of(candidate) <= 160.0);
+    assert!(shown.ends_with("ard.pdf"), "{shown}");
+    assert!(shown.starts_with("quarterly-"), "{shown}");
+    assert!(shown.contains('\u{2026}'), "{shown}");
+    assert!(width_of(&shown) <= 160.0, "{shown}");
+    let ended = shortened(long, Cut::End, |candidate| width_of(candidate) <= 160.0);
+    assert!(
+        ended.ends_with('\u{2026}') && !ended.contains(".pdf"),
+        "{ended}"
+    );
+    assert_eq!(
+        shortened("notes.txt", Cut::Middle, |candidate| width_of(candidate)
+            <= 160.0),
+        "notes.txt"
     );
 }

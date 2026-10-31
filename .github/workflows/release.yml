@@ -2,7 +2,7 @@ name: release
 
 on:
   push:
-    branches: [main]
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
   workflow_dispatch:
 
 concurrency:
@@ -158,6 +158,9 @@ jobs:
           fetch-depth: 0
       - name: Trust the checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Check that the tagged commit is on main
+        if: github.ref_type == 'tag'
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - run: ci/release/build-all.sh debs
       - uses: actions/upload-artifact@v7
         with:
@@ -198,7 +201,7 @@ jobs:
 
   publish:
     needs: [lint, test, install]
-    if: github.ref == 'refs/heads/main' && vars.APT_PUBLISH == 'true'
+    if: github.ref_type == 'tag' && vars.APT_PUBLISH == 'true'
     runs-on: ubuntu-24.04
     container: debian:testing
     timeout-minutes: 10

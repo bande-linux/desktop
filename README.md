@@ -67,15 +67,15 @@ Tests need no GPU and no display: rendering runs on lavapipe, the compositor tes
 headless, and D-Bus tests start their own session buses. `cargo run -p unbound-compositor --
 --headless` starts the compositor without a display.
 
-On every push to `main`, CI runs these checks in Debian testing, builds the packages for arm64
-and amd64, installs them into a clean Debian testing and publishes them to the APT repository;
-the KVM guest, polkit and performance jobs run on demand. See
+For every version tag on `main`, CI runs these checks in Debian testing, builds the packages
+for arm64 and amd64, installs them into a clean Debian testing and publishes them to the APT
+repository; the KVM guest, polkit and performance jobs run on demand. See
 [`docs/architecture/ci.md`](docs/architecture/ci.md).
 
 ## Installing on Debian testing
 
 Unbound installs from its APT repository at <https://unbound-linux.github.io/apt> on Debian
-testing, arm64 or amd64. The repository has one rolling suite: every change merged to `main`
+testing, arm64 or amd64. The repository has one rolling suite: every version tagged on `main`
 that passes CI is published. Its packages are built against Debian testing and do not install
 on Debian 13 (trixie).
 

@@ -22,6 +22,6 @@ Conflicts: unbound-apt-source-testing
 Replaces: unbound-apt-source-testing
 Description: Unbound APT repository
  Makes APT follow the rolling suite of the Unbound APT repository, which
- carries a build of every change merged to main for Debian testing. Its
+ carries every Unbound release, built for Debian testing. Its
  main component holds the Unbound desktop and unbound-os, and its apple
  component the kernel and boot packages for Apple Silicon Macs.

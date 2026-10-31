@@ -3,7 +3,6 @@ use std::fs::File;
 use std::io::{ErrorKind, PipeReader, Read, Write};
 use std::os::fd::{AsFd, OwnedFd};
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};

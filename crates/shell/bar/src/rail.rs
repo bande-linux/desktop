@@ -233,7 +233,7 @@ impl RailView {
         };
     }
 
-    fn tray_cells(&self) -> Vec<Slot> {
+    fn tray_split(&self) -> (Vec<Slot>, Vec<Slot>) {
         let mut cells: Vec<Slot> = (0..self.tray.len()).map(Slot::Tray).collect();
         if self.status.input_sources.current().is_some() {
             cells.push(Slot::InputSource);
@@ -243,8 +243,13 @@ impl RailView {
         } else {
             TRAY_SHOWN
         };
-        if cells.len() > shown {
-            cells.truncate(shown);
+        let hidden = cells.split_off(shown.min(cells.len()));
+        (cells, hidden)
+    }
+
+    fn tray_cells(&self) -> Vec<Slot> {
+        let (mut cells, hidden) = self.tray_split();
+        if !hidden.is_empty() {
             cells.push(Slot::TrayMore);
         }
         cells
@@ -1008,6 +1013,7 @@ impl RailView {
 
     fn describe(&self, slot: Slot) -> String {
         match slot {
+            Slot::System if self.expanded => L10N.tr("system-menu"),
             Slot::System | Slot::Launcher => L10N.tr("launcher"),
             Slot::App => L10N.tr_args("app-menus", [("app", self.app.clone().into())]),
             Slot::Tray(index) => self
@@ -1137,7 +1143,7 @@ impl StatusView for RailView {
             (PointerButton::Secondary, Some(glyph), _) => Some(glyph),
             (_, Some(_), _) => Some(Slot::ControlCenter),
             (PointerButton::Secondary, None, found) => found.copied(),
-            (_, None, Some(Slot::System)) => Some(Slot::Launcher),
+            (_, None, Some(Slot::System)) if !self.expanded => Some(Slot::Launcher),
             (_, None, found) => found.copied(),
         }
     }
@@ -1149,9 +1155,12 @@ impl StatusView for RailView {
             .map(|(_, rect)| *rect)
     }
 
-    fn slot_of_node(&self, node: NodeId) -> Option<Slot> {
+    fn slot_of_node(&self, node: NodeId, action: Action) -> Option<Slot> {
         let index = usize::try_from(node.0.checked_sub(NODE_BASE)?).ok()?;
-        self.slots.get(index).map(|(slot, _)| *slot)
+        self.slots.get(index).map(|(slot, _)| match slot {
+            Slot::System if action == Action::Click && !self.expanded => Slot::Launcher,
+            slot => *slot,
+        })
     }
 
     fn edge(&self) -> DisplayEdge {
@@ -1188,11 +1197,8 @@ impl StatusView for RailView {
         changed
     }
 
-    fn shown_tray_items(&self) -> usize {
-        self.tray_cells()
-            .iter()
-            .filter(|slot| matches!(slot, Slot::Tray(_)))
-            .count()
+    fn hidden_tray(&self) -> Vec<Slot> {
+        self.tray_split().1
     }
 
     fn set_hovered(&mut self, slot: Option<Slot>) -> bool {
@@ -1241,6 +1247,9 @@ impl StatusView for RailView {
                 y1: f64::from(rect.y + rect.height),
             });
             node.add_action(Action::Click);
+            if *slot == Slot::System && !self.expanded {
+                node.add_action(Action::ShowContextMenu);
+            }
             nodes.push((NodeId(NODE_BASE + index as u64), node));
         }
         root.set_children(nodes.iter().map(|(id, _)| *id).collect::<Vec<_>>());

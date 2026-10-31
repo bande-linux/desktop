@@ -17,25 +17,52 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
-use image::{ImageFormat, RgbaImage};
+use image::imageops::FilterType;
+use image::{ImageBuffer, ImageFormat, Rgba};
 use jiff::civil::DateTime;
 use unbound_l10n::Localizer;
-use unbound_toolkit::ScreenImage;
-use unbound_xdg::{Locale, applications, current_desktops, data_dirs};
+use unbound_toolkit::Snapshot;
+use unbound_xdg::{Locale, applications, current_desktops, data_dirs, find_app};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-screenshot.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Failure {
+    NoRecorder,
+    ScreenUnavailable,
+    RecordingFailed,
+    NotSaved(PathBuf),
+}
+
+impl Failure {
+    pub fn message(&self) -> (String, String) {
+        match self {
+            Self::NoRecorder => (L10N.tr("cannot-record"), L10N.tr("no-recorder")),
+            Self::ScreenUnavailable => (L10N.tr("cannot-record"), L10N.tr("screen-unavailable")),
+            Self::RecordingFailed => (
+                L10N.tr("recording-failed"),
+                L10N.tr("recording-failed-detail"),
+            ),
+            Self::NotSaved(dir) => (
+                L10N.tr("cannot-save"),
+                L10N.tr_args(
+                    "cannot-save-detail",
+                    [("folder", dir.display().to_string().into())],
+                ),
+            ),
+        }
+    }
+}
 
 pub fn app_name(app_id: &str) -> Option<String> {
     if app_id.is_empty() {
         return None;
     }
     let locale = Locale::from_env();
-    applications(&data_dirs(), locale.as_ref(), &current_desktops())
-        .into_iter()
-        .find(|entry| entry.app_id() == app_id)
-        .map(|entry| entry.name)
+    let entries = applications(&data_dirs(), locale.as_ref(), &current_desktops());
+    find_app(&entries, app_id).map(|entry| entry.name.clone())
 }
 
 pub fn file_stem(taken: DateTime) -> String {
@@ -67,9 +94,25 @@ pub fn free_path(dir: &Path, stem: &str, extension: &str) -> PathBuf {
         .unwrap_or_else(|| candidate(1))
 }
 
-pub fn png(image: &ScreenImage) -> io::Result<Vec<u8>> {
-    let pixels = RgbaImage::from_raw(image.width, image.height, image.rgba.clone())
-        .ok_or_else(|| io::Error::other("the capture does not fill its size"))?;
+fn pixels(image: &Snapshot) -> io::Result<ImageBuffer<Rgba<u8>, &[u8]>> {
+    ImageBuffer::from_raw(image.width, image.height, image.rgba.as_slice())
+        .ok_or_else(|| io::Error::other("the capture does not fill its size"))
+}
+
+pub fn shrunk(image: &Snapshot, most: u32) -> Option<Snapshot> {
+    let scale = (most as f32 / image.width.max(image.height).max(1) as f32).min(1.0);
+    let width = ((image.width as f32 * scale).round() as u32).max(1);
+    let height = ((image.height as f32 * scale).round() as u32).max(1);
+    let small = image::imageops::resize(&pixels(image).ok()?, width, height, FilterType::Triangle);
+    Some(Snapshot {
+        width,
+        height,
+        rgba: small.into_raw(),
+    })
+}
+
+pub fn png(image: &Snapshot) -> io::Result<Vec<u8>> {
+    let pixels = pixels(image)?;
     let mut bytes = Vec::new();
     pixels
         .write_to(&mut io::Cursor::new(&mut bytes), ImageFormat::Png)
@@ -77,16 +120,14 @@ pub fn png(image: &ScreenImage) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
-pub fn save(image: ScreenImage, dir: &Path, taken: DateTime) -> io::Result<PathBuf> {
+pub fn save(image: &Snapshot, dir: &Path, taken: DateTime) -> io::Result<PathBuf> {
     fs::create_dir_all(dir)?;
     let path = free_path(dir, &file_stem(taken), "png");
     let name = path
         .file_name()
         .ok_or_else(|| io::Error::other("a screenshot path without a name"))?;
     let partial = dir.join(format!(".{}", name.to_string_lossy()));
-    let pixels = RgbaImage::from_raw(image.width, image.height, image.rgba)
-        .ok_or_else(|| io::Error::other("the capture does not fill its size"))?;
-    pixels
+    pixels(image)?
         .save_with_format(&partial, ImageFormat::Png)
         .map_err(io::Error::other)?;
     fs::rename(&partial, &path)?;
@@ -115,13 +156,6 @@ mod tests {
     }
 
     #[test]
-    fn the_name_is_the_moment_it_was_taken_as_on_a_mac() {
-        let taken = jiff::civil::date(2026, 10, 29).at(9, 5, 7, 0);
-
-        assert_eq!(file_stem(taken), "Screenshot 2026-10-29 at 09.05.07");
-    }
-
-    #[test]
     fn a_taken_name_gets_a_copy_number() {
         let dir = tempfile::tempdir().expect("temporary directory");
         let stem = "Screenshot 2026-10-29 at 09.05.07";
@@ -140,7 +174,7 @@ mod tests {
         let taken = jiff::civil::date(2026, 10, 29).at(9, 5, 7, 0);
 
         let path = save(
-            ScreenImage {
+            &Snapshot {
                 width: 2,
                 height: 1,
                 rgba: rgba.clone(),

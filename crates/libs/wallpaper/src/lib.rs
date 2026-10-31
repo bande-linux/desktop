@@ -1,7 +1,7 @@
+mod cache;
 mod choice;
-mod inbox;
 mod picture;
 
-pub use choice::{Choice, DEFAULT_WALLPAPER, Fit, Variant, bundled, choose, follow, read};
-pub use inbox::{Inbox, Outbox, inbox};
+pub use cache::render_cached;
+pub use choice::{Choice, DEFAULT_WALLPAPER, Fit, Variant, bundled, choose, follow, read, set};
 pub use picture::{Picture, RenderError, backdrop, render};

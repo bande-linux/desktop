@@ -1,0 +1,11 @@
+[package]
+name = "unbound-golden"
+description = "Golden image comparison for Unbound rendering tests"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+image.workspace = true
+image-compare.workspace = true

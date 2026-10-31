@@ -9,6 +9,7 @@ repository.workspace = true
 rustix.workspace = true
 tracing.workspace = true
 unbound-log.workspace = true
+unbound-xdg.workspace = true
 wayland-backend.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true

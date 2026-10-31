@@ -31,7 +31,7 @@ pub use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
     Anchor, KeyboardInteractivity,
 };
 
-use crate::{Globals, Headless, Memory, ShmImage, TestClient, Workspace};
+use crate::{Globals, Headless, Memory, SessionEnd, ShmImage, TestClient, Workspace};
 
 #[derive(Default)]
 pub(crate) struct Shell {
@@ -50,16 +50,17 @@ pub(crate) struct Shell {
     volume_keys: Vec<(unbound_shell_v1::VolumeKey, bool)>,
     brightness_keys: Vec<(unbound_shell_v1::BrightnessKey, bool)>,
     media_keys: Vec<unbound_shell_v1::MediaKey>,
-    control_center_toggles: usize,
+    panel_toggles: Vec<unbound_shell_v1::Panel>,
     responding: Vec<(i32, String, bool)>,
     minimized: Vec<(String, bool)>,
     attention: Vec<String>,
     shell_focus: Vec<String>,
     identifiers: Vec<(ExtForeignToplevelHandleV1, String)>,
     quit_requests: usize,
+    apps_running: Vec<(String, u32)>,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
+    toplevel_updates: usize,
     workspaces: Option<(u32, u32)>,
-    window_workspaces: Vec<(String, u32)>,
     input_sources: Option<(String, u32)>,
     panel_anchors: Vec<(unbound_shell_v1::Panel, (i32, i32, i32, i32))>,
 }
@@ -133,6 +134,22 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn declare_layer_opaque(
+        &mut self,
+        server: &mut Headless,
+        index: usize,
+        (width, height): (u32, u32),
+    ) {
+        let surface = &self.globals.shell.layers[index].0;
+        let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
+        let region = compositor.create_region(&self.queue.handle(), ());
+        region.add(0, 0, width as i32, height as i32);
+        surface.set_opaque_region(Some(&region));
+        region.destroy();
+        surface.commit();
+        self.exchange(server);
+    }
+
     pub fn reconfigure_layer(&mut self, server: &mut Headless, index: usize) -> bool {
         self.globals.shell.layer_size = None;
         self.globals.shell.layers[index].0.commit();
@@ -155,7 +172,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 16);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 18);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -215,8 +232,8 @@ impl TestClient {
         &self.globals.shell.media_keys
     }
 
-    pub fn control_center_toggles(&self) -> usize {
-        self.globals.shell.control_center_toggles
+    pub fn panel_toggles(&self) -> &[unbound_shell_v1::Panel] {
+        &self.globals.shell.panel_toggles
     }
 
     pub fn toggle_control_center(&mut self, server: &mut Headless) {
@@ -268,7 +285,7 @@ impl TestClient {
     }
 
     pub fn place_window(&mut self, server: &mut Headless, index: usize, placement: Placement) {
-        let app: UnboundAppV1 = self.bind("unbound_app_v1", 2);
+        let app: UnboundAppV1 = self.bind("unbound_app_v1", 6);
         app.place_window(&self.windows[index].2, placement);
         self.exchange(server);
     }
@@ -287,16 +304,6 @@ impl TestClient {
 
     pub fn workspaces(&self) -> Option<(u32, u32)> {
         self.globals.shell.workspaces
-    }
-
-    pub fn window_workspace(&self, identifier: &str) -> Option<u32> {
-        self.globals
-            .shell
-            .window_workspaces
-            .iter()
-            .rev()
-            .find(|(known, _)| known == identifier)
-            .map(|(_, workspace)| *workspace)
     }
 
     pub fn input_sources(&self) -> Option<(&str, u32)> {
@@ -333,8 +340,16 @@ impl TestClient {
         self.shell_request(server, |shell| shell.quit_app(app_id.to_owned()));
     }
 
-    pub fn force_quit_app(&mut self, server: &mut Headless, app_id: &str) {
-        self.shell_request(server, |shell| shell.force_quit_app(app_id.to_owned()));
+    pub fn quit_all_apps(&mut self, server: &mut Headless) {
+        self.shell_request(server, UnboundShellV1::quit_all_apps);
+    }
+
+    pub fn confirm_session_end(&mut self, server: &mut Headless, ending: SessionEnd) {
+        self.shell_request(server, |shell| shell.confirm_session_end(ending));
+    }
+
+    pub fn apps_running(&self) -> &[(String, u32)] {
+        &self.globals.shell.apps_running
     }
 
     pub fn activate_window(&mut self, server: &mut Headless, identifier: &str) {
@@ -389,6 +404,10 @@ impl TestClient {
 
     pub fn activate_app(&mut self, server: &mut Headless, app_id: &str) {
         self.shell_request(server, |shell| shell.activate_app(app_id.to_owned()));
+    }
+
+    pub fn toplevel_updates(&self) -> usize {
+        self.globals.shell.toplevel_updates
     }
 
     pub fn running_app_ids(&self) -> Vec<String> {
@@ -556,9 +575,9 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
             unbound_shell_v1::Event::MediaKey {
                 key: WEnum::Value(key),
             } => globals.shell.media_keys.push(key),
-            unbound_shell_v1::Event::ToggleControlCenter => {
-                globals.shell.control_center_toggles += 1;
-            }
+            unbound_shell_v1::Event::TogglePanel {
+                panel: WEnum::Value(panel),
+            } => globals.shell.panel_toggles.push(panel),
             unbound_shell_v1::Event::WindowMinimized {
                 identifier,
                 minimized,
@@ -572,13 +591,6 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
             unbound_shell_v1::Event::Workspaces { count, active } => {
                 globals.shell.workspaces = Some((count, active));
             }
-            unbound_shell_v1::Event::WindowWorkspace {
-                identifier,
-                workspace,
-            } => globals
-                .shell
-                .window_workspaces
-                .push((identifier, workspace)),
             unbound_shell_v1::Event::PanelAnchor {
                 panel: WEnum::Value(panel),
                 x,
@@ -592,6 +604,9 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
                 .push((panel, (x, y, width, height))),
             unbound_shell_v1::Event::FocusShell { namespace } => {
                 globals.shell.shell_focus.push(namespace);
+            }
+            unbound_shell_v1::Event::AppsRunning { app_id, count } => {
+                globals.shell.apps_running.push((app_id, count));
             }
             unbound_shell_v1::Event::AppResponding {
                 pid,
@@ -652,6 +667,9 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for Globals {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+        if let ext_foreign_toplevel_handle_v1::Event::Done = &event {
+            globals.shell.toplevel_updates += 1;
+        }
         if let ext_foreign_toplevel_handle_v1::Event::Identifier { identifier } = &event {
             globals
                 .shell

@@ -152,6 +152,24 @@ fn connecting_and_disconnecting_a_paired_device() {
 }
 
 #[test]
+fn a_device_reports_its_battery_until_it_is_forgotten() {
+    let fixture = start(true);
+    let headphones = fixture.named("Studio Headphones");
+    assert_eq!(headphones.battery, Some(80));
+    assert_eq!(fixture.named("mouse").battery, None);
+    fixture.client.forget(&headphones).expect("forget");
+    assert!(!fixture.fake.has_device(HEADPHONES));
+    let paired: Vec<String> = fixture
+        .client
+        .paired_devices()
+        .expect("paired")
+        .into_iter()
+        .map(|device| device.name)
+        .collect();
+    assert_eq!(paired, ["mouse"]);
+}
+
+#[test]
 fn discovery_runs_only_while_asked() {
     let fixture = start(true);
     fixture.client.set_discovering(true).expect("start");

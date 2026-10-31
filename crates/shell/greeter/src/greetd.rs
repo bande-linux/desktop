@@ -1,6 +1,7 @@
 use std::io::{self, Read, Write};
 
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
 
 pub const SESSION: &str = "unbound-session";
 pub const SESSION_ENVIRONMENT: [&str; 3] = [
@@ -13,7 +14,7 @@ pub const SESSION_ENVIRONMENT: [&str; 3] = [
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Request {
     CreateSession { username: String },
-    PostAuthMessageResponse { response: Option<String> },
+    PostAuthMessageResponse { response: Option<Zeroizing<String>> },
     StartSession { cmd: Vec<String>, env: Vec<String> },
     CancelSession,
 }
@@ -49,11 +50,27 @@ pub enum Response {
 }
 
 pub fn write_message<T: Serialize>(stream: &mut impl Write, message: &T) -> io::Result<()> {
-    let body = serde_json::to_vec(message)?;
+    let mut counter = ByteCounter(0);
+    serde_json::to_writer(&mut counter, message)?;
+    let mut body = Zeroizing::new(Vec::with_capacity(counter.0));
+    serde_json::to_writer(&mut *body, message)?;
     let length = u32::try_from(body.len()).map_err(io::Error::other)?;
     stream.write_all(&length.to_ne_bytes())?;
     stream.write_all(&body)?;
     stream.flush()
+}
+
+struct ByteCounter(usize);
+
+impl Write for ByteCounter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0 += bytes.len();
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 pub fn read_message<T: for<'de> Deserialize<'de>>(stream: &mut impl Read) -> io::Result<T> {
@@ -89,13 +106,13 @@ enum Phase {
 
 #[derive(Debug)]
 pub struct Login {
-    password: Option<String>,
+    password: Option<Zeroizing<String>>,
     asked: bool,
     phase: Phase,
 }
 
 impl Login {
-    pub fn begin(username: &str, password: String) -> (Self, Request) {
+    pub fn begin(username: &str, password: Zeroizing<String>) -> (Self, Request) {
         (
             Self {
                 password: Some(password),
@@ -112,7 +129,7 @@ impl Login {
         self.phase == Phase::Idle
     }
 
-    pub fn answer(&self, text: String) -> Request {
+    pub fn answer(&self, text: Zeroizing<String>) -> Request {
         Request::PostAuthMessageResponse {
             response: Some(text),
         }

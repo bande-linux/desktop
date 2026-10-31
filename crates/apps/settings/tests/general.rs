@@ -1,49 +1,21 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod support;
+
 use std::path::{Path, PathBuf};
 
-use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
+use accesskit::{Action, ActionRequest, Role, TreeId};
+use support::{SIZE, click, find, has_text, nodes};
 use unbound_settings::{
-    About, AboutCommand, App, Category, Command, InstalledLocale, LocaleState, LoginCommand,
-    LoginItems, NetworkCommand, PaneId, SettingId, SettingsView, Storage, StorageCommand, Update,
-    Value, assignments, categorize, chip_name, installed_locales, locale_name, login_items,
-    login_matches, memory_bytes, parse_assignments, static_hostname, system_version, tally,
+    About, AboutCommand, App, Category, Command, DefaultAppCommand, InstalledLocale, LocaleState,
+    LoginCommand, LoginItems, NetworkCommand, Package, PaneId, SettingId, SettingsView,
+    SoftwareState, Storage, StorageCommand, Update, Value, WifiState, assignments, categorize,
+    chip_name, installed_locales, locale_name, login_items, login_matches, memory_bytes,
+    parse_assignments, static_hostname, system_version, tally,
 };
 use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Palette, Scheme, TextSystem};
+use unbound_toolkit::{Item, Palette, Scheme, TextSystem};
 use unbound_xdg::DesktopEntry;
-
-const SIZE: (u32, u32) = (900, 600);
-
-fn nodes(view: &mut SettingsView) -> Vec<(NodeId, Node)> {
-    view.scene(SIZE.0, SIZE.1);
-    view.accessibility().nodes
-}
-
-fn find(view: &mut SettingsView, role: Role, label: &str) -> Option<NodeId> {
-    nodes(view)
-        .into_iter()
-        .find(|(_, node)| {
-            node.role() == role && node.label().is_some_and(|text| text.starts_with(label))
-        })
-        .map(|(id, _)| id)
-}
-
-fn has_text(view: &mut SettingsView, text: &str) -> bool {
-    nodes(view).into_iter().any(|(_, node)| {
-        node.label().is_some_and(|label| label.contains(text))
-            || node.value().is_some_and(|value| value.contains(text))
-    })
-}
-
-fn click(view: &mut SettingsView, target: NodeId) {
-    view.perform(&ActionRequest {
-        action: Action::Click,
-        target_tree: TreeId::ROOT,
-        target_node: target,
-        data: None,
-    });
-}
 
 fn key(view: &mut SettingsView, key: Key, modifiers: Modifiers) {
     view.handle(&Event::Key { key, modifiers });
@@ -64,31 +36,37 @@ fn about() -> About {
     }
 }
 
-pub fn general_view(scheme: Scheme) -> SettingsView {
-    let mut view = SettingsView::new(Palette::for_scheme(scheme), TextSystem::new());
+fn general_view() -> SettingsView {
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     view.apply(Update::About(about()));
     view
 }
 
-#[test]
-fn general_lists_its_pages_and_back_returns_to_the_page_you_came_from() {
-    let mut view = general_view(Scheme::Light);
-    assert!(view.visible_panes().contains(&PaneId::General));
-    assert!(!view.visible_panes().contains(&PaneId::About));
-    view.select_pane(PaneId::General);
-    let about = find(&mut view, Role::Button, "About").expect("About row");
-    assert!(has_text(&mut view, "About, Apple MacBook Pro"));
-    assert!(has_text(&mut view, "Storage, 210 GB available of 494 GB"));
-    click(&mut view, about);
-    assert_eq!(view.selected_pane(), PaneId::About);
-    assert!(has_text(&mut view, "Apple M1 Pro"));
-    assert!(has_text(&mut view, "C02XL0GHJGH5"));
-    let selected: Vec<String> = nodes(&mut view)
+fn selected_in_sidebar(view: &mut SettingsView) -> Vec<String> {
+    nodes(view)
         .into_iter()
         .filter(|(_, node)| node.role() == Role::ListItem && node.is_selected() == Some(true))
         .filter_map(|(_, node)| node.label().map(str::to_owned))
-        .collect();
-    assert_eq!(selected, ["General"]);
+        .collect()
+}
+
+#[test]
+fn about_opens_storage_and_software_update_and_back_returns_to_the_row_you_came_from() {
+    let mut view = general_view();
+    assert!(view.visible_panes().contains(&PaneId::About));
+    assert!(!view.visible_panes().contains(&PaneId::Storage));
+    view.select_pane(PaneId::About);
+    assert!(has_text(&mut view, "Studio"));
+    assert!(has_text(
+        &mut view,
+        "Apple MacBook Pro (14-inch, M1 Pro, 2021)"
+    ));
+    assert!(has_text(&mut view, "C02XL0GHJGH5"));
+    assert!(has_text(&mut view, "210 GB available of 494 GB"));
+    let storage = find(&mut view, Role::Button, "Storage").expect("Storage row");
+    click(&mut view, storage);
+    assert_eq!(view.selected_pane(), PaneId::Storage);
+    assert_eq!(selected_in_sidebar(&mut view), ["About"]);
 
     key(
         &mut view,
@@ -98,19 +76,108 @@ fn general_lists_its_pages_and_back_returns_to_the_page_you_came_from() {
             ..Modifiers::default()
         },
     );
-    assert_eq!(view.selected_pane(), PaneId::General);
-    assert_eq!(view.focused_item().as_deref(), Some("about"));
+    assert_eq!(view.selected_pane(), PaneId::About);
+    assert_eq!(view.focused_item().as_deref(), Some("storage"));
 
-    let storage = find(&mut view, Role::Button, "Storage").expect("Storage row");
-    click(&mut view, storage);
-    let back = find(&mut view, Role::Button, "‹ General").expect("back button");
+    let update = find(&mut view, Role::Button, "Software Update").expect("update row");
+    click(&mut view, update);
+    assert_eq!(view.selected_pane(), PaneId::SoftwareUpdate);
+    let back = find(&mut view, Role::Button, "‹ About").expect("back button");
     click(&mut view, back);
-    assert_eq!(view.selected_pane(), PaneId::General);
+    assert_eq!(view.selected_pane(), PaneId::About);
+    assert_eq!(view.focused_item().as_deref(), Some("software-update"));
+}
+
+#[test]
+fn the_sidebar_offers_waiting_updates_only_while_they_wait() {
+    let mut view = general_view();
+    assert!(find(&mut view, Role::ListItem, "2 updates are available").is_none());
+    view.apply(Update::Software(SoftwareState::Available(vec![
+        Package::from_id("libc6;2.41-12;arm64;debian", ""),
+        Package::from_id("firefox-esr;128.4.0esr-1;arm64;debian", ""),
+    ])));
+    let waiting = find(&mut view, Role::ListItem, "2 updates are available").expect("row");
+    click(&mut view, waiting);
+    assert_eq!(view.selected_pane(), PaneId::SoftwareUpdate);
+
+    view.apply(Update::Software(SoftwareState::Installed { restart: true }));
+    assert!(find(&mut view, Role::ListItem, "Restart to finish updating").is_some());
+    view.apply(Update::Software(SoftwareState::UpToDate));
+    assert!(find(&mut view, Role::ListItem, "Restart to finish updating").is_none());
+    assert!(find(&mut view, Role::ListItem, "2 updates").is_none());
+}
+
+#[test]
+fn a_link_to_a_pane_without_its_device_opens_a_calm_page_and_stays_there() {
+    let mut view = general_view();
+    view.select_pane(PaneId::Bluetooth);
+    assert!(!view.visible_panes().contains(&PaneId::Bluetooth));
+    assert!(has_text(&mut view, "Bluetooth isn't available"));
+    assert!(find(&mut view, Role::Switch, "Bluetooth").is_none());
+    view.apply(Update::Values(vec![(
+        SettingId::Clock24Hour,
+        Value::Flag(true),
+    )]));
+    assert_eq!(view.selected_pane(), PaneId::Bluetooth);
+}
+
+#[test]
+fn the_clipboard_history_is_cleared_only_after_confirming_and_escape_keeps_it() {
+    let mut view = general_view();
+    view.set_value(SettingId::LockAfter, Value::Seconds(600));
+    view.select_pane(PaneId::PrivacySecurity);
+    assert!(has_text(&mut view, "After 10 min"));
+
+    let ask = find(&mut view, Role::Button, "Clear History…").expect("clear button");
+    click(&mut view, ask);
+    assert!(has_text(&mut view, "Clear the clipboard history?"));
+    key(&mut view, Key::Escape, Modifiers::default());
+    assert!(!has_text(&mut view, "Clear the clipboard history?"));
+    assert!(view.take_commands().is_empty());
+
+    let ask = find(&mut view, Role::Button, "Clear History…").expect("clear button");
+    click(&mut view, ask);
+    let clear = find(&mut view, Role::Button, "Clear").expect("confirm");
+    click(&mut view, clear);
+    assert_eq!(view.take_commands(), [Command::ClearClipboard]);
+    assert!(!has_text(&mut view, "Clear the clipboard history?"));
+
+    let lock = find(&mut view, Role::Button, "Automatic lock").expect("lock row");
+    click(&mut view, lock);
+    assert_eq!(view.selected_pane(), PaneId::Power);
+}
+
+#[test]
+fn the_sidebar_groups_its_panes_under_four_labels() {
+    let mut view = general_view();
+    let headings: Vec<String> = nodes(&mut view)
+        .into_iter()
+        .filter(|(_, node)| node.role() == Role::Heading)
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .collect();
+    assert_eq!(
+        headings[..4],
+        ["Desktop", "Devices", "System", "Appearance"].map(str::to_owned)[..],
+        "without network, sound or displays the Connections group is left out"
+    );
+    assert_eq!(
+        view.visible_panes(),
+        [
+            PaneId::Appearance,
+            PaneId::Bar,
+            PaneId::Accessibility,
+            PaneId::Keyboard,
+            PaneId::Power,
+            PaneId::PrivacySecurity,
+            PaneId::Apps,
+            PaneId::About,
+        ]
+    );
 }
 
 #[test]
 fn renaming_the_computer_waits_for_return_and_escape_keeps_the_old_name() {
-    let mut view = general_view(Scheme::Light);
+    let mut view = general_view();
     view.select_pane(PaneId::About);
     view.take_commands();
     let field = nodes(&mut view)
@@ -175,16 +242,9 @@ fn storage() -> Storage {
     }
 }
 
-pub fn storage_view(scheme: Scheme) -> SettingsView {
-    let mut view = general_view(scheme);
-    view.select_pane(PaneId::Storage);
-    view.apply(Update::Storage(storage()));
-    view
-}
-
 #[test]
 fn storage_measures_when_opened_and_asks_before_emptying_the_trash() {
-    let mut view = general_view(Scheme::Light);
+    let mut view = general_view();
     view.select_pane(PaneId::Storage);
     assert_eq!(
         view.take_commands(),
@@ -300,11 +360,14 @@ fn app(id: &str, name: &str) -> App {
 
 #[test]
 fn login_items_are_added_by_name_and_removed_from_their_row() {
-    let mut view = general_view(Scheme::Light);
-    view.select_pane(PaneId::LoginItems);
+    let mut view = general_view();
+    view.select_pane(PaneId::Apps);
     assert_eq!(
         view.take_commands(),
-        [Command::Login(LoginCommand::Refresh)]
+        [
+            Command::Login(LoginCommand::Refresh),
+            Command::DefaultApp(DefaultAppCommand::Refresh)
+        ]
     );
     view.apply(Update::Login(LoginItems {
         items: vec![app("org.unbound.Terminal.desktop", "Terminal")],
@@ -408,7 +471,7 @@ fn network_state() -> unbound_settings::NetworkState {
 
 #[test]
 fn ethernet_switches_to_a_manual_address_and_vpns_connect_from_their_row() {
-    let mut view = general_view(Scheme::Light);
+    let mut view = general_view();
     view.apply(Update::Network(network_state()));
     view.select_pane(PaneId::Network);
     assert!(has_text(
@@ -500,13 +563,13 @@ fn languages_come_from_installed_locales_and_write_lang_language_and_formats() {
         ("en_GB.UTF-8".to_owned(), Some("sv_SE.UTF-8".to_owned()))
     );
 
-    let mut view = general_view(Scheme::Light);
+    let mut view = general_view();
     view.apply(Update::Locale(Some(LocaleState {
         installed,
         language: "en_GB.UTF-8".to_owned(),
         region: None,
     })));
-    view.select_pane(PaneId::LanguageRegion);
+    view.select_pane(PaneId::LanguageTime);
     assert!(has_text(
         &mut view,
         "Changes take effect the next time you log in"
@@ -520,4 +583,42 @@ fn languages_come_from_installed_locales_and_write_lang_language_and_formats() {
     });
     assert_eq!(view.focused_setting(), Some(SettingId::Region));
     assert!(has_text(&mut view, "Sat 14 Mar, 13:45"));
+}
+
+fn crossfade(items: &[Item]) -> Vec<f32> {
+    items
+        .iter()
+        .flat_map(|item| match item {
+            Item::Opacity { alpha, items } if !items.is_empty() => vec![*alpha],
+            Item::Clip { items, .. } | Item::Translate { items, .. } => crossfade(items),
+            _ => Vec::new(),
+        })
+        .collect()
+}
+
+#[test]
+fn turning_wifi_off_cross_fades_the_page_into_the_off_state_but_changing_panes_does_not() {
+    let mut view = general_view();
+    view.apply(Update::Wifi(Some(WifiState {
+        enabled: true,
+        networks: Vec::new(),
+    })));
+    view.select_pane(PaneId::Wifi);
+    assert!(crossfade(&view.scene(SIZE.0, SIZE.1).items).is_empty());
+
+    view.apply(Update::Wifi(Some(WifiState {
+        enabled: false,
+        networks: Vec::new(),
+    })));
+    let alphas = crossfade(&view.scene(SIZE.0, SIZE.1).items);
+    assert_eq!(
+        alphas.len(),
+        2,
+        "the old page fades out while the off state fades in"
+    );
+    assert!((alphas[0] + alphas[1] - 1.0).abs() < 1e-4);
+    assert!(has_text(&mut view, "Wi-Fi is off"));
+
+    view.select_pane(PaneId::About);
+    assert!(crossfade(&view.scene(SIZE.0, SIZE.1).items).is_empty());
 }

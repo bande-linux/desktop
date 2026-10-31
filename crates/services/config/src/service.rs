@@ -294,6 +294,9 @@ fn publish_changes(
         if before.wallpaper.fit != after.wallpaper.fit {
             let _ = guard.wallpaper_fit_changed(emitter).await;
         }
+        if before.night_light != after.night_light {
+            let _ = guard.night_light_changed(emitter).await;
+        }
         if before.displays != after.displays {
             let _ = guard.displays_changed(emitter).await;
         }
@@ -987,6 +990,18 @@ impl ConfigInterface {
             &value,
         )?;
         self.write(&Setting::WallpaperFit(fit))
+    }
+
+    #[zbus(property)]
+    fn night_light(&self) -> (bool, String, String, String, u32) {
+        let night = self.store.current().night_light;
+        (
+            night.on,
+            night.schedule.keyword().to_owned(),
+            night.from.text(),
+            night.to.text(),
+            night.warmth,
+        )
     }
 
     #[zbus(property)]

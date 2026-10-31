@@ -9,7 +9,7 @@ use zbus::blocking::Connection;
 
 use crate::CursorTheme;
 
-pub const DESKTOP_NAME: &str = "Unbound";
+const DESKTOP_NAME: &str = "Unbound";
 
 #[zbus::proxy(
     interface = "org.freedesktop.systemd1.Manager",
@@ -36,7 +36,7 @@ pub fn cursor_environment(cursor: &CursorTheme) -> [(&'static str, String); 2] {
     ]
 }
 
-pub fn session_environment(socket_name: &str, cursor: &CursorTheme) -> Vec<(&'static str, String)> {
+fn session_environment(socket_name: &str, cursor: &CursorTheme) -> Vec<(&'static str, String)> {
     [
         ("WAYLAND_DISPLAY", socket_name.to_owned()),
         ("XDG_CURRENT_DESKTOP", DESKTOP_NAME.to_owned()),

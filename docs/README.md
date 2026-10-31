@@ -9,6 +9,7 @@
 | [`architecture/`](architecture/) | How the desktop is built: [overview](architecture/overview.md), [compositor](architecture/compositor.md), [toolkit](architecture/toolkit.md), [session services](architecture/session.md), [behaviour decisions](architecture/behaviour.md), [CI](architecture/ci.md), [packaging](architecture/packaging.md). |
 | [`decisions/`](decisions/) | Decision records, numbered: [0001 rendering](decisions/0001-rendering.md), [0002 toolkit](decisions/0002-toolkit.md), [0003 repository layout](decisions/0003-repository-layout.md). A decision is changed by a new record, not by editing an accepted one. |
 | [`parity.md`](parity.md) | How close Unbound is to macOS, feature by feature, with the milestone that closes each gap. |
+| [`debian-readiness.md`](debian-readiness.md) | How far the repository is from the official Debian archive (dependencies, packaging, licensing, lintian, build hygiene), with a roadmap. |
 
 Work in progress and the milestone backlog live outside `docs/`, in
 [`../NOTES/backlog.md`](../NOTES/backlog.md).

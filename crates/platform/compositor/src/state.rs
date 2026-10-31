@@ -11,6 +11,7 @@ use crate::element::ScreenElement;
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Format as DmabufFormat, Fourcc, Modifier};
 use smithay::backend::drm::DrmNode;
+use smithay::backend::renderer::Renderer as _;
 use smithay::backend::renderer::element::Kind as ElementKind;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::backend::renderer::element::surface::{
@@ -91,7 +92,7 @@ use crate::scene::{
     preview_elements, scrim, surface_blurs, tie_blurs_to_what_lies_below, window_elements,
 };
 use crate::screen::{OutputConfig, OutputSettings, Screen};
-use crate::session::{ForceQuit, LockScreen, SessionClient, SessionRole};
+use crate::session::{LockScreen, SessionClient, SessionRole, Summoned};
 use crate::shell;
 use crate::tile::{Preview, SnapDrag};
 use crate::window::Window;
@@ -147,6 +148,7 @@ pub struct State {
     pub(crate) screens: Vec<Screen>,
     pub(crate) departed: Vec<crate::displays::Departed>,
     pub(crate) display_config: unbound_config::Config,
+    pub(crate) night_light: crate::night::NightLight,
     pub(crate) output_managers: Vec<crate::management::Manager>,
     pub(crate) output_serial: u32,
     pub(crate) announced_workspaces: (usize, usize),
@@ -192,6 +194,9 @@ pub struct State {
     pub(crate) popups: PopupManager,
     pub(crate) lock_screen_requested: bool,
     pub(crate) force_quit_requested: bool,
+    pub(crate) session_end_requested:
+        Option<unbound_protocols::server::unbound_shell_v1::SessionEnd>,
+    pub(crate) quitting: Vec<(UnboundShellV1, Option<(String, u32)>)>,
     pub(crate) refused_tokens: Vec<XdgActivationToken>,
     pub(crate) drag: Option<crate::drag::Drag>,
     pub(crate) slide_back: Option<crate::scene::SlideBack>,
@@ -223,6 +228,7 @@ pub struct State {
     pub(crate) keys: crate::access_keys::AccessKeys,
     pub(crate) keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor,
     pub(crate) needs_redraw: bool,
+    pub(crate) reveal: crate::reveal::Reveal,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
     pub(crate) cursor_status: CursorImageStatus,
@@ -246,7 +252,8 @@ pub struct Headless {
     pub(crate) state: State,
     pub(crate) session_clients: Vec<SessionClient>,
     pub(crate) lock_screen: LockScreen,
-    pub(crate) force_quit: ForceQuit,
+    pub(crate) force_quit: Summoned,
+    pub(crate) session_dialog: Summoned,
     pub(crate) socket_name: Option<OsString>,
 }
 
@@ -299,8 +306,8 @@ impl Headless {
         };
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, UnboundShellV1, ()>(16, ());
-        handle.create_global::<State, UnboundAppV1, ()>(5, ());
+        handle.create_global::<State, UnboundShellV1, ()>(18, ());
+        handle.create_global::<State, UnboundAppV1, ()>(6, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
         State::create_capture_globals(&handle);
@@ -312,6 +319,7 @@ impl Headless {
             screens: vec![screen],
             departed: Vec::new(),
             display_config: unbound_config::Config::default(),
+            night_light: crate::night::NightLight::default(),
             output_managers: Vec::new(),
             output_serial: 0,
             announced_workspaces: (1, 0),
@@ -368,6 +376,8 @@ impl Headless {
             popups: PopupManager::default(),
             lock_screen_requested: false,
             force_quit_requested: false,
+            session_end_requested: None,
+            quitting: Vec::new(),
             refused_tokens: Vec::new(),
             drag: None,
             slide_back: None,
@@ -401,6 +411,7 @@ impl Headless {
             keys: crate::access_keys::AccessKeys::default(),
             keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor::default(),
             needs_redraw: false,
+            reveal: crate::reveal::Reveal::default(),
             pointer_location: (center.w, center.h).into(),
             cursor_shown: false,
             cursor_status: CursorImageStatus::default_named(),
@@ -426,7 +437,8 @@ impl Headless {
             state,
             session_clients: Vec::new(),
             lock_screen: LockScreen::new(),
-            force_quit: ForceQuit::new(),
+            force_quit: Summoned::new(crate::session::MONITOR),
+            session_dialog: Summoned::new(crate::session::SHELL),
             socket_name: None,
         })
     }
@@ -446,6 +458,7 @@ impl Headless {
         self.display.dispatch_clients(&mut self.state)?;
         self.state.deliver_pending_insert();
         self.state.activate_next_app_if_the_windowless_one_quit();
+        self.state.announce_apps_running();
         self.state.popups.cleanup();
         self.state.end_orphaned_drag();
         self.state.keep_families_together();
@@ -563,10 +576,6 @@ impl Headless {
 
     pub fn output_size(&self) -> Size<i32, Physical> {
         self.state.main_screen().mode_size()
-    }
-
-    pub fn output_scale(&self) -> f64 {
-        self.state.main_screen().scale()
     }
 
     pub fn logical_output_size(&self) -> Size<i32, Logical> {
@@ -698,15 +707,29 @@ impl Headless {
         elements.extend(self.state.switcher_elements(renderer, screen, scale));
         elements.extend(self.state.assist_elements(renderer, screen, scale));
         let key = self.state.key_window();
+        let shell_opacity = self.state.shell_opacity();
+        let wallpapers: Vec<WlSurface> = match shell_opacity < 1.0 {
+            true => self
+                .state
+                .placed_layers(screen, Layer::Background)
+                .into_iter()
+                .map(|(surface, _)| surface)
+                .collect(),
+            false => Vec::new(),
+        };
         for placed in self.state.scene(true, screen) {
             match placed {
                 Placed::Surface(surface, location) => {
+                    let alpha = match wallpapers.contains(&surface) {
+                        true => 1.0,
+                        false => shell_opacity,
+                    };
                     elements.extend(render_elements_from_surface_tree(
                         renderer,
                         &surface,
                         location.to_f64().to_physical(scale).to_i32_round::<i32>(),
                         scale,
-                        1.0,
+                        alpha,
                         ElementKind::Unspecified,
                     ));
                     elements.extend(surface_blurs(
@@ -740,7 +763,7 @@ impl Headless {
                     elements.extend(shown);
                     elements.extend(self.state.overview_ring(window, scale));
                     if let (Some(ghost), Some(look)) = (self.state.overview_ghost(window), &look) {
-                        elements.extend(look.ghost(ghost, scale));
+                        elements.extend(look.ghost(ghost, scale, &renderer.context_id()));
                     }
                     drawn.push((window.surface().clone(), look));
                     if let Some(preview) = &self.state.preview
@@ -753,7 +776,9 @@ impl Headless {
                         ));
                     }
                 }
-                Placed::Closing(closing) => elements.extend(closing.render_elements(scale)),
+                Placed::Closing(closing) => {
+                    elements.extend(closing.render_elements(scale, &renderer.context_id()));
+                }
                 Placed::Overview(screen) => {
                     elements.extend(self.state.overview_elements(renderer, screen, scale));
                 }
@@ -892,6 +917,7 @@ impl ClientData for ClientState {
 }
 
 const MONOTONIC: u32 = 1;
+const ACTIVATION_TOKEN_LIFETIME: Duration = Duration::from_secs(60);
 
 const DMABUF_FOURCCS: [Fourcc; 2] = [Fourcc::Argb8888, Fourcc::Xrgb8888];
 
@@ -990,11 +1016,18 @@ impl State {
             && surface.as_ref() != Some(&exclusive.surface)
         {
             exclusive.previous = surface.clone();
+            let holder = exclusive.surface.clone();
             if let Some(index) = surface
                 .as_ref()
                 .and_then(|surface| self.window_index(surface))
             {
                 self.raise(index);
+            }
+            if self.popup_grab.is_none()
+                && let Some(keyboard) = self.seat.get_keyboard()
+                && keyboard.current_focus().as_ref() != Some(&holder)
+            {
+                keyboard.set_focus(self, Some(holder), SERIAL_COUNTER.next_serial());
             }
             self.sync_activated();
             return;
@@ -1708,6 +1741,11 @@ impl XdgActivationHandler for State {
                 None => true,
                 Some(focused) => focused.client().map(|client| client.id()) == data.client_id,
             };
+        self.activation_state
+            .retain_tokens(|_, data| data.timestamp.elapsed() < ACTIVATION_TOKEN_LIFETIME);
+        let known = &self.activation_state;
+        self.refused_tokens
+            .retain(|refused| known.data_for_token(refused).is_some());
         if !valid {
             self.refused_tokens.push(token);
         }
@@ -1721,6 +1759,7 @@ impl XdgActivationHandler for State {
         surface: WlSurface,
     ) {
         let app_id = shell::toplevel_names(&surface).1;
+        self.activation_state.remove_token(&token);
         if let Some(index) = self
             .refused_tokens
             .iter()

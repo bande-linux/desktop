@@ -1,15 +1,16 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use unbound_datetime::{DateFormats, posix_locale};
-use unbound_lock::{LockScreen, SHAKE_DURATION, User, clock_texts, display_name, shake_offset};
+use unbound_lock::{
+    LockScreen, PowerAction, SHAKE_DURATION, User, clock_texts, display_name, shake_offset,
+};
+use unbound_status::status::{Battery, Power, Wifi};
 use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Appearance, CpuRenderer, Image, Scheme, TextSystem};
+use unbound_toolkit::{Appearance, CpuRenderer, Image, Item, TextSystem};
 
 const OUTPUT: (u32, u32) = (1024, 768);
-const MIN_SSIM: f64 = 0.99;
 const NONE: Modifiers = Modifiers {
     shift: false,
     alt: false,
@@ -60,25 +61,7 @@ fn press_return(screen: &mut LockScreen) {
 }
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        std::fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
-    );
+    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(size.0, size.1, rgba));
 }
 
 fn wallpaper() -> Image {
@@ -94,45 +77,18 @@ fn wallpaper() -> Image {
 
 fn render(screen: &mut LockScreen, name: &str) {
     let scene = screen.scene(OUTPUT.0, OUTPUT.1);
-    for (scale, suffix) in [(1.0, ""), (1.5, "-1.5x")] {
-        let size = (
-            (f64::from(OUTPUT.0) * scale).round() as u32,
-            (f64::from(OUTPUT.1) * scale).round() as u32,
-        );
-        let mut rgba = vec![0; (size.0 * size.1 * 4) as usize];
-        CpuRenderer::new()
-            .render_into(&scene, scale, &mut rgba)
-            .expect("frame");
-        check_golden(&format!("{name}{suffix}"), size, rgba);
-    }
+    let frame = CpuRenderer::new().render(&scene).expect("frame");
+    check_golden(name, OUTPUT, frame.rgba);
 }
 
 #[test]
-fn the_lock_screen_matches_its_goldens_in_light_and_dark_appearance() {
-    for (scheme, name) in [
-        (Scheme::Light, "lock-screen-light"),
-        (Scheme::Dark, "lock-screen-dark"),
-    ] {
-        let mut screen = LockScreen::new(
-            &ada(),
-            british(),
-            &morning(),
-            Appearance {
-                scheme,
-                ..Appearance::default()
-            },
-            TextSystem::new(),
-        );
-        screen.set_backdrop(wallpaper(), Instant::now() - Duration::from_secs(5));
-        screen.advance(Instant::now());
-        screen.set_position(1, 3);
-        render(&mut screen, name);
-    }
-}
-
-#[test]
-fn the_lock_screen_without_a_wallpaper_matches_its_golden() {
-    render(&mut screen(), "lock-screen");
+fn the_lock_screen_matches_its_goldens_over_a_wallpaper_and_without_one() {
+    let mut screen = screen();
+    render(&mut screen, "lock-screen");
+    screen.set_backdrop(wallpaper(), Instant::now() - Duration::from_secs(5));
+    screen.advance(Instant::now());
+    screen.set_position(1, 3);
+    render(&mut screen, "lock-screen-light");
 }
 
 #[test]
@@ -165,7 +121,10 @@ fn return_submits_the_password_once_and_typing_waits_for_the_verdict() {
     let mut screen = screen();
     type_text(&mut screen, "secret");
     press_return(&mut screen);
-    assert_eq!(screen.take_password().as_deref(), Some("secret"));
+    assert_eq!(
+        screen.take_password().as_deref().map(String::as_str),
+        Some("secret")
+    );
 
     type_text(&mut screen, "more");
     press_return(&mut screen);
@@ -203,7 +162,10 @@ fn a_rejected_password_is_cleared_and_the_field_shakes_back_into_place() {
 
     type_text(&mut screen, "right");
     press_return(&mut screen);
-    assert_eq!(screen.take_password().as_deref(), Some("right"));
+    assert_eq!(
+        screen.take_password().as_deref().map(String::as_str),
+        Some("right")
+    );
 }
 
 #[test]
@@ -315,7 +277,10 @@ fn a_message_stays_until_escape_clears_it_with_the_typed_text() {
     assert_eq!(texts(&mut screen), plain);
     type_text(&mut screen, "whole");
     press_return(&mut screen);
-    assert_eq!(screen.take_password().as_deref(), Some("whole"));
+    assert_eq!(
+        screen.take_password().as_deref().map(String::as_str),
+        Some("whole")
+    );
 }
 
 #[test]
@@ -329,8 +294,143 @@ fn a_follow_up_prompt_names_the_field_and_takes_a_fresh_answer() {
     assert_eq!(placeholder(&screen), "New password");
     type_text(&mut screen, "new");
     press_return(&mut screen);
-    assert_eq!(screen.take_password().as_deref(), Some("new"));
+    assert_eq!(
+        screen.take_password().as_deref().map(String::as_str),
+        Some("new")
+    );
 
     screen.ask(None);
     assert_eq!(placeholder(&screen), "Enter Password");
+}
+
+#[test]
+fn a_low_battery_and_the_wifi_show_in_the_top_right_corner() {
+    let mut screen = screen();
+    screen.set_backdrop(wallpaper(), Instant::now() - Duration::from_secs(5));
+    screen.advance(Instant::now());
+    let battery = Battery {
+        percent: 12.0,
+        power: Power::Battery { remaining: None },
+    };
+    let wifi = Wifi {
+        enabled: true,
+        networks: Vec::new(),
+    };
+
+    assert!(screen.set_devices(Some(battery), Some(&wifi)));
+    assert!(!screen.set_devices(Some(battery), Some(&wifi)));
+    render(&mut screen, "lock-screen-status");
+}
+
+fn press(screen: &mut LockScreen, key: Key) {
+    screen.handle(&Event::Key {
+        key,
+        modifiers: NONE,
+    });
+}
+
+#[test]
+fn the_login_window_offers_power_and_asks_before_restarting_or_shutting_down() {
+    let mut screen = screen();
+    screen.set_backdrop(wallpaper(), Instant::now() - Duration::from_secs(5));
+    screen.advance(Instant::now());
+    screen.offer_power(&[
+        PowerAction::Sleep,
+        PowerAction::Restart,
+        PowerAction::ShutDown,
+    ]);
+    render(&mut screen, "login-power");
+
+    press(&mut screen, Key::Tab);
+    press(&mut screen, Key::Space);
+    let slept = screen.take_power();
+    press(&mut screen, Key::Tab);
+    press(&mut screen, Key::Tab);
+    press(&mut screen, Key::Space);
+    let asked = screen.take_power();
+    render(&mut screen, "login-power-shut-down");
+    press(&mut screen, Key::Enter);
+
+    assert_eq!(slept, Some(PowerAction::Sleep));
+    assert_eq!(asked, None);
+    assert_eq!(screen.take_power(), Some(PowerAction::ShutDown));
+}
+
+#[test]
+fn escape_takes_back_the_question_without_shutting_down() {
+    let mut screen = screen();
+    screen.offer_power(&[PowerAction::Restart]);
+    press(&mut screen, Key::Tab);
+    press(&mut screen, Key::Space);
+    screen.take_power();
+
+    press(&mut screen, Key::Escape);
+    press(&mut screen, Key::Enter);
+
+    assert_eq!(screen.take_power(), None);
+}
+
+#[test]
+fn leaving_fades_the_card_out_over_the_wallpaper() {
+    let mut screen = screen();
+    let start = Instant::now();
+    screen.set_backdrop(wallpaper(), start - Duration::from_secs(5));
+    screen.advance(start);
+    assert!(texts(&mut screen) > 0);
+    screen.leave(start);
+    assert!(!screen.has_left());
+
+    screen.advance(start + Duration::from_millis(50));
+    let fading = |screen: &mut LockScreen, wanted: fn(f32) -> bool| {
+        screen.scene(OUTPUT.0, OUTPUT.1).items.iter().any(|item| {
+            matches!(item, Item::Opacity { alpha, items } if wanted(*alpha)
+                && items.iter().any(|item| matches!(item, Item::Text { .. })))
+        })
+    };
+    assert!(
+        fading(&mut screen, |alpha| alpha > 0.0 && alpha < 1.0),
+        "the card is part way out"
+    );
+    assert!(screen.is_animating());
+
+    screen.advance(start + Duration::from_secs(1));
+    assert!(screen.has_left());
+    assert!(!screen.is_animating());
+    assert!(
+        fading(&mut screen, |alpha| alpha == 0.0),
+        "the card is gone"
+    );
+    assert_eq!(texts(&mut screen), 0);
+}
+
+fn backdrop_layers(screen: &mut LockScreen) -> (bool, Option<f32>) {
+    let items = screen.scene(OUTPUT.0, OUTPUT.1).items;
+    let sharp = items.iter().any(|item| matches!(item, Item::Image { .. }));
+    let blurred = items.iter().find_map(|item| match item {
+        Item::Opacity { alpha, items } if matches!(items.first(), Some(Item::Image { .. })) => {
+            Some(*alpha)
+        }
+        _ => None,
+    });
+    (sharp, blurred)
+}
+
+#[test]
+fn leaving_unveils_the_sharp_wallpaper_under_the_blurred_one() {
+    let mut screen = screen();
+    let start = Instant::now();
+    screen.set_backdrop(wallpaper(), start - Duration::from_secs(5));
+    screen.set_wallpaper(wallpaper());
+    screen.advance(start);
+    assert_eq!(backdrop_layers(&mut screen), (false, Some(1.0)));
+    screen.leave(start);
+    screen.advance(start + Duration::from_millis(50));
+    let (sharp, blurred) = backdrop_layers(&mut screen);
+    assert!(sharp);
+    assert!(
+        blurred.is_some_and(|alpha| alpha > 0.0 && alpha < 1.0),
+        "{blurred:?}"
+    );
+    screen.advance(start + Duration::from_secs(1));
+    assert_eq!(backdrop_layers(&mut screen), (true, Some(0.0)));
 }

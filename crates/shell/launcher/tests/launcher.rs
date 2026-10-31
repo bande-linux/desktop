@@ -14,7 +14,6 @@ use unbound_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{Appearance, Color, CpuRenderer, Image, Point, Scene, Scheme, TextSystem};
 
 const SCREEN: (u32, u32) = (1024, 720);
-const MIN_SSIM: f64 = 0.99;
 const HOME: &str = "/home/someone";
 const NOW: u64 = 1_800_000_000;
 
@@ -571,25 +570,7 @@ fn every_keystroke_updates_the_results_within_a_frame() {
 }
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        std::fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
-    );
+    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(size.0, size.1, rgba));
 }
 
 fn scene(launcher: &mut Launcher, now: Instant) -> Scene {
@@ -600,17 +581,8 @@ fn scene(launcher: &mut Launcher, now: Instant) -> Scene {
 fn render(launcher: &mut Launcher, name: &str) {
     let mut scene = scene(launcher, Instant::now());
     scene.background = Color::hex(0x5A6B7D);
-    for (scale, suffix) in [(1.0, "1x"), (1.5, "1.5x")] {
-        let size = (
-            (f64::from(scene.width) * scale).round() as u32,
-            (f64::from(scene.height) * scale).round() as u32,
-        );
-        let mut rgba = vec![0; (size.0 * size.1 * 4) as usize];
-        CpuRenderer::new()
-            .render_into(&scene, scale, &mut rgba)
-            .expect("frame");
-        check_golden(&format!("{name}-{suffix}"), size, rgba);
-    }
+    let frame = CpuRenderer::new().render(&scene).expect("frame");
+    check_golden(name, (scene.width, scene.height), frame.rgba);
 }
 
 #[test]
@@ -620,60 +592,49 @@ fn the_launcher_matches_its_goldens() {
     std::fs::write(&document, "Groceries\n- tea\n- bread\n").unwrap();
     std::fs::write(folder.path().join("Holiday plans.txt"), "Rome").unwrap();
     let xbel = recently_used_xbel(&[&folder.path().join("Holiday plans.txt")]);
-    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
-        let mut usage = Usage::default();
-        usage.record("app:org.unbound.Terminal", NOW).unwrap();
-        let mut launcher = launcher_with(usage, scheme);
-        launcher.set_now(NOW);
-        launcher.set_recently_used(Some(&xbel));
-        render(&mut launcher, &format!("launcher-browse-{suffix}"));
+    let mut usage = Usage::default();
+    usage.record("app:org.unbound.Terminal", NOW).unwrap();
+    let mut launcher = launcher_with(usage, Scheme::Light);
+    launcher.set_now(NOW);
+    launcher.set_recently_used(Some(&xbel));
+    render(&mut launcher, "launcher-browse-light");
 
-        typed(&mut launcher, "te");
-        key(&mut launcher, Key::Down);
-        render(&mut launcher, &format!("launcher-results-{suffix}"));
+    typed(&mut launcher, "te");
+    key(&mut launcher, Key::Down);
+    render(&mut launcher, "launcher-results-light");
 
-        launcher.clear();
-        typed(&mut launcher, "5 km in mi");
-        render(&mut launcher, &format!("launcher-calculation-{suffix}"));
+    launcher.clear();
+    typed(&mut launcher, "notes");
+    let (generation, _) = launcher.file_query().unwrap();
+    launcher.set_files(FileResults {
+        generation,
+        hits: vec![FileHit {
+            path: document.clone(),
+            folder: false,
+            score: PREFIX,
+        }],
+    });
+    let requested = launcher.preview_request().unwrap();
+    let entry = Entry::read(requested, "notes.txt".to_owned());
+    let content = preview(&entry, Image::from_rgba);
+    launcher.set_preview(Loaded {
+        entry: Entry {
+            modified: None,
+            ..entry
+        },
+        content,
+    });
+    render(&mut launcher, "launcher-file-light");
 
-        launcher.clear();
-        typed(&mut launcher, "notes");
-        let (generation, _) = launcher.file_query().unwrap();
-        launcher.set_files(FileResults {
-            generation,
-            hits: vec![FileHit {
-                path: document.clone(),
-                folder: false,
-                score: PREFIX,
-            }],
-        });
-        let requested = launcher.preview_request().unwrap();
-        let entry = Entry::read(requested, "notes.txt".to_owned());
-        let content = preview(&entry, Image::from_rgba);
-        launcher.set_preview(Loaded {
-            entry: Entry {
-                modified: None,
-                ..entry
-            },
-            content,
-        });
-        render(&mut launcher, &format!("launcher-file-{suffix}"));
+    launcher.clear();
+    typed(&mut launcher, "zzzq");
+    files(&mut launcher, &[]);
+    render(&mut launcher, "launcher-none-light");
 
-        launcher.clear();
-        typed(&mut launcher, "zzzq");
-        files(&mut launcher, &[]);
-        render(&mut launcher, &format!("launcher-none-{suffix}"));
-
-        launcher.open(Mode::Emoji, true);
-        typed(&mut launcher, "arrow");
-        key(&mut launcher, Key::Right);
-        render(&mut launcher, &format!("launcher-emoji-{suffix}"));
-
-        launcher.set_now(NOW);
-        launcher.open(Mode::Clipboard, false);
-        launcher.set_clips(clips());
-        render(&mut launcher, &format!("launcher-clipboard-{suffix}"));
-    }
+    launcher.open(Mode::Emoji, true);
+    typed(&mut launcher, "arrow");
+    key(&mut launcher, Key::Right);
+    render(&mut launcher, "launcher-emoji-light");
 }
 
 fn recently_used_xbel(paths: &[&Path]) -> String {

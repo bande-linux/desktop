@@ -3,7 +3,7 @@ mod client;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use jiff::Zoned;
 use unbound_datetime::DateFormats;
@@ -40,6 +40,7 @@ const BUTTON_INSET: f32 = Spacing::S as f32;
 const DRAG_SLOP: f32 = 4.0;
 const DISMISS_FRACTION: f32 = 0.35;
 const FLICK_SPEED: f32 = 600.0;
+const FLICK_WINDOW: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Request {
@@ -198,6 +199,7 @@ impl Screen {
                 .any(|stack| &stack.group == group && stack.notifications.len() > 1)
         });
         self.presentation = presentation;
+        self.pressed = None;
         self.rebuild(now);
     }
 
@@ -860,8 +862,13 @@ impl Screen {
             return;
         };
         let (x, _) = banner.x.value_at(now);
-        let flung = drag.velocity > FLICK_SPEED
-            || (x > BANNER_WIDTH * DISMISS_FRACTION && drag.velocity > -FLICK_SPEED);
+        let velocity = if now.saturating_duration_since(drag.last.1) > FLICK_WINDOW {
+            0.0
+        } else {
+            drag.velocity
+        };
+        let flung = velocity > FLICK_SPEED
+            || (x > BANNER_WIDTH * DISMISS_FRACTION && velocity > -FLICK_SPEED);
         if flung {
             banner.leaving = true;
             banner.x.animate_at(

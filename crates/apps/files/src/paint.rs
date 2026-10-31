@@ -15,8 +15,8 @@ use crate::browser::Location;
 use crate::sidebar::{PlaceKind, Row};
 use crate::toolbar::TOOLBAR_HEIGHT;
 use crate::view::{
-    COLUMN_WIDTH, FilesView, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PROGRESS_HEIGHT, QuickLook,
-    ROW_HEIGHT, SIDEBAR_WIDTH,
+    COLUMN_WIDTH, ColumnPreview, FilesView, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PREVIEW_WIDTH,
+    PROGRESS_HEIGHT, QuickLook, ROW_HEIGHT, SIDEBAR_WIDTH,
 };
 use crate::views::ViewMode;
 
@@ -37,6 +37,11 @@ const QUICK_LOOK_SHARE: f32 = 0.8;
 const QUICK_LOOK_HEADER: f32 = 36.0;
 const PADDING: f32 = 16.0;
 const BUTTON_HEIGHT: f32 = 24.0;
+const PREVIEW_SIDE: f32 = 256.0;
+const PREVIEW_ICON: f32 = 128.0;
+const TOP_GAP: f32 = 8.0;
+const FACT_LABEL: f32 = 96.0;
+const PAGE_PADDING: f32 = 10.0;
 
 pub fn permissions(mode: u32) -> String {
     (0..9)
@@ -289,25 +294,205 @@ impl FilesView {
         if let Some(last) = self.browser.columns().len().checked_sub(1) {
             self.hits.push((content, Hit::Column(last)));
         }
+        let mut end = content.x;
         for index in first..self.browser.columns().len() {
             let x = content.x + (index - first) as f32 * COLUMN_WIDTH;
             if x >= content.x + content.width {
                 break;
             }
             self.paint_column(index, x, content, items);
+            end = x + COLUMN_WIDTH;
+        }
+        let width = (content.x + content.width - end).max(PREVIEW_WIDTH);
+        if end < content.x + content.width {
+            self.paint_preview_column(Rect::new(end, content.y, width, content.height), items);
         }
     }
 
+    fn paint_text_page(&mut self, text: &str, area: Rect, items: &mut Vec<Item>) {
+        let page = area.inset(PAGE_PADDING);
+        let lines = (page.height / CODE_SIZE).ceil() as usize + 1;
+        let shown = text.lines().take(lines).collect::<Vec<_>>().join("\n");
+        let ink = self.palette.ink;
+        let paragraph = self.text().paragraph(
+            &shown,
+            TextStyle::new(CODE_SIZE, ink).monospace(),
+            None,
+            TextAlign::Start,
+        );
+        items.push(self.fill(area, Radius::S, self.palette.well));
+        items.push(Item::Clip {
+            shape: Shape::rect(page),
+            items: vec![Item::Text {
+                origin: Point::new(page.x, page.y),
+                paragraph,
+            }],
+        });
+    }
+
+    fn paint_preview_picture(
+        &mut self,
+        shown: &ColumnPreview,
+        area: Rect,
+        items: &mut Vec<Item>,
+    ) -> Rect {
+        let Some(entry) = &shown.entry else {
+            return Rect::new(area.x, area.y, area.width, 0.0);
+        };
+        let picture = match &shown.preview {
+            Some(Preview::Image(image)) => Some(image.clone()),
+            _ => self.thumbs.get(entry, ThumbnailSize::Large),
+        };
+        if let Some(image) = picture {
+            let fitted = fitted(area, &image);
+            let rect = Rect::new(fitted.x, area.y, fitted.width, fitted.height);
+            items.push(Item::Clip {
+                shape: Shape::rounded(rect, Radius::S),
+                items: vec![Item::Image { rect, image }],
+            });
+            return rect;
+        }
+        let icon = area.width.min(PREVIEW_ICON);
+        let rect = Rect::new(
+            area.x + ((area.width - icon) / 2.0).round(),
+            area.y,
+            icon,
+            icon,
+        );
+        if let Some(image) = self.entry_icon(entry, LARGE_ICON_PIXELS) {
+            items.push(Item::Image { rect, image });
+        }
+        rect
+    }
+
+    fn paint_preview_column(&mut self, frame: Rect, items: &mut Vec<Item>) {
+        let Some(shown) = self.column_preview.take() else {
+            return;
+        };
+        let mut content = Vec::new();
+        let inner = frame.inset(PADDING);
+        let primary = self.palette.ink;
+        let muted = self.palette.ink2;
+        let side = inner
+            .width
+            .min(PREVIEW_SIDE)
+            .min(inner.height * 0.5)
+            .max(0.0);
+        let area = Rect::new(
+            inner.x + ((inner.width - side) / 2.0).round(),
+            inner.y + TOP_GAP,
+            side,
+            side,
+        );
+        let shown_area = match &shown.preview {
+            Some(Preview::Text(text)) => {
+                self.paint_text_page(text, area, &mut content);
+                area
+            }
+            _ => self.paint_preview_picture(&shown, area, &mut content),
+        };
+        let mut y = shown_area.y + shown_area.height + 16.0;
+        let (title, subtitle) = match &shown.entry {
+            Some(entry) => (
+                entry.name.clone(),
+                L10N.tr_args(
+                    "kind-and-size",
+                    [
+                        ("kind", shown.kind.clone().into()),
+                        ("size", format_size(entry.size).into()),
+                    ],
+                ),
+            ),
+            None => (
+                L10N.tr_args("item-count", [("count", shown.count.into())]),
+                format_size(shown.bytes),
+            ),
+        };
+        for (text, style) in [
+            (title, TextStyle::role(TextRole::BodyStrong, primary)),
+            (subtitle, TextStyle::role(TextRole::Callout, muted)),
+        ] {
+            let paragraph =
+                self.text()
+                    .paragraph(&text, style, Some(inner.width), TextAlign::Center);
+            let height = paragraph.height();
+            content.push(Item::Text {
+                origin: Point::new(inner.x, y),
+                paragraph,
+            });
+            y += height + 2.0;
+        }
+        y += 14.0;
+        let mut facts = Vec::new();
+        if let Some(created) = shown.created {
+            facts.push((L10N.tr("info-created"), format_date(created)));
+        }
+        if let Some(modified) = shown.entry.as_ref().and_then(|entry| entry.modified) {
+            facts.push((L10N.tr("info-modified"), format_date(modified)));
+        }
+        for (label, value) in facts {
+            let label = self.text().paragraph(
+                &label,
+                TextStyle::role(TextRole::Callout, muted),
+                Some(FACT_LABEL - 8.0),
+                TextAlign::End,
+            );
+            let value = self.text().paragraph(
+                &value,
+                TextStyle::role(TextRole::Callout, primary).tabular(),
+                Some(inner.width - FACT_LABEL),
+                TextAlign::Start,
+            );
+            let height = label.height().max(value.height());
+            content.push(Item::Text {
+                origin: Point::new(inner.x, y),
+                paragraph: label,
+            });
+            content.push(Item::Text {
+                origin: Point::new(inner.x + FACT_LABEL, y),
+                paragraph: value,
+            });
+            y += height + 6.0;
+        }
+        if shown.entry.is_some() {
+            y += 10.0;
+            let title = L10N.tr("more-info");
+            let width = self
+                .paragraph(&title, NAME_SIZE, primary, TextStyle::MEDIUM)
+                .width()
+                + 28.0;
+            let origin = Point::new(inner.x + ((inner.width - width) / 2.0).round(), y);
+            let button = self.button(&title, origin, false, &mut content);
+            self.hits.push((button, Hit::MoreInfo));
+        }
+        items.push(Item::Clip {
+            shape: Shape::rect(frame),
+            items: content,
+        });
+        self.column_preview = Some(shown);
+    }
+
     fn paint_column(&mut self, index: usize, x: f32, content: Rect, items: &mut Vec<Item>) {
-        let column = self.browser.columns()[index].clone();
         let active = index == self.browser.active();
         let frame = Rect::new(x, content.y, COLUMN_WIDTH, content.height);
         self.hits.push((frame, Hit::Column(index)));
         let mut rows = Vec::new();
         let scroll = self.column_offset(index);
         let first = (scroll.max(0.0) / ROW_HEIGHT).floor() as usize;
+        let fitting = (content.height / ROW_HEIGHT).ceil() as usize + 2;
+        let column = &self.browser.columns()[index];
+        let empty = column.entries.is_empty();
+        let shown = column
+            .entries
+            .iter()
+            .enumerate()
+            .skip(first)
+            .take(fitting)
+            .map(|(position, entry)| (position, entry.clone(), column.is_marked(position)))
+            .collect::<Vec<_>>();
         let renaming = self.rename.as_ref().map(|rename| rename.path.clone());
-        for (position, entry) in column.entries.iter().enumerate().skip(first) {
+        for (position, entry, marked) in &shown {
+            let (position, marked) = (*position, *marked);
             let y = content.y + self.rows_top() + position as f32 * ROW_HEIGHT - scroll;
             if y > content.y + content.height {
                 break;
@@ -320,7 +505,6 @@ impl FilesView {
                     row: position,
                 },
             ));
-            let marked = column.is_marked(position);
             let color = if marked && active {
                 self.palette.on_accent
             } else {
@@ -371,7 +555,7 @@ impl FilesView {
                 });
             }
         }
-        if column.entries.is_empty() {
+        if empty {
             let muted = self.palette.ink2;
             let empty = self.text().paragraph(
                 &L10N.tr("empty-folder"),

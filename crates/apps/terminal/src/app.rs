@@ -31,6 +31,7 @@ use crate::bus::{Bus, Outgoing};
 
 pub const APP_ID: &str = "org.unbound.Terminal";
 const FILES: &str = "unbound-files";
+const FILES_APP_ID: &str = "org.unbound.Files";
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
 const TERMINAL_NODE: NodeId = NodeId(u64::MAX - 1);
 const TAB_LIST_NODE: NodeId = NodeId(u64::MAX - 2);
@@ -392,22 +393,21 @@ impl TerminalApp {
         self.tab_layout().hit(at)
     }
 
+    fn tab_title(&self, tab: &Tab) -> String {
+        let title = tab.focused().title(self.home.as_deref());
+        if title.is_empty() {
+            L10N.tr("title")
+        } else {
+            title
+        }
+    }
+
     fn titles(&self) -> Vec<String> {
-        self.tabs
-            .iter()
-            .map(|tab| {
-                let title = tab.focused().title(self.home.as_deref());
-                if title.is_empty() {
-                    L10N.tr("title")
-                } else {
-                    title
-                }
-            })
-            .collect()
+        self.tabs.iter().map(|tab| self.tab_title(tab)).collect()
     }
 
     fn sync_title(&mut self, window: &mut Window) {
-        let title = self.titles().swap_remove(self.active);
+        let title = self.tab_title(self.tab());
         if title != self.title {
             window.set_title(&title);
             self.title = title;
@@ -467,7 +467,11 @@ impl TerminalApp {
                         ),
                         _ => L10N.tr_args("command-finished", [("command", command.into())]),
                     };
-                    let body = self.titles().get(tab).cloned().unwrap_or_default();
+                    let body = self
+                        .tabs
+                        .get(tab)
+                        .map(|tab| self.tab_title(tab))
+                        .unwrap_or_default();
                     self.bus.send(Outgoing::Notify { summary, body });
                 }
                 Notice::Finished { .. } => {}
@@ -633,7 +637,8 @@ impl TerminalApp {
                 L10N.tr("close")
             }
         };
-        self.banner = Some(Banner::confirm(palette, message, &button));
+        let text = self.painter.text_system().sharing_fonts();
+        self.banner = Some(Banner::confirm(palette, text, message, &button));
         self.pending = Some(pending);
         self.banner_focused = true;
         self.focus_terminal(false);
@@ -692,6 +697,9 @@ impl TerminalApp {
     }
 
     fn remove_other_tabs(&mut self, window: &mut Window, keep: u32) {
+        if !self.tabs.iter().any(|tab| tab.id == keep) {
+            return;
+        }
         while let Some(index) = self.tabs.iter().position(|tab| tab.id != keep) {
             self.close_tab(window, index);
         }
@@ -741,7 +749,12 @@ impl TerminalApp {
         if index < self.active || self.active >= self.tabs.len() {
             self.active -= 1;
         }
-        if self.pending == Some(Pending::CloseTab(closed.id)) {
+        let stale = match self.pending {
+            Some(Pending::CloseTab(id) | Pending::CloseOtherTabs(id)) => id == closed.id,
+            Some(Pending::ClosePane(id)) => closed.session(id).is_some(),
+            Some(Pending::Quit) | None => false,
+        };
+        if stale {
             self.close_banner();
         }
         if was_active {
@@ -813,6 +826,9 @@ impl TerminalApp {
         };
         if let Some(bytes) = encode_key(key, modifiers, mode) {
             self.session().terminal.scroll_to_bottom();
+            if key == Key::Enter && modifiers == Modifiers::default() && !in_alternate_screen {
+                self.session().terminal.mark_prompt();
+            }
             self.send(&bytes);
             window.request_redraw();
         }
@@ -858,6 +874,12 @@ impl TerminalApp {
             Command::SplitStacked => self.split(window, Axis::Stacked),
             Command::NextPane => self.move_focus(window, true),
             Command::PreviousPane => self.move_focus(window, false),
+            Command::PreviousPrompt => {
+                self.session().terminal.jump_to_prompt(true);
+            }
+            Command::NextPrompt => {
+                self.session().terminal.jump_to_prompt(false);
+            }
             Command::Settings => spawn_self(window, vec![SETTINGS_OPTION.to_owned()]),
         }
         window.request_redraw();
@@ -894,7 +916,12 @@ impl TerminalApp {
             MenuCommand::Run(command) => self.perform(window, command),
             MenuCommand::OpenLink(uri) => self.open_link(window, &uri),
             MenuCommand::CopyLink(uri) => window.copy(&uri),
-            MenuCommand::ShowInFiles => self.show_in_files(window),
+            MenuCommand::ShowInFiles => {
+                if let Some(directory) = self.session().working_directory() {
+                    self.show_in_files(window, &directory);
+                }
+            }
+            MenuCommand::Reveal(path) => self.show_in_files(window, &path),
             MenuCommand::CloseTab(id) => {
                 if let Some(index) = self.tabs.iter().position(|tab| tab.id == id) {
                     self.request_close_tab(window, index);
@@ -904,17 +931,16 @@ impl TerminalApp {
         }
     }
 
-    fn show_in_files(&mut self, window: &mut Window) {
-        let Some(directory) = self.session().working_directory() else {
-            return;
-        };
+    fn show_in_files(&mut self, window: &mut Window, path: &Path) {
         let token = window
             .activation_token(APP_ID)
             .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
             .ok();
-        let command = [FILES.to_owned(), directory.to_string_lossy().into_owned()];
-        if let Err(error) = unbound_xdg::spawn_detached(&command, None, token.as_deref()) {
-            tracing::warn!("cannot show {} in Files: {error}", directory.display());
+        let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
+        if let Err(error) =
+            unbound_xdg::spawn_detached(FILES_APP_ID, &command, None, token.as_deref())
+        {
+            tracing::warn!("cannot show {} in Files: {error}", path.display());
         }
     }
 
@@ -955,7 +981,8 @@ impl TerminalApp {
             None => {
                 self.close_banner();
                 let palette = window.appearance().palette();
-                self.banner = Some(Banner::find(palette, &self.last_query));
+                let text = self.painter.text_system().sharing_fonts();
+                self.banner = Some(Banner::find(palette, text, &self.last_query));
                 self.layout();
                 self.run_find();
             }
@@ -1197,12 +1224,21 @@ impl TerminalApp {
         contains(self.pane_area(), at)
     }
 
+    fn link_at(&mut self, at: Point) -> Option<Link> {
+        let cell = self.cell_at(at);
+        let directory = self.session().working_directory();
+        let terminal = &mut self.session().terminal;
+        terminal.link_at(cell).or_else(|| {
+            let home = std::env::home_dir()?;
+            terminal.path_at(cell, directory.as_deref().unwrap_or(&home), &home)
+        })
+    }
+
     fn hover_link(&mut self, window: &mut Window, modifiers: Modifiers) {
         let at = self.pointer;
         let over_focused = self.pane_at(at) == Some(self.tab().focused);
         let link = if modifiers.logo && self.gesture == Gesture::Idle && over_focused {
-            let cell = self.cell_at(at);
-            self.session().terminal.link_at(cell)
+            self.link_at(at)
         } else {
             None
         };
@@ -1221,7 +1257,7 @@ impl TerminalApp {
             .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
             .ok();
         let command = ["xdg-open".to_owned(), uri.to_owned()];
-        if let Err(error) = unbound_xdg::spawn_detached(&command, None, token.as_deref()) {
+        if let Err(error) = unbound_xdg::spawn_detached("", &command, None, token.as_deref()) {
             tracing::warn!("cannot open {uri}: {error}");
         }
     }
@@ -1304,13 +1340,11 @@ impl TerminalApp {
         let modifiers = pointer.modifiers;
         let program_takes_mouse = !modifiers.shift && reports_mouse(self.mode());
         if asks_for_menu(&pointer) && !program_takes_mouse {
-            let cell = self.cell_at(at);
-            let link = self.session().terminal.link_at(cell);
+            let link = self.link_at(at);
             return self.terminal_menu(window, at, link);
         }
         if modifiers.logo && pointer.is_primary() {
-            let cell = self.cell_at(at);
-            if let Some(link) = self.session().terminal.link_at(cell) {
+            if let Some(link) = self.link_at(at) {
                 self.open_link(window, &link.uri);
             }
             return;
@@ -1703,6 +1737,9 @@ impl App for TerminalApp {
                 .map(AppMenu::take_actions)
                 .unwrap_or_default();
             for action in actions {
+                if self.tabs.is_empty() {
+                    return;
+                }
                 self.menu_action(window, &action);
             }
             self.handle_banner_actions(window);
@@ -1867,7 +1904,7 @@ pub fn spawn_self(window: &mut Window, arguments: Vec<String>) {
         .ok();
     let mut command = vec![program];
     command.extend(arguments);
-    if let Err(error) = unbound_xdg::spawn_detached(&command, None, token.as_deref()) {
+    if let Err(error) = unbound_xdg::spawn_detached(APP_ID, &command, None, token.as_deref()) {
         tracing::warn!("cannot open a window: {error}");
     }
 }

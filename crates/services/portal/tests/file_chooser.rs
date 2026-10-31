@@ -186,6 +186,28 @@ fn save_files_appends_each_name_to_the_chosen_folder() {
 }
 
 #[test]
+fn save_files_refuses_names_that_leave_the_chosen_folder() {
+    for name in [
+        &b"../escape.png\0"[..],
+        b"sub/inner.png\0",
+        b"..\0",
+        b"/etc/passwd\0",
+    ] {
+        let fixture = start(Outcome::Chosen(selected(&["/home/anna/Export"])), false);
+        let files = vec![b"one.png\0".to_vec(), name.to_vec()];
+        let options = Options::from([("files", Value::from(files))]);
+        let (response, results) = fixture.portal.request(
+            INTERFACE,
+            "SaveFiles",
+            &(handle(), "org.example.Gallery", "", "Export", options),
+        );
+        assert_eq!(response, 2);
+        assert!(!results.contains_key("uris"));
+        assert!(fixture.shown.try_recv().is_err());
+    }
+}
+
+#[test]
 fn save_file_offers_the_suggested_name() {
     let fixture = start(Outcome::Chosen(selected(&["/tmp/report.pdf"])), false);
     let options = Options::from([("current_name", Value::from("report.pdf"))]);

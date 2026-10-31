@@ -21,7 +21,7 @@ use raw_window_handle::{
 use rustix::fs::{MemfdFlags, memfd_create};
 use unbound_graphics::{
     Appearance, CpuRenderer, Cursor, Event, GpuDevice, GpuRenderer, Point, Pointer, PointerButton,
-    Rect, Region, RenderError, Scene, TextSystem, damage, pixels,
+    Rect, Region, RenderError, ResizeEdge, Scene, TextSystem, damage, pixels,
 };
 use unbound_protocols::client::unbound_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
@@ -56,14 +56,12 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 use crate::L10N;
 use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
-use crate::capture::Capture;
 use crate::chrome::{
     Chrome, Control, Frame, FrameRegions, HEADER_HEIGHT, Header, Look, RESIZE_MARGIN, SHEET_INSET,
     Zone, control_for_node,
 };
 use crate::clipboard::Clipboard;
 use crate::clipboard::{DragAction, DragEvent, DragIcon, Transfer};
-use crate::effect::BackgroundEffect;
 use crate::lock::{Locked, SessionLock};
 use crate::popup::{Fading, MenuPlacement, Menus, Opening, Parent};
 use crate::presentation::Presentation;
@@ -75,6 +73,8 @@ use crate::text_input::TextInput;
 pub const RENDERER_VARIABLE: &str = "UNBOUND_RENDERER";
 pub const ACTIVATION_TOKEN_VARIABLE: &str = "XDG_ACTIVATION_TOKEN";
 const RELEASE_HIDDEN_AFTER: Duration = Duration::from_secs(30);
+const TILING_MENU_AFTER: Duration = Duration::from_millis(500);
+const NEXT_DISPLAY_SINCE: u32 = 6;
 const MAX_STALE_REGIONS: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,7 +172,7 @@ pub enum WindowEvent {
         fine: bool,
     },
     MediaKey(MediaKey),
-    ToggleControlCenter,
+    TogglePanel(Panel),
     AppResponding {
         pid: i32,
         app_id: String,
@@ -199,6 +199,10 @@ pub enum WindowEvent {
         full_screen: bool,
     },
     Displays(Vec<String>),
+    AppsRunning {
+        app_id: String,
+        count: u32,
+    },
     CapsLock(bool),
     Accessibility(ActionRequest),
 
@@ -214,7 +218,6 @@ pub enum WindowError {
     Io(io::Error),
     Render(RenderError),
     LockRefused,
-    CaptureFailed(u32),
 }
 
 impl fmt::Display for WindowError {
@@ -227,12 +230,6 @@ impl fmt::Display for WindowError {
             Self::Io(error) => write!(f, "{error}"),
             Self::Render(error) => write!(f, "{error}"),
             Self::LockRefused => write!(f, "the compositor refused to lock the session"),
-            Self::CaptureFailed(reason) => {
-                write!(
-                    f,
-                    "the compositor could not capture the screen (reason {reason})"
-                )
-            }
         }
     }
 }
@@ -271,43 +268,29 @@ pub struct ToplevelState {
     pub tiled: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResizeEdge {
-    Top,
-    Bottom,
-    Left,
-    Right,
-    TopLeft,
-    TopRight,
-    BottomLeft,
-    BottomRight,
+fn resize_cursor(edge: ResizeEdge) -> Cursor {
+    match edge {
+        ResizeEdge::Top => Cursor::ResizeTop,
+        ResizeEdge::Bottom => Cursor::ResizeBottom,
+        ResizeEdge::Left => Cursor::ResizeLeft,
+        ResizeEdge::Right => Cursor::ResizeRight,
+        ResizeEdge::TopLeft => Cursor::ResizeTopLeft,
+        ResizeEdge::TopRight => Cursor::ResizeTopRight,
+        ResizeEdge::BottomLeft => Cursor::ResizeBottomLeft,
+        ResizeEdge::BottomRight => Cursor::ResizeBottomRight,
+    }
 }
 
-impl ResizeEdge {
-    fn cursor(self) -> Cursor {
-        match self {
-            Self::Top => Cursor::ResizeTop,
-            Self::Bottom => Cursor::ResizeBottom,
-            Self::Left => Cursor::ResizeLeft,
-            Self::Right => Cursor::ResizeRight,
-            Self::TopLeft => Cursor::ResizeTopLeft,
-            Self::TopRight => Cursor::ResizeTopRight,
-            Self::BottomLeft => Cursor::ResizeBottomLeft,
-            Self::BottomRight => Cursor::ResizeBottomRight,
-        }
-    }
-
-    fn protocol(self) -> xdg_toplevel::ResizeEdge {
-        match self {
-            Self::Top => xdg_toplevel::ResizeEdge::Top,
-            Self::Bottom => xdg_toplevel::ResizeEdge::Bottom,
-            Self::Left => xdg_toplevel::ResizeEdge::Left,
-            Self::Right => xdg_toplevel::ResizeEdge::Right,
-            Self::TopLeft => xdg_toplevel::ResizeEdge::TopLeft,
-            Self::TopRight => xdg_toplevel::ResizeEdge::TopRight,
-            Self::BottomLeft => xdg_toplevel::ResizeEdge::BottomLeft,
-            Self::BottomRight => xdg_toplevel::ResizeEdge::BottomRight,
-        }
+fn resize_protocol(edge: ResizeEdge) -> xdg_toplevel::ResizeEdge {
+    match edge {
+        ResizeEdge::Top => xdg_toplevel::ResizeEdge::Top,
+        ResizeEdge::Bottom => xdg_toplevel::ResizeEdge::Bottom,
+        ResizeEdge::Left => xdg_toplevel::ResizeEdge::Left,
+        ResizeEdge::Right => xdg_toplevel::ResizeEdge::Right,
+        ResizeEdge::TopLeft => xdg_toplevel::ResizeEdge::TopLeft,
+        ResizeEdge::TopRight => xdg_toplevel::ResizeEdge::TopRight,
+        ResizeEdge::BottomLeft => xdg_toplevel::ResizeEdge::BottomLeft,
+        ResizeEdge::BottomRight => xdg_toplevel::ResizeEdge::BottomRight,
     }
 }
 
@@ -335,11 +318,10 @@ pub(crate) struct State {
     pub(crate) clipboard: Clipboard,
     pub(crate) shell: Shell,
     pub(crate) lock: SessionLock,
-    pub(crate) capture: Capture,
     pub(crate) text_input: TextInput,
     pub(crate) scaling: Scaling,
-    pub(crate) effect: BackgroundEffect,
     pub(crate) presentation: Presentation,
+    outputs: Vec<u32>,
 }
 
 impl State {
@@ -757,15 +739,11 @@ impl Window {
         self.state.events.push(WindowEvent::CloseRequested);
     }
 
-    pub fn toplevel_state(&self) -> ToplevelState {
-        self.state.toplevel
-    }
-
     pub fn close_requested_by_button(&self) -> bool {
         self.closed_by_button
     }
 
-    pub fn toggle_full_screen(&mut self) -> Result<(), WindowError> {
+    fn toggle_full_screen(&mut self) -> Result<(), WindowError> {
         let toplevel = self.toplevel()?;
         if self.state.toplevel.fullscreen {
             toplevel.unset_fullscreen();
@@ -775,9 +753,58 @@ impl Window {
         self.flush()
     }
 
-    fn open_window_menu(&mut self, at: Point) -> Result<(), WindowError> {
+    fn move_and_resize_items(&self) -> Vec<MenuItem> {
         let toplevel = self.state.toplevel;
         let place = |key: &str| MenuItem::new(&L10N.tr(key), key);
+        let mut items = vec![
+            place("place-left").shortcut("Ctrl+Super+Left"),
+            place("place-right").shortcut("Ctrl+Super+Right"),
+            MenuItem::separator(),
+            place("place-top-left"),
+            place("place-top-right"),
+            place("place-bottom-left"),
+            place("place-bottom-right"),
+            MenuItem::separator(),
+            place("place-fill").enabled(!toplevel.maximized),
+        ];
+        let next_display = self
+            .state
+            .shell
+            .app
+            .as_ref()
+            .is_some_and(|app| app.version() >= NEXT_DISPLAY_SINCE);
+        if next_display && self.state.outputs.len() > 1 {
+            items.push(place("place-next-display").shortcut("Alt+Shift+Super+Right"));
+        }
+        items.extend([
+            MenuItem::separator(),
+            place("place-restore").enabled(toplevel.tiled || toplevel.maximized),
+        ]);
+        items
+    }
+
+    fn offers_tiling_menu(&self) -> bool {
+        self.can_place() && !self.state.toplevel.fullscreen && self.menus.is_none()
+    }
+
+    fn open_tiling_menu(&mut self) -> Result<(), WindowError> {
+        let control = Control::Zoom.area(self.frame().title);
+        let offset = self.content_offset();
+        self.show_menu(
+            Menu::new(self.move_and_resize_items()),
+            MenuPlacement::Below(Rect::new(
+                control.x - offset.x,
+                control.y - offset.y,
+                control.width,
+                control.height,
+            )),
+        )?;
+        self.window_menu = true;
+        Ok(())
+    }
+
+    fn open_window_menu(&mut self, at: Point) -> Result<(), WindowError> {
+        let toplevel = self.state.toplevel;
         let mut items = vec![
             MenuItem::new(&L10N.tr("minimize"), "minimize")
                 .enabled(!toplevel.fullscreen)
@@ -802,17 +829,7 @@ impl Window {
             items.push(
                 MenuItem::submenu(
                     &L10N.tr("move-and-resize"),
-                    Menu::new(vec![
-                        place("place-left").shortcut("Ctrl+Super+Left"),
-                        place("place-right").shortcut("Ctrl+Super+Right"),
-                        MenuItem::separator(),
-                        place("place-top-left"),
-                        place("place-top-right"),
-                        place("place-bottom-left"),
-                        place("place-bottom-right"),
-                        MenuItem::separator(),
-                        place("place-restore").enabled(toplevel.tiled || toplevel.maximized),
-                    ]),
+                    Menu::new(self.move_and_resize_items()),
                 )
                 .enabled(!toplevel.fullscreen),
             );
@@ -860,6 +877,8 @@ impl Window {
             "place-top-right" => self.place(Placement::TopRight),
             "place-bottom-left" => self.place(Placement::BottomLeft),
             "place-bottom-right" => self.place(Placement::BottomRight),
+            "place-fill" if !self.state.toplevel.maximized => self.toggle_zoom(),
+            "place-next-display" => self.place(Placement::NextDisplay),
             "place-restore" => self.place(Placement::Restore),
             "keep-on-top" => {
                 let keep = !self.keep_on_top;
@@ -892,15 +911,15 @@ impl Window {
         Ok((seat, serial))
     }
 
-    pub fn start_move(&mut self) -> Result<(), WindowError> {
+    fn start_move(&mut self) -> Result<(), WindowError> {
         let (seat, serial) = self.grab()?;
         self.toplevel()?._move(seat, serial);
         self.flush()
     }
 
-    pub fn start_resize(&mut self, edge: ResizeEdge) -> Result<(), WindowError> {
+    fn start_resize(&mut self, edge: ResizeEdge) -> Result<(), WindowError> {
         let (seat, serial) = self.grab()?;
-        self.toplevel()?.resize(seat, serial, edge.protocol());
+        self.toplevel()?.resize(seat, serial, resize_protocol(edge));
         self.flush()
     }
 
@@ -956,11 +975,6 @@ impl Window {
         self.state
             .suggested_size
             .is_some_and(|size| size != self.size)
-    }
-
-    pub fn gpu_ready(&mut self) -> bool {
-        self.poll_gpu();
-        matches!(self.gpu, Gpu::Ready(_))
     }
 
     pub fn wait_for_gpu(&mut self) -> bool {
@@ -1221,7 +1235,15 @@ impl Window {
             .chain(self.ui_deadline)
             .chain(self.release_deadline())
             .chain(self.drag_deadline())
+            .chain(self.tiling_menu_deadline())
             .min()
+    }
+
+    fn tiling_menu_deadline(&self) -> Option<Instant> {
+        self.chrome
+            .as_ref()
+            .and_then(|chrome| chrome.zoom_rest)
+            .map(|since| since + TILING_MENU_AFTER)
     }
 
     fn release_deadline(&self) -> Option<Instant> {
@@ -1256,6 +1278,22 @@ impl Window {
         }
         self.serve_menus(self.frame_time());
         self.abandon_unfinished_drag(now);
+        if self
+            .tiling_menu_deadline()
+            .is_some_and(|deadline| deadline <= now)
+        {
+            let offered = self.offers_tiling_menu();
+            if let Some(chrome) = &mut self.chrome {
+                chrome.zoom_rest = None;
+                if offered {
+                    chrome.pressed = None;
+                    self.needs_redraw = true;
+                }
+            }
+            if offered && self.open_tiling_menu().is_err() {
+                self.needs_redraw = true;
+            }
+        }
         if self.ui_deadline.is_some_and(|deadline| deadline <= now) {
             self.ui_deadline = None;
             self.request_redraw();
@@ -1446,6 +1484,7 @@ impl Window {
                     let inside = zone == Zone::Control(control);
                     if inside != chrome.pressed_inside {
                         chrome.pressed_inside = inside;
+                        chrome.zoom_rest = None;
                         self.needs_redraw = true;
                     }
                     return;
@@ -1469,7 +1508,7 @@ impl Window {
                 }
                 let cursor = match zone {
                     _ if content => self.app_cursor,
-                    Zone::Resize(edge) => edge.cursor(),
+                    Zone::Resize(edge) => resize_cursor(edge),
                     _ => Cursor::Default,
                 };
                 self.show_cursor(cursor);
@@ -1504,6 +1543,7 @@ impl Window {
                     Zone::Control(control) => {
                         chrome.pressed = Some(control);
                         chrome.pressed_inside = true;
+                        chrome.zoom_rest = (control == Control::Zoom).then_some(now);
                         self.needs_redraw = true;
                         Ok(())
                     }
@@ -1518,6 +1558,7 @@ impl Window {
             }
             Event::PointerUp(pointer) => {
                 chrome.tab_press = None;
+                chrome.zoom_rest = None;
                 if chrome.content_buttons > 0 {
                     chrome.content_buttons -= 1;
                     passed.push(WindowEvent::Input(Event::PointerUp(into_content(pointer))));
@@ -2331,6 +2372,10 @@ impl Dispatch<WlRegistry, ()> for State {
         _: &Connection,
         handle: &QueueHandle<Self>,
     ) {
+        if let wl_registry::Event::GlobalRemove { name } = event {
+            state.outputs.retain(|output| *output != name);
+            return;
+        }
         if let wl_registry::Event::Global {
             name,
             interface,
@@ -2361,9 +2406,6 @@ impl Dispatch<WlRegistry, ()> for State {
                 "zwp_primary_selection_device_manager_v1" => {
                     state.clipboard.primary.manager = Some(registry.bind(name, 1, handle, ()));
                 }
-                "ext_background_effect_manager_v1" => {
-                    state.effect.manager = Some(registry.bind(name, 1, handle, ()));
-                }
                 "wp_cursor_shape_manager_v1" => {
                     state.cursor_shape_manager = Some(registry.bind(name, 1, handle, ()));
                 }
@@ -2371,6 +2413,7 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.lock.manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "wl_output" => {
+                    state.outputs.push(name);
                     if state.lock.output.is_none() {
                         state.lock.output = Some(registry.bind(name, 1, handle, ()));
                     }
@@ -2380,16 +2423,10 @@ impl Dispatch<WlRegistry, ()> for State {
                     }
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(16), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, version.min(18), handle, ()));
                 }
                 "unbound_app_v1" => {
-                    state.shell.app = Some(registry.bind(name, version.min(5), handle, ()));
-                }
-                "ext_output_image_capture_source_manager_v1" => {
-                    state.capture.sources = Some(registry.bind(name, 1, handle, ()));
-                }
-                "ext_image_copy_capture_manager_v1" => {
-                    state.capture.manager = Some(registry.bind(name, 1, handle, ()));
+                    state.shell.app = Some(registry.bind(name, version.min(6), handle, ()));
                 }
                 "zwp_text_input_manager_v3" => {
                     state.text_input.manager = Some(registry.bind(name, 1, handle, ()));

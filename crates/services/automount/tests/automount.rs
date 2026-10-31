@@ -256,3 +256,16 @@ fn an_ejected_drive_leaves_quietly() {
     std::thread::sleep(QUIET);
     assert!(fixture.notifications.active().is_empty());
 }
+
+#[test]
+fn a_drive_pulled_right_after_ejecting_leaves_quietly() {
+    let fixture = start(false);
+    for _ in 0..10 {
+        plug(&fixture.udisks, USB, usb(), &fixture.mounts_sender);
+        fixture.mounts.recv_timeout(WAIT).expect("mounted");
+        fixture.unmount(USB);
+        unplug(&fixture.udisks, USB);
+    }
+    std::thread::sleep(QUIET);
+    assert!(fixture.notifications.active().is_empty());
+}

@@ -52,6 +52,9 @@ impl State {
     }
 
     fn inhibited(&self) -> bool {
+        if self.idle.inhibitors.is_empty() {
+            return false;
+        }
         let shown: Vec<_> = (0..self.screens.len())
             .flat_map(|screen| self.stack(screen))
             .collect();
@@ -63,6 +66,12 @@ impl State {
 }
 
 impl Headless {
+    pub fn woke(&mut self) {
+        self.state.night_light.recheck();
+        self.state.note_activity();
+        self.state.needs_redraw = true;
+    }
+
     pub fn idle_tick(&mut self, now: Duration) -> Option<Duration> {
         let state = &mut self.state;
         state
@@ -165,9 +174,14 @@ impl IdleInhibitHandler for State {
     }
 
     fn uninhibit(&mut self, surface: WlSurface) {
-        self.idle
+        if let Some(at) = self
+            .idle
             .inhibitors
-            .retain(|inhibitor| *inhibitor != surface);
+            .iter()
+            .position(|inhibitor| *inhibitor == surface)
+        {
+            self.idle.inhibitors.remove(at);
+        }
     }
 }
 

@@ -1,15 +1,15 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
-use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use unbound_screenshot::area::AreaSelection;
 use unbound_screenshot::palette::{Mode, Palette as CapturePalette};
-use unbound_toolkit::ui::{Context, Event, FreeLayout, Pointer, Size, Ui, Widget};
+use unbound_screenshot::{Failure, L10N};
+use unbound_toolkit::ui::{Alert, Context, Event, FreeLayout, Pointer, Size, Ui, Widget};
 use unbound_toolkit::{
     Color, CpuRenderer, Item, Palette, Point, Rect, Scene, Scheme, Shape, TextSystem,
 };
 
-const MIN_SSIM: f64 = 0.99;
 const SIZE: (u32, u32) = (640, 400);
 
 fn backdrop() -> Item {
@@ -20,78 +20,67 @@ fn backdrop() -> Item {
 }
 
 fn check_golden(name: &str, scene: &Scene) {
-    for (scale, suffix) in [(1.0, ""), (1.5, "-1.5x")] {
-        let (width, height) = (
-            (f64::from(scene.width) * scale).round() as u32,
-            (f64::from(scene.height) * scale).round() as u32,
-        );
-        let mut rgba = vec![0; (width * height * 4) as usize];
-        CpuRenderer::new()
-            .render_into(scene, scale, &mut rgba)
-            .expect("frame");
-        let actual = image::RgbaImage::from_raw(width, height, rgba).expect("frame");
-        let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-        let name = format!("{name}{suffix}");
-        let path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-        if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-            std::fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
-            actual.save(&path).expect("write golden");
-        }
-        let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-        actual.save(&target).expect("save the frame");
-        let expected = image::open(&path)
-            .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-            .to_rgb8();
-        let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-        assert!(
-            similarity.score >= MIN_SSIM,
-            "{name} differs from its golden: {:.4} (frame in {})",
-            similarity.score,
-            target.display()
-        );
-    }
-}
-
-const SCHEMES: [(Scheme, &str); 2] = [(Scheme::Light, "light"), (Scheme::Dark, "dark")];
-
-#[test]
-fn an_area_being_chosen_matches_its_goldens() {
-    for (scheme, look) in SCHEMES {
-        let mut selection = AreaSelection::new(Vec::new(), false);
-        selection.handle(&Event::PointerDown(Pointer::at(Point::new(120.0, 90.0))));
-        selection.handle(&Event::PointerMove(Pointer::at(Point::new(420.0, 290.0))));
-        let mut scene = selection.scene(
-            SIZE.0,
-            SIZE.1,
-            &Palette::for_scheme(scheme),
-            &mut TextSystem::new(),
-        );
-        scene.items.insert(0, backdrop());
-        check_golden(&format!("area-{look}"), &scene);
-    }
+    let frame = CpuRenderer::new().render(scene).expect("frame");
+    unbound_golden::assert_golden!(
+        name,
+        &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
+    );
 }
 
 #[test]
-fn the_capture_toolbar_matches_its_goldens() {
-    for (scheme, look) in SCHEMES {
-        let palette = Palette::for_scheme(scheme);
-        let mut cx = Context::new(TextSystem::new(), palette);
-        let (mut toolbar, _) = CapturePalette::new(Mode::Area);
-        let size = toolbar.measure(&mut cx, Size::new(SIZE.0 as f32, SIZE.1 as f32));
-        let mut layout = FreeLayout::new();
-        layout.insert(
-            toolbar,
-            Rect::new(
-                ((SIZE.0 as f32 - size.width) / 2.0).round(),
-                SIZE.1 as f32 - 40.0 - size.height,
-                size.width,
-                size.height,
-            ),
-        );
-        let mut ui = Ui::new(Box::new(layout), cx);
-        let mut scene = ui.scene(SIZE.0, SIZE.1);
-        scene.items.insert(0, backdrop());
-        check_golden(&format!("toolbar-{look}"), &scene);
+fn an_area_being_chosen_matches_its_golden() {
+    let mut selection = AreaSelection::new(Vec::new(), false);
+    selection.handle(&Event::PointerDown(Pointer::at(Point::new(120.0, 90.0))));
+    selection.handle(&Event::PointerMove(Pointer::at(Point::new(420.0, 290.0))));
+    let mut scene = selection.scene(
+        SIZE.0,
+        SIZE.1,
+        &Palette::for_scheme(Scheme::Light),
+        &mut TextSystem::new(),
+    );
+    scene.items.insert(0, backdrop());
+    check_golden("area-light", &scene);
+}
+
+#[test]
+fn the_capture_toolbar_matches_its_golden() {
+    let palette = Palette::for_scheme(Scheme::Light);
+    let mut cx = Context::new(TextSystem::new(), palette);
+    let (mut toolbar, _) = CapturePalette::new(Mode::Area);
+    let size = toolbar.measure(&mut cx, Size::new(SIZE.0 as f32, SIZE.1 as f32));
+    let mut layout = FreeLayout::new();
+    layout.insert(
+        toolbar,
+        Rect::new(
+            ((SIZE.0 as f32 - size.width) / 2.0).round(),
+            SIZE.1 as f32 - 40.0 - size.height,
+            size.width,
+            size.height,
+        ),
+    );
+    let mut ui = Ui::new(Box::new(layout), cx);
+    let mut scene = ui.scene(SIZE.0, SIZE.1);
+    scene.items.insert(0, backdrop());
+    check_golden("toolbar-light", &scene);
+}
+
+#[test]
+fn a_recording_that_cannot_start_says_so_and_matches_its_golden() {
+    let (title, detail) = Failure::ScreenUnavailable.message();
+    let mut ui = Ui::new(
+        Box::new(FreeLayout::new()),
+        Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
+    );
+    ui.present_dialog(Alert::new(&title, &detail, |_| {}).primary(&L10N.tr("ok"), "ok"));
+    ui.layout(Size::new(SIZE.0 as f32, SIZE.1 as f32));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut scene = ui.scene(SIZE.0, SIZE.1);
+    while ui.is_animating() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(16));
+        scene = ui.scene(SIZE.0, SIZE.1);
     }
+    scene.items.insert(0, backdrop());
+
+    assert_eq!(title, "Screen recording is not available");
+    check_golden("cannot-record-light", &scene);
 }

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use unbound_file_chooser::{
     Accept, Chooser, glob_matches, initial_folder, initial_name, remember, remembered_folder,
+    typed_location,
 };
 use unbound_xdg::MimeDatabase;
 use xdg_desktop_portal_unbound::file_chooser::{Dialog, Filter, Mode, Pattern};
@@ -193,6 +194,21 @@ fn the_last_folder_is_remembered_for_each_app() {
 }
 
 #[test]
+fn a_remembered_folder_keeps_its_exact_name() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let folder = Path::new(OsStr::from_bytes(b"/home/anna/caf\xe9\n\tnotes"));
+    let memory = remember("", "org.example.Editor", folder);
+    let memory = remember(&memory, "org.example.Viewer", Path::new("/home/anna"));
+    assert_eq!(
+        remembered_folder(&memory, "org.example.Editor").as_deref(),
+        Some(folder)
+    );
+    assert_eq!(memory.lines().count(), 2);
+}
+
+#[test]
 fn the_dialog_starts_in_the_apps_folder_then_the_remembered_one_then_a_default() {
     let folder = folder();
     let home = Path::new("/home/anna");
@@ -228,4 +244,21 @@ fn the_dialog_starts_in_the_apps_folder_then_the_remembered_one_then_a_default()
         Vec::new(),
     );
     assert_eq!(initial_folder(&save, None, home, documents), documents);
+}
+
+#[test]
+fn typed_locations_expand_the_home_folder_and_resolve_against_the_shown_one() {
+    let home = Path::new("/home/anna");
+    let shown = Path::new("/home/anna/Documents");
+    assert_eq!(typed_location(" ~ ", home, shown), home);
+    assert_eq!(
+        typed_location("~/Pictures/", home, shown),
+        home.join("Pictures")
+    );
+    assert_eq!(typed_location("/etc", home, shown), Path::new("/etc"));
+    assert_eq!(
+        typed_location("Receipts", home, shown),
+        shown.join("Receipts")
+    );
+    assert_eq!(typed_location("~bob", home, shown), shown.join("~bob"));
 }

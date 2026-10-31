@@ -9,7 +9,7 @@ use unbound_notify::client::{self, Request};
 use zbus::blocking::fdo::ObjectManagerProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
-use zbus::{MatchRule, message};
+use zbus::{MatchRule, Message, message};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-automount.ftl");
 
@@ -19,6 +19,8 @@ pub const UDISKS: &str = "org.freedesktop.UDisks2";
 pub const UDISKS_PATH: &str = "/org/freedesktop/UDisks2";
 pub const BLOCK: &str = "org.freedesktop.UDisks2.Block";
 pub const FILESYSTEM: &str = "org.freedesktop.UDisks2.Filesystem";
+const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
+const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
 
 type Properties = HashMap<String, OwnedValue>;
 type Interfaces = HashMap<String, Properties>;
@@ -86,17 +88,12 @@ impl Automounter {
             .destination(UDISKS)?
             .path(UDISKS_PATH)?
             .build()?;
-        let added = manager.receive_interfaces_added()?;
-        let removed = manager.receive_interfaces_removed()?;
         let rule = MatchRule::builder()
             .msg_type(message::Type::Signal)
             .sender(UDISKS)?
-            .interface("org.freedesktop.DBus.Properties")?
-            .member("PropertiesChanged")?
             .path_namespace(UDISKS_PATH)?
-            .arg(0, FILESYSTEM)?
             .build();
-        let changes = MessageIterator::for_match_rule(rule, system, None)?;
+        let signals = MessageIterator::for_match_rule(rule, system, None)?;
         let automounter = Arc::new(Self {
             system: system.clone(),
             session: session.clone(),
@@ -111,61 +108,45 @@ impl Automounter {
         }
         let watcher = Arc::clone(&automounter);
         thread::spawn(move || {
-            for signal in added {
-                if let Ok(arguments) = signal.args() {
-                    let interfaces: Interfaces = arguments
-                        .interfaces_and_properties()
-                        .iter()
-                        .map(|(name, properties)| {
-                            (
-                                name.to_string(),
-                                properties
-                                    .iter()
-                                    .filter_map(|(key, value)| {
-                                        Some((key.to_string(), value.try_to_owned().ok()?))
-                                    })
-                                    .collect(),
-                            )
-                        })
-                        .collect();
-                    watcher.appeared(arguments.object_path().to_owned().into(), &interfaces);
-                }
+            for signal in signals.flatten() {
+                watcher.handle(&signal);
             }
         });
-        let watcher = Arc::clone(&automounter);
-        thread::spawn(move || {
-            for signal in removed {
-                if let Ok(arguments) = signal.args() {
-                    let gone: Vec<String> = arguments
-                        .interfaces()
-                        .iter()
-                        .map(|interface| interface.to_string())
-                        .collect();
-                    watcher.disappeared(&arguments.object_path().to_owned().into(), &gone);
+        Ok(automounter)
+    }
+
+    fn handle(&self, signal: &Message) {
+        let header = signal.header();
+        let (Some(interface), Some(member)) = (header.interface(), header.member()) else {
+            return;
+        };
+        let body = signal.body();
+        match (interface.as_str(), member.as_str()) {
+            (OBJECT_MANAGER, "InterfacesAdded") => {
+                if let Ok((path, interfaces)) = body.deserialize::<(OwnedObjectPath, Interfaces)>()
+                {
+                    self.appeared(path, &interfaces);
                 }
             }
-        });
-        let watcher = Arc::clone(&automounter);
-        thread::spawn(move || {
-            for signal in changes.flatten() {
-                let Some(path) = signal
-                    .header()
-                    .path()
-                    .map(|path| OwnedObjectPath::from(path.to_owned()))
-                else {
-                    continue;
-                };
-                if let Ok((_, changed, _)) = signal
-                    .body()
-                    .deserialize::<(String, Properties, Vec<String>)>()
-                    && changed.contains_key("MountPoints")
-                    && let Some(volume) = lock(&watcher.state).volumes.get_mut(&path)
+            (OBJECT_MANAGER, "InterfacesRemoved") => {
+                if let Ok((path, gone)) = body.deserialize::<(OwnedObjectPath, Vec<String>)>() {
+                    self.disappeared(&path, &gone);
+                }
+            }
+            (PROPERTIES, "PropertiesChanged") => {
+                if let (Some(path), Ok((FILESYSTEM, changed, _))) = (
+                    header.path(),
+                    body.deserialize::<(&str, Properties, Vec<String>)>(),
+                ) && changed.contains_key("MountPoints")
+                    && let Some(volume) = lock(&self.state)
+                        .volumes
+                        .get_mut(&OwnedObjectPath::from(path.to_owned()))
                 {
                     volume.mounted = mounted(&changed);
                 }
             }
-        });
-        Ok(automounter)
+            _ => {}
+        }
     }
 
     fn appeared(&self, path: OwnedObjectPath, interfaces: &Interfaces) {

@@ -100,8 +100,13 @@ impl Backdrop {
             return;
         }
         self.previous = self.current.replace(layer);
-        self.fade.jump_to(0.0);
-        self.fade.animate_at(now, false, 1.0, Spring::GENTLE);
+        match self.previous {
+            Some(_) => {
+                self.fade.jump_to(0.0);
+                self.fade.animate_at(now, false, 1.0, Spring::GENTLE);
+            }
+            None => self.fade.jump_to(1.0),
+        }
     }
 
     pub fn is_fading(&mut self, now: Instant) -> bool {

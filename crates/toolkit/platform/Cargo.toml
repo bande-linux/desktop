@@ -8,7 +8,6 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 accesskit_unix.workspace = true
-pollster.workspace = true
 raw-window-handle.workspace = true
 rustix = { workspace = true, features = ["fs", "pipe", "time"] }
 tracing.workspace = true
@@ -26,11 +25,10 @@ zbus.workspace = true
 
 [dev-dependencies]
 atspi-common.workspace = true
-image.workspace = true
-image-compare.workspace = true
 serde.workspace = true
 smithay.workspace = true
 unbound-compositor.workspace = true
+unbound-golden.workspace = true
 unbound-test-bus.workspace = true
 unbound-test-wayland.workspace = true
 

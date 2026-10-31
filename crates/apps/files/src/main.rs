@@ -9,8 +9,8 @@ use accesskit::TreeUpdate;
 use unbound_app_menu::{AppMenu, Standard};
 use unbound_files::{
     BookmarkEdit, Browser, FilesView, Location, Request, Row, SIDEBAR_WIDTH, SidebarEdit,
-    TOOLBAR_HEIGHT, ViewMemory, hidden_places, rows, sidebar_file, status_bar_file, views_file,
-    with_bookmarks, without_bookmark,
+    TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file, rows, sidebar_file,
+    status_bar_file, views_file, with_bookmarks, without_bookmark,
 };
 use unbound_fs::Trash;
 use unbound_search::{recently_used_path, usage_path};
@@ -22,7 +22,7 @@ use unbound_toolkit::{
 use unbound_volumes::{eject, media_roots};
 use unbound_xdg::{
     Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
-    path_from_file_uri, spawn_detached, user_dir,
+    path_from_file_uri, spawn_detached, state_home, user_dir,
 };
 
 const APP_ID: &str = "org.unbound.Files";
@@ -44,8 +44,7 @@ fn read(path: Option<PathBuf>) -> Option<String> {
 }
 
 fn layout_file(home: &Path) -> PathBuf {
-    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
-    sidebar_file(state_home.as_deref(), home)
+    sidebar_file(state_home().as_deref(), home)
 }
 
 fn sidebar(home: &Path) -> (Vec<Row>, Vec<Location>) {
@@ -360,7 +359,7 @@ fn open_terminal(window: &mut Window, folder: &Path) {
         TERMINAL_DIRECTORY.to_owned(),
         folder.to_string_lossy().into_owned(),
     ];
-    if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+    if let Err(error) = spawn_detached(TERMINAL_APP_ID, &command, None, token.as_deref()) {
         tracing::warn!("cannot open a terminal: {error}");
     }
 }
@@ -378,7 +377,7 @@ fn new_window(window: &mut Window, location: &Location) {
         }
     };
     let token = window.activation_token(APP_ID).ok();
-    if let Err(error) = spawn_detached(&[program, argument], None, token.as_deref()) {
+    if let Err(error) = spawn_detached(APP_ID, &[program, argument], None, token.as_deref()) {
         tracing::warn!("cannot open a window: {error}");
     }
 }
@@ -436,9 +435,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let user_dirs = config_home()
         .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
     view.set_templates(user_dir(&home, user_dirs.as_deref(), UserDir::Templates));
-    let state_home = std::env::var_os("XDG_STATE_HOME").map(PathBuf::from);
+    let state_home = state_home();
     view.set_view_memory(ViewMemory::load(views_file(state_home.as_deref(), &home)));
     view.set_status_bar_file(status_bar_file(state_home.as_deref(), &home));
+    view.set_list_columns_file(list_columns_file(state_home.as_deref(), &home));
     let data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
     if let Some(usage) = usage_path(state_home.as_deref(), Some(&home)) {
         view.set_recents_sources(recently_used_path(data_home.as_deref(), &home), usage);

@@ -3,6 +3,7 @@ use std::fmt;
 use std::ptr;
 
 use libloading::{Library, Symbol};
+use zeroize::Zeroizing;
 
 const PAM_SUCCESS: c_int = 0;
 const PAM_BUF_ERR: c_int = 5;
@@ -100,13 +101,14 @@ unsafe extern "C" fn converse(
 pub fn authenticate(service: &str, user: &str, password: &str) -> Result<(), AuthError> {
     let service = CString::new(service).map_err(|_| AuthError::InvalidText)?;
     let user = CString::new(user).map_err(|_| AuthError::InvalidText)?;
-    let mut secret = CString::new(password)
-        .map_err(|_| AuthError::InvalidText)?
-        .into_bytes_with_nul();
+    if password.contains('\0') {
+        return Err(AuthError::InvalidText);
+    }
+    let mut secret = Zeroizing::new(Vec::with_capacity(password.len() + 1));
+    secret.extend_from_slice(password.as_bytes());
+    secret.push(0);
     let library = unsafe { Library::new(LIBRARY) }.map_err(AuthError::Library)?;
-    let result = unsafe { run(&library, &service, &user, secret.as_mut_ptr().cast()) };
-    secret.fill(0);
-    result
+    unsafe { run(&library, &service, &user, secret.as_mut_ptr().cast()) }
 }
 
 unsafe fn run(

@@ -8,9 +8,9 @@ use std::time::{Duration, Instant, SystemTime};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_fs::{
-    Action, Answer, Change, FolderWatch, History, Job, Outcome, RenameError, Report, Resolution,
-    Sort, Task, Trash, TrashDir, duplicate_name, format_size, keep_both_name, list, new_folder,
-    rename, untitled_folder,
+    Action, Answer, Change, Entry, FolderChanges, FolderWatch, History, Job, Outcome, RenameError,
+    Report, Resolution, Sort, Task, Trash, TrashDir, duplicate_name, format_size, keep_both_name,
+    list, list_date, merge, new_folder, rename, untitled_folder,
 };
 
 struct Place {
@@ -491,9 +491,59 @@ fn watched_folders_report_bursts_of_changes_once() {
     let now = Instant::now();
     assert!(watch.take_changed(now).is_empty());
     let deadline = watch.deadline().expect("a deadline");
-    assert_eq!(watch.take_changed(deadline), [folder]);
+    let changes = watch.take_changed(deadline);
+    assert!(changes.folders.is_empty());
+    let mut expected = (0..20)
+        .map(|index| folder.join(index.to_string()))
+        .collect::<Vec<_>>();
+    expected.sort();
+    assert_eq!(changes.entries, expected);
     assert_eq!(watch.deadline(), None);
     assert!(watch.take_changed(deadline).is_empty());
+}
+
+fn settled(watch: &mut FolderWatch) -> FolderChanges {
+    let timeout = Timespec {
+        tv_sec: 5,
+        tv_nsec: 0,
+    };
+    let fd = watch.fd();
+    poll(&mut [PollFd::new(&fd, PollFlags::IN)], Some(&timeout)).expect("poll");
+    watch.read();
+    let deadline = watch.deadline().expect("a deadline");
+    watch.take_changed(deadline)
+}
+
+#[test]
+fn a_change_to_the_watched_folder_itself_asks_for_a_full_read() {
+    let place = Place::new();
+    let folder = place.path("watched");
+    fs::create_dir(&folder).expect("folder");
+    place.file("watched/inside", "x");
+    let mut watch = FolderWatch::new().expect("inotify");
+    watch.watch(std::slice::from_ref(&folder));
+
+    fs::set_permissions(&folder, fs::Permissions::from_mode(0o700)).expect("chmod");
+    fs::remove_file(folder.join("inside")).expect("remove");
+
+    let changes = settled(&mut watch);
+    assert_eq!(changes.folders, [folder]);
+    assert!(changes.entries.is_empty());
+}
+
+#[test]
+fn a_rename_inside_a_watched_folder_reports_both_names() {
+    let place = Place::new();
+    let folder = place.path("watched");
+    let old = place.file("watched/old", "x");
+    let mut watch = FolderWatch::new().expect("inotify");
+    watch.watch(std::slice::from_ref(&folder));
+
+    fs::rename(&old, folder.join("new")).expect("rename");
+
+    let changes = settled(&mut watch);
+    assert!(changes.folders.is_empty());
+    assert_eq!(changes.entries, [folder.join("new"), old]);
 }
 
 #[test]
@@ -512,6 +562,51 @@ fn folders_come_first_then_names_in_finder_order() {
 }
 
 #[test]
+fn a_sorted_chunk_merges_into_the_listing_and_reports_where_rows_moved() {
+    let root = TempDir::new().expect("temporary folder");
+    let entry = |name: &str| {
+        let path = root.path().join(name);
+        fs::write(&path, "").expect("file");
+        Entry::read(path, name.to_owned())
+    };
+    let mut entries = vec![entry("b"), entry("d"), entry("f")];
+    let chunk = vec![entry("a"), entry("c"), entry("g")];
+
+    let moved = merge(&mut entries, chunk, Sort::default());
+
+    let shown = entries
+        .iter()
+        .map(|entry| entry.name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(shown, ["a", "b", "c", "d", "f", "g"]);
+    assert_eq!(moved, [1, 3, 4]);
+}
+
+#[test]
+fn list_dates_read_today_yesterday_this_year_and_older() {
+    let at = |text: &str| SystemTime::from(text.parse::<jiff::Timestamp>().expect("timestamp"));
+    let now = at("2026-10-30T12:00:00Z");
+    let utc = jiff::tz::TimeZone::UTC;
+
+    assert_eq!(
+        list_date(at("2026-10-30T09:12:00Z"), now, &utc),
+        "Today, 09:12"
+    );
+    assert_eq!(
+        list_date(at("2026-10-29T21:03:00Z"), now, &utc),
+        "Yesterday, 21:03"
+    );
+    assert_eq!(
+        list_date(at("2026-10-28T16:20:00Z"), now, &utc),
+        "28 Oct, 16:20"
+    );
+    assert_eq!(
+        list_date(at("2025-12-31T23:59:00Z"), now, &utc),
+        "31 Dec 2025, 23:59"
+    );
+}
+
+#[test]
 fn sizes_read_as_in_the_finder() {
     assert_eq!(format_size(0), "Zero bytes");
     assert_eq!(format_size(1), "1 byte");
@@ -521,4 +616,32 @@ fn sizes_read_as_in_the_finder() {
     assert_eq!(format_size(999_600), "1 MB");
     assert_eq!(format_size(1_500_000), "1.5 MB");
     assert_eq!(format_size(2_340_000_000), "2.34 GB");
+}
+
+#[test]
+fn deleting_never_reaches_into_another_mount() {
+    let place = Place::new();
+    let outcome = place.run(Task::Delete {
+        sources: vec![PathBuf::from("/proc")],
+    });
+    let kinds: Vec<_> = outcome
+        .failures
+        .iter()
+        .map(|failure| failure.error.kind())
+        .collect();
+    assert_eq!(kinds, [std::io::ErrorKind::CrossesDevices]);
+}
+
+#[test]
+fn deleting_a_folder_removes_links_but_not_what_they_point_to() {
+    let place = Place::new();
+    let kept = place.file("elsewhere/kept.txt", "kept");
+    place.file("doomed/inner/deep/file.txt", "gone");
+    symlink(place.path("elsewhere"), place.path("doomed/inner/link")).expect("link");
+    let outcome = place.run(Task::Delete {
+        sources: vec![place.path("doomed")],
+    });
+    assert!(outcome.failures.is_empty(), "{:?}", outcome.failures);
+    assert!(place.path("doomed").symlink_metadata().is_err());
+    assert_eq!(read(&kept), "kept");
 }

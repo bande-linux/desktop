@@ -36,7 +36,7 @@ fn restore(arguments: &Arguments, folder: &Path, mine: &Path) -> Option<SavedWin
             RESTORE_OPTION.to_owned(),
             file.to_string_lossy().into_owned(),
         ];
-        if let Err(error) = unbound_xdg::spawn_detached(&command, None, None) {
+        if let Err(error) = unbound_xdg::spawn_detached(APP_ID, &command, None, None) {
             tracing::warn!("cannot restore a window: {error}");
         }
     }
@@ -52,7 +52,7 @@ fn run() -> Result<(), WindowError> {
     let settings = settings_folder()
         .map(|folder| Settings::load(&folder))
         .unwrap_or_default();
-    let saved_file = windows_folder(home.as_deref())
+    let saved_file = windows_folder()
         .filter(|_| arguments.command.is_none())
         .map(|folder| {
             let mine = window_file(&folder, std::process::id());

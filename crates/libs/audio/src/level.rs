@@ -76,27 +76,23 @@ mod tests {
     }
 
     #[test]
-    fn a_key_press_moves_one_of_sixteen_steps() {
-        assert_eq!(level(0.5).press(VolumeKey::Up, false).volume, 9.0 / 16.0);
-        assert_eq!(level(0.5).press(VolumeKey::Down, false).volume, 7.0 / 16.0);
-    }
-
-    #[test]
-    fn option_shift_moves_a_quarter_step() {
-        assert_eq!(level(0.5).press(VolumeKey::Up, true).volume, 33.0 / 64.0);
-        assert_eq!(level(0.5).press(VolumeKey::Down, true).volume, 31.0 / 64.0);
-    }
-
-    #[test]
-    fn a_level_between_steps_snaps_to_the_next_step() {
-        assert_eq!(level(0.3).press(VolumeKey::Up, false).volume, 5.0 / 16.0);
-        assert_eq!(level(0.3).press(VolumeKey::Down, false).volume, 4.0 / 16.0);
-    }
-
-    #[test]
-    fn the_level_stops_at_silence_and_full() {
-        assert_eq!(level(0.0).press(VolumeKey::Down, false).volume, 0.0);
-        assert_eq!(level(1.0).press(VolumeKey::Up, false).volume, 1.0);
+    fn keys_move_in_sixteen_steps_snapping_between_and_stopping_at_the_ends() {
+        for (from, key, fine, expected) in [
+            (0.5, VolumeKey::Up, false, 9.0 / 16.0),
+            (0.5, VolumeKey::Down, false, 7.0 / 16.0),
+            (0.5, VolumeKey::Up, true, 33.0 / 64.0),
+            (0.5, VolumeKey::Down, true, 31.0 / 64.0),
+            (0.3, VolumeKey::Up, false, 5.0 / 16.0),
+            (0.3, VolumeKey::Down, false, 4.0 / 16.0),
+            (0.0, VolumeKey::Down, false, 0.0),
+            (1.0, VolumeKey::Up, false, 1.0),
+        ] {
+            assert_eq!(
+                level(from).press(key, fine).volume,
+                expected,
+                "{from} {key:?} fine={fine}"
+            );
+        }
     }
 
     #[test]

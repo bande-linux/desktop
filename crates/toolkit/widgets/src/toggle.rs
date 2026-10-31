@@ -1,6 +1,6 @@
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
 
-use super::{Animated, Context, Event, Key, Size, Spring, Widget, WidgetId, contains};
+use super::{Animated, Context, Event, Key, Size, Spring, Widget, WidgetId};
 use unbound_graphics::{Color, Item, Point, Rect, Shape};
 
 pub const SWITCH_SIZE: Size = Size::new(36.0, 20.0);
@@ -28,10 +28,6 @@ impl Toggle {
             knob: Animated::new(if on { 1.0 } else { 0.0 }),
             frame: Rect::default(),
         }
-    }
-
-    pub fn is_on(&self) -> bool {
-        self.on
     }
 
     fn flip(&mut self, cx: &Context) {
@@ -104,7 +100,7 @@ impl Widget for Toggle {
         match event {
             Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
             Event::PointerUp(pointer) if pointer.is_primary() => {
-                let activate = self.pressed && contains(self.frame, pointer.position);
+                let activate = self.pressed && self.frame.contains(pointer.position);
                 self.pressed = false;
                 if activate {
                     self.flip(cx);

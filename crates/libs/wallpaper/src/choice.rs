@@ -4,7 +4,7 @@ use std::thread;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
-use crate::inbox::Outbox;
+use unbound_inbox::Outbox;
 
 pub const DEFAULT_WALLPAPER: &str = "drift";
 
@@ -163,16 +163,16 @@ pub fn follow(choices: Outbox<Choice>) {
     }
 }
 
+pub fn set(session: &Connection, path: &Path) -> zbus::Result<()> {
+    let config = proxy(session)?;
+    let path = path.to_string_lossy();
+    config.set_wallpaper_light(&path)?;
+    config.set_wallpaper_dark(&path)
+}
+
 pub fn choose(path: PathBuf) {
     let work = move || {
-        let choose = || -> zbus::Result<()> {
-            let session = Connection::session()?;
-            let config = proxy(&session)?;
-            let path = path.to_string_lossy();
-            config.set_wallpaper_light(&path)?;
-            config.set_wallpaper_dark(&path)
-        };
-        if let Err(error) = choose() {
+        if let Err(error) = Connection::session().and_then(|session| set(&session, &path)) {
             tracing::warn!("cannot set the wallpaper: {error}");
         }
     };

@@ -11,7 +11,7 @@ use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
 use unbound_protocols::server::unbound_shell_v1::{
-    BrightnessKey, LauncherMode, MediaKey, VolumeKey,
+    BrightnessKey, LauncherMode, MediaKey, Panel, VolumeKey,
 };
 
 use crate::frame::Target;
@@ -62,6 +62,8 @@ enum Shortcut {
     ToggleZoom,
     Zoom { closer: bool },
     ToggleScreenReader,
+    ShowDesktop,
+    TogglePanel(Panel),
     CancelGrab,
 }
 
@@ -94,6 +96,10 @@ fn media_key(keysym: u32) -> Option<MediaKey> {
     }
 }
 
+fn without_super(keysym: u32) -> Option<Shortcut> {
+    (keysym == keysyms::KEY_XF86LaunchA).then_some(Shortcut::Overview)
+}
+
 fn shortcut(
     keysym: u32,
     unshifted: Option<u32>,
@@ -118,6 +124,12 @@ fn shortcut(
         Some(digit @ keysyms::KEY_1..=keysyms::KEY_9) if alt && !ctrl => {
             return Some(Shortcut::WorkspaceAt((digit - keysyms::KEY_1) as usize));
         }
+        Some(keysyms::KEY_n) if alt && !ctrl => {
+            return Some(Shortcut::TogglePanel(Panel::NotificationCenter));
+        }
+        Some(keysyms::KEY_c) if alt && !ctrl => {
+            return Some(Shortcut::TogglePanel(Panel::ControlCenter));
+        }
         Some(keysyms::KEY_h) if alt => return Some(Shortcut::HideOthers),
         Some(keysyms::KEY_h) if !ctrl => return Some(Shortcut::HideApp),
         Some(keysyms::KEY_grave) if !ctrl && !alt => {
@@ -141,6 +153,7 @@ fn shortcut(
         keysyms::KEY_F2 => Some(Shortcut::FocusShell(MENU_BAR_NAMESPACE)),
         keysyms::KEY_F3 => Some(Shortcut::FocusShell(DOCK_NAMESPACE)),
         keysyms::KEY_F5 => Some(Shortcut::ToggleScreenReader),
+        keysyms::KEY_F11 | keysyms::KEY_XF86LaunchA => Some(Shortcut::ShowDesktop),
         keysyms::KEY_Left if ctrl && shift => Some(Shortcut::CarryWindow(false)),
         keysyms::KEY_Right if ctrl && shift => Some(Shortcut::CarryWindow(true)),
         keysyms::KEY_Left if alt && shift => Some(Shortcut::MoveToDisplay(-1, 0)),
@@ -272,6 +285,10 @@ impl State {
             self.focus_shell(namespace);
             return;
         }
+        if let Shortcut::TogglePanel(panel) = shortcut {
+            self.toggle_panel(panel);
+            return;
+        }
         if let Shortcut::OverviewKey(keysym, text) = shortcut {
             self.overview_key(keysym, text);
             return;
@@ -293,6 +310,10 @@ impl State {
         }
         if shortcut == Shortcut::AppWindows {
             self.show_app_windows();
+            return;
+        }
+        if shortcut == Shortcut::ShowDesktop {
+            self.toggle_desktop();
             return;
         }
         if let Shortcut::Workspace(forward) = shortcut {
@@ -383,6 +404,8 @@ impl State {
             | Shortcut::ToggleZoom
             | Shortcut::Zoom { .. }
             | Shortcut::ToggleScreenReader
+            | Shortcut::ShowDesktop
+            | Shortcut::TogglePanel(_)
             | Shortcut::NextApp { .. }
             | Shortcut::NextWindow { .. }
             | Shortcut::SwitcherKey(..)
@@ -711,9 +734,11 @@ impl State {
                         modifiers.shift,
                     )));
                 }
-                if sym.raw() == keysyms::KEY_XF86LaunchA && !state.is_locked() {
+                if let Some(shortcut) =
+                    without_super(sym.raw()).filter(|_| !modifiers.logo && !state.is_locked())
+                {
                     state.held_shortcut_keys.push(evdev_code);
-                    return FilterResult::Intercept(Some(Shortcut::Overview));
+                    return FilterResult::Intercept(Some(shortcut));
                 }
                 if state.overview.is_open() && !modifiers.logo {
                     state.held_shortcut_keys.push(evdev_code);
@@ -782,9 +807,9 @@ impl State {
 mod tests {
     use smithay::input::keyboard::keysyms;
     use unbound_keyboard::{Action, SHORTCUTS};
-    use unbound_protocols::server::unbound_shell_v1::LauncherMode;
+    use unbound_protocols::server::unbound_shell_v1::{LauncherMode, Panel};
 
-    use super::{Shortcut, shortcut};
+    use super::{Shortcut, shortcut, without_super};
     use crate::motion::DOCK_NAMESPACE;
     use crate::state::{MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE};
     use crate::tile::Direction;
@@ -801,6 +826,8 @@ mod tests {
             "F2" => keysyms::KEY_F2,
             "F3" => keysyms::KEY_F3,
             "F5" => keysyms::KEY_F5,
+            "F11" => keysyms::KEY_F11,
+            "Mission Control" => keysyms::KEY_XF86LaunchA,
             single => single
                 .chars()
                 .next()
@@ -816,6 +843,7 @@ mod tests {
             Action::TileWindow => Shortcut::Place(Direction::Left),
             Action::NextApp => Shortcut::NextApp { backwards: false },
             Action::NextWindow => Shortcut::NextWindow { backwards: false },
+            Action::PreviousWindow => Shortcut::NextWindow { backwards: true },
             Action::QuitApp => Shortcut::QuitApp,
             Action::HideApp => Shortcut::HideApp,
             Action::HideOthers => Shortcut::HideOthers,
@@ -825,12 +853,17 @@ mod tests {
             Action::WorkspaceByNumber => Shortcut::WorkspaceAt(0),
             Action::CarryWindowLeft => Shortcut::CarryWindow(false),
             Action::CarryWindowRight => Shortcut::CarryWindow(true),
+            Action::MoveWindowToDisplay => Shortcut::MoveToDisplay(1, 0),
             Action::Overview => Shortcut::Overview,
             Action::AppWindows => Shortcut::AppWindows,
             Action::NextInputSource => Shortcut::InputSource { backwards: false },
             Action::PreviousInputSource => Shortcut::InputSource { backwards: true },
             Action::CaptureScreen => Shortcut::CaptureScreen,
             Action::CaptureArea => Shortcut::CaptureArea,
+            Action::CaptureOptions => Shortcut::CaptureOptions,
+            Action::ShowDesktop => Shortcut::ShowDesktop,
+            Action::ShowNotificationCenter => Shortcut::TogglePanel(Panel::NotificationCenter),
+            Action::ShowControlCenter => Shortcut::TogglePanel(Panel::ControlCenter),
             Action::ShowLauncher => Shortcut::ShowLauncher,
             Action::ShowClipboardHistory => Shortcut::OpenLauncher(LauncherMode::Clipboard),
             Action::ShowEmojiPicker => Shortcut::OpenLauncher(LauncherMode::Emoji),
@@ -850,14 +883,13 @@ mod tests {
         for listed in SHORTCUTS {
             let parts: Vec<&str> = listed.keys.split('+').collect();
             let held = |name: &str| parts.contains(&name);
-            assert!(held("Super"), "{} lacks Super", listed.keys);
             let key = keysym(parts.last().copied().unwrap_or_default());
-            assert_eq!(
-                shortcut(key, Some(key), held("Ctrl"), held("Alt"), held("Shift")),
-                Some(expected(listed.action)),
-                "{}",
-                listed.keys
-            );
+            let runs = if held("Super") {
+                shortcut(key, Some(key), held("Ctrl"), held("Alt"), held("Shift"))
+            } else {
+                without_super(key)
+            };
+            assert_eq!(runs, Some(expected(listed.action)), "{}", listed.keys);
         }
     }
 }

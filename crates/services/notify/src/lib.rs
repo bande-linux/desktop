@@ -1,3 +1,4 @@
+mod alarm;
 mod center;
 pub mod client;
 mod wire;
@@ -7,13 +8,14 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
-use std::time::Instant;
 
 use zbus::blocking::Connection;
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::OwnedValue;
+
+use crate::alarm::Alarm;
 
 pub use center::{
     App, AppRule, BANNER_DURATION, BANNER_LINGER, Banners, Center, CloseReason, HiddenBanner,
@@ -45,7 +47,7 @@ impl State {
 
 struct Shared {
     state: Mutex<State>,
-    deadline_changed: Condvar,
+    alarm: Alarm,
     do_not_disturb_file: Option<PathBuf>,
     apps_file: Option<PathBuf>,
 }
@@ -130,7 +132,7 @@ impl Shared {
         let mut state = self.lock();
         let result = change(&mut state.center);
         state.present();
-        self.deadline_changed.notify_all();
+        self.alarm.nudge();
         result
     }
 
@@ -248,7 +250,7 @@ impl NotificationServer {
                 presentations,
                 stopped: false,
             }),
-            deadline_changed: Condvar::new(),
+            alarm: Alarm::new().map_err(|error| zbus::Error::InputOutput(error.into()))?,
             do_not_disturb_file,
             apps_file,
         });
@@ -314,7 +316,7 @@ impl NotificationServer {
 impl Drop for NotificationServer {
     fn drop(&mut self) {
         self.shared.lock().stopped = true;
-        self.shared.deadline_changed.notify_all();
+        self.shared.alarm.nudge();
     }
 }
 
@@ -335,35 +337,25 @@ fn publish(presented: &Receiver<Presentation>, connection: &Connection) {
 }
 
 fn expire(shared: &Shared, connection: &Connection) {
-    let mut state = shared.lock();
     loop {
+        let mut state = shared.lock();
         if state.stopped {
             return;
         }
-        let expired = state.center.advance(Instant::now());
+        let expired = state.center.advance(alarm::now());
         state.present();
+        let deadline = state.center.next_deadline();
+        drop(state);
         if !expired.is_empty() {
-            drop(state);
             if let Ok(emitter) = SignalEmitter::new(connection.inner(), OBJECT_PATH) {
                 zbus::block_on(emit_closed(&emitter, &expired, CloseReason::Expired));
             }
-            state = shared.lock();
             continue;
         }
-        state = match state.center.next_deadline() {
-            Some(deadline) => {
-                let wait = deadline.saturating_duration_since(Instant::now());
-                shared
-                    .deadline_changed
-                    .wait_timeout(state, wait)
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .0
-            }
-            None => shared
-                .deadline_changed
-                .wait(state)
-                .unwrap_or_else(PoisonError::into_inner),
-        };
+        if let Err(error) = shared.alarm.wait_until(deadline) {
+            tracing::error!("cannot wait for notifications to expire: {error}");
+            return;
+        }
     }
 }
 
@@ -443,7 +435,7 @@ impl Notifications {
             let id = center.post(
                 notification,
                 Timeout::from_milliseconds(expire_timeout),
-                Instant::now(),
+                alarm::now(),
             );
             let delivered = center.get(id).is_some();
             (
@@ -592,7 +584,7 @@ impl NotificationCenter {
 
     fn hold_banners(&self, held: bool) {
         self.shared
-            .update(|center| center.hold_banners(held, Instant::now()));
+            .update(|center| center.hold_banners(held, alarm::now()));
     }
 
     #[zbus(signal)]

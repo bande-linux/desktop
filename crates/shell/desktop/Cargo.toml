@@ -11,6 +11,7 @@ tracing.workspace = true
 unbound-bar.workspace = true
 unbound-config.workspace = true
 unbound-fs.workspace = true
+unbound-inbox.workspace = true
 unbound-l10n.workspace = true
 unbound-thumbnails.workspace = true
 unbound-toolkit.workspace = true
@@ -19,8 +20,7 @@ unbound-wallpaper.workspace = true
 unbound-xdg.workspace = true
 
 [dev-dependencies]
-image.workspace = true
-image-compare.workspace = true
+unbound-golden.workspace = true
 
 [lints]
 workspace = true

@@ -9,10 +9,12 @@ use zbus::blocking::Connection;
 use zbus::message::Header;
 use zbus::zvariant::{OwnedValue, Value};
 
-use crate::L10N;
+use unbound_toolkit::Snapshot;
+
 use crate::cast::Cast;
 use crate::engine::{Engine, Shot, Source};
 use crate::indicator::{Activity, Indicator};
+use crate::{L10N, shrunk};
 
 pub const BUS_NAME: &str = "org.unbound.Screenshot";
 pub const PATH: &str = "/org/unbound/Screenshot";
@@ -27,19 +29,11 @@ const MONITOR_PREFIX: &str = "monitor:";
 const THUMBNAIL: u32 = 320;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Thumbnail {
-    pub width: u32,
-    pub height: u32,
-    pub rgba: Vec<u8>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Choice {
     pub id: String,
-    pub kind: u32,
     pub title: String,
     pub app_id: String,
-    pub thumbnail: Option<Thumbnail>,
+    pub thumbnail: Option<Snapshot>,
 }
 
 pub enum UiRequest {
@@ -80,24 +74,15 @@ fn kind_of(id: &str) -> u32 {
     }
 }
 
-pub fn thumbnail(shot: &Shot) -> Thumbnail {
-    let scale = (THUMBNAIL as f32 / shot.width.max(shot.height).max(1) as f32).min(1.0);
-    let width = ((shot.width as f32 * scale).round() as u32).max(1);
-    let height = ((shot.height as f32 * scale).round() as u32).max(1);
-    let rgba = shot.rgba();
-    let source = image::RgbaImage::from_raw(shot.width, shot.height, rgba)
-        .unwrap_or_else(|| image::RgbaImage::new(1, 1));
-    let scaled = image::imageops::resize(
-        &source,
-        width,
-        height,
-        image::imageops::FilterType::Triangle,
-    );
-    Thumbnail {
-        width: scaled.width(),
-        height: scaled.height(),
-        rgba: scaled.into_raw(),
-    }
+pub fn thumbnail(shot: &Shot) -> Option<Snapshot> {
+    shrunk(
+        &Snapshot {
+            width: shot.width,
+            height: shot.height,
+            rgba: shot.rgba(),
+        },
+        THUMBNAIL,
+    )
 }
 
 struct Running {
@@ -130,8 +115,10 @@ impl Casting {
         })
     }
 
-    pub fn engine(&self) -> &Engine {
-        &self.engine
+    pub fn is_open(&self, node: u32) -> bool {
+        lock(&self.running)
+            .iter()
+            .any(|running| running.node_id == node)
     }
 
     fn choices(&self, types: u32) -> Vec<Choice> {
@@ -147,14 +134,13 @@ impl Casting {
                 };
                 choices.push(Choice {
                     id: format!("{MONITOR_PREFIX}{}", display.name),
-                    kind: MONITOR,
                     title,
                     app_id: String::new(),
                     thumbnail: self
                         .engine
                         .shoot(Source::Display(display.name), false)
                         .as_ref()
-                        .map(thumbnail),
+                        .and_then(thumbnail),
                 });
             }
         }
@@ -164,10 +150,9 @@ impl Casting {
                     .engine
                     .shoot(Source::Window(window.identifier.clone()), false)
                     .as_ref()
-                    .map(thumbnail);
+                    .and_then(thumbnail);
                 choices.push(Choice {
                     id: format!("{WINDOW_PREFIX}{}", window.identifier),
-                    kind: WINDOW,
                     title: window.title,
                     app_id: window.app_id,
                     thumbnail,

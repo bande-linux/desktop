@@ -3754,20 +3754,27 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "image",
- "image-compare",
  "jiff",
+ "smithay",
  "tracing",
+ "unbound-compositor",
  "unbound-config",
+ "unbound-controlcenter",
  "unbound-datetime",
  "unbound-dock-model",
  "unbound-fs",
+ "unbound-golden",
  "unbound-inbox",
  "unbound-keyboard",
  "unbound-l10n",
+ "unbound-launcher",
+ "unbound-notifications",
  "unbound-sound",
  "unbound-status",
+ "unbound-test-wayland",
  "unbound-toolkit",
  "unbound-xdg",
+ "wayland-client",
  "zbus",
 ]
 
@@ -3775,14 +3782,18 @@ dependencies = [
 name = "unbound-bench"
 version = "0.1.0"
 dependencies = [
+ "rustix 1.1.6",
  "smithay",
  "tempfile",
  "tracing",
  "unbound-compositor",
+ "unbound-files",
+ "unbound-fs",
  "unbound-log",
  "unbound-sample",
  "unbound-test-wayland",
  "unbound-toolkit",
+ "unbound-xdg",
  "wayland-client",
 ]
 
@@ -3815,6 +3826,7 @@ dependencies = [
  "unbound-log",
  "unbound-test-bus",
  "unbound-test-wayland",
+ "unbound-xdg",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
@@ -3829,12 +3841,15 @@ dependencies = [
  "accesskit_unix",
  "image",
  "image-compare",
+ "jiff",
  "rustix 1.1.6",
  "smithay",
  "tempfile",
  "tracing",
  "unbound-config",
+ "unbound-datetime",
  "unbound-edid",
+ "unbound-golden",
  "unbound-graphics",
  "unbound-greeter",
  "unbound-keyboard",
@@ -3874,12 +3889,11 @@ name = "unbound-controlcenter"
 version = "0.1.0"
 dependencies = [
  "accesskit",
- "image",
- "image-compare",
  "tempfile",
  "tracing",
  "unbound-audio",
  "unbound-bluetooth",
+ "unbound-golden",
  "unbound-inbox",
  "unbound-l10n",
  "unbound-network",
@@ -3901,6 +3915,7 @@ dependencies = [
  "icu_datetime",
  "icu_locale_core",
  "jiff",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -3912,12 +3927,12 @@ name = "unbound-desktop-surface"
 version = "0.1.0"
 dependencies = [
  "accesskit",
- "image",
- "image-compare",
  "tracing",
  "unbound-bar",
  "unbound-config",
  "unbound-fs",
+ "unbound-golden",
+ "unbound-inbox",
  "unbound-l10n",
  "unbound-thumbnails",
  "unbound-toolkit",
@@ -3945,16 +3960,16 @@ name = "unbound-file-chooser"
 version = "0.1.0"
 dependencies = [
  "accesskit",
- "image",
- "image-compare",
  "tempfile",
  "tracing",
  "unbound-files",
  "unbound-fs",
+ "unbound-golden",
  "unbound-l10n",
  "unbound-log",
  "unbound-toolkit",
  "unbound-volumes",
+ "unbound-wallpaper",
  "unbound-xdg",
  "xdg-desktop-portal-unbound",
 ]
@@ -3965,12 +3980,12 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "image",
- "image-compare",
  "rustix 1.1.6",
  "tempfile",
  "tracing",
  "unbound-app-menu",
  "unbound-fs",
+ "unbound-golden",
  "unbound-l10n",
  "unbound-log",
  "unbound-preview",
@@ -3998,6 +4013,14 @@ dependencies = [
  "unbound-l10n",
  "unbound-xdg",
  "zip",
+]
+
+[[package]]
+name = "unbound-golden"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "image-compare",
 ]
 
 [[package]]
@@ -4036,7 +4059,10 @@ dependencies = [
  "unbound-l10n",
  "unbound-lock",
  "unbound-log",
+ "unbound-status",
  "unbound-toolkit",
+ "zbus",
+ "zeroize",
 ]
 
 [[package]]
@@ -4069,11 +4095,12 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "image",
- "image-compare",
  "rustix 1.1.6",
  "tempfile",
  "tracing",
  "unbound-fs",
+ "unbound-golden",
+ "unbound-inbox",
  "unbound-l10n",
  "unbound-preview",
  "unbound-search",
@@ -4089,28 +4116,32 @@ name = "unbound-lock"
 version = "0.1.0"
 dependencies = [
  "accesskit",
- "image",
- "image-compare",
  "jiff",
  "libc",
  "libloading",
  "rustix 1.1.6",
  "tracing",
+ "unbound-bar",
  "unbound-datetime",
+ "unbound-golden",
+ "unbound-inbox",
  "unbound-keyboard",
  "unbound-l10n",
  "unbound-log",
  "unbound-spring",
+ "unbound-status",
  "unbound-toolkit",
  "unbound-wallpaper",
  "unbound-xdg",
  "zbus",
+ "zeroize",
 ]
 
 [[package]]
 name = "unbound-log"
 version = "0.1.0"
 dependencies = [
+ "rustix 1.1.6",
  "tracing",
  "tracing-journald",
  "tracing-subscriber",
@@ -4121,16 +4152,17 @@ name = "unbound-monitor"
 version = "0.1.0"
 dependencies = [
  "accesskit",
- "image",
- "image-compare",
  "rustix 1.1.6",
  "tempfile",
  "tracing",
  "unbound-app-menu",
+ "unbound-golden",
  "unbound-l10n",
  "unbound-log",
+ "unbound-test-bus",
  "unbound-toolkit",
  "unbound-xdg",
+ "zbus",
 ]
 
 [[package]]
@@ -4145,11 +4177,10 @@ dependencies = [
 name = "unbound-notifications"
 version = "0.1.0"
 dependencies = [
- "image",
- "image-compare",
  "jiff",
  "tracing",
  "unbound-datetime",
+ "unbound-golden",
  "unbound-inbox",
  "unbound-l10n",
  "unbound-notify",
@@ -4163,6 +4194,7 @@ dependencies = [
 name = "unbound-notify"
 version = "0.1.0"
 dependencies = [
+ "rustix 1.1.6",
  "tempfile",
  "tracing",
  "unbound-bus",
@@ -4263,7 +4295,6 @@ dependencies = [
  "accesskit",
  "blocking",
  "image",
- "image-compare",
  "jiff",
  "pipewire",
  "rustix 1.1.6",
@@ -4273,6 +4304,7 @@ dependencies = [
  "tracing",
  "unbound-compositor",
  "unbound-fs",
+ "unbound-golden",
  "unbound-graphics",
  "unbound-inbox",
  "unbound-l10n",
@@ -4296,6 +4328,7 @@ dependencies = [
  "jiff",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "unbound-watch",
  "unbound-xdg",
 ]
@@ -4305,8 +4338,6 @@ name = "unbound-settings"
 version = "0.1.0"
 dependencies = [
  "accesskit",
- "image",
- "image-compare",
  "jiff",
  "rustix 1.1.6",
  "tempfile",
@@ -4318,6 +4349,7 @@ dependencies = [
  "unbound-config",
  "unbound-datetime",
  "unbound-fs",
+ "unbound-golden",
  "unbound-keyboard",
  "unbound-l10n",
  "unbound-log",
@@ -4385,6 +4417,7 @@ dependencies = [
  "unbound-app-menu",
  "unbound-audio",
  "unbound-bluetooth",
+ "unbound-datetime",
  "unbound-inbox",
  "unbound-l10n",
  "unbound-network",
@@ -4399,12 +4432,11 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "alacritty_terminal",
- "image",
- "image-compare",
  "tempfile",
  "tracing",
  "unbound-app-menu",
  "unbound-design",
+ "unbound-golden",
  "unbound-l10n",
  "unbound-log",
  "unbound-notify",
@@ -4446,6 +4478,7 @@ dependencies = [
  "png",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "unbound-xdg",
 ]
 
@@ -4472,15 +4505,13 @@ dependencies = [
  "accesskit",
  "accesskit_unix",
  "atspi-common",
- "image",
- "image-compare",
- "pollster",
  "raw-window-handle",
  "rustix 1.1.6",
  "serde",
  "smithay",
  "tracing",
  "unbound-compositor",
+ "unbound-golden",
  "unbound-graphics",
  "unbound-l10n",
  "unbound-protocols",
@@ -4523,6 +4554,7 @@ dependencies = [
  "resvg",
  "tempfile",
  "tracing",
+ "unbound-inbox",
  "zbus",
 ]
 
@@ -4539,12 +4571,12 @@ name = "unbound-widgets"
 version = "0.1.0"
 dependencies = [
  "accesskit",
- "image",
- "image-compare",
  "parley",
+ "unbound-golden",
  "unbound-graphics",
  "unbound-l10n",
  "unbound-spring",
+ "zeroize",
 ]
 
 [[package]]
@@ -4554,6 +4586,11 @@ dependencies = [
  "image",
  "rustix 1.1.6",
  "tempfile",
+ "tracing",
+ "unbound-l10n",
+ "unbound-notify",
+ "unbound-test-bus",
+ "zbus",
 ]
 
 [[package]]
@@ -5434,6 +5471,7 @@ dependencies = [
  "tracing",
  "unbound-bus",
  "unbound-config",
+ "unbound-datetime",
  "unbound-design",
  "unbound-log",
  "unbound-test-bus",
@@ -5638,6 +5676,15 @@ dependencies = [
  "quote",
  "syn 3.0.9",
  "synstructure",
+]
+
+[[package]]
+name = "zeroize"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

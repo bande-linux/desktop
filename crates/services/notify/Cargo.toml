@@ -6,6 +6,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+rustix = { workspace = true, features = ["event", "time"] }
 tracing.workspace = true
 unbound-bus.workspace = true
 unbound-log.workspace = true

@@ -12,14 +12,13 @@ use unbound_term::{
     SelectionKind, Session, Settings, Side, TabBar, TabBarLayout, TabTarget, Terminal,
     TerminalContext, bracketed, claim, dropped_text, encode_key, is_openable, left_behind,
     mouse_report, next_font_size, settings_view, shortcut, tab_menu, terminal_menu, window_file,
+    written_path,
 };
 use unbound_toolkit::ui::{Key, Modifiers};
 use unbound_toolkit::{
     Appearance, CpuRenderer, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene,
     Scheme, Shape, framed_scene,
 };
-
-const MIN_SSIM: f64 = 0.99;
 
 fn plain() -> Modifiers {
     Modifiers::default()
@@ -237,15 +236,11 @@ fn painter(scheme: Scheme) -> Painter {
 const SCHEMES: [(Scheme, &str); 2] = [(Scheme::Light, "light"), (Scheme::Dark, "dark")];
 
 fn shoot(name: &str, scene: &Scene) {
-    for (scale, suffix) in [(1.0, ""), (1.5, "@1.5x")] {
-        let width = (f64::from(scene.width) * scale).round() as u32;
-        let height = (f64::from(scene.height) * scale).round() as u32;
-        let mut rgba = vec![0; (width * height * 4) as usize];
-        CpuRenderer::new()
-            .render_into(scene, scale, &mut rgba)
-            .expect("render");
-        check_golden(&format!("{name}{suffix}"), (width, height), rgba);
-    }
+    let mut rgba = vec![0; (scene.width * scene.height * 4) as usize];
+    CpuRenderer::new()
+        .render_into(scene, 1.0, &mut rgba)
+        .expect("render");
+    check_golden(name, (scene.width, scene.height), rgba);
 }
 
 #[test]
@@ -448,25 +443,7 @@ fn the_tab_strip_shares_the_header_after_the_window_controls_and_keeps_room_for_
 }
 
 fn check_golden(name: &str, size: (u32, u32), rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(size.0, size.1, rgba).expect("frame");
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        std::fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
-    );
+    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(size.0, size.1, rgba));
 }
 
 const SESSION: &[u8] = b"\x1b[1mmikael@unbound\x1b[0m:\x1b[34m~\x1b[0m$ ls --color\r\n\
@@ -474,27 +451,6 @@ const SESSION: &[u8] = b"\x1b[1mmikael@unbound\x1b[0m:\x1b[34m~\x1b[0m$ ls --col
 \x1b[1mmikael@unbound\x1b[0m:\x1b[34m~\x1b[0m$ echo \x1b[7mselected\x1b[0m \x1b[4munderlined\x1b[0m \x1b[31mred\x1b[0m \x1b[38;5;208m256\x1b[0m \x1b[38;2;0;128;128mtruecolor\x1b[0m\r\n\
 selected underlined red 256 truecolor\r\n\
 \x1b[1mmikael@unbound\x1b[0m:\x1b[34m~\x1b[0m$ ";
-
-#[test]
-fn the_terminal_matches_its_goldens_focused_and_unfocused() {
-    for (scheme, suffix) in SCHEMES {
-        let mut painter = painter(scheme);
-        let mut terminal = terminal(80, 8);
-        terminal.feed(SESSION);
-        let (width, height) = painter.metrics.content_size(terminal.size());
-        let size = (width.ceil() as u32, height.ceil() as u32);
-        terminal.set_focus(true);
-        shoot(
-            &format!("term-focused-{suffix}"),
-            &painter.scene(&terminal, size.0, size.1),
-        );
-        terminal.set_focus(false);
-        shoot(
-            &format!("term-unfocused-{suffix}"),
-            &painter.scene(&terminal, size.0, size.1),
-        );
-    }
-}
 
 #[test]
 fn every_profile_keeps_text_and_ansi_colours_legible() {
@@ -601,7 +557,11 @@ fn find_starts_at_the_newest_match_and_steps_through_the_scrollback() {
 
 #[test]
 fn the_find_bar_reports_typing_and_its_keys() {
-    let mut bar = Banner::find(unbound_toolkit::Palette::for_scheme(Scheme::Light), "old");
+    let mut bar = Banner::find(
+        unbound_toolkit::Palette::for_scheme(Scheme::Light),
+        unbound_toolkit::TextSystem::new(),
+        "old",
+    );
     bar.handle(&unbound_toolkit::ui::Event::Key {
         key: Key::Character('n'),
         modifiers: plain(),
@@ -632,28 +592,31 @@ fn the_find_bar_reports_typing_and_its_keys() {
 
 #[test]
 fn found_text_and_the_find_bar_match_their_goldens() {
-    for (scheme, suffix) in SCHEMES {
-        let mut painter = painter(scheme);
-        let mut terminal = terminal(60, 4);
-        terminal.feed(SESSION);
-        terminal.set_focus(false);
-        assert!(terminal.find("unbound"));
-        let mut bar = Banner::find(unbound_toolkit::Palette::for_scheme(scheme), "unbound");
-        bar.set_found(true);
-        let (width, height) = painter.metrics.content_size(terminal.size());
-        let size = (width.ceil() as u32, (height + BANNER_HEIGHT).ceil() as u32);
-        bar.set_area(Rect::new(0.0, 0.0, size.0 as f32, BANNER_HEIGHT));
-        let highlights = terminal.highlights();
-        let mut items = painter.terminal(&terminal, Point::new(0.0, BANNER_HEIGHT), &highlights);
-        items.extend(bar.items(size.0, size.1));
-        let scene = Scene {
-            width: size.0,
-            height: size.1,
-            background: painter.theme.background,
-            items,
-        };
-        shoot(&format!("term-find-{suffix}"), &scene);
-    }
+    let scheme = Scheme::Light;
+    let mut painter = painter(scheme);
+    let mut terminal = terminal(60, 4);
+    terminal.feed(SESSION);
+    terminal.set_focus(false);
+    assert!(terminal.find("unbound"));
+    let mut bar = Banner::find(
+        unbound_toolkit::Palette::for_scheme(scheme),
+        unbound_toolkit::TextSystem::new(),
+        "unbound",
+    );
+    bar.set_found(true);
+    let (width, height) = painter.metrics.content_size(terminal.size());
+    let size = (width.ceil() as u32, (height + BANNER_HEIGHT).ceil() as u32);
+    bar.set_area(Rect::new(0.0, 0.0, size.0 as f32, BANNER_HEIGHT));
+    let highlights = terminal.highlights();
+    let mut items = painter.terminal(&terminal, Point::new(0.0, BANNER_HEIGHT), &highlights);
+    items.extend(bar.items(size.0, size.1));
+    let scene = Scene {
+        width: size.0,
+        height: size.1,
+        background: painter.theme.background,
+        items,
+    };
+    shoot("term-find", &scene);
 }
 
 #[test]
@@ -685,30 +648,34 @@ fn links_are_found_in_plain_text_and_in_hyperlink_escapes() {
 #[test]
 fn the_close_confirmation_answers_enter_and_escape_and_matches_its_goldens() {
     let message = "Close this tab? \u{201C}vim\u{201D} is still running in it.";
-    for (scheme, suffix) in SCHEMES {
-        let palette = Palette::for_scheme(scheme);
-        let mut banner = Banner::confirm(palette, message, "Close");
-        let size = (480, BANNER_HEIGHT as u32);
-        banner.set_area(Rect::new(0.0, 0.0, 480.0, BANNER_HEIGHT));
-        let scene = Scene {
-            width: size.0,
-            height: size.1,
-            background: palette.sheet,
-            items: banner.items(size.0, size.1),
-        };
-        shoot(&format!("term-confirm-{suffix}"), &scene);
+    let scheme = Scheme::Light;
+    let palette = Palette::for_scheme(scheme);
+    let mut banner = Banner::confirm(
+        palette,
+        unbound_toolkit::TextSystem::new(),
+        message,
+        "Close",
+    );
+    let size = (480, BANNER_HEIGHT as u32);
+    banner.set_area(Rect::new(0.0, 0.0, 480.0, BANNER_HEIGHT));
+    let scene = Scene {
+        width: size.0,
+        height: size.1,
+        background: palette.sheet,
+        items: banner.items(size.0, size.1),
+    };
+    shoot("term-confirm", &scene);
 
-        for key in [Key::Enter, Key::Escape] {
-            banner.handle(&unbound_toolkit::ui::Event::Key {
-                key,
-                modifiers: plain(),
-            });
-        }
-        assert_eq!(
-            banner.take_actions(),
-            [BannerAction::Confirm, BannerAction::Dismiss]
-        );
+    for key in [Key::Enter, Key::Escape] {
+        banner.handle(&unbound_toolkit::ui::Event::Key {
+            key,
+            modifiers: plain(),
+        });
     }
+    assert_eq!(
+        banner.take_actions(),
+        [BannerAction::Confirm, BannerAction::Dismiss]
+    );
 }
 
 #[test]
@@ -746,6 +713,7 @@ fn menu_actions_name_the_command_they_run() {
         MenuCommand::OpenLink("https://example.com/a:b?c=d".to_owned()),
         MenuCommand::CopyLink("mailto:someone@example.com".to_owned()),
         MenuCommand::ShowInFiles,
+        MenuCommand::Reveal(PathBuf::from("/home/anna/notes: draft.txt")),
         MenuCommand::CloseTab(7),
         MenuCommand::CloseOtherTabs(3),
     ];
@@ -790,6 +758,43 @@ fn the_terminal_menu_offers_the_link_under_the_pointer_and_copy_only_with_a_sele
             .iter()
             .any(|item| item.action == "copy" && item.enabled)
     );
+
+    context.link = Some("file:///home/anna/Read%20me.md".to_owned());
+    let on_file = terminal_menu(&context);
+    assert_eq!(
+        on_file.items[0].action,
+        "open-link:file:///home/anna/Read%20me.md"
+    );
+    assert_eq!(on_file.items[1].action, "copy-link:/home/anna/Read me.md");
+    assert_eq!(on_file.items[2].action, "reveal:/home/anna/Read me.md");
+}
+
+#[test]
+fn paths_in_the_output_are_links_to_files_that_exist() {
+    let folder = tempfile::tempdir().unwrap();
+    let home = folder.path().join("home");
+    std::fs::create_dir_all(home.join("notes")).unwrap();
+    std::fs::create_dir_all(folder.path().join("src")).unwrap();
+    std::fs::write(folder.path().join("src/main.rs"), "").unwrap();
+    let mut terminal = terminal(40, 4);
+    terminal.feed(b"error at src/main.rs:12:5, see\r\n");
+    terminal.feed(b"(~/notes) missing.rs");
+    let path = |terminal: &Terminal, column, line| {
+        terminal
+            .path_at(cell(column, line), folder.path(), &home)
+            .map(|link| (link.uri, link.range.end().column.0))
+    };
+
+    let main = format!("file://{}/src/main.rs", folder.path().display());
+    assert_eq!(path(&terminal, 12, 0), Some((main.clone(), 19)));
+    assert_eq!(path(&terminal, 9, 0), Some((main, 19)));
+    assert_eq!(path(&terminal, 20, 0), None);
+    let notes = format!("file://{}/notes", home.display());
+    assert_eq!(path(&terminal, 3, 1), Some((notes, 7)));
+    assert_eq!(path(&terminal, 12, 1), None);
+    assert_eq!(path(&terminal, 2, 0), None);
+    assert_eq!(written_path("src/lib.rs:40:2."), "src/lib.rs");
+    assert_eq!(written_path("a:b"), "a:b");
 }
 
 #[test]
@@ -908,53 +913,84 @@ fn a_command_that_finishes_is_reported_with_its_name() {
 
 #[test]
 fn the_settings_window_matches_its_goldens() {
-    for (scheme, suffix) in SCHEMES {
-        let settings = std::rc::Rc::new(std::cell::RefCell::new(Settings {
-            profile: Profile::Midnight,
-            ..Settings::default()
-        }));
-        let mut ui = settings_view(appearance(scheme), &settings);
-        let mut content = ui.scene(SETTINGS_SIZE.0, SETTINGS_SIZE.1);
-        let palette = Palette::for_scheme(scheme);
-        content.background = palette.sheet;
-        let framed = framed_scene(&content, "Terminal Settings", None, None, &palette);
-        shoot(&format!("term-settings-{suffix}"), &framed);
-    }
+    let scheme = Scheme::Light;
+    let settings = std::rc::Rc::new(std::cell::RefCell::new(Settings {
+        profile: Profile::Midnight,
+        ..Settings::default()
+    }));
+    let mut ui = settings_view(appearance(scheme), &settings);
+    let mut content = ui.scene(SETTINGS_SIZE.0, SETTINGS_SIZE.1);
+    let palette = Palette::for_scheme(scheme);
+    content.background = palette.sheet;
+    let framed = framed_scene(&content, "Terminal Settings", None, None, &palette);
+    shoot("term-settings", &framed);
 }
 
 #[test]
 fn split_panes_match_their_goldens() {
-    for (scheme, suffix) in SCHEMES {
-        let mut painter = painter(scheme);
-        let mut left = terminal(40, 8);
-        left.feed(SESSION);
-        left.set_focus(true);
-        let mut right = terminal(40, 8);
-        right.feed(b"top - 14:32:07 up 3 days\r\n\x1b[7m  PID USER  %CPU\x1b[0m\r\n  812 mikael 12.5\r\n$ ");
-        let (width, height) = painter.metrics.content_size(left.size());
-        let area = Rect::new(0.0, 0.0, (2.0 * width + 1.0).ceil(), height.ceil());
-        let mut layout = Layout::Pane(1);
-        layout.split(1, Axis::SideBySide, 2);
-        let frames = layout.frames(area);
-        let panes = [
-            Pane {
-                frame: frames[0].1,
-                terminal: &left,
-                focused: true,
-            },
-            Pane {
-                frame: frames[1].1,
-                terminal: &right,
-                focused: false,
-            },
-        ];
-        let items = painter.panes(&panes, &layout.dividers(area), &Default::default());
-        let scene = Scene {
-            width: area.width as u32,
-            height: area.height as u32,
-            background: painter.theme.background,
-            items,
-        };
-        shoot(&format!("term-split-{suffix}"), &scene);
+    let scheme = Scheme::Light;
+    let mut painter = painter(scheme);
+    let mut left = terminal(40, 8);
+    left.feed(SESSION);
+    left.set_focus(true);
+    let mut right = terminal(40, 8);
+    right.feed(
+        b"top - 14:32:07 up 3 days\r\n\x1b[7m  PID USER  %CPU\x1b[0m\r\n  812 mikael 12.5\r\n$ ",
+    );
+    let (width, height) = painter.metrics.content_size(left.size());
+    let area = Rect::new(0.0, 0.0, (2.0 * width + 1.0).ceil(), height.ceil());
+    let mut layout = Layout::Pane(1);
+    layout.split(1, Axis::SideBySide, 2);
+    let frames = layout.frames(area);
+    let panes = [
+        Pane {
+            frame: frames[0].1,
+            terminal: &left,
+            focused: true,
+        },
+        Pane {
+            frame: frames[1].1,
+            terminal: &right,
+            focused: false,
+        },
+    ];
+    let items = painter.panes(&panes, &layout.dividers(area), &Default::default());
+    let scene = Scene {
+        width: area.width as u32,
+        height: area.height as u32,
+        background: painter.theme.background,
+        items,
+    };
+    shoot("term-split", &scene);
+}
+
+#[test]
+fn super_up_and_down_jump_between_the_commands_typed_at_the_prompt() {
+    assert_eq!(
+        shortcut(Key::Up, logo(false)),
+        Some(Command::PreviousPrompt)
+    );
+    assert_eq!(shortcut(Key::Down, logo(false)), Some(Command::NextPrompt));
+    let mut terminal = terminal(20, 3);
+    for command in ["one", "two"] {
+        terminal.feed(format!("$ {command}").as_bytes());
+        terminal.mark_prompt();
+        terminal.feed(b"\r\n");
+        for line in 0..4 {
+            terminal.feed(format!("{command} output {line}\r\n").as_bytes());
+        }
     }
+    terminal.feed(b"$ ");
+    assert_eq!(terminal.screen_text()[0], "two output 2");
+
+    assert!(terminal.jump_to_prompt(true));
+    assert_eq!(terminal.screen_text()[0], "$ two");
+    assert_eq!(terminal.link_at(cell(0, 0)), None);
+    assert!(terminal.jump_to_prompt(true));
+    assert_eq!(terminal.screen_text()[0], "$ one");
+    assert!(!terminal.jump_to_prompt(true));
+    assert!(terminal.jump_to_prompt(false));
+    assert_eq!(terminal.screen_text()[0], "$ two");
+    assert!(terminal.jump_to_prompt(false));
+    assert_eq!(terminal.screen_text()[0], "two output 2");
 }

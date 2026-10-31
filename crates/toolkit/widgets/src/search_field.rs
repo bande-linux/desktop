@@ -5,7 +5,6 @@ use unbound_graphics::{Color, Item, Path, Point, Rect, Shape};
 
 use super::{
     Context, Cursor, DragAction, Event, Key, Menu, Parts, Size, TextField, Widget, WidgetId,
-    contains,
 };
 use crate::L10N;
 
@@ -166,7 +165,7 @@ impl Widget for SearchField {
 
     fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
         let button = self.clear_button();
-        let on_clear = |point: Point| button.is_some_and(|button| contains(button, point));
+        let on_clear = |point: Point| button.is_some_and(|button| button.contains(point));
         match event {
             Event::PointerDown(pointer) if pointer.is_primary() && on_clear(pointer.position) => {
                 self.clear_pressed = true;
@@ -210,7 +209,7 @@ impl Widget for SearchField {
     fn cursor(&self, point: Point) -> Option<Cursor> {
         match self
             .clear_button()
-            .is_some_and(|button| contains(button, point))
+            .is_some_and(|button| button.contains(point))
         {
             true => Some(Cursor::Default),
             false => self.field.cursor(point),

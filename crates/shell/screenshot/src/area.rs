@@ -2,8 +2,8 @@ use unbound_toolkit::ui::{Event, Key};
 
 use crate::engine::Frame;
 use unbound_toolkit::{
-    Color, Item, Palette, Point, Radius, Rect, Scene, Scheme, ScreenImage, Shape, Spacing,
-    TextAlign, TextRole, TextStyle, TextSystem,
+    Color, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape, Snapshot, Spacing, TextAlign,
+    TextRole, TextStyle, TextSystem,
 };
 
 const SELECTION_FILL: f32 = 0.16;
@@ -48,10 +48,6 @@ impl AreaSelection {
             windows,
             ..Self::default()
         }
-    }
-
-    pub fn is_window_mode(&self) -> bool {
-        self.window_mode
     }
 
     fn hovered(&self) -> Option<&(String, Frame)> {
@@ -225,7 +221,7 @@ fn crosshair(items: &mut Vec<Item>, at: Point) {
     }
 }
 
-pub fn crop(image: &ScreenImage, region: Region) -> Option<ScreenImage> {
+pub fn crop(image: &Snapshot, region: Region) -> Option<Snapshot> {
     let right = region.x.checked_add(region.width)?;
     let bottom = region.y.checked_add(region.height)?;
     if region.width == 0 || region.height == 0 || right > image.width || bottom > image.height {
@@ -240,7 +236,7 @@ pub fn crop(image: &ScreenImage, region: Region) -> Option<ScreenImage> {
                 .copied()
         })
         .collect();
-    Some(ScreenImage {
+    Some(Snapshot {
         width: region.width,
         height: region.height,
         rgba,
@@ -252,42 +248,25 @@ mod tests {
     use super::*;
     use unbound_toolkit::ui::{Modifiers, Pointer};
 
-    fn drag(from: (f32, f32), to: (f32, f32)) -> (AreaSelection, AreaOutcome) {
-        let mut selection = AreaSelection::default();
-        selection.handle(&Event::PointerDown(Pointer::at(Point::new(from.0, from.1))));
-        selection.handle(&Event::PointerMove(Pointer::at(Point::new(to.0, to.1))));
-        let outcome = selection.handle(&Event::PointerUp(Pointer::at(Point::new(to.0, to.1))));
-        (selection, outcome)
-    }
-
     #[test]
-    fn dragging_chooses_the_rectangle_between_press_and_release() {
-        let (_, outcome) = drag((10.0, 20.0), (110.0, 70.0));
-
-        assert_eq!(
-            outcome,
-            AreaOutcome::Chosen(Region {
-                x: 10,
-                y: 20,
-                width: 100,
-                height: 50
-            })
-        );
-    }
-
-    #[test]
-    fn dragging_up_and_left_chooses_the_same_rectangle() {
-        let (_, outcome) = drag((110.0, 70.0), (10.0, 20.0));
-
-        assert_eq!(
-            outcome,
-            AreaOutcome::Chosen(Region {
-                x: 10,
-                y: 20,
-                width: 100,
-                height: 50
-            })
-        );
+    fn a_drag_either_way_chooses_the_rectangle_between_press_and_release_and_a_click_cancels() {
+        let chosen = AreaOutcome::Chosen(Region {
+            x: 10,
+            y: 20,
+            width: 100,
+            height: 50,
+        });
+        for (from, to, expected) in [
+            ((10.0, 20.0), (110.0, 70.0), chosen.clone()),
+            ((110.0, 70.0), (10.0, 20.0), chosen),
+            ((40.0, 40.0), (40.0, 40.0), AreaOutcome::Cancelled),
+        ] {
+            let mut selection = AreaSelection::default();
+            selection.handle(&Event::PointerDown(Pointer::at(Point::new(from.0, from.1))));
+            selection.handle(&Event::PointerMove(Pointer::at(Point::new(to.0, to.1))));
+            let outcome = selection.handle(&Event::PointerUp(Pointer::at(Point::new(to.0, to.1))));
+            assert_eq!(outcome, expected, "{from:?} to {to:?}");
+        }
     }
 
     #[test]
@@ -310,13 +289,6 @@ mod tests {
                 .items
                 .is_empty()
         );
-    }
-
-    #[test]
-    fn a_click_without_a_drag_takes_no_picture() {
-        let (_, outcome) = drag((40.0, 40.0), (40.0, 40.0));
-
-        assert_eq!(outcome, AreaOutcome::Cancelled);
     }
 
     #[test]
@@ -406,7 +378,7 @@ mod tests {
         let rgba = (0..3u8)
             .flat_map(|y| (0..4u8).flat_map(move |x| pixel(x, y)))
             .collect();
-        let image = ScreenImage {
+        let image = Snapshot {
             width: 4,
             height: 3,
             rgba,
@@ -425,7 +397,7 @@ mod tests {
         let expected = [pixel(1, 1), pixel(2, 1), pixel(1, 2), pixel(2, 2)].concat();
         assert_eq!(
             cropped,
-            Some(ScreenImage {
+            Some(Snapshot {
                 width: 2,
                 height: 2,
                 rgba: expected
@@ -435,7 +407,7 @@ mod tests {
 
     #[test]
     fn a_region_outside_the_screen_cannot_be_cropped() {
-        let image = ScreenImage {
+        let image = Snapshot {
             width: 4,
             height: 3,
             rgba: vec![0; 48],

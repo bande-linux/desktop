@@ -58,7 +58,7 @@ impl FrameClock {
         time.min(self.refresh.saturating_sub(SAFETY_MARGIN))
     }
 
-    pub fn predicted_render(&self) -> Duration {
+    fn predicted_render(&self) -> Duration {
         let slowest = self.deadline_to_done.iter().copied().max();
         self.within_a_refresh(slowest.unwrap_or_default())
     }
@@ -104,6 +104,7 @@ impl FrameClock {
 pub enum Submission {
     AtVblank,
     AwaitingFlip,
+    Paused,
 }
 
 pub trait FrameOutput {
@@ -114,6 +115,8 @@ pub trait FrameOutput {
         compositor: &mut Headless,
         output: &str,
     ) -> Result<Submission, Self::Error>;
+
+    fn set_color_temperature(&mut self, _kelvin: f64) {}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,7 +124,7 @@ enum Phase {
     Idle,
     Waiting(Vblank),
     Rendered(Vblank),
-    Flipping,
+    Held,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -200,16 +203,18 @@ impl FrameScheduler {
                     compositor.animate_on(&name, vblank.time);
                     compositor.latch_on(&name);
                     let deadline = self.clock.deadline(vblank);
-                    let submission = output.submit(compositor, &name)?;
+                    let submission = output.submit(compositor, &name).inspect_err(|_| {
+                        self.phase = Phase::Idle;
+                    })?;
                     now = clock();
                     self.clock.record_render(deadline, started, now);
                     self.phase = match submission {
-                        Submission::AwaitingFlip => Phase::Flipping,
+                        Submission::AwaitingFlip | Submission::Paused => Phase::Held,
                         Submission::AtVblank if now <= vblank.time => Phase::Rendered(vblank),
                         Submission::AtVblank => Phase::Rendered(self.clock.vblank_after(now)),
                     };
                 }
-                Phase::Flipping => {
+                Phase::Held => {
                     return Ok(Poll {
                         wake_at: None,
                         presented,
@@ -229,6 +234,11 @@ impl FrameScheduler {
                 }
             }
         }
+    }
+
+    pub fn resume(&mut self) {
+        self.phase = Phase::Idle;
+        self.wanted = true;
     }
 
     pub fn flipped(&mut self, vblank: Vblank, compositor: &mut Headless) -> io::Result<()> {

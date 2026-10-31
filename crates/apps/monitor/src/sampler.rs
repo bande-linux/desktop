@@ -5,9 +5,10 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use crate::cpu::{CpuShare, CpuTicks, read_cpu_ticks};
+use crate::inhibitors::SleepBlocker;
 use crate::proc::{
     DrmUse, IoBytes, Stat, display_name, parse_cgroup_unit, parse_cmdline, parse_drm_fdinfo,
-    parse_io, parse_kilobytes, parse_passwd, parse_stat, parse_uid,
+    parse_io, parse_kilobytes, parse_passwd, parse_stat, parse_switches, parse_uid,
 };
 use crate::system::{Memory, Transferred, read_disks, read_interfaces, read_memory};
 
@@ -37,6 +38,9 @@ pub struct Process {
     pub resident: u64,
     pub disk: Option<Rates>,
     pub gpu: Option<GpuUse>,
+    pub wakeups: Option<f64>,
+    pub energy: Option<f64>,
+    pub preventing_sleep: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -68,11 +72,27 @@ pub struct Snapshot {
     pub seconds: f64,
     pub cpu: CpuShare,
     pub cores: Vec<CpuShare>,
+    pub capacities: Vec<u32>,
     pub processes: Vec<Process>,
     pub memory: Memory,
     pub disk: Rates,
     pub interfaces: Vec<Interface>,
     pub gpu: bool,
+    pub battery: bool,
+}
+
+impl Snapshot {
+    pub fn mark_sleep_blockers(&mut self, blockers: &[SleepBlocker]) {
+        for process in &mut self.processes {
+            process.preventing_sleep = blockers
+                .iter()
+                .find(|blocker| blocker.pid == process.pid)
+                .map(|blocker| match blocker.why.is_empty() {
+                    true => blocker.who.clone(),
+                    false => blocker.why.clone(),
+                });
+        }
+    }
 }
 
 struct Known {
@@ -83,6 +103,7 @@ struct Known {
     reads_io: bool,
     reads_rollup: bool,
     gpu_ns: Option<u64>,
+    switches: Option<u64>,
 }
 
 struct Previous {
@@ -100,8 +121,12 @@ pub struct Sampler {
     known: HashMap<u32, Known>,
     previous: Option<Previous>,
     proportional: bool,
+    disk: bool,
     gpu: bool,
     gpu_seen: bool,
+    wakeups: bool,
+    battery: bool,
+    capacities: Vec<u32>,
     buffer: Vec<u8>,
 }
 
@@ -125,6 +150,17 @@ fn read_gpu(folder: &Path) -> Option<DrmUse> {
     })
 }
 
+fn has_battery(root: &Path) -> bool {
+    fs::read_dir(root.join("sys/class/power_supply"))
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .any(|supply| {
+            fs::read_to_string(supply.path().join("type"))
+                .is_ok_and(|kind| kind.trim() == "Battery")
+        })
+}
+
 fn rate(now: u64, then: u64, seconds: f64) -> f64 {
     if seconds > 0.0 {
         now.saturating_sub(then) as f64 / seconds
@@ -146,8 +182,12 @@ impl Sampler {
             known: HashMap::new(),
             previous: None,
             proportional: false,
+            disk: false,
             gpu: false,
             gpu_seen: false,
+            wakeups: false,
+            battery: has_battery(root),
+            capacities: Vec::new(),
             buffer: Vec::new(),
         }
     }
@@ -164,8 +204,29 @@ impl Sampler {
         self.proportional = measure;
     }
 
+    pub fn measure_disk(&mut self, measure: bool) {
+        self.disk = measure;
+    }
+
     pub fn measure_gpu(&mut self, measure: bool) {
         self.gpu = measure;
+    }
+
+    pub fn measure_wakeups(&mut self, measure: bool) {
+        self.wakeups = measure;
+    }
+
+    fn switches(&mut self, folder: &Path) -> Option<u64> {
+        let tasks = fs::read_dir(folder.join("task")).ok()?;
+        let mut total = 0;
+        for task in tasks.filter_map(Result::ok) {
+            total += self
+                .read(&task.path().join("status"))
+                .ok()
+                .and_then(parse_switches)
+                .unwrap_or(0);
+        }
+        Some(total)
     }
 
     fn read(&mut self, path: &Path) -> io::Result<&str> {
@@ -222,6 +283,7 @@ impl Sampler {
                     reads_io: readable,
                     reads_rollup: readable,
                     gpu_ns: None,
+                    switches: None,
                 },
             );
         }
@@ -236,7 +298,7 @@ impl Sampler {
             .then(|| read_gpu(&folder))
             .flatten();
         self.gpu_seen |= drm.is_some();
-        let io = reads_io
+        let io = (self.disk && reads_io)
             .then(|| self.read(&folder.join("io")).ok().and_then(parse_io))
             .flatten();
         let proportional = (self.proportional && reads_rollup)
@@ -245,6 +307,9 @@ impl Sampler {
                     .ok()
                     .and_then(|rollup| parse_kilobytes(rollup, "Pss"))
             })
+            .flatten();
+        let switches = (self.wakeups && !kernel_thread)
+            .then(|| self.switches(&folder))
             .flatten();
         let ticks_per_second = self.ticks_per_second;
         let resident = stat.resident_pages * self.page_size;
@@ -267,10 +332,12 @@ impl Sampler {
             }
         });
         known.gpu_ns = drm.map(|now| now.engine_ns);
+        let wakeups = switches.map(|now| rate(now, known.switches.unwrap_or(now), seconds));
+        known.switches = switches;
         let cpu_percent = rate(stat.cpu_ticks, known.cpu_ticks, seconds) / ticks_per_second * 100.0;
         known.cpu_ticks = stat.cpu_ticks;
         known.io = io;
-        known.reads_io = io.is_some();
+        known.reads_io &= !self.disk || io.is_some();
         known.reads_rollup &= !self.proportional || proportional.is_some();
         Some(Process {
             pid,
@@ -284,11 +351,30 @@ impl Sampler {
             resident,
             disk,
             gpu,
+            wakeups,
+            energy: None,
+            preventing_sleep: None,
         })
+    }
+
+    fn read_capacities(&mut self, cores: usize) {
+        if self.capacities.len() == cores {
+            return;
+        }
+        self.capacities = (0..cores)
+            .map(|core| {
+                let path = format!("sys/devices/system/cpu/cpu{core}/cpu_capacity");
+                fs::read_to_string(self.root.join(path))
+                    .ok()
+                    .and_then(|text| text.trim().parse().ok())
+                    .unwrap_or(0)
+            })
+            .collect();
     }
 
     pub fn sample(&mut self) -> io::Result<Snapshot> {
         let (cpu, cores) = read_cpu_ticks(&self.root)?;
+        self.read_capacities(cores.len());
         let disk = read_disks(&self.root);
         let interfaces = read_interfaces(&self.root);
         let previous = self.previous.take();
@@ -322,6 +408,7 @@ impl Sampler {
                 .zip(&previous.cores)
                 .map(|(now, then)| now.share_since(*then))
                 .collect(),
+            capacities: self.capacities.clone(),
             processes,
             memory: read_memory(&self.root).unwrap_or_default(),
             disk: Rates {
@@ -344,6 +431,7 @@ impl Sampler {
                 })
                 .collect(),
             gpu: self.gpu_seen,
+            battery: self.battery,
         };
         self.previous = Some(Previous {
             cpu,

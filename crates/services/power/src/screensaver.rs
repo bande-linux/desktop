@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::os::fd::OwnedFd;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
 use zbus::blocking::Connection;
@@ -12,6 +12,7 @@ pub const BUS_NAME: &str = "org.freedesktop.ScreenSaver";
 pub const OBJECT_PATHS: [&str; 2] = ["/org/freedesktop/ScreenSaver", "/ScreenSaver"];
 
 type Hold = Box<dyn Fn(&str, &str) -> Option<OwnedFd> + Send + Sync>;
+type Report = Box<dyn Fn(bool) + Send + Sync>;
 
 struct Inhibitor {
     owner: String,
@@ -35,10 +36,21 @@ impl Inhibitors {
     }
 }
 
-type Shared = Arc<Mutex<Inhibitors>>;
+struct Registry {
+    inhibitors: Mutex<Inhibitors>,
+    report: Report,
+}
 
-fn lock(inhibitors: &Shared) -> MutexGuard<'_, Inhibitors> {
-    inhibitors.lock().unwrap_or_else(PoisonError::into_inner)
+impl Registry {
+    fn change<T>(&self, edit: impl FnOnce(&mut Inhibitors) -> T) -> T {
+        let mut inhibitors = self
+            .inhibitors
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let outcome = edit(&mut inhibitors);
+        (self.report)(!inhibitors.active.is_empty());
+        outcome
+    }
 }
 
 pub struct InhibitionService {
@@ -49,10 +61,14 @@ impl InhibitionService {
     pub fn start(
         connection: &Connection,
         hold: impl Fn(&str, &str) -> Option<OwnedFd> + Send + Sync + 'static,
+        inhibited: impl Fn(bool) + Send + Sync + 'static,
     ) -> zbus::Result<Self> {
-        let inhibitors = Shared::default();
+        let registry = Arc::new(Registry {
+            inhibitors: Mutex::default(),
+            report: Box::new(inhibited),
+        });
         let owners = DBusProxy::new(connection)?.receive_name_owner_changed()?;
-        let released = Arc::clone(&inhibitors);
+        let released = Arc::clone(&registry);
         thread::spawn(move || {
             for change in owners {
                 let Ok(arguments) = change.args() else {
@@ -60,9 +76,11 @@ impl InhibitionService {
                 };
                 if arguments.new_owner().is_none() {
                     let gone = arguments.name().as_str();
-                    lock(&released)
-                        .active
-                        .retain(|_, inhibitor| inhibitor.owner != gone);
+                    released.change(|inhibitors| {
+                        inhibitors
+                            .active
+                            .retain(|_, inhibitor| inhibitor.owner != gone)
+                    });
                 }
             }
         });
@@ -71,7 +89,7 @@ impl InhibitionService {
             connection.object_server().at(
                 path,
                 ScreenSaver {
-                    inhibitors: Arc::clone(&inhibitors),
+                    registry: Arc::clone(&registry),
                     hold: Arc::clone(&hold),
                 },
             )?;
@@ -91,7 +109,7 @@ fn sender(header: &Header<'_>) -> zbus::fdo::Result<String> {
 }
 
 struct ScreenSaver {
-    inhibitors: Shared,
+    registry: Arc<Registry>,
     hold: Arc<Hold>,
 }
 
@@ -106,8 +124,7 @@ impl ScreenSaver {
     ) -> zbus::fdo::Result<u32> {
         let owner = sender(&header)?;
         let held = (self.hold)(&application_name, &reason_for_inhibit);
-        let cookie = {
-            let mut inhibitors = lock(&self.inhibitors);
+        let cookie = self.registry.change(|inhibitors| {
             let cookie = inhibitors.fresh_cookie();
             inhibitors.active.insert(
                 cookie,
@@ -117,27 +134,30 @@ impl ScreenSaver {
                 },
             );
             cookie
-        };
+        });
         let present = zbus::fdo::DBusProxy::new(connection)
             .await?
             .name_has_owner(BusName::try_from(owner.as_str()).map_err(zbus::Error::from)?)
             .await?;
         if !present {
-            lock(&self.inhibitors).active.remove(&cookie);
+            self.registry.change(|inhibitors| {
+                inhibitors.active.remove(&cookie);
+            });
         }
         Ok(cookie)
     }
 
     fn un_inhibit(&self, cookie: u32, #[zbus(header)] header: Header<'_>) -> zbus::fdo::Result<()> {
         let caller = sender(&header)?;
-        let mut inhibitors = lock(&self.inhibitors);
-        if inhibitors
-            .active
-            .get(&cookie)
-            .is_some_and(|inhibitor| inhibitor.owner == caller)
-        {
-            inhibitors.active.remove(&cookie);
-        }
+        self.registry.change(|inhibitors| {
+            if inhibitors
+                .active
+                .get(&cookie)
+                .is_some_and(|inhibitor| inhibitor.owner == caller)
+            {
+                inhibitors.active.remove(&cookie);
+            }
+        });
         Ok(())
     }
 }

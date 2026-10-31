@@ -90,11 +90,7 @@ pub fn format_layouts(layouts: &Layouts) -> String {
 }
 
 pub fn layouts_path() -> Option<PathBuf> {
-    std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".local/state")))
-        .map(|state| state.join("unbound/desktop-layout.tsv"))
+    unbound_xdg::state_home().map(|state| state.join("unbound/desktop-layout.tsv"))
 }
 
 pub fn save_layouts(path: &Path, layouts: &Layouts) -> io::Result<()> {

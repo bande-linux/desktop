@@ -66,6 +66,7 @@ wayland-protocols-wlr = { version = "=0.3.12", features = ["client"] }
 wayland-scanner = "=0.31.11"
 wayland-server = "=0.31.14"
 xkbcommon = "=0.8.0"
+zeroize = { version = "=1.8.1", features = ["serde"] }
 zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2"] }
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }
 unbound-app-menu = { path = "crates/libs/app-menu" }
@@ -86,6 +87,7 @@ unbound-dock-model = { path = "crates/libs/dock-model" }
 unbound-edid = { path = "crates/libs/edid" }
 unbound-files = { path = "crates/apps/files" }
 unbound-fs = { path = "crates/libs/fs" }
+unbound-golden = { path = "crates/testing/golden" }
 unbound-graphics = { path = "crates/toolkit/graphics" }
 unbound-greeter = { path = "crates/shell/greeter" }
 unbound-inbox = { path = "crates/libs/inbox" }

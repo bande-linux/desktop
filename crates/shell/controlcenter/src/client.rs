@@ -18,17 +18,17 @@ use unbound_inbox::Inbox;
 use unbound_network::NetworkManager;
 use unbound_notify::client::NotificationCenter;
 use unbound_power::backlight::{Backlight, SYSFS_BACKLIGHT};
-use unbound_power::logind::{ManagerProxyBlocking, own_session};
+use unbound_power::logind::own_session;
 use unbound_status::session::full_name;
 use unbound_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
 use unbound_toolkit::{
     App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
-    MenuPlacement, Palette, Panel, Point, Rect, Role, Scene, TextSystem, VolumeKey, Window,
-    WindowEvent,
+    MenuPlacement, Palette, Panel, Point, Rect, Role, Scene, SessionEnd, TextSystem, VolumeKey,
+    Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, current_desktops, data_dirs, find_icon, path_from_file_uri,
-    spawn_detached,
+    DesktopEntry, ICON_THEMES, applications, current_desktops, data_dirs, find_icon,
+    path_from_file_uri, running_app, spawn_detached,
 };
 use zbus::blocking::Connection;
 
@@ -327,11 +327,11 @@ impl ControlCenter {
             return;
         };
         if found.security.needs_password() && !found.known {
-            let token = window.activation_token("org.unbound.Settings").ok();
-            let command = ["unbound-settings".to_owned(), "wifi".to_owned()];
-            if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
-                tracing::warn!("cannot open Wi-Fi settings: {error}");
-            }
+            self.launch(
+                window,
+                "org.unbound.Settings",
+                &["unbound-settings", "wifi"],
+            );
             self.dismiss(window);
             return;
         }
@@ -452,7 +452,7 @@ impl ControlCenter {
     fn launch(&self, window: &mut Window, app_id: &str, command: &[&str]) {
         let token = window.activation_token(app_id).ok();
         let command: Vec<String> = command.iter().map(|part| (*part).to_owned()).collect();
-        if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+        if let Err(error) = spawn_detached(app_id, &command, None, token.as_deref()) {
             tracing::warn!("cannot start {}: {error}", command.join(" "));
         }
     }
@@ -460,17 +460,17 @@ impl ControlCenter {
     fn end_session(&mut self, window: &mut Window, keyword: &str) {
         if keyword == "sleep" {
             if let Some(system) = &self.system {
-                report(
-                    "sleep",
-                    ManagerProxyBlocking::new(system).and_then(|login| login.suspend(true)),
-                );
+                report("sleep", unbound_status::devices::sleep(system));
             }
         } else {
-            let shell = std::env::current_exe()
-                .ok()
-                .and_then(|path| path.to_str().map(str::to_owned))
-                .unwrap_or_else(|| "unbound-shell".to_owned());
-            self.launch(window, "", &[&shell, "--confirm", keyword]);
+            let ending = match keyword {
+                "restart" => SessionEnd::Restart,
+                "shut-down" => SessionEnd::ShutDown,
+                _ => SessionEnd::LogOut,
+            };
+            if let Err(error) = window.confirm_session_end(ending) {
+                tracing::warn!("cannot ask to end the session: {error}");
+            }
         }
         self.dismiss(window);
     }
@@ -479,10 +479,12 @@ impl ControlCenter {
         let Some(player) = self.players.current() else {
             return;
         };
+        let entries = applications(&data_dirs(), None, &current_desktops());
+        let windows = window.running_apps();
         let running = player
             .desktop_entry
             .as_deref()
-            .filter(|entry| window.running_apps().iter().any(|app| app == entry))
+            .and_then(|entry| running_app(&entries, &windows, entry))
             .map(str::to_owned);
         match running {
             Some(app_id) => report("bring the player forward", window.activate_app(&app_id)),
@@ -509,16 +511,22 @@ impl ControlCenter {
             .filter(|player| player.playback == Playback::Playing && player.length.is_some())
     }
 
-    fn rebuild(&mut self) {
-        if !matches!(self.mode, Mode::Panel { .. }) {
-            return;
-        }
-        let (fresh, fresh_height) = panel(
+    fn fresh_panel(&self) -> (Ui, f32) {
+        let (mut ui, height) = panel(
             &self.status(),
             self.palette,
             self.text.sharing_fonts(),
             &self.changes,
         );
+        ui.context().reduce_motion = self.reduce_motion;
+        (ui, height)
+    }
+
+    fn rebuild(&mut self) {
+        if !matches!(self.mode, Mode::Panel { .. }) {
+            return;
+        }
+        let (fresh, fresh_height) = self.fresh_panel();
         if let Mode::Panel { ui, height } = &mut self.mode {
             **ui = fresh;
             *height = fresh_height;
@@ -578,12 +586,7 @@ impl ControlCenter {
             self.dismiss(window);
             return;
         }
-        let (ui, height) = panel(
-            &self.status(),
-            self.palette,
-            self.text.sharing_fonts(),
-            &self.changes,
-        );
+        let (ui, height) = self.fresh_panel();
         self.mode = Mode::Panel {
             ui: Box::new(ui),
             height,
@@ -758,7 +761,7 @@ impl App for ControlCenter {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
-            WindowEvent::ToggleControlCenter => self.toggle_panel(window),
+            WindowEvent::TogglePanel(Panel::ControlCenter) => self.toggle_panel(window),
             WindowEvent::PanelAnchor {
                 panel: Panel::ControlCenter,
                 edge,

@@ -1,38 +1,19 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use unbound_file_chooser::{Chooser, ChooserView, Finished, Icons};
 use unbound_files::rows;
 use unbound_toolkit::ui::{Event, Key, Modifiers};
-use unbound_toolkit::{Appearance, CpuRenderer, Scheme, TextSystem};
+use unbound_toolkit::{Appearance, CpuRenderer, TextSystem};
 use unbound_xdg::MimeDatabase;
 use xdg_desktop_portal_unbound::file_chooser::{Dialog, Filter, Mode, Pattern};
 
 const SIZE: (u32, u32) = (820, 520);
-const MIN_SSIM: f64 = 0.99;
 
 fn check_golden(name: &str, rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(SIZE.0, SIZE.1, rgba).expect("frame");
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        std::fs::create_dir_all(path.parent().expect("golden directory")).expect("directory");
-        actual.save(&path).expect("write golden");
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).expect("save the frame");
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).expect("same size");
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
-    );
+    unbound_golden::assert_golden!(name, &unbound_golden::from_rgba(SIZE.0, SIZE.1, rgba));
 }
 
 struct Home {
@@ -86,7 +67,7 @@ fn dialog(mode: Mode) -> Dialog {
     }
 }
 
-fn view(home: &Path, mode: Mode, scheme: Scheme) -> ChooserView {
+fn view(home: &Path, mode: Mode) -> ChooserView {
     let chooser = Chooser::new(
         dialog(mode),
         MimeDatabase::load(&[]),
@@ -97,10 +78,7 @@ fn view(home: &Path, mode: Mode, scheme: Scheme) -> ChooserView {
         rows(home, None, None, None),
         home.to_path_buf(),
         Icons::new(Vec::new()),
-        Appearance {
-            scheme,
-            ..Appearance::default()
-        },
+        Appearance::default(),
         TextSystem::new(),
     )
 }
@@ -120,26 +98,22 @@ fn key(view: &mut ChooserView, key: Key) {
 #[test]
 fn the_open_and_save_dialogs_match_their_goldens() {
     let home = home();
-    for (scheme, suffix) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
-        let mut open = view(
-            &home.home,
-            Mode::Open {
-                multiple: true,
-                directory: false,
-            },
-            scheme,
-        );
-        check_golden(&format!("open-{suffix}"), render(&mut open));
-        let mut save = view(
-            &home.home,
-            Mode::Save {
-                name: Some("Untitled.txt".to_owned()),
-                file: None,
-            },
-            scheme,
-        );
-        check_golden(&format!("save-{suffix}"), render(&mut save));
-    }
+    let mut open = view(
+        &home.home,
+        Mode::Open {
+            multiple: true,
+            directory: false,
+        },
+    );
+    check_golden("open", render(&mut open));
+    let mut save = view(
+        &home.home,
+        Mode::Save {
+            name: Some("Untitled.txt".to_owned()),
+            file: None,
+        },
+    );
+    check_golden("save", render(&mut save));
 }
 
 #[test]
@@ -151,7 +125,6 @@ fn typing_jumps_to_a_file_and_return_opens_it() {
             multiple: false,
             directory: false,
         },
-        Scheme::Light,
     );
     render(&mut view);
     key(&mut view, Key::Character('s'));
@@ -171,7 +144,6 @@ fn return_on_a_folder_enters_it_and_escape_cancels() {
             multiple: false,
             directory: false,
         },
-        Scheme::Light,
     );
     render(&mut view);
     key(&mut view, Key::Character('r'));
@@ -181,4 +153,99 @@ fn return_on_a_folder_enters_it_and_escape_cancels() {
     render(&mut view);
     key(&mut view, Key::Escape);
     assert!(matches!(view.take_finished(), Some(Finished::Cancelled)));
+}
+
+fn type_text(view: &mut ChooserView, text: &str) {
+    for character in text.chars() {
+        key(view, Key::Character(character));
+    }
+}
+
+fn super_shift(view: &mut ChooserView, letter: char) {
+    view.handle(&Event::Key {
+        key: Key::Character(letter),
+        modifiers: Modifiers {
+            shift: true,
+            logo: true,
+            ..Modifiers::default()
+        },
+    });
+}
+
+#[test]
+fn typing_a_path_goes_to_its_folder_and_selects_a_file_there() {
+    let home = home();
+    let mut view = view(
+        &home.home,
+        Mode::Open {
+            multiple: false,
+            directory: false,
+        },
+    );
+    super_shift(&mut view, 'h');
+    assert_eq!(view.folder(), home.home);
+    render(&mut view);
+    type_text(&mut view, "~/Documents/Receipts");
+    key(&mut view, Key::Enter);
+    render(&mut view);
+    assert_eq!(view.folder(), home.home.join("Documents/Receipts"));
+    type_text(&mut view, "/");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while view.animating() && Instant::now() < deadline {
+        render(&mut view);
+        std::thread::sleep(Duration::from_millis(16));
+    }
+    check_golden("go-to", render(&mut view));
+    key(&mut view, Key::Backspace);
+    type_text(&mut view, "~/Documents/Letter.txt");
+    key(&mut view, Key::Enter);
+    render(&mut view);
+    assert_eq!(view.folder(), home.home.join("Documents"));
+    key(&mut view, Key::Enter);
+    let Some(Finished::Chosen(selection)) = view.take_finished() else {
+        panic!("Return opens the file gone to");
+    };
+    assert_eq!(selection.paths, [home.home.join("Documents/Letter.txt")]);
+}
+
+fn super_key(view: &mut ChooserView, key: Key) {
+    view.handle(&Event::Key {
+        key,
+        modifiers: Modifiers {
+            logo: true,
+            ..Modifiers::default()
+        },
+    });
+}
+
+#[test]
+fn super_brackets_go_back_and_forward_through_the_folders_visited() {
+    let home = home();
+    let mut view = view(
+        &home.home,
+        Mode::Open {
+            multiple: false,
+            directory: false,
+        },
+    );
+    let documents = home.home.join("Documents");
+    let receipts = documents.join("Receipts");
+    render(&mut view);
+    key(&mut view, Key::Character('r'));
+    key(&mut view, Key::Enter);
+    super_shift(&mut view, 'h');
+    assert_eq!(view.folder(), home.home);
+
+    super_key(&mut view, Key::Character('['));
+    assert_eq!(view.folder(), receipts);
+    super_key(&mut view, Key::Character('['));
+    assert_eq!(view.folder(), documents);
+    render(&mut view);
+    key(&mut view, Key::Enter);
+    assert_eq!(view.folder(), receipts);
+    super_key(&mut view, Key::Character(']'));
+    assert_eq!(view.folder(), receipts);
+    super_key(&mut view, Key::Character('['));
+    super_key(&mut view, Key::Character(']'));
+    assert_eq!(view.folder(), receipts);
 }

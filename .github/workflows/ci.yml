@@ -97,6 +97,7 @@ jobs:
           echo "DEB_VERSION=$version" >> "$GITHUB_ENV"
       - name: Build the packages
         env:
+          CARGO_BUILD_JOBS: '1'
           RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/build --remap-path-prefix=/root/.cargo=/cargo --remap-path-prefix=/root/.rustup=/rustup
         run: |
           packages="unbound-compositor unbound-notify unbound-clipboard unbound-config unbound-power unbound-sound \
@@ -109,6 +110,7 @@ jobs:
       - name: Build the benchmarks for ci/perf against the packaged release build
         if: github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[perf]')
         env:
+          CARGO_BUILD_JOBS: '1'
           RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/build --remap-path-prefix=/root/.cargo=/cargo --remap-path-prefix=/root/.rustup=/rustup
         run: cargo build --profile dist --locked --package unbound-bench --package unbound-sample
       - uses: actions/upload-artifact@v7
@@ -119,7 +121,23 @@ jobs:
             target/dist/unbound-compositor
             target/dist/unbound-bench
             target/dist/unbound-toolkit-bench
+            target/dist/unbound-idle
             target/dist/unbound-sample
+            target/dist/unbound-shell
+            target/dist/unbound-screenshot
+            target/dist/unbound-clipboard
+            target/dist/unbound-lock
+            target/dist/unbound-config
+            target/dist/unbound-power
+            target/dist/unbound-sound
+            target/dist/unbound-tray
+            target/dist/unbound-automount
+            target/dist/unbound-notify
+            target/dist/xdg-desktop-portal-unbound
+            target/dist/unbound-files
+            target/dist/unbound-settings
+            target/dist/unbound-term
+            target/dist/unbound-monitor
           if-no-files-found: error
       - name: Inspect the packages
         run: |
@@ -427,7 +445,7 @@ jobs:
         with:
           name: perf-binaries
           path: target/release
-      - run: chmod +x target/release/unbound-*
+      - run: chmod +x target/release/*
       - name: Measure against the budgets in docs/decisions/0001-rendering.md
         shell: bash
         run: |
@@ -451,6 +469,22 @@ jobs:
         with:
           name: perf-toolkit
           path: perf-toolkit.json
+          if-no-files-found: ignore
+      - name: Install the runtime dependencies of an idle session
+        run: ci/apt-install.sh dbus-daemon libglib2.0-bin libpipewire-0.3-0t64 libpam0g
+      - name: Measure wakeups of an idle session against the budget
+        shell: bash
+        run: |
+          home=$(mktemp -d)
+          mkdir -m 700 "$home/run"
+          env -i PATH=/usr/bin:/bin HOME="$home" XDG_RUNTIME_DIR="$home/run" LANG=C.UTF-8 \
+            dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- \
+            target/release/unbound-idle --json perf-idle.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: perf-idle
+          path: perf-idle.json
           if-no-files-found: ignore
 
   publish:

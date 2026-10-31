@@ -1,7 +1,7 @@
 use std::fs::{self, DirBuilder, OpenOptions};
 use std::io::{self, Write};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub type Contents = Vec<(String, Vec<u8>)>;
 
@@ -20,14 +20,6 @@ const TEXT_MIMES: [&str; 5] = [
 const URI_LIST: &str = "text/uri-list";
 const PASSWORD_HINT: &str = "x-kde-passwordManagerHint";
 const CONCEALED: &str = "application/x-nspasteboard-concealed-type";
-
-pub fn state_dir(state_home: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
-    let state = state_home
-        .filter(|path| path.is_absolute())
-        .map(Path::to_path_buf)
-        .or_else(|| home.map(|home| home.join(".local/state")))?;
-    Some(state.join("unbound/clipboard"))
-}
 
 pub fn is_sensitive(contents: &Contents) -> bool {
     contents.iter().any(|(mime, bytes)| {

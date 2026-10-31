@@ -221,6 +221,19 @@ impl State {
         }
     }
 
+    pub(crate) fn move_to_next_screen(&mut self, surface: &WlSurface) {
+        let Some(index) = self.window_index(surface) else {
+            return;
+        };
+        let index = self.root_index(index);
+        if self.screens.len() < 2 || self.on_full_screen_space(&self.windows[index]) {
+            return;
+        }
+        let next = (self.screen_of(&self.windows[index]) + 1) % self.screens.len();
+        self.move_window_to_screen(index, next, None);
+        self.focus(Some(surface.clone()));
+    }
+
     pub(crate) fn add_screen(&mut self, config: OutputConfig, settings: OutputSettings) {
         if self.screen_named(&config.name).is_some() {
             return;
@@ -439,7 +452,10 @@ impl State {
         let moved: Vec<usize> = (0..self.windows.len())
             .filter(|index| self.screen_of(&self.windows[*index]) == screen)
             .collect();
-        self.screens[screen].mirror = Some(self.screens[source].name());
+        let mirror = Some(self.screens[source].name());
+        let remirrored = self.screens[screen].mirror != mirror;
+        self.screens[screen].mirror = mirror;
+        let mut changed = remirrored || !moved.is_empty();
         for index in moved {
             self.move_window_to_screen(index, source, None);
         }
@@ -455,11 +471,16 @@ impl State {
         };
         if settings != current {
             self.screens[screen].apply(settings);
+            changed = true;
         }
-        self.after_screens_changed();
+        if changed {
+            self.after_screens_changed();
+        }
     }
 
     fn after_screens_changed(&mut self) {
+        self.end_switcher();
+        self.dismiss_assist();
         self.announce_outputs();
         self.pointer_location = self.nearest_on_screens(self.pointer_location);
         self.sync_surface_outputs();
@@ -486,14 +507,6 @@ impl Headless {
 
     pub fn output_settings(&self, output: &str) -> Option<OutputSettings> {
         Some(self.state.screens[self.state.screen_named(output)?].settings)
-    }
-
-    pub fn output_config(&self, output: &str) -> Option<&OutputConfig> {
-        Some(&self.state.screens[self.state.screen_named(output)?].config)
-    }
-
-    pub fn usable_area_on(&self, output: &str) -> Option<Rect> {
-        Some(self.state.usable_area(self.state.screen_named(output)?))
     }
 
     pub fn output_of(&self, window: &crate::Window) -> String {
@@ -526,6 +539,7 @@ impl Headless {
     }
 
     pub fn set_display_config(&mut self, config: unbound_config::Config) {
+        self.state.night_light.configure(config.night_light);
         self.state.display_config = config;
         self.state.arrange_screens();
     }
@@ -544,12 +558,6 @@ impl Headless {
     pub fn configure_output(&mut self, output: &str, settings: OutputSettings) {
         if let Some(screen) = self.state.screen_named(output) {
             self.state.configure_screen(screen, settings);
-        }
-    }
-
-    pub fn set_main_output(&mut self, output: &str) {
-        if let Some(screen) = self.state.screen_named(output) {
-            self.state.make_main(screen);
         }
     }
 

@@ -109,6 +109,7 @@ enum Key {
     RunningSeparator,
     TrashSeparator,
     Trash,
+    More,
 }
 
 impl Key {
@@ -170,6 +171,18 @@ impl Slot {
         } else {
             icon + 2.0 * padding
         }
+    }
+
+    fn departs_from_more(&self) -> bool {
+        self.leaving && self.hidden
+    }
+
+    fn claim(&self, now: Instant) -> f32 {
+        if self.departs_from_more() {
+            return 0.0;
+        }
+        let shown = self.presence.value_at(now).0.clamp(0.0, 1.0);
+        self.presence.target().max(shown)
     }
 }
 
@@ -667,6 +680,10 @@ impl DockState {
         }
     }
 
+    pub fn is_menu_open(&self) -> bool {
+        self.menu_open
+    }
+
     pub fn is_shown(&self) -> bool {
         self.reveal.target() > 0.0
     }
@@ -737,6 +754,15 @@ impl DockState {
         }
     }
 
+    pub fn target_at(&self, point: Point) -> Option<MenuTarget> {
+        match &self.more {
+            Some(more) if contains(self.reach(more.cell), point) => {
+                Some(MenuTarget::More(more.hidden.clone()))
+            }
+            _ => self.drop_target(point),
+        }
+    }
+
     pub fn drop_target(&self, point: Point) -> Option<MenuTarget> {
         self.slots
             .iter()
@@ -745,7 +771,7 @@ impl DockState {
             .and_then(|slot| match &slot.key {
                 Key::App(app_id) => Some(MenuTarget::App(app_id.clone())),
                 Key::Trash => Some(MenuTarget::Trash),
-                Key::RunningSeparator | Key::TrashSeparator => None,
+                Key::RunningSeparator | Key::TrashSeparator | Key::More => None,
             })
     }
 
@@ -779,11 +805,20 @@ impl DockState {
     }
 
     fn reachable(&self) -> Vec<Key> {
-        self.slots
+        let mut keys: Vec<Key> = self
+            .slots
             .iter()
             .filter(|slot| !slot.leaving && !slot.hidden && !slot.key.is_separator())
             .map(|slot| slot.key.clone())
-            .collect()
+            .collect();
+        if self.more.is_some() {
+            let at = keys
+                .iter()
+                .position(|key| *key == Key::Trash)
+                .unwrap_or(keys.len());
+            keys.insert(at, Key::More);
+        }
+        keys
     }
 
     pub fn start_navigation(&mut self, active: Option<&str>, now: Instant) {
@@ -853,7 +888,9 @@ impl DockState {
             }
             KeyboardKey::Enter | KeyboardKey::Space => {
                 self.activate(&selected);
-                self.actions.push(DockAction::ReleaseKeyboard);
+                if selected != Key::More {
+                    self.actions.push(DockAction::ReleaseKeyboard);
+                }
             }
             KeyboardKey::Menu => self.open_menu(&selected),
             KeyboardKey::Function(10) if modifiers.shift => self.open_menu(&selected),
@@ -918,7 +955,10 @@ impl DockState {
     }
 
     fn beyond_dock(&self, point: Point) -> bool {
-        self.depth_of(point) > SCREEN_GAP + thickness(self.icon_size) + self.icon_size
+        let dock = self
+            .rail
+            .map_or(SCREEN_GAP + thickness(self.icon_size), |rail| rail.width);
+        self.depth_of(point) > dock + self.icon_size
     }
 
     fn press_at(&mut self, key: &Key, point: Point) {
@@ -1272,7 +1312,7 @@ impl DockState {
             self.slots
                 .iter()
                 .filter(|slot| !pinned_to_bottom(&slot.key))
-                .map(|slot| slot.cell_length(icon, RAIL_PADDING) * slot.presence.target())
+                .map(|slot| slot.cell_length(icon, RAIL_PADDING) * slot.claim(now))
                 .sum()
         };
         let full = if rail.expanded {
@@ -1304,15 +1344,17 @@ impl DockState {
             .map(|slot| (slot.id, slot.cell))
             .collect::<Vec<_>>();
         let mut offset = rail.top;
+        let mut claimed = rail.top;
         let mut hidden = Vec::new();
         let mut more_at = None;
         for slot in &mut self.slots {
-            if pinned_to_bottom(&slot.key) {
+            if pinned_to_bottom(&slot.key) || slot.departs_from_more() {
                 continue;
             }
             let length = slot.cell_length(icon, RAIL_PADDING);
             let shown_length = length * slot.presence.value_at(now).0.max(0.0);
-            slot.hidden = overflowing && offset + length > rail.top + limit;
+            let claim = length * slot.claim(now);
+            slot.hidden = overflowing && (more_at.is_some() || claimed + claim > rail.top + limit);
             if slot.hidden {
                 more_at.get_or_insert(offset);
                 if let Some(app) = slot.app.as_ref().filter(|_| !slot.leaving) {
@@ -1322,6 +1364,7 @@ impl DockState {
             }
             slot.cell = Rect::new(cross, offset - (length - shown_length) / 2.0, thick, length);
             offset += shown_length;
+            claimed += claim;
         }
         self.more = more_at.filter(|_| !hidden.is_empty()).map(|at| More {
             hidden,
@@ -1394,6 +1437,7 @@ impl DockState {
     fn show_label(&mut self, key: Key, now: Instant) {
         self.label.pending = None;
         let Some(slot) = self.slots.iter().find(|slot| slot.key == key) else {
+            self.hide_label(now);
             return;
         };
         let center = if vertical(self.edge) {
@@ -1458,6 +1502,7 @@ impl DockState {
         let target = match key {
             Key::App(app_id) => MenuTarget::App(app_id.clone()),
             Key::Trash => MenuTarget::Trash,
+            Key::More => return self.open_more(),
             Key::RunningSeparator | Key::TrashSeparator => return,
         };
         let Some(at) = self.menu_point(key) else {
@@ -1478,6 +1523,7 @@ impl DockState {
         match key {
             Key::App(app_id) => self.actions.push(DockAction::Open(app_id.clone())),
             Key::Trash => self.actions.push(DockAction::OpenTrash),
+            Key::More => self.open_more(),
             Key::RunningSeparator | Key::TrashSeparator => {}
         }
     }
@@ -1647,6 +1693,7 @@ impl DockState {
                 Key::RunningSeparator | Key::TrashSeparator => {
                     self.paint_separator(cx, cell, &mut slot_items);
                 }
+                Key::More => {}
                 Key::Trash => {
                     self.paint_name(slot, cell, &mut slot_items);
                     let rect = scaled(self.icon_rect(cell), slot.press.value(cx));
@@ -1683,14 +1730,19 @@ impl DockState {
     }
 
     fn paint_selection(&self, cx: &Context, items: &mut Vec<Item>) {
-        let Some(slot) = self
-            .selected
-            .as_ref()
-            .and_then(|key| self.slots.iter().find(|slot| &slot.key == key))
-        else {
+        let cell = match self.selected.as_ref() {
+            Some(Key::More) => self.more.as_ref().map(|more| more.cell),
+            Some(key) => self
+                .slots
+                .iter()
+                .find(|slot| &slot.key == key)
+                .map(|slot| self.painted_cell(slot, cx)),
+            None => None,
+        };
+        let Some(cell) = cell else {
             return;
         };
-        let ring = self.icon_rect(self.painted_cell(slot, cx)).inset(-4.0);
+        let ring = self.icon_rect(cell).inset(-4.0);
         items.push(Item::Stroke {
             shape: Shape::rounded(ring, ring.width * 0.27),
             width: 3.0,

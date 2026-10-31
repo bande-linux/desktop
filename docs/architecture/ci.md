@@ -8,7 +8,7 @@ All CI runs on the organization's self-hosted runners, Docker containers on Appl
 tests (`runs-on: [self-hosted, unbound]`); `unbound-runner-kvm` carries `unbound-kvm`, has
 `/dev/kvm` and runs the jobs that boot a KVM guest (`runs-on: [self-hosted, unbound-kvm]`). Each
 runner takes one job at a time, and cargo is capped at two jobs (`CARGO_BUILD_JOBS: '2'`) so a
-link never runs a runner out of memory. Builds and tests run natively on arm64, the architecture
+link never runs a runner out of memory; `ci/deb` builds the fat-LTO `dist` binaries one at a time. Builds and tests run natively on arm64, the architecture
 Unbound targets.
 
 The Rust toolchain is pinned in `rust-toolchain.toml`, dependencies are pinned to exact versions,

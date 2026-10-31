@@ -1,10 +1,13 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::path::{Path, PathBuf};
+mod support;
+
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
+use support::replace_file;
 use unbound_config::{ConfigService, ConfigStore, EDIT_ACTION, ErrorNotifier};
 use unbound_notify::{Notification, NotificationServer};
 use unbound_test_bus::SessionBus;
@@ -18,12 +21,6 @@ struct Fixture {
     notifications: NotificationServer,
     opened: Receiver<PathBuf>,
     _bus: SessionBus,
-}
-
-fn replace_file(path: &Path, contents: &str) {
-    let staging = path.with_extension("kdl.tmp");
-    std::fs::write(&staging, contents).expect("write staging file");
-    std::fs::rename(&staging, path).expect("rename into place");
 }
 
 fn start(initial: &str) -> Fixture {

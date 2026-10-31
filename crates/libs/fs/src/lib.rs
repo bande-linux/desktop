@@ -11,8 +11,8 @@ use std::sync::LazyLock;
 use unbound_l10n::Localizer;
 
 pub use listing::{
-    Entry, Kind, Sort, SortBy, finder_order, format_date, format_size, is_hidden, list, list_trash,
-    same_volume, sort,
+    Entry, Kind, Listing, Sort, SortBy, compare, finder_order, format_date, format_list_date,
+    format_size, is_hidden, list, list_date, list_trash, merge, same_volume, sort,
 };
 pub use naming::{duplicate_name, keep_both_name, untitled_folder};
 pub use operations::{Finished, Operations, Purpose, Running};
@@ -22,7 +22,7 @@ pub use ops::{
 };
 pub use trash::{Trash, TrashDir, TrashItem};
 pub use undo::{Action, History, Step};
-pub use watch::FolderWatch;
+pub use watch::{FolderChanges, FolderWatch};
 
 const ENGLISH: &str = include_str!("../locales/en-US/unbound-fs.ftl");
 

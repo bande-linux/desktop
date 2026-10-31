@@ -170,10 +170,10 @@ impl State {
         }
     }
 
-    fn toggle_control_center(&mut self) {
+    pub(crate) fn toggle_panel(&mut self, panel: unbound_shell_v1::Panel) {
         for shell in &self.shell_resources {
-            if shell.version() >= unbound_shell_v1::EVT_TOGGLE_CONTROL_CENTER_SINCE {
-                shell.toggle_control_center();
+            if shell.version() >= unbound_shell_v1::EVT_TOGGLE_PANEL_SINCE {
+                shell.toggle_panel(panel);
             }
         }
     }
@@ -383,17 +383,17 @@ impl State {
         };
         let (title, app_id) = toplevel_names(surface);
         match &self.windows[index].foreign {
-            Some(handle) => {
+            Some(handle) if handle.title() != title || handle.app_id() != app_id => {
                 handle.send_title(&title);
                 handle.send_app_id(&app_id);
                 handle.send_done();
             }
+            Some(_) => {}
             None if self.windows[index].size.is_some() => {
                 let handle = self
                     .foreign_toplevel_state
                     .new_toplevel::<State>(title, app_id);
                 self.windows[index].foreign = Some(handle);
-                self.windows[index].announced_workspace = None;
                 self.announce_workspaces();
             }
             None => {}
@@ -445,7 +445,7 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         }
         state.announce_unresponsive(&shell);
         state.announce_minimized_windows(&shell);
-        state.announce_workspaces_to(&shell);
+        state.send_workspaces(&shell);
         state.announce_input_sources_to(&shell);
         for anchor in &state.panel_anchors {
             send_panel_anchor(&shell, anchor);
@@ -483,7 +483,9 @@ impl Dispatch<UnboundShellV1, ()> for State {
                     state.insert_text(text, client.id());
                 }
             }
-            unbound_shell_v1::Request::ToggleControlCenter => state.toggle_control_center(),
+            unbound_shell_v1::Request::ToggleControlCenter => {
+                state.toggle_panel(unbound_shell_v1::Panel::ControlCenter);
+            }
             unbound_shell_v1::Request::ShowLauncher => state.show_launcher(),
             unbound_shell_v1::Request::SetIconRect {
                 app_id,
@@ -541,8 +543,13 @@ impl Dispatch<UnboundShellV1, ()> for State {
                 edge,
                 Rectangle::new((x, y).into(), (width, height).into()),
             ),
+            unbound_shell_v1::Request::ConfirmSessionEnd {
+                ending: WEnum::Value(ending),
+            } => state.session_end_requested = Some(ending),
+            unbound_shell_v1::Request::QuitAllApps => state.quit_all_apps(resource.clone()),
             unbound_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);
+                state.quitting.retain(|(shell, _)| shell != resource);
             }
             _ => {}
         }
@@ -550,6 +557,7 @@ impl Dispatch<UnboundShellV1, ()> for State {
 
     fn destroyed(state: &mut Self, _client: ClientId, resource: &UnboundShellV1, _data: &()) {
         state.shell_resources.retain(|shell| shell != resource);
+        state.quitting.retain(|(shell, _)| shell != resource);
     }
 }
 

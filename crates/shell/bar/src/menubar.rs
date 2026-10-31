@@ -7,10 +7,10 @@ use unbound_toolkit::{
     TextAlign, TextStyle, TextSystem,
 };
 
-use unbound_status::status::{Battery, Status, speaker_waves, wifi_bars};
+use unbound_status::status::{Status, speaker_waves};
 
 use crate::L10N;
-use crate::symbols::{Symbol, Symbols, natural_size};
+use crate::symbols::{Symbol, Symbols, battery_items, place_symbol, snap, wifi_symbol};
 
 pub const HEIGHT: u32 = 24;
 const EDGE: f32 = 8.0;
@@ -20,21 +20,12 @@ const SYMBOL_SLOT: f32 = 30.0;
 const TRAY_SLOT: f32 = 28.0;
 const TRAY_ICON: f32 = 16.0;
 const BATTERY_SLOT: f32 = 38.0;
-const BATTERY_WIDTH: f32 = 23.0;
-const BATTERY_HEIGHT: f32 = 11.5;
 const HIGHLIGHT_INSET: f32 = 2.0;
 const BADGE_TEXT_SIZE: f32 = 10.0;
 const BADGE_PADDING: f32 = 4.0;
 const BADGE_MIN_WIDTH: f32 = 22.0;
 const BADGE_HEIGHT: f32 = 15.0;
 const BADGE_MARGIN: f32 = 5.0;
-
-pub fn app_name<'a>(app_id: &'a str, names: &'a [(String, String)]) -> &'a str {
-    names
-        .iter()
-        .find(|(id, _)| id == app_id)
-        .map_or(app_id, |(_, name)| name.as_str())
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Slot {
@@ -70,7 +61,7 @@ pub trait StatusView {
     fn open(&self) -> Option<Slot>;
     fn slot_at(&self, point: Point, button: PointerButton) -> Option<Slot>;
     fn slot_rect(&self, slot: Slot) -> Option<Rect>;
-    fn slot_of_node(&self, node: NodeId) -> Option<Slot>;
+    fn slot_of_node(&self, node: NodeId, action: Action) -> Option<Slot>;
     fn menu_placement(&self, anchor: Rect) -> MenuPlacement;
     fn edge(&self) -> DisplayEdge;
     fn slides_between_menus(&self) -> bool;
@@ -79,7 +70,7 @@ pub trait StatusView {
     fn set_battery_percentage(&mut self, shown: bool) -> bool;
     fn battery_percentage(&self) -> bool;
     fn set_workspaces(&mut self, count: usize, active: usize) -> bool;
-    fn shown_tray_items(&self) -> usize;
+    fn hidden_tray(&self) -> Vec<Slot>;
     fn scene(&mut self, width: u32, height: u32, scale: f64) -> Scene;
     fn accessibility(&self) -> TreeUpdate;
 }
@@ -143,7 +134,7 @@ impl StatusView for MenuBar {
         MenuBar::slot_rect(self, slot)
     }
 
-    fn slot_of_node(&self, node: NodeId) -> Option<Slot> {
+    fn slot_of_node(&self, node: NodeId, _action: Action) -> Option<Slot> {
         MenuBar::slot_of_node(self, node)
     }
 
@@ -179,8 +170,8 @@ impl StatusView for MenuBar {
         false
     }
 
-    fn shown_tray_items(&self) -> usize {
-        self.tray.len()
+    fn hidden_tray(&self) -> Vec<Slot> {
+        Vec::new()
     }
 
     fn scene(&mut self, width: u32, height: u32, scale: f64) -> Scene {
@@ -204,10 +195,6 @@ pub struct MenuBar {
     open: Option<Slot>,
     slots: Vec<(Slot, Rect)>,
     battery_percentage: bool,
-}
-
-fn snap(value: f32, scale: f64) -> f32 {
-    ((f64::from(value) * scale).round() / scale) as f32
 }
 
 fn contains(rect: Rect, point: Point) -> bool {
@@ -436,97 +423,20 @@ impl MenuBar {
                 },
                 None => return None,
             },
-            Slot::Wifi => match &self.status.wifi {
-                Some(wifi) if wifi.enabled => Symbol::Wifi {
-                    bars: wifi
-                        .current()
-                        .map_or(0, |network| wifi_bars(network.strength)),
-                },
-                _ => Symbol::WifiOff,
-            },
+            Slot::Wifi => wifi_symbol(self.status.wifi.as_ref()),
             _ => return None,
         })
     }
 
     fn place_symbol(&mut self, symbol: Symbol, rect: Rect, scale: f64, items: &mut Vec<Item>) {
-        let (width, height) = natural_size(symbol);
-        let Some(image) = self.symbols.image(symbol, self.palette.ink, scale) else {
-            return;
-        };
-        let x = snap(rect.x + (rect.width - width) / 2.0, scale);
-        let y = snap(rect.y + (rect.height - height) / 2.0, scale);
-        items.push(Item::Image {
-            rect: Rect::new(
-                x,
-                y,
-                image.width() as f32 / scale as f32,
-                image.height() as f32 / scale as f32,
-            ),
-            image,
-        });
-    }
-
-    fn paint_battery(&mut self, battery: Battery, rect: Rect, scale: f64, items: &mut Vec<Item>) {
-        let label = self.palette.ink;
-        let x = snap(rect.x + (rect.width - BATTERY_WIDTH - 2.0) / 2.0, scale);
-        let y = snap(rect.y + (rect.height - BATTERY_HEIGHT) / 2.0, scale);
-        let body = Rect::new(x, y, BATTERY_WIDTH, BATTERY_HEIGHT);
-        items.push(Item::Stroke {
-            shape: Shape::rounded(body.inset(0.5), 3.0),
-            width: 1.0,
-            paint: label.with_alpha(110).into(),
-        });
-        items.push(Item::Fill {
-            shape: Shape::rounded(
-                Rect::new(
-                    x + BATTERY_WIDTH + 0.5,
-                    y + BATTERY_HEIGHT / 2.0 - 2.0,
-                    1.5,
-                    4.0,
-                ),
-                0.75,
-            ),
-            paint: label.with_alpha(110).into(),
-        });
-        let inner = body.inset(2.0);
-        let level = (battery.percent / 100.0).clamp(0.0, 1.0) as f32;
-        let fill = if battery.low() {
-            self.palette.danger
-        } else if battery.on_adapter() {
-            self.palette.success
-        } else {
-            label
-        };
-        items.push(Item::Fill {
-            shape: Shape::rounded(
-                Rect::new(
-                    inner.x,
-                    inner.y,
-                    (inner.width * level).max(1.5),
-                    inner.height,
-                ),
-                1.5,
-            ),
-            paint: fill.into(),
-        });
-        if battery.on_adapter() {
-            let halo = self.palette.overlay;
-            let bolt = Rect::new(body.x, body.y, BATTERY_WIDTH, BATTERY_HEIGHT);
-            for (color, offset) in [(halo, -0.6), (halo, 0.6), (label, 0.0)] {
-                if let Some(image) = self.symbols.image(Symbol::Bolt, color, scale) {
-                    let (width, height) = natural_size(Symbol::Bolt);
-                    items.push(Item::Image {
-                        rect: Rect::new(
-                            snap(bolt.x + (bolt.width - width) / 2.0, scale) + offset,
-                            snap(bolt.y + (bolt.height - height) / 2.0, scale),
-                            image.width() as f32 / scale as f32,
-                            image.height() as f32 / scale as f32,
-                        ),
-                        image,
-                    });
-                }
-            }
-        }
+        place_symbol(
+            &mut self.symbols,
+            symbol,
+            self.palette.ink,
+            rect,
+            scale,
+            items,
+        );
     }
 
     fn paint_badge(
@@ -647,7 +557,14 @@ impl MenuBar {
                             content.width - percent_width,
                             content.height,
                         );
-                        self.paint_battery(battery, icon, scale, &mut items);
+                        battery_items(
+                            &mut self.symbols,
+                            &self.palette,
+                            battery,
+                            icon,
+                            scale,
+                            &mut items,
+                        );
                     }
                 }
                 Slot::InputSource => {

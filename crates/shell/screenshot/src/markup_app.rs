@@ -7,7 +7,7 @@ use unbound_screenshot::L10N;
 use unbound_screenshot::markup::{Command, Commanded, Markup, TOOLBAR_HEIGHT, Toolbar};
 use unbound_toolkit::ui::{Context, Event, FreeLayout, Key, Size, Ui, Widget, WidgetId};
 use unbound_toolkit::{
-    App, Elevation, Image, Item, Palette, Point, Rect, Role, Scene, Scheme, ScreenImage, Shape,
+    App, Elevation, Image, Item, Palette, Point, Rect, Role, Scene, Scheme, Shape, Snapshot,
     TextSystem, Transfer, Window, WindowError, WindowEvent,
 };
 use unbound_xdg::file_uri;
@@ -17,7 +17,7 @@ const MOST_HEIGHT: f32 = 720.0;
 const LEAST_WIDTH: f32 = 620.0;
 const MARGIN: f32 = 16.0;
 const CLIPBOARD_GRACE: Duration = Duration::from_millis(600);
-const APP_ID: &str = "org.unbound.Screenshot";
+pub const APP_ID: &str = "org.unbound.Screenshot";
 
 struct MarkupApp {
     layout: WidgetId,
@@ -59,16 +59,13 @@ impl MarkupApp {
         Point::new((point.x - canvas.x) * factor, (point.y - canvas.y) * factor)
     }
 
-    fn rendered(&mut self) -> Option<ScreenImage> {
-        let snapshot = self.markup.export(&self.image, &mut self.text)?;
-        Some(ScreenImage {
-            width: snapshot.width,
-            height: snapshot.height,
-            rgba: snapshot.rgba,
-        })
+    fn rendered(&mut self) -> Option<Snapshot> {
+        self.markup.commit_text();
+        self.markup.export(&self.image, &mut self.text)
     }
 
     fn done(&mut self, window: &mut Window) {
+        self.markup.commit_text();
         if !self.markup.edits().is_empty() {
             let saved = self
                 .rendered()

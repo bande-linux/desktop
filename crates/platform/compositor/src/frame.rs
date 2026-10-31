@@ -6,12 +6,13 @@ use smithay::backend::renderer::{ContextId, ImportMem, Renderer, Texture};
 use smithay::desktop::WindowSurfaceType;
 use smithay::desktop::utils::under_from_surface_tree;
 use smithay::input::pointer::{CursorIcon, CursorImageStatus};
-use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::{self, ResizeEdge};
+use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle};
 use unbound_graphics::{
-    Color, CpuRenderer, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_CORNER, RESIZE_MARGIN, Scene,
-    Scheme, TextAlign, TextSystem, TitleBar, WindowControl, title_style, window_controls_area,
+    Color, CpuRenderer, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_MARGIN, Rect, ResizeEdge, Scene,
+    Scheme, TextAlign, TextSystem, TitleBar, WindowControl, resize_edge, title_style,
+    window_controls_area,
 };
 use unbound_render::{VulkanRenderer, VulkanTexture};
 
@@ -41,7 +42,7 @@ impl Zone {
                 ResizeEdge::TopLeft => CursorIcon::NwResize,
                 ResizeEdge::TopRight => CursorIcon::NeResize,
                 ResizeEdge::BottomLeft => CursorIcon::SwResize,
-                _ => CursorIcon::SeResize,
+                ResizeEdge::BottomRight => CursorIcon::SeResize,
             },
         }
     }
@@ -90,49 +91,41 @@ fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
         return None;
     }
     let rect = window.geometry()?;
-    let x = location.x - f64::from(rect.location.x);
-    let y = location.y - f64::from(rect.location.y);
-    let (width, height) = (f64::from(rect.size.w), f64::from(rect.size.h));
-    if x >= 0.0 && y >= 0.0 && x < width && y < height {
-        if y >= f64::from(bar) {
+    let point = local_point(rect, location);
+    let frame = Rect::new(0.0, 0.0, rect.size.w as f32, rect.size.h as f32);
+    if frame.contains(point) {
+        if point.y >= bar as f32 {
             return None;
         }
-        let point = unbound_graphics::Point::new(x as f32, y as f32);
         return Some(WindowControl::at(point, bar as f32).map_or(Zone::TitleBar, Zone::Control));
     }
-    let margin = f64::from(RESIZE_MARGIN);
-    let outside = x < -margin || y < -margin || x >= width + margin || y >= height + margin;
-    if outside
+    if !frame.inset(-(RESIZE_MARGIN as f32)).contains(point)
         || window.has_state(xdg_toplevel::State::Maximized)
         || window.has_state(xdg_toplevel::State::Fullscreen)
     {
         return None;
     }
-    let corner = f64::from(RESIZE_CORNER);
-    let horizontal = if x < corner {
-        -1
-    } else if x >= width - corner {
-        1
-    } else {
-        0
-    };
-    let vertical = if y < corner {
-        -1
-    } else if y >= height - corner {
-        1
-    } else {
-        0
-    };
-    Some(Zone::Resize(match (vertical, horizontal) {
-        (-1, -1) => ResizeEdge::TopLeft,
-        (-1, 1) => ResizeEdge::TopRight,
-        (1, -1) => ResizeEdge::BottomLeft,
-        (1, 1) => ResizeEdge::BottomRight,
-        (-1, _) => ResizeEdge::Top,
-        (1, _) => ResizeEdge::Bottom,
-        (_, -1) => ResizeEdge::Left,
-        _ => ResizeEdge::Right,
-    }))
+    Some(Zone::Resize(resize_edge(frame, point)))
+}
+
+fn local_point(rect: crate::state::Rect, location: Point<f64, Logical>) -> unbound_graphics::Point {
+    unbound_graphics::Point::new(
+        (location.x - f64::from(rect.location.x)) as f32,
+        (location.y - f64::from(rect.location.y)) as f32,
+    )
+}
+
+fn protocol_edge(edge: ResizeEdge) -> xdg_toplevel::ResizeEdge {
+    match edge {
+        ResizeEdge::Top => xdg_toplevel::ResizeEdge::Top,
+        ResizeEdge::Bottom => xdg_toplevel::ResizeEdge::Bottom,
+        ResizeEdge::Left => xdg_toplevel::ResizeEdge::Left,
+        ResizeEdge::Right => xdg_toplevel::ResizeEdge::Right,
+        ResizeEdge::TopLeft => xdg_toplevel::ResizeEdge::TopLeft,
+        ResizeEdge::TopRight => xdg_toplevel::ResizeEdge::TopRight,
+        ResizeEdge::BottomLeft => xdg_toplevel::ResizeEdge::BottomLeft,
+        ResizeEdge::BottomRight => xdg_toplevel::ResizeEdge::BottomRight,
+    }
 }
 
 fn hovered_control(
@@ -142,15 +135,8 @@ fn hovered_control(
     let rect = window.geometry()?;
     let bar = window.title_bar_height() as f32;
     let area = window_controls_area(bar);
-    let point = unbound_graphics::Point::new(
-        (location.x - f64::from(rect.location.x)) as f32,
-        (location.y - f64::from(rect.location.y)) as f32,
-    );
-    let inside = point.x >= area.x
-        && point.x < area.x + area.width
-        && point.y >= 0.0
-        && point.y < area.height;
-    inside.then(|| WindowControl::at(point, bar))
+    let point = local_point(rect, location);
+    area.contains(point).then(|| WindowControl::at(point, bar))
 }
 
 pub(crate) enum Target {
@@ -259,7 +245,7 @@ impl State {
                 Some(false)
             }
             Zone::Resize(edges) => {
-                self.resize_from_frame(&surface, edges, button);
+                self.resize_from_frame(&surface, protocol_edge(edges), button);
                 Some(false)
             }
         }

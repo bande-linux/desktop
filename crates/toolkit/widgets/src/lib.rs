@@ -340,13 +340,6 @@ pub struct Ui {
     drop_owner: Option<WidgetId>,
 }
 
-fn contains(frame: Rect, point: Point) -> bool {
-    point.x >= frame.x
-        && point.y >= frame.y
-        && point.x < frame.x + frame.width
-        && point.y < frame.y + frame.height
-}
-
 fn find_mut(widget: &mut dyn Widget, id: WidgetId) -> Option<&mut dyn Widget> {
     if widget.id() == id {
         return Some(widget);
@@ -368,7 +361,7 @@ fn find(widget: &dyn Widget, id: WidgetId) -> Option<&dyn Widget> {
 }
 
 fn hit_path(widget: &dyn Widget, point: Point, path: &mut Vec<WidgetId>) -> bool {
-    if !contains(widget.frame(), point) {
+    if !widget.frame().contains(point) {
         return false;
     }
     path.push(widget.id());

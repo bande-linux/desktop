@@ -1,7 +1,7 @@
 use accesskit::{Action, ActionRequest, Node, Role};
 
 use super::control::{Symbol, focus_ring};
-use super::{Context, Event, Key, Size, Widget, WidgetId, contains};
+use super::{Context, Event, Key, Size, Widget, WidgetId};
 use unbound_graphics::{
     Color, ControlSize, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
@@ -238,10 +238,10 @@ impl Widget for Button {
             }
             Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
             Event::PointerMove(pointer) if self.pressed => {
-                self.pressed = contains(self.frame, pointer.position);
+                self.pressed = self.frame.contains(pointer.position);
             }
             Event::PointerUp(pointer) if pointer.is_primary() => {
-                let activate = self.pressed && contains(self.frame, pointer.position);
+                let activate = self.pressed && self.frame.contains(pointer.position);
                 self.pressed = false;
                 if activate {
                     (self.on_click)();

@@ -11,14 +11,13 @@ use unbound_desktop_surface::{
 };
 use unbound_toolkit::ui::{Event, Key, Menu, Modifiers, Pointer, PointerButton};
 use unbound_toolkit::{
-    Appearance, Color, CpuRenderer, DragAction, Image, Point, Scheme, TextAlign, TextStyle,
-    TextSystem,
+    Appearance, Color, CpuRenderer, DragAction, Image, Item as SceneItem, Point, Scheme, TextAlign,
+    TextStyle, TextSystem,
 };
 use unbound_wallpaper::{Fit, render};
 use unbound_xdg::file_uri;
 
 const SCREEN: (f32, f32) = (720.0, 480.0);
-const MIN_SSIM: f64 = 0.99;
 
 fn item(name: &str, kind: Kind) -> Item {
     Item {
@@ -277,6 +276,10 @@ fn view_with_items(scheme: Scheme) -> DesktopView {
 }
 
 fn wallpaper(view: &mut DesktopView, scheme: Scheme) {
+    wallpaper_at(view, scheme, Instant::now() - Duration::from_secs(5));
+}
+
+fn wallpaper_at(view: &mut DesktopView, scheme: Scheme, now: Instant) {
     let name = match scheme {
         Scheme::Light => "drift-light.svg",
         Scheme::Dark => "drift-dark.svg",
@@ -298,44 +301,16 @@ fn wallpaper(view: &mut DesktopView, scheme: Scheme) {
             image,
             luma,
         },
-        Instant::now() - Duration::from_secs(5),
+        now,
     );
 }
 
 fn check_golden(name: &str, view: &mut DesktopView) {
     let scene = view.scene(Instant::now() + Duration::from_secs(5));
-    for (scale, suffix) in [(1.0, ""), (1.5, "-1.5x")] {
-        let (width, height) = (
-            (f64::from(scene.width) * scale).round() as u32,
-            (f64::from(scene.height) * scale).round() as u32,
-        );
-        let mut rgba = vec![0; (width * height * 4) as usize];
-        CpuRenderer::new()
-            .render_into(&scene, scale, &mut rgba)
-            .unwrap();
-        compare(&format!("{name}{suffix}"), width, height, rgba);
-    }
-}
-
-fn compare(name: &str, width: u32, height: u32, rgba: Vec<u8>) {
-    let actual = image::RgbaImage::from_raw(width, height, rgba).unwrap();
-    let actual = image::DynamicImage::ImageRgba8(actual).to_rgb8();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/golden/{name}.png"));
-    if std::env::var_os("UNBOUND_UPDATE_GOLDENS").is_some() {
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        actual.save(&path).unwrap();
-    }
-    let target = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.png"));
-    actual.save(&target).unwrap();
-    let expected = image::open(&path)
-        .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
-        .to_rgb8();
-    let similarity = image_compare::rgb_hybrid_compare(&expected, &actual).unwrap();
-    assert!(
-        similarity.score >= MIN_SSIM,
-        "{name} differs from its golden: {:.4} (frame in {})",
-        similarity.score,
-        target.display()
+    let frame = CpuRenderer::new().render(&scene).unwrap();
+    unbound_golden::assert_golden!(
+        name,
+        &unbound_golden::from_rgba(frame.width, frame.height, frame.rgba)
     );
 }
 
@@ -710,4 +685,44 @@ fn dragging_several_icons_carries_a_count_badge_and_one_icon_does_not() {
     };
     assert!(badged(&["Notes.txt", "Projects"]));
     assert!(!badged(&["Notes.txt"]));
+}
+
+fn empty_view() -> DesktopView {
+    let mut view = DesktopView::new(Appearance::default(), Layouts::new(), TextSystem::new());
+    view.set_viewport(
+        SCREEN,
+        1.0,
+        Bounds::new(0.0, 0.0, SCREEN.0, SCREEN.1),
+        Instant::now(),
+    );
+    view
+}
+
+#[test]
+fn the_desktop_stays_see_through_until_its_first_wallpaper_which_shows_at_once() {
+    let mut view = empty_view();
+    let now = Instant::now();
+    assert_eq!(view.scene(now).background, Color::TRANSPARENT);
+    wallpaper_at(&mut view, Scheme::Light, now);
+    let scene = view.scene(now);
+    assert_eq!(scene.background.a, u8::MAX);
+    assert!(
+        matches!(scene.items.first(), Some(SceneItem::Image { .. })),
+        "the first wallpaper is drawn without fading in"
+    );
+    wallpaper_at(&mut view, Scheme::Dark, now);
+    assert!(
+        view.scene(now)
+            .items
+            .iter()
+            .any(|item| matches!(item, SceneItem::Opacity { .. })),
+        "a changed wallpaper still crossfades"
+    );
+}
+
+#[test]
+fn a_desktop_whose_wallpaper_cannot_be_shown_is_opaque() {
+    let mut view = empty_view();
+    view.wallpaper_unavailable();
+    assert_eq!(view.scene(Instant::now()).background.a, u8::MAX);
 }

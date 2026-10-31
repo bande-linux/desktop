@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use unbound_compositor::BACKGROUND;
 use unbound_graphics::{Palette, Scheme};
 use unbound_test_bus::SessionBus;
+use zbus::object_server::SignalEmitter;
 
 use crate::card::{Scanout, card_with_driver};
 use crate::uinput::{
@@ -362,6 +363,24 @@ impl FakeSession {
     fn set_locked_hint(&self, locked: bool) {
         *self.hint.0.lock().expect("locked hint") = Some(locked);
     }
+
+    #[zbus(signal)]
+    async fn lock(emitter: &SignalEmitter<'_>) -> zbus::Result<()>;
+}
+
+struct FakeManager;
+
+#[zbus::interface(name = "org.freedesktop.login1.Manager")]
+impl FakeManager {
+    #[zbus(signal)]
+    async fn prepare_for_sleep(emitter: &SignalEmitter<'_>, start: bool) -> zbus::Result<()>;
+}
+
+const SESSION_PATH: &str = "/org/freedesktop/login1/session/auto";
+const MANAGER_PATH: &str = "/org/freedesktop/login1";
+
+fn emitter<'a>(logind: &'a zbus::blocking::Connection, path: &'a str) -> SignalEmitter<'a> {
+    SignalEmitter::new(logind.inner(), path).expect("signal emitter")
 }
 
 fn fake_logind(bus: &SessionBus) -> (zbus::blocking::Connection, LockedHint) {
@@ -369,11 +388,12 @@ fn fake_logind(bus: &SessionBus) -> (zbus::blocking::Connection, LockedHint) {
     let logind = bus.connect().expect("logind stand-in connection");
     logind
         .object_server()
-        .at(
-            "/org/freedesktop/login1/session/auto",
-            FakeSession { hint: hint.clone() },
-        )
+        .at(SESSION_PATH, FakeSession { hint: hint.clone() })
         .expect("serve the session");
+    logind
+        .object_server()
+        .at(MANAGER_PATH, FakeManager)
+        .expect("serve the manager");
     logind
         .request_name("org.freedesktop.login1")
         .expect("own logind's name");
@@ -457,6 +477,65 @@ fn ctrl_super_q_locks_and_the_password_unlocks() {
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m17-unlocked");
+}
+
+#[test]
+#[ignore = "needs the ci/vm guest"]
+fn the_lock_screen_is_on_screen_before_sleep_and_takes_the_password_after_wake() {
+    let bus = SessionBus::start().expect("private bus standing in for the system bus");
+    let (logind, locked_hint) = fake_logind(&bus);
+    let mut keyboard = VirtualDevice::keyboard_and_mouse();
+    let _desktop = start_desktop_with(&[("DBUS_SYSTEM_BUS_ADDRESS", bus.address())]);
+    let icon = (32, 33);
+    wait_for("the Dock", STARTUP, || {
+        running("unbound-shell")
+            && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
+    });
+    thread::sleep(Duration::from_secs(1));
+
+    zbus::block_on(FakeSession::lock(&emitter(&logind, SESSION_PATH))).expect("Lock");
+    wait_for("logind to hear the session is locked", STARTUP, || {
+        locked_hint.get() == Some(true)
+    });
+    let before_sleep = scanout();
+    before_sleep.save("sleep-lock-screen-before-sleep");
+    assert!(
+        lock_screen_drawn(&before_sleep),
+        "the lock screen is on screen once logind hears the session is locked"
+    );
+
+    zbus::block_on(FakeManager::prepare_for_sleep(
+        &emitter(&logind, MANAGER_PATH),
+        true,
+    ))
+    .expect("PrepareForSleep(true)");
+    thread::sleep(Duration::from_secs(1));
+    zbus::block_on(FakeManager::prepare_for_sleep(
+        &emitter(&logind, MANAGER_PATH),
+        false,
+    ))
+    .expect("PrepareForSleep(false)");
+    wait_for("the lock screen after wake", STARTUP, || {
+        current_scanout().is_some_and(|scanout| lock_screen_drawn(&scanout))
+    });
+    thread::sleep(Duration::from_secs(1));
+    let awake = scanout();
+    awake.save("sleep-lock-screen-after-wake");
+
+    keyboard.type_text("typed after wake");
+    wait_for("typing after wake", STARTUP, || {
+        field_differs_from(&scanout(), &awake) > CARET_PIXELS
+    });
+    keyboard.tap(KEY_ENTER);
+    wait_for("the empty field after the rejection", STARTUP, || {
+        field_differs_from(&scanout(), &awake) <= CARET_PIXELS
+    });
+    keyboard.type_text(GUEST_PASSWORD);
+    keyboard.type_text("\n");
+    wait_for("the session to unlock", STARTUP, || {
+        locked_hint.get() == Some(false)
+    });
+    scanout().save("sleep-unlocked-after-wake");
 }
 
 fn saved_screenshots(desktop: &Path) -> Vec<PathBuf> {
@@ -855,7 +934,7 @@ fn the_greeter_takes_a_password_typed_in_the_system_layout_after_a_refusal_and_h
         username: "ada".to_owned(),
     };
     let answer = |password: &str| Request::PostAuthMessageResponse {
-        response: Some(password.to_owned()),
+        response: Some(password.to_owned().into()),
     };
     assert_eq!(
         requests,

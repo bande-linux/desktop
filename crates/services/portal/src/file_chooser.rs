@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use unbound_xdg::file_uri;
@@ -118,6 +118,14 @@ fn raw_filter(filter: &Filter) -> RawFilter {
 fn path(bytes: Vec<u8>) -> PathBuf {
     let bytes = bytes.strip_suffix(&[0]).unwrap_or(&bytes);
     PathBuf::from(OsStr::from_bytes(bytes))
+}
+
+fn is_plain_name(name: &Path) -> bool {
+    let mut components = name.components();
+    matches!(
+        (components.next(), components.next()),
+        (Some(Component::Normal(_)), None)
+    ) && !name.as_os_str().as_bytes().contains(&b'/')
 }
 
 fn option<T: TryFrom<OwnedValue>>(options: &Options, key: &str) -> Option<T> {
@@ -369,13 +377,16 @@ impl FileChooser {
         options: Options,
         #[zbus(connection)] connection: &Connection,
     ) -> (u32, Results) {
-        let mode = Mode::SaveMany {
-            names: option::<Vec<Vec<u8>>>(&options, "files")
-                .unwrap_or_default()
-                .into_iter()
-                .map(path)
-                .collect(),
-        };
+        let names: Vec<PathBuf> = option::<Vec<Vec<u8>>>(&options, "files")
+            .unwrap_or_default()
+            .into_iter()
+            .map(path)
+            .collect();
+        if !names.iter().all(|name| is_plain_name(name)) {
+            tracing::warn!("{app_id} asked to save files under names that leave the folder");
+            return (OTHER, Results::new());
+        }
+        let mode = Mode::SaveMany { names };
         let call = Call {
             method: "SaveFiles",
             app_id,

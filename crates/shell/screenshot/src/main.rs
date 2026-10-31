@@ -10,6 +10,7 @@ use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
+use unbound_fs::Trash;
 use unbound_inbox::{Inbox, Outbox};
 use unbound_screenshot::area::{AreaOutcome, AreaSelection, Region, crop};
 use unbound_screenshot::color::ColorPicker;
@@ -21,22 +22,25 @@ use unbound_screenshot::picker::{Outcome, Picker};
 use unbound_screenshot::record::{Container, Recording};
 use unbound_screenshot::service::{self, Casting, SCREEN_ID, UiRequest};
 use unbound_screenshot::shadow::with_shadow;
-use unbound_screenshot::thumbnail::{Thumbnail, ThumbnailAction};
-use unbound_screenshot::{L10N, app_name, free_path, png, recording_stem, save};
+use unbound_screenshot::thumbnail::{self, Thumbnail, ThumbnailAction};
+use unbound_screenshot::{Failure, L10N, app_name, free_path, png, recording_stem, save, shrunk};
 use unbound_toolkit::ui::{
     Alert, Context, FreeLayout, Menu, MenuItem, Size, Ui, Widget, frame_time,
 };
 use unbound_toolkit::{
     App, Color, DragAction, DragIcon, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions,
-    MenuPlacement, Point, Rect, Role, Scene, ScreenImage, Shape, TextAlign, TextStyle, TextSystem,
+    MenuPlacement, Point, Rect, Role, Scene, Shape, Snapshot, TextAlign, TextStyle, TextSystem,
     Transfer, Window, WindowError, WindowEvent,
 };
-use unbound_xdg::{UserDir, file_uri, spawn_detached, user_dir};
+use unbound_xdg::{UserDir, config_home, file_uri, spawn_detached, state_home, user_dir};
 use zbus::blocking::Connection;
 
 const MARKUP_FLAG: &str = "--markup";
+const FILES: &str = "unbound-files";
+const FILES_APP_ID: &str = "org.unbound.Files";
 const PALETTE_BOTTOM: f32 = 96.0;
 const COUNTDOWN_SIZE: f32 = 132.0;
+const THUMBNAIL_SIDE: u32 = 480;
 
 enum Purpose {
     Save,
@@ -97,8 +101,8 @@ struct Screenshots {
     session: Option<Connection>,
 }
 
-fn as_screen_image(shot: &Shot) -> ScreenImage {
-    ScreenImage {
+fn as_snapshot(shot: &Shot) -> Snapshot {
+    Snapshot {
         width: shot.width,
         height: shot.height,
         rgba: shot.rgba(),
@@ -118,9 +122,13 @@ fn scaled(region: Region, scale: f64) -> Region {
 }
 
 fn new_ui(window: &Window) -> Ui {
+    ui_with(window, FreeLayout::new())
+}
+
+fn ui_with(window: &Window, layout: FreeLayout) -> Ui {
     let appearance = window.appearance();
     let mut ui = Ui::new(
-        Box::new(FreeLayout::new()),
+        Box::new(layout),
         Context::new(TextSystem::new(), appearance.palette()),
     );
     ui.context().keyboard_navigation = true;
@@ -129,18 +137,9 @@ fn new_ui(window: &Window) -> Ui {
     ui
 }
 
-fn thumbnail_image(image: &ScreenImage) -> Option<Image> {
-    let scale = (480.0 / image.width.max(image.height).max(1) as f32).min(1.0);
-    let width = ((image.width as f32 * scale).round() as u32).max(1);
-    let height = ((image.height as f32 * scale).round() as u32).max(1);
-    let source = image::RgbaImage::from_raw(image.width, image.height, image.rgba.clone())?;
-    let small = image::imageops::resize(
-        &source,
-        width,
-        height,
-        image::imageops::FilterType::Triangle,
-    );
-    Image::from_rgba(width, height, small.into_raw())
+fn thumbnail_image(image: &Snapshot) -> Option<Image> {
+    let small = shrunk(image, THUMBNAIL_SIDE)?;
+    Image::from_rgba(small.width, small.height, small.rgba)
 }
 
 impl Screenshots {
@@ -265,20 +264,20 @@ impl Screenshots {
             .collect()
     }
 
-    fn shoot(&mut self, window: &mut Window, target: &Target) -> Option<ScreenImage> {
+    fn shoot(&mut self, window: &mut Window, target: &Target) -> Option<Snapshot> {
         self.hide_overlay(window);
         let engine = self.engine.as_ref()?;
         let pointer = self.options.show_pointer;
         match target {
             Target::Window(identifier) => {
                 let shot = engine.shoot(Source::Window(identifier.clone()), pointer)?;
-                Some(with_shadow(&as_screen_image(&shot), window.scale()))
+                Some(with_shadow(&as_snapshot(&shot), window.scale()))
             }
             Target::Area(region) => {
-                let image = as_screen_image(&engine.shoot(Source::Screen, pointer)?);
+                let image = as_snapshot(&engine.shoot(Source::Screen, pointer)?);
                 crop(&image, scaled(*region, window.scale()))
             }
-            _ => Some(as_screen_image(&engine.shoot(Source::Screen, pointer)?)),
+            _ => Some(as_snapshot(&engine.shoot(Source::Screen, pointer)?)),
         }
     }
 
@@ -307,7 +306,7 @@ impl Screenshots {
                 self.hide_overlay(window);
                 self.play_shutter();
                 let pointer = self.options.show_pointer;
-                let images: Vec<ScreenImage> = self
+                let images: Vec<Snapshot> = self
                     .engine
                     .as_ref()
                     .map(|engine| {
@@ -317,7 +316,7 @@ impl Screenshots {
                             .filter_map(|display| {
                                 engine.shoot(Source::Display(display.name), pointer)
                             })
-                            .map(|shot| as_screen_image(&shot))
+                            .map(|shot| as_snapshot(&shot))
                             .collect()
                     })
                     .unwrap_or_default();
@@ -337,7 +336,7 @@ impl Screenshots {
         self.arrange(window);
     }
 
-    fn deliver(&mut self, window: &mut Window, image: ScreenImage) {
+    fn deliver(&mut self, window: &mut Window, image: Snapshot) {
         if self.options.destination == Destination::Clipboard {
             match png(&image) {
                 Ok(bytes) => window.copy_transfer(Transfer::uris(Vec::new()).with_png(bytes)),
@@ -347,19 +346,22 @@ impl Screenshots {
         }
         let dir = self.destination_dir();
         let taken = jiff::Zoned::now().datetime();
-        match save(image.clone(), &dir, taken) {
+        match save(&image, &dir, taken) {
             Ok(path) => {
                 tracing::info!("saved {}", path.display());
                 self.show_thumbnail(window, &image, path, false);
             }
-            Err(error) => tracing::warn!("cannot save to {}: {error}", dir.display()),
+            Err(error) => {
+                tracing::warn!("cannot save to {}: {error}", dir.display());
+                self.notice(window, Failure::NotSaved(dir));
+            }
         }
     }
 
     fn show_thumbnail(
         &mut self,
         window: &mut Window,
-        image: &ScreenImage,
+        image: &Snapshot,
         path: PathBuf,
         video: bool,
     ) {
@@ -377,28 +379,29 @@ impl Screenshots {
         ));
     }
 
+    fn notice(&mut self, window: &mut Window, failure: Failure) {
+        let read = Rc::new(Cell::new(false));
+        let dismissed = Rc::clone(&read);
+        let (title, detail) = failure.message();
+        self.present(
+            window,
+            Alert::new(&title, &detail, move |_| dismissed.set(true)).primary(&L10N.tr("ok"), "ok"),
+        );
+        self.thumbnail = None;
+        self.mode = Mode::Notice(read);
+        self.arrange(window);
+    }
+
     fn start_recording(&mut self, window: &mut Window, target: Target) {
         let (Some(casting), Some(container)) = (self.casting.clone(), self.container) else {
-            let read = Rc::new(Cell::new(false));
-            let dismissed = Rc::clone(&read);
-            self.present(
-                window,
-                Alert::new(
-                    &L10N.tr("cannot-record"),
-                    &L10N.tr("no-recorder"),
-                    move |_| {
-                        dismissed.set(true);
-                    },
-                )
-                .primary(&L10N.tr("ok"), "ok"),
-            );
-            self.mode = Mode::Notice(read);
+            self.notice(window, Failure::NoRecorder);
             return;
         };
         self.hide_overlay(window);
         let Some((node, width, height)) = casting.open(SCREEN_ID, self.options.show_pointer, false)
         else {
             tracing::warn!("cannot record the screen");
+            self.notice(window, Failure::ScreenUnavailable);
             return;
         };
         let area = match &target {
@@ -432,6 +435,7 @@ impl Screenshots {
             Err(error) => {
                 tracing::warn!("cannot start recording: {error}");
                 casting.stop(&[node]);
+                self.notice(window, Failure::RecordingFailed);
             }
         }
     }
@@ -459,7 +463,11 @@ impl Screenshots {
                     self.show_thumbnail(window, &still, path, true);
                 }
             }
-            Err(error) => tracing::warn!("the recording failed: {error}"),
+            Err(error) => {
+                tracing::warn!("the recording failed: {error}");
+                self.notice(window, Failure::RecordingFailed);
+                return;
+            }
         }
         self.arrange(window);
     }
@@ -487,13 +495,7 @@ impl Screenshots {
                 size.height,
             ),
         );
-        let appearance = window.appearance();
-        self.ui = Ui::new(
-            Box::new(layout),
-            Context::new(TextSystem::new(), appearance.palette()),
-        );
-        self.ui.context().keyboard_navigation = true;
-        self.ui.set_appearance(appearance);
+        self.ui = ui_with(window, layout);
         self.ui.handle(&unbound_toolkit::ui::Event::Key {
             key: unbound_toolkit::ui::Key::Tab,
             modifiers: Default::default(),
@@ -647,6 +649,7 @@ impl Screenshots {
             }
             UiRequest::PickColor { reply } => {
                 self.cancel(window);
+                self.hide_overlay(window);
                 let Some(shot) = self
                     .engine
                     .as_ref()
@@ -698,7 +701,7 @@ impl Screenshots {
     ) {
         let path = self.shoot(window, target).and_then(|image| {
             let dir = self.portal_dir();
-            save(image, &dir, jiff::Zoned::now().datetime())
+            save(&image, &dir, jiff::Zoned::now().datetime())
                 .inspect_err(|error| tracing::warn!("cannot save to {}: {error}", dir.display()))
                 .ok()
         });
@@ -794,7 +797,15 @@ impl Screenshots {
         }
     }
 
-    fn open_markup(&self, path: &Path) {
+    fn open_shot(&self, window: &mut Window, path: &Path, video: bool) {
+        if video {
+            let token = window.activation_token("").ok();
+            let command = ["xdg-open".to_owned(), path.to_string_lossy().into_owned()];
+            if let Err(error) = spawn_detached("", &command, None, token.as_deref()) {
+                tracing::warn!("cannot open {}: {error}", path.display());
+            }
+            return;
+        }
         let Ok(program) = std::env::current_exe() else {
             return;
         };
@@ -803,9 +814,60 @@ impl Screenshots {
             MARKUP_FLAG.to_owned(),
             path.to_string_lossy().into_owned(),
         ];
-        if let Err(error) = spawn_detached(&command, None, None) {
+        if let Err(error) = spawn_detached(markup_app::APP_ID, &command, None, None) {
             tracing::warn!("cannot open markup: {error}");
         }
+    }
+
+    fn show_in_files(&self, window: &mut Window, path: &Path) {
+        let token = window.activation_token(FILES_APP_ID).ok();
+        let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
+        if let Err(error) = spawn_detached(FILES_APP_ID, &command, None, token.as_deref()) {
+            tracing::warn!("cannot show {} in Files: {error}", path.display());
+        }
+    }
+
+    fn thumbnail_action(&mut self, window: &mut Window, action: &str) -> bool {
+        let Some(thumbnail) = self.thumbnail.as_mut() else {
+            return false;
+        };
+        let now = frame_time().on_screen();
+        let path = thumbnail.path().to_path_buf();
+        let video = thumbnail.is_video();
+        match action {
+            thumbnail::OPEN => {
+                self.thumbnail = None;
+                self.open_shot(window, &path, video);
+                self.arrange(window);
+            }
+            thumbnail::SHOW_IN_FILES => {
+                thumbnail.dismiss(now);
+                self.show_in_files(window, &path);
+            }
+            thumbnail::COPY => {
+                match std::fs::read(&path) {
+                    Ok(bytes) => {
+                        window.copy_transfer(Transfer::uris(vec![file_uri(&path)]).with_png(bytes))
+                    }
+                    Err(error) => tracing::warn!("cannot copy {}: {error}", path.display()),
+                }
+                thumbnail.dismiss(now);
+            }
+            thumbnail::TRASH => {
+                thumbnail.dismiss(now);
+                match Trash::for_user().map(|trash| trash.put(&path)) {
+                    Some(Ok(_)) => {}
+                    Some(Err(error)) => {
+                        tracing::warn!("cannot move {} to the trash: {error}", path.display());
+                    }
+                    None => tracing::warn!("cannot find the trash"),
+                }
+            }
+            thumbnail::CLOSE => thumbnail.dismiss(now),
+            _ => return false,
+        }
+        window.request_redraw();
+        true
     }
 
     fn thumbnail_event(&mut self, window: &mut Window, input: &unbound_toolkit::ui::Event) {
@@ -816,9 +878,17 @@ impl Screenshots {
         };
         match thumbnail.handle(screen, input, now) {
             ThumbnailAction::Open(path) => {
+                let video = thumbnail.is_video();
                 self.thumbnail = None;
-                self.open_markup(&path);
+                self.open_shot(window, &path, video);
                 self.arrange(window);
+            }
+            ThumbnailAction::Menu(at) => {
+                if let Err(error) = window.show_menu(thumbnail.menu(), MenuPlacement::AtPoint(at)) {
+                    tracing::warn!("cannot show the screenshot's menu: {error}");
+                    thumbnail.menu_closed(now);
+                }
+                window.request_redraw();
             }
             ThumbnailAction::Drag(path) => {
                 let icon = DragIcon {
@@ -946,8 +1016,19 @@ impl App for Screenshots {
                 window.request_redraw();
             }
             WindowEvent::MenuAction(action) => {
-                self.choose_option(&action);
+                if !self.thumbnail_action(window, &action) {
+                    self.choose_option(&action);
+                }
+                if let Some(thumbnail) = self.thumbnail.as_mut() {
+                    thumbnail.menu_closed(frame_time().on_screen());
+                }
                 window.request_redraw();
+            }
+            WindowEvent::MenuClosed => {
+                if let Some(thumbnail) = self.thumbnail.as_mut() {
+                    thumbnail.menu_closed(frame_time().on_screen());
+                    window.request_redraw();
+                }
             }
             WindowEvent::Accessibility(request) => {
                 if self.ui.perform(&request) {
@@ -1000,8 +1081,16 @@ impl App for Screenshots {
                 for event in self.events.drain() {
                     match event {
                         EngineEvent::StreamEnded(stream) => {
-                            if let Some(casting) = &self.casting {
-                                casting.stream_ended(stream);
+                            let Some(casting) = &self.casting else {
+                                continue;
+                            };
+                            casting.stream_ended(stream);
+                            if self
+                                .recorder
+                                .as_ref()
+                                .is_some_and(|recorder| !casting.is_open(recorder.recording.node))
+                            {
+                                self.stop_recording(window);
                             }
                         }
                         EngineEvent::ShowOptions => self.show_palette(window),
@@ -1065,11 +1154,8 @@ fn run() -> Result<(), WindowError> {
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .ok_or_else(|| WindowError::Io(std::io::Error::other("HOME is not set")))?;
-    let config_home = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home.join(".config"));
-    let options_path = std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
+    let config_home = config_home().unwrap_or_else(|| home.join(".config"));
+    let options_path = state_home()
         .unwrap_or_else(|| home.join(".local/state"))
         .join("unbound-screenshot/options");
     let mut window = Window::open(

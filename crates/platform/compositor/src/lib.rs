@@ -35,11 +35,13 @@ mod lock;
 mod logind;
 mod management;
 mod motion;
+mod night;
 mod overview;
 mod pointing;
 mod popup;
 mod recall;
 mod render;
+mod reveal;
 mod scanout;
 mod scene;
 mod screen;
@@ -60,18 +62,16 @@ pub use assistive::follow_alerts;
 pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};
 pub use cursor::{
     ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,
-    DEFAULT_CURSOR_THEME,
 };
 pub use drm::{DrmBackend, DrmBackendError, DrmNotifiers, HeadChanges};
 pub use element::ScreenElement;
-pub use environment::{
-    DESKTOP_NAME, export_session_environment, notify_ready, session_environment,
-};
+pub use environment::{export_session_environment, notify_ready};
 pub use gesture::Gesture;
 pub use input_settings::{InputSettings, follow_input_settings};
 pub use keyboard_monitor::{KEYBOARD_MONITOR_NAME, KeyboardMonitorHandle, serve_keyboard_monitor};
 pub use keymap::KeyboardSettings;
-pub use logind::{SessionRequest, follow_session};
+pub use logind::{SessionRequest, Sleep, follow_session, follow_sleep};
+pub use night::NightTick;
 pub use pointing::PointerSettings;
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};

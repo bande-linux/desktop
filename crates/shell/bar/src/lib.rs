@@ -9,7 +9,7 @@ pub mod menubar;
 pub mod menus;
 pub mod rail;
 pub mod surfaces;
-mod symbols;
+pub mod symbols;
 
 use std::sync::LazyLock;
 

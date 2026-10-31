@@ -6,6 +6,7 @@ use crate::L10N;
 use unbound_graphics::{
     ControlSize, Item, Paragraph, Path, Point, Rect, Shape, TextAlign, TextStyle,
 };
+use zeroize::Zeroizing;
 
 const BULLET: char = '\u{25CF}';
 const PADDING: f32 = 8.0;
@@ -18,7 +19,7 @@ pub struct SecureField {
     id: WidgetId,
     placeholder: String,
     font_size: f32,
-    secret: String,
+    secret: Zeroizing<String>,
     on_submit: Box<dyn FnMut(&str)>,
     bullets: Option<Paragraph>,
     placeholder_paragraph: Option<Paragraph>,
@@ -31,7 +32,7 @@ impl SecureField {
             id: WidgetId::next(),
             placeholder: placeholder.to_owned(),
             font_size,
-            secret: String::new(),
+            secret: Zeroizing::default(),
             on_submit: Box::new(on_submit),
             bullets: None,
             placeholder_paragraph: None,
@@ -170,7 +171,7 @@ impl Widget for SecureField {
     fn perform(&mut self, _cx: &mut Context, request: &ActionRequest) -> bool {
         match (&request.action, &request.data) {
             (Action::SetValue, Some(ActionData::Value(value))) => {
-                self.secret = value.to_string();
+                self.secret = Zeroizing::new(value.to_string());
                 true
             }
             _ => false,
@@ -186,12 +187,12 @@ impl Widget for SecureField {
         }
         match key {
             Key::Enter => (self.on_submit)(&self.secret),
-            Key::Backspace if modifiers.logo || modifiers.alt => self.secret.clear(),
-            Key::Backspace => {
-                self.secret.pop();
+            Key::Backspace if modifiers.logo || modifiers.alt => {
+                self.secret = Zeroizing::default();
             }
-            Key::Character(character) if !modifiers.logo => self.secret.push(*character),
-            Key::Space if !modifiers.logo => self.secret.push(' '),
+            Key::Backspace => remove_last(&mut self.secret),
+            Key::Character(character) if !modifiers.logo => push(&mut self.secret, *character),
+            Key::Space if !modifiers.logo => push(&mut self.secret, ' '),
             _ => return false,
         }
         true
@@ -204,4 +205,22 @@ impl Widget for SecureField {
     fn accepts_focus(&self, _cx: &Context) -> bool {
         true
     }
+}
+
+fn remove_last(secret: &mut Zeroizing<String>) {
+    let mut characters = secret.chars();
+    characters.next_back();
+    let mut kept = Zeroizing::new(String::with_capacity(secret.capacity()));
+    kept.push_str(characters.as_str());
+    *secret = kept;
+}
+
+fn push(secret: &mut Zeroizing<String>, character: char) {
+    let needed = secret.len() + character.len_utf8();
+    if needed > secret.capacity() {
+        let mut grown = Zeroizing::new(String::with_capacity(needed.max(secret.capacity() * 2)));
+        grown.push_str(secret);
+        *secret = grown;
+    }
+    secret.push(character);
 }

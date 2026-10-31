@@ -209,9 +209,8 @@ when they reach the screen is Unbound's own.
   (v3) moves a window from its menu without following it: it slides off the screen and the
   keyboard goes to the next window. Focusing a window anywhere (the Dock's activate app or
   window, Super+Tab, an activation token) shows its workspace first. Shell clients learn the
-  row through `unbound_shell_v1` v9: `workspaces(count, active)` and
-  `window_workspace(identifier, position)`, sent on binding and on every change. With
-  Reduce Motion a switch crossfades the two workspaces in place.
+  row through `unbound_shell_v1` v9: `workspaces(count, active)`, sent on binding and on
+  every change. With Reduce Motion a switch crossfades the two workspaces in place.
 - **Overview.** `Alt+Super+Up`, the Mission Control key (`XF86LaunchA`, F3 on Apple
   keyboards, without Super) or a three-finger swipe up (300 units for the whole way, tracked
   1:1 and released like the other swipes) open it; the same key, `Escape`, a click on empty

@@ -23,7 +23,7 @@ const MINIMUM_WIDTH: f32 = 140.0;
 pub const MENU_RADIUS: f32 = Radius::L;
 const FONT_SIZE: f32 = 13.0;
 const MARK_STROKE: f32 = 1.6;
-pub const SUBMENU_DELAY: Duration = Duration::from_millis(200);
+const SUBMENU_DELAY: Duration = Duration::from_millis(200);
 const SAFE_DELAY: Duration = Duration::from_millis(300);
 const SAFE_MARGIN: f32 = 6.0;
 const SEARCH_LINE: f32 = ROW_HEIGHT + SEPARATOR_HEIGHT;
@@ -356,14 +356,14 @@ impl MenuPanel {
         }
     }
 
-    pub fn at_least_as_wide_as(self, width: f32) -> Self {
+    fn at_least_as_wide_as(self, width: f32) -> Self {
         Self {
             size: Size::new(self.size.width.max(width), self.size.height),
             ..self
         }
     }
 
-    pub fn fit_height(&mut self, height: f32) {
+    fn fit_height(&mut self, height: f32) {
         let (header, footer) = self.header_and_footer();
         let fewest = 2.0 * VERTICAL_PADDING + header + footer + 2.0 * SCROLL_ZONE;
         let fewest = fewest + FEWEST_ROWS * ROW_HEIGHT;
@@ -432,7 +432,7 @@ impl MenuPanel {
         (self.scrolls_down() && point.y >= bottom && point.y < self.size.height).then_some(1.0)
     }
 
-    pub fn scroll_by(&mut self, delta: f32) -> bool {
+    fn scroll_by(&mut self, delta: f32) -> bool {
         let scrolled = (self.scrolled + delta).clamp(0.0, self.scroll_limit());
         let moved = scrolled != self.scrolled;
         self.scrolled = scrolled;
@@ -453,7 +453,7 @@ impl MenuPanel {
         self.scrolled = self.scrolled.clamp(0.0, self.scroll_limit());
     }
 
-    pub fn open_submenus_left(&mut self, left: bool) {
+    fn open_submenus_left(&mut self, left: bool) {
         self.submenus_open_left = left;
     }
 

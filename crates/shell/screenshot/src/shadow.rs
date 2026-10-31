@@ -1,4 +1,4 @@
-use unbound_toolkit::ScreenImage;
+use unbound_toolkit::Snapshot;
 
 const BLUR: f64 = 22.0;
 const DROP: f64 = 12.0;
@@ -41,7 +41,7 @@ fn box_blur(values: &mut [f32], width: usize, height: usize, radius: usize) {
     }
 }
 
-pub fn with_shadow(window: &ScreenImage, scale: f64) -> ScreenImage {
+pub fn with_shadow(window: &Snapshot, scale: f64) -> Snapshot {
     let blur = (BLUR * scale).round() as usize;
     let drop = (DROP * scale).round() as usize;
     let margin = blur * 2;
@@ -85,7 +85,7 @@ pub fn with_shadow(window: &ScreenImage, scale: f64) -> ScreenImage {
             rgba[at + 3] = (combined * 255.0).round() as u8;
         }
     }
-    ScreenImage {
+    Snapshot {
         width: width as u32,
         height: height as u32,
         rgba,
@@ -96,13 +96,13 @@ pub fn with_shadow(window: &ScreenImage, scale: f64) -> ScreenImage {
 mod tests {
     use super::*;
 
-    fn alpha_at(image: &ScreenImage, x: u32, y: u32) -> u8 {
+    fn alpha_at(image: &Snapshot, x: u32, y: u32) -> u8 {
         image.rgba[((y * image.width + x) * 4 + 3) as usize]
     }
 
     #[test]
     fn the_window_keeps_its_pixels_inside_a_soft_shadow_that_falls_below_it() {
-        let window = ScreenImage {
+        let window = Snapshot {
             width: 40,
             height: 30,
             rgba: [0x20, 0x40, 0x60, 0xff].repeat(40 * 30),

@@ -12,12 +12,16 @@ use unbound_greeter::{
     read_message, remember_user, remembered_user, write_message,
 };
 use unbound_keyboard::Layouts;
-use unbound_lock::{BackdropSource, DateFormats, Inbox, LockScreen, User, Variant, load_backdrop};
+use unbound_lock::{
+    BackdropSource, DateFormats, Inbox, LockScreen, Look, PowerAction, User, Variant, load_backdrop,
+};
+use unbound_status::devices::{powers, use_power};
 use unbound_toolkit::ui::{Event, Key, frame_time};
 use unbound_toolkit::{
     App, Appearance, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem,
     Window, WindowEvent,
 };
+use zeroize::Zeroizing;
 
 const CLOCK_TICK: Duration = Duration::from_secs(1);
 
@@ -31,7 +35,7 @@ struct Conversation {
 }
 
 impl Conversation {
-    fn open(login: &str, password: String) -> std::io::Result<Self> {
+    fn open(login: &str, password: Zeroizing<String>) -> std::io::Result<Self> {
         let socket = std::env::var_os("GREETD_SOCK")
             .ok_or_else(|| std::io::Error::other("GREETD_SOCK is not set"))?;
         let mut greetd = UnixStream::connect(socket)?;
@@ -59,23 +63,27 @@ struct Greeter {
     conversation: Option<Conversation>,
     caps_lock: bool,
     next_clock: Instant,
-    backdrop: Option<Inbox<Image>>,
+    backdrop: Option<Inbox<(Look, Image)>>,
+    backdrop_requested: bool,
     picture: Option<File>,
     wallpaper: Option<Image>,
     last_user: Option<PathBuf>,
     layouts: Layouts,
     input_source: Option<String>,
     started: bool,
+    text: TextSystem,
+    system: Option<zbus::blocking::Connection>,
+    powers: Vec<PowerAction>,
 }
 
 impl Greeter {
-    fn screen_for(user: &User) -> LockScreen {
+    fn screen_for(user: &User, text: TextSystem) -> LockScreen {
         LockScreen::new(
             user,
             DateFormats::from_env(),
             &jiff::Zoned::now(),
             Appearance::default(),
-            TextSystem::new(),
+            text,
         )
     }
 
@@ -89,12 +97,14 @@ impl Greeter {
         } else {
             (self.user + count - 1) % count
         };
-        self.screen = Self::screen_for(&self.users[self.user]);
+        self.screen = Self::screen_for(&self.users[self.user], self.text.sharing_fonts());
         self.screen.set_position(self.user, count);
+        self.screen.offer_power(&self.powers);
         self.screen.set_input_source(self.input_source.clone());
         self.screen.set_caps_lock(self.caps_lock);
         self.picture = login_picture(Path::new(LOGIN_PICTURES), self.users[self.user].uid);
         self.backdrop = None;
+        self.backdrop_requested = false;
         if let Some(wallpaper) = &self.wallpaper {
             self.screen
                 .set_backdrop(wallpaper.clone(), Instant::now() - Duration::from_secs(1));
@@ -102,7 +112,7 @@ impl Greeter {
         true
     }
 
-    fn sign_in(&mut self, password: String) {
+    fn sign_in(&mut self, password: Zeroizing<String>) {
         self.screen.set_message(None);
         let sent = match &mut self.conversation {
             Some(conversation) if conversation.asking => {
@@ -159,6 +169,8 @@ impl Greeter {
         match finished.rejection {
             None if finished.started => {
                 self.started = true;
+                tracing::info!("signed in; handing the screen to the session");
+                self.screen.leave(frame_time().on_screen());
                 if let Some(file) = &self.last_user
                     && let Err(error) = remember_user(file, &self.users[self.user].login)
                 {
@@ -208,12 +220,14 @@ impl Greeter {
 impl App for Greeter {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
-        if self.backdrop.is_none() && width > 0 && height > 0 {
+        if !self.backdrop_requested && width > 0 && height > 0 {
+            self.backdrop_requested = true;
             let picture = self.picture.as_ref().map(opened_path);
             match load_backdrop(
                 BackdropSource::Picture(picture),
                 Variant::Dark,
                 (width, height),
+                vec![Look::Blurred, Look::Sharp],
             ) {
                 Ok(inbox) => self.backdrop = Some(inbox),
                 Err(error) => tracing::warn!("cannot load the wallpaper: {error}"),
@@ -257,6 +271,12 @@ impl App for Greeter {
             if let Some(password) = self.screen.take_password() {
                 self.sign_in(password);
             }
+            if let Some(power) = self.screen.take_power()
+                && let Some(system) = &self.system
+                && let Err(error) = use_power(system, power)
+            {
+                tracing::warn!("cannot {power:?}: {error}");
+            }
         }
     }
 
@@ -274,19 +294,29 @@ impl App for Greeter {
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        let backdrop = self.backdrop.as_ref().filter(|_| index == 0);
-        if let Some(image) = backdrop.and_then(|inbox| inbox.drain().pop()) {
-            self.screen
-                .set_backdrop(image.clone(), frame_time().on_screen());
-            self.wallpaper = Some(image);
-        } else if backdrop.is_none() {
-            self.converse();
+        match self.backdrop.as_mut().filter(|_| index == 0) {
+            Some(inbox) => {
+                for (look, image) in inbox.drain() {
+                    match look {
+                        Look::Blurred => {
+                            self.screen
+                                .set_backdrop(image.clone(), frame_time().on_screen());
+                            self.wallpaper = Some(image);
+                        }
+                        Look::Sharp => self.screen.set_wallpaper(image),
+                    }
+                }
+            }
+            None => self.converse(),
         }
         window.request_redraw();
     }
 
     fn deadline(&self) -> Option<Instant> {
-        Some(self.next_clock)
+        match self.finished() {
+            true => Some(Instant::now()),
+            false => Some(self.next_clock),
+        }
     }
 
     fn animating(&self) -> bool {
@@ -302,7 +332,7 @@ impl App for Greeter {
     }
 
     fn finished(&self) -> bool {
-        self.started
+        self.started && self.screen.has_left()
     }
 
     fn accessibility(&self) -> Option<TreeUpdate> {
@@ -324,8 +354,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .position(|user| Some(&user.login) == remembered.as_ref())
         .unwrap_or(0);
     let chosen = users.get(user).ok_or("no one can sign in")?;
-    let mut screen = Greeter::screen_for(chosen);
+    let text = TextSystem::new();
+    let mut screen = Greeter::screen_for(chosen, text.sharing_fonts());
     screen.set_position(user, users.len());
+    let system = zbus::blocking::Connection::system()
+        .inspect_err(|error| tracing::warn!("no system bus: {error}"))
+        .ok();
+    let powers = system
+        .as_ref()
+        .map(|system| {
+            powers(system)
+                .inspect_err(|error| tracing::warn!("cannot ask logind about power: {error}"))
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    screen.offer_power(&powers);
     let picture = login_picture(Path::new(LOGIN_PICTURES), chosen.uid);
     let mut window = Window::open(
         Role::Layer(LayerOptions {
@@ -345,12 +388,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         caps_lock: false,
         next_clock: Instant::now() + CLOCK_TICK,
         backdrop: None,
+        backdrop_requested: false,
         picture,
         wallpaper: None,
         last_user,
         layouts: Layouts::load(),
         input_source: None,
         started: false,
+        text,
+        system,
+        powers,
     };
     unbound_toolkit::run(&mut window, &mut greeter)?;
     Ok(())

@@ -13,6 +13,7 @@ use rustix::process::{Pid, PidfdFlags, pidfd_open};
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{Interest, Mode, PostAction};
 use smithay::reexports::wayland_server::Client;
+use unbound_protocols::server::unbound_shell_v1::SessionEnd;
 
 use crate::environment::cursor_environment;
 use crate::state::{ClientState, Headless};
@@ -31,6 +32,7 @@ pub const GREETER: &str = "/usr/bin/unbound-greeter";
 pub const REVIEW: &str = "/usr/bin/unbound-review";
 pub const MONITOR: &str = "/usr/bin/unbound-monitor";
 const FORCE_QUIT_ARGUMENT: &str = "--force-quit";
+const CONFIRM_ARGUMENT: &str = "--confirm";
 
 pub const SESSION_CLIENT_RESTART_THROTTLE: Duration = Duration::from_secs(10);
 
@@ -49,17 +51,29 @@ pub(crate) struct LockScreen {
     started: Option<Instant>,
 }
 
-pub(crate) struct ForceQuit {
+pub(crate) struct Summoned {
     executable: PathBuf,
     running: Option<(Child, Client)>,
 }
 
-impl ForceQuit {
-    pub(crate) fn new() -> Self {
+impl Summoned {
+    pub(crate) fn new(executable: &str) -> Self {
         Self {
-            executable: PathBuf::from(MONITOR),
+            executable: PathBuf::from(executable),
             running: None,
         }
+    }
+
+    fn pid(&self) -> Option<u32> {
+        self.running.as_ref().map(|(child, _)| child.id())
+    }
+}
+
+fn session_end_keyword(ending: SessionEnd) -> &'static str {
+    match ending {
+        SessionEnd::Restart => "restart",
+        SessionEnd::ShutDown => "shut-down",
+        _ => "log-out",
     }
 }
 
@@ -140,30 +154,42 @@ impl Headless {
     }
 
     pub fn force_quit_pid(&self) -> Option<u32> {
-        self.force_quit
-            .running
-            .as_ref()
-            .map(|(child, _)| child.id())
+        self.force_quit.pid()
     }
 
-    fn keep_force_quit(&mut self, upkeep: &mut SessionUpkeep) {
-        if let Some((child, _)) = self.force_quit.running.as_mut()
+    pub fn set_session_dialog(&mut self, executable: &Path) {
+        self.session_dialog.executable = executable.to_path_buf();
+    }
+
+    pub fn session_dialog_pid(&self) -> Option<u32> {
+        self.session_dialog.pid()
+    }
+
+    fn keep_summoned(
+        &mut self,
+        summoned: fn(&mut Headless) -> &mut Summoned,
+        arguments: Option<&[&str]>,
+        upkeep: &mut SessionUpkeep,
+    ) {
+        let dialog = summoned(self);
+        if let Some((child, _)) = dialog.running.as_mut()
             && !matches!(child.try_wait(), Ok(None))
         {
-            self.force_quit.running = None;
+            dialog.running = None;
         }
-        if !std::mem::take(&mut self.state.force_quit_requested) {
+        let Some(arguments) = arguments else {
+            return;
+        };
+        if let Some((_, client)) = &summoned(self).running {
+            let id = client.id();
+            self.state.focus_client(id);
             return;
         }
-        if let Some((_, client)) = &self.force_quit.running {
-            self.state.focus_client(client.id());
-            return;
-        }
-        let executable = self.force_quit.executable.clone();
+        let executable = summoned(self).executable.clone();
         let mut command = Command::new(&executable);
-        command.arg(FORCE_QUIT_ARGUMENT);
+        command.args(arguments);
         match self.spawn_session_command(command, SessionRole::Shell) {
-            Ok(running) => self.force_quit.running = Some(running),
+            Ok(running) => summoned(self).running = Some(running),
             Err(error) => upkeep.failures.push((executable, error)),
         }
     }
@@ -218,7 +244,22 @@ impl Headless {
     pub fn keep_session_clients_running(&mut self) -> SessionUpkeep {
         let mut upkeep = SessionUpkeep::default();
         self.keep_lock_screen(&mut upkeep);
-        self.keep_force_quit(&mut upkeep);
+        let force_quit = std::mem::take(&mut self.state.force_quit_requested);
+        self.keep_summoned(
+            |headless| &mut headless.force_quit,
+            force_quit.then_some([FORCE_QUIT_ARGUMENT].as_slice()),
+            &mut upkeep,
+        );
+        let confirm = self
+            .state
+            .session_end_requested
+            .take()
+            .map(|ending| [CONFIRM_ARGUMENT, session_end_keyword(ending)]);
+        self.keep_summoned(
+            |headless| &mut headless.session_dialog,
+            confirm.as_ref().map(|arguments| arguments.as_slice()),
+            &mut upkeep,
+        );
         self.keep_screen_reader();
         self.state.announce_displays();
         for index in 0..self.session_clients.len() {
@@ -283,12 +324,14 @@ impl Headless {
                     .map_err(io::Error::from)
             });
         }
+        let executable = PathBuf::from(command.get_program());
         let mut child = command.spawn()?;
         if let Err(error) = self.wake_when_exited(&child) {
             let _ = child.kill();
             let _ = child.wait();
             return Err(error);
         }
+        self.state.clear_alert(&executable);
         Ok((child, client))
     }
 
@@ -302,5 +345,26 @@ impl Headless {
             )
             .map(drop)
             .map_err(|error| io::Error::other(error.error))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, MONITOR, SCREENSHOT, SHELL};
+
+    #[test]
+    fn the_shipped_session_client_list_names_every_executable_the_compositor_starts() {
+        let shipped: Vec<&str> = include_str!("../data/session-clients").lines().collect();
+        assert_eq!(
+            shipped,
+            [
+                CLIPBOARD_DAEMON,
+                LOCK_SCREEN,
+                SCREENSHOT,
+                SHELL,
+                GREETER,
+                MONITOR
+            ]
+        );
     }
 }

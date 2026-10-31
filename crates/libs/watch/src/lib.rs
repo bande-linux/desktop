@@ -36,7 +36,7 @@ impl Changes {
     }
 }
 
-type Folders = Arc<Mutex<HashMap<i32, PathBuf>>>;
+type Folders = Arc<Mutex<HashMap<i32, Vec<PathBuf>>>>;
 
 pub struct FolderWatch {
     inotify: Arc<OwnedFd>,
@@ -45,7 +45,7 @@ pub struct FolderWatch {
     _stop: OwnedFd,
 }
 
-fn lock(folders: &Folders) -> MutexGuard<'_, HashMap<i32, PathBuf>> {
+fn lock(folders: &Folders) -> MutexGuard<'_, HashMap<i32, Vec<PathBuf>>> {
     folders.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
@@ -83,7 +83,10 @@ impl FolderWatch {
             folder,
             self.changes.flags() | WatchFlags::ONLYDIR,
         )?;
-        folders.insert(descriptor, folder.to_path_buf());
+        let paths = folders.entry(descriptor).or_default();
+        if !paths.iter().any(|path| path == folder) {
+            paths.push(folder.to_path_buf());
+        }
         Ok(())
     }
 }
@@ -114,13 +117,13 @@ fn next_changes(inotify: &OwnedFd, stopped: &OwnedFd, folders: &Folders) -> Opti
             folders.remove(&event.wd());
             continue;
         }
-        let Some(folder) = folders.get(&event.wd()) else {
+        let Some(watched) = folders.get(&event.wd()) else {
             continue;
         };
-        paths.push(match event.file_name() {
+        paths.extend(watched.iter().map(|folder| match event.file_name() {
             Some(name) => folder.join(OsStr::from_bytes(name.to_bytes())),
             None => folder.clone(),
-        });
+        }));
     }
 }
 
@@ -173,6 +176,22 @@ mod tests {
             seen.extend(changes.recv_timeout(Duration::from_secs(5)).unwrap());
         }
         assert!(seen.contains(&nested.join("notes.txt")));
+    }
+
+    #[test]
+    fn a_folder_watched_under_two_paths_reports_changes_under_both() {
+        let root = tempfile::tempdir().unwrap();
+        let real = root.path().join("Projects");
+        let alias = root.path().join("Work");
+        fs::create_dir(&real).unwrap();
+        std::os::unix::fs::symlink(&real, &alias).unwrap();
+        let (watch, changes) = watching(Changes::Saved, &real);
+        watch.watch(&alias).unwrap();
+        fs::write(real.join("plan.txt"), "draft").unwrap();
+        let mut seen = Vec::new();
+        while !(seen.contains(&real.join("plan.txt")) && seen.contains(&alias.join("plan.txt"))) {
+            seen.extend(changes.recv_timeout(Duration::from_secs(5)).unwrap());
+        }
     }
 
     #[test]

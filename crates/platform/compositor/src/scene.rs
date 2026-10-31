@@ -5,6 +5,7 @@ use smithay::backend::renderer::element::surface::{
 };
 use smithay::backend::renderer::element::{Element, Id, Kind, RenderElement};
 use smithay::backend::renderer::utils::{CommitCounter, DamageSet, OpaqueRegions};
+use smithay::backend::renderer::{ContextId, Renderer as _};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale};
 
@@ -732,13 +733,22 @@ pub(crate) fn preview_elements(
 #[derive(Debug, Clone)]
 pub(crate) struct Drawn {
     pieces: Vec<Piece>,
+    context: ContextId<VulkanTexture>,
     area: Area,
     pub(crate) look: Look,
     shading: Shading,
 }
 
 impl Drawn {
-    pub(crate) fn ghost(&self, look: Look, scale: f64) -> Vec<OutputElement> {
+    pub(crate) fn ghost(
+        &self,
+        look: Look,
+        scale: f64,
+        context: &ContextId<VulkanTexture>,
+    ) -> Vec<OutputElement> {
+        if self.context != *context {
+            return Vec::new();
+        }
         let shown = look.rect.to_physical(scale);
         let clip = rounded(shown, shaped_radius(self.area, shown, scale));
         scaled_pieces(
@@ -857,7 +867,14 @@ impl Closing {
         }
     }
 
-    pub(crate) fn render_elements(&self, scale: f64) -> Vec<OutputElement> {
+    pub(crate) fn render_elements(
+        &self,
+        scale: f64,
+        context: &ContextId<VulkanTexture>,
+    ) -> Vec<OutputElement> {
+        if self.drawn.context != *context {
+            return Vec::new();
+        }
         let Some(look) = self.motion.shown() else {
             return Vec::new();
         };
@@ -993,6 +1010,7 @@ pub(crate) fn window_elements(
         elements,
         Some(Drawn {
             pieces,
+            context: renderer.context_id(),
             area,
             look,
             shading,

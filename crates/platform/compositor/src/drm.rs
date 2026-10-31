@@ -44,6 +44,16 @@ struct Head {
     modes: Vec<Mode>,
     compositor: OutputCompositor,
     scanned_out: bool,
+    colour: Colour,
+    warmth: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Colour {
+    Unknown,
+    Ramp(usize),
+    Matrix(property::Handle),
+    Fixed,
 }
 
 pub struct DrmBackend {
@@ -56,6 +66,7 @@ pub struct DrmBackend {
     feedback: DmabufFeedback,
     heads: Vec<Head>,
     libinput: Option<Libinput>,
+    kelvin: Option<f64>,
 }
 
 pub struct DrmNotifiers {
@@ -120,6 +131,12 @@ fn edid_of(device: &DrmDevice, handle: connector::Handle) -> Option<unbound_edid
             return None;
         };
         unbound_edid::parse(&device.get_property_blob(blob).ok()?)
+    })
+}
+
+fn shows_another_display(known: &OutputConfig, edid: Option<unbound_edid::Edid>) -> bool {
+    edid.is_some_and(|edid| {
+        edid.make != known.make || edid.model != known.model || edid.serial != known.serial
     })
 }
 
@@ -244,6 +261,7 @@ impl DrmBackend {
             feedback,
             heads: Vec::new(),
             libinput: None,
+            kelvin: None,
         })
     }
 
@@ -303,6 +321,8 @@ impl DrmBackend {
             modes,
             compositor,
             scanned_out: false,
+            colour: Colour::Unknown,
+            warmth: None,
         }))
     }
 
@@ -311,9 +331,13 @@ impl DrmBackend {
         let mut changes = HeadChanges::default();
         let mut index = 0;
         while index < self.heads.len() {
+            let head = &self.heads[index];
             let still = present
                 .iter()
-                .any(|info| info.handle() == self.heads[index].connector);
+                .find(|info| info.handle() == head.connector)
+                .is_some_and(|info| {
+                    !shows_another_display(&head.config, edid_of(&self.device, info.handle()))
+                });
             if still {
                 index += 1;
                 continue;
@@ -399,6 +423,13 @@ impl DrmBackend {
             .any(|head| head.config.name == name && head.scanned_out)
     }
 
+    pub fn leave_on_screen(mut self) {
+        self.device.pause();
+        for head in self.heads.drain(..) {
+            std::mem::forget(head.compositor);
+        }
+    }
+
     pub fn session_active(&self) -> bool {
         self.session.is_active()
     }
@@ -416,6 +447,9 @@ impl DrmBackend {
             return Ok(None);
         };
         head.compositor.frame_submitted()?;
+        if let Some(kelvin) = self.kelvin {
+            warm(&self.device, head, kelvin);
+        }
         Ok(Some((
             head.config.name.clone(),
             Vblank {
@@ -442,35 +476,129 @@ impl DrmBackend {
     pub fn session_changed(&mut self, event: SessionEvent) -> Result<(), DrmBackendError> {
         match event {
             SessionEvent::PauseSession => {
-                if let Some(libinput) = self.libinput.as_mut() {
-                    libinput.suspend();
-                }
+                self.suspend_input();
                 self.device.pause();
+                Ok(())
             }
             SessionEvent::ActivateSession => {
-                if let Some(libinput) = self.libinput.as_mut() {
-                    libinput
-                        .resume()
-                        .map_err(|()| "libinput cannot resume its devices")?;
-                }
-                self.device.activate(true)?;
-                for head in &mut self.heads {
-                    head.compositor.reset_state()?;
-                }
+                self.device.activate(false)?;
+                self.wake()
             }
         }
+    }
+
+    pub fn suspend_input(&mut self) {
+        if let Some(libinput) = self.libinput.as_mut() {
+            libinput.suspend();
+        }
+    }
+
+    pub fn wake(&mut self) -> Result<(), DrmBackendError> {
+        if !self.session.is_active() {
+            return Ok(());
+        }
+        for head in &mut self.heads {
+            if let Err(error) = head.compositor.reset_state() {
+                tracing::warn!("cannot reset {}: {error}", head.config.name);
+            }
+            head.warmth = None;
+        }
+        if let Some(libinput) = self.libinput.as_mut() {
+            libinput
+                .resume()
+                .map_err(|()| "libinput cannot resume its devices")?;
+        }
         Ok(())
+    }
+}
+
+fn colour_of(device: &DrmDevice, crtc: crtc::Handle) -> Colour {
+    let size = device
+        .get_crtc(crtc)
+        .map_or(0, |info| info.gamma_length() as usize);
+    if size > 0 {
+        return Colour::Ramp(size);
+    }
+    device
+        .get_properties(crtc)
+        .ok()
+        .and_then(|properties| {
+            properties
+                .as_props_and_values()
+                .0
+                .iter()
+                .copied()
+                .find(|handle| {
+                    device
+                        .get_property(*handle)
+                        .is_ok_and(|info| info.name().to_bytes() == b"CTM")
+                })
+        })
+        .map_or(Colour::Fixed, Colour::Matrix)
+}
+
+fn set_matrix(
+    device: &DrmDevice,
+    crtc: crtc::Handle,
+    property: property::Handle,
+    kelvin: f64,
+) -> std::io::Result<()> {
+    let blob = device.create_property_blob(&crate::night::matrix(kelvin))?;
+    let applied = device.set_property(crtc, property, blob.into());
+    device.destroy_property_blob(blob.into())?;
+    applied
+}
+
+fn warm(device: &DrmDevice, head: &mut Head, kelvin: f64) {
+    if head.warmth == Some(kelvin) {
+        return;
+    }
+    let crtc = head.compositor.crtc();
+    if head.colour == Colour::Unknown {
+        head.colour = colour_of(device, crtc);
+        tracing::info!("{} warms through {:?}", head.config.name, head.colour);
+    }
+    let applied = match head.colour {
+        Colour::Ramp(size) => {
+            let [red, green, blue] = crate::night::ramp(size, kelvin);
+            device.set_gamma(crtc, &red, &green, &blue)
+        }
+        Colour::Matrix(property) => set_matrix(device, crtc, property, kelvin),
+        Colour::Unknown | Colour::Fixed => return,
+    };
+    match applied {
+        Ok(()) => head.warmth = Some(kelvin),
+        Err(error) => {
+            tracing::warn!("cannot warm {}: {error}", head.config.name);
+            head.colour = Colour::Fixed;
+        }
     }
 }
 
 impl FrameOutput for DrmBackend {
     type Error = DrmBackendError;
 
+    fn set_color_temperature(&mut self, kelvin: f64) {
+        self.kelvin = Some(kelvin);
+        if !self.session.is_active() {
+            return;
+        }
+        for head in &mut self.heads {
+            warm(&self.device, head, kelvin);
+        }
+    }
+
     fn submit(
         &mut self,
         compositor: &mut Headless,
         output: &str,
     ) -> Result<Submission, DrmBackendError> {
+        if !self.session.is_active() {
+            return Ok(Submission::Paused);
+        }
+        if compositor.holds_frames() {
+            return Ok(Submission::AtVblank);
+        }
         let Some(settings) = compositor.output_settings(output) else {
             return Ok(Submission::AtVblank);
         };
@@ -506,5 +634,40 @@ impl FrameOutput for DrmBackend {
         }
         head.compositor.queue_frame(())?;
         Ok(Submission::AwaitingFlip)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use smithay::utils::Size;
+    use unbound_edid::Edid;
+
+    use super::shows_another_display;
+    use crate::screen::OutputConfig;
+
+    fn display(serial: &str) -> Edid {
+        Edid {
+            make: "DEL".to_owned(),
+            model: "U2723QE".to_owned(),
+            serial: serial.to_owned(),
+        }
+    }
+
+    fn known(edid: &Edid) -> OutputConfig {
+        OutputConfig {
+            make: edid.make.clone(),
+            model: edid.model.clone(),
+            serial: edid.serial.clone(),
+            ..OutputConfig::virtual_display("DP-1", Size::from((3840, 2160)))
+        }
+    }
+
+    #[test]
+    fn a_connector_shows_another_display_only_when_its_edid_names_another() {
+        let desk = known(&display("A1"));
+
+        assert!(!shows_another_display(&desk, Some(display("A1"))));
+        assert!(shows_another_display(&desk, Some(display("B2"))));
+        assert!(!shows_another_display(&desk, None));
     }
 }

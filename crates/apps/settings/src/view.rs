@@ -15,19 +15,23 @@ use unbound_toolkit::{Image, Palette, Rect, SHEET_INSET, Scene, TextSystem};
 use crate::L10N;
 use crate::about::{About, AboutCommand};
 use crate::battery::{BatteryCommand, BatteryState};
+use crate::defaults::{DefaultApp, DefaultAppCommand};
 use crate::follow::{Command, Update};
+use crate::forget::Forget;
 use crate::idle::Idle;
 use crate::locale::{LocaleCommand, LocaleState};
 use crate::login::{LoginCommand, LoginItems, login_matches};
 use crate::notifications::{AppNotifications, NotificationCommand};
 use crate::pictures::{Pair, PictureCommand};
 use crate::pointing::PointingDevices;
+use crate::privacy::focus_after_asking;
+use crate::privilege::Privilege;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
 use crate::software::{SoftwareCommand, SoftwareState};
 use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
-use crate::widgets::{Column, Root};
+use crate::widgets::{Column, Crossfade, Root};
 use unbound_keyboard::Layouts;
 use unbound_settings_panes::{AUTOMATIC, Pane, PaneId, SettingId, Value, panes};
 use unbound_settings_panes::{PaneHit, search};
@@ -56,6 +60,8 @@ pub(crate) enum Intent {
     Connect(String),
     Disconnect(String),
     Pair(String),
+    AskForget(Option<Forget>),
+    Forget,
     Answer(Answer),
     ChoosePicture,
     AddingSource(bool),
@@ -66,19 +72,22 @@ pub(crate) enum Intent {
     Back,
     Draft(SettingId, String),
     AskEmptyTrash(bool),
+    AskClearClipboard(bool),
+    ClearClipboard,
     EmptyTrash,
     Reveal(PathBuf),
     Pick(Option<Picker>),
     PickQuery(String),
     Picked(String),
     RemoveLoginItem(String),
-    ExpandApp(Option<String>),
+    OpenApp(String),
     SetAppRule(AppNotifications),
     Software(SoftwareCommand),
     Network(NetworkCommand),
     ManualIpv4(bool),
     ImportVpn,
     Locale(LocaleCommand),
+    DefaultApp(&'static str, String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,12 +181,14 @@ pub struct SettingsView {
     pub(crate) storage: Option<Storage>,
     pub(crate) drafts: HashMap<SettingId, String>,
     pub(crate) confirming_empty_trash: bool,
+    pub(crate) confirming_clear_clipboard: bool,
+    pub(crate) forgetting: Option<Forget>,
     pub(crate) time: Option<TimeState>,
     pub(crate) picking: Option<(Picker, String)>,
     pub(crate) login: Option<LoginItems>,
     pub(crate) battery: Option<BatteryState>,
     pub(crate) notification_apps: Option<Vec<AppNotifications>>,
-    pub(crate) expanded_app: Option<String>,
+    pub(crate) app_page: Option<String>,
     pub(crate) software: SoftwareState,
     pub(crate) network: Option<NetworkState>,
     pub(crate) manual_ipv4: bool,
@@ -189,11 +200,21 @@ pub struct SettingsView {
     pub(crate) intents: Intents,
     pub(crate) commands: Vec<Command>,
     pub(crate) message: Option<String>,
+    pub(crate) errors: HashMap<SettingId, String>,
+    pub(crate) refused: Vec<Privilege>,
+    pub(crate) default_apps: Option<Vec<DefaultApp>>,
     pressed: bool,
     stale: bool,
-    focus_next: Option<Anchor>,
+    pub(crate) focus_next: Option<Anchor>,
     pub(crate) scroll: Rc<Cell<f32>>,
+    pub(crate) crossfade: Rc<RefCell<Crossfade>>,
+    pub(crate) shown: Option<(PaneId, bool)>,
+    pub(crate) sidebar_scroll: Rc<Cell<f32>>,
+    pub(crate) icon_dirs: Vec<PathBuf>,
+    pub(crate) symbols: HashMap<Symbol, Option<Image>>,
 }
+
+pub(crate) type Symbol = (&'static str, u32, [u8; 4]);
 
 impl SettingsView {
     pub fn new(palette: Palette, text: TextSystem) -> Self {
@@ -234,12 +255,14 @@ impl SettingsView {
             storage: None,
             drafts: HashMap::new(),
             confirming_empty_trash: false,
+            confirming_clear_clipboard: false,
+            forgetting: None,
             time: None,
             picking: None,
             login: None,
             battery: None,
             notification_apps: None,
-            expanded_app: None,
+            app_page: None,
             software: SoftwareState::Unknown,
             network: None,
             manual_ipv4: false,
@@ -251,17 +274,34 @@ impl SettingsView {
             intents,
             commands: Vec::new(),
             message: None,
+            errors: HashMap::new(),
+            refused: Vec::new(),
+            default_apps: None,
             pressed: false,
             stale: true,
             focus_next: None,
             scroll: Rc::default(),
+            crossfade: Rc::default(),
+            shown: None,
+            sidebar_scroll: Rc::default(),
+            icon_dirs: unbound_xdg::data_dirs(),
+            symbols: HashMap::new(),
         };
         view.rebuild();
         view
     }
 
     pub fn set_palette(&mut self, palette: Palette) {
-        self.ui.context().palette = palette;
+        if self.ui.context().palette != palette {
+            self.ui.context().palette = palette;
+            self.invalidate();
+        }
+    }
+
+    pub fn set_icon_dirs(&mut self, dirs: Vec<PathBuf>) {
+        self.icon_dirs = dirs;
+        self.symbols.clear();
+        self.invalidate();
     }
 
     pub fn set_value(&mut self, id: SettingId, value: Value) {
@@ -441,10 +481,17 @@ impl SettingsView {
                 }
                 self.storage = Some(storage);
             }
-            Update::Failed(error) => {
+            Update::Failed(setting, error) => {
                 self.busy.clear();
-                self.message = Some(L10N.tr_args("not-changed", [("error", error.into())]));
+                match setting {
+                    Some(setting) => {
+                        self.errors.insert(setting, error);
+                    }
+                    None => self.message = Some(error),
+                }
             }
+            Update::Refused(refused) => self.refused = refused,
+            Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
         }
         self.availability_changed();
     }
@@ -518,19 +565,17 @@ impl SettingsView {
             PaneId::Sound => self.audio.is_some(),
             PaneId::Displays => !self.displays.is_empty(),
             PaneId::About => self.about.is_some(),
-            PaneId::Battery => self.battery.is_some(),
             PaneId::Appearance
             | PaneId::Accessibility
-            | PaneId::Wallpaper
             | PaneId::Bar
-            | PaneId::LockScreen
             | PaneId::Keyboard
-            | PaneId::General
+            | PaneId::KeyboardShortcuts
+            | PaneId::Power
+            | PaneId::PrivacySecurity
+            | PaneId::Apps
             | PaneId::Storage
-            | PaneId::DateTime
-            | PaneId::LoginItems
             | PaneId::SoftwareUpdate => true,
-            PaneId::LanguageRegion => self.locale.is_some(),
+            PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
             PaneId::TrackpadMouse => self.pointing.trackpad || self.pointing.mouse,
         }
     }
@@ -610,12 +655,12 @@ impl SettingsView {
     fn availability_changed(&mut self) {
         if !self.query.is_empty() {
             self.hits = self.search_hits(&self.query.clone());
-        }
-        let visible = self.visible_panes();
-        if !self.shown_in(&visible)
-            && let Some(&first) = visible.first()
-        {
-            self.select_pane(first);
+            let visible = self.visible_panes();
+            if !self.shown_in(&visible)
+                && let Some(&first) = visible.first()
+            {
+                self.select_pane(first);
+            }
         }
         self.invalidate();
     }
@@ -652,21 +697,28 @@ impl SettingsView {
                 true
             }
             Event::Key {
+                key: Key::Character('f'),
+                modifiers,
+            } if modifiers.logo && !modifiers.control && !modifiers.alt => {
+                self.ui.perform(&request(Action::Focus, self.search, None));
+                true
+            }
+            Event::Key {
                 key: Key::Character('['),
                 modifiers,
-            } if modifiers.logo && self.pane.parent().is_some() => {
+            } if modifiers.logo && self.can_go_back() => {
                 self.intents.borrow_mut().push(Intent::Back);
                 true
             }
             Event::Key {
                 key: Key::Left,
                 modifiers,
-            } if modifiers.alt && self.pane.parent().is_some() => {
+            } if modifiers.alt && self.can_go_back() => {
                 self.intents.borrow_mut().push(Intent::Back);
                 true
             }
             Event::PointerDown(pointer)
-                if pointer.button == PointerButton::Back && self.pane.parent().is_some() =>
+                if pointer.button == PointerButton::Back && self.can_go_back() =>
             {
                 self.intents.borrow_mut().push(Intent::Back);
                 true
@@ -676,6 +728,22 @@ impl SettingsView {
                 modifiers,
             } if plain(modifiers) && self.confirming_empty_trash => {
                 self.intents.borrow_mut().push(Intent::AskEmptyTrash(false));
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && self.forgetting.is_some() => {
+                self.intents.borrow_mut().push(Intent::AskForget(None));
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && self.confirming_clear_clipboard => {
+                self.intents
+                    .borrow_mut()
+                    .push(Intent::AskClearClipboard(false));
                 true
             }
             Event::Key {
@@ -833,7 +901,9 @@ impl SettingsView {
             match intent {
                 Intent::Draft(..) => {}
                 Intent::Back => {
-                    if let Some(parent) = self.pane.parent() {
+                    if let Some(group) = self.app_page.take() {
+                        self.focus_next = Some(Anchor::Item(format!("app:{group}")));
+                    } else if let Some(parent) = self.pane.parent() {
                         self.focus_next = Some(Anchor::Item(self.pane.keyword().to_owned()));
                         self.select_pane(parent);
                     }
@@ -844,23 +914,45 @@ impl SettingsView {
                         if asking { "empty-trash" } else { "trash" }.to_owned(),
                     ));
                 }
+                Intent::AskClearClipboard(asking) => {
+                    self.confirming_clear_clipboard = asking;
+                    self.focus_next = Some(focus_after_asking(asking));
+                }
+                Intent::ClearClipboard => {
+                    self.confirming_clear_clipboard = false;
+                    self.focus_next = Some(focus_after_asking(false));
+                    self.commands.push(Command::ClearClipboard);
+                }
                 Intent::EmptyTrash => {
                     self.confirming_empty_trash = false;
                     self.commands
                         .push(Command::Storage(StorageCommand::EmptyTrash));
                 }
                 Intent::Reveal(path) => self.commands.push(Command::Reveal(path)),
-                Intent::ExpandApp(group) => {
-                    self.focus_next = group
-                        .clone()
-                        .or_else(|| self.expanded_app.clone())
-                        .map(|group| Anchor::Item(format!("app:{group}")));
-                    self.expanded_app = group;
+                Intent::OpenApp(group) => {
+                    self.focus_next = Some(Anchor::Back);
+                    self.app_page = Some(group);
+                    self.scroll.set(0.0);
                 }
                 Intent::Software(command) => self.commands.push(Command::Software(command)),
                 Intent::Network(command) => self.commands.push(Command::Network(command)),
                 Intent::ImportVpn => self.commands.push(Command::ImportVpn),
+                Intent::DefaultApp(role, id) => {
+                    if let Some(known) = self
+                        .default_apps
+                        .iter_mut()
+                        .flatten()
+                        .find(|known| known.role == role)
+                    {
+                        known.current = Some(id.clone());
+                    }
+                    self.focus_next = Some(Anchor::Item(format!("default:{role}")));
+                    self.commands
+                        .push(Command::DefaultApp(DefaultAppCommand::Choose(role, id)));
+                }
                 Intent::Locale(command) => {
+                    self.errors.remove(&SettingId::Language);
+                    self.errors.remove(&SettingId::Region);
                     if let Some(locale) = &mut self.locale {
                         match &command {
                             LocaleCommand::Language(language) => {
@@ -910,6 +1002,7 @@ impl SettingsView {
                         continue;
                     };
                     self.focus_next = Some(Anchor::Setting(picker.setting(), None));
+                    self.errors.remove(&picker.setting());
                     self.message = None;
                     self.picked(picker, key);
                 }
@@ -945,6 +1038,8 @@ impl SettingsView {
                     self.device_command(address, BluetoothCommand::Disconnect)
                 }
                 Intent::Pair(address) => self.device_command(address, BluetoothCommand::Pair),
+                Intent::AskForget(target) => self.ask_forget(target),
+                Intent::Forget => self.forget(),
                 Intent::Answer(answer) => {
                     self.pairing = None;
                     self.commands.push(Command::Answer(answer));
@@ -1085,7 +1180,11 @@ impl SettingsView {
             PaneId::Storage => self
                 .commands
                 .push(Command::Storage(StorageCommand::Measure)),
-            PaneId::LoginItems => self.commands.push(Command::Login(LoginCommand::Refresh)),
+            PaneId::Apps => {
+                self.commands.push(Command::Login(LoginCommand::Refresh));
+                self.commands
+                    .push(Command::DefaultApp(DefaultAppCommand::Refresh));
+            }
             PaneId::Notifications => self
                 .commands
                 .push(Command::Notifications(NotificationCommand::Refresh)),
@@ -1100,8 +1199,10 @@ impl SettingsView {
         self.pane = pane;
         self.adding_source = None;
         self.confirming_empty_trash = false;
+        self.confirming_clear_clipboard = false;
         self.picking = None;
-        self.expanded_app = None;
+        self.app_page = None;
+        self.errors.clear();
         self.scroll.set(0.0);
         self.invalidate();
     }
@@ -1233,13 +1334,15 @@ impl SettingsView {
                 .as_ref()
                 .map(|time| time.zone.clone())
                 .unwrap_or_default();
-            self.message = match parse_manual(text, &zone) {
+            match parse_manual(text, &zone) {
                 Some(at) => {
+                    self.errors.remove(&id);
                     self.commands.push(Command::Time(TimeCommand::Set(at)));
-                    None
                 }
-                None => Some(L10N.tr("manual-time-invalid")),
-            };
+                None => {
+                    self.errors.insert(id, L10N.tr("manual-time-invalid"));
+                }
+            }
             return;
         }
         if self.values.get(&id) == Some(&value) {
@@ -1263,7 +1366,16 @@ impl SettingsView {
         if let Some(muted) = unmuted {
             self.values.insert(muted, Value::Flag(false));
         }
+        self.errors.remove(&id);
         self.message = None;
+    }
+
+    fn can_go_back(&self) -> bool {
+        self.app_page.is_some() || self.pane.parent().is_some()
+    }
+
+    pub(crate) fn allowed(&self, id: SettingId) -> bool {
+        Privilege::of(id).is_none_or(|privilege| !self.refused.contains(&privilege))
     }
 
     pub fn deadline(&self) -> Option<Instant> {

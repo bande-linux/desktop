@@ -4,7 +4,7 @@ use unbound_graphics::{
 };
 
 use super::control::Symbol;
-use super::{Animated, Context, Event, Key, Parts, Size, Spring, Widget, WidgetId, contains};
+use super::{Animated, Context, Event, Key, Parts, Size, Spring, Widget, WidgetId};
 
 pub const SEGMENTED_HEIGHT: f32 = ControlSize::Regular.height();
 const PADDING: f32 = 14.0;
@@ -311,7 +311,7 @@ impl Widget for SegmentedControl {
         match event {
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 if let Some(index) = (0..self.segments.len())
-                    .find(|index| contains(self.segment(*index), pointer.position))
+                    .find(|index| self.segment(*index).contains(pointer.position))
                 {
                     self.select(cx, index);
                 }

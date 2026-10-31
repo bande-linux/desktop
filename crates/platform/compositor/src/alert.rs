@@ -1,13 +1,12 @@
 use std::cell::RefCell;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::utils::{Logical, Point};
+use unbound_graphics::{Scheme, TextRole};
 use unbound_render::VulkanRenderer;
-
-use unbound_graphics::TextRole;
 
 use crate::label::{Label, LabelStyle, Labels, Look};
 use crate::state::{Headless, OutputElement, State};
@@ -20,25 +19,61 @@ const ALERT_STYLE: LabelStyle = LabelStyle {
 const ALERT_MARGIN: f64 = 24.0;
 const ALERT_GAP: f64 = 8.0;
 
+struct Alert {
+    executable: PathBuf,
+    message: String,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct Layout {
+    screen: usize,
+    width: i32,
+    scale: f64,
+    scheme: Scheme,
+    generation: u64,
+}
+
+struct Rendered {
+    layout: Layout,
+    labels: Vec<Label>,
+}
+
 #[derive(Default)]
 pub(crate) struct Alerts {
-    messages: Vec<String>,
-    rendered: RefCell<Vec<Label>>,
+    alerts: Vec<Alert>,
+    generation: u64,
+    rendered: RefCell<Vec<Rendered>>,
     labels: RefCell<Labels>,
 }
 
-pub(crate) fn start_failure(executable: &Path, error: &io::Error) -> String {
-    format!("Cannot start {}: {error}", executable.display())
-}
-
 impl State {
-    pub(crate) fn raise_alert(&mut self, message: String) {
-        if self.alerts.messages.contains(&message) {
-            return;
+    fn raise_alert(&mut self, executable: &Path, message: String) {
+        let alerts = &mut self.alerts;
+        match alerts
+            .alerts
+            .iter_mut()
+            .find(|alert| alert.executable == executable)
+        {
+            Some(alert) if alert.message == message => return,
+            Some(alert) => alert.message.clone_from(&message),
+            None => alerts.alerts.push(Alert {
+                executable: executable.to_path_buf(),
+                message: message.clone(),
+            }),
         }
         tracing::error!("{message}");
-        self.alerts.messages.push(message);
+        alerts.generation += 1;
         self.needs_redraw = true;
+    }
+
+    pub(crate) fn clear_alert(&mut self, executable: &Path) {
+        let alerts = &mut self.alerts;
+        let before = alerts.alerts.len();
+        alerts.alerts.retain(|alert| alert.executable != executable);
+        if alerts.alerts.len() != before {
+            alerts.generation += 1;
+            self.needs_redraw = true;
+        }
     }
 
     pub(crate) fn alert_elements(
@@ -47,31 +82,53 @@ impl State {
         screen: usize,
         scale: f64,
     ) -> Vec<OutputElement> {
-        if self.alerts.messages.is_empty() {
+        if self.alerts.alerts.is_empty() {
             return Vec::new();
         }
         let output = self.screen_rect(screen);
-        let width = f64::from(output.size.w) - 2.0 * ALERT_MARGIN;
-        let messages = &self.alerts.messages;
+        let layout = Layout {
+            screen,
+            width: output.size.w,
+            scale,
+            scheme: self.decorations.scheme,
+            generation: self.alerts.generation,
+        };
         let mut rendered = self.alerts.rendered.borrow_mut();
-        let current = rendered.len() == messages.len()
-            && rendered.iter().zip(messages).all(|(label, message)| {
-                label.text == *message
-                    && label.scale == scale
-                    && label.scheme == self.decorations.scheme
-            });
-        if !current {
-            let mut labels = self.alerts.labels.borrow_mut();
-            *rendered = messages
-                .iter()
-                .filter_map(|message| {
-                    labels.render(message, ALERT_STYLE, width, self.decorations.scheme, scale)
-                })
-                .collect();
-        }
+        rendered.retain(|entry| entry.layout.generation == layout.generation);
+        let index = match rendered
+            .iter()
+            .position(|entry| entry.layout.screen == screen)
+        {
+            Some(index) if rendered[index].layout == layout => index,
+            found => {
+                let width = f64::from(output.size.w) - 2.0 * ALERT_MARGIN;
+                let mut labels = self.alerts.labels.borrow_mut();
+                let entry = Rendered {
+                    layout,
+                    labels: self
+                        .alerts
+                        .alerts
+                        .iter()
+                        .filter_map(|alert| {
+                            labels.render(&alert.message, ALERT_STYLE, width, layout.scheme, scale)
+                        })
+                        .collect(),
+                };
+                match found {
+                    Some(index) => {
+                        rendered[index] = entry;
+                        index
+                    }
+                    None => {
+                        rendered.push(entry);
+                        rendered.len() - 1
+                    }
+                }
+            }
+        };
         let mut top = f64::from(output.location.y) + ALERT_MARGIN;
         let mut elements = Vec::new();
-        for label in rendered.iter() {
+        for label in &rendered[index].labels {
             let location = Point::<f64, Logical>::from((
                 f64::from(output.location.x) + (f64::from(output.size.w) - label.size.w) / 2.0,
                 top,
@@ -98,6 +155,9 @@ impl State {
 
 impl Headless {
     pub fn report_start_failure(&mut self, executable: &Path, error: &io::Error) {
-        self.state.raise_alert(start_failure(executable, error));
+        self.state.raise_alert(
+            executable,
+            format!("Cannot start {}: {error}", executable.display()),
+        );
     }
 }

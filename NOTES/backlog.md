@@ -467,6 +467,12 @@ boot framebuffer, K3 USB input. Later, the Apple DCP and agx drivers unlock:
 - A null-audio-sink given `media.class = "Audio/Source"` stalls WirePlumber 0.5.8's event
   queue when it activates the node, after which no default node is chosen; virtual
   sources need `Audio/Source/Virtual`.
+- Files does not follow the text size yet (for the Files owner): `main.rs` hands only
+  `appearance.palette()` to its view. Hand the whole `Appearance` to the `Ui`
+  (`Ui::set_appearance`), insert toolbar controls that sit in the window header with
+  `FreeLayout::insert_in_header` so they keep the title bar's size, and read the table header
+  height from `Table::header_height()` instead of `HEADER_HEIGHT` (rows and header now grow
+  with the text). Activity Monitor (`crates/apps/monitor/src/list.rs`) shows the pattern.
 
 ## Resume here (desktop agent 1)
 

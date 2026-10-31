@@ -221,8 +221,13 @@ pub enum SettingId {
     TrackpadSpeed,
     TrackpadSecondaryClick,
     TrackpadDisableWhileTyping,
+    TrackpadAcceleration,
+    TrackpadDragging,
+    TrackpadScrollMethod,
+    MousePrimaryButton,
     MouseNaturalScrolling,
     MouseSpeed,
+    MouseAcceleration,
     ComputerName,
     AboutThisComputer,
     StorageUsage,
@@ -1115,6 +1120,10 @@ fn speed(id: SettingId, keywords: String) -> Setting {
     )
 }
 
+fn acceleration(id: SettingId) -> Setting {
+    switch(id, "pointer-acceleration").described("pointer-acceleration-description")
+}
+
 fn mouse_pane() -> Pane {
     pane(
         PaneId::Mouse,
@@ -1122,12 +1131,22 @@ fn mouse_pane() -> Pane {
             None,
             vec![
                 setting(
+                    SettingId::MousePrimaryButton,
+                    L10N.tr("primary-button"),
+                    L10N.tr("primary-button-keywords"),
+                    Kind::Choices(keyword_choices(vec![
+                        (L10N.tr("primary-button-left"), "left"),
+                        (L10N.tr("primary-button-right"), "right"),
+                    ])),
+                ),
+                setting(
                     SettingId::MouseNaturalScrolling,
                     L10N.tr("natural-scrolling"),
                     L10N.tr("mouse-natural-scrolling-keywords"),
                     Kind::Switch,
                 ),
                 speed(SettingId::MouseSpeed, L10N.tr("mouse-speed-keywords")),
+                acceleration(SettingId::MouseAcceleration),
             ],
         )],
     )
@@ -1136,27 +1155,60 @@ fn mouse_pane() -> Pane {
 fn trackpad_pane() -> Pane {
     pane(
         PaneId::Trackpad,
-        vec![section(
-            None,
-            vec![
-                switch(SettingId::TrackpadTapToClick, "tap-to-click"),
-                setting(
-                    SettingId::TrackpadSecondaryClick,
-                    L10N.tr("secondary-click"),
-                    L10N.tr("secondary-click-keywords"),
-                    Kind::Choices(keyword_choices(vec![
-                        (L10N.tr("secondary-click-two-fingers"), "two-fingers"),
-                        (L10N.tr("secondary-click-corner"), "corner"),
-                    ])),
-                ),
-                switch(SettingId::TrackpadNaturalScrolling, "natural-scrolling"),
-                speed(SettingId::TrackpadSpeed, L10N.tr("trackpad-speed-keywords")),
-                switch(
-                    SettingId::TrackpadDisableWhileTyping,
-                    "disable-while-typing",
-                ),
-            ],
-        )],
+        vec![
+            section(
+                Some(L10N.tr("trackpad-click")),
+                vec![
+                    switch(SettingId::TrackpadTapToClick, "tap-to-click"),
+                    setting(
+                        SettingId::TrackpadDragging,
+                        L10N.tr("dragging"),
+                        L10N.tr("dragging-keywords"),
+                        Kind::Menu(keyword_choices(vec![
+                            (L10N.tr("dragging-off"), "off"),
+                            (L10N.tr("dragging-tap"), "tap"),
+                            (L10N.tr("dragging-tap-with-lock"), "tap-with-lock"),
+                        ])),
+                    )
+                    .described("dragging-description"),
+                    setting(
+                        SettingId::TrackpadSecondaryClick,
+                        L10N.tr("secondary-click"),
+                        L10N.tr("secondary-click-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("secondary-click-two-fingers"), "two-fingers"),
+                            (L10N.tr("secondary-click-corner"), "corner"),
+                        ])),
+                    ),
+                ],
+            ),
+            section(
+                Some(L10N.tr("trackpad-scroll")),
+                vec![
+                    switch(SettingId::TrackpadNaturalScrolling, "natural-scrolling"),
+                    setting(
+                        SettingId::TrackpadScrollMethod,
+                        L10N.tr("scroll-method"),
+                        L10N.tr("scroll-method-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("scroll-method-two-fingers"), "two-fingers"),
+                            (L10N.tr("scroll-method-edge"), "edge"),
+                        ])),
+                    ),
+                ],
+            ),
+            section(
+                Some(L10N.tr("trackpad-pointer")),
+                vec![
+                    speed(SettingId::TrackpadSpeed, L10N.tr("trackpad-speed-keywords")),
+                    acceleration(SettingId::TrackpadAcceleration),
+                    switch(
+                        SettingId::TrackpadDisableWhileTyping,
+                        "disable-while-typing",
+                    ),
+                ],
+            ),
+        ],
     )
 }
 

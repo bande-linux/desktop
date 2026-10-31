@@ -427,6 +427,20 @@ fn pointing(scheme: Scheme, pane: PaneId) -> SettingsView {
         (SettingId::TrackpadDisableWhileTyping, Value::Flag(true)),
         (SettingId::MouseNaturalScrolling, Value::Flag(false)),
         (SettingId::MouseSpeed, Value::Number(5)),
+        (
+            SettingId::MousePrimaryButton,
+            Value::Keyword("left".to_owned()),
+        ),
+        (SettingId::MouseAcceleration, Value::Flag(true)),
+        (SettingId::TrackpadAcceleration, Value::Flag(true)),
+        (
+            SettingId::TrackpadDragging,
+            Value::Keyword("tap".to_owned()),
+        ),
+        (
+            SettingId::TrackpadScrollMethod,
+            Value::Keyword("two-fingers".to_owned()),
+        ),
     ]));
     view.select_pane(pane);
     view

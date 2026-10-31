@@ -382,6 +382,80 @@ fn sound_offers_the_alert_effects_a_live_input_level_and_a_volume_per_app() {
     );
 }
 
+#[test]
+fn the_new_pointer_rows_send_their_settings_and_dragging_follows_tap_to_click() {
+    let mut view = view();
+    view.set_pointing_devices(PointingDevices {
+        trackpad: true,
+        mouse: true,
+    });
+    view.apply(Update::Values(vec![
+        (
+            SettingId::MousePrimaryButton,
+            Value::Keyword("left".to_owned()),
+        ),
+        (SettingId::MouseAcceleration, Value::Flag(true)),
+        (SettingId::TrackpadTapToClick, Value::Flag(true)),
+        (
+            SettingId::TrackpadDragging,
+            Value::Keyword("tap".to_owned()),
+        ),
+        (
+            SettingId::TrackpadScrollMethod,
+            Value::Keyword("two-fingers".to_owned()),
+        ),
+        (SettingId::TrackpadAcceleration, Value::Flag(true)),
+    ]));
+
+    open(&mut view, "Mouse");
+    let right = find(&mut view, Role::RadioButton, "Right").expect("Right");
+    click(&mut view, right);
+    let acceleration = find(&mut view, Role::Switch, "Pointer acceleration").expect("switch");
+    click(&mut view, acceleration);
+    assert_eq!(
+        view.take_commands(),
+        [
+            Command::Set(
+                SettingId::MousePrimaryButton,
+                Value::Keyword("right".to_owned())
+            ),
+            Command::Set(SettingId::MouseAcceleration, Value::Flag(false)),
+        ]
+    );
+
+    open(&mut view, "Trackpad");
+    let edge = find(&mut view, Role::RadioButton, "One finger along the edge").expect("edge");
+    click(&mut view, edge);
+    let acceleration = find(&mut view, Role::Switch, "Pointer acceleration").expect("switch");
+    click(&mut view, acceleration);
+    let dragging = find(&mut view, Role::ComboBox, "Dragging").expect("dragging");
+    click(&mut view, dragging);
+    assert!(view.ui().menu_action("2"));
+    view.settle();
+    assert_eq!(
+        view.take_commands(),
+        [
+            Command::Set(
+                SettingId::TrackpadScrollMethod,
+                Value::Keyword("edge".to_owned())
+            ),
+            Command::Set(SettingId::TrackpadAcceleration, Value::Flag(false)),
+            Command::Set(
+                SettingId::TrackpadDragging,
+                Value::Keyword("tap-with-lock".to_owned())
+            ),
+        ]
+    );
+
+    let tap = find(&mut view, Role::Switch, "Tap to click").expect("tap");
+    click(&mut view, tap);
+    view.apply(Update::Values(vec![(
+        SettingId::TrackpadTapToClick,
+        Value::Flag(false),
+    )]));
+    assert!(find(&mut view, Role::ComboBox, "Dragging").is_none());
+}
+
 fn display(connector: &str, rates: &[i32]) -> Display {
     let modes: Vec<Mode> = rates
         .iter()

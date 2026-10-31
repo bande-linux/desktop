@@ -561,8 +561,8 @@ notifications per app.
 | Keyboard light off when idle | M | missing | later | `services/power`; S |
 | Input methods (fcitx5) | M W G K | missing | later | maturity gaps §5 |
 | Tap, secondary click, natural scrolling, speed, ignore while typing | M W G K | have | — | — |
-| Primary button (left-handed) | M W G K | missing | now (slice 6) | libinput `left_handed` in the compositor's `pointing.rs`; S |
-| Pointer acceleration off (flat) | M W G K | missing | now (slice 6) | libinput accel profile; S |
+| Primary button (left-handed) | M W G K | have | slice 6 | libinput `left_handed` in the compositor's `pointing.rs`; S |
+| Pointer acceleration off (flat) | M W G K | have | slice 6 | libinput accel profile; S |
 | Scroll speed | M W K | missing | later | the compositor must scale it; S–M |
 | Three-finger drag | M | missing | later | roadmap |
 | Gesture choices | M W K | one fixed set | never | one way per task |
@@ -800,9 +800,11 @@ Owns `services/config`, `platform/compositor` and `apps/settings`.
    `trackpad { acceleration #true }`.
 2. **Compositor.** `pointing.rs` sets libinput's left-handed option and the flat or adaptive
    accel profile.
-3. **Settings.** Trackpad & Mouse gains Primary button (Left, Right) under Mouse, and "Pointer
-   acceleration" in both sections, with the description "Faster movements move the pointer
-   farther".
+3. **Settings.** Mouse gains Primary button (Left, Right) and "Pointer acceleration", with the
+   description "Faster movements move the pointer farther". Trackpad groups its rows into Click
+   (Tap to click; Dragging, shown while tapping is on; Secondary click), Scroll (Natural
+   scrolling; Scroll with two fingers or along the edge) and Pointer (Tracking speed, Pointer
+   acceleration, Ignore the trackpad while typing).
 4. **Proof.**
    - A config round-trip test.
    - A headless compositor test where the device reports the configured options.

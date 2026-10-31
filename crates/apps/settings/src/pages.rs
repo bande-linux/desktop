@@ -478,6 +478,11 @@ impl SettingsView {
             {
                 Vec::new()
             }
+            _ if setting.id == SettingId::TrackpadDragging
+                && self.values.get(&SettingId::TrackpadTapToClick) != Some(&Value::Flag(true)) =>
+            {
+                Vec::new()
+            }
             _ => self
                 .setting_row(setting, None, matched)
                 .into_iter()

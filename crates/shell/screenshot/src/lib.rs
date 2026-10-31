@@ -28,6 +28,34 @@ const ENGLISH: &str = include_str!("../locales/en-US/unbound-screenshot.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Failure {
+    NoRecorder,
+    ScreenUnavailable,
+    RecordingFailed,
+    NotSaved(PathBuf),
+}
+
+impl Failure {
+    pub fn message(&self) -> (String, String) {
+        match self {
+            Self::NoRecorder => (L10N.tr("cannot-record"), L10N.tr("no-recorder")),
+            Self::ScreenUnavailable => (L10N.tr("cannot-record"), L10N.tr("screen-unavailable")),
+            Self::RecordingFailed => (
+                L10N.tr("recording-failed"),
+                L10N.tr("recording-failed-detail"),
+            ),
+            Self::NotSaved(dir) => (
+                L10N.tr("cannot-save"),
+                L10N.tr_args(
+                    "cannot-save-detail",
+                    [("folder", dir.display().to_string().into())],
+                ),
+            ),
+        }
+    }
+}
+
 pub fn app_name(app_id: &str) -> Option<String> {
     if app_id.is_empty() {
         return None;

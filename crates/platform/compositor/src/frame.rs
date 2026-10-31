@@ -179,7 +179,7 @@ impl State {
             .into_iter()
             .find_map(|placed| match placed {
                 Placed::Surface(surface, origin) => surface_at(&surface, origin, location),
-                Placed::Window(window) => zone_at(window, location)
+                Placed::Window(_, window) => zone_at(window, location)
                     .map(|zone| Target::Frame(window.surface().clone(), zone))
                     .or_else(|| surface_at(window.surface(), window.surface_origin(), location)),
                 Placed::Scrim(owner, _) => Some(Target::Scrim(owner)),

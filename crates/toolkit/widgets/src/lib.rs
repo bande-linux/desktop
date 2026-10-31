@@ -236,22 +236,7 @@ const DRAG_FONT_SIZE: f32 = 13.0;
 const DRAG_OPACITY: f32 = 0.75;
 const DRAG_WIDTH: f32 = 320.0;
 
-pub trait AsAny {
-    fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
-}
-
-impl<T: Any> AsAny for T {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-}
-
-pub trait Widget: AsAny {
+pub trait Widget: Any {
     fn id(&self) -> WidgetId;
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size;
     fn place(&mut self, cx: &mut Context, frame: Rect);
@@ -521,7 +506,8 @@ impl Ui {
     }
 
     pub fn widget_as<T: Widget + 'static>(&mut self, id: WidgetId) -> Option<&mut T> {
-        self.lookup_mut(id)?.as_any_mut().downcast_mut()
+        let widget: &mut dyn Any = self.lookup_mut(id)?;
+        widget.downcast_mut()
     }
 
     pub fn update_widget<T: Widget + 'static>(
@@ -531,7 +517,7 @@ impl Ui {
     ) -> bool {
         self.sync_event_clock();
         let widget = lookup_in(&mut self.root, &mut self.sheet, id)
-            .and_then(|widget| widget.as_any_mut().downcast_mut::<T>());
+            .and_then(|widget| (widget as &mut dyn Any).downcast_mut::<T>());
         match widget {
             Some(widget) => {
                 update(widget, &self.cx);
@@ -542,7 +528,8 @@ impl Ui {
     }
 
     pub fn widget_ref<T: Widget + 'static>(&self, id: WidgetId) -> Option<&T> {
-        self.lookup(id)?.as_any().downcast_ref()
+        let widget: &dyn Any = self.lookup(id)?;
+        widget.downcast_ref()
     }
 
     fn lookup(&self, id: WidgetId) -> Option<&dyn Widget> {

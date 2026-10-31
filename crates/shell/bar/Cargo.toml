@@ -3,6 +3,7 @@ name = "unbound-bar"
 description = "Unbound bar: the Dock and the menu bar, or both as one bar on a screen edge, as a part of unbound-shell"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

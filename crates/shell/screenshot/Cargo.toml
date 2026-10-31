@@ -3,6 +3,7 @@ name = "unbound-screenshot"
 description = "Unbound screenshots: saves pictures of the screen or of a dragged-out area"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

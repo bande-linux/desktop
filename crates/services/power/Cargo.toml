@@ -3,6 +3,7 @@ name = "unbound-power"
 description = "Unbound power service: sleep locking, battery alerts and idle inhibition"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

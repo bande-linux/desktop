@@ -3,6 +3,7 @@ name = "unbound-inbox"
 description = "Hands values from worker threads to a poll-driven run loop"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

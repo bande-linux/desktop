@@ -3,6 +3,7 @@ name = "unbound-sound"
 description = "Unbound event sounds: an original sound theme played through PipeWire"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [features]

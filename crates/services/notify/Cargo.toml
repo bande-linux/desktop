@@ -3,6 +3,7 @@ name = "unbound-notify"
 description = "Unbound notification daemon (org.freedesktop.Notifications)"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

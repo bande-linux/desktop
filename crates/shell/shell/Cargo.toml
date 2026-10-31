@@ -3,6 +3,7 @@ name = "unbound-shell"
 description = "Unbound shell: the desktop, the bar, the notifications, Control Center and the launcher in one process"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

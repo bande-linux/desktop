@@ -3,6 +3,7 @@ name = "unbound-xdg"
 description = "Desktop entries, app icons, MIME types, default apps and app launching for Unbound"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

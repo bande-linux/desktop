@@ -3,6 +3,7 @@ name = "unbound-edid"
 description = "Display names from EDID blocks for Unbound"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [lints]

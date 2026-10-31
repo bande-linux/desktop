@@ -3,6 +3,7 @@ name = "unbound-compositor"
 description = "Unbound Wayland compositor"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
@@ -45,9 +46,10 @@ depends = "$auto, libvulkan1, mesa-vulkan-drivers | vulkan-icd, systemd"
 recommends = "unbound-clipboard, unbound-shell, unbound-term, unbound-lock, unbound-screenshot, unbound-files, unbound-settings"
 suggests = "fcitx5"
 extended-description = """\
-Headless Wayland compositor built on Smithay. It serves wl_compositor, \
-wl_shm, linux-dmabuf-v1 and xdg_wm_base clients and renders their windows offscreen \
-with its own Vulkan renderer, including on Mesa's lavapipe CPU driver."""
+Wayland compositor for the Unbound desktop session, built on Smithay. It runs \
+on a logind seat, drives the displays through DRM/KMS, reads input through \
+libinput and composes windows with its own Vulkan renderer, scanning \
+full-screen clients out directly when it can."""
 assets = [
     ["target/release/unbound-compositor", "usr/bin/", "755"],
     ["data/unbound-session", "usr/bin/", "755"],

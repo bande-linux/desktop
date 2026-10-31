@@ -3,6 +3,7 @@ name = "unbound-toolkit-platform"
 description = "Unbound toolkit platform: Wayland windows, input, clipboard, run loop and accessibility"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

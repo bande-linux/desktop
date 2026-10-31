@@ -3,6 +3,7 @@ name = "unbound-preview"
 description = "Quick Look content of files and folders for Unbound: images, text and summaries"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

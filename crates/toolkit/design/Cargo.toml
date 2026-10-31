@@ -3,6 +3,7 @@ name = "unbound-design"
 description = "Unbound design tokens (Datum): colour roles, radii, spacing, type roles and elevation"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [lints]

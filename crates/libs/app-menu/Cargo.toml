@@ -3,6 +3,7 @@ name = "unbound-app-menu"
 description = "Exports an app's menus to the menu bar over com.canonical.dbusmenu"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

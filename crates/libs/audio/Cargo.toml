@@ -3,6 +3,7 @@ name = "unbound-audio"
 description = "Unbound PipeWire client: output and input devices, volume, mute and the volume keys"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

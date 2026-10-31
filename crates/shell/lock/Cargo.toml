@@ -3,6 +3,7 @@ name = "unbound-lock"
 description = "Unbound lock screen: locks the session until the user's password is entered"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

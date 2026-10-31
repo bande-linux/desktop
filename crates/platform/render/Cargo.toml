@@ -3,6 +3,7 @@ name = "unbound-render"
 description = "Unbound's Vulkan compositor renderer"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

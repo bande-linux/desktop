@@ -3,6 +3,7 @@ name = "unbound-clipboard"
 description = "Unbound clipboard daemon: keeps the selection after the copying app quits and remembers recent copies"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]

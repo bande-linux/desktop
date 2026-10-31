@@ -1,6 +1,7 @@
 pub mod daylight;
 mod minute;
 mod month;
+pub mod timedate;
 mod zone;
 
 use icu_calendar::Gregorian;

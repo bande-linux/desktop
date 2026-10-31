@@ -12,9 +12,11 @@ icu_datetime.workspace = true
 icu_locale_core.workspace = true
 jiff.workspace = true
 rustix = { workspace = true, features = ["time"] }
+zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+unbound-test-bus.workspace = true
 
 [lints]
 workspace = true

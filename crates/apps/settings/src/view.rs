@@ -1172,6 +1172,11 @@ impl SettingsView {
             self.commands
                 .push(Command::Audio(AudioCommand::Listen(false)));
         }
+        let networking = |pane: PaneId| matches!(pane, PaneId::Wifi | PaneId::Network);
+        if networking(self.pane) != networking(pane) {
+            self.commands
+                .push(Command::Network(NetworkCommand::Watch(networking(pane))));
+        }
         match pane {
             PaneId::Wifi => self.commands.push(Command::Network(NetworkCommand::Scan)),
             PaneId::Bluetooth => self

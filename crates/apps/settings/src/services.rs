@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
@@ -39,6 +40,7 @@ pub enum NetworkCommand {
     ConfigureEthernet(Option<ManualIpv4>),
     ConnectVpn(String),
     DisconnectVpn(String),
+    Watch(bool),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -196,7 +198,12 @@ pub fn follow_audio(updates: Updates) -> Sender<AudioCommand> {
     sender
 }
 
-fn signals(bus: &Connection, rule: MatchRule<'static>, changed: Sender<()>) {
+fn signals(
+    bus: &Connection,
+    rule: MatchRule<'static>,
+    changed: Sender<()>,
+    wanted: impl Fn() -> bool + Send + 'static,
+) {
     let bus = bus.clone();
     spawn("signals", move || {
         let iterator = match MessageIterator::for_match_rule(rule, &bus, None) {
@@ -207,7 +214,7 @@ fn signals(bus: &Connection, rule: MatchRule<'static>, changed: Sender<()>) {
             }
         };
         for _ in iterator.flatten() {
-            if changed.send(()).is_err() {
+            if !wanted() || changed.send(()).is_err() {
                 break;
             }
         }
@@ -266,10 +273,10 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
     if let Some(rule) = rule(|| {
         Ok(MatchRule::builder()
             .msg_type(message::Type::Signal)
-            .path_namespace(NETWORK_MANAGER)?
+            .path(NETWORK_MANAGER)?
             .build())
     }) {
-        signals(system, rule, changed);
+        signals(system, rule, changed.clone(), || true);
     }
     let reader = NetworkManager::new(system);
     follow_state("network", updates.clone(), changes, move || {
@@ -280,9 +287,27 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
     });
     let (sender, receiver) = mpsc::channel();
     let network = NetworkManager::new(system);
+    let bus = system.clone();
     spawn("network-worker", move || {
+        let watching = Arc::new(AtomicU64::new(0));
         for command in receiver {
             match command {
+                NetworkCommand::Watch(on) => {
+                    let generation = watching.fetch_add(1, Ordering::Relaxed) + 1;
+                    let every_change = rule(|| {
+                        Ok(MatchRule::builder()
+                            .msg_type(message::Type::Signal)
+                            .path_namespace(NETWORK_MANAGER)?
+                            .build())
+                    });
+                    if on && let Some(every_change) = every_change {
+                        let current = Arc::clone(&watching);
+                        signals(&bus, every_change, changed.clone(), move || {
+                            current.load(Ordering::Relaxed) == generation
+                        });
+                        let _ = changed.send(());
+                    }
+                }
                 NetworkCommand::Power(on) => report(&updates, network.set_wifi_enabled(on)),
                 NetworkCommand::ConfigureEthernet(manual) => {
                     report(&updates, network.configure_ethernet(manual.as_ref()));
@@ -386,7 +411,7 @@ pub fn follow_bluetooth(
             .sender(BLUEZ)?
             .build())
     }) {
-        signals(system, rule, changed);
+        signals(system, rule, changed, || true);
     }
     let reader = Bluetooth::new(system);
     follow_state("bluetooth", updates.clone(), changes, move || {

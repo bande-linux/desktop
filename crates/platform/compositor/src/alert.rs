@@ -8,6 +8,7 @@ use smithay::utils::{Logical, Point};
 use unbound_graphics::{Scheme, TextRole};
 use unbound_render::VulkanRenderer;
 
+use crate::L10N;
 use crate::label::{Label, LabelStyle, Labels, Look};
 use crate::state::{Headless, OutputElement, State};
 
@@ -155,9 +156,46 @@ impl State {
 
 impl Headless {
     pub fn report_start_failure(&mut self, executable: &Path, error: &io::Error) {
-        self.state.raise_alert(
-            executable,
-            format!("Cannot start {}: {error}", executable.display()),
+        self.state
+            .raise_alert(executable, start_failure(executable, error));
+    }
+}
+
+fn start_failure(executable: &Path, error: &io::Error) -> String {
+    let name = executable
+        .file_name()
+        .unwrap_or(executable.as_os_str())
+        .to_string_lossy()
+        .into_owned();
+    let reason = match error.kind() {
+        io::ErrorKind::NotFound => L10N.tr("start-failure-missing"),
+        io::ErrorKind::PermissionDenied => L10N.tr("start-failure-denied"),
+        _ => L10N.tr_args("start-failure-other", [("error", error.to_string().into())]),
+    };
+    L10N.tr_args(
+        "start-failure",
+        [("name", name.into()), ("reason", reason.into())],
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+    use std::path::Path;
+
+    use super::start_failure;
+
+    #[test]
+    fn a_start_failure_names_the_program_and_says_why_in_words() {
+        let missing = io::Error::from(io::ErrorKind::NotFound);
+        assert_eq!(
+            start_failure(Path::new("/usr/bin/unbound-shell"), &missing),
+            "unbound-shell could not start because it is not installed."
+        );
+        let denied = io::Error::from(io::ErrorKind::PermissionDenied);
+        assert_eq!(
+            start_failure(Path::new("/usr/libexec/unbound-greeter"), &denied),
+            "unbound-greeter could not start because it may not be run."
         );
     }
 }

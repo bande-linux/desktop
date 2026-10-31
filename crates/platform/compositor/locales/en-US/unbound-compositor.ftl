@@ -25,3 +25,7 @@ place-restore = Return to Previous Size
 move-to-desktop = Move to Desktop
 desktop-number = Desktop { $number }
 new-desktop = New Desktop
+start-failure = { $name } could not start because { $reason }.
+start-failure-missing = it is not installed
+start-failure-denied = it may not be run
+start-failure-other = of an error: { $error }

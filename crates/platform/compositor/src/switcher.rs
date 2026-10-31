@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use smithay::backend::renderer::element::memory::{
@@ -9,6 +9,7 @@ use smithay::backend::renderer::element::surface::{
 };
 use smithay::backend::renderer::element::{Id, Kind};
 use smithay::input::keyboard::keysyms;
+use smithay::reexports::calloop::channel::Sender;
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -242,9 +243,19 @@ pub(crate) struct Switcher {
     session: Option<Session>,
     card: Option<Card>,
     entries: Option<(Instant, Vec<DesktopEntry>)>,
+    loading_entries: bool,
     known: HashMap<String, App>,
-    images: HashMap<(String, u32), Option<Image>>,
+    images: HashMap<IconKey, Option<Image>>,
+    loading_icons: HashSet<IconKey>,
+    loader: Option<Sender<Loaded>>,
     announcer: Announcer,
+}
+
+type IconKey = (String, u32);
+
+pub(crate) enum Loaded {
+    Entries(Vec<DesktopEntry>),
+    Icons(Vec<(IconKey, Option<Image>)>),
 }
 
 impl Switcher {
@@ -264,23 +275,94 @@ impl Switcher {
                 .is_some_and(|card| !card.look.is_settled() || !card.ring.is_settled())
     }
 
-    fn app(&mut self, id: &str, title: &str) -> App {
-        if let Some(known) = self.known.get(id) {
-            return known.clone();
-        }
+    pub(crate) fn load_with(&mut self, loader: Sender<Loaded>) {
+        self.loader = Some(loader);
+        self.refresh_entries();
+    }
+
+    fn load_in_background(&self, load: impl FnOnce() -> Loaded + Send + 'static) -> bool {
+        let Some(loader) = self.loader.clone() else {
+            return false;
+        };
+        std::thread::Builder::new()
+            .name("app-catalog".to_owned())
+            .spawn(move || loader.send(load()).is_ok())
+            .inspect_err(|error| tracing::warn!("cannot load app names and icons: {error}"))
+            .is_ok()
+    }
+
+    fn refresh_entries(&mut self) {
         let stale = self
             .entries
             .as_ref()
             .is_none_or(|(loaded, _)| loaded.elapsed() >= ENTRIES_FRESH_FOR);
-        if stale && !id.is_empty() {
-            self.entries = Some((
-                Instant::now(),
-                applications(
+        if stale && !self.loading_entries {
+            self.loading_entries = self.load_in_background(|| {
+                Loaded::Entries(applications(
                     &data_dirs(),
                     Locale::from_env().as_ref(),
                     &current_desktops(),
-                ),
-            ));
+                ))
+            });
+        }
+    }
+
+    fn load_icons(&mut self, wanted: Vec<IconKey>) {
+        if wanted.is_empty() {
+            return;
+        }
+        let requested = wanted.clone();
+        let loading = self.load_in_background(move || {
+            Loaded::Icons(
+                wanted
+                    .into_iter()
+                    .map(|(name, pixels)| {
+                        let image = find_icon(&name, pixels, &ICON_THEMES, &data_dirs())
+                            .and_then(|path| Image::load(&path, pixels));
+                        ((name, pixels), image)
+                    })
+                    .collect(),
+            )
+        });
+        if loading {
+            self.loading_icons.extend(requested);
+        }
+    }
+
+    fn take_entries(&mut self, entries: Vec<DesktopEntry>) -> bool {
+        self.entries = Some((Instant::now(), entries));
+        self.loading_entries = false;
+        let Some(mut session) = self.session.take() else {
+            return false;
+        };
+        session.apps = std::mem::take(&mut session.apps)
+            .into_iter()
+            .map(|app| App {
+                client: app.client.clone(),
+                ..self.app(&app.id, &app.name)
+            })
+            .collect();
+        self.session = Some(session);
+        true
+    }
+
+    fn take_icons(&mut self, icons: Vec<(IconKey, Option<Image>)>) -> bool {
+        for (key, image) in icons {
+            self.loading_icons.remove(&key);
+            self.images.insert(key, image);
+        }
+        self.card.as_mut().is_some_and(|card| {
+            card.icons = None;
+            true
+        })
+    }
+
+    fn app(&mut self, id: &str, title: &str) -> App {
+        if let Some(known) = self.known.get(id) {
+            return known.clone();
+        }
+        if !id.is_empty() {
+            self.refresh_entries();
         }
         let entry = self
             .entries
@@ -305,14 +387,17 @@ impl Switcher {
         app
     }
 
-    fn image(&mut self, name: &str, pixels: u32) -> Option<Image> {
-        self.images
-            .entry((name.to_owned(), pixels))
-            .or_insert_with(|| {
-                let path = find_icon(name, pixels, &ICON_THEMES, &data_dirs())?;
-                Image::load(&path, pixels)
-            })
-            .clone()
+    fn image(&mut self, name: &str, pixels: u32, wanted: &mut Vec<IconKey>) -> Option<Image> {
+        let key = (name.to_owned(), pixels);
+        match self.images.get(&key) {
+            Some(image) => image.clone(),
+            None => {
+                if !self.loading_icons.contains(&key) && !wanted.contains(&key) {
+                    wanted.push(key);
+                }
+                None
+            }
+        }
     }
 
     fn paint_icons(&mut self, labels: &mut Labels, palette: Palette, scale: f64) {
@@ -337,6 +422,7 @@ impl Switcher {
         let layout = card.layout.clone();
         let origin = layout.card.loc;
         let mut items = Vec::new();
+        let mut wanted = Vec::new();
         for (app, content) in apps.iter().zip(&layout.contents) {
             let rect = Rect::new(
                 (content.loc.x - origin.x) as f32,
@@ -348,12 +434,13 @@ impl Switcher {
             match app
                 .icon
                 .as_deref()
-                .and_then(|icon| self.image(icon, pixels))
+                .and_then(|icon| self.image(icon, pixels, &mut wanted))
             {
                 Some(image) => items.push(Item::Image { rect, image }),
                 None => items.extend(placeholder(labels, app, rect, palette)),
             }
         }
+        self.load_icons(wanted);
         let scene = Scene {
             width: layout.card.size.w as u32,
             height: layout.card.size.h as u32,
@@ -413,6 +500,21 @@ impl Switcher {
 }
 
 impl State {
+    pub(crate) fn receive_catalog(&mut self, loaded: Loaded) {
+        match loaded {
+            Loaded::Entries(entries) => {
+                if self.switcher.take_entries(entries) {
+                    self.refresh_card();
+                }
+            }
+            Loaded::Icons(icons) => {
+                if self.switcher.take_icons(icons) {
+                    self.needs_redraw = true;
+                }
+            }
+        }
+    }
+
     fn running_apps(&mut self) -> Vec<App> {
         let key = self.key_window().map(|surface| owner_of(&surface));
         let mut found: Vec<(String, String, Option<ClientId>)> = Vec::new();
@@ -1154,6 +1256,49 @@ mod tests {
         assert!((wide.w - (THUMBNAIL.0 + 2.0 * THUMBNAIL_INSET)).abs() < 1e-9);
         assert!(((wide.h - 2.0 * THUMBNAIL_INSET) - THUMBNAIL.0 / 4.0).abs() < 1e-9);
         assert_eq!(small, Size::from((116.0, 66.0)));
+    }
+
+    #[test]
+    fn apps_shown_before_the_catalog_arrives_take_their_names_and_icons_from_it() {
+        let mut switcher = Switcher::default();
+        let editor = switcher.app("org.example.Editor", "Untitled");
+        assert_eq!(editor.name, "Editor");
+        switcher.session = Some(Session {
+            mode: Mode::Apps,
+            apps: vec![editor],
+            windows: Vec::new(),
+            selected: 0,
+            hidden: Vec::new(),
+            screen: 0,
+            since: None,
+            shown: true,
+        });
+
+        let refreshed = switcher.take_entries(vec![DesktopEntry {
+            id: "org.example.Editor".to_owned(),
+            path: "/usr/share/applications/org.example.Editor.desktop".into(),
+            name: "Text Editor".to_owned(),
+            generic_name: None,
+            comment: None,
+            icon: Some("accessories-text-editor".to_owned()),
+            exec: "editor".to_owned(),
+            working_directory: None,
+            terminal: false,
+            keywords: Vec::new(),
+            mime_types: Vec::new(),
+            no_display: false,
+            startup_wm_class: None,
+            actions: Vec::new(),
+        }]);
+
+        assert!(refreshed);
+        let apps = switcher.session.map(|session| session.apps);
+        let shown = apps.as_ref().and_then(|apps| apps.first());
+        assert_eq!(shown.map(|app| app.name.as_str()), Some("Text Editor"));
+        assert_eq!(
+            shown.and_then(|app| app.icon.as_deref()),
+            Some("accessories-text-editor")
+        );
     }
 
     #[test]

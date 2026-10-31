@@ -372,7 +372,7 @@ impl Headless {
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
         State::create_capture_globals(&handle);
         State::create_capture_shell_global(&handle);
-        let state = State {
+        let mut state = State {
             display_handle: handle.clone(),
             syncobj_state: None,
             blockers: fences.handle(),
@@ -493,6 +493,16 @@ impl Headless {
             alerts: crate::alert::Alerts::default(),
             labels: std::cell::RefCell::default(),
         };
+        let (catalog, arrivals) = smithay::reexports::calloop::channel::channel();
+        fences
+            .handle()
+            .insert_source(arrivals, |event, _, state: &mut State| {
+                if let smithay::reexports::calloop::channel::Event::Msg(loaded) = event {
+                    state.receive_catalog(loaded);
+                }
+            })
+            .map_err(|error| io::Error::other(error.error))?;
+        state.switcher.load_with(catalog);
         Ok(Self {
             display,
             fences,

@@ -7,6 +7,7 @@ no-selection = No selection
 column-name = Name
 search-placeholder = Search
 column-modified = Date Modified
+column-created = Date Created
 column-size = Size
 column-kind = Kind
 item-count = { $count ->
@@ -18,6 +19,9 @@ status-free = { $items }, { $free } available
 
 info-size = Size
 info-modified = Modified
+info-created = Created
+more-info = More Info
+kind-and-size = { $kind } · { $size }
 info-where = Where
 info-original-location = Put back to
 info-deleted = Deleted

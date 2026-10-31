@@ -1,7 +1,7 @@
 # Files: depth and polish against the Finder
 
-Status: research and build plan of 2026-10-30, branch `night/files-monitor-spec`. Nothing was
-built or run for it. It reads with the accepted proposal [`../design/features/files.md`](../design/features/files.md),
+Status: research and build plan of 2026-10-30, branch `night/files-monitor-spec`. Slices F1–F7
+were built on 2026-10-31 in `night/files-depth-1`; see "Built" under §6. It reads with the accepted proposal [`../design/features/files.md`](../design/features/files.md),
 the principles in [`../design/DESIGN.md`](../design/DESIGN.md) and the design language
 [`../design/datum.md`](../design/datum.md).
 
@@ -208,6 +208,37 @@ tautologies). "Goldens" are headless renders in `crates/apps/files/tests/golden/
 "Review" means steps and `shot` lines appended to one growing scenario,
 `ci/review/scenarios/files-depth.scenario`, recorded with `ci/review/run.sh` and copied to
 `/home/mikael/.cache/unbound-agents/report/<branch>/`. Crates: `apps/files` unless named.
+
+### Built (2026-10-31, `night/files-depth-1`)
+
+- **F1.** `unbound-files-bench` (`crates/testing/bench`) drives `FilesView` in-process on a folder of
+  100 000 files: open, list view, scrolling, Select All and one external change. It measures the
+  UI-thread work that F2–F4 change; the frame time of the session stays with
+  `unbound-session-bench`. Numbers in [`../architecture/performance.md`](../architecture/performance.md).
+- **F2.** The first 2 000 entries are read at once and shown; a `Lister` thread (socket-pair
+  wake-up like `Loader`) reads the rest in doubling chunks that merge in sort order. Selection,
+  reveal and Go to Folder follow the entries as they arrive; leaving the folder drops the
+  listing.
+- **F3.** `FolderWatch` reports changed names; `Browser::apply` re-stats only those and inserts or
+  removes their rows in place; a change to the folder itself or a queue overflow still reads it
+  again. The list view applies the same row edits to its `Table` (`insert_row`, `remove_row`).
+- **F4.** Marks stay sorted and are searched by bisection; the list view selects by row index
+  (`Table::select_rows`, `selected_rows`) instead of 100 000 path strings; sizes and dates are
+  formatted once per value; sorting re-orders in memory instead of reading again; the column
+  view paints only its visible rows; table cells share their text (`Rc<str>`). Select All
+  (4.3 ms) and switching to the list view (12.4 ms median, 50 ms on a cold first run) meet the
+  16 ms target at the median; a `Table` that asks for visible cells only would remove the cold
+  case.
+- **F5.** The preview column, 32 pt rows in the columns view, dark goldens for every view.
+- **F6.** List rows of folders are expandable; Right, Left, Alt+Right and the disclosure open them
+  in place, children are listed when opened (on the UI thread: an opened folder is usually small),
+  watched while shown and kept while the window lives; selection and drag work across levels.
+- **F7.** Kind is sortable (by extension, folders first: the type groups match the Kind column
+  closely and need no MIME lookup while sorting), sort is remembered per folder in the views
+  file, dates read relative in lists, a header right-click chooses Date Modified, Date Created,
+  Size and Kind, remembered in `files-columns` beside the views file.
+- Not done: the review scenario `files-depth.scenario` (the harness installs packages into the
+  live system; the goldens in `crates/apps/files/tests/golden/` are the shots instead).
 
 ### F1. Measure big folders
 

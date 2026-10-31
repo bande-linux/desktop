@@ -3787,10 +3787,13 @@ dependencies = [
  "tempfile",
  "tracing",
  "unbound-compositor",
+ "unbound-files",
+ "unbound-fs",
  "unbound-log",
  "unbound-sample",
  "unbound-test-wayland",
  "unbound-toolkit",
+ "unbound-xdg",
  "wayland-client",
 ]
 

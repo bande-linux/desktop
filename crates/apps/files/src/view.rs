@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
 use std::os::fd::BorrowedFd;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
@@ -81,6 +82,9 @@ pub struct Info {
     pub chosen: Option<usize>,
     pub folder_size: Option<(u64, u64)>,
     pub preview: Option<Preview<Image>>,
+    pub pixels: Option<(u32, u32)>,
+    pub mode: Option<u32>,
+    pub owned: bool,
 }
 
 pub struct Rename {
@@ -182,6 +186,8 @@ pub struct FilesView {
     pub(crate) quick_look: Option<QuickLook>,
     pub(crate) inspector: bool,
     pub(crate) info: Option<Info>,
+    pub(crate) inspector_controls: Option<crate::inspector::InspectorControls>,
+    pub(crate) inspector_scroll: ScrollState,
     pub(crate) column_preview: Option<ColumnPreview>,
     pub(crate) rename: Option<Rename>,
     pub(crate) sheet: Option<Sheet>,
@@ -295,6 +301,8 @@ impl FilesView {
             quick_look: None,
             inspector: false,
             info: None,
+            inspector_controls: None,
+            inspector_scroll: ScrollState::default(),
             column_preview: None,
             rename: None,
             sheet: None,
@@ -732,7 +740,7 @@ impl FilesView {
         self.selection_changed();
     }
 
-    fn show_notice(&mut self, text: String) {
+    pub(crate) fn show_notice(&mut self, text: String) {
         self.notice = Some((text, Instant::now()));
     }
 
@@ -749,7 +757,11 @@ impl FilesView {
         let mut changed = false;
         for loaded in self.loader.take() {
             match loaded {
-                Loaded::Preview(path, preview) => {
+                Loaded::Preview {
+                    path,
+                    preview,
+                    pixels,
+                } => {
                     if let Some(shown) = &mut self.column_preview
                         && shown.entry.as_ref().is_some_and(|entry| entry.path == path)
                     {
@@ -767,6 +779,7 @@ impl FilesView {
                         && info.entries[0].path == path
                     {
                         info.preview = Some(preview);
+                        info.pixels = pixels;
                         changed = true;
                     }
                 }
@@ -804,6 +817,7 @@ impl FilesView {
             self.update_info();
         } else {
             self.info = None;
+            self.sync_inspector_controls();
         }
         self.update_column_preview();
         let column_preview = self
@@ -835,17 +849,41 @@ impl FilesView {
             .into_iter()
             .cloned()
             .collect::<Vec<_>>();
-        let previous = self.info.take();
-        let same = previous
+        let metadata = match entries.as_slice() {
+            [entry] if entry.trashed.is_none() => std::fs::symlink_metadata(&entry.path).ok(),
+            _ => None,
+        };
+        let mode = metadata.as_ref().map(|metadata| metadata.mode());
+        let owned = metadata
             .as_ref()
-            .is_some_and(|info| info.entries == entries);
-        if same {
-            self.info = previous;
+            .is_some_and(|metadata| metadata.uid() == rustix::process::getuid().as_raw());
+        let previous = self.info.take();
+        if previous.as_ref().is_none_or(|info| info.entries != entries) {
+            self.inspector_scroll = ScrollState::default();
+        }
+        if let Some(mut info) = previous.filter(|info| info.entries == entries) {
+            info.mode = mode;
+            info.owned = owned;
+            self.info = Some(info);
+            self.sync_inspector_controls();
             return;
         }
         let mime = match entries.as_slice() {
             [entry] => self.apps.mime_for(&entry.path),
             _ => String::new(),
+        };
+        let kinds = match entries.len() > 1 {
+            true => {
+                let mut kinds: Vec<String> = Vec::new();
+                for entry in &entries {
+                    let kind = self.apps.kind_for_name(&entry.name, entry.is_folder());
+                    if !kinds.contains(&kind) {
+                        kinds.push(kind);
+                    }
+                }
+                kinds.join(", ")
+            }
+            false => String::new(),
         };
         let apps = match entries.as_slice() {
             [entry] if !entry.is_folder() => self
@@ -863,7 +901,7 @@ impl FilesView {
             .or((!apps.is_empty()).then_some(0));
         self.info = Some(Info {
             kind: if mime.is_empty() {
-                String::new()
+                kinds
             } else {
                 self.apps.kind(&mime)
             },
@@ -874,7 +912,11 @@ impl FilesView {
             chosen,
             folder_size: None,
             preview: None,
+            pixels: None,
+            mode,
+            owned,
         });
+        self.sync_inspector_controls();
     }
 
     pub fn set_full_screen(&mut self, full_screen: bool) {
@@ -1050,6 +1092,11 @@ impl FilesView {
     }
 
     fn scroll(&mut self, scroll: &Scroll) -> bool {
+        let sheet = self.sheet_frame();
+        if self.inspector && scroll.position.x >= sheet.x + sheet.width - INSPECTOR_WIDTH {
+            let cx = self.ui.context();
+            return self.inspector_scroll.scroll(cx, scroll);
+        }
         let content = self.content_frame();
         if !contains(content, scroll.position) {
             return false;

@@ -27,6 +27,17 @@ info-original-location = Put back to
 info-deleted = Deleted
 info-permissions = Permissions
 info-link = Points to
+info-dimensions = Dimensions
+info-pixels = { $width } × { $height }
+sharing-permissions = Sharing & Permissions
+allow-running = Allow running as a program
+access-you = You
+access-group = Group
+access-everyone = Everyone
+access-read-write = Read & Write
+access-read-only = Read only
+access-none = No Access
+error-permissions = The permissions couldn’t be changed: { $error }
 folder-size = { $size } for { $count ->
     [one] { $count } item
    *[other] { $count } items

@@ -1,10 +1,10 @@
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use unbound_fs::{Entry, Purpose, format_date, format_size};
 use unbound_preview::Preview;
 use unbound_thumbnails::ThumbnailSize;
+use unbound_toolkit::ui::{BUTTON_HEIGHT as CONTROL_HEIGHT, SWITCH_SIZE};
 use unbound_toolkit::{
     Color, Elevation, Image, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign,
     TextRole, TextStyle,
@@ -40,6 +40,7 @@ const PREVIEW_ICON: f32 = 128.0;
 const TOP_GAP: f32 = 8.0;
 const FACT_LABEL: f32 = 96.0;
 const PAGE_PADDING: f32 = 10.0;
+const FACT_COLUMN: f32 = 90.0;
 
 pub fn permissions(mode: u32) -> String {
     (0..9)
@@ -113,6 +114,10 @@ impl FilesView {
         self.hits.clear();
         self.layout_controls();
         self.refresh_navigation();
+        let mut inspector = Vec::new();
+        if self.inspector {
+            self.paint_inspector(&mut inspector);
+        }
         let (controls, sheet) = self.ui.paint_layers(width, height);
         let sheet_shape = Shape::rounded(self.sheet_frame(), self.sheet_radius());
         let mut items = Vec::new();
@@ -122,6 +127,7 @@ impl FilesView {
         self.paint_scope_bar(&mut content);
         self.paint_tab_bar(&mut content);
         self.paint_path_bar(&mut content);
+        content.extend(inspector);
         items.push(Item::Clip {
             shape: sheet_shape,
             items: content,
@@ -130,9 +136,6 @@ impl FilesView {
         self.paint_drop(&mut items);
         let mut overlays = Vec::new();
         self.paint_progress(&mut overlays);
-        if self.inspector {
-            self.paint_inspector(&mut overlays);
-        }
         items.push(Item::Clip {
             shape: sheet_shape,
             items: overlays,
@@ -880,7 +883,9 @@ impl FilesView {
         };
         let mut content = Vec::new();
         let inner = area.inset(PADDING);
-        let mut y = inner.y;
+        let offset = self.inspector_scroll.offset(self.ui.context());
+        let first_hit = self.hits.len();
+        let mut y = inner.y - offset;
         let primary = self.palette.ink;
         let muted = self.palette.ink2;
         let preview_area = Rect::new(inner.x, y, inner.width, 150.0);
@@ -957,6 +962,18 @@ impl FilesView {
                     format_size(entry.size)
                 };
                 facts.push((L10N.tr("info-size"), size));
+                if let Some((width, height)) = info.pixels {
+                    facts.push((
+                        L10N.tr("info-dimensions"),
+                        L10N.tr_args(
+                            "info-pixels",
+                            [("width", width.into()), ("height", height.into())],
+                        ),
+                    ));
+                }
+                if let Some(created) = entry.created {
+                    facts.push((L10N.tr("info-created"), format_date(created)));
+                }
                 if let Some(modified) = entry.modified {
                     facts.push((L10N.tr("info-modified"), format_date(modified)));
                 }
@@ -986,11 +1003,8 @@ impl FilesView {
                         deleted.strftime("%-d %b %Y, %H:%M").to_string(),
                     ));
                 }
-                if let Ok(metadata) = std::fs::symlink_metadata(&entry.path) {
-                    facts.push((
-                        L10N.tr("info-permissions"),
-                        permissions(metadata.permissions().mode()),
-                    ));
+                if let Some(mode) = info.mode.filter(|_| self.inspector_controls.is_none()) {
+                    facts.push((L10N.tr("info-permissions"), permissions(mode)));
                 }
                 if entry.link
                     && let Ok(target) = std::fs::read_link(&entry.path)
@@ -1013,7 +1027,7 @@ impl FilesView {
             let value_paragraph = self.text().paragraph(
                 &value,
                 TextStyle::new(SMALL_SIZE, primary),
-                Some(inner.width - 90.0),
+                Some(inner.width - FACT_COLUMN),
                 TextAlign::Start,
             );
             let height = value_paragraph.height().max(label.height());
@@ -1022,11 +1036,12 @@ impl FilesView {
                 paragraph: label,
             });
             content.push(Item::Text {
-                origin: Point::new(inner.x + 90.0, y),
+                origin: Point::new(inner.x + FACT_COLUMN, y),
                 paragraph: value_paragraph,
             });
             y += height + 6.0;
         }
+        y = self.paint_permissions(area, inner, y, &mut content);
         if !info.apps.is_empty() {
             y += 10.0;
             let heading = self.paragraph(
@@ -1071,12 +1086,105 @@ impl FilesView {
                 );
                 self.hits.push((change, Hit::UseForAll));
             }
+            y += BUTTON_HEIGHT;
+        }
+        let cx = self.ui.context();
+        self.inspector_scroll
+            .set_extent(y + offset - area.y + PADDING, area.height);
+        self.inspector_scroll
+            .paint_scrollbar(cx, area, &mut content);
+        let mut index = first_hit;
+        while index < self.hits.len() {
+            let (rect, _) = &self.hits[index];
+            match rect.y >= area.y && rect.y + rect.height <= area.y + area.height {
+                true => index += 1,
+                false => {
+                    self.hits.remove(index);
+                }
+            }
         }
         items.push(Item::Clip {
             shape: Shape::rect(area),
             items: content,
         });
         self.info = Some(info);
+    }
+
+    fn paint_permissions(
+        &mut self,
+        area: Rect,
+        inner: Rect,
+        mut y: f32,
+        items: &mut Vec<Item>,
+    ) -> f32 {
+        let Some(controls) = &self.inspector_controls else {
+            return y;
+        };
+        let (runnable, access) = (controls.runnable, controls.access.clone());
+        let (primary, muted) = (self.palette.ink, self.palette.ink2);
+        y += 10.0;
+        let heading = self.paragraph(
+            &L10N.tr("sharing-permissions"),
+            SMALL_SIZE,
+            muted,
+            TextStyle::SEMIBOLD,
+        );
+        items.push(Item::Text {
+            origin: Point::new(inner.x, y),
+            paragraph: heading,
+        });
+        y += 22.0;
+        let mut frames = Vec::new();
+        if let Some((id, _)) = runnable {
+            let label = self.text().paragraph(
+                &L10N.tr("allow-running"),
+                TextStyle::new(NAME_SIZE, primary),
+                Some(inner.width - SWITCH_SIZE.width - 12.0),
+                TextAlign::Start,
+            );
+            let height = label.height().max(SWITCH_SIZE.height);
+            items.push(Item::Text {
+                origin: Point::new(inner.x, y + ((height - label.height()) / 2.0).round()),
+                paragraph: label,
+            });
+            frames.push((
+                id,
+                Rect::new(
+                    inner.x + inner.width - SWITCH_SIZE.width,
+                    y + ((height - SWITCH_SIZE.height) / 2.0).round(),
+                    SWITCH_SIZE.width,
+                    SWITCH_SIZE.height,
+                ),
+            ));
+            y += height + 10.0;
+        }
+        for (class, id, _) in access {
+            let label = self.label(&crate::inspector::class_title(class), SMALL_SIZE, muted);
+            items.push(Item::Text {
+                origin: Point::new(
+                    inner.x,
+                    y + ((CONTROL_HEIGHT - label.height()) / 2.0).round(),
+                ),
+                paragraph: label,
+            });
+            frames.push((
+                id,
+                Rect::new(
+                    inner.x + FACT_COLUMN,
+                    y,
+                    inner.width - FACT_COLUMN,
+                    CONTROL_HEIGHT,
+                ),
+            ));
+            y += CONTROL_HEIGHT + 6.0;
+        }
+        if let Some(host) = self.host_mut() {
+            for (id, frame) in frames {
+                let shown = frame.y >= area.y && frame.y + frame.height <= area.y + area.height;
+                host.set_frame(id, if shown { frame } else { Rect::default() });
+            }
+        }
+        y
     }
 
     fn button(&mut self, title: &str, origin: Point, default: bool, items: &mut Vec<Item>) -> Rect {

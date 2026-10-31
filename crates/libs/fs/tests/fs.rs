@@ -645,3 +645,46 @@ fn deleting_a_folder_removes_links_but_not_what_they_point_to() {
     assert!(place.path("doomed").symlink_metadata().is_err());
     assert_eq!(read(&kept), "kept");
 }
+
+#[test]
+fn allowing_a_script_to_run_sets_execute_for_whoever_can_read() {
+    let place = TempDir::new().unwrap();
+    let script = place.path().join("run.sh");
+    fs::write(&script, "#!/bin/sh\n").unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o640)).unwrap();
+    let mode = fs::metadata(&script).unwrap().permissions().mode();
+    assert!(!unbound_fs::runnable(mode));
+
+    unbound_fs::set_mode(&script, unbound_fs::with_runnable(mode, true)).unwrap();
+
+    let mode = fs::metadata(&script).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o750);
+    assert!(unbound_fs::runnable(mode));
+    assert_eq!(unbound_fs::with_runnable(mode, false) & 0o777, 0o640);
+}
+
+#[test]
+fn access_changes_only_the_chosen_class() {
+    use unbound_fs::{Access, Class, access, with_access};
+    let mode = 0o100_764;
+    assert_eq!(access(mode, Class::Owner), Access::ReadWrite);
+    assert_eq!(access(mode, Class::Group), Access::ReadWrite);
+    assert_eq!(access(mode, Class::Others), Access::ReadOnly);
+
+    assert_eq!(
+        with_access(mode, Class::Group, Access::ReadOnly, false),
+        0o100_744
+    );
+    assert_eq!(
+        with_access(mode, Class::Owner, Access::ReadOnly, false),
+        0o100_564
+    );
+    assert_eq!(
+        with_access(mode, Class::Others, Access::NoAccess, false),
+        0o100_760
+    );
+    assert_eq!(
+        with_access(0o40_700, Class::Others, Access::ReadOnly, true),
+        0o40_705
+    );
+}

@@ -4,6 +4,7 @@ mod controls;
 mod drag;
 mod grid;
 mod icons;
+mod inspector;
 mod lister;
 mod loader;
 mod menus;
@@ -60,6 +61,7 @@ mod tests {
             include_str!("sidebar.rs"),
             include_str!("view.rs"),
             include_str!("grid.rs"),
+            include_str!("inspector.rs"),
             include_str!("quick_look.rs"),
             include_str!("tabs.rs"),
             include_str!("search.rs"),

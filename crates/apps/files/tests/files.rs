@@ -2588,3 +2588,125 @@ fn quick_look_matches_its_goldens() {
     });
     shoot("quick-look-several", &mut view);
 }
+
+fn control_node(view: &FilesView, role: accesskit::Role, label: &str) -> accesskit::NodeId {
+    view.accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.role() == role && node.label() == Some(label))
+        .map(|(id, _)| id)
+        .unwrap_or_else(|| panic!("no {role:?} named {label}"))
+}
+
+fn click_node(view: &mut FilesView, node: accesskit::NodeId) {
+    view.perform(&accesskit::ActionRequest {
+        action: accesskit::Action::Click,
+        target_tree: accesskit::TreeId::ROOT,
+        target_node: node,
+        data: None,
+    });
+}
+
+fn mode_of(path: &Path) -> u32 {
+    fs::metadata(path).expect("metadata").permissions().mode() & 0o777
+}
+
+fn inspect(place: &Place, name: &str) -> FilesView {
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    while selected_name(view.browser()).as_deref() != Some(name) {
+        view.handle(&press(Key::Down));
+    }
+    view.handle(&command(Key::Character('i'), false));
+    view.scene(1000, 600);
+    view
+}
+
+#[test]
+fn the_inspector_switch_lets_a_script_run() {
+    let place = Place::new();
+    let script = place.home().join("run.sh");
+    fs::write(&script, "#!/bin/sh\necho hi\n").expect("script");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o644)).expect("mode");
+    let mut view = inspect(&place, "run.sh");
+
+    let switch = control_node(&view, accesskit::Role::Switch, "Allow running as a program");
+    click_node(&mut view, switch);
+
+    assert_eq!(mode_of(&script), 0o755);
+    assert_eq!(
+        view.info()
+            .and_then(|info| info.mode)
+            .map(|mode| mode & 0o777),
+        Some(0o755)
+    );
+    view.scene(1000, 600);
+    let node = control_node(&view, accesskit::Role::Switch, "Allow running as a program");
+    click_node(&mut view, node);
+    assert_eq!(mode_of(&script), 0o644);
+}
+
+#[test]
+fn read_only_access_removes_the_write_bit_of_that_class_only() {
+    let place = Place::new();
+    let file = place.home().join("notes.txt");
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o664)).expect("mode");
+    let mut view = inspect(&place, "notes.txt");
+
+    let node = control_node(&view, accesskit::Role::ComboBox, "Group");
+    click_node(&mut view, node);
+    assert!(
+        view.take_requests()
+            .iter()
+            .any(|request| matches!(request, Request::ShowMenu { .. }))
+    );
+    view.menu_action("1");
+
+    assert_eq!(mode_of(&file), 0o644);
+    view.scene(1000, 600);
+    let node = control_node(&view, accesskit::Role::ComboBox, "Everyone");
+    click_node(&mut view, node);
+    view.menu_action("2");
+    assert_eq!(mode_of(&file), 0o640);
+}
+
+#[test]
+fn the_inspector_sums_several_items_and_names_their_kinds() {
+    let place = Place::new();
+    fs::write(place.home().join("more.txt"), "12345").expect("file");
+    let mut view = place.view();
+    view.handle(&command(Key::Character('2'), false));
+    view.handle(&command(Key::Character('a'), false));
+    view.handle(&command(Key::Character('i'), false));
+
+    let info = view.info().expect("info");
+    assert_eq!(info.entries.len(), 4);
+    assert_eq!(info.kind, "inode/directory, text/plain");
+}
+
+#[test]
+fn the_inspector_matches_its_goldens() {
+    let place = Place::new();
+    picture(&place.home().join("Lake.png"), 640, 400);
+    fs::set_permissions(
+        place.home().join("Lake.png"),
+        fs::Permissions::from_mode(0o644),
+    )
+    .expect("mode");
+    date_everything(&place.home());
+    let mut view = place.themed_view();
+    view.handle(&command(Key::Character('2'), false));
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
+    view.handle(&press(Key::Down));
+    view.handle(&command(Key::Character('i'), false));
+    run_until(&mut view, |view| {
+        view.info()
+            .is_some_and(|info| info.pixels == Some((640, 400)))
+    });
+    settle_thumbnails(&mut view, GOLDEN_SIZE, 0);
+    shoot("inspector-file", &mut view);
+
+    view.handle(&command(Key::Character('a'), false));
+    shoot("inspector-several", &mut view);
+}

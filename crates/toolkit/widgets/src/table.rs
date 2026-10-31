@@ -1573,7 +1573,17 @@ impl Widget for Table {
             items: rows,
         });
         if self.header {
-            self.paint_header(cx, items);
+            let mut header = Vec::new();
+            self.paint_header(cx, &mut header);
+            items.push(Item::Clip {
+                shape: Shape::rect(Rect::new(
+                    self.frame.x,
+                    self.frame.y,
+                    self.frame.width,
+                    HEADER_HEIGHT,
+                )),
+                items: header,
+            });
         }
         self.scroll.paint_scrollbar(cx, body, items);
     }

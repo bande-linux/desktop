@@ -2,6 +2,7 @@ mod listing;
 mod naming;
 mod operations;
 mod ops;
+mod permissions;
 mod trash;
 mod undo;
 mod watch;
@@ -20,6 +21,7 @@ pub use ops::{
     Answer, Change, Conflict, Failure, Job, Outcome, Progress, RenameError, Report, Resolution,
     Task, archive_path, can_extract, new_document, new_folder, rename,
 };
+pub use permissions::{Access, Class, access, runnable, set_mode, with_access, with_runnable};
 pub use trash::{Trash, TrashDir, TrashItem};
 pub use undo::{Action, History, Step};
 pub use watch::{FolderChanges, FolderWatch};

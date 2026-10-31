@@ -56,6 +56,8 @@ pub(crate) enum Signal {
     Back,
     Forward,
     Expand(Vec<String>, bool, bool),
+    Runnable(bool),
+    Access(unbound_fs::Class, usize),
 }
 
 pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
@@ -244,7 +246,7 @@ fn request(action: Action, target: accesskit::NodeId) -> ActionRequest {
 }
 
 impl FilesView {
-    fn host_mut(&mut self) -> Option<&mut FreeLayout> {
+    pub(crate) fn host_mut(&mut self) -> Option<&mut FreeLayout> {
         self.ui.widget_as::<FreeLayout>(self.host)
     }
 
@@ -309,6 +311,11 @@ impl FilesView {
         ]
         .into_iter()
         .flatten()
+        .chain(
+            self.inspector_controls
+                .iter()
+                .flat_map(crate::inspector::InspectorControls::ids),
+        )
         .collect()
     }
 
@@ -545,6 +552,8 @@ impl FilesView {
                     Signal::Search(text) => self.search_changed(&text),
                     Signal::View(index) => self.view_chosen(index),
                     Signal::Back => self.back(),
+                    Signal::Runnable(on) => self.set_runnable(on),
+                    Signal::Access(class, index) => self.set_access(class, index),
                     Signal::Forward => self.forward(),
                     Signal::Scope(everywhere) => self.set_scope(everywhere),
                     Signal::IconSize(size) => self.set_icon_size(size.round() as u32),

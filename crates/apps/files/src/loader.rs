@@ -9,7 +9,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use unbound_fs::Entry;
-use unbound_preview::{Preview, preview};
+use unbound_preview::{Preview, image_size, preview};
 use unbound_toolkit::Image;
 
 #[derive(Debug)]
@@ -20,7 +20,11 @@ enum Request {
 
 #[derive(Debug)]
 pub enum Loaded {
-    Preview(PathBuf, Preview<Image>),
+    Preview {
+        path: PathBuf,
+        preview: Preview<Image>,
+        pixels: Option<(u32, u32)>,
+    },
     FolderSize {
         folder: PathBuf,
         items: u64,
@@ -80,10 +84,18 @@ impl Loader {
                         continue;
                     }
                     let loaded = match request {
-                        Request::Preview(entry) => Some(Loaded::Preview(
-                            entry.path.clone(),
-                            preview(&entry, Image::from_rgba),
-                        )),
+                        Request::Preview(entry) => {
+                            let preview = preview(&entry, Image::from_rgba);
+                            let pixels = match preview {
+                                Preview::Image(_) => image_size(&entry.path),
+                                _ => None,
+                            };
+                            Some(Loaded::Preview {
+                                path: entry.path,
+                                preview,
+                                pixels,
+                            })
+                        }
                         Request::FolderSize(folder) => {
                             tree_size(&folder, &current).map(|(items, bytes)| Loaded::FolderSize {
                                 folder,

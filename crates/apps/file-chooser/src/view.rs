@@ -11,12 +11,12 @@ use unbound_toolkit::ui::{
     Sort, Stack, TEXT_FIELD_HEIGHT, Table, TextField, Ui, Widget, WidgetId,
 };
 use unbound_toolkit::{Appearance, Image, Item, Rect, Scene, Shape, TextSystem};
-use unbound_xdg::{OCTET_STREAM, find_icon};
+use unbound_xdg::{OCTET_STREAM, UserDir, config_home, find_icon, user_dir};
 use xdg_desktop_portal_unbound::file_chooser::{Mode, Selection};
 use xdg_desktop_portal_unbound::settings::icon_theme;
 
 use crate::L10N;
-use crate::model::{Accept, Chooser};
+use crate::model::{Accept, Chooser, typed_location};
 
 const SIDEBAR_WIDTH: f32 = 184.0;
 const BAR_HEIGHT: f32 = 44.0;
@@ -38,6 +38,8 @@ enum Intent {
     Sort(Sort),
     NewFolder,
     CreateFolder(String),
+    AskGoTo(String),
+    GoTo(String),
     Replace(PathBuf),
     Accept,
     Cancel,
@@ -249,44 +251,70 @@ impl Widget for Layout {
 
 struct Prompt {
     id: WidgetId,
+    question: String,
     children: Vec<Box<dyn Widget>>,
     done: Rc<Flag<bool>>,
     frame: Rect,
 }
 
 impl Prompt {
-    fn new(intents: &Intents) -> Self {
+    fn new(
+        intents: &Intents,
+        question: &str,
+        text: &str,
+        accept: &str,
+        intent: fn(String) -> Intent,
+    ) -> Self {
         let done = Rc::new(Flag::new(false));
-        let name = Rc::new(RefCell::new(L10N.tr("untitled-folder")));
-        let typed = Rc::clone(&name);
-        let (cancel_done, create_done, create) =
+        let typed = Rc::new(RefCell::new(text.to_owned()));
+        let changed = Rc::clone(&typed);
+        let (cancel_done, accept_done, accepted) =
             (Rc::clone(&done), Rc::clone(&done), Rc::clone(intents));
         let buttons: Vec<Box<dyn Widget>> = vec![
             Box::new(
                 Button::new(&L10N.tr("button-cancel"), move || cancel_done.set(true)).cancel(),
             ),
             Box::new(
-                Button::new(&L10N.tr("button-create"), move || {
-                    create_done.set(true);
-                    push(&create, Intent::CreateFolder(name.borrow().clone()));
+                Button::new(accept, move || {
+                    accept_done.set(true);
+                    push(&accepted, intent(typed.borrow().clone()));
                 })
                 .primary(),
             ),
         ];
         Self {
             id: WidgetId::next(),
+            question: question.to_owned(),
             children: vec![
-                Box::new(Label::new(&L10N.tr("new-folder-prompt"))),
-                Box::new(TextField::new(
-                    "",
-                    &L10N.tr("untitled-folder"),
-                    move |text: &str| *typed.borrow_mut() = text.to_owned(),
-                )),
+                Box::new(Label::new(question)),
+                Box::new(TextField::new("", text, move |text: &str| {
+                    *changed.borrow_mut() = text.to_owned()
+                })),
                 Box::new(Stack::new(Axis::Horizontal, GAP, 0.0, buttons)),
             ],
             done,
             frame: Rect::default(),
         }
+    }
+
+    fn new_folder(intents: &Intents) -> Self {
+        Self::new(
+            intents,
+            &L10N.tr("new-folder-prompt"),
+            &L10N.tr("untitled-folder"),
+            &L10N.tr("button-create"),
+            Intent::CreateFolder,
+        )
+    }
+
+    fn go_to(intents: &Intents, text: &str) -> Self {
+        Self::new(
+            intents,
+            &L10N.tr("go-to-prompt"),
+            text,
+            &L10N.tr("button-go"),
+            Intent::GoTo,
+        )
     }
 }
 
@@ -337,7 +365,7 @@ impl Widget for Prompt {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Dialog);
-        node.set_label(L10N.tr("new-folder"));
+        node.set_label(self.question.clone());
         node
     }
 
@@ -411,6 +439,8 @@ pub struct ChooserView {
     files: WidgetId,
     focus: WidgetId,
     selected: Vec<PathBuf>,
+    back: Vec<PathBuf>,
+    forward: Vec<PathBuf>,
     finished: Option<Finished>,
 }
 
@@ -474,6 +504,8 @@ impl ChooserView {
             files: WidgetId::next(),
             focus: WidgetId::next(),
             selected: Vec::new(),
+            back: Vec::new(),
+            forward: Vec::new(),
             finished: None,
         };
         view.ui.set_appearance(appearance);
@@ -748,12 +780,84 @@ impl ChooserView {
     }
 
     fn go(&mut self, folder: PathBuf) {
+        let left = self.chooser.folder().to_path_buf();
+        if self.open(folder) {
+            self.back.push(left);
+            self.forward.clear();
+        }
+    }
+
+    fn open(&mut self, folder: PathBuf) -> bool {
         if folder == self.chooser.folder() {
-            return;
+            return false;
         }
         match self.chooser.open(&folder) {
-            Ok(()) => self.rebuild(),
-            Err(error) => tracing::warn!("cannot open {}: {error}", folder.display()),
+            Ok(()) => {
+                self.rebuild();
+                true
+            }
+            Err(error) => {
+                tracing::warn!("cannot open {}: {error}", folder.display());
+                false
+            }
+        }
+    }
+
+    fn step(&mut self, back: bool) {
+        let popped = match back {
+            true => self.back.pop(),
+            false => self.forward.pop(),
+        };
+        let Some(folder) = popped else {
+            return;
+        };
+        let left = self.chooser.folder().to_path_buf();
+        if !self.open(folder) {
+            return;
+        }
+        if left.parent() == Some(self.chooser.folder()) {
+            self.select(std::slice::from_ref(&left));
+        }
+        match back {
+            true => self.forward.push(left),
+            false => self.back.push(left),
+        }
+    }
+
+    fn go_to(&mut self, typed: &str) {
+        let path = typed_location(typed, &self.home, self.chooser.folder());
+        if path.is_dir() {
+            self.go(path);
+        } else if let Some(parent) = path.parent().filter(|_| path.exists()) {
+            self.go(parent.to_path_buf());
+            self.select(&[path]);
+        } else {
+            let alert = Alert::new(
+                &L10N.tr_args(
+                    "go-to-missing",
+                    [("path", path.display().to_string().into())],
+                ),
+                &L10N.tr("go-to-missing-message"),
+                |_| {},
+            )
+            .primary(&L10N.tr("button-ok"), "ok");
+            self.ui.present_sheet(alert);
+        }
+    }
+
+    fn user_folder(&self, dir: UserDir) -> PathBuf {
+        let user_dirs = config_home()
+            .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
+        user_dir(&self.home, user_dirs.as_deref(), dir)
+    }
+
+    fn shown_folder(&self) -> String {
+        let folder = self.chooser.folder();
+        match folder.strip_prefix(&self.home) {
+            Ok(inside) if inside.as_os_str().is_empty() => "~/".to_owned(),
+            Ok(inside) => format!("~/{}/", inside.display()),
+            Err(_) if folder.parent().is_none() => "/".to_owned(),
+            Err(_) => format!("{}/", folder.display()),
         }
     }
 
@@ -843,7 +947,11 @@ impl ChooserView {
                             table.set_rows(rows);
                         }
                     }
-                    Intent::NewFolder => self.ui.present_sheet(Prompt::new(&self.intents)),
+                    Intent::NewFolder => self.ui.present_sheet(Prompt::new_folder(&self.intents)),
+                    Intent::AskGoTo(text) => {
+                        self.ui.present_sheet(Prompt::go_to(&self.intents, &text));
+                    }
+                    Intent::GoTo(typed) => self.go_to(&typed),
                     Intent::CreateFolder(name) => self.create_folder(&name),
                     Intent::Replace(path) => {
                         self.finished = Some(Finished::Chosen(self.chooser.replace(path)))
@@ -882,8 +990,18 @@ impl ChooserView {
     }
 
     fn shortcut(&mut self, key: Key, logo: bool, shift: bool) -> bool {
-        if !logo || self.ui.has_sheet() {
+        if self.ui.has_sheet() {
             return false;
+        }
+        if !logo {
+            return match key {
+                Key::Character(typed @ ('/' | '~')) if self.ui.focus() == Some(self.files) => {
+                    push(&self.intents, Intent::AskGoTo(typed.to_string()));
+                    self.drain();
+                    true
+                }
+                _ => false,
+            };
         }
         match key {
             Key::Up => {
@@ -902,8 +1020,29 @@ impl ChooserView {
                 }
                 true
             }
-            Key::Character('n' | 'N') if shift => {
-                push(&self.intents, Intent::NewFolder);
+            Key::Character('[') if !shift => {
+                self.step(true);
+                true
+            }
+            Key::Character(']') if !shift => {
+                self.step(false);
+                true
+            }
+            Key::Character(letter) if shift => {
+                match letter.to_ascii_lowercase() {
+                    'n' => push(&self.intents, Intent::NewFolder),
+                    'g' => push(&self.intents, Intent::AskGoTo(self.shown_folder())),
+                    'h' => push(&self.intents, Intent::Go(self.home.clone())),
+                    'd' => push(
+                        &self.intents,
+                        Intent::Go(self.user_folder(UserDir::Desktop)),
+                    ),
+                    'o' => push(
+                        &self.intents,
+                        Intent::Go(self.user_folder(UserDir::Documents)),
+                    ),
+                    _ => return false,
+                }
                 self.drain();
                 true
             }

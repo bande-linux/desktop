@@ -1,8 +1,11 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
+use std::time::{Duration, Instant};
+
 use unbound_screenshot::area::AreaSelection;
 use unbound_screenshot::palette::{Mode, Palette as CapturePalette};
-use unbound_toolkit::ui::{Context, Event, FreeLayout, Pointer, Size, Ui, Widget};
+use unbound_screenshot::{Failure, L10N};
+use unbound_toolkit::ui::{Alert, Context, Event, FreeLayout, Pointer, Size, Ui, Widget};
 use unbound_toolkit::{
     Color, CpuRenderer, Item, Palette, Point, Rect, Scene, Scheme, Shape, TextSystem,
 };
@@ -59,4 +62,25 @@ fn the_capture_toolbar_matches_its_golden() {
     let mut scene = ui.scene(SIZE.0, SIZE.1);
     scene.items.insert(0, backdrop());
     check_golden("toolbar-light", &scene);
+}
+
+#[test]
+fn a_recording_that_cannot_start_says_so_and_matches_its_golden() {
+    let (title, detail) = Failure::ScreenUnavailable.message();
+    let mut ui = Ui::new(
+        Box::new(FreeLayout::new()),
+        Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
+    );
+    ui.present_dialog(Alert::new(&title, &detail, |_| {}).primary(&L10N.tr("ok"), "ok"));
+    ui.layout(Size::new(SIZE.0 as f32, SIZE.1 as f32));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut scene = ui.scene(SIZE.0, SIZE.1);
+    while ui.is_animating() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(16));
+        scene = ui.scene(SIZE.0, SIZE.1);
+    }
+    scene.items.insert(0, backdrop());
+
+    assert_eq!(title, "Screen recording is not available");
+    check_golden("cannot-record-light", &scene);
 }

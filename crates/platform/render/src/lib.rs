@@ -36,7 +36,7 @@ const REQUIRED_EXTENSIONS: [&CStr; 3] = [
     ash::ext::external_memory_dma_buf::NAME,
 ];
 const TARGET_FORMATS: [vk::Format; 2] = [vk::Format::B8G8R8A8_UNORM, vk::Format::R8G8B8A8_UNORM];
-const TEXTURE_FOURCCS: [Fourcc; 2] = [Fourcc::Argb8888, Fourcc::Xrgb8888];
+const TEXTURE_FOURCCS: [Fourcc; 3] = [Fourcc::Argb8888, Fourcc::Xrgb8888, Fourcc::Abgr8888];
 
 static NEXT_RENDERER: AtomicU64 = AtomicU64::new(1);
 
@@ -390,7 +390,7 @@ fn target_format(format: Fourcc) -> Option<vk::Format> {
 
 fn is_opaque(format: Fourcc) -> Option<bool> {
     match format {
-        Fourcc::Argb8888 => Some(false),
+        Fourcc::Argb8888 | Fourcc::Abgr8888 => Some(false),
         Fourcc::Xrgb8888 => Some(true),
         _ => None,
     }

@@ -10,9 +10,9 @@ fn run() -> Result<(), WindowError> {
     let mut text = TextSystem::new();
     let palette = Palette::for_scheme(Scheme::Light);
     let mut drawn = window.size();
-    window.draw(&unbound_sample::scene(&mut text, &palette, drawn))?;
+    window.draw(unbound_sample::scene(&mut text, &palette, drawn))?;
     window.wait_for_gpu();
-    window.draw(&unbound_sample::scene(&mut text, &palette, drawn))?;
+    window.draw(unbound_sample::scene(&mut text, &palette, drawn))?;
     while !window.is_closed() {
         window.dispatch()?;
         if window.take_events().contains(&WindowEvent::CloseRequested) {
@@ -20,7 +20,7 @@ fn run() -> Result<(), WindowError> {
         }
         if window.size() != drawn {
             drawn = window.size();
-            window.draw(&unbound_sample::scene(&mut text, &palette, drawn))?;
+            window.draw(unbound_sample::scene(&mut text, &palette, drawn))?;
         }
     }
     Ok(())

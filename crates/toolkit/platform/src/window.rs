@@ -74,7 +74,6 @@ pub const RENDERER_VARIABLE: &str = "UNBOUND_RENDERER";
 pub const ACTIVATION_TOKEN_VARIABLE: &str = "XDG_ACTIVATION_TOKEN";
 const RELEASE_HIDDEN_AFTER: Duration = Duration::from_secs(30);
 const TILING_MENU_AFTER: Duration = Duration::from_millis(500);
-const NEXT_DISPLAY_SINCE: u32 = 6;
 const MAX_STALE_REGIONS: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -786,13 +785,7 @@ impl Window {
             MenuItem::separator(),
             place("place-fill").enabled(!toplevel.maximized),
         ];
-        let next_display = self
-            .state
-            .shell
-            .app
-            .as_ref()
-            .is_some_and(|app| app.version() >= NEXT_DISPLAY_SINCE);
-        if next_display && self.state.outputs.len() > 1 {
+        if self.can_place() && self.state.outputs.len() > 1 {
             items.push(place("place-next-display").shortcut("Alt+Shift+Super+Right"));
         }
         items.extend([
@@ -1694,7 +1687,7 @@ impl Window {
         result.is_ok()
     }
 
-    fn framed(&mut self, frame: &Frame, scene: &Scene, presentation: Instant) -> Scene {
+    fn framed(&mut self, frame: &Frame, scene: Scene, presentation: Instant) -> Scene {
         let appearance = self.appearance.borrow().current();
         let toplevel = self.state.toplevel;
         let look = Look {
@@ -1710,7 +1703,7 @@ impl Window {
                 look,
                 presentation,
             ),
-            None => scene.clone(),
+            None => scene,
         }
     }
 
@@ -1890,7 +1883,7 @@ impl Window {
         Ok(())
     }
 
-    pub fn draw(&mut self, scene: &Scene) -> Result<FramePath, WindowError> {
+    pub fn draw(&mut self, scene: Scene) -> Result<FramePath, WindowError> {
         self.wait_for_frame()?;
         self.queue.dispatch_pending(&mut self.state)?;
         self.poll_gpu();
@@ -1901,15 +1894,14 @@ impl Window {
         self.state.suggested_size = None;
         let (extra_width, extra_height) = self.frame().chrome_size();
         self.size = (scene.width + extra_width, scene.height + extra_height);
-        let framed;
         let (scene, opaque) = if self.chrome.is_some() {
             let frame = self.frame();
-            framed = self.framed(&frame, scene, frame_time.presentation);
+            let sheet_opaque = scene.background.a == u8::MAX;
+            let framed = self.framed(&frame, scene, frame_time.presentation);
             self.frame_surface(&frame);
             let chassis = self.appearance.borrow().current().palette().chassis;
-            let opaque =
-                (chassis.a == u8::MAX && scene.background.a == u8::MAX).then(|| frame.window());
-            (&framed, opaque)
+            let opaque = (chassis.a == u8::MAX && sheet_opaque).then(|| frame.window());
+            (framed, opaque)
         } else {
             let opaque = (scene.background.a == u8::MAX)
                 .then(|| Rect::new(0.0, 0.0, scene.width as f32, scene.height as f32));
@@ -1932,9 +1924,9 @@ impl Window {
             .shown_scene
             .take()
             .filter(|(_, shown_scale)| *shown_scale == scale)
-            .and_then(|(shown, _)| damage(&shown, scene, scale));
+            .and_then(|(shown, _)| damage(&shown, &scene, scale));
         let presented = match &mut self.gpu {
-            Gpu::Ready(gpu) => Some(gpu.present(scene, scale, damage.as_deref())),
+            Gpu::Ready(gpu) => Some(gpu.present(&scene, scale, damage.as_deref())),
             Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => None,
         };
         let path = match presented {
@@ -1947,15 +1939,15 @@ impl Window {
             Some(Err(error)) => {
                 tracing::warn!(%error, "drawing on the CPU after a GPU failure");
                 self.gpu = Gpu::Unavailable;
-                self.draw_on_cpu(scene, None)?;
+                self.draw_on_cpu(&scene, None)?;
                 FramePath::Cpu
             }
             None => {
-                self.draw_on_cpu(scene, damage.as_deref())?;
+                self.draw_on_cpu(&scene, damage.as_deref())?;
                 FramePath::Cpu
             }
         };
-        self.shown_scene = Some((scene.clone(), scale));
+        self.shown_scene = Some((scene, scale));
         self.flush()?;
         Ok(path)
     }
@@ -2442,10 +2434,10 @@ impl Dispatch<WlRegistry, ()> for State {
                     }
                 }
                 "unbound_shell_v1" => {
-                    state.shell.protocol = Some(registry.bind(name, version.min(18), handle, ()));
+                    state.shell.protocol = Some(registry.bind(name, 1, handle, ()));
                 }
                 "unbound_app_v1" => {
-                    state.shell.app = Some(registry.bind(name, version.min(6), handle, ()));
+                    state.shell.app = Some(registry.bind(name, 1, handle, ()));
                 }
                 "unbound_app_control_v1" => {
                     state.shell.app_control_global = Some((registry.clone(), name));

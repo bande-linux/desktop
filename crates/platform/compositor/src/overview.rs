@@ -15,7 +15,7 @@ use unbound_render::VulkanRenderer;
 use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::gesture::Tracker;
-use crate::label::{Label, Labels, TITLE};
+use crate::label::{Label, TITLE};
 use crate::motion::{Look, Motion, Tick};
 use crate::scene::{
     BlurElement, CORNER_RADIUS, FillElement, Piece, fresh, pieces_of, premultiplied, rounded,
@@ -75,7 +75,6 @@ struct Press {
 #[derive(Default)]
 pub(crate) struct Overview {
     title: Option<(WlSurface, Label)>,
-    labels: Option<Labels>,
     progress: f64,
     target: f64,
     settle: Option<Animation>,
@@ -415,11 +414,10 @@ impl State {
             return;
         }
         let width = slot.size.w.max(TITLE_MIN_WIDTH);
-        let label = self
-            .overview
-            .labels
-            .get_or_insert_with(Labels::default)
-            .render(&text, TITLE, width, self.decorations.scheme, scale);
+        let label =
+            self.labels
+                .get_mut()
+                .render(&text, TITLE, width, self.decorations.scheme, scale);
         self.overview.title = label.map(|label| (surface, label));
     }
 

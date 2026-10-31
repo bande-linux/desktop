@@ -174,7 +174,7 @@ impl TestClient {
     }
 
     pub fn join_shell(&mut self, server: &mut Headless) {
-        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 18);
+        let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 1);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
@@ -287,19 +287,19 @@ impl TestClient {
     }
 
     pub fn place_window(&mut self, server: &mut Headless, index: usize, placement: Placement) {
-        let app: UnboundAppV1 = self.bind("unbound_app_v1", 6);
+        let app: UnboundAppV1 = self.bind("unbound_app_v1", 1);
         app.place_window(&self.windows[index].2, placement);
         self.exchange(server);
     }
 
     pub fn move_to_workspace(&mut self, server: &mut Headless, index: usize, workspace: Workspace) {
-        let app: UnboundAppV1 = self.bind("unbound_app_v1", 3);
+        let app: UnboundAppV1 = self.bind("unbound_app_v1", 1);
         app.move_to_workspace(&self.windows[index].2, workspace);
         self.exchange(server);
     }
 
     pub fn keep_on_top(&mut self, server: &mut Headless, index: usize, keep: bool) {
-        let app: UnboundAppV1 = self.bind("unbound_app_v1", 4);
+        let app: UnboundAppV1 = self.bind("unbound_app_v1", 1);
         app.set_keep_on_top(&self.windows[index].2, u32::from(keep));
         self.exchange(server);
     }

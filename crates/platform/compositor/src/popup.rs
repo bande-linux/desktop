@@ -1,7 +1,7 @@
 use smithay::backend::renderer::utils::with_renderer_surface_state;
 use smithay::desktop::{
-    PopupKeyboardGrab, PopupKind, PopupManager, PopupPointerGrab, PopupUngrabStrategy,
-    WindowSurfaceType, find_popup_root_surface, get_popup_toplevel_coords, layer_map_for_output,
+    PopupKeyboardGrab, PopupKind, PopupPointerGrab, PopupUngrabStrategy, WindowSurfaceType,
+    find_popup_root_surface, get_popup_toplevel_coords, layer_map_for_output,
 };
 use smithay::input::Seat;
 use smithay::input::pointer::Focus;
@@ -51,26 +51,6 @@ impl State {
             return Some(self.windows[index].content_location());
         }
         self.layer_origin(root)
-    }
-
-    pub(crate) fn popup_surfaces(
-        &self,
-        root: &WlSurface,
-        geometry_origin: Point<i32, Logical>,
-    ) -> Vec<(WlSurface, Point<i32, Logical>)> {
-        PopupManager::popups_for_surface(root)
-            .map(|(popup, offset)| {
-                let own = popup.geometry().loc;
-                (
-                    popup.wl_surface().clone(),
-                    (
-                        geometry_origin.x + offset.x - own.x,
-                        geometry_origin.y + offset.y - own.y,
-                    )
-                        .into(),
-                )
-            })
-            .collect()
     }
 
     fn unconstrained(

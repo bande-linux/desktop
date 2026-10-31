@@ -20,7 +20,6 @@ use unbound_spring::Spring;
 use unbound_widgets::{MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
 
 use crate::L10N;
-use crate::label::Labels;
 use crate::motion::{Look, Motion, Tick};
 use crate::state::{Headless, OutputElement, Rect, State};
 
@@ -60,7 +59,6 @@ struct Open {
 #[derive(Default)]
 pub(crate) struct WindowMenus {
     open: Option<Open>,
-    labels: Option<Labels>,
     on_zoom: Option<WlSurface>,
     rest: Option<(WlSurface, Instant)>,
 }
@@ -74,10 +72,6 @@ impl WindowMenus {
         self.open.as_ref().is_some_and(|open| {
             open.tracker.is_flashing() || open.panels.iter().any(|panel| !panel.motion.is_settled())
         })
-    }
-
-    fn canvas(&mut self) -> &mut Labels {
-        self.labels.get_or_insert_with(Labels::default)
     }
 }
 
@@ -326,7 +320,7 @@ impl State {
         let screen = self.screen_of(&self.windows[index]);
         let area = self.usable_area(screen);
         let palette = Palette::for_scheme(self.decorations.scheme);
-        let panel = MenuPanel::new(menu, self.window_menus.canvas().text(), &palette);
+        let panel = MenuPanel::new(menu, self.labels.get_mut().text(), &palette);
         let geometry = root_placement(&anchored, whole_size(&panel), area);
         let mut tracker = MenuTracker::new(panel, from_keyboard);
         tracker.placed(0, geometry.size.h as f32, false);
@@ -363,7 +357,8 @@ impl State {
             return;
         };
         let area = self.usable_area(screen);
-        let WindowMenus { open, labels, .. } = &mut self.window_menus;
+        let labels = self.labels.get_mut();
+        let open = &mut self.window_menus.open;
         let Some(open) = open.as_mut() else {
             return;
         };
@@ -376,7 +371,7 @@ impl State {
         open.panels.truncate(level + 1);
         open.tracker.truncate(level + 1);
         let row = open.tracker.panels()[level].row_rect(index);
-        let text = labels.get_or_insert_with(Labels::default).text();
+        let text = labels.text();
         let panel = MenuPanel::new(menu, text, &palette);
         let geometry = submenu_placement(parent, row, whole_size(&panel), area);
         let beside_left = f64::from(geometry.loc.x) < parent.loc.x;
@@ -632,7 +627,8 @@ impl State {
         let scheme = self.decorations.scheme;
         let palette = Palette::for_scheme(scheme);
         let now = Instant::now();
-        let WindowMenus { open, labels, .. } = &mut self.window_menus;
+        let labels = self.labels.get_mut();
+        let open = &mut self.window_menus.open;
         let Some(open) = open.as_mut().filter(|open| open.screen == screen) else {
             return;
         };
@@ -661,10 +657,7 @@ impl State {
                 continue;
             }
             let scene = panel.scene(&palette, show_highlight);
-            shown.painted = labels
-                .get_or_insert_with(Labels::default)
-                .paint(&scene, scale)
-                .map(|buffer| (look, buffer));
+            shown.painted = labels.paint(&scene, scale).map(|buffer| (look, buffer));
         }
     }
 

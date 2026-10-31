@@ -108,7 +108,7 @@ pub fn run(window: &mut Window, app: &mut impl App) -> Result<(), WindowError> {
         if frame_drawn {
             set_frame_time(window.plan_frame());
             let scene = app.scene(window);
-            window.draw(&scene)?;
+            window.draw(scene)?;
             window.wake_ui_at(take_wake());
             if app.animating() {
                 window.request_redraw();
@@ -374,7 +374,7 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
                 let scene = app.scene(index);
                 let animating = app.animating(index);
                 let window = &mut app.windows_mut()[index];
-                window.draw(&scene)?;
+                window.draw(scene)?;
                 window.wake_ui_at(take_wake());
                 if animating {
                     window.request_redraw();

@@ -9,7 +9,7 @@ use unbound_graphics::{Scheme, TextRole};
 use unbound_render::VulkanRenderer;
 
 use crate::L10N;
-use crate::label::{Label, LabelStyle, Labels, Look};
+use crate::label::{Label, LabelStyle, Look};
 use crate::state::{Headless, OutputElement, State};
 
 const ALERT_STYLE: LabelStyle = LabelStyle {
@@ -44,7 +44,6 @@ pub(crate) struct Alerts {
     alerts: Vec<Alert>,
     generation: u64,
     rendered: RefCell<Vec<Rendered>>,
-    labels: RefCell<Labels>,
 }
 
 impl State {
@@ -103,7 +102,7 @@ impl State {
             Some(index) if rendered[index].layout == layout => index,
             found => {
                 let width = f64::from(output.size.w) - 2.0 * ALERT_MARGIN;
-                let mut labels = self.alerts.labels.borrow_mut();
+                let mut labels = self.labels.borrow_mut();
                 let entry = Rendered {
                     layout,
                     labels: self

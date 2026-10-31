@@ -111,7 +111,7 @@ impl Labels {
         &mut self.text
     }
 
-    pub(crate) fn paint(&mut self, scene: &Scene, scale: f64) -> Option<MemoryRenderBuffer> {
+    pub(crate) fn rasterise(&mut self, scene: &Scene, scale: f64) -> Option<(Vec<u8>, (i32, i32))> {
         let pixels = (
             unbound_graphics::pixels(scene.width, scale),
             unbound_graphics::pixels(scene.height, scale),
@@ -121,13 +121,15 @@ impl Labels {
             tracing::warn!("cannot draw a compositor overlay: {error}");
             return None;
         }
-        for pixel in rgba.as_chunks_mut::<4>().0 {
-            pixel.swap(0, 2);
-        }
+        Some((rgba, (pixels.0 as i32, pixels.1 as i32)))
+    }
+
+    pub(crate) fn paint(&mut self, scene: &Scene, scale: f64) -> Option<MemoryRenderBuffer> {
+        let (rgba, size) = self.rasterise(scene, scale)?;
         Some(MemoryRenderBuffer::from_slice(
             &rgba,
-            Fourcc::Argb8888,
-            (pixels.0 as i32, pixels.1 as i32),
+            Fourcc::Abgr8888,
+            size,
             1,
             Transform::Normal,
             None,

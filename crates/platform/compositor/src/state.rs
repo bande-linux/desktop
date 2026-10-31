@@ -19,7 +19,8 @@ use smithay::backend::renderer::element::surface::{
 };
 use smithay::backend::renderer::utils::{on_commit_buffer_handler, with_renderer_surface_state};
 use smithay::desktop::{
-    LayerSurface as MappedLayer, PopupGrab, PopupManager, WindowSurfaceType, layer_map_for_output,
+    LayerMap, LayerSurface as MappedLayer, PopupGrab, PopupManager, WindowSurfaceType,
+    layer_map_for_output,
 };
 use smithay::input::keyboard::XkbConfig;
 use smithay::input::pointer::{CursorIcon, CursorImageAttributes, CursorImageStatus};
@@ -113,6 +114,61 @@ pub struct ScanoutDevice {
 
 pub(crate) const MENU_BAR_NAMESPACE: &str = "menubar";
 pub(crate) const MENU_SEARCH_NAMESPACE: &str = "menu-search";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Band {
+    Front,
+    Leaving,
+    OnTop,
+    Rest,
+}
+
+struct Layers<'m> {
+    map: &'m LayerMap,
+    origin: Point<i32, Logical>,
+    screen: usize,
+}
+
+impl Layers<'_> {
+    fn push(&self, placed: &mut Vec<Placed<'_>>, layer: Layer) {
+        for mapped in self.map.layers_on(layer).rev() {
+            let Some(geometry) = self.map.layer_geometry(mapped) else {
+                continue;
+            };
+            let surface = mapped.wl_surface();
+            let at = self.origin + geometry.loc;
+            placed.extend(popup_surfaces(surface, at));
+            placed.push(Placed::Surface(surface.clone(), at));
+            if crate::effect::scrim(surface).is_some() && is_mapped(surface) {
+                placed.push(Placed::Scrim(surface.clone(), self.screen));
+            }
+        }
+    }
+}
+
+fn push_windows<'a>(placed: &mut Vec<Placed<'a>>, visible: &[(Band, &'a Window)], band: Band) {
+    for (_, window) in visible.iter().filter(|(of, _)| *of == band) {
+        placed.extend(popup_surfaces(window.surface(), window.content_location()));
+        placed.push(Placed::Window(window));
+    }
+}
+
+fn popup_surfaces<'a>(
+    root: &WlSurface,
+    geometry_origin: Point<i32, Logical>,
+) -> impl Iterator<Item = Placed<'a>> + use<'a> {
+    PopupManager::popups_for_surface(root).map(move |(popup, offset)| {
+        let own = popup.geometry().loc;
+        Placed::Surface(
+            popup.wl_surface().clone(),
+            (
+                geometry_origin.x + offset.x - own.x,
+                geometry_origin.y + offset.y - own.y,
+            )
+                .into(),
+        )
+    })
+}
 
 #[derive(Clone)]
 pub(crate) enum Placed<'a> {
@@ -252,6 +308,7 @@ pub struct State {
     pub(crate) decorations: crate::frame::Decorations,
     pub(crate) window_menus: crate::window_menu::WindowMenus,
     pub(crate) alerts: crate::alert::Alerts,
+    pub(crate) labels: std::cell::RefCell<crate::label::Labels>,
 }
 
 pub struct Headless {
@@ -314,14 +371,14 @@ impl Headless {
         };
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, UnboundShellV1, ()>(18, ());
-        handle.create_global::<State, UnboundAppV1, ()>(6, ());
+        handle.create_global::<State, UnboundShellV1, ()>(1, ());
+        handle.create_global::<State, UnboundAppV1, ()>(1, ());
         handle.create_global::<State, UnboundAppControlV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
         State::create_capture_globals(&handle);
         State::create_capture_shell_global(&handle);
-        let state = State {
+        let mut state = State {
             display_handle: handle.clone(),
             syncobj_state: None,
             blockers: fences.handle(),
@@ -454,7 +511,18 @@ impl Headless {
             decorations: crate::frame::Decorations::default(),
             window_menus: crate::window_menu::WindowMenus::default(),
             alerts: crate::alert::Alerts::default(),
+            labels: std::cell::RefCell::default(),
         };
+        let (catalog, arrivals) = smithay::reexports::calloop::channel::channel();
+        fences
+            .handle()
+            .insert_source(arrivals, |event, _, state: &mut State| {
+                if let smithay::reexports::calloop::channel::Event::Msg(loaded) = event {
+                    state.receive_catalog(loaded);
+                }
+            })
+            .map_err(|error| io::Error::other(error.error))?;
+        state.switcher.load_with(catalog);
         Ok(Self {
             display,
             fences,
@@ -1256,24 +1324,6 @@ impl State {
                 .collect();
         }
 
-        let popups = |surface: &WlSurface, geometry_origin| {
-            self.popup_surfaces(surface, geometry_origin)
-                .into_iter()
-                .map(|(surface, origin)| Placed::Surface(surface, origin))
-        };
-        let layers = |layer: Layer| {
-            self.placed_layers(screen, layer)
-                .into_iter()
-                .flat_map(|(surface, at)| {
-                    let scrim = crate::effect::scrim(&surface)
-                        .filter(|_| is_mapped(&surface))
-                        .map(|_| Placed::Scrim(surface.clone(), screen));
-                    popups(&surface, at)
-                        .chain([Placed::Surface(surface, at)])
-                        .chain(scrim)
-                })
-                .collect::<Vec<_>>()
-        };
         let visible = self
             .windows
             .iter()
@@ -1290,53 +1340,50 @@ impl State {
                         && !self.overview.is_shown()
                 }
             })
+            .map(|window| {
+                let band = if self.on_full_screen_space(window) || self.dragged_in_overview(window)
+                {
+                    Band::Front
+                } else if window.is_minimized() {
+                    Band::Leaving
+                } else if window.keep_on_top {
+                    Band::OnTop
+                } else {
+                    Band::Rest
+                };
+                (band, window)
+            })
             .collect::<Vec<_>>();
-        let (front, rest): (Vec<&Window>, Vec<&Window>) = visible.into_iter().partition(|window| {
-            self.on_full_screen_space(window) || self.dragged_in_overview(window)
-        });
-        let (leaving, rest): (Vec<&Window>, Vec<&Window>) =
-            rest.into_iter().partition(|window| window.is_minimized());
-        let (on_top, rest): (Vec<&Window>, Vec<&Window>) =
-            rest.into_iter().partition(|window| window.keep_on_top);
+        let overview = rendered && self.overview.is_shown();
         let name = self.screens[screen].name();
-        [
-            layers(Layer::Overlay),
-            self.window_entries(&leaving),
-            self.window_entries(&front),
-            layers(Layer::Top),
-            if rendered && self.overview.is_shown() {
-                vec![Placed::Overview(screen)]
-            } else {
-                Vec::new()
-            },
+        let map = layer_map_for_output(&self.screens[screen].output);
+        let layers = Layers {
+            map: &map,
+            origin: self.screens[screen].settings.position,
+            screen,
+        };
+        let mut placed = Vec::with_capacity(2 * (visible.len() + map.layers().count()) + 2);
+        layers.push(&mut placed, Layer::Overlay);
+        push_windows(&mut placed, &visible, Band::Leaving);
+        push_windows(&mut placed, &visible, Band::Front);
+        layers.push(&mut placed, Layer::Top);
+        if overview {
+            placed.push(Placed::Overview(screen));
+        }
+        placed.extend(
             self.closing
                 .iter()
                 .filter(|closing| rendered && closing.output == name)
-                .map(Placed::Closing)
-                .collect(),
-            self.window_entries(&on_top),
-            self.window_entries(&rest),
-            layers(Layer::Bottom),
-            if rendered && self.overview.is_shown() {
-                vec![Placed::Backdrop(screen)]
-            } else {
-                Vec::new()
-            },
-            layers(Layer::Background),
-        ]
-        .concat()
-    }
-
-    fn window_entries<'a>(&'a self, windows: &[&'a Window]) -> Vec<Placed<'a>> {
-        windows
-            .iter()
-            .flat_map(|window| {
-                self.popup_surfaces(window.surface(), window.content_location())
-                    .into_iter()
-                    .map(|(surface, origin)| Placed::Surface(surface, origin))
-                    .chain([Placed::Window(window)])
-            })
-            .collect()
+                .map(Placed::Closing),
+        );
+        push_windows(&mut placed, &visible, Band::OnTop);
+        push_windows(&mut placed, &visible, Band::Rest);
+        layers.push(&mut placed, Layer::Bottom);
+        if overview {
+            placed.push(Placed::Backdrop(screen));
+        }
+        layers.push(&mut placed, Layer::Background);
+        placed
     }
 
     fn commit_layer(&mut self, surface: &WlSurface) -> bool {

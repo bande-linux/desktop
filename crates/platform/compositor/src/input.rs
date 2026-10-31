@@ -193,10 +193,7 @@ impl State {
         &self,
         location: Point<f64, Logical>,
     ) -> Option<(WlSurface, Point<f64, Logical>)> {
-        match self.pointer_target(location)? {
-            Target::Surface(surface, at) => Some((surface, at)),
-            Target::Frame(..) | Target::Scrim(_) => None,
-        }
+        self.pointer_target(location)?.surface()
     }
 
     pub(crate) fn refocus_pointer(&mut self) {
@@ -583,14 +580,17 @@ impl Headless {
             }
             return;
         }
-        let under = state
-            .surface_under(location)
+        let target = state.pointer_target(location);
+        let under = target
+            .as_ref()
+            .and_then(Target::surface)
             .filter(|(surface, _)| state.reachable_beside_menu(surface));
         let Some(pointer) = state.seat.get_pointer() else {
             return;
         };
         if !pointer.is_grabbed() {
-            state.point_at_frame(location, under.is_some());
+            let pointed = target.as_ref().and_then(Target::frame);
+            state.point_at_frame(location, pointed, under.is_some());
         }
         state.drag_over(under.as_ref().map(|(surface, _)| surface));
         pointer.motion(
@@ -622,28 +622,36 @@ impl Headless {
             state.swallowed_button = Some(button);
             return;
         }
-        if state.overview.is_open() && state.popup_grab.is_none() {
-            let under = state.surface_under(state.pointer_location);
-            if !under.is_some_and(|(surface, _)| state.is_above_windows(&surface)) {
-                state.overview_button(button, pressed);
-                return;
-            }
+        let overview_button = state.overview.is_open() && state.popup_grab.is_none();
+        let target = (pressed || overview_button)
+            .then(|| state.pointer_target(state.pointer_location))
+            .flatten();
+        let under = target.as_ref().and_then(Target::surface);
+        if overview_button
+            && !under
+                .as_ref()
+                .is_some_and(|(surface, _)| state.is_above_windows(surface))
+        {
+            state.overview_button(button, pressed);
+            return;
         }
         if pressed {
-            let under = state.surface_under(state.pointer_location);
             if state.dismisses_popups(under.as_ref().map(|(surface, _)| surface)) {
                 state.swallowed_button = Some(button);
                 return;
             }
-            if let Some(Target::Scrim(owner)) = state.pointer_target(state.pointer_location) {
-                state.scrim_pressed(&owner);
+            if let Some(Target::Scrim(owner)) = &target {
+                state.scrim_pressed(owner);
                 state.swallowed_button = Some(button);
                 return;
             }
             if state.popup_grab.is_none() {
-                match state.press_frame(button, time) {
-                    Some(true) => return,
-                    Some(false) => {}
+                match target.as_ref().and_then(Target::frame) {
+                    Some(pointed) => {
+                        if state.press_frame(pointed, button, time) {
+                            return;
+                        }
+                    }
                     None => match under {
                         Some((surface, _)) => {
                             if let Some(dialog) = state

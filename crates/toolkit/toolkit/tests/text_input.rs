@@ -47,7 +47,7 @@ impl App for Field {
         window.drive(&mut self.ui, event).expect("drive the ui");
         if preedit {
             let scene = self.scene(window);
-            window.draw(&scene).expect("draw the composition");
+            window.draw(scene).expect("draw the composition");
             if let Some(area) = self.ui.text_input_area() {
                 let value = self.text.borrow().clone();
                 self.composing.send(Composing { area, value }).ok();

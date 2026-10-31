@@ -10,12 +10,12 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle};
 use unbound_graphics::{
-    Color, CpuRenderer, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_MARGIN, Rect, ResizeEdge, Scene,
-    Scheme, TextAlign, TextSystem, TitleBar, WindowControl, resize_edge, title_style,
-    window_controls_area,
+    Color, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_MARGIN, Rect, ResizeEdge, Scene, Scheme,
+    TextAlign, TitleBar, WindowControl, resize_edge, title_style, window_controls_area,
 };
 use unbound_render::{VulkanRenderer, VulkanTexture};
 
+use crate::label::Labels;
 use crate::scene::Piece;
 use crate::shell::toplevel_names;
 use crate::state::{Headless, Placed, State};
@@ -79,8 +79,6 @@ pub(crate) struct Frame {
 
 #[derive(Default)]
 pub(crate) struct Decorations {
-    text: TextSystem,
-    renderer: CpuRenderer,
     pub(crate) scheme: Scheme,
     pointed: Option<(WlSurface, Zone)>,
     last_click: Option<(WlSurface, u32)>,
@@ -146,6 +144,22 @@ pub(crate) enum Target {
     Scrim(WlSurface),
 }
 
+impl Target {
+    pub(crate) fn surface(&self) -> Option<(WlSurface, Point<f64, Logical>)> {
+        match self {
+            Target::Surface(surface, at) => Some((surface.clone(), *at)),
+            Target::Frame(..) | Target::Scrim(_) => None,
+        }
+    }
+
+    pub(crate) fn frame(&self) -> Option<(WlSurface, Zone)> {
+        match self {
+            Target::Frame(surface, zone) => Some((surface.clone(), *zone)),
+            Target::Surface(..) | Target::Scrim(_) => None,
+        }
+    }
+}
+
 fn surface_at(
     surface: &WlSurface,
     origin: Point<i32, Logical>,
@@ -170,15 +184,12 @@ impl State {
             })
     }
 
-    fn frame_under(&self, location: Point<f64, Logical>) -> Option<(WlSurface, Zone)> {
-        match self.pointer_target(location)? {
-            Target::Frame(surface, zone) => Some((surface, zone)),
-            Target::Surface(..) | Target::Scrim(_) => None,
-        }
-    }
-
-    pub(crate) fn point_at_frame(&mut self, location: Point<f64, Logical>, over_surface: bool) {
-        let pointed = self.frame_under(location);
+    pub(crate) fn point_at_frame(
+        &mut self,
+        location: Point<f64, Logical>,
+        pointed: Option<(WlSurface, Zone)>,
+        over_surface: bool,
+    ) {
         let hovered = pointed
             .as_ref()
             .filter(|(_, zone)| matches!(zone, Zone::Control(_) | Zone::TitleBar))
@@ -217,15 +228,19 @@ impl State {
         self.needs_redraw = true;
     }
 
-    pub(crate) fn press_frame(&mut self, button: u32, time: u32) -> Option<bool> {
-        let (surface, zone) = self.frame_under(self.pointer_location)?;
+    pub(crate) fn press_frame(
+        &mut self,
+        (surface, zone): (WlSurface, Zone),
+        button: u32,
+        time: u32,
+    ) -> bool {
         self.focus(Some(surface.clone()));
         if button != BTN_LEFT {
             self.swallowed_button = Some(button);
             if button == BTN_RIGHT && matches!(zone, Zone::Control(_) | Zone::TitleBar) {
                 self.open_window_menu(&surface);
             }
-            return Some(true);
+            return true;
         }
         match zone {
             Zone::Control(control) => {
@@ -236,7 +251,7 @@ impl State {
                 if control == WindowControl::Zoom {
                     self.press_zoom(&surface);
                 }
-                Some(true)
+                true
             }
             Zone::TitleBar => {
                 let double = self
@@ -251,15 +266,15 @@ impl State {
                 if double {
                     self.swallowed_button = Some(button);
                     self.toggle_zoom(&surface);
-                    return Some(true);
+                    return true;
                 }
                 self.decorations.last_click = Some((surface.clone(), time));
                 self.move_from_title_bar(&surface, button);
-                Some(false)
+                false
             }
             Zone::Resize(edges) => {
                 self.resize_from_frame(&surface, protocol_edge(edges), button);
-                Some(false)
+                false
             }
         }
     }
@@ -278,7 +293,9 @@ impl State {
         let control = self.windows[index].frame.pressed.take();
         self.needs_redraw = true;
         let surface = self.windows[index].surface().clone();
-        let released_on = self.frame_under(self.pointer_location);
+        let released_on = self
+            .pointer_target(self.pointer_location)
+            .and_then(|target| target.frame());
         if released_on.as_ref().map(|(on, zone)| (on, *zone))
             != control.map(|control| (&surface, Zone::Control(control)))
         {
@@ -328,7 +345,7 @@ impl State {
         let scheme = self.decorations.scheme;
         let palette = Palette::for_scheme(scheme);
         let context = renderer.context_id();
-        let decorations = &mut self.decorations;
+        let labels = self.labels.get_mut();
         for (window, scale) in self.windows.iter_mut().zip(scales) {
             let bar = window.title_bar_height();
             let Some(rect) = window.geometry().filter(|_| bar > 0) else {
@@ -354,7 +371,7 @@ impl State {
             {
                 continue;
             }
-            match decorations.paint(&look, bar, &palette, renderer) {
+            match paint_title_bar(labels, &look, bar, &palette, renderer) {
                 Some(texture) => {
                     window.frame.painted = Some(Painted {
                         look,
@@ -376,65 +393,46 @@ impl Headless {
     }
 }
 
-impl Decorations {
-    fn paint(
-        &mut self,
-        look: &Look,
-        bar: i32,
-        palette: &Palette,
-        renderer: &mut VulkanRenderer,
-    ) -> Option<VulkanTexture> {
-        let title = self.text.paragraph(
-            &look.title,
-            title_style(palette, look.active),
-            None,
-            TextAlign::Start,
-        );
-        let scene = Scene {
-            width: look.width.unsigned_abs(),
-            height: bar.unsigned_abs(),
-            background: Color::TRANSPARENT,
-            items: TitleBar {
-                width: look.width as f32,
-                height: bar as f32,
-                title,
-                palette,
-                active: look.active,
-                hover: if look.hovered.is_some() { 1.0 } else { 0.0 },
-                close_hover: if look.hovered == Some(Some(WindowControl::Close)) {
-                    1.0
-                } else {
-                    0.0
-                },
-                pressed: look.pressed,
-                zoomed: look.zoomed,
-                alternate: look.alternate && look.active,
-            }
-            .items(),
-        };
-        let scale = f64::from_bits(look.scale);
-        let pixels = (
-            unbound_graphics::pixels(scene.width, scale),
-            unbound_graphics::pixels(scene.height, scale),
-        );
-        let mut rgba = vec![0; pixels.0 as usize * pixels.1 as usize * 4];
-        if let Err(error) = self.renderer.render_into(&scene, scale, &mut rgba) {
-            tracing::warn!("cannot draw a title bar: {error}");
-            return None;
+fn paint_title_bar(
+    labels: &mut Labels,
+    look: &Look,
+    bar: i32,
+    palette: &Palette,
+    renderer: &mut VulkanRenderer,
+) -> Option<VulkanTexture> {
+    let title = labels.text().paragraph(
+        &look.title,
+        title_style(palette, look.active),
+        None,
+        TextAlign::Start,
+    );
+    let scene = Scene {
+        width: look.width.unsigned_abs(),
+        height: bar.unsigned_abs(),
+        background: Color::TRANSPARENT,
+        items: TitleBar {
+            width: look.width as f32,
+            height: bar as f32,
+            title,
+            palette,
+            active: look.active,
+            hover: if look.hovered.is_some() { 1.0 } else { 0.0 },
+            close_hover: if look.hovered == Some(Some(WindowControl::Close)) {
+                1.0
+            } else {
+                0.0
+            },
+            pressed: look.pressed,
+            zoomed: look.zoomed,
+            alternate: look.alternate && look.active,
         }
-        for pixel in rgba.as_chunks_mut::<4>().0 {
-            pixel.swap(0, 2);
-        }
-        renderer
-            .import_memory(
-                &rgba,
-                Fourcc::Argb8888,
-                (pixels.0 as i32, pixels.1 as i32).into(),
-                false,
-            )
-            .inspect_err(|error| tracing::warn!("cannot upload a title bar: {error}"))
-            .ok()
-    }
+        .items(),
+    };
+    let (rgba, size) = labels.rasterise(&scene, f64::from_bits(look.scale))?;
+    renderer
+        .import_memory(&rgba, Fourcc::Abgr8888, size.into(), false)
+        .inspect_err(|error| tracing::warn!("cannot upload a title bar: {error}"))
+        .ok()
 }
 
 impl Window {

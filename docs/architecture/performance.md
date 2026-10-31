@@ -87,6 +87,25 @@ animation's deadline) used to redraw every window of the app; it now redraws onl
 own timer is due, and a sample redraws all of them once. Sampling less while every window is hidden
 needs a hidden or suspended signal from the toolkit, which it does not have yet.
 
+## 2026-10-31: Files list rows built on demand
+
+`Table` can hold unfilled rows (`set_row_count`) and names the ones around the visible rows that
+still lack cells (`unfilled_rows`); Files fills them before each frame instead of building all
+100 000 rows when the list is shown. Nested lists (open folders) still build every row.
+`unbound-files-bench`, medians of five runs (worst in brackets), release build, same VM, back to
+back with other developers' builds running; before is `669fbf9`, after is `bb08f42`:
+
+| Action | before | after |
+| :--- | ---: | ---: |
+| Switch to the list view | 12.7 ms (32.9) | 1.4 ms (4.7) |
+| Select All in the list view | 4.3 ms (6.6) | 1.1 ms (2.5) |
+| One external change in the list view | 4.5 ms (7.4) | 2.6 ms (6.9) |
+| Frame while scrolling the list, p99 | 0.4 ms (0.5) | 0.4 ms (0.5) |
+| Open to first frame (column view, unchanged code) | 19.9 ms (22.3) | 18.7 ms (36.7) |
+
+The column-view rows (open, listing stall) do not touch the changed code; their spread is the
+shared VM's load.
+
 ## 2026-10-31: Files with 100 000 items
 
 Before, Files read every folder on the UI thread (two `stat` calls per entry, then a sort), read

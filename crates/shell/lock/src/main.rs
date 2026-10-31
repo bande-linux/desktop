@@ -2,6 +2,7 @@ use std::io::{Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
+use std::sync::mpsc::Sender;
 use std::thread;
 
 use accesskit::TreeUpdate;
@@ -11,6 +12,8 @@ use unbound_lock::{
     BackdropSource, Inbox, LockScreen, Look, PAM_SERVICE, User, Variant, authenticate,
     current_user, load_backdrop,
 };
+use unbound_status::Update;
+use unbound_status::devices::{Control, follow_devices};
 use unbound_toolkit::ui::frame_time;
 use unbound_toolkit::{
     App, Image, Role, Scene, Scheme, TextSystem, Window, WindowError, WindowEvent,
@@ -34,6 +37,7 @@ struct Locker {
     minutes: MinuteTimer,
     backdrop: Option<Inbox<(Look, Image)>>,
     backdrop_requested: bool,
+    devices: Option<(Inbox<Update>, Sender<Control>)>,
     layouts: Layouts,
     unlocked: bool,
 }
@@ -74,6 +78,7 @@ impl App for Locker {
             }
         }
         self.screen.advance(frame_time().presentation);
+        self.screen.set_scale(window.scale());
         self.screen.scene(width, height)
     }
 
@@ -105,6 +110,7 @@ impl App for Locker {
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         let mut sources = vec![self.verdicts.as_fd(), self.minutes.as_fd()];
+        sources.extend(self.devices.as_ref().map(|(inbox, _)| inbox.fd()));
         sources.extend(self.backdrop.as_ref().map(Inbox::fd));
         sources
     }
@@ -118,7 +124,25 @@ impl App for Locker {
             window.request_redraw();
             return;
         }
-        if index == 2 {
+        if index == 2
+            && let Some((inbox, _)) = self.devices.as_mut()
+        {
+            let latest = inbox
+                .drain()
+                .into_iter()
+                .rev()
+                .find_map(|update| match update {
+                    Update::Devices((battery, wifi, _)) => Some((battery, wifi)),
+                    _ => None,
+                });
+            if let Some((battery, wifi)) = latest
+                && self.screen.set_devices(battery, wifi.as_ref())
+            {
+                window.request_redraw();
+            }
+            return;
+        }
+        if index >= 2 {
             if let Some((_, image)) = self
                 .backdrop
                 .take()
@@ -168,6 +192,17 @@ fn clock_format() -> zbus::Result<String> {
     .get_property("ClockFormat")
 }
 
+fn follow_status() -> Option<(Inbox<Update>, Sender<Control>)> {
+    let system = zbus::blocking::Connection::system()
+        .inspect_err(|error| tracing::warn!("no system bus: {error}"))
+        .ok()?;
+    let inbox = Inbox::new()
+        .inspect_err(|error| tracing::warn!("cannot follow the battery and Wi-Fi: {error}"))
+        .ok()?;
+    let controls = follow_devices(&system, inbox.outbox());
+    Some((inbox, controls))
+}
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let user = current_user()?;
     let (verdicts, verdict_sender) = UnixStream::pair()?;
@@ -190,6 +225,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         minutes: MinuteTimer::new()?,
         backdrop: None,
         backdrop_requested: false,
+        devices: follow_status(),
         layouts: Layouts::load(),
         unlocked: false,
     };

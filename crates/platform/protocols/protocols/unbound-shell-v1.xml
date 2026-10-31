@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="unbound_shell_v1">
-  <interface name="unbound_shell_v1" version="16">
+  <interface name="unbound_shell_v1" version="17">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the shell and the screenshot tool), never on the listening socket.
@@ -423,6 +423,40 @@
         button is pressed on the scrim outside the surface and its popups.
       </description>
       <arg name="surface" type="object" interface="wl_surface"/>
+    </event>
+
+    <enum name="session_end" since="17">
+      <entry name="log_out" value="0" summary="end the user's session"/>
+      <entry name="restart" value="1" summary="restart the computer"/>
+      <entry name="shut_down" value="2" summary="turn the computer off"/>
+    </enum>
+
+    <request name="confirm_session_end" since="17">
+      <description summary="ask the user before the session ends">
+        Opens the confirmation for logging out, restarting or shutting down:
+        the compositor starts the shell's session dialog as a shell client, or
+        brings forward the one already open.
+      </description>
+      <arg name="ending" type="uint" enum="session_end"/>
+    </request>
+
+    <request name="quit_all_apps" since="17">
+      <description summary="ask every app to quit before the session ends">
+        Asks every app with a window to quit, as quit_app does for each; apps
+        with unsaved work may ask the user first. Windows of shell clients are
+        left alone. From then on the compositor sends apps_running on this
+        object until it is destroyed.
+      </description>
+    </request>
+
+    <event name="apps_running" since="17">
+      <description summary="an app still holds a window">
+        Sent after quit_all_apps and again whenever the answer changes: how
+        many apps still hold a window, and the app id of the frontmost of
+        them. A count of 0 means every app has closed its windows.
+      </description>
+      <arg name="app_id" type="string"/>
+      <arg name="count" type="uint"/>
     </event>
   </interface>
 

@@ -3,6 +3,7 @@ name = "unbound-volumes"
 description = "Removable volumes for Unbound: which are mounted, and ejecting them through UDisks"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

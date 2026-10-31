@@ -3,6 +3,7 @@ name = "unbound-bus"
 description = "D-Bus helpers for Unbound: serve until the bus goes away, follow the portal settings"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

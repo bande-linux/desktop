@@ -3,6 +3,7 @@ name = "unbound-fs"
 description = "Trash, file operations with undo, and folder watching for Unbound"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

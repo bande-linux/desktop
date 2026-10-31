@@ -3,6 +3,7 @@ name = "unbound-sample"
 description = "Sample unbound-toolkit app whose start time and memory ci/perf measures"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 publish = false

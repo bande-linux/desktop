@@ -3,6 +3,7 @@ name = "unbound-spring"
 description = "Damped spring model for Unbound animations"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

@@ -124,48 +124,6 @@ impl Spring {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Animation {
-    spring: Spring,
-    start: State,
-    target: f64,
-    elapsed: f64,
-}
-
-impl Animation {
-    pub fn new(spring: Spring, start: State, target: f64) -> Self {
-        Self {
-            spring,
-            start,
-            target,
-            elapsed: 0.0,
-        }
-    }
-
-    pub fn state(&self) -> State {
-        self.spring.state_at(self.start, self.target, self.elapsed)
-    }
-
-    pub fn target(&self) -> f64 {
-        self.target
-    }
-
-    pub fn advance(&mut self, seconds: f64) -> State {
-        self.elapsed += seconds;
-        self.state()
-    }
-
-    pub fn retarget(&mut self, target: f64) {
-        self.start = self.state();
-        self.target = target;
-        self.elapsed = 0.0;
-    }
-
-    pub fn is_at_rest(&self, precision: f64) -> bool {
-        is_settled(self.state(), self.target, precision)
-    }
-}
-
 fn is_settled(state: State, target: f64, precision: f64) -> bool {
     (state.position - target).abs() <= precision && state.velocity.abs() * REST_HORIZON <= precision
 }

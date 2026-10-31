@@ -4,7 +4,7 @@ use std::f64::consts::PI;
 use std::time::{Duration, Instant};
 
 use unbound_spring::{
-    Animated, Animation, Decay, RUBBER_BAND_CONSTANT, Spring, SpringError, State, rubber_band,
+    Animated, Decay, RUBBER_BAND_CONSTANT, Spring, SpringError, State, rubber_band,
 };
 
 const OMEGA: f64 = 12.0;
@@ -140,39 +140,28 @@ fn energy_is_conserved_without_damping_and_never_grows_with_it() {
 }
 
 #[test]
-fn animation_state_does_not_depend_on_the_frame_rate() {
-    let start = released(0.0, -40.0);
-    let mut at_60_hz = Animation::new(spring(0.6), start, 100.0);
-    let mut at_240_hz = at_60_hz;
-    for _ in 0..60 {
-        at_60_hz.advance(1.0 / 60.0);
-    }
-    for _ in 0..240 {
-        at_240_hz.advance(1.0 / 240.0);
-    }
-    let (a, b) = (at_60_hz.state(), at_240_hz.state());
-    assert!(close(a.position, b.position, 1e-9));
-    assert!(close(a.velocity, b.velocity, 1e-9));
-}
-
-#[test]
 fn retargeting_mid_flight_keeps_position_and_velocity_continuous() {
-    let mut animation = Animation::new(spring(0.5), released(0.0, 0.0), 100.0);
-    let before = animation.advance(0.08);
-    animation.retarget(-50.0);
-    let after = animation.state();
-    assert_eq!(after, before);
-    assert_eq!(animation.target(), -50.0);
-    let next = animation.advance(0.001);
+    let start = Instant::now();
+    let mut animated = Animated::released(released(0.0, 0.0), 100.0, spring(0.5));
+    animated.start_at(start);
+    let turn = start + Duration::from_millis(80);
+    let before = animated.state_at(turn);
+    animated.animate_at(turn, false, -50.0, spring(0.5));
+    assert_eq!(animated.state_at(turn), before);
+    assert_eq!(animated.target(), -50.0);
+    let next = animated.state_at(turn + Duration::from_millis(1));
     assert!(next.velocity < before.velocity);
 }
 
 #[test]
-fn animation_settles_on_its_target() {
-    let mut animation = Animation::new(spring(1.0), released(0.0, 0.0), 1.0);
-    assert!(!animation.is_at_rest(1e-3));
-    animation.advance(2.0);
-    assert!(animation.is_at_rest(1e-3));
+fn a_released_spring_waits_for_its_start_and_settles_on_its_target() {
+    let start = Instant::now();
+    let mut animated = Animated::released(released(0.0, 5.0), 1.0, spring(1.0));
+    let later = start + Duration::from_secs(2);
+    assert_eq!(animated.state_at(later), released(0.0, 5.0));
+    assert!(!animated.is_at_rest(later, 1e-3));
+    animated.start_at(start);
+    assert!(animated.is_at_rest(later, 1e-3));
 }
 
 #[test]
@@ -199,9 +188,9 @@ fn non_physical_parameters_are_rejected() {
 #[test]
 fn presets_settle_to_a_thousandth_of_the_distance_in_their_named_times() {
     let settled_after = |spring: Spring, seconds: f64| {
-        let mut animation = Animation::new(spring, released(0.0, 0.0), 1000.0);
-        animation.advance(seconds);
-        animation.is_at_rest(1.0)
+        let mut animated = Animated::released(released(0.0, 0.0), 1000.0, spring);
+        animated.start_at(Duration::ZERO);
+        animated.is_at_rest(Duration::from_secs_f64(seconds), 1.0)
     };
     for (spring, settles) in [
         (Spring::QUICK, 0.27),
@@ -217,9 +206,10 @@ fn presets_settle_to_a_thousandth_of_the_distance_in_their_named_times() {
 #[test]
 fn momentum_overshoots_slightly_and_critical_presets_never() {
     let peak = |spring: Spring| {
-        let mut animation = Animation::new(spring, released(0.0, 0.0), 1.0);
-        (0..2000)
-            .map(|_| animation.advance(0.001).position)
+        let mut animated = Animated::released(released(0.0, 0.0), 1.0, spring);
+        animated.start_at(Duration::ZERO);
+        (1..=2000)
+            .map(|millis| animated.state_at(Duration::from_millis(millis)).position)
             .fold(f64::MIN, f64::max)
     };
 

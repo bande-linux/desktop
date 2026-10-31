@@ -3,13 +3,14 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::thread;
 
-use unbound_xdg::config_home;
+use unbound_xdg::{config_home, data_home};
 use xdg_desktop_portal_unbound::capture::{ScreenshotService, ScreenshotTool};
 use xdg_desktop_portal_unbound::dialog_process::{DIALOG_PROGRAM, DialogProcess};
 use xdg_desktop_portal_unbound::file_chooser::FileChooser;
 use xdg_desktop_portal_unbound::screencast::{ScreenCast, close_sessions_streaming};
 use xdg_desktop_portal_unbound::screenshot::Screenshot;
 use xdg_desktop_portal_unbound::settings::{CursorSettings, Settings};
+use xdg_desktop_portal_unbound::wallpaper::{BACKGROUNDS, Wallpaper};
 use xdg_desktop_portal_unbound::{BUS_NAME, OBJECT_PATH};
 use zbus::blocking::Connection;
 
@@ -47,12 +48,22 @@ fn serve() -> zbus::Result<Connection> {
     connection
         .object_server()
         .at(OBJECT_PATH, Screenshot { ui: tool })?;
-    connection.object_server().at(
-        OBJECT_PATH,
-        FileChooser::new(Arc::new(DialogProcess {
-            program: PathBuf::from(DIALOG_PROGRAM),
-        })),
-    )?;
+    let dialogs = Arc::new(DialogProcess {
+        program: PathBuf::from(DIALOG_PROGRAM),
+    });
+    connection
+        .object_server()
+        .at(OBJECT_PATH, FileChooser::new(dialogs.clone()))?;
+    if let Some(data_home) = data_home() {
+        connection.object_server().at(
+            OBJECT_PATH,
+            Wallpaper {
+                ui: dialogs,
+                folder: data_home.join(BACKGROUNDS),
+                session: connection.clone(),
+            },
+        )?;
+    }
     close_sessions_when_sharing_ends(&connection, &tool_connection)?;
     connection.request_name(BUS_NAME)?;
     Ok(connection)

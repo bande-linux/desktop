@@ -1,7 +1,9 @@
 use std::collections::{BTreeSet, HashMap};
+use std::ffi::OsStr;
 use std::io;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -11,11 +13,24 @@ use rustix::io::Errno;
 const SETTLE: Duration = Duration::from_millis(80);
 const BUFFER: usize = 16 * 1024;
 
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct FolderChanges {
+    pub folders: Vec<PathBuf>,
+    pub entries: Vec<PathBuf>,
+}
+
+impl FolderChanges {
+    pub fn is_empty(&self) -> bool {
+        self.folders.is_empty() && self.entries.is_empty()
+    }
+}
+
 #[derive(Debug)]
 pub struct FolderWatch {
     fd: OwnedFd,
     watches: HashMap<i32, Vec<PathBuf>>,
     changed: BTreeSet<PathBuf>,
+    touched: BTreeSet<PathBuf>,
     due: Option<Instant>,
 }
 
@@ -25,6 +40,7 @@ impl FolderWatch {
             fd: inotify::init(CreateFlags::NONBLOCK | CreateFlags::CLOEXEC)?,
             watches: HashMap::new(),
             changed: BTreeSet::new(),
+            touched: BTreeSet::new(),
             due: None,
         })
     }
@@ -70,8 +86,13 @@ impl FolderWatch {
         let mut buffer = [MaybeUninit::<u8>::uninit(); BUFFER];
         let mut reader = inotify::Reader::new(&self.fd, &mut buffer);
         let mut changed = Vec::new();
+        let mut touched = Vec::new();
         let mut forgotten = Vec::new();
         let mut overflowed = false;
+        let whole = ReadFlags::QUEUE_OVERFLOW
+            | ReadFlags::IGNORED
+            | ReadFlags::DELETE_SELF
+            | ReadFlags::MOVE_SELF;
         loop {
             match reader.next() {
                 Ok(event) => {
@@ -82,7 +103,14 @@ impl FolderWatch {
                     if flags.contains(ReadFlags::IGNORED) {
                         forgotten.push(event.wd());
                     }
-                    changed.push(event.wd());
+                    let name = event
+                        .file_name()
+                        .map(|name| OsStr::from_bytes(name.to_bytes()).to_os_string())
+                        .filter(|name| !name.is_empty());
+                    match name {
+                        Some(name) if !flags.intersects(whole) => touched.push((event.wd(), name)),
+                        _ => changed.push(event.wd()),
+                    }
                 }
                 Err(Errno::INTR) => {}
                 Err(_) => break,
@@ -99,10 +127,15 @@ impl FolderWatch {
                 .flatten()
                 .cloned(),
         );
+        for (wd, name) in touched {
+            for folder in self.watches.get(&wd).into_iter().flatten() {
+                self.touched.insert(folder.join(&name));
+            }
+        }
         for wd in forgotten {
             self.watches.remove(&wd);
         }
-        if !self.changed.is_empty() {
+        if !self.changed.is_empty() || !self.touched.is_empty() {
             self.due.get_or_insert_with(|| Instant::now() + SETTLE);
         }
     }
@@ -111,11 +144,19 @@ impl FolderWatch {
         self.due
     }
 
-    pub fn take_changed(&mut self, now: Instant) -> Vec<PathBuf> {
+    pub fn take_changed(&mut self, now: Instant) -> FolderChanges {
         if self.due.is_none_or(|due| due > now) {
-            return Vec::new();
+            return FolderChanges::default();
         }
         self.due = None;
-        std::mem::take(&mut self.changed).into_iter().collect()
+        let folders = std::mem::take(&mut self.changed);
+        let entries = std::mem::take(&mut self.touched)
+            .into_iter()
+            .filter(|path| path.parent().is_none_or(|folder| !folders.contains(folder)))
+            .collect();
+        FolderChanges {
+            folders: folders.into_iter().collect(),
+            entries,
+        }
     }
 }

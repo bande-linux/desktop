@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use unbound_bar::menubar::{MenuBar, Slot, app_name};
+use unbound_bar::menubar::{MenuBar, Slot};
 use unbound_bar::menus::{
     app_menu, battery_menu, bluetooth_menu, input_source_menu, sound_menu, system_menu,
 };
@@ -42,16 +42,6 @@ fn action_of<'a>(menu: &'a Menu, title: &str) -> &'a str {
         .find(|item| item.title == title)
         .unwrap_or_else(|| panic!("no {title} in {menu:?}"))
         .action
-}
-
-#[test]
-fn the_active_app_is_named_by_its_desktop_entry() {
-    let names = vec![("org.unbound.Terminal".to_owned(), "Terminal".to_owned())];
-    assert_eq!(app_name("org.unbound.Terminal", &names), "Terminal");
-    assert_eq!(
-        app_name("org.example.Unknown", &names),
-        "org.example.Unknown"
-    );
 }
 
 #[test]

@@ -5,6 +5,7 @@ use std::sync::mpsc::{self, Sender};
 
 use unbound_fs::Trash;
 
+use crate::failure::unexpected;
 use crate::follow::{Update, Updates, spawn};
 
 const BLOCK: u64 = 512;
@@ -156,7 +157,7 @@ pub fn follow_storage(updates: Updates) -> Sender<StorageCommand> {
             if commands.contains(&StorageCommand::EmptyTrash)
                 && let Err(error) = trash.empty()
             {
-                updates.send(Update::Failed(error.to_string()));
+                updates.send(unexpected(error));
             }
             measure(&home, &trash, &updates);
         }

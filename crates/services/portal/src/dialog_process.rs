@@ -1,13 +1,14 @@
 use std::ffi::{OsStr, OsString};
 use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use rustix::process::{Pid, Signal, kill_process};
 
 use crate::file_chooser::{Dialog, FileChooserUi, Filter, Mode, Outcome, Pattern, Selection};
 use crate::request::Cancellation;
+use crate::wallpaper::WallpaperUi;
 
 pub const DIALOG_PROGRAM: &str = "/usr/libexec/unbound-file-chooser";
 pub const CHOSEN: u8 = 0;
@@ -222,10 +223,14 @@ pub struct DialogProcess {
     pub program: PathBuf,
 }
 
-impl FileChooserUi for DialogProcess {
-    fn choose(&self, dialog: &Dialog, cancellation: &Cancellation) -> Outcome {
+impl DialogProcess {
+    fn show(
+        &self,
+        arguments: Vec<OsString>,
+        cancellation: &Cancellation,
+    ) -> Option<(Option<i32>, Vec<u8>)> {
         let child = Command::new(&self.program)
-            .args(arguments(dialog))
+            .args(arguments)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .spawn();
@@ -233,7 +238,7 @@ impl FileChooserUi for DialogProcess {
             Ok(child) => child,
             Err(error) => {
                 tracing::warn!("cannot start {}: {error}", self.program.display());
-                return Outcome::Unavailable;
+                return None;
             }
         };
         if let Some(pid) = i32::try_from(child.id()).ok().and_then(Pid::from_raw) {
@@ -246,11 +251,37 @@ impl FileChooserUi for DialogProcess {
             let _ = stdout.read_to_end(&mut output);
         }
         let status = child.wait().ok().and_then(|status| status.code());
-        match status {
-            _ if cancellation.is_cancelled() => Outcome::Cancelled,
-            Some(code) if code == i32::from(CHOSEN) => Outcome::Chosen(decode(&output, dialog)),
-            Some(code) if code == i32::from(CANCELLED) => Outcome::Cancelled,
-            _ => Outcome::Unavailable,
+        Some((status.filter(|_| !cancellation.is_cancelled()), output))
+    }
+}
+
+impl FileChooserUi for DialogProcess {
+    fn choose(&self, dialog: &Dialog, cancellation: &Cancellation) -> Outcome {
+        match self.show(arguments(dialog), cancellation) {
+            None => Outcome::Unavailable,
+            Some(_) if cancellation.is_cancelled() => Outcome::Cancelled,
+            Some((Some(code), output)) if code == i32::from(CHOSEN) => {
+                Outcome::Chosen(decode(&output, dialog))
+            }
+            Some((Some(code), _)) if code == i32::from(CANCELLED) => Outcome::Cancelled,
+            Some(_) => Outcome::Unavailable,
         }
+    }
+}
+
+pub const SET_WALLPAPER: &str = "--set-wallpaper";
+
+impl WallpaperUi for DialogProcess {
+    fn confirm(&self, app_id: &str, picture: &Path, cancellation: &Cancellation) -> bool {
+        let arguments = vec![
+            os(SET_WALLPAPER),
+            picture.as_os_str().to_owned(),
+            os("--app-id"),
+            os(app_id),
+        ];
+        matches!(
+            self.show(arguments, cancellation),
+            Some((Some(code), _)) if code == i32::from(CHOSEN)
+        )
     }
 }

@@ -17,7 +17,7 @@ const MOST_HEIGHT: f32 = 720.0;
 const LEAST_WIDTH: f32 = 620.0;
 const MARGIN: f32 = 16.0;
 const CLIPBOARD_GRACE: Duration = Duration::from_millis(600);
-const APP_ID: &str = "org.unbound.Screenshot";
+pub const APP_ID: &str = "org.unbound.Screenshot";
 
 struct MarkupApp {
     layout: WidgetId,

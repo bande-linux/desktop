@@ -1,12 +1,23 @@
 use std::fmt;
 use std::io;
-use std::os::unix::process::CommandExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::slice;
 use std::thread;
+use std::time::{Duration, Instant};
 
-use crate::entry::{DesktopAction, DesktopEntry};
+use rustix::process::Signal;
+use unbound_notify::Urgency;
+use unbound_notify::client::{Request, notify};
+use zbus::blocking::Connection;
+use zbus::zvariant::Value;
+
+use crate::L10N;
+use crate::entry::{
+    DesktopAction, DesktopEntry, Locale, applications, current_desktops, data_dirs,
+};
+use crate::identity::{app_name, find_app};
 use crate::uri::file_uri;
 
 pub const TERMINAL: &str = "unbound-term";
@@ -205,24 +216,23 @@ pub fn launch_with(
     activation_token: Option<&str>,
 ) -> Result<(), LaunchError> {
     for command in entry.commands_for(files).map_err(LaunchError::Exec)? {
-        spawn_detached(
-            &command,
-            entry.working_directory.as_deref(),
-            activation_token,
-        )
-        .map_err(LaunchError::Spawn)?;
+        start(entry, &command, activation_token)?;
     }
     Ok(())
 }
 
 pub fn launch(entry: &DesktopEntry, activation_token: Option<&str>) -> Result<u32, LaunchError> {
-    let command = entry.command().map_err(LaunchError::Exec)?;
-    spawn_detached(
-        &command,
-        entry.working_directory.as_deref(),
-        activation_token,
-    )
-    .map_err(LaunchError::Spawn)
+    launch_with_arguments(entry, &[], activation_token)
+}
+
+pub fn launch_with_arguments(
+    entry: &DesktopEntry,
+    arguments: &[String],
+    activation_token: Option<&str>,
+) -> Result<u32, LaunchError> {
+    let mut command = entry.command().map_err(LaunchError::Exec)?;
+    command.extend_from_slice(arguments);
+    start(entry, &command, activation_token)
 }
 
 pub fn launch_action(
@@ -231,8 +241,17 @@ pub fn launch_action(
     activation_token: Option<&str>,
 ) -> Result<u32, LaunchError> {
     let command = entry.action_command(action).map_err(LaunchError::Exec)?;
+    start(entry, &command, activation_token)
+}
+
+fn start(
+    entry: &DesktopEntry,
+    command: &[String],
+    activation_token: Option<&str>,
+) -> Result<u32, LaunchError> {
     spawn_detached(
-        &command,
+        entry.app_id(),
+        command,
         entry.working_directory.as_deref(),
         activation_token,
     )
@@ -240,6 +259,7 @@ pub fn launch_action(
 }
 
 pub fn spawn_detached(
+    app_id: &str,
     command: &[String],
     working_directory: Option<&Path>,
     activation_token: Option<&str>,
@@ -265,8 +285,273 @@ pub fn spawn_detached(
                 .map_err(io::Error::from)
         });
     }
-    let mut child = process.spawn()?;
+    if app_id.is_empty() {
+        let mut child = process.spawn()?;
+        let pid = child.id();
+        thread::spawn(move || child.wait());
+        return Ok(pid);
+    }
+    let app_id = app_id.to_owned();
+    let started = Instant::now();
+    let child = match process.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            thread::spawn(move || tell(Connection::session(), &app_id, Failure::NotOpened));
+            return Err(error);
+        }
+    };
     let pid = child.id();
-    thread::spawn(move || child.wait());
+    thread::spawn(move || supervise(Connection::session, &app_id, child, started));
     Ok(pid)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Failure {
+    NotOpened,
+    Crashed,
+}
+
+const OPENING: Duration = Duration::from_secs(5);
+const CRASHES: [Signal; 6] = [
+    Signal::SEGV,
+    Signal::ABORT,
+    Signal::BUS,
+    Signal::ILL,
+    Signal::FPE,
+    Signal::SYS,
+];
+const SYSTEMD: &str = "org.freedesktop.systemd1";
+
+fn failure(status: ExitStatus, ran: Duration) -> Option<Failure> {
+    if let Some(signal) = status.signal() {
+        return CRASHES
+            .iter()
+            .any(|crash| crash.as_raw() == signal)
+            .then_some(Failure::Crashed);
+    }
+    (!status.success() && ran < OPENING).then_some(Failure::NotOpened)
+}
+
+fn scope_name(app_id: &str, pid: u32) -> String {
+    let mut escaped = String::with_capacity(app_id.len());
+    for byte in app_id.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'_' | b'.') {
+            escaped.push(char::from(byte));
+        } else {
+            escaped.push_str(&format!("\\x{byte:02x}"));
+        }
+    }
+    format!("app-unbound-{escaped}-{pid}.scope")
+}
+
+fn place_in_scope(bus: &Connection, app_id: &str, pid: u32) -> zbus::Result<()> {
+    let properties = vec![
+        ("PIDs", Value::from(vec![pid])),
+        ("Slice", Value::from("app.slice")),
+        ("CollectMode", Value::from("inactive-or-failed")),
+    ];
+    bus.call_method(
+        Some(SYSTEMD),
+        "/org/freedesktop/systemd1",
+        Some("org.freedesktop.systemd1.Manager"),
+        "StartTransientUnit",
+        &(
+            scope_name(app_id, pid),
+            "fail",
+            properties,
+            Vec::<(&str, Vec<(&str, Value)>)>::new(),
+        ),
+    )?;
+    Ok(())
+}
+
+fn supervise(
+    connect: impl Fn() -> zbus::Result<Connection>,
+    app_id: &str,
+    mut child: Child,
+    started: Instant,
+) {
+    let placed = connect().and_then(|bus| place_in_scope(&bus, app_id, child.id()));
+    if let Err(error) = placed {
+        tracing::debug!("{app_id} runs outside its own scope: {error}");
+    }
+    let status = match child.wait() {
+        Ok(status) => status,
+        Err(error) => return tracing::debug!("cannot follow {app_id}: {error}"),
+    };
+    if let Some(failure) = failure(status, started.elapsed()) {
+        tracing::warn!("{app_id} ended with {status}");
+        tell(connect(), app_id, failure);
+    }
+}
+
+fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure) {
+    let entries = applications(
+        &data_dirs(),
+        Locale::from_env().as_ref(),
+        &current_desktops(),
+    );
+    let entry = find_app(&entries, app_id);
+    let app = app_name(&entries, app_id);
+    let (summary, body) = match failure {
+        Failure::NotOpened => ("app-not-opened", "app-not-opened-body"),
+        Failure::Crashed => ("app-crashed", "app-crashed-body"),
+    };
+    let request = Request {
+        app_name: entry.map_or(app_id, DesktopEntry::app_id),
+        replaces_id: 0,
+        app_icon: entry
+            .and_then(|entry| entry.icon.as_deref())
+            .unwrap_or_default(),
+        summary: &L10N.tr_args(summary, [("app", app.into())]),
+        body: &L10N.tr(body),
+        actions: &[],
+        urgency: Urgency::Normal,
+        sound: None,
+    };
+    let told = bus.and_then(|bus| notify(&bus, &request));
+    if let Err(error) = told {
+        tracing::warn!("cannot tell that {app_id} failed: {error}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    use unbound_test_bus::SessionBus;
+    use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+
+    use super::*;
+
+    type Units = Arc<Mutex<Vec<(String, Vec<u32>, String)>>>;
+    type Notes = Arc<Mutex<Vec<(String, String)>>>;
+
+    struct Systemd(Units);
+
+    #[zbus::interface(name = "org.freedesktop.systemd1.Manager")]
+    impl Systemd {
+        fn start_transient_unit(
+            &self,
+            name: String,
+            _mode: String,
+            properties: Vec<(String, OwnedValue)>,
+            _aux: Vec<(String, Vec<(String, OwnedValue)>)>,
+        ) -> OwnedObjectPath {
+            let property = |key: &str| {
+                properties
+                    .iter()
+                    .find(|(name, _)| name == key)
+                    .map(|(_, value)| value.try_clone().unwrap())
+                    .unwrap()
+            };
+            let pids = Vec::<u32>::try_from(property("PIDs")).unwrap();
+            let slice = String::try_from(property("Slice")).unwrap();
+            self.0.lock().unwrap().push((name, pids, slice));
+            OwnedObjectPath::try_from("/org/freedesktop/systemd1/job/1").unwrap()
+        }
+    }
+
+    struct Notifications(Notes);
+
+    #[zbus::interface(name = "org.freedesktop.Notifications")]
+    impl Notifications {
+        #[allow(clippy::too_many_arguments)]
+        fn notify(
+            &self,
+            app_name: String,
+            _replaces_id: u32,
+            _app_icon: String,
+            summary: String,
+            _body: String,
+            _actions: Vec<String>,
+            _hints: HashMap<String, OwnedValue>,
+            _expire_timeout: i32,
+        ) -> u32 {
+            self.0.lock().unwrap().push((app_name, summary));
+            1
+        }
+    }
+
+    fn status(script: &str) -> ExitStatus {
+        Command::new("sh").args(["-c", script]).status().unwrap()
+    }
+
+    #[test]
+    fn only_crashes_and_failures_while_opening_are_reported() {
+        assert_eq!(
+            failure(status("exit 1"), Duration::ZERO),
+            Some(Failure::NotOpened)
+        );
+        assert_eq!(
+            failure(status("kill -SEGV $$"), Duration::from_secs(60)),
+            Some(Failure::Crashed)
+        );
+        assert_eq!(
+            failure(status("kill -ABRT $$"), Duration::ZERO),
+            Some(Failure::Crashed)
+        );
+        assert_eq!(failure(status("exit 0"), Duration::ZERO), None);
+        assert_eq!(failure(status("kill -TERM $$"), Duration::ZERO), None);
+        assert_eq!(failure(status("kill -KILL $$"), Duration::ZERO), None);
+        assert_eq!(failure(status("exit 1"), Duration::from_secs(60)), None);
+    }
+
+    #[test]
+    fn apps_run_in_their_own_scope_and_a_crash_is_told() {
+        let bus = SessionBus::start().unwrap();
+        let units = Units::default();
+        let notes = Notes::default();
+        let server = bus.connect().unwrap();
+        server
+            .object_server()
+            .at("/org/freedesktop/systemd1", Systemd(units.clone()))
+            .unwrap();
+        server
+            .object_server()
+            .at(
+                "/org/freedesktop/Notifications",
+                Notifications(notes.clone()),
+            )
+            .unwrap();
+        server.request_name(SYSTEMD).unwrap();
+        server
+            .request_name("org.freedesktop.Notifications")
+            .unwrap();
+
+        let run = |app_id: &str, script: &str| {
+            let child = Command::new("sh").args(["-c", script]).spawn().unwrap();
+            let pid = child.id();
+            supervise(|| bus.connect(), app_id, child, Instant::now());
+            pid
+        };
+        let calm = run("org.example.Calm", "sleep 0.2");
+        let crashed = run("org.example.crash-test", "sleep 0.2; kill -SEGV $$");
+
+        assert_eq!(
+            *units.lock().unwrap(),
+            [
+                (
+                    format!("app-unbound-org.example.Calm-{calm}.scope"),
+                    vec![calm],
+                    "app.slice".to_owned()
+                ),
+                (
+                    format!("app-unbound-org.example.crash\\x2dtest-{crashed}.scope"),
+                    vec![crashed],
+                    "app.slice".to_owned()
+                ),
+            ]
+        );
+        assert_eq!(
+            *notes.lock().unwrap(),
+            [(
+                "org.example.crash-test".to_owned(),
+                "crash-test quit unexpectedly".to_owned()
+            )]
+        );
+    }
 }

@@ -83,7 +83,7 @@ impl FilesView {
         self.end_search();
         self.quick_look = None;
         self.band = None;
-        self.table_revision = None;
+        self.table_synced = None;
     }
 
     fn show_tab(&mut self) {

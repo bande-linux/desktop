@@ -33,7 +33,11 @@ pub enum Request {
     EmojiPicker,
     Menu(Menu, Point),
     Inspect(u32),
-    SaveColumns(String),
+    SaveState(String),
+    QuitApp {
+        app_id: String,
+        roots: Vec<(u32, u64)>,
+    },
 }
 
 type FindIcon = Box<dyn Fn(&str) -> Option<Image>>;
@@ -185,6 +189,13 @@ pub(crate) fn answer_stop(
     }
 }
 
+pub fn due_redraws(screens: &[Box<dyn Screen>], now: Instant) -> Vec<bool> {
+    screens
+        .iter()
+        .map(|screen| screen.deadline().is_some_and(|deadline| deadline <= now))
+        .collect()
+}
+
 pub trait Screen {
     fn scene(&mut self, width: u32, height: u32) -> Scene;
     fn set_palette(&mut self, palette: Palette);
@@ -211,6 +222,18 @@ pub trait Screen {
     fn set_full_screen(&mut self, _full_screen: bool) {}
 
     fn measures_gpu(&self) -> bool {
+        false
+    }
+
+    fn measures_wakeups(&self) -> bool {
+        false
+    }
+
+    fn measures_sleep_blockers(&self) -> bool {
+        false
+    }
+
+    fn measures_disk(&self) -> bool {
         false
     }
 

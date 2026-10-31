@@ -7,7 +7,8 @@ use std::sync::mpsc::{self, Sender};
 use std::thread;
 use std::time::Instant;
 
-use crate::menubar::{HEIGHT, MenuBar, Slot, StatusView, app_name};
+use crate::dialogs::DIALOGS;
+use crate::menubar::{HEIGHT, MenuBar, Slot, StatusView};
 use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, input_source_menu, sound_menu,
     system_menu, wifi_menu,
@@ -27,11 +28,11 @@ use unbound_status::{Command, Update};
 use unbound_toolkit::ui::{Event, Menu, MenuItem, PointerButton};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Rect, Role, Scene,
-    TextSystem, Window, WindowEvent,
+    SessionEnd, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_icon,
-    launch_action, spawn_detached,
+    DesktopEntry, ICON_THEMES, Locale, app_name, applications, current_desktops, data_dirs,
+    find_app, find_icon, launch_action, spawn_detached,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -60,7 +61,6 @@ pub struct MenuBarClient<V> {
     restart: Restart,
     workspaces: (usize, usize),
     anchors: Vec<(Panel, Rect)>,
-    names: Vec<(String, String)>,
     entries: Vec<DesktopEntry>,
     inbox: Inbox<Update>,
     controls: Option<Sender<Control>>,
@@ -80,6 +80,10 @@ fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
     if let Err(error) = result {
         tracing::warn!("cannot {what}: {error}");
     }
+}
+
+fn confirm_session_end(window: &mut Window, ending: SessionEnd) {
+    report("ask to end the session", window.confirm_session_end(ending));
 }
 
 fn tray_image(icon: &TrayIcon, pixels: u32) -> Option<Image> {
@@ -150,7 +154,7 @@ impl<V: StatusView> MenuBarClient<V> {
     fn launch(&self, window: &mut Window, app_id: &str, command: &[&str]) {
         let token = window.activation_token(app_id).ok();
         let command: Vec<String> = command.iter().map(|part| (*part).to_owned()).collect();
-        if let Err(error) = spawn_detached(&command, None, token.as_deref()) {
+        if let Err(error) = spawn_detached(app_id, &command, None, token.as_deref()) {
             tracing::warn!("cannot start {}: {error}", command.join(" "));
         }
     }
@@ -171,7 +175,7 @@ impl<V: StatusView> MenuBarClient<V> {
     fn run(&mut self, window: &mut Window, command: Command) {
         let myself = self.myself();
         match command {
-            Command::About => self.launch(window, "", &[&myself, "--about"]),
+            Command::About => self.launch(window, DIALOGS, &[&myself, "--about"]),
             Command::Settings(pane) => match pane {
                 Some(pane) => self.launch(window, SETTINGS, &["unbound-settings", &pane]),
                 None => self.launch(window, SETTINGS, &["unbound-settings"]),
@@ -179,9 +183,9 @@ impl<V: StatusView> MenuBarClient<V> {
             Command::ForceQuit => {
                 self.launch(window, MONITOR, &["unbound-monitor", "--force-quit"]);
             }
-            Command::Restart => self.launch(window, "", &[&myself, "--confirm", "restart"]),
-            Command::ShutDown => self.launch(window, "", &[&myself, "--confirm", "shut-down"]),
-            Command::LogOut => self.launch(window, "", &[&myself, "--confirm", "log-out"]),
+            Command::Restart => confirm_session_end(window, SessionEnd::Restart),
+            Command::ShutDown => confirm_session_end(window, SessionEnd::ShutDown),
+            Command::LogOut => confirm_session_end(window, SessionEnd::LogOut),
             Command::SetMuted(muted) => {
                 let _ = self.sound.send(SoundControl::SetMuted(muted));
             }
@@ -193,7 +197,7 @@ impl<V: StatusView> MenuBarClient<V> {
             }
             Command::AboutApp(version) => {
                 let app = self.app_id.clone();
-                self.launch(window, "", &[&myself, "--about-app", &app, &version]);
+                self.launch(window, DIALOGS, &[&myself, "--about-app", &app, &version]);
             }
             Command::HideApp => report("hide the app", window.hide_app(&self.app_id)),
             Command::QuitApp => report("quit the app", window.quit_app(&self.app_id)),
@@ -278,9 +282,7 @@ impl<V: StatusView> MenuBarClient<V> {
     }
 
     fn entry(&self) -> Option<&DesktopEntry> {
-        self.entries
-            .iter()
-            .find(|entry| entry.app_id() == self.app_id)
+        find_app(&self.entries, &self.app_id)
     }
 
     fn run_app_action(&mut self, window: &mut Window, id: &str) {
@@ -516,7 +518,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::ActiveApp(app_id) => {
-                if self.bar.set_app(app_name(&app_id, &self.names)) {
+                if self.bar.set_app(&app_name(&self.entries, &app_id)) {
                     window.request_redraw();
                 }
                 if app_id != self.app_id {
@@ -759,10 +761,6 @@ impl<V: StatusView> MenuBarClient<V> {
             Locale::from_env().as_ref(),
             &current_desktops(),
         );
-        let names = entries
-            .iter()
-            .map(|entry| (entry.app_id().to_owned(), entry.name.clone()))
-            .collect();
         let inbox = Inbox::new()?;
         let controls = system.map(|system| follow_devices(system, inbox.outbox()));
         let sound = follow_sound(inbox.outbox());
@@ -806,7 +804,6 @@ impl<V: StatusView> MenuBarClient<V> {
             restart: Restart::default(),
             workspaces: (1, 0),
             anchors: Vec::new(),
-            names,
             entries,
             inbox,
             controls,

@@ -1,29 +1,57 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
-use accesskit::{ActionRequest, TreeUpdate};
+use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use unbound_toolkit::ui::{
-    Button, Cell, Column as TableColumn, Cursor, Event, HEADER_HEIGHT, Key, Modifiers, Pointer,
-    Row as TableRow, SEGMENTED_HEIGHT, SearchField, SegmentedControl, Sort, TEXT_FIELD_HEIGHT,
-    Table, WidgetId,
+    Animated, Button, Cell, Column as TableColumn, Cursor, Event, HEADER_HEIGHT, Key, Modifiers,
+    Pointer, Row as TableRow, SEGMENTED_HEIGHT, SearchField, SegmentedControl, Sort, Spring,
+    TEXT_FIELD_HEIGHT, Table, WidgetId,
 };
 use unbound_toolkit::{
-    Color, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextAlign,
+    Color, Header, Item, Palette, Path, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextAlign,
     TextRole, TextStyle, TextSystem,
 };
 
 use crate::L10N;
 use crate::list::{List, Signal, group_id, sender};
 use crate::menu::{COLUMN_ACTION, MenuCommand, Selected, columns_menu, process_menu};
-use crate::model::{Column, Graph, HISTORY, Monitor, Row, RowKey, StopTarget, Tab};
+use crate::model::{
+    Column, CoreGroup, CoreKind, Filter, Graph, HISTORY, Monitor, Row, RowKey, StopTarget, Tab,
+};
 use crate::sampler::Snapshot;
+use crate::system::PressureLevel;
 use crate::view::{
     ALERT_ICON, FORCE_QUIT, INSPECT_SYMBOL, Icons, Painter, QUIT, Request, Screen, answer_stop,
     contains, is_secondary, opens_menu, stop_alert, stop_button, symbol_button,
 };
 
 pub const TOOLBAR_HEIGHT: f32 = unbound_toolkit::HEADER_HEIGHT as f32;
-pub const FOOTER_HEIGHT: f32 = 112.0;
+const FOOTER_HEIGHT: f32 = 112.0;
+const FOOTER_PAD: f32 = 16.0;
+const READOUT_WIDTH: f32 = 176.0;
+const READOUT_SPACE: f32 = 24.0;
+const GRID: f32 = 8.0;
+const READOUT_GAP: f32 = 24.0;
+const READOUT_ROW: f32 = 24.0;
+const READOUT_ROWS: usize = 3;
+const READOUT_COLUMNS: usize = 3;
+const GRAPH_MIN_WIDTH: f32 = 160.0;
+const GRAPH_SMALLEST_WIDTH: f32 = 96.0;
+const GRAPH_PAD: f32 = 6.0;
+const GRAPH_LABEL: f32 = 14.0;
+const SERIES_WIDTH: f32 = 1.5;
+const BAR_SLOT: usize = 2;
+const STRIP_HEIGHT: f32 = 28.0;
+const STRIP_GAP: f32 = 4.0;
+const STRIP_MIN_WIDTH: f32 = 200.0;
+const STRIP_COLUMNS: usize = 4;
+const GROUP_LABEL: f32 = 20.0;
+const EDGE_GRAB: f32 = 4.0;
+const EDGE_SNAP: f32 = 24.0;
+const BAR_HEIGHT: f32 = 8.0;
+const KEY_SIZE: f32 = 8.0;
+const KEY_RADIUS: f32 = 2.0;
+const KEY_GAP: f32 = 6.0;
 const SIDE: f32 = 12.0;
 const LEADING: f32 = 94.0;
 const BUTTON_SIZE: f32 = 28.0;
@@ -31,11 +59,7 @@ const ITEM_GAP: f32 = 16.0;
 const BUTTON_GAP: f32 = 4.0;
 const SEGMENT_WIDTH: f32 = 80.0;
 const SEARCH_WIDTH: f32 = 200.0;
-const GRAPH_WIDTH: f32 = 240.0;
 const NAME_WIDTH: f32 = 160.0;
-const SUMMARY_WIDTH: f32 = 210.0;
-const SUMMARY_ROW: f32 = 22.0;
-const SUMMARY_ROWS: usize = 3;
 
 fn column_width(column: Column) -> f32 {
     match column {
@@ -95,7 +119,9 @@ fn table_row(
     if let Some(name) = cells.first_mut() {
         name.icon = row.icon.as_deref().and_then(|icon| icons.get(icon));
         if !row.responding {
-            name.text = L10N.tr_args("not-responding", [("name", row.name.clone().into())]);
+            name.text = L10N
+                .tr_args("not-responding", [("name", row.name.clone().into())])
+                .into();
             name.tint = Some(alarm);
         }
     }
@@ -128,6 +154,13 @@ pub struct MonitorView {
     focused: bool,
     stopping: Option<StopTarget>,
     requests: Vec<Request>,
+    footer: WidgetId,
+    readout_width: f32,
+    cores: Animated,
+    cores_extent: f32,
+    cores_moving: bool,
+    edge_drag: Option<f32>,
+    edge_hover: bool,
 }
 
 fn tabs_control(list: &List, tabs: &[Tab], tab: Tab) -> SegmentedControl {
@@ -157,7 +190,7 @@ impl MonitorView {
         ));
         let shown_tabs = monitor.tabs();
         let tabs = list.insert(tabs_control(&list, &shown_tabs, tab));
-        let search = list.insert(search_field(&list));
+        let search = list.insert(search_field(&list, monitor.filter(), ""));
         let mut view = Self {
             monitor,
             palette,
@@ -177,6 +210,13 @@ impl MonitorView {
             focused: true,
             stopping: None,
             requests: Vec::new(),
+            footer: WidgetId::next(),
+            readout_width: READOUT_WIDTH,
+            cores: Animated::points(0.0),
+            cores_extent: 0.0,
+            cores_moving: false,
+            edge_drag: None,
+            edge_hover: false,
         };
         view.sync();
         view
@@ -299,6 +339,13 @@ impl MonitorView {
         let denied = answer_stop(&target, choice, icon, move |choice| {
             send(Signal::Choice(choice.to_owned()))
         });
+        if choice == QUIT {
+            self.requests
+                .extend(target.apps.iter().map(|(app_id, roots)| Request::QuitApp {
+                    app_id: app_id.clone(),
+                    roots: roots.clone(),
+                }));
+        }
         if matches!(choice, QUIT | FORCE_QUIT) {
             self.requests.push(Request::Resample);
         }
@@ -352,11 +399,12 @@ impl MonitorView {
 
     fn list_frame(&self) -> Rect {
         let sheet = self.sheet();
+        let footer = self.footer_layout();
         Rect::new(
             sheet.x,
             sheet.y,
             sheet.width,
-            (sheet.height - FOOTER_HEIGHT).max(0.0),
+            (footer.top - sheet.y).max(0.0),
         )
     }
 
@@ -395,7 +443,81 @@ impl MonitorView {
         ]
     }
 
+    fn footer_layout(&self) -> Footer {
+        footer_layout(
+            self.sheet(),
+            slot_count(&self.monitor),
+            self.readout_width,
+            self.cores_extent,
+        )
+    }
+
+    fn animate_cores(&mut self, first: bool) {
+        let width = self.sheet().width - 2.0 * FOOTER_PAD;
+        let target = match self.monitor.cores_shown() {
+            true => core_slots(&self.monitor.core_groups(), Point::new(0.0, 0.0), width).1,
+            false => 0.0,
+        };
+        let (now, reduce_motion) = self.list.motion();
+        if first {
+            self.cores.jump_to(target);
+        }
+        self.cores
+            .animate_at(now, reduce_motion, target, Spring::STANDARD);
+        (self.cores_extent, self.cores_moving) = self.cores.value_at(now);
+    }
+
+    fn on_footer_edge(&self, at: Point) -> bool {
+        let sheet = self.sheet();
+        self.monitor.tab() == Tab::Cpu
+            && at.x >= sheet.x
+            && at.x < sheet.x + sheet.width
+            && (at.y - self.footer_layout().top).abs() <= EDGE_GRAB
+    }
+
+    fn drag_edge(&mut self, from: f32, to: f32) {
+        let raised = from - to;
+        let shown = self.monitor.cores_shown();
+        if (raised >= EDGE_SNAP && !shown) || (raised <= -EDGE_SNAP && shown) {
+            self.toggle_cores();
+            self.edge_drag = Some(to);
+        }
+    }
+
+    fn toggle_cores(&mut self) -> bool {
+        if self.monitor.tab() != Tab::Cpu {
+            self.set_tab(Tab::Cpu);
+            self.monitor.set_cores_shown(true);
+        } else {
+            self.monitor.set_cores_shown(!self.monitor.cores_shown());
+        }
+        self.requests.push(Request::SaveState(self.monitor.state()));
+        true
+    }
+
+    fn measure_readouts(&mut self) {
+        let palette = self.palette;
+        let summary = self.monitor.summary();
+        let text = self.list.text();
+        let mut width = |content: &str, style: TextStyle| {
+            text.paragraph(content, style, None, TextAlign::Start)
+                .width()
+        };
+        let widest = summary
+            .iter()
+            .map(|(label, value)| {
+                width(label, readout_label(palette)) + width(value, readout_value(palette))
+            })
+            .fold(0.0, f32::max);
+        let key = match self.monitor.memory_bar() {
+            Some(_) => KEY_SIZE + KEY_GAP,
+            None => 0.0,
+        };
+        self.readout_width = ((widest + key + READOUT_SPACE) / GRID).ceil() * GRID;
+    }
+
     fn layout(&mut self) {
+        self.measure_readouts();
         for (id, frame) in self.toolbar_frames() {
             self.list.place(id, frame);
         }
@@ -420,11 +542,13 @@ impl MonitorView {
         self.show_columns();
     }
 
-    fn measures(&self) -> (bool, bool) {
-        (
+    fn measures(&self) -> [bool; 4] {
+        [
             self.monitor.measures_proportional_memory(),
             self.monitor.measures_gpu(),
-        )
+            self.monitor.measures_wakeups(),
+            self.monitor.measures_disk(),
+        ]
     }
 
     fn show_columns(&mut self) {
@@ -450,8 +574,7 @@ impl MonitorView {
             self.requests.push(Request::Resample);
         }
         self.show_columns();
-        self.requests
-            .push(Request::SaveColumns(self.monitor.chosen_columns()));
+        self.requests.push(Request::SaveState(self.monitor.state()));
         true
     }
 
@@ -514,9 +637,22 @@ impl MonitorView {
     }
 
     fn clear_search(&mut self) {
-        let field = search_field(&self.list);
+        let field = search_field(&self.list, self.monitor.filter(), "");
         self.toolbar.search = self.list.replace(self.toolbar.search, field);
         self.set_search("");
+    }
+
+    fn set_filter(&mut self, filter: Filter) -> bool {
+        self.monitor.set_filter(filter);
+        let focused = self.searching();
+        let field = search_field(&self.list, filter, self.monitor.search());
+        self.toolbar.search = self.list.replace(self.toolbar.search, field);
+        if focused {
+            self.list.focus_widget(self.toolbar.search);
+        }
+        self.sync();
+        self.requests.push(Request::SaveState(self.monitor.state()));
+        true
     }
 
     fn search_key(&mut self, key: Key, modifiers: Modifiers) -> Option<bool> {
@@ -585,12 +721,24 @@ impl MonitorView {
                 self.clear_search();
                 true
             }
+            Key::Escape if self.monitor.cores_shown() => self.toggle_cores(),
             _ => self.pass(event),
         }
     }
 
     fn pointer_down(&mut self, event: &Event, pointer: &Pointer) -> bool {
         let at = pointer.position;
+        if !self.list.has_dialog() && self.on_footer_edge(at) {
+            self.edge_drag = Some(at.y);
+            return true;
+        }
+        let on_graph = self
+            .footer_layout()
+            .graph
+            .is_some_and(|graph| contains(graph, at));
+        if on_graph && !self.list.has_dialog() && self.monitor.tab() == Tab::Cpu {
+            return self.toggle_cores();
+        }
         let handled = self.pass(event);
         if self.list.has_dialog() || !contains(self.list.frame(), at) {
             return handled;
@@ -615,86 +763,407 @@ impl MonitorView {
     }
 }
 
+fn series_points(values: &[f32], plot: Rect) -> Vec<Point> {
+    let step = plot.width / (HISTORY - 1) as f32;
+    let right = plot.x + plot.width;
+    let bottom = plot.y + plot.height;
+    let first = values.len().saturating_sub(HISTORY);
+    let shown = &values[first..];
+    shown
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            Point::new(
+                right - (shown.len() - 1 - index) as f32 * step,
+                bottom - value.clamp(0.0, 1.0) * plot.height,
+            )
+        })
+        .collect()
+}
+
+fn polyline(points: &[Point]) -> Option<Path> {
+    let (first, rest) = points.split_first()?;
+    Some(
+        rest.iter()
+            .fold(Path::new().move_to(*first), |path, point| {
+                path.line_to(*point)
+            }),
+    )
+}
+
+fn paint_series(
+    painter: &mut Painter,
+    values: &[f32],
+    plot: Rect,
+    line: Color,
+    area: Option<Color>,
+) {
+    let points = series_points(values, plot);
+    let (Some(path), Some(first), Some(last)) = (polyline(&points), points.first(), points.last())
+    else {
+        return;
+    };
+    let bottom = plot.y + plot.height;
+    if let Some(area) = area {
+        let closed = path
+            .clone()
+            .line_to(Point::new(last.x, bottom))
+            .line_to(Point::new(first.x, bottom))
+            .close();
+        painter.items.push(Item::FillPath {
+            path: closed,
+            paint: area.into(),
+        });
+    }
+    painter.items.push(Item::StrokePath {
+        path,
+        width: SERIES_WIDTH,
+        paint: line.into(),
+    });
+}
+
+fn pressure_color(level: PressureLevel, palette: Palette) -> Color {
+    match level {
+        PressureLevel::Normal => palette.success,
+        PressureLevel::Elevated => palette.warning,
+        PressureLevel::Critical => palette.danger,
+    }
+}
+
+fn paint_pressure(
+    painter: &mut Painter,
+    samples: &[(f32, PressureLevel)],
+    plot: Rect,
+    palette: Palette,
+) {
+    let step = plot.width / HISTORY as f32;
+    let right = plot.x + plot.width;
+    let bottom = plot.y + plot.height;
+    let first = samples.len().saturating_sub(HISTORY);
+    let shown = &samples[first..];
+    for (index, (used, level)) in shown.iter().enumerate() {
+        let height = used.clamp(0.0, 1.0) * plot.height;
+        let x = right - (shown.len() - index) as f32 * step;
+        painter.fill(
+            Shape::rect(Rect::new(x, bottom - height, (step - 1.0).max(1.0), height)),
+            pressure_color(*level, palette),
+        );
+    }
+}
+
 fn paint_graph(monitor: &Monitor, palette: Palette, painter: &mut Painter, frame: Rect) {
-    painter.fill(Shape::rounded(frame, Radius::S), palette.well);
-    let inner = frame.inset(6.0);
-    let bar = inner.width / HISTORY as f32;
-    let bars = |painter: &mut Painter, values: &[f32], color: Color, baseline: f32, reach: f32| {
-        let start = inner.x + inner.width - values.len() as f32 * bar;
-        for (index, value) in values.iter().enumerate() {
-            let height = value.clamp(0.0, 1.0) * reach;
-            if height.abs() < 0.5 {
-                continue;
-            }
-            painter.fill(
-                Shape::rect(Rect::new(
-                    start + index as f32 * bar,
-                    baseline.min(baseline - height),
-                    (bar - 1.0).max(1.0),
-                    height.abs(),
-                )),
-                color,
+    let well = Shape::rounded(frame, Radius::S);
+    let mut graph = Painter {
+        text: &mut *painter.text,
+        items: Vec::new(),
+    };
+    graph.fill(well, palette.well);
+    for quarter in 1..4 {
+        let y = (frame.y + frame.height * quarter as f32 / 4.0).round();
+        graph.fill(
+            Shape::rect(Rect::new(frame.x, y, frame.width, 1.0)),
+            palette.hairline,
+        );
+    }
+    let plot = Rect::new(frame.x, frame.y + 1.0, frame.width, frame.height - 1.0);
+    let graph_kind = monitor.graph();
+    let is_scale = matches!(graph_kind, Graph::Lines { .. });
+    let title = match graph_kind {
+        Graph::Lines {
+            primary,
+            secondary,
+            scale,
+        } => {
+            paint_series(
+                &mut graph,
+                &primary,
+                plot,
+                palette.accent,
+                Some(palette.accent_soft),
             );
+            if let Some(secondary) = &secondary {
+                paint_series(&mut graph, secondary, plot, palette.ink2, None);
+            }
+            scale
+        }
+        Graph::Pressure(samples) => {
+            paint_pressure(&mut graph, &samples, plot, palette);
+            L10N.tr("graph-pressure")
         }
     };
-    let bottom = inner.y + inner.height;
-    match monitor.graph() {
-        Graph::Stacked { lower, upper } => {
-            bars(painter, &upper, palette.accent, bottom, inner.height);
-            bars(painter, &lower, palette.danger, bottom, inner.height);
+    let label = readout_label(palette);
+    let corner = |y: f32| {
+        Rect::new(
+            frame.x + GRAPH_PAD,
+            y,
+            frame.width - 2.0 * GRAPH_PAD,
+            GRAPH_LABEL,
+        )
+    };
+    let title_style = match is_scale {
+        true => TextStyle {
+            caps: false,
+            ..label
         }
-        Graph::Filled(values) => bars(painter, &values, palette.accent, bottom, inner.height),
-        Graph::Mirrored { up, down } => {
-            let middle = (inner.y + inner.height / 2.0).round();
-            bars(painter, &up, palette.accent, middle, inner.height / 2.0);
-            bars(painter, &down, palette.danger, middle, -inner.height / 2.0);
-            painter.fill(
-                Shape::rect(Rect::new(inner.x, middle, inner.width, 1.0)),
-                palette.hairline,
-            );
-        }
+        .tabular(),
+        false => label,
+    };
+    graph.text_in(
+        &title,
+        title_style,
+        corner(frame.y + GRAPH_PAD),
+        TextAlign::Start,
+    );
+    graph.text_in(
+        &L10N.tr("graph-span"),
+        label,
+        corner(frame.y + frame.height - GRAPH_PAD - GRAPH_LABEL),
+        TextAlign::Start,
+    );
+    let items = std::mem::take(&mut graph.items);
+    painter.items.push(Item::Clip { shape: well, items });
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Footer {
+    sheet: Rect,
+    top: f32,
+    rows: usize,
+    readout_width: f32,
+    graph: Option<Rect>,
+    cores: Rect,
+}
+
+fn readout_label(palette: Palette) -> TextStyle {
+    TextStyle::role(TextRole::Label, palette.ink3)
+}
+
+fn readout_value(palette: Palette) -> TextStyle {
+    TextStyle::role(TextRole::BodyStrong, palette.ink).tabular()
+}
+
+fn footer_layout(sheet: Rect, readouts: usize, readout_width: f32, cores: f32) -> Footer {
+    let available = sheet.width - 2.0 * FOOTER_PAD;
+    let readouts_width = |columns: usize| {
+        columns as f32 * readout_width + columns.saturating_sub(1) as f32 * READOUT_GAP
+    };
+    let fitting = (1..=READOUT_COLUMNS)
+        .rev()
+        .find(|columns| available - readouts_width(*columns) - READOUT_GAP >= GRAPH_MIN_WIDTH)
+        .unwrap_or(1);
+    let columns = fitting.min(readouts.div_ceil(READOUT_ROWS)).max(1);
+    let rows = readouts.div_ceil(columns).max(1);
+    let height = (rows as f32 * READOUT_ROW + 2.0 * FOOTER_PAD).max(FOOTER_HEIGHT);
+    let top = sheet.y + sheet.height - height - cores;
+    let graph_x = sheet.x + FOOTER_PAD + readouts_width(columns) + READOUT_GAP;
+    let graph_width = sheet.x + sheet.width - FOOTER_PAD - graph_x;
+    let graph = (graph_width >= GRAPH_SMALLEST_WIDTH).then(|| {
+        Rect::new(
+            graph_x,
+            top + FOOTER_PAD,
+            graph_width,
+            height - 2.0 * FOOTER_PAD,
+        )
+    });
+    Footer {
+        sheet,
+        top,
+        rows,
+        readout_width,
+        graph,
+        cores: Rect::new(
+            sheet.x + FOOTER_PAD,
+            top + height,
+            sheet.width - 2.0 * FOOTER_PAD,
+            cores,
+        ),
     }
 }
 
-fn paint_footer(monitor: &Monitor, palette: Palette, sheet: Rect, painter: &mut Painter) {
-    let top = sheet.y + sheet.height - FOOTER_HEIGHT;
+fn paint_footer(monitor: &Monitor, palette: Palette, footer: Footer, painter: &mut Painter) {
+    let (sheet, readout_width) = (footer.sheet, footer.readout_width);
+    let summary = monitor.summary();
+    let bar = monitor.memory_bar();
     painter.fill(
-        Shape::rect(Rect::new(sheet.x, top, sheet.width, 1.0)),
+        Shape::rect(Rect::new(sheet.x, footer.top, sheet.width, 1.0)),
         palette.hairline,
     );
-    for (index, (label, value)) in monitor.summary().iter().enumerate() {
-        let x = sheet.x + SIDE + (index / SUMMARY_ROWS) as f32 * (SUMMARY_WIDTH + 2.0 * SIDE);
-        let y = top + 16.0 + (index % SUMMARY_ROWS) as f32 * SUMMARY_ROW;
-        let row = Rect::new(x, y, SUMMARY_WIDTH, SUMMARY_ROW);
-        painter.text_in(
-            label,
-            TextStyle::role(TextRole::Callout, palette.ink2),
-            row,
-            TextAlign::Start,
-        );
-        painter.text_in(
-            value,
-            TextStyle::role(TextRole::Callout, palette.ink)
-                .weight(TextStyle::MEDIUM)
-                .tabular(),
-            row,
-            TextAlign::End,
-        );
+    let slot = |index: usize| {
+        let x = sheet.x + FOOTER_PAD + (index / footer.rows) as f32 * (readout_width + READOUT_GAP);
+        let y = footer.top + FOOTER_PAD + (index % footer.rows) as f32 * READOUT_ROW;
+        Rect::new(x, y, readout_width, READOUT_ROW)
+    };
+    let colors = segment_colors(palette);
+    if let Some(bar) = &bar {
+        paint_memory_bar(painter, bar, slot(BAR_SLOT), palette);
     }
-    let graph = Rect::new(
-        sheet.x + sheet.width - SIDE - GRAPH_WIDTH,
-        top + SIDE,
-        GRAPH_WIDTH,
-        FOOTER_HEIGHT - 2.0 * SIDE,
-    );
-    if graph.x > sheet.x + SIDE + 2.0 * (SUMMARY_WIDTH + 2.0 * SIDE) {
+    for (index, (label, value)) in summary.iter().enumerate() {
+        let shift = usize::from(bar.is_some() && index >= BAR_SLOT);
+        let mut row = slot(index + shift);
+        let key = bar
+            .iter()
+            .flatten()
+            .position(|(readout, _)| *readout == index)
+            .and_then(|segment| colors.get(segment));
+        if let Some(color) = key {
+            let middle = row.y + ((READOUT_ROW - KEY_SIZE) / 2.0).round();
+            painter.fill(
+                Shape::rounded(Rect::new(row.x, middle, KEY_SIZE, KEY_SIZE), KEY_RADIUS),
+                *color,
+            );
+            row = Rect::new(
+                row.x + KEY_SIZE + KEY_GAP,
+                row.y,
+                row.width - KEY_SIZE - KEY_GAP,
+                row.height,
+            );
+        }
+        painter.text_in(label, readout_label(palette), row, TextAlign::Start);
+        painter.text_in(value, readout_value(palette), row, TextAlign::End);
+    }
+    if let Some(graph) = footer.graph {
         paint_graph(monitor, palette, painter, graph);
+    }
+    if footer.cores.height > 0.0 {
+        paint_cores(monitor, palette, footer.cores, painter);
     }
 }
 
-fn search_field(list: &List) -> SearchField {
+enum CoreSlot {
+    Label(String, Rect),
+    Strip(usize, Vec<f32>, Rect),
+}
+
+fn core_slots(groups: &[CoreGroup], origin: Point, width: f32) -> (Vec<CoreSlot>, f32) {
+    let largest = groups
+        .iter()
+        .map(|group| group.cores.len())
+        .max()
+        .unwrap_or(1);
+    let columns = (((width + STRIP_GAP) / (STRIP_MIN_WIDTH + STRIP_GAP)) as usize)
+        .clamp(1, STRIP_COLUMNS)
+        .min(largest.max(1));
+    let strip_width = (width - (columns - 1) as f32 * STRIP_GAP) / columns as f32;
+    let mut slots = Vec::new();
+    let mut y = origin.y;
+    for group in groups {
+        if let Some(kind) = group.kind {
+            let title = match kind {
+                CoreKind::Performance => L10N.tr("cores-performance"),
+                CoreKind::Efficiency => L10N.tr("cores-efficiency"),
+            };
+            slots.push(CoreSlot::Label(
+                title,
+                Rect::new(origin.x, y, width, GROUP_LABEL),
+            ));
+            y += GROUP_LABEL;
+        }
+        for (index, (core, history)) in group.cores.iter().enumerate() {
+            let column = index % columns;
+            let row = index / columns;
+            slots.push(CoreSlot::Strip(
+                *core,
+                history.clone(),
+                Rect::new(
+                    origin.x + column as f32 * (strip_width + STRIP_GAP),
+                    y + row as f32 * (STRIP_HEIGHT + STRIP_GAP),
+                    strip_width,
+                    STRIP_HEIGHT,
+                ),
+            ));
+        }
+        y += group.cores.len().div_ceil(columns) as f32 * (STRIP_HEIGHT + STRIP_GAP);
+    }
+    (slots, y - origin.y + FOOTER_PAD - STRIP_GAP)
+}
+
+fn paint_cores(monitor: &Monitor, palette: Palette, area: Rect, painter: &mut Painter) {
+    let (slots, _) = core_slots(
+        &monitor.core_groups(),
+        Point::new(area.x, area.y),
+        area.width,
+    );
+    for slot in slots {
+        match slot {
+            CoreSlot::Label(title, frame) => {
+                painter.text_in(&title, readout_label(palette), frame, TextAlign::Start)
+            }
+            CoreSlot::Strip(core, history, frame) => {
+                let well = Shape::rounded(frame, Radius::S);
+                let mut strip = Painter {
+                    text: &mut *painter.text,
+                    items: Vec::new(),
+                };
+                strip.fill(well, palette.well);
+                paint_series(
+                    &mut strip,
+                    &history,
+                    frame,
+                    palette.accent,
+                    Some(palette.accent_soft),
+                );
+                strip.text_in(
+                    &L10N.tr_args("core-label", [("number", (core + 1).into())]),
+                    readout_label(palette),
+                    Rect::new(
+                        frame.x + GRAPH_PAD,
+                        frame.y + 2.0,
+                        frame.width - 2.0 * GRAPH_PAD,
+                        GRAPH_LABEL,
+                    ),
+                    TextAlign::Start,
+                );
+                let items = std::mem::take(&mut strip.items);
+                painter.items.push(Item::Clip { shape: well, items });
+            }
+        }
+    }
+}
+
+fn segment_colors(palette: Palette) -> [Color; 4] {
+    [
+        palette.accent,
+        palette.ink2,
+        palette.ink3,
+        palette.accent_soft,
+    ]
+}
+
+fn slot_count(monitor: &Monitor) -> usize {
+    monitor.summary().len() + usize::from(monitor.memory_bar().is_some())
+}
+
+fn paint_memory_bar(painter: &mut Painter, bar: &[(usize, f32)], slot: Rect, palette: Palette) {
+    let track = Rect::new(
+        slot.x,
+        slot.y + ((slot.height - BAR_HEIGHT) / 2.0).round(),
+        slot.width,
+        BAR_HEIGHT,
+    );
+    let shape = Shape::rounded(track, BAR_HEIGHT / 2.0);
+    let mut items = vec![Item::Fill {
+        shape: Shape::rect(track),
+        paint: palette.well.into(),
+    }];
+    let mut x = track.x;
+    for ((_, share), color) in bar.iter().zip(segment_colors(palette)) {
+        let width = (share.clamp(0.0, 1.0) * track.width).round();
+        items.push(Item::Fill {
+            shape: Shape::rect(Rect::new(x, track.y, width, track.height)),
+            paint: color.into(),
+        });
+        x += width;
+    }
+    painter.items.push(Item::Clip { shape, items });
+}
+
+fn search_field(list: &List, filter: Filter, text: &str) -> SearchField {
     let send = sender(list.signals());
-    SearchField::new(&L10N.tr("search-placeholder"), "", move |text| {
+    let placeholder = match filter {
+        Filter::All => L10N.tr("search-placeholder"),
+        filter => L10N.tr_args("search-filtered", [("filter", filter.title().into())]),
+    };
+    SearchField::new(&placeholder, text, move |text| {
         send(Signal::Search(text.to_owned()))
     })
 }
@@ -755,6 +1224,8 @@ impl Screen for MonitorView {
                 self.set_tab(tab);
                 true
             }
+            Some(MenuCommand::ShowCores) => self.toggle_cores(),
+            Some(MenuCommand::Filter(filter)) => self.set_filter(filter),
             None => false,
         }
     }
@@ -773,22 +1244,36 @@ impl Screen for MonitorView {
         match event {
             Event::Key { key, modifiers } => self.key(event, *key, *modifiers),
             Event::PointerDown(pointer) => self.pointer_down(event, pointer),
+            Event::PointerMove(pointer) => match self.edge_drag {
+                Some(from) => {
+                    self.drag_edge(from, pointer.position.y);
+                    true
+                }
+                None => {
+                    self.edge_hover = self.on_footer_edge(pointer.position);
+                    self.pass(event)
+                }
+            },
+            Event::PointerUp(_) if self.edge_drag.take().is_some() => true,
             _ => self.pass(event),
         }
     }
 
     fn scene(&mut self, width: u32, height: u32) -> Scene {
+        let first = self.size == (0.0, 0.0);
         self.size = (width as f32, height as f32);
+        self.animate_cores(first);
         self.layout();
         let (controls, dialog) = self.list.paint(width, height);
         let sheet = self.sheet();
         let radius = Radius::concentric(Radius::XL, self.inset());
+        let footer = self.footer_layout();
         let (monitor, palette) = (&self.monitor, self.palette);
         let mut painter = Painter {
             text: self.list.text(),
             items: Vec::new(),
         };
-        paint_footer(monitor, palette, sheet, &mut painter);
+        paint_footer(monitor, palette, footer, &mut painter);
         painter.items = vec![Item::Clip {
             shape: Shape::rounded(sheet, radius),
             items: std::mem::take(&mut painter.items),
@@ -818,8 +1303,20 @@ impl Screen for MonitorView {
         self.monitor.measures_gpu()
     }
 
+    fn measures_disk(&self) -> bool {
+        self.monitor.measures_disk()
+    }
+
     fn measures_proportional_memory(&self) -> bool {
         self.monitor.measures_proportional_memory()
+    }
+
+    fn measures_wakeups(&self) -> bool {
+        self.monitor.measures_wakeups()
+    }
+
+    fn measures_sleep_blockers(&self) -> bool {
+        self.monitor.measures_sleep_blockers()
     }
 
     fn finished(&self) -> bool {
@@ -835,7 +1332,27 @@ impl Screen for MonitorView {
     }
 
     fn accessibility(&self) -> Option<TreeUpdate> {
-        Some(self.list.accessibility())
+        let mut tree = self.list.accessibility();
+        let group = self.footer.part(0);
+        let mut footer = Node::new(Role::Group);
+        footer.set_label(self.monitor.tab().title());
+        let mut nodes = Vec::new();
+        for (index, (label, value)) in self.monitor.summary().into_iter().enumerate() {
+            let mut readout = Node::new(Role::Label);
+            readout.set_label(label);
+            readout.set_value(value);
+            nodes.push((self.footer.part(index as u64 + 2), readout));
+        }
+        let mut graph = Node::new(Role::Image);
+        graph.set_label(self.monitor.graph_description());
+        nodes.push((self.footer.part(1), graph));
+        footer.set_children(nodes.iter().map(|(id, _)| *id).collect::<Vec<_>>());
+        if let Some((_, root)) = tree.nodes.first_mut() {
+            root.push_child(group);
+        }
+        tree.nodes.push((group, footer));
+        tree.nodes.extend(nodes);
+        Some(tree)
     }
 
     fn perform(&mut self, request: &ActionRequest) -> bool {
@@ -845,11 +1362,14 @@ impl Screen for MonitorView {
     }
 
     fn cursor(&self) -> Cursor {
-        self.list.cursor()
+        match self.edge_drag.is_some() || self.edge_hover {
+            true => Cursor::RowResize,
+            false => self.list.cursor(),
+        }
     }
 
     fn animating(&self) -> bool {
-        self.list.animating()
+        self.list.animating() || self.cores_moving
     }
 
     fn deadline(&self) -> Option<Instant> {

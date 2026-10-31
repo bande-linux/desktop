@@ -12,3 +12,5 @@ size-megabytes = { $value } MB
 size-gigabytes = { $value } GB
 size-terabytes = { $value } TB
 archive-name = Archive
+date-today = Today, { $time }
+date-yesterday = Yesterday, { $time }

@@ -43,6 +43,18 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
   Other developers' builds share the VM's ten cores, so wall-clock frame times move with the
   load average the tool prints; compare runs taken back to back, and the CPU columns, which
   move less.
+- **Files at 100 000 items:** `unbound-files-bench` (`crates/testing/bench`) creates a folder of
+  100 000 files and drives `FilesView` in-process, without a compositor: it opens the folder in
+  the column view, switches to the list view, scrolls it 120 times, selects all and writes one
+  new file into the folder, five times over. Every number is UI-thread time: the work between
+  two frames, including building the scene. Background listing is waited for with `poll` and
+  not counted, so "open to fully listed" is wall-clock.
+
+  ```sh
+  cargo build --release -p unbound-bench --bin unbound-files-bench
+  dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- \
+      target/release/unbound-files-bench
+  ```
 - **Idle wake-ups:** sum the `voluntary_ctxt_switches` and `nonvoluntary_ctxt_switches` of every
   thread in `/proc/<pid>/task/*/status` twice, some seconds apart, and divide the difference by
   the interval; the per-thread `comm` names show which thread wakes. Run the services inside the
@@ -56,6 +68,50 @@ checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
 All numbers below are from the development VM: 10 cores, lavapipe (Mesa 25.0.7, Vulkan on the
 CPU), so GPU memory shows up as process memory. On Apple Silicon GPU memory is also system
 memory, so the device-memory savings carry over.
+
+## 2026-10-31: Activity Monitor's own cost
+
+What one sample costs Activity Monitor on this VM (293 processes, release build, mean of 200
+samples, CPU time of the process from `/proc/self/stat`, measured with a throwaway harness that
+runs `Sampler::live()` and `MonitorView::update` plus `scene` at 860 × 600; no rendering):
+
+| What is shown | sampling | sample, update and scene | % of one core at one sample per 2 s | RSS |
+| :--- | ---: | ---: | ---: | ---: |
+| CPU tab | 1.35 ms | 2.0 ms | 0.1 % | 9.7 MB |
+| Memory tab (proportional memory from `smaps_rollup`) | 13.1 ms | 14.2 ms | 0.7 % | 9.8 MB |
+| Energy columns (wake-ups from every task's `status`, GPU from `fdinfo`) | 4.5 ms | 5.4 ms | 0.3 % | 9.8 MB |
+
+Proportional memory is the expensive measure, which is why it is read only while the Memory column
+shows; wake-ups likewise. Between samples, a wake-up of the event loop (a tooltip, a caret, an
+animation's deadline) used to redraw every window of the app; it now redraws only the window whose
+own timer is due, and a sample redraws all of them once. Sampling less while every window is hidden
+needs a hidden or suspended signal from the toolkit, which it does not have yet.
+
+## 2026-10-31: Files with 100 000 items
+
+Before, Files read every folder on the UI thread (two `stat` calls per entry, then a sort), read
+the whole folder again on every settled inotify batch, built every list row with a time-zone
+conversion and a Fluent call, kept marks in a vector searched linearly and passed the selection to
+the list as path strings. After: the first 2 000 entries are read at once and the rest on a
+listing thread in doubling chunks; inotify names are applied as row edits; marks are bisected and
+passed as row indices; sizes and dates are formatted once per value; sorting re-orders in memory.
+`unbound-files-bench`, medians of five runs (worst in brackets), release build, same VM, other
+developers' builds running:
+
+| Action | before | after |
+| :--- | ---: | ---: |
+| Open to first frame | 199.9 ms (240.3) | 25.4 ms (49.2) |
+| Open to fully listed (wall-clock; after: in the background) | 199.9 ms (240.3) | 158.9 ms (191.7) |
+| Longest UI stall while the rest is listed | — | 5.0 ms (9.4) |
+| Switch to the list view | 105.0 ms (183.0) | 12.4 ms (49.7) |
+| Frame while scrolling the list, p99 | 0.4 ms (0.5) | 0.3 ms (0.4) |
+| Select All in the list view | 34.0 ms (47.8) | 4.3 ms (11.8) |
+| One file written into the folder (UI work) | 394.8 ms (491.6) | 3.3 ms (5.7) |
+
+Table cells hold their text as `Rc<str>`, so the list view shares one string per kind, size and
+minute instead of allocating three per row; that took the switch to the list view from 27 ms to
+12 ms. Its worst case (the first run, cold caches) is still 50 ms: all 100 000 rows are built
+when the list is shown. The next step is a `Table` that asks for the cells of visible rows only.
 
 ## 2026-10-30: menus, launcher and banners in motion
 

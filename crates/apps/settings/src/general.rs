@@ -1,12 +1,13 @@
 use std::path::Path;
 
 use unbound_fs::format_size;
-use unbound_settings_panes::{PaneId, SettingId};
+use unbound_settings_panes::{PaneId, SettingId, Value, duration_label};
 use unbound_toolkit::Spacing;
 use unbound_toolkit::ui::{Axis, Button, Label, SearchField, Stack, Widget};
 
 use crate::L10N;
 use crate::pages::{Widgets, boxed, muted_row, submit};
+use crate::software::SoftwareState;
 use crate::storage::Category;
 use crate::view::{Anchor, Intent, Picker, SettingsView, intent};
 use crate::widgets::{Row, Segment, Text, Tone, UsageBar};
@@ -45,46 +46,28 @@ fn shown_path(path: &Path, home: Option<&Path>) -> String {
 }
 
 impl SettingsView {
-    fn pane_summary(&self, pane: PaneId) -> Option<String> {
+    pub(crate) fn pane_summary(&self, pane: PaneId) -> Option<String> {
         match pane {
-            PaneId::About => self.about.as_ref().map(|about| about.model.clone()),
             PaneId::SoftwareUpdate => match &self.software {
-                crate::software::SoftwareState::Available(packages) => {
+                SoftwareState::Available(packages) => {
                     Some(L10N.tr_args("updates-available", [("count", packages.len().into())]))
                 }
-                crate::software::SoftwareState::UpToDate => Some(L10N.tr("up-to-date")),
+                SoftwareState::UpToDate => Some(L10N.tr("up-to-date")),
+                SoftwareState::Installed { restart: true } => Some(L10N.tr("restart-to-update")),
                 _ => None,
             },
             PaneId::Storage => self
                 .about
                 .as_ref()
                 .map(|about| available_of(about.available, about.capacity)),
+            PaneId::Power => match self.values.get(&SettingId::LockAfter) {
+                Some(Value::Seconds(seconds)) => {
+                    Some(L10N.tr_args("lock-summary", [("time", duration_label(*seconds).into())]))
+                }
+                _ => None,
+            },
             _ => None,
         }
-    }
-
-    pub(crate) fn general_rows(&mut self) -> Widgets {
-        let children: Vec<(PaneId, String)> = self
-            .panes
-            .iter()
-            .filter(|pane| pane.id.parent() == Some(PaneId::General) && self.available(pane.id))
-            .map(|pane| (pane.id, pane.name.clone()))
-            .collect();
-        children
-            .into_iter()
-            .map(|(id, name)| {
-                let mut open = intent(&self.intents, Intent::SelectPane);
-                let mut row = Row::new(
-                    Text::new(&name, Tone::Primary),
-                    Some(boxed(Label::new("›"))),
-                )
-                .on_activate(move || open(id));
-                if let Some(summary) = self.pane_summary(id) {
-                    row = row.detail(Text::new(&summary, Tone::Muted).caption());
-                }
-                self.item_row(id.keyword().to_owned(), row)
-            })
-            .collect()
     }
 
     pub(crate) fn back_button(&mut self, parent: PaneId) -> Option<Box<dyn Widget>> {
@@ -117,10 +100,6 @@ impl SettingsView {
             info_row(&L10N.tr("about-model"), &about.model),
             info_row(&L10N.tr("about-chip"), &about.chip),
             info_row(&L10N.tr("about-memory"), &format_size(about.memory)),
-            info_row(
-                &L10N.tr("about-storage"),
-                &available_of(about.available, about.capacity),
-            ),
             info_row(&L10N.tr("about-unbound"), &about.unbound),
             info_row(&L10N.tr("about-system"), &about.system),
         ];

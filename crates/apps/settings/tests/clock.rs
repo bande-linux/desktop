@@ -9,8 +9,8 @@ use accesskit::{Action, ActionRequest, Role, TreeId};
 use jiff::Timestamp;
 use support::{SIZE, WAIT, click, find, has_text, nodes};
 use unbound_settings::{
-    Command, Feed, PaneId, SettingId, SettingsView, TimeCommand, TimeState, Update, Value, feed,
-    follow_time, parse_manual, zone_matches, zone_offset, zone_place,
+    Command, Feed, PaneId, Privilege, SettingId, SettingsView, TimeCommand, TimeState, Update,
+    Value, feed, follow_time, parse_manual, zone_matches, zone_offset, zone_place,
 };
 use unbound_test_bus::SessionBus;
 use unbound_toolkit::ui::{Event, Key, Modifiers};
@@ -59,9 +59,15 @@ impl Timedate {
         zone: String,
         _interactive: bool,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) {
+    ) -> zbus::fdo::Result<()> {
+        if zone == "Asia/Tokyo" {
+            return Err(zbus::fdo::Error::InteractiveAuthorizationRequired(
+                "authentication is required".to_owned(),
+            ));
+        }
         self.0.lock().expect("clock").zone = zone;
         let _ = self.timezone_changed(&emitter).await;
+        Ok(())
     }
 
     #[zbus(name = "SetNTP")]
@@ -132,7 +138,7 @@ fn the_time_zone_is_chosen_by_typing_a_city_and_manual_time_is_set_on_return() {
     let (feed, updates) = feed().expect("feed");
     let sender = follow_time(&system, updates);
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
-    view.select_pane(PaneId::DateTime);
+    view.select_pane(PaneId::LanguageTime);
     pump(&mut view, &feed, &sender, |view| {
         has_text(view, "Stockholm")
     });
@@ -152,6 +158,19 @@ fn the_time_zone_is_chosen_by_typing_a_city_and_manual_time_is_set_on_return() {
     pump(&mut view, &feed, &sender, |view| {
         has_text(view, "Paris") && !has_text(view, "Search cities")
     });
+
+    let change = find(&mut view, Role::Button, "Change…").expect("Change…");
+    click(&mut view, change);
+    for character in "tok".chars() {
+        press(&mut view, Key::Character(character));
+    }
+    press(&mut view, Key::Enter);
+    pump(&mut view, &feed, &sender, |view| {
+        has_text(view, "Only an administrator can change this.")
+    });
+    assert!(has_text(&mut view, "Paris"), "the zone springs back");
+    assert!(!has_text(&mut view, "Tokyo"));
+    assert!(!has_text(&mut view, "Interactive"), "no raw D-Bus text");
 
     let automatic = find(&mut view, Role::Switch, "Set time automatically").expect("switch");
     click(&mut view, automatic);
@@ -183,6 +202,31 @@ fn the_time_zone_is_chosen_by_typing_a_city_and_manual_time_is_set_on_return() {
 }
 
 #[test]
+fn without_administrator_rights_the_clock_rows_say_so_before_anything_is_tried() {
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
+    view.apply(Update::Time(Some(TimeState {
+        automatic: true,
+        can_automatic: true,
+        zone: "Europe/Paris".to_owned(),
+        zones: Vec::new(),
+    })));
+    view.select_pane(PaneId::LanguageTime);
+    assert!(find(&mut view, Role::Button, "Change…").is_some());
+    assert!(find(&mut view, Role::Switch, "Set time automatically").is_some());
+    assert!(!has_text(&mut view, "Only an administrator"));
+
+    view.apply(Update::Refused(vec![Privilege::Time]));
+    assert!(find(&mut view, Role::Button, "Change…").is_none());
+    assert!(find(&mut view, Role::Switch, "Set time automatically").is_none());
+    assert!(has_text(
+        &mut view,
+        "Only an administrator can change this."
+    ));
+    assert!(has_text(&mut view, "Paris"));
+    assert!(view.take_commands().is_empty());
+}
+
+#[test]
 fn the_24_hour_switch_writes_the_clock_setting() {
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     view.apply(Update::Time(Some(TimeState {
@@ -192,7 +236,7 @@ fn the_24_hour_switch_writes_the_clock_setting() {
         zones: Vec::new(),
     })));
     view.set_value(SettingId::Clock24Hour, Value::Flag(false));
-    view.select_pane(PaneId::DateTime);
+    view.select_pane(PaneId::LanguageTime);
     let switch = find(&mut view, Role::Switch, "24-hour time").expect("switch");
     click(&mut view, switch);
     assert_eq!(

@@ -86,6 +86,18 @@ fn the_calculator_converts_units() {
     assert_eq!(calculate("1 km + 300 m").as_deref(), Some("1.3 km"));
     assert_eq!(calculate("10 km / 2").as_deref(), Some("5 km"));
     assert_eq!(calculate("1 km / 250 m").as_deref(), Some("4"));
+    assert_eq!(
+        calculate("2 ha to acres").as_deref(),
+        Some("4.94210762934 ac")
+    );
+    assert_eq!(calculate("500 sqft in m²").as_deref(), Some("46.45152 m²"));
+    assert_eq!(
+        calculate("1 m² in ft²").as_deref(),
+        Some("10.7639104167 ft²")
+    );
+    assert_eq!(calculate("1 cup in ml").as_deref(), Some("236.5882365 ml"));
+    assert_eq!(calculate("3 tsp in tbsp").as_deref(), Some("1 tbsp"));
+    assert_eq!(calculate("2 pints in l").as_deref(), Some("0.946352946 l"));
 }
 
 #[test]

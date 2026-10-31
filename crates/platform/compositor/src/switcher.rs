@@ -20,7 +20,8 @@ use unbound_graphics::{
 use unbound_render::VulkanRenderer;
 use unbound_spring::Spring;
 use unbound_xdg::{
-    DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_icon,
+    DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_app,
+    find_icon,
 };
 
 use crate::L10N;
@@ -258,9 +259,8 @@ impl Switcher {
         }
         let entry = self
             .entries
-            .iter()
-            .flat_map(|(_, entries)| entries)
-            .find(|entry| entry.app_id() == id);
+            .as_ref()
+            .and_then(|(_, entries)| find_app(entries, id));
         let name = entry.map(|entry| entry.name.clone()).unwrap_or_else(|| {
             if id.is_empty() {
                 title.to_owned()

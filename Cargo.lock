@@ -4164,6 +4164,7 @@ dependencies = [
  "unbound-golden",
  "unbound-l10n",
  "unbound-log",
+ "unbound-status",
  "unbound-test-bus",
  "unbound-toolkit",
  "unbound-xdg",
@@ -4393,9 +4394,12 @@ name = "unbound-shell"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "smithay",
+ "tempfile",
  "tracing",
  "unbound-bar",
  "unbound-bluetooth",
+ "unbound-compositor",
  "unbound-config",
  "unbound-controlcenter",
  "unbound-desktop-surface",

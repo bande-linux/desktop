@@ -14,9 +14,10 @@ use unbound_greeter::{
 };
 use unbound_keyboard::Layouts;
 use unbound_lock::{
-    BackdropSource, Inbox, LockScreen, Look, PowerAction, User, Variant, load_backdrop,
+    BackdropSource, Devices, Inbox, LockScreen, Look, PowerAction, User, Variant, load_backdrop,
 };
 use unbound_status::devices::{powers, use_power};
+use unbound_status::status::{Battery, Wifi};
 use unbound_toolkit::ui::{Event, Key, frame_time};
 use unbound_toolkit::{
     App, Appearance, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem,
@@ -73,6 +74,8 @@ struct Greeter {
     text: TextSystem,
     system: Option<zbus::blocking::Connection>,
     powers: Vec<PowerAction>,
+    devices: Option<Devices>,
+    corner: (Option<Battery>, Option<Wifi>),
 }
 
 impl Greeter {
@@ -101,6 +104,8 @@ impl Greeter {
         self.screen.offer_power(&self.powers);
         self.screen.set_input_source(self.input_source.clone());
         self.screen.set_caps_lock(self.caps_lock);
+        self.screen
+            .set_devices(self.corner.0, self.corner.1.as_ref());
         self.picture = login_picture(Path::new(LOGIN_PICTURES), self.users[self.user].uid);
         self.backdrop = None;
         self.backdrop_requested = false;
@@ -281,6 +286,7 @@ impl App for Greeter {
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         std::iter::once(self.minutes.as_fd())
+            .chain(self.devices.as_ref().map(Devices::fd))
             .chain(self.backdrop.as_ref().map(Inbox::fd))
             .chain(
                 self.conversation
@@ -299,7 +305,17 @@ impl App for Greeter {
             window.request_redraw();
             return;
         }
-        match self.backdrop.as_mut().filter(|_| index == 1) {
+        let following = usize::from(self.devices.is_some());
+        if following == 1 && index == 1 {
+            if let Some(corner) = self.devices.as_mut().and_then(Devices::latest) {
+                if self.screen.set_devices(corner.0, corner.1.as_ref()) {
+                    window.request_redraw();
+                }
+                self.corner = corner;
+            }
+            return;
+        }
+        match self.backdrop.as_mut().filter(|_| index == following + 1) {
             Some(inbox) => {
                 for (look, image) in inbox.drain() {
                     match look {
@@ -392,6 +408,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         text,
         system,
         powers,
+        devices: Devices::follow(),
+        corner: (None, None),
     };
     unbound_toolkit::run(&mut window, &mut greeter)?;
     Ok(())
@@ -405,5 +423,61 @@ fn main() -> ExitCode {
             tracing::error!("{error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use unbound_status::status::Power;
+
+    use super::*;
+
+    fn person(uid: u32, login: &str) -> User {
+        User {
+            uid,
+            login: login.to_owned(),
+            full_name: login.to_owned(),
+        }
+    }
+
+    #[test]
+    fn the_battery_and_wifi_stay_in_the_corner_when_another_person_is_chosen() {
+        let battery = Battery {
+            percent: 12.0,
+            power: Power::Battery { remaining: None },
+        };
+        let wifi = Wifi {
+            enabled: true,
+            networks: Vec::new(),
+            sign_in: false,
+        };
+        let users = vec![person(1000, "ada"), person(1001, "grace")];
+        let text = TextSystem::new();
+        let mut screen = Greeter::screen_for(&users[0], text.sharing_fonts());
+        screen.set_devices(Some(battery), Some(&wifi));
+        let mut greeter = Greeter {
+            users,
+            user: 0,
+            screen,
+            conversation: None,
+            caps_lock: false,
+            minutes: MinuteTimer::new().unwrap(),
+            backdrop: None,
+            backdrop_requested: false,
+            picture: None,
+            wallpaper: None,
+            last_user: None,
+            layouts: Layouts::load(),
+            input_source: None,
+            started: false,
+            text,
+            system: None,
+            powers: Vec::new(),
+            devices: None,
+            corner: (Some(battery), Some(wifi.clone())),
+        };
+
+        assert!(greeter.switch_user(true));
+        assert!(!greeter.screen.set_devices(Some(battery), Some(&wifi)));
     }
 }

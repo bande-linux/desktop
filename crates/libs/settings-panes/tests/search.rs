@@ -137,3 +137,19 @@ fn old_pane_names_find_their_new_home() {
         (PaneId::Storage, Some(SettingId::LargeFiles))
     );
 }
+
+#[test]
+fn other_platforms_words_find_night_light_text_size_and_app_permissions() {
+    assert_eq!(found("night shift")[0], PaneId::NightLight);
+    assert_eq!(found("blue light")[0], PaneId::NightLight);
+    assert_eq!(
+        best("font size"),
+        (PaneId::Appearance, Some(SettingId::TextSize))
+    );
+    assert_eq!(found("webcam")[0], PaneId::Camera);
+    assert!(found("screen recording").contains(&PaneId::ScreenSharing));
+    assert_eq!(
+        best("backlight"),
+        (PaneId::Displays, Some(SettingId::Brightness))
+    );
+}

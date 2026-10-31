@@ -299,6 +299,7 @@ impl PreviewPane {
                 Kind::Calculation => L10N.tr("hint-calculation"),
                 Kind::Application => L10N.tr("hint-application"),
                 Kind::Setting => L10N.tr("hint-setting"),
+                Kind::Command => L10N.tr("hint-command"),
                 Kind::Emoji => L10N.tr("hint-emoji-copy"),
                 Kind::CopiedText if state.model.inserts => L10N.tr("hint-clip-insert"),
                 Kind::CopiedText | Kind::CopiedImage | Kind::CopiedFiles => {

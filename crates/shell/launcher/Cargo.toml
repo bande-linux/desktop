@@ -15,6 +15,7 @@ unbound-l10n.workspace = true
 unbound-preview.workspace = true
 unbound-search.workspace = true
 unbound-settings-panes.workspace = true
+unbound-status.workspace = true
 unbound-thumbnails.workspace = true
 unbound-toolkit.workspace = true
 unbound-xdg.workspace = true

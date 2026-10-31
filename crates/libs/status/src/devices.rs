@@ -246,7 +246,7 @@ fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Co
             }
         }
         Command::Sleep => report("sleep", sleep(system)),
-        Command::LockScreen => report("lock the screen", own_session(system, "Lock")),
+        Command::LockScreen => report("lock the screen", lock_screen(system)),
         _ => {}
     }
 }
@@ -261,6 +261,10 @@ fn own_session(system: &Connection, method: &str) -> zbus::Result<()> {
         &(),
     )?;
     Ok(())
+}
+
+pub fn lock_screen(system: &Connection) -> zbus::Result<()> {
+    own_session(system, "Lock")
 }
 
 pub fn sleep(system: &Connection) -> zbus::Result<()> {

@@ -19,6 +19,7 @@ const ROW_ICON: f32 = 22.0;
 const CELL_RADIUS: f32 = Radius::L;
 const CELL_ICON: f32 = 48.0;
 const BADGE_ON_SELECTION: f32 = 0.22;
+const COMMAND_GLYPH_INSET: f32 = 0.2;
 const CELL_TITLE_LINES: usize = 2;
 
 pub const OPEN: &str = "open";
@@ -115,7 +116,7 @@ pub fn centered(paragraph: &Paragraph, frame: Rect, y: f32) -> Item {
     }
 }
 
-fn calculation_badge(cx: &mut Context, rect: Rect, selected: bool, items: &mut Vec<Item>) {
+fn badge(cx: &Context, rect: Rect, selected: bool, items: &mut Vec<Item>) {
     let fill = if selected {
         cx.palette.on_accent.with_opacity(BADGE_ON_SELECTION)
     } else {
@@ -125,6 +126,10 @@ fn calculation_badge(cx: &mut Context, rect: Rect, selected: bool, items: &mut V
         shape: Shape::rounded(rect, (rect.width * 0.22).round()),
         paint: fill.into(),
     });
+}
+
+fn calculation_badge(cx: &mut Context, rect: Rect, selected: bool, items: &mut Vec<Item>) {
+    badge(cx, rect, selected, items);
     let sign = cx.text.paragraph(
         "=",
         TextStyle::new((rect.height * 0.7).round(), cx.palette.on_accent)
@@ -151,6 +156,19 @@ pub fn icon_items(
 ) {
     match (hit.kind, icon) {
         (Kind::Calculation, _) => calculation_badge(cx, rect, selected, items),
+        (Kind::Command, glyph) => {
+            badge(cx, rect, selected, items);
+            let inset = (rect.width * COMMAND_GLYPH_INSET).round();
+            items.extend(glyph.map(|glyph| Item::Image {
+                rect: Rect::new(
+                    rect.x + inset,
+                    rect.y + inset,
+                    rect.width - 2.0 * inset,
+                    rect.height - 2.0 * inset,
+                ),
+                image: glyph.clone(),
+            }));
+        }
         (_, Some(image)) => items.push(Item::Image {
             rect,
             image: image.clone(),
@@ -222,7 +240,7 @@ pub fn hit_menu(hit: &Hit, model: &Model) -> Menu {
             MenuItem::separator(),
             MenuItem::new(&L10N.tr("menu-copy-path"), COPY).shortcut("Super+C"),
         ],
-        Target::App(_) | Target::Settings(_) => {
+        Target::App(_) | Target::Settings(_) | Target::Command(_) => {
             vec![MenuItem::new(&L10N.tr("menu-open"), OPEN).shortcut("Return")]
         }
     };

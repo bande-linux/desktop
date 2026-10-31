@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     Action, AppInfo, Catalog, Clips, Hit, ICON_SIZE, Kind, Launcher, Loaded, Mode, PaneInfo, Reply,
-    Request, SettingInfo, Target,
+    Request, SettingInfo, SystemCommand, Target,
 };
 use accesskit::TreeUpdate;
 use unbound_fs::Entry;
@@ -17,12 +17,13 @@ use unbound_preview::{Preview, preview};
 use unbound_search::{FileIndex, Usage, recently_used_path, usage_path};
 use unbound_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use unbound_toolkit::{
-    App, Edges, Image, KeyboardFocus, LauncherMode, LayerKind, LayerOptions, MenuPlacement, Rect,
-    Role, Scene, TextSystem, Window, WindowError, WindowEvent, ui::frame_time,
+    App, Color, Edges, Image, KeyboardFocus, LauncherMode, LayerKind, LayerOptions, MenuPlacement,
+    Rect, Role, Scene, SessionEnd, TextSystem, Window, WindowError, WindowEvent, ui::frame_time,
 };
 use unbound_xdg::{
-    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, Locale, MimeDatabase, applications, config_dirs,
-    current_desktops, data_dirs, find_icon, launch, launch_with, launch_with_arguments,
+    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, MimeDatabase, applications,
+    config_dirs, current_desktops, data_dirs, find_icon, launch, launch_with,
+    launch_with_arguments,
 };
 
 const FALLBACK_DOCUMENT: &str = "application-x-generic";
@@ -53,6 +54,52 @@ impl Library {
     }
 }
 
+impl Library {
+    fn command_glyph(&mut self, command: SystemCommand) -> Option<Image> {
+        let name = match command {
+            SystemCommand::LockScreen => "system-lock-screen-symbolic",
+            SystemCommand::Sleep => "weather-clear-night-symbolic",
+            SystemCommand::LogOut => "system-log-out-symbolic",
+            SystemCommand::Restart => "system-reboot-symbolic",
+            SystemCommand::ShutDown => "system-shutdown-symbolic",
+        };
+        let data_dirs = &self.data_dirs;
+        self.icons
+            .entry(name.to_owned())
+            .or_insert_with(|| {
+                find_icon(name, ICON_SIZE, &ICON_THEMES, data_dirs)
+                    .and_then(|path| Image::load_symbolic(&path, ICON_SIZE, Color::WHITE))
+            })
+            .clone()
+    }
+}
+
+fn carry_out(window: &mut Window, command: SystemCommand) -> std::io::Result<()> {
+    let ending = match command {
+        SystemCommand::LockScreen | SystemCommand::Sleep => {
+            std::thread::spawn(move || {
+                let result = zbus::blocking::Connection::system().and_then(|system| {
+                    if command == SystemCommand::Sleep {
+                        unbound_status::devices::sleep(&system)
+                    } else {
+                        unbound_status::devices::lock_screen(&system)
+                    }
+                });
+                if let Err(error) = result {
+                    tracing::warn!("cannot carry out {command:?}: {error}");
+                }
+            });
+            return Ok(());
+        }
+        SystemCommand::LogOut => SessionEnd::LogOut,
+        SystemCommand::Restart => SessionEnd::Restart,
+        SystemCommand::ShutDown => SessionEnd::ShutDown,
+    };
+    window
+        .confirm_session_end(ending)
+        .map_err(std::io::Error::other)
+}
+
 impl Catalog for Library {
     fn icon(&mut self, hit: &Hit) -> Option<Image> {
         match (&hit.target, hit.kind) {
@@ -74,6 +121,7 @@ impl Catalog for Library {
             (Target::Clip(_), Kind::CopiedImage) => self.named_icon(&[CLIP_IMAGE.to_owned()]),
             (Target::Clip(_), Kind::CopiedFiles) => self.named_icon(&[CLIP_FILES.to_owned()]),
             (Target::Clip(_), _) => self.named_icon(&[CLIP_TEXT.to_owned()]),
+            (Target::Command(command), _) => self.command_glyph(*command),
             (Target::Value(_) | Target::Emoji(_), _) => None,
         }
     }
@@ -291,6 +339,9 @@ impl LauncherShell {
                     launch_with_arguments(entry, std::slice::from_ref(keyword), token.as_deref())
                         .map(|_| ())
                 }),
+            Target::Command(command) => {
+                Some(carry_out(window, *command).map_err(LaunchError::Spawn))
+            }
             Target::Value(_) | Target::Emoji(_) | Target::Clip(_) => None,
         };
         match opened {

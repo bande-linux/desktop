@@ -15,6 +15,8 @@ pub const MAX_APPS: usize = 4;
 pub const MAX_SETTINGS: usize = 3;
 pub const MAX_FOLDERS: usize = 3;
 pub const MAX_DOCUMENTS: usize = 5;
+pub const MAX_COMMANDS: usize = 2;
+const MIN_COMMAND_QUERY: usize = 2;
 const DESCRIBED_PENALTY: u32 = 150;
 const COMMENT_PENALTY: u32 = 300;
 const SETTING_LABEL_PENALTY: u32 = 100;
@@ -212,6 +214,82 @@ impl Clip {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SystemCommand {
+    LockScreen,
+    Sleep,
+    LogOut,
+    Restart,
+    ShutDown,
+}
+
+impl SystemCommand {
+    const ALL: [Self; 5] = [
+        Self::LockScreen,
+        Self::Sleep,
+        Self::LogOut,
+        Self::Restart,
+        Self::ShutDown,
+    ];
+
+    fn key(self) -> &'static str {
+        match self {
+            Self::LockScreen => "lock-screen",
+            Self::Sleep => "sleep",
+            Self::LogOut => "log-out",
+            Self::Restart => "restart",
+            Self::ShutDown => "shut-down",
+        }
+    }
+
+    pub fn title(self) -> String {
+        crate::L10N.tr(match self {
+            Self::LockScreen => "command-lock-screen",
+            Self::Sleep => "command-sleep",
+            Self::LogOut => "command-log-out",
+            Self::Restart => "command-restart",
+            Self::ShutDown => "command-shut-down",
+        })
+    }
+
+    fn keywords(self) -> String {
+        crate::L10N.tr(match self {
+            Self::LockScreen => "command-lock-screen-keywords",
+            Self::Sleep => "command-sleep-keywords",
+            Self::LogOut => "command-log-out-keywords",
+            Self::Restart => "command-restart-keywords",
+            Self::ShutDown => "command-shut-down-keywords",
+        })
+    }
+}
+
+struct IndexedCommand {
+    command: SystemCommand,
+    title: String,
+    name: String,
+    keywords: Vec<String>,
+}
+
+impl IndexedCommand {
+    fn new(command: SystemCommand) -> Self {
+        let title = command.title();
+        Self {
+            name: fold(title.trim_end_matches('…')),
+            keywords: command.keywords().split_whitespace().map(fold).collect(),
+            title,
+            command,
+        }
+    }
+
+    fn score(&self, query: &Query) -> Option<u32> {
+        let named = query
+            .score(&self.name)
+            .filter(|score| *score >= unbound_search::WORDS);
+        let described = word_match(query, &self.keywords).map(|score| score - DESCRIBED_PENALTY);
+        named.max(described)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     CopiedText,
@@ -221,6 +299,7 @@ pub enum Kind {
     Calculation,
     Application,
     Setting,
+    Command,
     Folder,
     Document,
 }
@@ -233,6 +312,7 @@ pub enum Target {
     Value(String),
     Emoji(String),
     Clip(u64),
+    Command(SystemCommand),
 }
 
 impl Target {
@@ -242,6 +322,7 @@ impl Target {
             Self::Settings(keyword) => Some(format!("settings:{keyword}")),
             Self::Path(path) => path.to_str().map(|path| format!("file:{path}")),
             Self::Emoji(character) => Some(format!("{EMOJI_KEY}{character}")),
+            Self::Command(command) => Some(format!("command:{}", command.key())),
             Self::Value(_) | Self::Clip(_) => None,
         }
     }
@@ -262,6 +343,7 @@ pub enum Heading {
     TopHit,
     Applications,
     Settings,
+    System,
     Folders,
     Documents,
     RecentApps,
@@ -287,6 +369,7 @@ pub enum Action {
 pub struct Model {
     apps: Vec<IndexedApp>,
     panes: Vec<IndexedPane>,
+    commands: Vec<IndexedCommand>,
     home: PathBuf,
     usage: Usage,
     now: u64,
@@ -327,6 +410,10 @@ impl Model {
         let mut model = Self {
             apps: apps.into_iter().map(IndexedApp::new).collect(),
             panes: panes.into_iter().map(IndexedPane::new).collect(),
+            commands: SystemCommand::ALL
+                .into_iter()
+                .map(IndexedCommand::new)
+                .collect(),
             home,
             usage,
             now,
@@ -531,6 +618,27 @@ impl Model {
             })
             .collect();
         settings.sort_by(by_score);
+        let typed_enough = self.query.trim().chars().count() >= MIN_COMMAND_QUERY;
+        let mut commands: Vec<Hit> = self
+            .commands
+            .iter()
+            .filter(|_| typed_enough)
+            .filter_map(|command| {
+                let target = Target::Command(command.command);
+                let boost = target
+                    .usage_key()
+                    .map_or(0, |key| self.usage.boost(&key, self.now));
+                Some(Hit {
+                    matched: query.matched(&command.name),
+                    kind: Kind::Command,
+                    title: command.title.clone(),
+                    detail: None,
+                    target,
+                    score: command.score(&query)? + boost,
+                })
+            })
+            .collect();
+        commands.sort_by(by_score);
         let files: Vec<Hit> = self
             .files
             .iter()
@@ -556,6 +664,7 @@ impl Model {
         for (heading, group, limit) in [
             (Heading::Applications, apps, MAX_APPS),
             (Heading::Settings, settings, MAX_SETTINGS),
+            (Heading::System, commands, MAX_COMMANDS),
             (Heading::Folders, folders, MAX_FOLDERS),
             (Heading::Documents, documents, MAX_DOCUMENTS),
         ] {
@@ -900,7 +1009,7 @@ impl Model {
                 self.copied = true;
                 return true;
             }
-            Some(Target::App(_) | Target::Settings(_)) | None => return false,
+            Some(Target::App(_) | Target::Settings(_) | Target::Command(_)) | None => return false,
         };
         self.actions.push(Action::Copy(text));
         self.copied = true;

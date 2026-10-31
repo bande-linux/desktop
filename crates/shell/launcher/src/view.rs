@@ -101,6 +101,7 @@ fn heading_text(heading: Heading) -> String {
         Heading::TopHit => "top-hit",
         Heading::Applications => "applications",
         Heading::Settings => "settings",
+        Heading::System => "system",
         Heading::Folders => "folders",
         Heading::Documents => "documents",
         Heading::RecentApps => "recent-apps",

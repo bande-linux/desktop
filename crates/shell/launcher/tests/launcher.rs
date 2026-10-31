@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use unbound_fs::Entry;
 use unbound_launcher::{
     Action, AppInfo, Catalog, Clip, Heading, Hit, Kind, Launcher, Loaded, Mode, PaneInfo,
-    SettingInfo, Target,
+    SettingInfo, SystemCommand, Target,
 };
 use unbound_preview::preview;
 use unbound_search::{EXACT, FileHit, FileResults, PREFIX, Usage, WORD, usage_path};
@@ -334,6 +334,39 @@ fn settings_panes_are_found_by_name_keyword_and_setting() {
 }
 
 #[test]
+fn system_commands_are_found_by_name_and_keyword_and_run_on_return() {
+    let mut launcher = launcher();
+    typed(&mut launcher, "reboot");
+    assert_eq!(launcher.headings(), [Heading::System]);
+    assert_eq!(titles(&launcher), ["Restart…"]);
+    key(&mut launcher, Key::Enter);
+    assert_eq!(
+        launcher.take_actions(),
+        [Action::Open(Target::Command(SystemCommand::Restart))]
+    );
+
+    launcher.clear();
+    typed(&mut launcher, "shut");
+    assert_eq!(titles(&launcher), ["Shut Down…"]);
+}
+
+#[test]
+fn system_commands_wait_for_a_second_letter_and_never_take_the_top_hit() {
+    let mut launcher = launcher();
+    typed(&mut launcher, "s");
+    assert!(!launcher.headings().contains(&Heading::System));
+
+    typed(&mut launcher, "l");
+    assert!(titles(&launcher).contains(&"Sleep".to_owned()));
+
+    launcher.clear();
+    typed(&mut launcher, "lock");
+    let headings = launcher.headings();
+    assert_eq!(launcher.selection().unwrap().kind, Kind::Setting);
+    assert!(headings.contains(&Heading::System));
+}
+
+#[test]
 fn a_right_click_on_a_file_offers_open_show_in_files_and_copy_path() {
     let mut launcher = launcher();
     typed(&mut launcher, "budget");
@@ -630,6 +663,11 @@ fn the_launcher_matches_its_goldens() {
     typed(&mut launcher, "zzzq");
     files(&mut launcher, &[]);
     render(&mut launcher, "launcher-none-light");
+
+    launcher.clear();
+    typed(&mut launcher, "restart");
+    files(&mut launcher, &[]);
+    render(&mut launcher, "launcher-command-light");
 
     launcher.open(Mode::Emoji, true);
     typed(&mut launcher, "arrow");

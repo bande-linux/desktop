@@ -32,7 +32,7 @@ impl Place {
     }
 
     fn run(&self, task: Task) -> Outcome {
-        let job = Job::start(task, self.trash.clone()).expect("job");
+        let job = Job::start(task, self.trash.clone(), false).expect("job");
         loop {
             if let Report::Finished(outcome) = job.wait() {
                 return outcome;

@@ -2,7 +2,7 @@ use std::io;
 use std::os::fd::BorrowedFd;
 use std::time::{Duration, Instant};
 
-use crate::ops::{Answer, Change, Conflict, Job, Outcome, Progress, Report, Task};
+use crate::ops::{Answer, Change, Conflict, Failure, Job, Outcome, Progress, Report, Task};
 use crate::trash::Trash;
 use crate::undo::{Action, History, Step};
 
@@ -23,12 +23,15 @@ pub struct Running {
     pub started: Instant,
     pub progress: Progress,
     pub conflict: Option<Conflict>,
+    pub failure: Option<Failure>,
     pub items: usize,
 }
 
 impl Running {
     pub fn visible(&self, now: Instant) -> bool {
-        now.duration_since(self.started) >= REVEAL_DELAY || self.conflict.is_some()
+        now.duration_since(self.started) >= REVEAL_DELAY
+            || self.conflict.is_some()
+            || self.failure.is_some()
     }
 }
 
@@ -43,6 +46,7 @@ pub struct Operations {
     trash: Trash,
     history: History,
     running: Vec<Running>,
+    asks: bool,
 }
 
 fn items_in(task: &Task) -> usize {
@@ -66,6 +70,14 @@ impl Operations {
             trash,
             history: History::default(),
             running: Vec::new(),
+            asks: false,
+        }
+    }
+
+    pub fn asking(trash: Trash) -> Self {
+        Self {
+            asks: true,
+            ..Self::new(trash)
         }
     }
 
@@ -79,13 +91,14 @@ impl Operations {
 
     pub fn start(&mut self, task: Task, purpose: Purpose) -> io::Result<()> {
         let items = items_in(&task);
-        let job = Job::start(task, self.trash.clone())?;
+        let job = Job::start(task, self.trash.clone(), self.asks)?;
         self.running.push(Running {
             job,
             purpose,
             started: Instant::now(),
             progress: Progress::default(),
             conflict: None,
+            failure: None,
             items,
         });
         Ok(())
@@ -134,9 +147,17 @@ impl Operations {
             .find(|(_, running)| running.conflict.is_some())
     }
 
+    pub fn failure(&self) -> Option<(usize, &Running)> {
+        self.running
+            .iter()
+            .enumerate()
+            .find(|(_, running)| running.failure.is_some())
+    }
+
     pub fn answer(&mut self, index: usize, answer: Answer) {
         if let Some(running) = self.running.get_mut(index) {
             running.conflict = None;
+            running.failure = None;
             running.job.answer(answer);
         }
     }
@@ -144,6 +165,7 @@ impl Operations {
     pub fn cancel(&mut self, index: usize) {
         if let Some(running) = self.running.get_mut(index) {
             running.conflict = None;
+            running.failure = None;
             running.job.cancel();
         }
     }
@@ -164,6 +186,8 @@ impl Operations {
             match report {
                 Report::Progress(progress) => running.progress = progress,
                 Report::Conflict(conflict) => running.conflict = Some(conflict),
+                Report::Failure(failure) => running.failure = Some(failure),
+
                 Report::Finished(finished) => outcome = Some(finished),
             }
         }

@@ -111,6 +111,7 @@ pub(crate) struct Searching {
     before_mode: ViewMode,
     pub kind: SearchKind,
     pub recency: Recency,
+    pub answered: bool,
     hits: Vec<PathBuf>,
     pub(crate) scope_control: WidgetId,
     pub(crate) kind_control: WidgetId,
@@ -209,6 +210,7 @@ impl FilesView {
             everywhere,
             kind: SearchKind::Any,
             recency: Recency::AnyTime,
+            answered: false,
             hits: Vec::new(),
             scope_control,
             kind_control,
@@ -265,6 +267,9 @@ impl FilesView {
                 }
             }
         }
+        if let Some(searching) = &mut self.searching {
+            searching.answered = false;
+        }
         if let Some(index) = &mut self.index {
             index.generation += 1;
             index
@@ -291,6 +296,7 @@ impl FilesView {
             .collect();
         if let Some(searching) = &mut self.searching {
             searching.hits = found;
+            searching.answered = true;
         }
         self.show_filtered();
         true

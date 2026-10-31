@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::io;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -27,8 +28,25 @@ pub struct Column {
     pub revision: u64,
     pub edits: Vec<RowEdit>,
     pub depths: Vec<u8>,
+    pub denied: bool,
     listing: Option<Ticket>,
     awaited: Vec<PathBuf>,
+}
+
+struct Contents {
+    entries: Vec<Entry>,
+    listing: Option<Ticket>,
+    denied: bool,
+}
+
+impl Contents {
+    fn listed(entries: Vec<Entry>) -> Self {
+        Self {
+            entries,
+            listing: None,
+            denied: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,17 +64,18 @@ fn next_revision() -> u64 {
 }
 
 impl Column {
-    fn new(location: Location, (entries, listing): (Vec<Entry>, Option<Ticket>)) -> Self {
+    fn new(location: Location, contents: Contents) -> Self {
         Self {
             revision: next_revision(),
             edits: Vec::new(),
             depths: Vec::new(),
+            denied: contents.denied,
             location,
-            entries,
+            entries: contents.entries,
             selected: None,
             marked: Vec::new(),
             anchor: None,
-            listing,
+            listing: contents.listing,
             awaited: Vec::new(),
         }
     }
@@ -291,22 +310,28 @@ impl Browser {
         browser
     }
 
-    fn read(&mut self, location: &Location) -> (Vec<Entry>, Option<Ticket>) {
+    fn read(&mut self, location: &Location) -> Contents {
         match location {
             Location::Folder(folder) => self.read_folder(folder),
-            Location::Trash => (list_trash(&self.trash, self.sort), None),
-            Location::Recents => (entries(&self.recents), None),
+            Location::Trash => Contents::listed(list_trash(&self.trash, self.sort)),
+            Location::Recents => Contents::listed(entries(&self.recents)),
             Location::Search(_) => {
                 let mut found = entries(&self.found);
                 sort(&mut found, self.sort);
-                (found, None)
+                Contents::listed(found)
             }
         }
     }
 
-    fn read_folder(&mut self, folder: &Path) -> (Vec<Entry>, Option<Ticket>) {
-        let Ok(mut listing) = Listing::open(folder, self.show_hidden) else {
-            return (Vec::new(), None);
+    fn read_folder(&mut self, folder: &Path) -> Contents {
+        let mut listing = match Listing::open(folder, self.show_hidden) {
+            Ok(listing) => listing,
+            Err(error) => {
+                return Contents {
+                    denied: error.kind() == io::ErrorKind::PermissionDenied,
+                    ..Contents::listed(Vec::new())
+                };
+            }
         };
         let first = match self.lister {
             Some(_) => FIRST_CHUNK,
@@ -314,11 +339,15 @@ impl Browser {
         };
         let mut entries = listing.next_chunk(first);
         sort(&mut entries, self.sort);
-        let ticket = match &mut self.lister {
+        let listing = match &mut self.lister {
             Some(lister) if !listing.is_done() => Some(lister.finish(listing, self.sort)),
             _ => None,
         };
-        (entries, ticket)
+        Contents {
+            entries,
+            listing,
+            denied: false,
+        }
     }
 
     pub fn listing_fd(&self) -> Option<BorrowedFd<'_>> {
@@ -915,7 +944,11 @@ impl Browser {
             .map(|entry| entry.path.clone());
         let previous_row = column.selected;
         let location = column.location.clone();
-        let (entries, listing) = self.read(&location);
+        let Contents {
+            entries,
+            listing,
+            denied,
+        } = self.read(&location);
         let (entries, depths) = match (index, &listing) {
             (0, None) => self.nested(entries),
             _ => (entries, Vec::new()),
@@ -951,6 +984,7 @@ impl Browser {
             column.replaced();
         }
         column.listing = listing;
+        column.denied = denied;
         column.awaited = awaited;
         column.depths = depths;
         column.marked = marked;

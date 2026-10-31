@@ -8,7 +8,8 @@ use std::time::{Duration, Instant, SystemTime};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 use unbound_fs::{
-    Action, Answer, Change, Entry, FolderChanges, FolderWatch, History, Job, Outcome, RenameError,
+    Action, Answer, Change, Entry, Failure, FolderChanges, FolderWatch, History, Job, Outcome,
+    Problem, RenameError,
     Report, Resolution, Sort, Task, Trash, TrashDir, duplicate_name, format_size, keep_both_name,
     list, list_date, merge, new_folder, rename, untitled_folder,
 };
@@ -41,12 +42,20 @@ impl Place {
     }
 
     fn run_answering(&self, task: Task, answers: &[Answer]) -> Outcome {
-        let job = Job::start(task, self.trash.clone()).expect("job");
+        self.run_asking(task, answers, false).0
+    }
+
+    fn run_asking(&self, task: Task, answers: &[Answer], asks: bool) -> (Outcome, usize) {
+        let job = Job::start(task, self.trash.clone(), asks).expect("job");
         let mut answers = answers.iter();
+        let mut asked = 0;
         loop {
             match job.wait() {
-                Report::Finished(outcome) => return outcome,
-                Report::Conflict(_) => job.answer(*answers.next().expect("an answer")),
+                Report::Finished(outcome) => return (outcome, asked),
+                Report::Conflict(_) | Report::Failure(_) => {
+                    asked += 1;
+                    job.answer(*answers.next().expect("an answer"));
+                }
                 Report::Progress(_) => {}
             }
         }
@@ -284,6 +293,7 @@ fn cancelling_while_a_conflict_waits_keeps_what_was_done() {
             destination: destination.clone(),
         },
         place.trash.clone(),
+        false,
     )
     .expect("job");
 
@@ -294,9 +304,10 @@ fn cancelling_while_a_conflict_waits_keeps_what_was_done() {
                 job.cancel();
             }
             Report::Finished(outcome) => break outcome,
-            Report::Progress(_) => {}
+            Report::Progress(_) | Report::Failure(_) => {}
         }
     };
+
 
     assert!(outcome.cancelled);
     assert_eq!(
@@ -909,4 +920,119 @@ fn typed_locations_expand_the_home_folder_and_resolve_against_the_shown_one() {
         unbound_fs::typed_location("~bob", home, shown),
         shown.join("~bob")
     );
+}
+
+#[test]
+fn a_copy_larger_than_the_free_space_stops_before_writing() {
+    let place = Place::new();
+    let big = place.file("from/big.iso", "");
+    let free = rustix::fs::statvfs(place.dir.path()).expect("statvfs");
+    let free = free.f_bavail * free.f_frsize;
+    fs::File::options()
+        .write(true)
+        .open(&big)
+        .and_then(|file| file.set_len(free + 1_000_000_000))
+        .expect("sparse file");
+    let small = place.file("from/small.txt", "small");
+    let destination = place.path("to");
+    fs::create_dir(&destination).expect("destination");
+
+    let outcome = place.run(Task::Copy {
+        sources: vec![small, big],
+        destination: destination.clone(),
+    });
+
+    let shortfall = outcome.shortfall.expect("a shortfall");
+    assert!(shortfall.needed >= 1_000_000_000);
+    assert_eq!(shortfall.destination, destination);
+    assert!(outcome.changes.is_empty());
+    assert_eq!(fs::read_dir(&destination).expect("listing").count(), 0);
+}
+
+#[test]
+fn a_failure_asks_and_skip_all_stops_asking() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let place = Place::new();
+    let mut sources = vec![place.file("from/a.txt", "a")];
+    for name in ["b", "c", "d"] {
+        let locked = place.file(&format!("from/{name}.txt"), name);
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("lock");
+        sources.push(locked);
+    }
+    sources.push(place.file("from/e.txt", "e"));
+    let destination = place.path("to");
+    fs::create_dir(&destination).expect("destination");
+
+    let (outcome, asked) = place.run_asking(
+        Task::Copy {
+            sources,
+            destination: destination.clone(),
+        },
+        &[
+            answer(Resolution::Skip, false),
+            answer(Resolution::Skip, true),
+        ],
+        true,
+    );
+
+    assert_eq!(asked, 2);
+    assert!(outcome.failures.is_empty());
+    assert_eq!(names(&destination, false), ["a.txt", "e.txt"]);
+}
+
+#[test]
+fn trying_again_after_the_cause_is_fixed_finishes_the_item() {
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let place = Place::new();
+    let source = place.file("from/a.txt", "a");
+    let destination = place.path("to");
+    fs::create_dir(&destination).expect("destination");
+    fs::set_permissions(&destination, fs::Permissions::from_mode(0o555)).expect("lock");
+    let job = Job::start(
+        Task::Copy {
+            sources: vec![source],
+            destination: destination.clone(),
+        },
+        place.trash.clone(),
+        true,
+    )
+    .expect("job");
+
+    let outcome = loop {
+        match job.wait() {
+            Report::Failure(failure) => {
+                assert_eq!(failure.problem(), Problem::Permission);
+                assert!(failure.retryable());
+                fs::set_permissions(&destination, fs::Permissions::from_mode(0o755))
+                    .expect("unlock");
+                job.answer(answer(Resolution::Retry, false));
+            }
+            Report::Finished(outcome) => break outcome,
+            Report::Progress(_) | Report::Conflict(_) => {}
+        }
+    };
+
+    assert!(outcome.failures.is_empty());
+    assert_eq!(fs::read_to_string(destination.join("a.txt")).expect("copy"), "a");
+}
+
+#[test]
+fn failures_name_the_problem_a_person_can_act_on() {
+    let problem = |errno: rustix::io::Errno| {
+        Failure {
+            path: PathBuf::from("/x"),
+            error: std::io::Error::from_raw_os_error(errno.raw_os_error()),
+        }
+        .problem()
+    };
+    assert_eq!(problem(rustix::io::Errno::ROFS), Problem::ReadOnly);
+    assert_eq!(problem(rustix::io::Errno::NOSPC), Problem::NoSpace);
+    assert_eq!(problem(rustix::io::Errno::NAMETOOLONG), Problem::NameTooLong);
+    assert_eq!(problem(rustix::io::Errno::NODEV), Problem::DeviceGone);
+    assert_eq!(problem(rustix::io::Errno::PERM), Problem::Permission);
+    assert_eq!(problem(rustix::io::Errno::LOOP), Problem::Other);
 }

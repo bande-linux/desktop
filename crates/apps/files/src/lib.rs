@@ -3,6 +3,7 @@ mod browser;
 mod context;
 mod controls;
 mod drag;
+mod empty;
 mod grid;
 mod icons;
 mod inspector;
@@ -18,6 +19,7 @@ mod sidebar;
 mod tabs;
 mod thumbs;
 mod toolbar;
+mod trouble;
 mod view;
 mod views;
 
@@ -71,6 +73,8 @@ mod tests {
             include_str!("quick_look.rs"),
             include_str!("tabs.rs"),
             include_str!("search.rs"),
+            include_str!("empty.rs"),
+            include_str!("trouble.rs"),
             include_str!("toolbar.rs"),
         ];
         assert_eq!(

@@ -23,8 +23,8 @@ pub use listing::{
 pub use naming::{duplicate_name, keep_both_name, typed_location, untitled_folder};
 pub use operations::{Finished, Operations, Purpose, Running};
 pub use ops::{
-    Answer, Change, Conflict, Failure, Job, Outcome, Progress, RenameError, Report, Resolution,
-    Task, archive_path, can_extract, new_document, new_folder, rename,
+    Answer, Change, Conflict, Failure, Job, Outcome, Problem, Progress, RenameError, Report,
+    Resolution, Shortfall, Task, archive_path, can_extract, new_document, new_folder, rename,
 };
 pub use permissions::{Access, Class, access, runnable, set_mode, with_access, with_runnable};
 pub use trash::{Trash, TrashDir, TrashItem};

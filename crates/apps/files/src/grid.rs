@@ -7,7 +7,6 @@ use unbound_toolkit::{
     Color, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
 
-use crate::L10N;
 use crate::controls::Press;
 use crate::view::{FilesView, Hit};
 
@@ -409,17 +408,7 @@ impl FilesView {
             ));
         }
         if column.entries.is_empty() {
-            let muted = self.palette.ink2;
-            let empty = self.text().paragraph(
-                &L10N.tr("empty-folder"),
-                TextStyle::new(13.0, muted),
-                Some(content.width),
-                TextAlign::Center,
-            );
-            shown.push(Item::Text {
-                origin: Point::new(content.x, content.y + 40.0),
-                paragraph: empty,
-            });
+            self.paint_empty(0, content, &mut shown);
         }
         if let Some(band) = &self.band {
             let area = offset(normalised(band.origin, band.current), origin);

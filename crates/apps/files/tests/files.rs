@@ -3128,3 +3128,126 @@ fn files_follows_the_text_size() {
 
     assert!(widest_text(&view.scene(1000, 600).items) > regular * 1.5);
 }
+
+fn running_as_root() -> bool {
+    rustix::process::geteuid().is_root()
+}
+
+fn press_at(view: &mut FilesView, at: Point) {
+    view.handle(&Event::PointerDown(Pointer::at(at)));
+    view.handle(&Event::PointerUp(Pointer::at(at)));
+}
+
+fn node_centre(view: &FilesView, role: accesskit::Role, label: &str) -> Point {
+    let bounds = view
+        .accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.role() == role && node.label() == Some(label))
+        .and_then(|(_, node)| node.bounds())
+        .unwrap_or_else(|| panic!("no {role:?} named {label}"));
+    Point::new(
+        ((bounds.x0 + bounds.x1) / 2.0) as f32,
+        ((bounds.y0 + bounds.y1) / 2.0) as f32,
+    )
+}
+
+#[test]
+fn a_folder_you_may_not_read_says_so_instead_of_looking_empty() {
+    if running_as_root() {
+        return;
+    }
+    let place = Place::new();
+    let locked = place.home().join("Locked");
+    fs::create_dir(&locked).expect("folder");
+    fs::write(locked.join("secret.txt"), "secret").expect("file");
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("lock");
+    let mut view = place.view();
+    while selected_name(view.browser()).as_deref() != Some("Locked") {
+        view.handle(&press(Key::Down));
+    }
+
+    assert_eq!(
+        view.empty_message(1).as_deref(),
+        Some("You don’t have permission to see the contents of “Locked”.")
+    );
+    assert_eq!(view.empty_message(0), None);
+    view.handle(&press(Key::Up));
+    assert_eq!(view.empty_message(1).as_deref(), Some("Empty Folder"));
+
+    view.handle(&command(Key::Character('2'), false));
+    view.go(Location::Folder(locked.clone()));
+    assert!(
+        view.empty_message(0)
+            .is_some_and(|message| message.contains("permission"))
+    );
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).expect("unlock");
+}
+
+#[test]
+fn the_trash_and_recents_explain_their_empty_state() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.go(Location::Trash);
+    assert_eq!(view.empty_message(0).as_deref(), Some("The Trash is empty"));
+    view.go(Location::Recents);
+    assert_eq!(
+        view.empty_message(0).as_deref(),
+        Some("Files you open appear here")
+    );
+}
+
+#[test]
+fn a_search_without_results_offers_home_and_widens_the_scope() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.handle(&command(Key::Character('f'), false));
+    type_text(&mut view, "zzqx");
+    run_until(&mut view, |view| view.empty_message(0).is_some());
+    assert_eq!(
+        view.empty_message(0).as_deref(),
+        Some("No results for “zzqx” in home")
+    );
+    view.scene(1000, 600);
+
+    let button = node_centre(&view, accesskit::Role::Button, "Search Home");
+    press_at(&mut view, button);
+
+    let home = PathBuf::from(std::env::var_os("HOME").expect("home"));
+    assert_eq!(view.browser().root(), &Location::Search(home));
+    view.scene(1000, 600);
+    assert!(
+        !view
+            .accessibility()
+            .nodes
+            .iter()
+            .any(|(_, node)| node.label() == Some("Search Home"))
+    );
+}
+
+#[test]
+fn an_empty_folder_in_the_list_view_matches_its_golden() {
+    let place = Place::new();
+    let mut view = place.themed_view();
+    view.go(Location::Folder(place.home().join("Empty")));
+    view.handle(&command(Key::Character('2'), false));
+    shoot("empty-list", &mut view);
+}
+
+#[test]
+fn a_folder_you_may_not_read_matches_its_golden() {
+    if running_as_root() {
+        return;
+    }
+    let place = Place::new();
+    let locked = place.home().join("Locked");
+    fs::create_dir(&locked).expect("folder");
+    date_files(&[place.home().join("Documents/a.txt")]);
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("lock");
+    let mut view = place.themed_view();
+    while selected_name(view.browser()).as_deref() != Some("Locked") {
+        view.handle(&press(Key::Down));
+    }
+    shoot("no-permission", &mut view);
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).expect("unlock");
+}

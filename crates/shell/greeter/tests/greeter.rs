@@ -139,9 +139,9 @@ fn an_expired_password_asks_for_each_further_secret_and_reports_pams_reason() {
         [Step::Ask("Current password: ".to_owned())]
     );
     assert_eq!(
-        login.answer("old".to_owned()),
+        login.answer("old".to_owned().into()),
         Request::PostAuthMessageResponse {
-            response: Some("old".to_owned())
+            response: Some("old".to_owned().into())
         }
     );
     assert_eq!(

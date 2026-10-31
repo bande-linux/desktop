@@ -1,6 +1,6 @@
 #!/bin/bash
-# Installs Debian 13's own font packages, the ones the render goldens are made with, on the
-# Ubuntu runner image, whose font releases differ. Downloads are checked and cached.
+# Installs Debian 13's own font packages, the ones the render goldens are made with, over the
+# runner's releases, which differ on Debian testing. Downloads are checked and cached.
 set -euo pipefail
 
 cache=${UNBOUND_FONT_CACHE:-/cache/debian-fonts}
@@ -28,5 +28,7 @@ for entry in "${packages[@]}"; do
     fi
     debs+=("$deb")
 done
-sudo dpkg --install "${debs[@]}"
+as_root=()
+[ "$(id -u)" = 0 ] || as_root=(sudo)
+"${as_root[@]}" dpkg --install "${debs[@]}"
 fc-cache --force

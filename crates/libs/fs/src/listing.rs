@@ -265,7 +265,7 @@ pub fn format_size(bytes: u64) -> String {
 }
 
 pub fn format_list_date(time: SystemTime) -> String {
-    list_date(time, SystemTime::now(), &jiff::tz::TimeZone::system())
+    list_date(time, SystemTime::now(), &unbound_datetime::local_zone())
 }
 
 pub fn list_date(time: SystemTime, now: SystemTime, zone: &jiff::tz::TimeZone) -> String {
@@ -325,7 +325,7 @@ impl Recency {
     }
 
     pub fn includes(self, time: Option<SystemTime>) -> bool {
-        match self.start(SystemTime::now(), &jiff::tz::TimeZone::system()) {
+        match self.start(SystemTime::now(), &unbound_datetime::local_zone()) {
             None => true,
             Some(start) => time.is_some_and(|time| time >= start),
         }
@@ -336,7 +336,7 @@ pub fn format_date(time: SystemTime) -> String {
     jiff::Timestamp::try_from(time)
         .map(|timestamp| {
             timestamp
-                .to_zoned(jiff::tz::TimeZone::system())
+                .to_zoned(unbound_datetime::local_zone())
                 .strftime("%-d %b %Y, %H:%M")
                 .to_string()
         })

@@ -60,6 +60,7 @@ pub(crate) struct Shell {
     identifiers: Vec<(ExtForeignToplevelHandleV1, String)>,
     quit_requests: usize,
     apps_running: Vec<(String, u32)>,
+    app_processes: Vec<(String, i32)>,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
     toplevel_updates: usize,
     workspaces: Option<(u32, u32)>,
@@ -371,6 +372,10 @@ impl TestClient {
         &self.globals.shell.apps_running
     }
 
+    pub fn app_processes(&self) -> &[(String, i32)] {
+        &self.globals.shell.app_processes
+    }
+
     pub fn activate_window(&mut self, server: &mut Compositor, identifier: &str) {
         self.shell_request(server, |shell| shell.activate_window(identifier.to_owned()));
     }
@@ -631,6 +636,9 @@ impl Dispatch<UnboundShellV1, ()> for Globals {
             }
             unbound_shell_v1::Event::AppsRunning { app_id, count } => {
                 globals.shell.apps_running.push((app_id, count));
+            }
+            unbound_shell_v1::Event::AppProcess { app_id, pid } => {
+                globals.shell.app_processes.push((app_id, pid));
             }
             unbound_shell_v1::Event::AppResponding {
                 pid,

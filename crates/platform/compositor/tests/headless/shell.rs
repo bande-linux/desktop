@@ -582,6 +582,34 @@ fn the_window_list_hears_of_a_window_again_only_when_its_title_or_app_changes() 
 }
 
 #[test]
+fn the_shell_hears_which_process_runs_each_app_and_again_when_its_app_id_changes() {
+    let mut server = server();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+    let mut app = window_of(&mut server, RED, (32, 32), "org.example.Stray");
+    roundtrip(&mut server, &mut [&mut shell, &mut app]);
+    let pid = std::process::id() as i32;
+    assert_eq!(
+        shell.app_processes().last(),
+        Some(&("org.example.Stray".to_owned(), pid))
+    );
+
+    app.set_app_id(&mut server, 0, "org.example.Renamed");
+    roundtrip(&mut server, &mut [&mut shell, &mut app]);
+    assert_eq!(
+        shell.app_processes().last(),
+        Some(&("org.example.Renamed".to_owned(), pid))
+    );
+
+    let mut late = TestClient::connect_as_shell(&mut server);
+    late.join_shell(&mut server);
+    assert_eq!(
+        late.app_processes(),
+        [("org.example.Renamed".to_owned(), pid)]
+    );
+}
+
+#[test]
 fn layer_surfaces_receive_frame_callbacks() {
     let mut server = server();
     let mut shell = TestClient::connect_as_shell(&mut server);

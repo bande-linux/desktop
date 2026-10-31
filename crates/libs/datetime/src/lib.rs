@@ -1,6 +1,8 @@
 pub mod daylight;
 mod minute;
 mod month;
+pub mod timedate;
+mod zone;
 
 use icu_calendar::Gregorian;
 use icu_calendar::week::WeekInformation;
@@ -13,6 +15,7 @@ use jiff::Zoned;
 
 pub use minute::MinuteTimer;
 pub use month::{Month, Week};
+pub use zone::{local_zone, now};
 
 const LOCALE_VARIABLES: [&str; 3] = ["LC_ALL", "LC_TIME", "LANG"];
 const FALLBACK: Locale = locale!("en-US");

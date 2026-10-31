@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use unbound_xdg::{
     DesktopEntry, ExecError, ICON_THEMES, Locale, TERMINAL, UserDir, app_name, applications,
-    apps_to_reopen, autostart_dir, find_app, find_icon, launch, opens_at_login, remember_apps,
-    running_app, set_open_at_login, take_apps_to_reopen, user_dir,
+    apps_to_reopen, autostart_dir, find_app, find_app_for_process, find_icon, launch,
+    opens_at_login, remember_apps, running_app, set_open_at_login, take_apps_to_reopen, user_dir,
 };
 
 fn desktops() -> Vec<String> {
@@ -440,6 +440,65 @@ fn window_app_ids_find_their_desktop_entry() {
         Some("org.example.Unknown")
     );
     assert_eq!(running_app(&entries, &running, "slack"), None);
+}
+
+fn executable(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    write(path, "");
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).expect("executable");
+}
+
+fn process(root: &Path, pid: u32, unit: &str, exe: &Path) {
+    let folder = root.join(pid.to_string());
+    write(
+        &folder.join("cgroup"),
+        &format!("0::/user.slice/user-1000.slice/user@1000.service/app.slice/{unit}\n"),
+    );
+    std::os::unix::fs::symlink(exe, folder.join("exe")).expect("exe link");
+}
+
+#[test]
+fn a_window_finds_its_app_through_its_own_scope_or_its_program() {
+    let dir = TempDir::new().expect("dir");
+    let bin = dir.path().join("bin");
+    let (editor, python) = (bin.join("my editor"), bin.join("python3"));
+    executable(&editor);
+    executable(&python);
+    let entries = [
+        installed("org.unbound.Terminal", "Exec=true"),
+        installed("com.example.Editor", "Exec=true"),
+        installed("org.example.Paint", "Exec=true"),
+        installed(
+            "org.example.Writer",
+            &format!("Exec=\"{}\" %F", editor.display()),
+        ),
+        installed(
+            "org.example.Tool",
+            &format!("Exec={} tool.py", python.display()),
+        ),
+    ];
+    let root = dir.path().join("proc");
+    process(&root, 42, "app-com.example.Editor-42.scope", &python);
+    process(
+        &root,
+        43,
+        "app-unbound-org.unbound.Terminal-7.scope",
+        &editor,
+    );
+    process(
+        &root,
+        44,
+        "app-unbound-org.unbound.Terminal-7.scope",
+        &python,
+    );
+    process(&root, 45, "app-flatpak-org.example.Paint-99.scope", &python);
+    let found = |pid| find_app_for_process(&entries, &root, pid).map(DesktopEntry::app_id);
+
+    assert_eq!(found(42), Some("com.example.Editor"));
+    assert_eq!(found(43), Some("org.example.Writer"));
+    assert_eq!(found(44), None);
+    assert_eq!(found(45), Some("org.example.Paint"));
+    assert_eq!(found(46), None);
 }
 
 #[test]

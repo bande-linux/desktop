@@ -152,7 +152,7 @@ impl<R: Read> Read for Counted<R> {
 fn zip_time(time: SystemTime) -> DateTime {
     jiff::Timestamp::try_from(time)
         .ok()
-        .map(|stamp| stamp.to_zoned(jiff::tz::TimeZone::system()))
+        .map(|stamp| stamp.to_zoned(unbound_datetime::local_zone()))
         .and_then(|local| {
             DateTime::from_date_and_time(
                 u16::try_from(local.year()).ok()?,
@@ -179,7 +179,7 @@ fn system_time(time: DateTime) -> Option<SystemTime> {
         i8::try_from(time.second()).ok()?,
         0,
     );
-    let zoned = civil.to_zoned(jiff::tz::TimeZone::system()).ok()?;
+    let zoned = civil.to_zoned(unbound_datetime::local_zone()).ok()?;
     Some(SystemTime::from(zoned.timestamp()))
 }
 

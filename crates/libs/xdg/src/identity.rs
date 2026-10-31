@@ -1,6 +1,8 @@
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
-use crate::entry::DesktopEntry;
+use crate::entry::{DesktopEntry, find_executable};
+use crate::units::unit_app_ids;
 
 const LAUNCHERS: &[&str] = &[
     "bash", "dash", "env", "fish", "flatpak", "java", "node", "perl", "pkexec", "python",
@@ -8,13 +10,23 @@ const LAUNCHERS: &[&str] = &[
 ];
 
 impl DesktopEntry {
-    pub fn program(&self) -> Option<String> {
+    fn own_program(&self) -> Option<String> {
         if self.terminal {
             return None;
         }
-        let command = self.command().ok()?;
-        let program = Path::new(command.first()?).file_name()?.to_str()?;
-        (!LAUNCHERS.contains(&program)).then(|| program.to_owned())
+        let program = self.command().ok()?.into_iter().next()?;
+        let name = Path::new(&program).file_name()?.to_str()?;
+        (!LAUNCHERS.contains(&name)).then_some(program)
+    }
+
+    pub fn program(&self) -> Option<String> {
+        let program = self.own_program()?;
+        Path::new(&program).file_name()?.to_str().map(str::to_owned)
+    }
+
+    fn executable(&self) -> Option<PathBuf> {
+        let path = find_executable(&self.own_program()?)?;
+        Some(fs::canonicalize(&path).unwrap_or(path))
     }
 }
 
@@ -61,5 +73,45 @@ pub fn running_app<'a>(
     running().find(|window| *window == app_id).or_else(|| {
         let wanted = find_app(entries, app_id)?.app_id();
         running().find(|window| find_app(entries, window).map(DesktopEntry::app_id) == Some(wanted))
+    })
+}
+
+fn trusted_scope(cgroup: &str, pid: u32) -> Option<&str> {
+    let unit = cgroup
+        .lines()
+        .find_map(|line| line.strip_prefix("0::"))?
+        .rsplit('/')
+        .next()?;
+    let scope = unit.strip_suffix(".scope")?;
+    let own = scope
+        .rsplit_once('-')
+        .is_some_and(|(_, number)| number == pid.to_string());
+    (own || scope.starts_with("app-flatpak-")).then_some(unit)
+}
+
+fn process_executable(process: &Path) -> Option<PathBuf> {
+    let link = fs::read_link(process.join("exe")).ok()?;
+    let text = link.to_str()?;
+    let path = PathBuf::from(text.strip_suffix(" (deleted)").unwrap_or(text));
+    Some(fs::canonicalize(&path).unwrap_or(path))
+}
+
+pub fn find_app_for_process<'a>(
+    entries: &'a [DesktopEntry],
+    proc_root: &Path,
+    pid: u32,
+) -> Option<&'a DesktopEntry> {
+    let process = proc_root.join(pid.to_string());
+    let cgroup = fs::read_to_string(process.join("cgroup")).unwrap_or_default();
+    let scoped = trusted_scope(&cgroup, pid)
+        .map(unit_app_ids)
+        .unwrap_or_default()
+        .iter()
+        .find_map(|app_id| find_app(entries, app_id));
+    scoped.or_else(|| {
+        let executable = process_executable(&process)?;
+        entries
+            .iter()
+            .find(|entry| entry.executable().as_ref() == Some(&executable))
     })
 }

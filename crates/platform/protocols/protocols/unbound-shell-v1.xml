@@ -454,6 +454,18 @@
       </description>
       <arg name="panel" type="uint" enum="panel"/>
     </event>
+
+    <event name="app_process">
+      <description summary="the process behind an app's windows">
+        Sent before the window list first shows a window with this app id, or
+        shows a window's new app id, and on binding for every listed window.
+        Pid is the process on the other end of the window's connection, so
+        the shell can find the app a window belongs to when its app id names
+        no installed app.
+      </description>
+      <arg name="app_id" type="string"/>
+      <arg name="pid" type="int"/>
+    </event>
   </interface>
 
   <interface name="unbound_app_v1" version="1">

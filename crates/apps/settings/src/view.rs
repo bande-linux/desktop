@@ -301,7 +301,7 @@ impl SettingsView {
             icon_dirs: unbound_xdg::data_dirs(),
             symbols: HashMap::new(),
             place: OnceCell::new(),
-            clock: Box::new(Zoned::now),
+            clock: Box::new(unbound_datetime::now),
         };
         view.rebuild();
         view

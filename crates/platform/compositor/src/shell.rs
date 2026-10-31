@@ -338,6 +338,13 @@ impl State {
             return;
         };
         let (title, app_id) = toplevel_names(surface);
+        let newly_listed = match &self.windows[index].foreign {
+            Some(handle) => handle.app_id() != app_id,
+            None => self.windows[index].size.is_some(),
+        };
+        if newly_listed {
+            self.announce_app_process(surface, &app_id);
+        }
         match &self.windows[index].foreign {
             Some(handle) if handle.title() != title || handle.app_id() != app_id => {
                 handle.send_title(&title);
@@ -354,6 +361,26 @@ impl State {
                 self.announce_workspaces();
             }
             None => {}
+        }
+    }
+
+    fn app_process(&self, surface: &WlSurface) -> Option<i32> {
+        let credentials = surface.client()?.get_credentials(&self.display_handle);
+        credentials.ok().map(|credentials| credentials.pid)
+    }
+
+    fn announce_app_process(&self, surface: &WlSurface, app_id: &str) {
+        if let Some(pid) = self.app_process(surface) {
+            self.each_shell(|shell| shell.app_process(app_id.to_owned(), pid));
+        }
+    }
+
+    fn announce_app_processes_to(&self, shell: &UnboundShellV1) {
+        for window in &self.windows {
+            let surface = window.toplevel.wl_surface();
+            if let (Some(handle), Some(pid)) = (&window.foreign, self.app_process(surface)) {
+                shell.app_process(handle.app_id(), pid);
+            }
         }
     }
 
@@ -398,6 +425,7 @@ impl GlobalDispatch<UnboundShellV1, ()> for State {
         state.announce_minimized_windows(&shell);
         state.send_workspaces(&shell);
         state.announce_input_sources_to(&shell);
+        state.announce_app_processes_to(&shell);
         for anchor in &state.panel_anchors {
             send_panel_anchor(&shell, anchor);
         }

@@ -9,8 +9,13 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use common::Portal;
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
 use unbound_config::{ConfigService, ConfigStore};
+use unbound_datetime::daylight::{Sky, place_of, sky};
+use unbound_datetime::timedate::TimedateProxyBlocking;
 use unbound_design::{Accent, Color, Palette, Scheme};
+use unbound_test_bus::timedate::FakeTimedate;
 use xdg_desktop_portal_unbound::gtk;
 use xdg_desktop_portal_unbound::settings::{CursorSettings, Settings, UNBOUND_APPEARANCE};
 use zbus::blocking::MessageIterator;
@@ -21,6 +26,16 @@ const INTERFACE: &str = "org.freedesktop.impl.portal.Settings";
 const APPEARANCE: &str = "org.freedesktop.appearance";
 const GNOME_INTERFACE: &str = "org.gnome.desktop.interface";
 const WAIT: Duration = Duration::from_secs(5);
+const AROUND_THE_WORLD: [&str; 8] = [
+    "Europe/London",
+    "Asia/Kolkata",
+    "Asia/Shanghai",
+    "Australia/Sydney",
+    "Pacific/Auckland",
+    "America/Los_Angeles",
+    "America/New_York",
+    "America/Sao_Paulo",
+];
 
 type All = HashMap<String, HashMap<String, OwnedValue>>;
 
@@ -45,6 +60,7 @@ fn start(config: &str) -> Fixture {
         );
         Settings::serve(
             connection,
+            Some(connection),
             CursorSettings {
                 theme: "Adwaita".to_owned(),
             },
@@ -497,4 +513,42 @@ fn a_tinted_frame_serves_the_wallpapers_average_colour() {
         let expected = f64::from(expected) / 255.0;
         assert!((served - expected).abs() < 0.01, "{served} vs {expected}");
     }
+}
+
+fn color_scheme_in(zone: &str) -> u32 {
+    let zone = TimeZone::get(zone).expect("zone");
+    let now = Timestamp::now().to_zoned(zone.clone());
+    match sky(&now, place_of(&zone)).expect("sky").0 {
+        Sky::Day => 2,
+        Sky::Night => 1,
+    }
+}
+
+#[test]
+fn a_new_time_zone_replans_the_automatic_appearance_at_once() {
+    let fixture = start("appearance \"automatic\"\n");
+    let _timedated = FakeTimedate::start(&fixture.portal.bus, "Europe/Stockholm").expect("fake");
+    let shown = fixture.color_scheme();
+    let (zone, wanted) = AROUND_THE_WORLD
+        .into_iter()
+        .map(|zone| (zone, color_scheme_in(zone)))
+        .find(|(_, scheme)| *scheme != shown)
+        .expect("a zone on the other side of the day");
+    let changes = fixture.changes();
+
+    TimedateProxyBlocking::new(&fixture.portal.client)
+        .expect("timedate")
+        .set_timezone(zone, true)
+        .expect("SetTimezone");
+
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        let (namespace, key, value) = changes.recv_timeout(left).expect("SettingChanged");
+        if (namespace.as_str(), key.as_str()) == (APPEARANCE, "color-scheme") {
+            assert_eq!(u32::try_from(&value).expect("u"), wanted, "in {zone}");
+            break;
+        }
+    }
+    assert_eq!(fixture.color_scheme(), wanted);
 }

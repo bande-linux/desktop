@@ -1,0 +1,11 @@
+#!/usr/bin/make -f
+
+ifeq ($(DEB_VERSION_OVERRIDE),)
+$(error DEB_VERSION_OVERRIDE must hold the version from ci/deb/version.sh)
+endif
+
+%:
+	dh $@
+
+override_dh_gencontrol:
+	dh_gencontrol -- -v$(DEB_VERSION_OVERRIDE)

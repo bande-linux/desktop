@@ -1,6 +1,4 @@
 #!/bin/bash
-# Installs the given Debian packages, skipping apt-get entirely when the runner image
-# already carries all of them.
 set -euo pipefail
 
 missing=()
@@ -10,5 +8,7 @@ for package in "$@"; do
 done
 [ "${#missing[@]}" -eq 0 ] && exit 0
 echo "Installing ${missing[*]}"
-sudo apt-get update
-sudo apt-get install -y --no-install-recommends "${missing[@]}"
+as_root=()
+[ "$(id -u)" = 0 ] || as_root=(sudo)
+"${as_root[@]}" apt-get update
+"${as_root[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"

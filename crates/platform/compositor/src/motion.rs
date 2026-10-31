@@ -408,7 +408,7 @@ impl State {
             || self.switcher.is_animating()
             || self.assist.is_animating()
             || self.window_menus.is_animating()
-            || self.zoom.is_animating(self.progress_precision())
+            || self.zoom.is_animating()
             || self.is_flashing()
             || self.is_revealing()
             || self.windows.iter().any(|window| window.motion.is_some())

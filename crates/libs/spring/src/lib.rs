@@ -186,22 +186,22 @@ impl<T> Default for Animated<T> {
 }
 
 impl<T> Animated<T> {
-    pub const fn new(value: f32) -> Self {
-        Self::with_precision(value, UNIT_PRECISION)
+    pub fn new(value: impl Into<f64>) -> Self {
+        Self::with_precision(value.into(), UNIT_PRECISION)
     }
 
-    pub const fn points(value: f32) -> Self {
-        Self::with_precision(value, POINT_PRECISION)
+    pub fn points(value: impl Into<f64>) -> Self {
+        Self::with_precision(value.into(), POINT_PRECISION)
     }
 
-    const fn with_precision(value: f32, precision: f64) -> Self {
+    const fn with_precision(value: f64, precision: f64) -> Self {
         Self {
             spring: Spring::QUICK,
             start: State {
-                position: value as f64,
+                position: value,
                 velocity: 0.0,
             },
-            target: value as f64,
+            target: value,
             since: None,
             precision,
         }
@@ -211,13 +211,13 @@ impl<T> Animated<T> {
         self.target as f32
     }
 
-    pub fn jump_to(&mut self, value: f32) {
-        *self = Self::with_precision(value, self.precision);
+    pub fn jump_to(&mut self, value: impl Into<f64>) {
+        *self = Self::with_precision(value.into(), self.precision);
     }
 }
 
 impl<T: Copy + PartialOrd + Sub<Output = Duration>> Animated<T> {
-    fn state_at(&self, now: T) -> State {
+    pub fn state_at(&self, now: T) -> State {
         match self.since {
             Some(since) if now > since => {
                 self.spring
@@ -227,13 +227,19 @@ impl<T: Copy + PartialOrd + Sub<Output = Duration>> Animated<T> {
         }
     }
 
-    pub fn animate_at(&mut self, now: T, reduce_motion: bool, target: f32, spring: Spring) -> bool {
-        let target = f64::from(target);
+    pub fn animate_at(
+        &mut self,
+        now: T,
+        reduce_motion: bool,
+        target: impl Into<f64>,
+        spring: Spring,
+    ) -> bool {
+        let target = target.into();
         if target == self.target {
             return false;
         }
         if reduce_motion && spring != Spring::FADE {
-            self.jump_to(target as f32);
+            self.jump_to(target);
             return false;
         }
         self.start = self.state_at(now);
@@ -241,6 +247,10 @@ impl<T: Copy + PartialOrd + Sub<Output = Duration>> Animated<T> {
         self.target = target;
         self.since = Some(now);
         true
+    }
+
+    pub fn is_at_rest(&self, now: T, precision: f64) -> bool {
+        is_settled(self.state_at(now), self.target, precision)
     }
 
     pub fn value_at(&self, now: T) -> (f32, bool) {

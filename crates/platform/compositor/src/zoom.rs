@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use smithay::utils::{Logical, Physical, Point};
 use unbound_config::ZOOM_RANGE;
-use unbound_spring::{Animation, Spring, State as Phase};
+use unbound_spring::{Animated, Spring};
 use zbus::zvariant::Value;
 
 use crate::state::{Compositor, State};
@@ -10,7 +10,8 @@ use crate::state::{Compositor, State};
 const STEP: f64 = 1.25;
 const FIRST_LEVEL: f64 = 2.0;
 pub(crate) struct Zoom {
-    level: Animation,
+    level: Animated<Duration>,
+    wanted: f64,
     last: Option<Duration>,
     remembered: f64,
     written: Vec<f64>,
@@ -20,7 +21,8 @@ pub(crate) struct Zoom {
 impl Default for Zoom {
     fn default() -> Self {
         Self {
-            level: still(1.0),
+            level: Animated::new(1.0),
+            wanted: 1.0,
             last: None,
             remembered: FIRST_LEVEL,
             written: Vec::new(),
@@ -29,28 +31,21 @@ impl Default for Zoom {
     }
 }
 
-fn still(level: f64) -> Animation {
-    Animation::new(
-        Spring::QUICK,
-        Phase {
-            position: level,
-            velocity: 0.0,
-        },
-        level,
-    )
-}
-
 impl Zoom {
+    fn shown(&self) -> f64 {
+        self.level.state_at(self.last.unwrap_or_default()).position
+    }
+
     pub(crate) fn level(&self) -> f64 {
-        self.level.state().position.max(1.0)
+        self.shown().max(1.0)
     }
 
     pub(crate) fn target(&self) -> f64 {
-        self.level.target()
+        self.wanted
     }
 
-    pub(crate) fn is_animating(&self, precision: f64) -> bool {
-        !self.level.is_at_rest(precision)
+    pub(crate) fn is_animating(&self) -> bool {
+        self.last.is_some() || self.wanted != self.shown()
     }
 
     fn go_to(&mut self, level: f64, reduce_motion: bool) {
@@ -58,10 +53,10 @@ impl Zoom {
         if level > 1.0 {
             self.remembered = level;
         }
+        self.wanted = level;
         if reduce_motion {
-            self.level = still(level);
-        } else {
-            self.level.retarget(level);
+            self.level.jump_to(self.wanted);
+            self.last = None;
         }
     }
 
@@ -71,19 +66,17 @@ impl Zoom {
             return;
         }
         self.written.clear();
-        if level != self.level.target() {
+        if level != self.target() {
             self.go_to(level, reduce_motion);
         }
     }
 
-    pub(crate) fn advance(&mut self, time: Duration, precision: f64) {
-        let step = self
-            .last
-            .map_or(Duration::ZERO, |last| time.saturating_sub(last));
+    fn advance(&mut self, time: Duration, precision: f64) {
+        self.level
+            .animate_at(self.last.unwrap_or(time), false, self.wanted, Spring::QUICK);
         self.last = Some(time);
-        self.level.advance(step.as_secs_f64());
-        if !self.is_animating(precision) {
-            self.level = still(self.level.target());
+        if self.level.is_at_rest(time, precision) {
+            self.level.jump_to(self.wanted);
             self.last = None;
         }
     }
@@ -164,8 +157,8 @@ impl State {
     }
 
     pub(crate) fn animate_zoom(&mut self, time: Duration) {
-        let precision = self.progress_precision();
-        if self.zoom.is_animating(precision) {
+        if self.zoom.is_animating() {
+            let precision = self.progress_precision();
             self.zoom.advance(time, precision);
         }
     }

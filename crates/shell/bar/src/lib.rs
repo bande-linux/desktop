@@ -2,10 +2,10 @@ mod combined_client;
 pub mod dialogs;
 pub mod dock;
 mod dock_client;
+pub mod menu_bar;
 mod menu_bar_client;
 pub mod menu_search;
 mod menu_search_client;
-pub mod menubar;
 pub mod menus;
 pub mod rail;
 pub mod surfaces;
@@ -25,7 +25,7 @@ mod tests {
     fn every_message_id_used_in_code_is_in_the_english_file() {
         let sources = [
             include_str!("dock.rs"),
-            include_str!("menubar.rs"),
+            include_str!("menu_bar.rs"),
             include_str!("menus.rs"),
             include_str!("menu_search.rs"),
             include_str!("rail.rs"),

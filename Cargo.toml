@@ -13,48 +13,47 @@ expect_used = "deny"
 panic = "deny"
 
 [workspace.dependencies]
-alacritty_terminal = { version = "=0.26.0", default-features = false }
+ab_glyph = "=0.2.32"
 accesskit = "=0.25.2"
 accesskit_unix = "=0.24.1"
-ab_glyph = "=0.2.32"
+alacritty_terminal = { version = "=0.26.0", default-features = false }
 ash = "=0.38.0"
 atspi-common = "=0.13.0"
 blocking = "=1.6.2"
 bzip2 = "=0.6.1"
-image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
 flate2 = "=1.1.10"
+fluent-bundle = "=0.16.0"
+fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
 icu_calendar = "=2.4.0"
 icu_datetime = "=2.4.0"
 icu_locale_core = "=2.4.0"
+image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
+image-compare = "=0.5.0"
 jiff = "=0.2.38"
+kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 libc = "=0.2.191"
 libloading = "=0.8.9"
 lzma-rust2 = { version = "=0.24.0", default-features = false, features = ["std", "xz"] }
 md-5 = "=0.10.6"
-kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
-image-compare = "=0.5.0"
+naga = { version = "=30.0.1", features = ["wgsl-in", "spv-out"] }
+parley = { version = "=0.12.0", features = ["complex-scripts"] }
+pipewire = "=0.10.1"
+png = "=0.18.1"
 pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
 resvg = { version = "=0.49.0", default-features = false }
 roxmltree = "=0.21.2"
-serde = { version = "=1.0.229", features = ["derive"] }
-ruzstd = "=0.9.1"
 rustix = { version = "=1.1.6", features = ["event", "param", "process"] }
+ruzstd = "=0.9.1"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
 skrifa = "=0.44.0"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
 tar = "=0.4.46"
 tempfile = "=3.27.0"
-naga = { version = "=30.0.1", features = ["wgsl-in", "spv-out"] }
-fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
-parley = { version = "=0.12.0", features = ["complex-scripts"] }
-pipewire = "=0.10.1"
-png = "=0.18.1"
-serde_json = "=1.0.154"
-zbus = "=5.19.0"
 tracing = "=0.1.44"
 tracing-journald = "=0.3.2"
 tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["ansi", "fmt", "registry", "std", "tracing-log"] }
-fluent-bundle = "=0.16.0"
 unic-langid = "=0.9.6"
 vello_cpu = "=0.3.0"
 vello_gpu = { version = "=0.3.0", default-features = false, features = ["wgpu", "text"] }
@@ -65,9 +64,10 @@ wayland-protocols-misc = { version = "=0.3.12", features = ["client"] }
 wayland-protocols-wlr = { version = "=0.3.12", features = ["client"] }
 wayland-scanner = "=0.31.11"
 wayland-server = "=0.31.14"
-xkbcommon = "=0.8.0"
-zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2"] }
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }
+xkbcommon = "=0.8.0"
+zbus = "=5.19.0"
+zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2"] }
 unbound-app-menu = { path = "crates/libs/app-menu" }
 unbound-audio = { path = "crates/libs/audio" }
 unbound-automount = { path = "crates/services/automount" }
@@ -78,8 +78,8 @@ unbound-bus = { path = "crates/libs/bus" }
 unbound-clipboard = { path = "crates/services/clipboard" }
 unbound-compositor = { path = "crates/platform/compositor" }
 unbound-config = { path = "crates/services/config" }
-unbound-datetime = { path = "crates/libs/datetime" }
 unbound-controlcenter = { path = "crates/shell/controlcenter" }
+unbound-datetime = { path = "crates/libs/datetime" }
 unbound-design = { path = "crates/toolkit/design" }
 unbound-desktop-surface = { path = "crates/shell/desktop" }
 unbound-dock-model = { path = "crates/libs/dock-model" }
@@ -100,8 +100,8 @@ unbound-network = { path = "crates/libs/network" }
 unbound-notifications = { path = "crates/shell/notifications" }
 unbound-notify = { path = "crates/services/notify" }
 unbound-polkit = { path = "crates/services/polkit" }
-unbound-preview = { path = "crates/libs/preview" }
 unbound-power = { path = "crates/services/power" }
+unbound-preview = { path = "crates/libs/preview" }
 unbound-protocols = { path = "crates/platform/protocols" }
 unbound-render = { path = "crates/platform/render" }
 unbound-review = { path = "crates/testing/review" }

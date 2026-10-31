@@ -14,7 +14,7 @@ use unbound_xdg::{ICON_THEMES, find_icon};
 
 use crate::L10N;
 use crate::dock::{Rail as AppsRegion, WELL_ALPHA};
-use crate::menubar::{Slot, StatusView};
+use crate::menu_bar::{Slot, StatusView};
 
 pub const EDGE_PADDING: f32 = 24.0;
 pub const LABEL_ROOM: f32 = 280.0;

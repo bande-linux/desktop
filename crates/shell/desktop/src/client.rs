@@ -60,6 +60,7 @@ pub struct DesktopSurface {
     home: Option<PathBuf>,
     icons: HashMap<(String, u32), Option<Image>>,
     thumbnails: Option<Thumbnails>,
+    items: Vec<Item>,
     pictures: HashMap<PathBuf, (Option<SystemTime>, Option<Option<Image>>)>,
     layouts_file: Option<PathBuf>,
     bar_edge: BarEdge,
@@ -225,7 +226,7 @@ impl DesktopSurface {
     }
 
     fn thumbnails_ready(&mut self) {
-        let Some(thumbnails) = &self.thumbnails else {
+        let Some(thumbnails) = &mut self.thumbnails else {
             return;
         };
         let done = thumbnails.take();
@@ -241,7 +242,7 @@ impl DesktopSurface {
                 *kept = Some(picture);
             }
         }
-        self.relist();
+        self.show_items();
     }
 
     fn relist(&mut self) {
@@ -250,10 +251,18 @@ impl DesktopSurface {
         }
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
         let volumes = mounted_volumes(&mountinfo, &self.media);
-        let items = list(&mut self.apps, &self.desktop_dir, &volumes);
+        self.items = list(&mut self.apps, &self.desktop_dir, &volumes);
+        self.show_items();
+        self.watch_folders();
+        self.save_layouts();
+    }
+
+    fn show_items(&mut self) {
         let pixels = self.icon_pixels();
         let mut wanted = Vec::new();
-        let with_icons = items
+        let with_icons = self
+            .items
+            .clone()
             .into_iter()
             .map(|item| {
                 let artwork = self.artwork(&item, pixels, &mut wanted);
@@ -266,8 +275,6 @@ impl DesktopSurface {
             thumbnails.want(wanted);
         }
         self.view.set_items(with_icons, frame_time().on_screen());
-        self.watch_folders();
-        self.save_layouts();
     }
 
     fn icon_pixels(&self) -> u32 {
@@ -920,6 +927,7 @@ impl DesktopSurface {
             home,
             icons: HashMap::new(),
             thumbnails,
+            items: Vec::new(),
             pictures: HashMap::new(),
             layouts_file,
             bar_edge,

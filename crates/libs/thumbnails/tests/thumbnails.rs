@@ -216,7 +216,7 @@ fn installed_thumbnailers_draw_other_kinds_with_the_spec_arguments() {
     );
 }
 
-fn collect(thumbnails: &Thumbnails, wanted: usize, within: Duration) -> Vec<Thumbnailed> {
+fn collect(thumbnails: &mut Thumbnails, wanted: usize, within: Duration) -> Vec<Thumbnailed> {
     let deadline = Instant::now() + within;
     let mut done = Vec::new();
     while Instant::now() < deadline && done.len() < wanted {
@@ -245,7 +245,7 @@ fn the_worker_makes_wanted_thumbnails_and_drops_those_no_longer_wanted() {
             path
         })
         .collect::<Vec<_>>();
-    let thumbnails = Thumbnails::spawn(place.cache(), thumbnailers).expect("worker");
+    let mut thumbnails = Thumbnails::spawn(place.cache(), thumbnailers).expect("worker");
     thumbnails.want(
         papers
             .iter()
@@ -255,7 +255,7 @@ fn the_worker_makes_wanted_thumbnails_and_drops_those_no_longer_wanted() {
     std::thread::sleep(Duration::from_millis(150));
     let photo = place.image("photo.png", 300, 300);
     thumbnails.want(vec![request(&photo, "image/png")]);
-    let done = collect(&thumbnails, 3, Duration::from_secs(5));
+    let done = collect(&mut thumbnails, 3, Duration::from_secs(5));
     std::thread::sleep(Duration::from_millis(600));
     let mut done = done
         .into_iter()

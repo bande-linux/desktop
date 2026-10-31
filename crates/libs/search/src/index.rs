@@ -1,13 +1,13 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap, HashMap};
 use std::fs;
-use std::io::{self, Read, Write};
-use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::net::UnixStream;
+use std::io;
+use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::thread;
 
+use unbound_inbox::{Inbox, Outbox};
 use unbound_watch::{Changes, FolderWatch};
 
 use crate::matcher::{Query, fold};
@@ -47,17 +47,14 @@ enum Command {
 
 pub struct FileIndex {
     commands: Sender<Command>,
-    results: Receiver<FileResults>,
-    wake: UnixStream,
+    results: Inbox<FileResults>,
 }
 
 impl FileIndex {
     pub fn spawn(root: PathBuf) -> io::Result<Self> {
         let (commands, received) = channel();
-        let (sender, results) = channel();
-        let (wake, signal) = UnixStream::pair()?;
-        wake.set_nonblocking(true)?;
-        signal.set_nonblocking(true)?;
+        let results = Inbox::new()?;
+        let sender = results.outbox();
         let changes = commands.clone();
         let watcher = FolderWatch::spawn(Changes::Any, move |paths| {
             let _ = changes.send(Command::Changed(paths));
@@ -74,17 +71,12 @@ impl FileIndex {
                     boosts: HashMap::new(),
                     commands: received,
                     results: sender,
-                    signal,
                     pending: None,
                     answered: None,
                 };
                 worker.run();
             })?;
-        Ok(Self {
-            commands,
-            results,
-            wake,
-        })
+        Ok(Self { commands, results })
     }
 
     pub fn query(&self, generation: u64, text: &str) {
@@ -110,13 +102,11 @@ impl FileIndex {
     }
 
     pub fn fd(&self) -> BorrowedFd<'_> {
-        self.wake.as_fd()
+        self.results.fd()
     }
 
     pub fn take(&mut self) -> Option<FileResults> {
-        let mut drained = [0; 64];
-        while matches!((&self.wake).read(&mut drained), Ok(read) if read > 0) {}
-        self.results.try_iter().last()
+        self.results.drain().pop()
     }
 }
 
@@ -131,8 +121,7 @@ struct Worker {
     watcher: Option<FolderWatch>,
     boosts: HashMap<PathBuf, u32>,
     commands: Receiver<Command>,
-    results: Sender<FileResults>,
-    signal: UnixStream,
+    results: Outbox<FileResults>,
     pending: Option<Asked>,
     answered: Option<Asked>,
 }
@@ -181,10 +170,9 @@ impl Worker {
             let hits = self.search(&asked);
             let generation = asked.generation;
             self.answered = Some(asked);
-            if self.results.send(FileResults { generation, hits }).is_err() {
+            if !self.results.send(FileResults { generation, hits }) {
                 return false;
             }
-            let _ = (&self.signal).write(&[1]);
         }
         true
     }

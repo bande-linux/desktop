@@ -28,7 +28,7 @@ use unbound_status::{Command, Update};
 use unbound_toolkit::ui::{Event, Menu, MenuItem, PointerButton};
 use unbound_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Rect, Role, Scene,
-    TextSystem, Window, WindowEvent,
+    SessionEnd, TextSystem, Window, WindowEvent,
 };
 use unbound_xdg::{
     DesktopEntry, ICON_THEMES, Locale, app_name, applications, current_desktops, data_dirs,
@@ -80,6 +80,11 @@ fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
     if let Err(error) = result {
         tracing::warn!("cannot {what}: {error}");
     }
+}
+
+fn confirm_session_end(window: &mut Window, ending: SessionEnd) {
+    remember_running_apps(&window.running_apps());
+    report("ask to end the session", window.confirm_session_end(ending));
 }
 
 fn tray_image(icon: &TrayIcon, pixels: u32) -> Option<Image> {
@@ -155,11 +160,6 @@ impl<V: StatusView> MenuBarClient<V> {
         }
     }
 
-    fn confirm(&self, window: &mut Window, myself: &str, ending: &str) {
-        remember_running_apps(&window.running_apps());
-        self.launch(window, DIALOGS, &[myself, "--confirm", ending]);
-    }
-
     fn myself(&self) -> String {
         std::env::current_exe()
             .ok()
@@ -184,9 +184,9 @@ impl<V: StatusView> MenuBarClient<V> {
             Command::ForceQuit => {
                 self.launch(window, MONITOR, &["unbound-monitor", "--force-quit"]);
             }
-            Command::Restart => self.confirm(window, &myself, "restart"),
-            Command::ShutDown => self.confirm(window, &myself, "shut-down"),
-            Command::LogOut => self.confirm(window, &myself, "log-out"),
+            Command::Restart => confirm_session_end(window, SessionEnd::Restart),
+            Command::ShutDown => confirm_session_end(window, SessionEnd::ShutDown),
+            Command::LogOut => confirm_session_end(window, SessionEnd::LogOut),
             Command::SetMuted(muted) => {
                 let _ = self.sound.send(SoundControl::SetMuted(muted));
             }

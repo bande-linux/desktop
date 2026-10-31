@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use crate::L10N;
 use unbound_status::devices::end_session;
-use unbound_status::session::{COUNTDOWN, Ending, facts};
+use unbound_status::session::{Effect, Ending, SessionEnding, Stage, facts, quitting_apps};
 use unbound_toolkit::ui::{Axis, Button, Event, Key, Label, Stack, Ui, Widget};
 use unbound_toolkit::{
     App, Image, Item, Palette, Point, Rect, Role, Scene, TextAlign, TextStyle, TextSystem, Window,
@@ -17,6 +17,7 @@ use unbound_xdg::{
 use zbus::blocking::Connection;
 
 pub const DIALOGS: &str = "org.unbound.MenuBar";
+pub const CONFIRMATION_SIZE: (u32, u32) = (420, 130);
 const ABOUT_SIZE: (u32, u32) = (280, 190);
 const ABOUT_ICON: f32 = 64.0;
 const ABOUT_PADDING: f32 = 28.0;
@@ -30,6 +31,15 @@ fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
     }
 }
 
+fn app_name(app_id: &str) -> String {
+    let entries = applications(
+        &data_dirs(),
+        Locale::from_env().as_ref(),
+        &current_desktops(),
+    );
+    find_app(&entries, app_id).map_or_else(|| app_id.to_owned(), |entry| entry.name.clone())
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Choice {
     Undecided,
@@ -37,71 +47,161 @@ enum Choice {
     Confirm,
 }
 
-struct Dialog {
-    ui: Ui,
-    choice: Rc<Cell<Choice>>,
-    ending: Option<(Ending, Instant)>,
-    next_second: Option<Instant>,
-}
-
-fn dialog_ui(lines: Vec<Box<dyn Widget>>, buttons: Vec<Box<dyn Widget>>, window: &Window) -> Ui {
+fn dialog_ui(lines: Widgets, buttons: Widgets, palette: Palette) -> Ui {
     let mut rows = lines;
     if !buttons.is_empty() {
         rows.push(Box::new(Stack::new(Axis::Horizontal, 12.0, 0.0, buttons)));
     }
     Ui::new(
         Box::new(Stack::new(Axis::Vertical, 10.0, 20.0, rows)),
-        unbound_toolkit::ui::Context::new(TextSystem::new(), window.appearance().palette()),
+        unbound_toolkit::ui::Context::new(TextSystem::new(), palette),
     )
 }
 
-fn confirmation(ending: Ending, left: Duration, choice: &Rc<Cell<Choice>>, window: &Window) -> Ui {
-    let cancel = Rc::clone(choice);
-    let confirm = Rc::clone(choice);
-    dialog_ui(
-        vec![
-            Box::new(Label::new(&ending.question())),
-            Box::new(Label::new(&ending.countdown(left))),
-        ],
-        vec![
-            Box::new(Button::new(&L10N.tr("button-cancel"), move || {
-                cancel.set(Choice::Cancel);
-            })),
-            Box::new(Button::new(&ending.button(), move || {
-                confirm.set(Choice::Confirm);
-            })),
-        ],
-        window,
-    )
+fn choice_button(title: &str, choice: &Rc<Cell<Choice>>, picked: Choice) -> Button {
+    let choice = Rc::clone(choice);
+    Button::new(title, move || choice.set(picked))
 }
 
-impl App for Dialog {
+type Widgets = Vec<Box<dyn Widget>>;
+
+fn confirmation_ui(
+    session: &SessionEnding,
+    choice: &Rc<Cell<Choice>>,
+    palette: Palette,
+    now: Instant,
+) -> Ui {
+    let ending = session.ending;
+    let cancel = Box::new(choice_button(
+        &L10N.tr("button-cancel"),
+        choice,
+        Choice::Cancel,
+    ));
+    let (lines, buttons): (Widgets, Widgets) = match session.stage() {
+        Stage::Asking { .. } => (
+            vec![
+                Box::new(Label::new(&ending.question())),
+                Box::new(Label::new(
+                    &ending.countdown(session.left(now) + Duration::from_millis(999)),
+                )),
+            ],
+            vec![
+                cancel,
+                Box::new(choice_button(&ending.button(), choice, Choice::Confirm).primary()),
+            ],
+        ),
+        Stage::Quitting { .. } => (vec![Box::new(Label::new(&quitting_apps()))], vec![cancel]),
+        Stage::Blocked { app_id } => (
+            vec![Box::new(Label::new(&ending.blocked(&app_name(app_id))))],
+            vec![
+                cancel,
+                Box::new(choice_button(&ending.anyway(), choice, Choice::Confirm).destructive()),
+            ],
+        ),
+        Stage::Ending => (Vec::new(), Vec::new()),
+    };
+    dialog_ui(lines, buttons, palette)
+}
+
+pub fn session_ending_scene(
+    session: &SessionEnding,
+    palette: Palette,
+    (width, height): (u32, u32),
+    now: Instant,
+) -> Scene {
+    let choice = Rc::new(Cell::new(Choice::Undecided));
+    confirmation_ui(session, &choice, palette, now).scene(width, height)
+}
+
+struct Confirmation {
+    session: SessionEnding,
+    ui: Ui,
+    choice: Rc<Cell<Choice>>,
+}
+
+impl Confirmation {
+    fn rebuild(&mut self, window: &mut Window, now: Instant) {
+        let palette = window.appearance().palette();
+        self.ui = confirmation_ui(&self.session, &self.choice, palette, now);
+        window.request_redraw();
+    }
+
+    fn apply(&mut self, window: &mut Window, effect: Option<Effect>, now: Instant) {
+        match effect {
+            None => return,
+            Some(Effect::QuitApps) => {
+                if let Err(error) = window.quit_all_apps() {
+                    tracing::warn!("cannot ask the apps to quit: {error}");
+                    let effect = self.session.confirm(now);
+                    return self.apply(window, effect, now);
+                }
+            }
+            Some(Effect::Activate(app_id)) => {
+                report("bring the app forward", window.activate_app(&app_id))
+            }
+            Some(Effect::End) => {
+                let ending = self.session.ending;
+                let result = Connection::system().and_then(|system| end_session(&system, ending));
+                report("end the session", result);
+                window.close();
+                return;
+            }
+        }
+        self.rebuild(window, now);
+    }
+
+    fn decide(&mut self, window: &mut Window) {
+        let now = Instant::now();
+        match self.choice.replace(Choice::Undecided) {
+            Choice::Undecided => {}
+            Choice::Cancel => {
+                if let Some(file) = reopen_file() {
+                    take_apps_to_reopen(&file);
+                }
+                window.close();
+            }
+            Choice::Confirm => {
+                let effect = self.session.confirm(now);
+                self.apply(window, effect, now);
+            }
+        }
+    }
+}
+
+impl App for Confirmation {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         self.ui.scene(width, height)
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        match &event {
+        match event {
             WindowEvent::Input(Event::Key {
                 key: Key::Escape, ..
             }) => self.choice.set(Choice::Cancel),
             WindowEvent::Input(Event::Key {
                 key: Key::Enter, ..
-            }) if self.ending.is_some() => self.choice.set(Choice::Confirm),
+            }) if matches!(self.session.stage(), Stage::Asking { .. }) => {
+                self.choice.set(Choice::Confirm);
+            }
             WindowEvent::Input(input) => {
-                if self.ui.handle(input) {
+                if self.ui.handle(&input) {
                     window.request_redraw();
                 }
             }
             WindowEvent::Accessibility(request) => {
-                if self.ui.perform(request) {
+                if self.ui.perform(&request) {
                     window.request_redraw();
                 }
             }
             WindowEvent::AppearanceChanged(appearance) => {
-                self.ui.set_appearance(*appearance);
+                self.ui.set_appearance(appearance);
                 window.request_redraw();
+            }
+            WindowEvent::AppsRunning { app_id, count } => {
+                let now = Instant::now();
+                let effect = self.session.apps_running(app_id, count, now);
+                self.apply(window, effect, now);
             }
             _ => {}
         }
@@ -109,27 +209,14 @@ impl App for Dialog {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.next_second
+        self.session.deadline(Instant::now())
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
-        let Some((ending, until)) = self.ending else {
-            return;
-        };
-        let left = until.saturating_duration_since(now);
-        if left.is_zero() {
-            self.choice.set(Choice::Confirm);
-        } else {
-            self.ui = confirmation(
-                ending,
-                left + Duration::from_millis(999),
-                &self.choice,
-                window,
-            );
-            self.next_second = Some(now + Duration::from_secs(1));
-            window.request_redraw();
+        match self.session.tick(now) {
+            None => self.rebuild(window, now),
+            effect => self.apply(window, effect, now),
         }
-        self.decide(window);
     }
 
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
@@ -137,43 +224,51 @@ impl App for Dialog {
     }
 }
 
-impl Dialog {
-    fn decide(&mut self, window: &mut Window) {
-        match self.choice.get() {
-            Choice::Undecided => {}
-            Choice::Cancel => {
-                if self.ending.is_some()
-                    && let Some(file) = reopen_file()
-                {
-                    take_apps_to_reopen(&file);
-                }
-                window.close();
-            }
-            Choice::Confirm => {
-                if let Some((ending, _)) = self.ending {
-                    let result =
-                        Connection::system().and_then(|system| end_session(&system, ending));
-                    report("end the session", result);
-                }
-                window.close();
-            }
-        }
-    }
+pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>> {
+    let mut window = Window::open(Role::toplevel(&ending.button(), DIALOGS), CONFIRMATION_SIZE)?;
+    report("keep the dialog in front", window.set_keep_on_top(true));
+    let now = Instant::now();
+    let mut confirmation = Confirmation {
+        session: SessionEnding::new(ending, now),
+        ui: dialog_ui(Vec::new(), Vec::new(), window.appearance().palette()),
+        choice: Rc::new(Cell::new(Choice::Undecided)),
+    };
+    confirmation.rebuild(&mut window, now);
+    unbound_toolkit::run(&mut window, &mut confirmation)?;
+    Ok(())
 }
 
-pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>> {
-    let mut window = Window::open(Role::toplevel(&ending.button(), DIALOGS), (420, 130))?;
-    let choice = Rc::new(Cell::new(Choice::Undecided));
-    let now = Instant::now();
-    let ui = confirmation(ending, COUNTDOWN, &choice, &window);
-    let mut dialog = Dialog {
-        ui,
-        choice,
-        ending: Some((ending, now + COUNTDOWN)),
-        next_second: Some(now + Duration::from_secs(1)),
-    };
-    unbound_toolkit::run(&mut window, &mut dialog)?;
-    Ok(())
+struct About {
+    ui: Ui,
+}
+
+impl App for About {
+    fn scene(&mut self, window: &mut Window) -> Scene {
+        let (width, height) = window.size();
+        self.ui.scene(width, height)
+    }
+
+    fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        match event {
+            WindowEvent::Input(Event::Key {
+                key: Key::Escape, ..
+            }) => window.close(),
+            WindowEvent::Accessibility(request) => {
+                if self.ui.perform(&request) {
+                    window.request_redraw();
+                }
+            }
+            WindowEvent::AppearanceChanged(appearance) => {
+                self.ui.set_appearance(appearance);
+                window.request_redraw();
+            }
+            _ => {}
+        }
+    }
+
+    fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
+        Some(self.ui.accessibility())
+    }
 }
 
 pub fn run_about() -> Result<(), Box<dyn std::error::Error>> {
@@ -202,14 +297,8 @@ pub fn run_about() -> Result<(), Box<dyn std::error::Error>> {
         &L10N.tr("about-desktop"),
         &format!("Unbound {}", env!("CARGO_PKG_VERSION")),
     ));
-    let ui = dialog_ui(lines, Vec::new(), &window);
-    let mut dialog = Dialog {
-        ui,
-        choice: Rc::new(Cell::new(Choice::Undecided)),
-        ending: None,
-        next_second: None,
-    };
-    unbound_toolkit::run(&mut window, &mut dialog)?;
+    let ui = dialog_ui(lines, Vec::new(), window.appearance().palette());
+    unbound_toolkit::run(&mut window, &mut About { ui })?;
     Ok(())
 }
 

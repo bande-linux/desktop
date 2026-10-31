@@ -1,16 +1,16 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::{BACKGROUND, Gesture, Headless, Renderer};
+use unbound_compositor::{BACKGROUND, Compositor, Gesture, Renderer};
 use unbound_test_wayland::{BLUE, RED, TestClient, Workspace, roundtrip};
 
 const WINDOW: (i32, i32) = (64, 48);
 
-fn app(server: &mut Headless, color: [u8; 4], app_id: &str) -> TestClient {
+fn app(server: &mut Compositor, color: [u8; 4], app_id: &str) -> TestClient {
     window_of(server, color, WINDOW, app_id)
 }
 
-fn chord(server: &mut Headless, modifiers: &[u32], key: u32) {
+fn chord(server: &mut Compositor, modifiers: &[u32], key: u32) {
     for modifier in modifiers {
         server.key(*modifier, true, 0);
     }
@@ -21,11 +21,11 @@ fn chord(server: &mut Headless, modifiers: &[u32], key: u32) {
     }
 }
 
-fn workspace_of(server: &Headless, color_window: usize) -> Option<usize> {
+fn workspace_of(server: &Compositor, color_window: usize) -> Option<usize> {
     server.workspace_of(&server.windows()[color_window])
 }
 
-fn workspace_of_app(server: &Headless, app_id: &str) -> Option<usize> {
+fn workspace_of_app(server: &Compositor, app_id: &str) -> Option<usize> {
     let window = server
         .windows()
         .iter()
@@ -33,7 +33,7 @@ fn workspace_of_app(server: &Headless, app_id: &str) -> Option<usize> {
     server.workspace_of(window)
 }
 
-fn swipe(server: &mut Headless, fingers: u32, steps: &[(f64, f64)], start: u32) -> u32 {
+fn swipe(server: &mut Compositor, fingers: u32, steps: &[(f64, f64)], start: u32) -> u32 {
     server.gesture(Gesture::SwipeBegin { fingers }, start);
     let mut time = start;
     for &delta in steps {

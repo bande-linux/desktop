@@ -16,7 +16,7 @@ use crate::cursor::CursorTheme;
 use crate::environment::export_cursor_environment;
 use crate::motion::SETTLED_ALPHA;
 use crate::scene::{FillElement, rounded};
-use crate::state::{Headless, OutputElement, State};
+use crate::state::{Compositor, OutputElement, State};
 
 const SOUND_BUS_NAME: &str = "org.unbound.Sound";
 const SOUND_PATH: &str = "/org/unbound/Sound";
@@ -200,7 +200,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub(crate) fn keep_screen_reader(&mut self) {
         let assistive = &mut self.state.assistive;
         if let Some(child) = assistive.screen_reader.as_mut()

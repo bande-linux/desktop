@@ -6,7 +6,7 @@ use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
 use smithay::backend::session::libseat::LibSeatSessionNotifier;
 use smithay::reexports::calloop::EventLoop;
 use smithay::reexports::drm::control::crtc;
-use unbound_compositor::{DrmBackend, DrmNotifiers, FrameOutput, Headless, Submission};
+use unbound_compositor::{Compositor, DrmBackend, DrmNotifiers, FrameOutput, Submission};
 use unbound_test_wayland::TestClient;
 
 use crate::card::{Card, Scanout, card_path};
@@ -14,7 +14,7 @@ use crate::card::{Card, Scanout, card_path};
 const FLIP_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct Shared {
-    pub server: Headless,
+    pub server: Compositor,
     flip: Option<(crtc::Handle, Option<DrmEventMetadata>)>,
 }
 
@@ -43,7 +43,7 @@ impl Session {
             .next()
             .expect("a connected display");
         let mut server =
-            Headless::on_device(first, Some(output.scanout_device())).expect("compositor state");
+            Compositor::on_device(first, Some(output.scanout_device())).expect("compositor state");
         let client = TestClient::connect(&mut server);
         let events = EventLoop::try_new().expect("event loop");
         events

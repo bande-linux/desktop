@@ -3,13 +3,13 @@
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use unbound_compositor::{Headless, OutputConfig, OutputMode};
+use unbound_compositor::{Compositor, OutputConfig, OutputMode};
 use unbound_settings::Displays;
 use wayland_client::Connection;
 
 #[test]
 fn the_displays_pane_lists_each_output_by_connector_with_its_modes() {
-    let mut server = Headless::with_output(OutputConfig {
+    let mut server = Compositor::with_output(OutputConfig {
         name: "eDP-1".to_owned(),
         make: "Apple".to_owned(),
         model: "Built-in Retina Display".to_owned(),

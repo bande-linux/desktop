@@ -1,36 +1,36 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::{BACKGROUND, Headless, Rect, Renderer};
+use unbound_compositor::{BACKGROUND, Compositor, Rect, Renderer};
 use unbound_test_wayland::{BLUE, Placement, RED, ResizeEdge, TestClient, roundtrip};
 
 const WINDOW: (i32, i32) = (64, 48);
 const GRAB: (i32, i32) = (110, 80);
 
-fn app(server: &mut Headless, color: [u8; 4]) -> TestClient {
+fn app(server: &mut Compositor, color: [u8; 4]) -> TestClient {
     window(server, color, WINDOW)
 }
 
-fn grab(server: &mut Headless, client: &mut TestClient) {
+fn grab(server: &mut Compositor, client: &mut TestClient) {
     server.move_pointer_to(at(GRAB.0, GRAB.1), 0);
     server.press_button(BTN_LEFT, true, 0);
     roundtrip(server, &mut [client]);
     client.request_move(server, 0);
 }
 
-fn release(server: &mut Headless, client: &mut TestClient, time: u32) {
+fn release(server: &mut Compositor, client: &mut TestClient, time: u32) {
     server.press_button(BTN_LEFT, false, time);
     roundtrip(server, &mut [client]);
 }
 
-fn drop_after(server: &mut Headless, client: &mut TestClient, to: (i32, i32), rest: u32) {
+fn drop_after(server: &mut Compositor, client: &mut TestClient, to: (i32, i32), rest: u32) {
     grab(server, client);
     server.move_pointer_to(at(to.0, to.1), 1000);
     server.snap_tick(Duration::from_millis(u64::from(1000 + rest)));
     release(server, client, 1000 + rest);
 }
 
-fn settle(server: &mut Headless, client: &mut TestClient, color: [u8; 4]) -> Rect {
+fn settle(server: &mut Compositor, client: &mut TestClient, color: [u8; 4]) -> Rect {
     if client
         .configured(0)
         .is_some_and(|configured| configured.width > 0)
@@ -41,7 +41,7 @@ fn settle(server: &mut Headless, client: &mut TestClient, color: [u8; 4]) -> Rec
     server.windows()[0].geometry().expect("mapped")
 }
 
-fn chord(server: &mut Headless, client: &mut TestClient, key: u32) {
+fn chord(server: &mut Compositor, client: &mut TestClient, key: u32) {
     for (code, pressed) in [
         (KEY_LEFTCTRL, true),
         (KEY_LEFTMETA, true),
@@ -88,7 +88,7 @@ fn the_preview_appears_only_once_the_pointer_rests() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
     let mut editor = app(&mut server, RED);
-    let mut background = |server: &mut Headless, time: u64| {
+    let mut background = |server: &mut Compositor, time: u64| {
         server.animate(Duration::from_millis(time));
         renderer.render(server).expect("frame");
         let snapshot = renderer.snapshot(server).expect("read back");
@@ -243,7 +243,7 @@ fn the_window_menu_can_tile_a_window_into_a_quarter_and_restore_it() {
     assert_eq!(restored, before);
 }
 
-fn escape(server: &mut Headless, client: &mut TestClient) {
+fn escape(server: &mut Compositor, client: &mut TestClient) {
     server.key(KEY_ESC, true, 1200);
     server.key(KEY_ESC, false, 1201);
     roundtrip(server, &mut [client]);

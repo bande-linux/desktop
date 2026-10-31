@@ -11,7 +11,7 @@ use smithay::utils::{Logical, Point, Rectangle, SERIAL_COUNTER};
 use unbound_spring::{Animation, Decay, Spring, State as Phase, rubber_band};
 
 use crate::motion::Tick;
-use crate::state::{Headless, State};
+use crate::state::{Compositor, State};
 
 const DESKTOP_FINGERS: u32 = 4;
 const SPACE_FINGERS: u32 = 3;
@@ -452,7 +452,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn gesture(&mut self, gesture: Gesture, time: u32) {
         self.state.note_activity();
         self.state.route_gesture(gesture, time);

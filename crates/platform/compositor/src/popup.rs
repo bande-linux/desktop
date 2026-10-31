@@ -16,7 +16,7 @@ use smithay::wayland::shell::xdg::{PopupSurface, PositionerState};
 
 use crate::motion::{BAR_NAMESPACE, DOCK_NAMESPACE};
 
-use crate::state::{Headless, MENU_BAR_NAMESPACE, Rect, State};
+use crate::state::{Compositor, MENU_BAR_NAMESPACE, Rect, State};
 
 impl State {
     pub(crate) fn toplevel_of(&self, surface: &WlSurface) -> Option<WlSurface> {
@@ -268,7 +268,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn popup_rects(&self) -> Vec<Rect> {
         (0..self.state.screens.len())
             .flat_map(|screen| self.state.stack(screen))

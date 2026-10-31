@@ -8,7 +8,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use smithay::utils::{Point, Size};
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
+use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
 use unbound_graphics::Scene;
 use unbound_test_bus::SessionBus;
 use unbound_toolkit_platform::{App, RENDERER_VARIABLE, Role, Window, WindowEvent, run};
@@ -136,7 +136,7 @@ fn draw_on_the_gpu() {
 
 pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
     draw_on_the_gpu();
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     server.set_dark_appearance(shot.dark);
     DARK.store(shot.dark, Ordering::SeqCst);
     TEXT_SIZE.store(shot.text_size, Ordering::SeqCst);
@@ -196,13 +196,14 @@ pub fn shot(name: &str, prepare: fn(&mut Window) -> Option<Ui>, shot: Shot) {
     let mut renderer = Renderer::new().expect("Vulkan renderer");
     let mut scheduler = FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH));
     let start = Instant::now();
-    let pump = |server: &mut Headless, scheduler: &mut FrameScheduler, renderer: &mut Renderer| {
-        server.dispatch().expect("server dispatch");
-        scheduler
-            .poll(|| start.elapsed(), server, renderer)
-            .expect("compositor frame");
-        thread::sleep(Duration::from_millis(2));
-    };
+    let pump =
+        |server: &mut Compositor, scheduler: &mut FrameScheduler, renderer: &mut Renderer| {
+            server.dispatch().expect("server dispatch");
+            scheduler
+                .poll(|| start.elapsed(), server, renderer)
+                .expect("compositor frame");
+            thread::sleep(Duration::from_millis(2));
+        };
     while on_screen.try_recv().is_err() {
         assert!(
             start.elapsed() < Duration::from_secs(30),

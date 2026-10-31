@@ -36,7 +36,7 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
 
-use unbound_compositor::{Headless, SessionRole};
+use unbound_compositor::{Compositor, SessionRole};
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_callback::{self, WlCallback};
 use wayland_client::protocol::wl_compositor::WlCompositor;
@@ -149,7 +149,7 @@ impl TestClient {
         self.globals.hung = true;
     }
 
-    pub fn recover(&mut self, server: &mut Headless) {
+    pub fn recover(&mut self, server: &mut Compositor) {
         self.globals.hung = false;
         for (wm_base, serial) in self.globals.unanswered_pings.drain(..) {
             wm_base.pong(serial);
@@ -157,13 +157,13 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn connect(server: &mut Headless) -> Self {
+    pub fn connect(server: &mut Compositor) -> Self {
         let (client_end, server_end) = UnixStream::pair().expect("socket pair");
         server.insert_client(server_end).expect("insert client");
         Self::from_socket(server, client_end)
     }
 
-    pub fn connect_as_clipboard_daemon(server: &mut Headless) -> Self {
+    pub fn connect_as_clipboard_daemon(server: &mut Compositor) -> Self {
         let (client_end, server_end) = UnixStream::pair().expect("socket pair");
         server
             .insert_session_client(server_end, SessionRole::ClipboardDaemon)
@@ -171,7 +171,7 @@ impl TestClient {
         Self::from_socket(server, client_end)
     }
 
-    pub(crate) fn from_socket(server: &mut Headless, client_end: UnixStream) -> Self {
+    pub(crate) fn from_socket(server: &mut Compositor, client_end: UnixStream) -> Self {
         let connection = Connection::from_socket(client_end).expect("client connection");
         let queue = connection.new_event_queue();
         connection.display().get_registry(&queue.handle(), ());
@@ -192,7 +192,7 @@ impl TestClient {
             .any(|(_, advertised)| advertised == interface)
     }
 
-    pub fn exchange(&mut self, server: &mut Headless) {
+    pub fn exchange(&mut self, server: &mut Compositor) {
         roundtrip(server, &mut [self]);
     }
 
@@ -211,17 +211,17 @@ impl TestClient {
         registry.bind(*name, version, &self.queue.handle(), ())
     }
 
-    pub fn show_window(&mut self, server: &mut Headless, image: &ShmImage) {
+    pub fn show_window(&mut self, server: &mut Compositor, image: &ShmImage) {
         self.show_window_in(server, image, Memory::Shm);
     }
 
-    pub fn show_window_in(&mut self, server: &mut Headless, image: &ShmImage, memory: Memory) {
+    pub fn show_window_in(&mut self, server: &mut Compositor, image: &ShmImage, memory: Memory) {
         self.map_window(server, image, memory, |_, _, _| {});
     }
 
     pub(crate) fn map_window(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         image: &ShmImage,
         memory: Memory,
         before_buffer: impl FnOnce(&Self, &WlSurface, &XdgToplevel),
@@ -286,7 +286,7 @@ impl TestClient {
         surface.commit();
     }
 
-    pub fn create_dmabuf(&mut self, server: &mut Headless, image: &ShmImage, modifier: u64) {
+    pub fn create_dmabuf(&mut self, server: &mut Compositor, image: &ShmImage, modifier: u64) {
         self.dmabuf_buffer(image, modifier);
         let _ = self.connection.flush();
         server.dispatch().expect("server dispatch");
@@ -354,7 +354,7 @@ impl TestClient {
         buffer
     }
 
-    pub fn close_window(&mut self, server: &mut Headless, index: usize) {
+    pub fn close_window(&mut self, server: &mut Compositor, index: usize) {
         let (surface, xdg_surface, toplevel) = self.windows.remove(index);
         toplevel.destroy();
         xdg_surface.destroy();
@@ -362,7 +362,7 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn request_frame(&mut self, server: &mut Headless) {
+    pub fn request_frame(&mut self, server: &mut Compositor) {
         let (surface, _, _) = self.windows.last().expect("a shown window");
         surface.frame(&self.queue.handle(), ());
         surface.commit();
@@ -387,7 +387,7 @@ impl TestClient {
     }
 }
 
-pub fn roundtrip(server: &mut Headless, clients: &mut [&mut TestClient]) {
+pub fn roundtrip(server: &mut Compositor, clients: &mut [&mut TestClient]) {
     for _ in 0..4 {
         for client in clients.iter_mut() {
             client.connection.flush().expect("client flush");
@@ -406,7 +406,7 @@ pub fn roundtrip(server: &mut Headless, clients: &mut [&mut TestClient]) {
 }
 
 pub fn roundtrip_until(
-    server: &mut Headless,
+    server: &mut Compositor,
     clients: &mut [&mut TestClient],
     condition: impl Fn(&[&mut TestClient]) -> bool,
 ) {

@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, TreeId};
 use smithay::utils::Size;
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
+use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
 use unbound_test_wayland::{RED, ShmImage, TestClient};
 use unbound_toolkit::ui::{Context, Event, TextField, Ui, Widget};
 use unbound_toolkit::{
@@ -64,7 +64,7 @@ impl App for Field {
     }
 }
 
-fn pixel(renderer: &mut Renderer, server: &mut Headless, x: i32, y: i32) -> [u8; 3] {
+fn pixel(renderer: &mut Renderer, server: &mut Compositor, x: i32, y: i32) -> [u8; 3] {
     renderer.render(server).expect("frame");
     let snapshot = renderer.snapshot(server).expect("read back");
     let at = ((y * snapshot.size.w + x) * 4) as usize;
@@ -77,7 +77,7 @@ fn pixel(renderer: &mut Renderer, server: &mut Headless, x: i32, y: i32) -> [u8;
 
 #[test]
 fn an_input_method_composes_in_place_with_candidates_below_the_text_and_commits() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut input_method = TestClient::connect(&mut server);
     input_method.use_seat(&mut server);
     input_method.become_input_method(&mut server);
@@ -120,7 +120,7 @@ fn an_input_method_composes_in_place_with_candidates_below_the_text_and_commits(
     let mut renderer = Renderer::new().expect("Vulkan renderer");
     let mut scheduler = FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH));
     let start = Instant::now();
-    let mut pump = |server: &mut Headless, input_method: &mut TestClient| {
+    let mut pump = |server: &mut Compositor, input_method: &mut TestClient| {
         assert!(start.elapsed() < TIMEOUT, "the field never got the text");
         server.dispatch().expect("server dispatch");
         scheduler

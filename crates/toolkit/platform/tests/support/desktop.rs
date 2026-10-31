@@ -4,7 +4,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
+use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
 use unbound_toolkit_platform::{App, Role, Window, WindowEvent};
 
 pub struct Client {
@@ -21,7 +21,7 @@ impl Drop for Client {
 }
 
 pub struct Desktop {
-    pub server: Headless,
+    pub server: Compositor,
     pub renderer: Renderer,
     pub scheduler: FrameScheduler,
     pub start: Instant,
@@ -30,7 +30,7 @@ pub struct Desktop {
 impl Desktop {
     pub fn sized(output: (i32, i32)) -> Self {
         Self {
-            server: Headless::new(Size::from(output)).expect("headless compositor"),
+            server: Compositor::new(Size::from(output)).expect("headless compositor"),
             renderer: Renderer::new().expect("Vulkan renderer"),
             scheduler: FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH)),
             start: Instant::now(),

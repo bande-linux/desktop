@@ -12,8 +12,8 @@ use smithay::reexports::drm::control::crtc;
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use unbound_compositor::{
-    CLIPBOARD_DAEMON, CursorTheme, DrmBackend, DrmNotifiers, FrameClock, FrameOutput,
-    FrameScheduler, GREETER, Headless, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
+    CLIPBOARD_DAEMON, Compositor, CursorTheme, DrmBackend, DrmNotifiers, FrameClock, FrameOutput,
+    FrameScheduler, GREETER, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
     SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
     export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
     follow_session, follow_shutdown, follow_sleep, notify_ready, serve_keyboard_monitor,
@@ -30,7 +30,7 @@ enum Backend {
 }
 
 struct App<O> {
-    compositor: Headless,
+    compositor: Compositor,
     output: O,
     schedulers: Vec<FrameScheduler>,
     started: Duration,
@@ -43,7 +43,7 @@ struct Greeter {
 }
 
 impl Greeter {
-    fn start(compositor: &mut Headless) -> Self {
+    fn start(compositor: &mut Compositor) -> Self {
         let child = compositor
             .spawn_shell_client(Path::new(GREETER))
             .inspect_err(|error| compositor.report_start_failure(Path::new(GREETER), error))
@@ -104,7 +104,7 @@ fn run_headless(session: Session, started: Duration) -> Result<(), Box<dyn Error
     let renderer = Renderer::new()?;
     let info = renderer.device_info();
     tracing::info!("rendering on {} ({})", info.name, info.driver);
-    let compositor = Headless::new(Size::from(HEADLESS_SIZE))?;
+    let compositor = Compositor::new(Size::from(HEADLESS_SIZE))?;
     let mut event_loop: EventLoop<App<Renderer>> = EventLoop::try_new()?;
     let app = App {
         compositor,
@@ -259,7 +259,7 @@ fn run_drm(
     tracing::info!("driving {}", backend.path().display());
     let mut outputs = backend.outputs().into_iter();
     let first = outputs.next().ok_or("no display is connected")?;
-    let mut compositor = Headless::on_device(first, Some(backend.scanout_device()))?;
+    let mut compositor = Compositor::on_device(first, Some(backend.scanout_device()))?;
     for output in outputs {
         compositor.add_output(output);
     }

@@ -5,12 +5,12 @@ use wayland_protocols::xdg::decoration::zv1::client::zxdg_toplevel_decoration_v1
     self, ZxdgToplevelDecorationV1,
 };
 
-use crate::{Globals, Headless, Memory, ShmImage, TestClient};
+use crate::{Compositor, Globals, Memory, ShmImage, TestClient};
 
 impl TestClient {
     pub fn show_decorated_window(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         image: &ShmImage,
         requested: Option<DecorationMode>,
     ) {

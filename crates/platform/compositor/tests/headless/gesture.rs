@@ -1,12 +1,12 @@
 use crate::support::*;
 use smithay::utils::Point;
-use unbound_compositor::{BACKGROUND, Gesture, Headless, Renderer};
+use unbound_compositor::{BACKGROUND, Compositor, Gesture, Renderer};
 use unbound_test_wayland::{ClientGesture, RED, TestClient, roundtrip};
 
 const WINDOW: i32 = 64;
 const CENTER: (f64, f64) = (128.0, 96.0);
 
-fn app(server: &mut Headless) -> TestClient {
+fn app(server: &mut Compositor) -> TestClient {
     let mut client = window(server, RED, (WINDOW, WINDOW));
     client.use_gestures(server);
     server.move_pointer_to(CENTER.into(), 0);
@@ -14,11 +14,17 @@ fn app(server: &mut Headless) -> TestClient {
     client
 }
 
-fn pinch(server: &mut Headless, fingers: u32, scales: &[f64], start: u32) -> u32 {
+fn pinch(server: &mut Compositor, fingers: u32, scales: &[f64], start: u32) -> u32 {
     pinch_every(server, fingers, scales, start, 10)
 }
 
-fn pinch_every(server: &mut Headless, fingers: u32, scales: &[f64], start: u32, step: u32) -> u32 {
+fn pinch_every(
+    server: &mut Compositor,
+    fingers: u32,
+    scales: &[f64],
+    start: u32,
+    step: u32,
+) -> u32 {
     server.gesture(Gesture::PinchBegin { fingers }, start);
     let mut time = start;
     for scale in scales {

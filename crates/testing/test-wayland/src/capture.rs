@@ -20,7 +20,7 @@ use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_captu
 
 use unbound_protocols::client::unbound_capture_v1::{self, UnboundCaptureV1};
 
-use crate::{Globals, Headless, TestClient};
+use crate::{Compositor, Globals, TestClient};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CaptureOutcome {
@@ -56,7 +56,7 @@ impl TestClient {
 
     pub fn start_screen_capture(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         paint_cursors: bool,
     ) -> CaptureConstraints {
         let qh = self.queue.handle();
@@ -69,7 +69,7 @@ impl TestClient {
 
     pub fn start_window_capture(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         app_id: &str,
         paint_cursors: bool,
     ) -> CaptureConstraints {
@@ -85,7 +85,7 @@ impl TestClient {
 
     fn start_capture_session(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         source: &ExtImageCaptureSourceV1,
         paint_cursors: bool,
     ) -> CaptureConstraints {
@@ -105,7 +105,7 @@ impl TestClient {
         self.globals.capture.constraints.clone()
     }
 
-    pub fn capture_frame(&mut self, server: &mut Headless, (width, height): (i32, i32)) {
+    pub fn capture_frame(&mut self, server: &mut Compositor, (width, height): (i32, i32)) {
         let qh = self.queue.handle();
         let stride = width * 4;
         let file = tempfile::tempfile().expect("capture file");
@@ -138,13 +138,13 @@ impl TestClient {
         &self.globals.capture.constraints
     }
 
-    pub fn join_capture(&mut self, server: &mut Headless) {
+    pub fn join_capture(&mut self, server: &mut Compositor) {
         let capture: UnboundCaptureV1 = self.bind("unbound_capture_v1", 1);
         self.globals.capture.shell = Some(capture);
         self.exchange(server);
     }
 
-    pub fn list_windows(&mut self, server: &mut Headless) -> Vec<(String, (i32, i32, i32, i32))> {
+    pub fn list_windows(&mut self, server: &mut Compositor) -> Vec<(String, (i32, i32, i32, i32))> {
         let capture = &mut self.globals.capture;
         capture.windows.clear();
         capture.windows_done = false;

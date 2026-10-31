@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::{BACKGROUND, Headless, Renderer, Vblank};
+use unbound_compositor::{BACKGROUND, Compositor, Renderer, Vblank};
 use unbound_test_wayland::{BLUE, CaptureOutcome, RED, ShmImage, TestClient, roundtrip};
 use wayland_client::protocol::wl_shm::Format;
 
@@ -13,7 +13,7 @@ const STOPPED: u32 = 2;
 const KEY_5: u32 = 6;
 const KEY_SYSRQ: u32 = 99;
 
-fn red_window(server: &mut Headless) -> TestClient {
+fn red_window(server: &mut Compositor) -> TestClient {
     let mut client = TestClient::connect(server);
     client.show_window(server, &xrgb(&solid(RED, WINDOW), WINDOW));
     client
@@ -24,7 +24,7 @@ fn rgb_at(argb8888: &[u8], (x, y): (i32, i32)) -> [u8; 3] {
     [argb8888[at + 2], argb8888[at + 1], argb8888[at]]
 }
 
-fn capture(server: &mut Headless, renderer: &mut Renderer, shell: &mut TestClient) -> Vec<u8> {
+fn capture(server: &mut Compositor, renderer: &mut Renderer, shell: &mut TestClient) -> Vec<u8> {
     shell.start_screen_capture(server, false);
     shell.capture_frame(server, OUTPUT);
     renderer.render(server).expect("frame");
@@ -124,14 +124,14 @@ fn a_locked_screen_captures_only_the_lock_surface() {
     assert_eq!(rgb_at(&pixels, CORNER), [0x00, 0x00, 0xff]);
 }
 
-fn red_window_named(server: &mut Headless, app_id: &str) -> TestClient {
+fn red_window_named(server: &mut Compositor, app_id: &str) -> TestClient {
     let mut client = red_window(server);
     client.set_app_id(server, 0, app_id);
     client
 }
 
 fn capture_window(
-    server: &mut Headless,
+    server: &mut Compositor,
     renderer: &mut Renderer,
     shell: &mut TestClient,
     size: (i32, i32),
@@ -155,7 +155,7 @@ fn argb_at(argb8888: &[u8], width: i32, (x, y): (i32, i32)) -> [u8; 4] {
     ]
 }
 
-fn named_shell(server: &mut Headless, app: &mut TestClient) -> TestClient {
+fn named_shell(server: &mut Compositor, app: &mut TestClient) -> TestClient {
     let mut shell = TestClient::connect_as_shell(server);
     shell.join_shell(server);
     roundtrip(server, &mut [app, &mut shell]);

@@ -1,6 +1,6 @@
 use crate::support::*;
 use smithay::utils::Size;
-use unbound_compositor::{Headless, Renderer, Snapshot};
+use unbound_compositor::{Compositor, Renderer, Snapshot};
 use unbound_test_wayland::{
     Anchor, KeyboardInteractivity, Layer, LayerRequest, ShmImage, TestClient, roundtrip,
 };
@@ -46,8 +46,8 @@ enum Effects {
     Reduced,
 }
 
-fn scene(blurred: bool, effects: Effects) -> (Headless, Renderer, TestClient, TestClient) {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+fn scene(blurred: bool, effects: Effects) -> (Compositor, Renderer, TestClient, TestClient) {
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut below = TestClient::connect(&mut server);
     let pixels = below_pixels(BELOW.0 / 2);
     below.show_window(
@@ -109,7 +109,7 @@ fn a_change_behind_the_blur_but_outside_it_redraws_the_blur() {
 }
 
 fn corner_and_middle(radius: Option<u32>) -> (u8, u8) {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut below = TestClient::connect(&mut server);
     let stripes: Vec<u8> = (0..OUTPUT.1)
         .flat_map(|_| (0..OUTPUT.0).flat_map(|x| if x % 2 == 0 { BLACK } else { WHITE }))

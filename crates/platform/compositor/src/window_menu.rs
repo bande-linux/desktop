@@ -22,7 +22,7 @@ use unbound_widgets::{MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel
 use crate::L10N;
 use crate::label::Labels;
 use crate::motion::{Look, Motion, Tick};
-use crate::state::{Headless, OutputElement, Rect, State};
+use crate::state::{Compositor, OutputElement, Rect, State};
 
 const TILING_MENU_AFTER: Duration = Duration::from_millis(500);
 const BELOW_GAP: i32 = 4;
@@ -726,7 +726,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn set_text_size(&mut self, size: TextSize) {
         self.state.window_menus.text_size = size;
     }

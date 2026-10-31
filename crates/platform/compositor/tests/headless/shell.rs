@@ -1,6 +1,6 @@
 use crate::support::*;
 use smithay::utils::{Point, Size};
-use unbound_compositor::{Headless, Renderer, automatic_scale};
+use unbound_compositor::{Compositor, Renderer, automatic_scale};
 use unbound_test_wayland::{
     Anchor, BLUE, BrightnessKey, GREEN, KeyboardInteractivity, LauncherMode, Layer, LayerRequest,
     MediaKey, Panel, PanelEdge, RED, TestClient, VolumeKey, roundtrip,
@@ -409,7 +409,7 @@ fn exclusive(layer: Layer) -> LayerRequest {
     }
 }
 
-fn typed_a(server: &mut Headless, clients: &mut [&mut TestClient]) {
+fn typed_a(server: &mut Compositor, clients: &mut [&mut TestClient]) {
     chord(server, &[KEY_A]);
     roundtrip(server, clients);
 }

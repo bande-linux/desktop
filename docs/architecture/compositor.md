@@ -137,7 +137,7 @@ when they reach the screen is Unbound's own.
   with its time and sequence); a superseded commit's feedback is discarded, and a render that
   overruns its vblank is presented at the next one.
 - **Window motion.** Every window state change is animated by springs on x, y, width, height
-  and opacity, sampled at the frame's vblank (`Headless::animate_on`, called by each output's
+  and opacity, sampled at the frame's vblank (`Compositor::animate_on`, called by each output's
   scheduler before it latches a frame). Animations are closed-form springs, so every display
   samples its own vblank, even one earlier than another display's last frame, and displays
   of different rates never repeat a frame. An animation stops once its remaining motion is

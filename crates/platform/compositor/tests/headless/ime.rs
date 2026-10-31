@@ -1,18 +1,18 @@
 use crate::support::*;
 use smithay::utils::Size;
-use unbound_compositor::{Headless, Renderer};
+use unbound_compositor::{Compositor, Renderer};
 use unbound_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
 
 const WINDOW: i32 = 64;
 
 struct Session {
-    server: Headless,
+    server: Compositor,
     app: TestClient,
     input_method: TestClient,
 }
 
 fn typing_in_a_field_at(cursor: (i32, i32, i32, i32)) -> Session {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut input_method = TestClient::connect(&mut server);
     input_method.use_seat(&mut server);
     input_method.become_input_method(&mut server);

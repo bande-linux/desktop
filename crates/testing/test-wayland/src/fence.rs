@@ -10,7 +10,7 @@ use wayland_protocols::wp::linux_drm_syncobj::v1::client::{
     wp_linux_drm_syncobj_timeline_v1::WpLinuxDrmSyncobjTimelineV1,
 };
 
-use crate::{Globals, Headless, Memory, ShmImage, TestClient};
+use crate::{Compositor, Globals, Memory, ShmImage, TestClient};
 
 const SW_SYNC: &str = "/sys/kernel/debug/sync/sw_sync";
 const DMA_BUF_SYNC_WRITE: u32 = 2;
@@ -91,7 +91,7 @@ impl TestClient {
 
     pub fn show_synced_window(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         image: &ShmImage,
         timeline: BorrowedFd<'_>,
         points: (u64, u64),

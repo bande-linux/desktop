@@ -1,13 +1,13 @@
 use std::time::{Duration, Instant};
 
-use unbound_compositor::Headless;
+use unbound_compositor::Compositor;
 use unbound_test_wayland::{RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
 
 use crate::session::Session;
 use crate::uinput::{BTN_LEFT, EV_KEY, EV_REL, KEY_A, REL_X, VirtualDevice};
 
-fn window(client: &mut TestClient, server: &mut Headless, width: i32, height: i32) {
+fn window(client: &mut TestClient, server: &mut Compositor, width: i32, height: i32) {
     let pixels = RED.repeat((width * height) as usize);
     client.show_window(
         server,

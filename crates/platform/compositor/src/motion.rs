@@ -10,7 +10,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use crate::scene::Closing;
 use crate::screen::Screen;
 use crate::shell::toplevel_names;
-use crate::state::{Headless, State};
+use crate::state::{Compositor, State};
 use crate::window::Window;
 
 const SETTLED_PIXELS: f64 = 0.25;
@@ -415,7 +415,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn animate(&mut self, time: Duration) {
         self.state.animate(self.state.tick(time, 0));
     }

@@ -9,8 +9,8 @@ use smithay::backend::input::{Axis, AxisSource};
 use smithay::input::pointer::AxisFrame;
 use smithay::utils::{Point, Size};
 use unbound_compositor::{
-    FrameClock, FrameOutput, FrameScheduler, FrameStats, Headless, REFRESH, RenderError, Renderer,
-    Submission,
+    Compositor, FrameClock, FrameOutput, FrameScheduler, FrameStats, REFRESH, RenderError,
+    Renderer, Submission,
 };
 
 const OUTPUT: (i32, i32) = (2928, 1818);
@@ -43,7 +43,7 @@ impl FrameOutput for Timed {
 
     fn submit(
         &mut self,
-        compositor: &mut Headless,
+        compositor: &mut Compositor,
         output: &str,
     ) -> Result<Submission, RenderError> {
         let started = Instant::now();
@@ -54,7 +54,7 @@ impl FrameOutput for Timed {
 }
 
 struct Bench {
-    server: Headless,
+    server: Compositor,
     output: Timed,
     scheduler: FrameScheduler,
     epoch: Instant,
@@ -174,7 +174,7 @@ impl Bench {
         folder: &Path,
         full_effects: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        let mut server = Headless::new(Size::from(OUTPUT))?;
+        let mut server = Compositor::new(Size::from(OUTPUT))?;
         server.set_output_scale(SCALE);
         let mut bench = Self {
             server,

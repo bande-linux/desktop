@@ -2,19 +2,19 @@ use std::path::Path;
 
 use crate::support::*;
 use smithay::utils::{Point, Size};
-use unbound_compositor::{Headless, Rect};
+use unbound_compositor::{Compositor, Rect};
 use unbound_test_wayland::{RED, TestClient, roundtrip};
 
 const OUTPUT: (i32, i32) = (640, 400);
 const WINDOW: (i32, i32) = (120, 80);
 
-fn remembering(memory: &Path) -> Headless {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+fn remembering(memory: &Path) -> Compositor {
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     server.remember_windows_in(memory.join("unbound/windows"));
     server
 }
 
-fn open(server: &mut Headless, app_id: &str) -> TestClient {
+fn open(server: &mut Compositor, app_id: &str) -> TestClient {
     let mut client = TestClient::connect(server);
     client.use_seat(server);
     client.show_window_of(server, &xrgb(&solid(RED, WINDOW), WINDOW), app_id);
@@ -22,7 +22,7 @@ fn open(server: &mut Headless, app_id: &str) -> TestClient {
     client
 }
 
-fn frame_of(server: &Headless, app_id: &str, nth: usize) -> Rect {
+fn frame_of(server: &Compositor, app_id: &str, nth: usize) -> Rect {
     server
         .windows()
         .iter()
@@ -32,7 +32,11 @@ fn frame_of(server: &Headless, app_id: &str, nth: usize) -> Rect {
         .expect("a mapped window")
 }
 
-fn drag(server: &mut Headless, client: &mut TestClient, from: Point<i32, smithay::utils::Logical>) {
+fn drag(
+    server: &mut Compositor,
+    client: &mut TestClient,
+    from: Point<i32, smithay::utils::Logical>,
+) {
     server.move_pointer_to(at(from.x + 10, from.y + 10), 0);
     server.press_button(BTN_LEFT, true, 0);
     roundtrip(server, &mut [&mut *client]);
@@ -75,7 +79,7 @@ fn a_remembered_frame_off_the_current_displays_is_brought_back_into_view() {
     let state = tempfile::tempdir().expect("state directory");
     let path = state.path().join("unbound/windows");
     std::fs::create_dir_all(path.parent().expect("parent")).expect("directory");
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let displays = server.main_output();
     std::fs::write(&path, format!("{displays}\t{EDITOR}\t600\t350\t200\t150\n")).expect("memory");
     server.remember_windows_in(path);

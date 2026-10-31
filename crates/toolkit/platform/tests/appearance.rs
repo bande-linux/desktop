@@ -7,7 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
+use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
 use unbound_graphics::{Accent, Appearance, Color, Contrast, Scene, Scheme, TextSize};
 use unbound_test_bus::SessionBus;
 use unbound_toolkit_platform::{App, Role, Window, WindowEvent};
@@ -100,7 +100,7 @@ fn the_window_follows_the_portal_colour_scheme_accent_contrast_motion_and_text_s
             .expect("emit SettingChanged");
     };
 
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let (client_end, server_end) = UnixStream::pair().expect("socket pair");
     server.insert_client(server_end).expect("insert client");
     let (report, reports) = mpsc::channel();

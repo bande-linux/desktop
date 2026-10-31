@@ -10,7 +10,7 @@ use unbound_render::VulkanRenderer;
 use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::label::{Label, LabelStyle, Look};
-use crate::state::{Headless, OutputElement, State};
+use crate::state::{Compositor, OutputElement, State};
 
 const HUD_STYLE: LabelStyle = LabelStyle {
     role: TextRole::Heading,
@@ -277,7 +277,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn apply_keyboard_settings(&mut self, settings: KeyboardSettings) {
         self.state.apply_keyboard_settings(settings);
         if let Err(error) = self.flush() {

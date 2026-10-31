@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::support::*;
 use smithay::utils::Size;
-use unbound_compositor::{Headless, Renderer, UNRESPONSIVE_AFTER};
+use unbound_compositor::{Compositor, Renderer, UNRESPONSIVE_AFTER};
 use unbound_test_wayland::{RED, TestClient, roundtrip};
 
 const WINDOW: i32 = 64;
@@ -11,14 +11,14 @@ const SAMPLE: (i32, i32) = (108, 76);
 const APP_ID: &str = "org.example.Stuck";
 
 struct Scene {
-    server: Headless,
+    server: Compositor,
     renderer: Renderer,
     app: TestClient,
     shell: TestClient,
 }
 
 fn scene() -> Scene {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let app = window_of(&mut server, RED, (WINDOW, WINDOW), APP_ID);
     let mut shell = TestClient::connect_as_shell(&mut server);
     shell.join_shell(&mut server);

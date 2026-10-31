@@ -8,7 +8,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use smithay::utils::{Point, Size};
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
+use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
 use unbound_graphics::{Color, Event, Scene};
 use unbound_toolkit_platform::{
     Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Surfaces, Window, WindowEvent,
@@ -58,7 +58,7 @@ impl Surfaces for Pair {
     }
 }
 
-fn open_pair(server: &mut Headless) -> Receiver<(usize, WindowEvent)> {
+fn open_pair(server: &mut Compositor) -> Receiver<(usize, WindowEvent)> {
     let (client_end, server_end) = UnixStream::pair().expect("socket pair");
     server
         .insert_session_client(server_end, SessionRole::Shell)
@@ -128,7 +128,7 @@ impl Surfaces for Urgent {
 }
 
 struct Desktop {
-    server: Headless,
+    server: Compositor,
     renderer: Renderer,
     scheduler: FrameScheduler,
     start: Instant,
@@ -173,7 +173,7 @@ fn pointer_events(seen: &[(usize, WindowEvent)]) -> Vec<(usize, &'static str)> {
 #[test]
 fn sibling_surfaces_on_one_connection_each_get_only_their_own_input() {
     let mut desktop = Desktop {
-        server: Headless::new(Size::from(OUTPUT)).expect("headless compositor"),
+        server: Compositor::new(Size::from(OUTPUT)).expect("headless compositor"),
         renderer: Renderer::new().expect("Vulkan renderer"),
         scheduler: FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH)),
         start: Instant::now(),
@@ -237,7 +237,7 @@ fn sibling_surfaces_on_one_connection_each_get_only_their_own_input() {
 #[test]
 fn a_source_that_signals_only_priority_data_wakes_the_loop() {
     let mut desktop = Desktop {
-        server: Headless::new(Size::from(OUTPUT)).expect("headless compositor"),
+        server: Compositor::new(Size::from(OUTPUT)).expect("headless compositor"),
         renderer: Renderer::new().expect("Vulkan renderer"),
         scheduler: FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH)),
         start: Instant::now(),

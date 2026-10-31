@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use unbound_xdg::remember_running_apps;
 
 use crate::shell::{is_shell, toplevel_names};
-use crate::state::{Headless, State};
+use crate::state::{Compositor, State};
 
 impl State {
     pub(crate) fn quit_app(&mut self, owner: Option<Client>) {
@@ -95,7 +95,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn remember_apps_to_reopen_in(&mut self, file: PathBuf) {
         self.state.reopen_file = Some(file);
     }

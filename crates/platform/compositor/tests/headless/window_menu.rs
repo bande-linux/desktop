@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use crate::support::*;
 use smithay::utils::{Logical, Point, Size};
-use unbound_compositor::{Headless, Renderer};
+use unbound_compositor::{Compositor, Renderer};
 use unbound_graphics::TextSize;
 use unbound_test_wayland::{BLUE, DecorationMode, TestClient, ToplevelState, roundtrip};
 
@@ -14,13 +14,13 @@ const BTN_RIGHT: u32 = 0x111;
 const KEY_ENTER: u32 = 28;
 const LATER: Duration = Duration::from_millis(600);
 
-fn server() -> Headless {
-    let mut server = Headless::new(Size::from(SCREEN)).expect("headless compositor");
+fn server() -> Compositor {
+    let mut server = Compositor::new(Size::from(SCREEN)).expect("headless compositor");
     server.set_reduce_motion(true);
     server
 }
 
-fn decorated(server: &mut Headless) -> TestClient {
+fn decorated(server: &mut Compositor) -> TestClient {
     let mut client = TestClient::connect(server);
     client.use_seat(server);
     let pixels = solid(BLUE, WINDOW);
@@ -32,23 +32,23 @@ fn decorated(server: &mut Headless) -> TestClient {
     client
 }
 
-fn on_window(server: &Headless, (x, y): (i32, i32)) -> Point<f64, Logical> {
+fn on_window(server: &Compositor, (x, y): (i32, i32)) -> Point<f64, Logical> {
     let location = geometry(server).location;
     at(location.x + x, location.y + y)
 }
 
-fn press(server: &mut Headless, button: u32, location: Point<f64, Logical>) {
+fn press(server: &mut Compositor, button: u32, location: Point<f64, Logical>) {
     server.move_pointer_to(location, 10);
     server.press_button(button, true, 10);
     server.press_button(button, false, 11);
 }
 
-fn choose(server: &mut Headless, title: &str) {
+fn choose(server: &mut Compositor, title: &str) {
     let item = server.window_menu_item(title).expect("a menu item");
     press(server, BTN_LEFT, item);
 }
 
-fn open_window_menu(server: &mut Headless) {
+fn open_window_menu(server: &mut Compositor) {
     let title = on_window(server, (150, TITLE_BAR / 2));
     press(server, BTN_RIGHT, title);
 }

@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use serde::de::DeserializeOwned;
 use smithay::utils::Size;
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
+use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
 use unbound_graphics::{Palette, Point, Scene, Scheme, TextSystem};
 use unbound_test_bus::SessionBus;
 use unbound_toolkit_platform::{App, MenuPlacement, Role, Window, WindowEvent};
@@ -338,7 +338,7 @@ fn a_screen_reader_reads_and_operates_a_toolkit_window_through_atspi() {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", session.address());
     }
     let (_launcher, address) = start_registry(&session);
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut renderer = Renderer::new().expect("Vulkan renderer");
     let mut scheduler = FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH));
     let (client_end, server_end) = UnixStream::pair().expect("socket pair");

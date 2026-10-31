@@ -6,7 +6,7 @@ use wayland_protocols::ext::idle_notify::v1::client::ext_idle_notifier_v1::ExtId
 use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1;
 use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibitor_v1::ZwpIdleInhibitorV1;
 
-use crate::{Globals, Headless, TestClient};
+use crate::{Compositor, Globals, TestClient};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IdleEvent {
@@ -22,7 +22,7 @@ pub(crate) struct Idle {
 impl TestClient {
     pub fn watch_idle(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         timeout_ms: u32,
         input_only: bool,
     ) -> usize {
@@ -43,7 +43,7 @@ impl TestClient {
         &self.globals.idle.watches[watch].1
     }
 
-    pub fn inhibit_idle(&mut self, server: &mut Headless, window: usize) {
+    pub fn inhibit_idle(&mut self, server: &mut Compositor, window: usize) {
         let manager: ZwpIdleInhibitManagerV1 = self.bind("zwp_idle_inhibit_manager_v1", 1);
         let _: ZwpIdleInhibitorV1 =
             manager.create_inhibitor(&self.windows[window].0, &self.queue.handle(), ());

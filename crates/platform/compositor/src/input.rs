@@ -24,7 +24,7 @@ use crate::gesture::Gesture;
 use crate::keyboard_monitor::KeyEvent;
 use crate::motion::DOCK_NAMESPACE;
 use crate::shell::toplevel_names;
-use crate::state::{Headless, MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE, State};
+use crate::state::{Compositor, MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE, State};
 use crate::tile::Direction;
 
 const EVDEV_OFFSET: u32 = 8;
@@ -428,7 +428,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn handle_input<B: InputBackend>(&mut self, event: InputEvent<B>) -> io::Result<()> {
         self.state.note_activity();
         match event {
@@ -701,7 +701,7 @@ impl Headless {
 
 impl KeyboardShortcutsInhibitHandler for State {
     fn keyboard_shortcuts_inhibit_state(&mut self) -> &mut KeyboardShortcutsInhibitState {
-        &mut self.shortcuts_inhibit_state
+        &mut self.globals.shortcuts_inhibit_state
     }
 
     fn new_inhibitor(&mut self, inhibitor: KeyboardShortcutsInhibitor) {

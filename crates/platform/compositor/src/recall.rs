@@ -7,7 +7,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::Point;
 
 use crate::shell::toplevel_names;
-use crate::state::{Headless, Rect, State};
+use crate::state::{Compositor, Rect, State};
 
 #[derive(Debug, Clone, PartialEq)]
 struct Remembered {
@@ -199,7 +199,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn remember_windows_in(&mut self, path: PathBuf) {
         let frames = fs::read_to_string(&path)
             .map(|text| parse(&text))

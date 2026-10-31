@@ -7,7 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use smithay::utils::{Point, Size};
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
+use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
 
 const OUTPUT: (i32, i32) = (2928, 1818);
 const SETTLE: Duration = Duration::from_secs(4);
@@ -87,7 +87,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 }
 
 struct Session {
-    server: Headless,
+    server: Compositor,
     renderer: Renderer,
     scheduler: FrameScheduler,
     epoch: Instant,
@@ -113,7 +113,7 @@ fn measure(
     settle: Duration,
 ) -> Result<Footprint, Box<dyn Error>> {
     let mut session = Session {
-        server: Headless::new(Size::from(OUTPUT))?,
+        server: Compositor::new(Size::from(OUTPUT))?,
         renderer: Renderer::new()?,
         scheduler: FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH)),
         epoch: Instant::now(),

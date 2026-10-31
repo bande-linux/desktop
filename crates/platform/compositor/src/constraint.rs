@@ -6,7 +6,7 @@ use smithay::wayland::pointer_constraints::{
     PointerConstraint, PointerConstraintsHandler, with_pointer_constraint,
 };
 
-use crate::state::{Headless, State};
+use crate::state::{Compositor, State};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Held {
@@ -93,7 +93,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn move_pointer_by(
         &mut self,
         delta: Point<f64, Logical>,

@@ -3,7 +3,7 @@ use std::path::Path;
 use image::{RgbaImage, buffer::ConvertBuffer};
 use image_compare::Algorithm;
 use smithay::utils::Size;
-use unbound_compositor::{Headless, Renderer};
+use unbound_compositor::{Compositor, Renderer};
 use unbound_test_wayland::{ShmImage, TestClient, quadrants};
 use wayland_client::protocol::wl_shm::Format;
 
@@ -12,7 +12,7 @@ const MAX_CHANNEL_DELTA: u8 = 2;
 
 #[test]
 fn centered_window_matches_the_golden_image() {
-    let mut server = Headless::new(Size::from((256, 192))).expect("headless compositor");
+    let mut server = Compositor::new(Size::from((256, 192))).expect("headless compositor");
     let mut client = TestClient::connect(&mut server);
     let pixels = quadrants(96, 64, 96 * 4);
     client.show_window(

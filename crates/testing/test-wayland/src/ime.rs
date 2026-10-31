@@ -11,7 +11,7 @@ use wayland_protocols_misc::zwp_input_method_v2::client::zwp_input_method_v2::{
 };
 use wayland_protocols_misc::zwp_input_method_v2::client::zwp_input_popup_surface_v2::ZwpInputPopupSurfaceV2;
 
-use crate::{Globals, Headless, ShmImage, TestClient};
+use crate::{Compositor, Globals, ShmImage, TestClient};
 
 #[derive(Default)]
 pub(crate) struct TextInput {
@@ -33,7 +33,7 @@ pub(crate) struct InputMethod {
 }
 
 impl TestClient {
-    pub fn enable_text_input(&mut self, server: &mut Headless, cursor: (i32, i32, i32, i32)) {
+    pub fn enable_text_input(&mut self, server: &mut Compositor, cursor: (i32, i32, i32, i32)) {
         let manager: ZwpTextInputManagerV3 = self.bind("zwp_text_input_manager_v3", 1);
         let seat = self.globals.input.seat.as_ref().expect("use_seat first");
         let text_input = manager.get_text_input(seat, &self.queue.handle(), ());
@@ -54,7 +54,7 @@ impl TestClient {
         &self.globals.text_input.committed
     }
 
-    pub fn become_input_method(&mut self, server: &mut Headless) {
+    pub fn become_input_method(&mut self, server: &mut Compositor) {
         let manager: ZwpInputMethodManagerV2 = self.bind("zwp_input_method_manager_v2", 1);
         let seat = self.globals.input.seat.as_ref().expect("use_seat first");
         self.globals.input_method.input_method =
@@ -74,21 +74,21 @@ impl TestClient {
             .expect("become_input_method first")
     }
 
-    pub fn commit_text(&mut self, server: &mut Headless, text: &str) {
+    pub fn commit_text(&mut self, server: &mut Compositor, text: &str) {
         let input_method = self.input_method();
         input_method.commit_string(text.to_owned());
         input_method.commit(self.globals.input_method.done);
         self.exchange(server);
     }
 
-    pub fn set_preedit(&mut self, server: &mut Headless, text: &str, cursor: (i32, i32)) {
+    pub fn set_preedit(&mut self, server: &mut Compositor, text: &str, cursor: (i32, i32)) {
         let input_method = self.input_method();
         input_method.set_preedit_string(text.to_owned(), cursor.0, cursor.1);
         input_method.commit(self.globals.input_method.done);
         self.exchange(server);
     }
 
-    pub fn grab_keyboard(&mut self, server: &mut Headless) {
+    pub fn grab_keyboard(&mut self, server: &mut Compositor) {
         let grab = self.input_method().grab_keyboard(&self.queue.handle(), ());
         self.globals.input_method.grab = Some(grab);
         self.exchange(server);
@@ -98,7 +98,7 @@ impl TestClient {
         &self.globals.input_method.grabbed_keys
     }
 
-    pub fn show_candidates(&mut self, server: &mut Headless, image: &ShmImage) {
+    pub fn show_candidates(&mut self, server: &mut Compositor, image: &ShmImage) {
         let qh = self.queue.handle();
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
         let surface = compositor.create_surface(&qh, ());

@@ -1,18 +1,18 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::Headless;
+use unbound_compositor::Compositor;
 use unbound_test_wayland::{IdleEvent, RED, TestClient, roundtrip};
 
 const SECOND: Duration = Duration::from_secs(1);
 
-fn watcher(server: &mut Headless) -> TestClient {
+fn watcher(server: &mut Compositor) -> TestClient {
     let mut client = TestClient::connect(server);
     client.use_seat(server);
     client
 }
 
-fn tick(server: &mut Headless, client: &mut TestClient, at: Duration) -> Option<Duration> {
+fn tick(server: &mut Compositor, client: &mut TestClient, at: Duration) -> Option<Duration> {
     let next = server.idle_tick(at);
     roundtrip(server, &mut [client]);
     next

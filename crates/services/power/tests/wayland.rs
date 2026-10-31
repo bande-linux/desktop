@@ -6,7 +6,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
-use unbound_compositor::Headless;
+use unbound_compositor::Compositor;
 use unbound_power::controller::IdleController;
 use unbound_power::idle::{Command, Policy};
 use unbound_power::wayland::watch_idle;
@@ -22,7 +22,7 @@ fn policy(dim_after: u64, lock_after: u64) -> Policy {
     }
 }
 
-fn watched(server: &mut Headless, policy: Policy) -> (Arc<IdleController>, Receiver<Command>) {
+fn watched(server: &mut Compositor, policy: Policy) -> (Arc<IdleController>, Receiver<Command>) {
     let (client_end, server_end) = UnixStream::pair().expect("socket pair");
     server.insert_client(server_end).expect("insert client");
     let (commands, received) = mpsc::channel();
@@ -42,7 +42,7 @@ fn watched(server: &mut Headless, policy: Policy) -> (Arc<IdleController>, Recei
     (controller, received)
 }
 
-fn run_until(server: &mut Headless, at: Duration, received: &Receiver<Command>) -> Vec<Command> {
+fn run_until(server: &mut Compositor, at: Duration, received: &Receiver<Command>) -> Vec<Command> {
     let start = Instant::now();
     let mut seen = Vec::new();
     while start.elapsed() < Duration::from_millis(300) {
@@ -60,7 +60,7 @@ fn run_until(server: &mut Headless, at: Duration, received: &Receiver<Command>) 
 
 #[test]
 fn compositor_idle_dims_then_locks_and_input_undims() {
-    let mut server = Headless::new(Size::from((64, 64))).expect("compositor");
+    let mut server = Compositor::new(Size::from((64, 64))).expect("compositor");
     let (_controller, received) = watched(&mut server, policy(5, 10));
 
     assert_eq!(run_until(&mut server, SECOND, &received), []);
@@ -83,7 +83,7 @@ fn compositor_idle_dims_then_locks_and_input_undims() {
 
 #[test]
 fn a_new_policy_replaces_the_idle_thresholds() {
-    let mut server = Headless::new(Size::from((64, 64))).expect("compositor");
+    let mut server = Compositor::new(Size::from((64, 64))).expect("compositor");
     let (controller, received) = watched(&mut server, policy(50, 100));
     run_until(&mut server, SECOND, &received);
 
@@ -96,7 +96,7 @@ fn a_new_policy_replaces_the_idle_thresholds() {
 
 #[test]
 fn idle_counts_again_from_the_end_of_an_inhibition() {
-    let mut server = Headless::new(Size::from((64, 64))).expect("compositor");
+    let mut server = Compositor::new(Size::from((64, 64))).expect("compositor");
     let (controller, received) = watched(&mut server, policy(5, 100));
     run_until(&mut server, SECOND, &received);
     controller.set_inhibited(true);

@@ -179,7 +179,7 @@ impl State {
 
 impl SessionLockHandler for State {
     fn lock_state(&mut self) -> &mut SessionLockManagerState {
-        &mut self.session_lock_state
+        &mut self.globals.session_lock_state
     }
 
     fn lock(&mut self, confirmation: SessionLocker) {

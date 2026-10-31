@@ -2,23 +2,23 @@ use std::time::{Duration, Instant};
 
 use crate::support::*;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
-use unbound_compositor::{BACKGROUND, Headless, Renderer, Vblank};
+use unbound_compositor::{BACKGROUND, Compositor, Renderer, Vblank};
 use unbound_test_wayland::{BLUE, RED, TestClient, roundtrip};
 
 const WINDOW: (i32, i32) = (64, 48);
 const INSIDE_WINDOW: (i32, i32) = (100, 80);
 
-fn app(server: &mut Headless) -> TestClient {
+fn app(server: &mut Compositor) -> TestClient {
     window(server, RED, WINDOW)
 }
 
-fn locker(server: &mut Headless) -> TestClient {
+fn locker(server: &mut Compositor) -> TestClient {
     let mut client = TestClient::connect_as_shell(server);
     client.use_seat(server);
     client
 }
 
-fn present_frame(server: &mut Headless, sequence: u64) {
+fn present_frame(server: &mut Compositor, sequence: u64) {
     server.take_redraw();
     server.latch();
     server
@@ -29,7 +29,7 @@ fn present_frame(server: &mut Headless, sequence: u64) {
         .expect("presented");
 }
 
-fn focused_app() -> (Headless, TestClient) {
+fn focused_app() -> (Compositor, TestClient) {
     let mut server = server();
     let mut editor = app(&mut server);
     server.move_pointer_to((128.0, 96.0).into(), 0);

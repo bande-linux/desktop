@@ -1,9 +1,9 @@
 use crate::support::*;
-use unbound_compositor::{BACKGROUND, FrameStats, Headless, Renderer, Snapshot};
+use unbound_compositor::{BACKGROUND, Compositor, FrameStats, Renderer, Snapshot};
 use unbound_test_wayland::{BLUE, GREEN, Memory, RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
 
-fn render(renderer: &mut Renderer, server: &mut Headless) -> (FrameStats, Snapshot) {
+fn render(renderer: &mut Renderer, server: &mut Compositor) -> (FrameStats, Snapshot) {
     let stats = renderer.render(server).expect("rendered frame");
     (stats, renderer.snapshot(server).expect("read back frame"))
 }

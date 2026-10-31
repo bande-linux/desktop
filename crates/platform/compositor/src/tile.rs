@@ -9,7 +9,7 @@ use unbound_spring::Spring;
 
 use crate::motion::{Look, Motion, Tick};
 use crate::scene::Casting;
-use crate::state::{Headless, Rect, State};
+use crate::state::{Compositor, Rect, State};
 
 pub(crate) const REST: Duration = Duration::from_millis(150);
 const REST_DISTANCE: f64 = 2.0;
@@ -457,7 +457,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn snap_tick(&mut self, now: Duration) -> Option<Duration> {
         self.state.snap_due(now)
     }

@@ -14,7 +14,7 @@ use zbus::blocking::Connection;
 use zbus::zvariant::Value;
 
 use crate::L10N;
-use crate::state::{Headless, State};
+use crate::state::{Compositor, State};
 
 const SLOW_KEYS_DELAY: Duration = Duration::from_millis(300);
 const BOUNCE_KEYS_DELAY: u32 = 300;
@@ -348,7 +348,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn key(&mut self, evdev_code: u32, pressed: bool, time: u32) {
         self.state.note_activity();
         for (code, pressed, time) in self.state.access_keys(evdev_code, pressed, time) {

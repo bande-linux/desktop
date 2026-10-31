@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use smithay::utils::{Point, Size};
 use unbound_bar::L10N;
 use unbound_bar::surfaces::{self, Display, Services};
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
+use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
 use unbound_config::Config;
 use unbound_controlcenter::ControlCenter;
 use unbound_launcher::LauncherShell;
@@ -266,7 +266,7 @@ enum Outcome {
 }
 
 struct Desktop {
-    server: Headless,
+    server: Compositor,
     renderer: Renderer,
     scheduler: FrameScheduler,
     start: Instant,
@@ -283,7 +283,7 @@ struct Desktop {
 impl Desktop {
     fn new(expanded: bool) -> Self {
         install_apps();
-        let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+        let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
         let (client_end, server_end) = UnixStream::pair().expect("socket pair");
         server
             .insert_session_client(server_end, SessionRole::Shell)

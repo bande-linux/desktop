@@ -6,7 +6,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
-use unbound_compositor::{Headless, Renderer, SessionRole};
+use unbound_compositor::{Compositor, Renderer, SessionRole};
 use unbound_inbox::Inbox;
 use unbound_screenshot::engine::{Engine, EngineEvent, Shot};
 use unbound_test_wayland::{RED, ShmImage, TestClient, roundtrip};
@@ -18,7 +18,7 @@ pub const WINDOW: (i32, i32) = (64, 48);
 pub const WAIT: Duration = Duration::from_secs(10);
 
 pub struct Desktop {
-    pub server: Headless,
+    pub server: Compositor,
     pub renderer: Renderer,
     pub app: TestClient,
     pub engine: Engine,
@@ -27,7 +27,7 @@ pub struct Desktop {
 
 impl Desktop {
     pub fn start() -> Self {
-        let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+        let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
         let mut renderer = Renderer::new().expect("renderer");
         let mut app = TestClient::connect(&mut server);
         app.show_window(

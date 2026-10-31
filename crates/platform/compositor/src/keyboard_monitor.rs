@@ -7,7 +7,7 @@ use zbus::blocking::fdo::DBusProxy;
 use zbus::message::Header;
 use zbus::names::{OwnedUniqueName, UniqueName};
 
-use crate::state::{Headless, State};
+use crate::state::{Compositor, State};
 
 pub const KEYBOARD_MONITOR_NAME: &str = "org.freedesktop.a11y.Manager";
 const PATH: &str = "/org/freedesktop/a11y/Manager";
@@ -239,7 +239,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn monitor_keyboard(&mut self, handle: KeyboardMonitorHandle) {
         self.state.keyboard_monitor = KeyboardMonitor {
             listeners: handle.listeners,

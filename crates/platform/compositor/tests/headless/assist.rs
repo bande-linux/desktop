@@ -1,21 +1,21 @@
 use crate::support::*;
 use smithay::utils::Size;
-use unbound_compositor::{Headless, Rect, Renderer};
+use unbound_compositor::{Compositor, Rect, Renderer};
 use unbound_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
 
 const OUTPUT: (i32, i32) = (480, 270);
 const WINDOW: (i32, i32) = (160, 100);
 const KEY_ENTER: u32 = 28;
 
-fn server() -> Headless {
-    Headless::new(Size::from(OUTPUT)).expect("headless compositor")
+fn server() -> Compositor {
+    Compositor::new(Size::from(OUTPUT)).expect("headless compositor")
 }
 
-fn app(server: &mut Headless, color: [u8; 4]) -> TestClient {
+fn app(server: &mut Compositor, color: [u8; 4]) -> TestClient {
     window(server, color, WINDOW)
 }
 
-fn tile_with_keys(server: &mut Headless, arrow: u32) {
+fn tile_with_keys(server: &mut Compositor, arrow: u32) {
     server.key(KEY_LEFTCTRL, true, 0);
     server.key(KEY_LEFTMETA, true, 0);
     server.key(arrow, true, 0);
@@ -24,7 +24,7 @@ fn tile_with_keys(server: &mut Headless, arrow: u32) {
     server.key(KEY_LEFTCTRL, false, 0);
 }
 
-fn tile_of(server: &Headless, nth: usize) -> Option<Rect> {
+fn tile_of(server: &Compositor, nth: usize) -> Option<Rect> {
     server.windows()[nth].tile()
 }
 

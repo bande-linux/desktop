@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use smithay::utils::{Clock, Monotonic, Point, Size};
 use unbound_compositor::{
-    CLIPBOARD_DAEMON, FrameClock, FrameScheduler, Headless, LOCK_SCREEN, REFRESH, Renderer,
+    CLIPBOARD_DAEMON, Compositor, FrameClock, FrameScheduler, LOCK_SCREEN, REFRESH, Renderer,
     SCREENSHOT, SHELL, SessionRole,
 };
 
@@ -59,7 +59,7 @@ struct Options {
 }
 
 struct Session {
-    server: Headless,
+    server: Compositor,
     renderer: Renderer,
     scheduler: FrameScheduler,
     readiness: [OwnedFd; 2],
@@ -202,7 +202,7 @@ fn now() -> Duration {
 
 impl Session {
     fn start(binaries: &Path, home: &Path) -> Result<Self, Box<dyn Error>> {
-        let mut server = Headless::new(Size::from(OUTPUT))?;
+        let mut server = Compositor::new(Size::from(OUTPUT))?;
         server.set_output_scale(SCALE);
         server.set_lock_screen(&beside(binaries, LOCK_SCREEN)?);
         let readiness = [server.poll_fd()?, server.fence_fd()?];

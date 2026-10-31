@@ -1,6 +1,6 @@
 use crate::support::*;
 use smithay::utils::Size;
-use unbound_compositor::{Headless, Renderer};
+use unbound_compositor::{Compositor, Renderer};
 use unbound_test_wayland::{DecorationMode, RED, TestClient, ToplevelState, roundtrip};
 
 const WINDOW: (i32, i32) = (120, 40);
@@ -8,12 +8,12 @@ const BAR: i32 = 40;
 const CLOSE: (i32, i32) = (24, BAR / 2);
 const ZOOM: (i32, i32) = (CLOSE.0 + 42, BAR / 2);
 
-fn decorated(server: &mut Headless, requested: Option<DecorationMode>) -> TestClient {
+fn decorated(server: &mut Compositor, requested: Option<DecorationMode>) -> TestClient {
     decorated_sized(server, requested, WINDOW)
 }
 
 fn decorated_sized(
-    server: &mut Headless,
+    server: &mut Compositor,
     requested: Option<DecorationMode>,
     size: (i32, i32),
 ) -> TestClient {
@@ -29,13 +29,13 @@ fn decorated_sized(
     client
 }
 
-fn server() -> Headless {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+fn server() -> Compositor {
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     server.set_reduce_motion(true);
     server
 }
 
-fn origin(server: &Headless) -> (i32, i32) {
+fn origin(server: &Compositor) -> (i32, i32) {
     let location = geometry(server).location;
     (location.x, location.y)
 }
@@ -47,7 +47,7 @@ fn close_to(actual: [u8; 3], expected: [u8; 3]) -> bool {
         .all(|(actual, expected)| actual.abs_diff(expected) <= 6)
 }
 
-fn click(server: &mut Headless, client: &mut TestClient, x: i32, y: i32, time: u32) {
+fn click(server: &mut Compositor, client: &mut TestClient, x: i32, y: i32, time: u32) {
     server.move_pointer_to(at(x, y), time);
     server.press_button(BTN_LEFT, true, time);
     server.press_button(BTN_LEFT, false, time + 1);

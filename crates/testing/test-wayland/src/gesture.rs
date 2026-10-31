@@ -10,7 +10,7 @@ use wayland_protocols::wp::pointer_gestures::zv1::client::zwp_pointer_gesture_sw
 };
 use wayland_protocols::wp::pointer_gestures::zv1::client::zwp_pointer_gestures_v1::ZwpPointerGesturesV1;
 
-use crate::{Globals, Headless, TestClient};
+use crate::{Compositor, Globals, TestClient};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ClientGesture {
@@ -27,7 +27,7 @@ pub enum ClientGesture {
 delegate_noop!(Globals: ZwpPointerGesturesV1);
 
 impl TestClient {
-    pub fn use_gestures(&mut self, server: &mut Headless) {
+    pub fn use_gestures(&mut self, server: &mut Compositor) {
         let gestures: ZwpPointerGesturesV1 = self.bind("zwp_pointer_gestures_v1", 3);
         let pointer = self.globals.input.pointer.clone().expect("a pointer");
         let handle = self.queue.handle();

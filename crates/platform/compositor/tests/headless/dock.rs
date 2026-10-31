@@ -1,6 +1,6 @@
 use crate::support::*;
 use smithay::utils::Point;
-use unbound_compositor::{BACKGROUND, Headless, Renderer};
+use unbound_compositor::{BACKGROUND, Compositor, Renderer};
 use unbound_test_wayland::{
     Anchor, KeyboardInteractivity, Layer, LayerRequest, RED, SessionEnd, TestClient, ToplevelState,
     roundtrip,
@@ -10,18 +10,18 @@ const WINDOW: i32 = 64;
 const KEY_F2: u32 = 60;
 const KEY_F3: u32 = 61;
 
-fn app(server: &mut Headless, app_id: &str) -> TestClient {
+fn app(server: &mut Compositor, app_id: &str) -> TestClient {
     window_of(server, RED, (WINDOW, WINDOW), app_id)
 }
 
-fn shell(server: &mut Headless) -> TestClient {
+fn shell(server: &mut Compositor) -> TestClient {
     let mut shell = TestClient::connect_as_shell(server);
     shell.use_seat(server);
     shell.join_shell(server);
     shell
 }
 
-fn super_key(server: &mut Headless, key: u32) {
+fn super_key(server: &mut Compositor, key: u32) {
     server.key(KEY_LEFTMETA, true, 1);
     server.key(key, true, 2);
     server.key(key, false, 3);

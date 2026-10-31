@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::{Headless, Renderer, Snapshot};
+use unbound_compositor::{Compositor, Renderer, Snapshot};
 use unbound_test_wayland::{
     Anchor, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, TestClient, roundtrip,
 };
@@ -11,7 +11,7 @@ const SETTLED: Duration = Duration::from_secs(2);
 
 type Bounds = (i32, i32, i32, i32);
 
-fn app(server: &mut Headless) -> TestClient {
+fn app(server: &mut Compositor) -> TestClient {
     window(server, RED, WINDOW)
 }
 
@@ -19,7 +19,7 @@ fn ms(millis: u64) -> Duration {
     Duration::from_millis(millis)
 }
 
-fn frame(renderer: &mut Renderer, server: &mut Headless, time: Duration) -> Snapshot {
+fn frame(renderer: &mut Renderer, server: &mut Compositor, time: Duration) -> Snapshot {
     server.animate(time);
     renderer.render(server).expect("frame");
     renderer.snapshot(server).expect("read back")
@@ -49,7 +49,7 @@ fn reddish(snapshot: &Snapshot) -> Option<Bounds> {
     bounds
 }
 
-fn minimize(server: &mut Headless, client: &mut TestClient) {
+fn minimize(server: &mut Compositor, client: &mut TestClient) {
     for (key, pressed) in [
         (KEY_LEFTMETA, true),
         (KEY_M, true),
@@ -82,7 +82,7 @@ fn a_new_window_takes_focus_at_once_and_grows_and_fades_in() {
     assert!(!server.is_animating());
 }
 
-fn settled_window() -> (Headless, Renderer, TestClient) {
+fn settled_window() -> (Compositor, Renderer, TestClient) {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
     let mut editor = app(&mut server);

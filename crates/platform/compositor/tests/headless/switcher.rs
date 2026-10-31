@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::support::*;
 use smithay::utils::Size;
-use unbound_compositor::{Headless, Renderer};
+use unbound_compositor::{Compositor, Renderer};
 use unbound_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
 
 const OUTPUT: (i32, i32) = (480, 270);
@@ -10,21 +10,21 @@ const WINDOW: (i32, i32) = (160, 100);
 const KEY_GRAVE: u32 = 41;
 const PLAYER: &str = "org.example.Player";
 
-fn server() -> Headless {
-    Headless::new(Size::from(OUTPUT)).expect("headless compositor")
+fn server() -> Compositor {
+    Compositor::new(Size::from(OUTPUT)).expect("headless compositor")
 }
 
-fn another_window(server: &mut Headless, client: &mut TestClient, color: [u8; 4], index: usize) {
+fn another_window(server: &mut Compositor, client: &mut TestClient, color: [u8; 4], index: usize) {
     client.show_window(server, &xrgb(&solid(color, WINDOW), WINDOW));
     client.set_app_id(server, index, EDITOR);
 }
 
-fn hold_super_and_tap(server: &mut Headless, key: u32) {
+fn hold_super_and_tap(server: &mut Compositor, key: u32) {
     server.key(KEY_LEFTMETA, true, 0);
     tap(server, key);
 }
 
-fn run_for(server: &mut Headless, from: u64, millis: u64) -> u64 {
+fn run_for(server: &mut Compositor, from: u64, millis: u64) -> u64 {
     let mut at = from;
     while at < from + millis {
         at += 16;
@@ -199,7 +199,7 @@ fn clicking_an_icon_switches_to_its_app() {
     assert!(editor.buttons().is_empty() && player.buttons().is_empty());
 }
 
-fn check_golden(name: &str, renderer: &mut Renderer, server: &mut Headless) {
+fn check_golden(name: &str, renderer: &mut Renderer, server: &mut Compositor) {
     renderer.render(server).expect("frame");
     let snapshot = renderer.snapshot(server).expect("read back");
     unbound_golden::assert_golden!(

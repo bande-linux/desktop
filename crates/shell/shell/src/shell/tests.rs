@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
 use unbound_compositor::{
-    FrameClock, FrameScheduler, Headless, OutputConfig, REFRESH, Renderer, SessionRole,
+    Compositor, FrameClock, FrameScheduler, OutputConfig, REFRESH, Renderer, SessionRole,
 };
 
 use super::*;
@@ -16,7 +16,7 @@ const KEY_SPACE: u32 = 57;
 const TIMEOUT: Duration = Duration::from_secs(30);
 
 struct Session {
-    server: Headless,
+    server: Compositor,
     renderer: Renderer,
     scheduler: FrameScheduler,
     start: Instant,
@@ -27,7 +27,7 @@ impl Session {
     fn start(displays: &[OutputConfig]) -> (Self, Receiver<()>) {
         let config = tempfile::tempdir().unwrap();
         let home = config.path().to_path_buf();
-        let mut server = Headless::new(Size::from((1280, 800))).unwrap();
+        let mut server = Compositor::new(Size::from((1280, 800))).unwrap();
         for display in displays {
             server.add_output(display.clone());
         }
@@ -70,7 +70,7 @@ impl Session {
         thread::sleep(Duration::from_millis(1));
     }
 
-    fn pump_until(&mut self, what: &str, mut done: impl FnMut(&Headless) -> bool) {
+    fn pump_until(&mut self, what: &str, mut done: impl FnMut(&Compositor) -> bool) {
         while !done(&self.server) {
             assert!(
                 self.start.elapsed() < TIMEOUT,
@@ -86,12 +86,12 @@ fn startup_maps_every_shell_surface_once_on_every_display() {
     let side = OutputConfig::virtual_display("SIDE-1", Size::from((800, 600)));
     let (mut session, _) = Session::start(&[side]);
     let mut seen: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
-    let mut record = |server: &Headless| {
+    let mut record = |server: &Compositor| {
         for (namespace, id) in server.mapped_layers() {
             seen.entry(namespace).or_default().insert(id);
         }
     };
-    let on_every_display = |server: &Headless| {
+    let on_every_display = |server: &Compositor| {
         let layers = server.mapped_layers();
         ["desktop", "bar"].iter().all(|wanted| {
             layers

@@ -8,7 +8,7 @@ use smithay::wayland::shell::wlr_layer::Layer;
 use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::motion::{BAR_NAMESPACE, SETTLED_ALPHA};
-use crate::state::{Headless, MENU_BAR_NAMESPACE, State, is_mapped};
+use crate::state::{Compositor, MENU_BAR_NAMESPACE, State, is_mapped};
 
 #[derive(Default)]
 pub(crate) enum Reveal {
@@ -112,7 +112,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn hold_until_shell_ready(&mut self, since: Duration, deadline: Duration) {
         self.state.reveal = Reveal::Holding { since, deadline };
     }

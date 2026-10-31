@@ -32,7 +32,7 @@ use crate::clock::{FrameOutput, Submission, Vblank};
 use crate::render::background;
 use crate::scanout::ScanoutExporter;
 use crate::screen::{OutputConfig, OutputMode};
-use crate::state::{Headless, REFRESH, ScanoutDevice};
+use crate::state::{Compositor, REFRESH, ScanoutDevice};
 
 pub type DrmBackendError = Box<dyn Error>;
 
@@ -642,7 +642,7 @@ impl FrameOutput for DrmBackend {
 
     fn submit(
         &mut self,
-        compositor: &mut Headless,
+        compositor: &mut Compositor,
         output: &str,
     ) -> Result<Submission, DrmBackendError> {
         if !self.session.is_active() {

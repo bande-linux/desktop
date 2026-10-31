@@ -16,7 +16,7 @@ use smithay::reexports::wayland_server::Client;
 use unbound_protocols::server::unbound_shell_v1::SessionEnd;
 
 use crate::environment::cursor_environment;
-use crate::state::{ClientState, Headless};
+use crate::state::{ClientState, Compositor};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionRole {
@@ -93,7 +93,7 @@ pub struct SessionUpkeep {
     pub failures: Vec<(PathBuf, io::Error)>,
 }
 
-impl Headless {
+impl Compositor {
     pub fn set_socket_name(&mut self, name: &OsStr) {
         self.socket_name = Some(name.to_owned());
     }
@@ -167,7 +167,7 @@ impl Headless {
 
     fn keep_summoned(
         &mut self,
-        summoned: fn(&mut Headless) -> &mut Summoned,
+        summoned: fn(&mut Compositor) -> &mut Summoned,
         arguments: Option<&[&str]>,
         upkeep: &mut SessionUpkeep,
     ) {
@@ -246,7 +246,7 @@ impl Headless {
         self.keep_lock_screen(&mut upkeep);
         let force_quit = std::mem::take(&mut self.state.force_quit_requested);
         self.keep_summoned(
-            |headless| &mut headless.force_quit,
+            |compositor| &mut compositor.force_quit,
             force_quit.then_some([FORCE_QUIT_ARGUMENT].as_slice()),
             &mut upkeep,
         );
@@ -256,7 +256,7 @@ impl Headless {
             .take()
             .map(|ending| [CONFIRM_ARGUMENT, session_end_keyword(ending)]);
         self.keep_summoned(
-            |headless| &mut headless.session_dialog,
+            |compositor| &mut compositor.session_dialog,
             confirm.as_ref().map(|arguments| arguments.as_slice()),
             &mut upkeep,
         );

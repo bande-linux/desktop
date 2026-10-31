@@ -34,7 +34,7 @@ use crate::motion::Look;
 use crate::render::{background, rendering_error};
 use crate::scene::{Shading, window_elements};
 use crate::shell::is_shell;
-use crate::state::{Headless, OutputElement, State};
+use crate::state::{Compositor, OutputElement, State};
 use crate::window::Window;
 
 const SHM_FORMATS: [Format; 2] = [Format::Argb8888, Format::Xrgb8888];
@@ -116,7 +116,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub(crate) fn copy_captures(&mut self, renderer: &mut VulkanRenderer, output: &str) {
         let (pending, others): (Vec<PendingCapture>, Vec<PendingCapture>) =
             std::mem::take(&mut self.state.pending_captures)

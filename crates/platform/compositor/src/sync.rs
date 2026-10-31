@@ -16,11 +16,11 @@ use smithay::wayland::drm_syncobj::{
     DrmSyncobjCachedState, DrmSyncobjHandler, DrmSyncobjState, supports_syncobj_eventfd,
 };
 
-use crate::state::{Headless, State};
+use crate::state::{Compositor, State};
 
 impl DrmSyncobjHandler for State {
     fn drm_syncobj_state(&mut self) -> Option<&mut DrmSyncobjState> {
-        self.syncobj_state.as_mut()
+        self.globals.syncobj_state.as_mut()
     }
 }
 
@@ -80,13 +80,13 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn enable_explicit_sync(&mut self, device: DrmDeviceFd) -> bool {
         if !supports_syncobj_eventfd(&device) {
             return false;
         }
         let display = self.state.display_handle.clone();
-        self.state.syncobj_state = Some(DrmSyncobjState::new::<State>(&display, device));
+        self.state.globals.syncobj_state = Some(DrmSyncobjState::new::<State>(&display, device));
         true
     }
 

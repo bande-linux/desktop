@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::{BACKGROUND, Headless, KeyboardSettings, Renderer};
+use unbound_compositor::{BACKGROUND, Compositor, KeyboardSettings, Renderer};
 use unbound_config::{CapsLock, InputSource};
 use unbound_test_wayland::{BLUE, TestClient, roundtrip};
 
@@ -17,13 +17,13 @@ fn settings(codes: &[&str]) -> KeyboardSettings {
     }
 }
 
-fn shell(server: &mut Headless) -> TestClient {
+fn shell(server: &mut Compositor) -> TestClient {
     let mut shell = TestClient::connect_as_shell(server);
     shell.join_shell(server);
     shell
 }
 
-fn switch(server: &mut Headless, backwards: bool) {
+fn switch(server: &mut Compositor, backwards: bool) {
     server.key(KEY_LEFTMETA, true, 0);
     server.key(KEY_LEFTALT, true, 0);
     if backwards {

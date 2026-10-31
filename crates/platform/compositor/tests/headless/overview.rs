@@ -1,18 +1,18 @@
 use std::time::Duration;
 
 use crate::support::*;
-use unbound_compositor::{BACKGROUND, Gesture, Headless, Renderer, Snapshot};
+use unbound_compositor::{BACKGROUND, Compositor, Gesture, Renderer, Snapshot};
 use unbound_test_wayland::{BLUE, RED, TestClient, roundtrip};
 
 const WINDOW: (i32, i32) = (64, 48);
 const ADD_WORKSPACE: (f64, f64) = (151.0, 25.0);
 const BELOW_THE_STRIP: usize = 50;
 
-fn app(server: &mut Headless, color: [u8; 4], app_id: &str) -> TestClient {
+fn app(server: &mut Compositor, color: [u8; 4], app_id: &str) -> TestClient {
     window_of(server, color, WINDOW, app_id)
 }
 
-fn open_with_keys(server: &mut Headless) {
+fn open_with_keys(server: &mut Compositor) {
     server.key(KEY_LEFTALT, true, 0);
     server.key(KEY_LEFTMETA, true, 0);
     server.key(KEY_UP, true, 0);
@@ -21,7 +21,7 @@ fn open_with_keys(server: &mut Headless) {
     server.key(KEY_LEFTALT, false, 0);
 }
 
-fn snapshot(renderer: &mut Renderer, server: &mut Headless) -> Snapshot {
+fn snapshot(renderer: &mut Renderer, server: &mut Compositor) -> Snapshot {
     renderer.render(server).expect("frame");
     renderer.snapshot(server).expect("read back")
 }
@@ -38,7 +38,7 @@ fn find(snapshot: &Snapshot, color: [u8; 3]) -> Option<(f64, f64)> {
         })
 }
 
-fn click(server: &mut Headless, (x, y): (f64, f64), time: u32) {
+fn click(server: &mut Compositor, (x, y): (f64, f64), time: u32) {
     server.move_pointer_to((x, y).into(), time);
     server.press_button(BTN_LEFT, true, time);
     server.press_button(BTN_LEFT, false, time + 1);
@@ -120,7 +120,7 @@ fn keys_typed_in_the_overview_stay_out_of_the_app_and_escape_closes_it() {
 fn a_three_finger_swipe_up_opens_the_overview_and_down_closes_it() {
     let mut server = server();
     let _editor = app(&mut server, RED, EDITOR);
-    let swipe = |server: &mut Headless, dy: f64, start: u32| {
+    let swipe = |server: &mut Compositor, dy: f64, start: u32| {
         server.gesture(Gesture::SwipeBegin { fingers: 3 }, start);
         for step in 1..=10 {
             server.gesture(

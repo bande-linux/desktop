@@ -13,7 +13,7 @@ use smithay::reexports::wayland_server::{
 use smithay::wayland::compositor::get_parent;
 use smithay::wayland::idle_inhibit::IdleInhibitHandler;
 
-use crate::state::{Headless, State};
+use crate::state::{Compositor, State};
 
 const NOTIFIER_VERSION: u32 = 2;
 
@@ -65,7 +65,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn woke(&mut self) {
         self.state.night_light.recheck();
         self.state.note_activity();

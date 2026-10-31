@@ -40,6 +40,7 @@ mod night;
 mod overview;
 mod pointing;
 mod popup;
+mod probe;
 mod recall;
 mod render;
 mod reveal;
@@ -81,7 +82,7 @@ pub use session::{
     CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, MONITOR, REVIEW, SCREENSHOT,
     SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRole, SessionUpkeep,
 };
-pub use state::{Headless, OutputElement, REFRESH, Rect, ScanoutDevice};
+pub use state::{Compositor, OutputElement, REFRESH, Rect, ScanoutDevice};
 pub use unbound_render::{DeviceInfo, RenderError};
 pub use watchdog::UNRESPONSIVE_AFTER;
 pub use window::Window;

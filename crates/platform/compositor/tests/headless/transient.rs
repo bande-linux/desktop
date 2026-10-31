@@ -2,28 +2,28 @@ use std::time::Duration;
 
 use crate::support::*;
 use smithay::utils::{Point, Size};
-use unbound_compositor::{Headless, Rect, Renderer};
+use unbound_compositor::{Compositor, Rect, Renderer};
 use unbound_test_wayland::{BLUE, GREEN, RED, TestClient, roundtrip};
 
 const OUTPUT: (i32, i32) = (480, 270);
 const PARENT: (i32, i32) = (200, 120);
 const DIALOG: (i32, i32) = (80, 40);
 
-fn server() -> Headless {
-    Headless::new(Size::from(OUTPUT)).expect("headless compositor")
+fn server() -> Compositor {
+    Compositor::new(Size::from(OUTPUT)).expect("headless compositor")
 }
 
-fn app_with_dialog(server: &mut Headless) -> TestClient {
+fn app_with_dialog(server: &mut Compositor) -> TestClient {
     let mut client = window(server, RED, PARENT);
     client.show_child_window(server, &xrgb(&solid(GREEN, DIALOG), DIALOG), 0);
     client
 }
 
-fn other_app(server: &mut Headless) -> TestClient {
+fn other_app(server: &mut Compositor) -> TestClient {
     window(server, BLUE, (60, 60))
 }
 
-fn rect_of(server: &Headless, width: i32) -> Rect {
+fn rect_of(server: &Compositor, width: i32) -> Rect {
     server
         .windows()
         .iter()
@@ -32,7 +32,7 @@ fn rect_of(server: &Headless, width: i32) -> Rect {
         .expect("a mapped window of that width")
 }
 
-fn stacking(server: &Headless) -> Vec<i32> {
+fn stacking(server: &Compositor) -> Vec<i32> {
     server
         .windows()
         .iter()
@@ -40,7 +40,7 @@ fn stacking(server: &Headless) -> Vec<i32> {
         .collect()
 }
 
-fn shown(server: &Headless) -> Vec<i32> {
+fn shown(server: &Compositor) -> Vec<i32> {
     server
         .windows()
         .iter()
@@ -49,7 +49,7 @@ fn shown(server: &Headless) -> Vec<i32> {
         .collect()
 }
 
-fn beside_dialog(server: &Headless) -> (i32, i32) {
+fn beside_dialog(server: &Compositor) -> (i32, i32) {
     let parent = rect_of(server, PARENT.0);
     (parent.location.x + 10, parent.location.y + 10)
 }
@@ -282,7 +282,7 @@ fn the_app_switcher_offers_an_app_once_even_when_its_dialog_has_no_app_id() {
 
 fn bounds_of(
     renderer: &mut Renderer,
-    server: &mut Headless,
+    server: &mut Compositor,
     color: [u8; 3],
 ) -> (usize, usize, usize, usize) {
     renderer.render(server).expect("frame");

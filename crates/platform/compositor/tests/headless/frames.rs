@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use smithay::utils::Size;
 use unbound_compositor::{
-    FrameClock, FrameOutput, FrameScheduler, Headless, Poll, REFRESH, RenderError, Renderer,
+    Compositor, FrameClock, FrameOutput, FrameScheduler, Poll, REFRESH, RenderError, Renderer,
     SAFETY_MARGIN, Submission, Vblank,
 };
 use unbound_test_wayland::{Presented, RED, ShmImage, TestClient};
@@ -27,7 +27,7 @@ fn vblank_time(sequence: u64) -> Duration {
 }
 
 struct Session {
-    server: Headless,
+    server: Compositor,
     client: TestClient,
     renderer: Renderer,
     scheduler: FrameScheduler,
@@ -36,7 +36,7 @@ struct Session {
 
 impl Session {
     fn with_a_window() -> (Self, Vblank) {
-        let mut server = Headless::new(Size::from((256, 192))).expect("headless compositor");
+        let mut server = Compositor::new(Size::from((256, 192))).expect("headless compositor");
         let mut client = TestClient::connect(&mut server);
         let pixels = RED.repeat((SIDE * SIDE) as usize);
         client.show_window(&mut server, &image(&pixels));
@@ -147,7 +147,7 @@ struct Away;
 impl FrameOutput for Away {
     type Error = RenderError;
 
-    fn submit(&mut self, _: &mut Headless, _: &str) -> Result<Submission, RenderError> {
+    fn submit(&mut self, _: &mut Compositor, _: &str) -> Result<Submission, RenderError> {
         Ok(Submission::Paused)
     }
 }
@@ -259,7 +259,7 @@ struct Display {
 impl FrameOutput for Display {
     type Error = io::Error;
 
-    fn submit(&mut self, _: &mut Headless, _: &str) -> io::Result<Submission> {
+    fn submit(&mut self, _: &mut Compositor, _: &str) -> io::Result<Submission> {
         if self.failing {
             return Err(io::Error::other("the connector is gone"));
         }
@@ -274,7 +274,7 @@ fn poll_display(session: &mut Session, display: &mut Display, now: Duration) -> 
 
 fn submit_through(
     scheduler: &mut FrameScheduler,
-    server: &mut Headless,
+    server: &mut Compositor,
     display: &mut Display,
     mut now: Duration,
 ) {
@@ -341,7 +341,7 @@ fn a_frame_the_display_refuses_is_dropped_instead_of_retried_every_refresh() {
 
 #[test]
 fn a_flip_lost_while_the_session_was_paused_does_not_stop_frames_after_it_resumes() {
-    let mut server = Headless::new(Size::from((64, 64))).expect("headless compositor");
+    let mut server = Compositor::new(Size::from((64, 64))).expect("headless compositor");
     let mut display = Display {
         failing: false,
         submitted: 0,

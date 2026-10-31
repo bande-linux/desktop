@@ -6,7 +6,7 @@ use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
 use smithay::utils::{Clock, Monotonic, Size};
-use unbound_compositor::{FrameClock, FrameScheduler, FrameStats, Headless, REFRESH, Renderer};
+use unbound_compositor::{Compositor, FrameClock, FrameScheduler, FrameStats, REFRESH, Renderer};
 use unbound_test_wayland::{ShmImage, TestClient, quadrants};
 use wayland_client::protocol::wl_shm::Format;
 
@@ -221,7 +221,7 @@ enum Repaint {
 
 fn frame_times(repaint: Repaint) -> Result<(Vec<Duration>, FrameStats), Box<dyn Error>> {
     let mut renderer = Renderer::new()?;
-    let mut server = Headless::new(Size::from(OUTPUT))?;
+    let mut server = Compositor::new(Size::from(OUTPUT))?;
     let mut client = TestClient::connect(&mut server);
     let stride = WINDOW_WIDTH * 4;
     let frames = [
@@ -282,7 +282,7 @@ fn frame_times(repaint: Repaint) -> Result<(Vec<Duration>, FrameStats), Box<dyn 
 
 fn overview_frames() -> Result<(Vec<Duration>, FrameStats), Box<dyn Error>> {
     let mut renderer = Renderer::new()?;
-    let mut server = Headless::new(Size::from(OUTPUT))?;
+    let mut server = Compositor::new(Size::from(OUTPUT))?;
     let mut client = TestClient::connect(&mut server);
     client.use_seat(&mut server);
     let stride = WINDOW_WIDTH * 4;
@@ -331,7 +331,7 @@ fn overview_frames() -> Result<(Vec<Duration>, FrameStats), Box<dyn Error>> {
 }
 
 fn presentation_latency() -> Result<(Vec<Duration>, usize), Box<dyn Error>> {
-    let mut server = Headless::new(Size::from(OUTPUT))?;
+    let mut server = Compositor::new(Size::from(OUTPUT))?;
     let mut client = TestClient::connect(&mut server);
     let mut renderer = Renderer::new()?;
     let stride = WINDOW_WIDTH * 4;

@@ -194,7 +194,7 @@ impl State {
     }
 }
 
-impl crate::state::Headless {
+impl crate::state::Compositor {
     pub fn is_dragging(&self) -> bool {
         self.state.drag.is_some()
     }
@@ -202,7 +202,7 @@ impl crate::state::Headless {
 
 impl DataDeviceHandler for State {
     fn data_device_state(&self) -> &DataDeviceState {
-        &self.data_device_state
+        &self.globals.data_device_state
     }
 
     fn action_choice(&mut self, available: DndAction, preferred: DndAction) -> DndAction {

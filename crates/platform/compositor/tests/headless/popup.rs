@@ -1,6 +1,6 @@
 use crate::support::*;
 use smithay::utils::{Point, Size};
-use unbound_compositor::{Headless, OutputConfig, Rect};
+use unbound_compositor::{Compositor, OutputConfig, Rect};
 use unbound_test_wayland::{
     Anchor, BLUE, ConstraintAdjustment, GREEN, KeyboardInteractivity, Layer, LayerRequest,
     PopupRequest, RED, ShmImage, TestClient, roundtrip, roundtrip_until,
@@ -17,19 +17,19 @@ fn at((x, y): (i32, i32)) -> Point<f64, smithay::utils::Logical> {
     (f64::from(x), f64::from(y)).into()
 }
 
-fn app(server: &mut Headless, color: [u8; 4], app_id: &str) -> TestClient {
+fn app(server: &mut Compositor, color: [u8; 4], app_id: &str) -> TestClient {
     window_of(server, color, WINDOW, app_id)
 }
 
 struct Desk {
-    server: Headless,
+    server: Compositor,
     bystander: TestClient,
     editor: TestClient,
 }
 
 impl Desk {
     fn new() -> Self {
-        let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+        let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
         let mut bystander = app(&mut server, BLUE, VIEWER);
         bystander.set_maximized(&mut server, 0, true);
         bystander.fill_configured_size(&mut server, 0, BLUE);
@@ -106,7 +106,7 @@ fn menu(parent: usize) -> PopupRequest {
     }
 }
 
-fn click(server: &mut Headless, point: (i32, i32)) {
+fn click(server: &mut Compositor, point: (i32, i32)) {
     server.move_pointer_to(at(point), 0);
     server.press_button(BTN_LEFT, true, 0);
     server.press_button(BTN_LEFT, false, 0);
@@ -474,14 +474,14 @@ fn placed_menu(anchor: (i32, i32), size: (i32, i32)) -> PopupRequest {
     }
 }
 
-fn shell_layer(server: &mut Headless, namespace: &str, request: &LayerRequest) -> TestClient {
+fn shell_layer(server: &mut Compositor, namespace: &str, request: &LayerRequest) -> TestClient {
     let mut shell = TestClient::connect_as_shell(server);
     shell.use_seat(server);
     shell.show_named_layer(server, request, namespace);
     shell
 }
 
-fn desktop(server: &mut Headless) -> TestClient {
+fn desktop(server: &mut Compositor) -> TestClient {
     shell_layer(
         server,
         "desktop",
@@ -496,7 +496,7 @@ fn desktop(server: &mut Headless) -> TestClient {
     )
 }
 
-fn bottom_bar(server: &mut Headless) -> TestClient {
+fn bottom_bar(server: &mut Compositor) -> TestClient {
     shell_layer(
         server,
         "bar",
@@ -518,7 +518,7 @@ fn inside(outer: Rect, inner: Rect) -> bool {
         && inner.location.y + inner.size.h <= outer.location.y + outer.size.h
 }
 
-fn only_popup(server: &Headless) -> Rect {
+fn only_popup(server: &Compositor) -> Rect {
     let rects = server.popup_rects();
     assert_eq!(rects.len(), 1, "{rects:?}");
     rects[0]
@@ -538,7 +538,7 @@ fn a_desktop_menu_opened_near_any_edge_or_corner_stays_on_the_screen() {
         (2, height / 2),
     ];
     for anchor in anchors {
-        let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+        let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
         let mut desk = desktop(&mut server);
         desk.open_layer_popup(&mut server, &placed_menu(anchor, MENU_SIZE));
         roundtrip(&mut server, &mut [&mut desk]);
@@ -554,7 +554,7 @@ fn a_desktop_menu_opened_near_any_edge_or_corner_stays_on_the_screen() {
 
 #[test]
 fn a_desktop_menu_in_the_bottom_right_corner_opens_up_and_to_the_left_of_the_pointer() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut desk = desktop(&mut server);
     let pointer = (OUTPUT.0 - 10, OUTPUT.1 - 10);
     desk.open_layer_popup(&mut server, &placed_menu(pointer, MENU_SIZE));
@@ -569,7 +569,7 @@ fn a_desktop_menu_in_the_bottom_right_corner_opens_up_and_to_the_left_of_the_poi
 
 #[test]
 fn a_desktop_menu_stays_clear_of_the_bar_but_a_bar_menu_may_cover_its_own_bar() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut bar = bottom_bar(&mut server);
     let mut desk = desktop(&mut server);
     let usable = server.usable_area();
@@ -583,7 +583,7 @@ fn a_desktop_menu_stays_clear_of_the_bar_but_a_bar_menu_may_cover_its_own_bar() 
     let placed = only_popup(&server);
     assert!(inside(usable, placed), "{placed:?} covers the bar");
 
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut bar = bottom_bar(&mut server);
     let request = PopupRequest {
         adjustment: ConstraintAdjustment::SlideY,
@@ -597,7 +597,7 @@ fn a_desktop_menu_stays_clear_of_the_bar_but_a_bar_menu_may_cover_its_own_bar() 
 
 #[test]
 fn a_menu_taller_than_the_screen_is_shortened_to_the_usable_height() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut bar = bottom_bar(&mut server);
     let mut desk = desktop(&mut server);
     desk.open_layer_popup(&mut server, &placed_menu((100, 60), (60, 400)));
@@ -608,7 +608,7 @@ fn a_menu_taller_than_the_screen_is_shortened_to_the_usable_height() {
 
 #[test]
 fn a_window_menu_is_kept_on_the_display_of_its_anchor() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     server.add_output(OutputConfig::virtual_display(SIDE, Size::from((320, 240))));
     server.move_pointer_to(at((OUTPUT.0 + 160, 120)), 0);
     let mut editor = app(&mut server, RED, EDITOR);

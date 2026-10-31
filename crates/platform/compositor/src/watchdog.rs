@@ -10,7 +10,7 @@ use unbound_protocols::server::unbound_app_control_v1::UnboundAppControlV1;
 use unbound_protocols::server::unbound_shell_v1::UnboundShellV1;
 
 use crate::shell::toplevel_names;
-use crate::state::{Headless, State};
+use crate::state::{Compositor, State};
 
 pub const UNRESPONSIVE_AFTER: Duration = Duration::from_secs(3);
 const PING_INTERVAL: Duration = Duration::from_secs(1);
@@ -199,7 +199,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn watchdog_tick(&mut self, now: Duration) -> Option<Duration> {
         self.state.watchdog_due(now)
     }

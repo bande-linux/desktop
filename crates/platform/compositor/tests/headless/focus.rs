@@ -1,17 +1,17 @@
 use crate::support::*;
-use unbound_compositor::Headless;
+use unbound_compositor::Compositor;
 use unbound_test_wayland::{
     SeparateApp, ShmImage, TestClient, act_as_separate_app, quadrants, roundtrip, roundtrip_until,
 };
 use wayland_client::protocol::wl_shm::Format;
 
-fn app(server: &mut Headless) -> TestClient {
+fn app(server: &mut Compositor) -> TestClient {
     let mut client = TestClient::connect(server);
     client.join_seat(server);
     client
 }
 
-fn open_window(server: &mut Headless, app: &mut TestClient, side: usize) {
+fn open_window(server: &mut Compositor, app: &mut TestClient, side: usize) {
     let stride = side * 4;
     let pixels = quadrants(side, side, stride);
     let side = i32::try_from(side).expect("side");
@@ -27,7 +27,7 @@ fn open_window(server: &mut Headless, app: &mut TestClient, side: usize) {
     );
 }
 
-fn stacking_by_side(server: &Headless) -> Vec<i32> {
+fn stacking_by_side(server: &Compositor) -> Vec<i32> {
     server
         .windows()
         .iter()
@@ -122,7 +122,7 @@ fn a_background_apps_new_window_opens_behind_the_focused_window() {
     assert_eq!(stacking_by_side(&server), vec![2, 3, 4]);
 }
 
-fn type_a_key(server: &mut Headless) {
+fn type_a_key(server: &mut Compositor) {
     server.key(KEY_A, true, 0);
     server.key(KEY_A, false, 40);
 }

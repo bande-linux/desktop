@@ -8,7 +8,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
+use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
 use unbound_toolkit::{CpuRenderer, GpuRenderer, Palette, RENDERER_VARIABLE, Scheme, TextSystem};
 
 const STARTS: usize = 5;
@@ -158,7 +158,7 @@ fn options() -> Result<(PathBuf, PathBuf), Box<dyn Error>> {
 }
 
 struct Session {
-    server: Headless,
+    server: Compositor,
     renderer: Renderer,
     scheduler: FrameScheduler,
     epoch: Instant,
@@ -183,7 +183,7 @@ impl Session {
 
 fn start(sample: &PathBuf, renderers: Renderers) -> Result<Start, Box<dyn Error>> {
     let mut session = Session {
-        server: Headless::new(Size::from((1280, 800)))?,
+        server: Compositor::new(Size::from((1280, 800)))?,
         renderer: Renderer::new()?,
         scheduler: FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH)),
         epoch: Instant::now(),

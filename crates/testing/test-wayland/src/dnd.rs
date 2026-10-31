@@ -3,7 +3,7 @@ use wayland_client::protocol::wl_data_offer::WlDataOffer;
 use wayland_client::protocol::wl_surface::WlSurface;
 
 use crate::clipboard::TEXT;
-use crate::{Globals, Headless, ShmImage, TestClient};
+use crate::{Compositor, Globals, ShmImage, TestClient};
 
 #[derive(Default)]
 pub(crate) struct Dnd {
@@ -55,7 +55,7 @@ impl TestClient {
         self.globals.dnd.holds = true;
     }
 
-    pub fn start_drag(&mut self, server: &mut Headless, icon: &ShmImage, offset: (i32, i32)) {
+    pub fn start_drag(&mut self, server: &mut Compositor, icon: &ShmImage, offset: (i32, i32)) {
         let qh = self.queue.handle();
         let manager: WlDataDeviceManager = self.bind("wl_data_device_manager", 3);
         let source = manager.create_data_source(&qh, b"dragged".to_vec());

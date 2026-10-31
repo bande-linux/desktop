@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::io;
 use std::time::Duration;
 
-use crate::state::Headless;
+use crate::state::Compositor;
 
 pub const SAFETY_MARGIN: Duration = Duration::from_millis(1);
 
@@ -112,7 +112,7 @@ pub trait FrameOutput {
 
     fn submit(
         &mut self,
-        compositor: &mut Headless,
+        compositor: &mut Compositor,
         output: &str,
     ) -> Result<Submission, Self::Error>;
 
@@ -168,7 +168,7 @@ impl FrameScheduler {
     pub fn poll<O: FrameOutput>(
         &mut self,
         clock: impl Fn() -> Duration,
-        compositor: &mut Headless,
+        compositor: &mut Compositor,
         output: &mut O,
     ) -> Result<Poll, O::Error> {
         let mut now = clock();
@@ -241,7 +241,7 @@ impl FrameScheduler {
         self.wanted = true;
     }
 
-    pub fn flipped(&mut self, vblank: Vblank, compositor: &mut Headless) -> io::Result<()> {
+    pub fn flipped(&mut self, vblank: Vblank, compositor: &mut Compositor) -> io::Result<()> {
         let name = self
             .output
             .clone()

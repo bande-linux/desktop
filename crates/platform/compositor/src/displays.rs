@@ -8,7 +8,7 @@ use unbound_spring::Spring;
 
 use crate::motion::{Look, OPENING_SCALE};
 use crate::screen::{OutputConfig, OutputSettings, Screen};
-use crate::state::{Headless, Rect, State};
+use crate::state::{Compositor, Rect, State};
 
 const MAIN_SCREEN_LAYERS: [&str; 6] = [
     "dock",
@@ -496,7 +496,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn outputs(&self) -> Vec<String> {
         self.state.screens.iter().map(Screen::name).collect()
     }

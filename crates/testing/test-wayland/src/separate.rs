@@ -5,7 +5,7 @@ use std::process::{ChildStdin, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
-use unbound_compositor::Headless;
+use unbound_compositor::Compositor;
 use wayland_client::Connection;
 use wayland_client::protocol::wl_shm::Format;
 
@@ -19,7 +19,7 @@ pub struct SeparateApp {
 }
 
 impl SeparateApp {
-    pub fn launch(server: &mut Headless, test: &str) -> Self {
+    pub fn launch(server: &mut Compositor, test: &str) -> Self {
         let socket_dir = tempfile::tempdir().expect("socket dir");
         let socket = socket_dir.path().join("wayland");
         let listener = UnixListener::bind(&socket).expect("bind socket");
@@ -42,7 +42,7 @@ impl SeparateApp {
         }
     }
 
-    pub fn show_window(&mut self, server: &mut Headless, side: i32) {
+    pub fn show_window(&mut self, server: &mut Compositor, side: i32) {
         writeln!(self.orders, "{side}").expect("order a window");
         let deadline = Instant::now() + Duration::from_secs(10);
         while !server

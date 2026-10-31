@@ -1,12 +1,12 @@
 use std::io::Read;
 
 use crate::support::*;
-use unbound_compositor::Headless;
+use unbound_compositor::Compositor;
 use unbound_test_wayland::clipboard::TEXT;
 use unbound_test_wayland::{ShmImage, TestClient, quadrants, roundtrip};
 use wayland_client::protocol::wl_shm::Format;
 
-fn focused_client(server: &mut Headless) -> TestClient {
+fn focused_client(server: &mut Compositor) -> TestClient {
     let mut client = TestClient::connect(server);
     client.join_seat(server);
     let pixels = quadrants(4, 4, 16);

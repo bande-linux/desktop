@@ -5,7 +5,7 @@ use unbound_config::ZOOM_RANGE;
 use unbound_spring::{Animation, Spring, State as Phase};
 use zbus::zvariant::Value;
 
-use crate::state::{Headless, State};
+use crate::state::{Compositor, State};
 
 const STEP: f64 = 1.25;
 const FIRST_LEVEL: f64 = 2.0;
@@ -171,7 +171,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn zoom_level(&self) -> f64 {
         self.state.zoom.level()
     }

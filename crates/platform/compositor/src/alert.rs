@@ -10,7 +10,7 @@ use unbound_render::VulkanRenderer;
 
 use crate::L10N;
 use crate::label::{Label, LabelStyle, Look};
-use crate::state::{Headless, OutputElement, State};
+use crate::state::{Compositor, OutputElement, State};
 
 const ALERT_STYLE: LabelStyle = LabelStyle {
     role: TextRole::BodyStrong,
@@ -153,7 +153,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn report_start_failure(&mut self, executable: &Path, error: &io::Error) {
         self.state
             .raise_alert(executable, start_failure(executable, error));

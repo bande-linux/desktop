@@ -5,7 +5,7 @@ use std::time::Duration;
 use crate::support::*;
 use smithay::utils::{Point, Size};
 use unbound_compositor::{
-    BACKGROUND, CursorTheme, Headless, Renderer, Snapshot, UNRESPONSIVE_AFTER,
+    BACKGROUND, Compositor, CursorTheme, Renderer, Snapshot, UNRESPONSIVE_AFTER,
 };
 use unbound_test_wayland::{BLUE, CursorShape, RED, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
@@ -67,7 +67,7 @@ fn install(root: &Path, theme: &str, index: &str, cursors: &[(&str, &[Image])]) 
 }
 
 fn frame_with_pointer(theme: Option<CursorTheme>) -> Snapshot {
-    let mut server = Headless::new(Size::from((256, 192))).expect("headless compositor");
+    let mut server = Compositor::new(Size::from((256, 192))).expect("headless compositor");
     if let Some(theme) = theme {
         server.use_cursor_theme(theme);
     }
@@ -199,7 +199,7 @@ fn a_window_that_asks_for_the_text_shape_gets_the_themes_text_cursor() {
         "[Icon Theme]\nName=Fixture\n",
         &[("default", &[image(arrow)]), ("text", &[image(beam)])],
     );
-    let mut server = Headless::new(Size::from((256, 192))).expect("headless compositor");
+    let mut server = Compositor::new(Size::from((256, 192))).expect("headless compositor");
     server.use_cursor_theme(CursorTheme {
         search_path: vec![root.path().to_path_buf()],
         name: "Fixture".to_owned(),
@@ -240,7 +240,7 @@ fn the_pointer_over_an_app_that_stopped_answering_is_the_themes_wait_cursor() {
         "[Icon Theme]\nName=Fixture\n",
         &[("default", &[image(arrow)]), ("wait", &[image(wait)])],
     );
-    let mut server = Headless::new(Size::from((256, 192))).expect("headless compositor");
+    let mut server = Compositor::new(Size::from((256, 192))).expect("headless compositor");
     server.use_cursor_theme(CursorTheme {
         search_path: vec![root.path().to_path_buf()],
         name: "Fixture".to_owned(),
@@ -289,7 +289,7 @@ fn the_pointer_shows_what_a_drop_would_do() {
         ],
     );
     let shown = |accepts: bool, option: bool| {
-        let mut server = Headless::new(Size::from((256, 192))).expect("headless compositor");
+        let mut server = Compositor::new(Size::from((256, 192))).expect("headless compositor");
         server.use_cursor_theme(CursorTheme {
             search_path: vec![root.path().to_path_buf()],
             name: "Fixture".to_owned(),

@@ -10,7 +10,7 @@ use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_v1::{
     self, ExtSessionLockV1,
 };
 
-use crate::{Globals, Headless, ShmImage, TestClient};
+use crate::{Compositor, Globals, ShmImage, TestClient};
 
 #[derive(Default)]
 pub(crate) struct SessionLock {
@@ -26,7 +26,7 @@ impl TestClient {
         self.advertises("ext_session_lock_manager_v1")
     }
 
-    pub fn lock_session(&mut self, server: &mut Headless) {
+    pub fn lock_session(&mut self, server: &mut Compositor) {
         let manager: ExtSessionLockManagerV1 = self.bind("ext_session_lock_manager_v1", 1);
         self.globals.lock.lock = Some(manager.lock(&self.queue.handle(), ()));
         self.exchange(server);
@@ -40,7 +40,7 @@ impl TestClient {
         self.globals.lock.finished
     }
 
-    pub fn show_lock_surface(&mut self, server: &mut Headless, color: [u8; 4]) -> (u32, u32) {
+    pub fn show_lock_surface(&mut self, server: &mut Compositor, color: [u8; 4]) -> (u32, u32) {
         let qh = self.queue.handle();
         let output: WlOutput = self.bind("wl_output", 1);
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
@@ -74,7 +74,7 @@ impl TestClient {
             && self.globals.input.keyboard_surface() == self.globals.lock.surface.as_ref()
     }
 
-    pub fn unlock_session(&mut self, server: &mut Headless) {
+    pub fn unlock_session(&mut self, server: &mut Compositor) {
         if let Some(lock) = self.globals.lock.lock.take() {
             lock.unlock_and_destroy();
         }

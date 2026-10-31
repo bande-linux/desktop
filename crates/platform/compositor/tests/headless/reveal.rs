@@ -1,7 +1,7 @@
 use crate::support::*;
 use std::time::Duration;
 
-use unbound_compositor::{BACKGROUND, Headless, Renderer};
+use unbound_compositor::{BACKGROUND, Compositor, Renderer};
 use unbound_test_wayland::{
     Anchor, BLUE, KeyboardInteractivity, Layer, LayerRequest, RED, TestClient,
 };
@@ -9,19 +9,19 @@ use unbound_test_wayland::{
 const STARTED: Duration = Duration::from_secs(1);
 const DEADLINE: Duration = Duration::from_secs(4);
 
-fn holding_server() -> Headless {
+fn holding_server() -> Compositor {
     let mut server = server();
     server.hold_until_shell_ready(STARTED, DEADLINE);
     server
 }
 
-fn shell(server: &mut Headless) -> TestClient {
+fn shell(server: &mut Compositor) -> TestClient {
     let mut shell = TestClient::connect_as_shell(server);
     shell.join_shell(server);
     shell
 }
 
-fn show_wallpaper(shell: &mut TestClient, server: &mut Headless) -> (u32, u32) {
+fn show_wallpaper(shell: &mut TestClient, server: &mut Compositor) -> (u32, u32) {
     shell.show_named_layer(
         server,
         &LayerRequest {
@@ -36,7 +36,7 @@ fn show_wallpaper(shell: &mut TestClient, server: &mut Headless) -> (u32, u32) {
     )
 }
 
-fn show_bar(shell: &mut TestClient, server: &mut Headless) {
+fn show_bar(shell: &mut TestClient, server: &mut Compositor) {
     shell.show_named_layer(
         server,
         &LayerRequest {
@@ -51,7 +51,7 @@ fn show_bar(shell: &mut TestClient, server: &mut Headless) {
     );
 }
 
-fn bar_and_desktop(renderer: &mut Renderer, server: &mut Headless) -> ([u8; 3], [u8; 3]) {
+fn bar_and_desktop(renderer: &mut Renderer, server: &mut Compositor) -> ([u8; 3], [u8; 3]) {
     (
         pixel(renderer, server, 128, 8),
         pixel(renderer, server, 128, 120),

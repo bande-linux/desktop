@@ -12,7 +12,7 @@ use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State, Xdg
 
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
 
-use crate::{Globals, Headless, ShmImage, TestClient};
+use crate::{Compositor, Globals, ShmImage, TestClient};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Configured {
@@ -90,7 +90,7 @@ impl TestClient {
             .map(|(_, configured)| configured.clone())
     }
 
-    pub fn fill_configured_size(&mut self, server: &mut Headless, index: usize, color: [u8; 4]) {
+    pub fn fill_configured_size(&mut self, server: &mut Compositor, index: usize, color: [u8; 4]) {
         let configured = self.configured(index).expect("a configure for the window");
         let (width, height) = (configured.width, configured.height);
         assert!(width > 0 && height > 0, "the compositor chose a size");
@@ -121,25 +121,25 @@ impl TestClient {
         )
     }
 
-    pub fn request_move(&mut self, server: &mut Headless, index: usize) {
+    pub fn request_move(&mut self, server: &mut Compositor, index: usize) {
         let (seat, serial) = self.seat_and_serial();
         self.toplevel(index)._move(seat, serial);
         self.exchange(server);
     }
 
-    pub fn request_resize(&mut self, server: &mut Headless, index: usize, edges: ResizeEdge) {
+    pub fn request_resize(&mut self, server: &mut Compositor, index: usize, edges: ResizeEdge) {
         let (seat, serial) = self.seat_and_serial();
         self.toplevel(index).resize(seat, serial, edges);
         self.exchange(server);
     }
 
-    pub fn set_min_size(&mut self, server: &mut Headless, index: usize, width: i32, height: i32) {
+    pub fn set_min_size(&mut self, server: &mut Compositor, index: usize, width: i32, height: i32) {
         self.toplevel(index).set_min_size(width, height);
         self.windows[index].0.commit();
         self.exchange(server);
     }
 
-    pub fn set_maximized(&mut self, server: &mut Headless, index: usize, maximized: bool) {
+    pub fn set_maximized(&mut self, server: &mut Compositor, index: usize, maximized: bool) {
         let toplevel = self.toplevel(index);
         if maximized {
             toplevel.set_maximized();
@@ -149,7 +149,7 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn set_fullscreen(&mut self, server: &mut Headless, index: usize, fullscreen: bool) {
+    pub fn set_fullscreen(&mut self, server: &mut Compositor, index: usize, fullscreen: bool) {
         let toplevel = self.toplevel(index);
         if fullscreen {
             toplevel.set_fullscreen(None);
@@ -159,14 +159,14 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn show_child_window(&mut self, server: &mut Headless, image: &ShmImage, parent: usize) {
+    pub fn show_child_window(&mut self, server: &mut Compositor, image: &ShmImage, parent: usize) {
         let parent = self.toplevel(parent).clone();
         self.map_window(server, image, crate::Memory::Shm, |_, _, toplevel| {
             toplevel.set_parent(Some(&parent));
         });
     }
 
-    pub fn make_modal(&mut self, server: &mut Headless, index: usize) {
+    pub fn make_modal(&mut self, server: &mut Compositor, index: usize) {
         let manager: XdgWmDialogV1 = self.bind("xdg_wm_dialog_v1", 1);
         let dialog = manager.get_xdg_dialog(self.toplevel(index), &self.queue.handle(), ());
         dialog.set_modal();
@@ -174,24 +174,24 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn set_minimized(&mut self, server: &mut Headless, index: usize) {
+    pub fn set_minimized(&mut self, server: &mut Compositor, index: usize) {
         self.toplevel(index).set_minimized();
         self.exchange(server);
     }
 
-    pub fn open_popup(&mut self, server: &mut Headless, request: &PopupRequest) -> usize {
+    pub fn open_popup(&mut self, server: &mut Compositor, request: &PopupRequest) -> usize {
         let parent = self.windows[request.parent].1.clone();
         self.open_popup_on(server, request, Some(&parent), None)
     }
 
-    pub fn open_layer_popup(&mut self, server: &mut Headless, request: &PopupRequest) -> usize {
+    pub fn open_layer_popup(&mut self, server: &mut Compositor, request: &PopupRequest) -> usize {
         let layer = self.globals.shell.layers[request.parent].1.clone();
         self.open_popup_on(server, request, None, Some(&layer))
     }
 
     fn open_popup_on(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         request: &PopupRequest,
         parent: Option<&XdgSurface>,
         layer: Option<&ZwlrLayerSurfaceV1>,
@@ -230,7 +230,7 @@ impl TestClient {
         self.globals.toplevels.popups.len() - 1
     }
 
-    pub fn destroy_popup(&mut self, server: &mut Headless, index: usize) {
+    pub fn destroy_popup(&mut self, server: &mut Compositor, index: usize) {
         let popup = &self.globals.toplevels.popups[index];
         popup.popup.destroy();
         popup.surface.destroy();

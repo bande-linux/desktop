@@ -5,7 +5,7 @@ use jiff::{Timestamp, Zoned};
 use unbound_config::{ClockTime, NightLight as Settings, NightSchedule};
 use unbound_datetime::daylight::{Place, Sky, sky, system_place, within_daily};
 
-use crate::state::Headless;
+use crate::state::Compositor;
 
 const NEUTRAL: f64 = 6500.0;
 const LEAST_WARM: f64 = 5000.0;
@@ -231,7 +231,7 @@ impl NightLight {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn night_light_tick(&mut self, now: Duration) -> NightTick {
         self.state
             .night_light

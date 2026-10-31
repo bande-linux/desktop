@@ -3,7 +3,7 @@ use smithay::backend::libinput::LibinputInputBackend;
 use smithay::reexports::input::{ClickMethod, Device, DeviceCapability};
 use unbound_config::{Mouse, SecondaryClick, Trackpad};
 
-use crate::state::Headless;
+use crate::state::Compositor;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct PointerSettings {
@@ -50,7 +50,7 @@ fn configure(device: &mut Device, settings: &PointerSettings) {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn track_libinput_device(&mut self, event: &InputEvent<LibinputInputBackend>) {
         let pointing = &mut self.state.pointing;
         match event {

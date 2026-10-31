@@ -1,6 +1,6 @@
 use crate::support::*;
 use smithay::utils::{Physical, Size};
-use unbound_compositor::{Headless, Renderer};
+use unbound_compositor::{Compositor, Renderer};
 use unbound_test_wayland::{CaptureOutcome, RED, TestClient, roundtrip};
 
 const LOGICAL: (i32, i32) = (256, 192);
@@ -8,7 +8,7 @@ const WINDOW: (i32, i32) = (64, 48);
 const SCALES: [f64; 2] = [2.0, 1.5];
 
 struct Scene {
-    server: Headless,
+    server: Compositor,
     renderer: Renderer,
     app: TestClient,
     shell: TestClient,
@@ -21,7 +21,7 @@ fn scene(scale: f64) -> Scene {
         (f64::from(LOGICAL.0) * scale).round() as i32,
         (f64::from(LOGICAL.1) * scale).round() as i32,
     ));
-    let mut server = Headless::new(physical).expect("headless compositor");
+    let mut server = Compositor::new(physical).expect("headless compositor");
     server.set_output_scale(scale);
     let mut shell = top_bar(&mut server);
     let mut app = window(&mut server, RED, WINDOW);
@@ -145,7 +145,7 @@ fn the_pointer_reaches_the_window_point_under_it() {
 
 #[test]
 fn changing_the_scale_keeps_the_pointer_where_it_is_on_screen() {
-    let mut server = Headless::new(Size::from((512, 384))).expect("headless compositor");
+    let mut server = Compositor::new(Size::from((512, 384))).expect("headless compositor");
     server.move_pointer_to((100.0, 50.0).into(), 0);
 
     server.set_output_scale(2.0);

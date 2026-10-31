@@ -18,7 +18,7 @@ use unbound_render::{VulkanRenderer, VulkanTexture};
 use crate::label::Labels;
 use crate::scene::Piece;
 use crate::shell::toplevel_names;
-use crate::state::{Headless, Placed, State};
+use crate::state::{Compositor, Placed, State};
 use crate::window::Window;
 
 const BTN_LEFT: u32 = 0x110;
@@ -386,7 +386,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn set_dark_appearance(&mut self, dark: bool) {
         self.state.decorations.scheme = if dark { Scheme::Dark } else { Scheme::Light };
         self.state.needs_redraw = true;

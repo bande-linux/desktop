@@ -7,7 +7,7 @@ use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::zwp_keyboard
 use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::zwp_keyboard_shortcuts_inhibitor_v1::ZwpKeyboardShortcutsInhibitorV1;
 use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
 
-use crate::{Globals, Headless, TestClient};
+use crate::{Compositor, Globals, TestClient};
 
 #[derive(Default)]
 pub(crate) struct Input {
@@ -35,7 +35,7 @@ impl Input {
 }
 
 impl TestClient {
-    pub fn use_seat(&mut self, server: &mut Headless) {
+    pub fn use_seat(&mut self, server: &mut Compositor) {
         let registry = self.globals.registry.as_ref().expect("registry");
         let (name, _) = self
             .globals
@@ -48,7 +48,7 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn inhibit_shortcuts(&mut self, server: &mut Headless, window: usize) {
+    pub fn inhibit_shortcuts(&mut self, server: &mut Compositor, window: usize) {
         let manager: ZwpKeyboardShortcutsInhibitManagerV1 =
             self.bind("zwp_keyboard_shortcuts_inhibit_manager_v1", 1);
         let seat = self.globals.input.seat.as_ref().expect("use_seat first");

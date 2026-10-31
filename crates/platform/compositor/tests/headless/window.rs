@@ -1,5 +1,5 @@
 use crate::support::*;
-use unbound_compositor::{Headless, Rect, Renderer};
+use unbound_compositor::{Compositor, Rect, Renderer};
 use unbound_test_wayland::{
     Anchor, BLUE, ConstraintAdjustment, GREEN, KeyboardInteractivity, Layer, LayerRequest,
     PopupRequest, RED, ResizeEdge, TestClient, ToplevelState, roundtrip,
@@ -9,16 +9,16 @@ const WINDOW: (i32, i32) = (64, 48);
 const CENTERED: (i32, i32) = (96, 72);
 const WHITE: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
 
-fn app(server: &mut Headless, color: [u8; 4]) -> TestClient {
+fn app(server: &mut Compositor, color: [u8; 4]) -> TestClient {
     window(server, color, WINDOW)
 }
 
 fn drag_with(
-    server: &mut Headless,
+    server: &mut Compositor,
     client: &mut TestClient,
     from: (i32, i32),
     by: (i32, i32),
-    request: impl FnOnce(&mut Headless, &mut TestClient),
+    request: impl FnOnce(&mut Compositor, &mut TestClient),
 ) {
     server.move_pointer_to(at(from.0, from.1), 0);
     server.press_button(BTN_LEFT, true, 0);
@@ -327,7 +327,7 @@ fn a_click_outside_a_grabbing_popup_dismisses_it_and_is_not_delivered() {
     assert_eq!(server.popup_count(), 0);
 }
 
-fn grabbing_menu(server: &mut Headless, client: &mut TestClient, x: i32, y: i32) -> usize {
+fn grabbing_menu(server: &mut Compositor, client: &mut TestClient, x: i32, y: i32) -> usize {
     server.move_pointer_to(at(x, y), 0);
     server.press_button(BTN_LEFT, true, 1);
     roundtrip(server, &mut [&mut *client]);
@@ -509,13 +509,13 @@ fn a_window_kept_on_top_stays_in_front_of_a_newer_window_until_released() {
     assert_eq!(released, rgb(BLUE));
 }
 
-fn escape(server: &mut Headless, client: &mut TestClient) {
+fn escape(server: &mut Compositor, client: &mut TestClient) {
     server.key(KEY_ESC, true, 5);
     server.key(KEY_ESC, false, 6);
     roundtrip(server, &mut [client]);
 }
 
-fn assert_released(server: &mut Headless, client: &mut TestClient) {
+fn assert_released(server: &mut Compositor, client: &mut TestClient) {
     server.press_button(BTN_LEFT, false, 9);
     roundtrip(server, &mut [&mut *client]);
     assert!(!server.pointer_grabbed());

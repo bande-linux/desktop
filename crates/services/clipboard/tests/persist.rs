@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use rustix::io::{FdFlags, fcntl_setfd};
 use smithay::utils::Size;
 use unbound_clipboard::Item;
-use unbound_compositor::{Headless, SessionRole};
+use unbound_compositor::{Compositor, SessionRole};
 use unbound_test_bus::SessionBus;
 use unbound_test_wayland::clipboard::TEXT;
 use unbound_test_wayland::{ShmImage, TestClient, quadrants, roundtrip, roundtrip_until};
@@ -20,8 +20,8 @@ use wayland_client::protocol::wl_shm::Format;
 
 const DAEMON: &str = env!("CARGO_BIN_EXE_unbound-clipboard");
 
-fn server() -> Headless {
-    Headless::new(Size::from((256, 192))).expect("headless compositor")
+fn server() -> Compositor {
+    Compositor::new(Size::from((256, 192))).expect("headless compositor")
 }
 
 struct Daemon {
@@ -52,7 +52,7 @@ impl Daemon {
     }
 }
 
-fn server_with(daemon: &Daemon) -> Headless {
+fn server_with(daemon: &Daemon) -> Compositor {
     let mut server = server();
     server
         .start_session_client(&daemon.launcher, SessionRole::ClipboardDaemon)
@@ -60,12 +60,12 @@ fn server_with(daemon: &Daemon) -> Headless {
     server
 }
 
-fn server_with_daemon() -> (Headless, Daemon) {
+fn server_with_daemon() -> (Compositor, Daemon) {
     let daemon = Daemon::new(None);
     (server_with(&daemon), daemon)
 }
 
-fn focused_client(server: &mut Headless) -> TestClient {
+fn focused_client(server: &mut Compositor) -> TestClient {
     let mut client = TestClient::connect(server);
     client.join_seat(server);
     let pixels = quadrants(4, 4, 16);
@@ -82,7 +82,7 @@ fn focused_client(server: &mut Headless) -> TestClient {
     client
 }
 
-fn wait_for_takeover(server: &mut Headless, source: &mut TestClient) {
+fn wait_for_takeover(server: &mut Compositor, source: &mut TestClient) {
     roundtrip_until(server, &mut [source], |clients| {
         clients[0].cancelled_sources() == 1
     });
@@ -94,7 +94,7 @@ fn read_all(mut pipe: std::io::PipeReader) -> String {
     text
 }
 
-fn paste(server: &mut Headless, target: &mut TestClient) -> String {
+fn paste(server: &mut Compositor, target: &mut TestClient) -> String {
     assert_eq!(target.selection_mimes(), Some(vec![TEXT.to_owned()]));
     let pipe = target.request_paste(TEXT);
     roundtrip(server, &mut [target]);
@@ -240,7 +240,7 @@ trait Clipboard {
     fn clear(&self) -> zbus::Result<()>;
 }
 
-fn history_proxy(server: &mut Headless, bus: &SessionBus) -> ClipboardProxyBlocking<'static> {
+fn history_proxy(server: &mut Compositor, bus: &SessionBus) -> ClipboardProxyBlocking<'static> {
     let connection = bus.connect().expect("connect to the test bus");
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {

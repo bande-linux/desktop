@@ -1,26 +1,26 @@
 use crate::support::*;
 use smithay::utils::{Logical, Point, Size};
-use unbound_compositor::{ARROW_FILL, ARROW_OUTLINE, BACKGROUND, Headless, Renderer};
+use unbound_compositor::{ARROW_FILL, ARROW_OUTLINE, BACKGROUND, Compositor, Renderer};
 use unbound_test_wayland::{RED, TestClient, roundtrip};
 
 const KEY_W: u32 = 17;
 
-fn client_with_window(server: &mut Headless, side: i32) -> TestClient {
+fn client_with_window(server: &mut Compositor, side: i32) -> TestClient {
     window(server, RED, (side, side))
 }
 
-fn click(server: &mut Headless, at: (f64, f64)) {
+fn click(server: &mut Compositor, at: (f64, f64)) {
     server.move_pointer_to(Point::from(at), 1);
     server.press_button(BTN_LEFT, true, 2);
     server.press_button(BTN_LEFT, false, 3);
 }
 
-fn tap(server: &mut Headless, key: u32) {
+fn tap(server: &mut Compositor, key: u32) {
     server.key(key, true, 10);
     server.key(key, false, 11);
 }
 
-fn chord(server: &mut Headless, key: u32) {
+fn chord(server: &mut Compositor, key: u32) {
     server.key(KEY_LEFTMETA, true, 20);
     tap(server, key);
     server.key(KEY_LEFTMETA, false, 21);
@@ -330,7 +330,7 @@ fn the_compositor_draws_an_arrow_where_the_pointer_is_once_it_moves() {
     assert_eq!(rgba(&after, 41, 55), bgr(ARROW_FILL));
 }
 
-fn game_under_pointer(server: &mut Headless) -> (TestClient, Point<f64, Logical>) {
+fn game_under_pointer(server: &mut Compositor) -> (TestClient, Point<f64, Logical>) {
     let mut game = client_with_window(server, 64);
     game.use_relative_pointer(server);
     let centre = (geometry(server).location + Point::from((32, 32))).to_f64();

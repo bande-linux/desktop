@@ -9,7 +9,7 @@ use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::keymap::KeyboardSettings;
 use crate::pointing::PointerSettings;
-use crate::state::Headless;
+use crate::state::Compositor;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct InputSettings {
@@ -69,7 +69,7 @@ pub fn follow_input_settings(
     Ok(())
 }
 
-impl Headless {
+impl Compositor {
     pub fn apply_input_settings(&mut self, settings: InputSettings) {
         self.apply_pointer_settings(settings.pointer);
         self.apply_keyboard_settings(settings.keyboard);

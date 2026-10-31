@@ -8,7 +8,7 @@ use smithay::utils::{Physical, Size, Transform};
 use unbound_render::{DeviceInfo, OffscreenTarget, RenderError, VulkanRenderer};
 
 use crate::clock::{FrameOutput, Submission};
-use crate::state::Headless;
+use crate::state::Compositor;
 
 pub const BACKGROUND: [u8; 3] = [0x20, 0x28, 0x30];
 
@@ -66,14 +66,14 @@ impl Renderer {
         self.vulkan.set_reduced_effects(reduced);
     }
 
-    pub fn render(&mut self, compositor: &mut Headless) -> Result<FrameStats, RenderError> {
+    pub fn render(&mut self, compositor: &mut Compositor) -> Result<FrameStats, RenderError> {
         let main = compositor.main_output();
         self.render_output(compositor, &main)
     }
 
     pub fn render_output(
         &mut self,
-        compositor: &mut Headless,
+        compositor: &mut Compositor,
         name: &str,
     ) -> Result<FrameStats, RenderError> {
         let Some(settings) = compositor.output_settings(name) else {
@@ -145,7 +145,7 @@ impl Renderer {
         })
     }
 
-    pub fn snapshot(&mut self, compositor: &Headless) -> Result<Snapshot, RenderError> {
+    pub fn snapshot(&mut self, compositor: &Compositor) -> Result<Snapshot, RenderError> {
         self.snapshot_output(&compositor.main_output())
     }
 
@@ -163,7 +163,7 @@ impl FrameOutput for Renderer {
 
     fn submit(
         &mut self,
-        compositor: &mut Headless,
+        compositor: &mut Compositor,
         output: &str,
     ) -> Result<Submission, RenderError> {
         if !compositor.holds_frames() {

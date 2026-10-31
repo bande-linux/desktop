@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use crate::support::*;
 use smithay::utils::{Point, Size};
 use unbound_compositor::{
-    Headless, KEYBOARD_MONITOR_NAME, Renderer, Snapshot, serve_keyboard_monitor,
+    Compositor, KEYBOARD_MONITOR_NAME, Renderer, Snapshot, serve_keyboard_monitor,
 };
 use unbound_config::Accessibility;
 use unbound_test_bus::SessionBus;
@@ -28,12 +28,12 @@ fn with(change: impl FnOnce(&mut Accessibility)) -> Accessibility {
     settings
 }
 
-fn tap(server: &mut Headless, key: u32, time: u32) {
+fn tap(server: &mut Compositor, key: u32, time: u32) {
     server.key(key, true, time);
     server.key(key, false, time + 20);
 }
 
-fn chord(server: &mut Headless, keys: &[u32]) {
+fn chord(server: &mut Compositor, keys: &[u32]) {
     for key in keys {
         server.key(*key, true, 0);
     }
@@ -54,7 +54,7 @@ fn red_pixels(snapshot: &Snapshot) -> usize {
 
 #[test]
 fn with_sticky_keys_a_modifier_pressed_alone_holds_until_the_next_key() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut app = focused_app(&mut server);
     server.apply_accessibility(with(|access| access.sticky_keys = true));
 
@@ -96,7 +96,7 @@ fn with_sticky_keys_a_modifier_pressed_alone_holds_until_the_next_key() {
 
 #[test]
 fn turning_sticky_keys_off_releases_a_latched_modifier() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut app = focused_app(&mut server);
     server.apply_accessibility(with(|access| access.sticky_keys = true));
     tap(&mut server, KEY_LEFTSHIFT, 0);
@@ -107,7 +107,7 @@ fn turning_sticky_keys_off_releases_a_latched_modifier() {
 
 #[test]
 fn bounce_keys_ignore_a_key_pressed_again_right_after_its_release() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut app = focused_app(&mut server);
     server.apply_accessibility(with(|access| access.bounce_keys = true));
 
@@ -123,7 +123,7 @@ fn bounce_keys_ignore_a_key_pressed_again_right_after_its_release() {
 
 #[test]
 fn slow_keys_accept_only_a_key_held_long_enough() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut app = focused_app(&mut server);
     server.apply_accessibility(with(|access| access.slow_keys = true));
 
@@ -146,7 +146,7 @@ fn slow_keys_accept_only_a_key_held_long_enough() {
 
 #[test]
 fn zoom_magnifies_around_the_pointer_and_steps_with_the_keyboard() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut app = focused_app(&mut server);
     let mut renderer = Renderer::new().expect("renderer");
     server.set_reduce_motion(true);
@@ -187,7 +187,7 @@ fn zoom_magnifies_around_the_pointer_and_steps_with_the_keyboard() {
 
 #[test]
 fn zoom_glides_to_its_level_unless_motion_is_reduced() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     server.apply_accessibility(with(|access| access.zoom = 3.0));
     server.animate(Duration::from_millis(16));
     server.animate(Duration::from_millis(32));
@@ -200,7 +200,7 @@ fn zoom_glides_to_its_level_unless_motion_is_reduced() {
 
 #[test]
 fn an_alert_flashes_the_screen_only_when_asked_to() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut renderer = Renderer::new().expect("renderer");
     renderer.render(&mut server).expect("frame");
     let calm = renderer.snapshot(&server).expect("read back").rgba[0];
@@ -221,7 +221,7 @@ fn an_alert_flashes_the_screen_only_when_asked_to() {
 #[test]
 fn a_screen_reader_hears_every_key_and_keeps_its_own_commands_from_the_app() {
     let bus = SessionBus::start().expect("dbus-daemon");
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut app = focused_app(&mut server);
     let handle = serve_keyboard_monitor(&bus.connect().expect("connection")).expect("monitor");
     server.monitor_keyboard(handle);

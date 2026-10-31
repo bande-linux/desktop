@@ -10,7 +10,7 @@ use unbound_spring::{Animation, Spring, State as Phase};
 
 use crate::gesture::Tracker;
 use crate::motion::{Look, Tick, progress_precision};
-use crate::state::{Headless, State};
+use crate::state::{Compositor, State};
 use crate::window::Window;
 
 const SWIPE_PER_WORKSPACE: f64 = 350.0;
@@ -694,7 +694,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn workspace_count(&self) -> usize {
         self.state.main_screen().workspaces.count()
     }

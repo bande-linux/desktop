@@ -35,7 +35,7 @@ use crate::scene::{
     scaled_pieces,
 };
 use crate::shell::toplevel_names;
-use crate::state::{Headless, OutputElement, State};
+use crate::state::{Compositor, OutputElement, State};
 
 type Frame = Rectangle<f64, Logical>;
 
@@ -1189,7 +1189,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn switcher_shown(&self) -> bool {
         self.state.switcher.is_shown()
     }

@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use smithay::utils::Size;
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer};
+use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
 use unbound_test_bus::SessionBus;
 use unbound_toolkit::ui::{Axis, Button, Context, Label, Stack, Ui};
 use unbound_toolkit::{App, Palette, Role, Scene, Scheme, TextSystem, Window, WindowEvent};
@@ -144,7 +144,7 @@ fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
     }
     let (_status, _registry, plugs) = serve_atspi(&bus);
 
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let (client_end, server_end) = UnixStream::pair().expect("socket pair");
     server.insert_client(server_end).expect("insert client");
     let app = thread::spawn(move || {

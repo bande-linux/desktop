@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
-use unbound_compositor::{FrameClock, FrameScheduler, Headless, REFRESH, Renderer, SessionRole};
+use unbound_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer, SessionRole};
 use unbound_graphics::{Color, Item, Point, Scene, TextAlign, TextStyle, TextSystem};
 use unbound_test_wayland::{ShmImage, TestClient, quadrants};
 use unbound_toolkit_platform::{
@@ -38,7 +38,7 @@ fn filled(color: Color) -> Scene {
 #[test]
 fn the_first_frame_is_drawn_on_the_cpu_and_later_frames_on_the_gpu() {
     draw_on_the_gpu();
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let (client_end, server_end) = UnixStream::pair().expect("socket pair");
     server.insert_client(server_end).expect("insert client");
 
@@ -107,7 +107,7 @@ fn the_first_frame_is_drawn_on_the_cpu_and_later_frames_on_the_gpu() {
 
 #[test]
 fn a_lock_window_covers_the_output_until_it_unlocks() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let (client_end, server_end) = UnixStream::pair().expect("socket pair");
     server
         .insert_session_client(server_end, SessionRole::Shell)
@@ -135,7 +135,7 @@ fn a_lock_window_covers_the_output_until_it_unlocks() {
     let mut renderer = Renderer::new().expect("Vulkan renderer");
     let mut scheduler = FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH));
     let start = Instant::now();
-    let centre = |renderer: &mut Renderer, server: &Headless| {
+    let centre = |renderer: &mut Renderer, server: &Compositor| {
         let snapshot = renderer.snapshot(server).expect("read back");
         let offset = (((OUTPUT.1 / 3) * snapshot.size.w + OUTPUT.0 / 3) * 4) as usize;
         snapshot.rgba[offset..offset + 3].to_vec()
@@ -169,7 +169,7 @@ fn a_lock_window_covers_the_output_until_it_unlocks() {
 
 #[test]
 fn on_a_2x_output_a_window_keeps_its_size_in_points_and_fills_twice_the_pixels() {
-    let mut server = Headless::new(Size::from((640, 480))).expect("headless compositor");
+    let mut server = Compositor::new(Size::from((640, 480))).expect("headless compositor");
     server.set_output_scale(2.0);
     let (client_end, server_end) = UnixStream::pair().expect("socket pair");
     server.insert_client(server_end).expect("insert client");
@@ -242,7 +242,7 @@ fn windows_sharing_the_gpu_resize_while_others_draw_and_stay_on_the_gpu() {
     const WINDOWS: usize = 4;
     const FRAMES: u32 = 30;
     draw_on_the_gpu();
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let clients: Vec<_> = (0..WINDOWS)
         .map(|index| {
             let (client_end, server_end) = UnixStream::pair().expect("socket pair");
@@ -310,7 +310,7 @@ fn windows_sharing_the_gpu_resize_while_others_draw_and_stay_on_the_gpu() {
 fn a_change_under_an_opaque_window_shades_only_the_window_on_top() {
     const BELOW: (usize, usize) = (300, 220);
     const TOOLKIT: &str = "unbound-toolkit-test";
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut below = TestClient::connect(&mut server);
     let stride = BELOW.0 * 4;
     let pixels = quadrants(BELOW.0, BELOW.1, stride);
@@ -341,7 +341,7 @@ fn a_change_under_an_opaque_window_shades_only_the_window_on_top() {
     let mut renderer = Renderer::new().expect("Vulkan renderer");
     let mut scheduler = FrameScheduler::new(FrameClock::new(Duration::ZERO, REFRESH));
     let start = Instant::now();
-    let mut settle = |server: &mut Headless, renderer: &mut Renderer| {
+    let mut settle = |server: &mut Compositor, renderer: &mut Renderer| {
         server.dispatch().expect("server dispatch");
         scheduler
             .poll(|| start.elapsed(), server, renderer)

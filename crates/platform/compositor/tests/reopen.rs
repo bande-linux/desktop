@@ -8,7 +8,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use smithay::utils::Size;
-use unbound_compositor::Headless;
+use unbound_compositor::Compositor;
 use unbound_test_wayland::{RED, SessionEnd, ShmImage, TestClient};
 use wayland_client::protocol::wl_shm::Format;
 
@@ -48,7 +48,7 @@ fn every_session_ending_remembers_the_open_apps_once() {
     }
     let state = tempfile::tempdir().expect("state dir");
     let file = state.path().join("unbound/reopen");
-    let mut server = Headless::new(Size::from((256, 192))).expect("headless compositor");
+    let mut server = Compositor::new(Size::from((256, 192))).expect("headless compositor");
     server.remember_apps_to_reopen_in(file.clone());
     let mut editor = TestClient::connect(&mut server);
     let pixels = RED.repeat(32 * 32);

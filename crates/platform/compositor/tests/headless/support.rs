@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use smithay::utils::{Logical, Point, Size};
-use unbound_compositor::{Headless, Rect, Renderer, Snapshot};
+use unbound_compositor::{Compositor, Rect, Renderer, Snapshot};
 use unbound_test_wayland::{
     Anchor, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage, TestClient, roundtrip,
 };
@@ -28,8 +28,8 @@ pub const KEY_LEFTMETA: u32 = 125;
 pub const EDITOR: &str = "org.example.Editor";
 pub const VIEWER: &str = "org.example.Viewer";
 
-pub fn server() -> Headless {
-    Headless::new(Size::from(OUTPUT)).expect("headless compositor")
+pub fn server() -> Compositor {
+    Compositor::new(Size::from(OUTPUT)).expect("headless compositor")
 }
 
 pub fn solid(color: [u8; 4], (width, height): (i32, i32)) -> Vec<u8> {
@@ -46,14 +46,14 @@ pub fn xrgb(bytes: &[u8], (width, height): (i32, i32)) -> ShmImage<'_> {
     }
 }
 
-pub fn window(server: &mut Headless, color: [u8; 4], size: (i32, i32)) -> TestClient {
+pub fn window(server: &mut Compositor, color: [u8; 4], size: (i32, i32)) -> TestClient {
     let mut client = TestClient::connect(server);
     client.use_seat(server);
     client.show_window(server, &xrgb(&solid(color, size), size));
     client
 }
 
-pub fn focused_app(server: &mut Headless) -> TestClient {
+pub fn focused_app(server: &mut Compositor) -> TestClient {
     let mut app = window(server, RED, (32, 32));
     roundtrip(server, &mut [&mut app]);
     assert!(app.keyboard_focus_on(0));
@@ -61,7 +61,7 @@ pub fn focused_app(server: &mut Headless) -> TestClient {
 }
 
 pub fn window_of(
-    server: &mut Headless,
+    server: &mut Compositor,
     color: [u8; 4],
     size: (i32, i32),
     app_id: &str,
@@ -82,18 +82,18 @@ pub fn rect(x: i32, y: i32, w: i32, h: i32) -> Rect {
     }
 }
 
-pub fn click(server: &mut Headless, x: i32, y: i32) {
+pub fn click(server: &mut Compositor, x: i32, y: i32) {
     server.move_pointer_to(at(x, y), 0);
     server.press_button(BTN_LEFT, true, 0);
     server.press_button(BTN_LEFT, false, 0);
 }
 
-pub fn tap(server: &mut Headless, key: u32) {
+pub fn tap(server: &mut Compositor, key: u32) {
     server.key(key, true, 0);
     server.key(key, false, 0);
 }
 
-pub fn chord(server: &mut Headless, keys: &[u32]) {
+pub fn chord(server: &mut Compositor, keys: &[u32]) {
     for &key in keys {
         server.key(key, true, 0);
     }
@@ -102,7 +102,7 @@ pub fn chord(server: &mut Headless, keys: &[u32]) {
     }
 }
 
-pub fn settle(server: &mut Headless, from: u64) -> u64 {
+pub fn settle(server: &mut Compositor, from: u64) -> u64 {
     let mut at = from;
     while {
         at += 16;
@@ -125,14 +125,14 @@ pub fn rgb_at(snapshot: &Snapshot, x: i32, y: i32) -> [u8; 3] {
     ]
 }
 
-pub fn pixel(renderer: &mut Renderer, server: &mut Headless, x: i32, y: i32) -> [u8; 3] {
+pub fn pixel(renderer: &mut Renderer, server: &mut Compositor, x: i32, y: i32) -> [u8; 3] {
     renderer.render(server).expect("frame");
     rgb_at(&renderer.snapshot(server).expect("read back"), x, y)
 }
 
 pub const BAR: i32 = 24;
 
-pub fn top_bar(server: &mut Headless) -> TestClient {
+pub fn top_bar(server: &mut Compositor) -> TestClient {
     let mut shell = TestClient::connect_as_shell(server);
     shell.show_layer(
         server,
@@ -148,6 +148,6 @@ pub fn top_bar(server: &mut Headless) -> TestClient {
     shell
 }
 
-pub fn geometry(server: &Headless) -> Rect {
+pub fn geometry(server: &Compositor) -> Rect {
     server.windows()[0].geometry().expect("a mapped window")
 }

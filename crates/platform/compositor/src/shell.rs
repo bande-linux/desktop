@@ -347,6 +347,7 @@ impl State {
             Some(_) => {}
             None if self.windows[index].size.is_some() => {
                 let handle = self
+                    .globals
                     .foreign_toplevel_state
                     .new_toplevel::<State>(title, app_id);
                 self.windows[index].foreign = Some(handle);
@@ -363,7 +364,7 @@ impl State {
             .find(|window| window.toplevel.wl_surface() == surface)
             .and_then(|window| window.foreign.take());
         if let Some(handle) = handle {
-            self.foreign_toplevel_state.remove_toplevel(&handle);
+            self.globals.foreign_toplevel_state.remove_toplevel(&handle);
         }
     }
 }
@@ -524,7 +525,7 @@ fn send_panel_anchor(shell: &UnboundShellV1, anchor: &PanelAnchor) {
 
 impl ForeignToplevelListHandler for State {
     fn foreign_toplevel_list_state(&mut self) -> &mut ForeignToplevelListState {
-        &mut self.foreign_toplevel_state
+        &mut self.globals.foreign_toplevel_state
     }
 }
 

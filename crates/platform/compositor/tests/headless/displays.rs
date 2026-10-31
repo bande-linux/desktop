@@ -1,7 +1,7 @@
 use smithay::utils::{Logical, Point, Size};
 use std::time::Duration;
 
-use unbound_compositor::{Headless, OutputConfig, OutputMode, Rect, Renderer};
+use unbound_compositor::{Compositor, OutputConfig, OutputMode, Rect, Renderer};
 use unbound_config::Config;
 use unbound_test_wayland::{
     Anchor, BLUE, ConstraintAdjustment, DecorationMode, GREEN, KeyboardInteractivity, Layer,
@@ -21,8 +21,8 @@ fn side_display() -> OutputConfig {
     OutputConfig::virtual_display(SIDE, Size::from(SIDE_SIZE))
 }
 
-fn two_displays() -> Headless {
-    let mut server = Headless::new(Size::from(MAIN_SIZE)).expect("headless compositor");
+fn two_displays() -> Compositor {
+    let mut server = Compositor::new(Size::from(MAIN_SIZE)).expect("headless compositor");
     server.add_output(side_display());
     server
 }
@@ -31,11 +31,11 @@ fn at(x: f64, y: f64) -> Point<f64, Logical> {
     (x, y).into()
 }
 
-fn app(server: &mut Headless) -> TestClient {
+fn app(server: &mut Compositor) -> TestClient {
     window(server, RED, WINDOW)
 }
 
-fn chord(server: &mut Headless, modifiers: &[u32], key: u32) {
+fn chord(server: &mut Compositor, modifiers: &[u32], key: u32) {
     for modifier in modifiers {
         server.key(*modifier, true, 0);
     }
@@ -46,7 +46,7 @@ fn chord(server: &mut Headless, modifiers: &[u32], key: u32) {
     }
 }
 
-fn red_pixels(renderer: &mut Renderer, server: &mut Headless, output: &str) -> usize {
+fn red_pixels(renderer: &mut Renderer, server: &mut Compositor, output: &str) -> usize {
     renderer.render_output(server, output).expect("frame");
     let snapshot = renderer.snapshot_output(output).expect("read back");
     snapshot
@@ -265,7 +265,7 @@ fn a_window_is_told_the_scale_of_the_display_it_is_on() {
     assert_eq!(app.preferred_scale(&mut server, 0), Some(240));
 }
 
-fn config(server: &Headless, arrangement: &str) -> Config {
+fn config(server: &Compositor, arrangement: &str) -> Config {
     let main = server.output_identity(MAIN).expect("main identity");
     let side = server.output_identity(SIDE).expect("side identity");
     let source = arrangement.replace("MAIN", &main).replace("SIDE", &side);
@@ -289,7 +289,7 @@ fn a_remembered_arrangement_places_the_displays_and_names_the_main_one() {
 
 #[test]
 fn a_display_unknown_to_the_remembered_arrangement_goes_to_the_right() {
-    let mut server = Headless::new(Size::from(MAIN_SIZE)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(MAIN_SIZE)).expect("headless compositor");
     let main = server.output_identity(MAIN).expect("main identity");
     let source = format!("arrangement {{\n    display \"{main}\" x=0 y=0 main=#true\n}}\n");
     server.set_display_config(Config::parse(&source).expect("valid config"));
@@ -301,7 +301,7 @@ fn a_display_unknown_to_the_remembered_arrangement_goes_to_the_right() {
 
 #[test]
 fn display_settings_pick_the_resolution_refresh_and_scale() {
-    let mut server = Headless::new(Size::from(MAIN_SIZE)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(MAIN_SIZE)).expect("headless compositor");
     let mode = |width: i32, height: i32, hertz: u64| OutputMode {
         size: (width, height).into(),
         refresh: Duration::from_nanos(1_000_000_000 / hertz),

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::support::*;
 use smithay::utils::{Point, Size};
-use unbound_compositor::{Headless, OutputConfig, Renderer};
+use unbound_compositor::{Compositor, OutputConfig, Renderer};
 use unbound_test_wayland::{BLUE, GREEN, RED, ShmImage, TestClient, roundtrip};
 use wayland_client::protocol::wl_data_device_manager::DndAction;
 use wayland_client::protocol::wl_shm::Format;
@@ -31,8 +31,8 @@ fn shm(pixels: &[u8], side: i32) -> ShmImage<'_> {
     }
 }
 
-fn start_drag(accepts: bool) -> (Headless, TestClient) {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+fn start_drag(accepts: bool) -> (Compositor, TestClient) {
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut client = TestClient::connect(&mut server);
     client.use_seat(&mut server);
     client.join_seat(&mut server);
@@ -47,7 +47,7 @@ fn start_drag(accepts: bool) -> (Headless, TestClient) {
     (server, client)
 }
 
-fn icon_pixel(renderer: &mut Renderer, server: &mut Headless, pointer: (i32, i32)) -> [u8; 3] {
+fn icon_pixel(renderer: &mut Renderer, server: &mut Compositor, pointer: (i32, i32)) -> [u8; 3] {
     renderer.render(server).expect("frame");
     let snapshot = renderer.snapshot(server).expect("read back");
     let (x, y) = (pointer.0 - ICON / 2 + 2, pointer.1 - ICON / 2 + 2);
@@ -116,7 +116,7 @@ fn a_refused_drop_slides_the_icon_back_to_where_the_drag_began() {
 
 #[test]
 fn escape_cancels_a_drag_slides_the_icon_back_and_nothing_is_dropped() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut target = TestClient::connect(&mut server);
     target.use_seat(&mut server);
     target.join_seat(&mut server);
@@ -191,8 +191,8 @@ fn pressing_option_or_super_mid_drag_changes_the_action_without_moving() {
     assert_eq!(released, Some(DndAction::Move));
 }
 
-fn two_clients() -> (Headless, TestClient, TestClient) {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+fn two_clients() -> (Compositor, TestClient, TestClient) {
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut target = TestClient::connect(&mut server);
     target.use_seat(&mut server);
     target.join_seat(&mut server);
@@ -216,7 +216,7 @@ fn two_clients() -> (Headless, TestClient, TestClient) {
     (server, target, source)
 }
 
-fn next_click_reaches(server: &mut Headless, client: &mut TestClient) {
+fn next_click_reaches(server: &mut Compositor, client: &mut TestClient) {
     assert!(!server.pointer_grabbed());
     let pressed = client.buttons().len();
     server.move_pointer_to(at((AWAY.0 + 3, AWAY.1)), 50);
@@ -255,7 +255,7 @@ fn a_target_that_dies_mid_drag_gets_no_drop_and_the_source_is_cancelled() {
 
 #[test]
 fn the_drag_icon_is_drawn_on_both_displays_where_it_straddles_the_seam() {
-    let mut server = Headless::new(Size::from(OUTPUT)).expect("headless compositor");
+    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     server.add_output(OutputConfig::virtual_display(
         "HEADLESS-2",
         Size::from(OUTPUT),

@@ -22,7 +22,7 @@ use crate::scene::{
     scaled_pieces,
 };
 use crate::shell::toplevel_names;
-use crate::state::{Headless, OutputElement, State};
+use crate::state::{Compositor, OutputElement, State};
 use crate::window::Window;
 
 type Frame = Rectangle<f64, Logical>;
@@ -1147,7 +1147,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn overview_shown(&self) -> bool {
         self.state.overview.is_open()
     }

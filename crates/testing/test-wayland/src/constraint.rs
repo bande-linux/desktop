@@ -13,7 +13,7 @@ use wayland_protocols::wp::relative_pointer::zv1::client::zwp_relative_pointer_v
     self, ZwpRelativePointerV1,
 };
 
-use crate::{Globals, Headless, TestClient};
+use crate::{Compositor, Globals, TestClient};
 
 #[derive(Default)]
 pub(crate) struct Constraint {
@@ -22,14 +22,14 @@ pub(crate) struct Constraint {
 }
 
 impl TestClient {
-    pub fn use_relative_pointer(&mut self, server: &mut Headless) {
+    pub fn use_relative_pointer(&mut self, server: &mut Compositor) {
         let manager: ZwpRelativePointerManagerV1 = self.bind("zwp_relative_pointer_manager_v1", 1);
         let pointer = self.globals.input.pointer.clone().expect("a pointer");
         manager.get_relative_pointer(&pointer, &self.queue.handle(), ());
         self.exchange(server);
     }
 
-    pub fn lock_pointer(&mut self, server: &mut Headless, window: usize) {
+    pub fn lock_pointer(&mut self, server: &mut Compositor, window: usize) {
         let constraints: ZwpPointerConstraintsV1 = self.bind("zwp_pointer_constraints_v1", 1);
         let pointer = self.globals.input.pointer.clone().expect("a pointer");
         constraints.lock_pointer(
@@ -43,7 +43,7 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn confine_pointer(&mut self, server: &mut Headless, window: usize) {
+    pub fn confine_pointer(&mut self, server: &mut Compositor, window: usize) {
         let constraints: ZwpPointerConstraintsV1 = self.bind("zwp_pointer_constraints_v1", 1);
         let pointer = self.globals.input.pointer.clone().expect("a pointer");
         constraints.confine_pointer(

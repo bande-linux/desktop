@@ -32,7 +32,7 @@ pub use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
     Anchor, KeyboardInteractivity,
 };
 
-use crate::{Globals, Headless, Memory, SessionEnd, ShmImage, TestClient, Workspace};
+use crate::{Compositor, Globals, Memory, SessionEnd, ShmImage, TestClient, Workspace};
 
 #[derive(Default)]
 pub(crate) struct Shell {
@@ -77,13 +77,13 @@ pub struct LayerRequest {
 }
 
 impl TestClient {
-    pub fn show_layer(&mut self, server: &mut Headless, request: &LayerRequest) -> (u32, u32) {
+    pub fn show_layer(&mut self, server: &mut Compositor, request: &LayerRequest) -> (u32, u32) {
         self.show_named_layer(server, request, "unbound-test")
     }
 
     pub fn show_named_layer(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         request: &LayerRequest,
         namespace: &str,
     ) -> (u32, u32) {
@@ -121,7 +121,7 @@ impl TestClient {
         (width, height)
     }
 
-    pub fn connect_as_shell(server: &mut Headless) -> Self {
+    pub fn connect_as_shell(server: &mut Compositor) -> Self {
         let (client_end, server_end) = std::os::unix::net::UnixStream::pair().expect("socket pair");
         server
             .insert_session_client(server_end, SessionRole::Shell)
@@ -129,7 +129,7 @@ impl TestClient {
         Self::from_socket(server, client_end)
     }
 
-    pub fn hide_layer(&mut self, server: &mut Headless, index: usize) {
+    pub fn hide_layer(&mut self, server: &mut Compositor, index: usize) {
         let surface = &self.globals.shell.layers[index].0;
         surface.attach(None, 0, 0);
         surface.commit();
@@ -138,7 +138,7 @@ impl TestClient {
 
     pub fn declare_layer_opaque(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         index: usize,
         (width, height): (u32, u32),
     ) {
@@ -152,35 +152,35 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn reconfigure_layer(&mut self, server: &mut Headless, index: usize) -> bool {
+    pub fn reconfigure_layer(&mut self, server: &mut Compositor, index: usize) -> bool {
         self.globals.shell.layer_size = None;
         self.globals.shell.layers[index].0.commit();
         self.exchange(server);
         self.globals.shell.layer_size.is_some()
     }
 
-    pub fn close_layer(&mut self, server: &mut Headless, index: usize) {
+    pub fn close_layer(&mut self, server: &mut Compositor, index: usize) {
         let (surface, layer_surface) = self.globals.shell.layers.remove(index);
         layer_surface.destroy();
         surface.destroy();
         self.exchange(server);
     }
 
-    pub fn request_layer_frame(&mut self, server: &mut Headless, index: usize) {
+    pub fn request_layer_frame(&mut self, server: &mut Compositor, index: usize) {
         let surface = &self.globals.shell.layers[index].0;
         surface.frame(&self.queue.handle(), ());
         surface.commit();
         self.exchange(server);
     }
 
-    pub fn join_shell(&mut self, server: &mut Headless) {
+    pub fn join_shell(&mut self, server: &mut Compositor) {
         let shell: UnboundShellV1 = self.bind("unbound_shell_v1", 1);
         self.globals.shell.shell = Some(shell);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
         self.exchange(server);
     }
 
-    pub fn set_scrim(&mut self, server: &mut Headless, index: usize, opacity: f64) {
+    pub fn set_scrim(&mut self, server: &mut Compositor, index: usize, opacity: f64) {
         if let Some(shell) = &self.globals.shell.shell {
             shell.set_scrim(&self.globals.shell.layers[index].0, opacity);
         }
@@ -199,7 +199,7 @@ impl TestClient {
         &self.globals.shell.launcher_modes
     }
 
-    pub fn insert_text(&mut self, server: &mut Headless, text: &str) {
+    pub fn insert_text(&mut self, server: &mut Compositor, text: &str) {
         if let Some(shell) = &self.globals.shell.shell {
             shell.insert_text(text.to_owned());
         }
@@ -238,7 +238,7 @@ impl TestClient {
         &self.globals.shell.panel_toggles
     }
 
-    pub fn toggle_control_center(&mut self, server: &mut Headless) {
+    pub fn toggle_control_center(&mut self, server: &mut Compositor) {
         let shell = self.globals.shell.shell.as_ref().expect("joined the shell");
         shell.toggle_control_center();
         self.exchange(server);
@@ -246,7 +246,7 @@ impl TestClient {
 
     pub fn set_icon_rect(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         app_id: &str,
         layer: usize,
         rect: (i32, i32, i32, i32),
@@ -259,7 +259,7 @@ impl TestClient {
 
     pub fn set_panel_anchor(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         layer: usize,
         panel: unbound_shell_v1::Panel,
         edge: unbound_shell_v1::Edge,
@@ -281,24 +281,29 @@ impl TestClient {
             .map(|(_, rect)| *rect)
     }
 
-    pub fn take_app_requests(&mut self, server: &mut Headless) {
+    pub fn take_app_requests(&mut self, server: &mut Compositor) {
         let _: UnboundAppV1 = self.bind("unbound_app_v1", 1);
         self.exchange(server);
     }
 
-    pub fn place_window(&mut self, server: &mut Headless, index: usize, placement: Placement) {
+    pub fn place_window(&mut self, server: &mut Compositor, index: usize, placement: Placement) {
         let app: UnboundAppV1 = self.bind("unbound_app_v1", 1);
         app.place_window(&self.windows[index].2, placement);
         self.exchange(server);
     }
 
-    pub fn move_to_workspace(&mut self, server: &mut Headless, index: usize, workspace: Workspace) {
+    pub fn move_to_workspace(
+        &mut self,
+        server: &mut Compositor,
+        index: usize,
+        workspace: Workspace,
+    ) {
         let app: UnboundAppV1 = self.bind("unbound_app_v1", 1);
         app.move_to_workspace(&self.windows[index].2, workspace);
         self.exchange(server);
     }
 
-    pub fn keep_on_top(&mut self, server: &mut Headless, index: usize, keep: bool) {
+    pub fn keep_on_top(&mut self, server: &mut Compositor, index: usize, keep: bool) {
         let app: UnboundAppV1 = self.bind("unbound_app_v1", 1);
         app.set_keep_on_top(&self.windows[index].2, u32::from(keep));
         self.exchange(server);
@@ -313,11 +318,11 @@ impl TestClient {
         Some((sources, *active))
     }
 
-    pub fn select_input_source(&mut self, server: &mut Headless, index: u32) {
+    pub fn select_input_source(&mut self, server: &mut Compositor, index: u32) {
         self.shell_request(server, |shell| shell.select_input_source(index));
     }
 
-    pub fn show_windows(&mut self, server: &mut Headless, app_id: &str) {
+    pub fn show_windows(&mut self, server: &mut Compositor, app_id: &str) {
         self.shell_request(server, |shell| shell.show_windows(app_id.to_owned()));
     }
 
@@ -325,40 +330,40 @@ impl TestClient {
         self.globals.shell.quit_requests
     }
 
-    fn shell_request(&mut self, server: &mut Headless, request: impl FnOnce(&UnboundShellV1)) {
+    fn shell_request(&mut self, server: &mut Compositor, request: impl FnOnce(&UnboundShellV1)) {
         request(self.globals.shell.shell.as_ref().expect("joined the shell"));
         self.exchange(server);
     }
 
-    pub fn join_app_control(&mut self, server: &mut Headless) {
+    pub fn join_app_control(&mut self, server: &mut Compositor) {
         self.globals.shell.app_control = Some(self.bind("unbound_app_control_v1", 1));
         self.exchange(server);
     }
 
-    pub fn ask_app_to_quit(&mut self, server: &mut Headless, app_id: &str) {
+    pub fn ask_app_to_quit(&mut self, server: &mut Compositor, app_id: &str) {
         if let Some(control) = &self.globals.shell.app_control {
             control.quit_app(app_id.to_owned());
         }
         self.exchange(server);
     }
 
-    pub fn hide_app(&mut self, server: &mut Headless, app_id: &str) {
+    pub fn hide_app(&mut self, server: &mut Compositor, app_id: &str) {
         self.shell_request(server, |shell| shell.hide_app(app_id.to_owned()));
     }
 
-    pub fn show_app(&mut self, server: &mut Headless, app_id: &str) {
+    pub fn show_app(&mut self, server: &mut Compositor, app_id: &str) {
         self.shell_request(server, |shell| shell.show_app(app_id.to_owned()));
     }
 
-    pub fn quit_app(&mut self, server: &mut Headless, app_id: &str) {
+    pub fn quit_app(&mut self, server: &mut Compositor, app_id: &str) {
         self.shell_request(server, |shell| shell.quit_app(app_id.to_owned()));
     }
 
-    pub fn quit_all_apps(&mut self, server: &mut Headless) {
+    pub fn quit_all_apps(&mut self, server: &mut Compositor) {
         self.shell_request(server, UnboundShellV1::quit_all_apps);
     }
 
-    pub fn confirm_session_end(&mut self, server: &mut Headless, ending: SessionEnd) {
+    pub fn confirm_session_end(&mut self, server: &mut Compositor, ending: SessionEnd) {
         self.shell_request(server, |shell| shell.confirm_session_end(ending));
     }
 
@@ -366,11 +371,11 @@ impl TestClient {
         &self.globals.shell.apps_running
     }
 
-    pub fn activate_window(&mut self, server: &mut Headless, identifier: &str) {
+    pub fn activate_window(&mut self, server: &mut Compositor, identifier: &str) {
         self.shell_request(server, |shell| shell.activate_window(identifier.to_owned()));
     }
 
-    pub fn set_corner_radius(&mut self, server: &mut Headless, layer: usize, radius: u32) {
+    pub fn set_corner_radius(&mut self, server: &mut Compositor, layer: usize, radius: u32) {
         let surface = self.globals.shell.layers[layer].0.clone();
         self.shell_request(server, |shell| shell.set_corner_radius(&surface, radius));
     }
@@ -416,7 +421,7 @@ impl TestClient {
         &self.globals.shell.shell_focus
     }
 
-    pub fn activate_app(&mut self, server: &mut Headless, app_id: &str) {
+    pub fn activate_app(&mut self, server: &mut Compositor, app_id: &str) {
         self.shell_request(server, |shell| shell.activate_app(app_id.to_owned()));
     }
 
@@ -434,18 +439,18 @@ impl TestClient {
             .collect()
     }
 
-    pub fn show_window_of(&mut self, server: &mut Headless, image: &ShmImage, app_id: &str) {
+    pub fn show_window_of(&mut self, server: &mut Compositor, image: &ShmImage, app_id: &str) {
         self.map_window(server, image, Memory::Shm, |_, _, toplevel| {
             toplevel.set_app_id(app_id.to_owned());
         });
     }
 
-    pub fn set_app_id(&mut self, server: &mut Headless, index: usize, app_id: &str) {
+    pub fn set_app_id(&mut self, server: &mut Compositor, index: usize, app_id: &str) {
         self.windows[index].2.set_app_id(app_id.to_owned());
         self.exchange(server);
     }
 
-    pub fn activation_token(&mut self, server: &mut Headless) -> String {
+    pub fn activation_token(&mut self, server: &mut Compositor) -> String {
         let activation: XdgActivationV1 = self.bind("xdg_activation_v1", 1);
         let token = activation.get_activation_token(&self.queue.handle(), ());
         if let Some((surface, _, _)) = self.windows.last() {
@@ -461,13 +466,18 @@ impl TestClient {
             .expect("an activation token")
     }
 
-    pub fn activate(&mut self, server: &mut Headless, index: usize, token: &str) {
+    pub fn activate(&mut self, server: &mut Compositor, index: usize, token: &str) {
         let activation: XdgActivationV1 = self.bind("xdg_activation_v1", 1);
         activation.activate(token.to_owned(), &self.windows[index].0);
         self.exchange(server);
     }
 
-    pub fn show_window_activated(&mut self, server: &mut Headless, image: &ShmImage, token: &str) {
+    pub fn show_window_activated(
+        &mut self,
+        server: &mut Compositor,
+        image: &ShmImage,
+        token: &str,
+    ) {
         self.map_window(server, image, Memory::Shm, |client, surface, _| {
             let activation: XdgActivationV1 = client.bind("xdg_activation_v1", 1);
             activation.activate(token.to_owned(), surface);
@@ -476,7 +486,7 @@ impl TestClient {
 
     pub fn show_window_scaled(
         &mut self,
-        server: &mut Headless,
+        server: &mut Compositor,
         image: &ShmImage,
         destination: (i32, i32),
     ) {
@@ -487,7 +497,7 @@ impl TestClient {
         });
     }
 
-    pub fn preferred_scale(&mut self, server: &mut Headless, index: usize) -> Option<u32> {
+    pub fn preferred_scale(&mut self, server: &mut Compositor, index: usize) -> Option<u32> {
         if self.globals.shell.fractional_scale.is_none() {
             let manager: WpFractionalScaleManagerV1 =
                 self.bind("wp_fractional_scale_manager_v1", 1);

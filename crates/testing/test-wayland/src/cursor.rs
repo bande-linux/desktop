@@ -3,10 +3,10 @@ pub use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::WpCursorShapeDeviceV1;
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 
-use crate::{Globals, Headless, TestClient};
+use crate::{Compositor, Globals, TestClient};
 
 impl TestClient {
-    pub fn set_cursor_shape(&mut self, server: &mut Headless, shape: CursorShape) {
+    pub fn set_cursor_shape(&mut self, server: &mut Compositor, shape: CursorShape) {
         let manager: WpCursorShapeManagerV1 = self.bind("wp_cursor_shape_manager_v1", 1);
         let pointer = self.globals.input.pointer.as_ref().expect("a pointer");
         let device = manager.get_pointer(pointer, &self.queue.handle(), ());

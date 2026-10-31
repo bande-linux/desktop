@@ -9,7 +9,7 @@ use unbound_spring::Spring;
 use crate::motion::{Look, Motion, Tick};
 use crate::overview::{arrange, real_rect};
 use crate::scene::{Casting, FillElement, Shading, cast_shadows, premultiplied, rounded};
-use crate::state::{Headless, OutputElement, State};
+use crate::state::{Compositor, OutputElement, State};
 use crate::tile::Tile;
 
 type Frame = Rectangle<f64, Logical>;
@@ -341,7 +341,7 @@ impl State {
     }
 }
 
-impl Headless {
+impl Compositor {
     pub fn other_half_offered(&self) -> bool {
         self.state.assist.is_open()
     }

@@ -9,14 +9,17 @@ repository.workspace = true
 fontique.workspace = true
 image.workspace = true
 parley.workspace = true
-pollster.workspace = true
+pollster = { workspace = true, optional = true }
 resvg.workspace = true
 skrifa.workspace = true
 tracing.workspace = true
 unbound-design.workspace = true
 vello_cpu.workspace = true
-vello_gpu.workspace = true
-wgpu.workspace = true
+vello_gpu = { workspace = true, optional = true }
+wgpu = { workspace = true, optional = true }
+
+[features]
+gpu = ["dep:pollster", "dep:vello_gpu", "dep:wgpu"]
 
 [dev-dependencies]
 ab_glyph.workspace = true

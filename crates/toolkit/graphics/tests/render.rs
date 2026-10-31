@@ -3,8 +3,8 @@
 mod support;
 
 use unbound_graphics::{
-    Color, CpuRenderer, GpuRenderer, Image, Item, Paint, Palette, Point, Rect, Scene, Scheme,
-    Shape, Spacing, Stop, TextAlign, TextStyle, TextSystem, damage,
+    Color, CpuRenderer, Image, Item, Paint, Palette, Point, Rect, Scene, Scheme, Shape, Spacing,
+    Stop, TextAlign, TextStyle, TextSystem, damage,
 };
 
 use support::{Reference, assert_all_match, compare};
@@ -202,51 +202,57 @@ fn cpu_frames_match_references_computed_from_the_scene() {
     assert_all_match(&results);
 }
 
-#[test]
-fn gpu_frames_match_the_same_references() {
-    let mut text = TextSystem::new();
-    let mut renderer = GpuRenderer::new().expect("Vulkan device");
-    let info = renderer.adapter_info();
-    println!(
-        "adapter: {} ({:?}, {})",
-        info.name, info.device_type, info.driver
-    );
-    let results: Vec<_> = scenes(&mut text)
-        .into_iter()
-        .map(|(name, scene)| {
-            let name = format!("gpu-{name}");
-            let snapshot = renderer.render(&scene).expect("GPU frame");
-            let comparison = compare(&name, &snapshot, &Reference::draw(&scene));
-            (name, comparison)
-        })
-        .collect();
-    assert_all_match(&results);
-}
+#[cfg(feature = "gpu")]
+mod gpu {
+    use super::*;
+    use unbound_graphics::GpuRenderer;
 
-fn solid_image_scene(rgba: [u8; 4]) -> Scene {
-    let image = Image::from_rgba(32, 32, rgba.repeat(32 * 32)).expect("image");
-    Scene {
-        width: 64,
-        height: 64,
-        background: Color::hex(0x000000),
-        items: vec![Item::Image {
-            rect: Rect::new(16.0, 16.0, 32.0, 32.0),
-            image,
-        }],
+    #[test]
+    fn gpu_frames_match_the_same_references() {
+        let mut text = TextSystem::new();
+        let mut renderer = GpuRenderer::new().expect("Vulkan device");
+        let info = renderer.adapter_info();
+        println!(
+            "adapter: {} ({:?}, {})",
+            info.name, info.device_type, info.driver
+        );
+        let results: Vec<_> = scenes(&mut text)
+            .into_iter()
+            .map(|(name, scene)| {
+                let name = format!("gpu-{name}");
+                let snapshot = renderer.render(&scene).expect("GPU frame");
+                let comparison = compare(&name, &snapshot, &Reference::draw(&scene));
+                (name, comparison)
+            })
+            .collect();
+        assert_all_match(&results);
     }
-}
 
-#[test]
-fn an_image_replacing_a_dropped_one_is_drawn_whole_on_the_gpu() {
-    let mut renderer = GpuRenderer::new().expect("Vulkan device");
-    renderer
-        .render(&solid_image_scene([255, 0, 0, 255]))
-        .expect("first frame");
-    let snapshot = renderer
-        .render(&solid_image_scene([0, 0, 255, 255]))
-        .expect("second frame");
-    let centre = ((32 * snapshot.width + 32) * 4) as usize;
-    assert_eq!(&snapshot.rgba[centre..centre + 4], [0, 0, 255, 255]);
+    fn solid_image_scene(rgba: [u8; 4]) -> Scene {
+        let image = Image::from_rgba(32, 32, rgba.repeat(32 * 32)).expect("image");
+        Scene {
+            width: 64,
+            height: 64,
+            background: Color::hex(0x000000),
+            items: vec![Item::Image {
+                rect: Rect::new(16.0, 16.0, 32.0, 32.0),
+                image,
+            }],
+        }
+    }
+
+    #[test]
+    fn an_image_replacing_a_dropped_one_is_drawn_whole_on_the_gpu() {
+        let mut renderer = GpuRenderer::new().expect("Vulkan device");
+        renderer
+            .render(&solid_image_scene([255, 0, 0, 255]))
+            .expect("first frame");
+        let snapshot = renderer
+            .render(&solid_image_scene([0, 0, 255, 255]))
+            .expect("second frame");
+        let centre = ((32 * snapshot.width + 32) * 4) as usize;
+        assert_eq!(&snapshot.rgba[centre..centre + 4], [0, 0, 255, 255]);
+    }
 }
 
 fn highlighted(scene: &Scene) -> Scene {

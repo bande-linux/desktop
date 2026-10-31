@@ -1,6 +1,7 @@
 mod cpu;
 mod damage;
 mod draw;
+#[cfg(feature = "gpu")]
 mod gpu;
 mod input;
 mod outline;
@@ -11,6 +12,7 @@ mod title_bar;
 
 pub use cpu::CpuRenderer;
 pub use damage::{Region, damage};
+#[cfg(feature = "gpu")]
 pub use gpu::{GpuDevice, GpuRenderer};
 pub use input::{
     Cursor, DOUBLE_CLICK_INTERVAL, Event, Key, Modifiers, Pointer, PointerButton, Scroll,

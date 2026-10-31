@@ -4,11 +4,18 @@ use crate::scene::Scene;
 
 #[derive(Debug)]
 pub enum RenderError {
-    TooLarge { width: u32, height: u32 },
+    TooLarge {
+        width: u32,
+        height: u32,
+    },
     BufferSize,
+    #[cfg(feature = "gpu")]
     Adapter(wgpu::RequestAdapterError),
+    #[cfg(feature = "gpu")]
     Device(wgpu::RequestDeviceError),
+    #[cfg(feature = "gpu")]
     Gpu(String),
+    #[cfg(feature = "gpu")]
     Software(String),
 }
 
@@ -19,9 +26,13 @@ impl fmt::Display for RenderError {
                 write!(f, "a {width}x{height} scene exceeds 65535 pixels per side")
             }
             Self::BufferSize => write!(f, "the target buffer does not match the scene's size"),
+            #[cfg(feature = "gpu")]
             Self::Adapter(error) => write!(f, "no usable Vulkan adapter: {error}"),
+            #[cfg(feature = "gpu")]
             Self::Device(error) => write!(f, "cannot open the Vulkan device: {error}"),
+            #[cfg(feature = "gpu")]
             Self::Gpu(error) => write!(f, "GPU rendering failed: {error}"),
+            #[cfg(feature = "gpu")]
             Self::Software(adapter) => {
                 write!(f, "the only Vulkan device, {adapter}, renders on the CPU")
             }

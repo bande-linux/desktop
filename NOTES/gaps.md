@@ -48,7 +48,7 @@ we have no swap (granted this is not an official installation of debian) and it 
 Status: planned ([plans/swap.md](plans/swap.md))
 
 review the CI, its performance and result has been abysmal. Right now it only starts on tags but still has not run successfully. I want tagged releases to build reliably, both arm64 and amd64. These builds are then picked up by the apt repo and published as installable packages correctly for debian users (make sure architecture works correctly)
-Status: planned ([plans/ci-releases.md](plans/ci-releases.md))
+Status: finished up to the first tag, which the owner cuts ([plans/ci-releases.md](plans/ci-releases.md), "Cutting the first release")
 
 we have no app store, should we build one?
 Status: planned ([plans/app-store.md](plans/app-store.md))

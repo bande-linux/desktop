@@ -45,7 +45,7 @@ impl SettingsView {
             SoftwareState::Available(packages) if !packages.is_empty() => {
                 Some(L10N.tr_args("updates-available", [("count", packages.len().into())]))
             }
-            SoftwareState::Installed { restart: true } => Some(L10N.tr("restart-to-update")),
+            SoftwareState::Prepared(_) => Some(L10N.tr("restart-to-update")),
             _ => None,
         }
     }

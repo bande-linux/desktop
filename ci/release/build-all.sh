@@ -23,6 +23,7 @@ echo "== bande-desktop pins its packages at $version"
 [ "$(field bande-desktop Version)" = "$version" ]
 field bande-desktop Depends | grep -qF "bande-compositor (= $version)"
 field bande-desktop Recommends | grep -qF "bande-monitor (= $version)"
+field bande-desktop Recommends | grep -qF "bande-installer (= $version)"
 dpkg-deb --extract "$(deb bande-desktop "$version")" "$scratch/desktop"
 grep -qx 'application/pdf=org.gnome.Papers.desktop;' "$scratch/desktop/usr/share/applications/bande-mimeapps.list"
 

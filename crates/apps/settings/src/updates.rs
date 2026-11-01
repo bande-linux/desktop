@@ -4,7 +4,6 @@ use bande_toolkit::ui::{Button, Label, ProgressBar, Spinner, Widget};
 
 use crate::L10N;
 use crate::pages::{Widgets, boxed};
-use crate::privilege::Privilege;
 use crate::software::{Package, SoftwareCommand, SoftwareState, Stage};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
@@ -18,11 +17,8 @@ impl SettingsView {
         command: SoftwareCommand,
         primary: bool,
     ) -> Box<dyn Widget> {
-        let refused = matches!(command, SoftwareCommand::Install(_))
-            && self.refused.contains(&Privilege::Updates);
         let mut act = intent(&self.intents, Intent::Software);
-        let mut button = Button::new(title, move || act(command.clone()));
-        button.set_enabled(!refused);
+        let button = Button::new(title, move || act(command.clone()));
         let button = if primary { button.primary() } else { button };
         self.anchors.push((
             Anchor::Setting(SettingId::SoftwareUpdates, None),
@@ -97,48 +93,47 @@ impl SettingsView {
                     system
                 };
                 let ids = packages.iter().map(|package| package.id.clone()).collect();
-                let refused = self.refused.contains(&Privilege::Updates);
-                let detail = match refused {
-                    true => L10N.tr("administrator-only"),
-                    false => detail,
-                };
-                let install = self.software_button(
-                    &L10N.tr("install-now"),
-                    SoftwareCommand::Install(ids),
-                    !refused,
+                let download = self.software_button(
+                    &L10N.tr("download-updates"),
+                    SoftwareCommand::Download(ids),
+                    true,
                 );
                 let mut rows = vec![self.status_row(
                     &L10N.tr_args("updates-available", [("count", packages.len().into())]),
                     Some(&detail),
-                    Some(install),
+                    Some(download),
                 )];
                 rows.extend(Self::package_rows(&packages));
                 rows
             }
-            SoftwareState::Installing { percent } => {
-                let label = L10N.tr("installing-updates");
+            SoftwareState::Downloading { percent } => {
+                let label = L10N.tr("downloading-updates");
                 vec![self.status_row(
                     &label,
-                    Some(&L10N.tr("installing-hint")),
+                    Some(&L10N.tr("downloading-hint")),
                     Some(boxed(ProgressBar::new(
                         &label,
                         percent.map(|percent| percent as f32 / 100.0),
                     ))),
                 )]
             }
-            SoftwareState::Installed { restart: true } => {
+            SoftwareState::Prepared(count) => {
                 let restart =
                     self.software_button(&L10N.tr("restart-now"), SoftwareCommand::Restart, true);
                 vec![self.status_row(
-                    &L10N.tr("updates-installed"),
-                    Some(&L10N.tr("restart-to-finish")),
+                    &L10N.tr_args("restart-to-install", [("count", count.into())]),
+                    Some(&L10N.tr("installs-on-restart")),
                     Some(restart),
                 )]
             }
-            SoftwareState::Installed { restart: false } => {
+            SoftwareState::Installed(count) => {
                 let check =
                     self.software_button(&L10N.tr("check-now"), SoftwareCommand::Check, false);
-                vec![self.status_row(&L10N.tr("updates-installed"), Some(&system), Some(check))]
+                vec![self.status_row(
+                    &L10N.tr_args("updates-were-installed", [("count", count.into())]),
+                    Some(&system),
+                    Some(check),
+                )]
             }
             SoftwareState::Unavailable => vec![self.status_row(
                 &L10N.tr("updates-unavailable"),
@@ -148,6 +143,7 @@ impl SettingsView {
             SoftwareState::Failed { during, reason } => {
                 let title = match during {
                     Stage::Check => L10N.tr("updates-failed"),
+                    Stage::Download => L10N.tr("download-failed"),
                     Stage::Install => L10N.tr("install-failed"),
                 };
                 let retry =

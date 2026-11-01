@@ -36,6 +36,16 @@ fn about() -> About {
     }
 }
 
+fn update(name: &str, version: &str) -> Package {
+    Package {
+        id: format!("{name};{version};arm64;debian"),
+        name: name.to_owned(),
+        version: version.to_owned(),
+        summary: String::new(),
+        size: 0,
+    }
+}
+
 fn general_view() -> SettingsView {
     let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
     view.apply(Update::About(about()));
@@ -93,17 +103,17 @@ fn the_sidebar_offers_waiting_updates_only_while_they_wait() {
     let mut view = general_view();
     assert!(find(&mut view, Role::ListItem, "2 updates are available").is_none());
     view.apply(Update::Software(SoftwareState::Available(vec![
-        Package::from_id("libc6;2.41-12;arm64;debian", ""),
-        Package::from_id("firefox-esr;128.4.0esr-1;arm64;debian", ""),
+        update("libc6", "2.41-12"),
+        update("firefox-esr", "128.4.0esr-1"),
     ])));
     let waiting = find(&mut view, Role::ListItem, "2 updates are available").expect("row");
     click(&mut view, waiting);
     assert_eq!(view.selected_pane(), PaneId::SoftwareUpdate);
 
-    view.apply(Update::Software(SoftwareState::Installed { restart: true }));
-    assert!(find(&mut view, Role::ListItem, "Restart to finish updating").is_some());
+    view.apply(Update::Software(SoftwareState::Prepared(2)));
+    assert!(find(&mut view, Role::ListItem, "Restart to install updates").is_some());
     view.apply(Update::Software(SoftwareState::UpToDate));
-    assert!(find(&mut view, Role::ListItem, "Restart to finish updating").is_none());
+    assert!(find(&mut view, Role::ListItem, "Restart to install updates").is_none());
     assert!(find(&mut view, Role::ListItem, "2 updates").is_none());
 }
 

@@ -6,8 +6,7 @@ polkit.addRule(function(action, subject) {
         "org.freedesktop.locale1.set-locale",
         "org.freedesktop.locale1.set-keyboard",
         "org.freedesktop.hostname1.set-static-hostname",
-        "org.freedesktop.hostname1.set-machine-info",
-        "org.freedesktop.packagekit.system-update"
+        "org.freedesktop.hostname1.set-machine-info"
     ];
     if (settings.indexOf(action.id) >= 0 &&
         subject.local && subject.active &&

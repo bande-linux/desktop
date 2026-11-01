@@ -13,25 +13,17 @@ pub enum Privilege {
     Time,
     Locale,
     Hostname,
-    Updates,
     Keyboard,
 }
 
 impl Privilege {
-    const ALL: [Self; 5] = [
-        Self::Time,
-        Self::Locale,
-        Self::Hostname,
-        Self::Updates,
-        Self::Keyboard,
-    ];
+    const ALL: [Self; 4] = [Self::Time, Self::Locale, Self::Hostname, Self::Keyboard];
 
     fn action(self) -> &'static str {
         match self {
             Self::Time => "org.freedesktop.timedate1.set-timezone",
             Self::Locale => "org.freedesktop.locale1.set-locale",
             Self::Hostname => "org.freedesktop.hostname1.set-static-hostname",
-            Self::Updates => "org.freedesktop.packagekit.system-update",
             Self::Keyboard => "org.freedesktop.locale1.set-keyboard",
         }
     }

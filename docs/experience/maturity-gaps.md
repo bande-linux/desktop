@@ -197,7 +197,7 @@ polish).
 | No printing: cups is not recommended, there is no Printers pane, and the Print portal is GTK's | A home or office user cannot print a PDF from Papers until they find and install cups | major | S (packaging) + L (Printers pane, Later) | `packaging/bande-desktop`, `apps/settings` | Partly: `cups` recommended; no Printers pane |
 | No charge limit to preserve the battery (Asahi exposes `charge_control_end_threshold`) | macOS has Optimised Battery Charging, GNOME 48 "Preserve Battery Health" | minor | S–M | `services/power`, `apps/settings` | Open |
 | The keyboard backlight stays on when idle, and idle times are the same on battery and on power | macOS turns the keyboard light off after a while of inactivity, and macOS and GNOME treat battery and power separately | minor | S | `services/power` | Partly: the keyboard light goes dark with the display; one set of idle times |
-| Updates only install live (`apps/settings/src/software.rs`). There is no offline update at restart, no switch for automatic security updates and no list of what changes, and session services are not restarted after an update (`session.md`: "planned") | GNOME Software installs at reboot, and macOS shows what an update contains | minor | M | `apps/settings` | Open |
+| Updates only install live (`apps/settings/src/software.rs`). There is no offline update at restart, no switch for automatic security updates and no list of what changes, and session services are not restarted after an update (`session.md`: "planned") | GNOME Software installs at reboot, and macOS shows what an update contains | minor | M | `apps/settings` | Partly: updates download, then install at restart (offline, `libs/packages`); no automatic security updates |
 
 ## 13. App integration and portals
 

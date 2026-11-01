@@ -23,6 +23,7 @@ bande-l10n.workspace = true
 bande-log.workspace = true
 bande-network.workspace = true
 bande-notify.workspace = true
+bande-packages.workspace = true
 bande-settings-panes.workspace = true
 bande-sound.workspace = true
 bande-status.workspace = true
@@ -54,8 +55,10 @@ search field that ranks the matching settings and marks them. Every pane \
 follows changes made elsewhere while it is open. Desktop settings go \
 through org.bande.Config, which writes config.kdl. A polkit rule lets \
 administrators (members of sudo) change the time, language, login screen \
-keyboard layouts, computer name and install updates without a password \
-prompt. Any supported language can be chosen; localed generates it."""
+keyboard layouts and computer name without a password prompt. Any \
+supported language can be chosen; localed generates it. Updates download \
+in the background and install at the next restart through PackageKit's \
+offline updates."""
 recommends = "bande-polkit, network-manager, bluez, pipewire, wireplumber, bande-notify, packagekit, power-profiles-daemon, upower"
 maintainer-scripts = "debian/"
 assets = [

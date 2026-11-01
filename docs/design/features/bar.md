@@ -2,6 +2,7 @@
 
 Status: adopted by the owner on 2026-10-30 (app menus: cascade from the app header, option A). Implementation order: `docs/roadmap.md`, wave D.
 Name: since 2026-11-01 people see this bar as the **Taskbar** (Settings ▸ Taskbar, "Keep in Taskbar"), and the side strip in the separate-menu-bar layout is the taskbar too. This page says "bar" for the same thing; "today's Dock" means the separate Dock that came before it. The config key stays `bar { … }` and the D-Bus properties stay `BarApps`, `BarEdge` and so on.
+The expanded width (248 pt, "Show names", dragging the inner edge) was removed by the owner on 2026-11-01 ([plan](../../../NOTES/plans/taskbar-width-and-options.md)); the bar has one width, set by the Size slider.
 The proposal's mockups were removed on 2026-11-01; the bar's goldens (`crates/shell/bar/tests/golden/`) show what was built.
 
 ## 1. The idea in one paragraph
@@ -9,11 +10,11 @@ The proposal's mockups were removed on 2026-11-01; the bar's goldens (`crates/sh
 One bar, on the left edge by default, holds everything that today lives in the Dock and the menu
 bar, in one fixed order from the top corner to the bottom corner: **launcher, the active app and
 its menus, the apps, Trash, workspaces, tray, Control Center, clock and notifications**. It is 64 pt
-wide by default and can be pinned open to 248 pt, where everything gets its name (a sidebar). The
+wide by default (56–80 pt with the Size slider) and has no wider mode. The
 same model is drawn horizontally at the bottom or top. People who want the classic split keep a
 separate top menu bar with one switch. App menus live behind the active app's header as one
 cascading menu that filters as soon as you type (no visible field), the same search also opens with `Shift+Super+/` from
-anywhere, and in the expanded bar the menu titles are listed as rows.
+anywhere.
 
 ## 2. Prior art: what worked and what failed
 
@@ -49,30 +50,29 @@ Sources fetched or searched in this session: Haiku, Unity/HUD, Windows 2026 task
    (hover-only, search-only, app menu nobody opens) fails. A clearly marked, always-present entry
    that opens the full menu is the floor; search is the ceiling.
 4. **Do not rotate text.** Vertical labels read badly; every label in the bar is horizontal. The
-   narrow bar uses icons + short captions; names appear on hover or in the expanded width.
+   narrow bar uses icons + short captions; names appear on hover.
 5. **Density by grouping, not shrinking.** Four status glyphs as one button beats four 16 pt
    targets; tray items in a 2-column grid; "+N" and "•••" for overflow, never silent hiding.
-6. **Two sizes, not four layouts.** Haiku's four Deskbar modes are a cautionary tale. Collapsed and
-   expanded, on any edge, plus "separate menu bar" for those who want it.
+6. **One width, not four layouts.** Haiku's four Deskbar modes are a cautionary tale. One width
+   (the Size slider), on any edge, plus "separate menu bar" for those who want it.
 
 ## 3. The design
 
 ### 3.1 Order (left edge; top to bottom)
 
-| # | Region | Collapsed (64 pt) | Expanded (248 pt) | Click | Right click |
-|---|---|---|---|---|---|
-| 1 | **Mark / launcher** (top corner) | Bande mark, 64×52 cell touching the corner | Mark + search field "Search  ⟨Super Space⟩" | Opens the launcher (same as `Super+Space`; centred card as today) | System menu: About This Computer, System Settings…, Force Quit…, Sleep, Restart…, Shut Down…, Lock Screen, Log Out *user*… |
-| 2 | **App header** | Active app icon 24 pt, bold 11 pt name caption (ellipsised), `›` | Icon, bold app name, menu glyph; below it the app's menu titles as rows (File, Edit, View, …) | Opens the **app menu** (§3.3) | Same menu (it is the app's) |
-| 3 | **Apps** | Kept apps, hairline, running apps not kept. Icon 40 pt in 48 pt cells. Running: 4 pt dot at the edge; active app: 3×20 pt pill at the edge | 30 pt icon + name, badge on the right; active app row tinted, its windows listed below it as 22 pt rows (up to 6, then "n more") | As today's Dock: open or bring forward | As today's Dock icon menu |
-| 4 | **Trash** | Fixed after the apps, pinned to the bottom group | "Trash" row | Opens Trash in Files | Open, Empty Trash… |
-| 5 | **Workspaces** (only with 2+ workspaces) | Column of 6 pt dots, active one a 6×12 pill | "Desktops 1 2 3" pills | Click = switch; click active = overview | Overview, Add Desktop |
-| 6 | **Tray** (StatusNotifierItems) | 2 per row, 26 pt cells, 15 pt glyphs; beyond 3 items the 4th slot is `•••` | One row of icons; `•••` beyond 6 | Item's own menu | Item's own menu |
-| 7 | **Control Center** | Wi-Fi, sound, Bluetooth, battery as a 2×2 glyph grid inside **one** 52×58 button | One row: glyphs, then "Home-5G · 84 %", Control Center glyph | Opens Control Center | Wi-Fi glyph: network menu; sound: output menu; Bluetooth: devices; battery: battery menu (today's per-item menus, one step away) |
-| 8 | **Clock + notifications** (bottom corner) | "14:32" 15 pt semibold tabular, "Thu 30" 11 pt muted; 7 pt accent dot when unread | "14:32" 22 pt, "Thursday 30 October", bell with dot | Opens Notification Center | Date & Time settings, Do Not Disturb toggle |
+| # | Region | Bar (64 pt) | Click | Right click |
+|---|---|---|---|---|
+| 1 | **Mark / launcher** (top corner) | Bande mark, 64×52 cell touching the corner | Opens the launcher (same as `Super+Space`; centred card as today) | System menu: About This Computer, System Settings…, Force Quit…, Sleep, Restart…, Shut Down…, Lock Screen, Log Out *user*… |
+| 2 | **App header** | Active app icon 24 pt, bold 11 pt name caption (ellipsised), `›` | Opens the **app menu** (§3.3) | Same menu (it is the app's) |
+| 3 | **Apps** | Kept apps, hairline, running apps not kept. Icon 40 pt in 48 pt cells. Running: 4 pt dot at the edge; active app: 3×20 pt pill at the edge | As today's Dock: open or bring forward | As today's Dock icon menu |
+| 4 | **Trash** | Fixed after the apps, pinned to the bottom group | Opens Trash in Files | Open, Empty Trash… |
+| 5 | **Workspaces** (only with 2+ workspaces) | Column of 6 pt dots, active one a 6×12 pill | Click = switch; click active = overview | Overview, Add Desktop |
+| 6 | **Tray** (StatusNotifierItems) | 2 per row, 26 pt cells, 15 pt glyphs; beyond 3 items the 4th slot is `•••` | Item's own menu | Item's own menu |
+| 7 | **Control Center** | Wi-Fi, sound, Bluetooth, battery as a 2×2 glyph grid inside **one** 52×58 button | Opens Control Center | Wi-Fi glyph: network menu; sound: output menu; Bluetooth: devices; battery: battery menu (today's per-item menus, one step away) |
+| 8 | **Clock + notifications** (bottom corner) | "14:32" 15 pt semibold tabular, "Thu 30" 11 pt muted; 7 pt accent dot when unread | Opens Notification Center | Date & Time settings, Do Not Disturb toggle |
 
 Scrolling over the Control Center button changes volume (today's behaviour on the sound item).
-Battery percentage stays in the battery menu ("Show Percentage" item, roadmap decision) — in the
-expanded bar it is shown because there is room.
+Battery percentage stays in the battery menu ("Show Percentage" item, roadmap decision).
 
 Clock legibility: at 64 pt "14:32" in Inter 15 pt semibold is ~42 pt wide and fits on one line,
 so the time is never stacked digit-pairs at the default width (stacked hours over minutes, as in
@@ -84,11 +84,10 @@ the design-language draft, is the fallback below 56 pt width). A 12-hour locale 
 | Thing | Value |
 |---|---|
 | Collapsed width | `icon + 24`; default icon 40 → **64 pt**; Size slider icon 32–56 → width 56–80 |
-| Expanded width | **248 pt** (fixed; app names to ~22 characters, then ellipsis) |
 | Horizontal height | `icon + 16`; default **56 pt** |
 | App cell | 48 pt along the bar (icon + 8); shrinks to icon 36 / cell 44 before overflow |
 | Hairline separators | 1 pt, 32 pt long, 10 % label colour; only between groups |
-| Mark cell | 52 pt; header 58 pt (+ 28 pt per menu row in expanded) |
+| Mark cell | 52 pt; header 58 pt |
 | Status button | 52×58 pt (2×2 grid of 26 pt cells, 15 pt glyphs) |
 | Clock block | 52 pt |
 | Edge indicators | dot 4 pt; active pill 3×20 pt on the screen-edge side |
@@ -150,11 +149,7 @@ the bottom it opens upwards); uses the exported dbusmenu tree unchanged; costs o
 compared to the macOS strip, which the search removes for power users. It is NeXTSTEP's vertical
 menu, made modern with search.
 
-**B. Menu titles as rows in the expanded bar** — not an alternative but how A looks when the bar is
-pinned open: the menu titles are listed under the app name, each row opening its submenu
-directly (macOS's one-click reach to "Edit"). Collapsed bars cannot show them. The header row
-still opens the same cascade (and `Super+F2` the same), so typing to search works identically in
-both widths; the rows are the one-click shortcut into a single menu.
+**B. Menu titles as rows in an expanded bar.** Dropped with the expanded bar on 2026-11-01.
 
 **C. Menu search (HUD), `Shift+Super+/`.** A centred card like the launcher, listing every enabled item
 of the active app's menus by name, with its path ("Edit › Find") and shortcut; Return runs it,
@@ -181,12 +176,8 @@ empty or dead. Their in-window menus are unaffected.
 
 ### 3.4 Expanded mode
 
-Pinned, not hover. Hover-expanding sidebars move targets under the pointer and cover content
-(the reason the Dock spec rejects magnification). The collapsed bar keeps today's hover labels.
-Expanded is entered by dragging the bar's inner edge outward (snaps between 64 and 248), by the
-bar's background menu ("Show Names"), or in Settings. It reserves its width; windows reflow.
-Recommended on ≥ 2560 pt-wide screens; the first-run assistant can
-suggest it there, not force it.
+Removed on 2026-11-01 by the owner: it looked bad and was one more mode to support. The bar keeps
+its hover labels. A `config.kdl` that still says `names` loads and ignores it.
 
 ### 3.5 Panels slide out of the bar
 
@@ -219,8 +210,7 @@ mirrored.
   items gets "•••". The bottom group (Trash … clock) never scrolls or hides.
 - **Small screens (1366×768).** 64 pt is 4.7 % of width — still cheaper than 80 pt of height.
   The header keeps its place; six to eight apps fit before "+N" (`06`).
-- **Huge screens (3440×1440).** Expanded mode with window rows works as a vertical tab strip;
-  2.0 % (collapsed) or 7.2 % (expanded) of width.
+- **Huge screens (3440×1440).** The bar takes 2.0 % of the width.
 - **Multiple displays.** A bar on every display (roadmap A3 already wants the menu bar on every
   display and the Dock on the main one; one bar resolves that split). Each bar shows the same apps
   and status; the header follows the active app everywhere and is dimmed on displays that do not
@@ -236,7 +226,7 @@ mirrored.
   and Trash, reorder by drag after 4 pt, drag out to remove, drag apps from the launcher or Files
   into the kept group. New: dragging a file onto the app header hands it to the active app.
 - **Right click everywhere.** Every region has a menu (table in 3.1); the bar background menu
-  has Show Names, Automatically Hide, Position ▸ (Left, Bottom, Right, Top), Taskbar Settings….
+  has Automatically Hide, Position ▸ (Left, Bottom, Right, Top), Taskbar Settings….
 - **Keyboard.** `Super+F2`: app menu open with the first title selected (macOS Ctrl+F2 analogue,
   as today). `Super+F3`: the apps (today). `Shift+Super+/`: menu search. Inside the bar, Up/Down move
   within a region, Tab/Shift+Tab move between regions (launcher → header → apps → Trash →
@@ -265,7 +255,6 @@ Only where people genuinely differ:
 |---|---|---|
 | Position | Left (default), Bottom, Right, Top | Habit, screen shape and handedness differ; every precedent that removed this regretted it |
 | Size | slider, icon 32–56 pt | Eyesight and screen density differ |
-| Show names | off (default) / on (expanded) | Screen width differs by 2.5× between laptops and ultrawides |
 | Automatically hide | off (default) / on | Small-screen users want every point |
 | Menu bar | In the bar (default) / Separate, at the top | The one structural preference people hold strongly |
 
@@ -277,7 +266,6 @@ something, i.e. 2+ workspaces).
 bar {
     edge "left"
     size 40
-    names #false
     auto-hide #false
     menu-bar "in-bar"
     apps "org.bande.Files" "firefox" ...
@@ -338,8 +326,8 @@ bar {
 3. **App header + cascade menu** (A) with submenu safe-triangle, keyboard (`Super+F2`), right-click
    menus; fall-back content for apps without dbusmenu.
 4. **Menu search** in the cascade and `Shift+Super+/` card (needs compositor binding).
-5. **Combined mode on by default** on the left; Settings pane (5 controls); config migration.
-6. **Expanded mode** (names, inline menu rows, active app's window rows), drag-to-resize edge.
+5. **Combined mode on by default** on the left; Settings pane (4 controls); config migration.
+6. **Expanded mode**: built, then removed on 2026-11-01 (owner).
 7. **Horizontal layouts** (bottom/top) with inline menu titles and their collapse order.
 8. **Panels anchored to items** (Control Center, Notification Center) on every edge.
 9. **Multi-display, full screen, auto-hide polish** (depends on roadmap A3).
@@ -353,7 +341,7 @@ bar {
 
 - **One more click to reach a menu** in the collapsed bar (header → Edit → item) versus macOS's
   strip. Mitigated by search (`Shift+Super+/`), shortcuts shown everywhere, and inline titles when
-  expanded or horizontal.
+  horizontal.
 - **The Dock spec said the Dock is "not a clock or tray"**. The combined bar deliberately
   reverses that; the separate-menu-bar setting preserves the old split.
 - **Width on small laptops**: 64 pt on 1366 wide is 4.7 %; auto-hide is the escape, and the

@@ -186,7 +186,7 @@ Targets: body text Lc ≥ 90 in light; in dark Lc 75–90, because APCA gives Lc
 **UI text: Inter** (already installed, `fonts-inter`, SIL OFL), set apart from SF with Inter 4's own features:
 `cv05` (lowercase l with tail: disambiguates Il1 in file names), `cv08` (capital I with serifs), `ss07` and `ss08` (square punctuation and quotes: the square motif at the size of a full stop), and `tnum` wherever numbers are in columns (tables, clock, sizes, sliders). parley already sets `FontFeatures`, so this is a one-line change in `text.rs`.
 
-**Display and voice: Manrope** (`fonts-manrope`, Debian main, SIL OFL; weights 200–800). It is a modern geometric grotesk with open apertures and a slightly wide stance, clearly not SF Pro Display. It is used from 15 pt up: window titles, page titles, alert headings, the lock screen and the expanded bar's clock. It is what makes a screenshot recognisable as Bande.
+**Display and voice: Manrope** (`fonts-manrope`, Debian main, SIL OFL; weights 200–800). It is a modern geometric grotesk with open apertures and a slightly wide stance, clearly not SF Pro Display. It is used from 15 pt up: window titles, page titles, alert headings and the lock screen. It is what makes a screenshot recognisable as Bande.
 
 **Mono: JetBrains Mono** (`fonts-jetbrains-mono`, OFL; with `zero` slashed) replaces DejaVu Sans Mono in the terminal and code.
 
@@ -303,11 +303,11 @@ A dry, short, *wooden-percussive* palette: soft-attack mallet and click tones un
 
 ## 13. The shell: the combined bar
 
-The combined-bar mockups (not kept) put an edge-anchored bar of 64 pt on the left (expandable to 248 with labels) holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
+The combined-bar mockups (not kept) put an edge-anchored bar of 64 pt on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
 - Bar surface = `chassis` (same tone as window frames, so the bar reads as the desktop's frame), with a 1 pt `edge` on the inner side only, square at the screen edge. It is opaque; "Tinted chassis" applies here too.
-- **Active app = a 3×16 accent tick** on the screen-edge side; **running = a 3×3 `ink2` square** (the square motif; a dot would be macOS). The expanded bar's app rows use the sidebar row spec (28/32 pt, `well` selection radius 6).
+- **Active app = a 3×16 accent tick** on the screen-edge side; **running = a 3×3 `ink2` square** (the square motif; a dot would be macOS).
 - The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 14 panels).
-- The collapsed clock is Inter 15/600 tnum stacked "14 / 32"; the expanded one is Manrope 22/700 with the date in Callout.
+- The clock is Inter 15/600 tnum stacked "14 / 32".
 - The mark is a "U" of seven 4.5 pt squares in `ink` (mockups); the signal-blue dot in the researcher's "U" mark becomes the ember square if a colour is wanted.
 - Bar pop-overs (Control Center, calendar, notifications) are `overlay` panels with radius 14 that slide out from the bar along its normal axis (`standard`).
 - Horizontal placement uses the same rules with the tick on the bottom edge.

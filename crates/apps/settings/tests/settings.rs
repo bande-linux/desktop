@@ -318,7 +318,6 @@ fn changes_are_written_through_org_bande_config() {
         (SettingId::KeyRepeatDelay, Value::Number(300)),
         (SettingId::BarIconSize, Value::Number(52)),
         (SettingId::BarAutoHide, Value::Flag(true)),
-        (SettingId::BarNames, Value::Flag(true)),
         (SettingId::BarMenuBar, keyword("separate")),
         (SettingId::ReduceMotion, Value::Flag(true)),
         (SettingId::Zoom, Value::Flag(true)),

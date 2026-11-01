@@ -625,7 +625,6 @@ pub struct Bar {
     pub apps: Vec<String>,
     pub auto_hide: bool,
     pub icon_size: u32,
-    pub names: bool,
     pub menu_bar: MenuBarPlacement,
 }
 
@@ -636,7 +635,6 @@ impl Default for Bar {
             apps: DEFAULT_BAR_APPS.map(str::to_owned).to_vec(),
             auto_hide: false,
             icon_size: DEFAULT_BAR_ICON_SIZE,
-            names: false,
             menu_bar: MenuBarPlacement::InBar,
         }
     }
@@ -1115,7 +1113,7 @@ impl Parser<'_> {
                 }
                 "apps" => bar.apps = self.app_ids(child)?,
                 "auto-hide" => bar.auto_hide = self.flag(child)?,
-                "names" => bar.names = self.flag(child)?,
+                "names" => {}
                 "size" => bar.icon_size = self.integer_in(child, BAR_ICON_SIZE_RANGE)?,
                 "menu-bar" => {
                     bar.menu_bar = self.keyword(

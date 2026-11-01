@@ -104,7 +104,6 @@ pub struct Taskbar {
     bus: Inbox<BusEvent>,
     trash: Option<TrashWatch>,
     session: Option<Connection>,
-    names: bool,
     output: String,
 }
 
@@ -795,7 +794,6 @@ impl Taskbar {
                     }
                 }
                 BusEvent::Edge(edge) => self.move_to(window, edge, now),
-                BusEvent::Names(names) => self.names = names,
                 BusEvent::Launcher(app_id, update) => {
                     self.state
                         .borrow_mut()
@@ -818,17 +816,6 @@ impl Taskbar {
 
     pub fn has_menu(&self) -> bool {
         self.menu.is_some()
-    }
-
-    pub fn names(&self) -> bool {
-        self.names
-    }
-
-    pub fn set_names(&mut self, names: bool) {
-        self.names = names;
-        if let Some(session) = &self.session {
-            bus::write_names(session.clone(), names);
-        }
     }
 
     pub fn set_menu_open(&mut self, open: bool) {
@@ -1114,7 +1101,6 @@ impl Taskbar {
             bus: inbox,
             trash: TrashWatch::start(),
             session: session.cloned(),
-            names: config.names,
             output: output.to_owned(),
         };
         taskbar.follow_windows(window);

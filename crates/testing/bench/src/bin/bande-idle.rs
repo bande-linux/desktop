@@ -95,8 +95,16 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let home = match tempfile::tempdir() {
+        Ok(home) => home,
+        Err(error) => {
+            eprintln!("bande-idle: cannot make a home folder: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
+        std::env::set_var("HOME", home.path());
     }
     bande_log::init("bande-idle");
     match run() {
@@ -136,8 +144,7 @@ fn options() -> Result<Options, Box<dyn Error>> {
 
 fn run() -> Result<bool, Box<dyn Error>> {
     let options = options()?;
-    let home = tempfile::tempdir()?;
-    let mut session = Session::start(&options.binaries, home.path())?;
+    let mut session = Session::start(&options.binaries)?;
     let result = measure_cases(&mut session, &options);
     session.stop();
     let cases = result?;
@@ -212,7 +219,7 @@ fn now() -> Duration {
 }
 
 impl Session {
-    fn start(binaries: &Path, home: &Path) -> Result<Self, Box<dyn Error>> {
+    fn start(binaries: &Path) -> Result<Self, Box<dyn Error>> {
         let mut server = Compositor::new(Size::from(OUTPUT))?;
         server.set_output_scale(SCALE);
         server.set_lock_screen(&beside(binaries, LOCK_SCREEN)?);
@@ -226,7 +233,6 @@ impl Session {
         };
         for service in SERVICES {
             let child = Command::new(binaries.join(service))
-                .env("HOME", home)
                 .stdout(Stdio::null())
                 .spawn()
                 .map_err(|error| format!("cannot start {service}: {error}"))?;
@@ -250,17 +256,16 @@ impl Session {
                 find_executable(app)
                     .ok_or_else(|| format!("{app} is neither built nor installed"))?
             };
-            session.open_app(&executable, home)?;
+            session.open_app(&executable)?;
             session.wait_for_window(app_id)?;
         }
         Ok(session)
     }
 
-    fn open_app(&mut self, executable: &Path, home: &Path) -> Result<(), Box<dyn Error>> {
+    fn open_app(&mut self, executable: &Path) -> Result<(), Box<dyn Error>> {
         let (client_end, server_end) = UnixStream::pair()?;
         self.server.insert_client(server_end)?;
         let child = Command::new(executable)
-            .env("HOME", home)
             .env("WAYLAND_SOCKET", "0")
             .env_remove("WAYLAND_DISPLAY")
             .stdin(Stdio::from(OwnedFd::from(client_end)))

@@ -59,6 +59,18 @@ fn create_private_dir(path: &Path) -> io::Result<()> {
         .create(path)
 }
 
+fn owned_dir(path: &Path, uid: u32) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_dir() && metadata.uid() == uid)
+}
+
+fn usable_root(root: &Path, uid: u32) -> bool {
+    owned_dir(root, uid)
+        && ["files", "info"].iter().all(|part| {
+            let path = root.join(part);
+            fs::symlink_metadata(&path).is_err() || owned_dir(&path, uid)
+        })
+}
+
 impl TrashDir {
     pub fn home(root: PathBuf) -> Self {
         Self { root, topdir: None }
@@ -70,9 +82,7 @@ impl TrashDir {
             .is_ok_and(|metadata| metadata.is_dir() && metadata.permissions().mode() & STICKY != 0);
         if usable_shared {
             let root = shared.join(uid.to_string());
-            if create_private_dir(&root).is_ok()
-                && fs::symlink_metadata(&root).is_ok_and(|metadata| metadata.is_dir())
-            {
+            if create_private_dir(&root).is_ok() && usable_root(&root, uid) {
                 return Ok(Self {
                     root,
                     topdir: Some(topdir.to_path_buf()),
@@ -81,8 +91,7 @@ impl TrashDir {
         }
         let root = topdir.join(format!(".Trash-{uid}"));
         create_private_dir(&root)?;
-        let metadata = fs::symlink_metadata(&root)?;
-        if !metadata.is_dir() || metadata.uid() != uid {
+        if !usable_root(&root, uid) {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 "the volume's trash folder is not usable",
@@ -405,14 +414,16 @@ impl Trash {
     }
 
     fn dirs(&self) -> Vec<TrashDir> {
-        let uid = self.uid.to_string();
+        let uid = self.uid;
         let mut dirs = vec![self.home.clone()];
         for topdir in mount_points() {
-            for root in [
-                topdir.join(".Trash").join(&uid),
-                topdir.join(format!(".Trash-{uid}")),
-            ] {
-                if !dirs.iter().any(|known| known.root == root) && root.join("info").is_dir() {
+            let shared = topdir.join(".Trash");
+            let shared_is_dir = fs::symlink_metadata(&shared).is_ok_and(|metadata| metadata.is_dir());
+            for root in [shared.join(uid.to_string()), topdir.join(format!(".Trash-{uid}"))] {
+                let real = (shared_is_dir || !root.starts_with(&shared))
+                    && usable_root(&root, uid)
+                    && root.join("info").is_dir();
+                if real && !dirs.iter().any(|known| known.root == root) {
                     dirs.push(TrashDir {
                         root,
                         topdir: Some(topdir.clone()),

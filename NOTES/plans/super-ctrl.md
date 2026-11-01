@@ -11,7 +11,7 @@ shell. The compositor hardly changes, and third-party apps need no change at all
 
 - Copy is `Super+C` in Files, Terminal, Settings and the launcher, but `Ctrl+C` in VS Code,
   Zed, Claude and Firefox. All four are pinned in the bar (`~/.config/bande/config.kdl`).
-- In an Bande text field, `Ctrl+C`, `Ctrl+V`, `Ctrl+A` and `Ctrl+Z` do nothing.
+- In a Bande text field, `Ctrl+C`, `Ctrl+V`, `Ctrl+A` and `Ctrl+Z` do nothing.
   `Ctrl+Left` does not move by a word.
 - In lists, Ctrl+click opens the context menu instead of adding the item to the selection.
 - The keyboard is a Microsoft PC keyboard, not an Apple one (`/proc/bus/input/devices`:

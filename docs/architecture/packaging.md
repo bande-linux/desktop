@@ -36,7 +36,7 @@ profiles. Sizes are tracked in [performance.md](performance.md).
   `libpam-gnome-keyring`, Qt's portal platform theme (so Qt apps follow dark mode), the everyday apps a fresh install needs (`firefox-esr`,
   `gnome-text-editor`, `loupe`, `papers`, `showtime`, `gnome-calculator`), `fonts-inter`,
   `xdg-user-dirs`, `upower` and `udisks2`, and suggests `gnome-clocks`. It installs
-  `/usr/share/applications/bande-mimeapps.list`, read only in an Bande session, which
+  `/usr/share/applications/bande-mimeapps.list`, read only in a Bande session, which
   opens folders in Files, web pages in Firefox, text in Text Editor, pictures in Loupe, PDFs
   in Papers and videos in Showtime; a person's own choice in `~/.config/mimeapps.list` still
   wins. The `install` jobs install without the third-party recommends and check that each of

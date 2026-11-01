@@ -135,6 +135,30 @@ fn a_higher_directory_replaces_and_extends_the_globs_below() {
 }
 
 #[test]
+fn a_fifo_is_named_by_its_kind_without_being_opened() {
+    let (_user, _system, database) = database();
+    let files = TempDir::new().expect("files");
+    let fifo = files.path().join("pipe");
+    rustix::fs::mknodat(
+        rustix::fs::CWD,
+        &fifo,
+        rustix::fs::FileType::Fifo,
+        rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
+        0,
+    )
+    .expect("fifo");
+
+    let (sender, named) = std::sync::mpsc::channel();
+    std::thread::spawn(move || sender.send(database.for_path(&fifo)));
+    assert_eq!(
+        named
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .as_deref(),
+        Ok("inode/fifo")
+    );
+}
+
+#[test]
 fn contents_decide_when_the_name_says_nothing_or_is_ambiguous() {
     let (_user, _system, database) = database();
     let files = TempDir::new().expect("files");

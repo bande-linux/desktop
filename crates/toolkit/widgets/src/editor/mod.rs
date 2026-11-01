@@ -685,13 +685,17 @@ impl Editor {
         selection: &TextSelection,
         owner: WidgetId,
     ) -> bool {
+        if self.preedit.is_some() {
+            return false;
+        }
         let locate = |position: &TextPosition| {
             let index = WidgetId::owner_of_part(position.node)
                 .filter(|(id, _)| *id == owner)
                 .map(|(_, part)| part as usize)?;
             let run = runs.get(index)?;
             let text = self.layout_text(run.paragraph);
-            let offset = text[run.range.clone()]
+            let offset = text
+                .get(run.range.clone())?
                 .char_indices()
                 .nth(position.character_index)
                 .map_or(run.range.end, |(at, _)| run.range.start + at);

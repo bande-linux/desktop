@@ -554,6 +554,42 @@ fn a_text_field_publishes_its_text_and_caret_to_assistive_technology() {
 }
 
 #[test]
+fn assistive_technology_cannot_move_the_caret_into_a_reading_being_composed() {
+    let mut editing = Editing::field("ab");
+    editing.send(Event::Preedit {
+        text: "日本".to_owned(),
+        cursor: Some((6, 6)),
+    });
+    let tree = editing.ui.accessibility();
+    let field = tree
+        .nodes
+        .iter()
+        .find(|(node, _)| *node == NodeId::from(editing.id))
+        .map(|(_, node)| node.clone())
+        .expect("field node");
+    let run_id = field.children()[0];
+    let past_the_text = TextPosition {
+        node: run_id,
+        character_index: 4,
+    };
+    assert!(!editing.ui.perform(&request(
+        editing.id.into(),
+        Action::SetTextSelection,
+        Some(ActionData::SetTextSelection(TextSelection {
+            anchor: past_the_text,
+            focus: past_the_text,
+        })),
+    )));
+
+    editing.send(Event::Commit("日本".to_owned()));
+    editing.send(Event::Preedit {
+        text: String::new(),
+        cursor: None,
+    });
+    assert_eq!(editing.text(), "ab日本");
+}
+
+#[test]
 fn a_text_view_wraps_inserts_new_lines_and_moves_between_lines_keeping_the_column() {
     let mut editing = Editing::view("");
     editing.type_text("first line\nsecond\nthird line here");

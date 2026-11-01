@@ -171,6 +171,21 @@ fn a_volume_trash_uses_a_shared_sticky_folder_or_a_private_one() {
 }
 
 #[test]
+fn a_volume_trash_whose_files_folder_is_a_link_is_not_used() {
+    let place = Place::new();
+    let uid = rustix::process::getuid().as_raw();
+    let volume = place.path("volume");
+    let elsewhere = place.file("documents/report.txt", "keep");
+    let trash = volume.join(format!(".Trash-{uid}"));
+    fs::create_dir_all(trash.join("info")).expect("info");
+    std::os::unix::fs::symlink(elsewhere.parent().expect("folder"), trash.join("files"))
+        .expect("link");
+
+    assert!(TrashDir::for_volume(&volume, uid).is_err());
+    assert_eq!(read(&elsewhere), "keep");
+}
+
+#[test]
 fn copies_keep_contents_permissions_times_and_links() {
     let place = Place::new();
     let script = place.file("src/bin/run.sh", "#!/bin/sh\n");

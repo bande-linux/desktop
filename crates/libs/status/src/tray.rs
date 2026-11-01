@@ -97,7 +97,7 @@ pub fn split(id: &str) -> (&str, &str) {
 
 pub fn pixmap_rgba(width: i32, height: i32, argb: &[u8]) -> Option<TrayIcon> {
     let (width, height) = (u32::try_from(width).ok()?, u32::try_from(height).ok()?);
-    if argb.len() != (width * height * 4) as usize || width == 0 {
+    if Some(argb.len()) != (width as usize).checked_mul(height as usize * 4) || width == 0 {
         return None;
     }
     let rgba = argb
@@ -139,7 +139,7 @@ fn fetch(connection: &Connection, id: &str) -> Option<TrayItem> {
             .and_then(|pixmaps| {
                 pixmaps
                     .into_iter()
-                    .min_by_key(|(width, _, _)| (width - ICON_PIXELS).abs())
+                    .min_by_key(|(width, _, _)| width.abs_diff(ICON_PIXELS))
             })
             .and_then(|(width, height, argb)| pixmap_rgba(width, height, &argb))
             .unwrap_or(TrayIcon::Missing),

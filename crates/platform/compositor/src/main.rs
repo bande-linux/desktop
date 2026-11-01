@@ -9,9 +9,9 @@ use bande_compositor::{
     SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
     export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
     follow_session, follow_shutdown, follow_sleep, notify_service_manager, serve_keyboard_monitor,
-    watchdog_keepalive_interval,
+    user_config, watchdog_keepalive_interval,
 };
-use bande_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
+use bande_config::{BUS_NAME, OBJECT_PATH};
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
 use smithay::backend::udev::{UdevBackend, UdevEvent};
 use smithay::reexports::calloop::channel::{self, Event};
@@ -144,15 +144,6 @@ fn run_headless(session: Session, started: Duration, buses: Buses) -> Result<(),
 
 fn window_memory() -> Option<PathBuf> {
     bande_xdg::state_home().map(|state| state.join("bande/windows"))
-}
-
-fn display_config() -> Config {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    config_path(config_home.as_deref(), home.as_deref())
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|source| Config::parse(&source).ok())
-        .unwrap_or_default()
 }
 
 fn follow_display_settings(
@@ -300,7 +291,7 @@ fn run_drm(
     for output in outputs {
         compositor.add_output(output);
     }
-    compositor.set_display_config(display_config());
+    compositor.set_display_config(user_config().unwrap_or_default());
     if !compositor.enable_explicit_sync(backend.device_fd()) {
         tracing::warn!(
             "{} has no syncobj eventfd; explicit sync is off",
@@ -356,8 +347,10 @@ fn run_drm(
             "the display settings",
             |sender| follow_display_settings(session, sender),
             |app, ()| {
-                app.compositor.set_display_config(display_config());
-                sync_heads(app);
+                if let Some(config) = user_config() {
+                    app.compositor.set_display_config(config);
+                    sync_heads(app);
+                }
             },
         )?;
     }
@@ -528,7 +521,8 @@ fn start_user_session<O: 'static>(
                 .report_start_failure(Path::new(executable), &error);
         }
     }
-    app.compositor.apply_input_settings(InputSettings::read());
+    app.compositor
+        .apply_input_settings(InputSettings::read().unwrap_or_else(InputSettings::system));
     let handle = event_loop.handle();
     if let Some(bus) = app.buses.session.clone() {
         follow_session_bus(&handle, app, &bus)?;

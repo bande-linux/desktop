@@ -47,6 +47,13 @@ fn widely_scattered_letters_do_not_match() {
 }
 
 #[test]
+fn a_pasted_wall_of_brackets_is_not_a_calculation() {
+    let deep = format!("{}1{}", "(".repeat(200_000), ")".repeat(200_000));
+    assert_eq!(calculate(&deep), None);
+    assert_eq!(calculate(&"-".repeat(200_000)), None);
+}
+
+#[test]
 fn the_calculator_evaluates_arithmetic_with_precedence() {
     assert_eq!(calculate("2+3*4").as_deref(), Some("14"));
     assert_eq!(calculate("(2+3)*4").as_deref(), Some("20"));

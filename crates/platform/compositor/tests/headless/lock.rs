@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use crate::support::*;
 use bande_compositor::{BACKGROUND, Compositor, Renderer, Vblank};
-use bande_test_wayland::{BLUE, RED, TestClient, roundtrip};
+use bande_test_wayland::{BLUE, ConstraintAdjustment, PopupRequest, RED, TestClient, roundtrip};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 const WINDOW: (i32, i32) = (64, 48);
@@ -96,6 +96,61 @@ fn while_locked_only_the_lock_surface_is_drawn_and_receives_input() {
     assert_eq!(editor.buttons().len(), clicks_before);
     assert!(lock.keys().contains(&(KEY_A, true)));
     assert!(!editor.keyboard_focus_on(0));
+}
+
+#[test]
+fn a_grabbing_popup_cannot_take_the_keyboard_from_the_lock_surface() {
+    let (mut server, mut editor) = focused_app();
+    let mut lock = locker(&mut server);
+    lock.lock_session(&mut server);
+    lock.show_lock_surface(&mut server, BLUE);
+    roundtrip(&mut server, &mut [&mut lock, &mut editor]);
+
+    let popup = editor.open_popup(
+        &mut server,
+        &PopupRequest {
+            parent: 0,
+            anchor_rect: (0, 0, 1, 1),
+            size: (20, 20),
+            adjustment: ConstraintAdjustment::empty(),
+            grab: true,
+            color: RED,
+        },
+    );
+    server.key(KEY_A, true, 1);
+    server.key(KEY_A, false, 2);
+    roundtrip(&mut server, &mut [&mut lock, &mut editor]);
+
+    assert!(editor.popup_dismissed(popup));
+    assert!(editor.keys().is_empty());
+    assert!(lock.lock_surface_has_keyboard());
+    assert!(lock.keys().contains(&(KEY_A, true)));
+}
+
+#[test]
+fn an_input_method_keyboard_grab_does_not_see_keys_typed_into_the_lock_screen() {
+    let (mut server, mut editor) = focused_app();
+    let mut input_method = TestClient::connect(&mut server);
+    input_method.use_seat(&mut server);
+    input_method.become_input_method(&mut server);
+    input_method.grab_keyboard(&mut server);
+    let mut lock = locker(&mut server);
+    lock.lock_session(&mut server);
+    lock.show_lock_surface(&mut server, BLUE);
+    roundtrip(
+        &mut server,
+        &mut [&mut lock, &mut editor, &mut input_method],
+    );
+
+    server.key(KEY_A, true, 1);
+    server.key(KEY_A, false, 2);
+    roundtrip(
+        &mut server,
+        &mut [&mut lock, &mut editor, &mut input_method],
+    );
+
+    assert!(input_method.grabbed_keys().is_empty());
+    assert!(lock.keys().contains(&(KEY_A, true)));
 }
 
 #[test]

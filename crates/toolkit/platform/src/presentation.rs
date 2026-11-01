@@ -73,7 +73,8 @@ fn vblank_at_or_after(anchor: Instant, refresh: Duration, earliest: Instant) -> 
 }
 
 fn monotonic_instant(seconds: u64, nanoseconds: u32) -> Instant {
-    let at = Duration::new(seconds, nanoseconds);
+    let at =
+        Duration::from_secs(seconds).saturating_add(Duration::from_nanos(u64::from(nanoseconds)));
     let now = Instant::now();
     let clock = clock_gettime(ClockId::Monotonic);
     let clock = Duration::new(
@@ -82,7 +83,7 @@ fn monotonic_instant(seconds: u64, nanoseconds: u32) -> Instant {
     );
     match clock.checked_sub(at) {
         Some(age) => now.checked_sub(age).unwrap_or(now),
-        None => now + (at - clock),
+        None => now.checked_add(at - clock).unwrap_or(now),
     }
 }
 
@@ -169,6 +170,13 @@ mod tests {
         let (presentation, at) = presentation(Duration::from_millis(6));
         let frame = presentation.frame_time(at + 100 * REFRESH + Duration::from_millis(1), false);
         assert_eq!(frame.presentation, at + 101 * REFRESH);
+    }
+
+    #[test]
+    fn a_presentation_time_far_in_the_future_is_taken_as_now() {
+        let before = Instant::now();
+        let at = monotonic_instant(u64::MAX, 999_999_999);
+        assert!(at >= before && at <= Instant::now());
     }
 
     #[test]

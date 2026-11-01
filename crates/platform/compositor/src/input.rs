@@ -687,6 +687,9 @@ impl State {
         } else {
             KeyState::Released
         };
+        if state.is_locked() && keyboard.is_grabbed() {
+            keyboard.unset_grab(state);
+        }
         let before = keyboard.modifier_state();
         let action = keyboard.input(
             state,

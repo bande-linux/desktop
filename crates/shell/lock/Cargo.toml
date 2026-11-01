@@ -41,7 +41,7 @@ assets = [
     ["data/bande-lock.pam", "etc/pam.d/bande-lock", "644"],
 ]
 extended-description = """\
-The lock screen of the Bande desktop. Control-Super-Q, or the session \
+The lock screen of the Bande desktop. Super+L, or the session \
 going idle or to sleep, starts it; it covers every output through \
 ext-session-lock-v1 and unlocks once PAM accepts the user's password."""
 

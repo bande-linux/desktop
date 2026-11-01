@@ -5,7 +5,7 @@ if [ "${JOURNAL_STREAM:-}" != "$(stat -L -c %d:%i /proc/self/fd/2)" ]; then
 fi
 
 if systemctl --user --quiet is-active bande-compositor.service; then
-    echo "bande-session: an Bande session is already running" >&2
+    echo "bande-session: a Bande session is already running" >&2
     exit 1
 fi
 

@@ -70,7 +70,7 @@ stop_session() {
     fi
     if pgrep -u "$(id -u)" -x bande-composi >/dev/null; then
         if [ "$take_over" != 1 ]; then
-            echo "run.sh: an Bande compositor runs outside the session service (the console session);" >&2
+            echo "run.sh: a Bande compositor runs outside the session service (the console session);" >&2
             echo "run.sh: pass --take-over to stop it for the recording" >&2
             exit 1
         fi

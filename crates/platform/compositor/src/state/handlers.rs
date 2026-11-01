@@ -372,6 +372,14 @@ impl WlrLayerShellHandler for State {
         _layer: Layer,
         namespace: String,
     ) {
+        let trusted = surface
+            .wl_surface()
+            .client()
+            .is_some_and(|client| shell::is_shell(&client));
+        let namespace = match trusted {
+            true => namespace,
+            false => format!("app/{namespace}"),
+        };
         let screen = output
             .as_ref()
             .and_then(|output| {

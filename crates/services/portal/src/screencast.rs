@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+use zbus::message::Header;
 use zbus::object_server::{ObjectServer, SignalEmitter};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
 
+use crate::from_frontend;
 use crate::request::{self, CANCELLED, Cancellation, OTHER, SUCCESS};
 
 pub const MONITOR: u32 = 1;
@@ -188,6 +190,8 @@ impl ScreenCast {
         app_id: String,
         options: Options,
         #[zbus(object_server)] server: &ObjectServer,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: Header<'_>,
     ) -> (u32, Results) {
         let path = OwnedObjectPath::from(session_handle.to_owned());
         let types = option(&options, "types").unwrap_or(MONITOR);
@@ -206,7 +210,11 @@ impl ScreenCast {
             return (OTHER, Results::new());
         }
         let persist_mode = option::<u32>(&options, "persist_mode").unwrap_or(0).min(2);
-        let restored = match restored_ids(&options) {
+        let restorable = match restored_ids(&options) {
+            Some(ids) if from_frontend(connection, &header).await => Some(ids),
+            _ => None,
+        };
+        let restored = match restorable {
             Some(ids) => {
                 let backend = Arc::clone(&self.backend);
                 blocking::unblock(move || backend.resolve(&ids)).await

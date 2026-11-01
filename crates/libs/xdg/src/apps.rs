@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use crate::entry::{DesktopEntry, Locale, current_desktops, handlers};
@@ -113,12 +114,23 @@ impl Apps {
     }
 
     pub fn launcher(&self, path: &Path, mime: &str) -> Option<DesktopEntry> {
-        if mime != DESKTOP_ENTRY {
+        if mime != DESKTOP_ENTRY || !self.trusts_launcher(path) {
             return None;
         }
         let text = fs::read_to_string(path).ok()?;
         let id = path.file_name()?.to_string_lossy().into_owned();
         DesktopEntry::parse_handler(&id, path, &text, self.locale.as_ref(), &current_desktops())
+    }
+
+    fn trusts_launcher(&self, path: &Path) -> bool {
+        let installed = self
+            .data_dirs
+            .iter()
+            .any(|dir| path.starts_with(dir.join("applications")));
+        installed
+            || fs::metadata(path).is_ok_and(|metadata| {
+                metadata.uid() == rustix::process::getuid().as_raw() && metadata.mode() & 0o111 != 0
+            })
     }
 
     pub fn data_dirs(&self) -> &[PathBuf] {

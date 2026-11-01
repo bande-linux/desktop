@@ -345,3 +345,16 @@ fn a_blurred_region_is_clipped_to_its_rounded_shape() {
     assert_eq!(at(&pixels, 30, 20), [0, 0, 0, 255]);
     assert!(at(&pixels, 30, 30)[0] > 0);
 }
+
+#[test]
+fn a_texture_wider_than_the_device_allows_is_refused() {
+    let mut renderer = VulkanRenderer::new().expect("Vulkan renderer");
+    let side = i32::try_from(renderer.device_info().max_image_side).expect("side") + 1;
+    let row = RED.repeat(usize::try_from(side).expect("width"));
+
+    assert!(
+        renderer
+            .import_memory(&row, Fourcc::Abgr8888, Size::from((side, 1)), false)
+            .is_err()
+    );
+}

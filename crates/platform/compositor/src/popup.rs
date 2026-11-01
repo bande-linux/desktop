@@ -142,9 +142,10 @@ impl State {
         let Some(seat) = Seat::<State>::from_resource(seat) else {
             return;
         };
-        if self
-            .menu_root()
-            .is_some_and(|menu| menu.client() != popup.wl_surface().client())
+        if self.is_locked()
+            || self
+                .menu_root()
+                .is_some_and(|menu| menu.client() != popup.wl_surface().client())
         {
             popup.send_popup_done();
             return;

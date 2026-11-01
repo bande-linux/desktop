@@ -203,6 +203,7 @@ fn a_persisted_selection_is_restored_without_asking_again() {
 
     let second = "/org/freedesktop/portal/desktop/session/1_42/t";
     fixture.create(second);
+    let restore_data_again = restore_data.try_clone().expect("clone");
     let restore = Value::from(restore_data);
     assert_eq!(
         fixture.select(
@@ -216,6 +217,19 @@ fn a_persisted_selection_is_restored_without_asking_again() {
     );
     assert_eq!(fixture.backend.picks.load(Ordering::SeqCst), 1);
     assert_eq!(fixture.start(second).0, 0);
+
+    fixture
+        .portal
+        .client
+        .release_name(xdg_desktop_portal_bande::FRONTEND)
+        .expect("release");
+    let third = "/org/freedesktop/portal/desktop/session/1_42/u";
+    fixture.create(third);
+    fixture.select(
+        third,
+        Options::from([("restore_data", Value::from(restore_data_again))]),
+    );
+    assert_eq!(fixture.backend.picks.load(Ordering::SeqCst), 2);
 }
 
 #[test]

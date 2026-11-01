@@ -569,3 +569,45 @@ fn a_new_time_zone_replans_the_automatic_appearance_at_once() {
     }
     assert_eq!(fixture.color_scheme(), wanted);
 }
+
+#[test]
+fn gtk_puts_the_window_controls_on_the_left_in_our_order() {
+    let fixture = start("");
+
+    assert_eq!(
+        fixture.string("org.gnome.desktop.wm.preferences", "button-layout"),
+        "close,minimize,maximize:"
+    );
+}
+
+fn scheme_block(css: &str, scheme: &str) -> String {
+    css.split(&format!("@media (prefers-color-scheme: {scheme})"))
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .unwrap_or_default()
+        .to_owned()
+}
+
+#[test]
+fn gtk_window_controls_take_the_colours_of_our_title_bar_in_each_scheme() {
+    let css = gtk::stylesheet(Accent::Plum, Scheme::Light);
+    for (query, scheme) in [("light", Scheme::Light), ("dark", Scheme::Dark)] {
+        let palette = Palette::generate(scheme, Accent::Plum, Contrast::Standard);
+        let block = scheme_block(&css, query);
+        for (name, color) in [
+            ("bande-well", palette.well),
+            ("bande-hairline", palette.hairline),
+            ("bande-ink", palette.ink),
+            ("bande-ink2", palette.ink2),
+            ("bande-ink3", palette.ink3),
+            ("bande-danger", palette.danger),
+        ] {
+            assert!(
+                block.contains(&format!("--{name}: {};", hex(color))),
+                "{query}: {block}"
+            );
+        }
+    }
+    assert!(css.contains("windowcontrols {"));
+    assert!(css.contains("font-family: \"Manrope\";\n  font-size: 15px;\n  font-weight: 700;"));
+}

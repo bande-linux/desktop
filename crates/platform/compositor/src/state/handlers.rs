@@ -426,6 +426,12 @@ impl WlrLayerShellHandler for State {
         self.needs_redraw = true;
         self.follow_panel_zones();
         self.follow_exclusive_layer(surface.wl_surface(), None);
+        let lost = surface.wl_surface();
+        if self.focused().is_some_and(|focused| {
+            &focused == lost || !focused.is_alive() || self.root_of(&focused).as_ref() == Some(lost)
+        }) {
+            self.focus_behind_layer();
+        }
     }
 }
 

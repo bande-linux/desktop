@@ -202,6 +202,7 @@ impl SessionLockHandler for State {
         self.close_overview();
         self.drop_window_menu();
         self.close_force_quit();
+        self.dismiss_assist();
         let previous = self.key_window();
         self.lock = Some(Lock {
             owner,

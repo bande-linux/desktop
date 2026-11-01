@@ -7,6 +7,7 @@ use smithay::input::pointer::{
     GestureHoldBeginEvent, GestureHoldEndEvent, GesturePinchBeginEvent, GesturePinchEndEvent,
     GesturePinchUpdateEvent, GestureSwipeBeginEvent, GestureSwipeEndEvent, GestureSwipeUpdateEvent,
 };
+use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, SERIAL_COUNTER};
 
@@ -293,10 +294,12 @@ impl State {
 
     fn hand_keyboard_over(&mut self, target: f64) {
         if target == 0.0 {
-            let previous = self.desktop.focus_before.take();
-            if previous.is_some() {
-                self.focus(previous);
-            }
+            let next = match self.desktop.focus_before.take() {
+                Some(previous) if previous.is_alive() => Some(previous),
+                Some(_) => self.frontmost(None),
+                None => return,
+            };
+            self.focus(next);
             return;
         }
         self.desktop.focus_before = self

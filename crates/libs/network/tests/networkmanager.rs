@@ -192,3 +192,38 @@ fn a_captive_portal_asks_to_sign_in_at_the_check_page() {
         Some(CHECK_URI.to_owned())
     );
 }
+
+#[test]
+fn a_profile_bound_to_a_renamed_interface_is_released_and_joined() {
+    let fixture = start();
+    fixture.fake.bind_saved("wlp1s0f0").expect("bind");
+    let studio = fixture.network("Studio");
+    assert_eq!(
+        fixture
+            .client
+            .join(&studio, Some(FakeNetworkManager::STUDIO_PASSWORD))
+            .expect("join"),
+        JoinOutcome::Joined
+    );
+    assert_eq!(fixture.fake.saved_interfaces(), [None]);
+    assert_eq!(
+        fixture.client.join(&studio, None).expect("rejoin"),
+        JoinOutcome::Joined
+    );
+}
+
+#[test]
+fn a_profile_bound_to_another_present_device_keeps_its_binding_and_says_why() {
+    let fixture = start();
+    fixture.fake.bind_saved("end0").expect("bind");
+    let studio = fixture.network("Studio");
+    let refusal = fixture
+        .client
+        .join(&studio, Some(FakeNetworkManager::STUDIO_PASSWORD))
+        .expect_err("refused");
+    assert!(
+        matches!(&refusal, Error::Refused(reason) if reason.contains("mismatching interface name")),
+        "{refusal:?}"
+    );
+    assert_eq!(fixture.fake.saved_interfaces(), [Some("end0".to_owned())]);
+}

@@ -14,7 +14,7 @@ use crate::{
 use accesskit::TreeUpdate;
 use bande_audio::{Audio, Level, Meter, meter_level};
 use bande_bluetooth::Bluetooth;
-use bande_inbox::Inbox;
+use bande_inbox::{Inbox, Outbox};
 use bande_network::NetworkManager;
 use bande_notify::client::NotificationCenter;
 use bande_power::logind::own_session;
@@ -68,6 +68,81 @@ pub struct ControlCenter {
     artwork: Option<(String, Option<Image>)>,
     meter: Option<Meter>,
     input_level: Rc<Cell<f32>>,
+    connected: Connected,
+    connected_updates: Inbox<Connected>,
+    refresh: Option<Sender<()>>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct Connected {
+    wifi: Option<bool>,
+    network: Option<String>,
+    sign_in: bool,
+    bluetooth: Option<bool>,
+    do_not_disturb: bool,
+}
+
+fn read_connected(
+    network: Option<&NetworkManager>,
+    bluetooth: Option<&Bluetooth>,
+    session: Option<&Connection>,
+) -> Connected {
+    let wifi = network.and_then(|network| {
+        network
+            .has_wifi()
+            .ok()
+            .filter(|has| *has)
+            .and_then(|_| network.wifi_enabled().ok())
+    });
+    Connected {
+        wifi,
+        network: network
+            .filter(|_| wifi == Some(true))
+            .and_then(|network| network.networks().ok())
+            .and_then(|networks| networks.into_iter().find(|found| found.current))
+            .map(|current| current.name()),
+        sign_in: network.is_some_and(|network| matches!(network.sign_in_page(), Ok(Some(_)))),
+        bluetooth: bluetooth.and_then(|bluetooth| {
+            bluetooth
+                .available()
+                .ok()
+                .filter(|available| *available)
+                .and_then(|_| bluetooth.powered().ok())
+        }),
+        do_not_disturb: session
+            .and_then(|session| NotificationCenter::new(session).ok())
+            .and_then(|center| center.do_not_disturb().ok())
+            .unwrap_or(false),
+    }
+}
+
+fn follow_connected(
+    session: Option<&Connection>,
+    system: Option<&Connection>,
+    outbox: Outbox<Connected>,
+) -> Option<Sender<()>> {
+    let (refresh, wanted) = mpsc::channel::<()>();
+    let (session, system) = (session.cloned(), system.cloned());
+    let started = std::thread::Builder::new()
+        .name("control-status".to_owned())
+        .spawn(move || {
+            let network = system.as_ref().map(NetworkManager::new);
+            let bluetooth = system.as_ref().map(Bluetooth::new);
+            while wanted.recv().is_ok() {
+                wanted.try_iter().count();
+                let read = read_connected(network.as_ref(), bluetooth.as_ref(), session.as_ref());
+                if !outbox.send(read) {
+                    break;
+                }
+            }
+        });
+    match started {
+        Ok(_) => Some(refresh),
+        Err(error) => {
+            tracing::warn!("Control Center does not follow Wi-Fi and Bluetooth: {error}");
+            None
+        }
+    }
 }
 
 fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
@@ -169,35 +244,13 @@ impl ControlCenter {
     }
 
     fn status(&self) -> Status {
-        let wifi = self.network.as_ref().and_then(|network| {
-            network
-                .has_wifi()
-                .ok()
-                .filter(|has| *has)
-                .and_then(|_| network.wifi_enabled().ok())
-        });
-        let network = self
-            .network
-            .as_ref()
-            .filter(|_| wifi == Some(true))
-            .and_then(|network| network.networks().ok())
-            .and_then(|networks| networks.into_iter().find(|found| found.current))
-            .map(|current| current.name());
-        let sign_in = self
-            .network
-            .as_ref()
-            .is_some_and(|network| matches!(network.sign_in_page(), Ok(Some(_))));
-        let bluetooth = self.bluetooth.as_ref().and_then(|bluetooth| {
-            bluetooth
-                .available()
-                .ok()
-                .filter(|available| *available)
-                .and_then(|_| bluetooth.powered().ok())
-        });
-        let do_not_disturb = self
-            .notification_center()
-            .and_then(|center| center.do_not_disturb().ok())
-            .unwrap_or(false);
+        let Connected {
+            wifi,
+            network,
+            sign_in,
+            bluetooth,
+            do_not_disturb,
+        } = self.connected.clone();
         let snapshot = self.audio.as_deref().map(Audio::snapshot);
         let output = snapshot
             .as_ref()
@@ -339,17 +392,19 @@ impl ControlCenter {
                 if let Some(network) = &self.network {
                     report("switch Wi-Fi", network.set_wifi_enabled(on));
                 }
-                self.rebuild();
+                self.refresh();
             }
             Change::Bluetooth(on) => {
                 if let Some(bluetooth) = &self.bluetooth {
                     report("switch Bluetooth", bluetooth.set_powered(on));
                 }
+                self.refresh();
             }
             Change::DoNotDisturb(on) => {
                 if let Some(center) = self.notification_center() {
                     report("switch Do Not Disturb", center.set_do_not_disturb(on));
                 }
+                self.refresh();
             }
             Change::Volume(volume) => {
                 let Some(audio) = &self.audio else {
@@ -509,6 +564,12 @@ impl ControlCenter {
         (ui, height)
     }
 
+    fn refresh(&self) {
+        if let Some(refresh) = &self.refresh {
+            let _ = refresh.send(());
+        }
+    }
+
     fn rebuild(&mut self) {
         if !matches!(self.mode, Mode::Panel { .. }) {
             return;
@@ -579,6 +640,7 @@ impl ControlCenter {
             height,
         };
         self.listen();
+        self.refresh();
         self.shown.jump_to(0.0);
         self.reveal(window, true);
     }
@@ -827,15 +889,22 @@ impl App for ControlCenter {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.player_updates.fd()]
+        vec![self.player_updates.fd(), self.connected_updates.fd()]
     }
 
-    fn source_ready(&mut self, window: &mut Window, _index: usize) {
-        let Some(latest) = self.player_updates.drain().pop() else {
-            return;
-        };
-        self.players.update(latest);
-        self.load_artwork();
+    fn source_ready(&mut self, window: &mut Window, index: usize) {
+        if index == 1 {
+            let Some(connected) = self.connected_updates.drain().pop() else {
+                return;
+            };
+            self.connected = connected;
+        } else {
+            let Some(latest) = self.player_updates.drain().pop() else {
+                return;
+            };
+            self.players.update(latest);
+            self.load_artwork();
+        }
         if matches!(self.mode, Mode::Panel { .. }) {
             self.rebuild();
             window.request_redraw();
@@ -887,6 +956,8 @@ impl ControlCenter {
         audio: Option<Arc<Audio>>,
     ) -> std::io::Result<Self> {
         let player_updates = Inbox::new()?;
+        let connected_updates = Inbox::new()?;
+        let refresh = follow_connected(session, system, connected_updates.outbox());
         let player_commands = session.map(|connection| {
             let (commands, received) = mpsc::channel();
             let (watching, outbox) = (connection.clone(), player_updates.outbox());
@@ -902,7 +973,7 @@ impl ControlCenter {
         window.set_input_region(Some(&[]));
         report("hide", window.hide());
         let appearance = window.appearance();
-        Ok(Self {
+        let center = Self {
             mode: Mode::Hidden,
             shown: Animated::new(0.0),
             surface_shown: false,
@@ -925,6 +996,11 @@ impl ControlCenter {
             artwork: None,
             meter: None,
             input_level: Rc::default(),
-        })
+            connected: Connected::default(),
+            connected_updates,
+            refresh,
+        };
+        center.refresh();
+        Ok(center)
     }
 }

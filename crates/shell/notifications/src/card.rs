@@ -2,8 +2,8 @@ use bande_datetime::DateFormats;
 use bande_notify::Notification;
 use bande_toolkit::ui::focus_ring_for;
 use bande_toolkit::{
-    Color, ControlSize, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, Scheme,
-    Shape, Spacing, TextAlign, TextRole, TextStyle, TextSystem,
+    Color, ControlSize, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, Shape,
+    Spacing, TextAlign, TextRole, TextStyle, TextSystem,
 };
 use jiff::Zoned;
 
@@ -463,11 +463,5 @@ pub(crate) fn surface_with_edge(
         shape,
         paint: fill.into(),
     });
-    if palette.scheme == Scheme::Dark {
-        items.push(Item::Stroke {
-            shape: Shape::rounded(shape.rect.inset(0.5), shape.radius - 0.5),
-            width: 1.0,
-            paint: palette.hairline.into(),
-        });
-    }
+    items.extend(Item::rim(shape, palette));
 }

@@ -118,7 +118,7 @@ impl Text {
             Tone::Primary => cx.palette.ink,
             Tone::Muted => cx.palette.ink2,
             Tone::Faint => cx.palette.ink3,
-            Tone::Danger => cx.palette.danger,
+            Tone::Danger => cx.palette.danger_text,
         };
         let style = match self.role {
             Some(role) => TextStyle::role(role, color),
@@ -1288,7 +1288,7 @@ impl Widget for Check {
                 let at = Point::new(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
                 items.push(Item::Fill {
                     shape: Shape::rounded(Rect::new(at.x - 1.0, at.y - 1.0, 2.0, 2.0), 1.0),
-                    paint: cx.palette.accent.into(),
+                    paint: cx.palette.accent_text.into(),
                 });
             }
         };
@@ -1434,7 +1434,7 @@ impl Widget for Thumbnails {
                 items.push(Item::Stroke {
                     shape: Shape::rounded(rect.inset(-3.0), THUMBNAIL_RADIUS + 3.0),
                     width: 3.0,
-                    paint: cx.palette.accent.into(),
+                    paint: cx.palette.accent_text.into(),
                 });
                 if cx.is_focused(self.id) {
                     focus_ring(

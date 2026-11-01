@@ -8,7 +8,7 @@ use resvg::{tiny_skia, usvg};
 use vello_cpu::{PixelMetadata, Pixmap};
 
 use crate::text::Paragraph;
-use bande_design::{Color, Elevation, Scheme};
+use bande_design::{Color, Elevation, Palette, Scheme};
 
 const SYMBOLIC_INK: &str = "#201E1A";
 
@@ -351,6 +351,14 @@ impl Item {
                 blur_radius: shadow.blur,
                 color: Color::BLACK.with_opacity(shadow.opacity),
             })
+    }
+
+    pub fn rim(shape: Shape, palette: &Palette) -> Option<Self> {
+        (palette.scheme == Scheme::Dark).then(|| Self::Stroke {
+            shape: Shape::rounded(shape.rect.inset(0.5), shape.radius - 0.5),
+            width: 1.0,
+            paint: palette.rim.into(),
+        })
     }
 }
 

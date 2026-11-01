@@ -199,7 +199,7 @@ impl SettingsView {
                         Some(Swatch {
                             label: choice.label.clone(),
                             light: accent.color(Scheme::Light),
-                            dark: accent.color(Scheme::Dark),
+                            dark: accent.fill(Scheme::Dark),
                         })
                     })
                     .collect();

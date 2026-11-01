@@ -99,6 +99,23 @@ fn while_locked_only_the_lock_surface_is_drawn_and_receives_input() {
 }
 
 #[test]
+fn locking_closes_force_quit_so_it_cannot_take_keys_from_the_lock_surface() {
+    let (mut server, mut editor) = focused_app();
+    server.show_force_quit();
+    let mut lock = locker(&mut server);
+    lock.lock_session(&mut server);
+    lock.show_lock_surface(&mut server, BLUE);
+    roundtrip(&mut server, &mut [&mut lock, &mut editor]);
+
+    server.key(KEY_A, true, 1);
+    server.key(KEY_A, false, 2);
+    roundtrip(&mut server, &mut [&mut lock, &mut editor]);
+
+    assert!(server.force_quit_frame().is_none());
+    assert!(lock.keys().contains(&(KEY_A, true)));
+}
+
+#[test]
 fn a_grabbing_popup_cannot_take_the_keyboard_from_the_lock_surface() {
     let (mut server, mut editor) = focused_app();
     let mut lock = locker(&mut server);

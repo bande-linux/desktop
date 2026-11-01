@@ -314,3 +314,95 @@ Decided overnight 2026-11-01: Super+W and Super+Q stay as compositor-level close
 3. Milestone 10: should a tap of Super open the launcher, should Alt+Tab work, and should
    Super+arrows tile as in GNOME? The recommendation is yes to all three, since the owner's
    note asks for "like normal linux distros".
+
+## Follow-up 2026-11-01
+
+The owner, on the installed main (`0.0.0+git20261101.1357.6b95e86`, which has `b36cc67a` and
+`dedef2bc`): the gap is "finished but not in reality", Super still runs a lot of shortcuts. He
+wants the GNOME/KDE model: Ctrl for app actions, `Alt+F4`/`Alt+Tab`, and Super only for the
+system, with `Super+Space` opening the launcher.
+
+### Findings
+
+- **Bande's own apps no longer react to Super+letter.** Every app key handler (toolkit text
+  fields, secure fields, tables, Files, Terminal, desktop, file chooser) returns early when Super
+  is held, and the compositor translates nothing (no Super->Ctrl rewrite, no XKB option such as
+  `altwin:ctrl_win`). Unbound Super chords are forwarded to the focused client, as GNOME does.
+- **What the owner still sees is the compositor's table.** The overnight run kept every macOS
+  chord as a "system shortcut": `Super+W` close, `Super+Q` quit, `Super+H` hide, `Alt+Super+H`
+  hide others, `Super+M` minimize, `Ctrl+Super+F` full screen, `Ctrl+Super+Q` lock,
+  `Shift+Super+3/4/5` screenshots, `Ctrl+Super+Space` emoji, `Alt+Super+Escape` force quit,
+  `Super+F11` show desktop, `Super+F5` screen reader, `Alt+Super+0` zoom. These are app actions
+  or Mac habits on Super; Settings ▸ Keyboard ▸ Shortcuts lists them, and the menus show them
+  (bar app menu Hide `Super+H`, Quit `Super+Q`; system menu Lock `Ctrl+Super+Q`; window menus
+  Minimize `Super+M`, Full Screen `Ctrl+Super+F`, Quit `Super+Q`; the `app-menu` standard
+  items Hide `Super+H`, Hide Others `Alt+Super+H`, Minimize `Super+M`; the text field's
+  Emoji item `Ctrl+Super+Space`).
+- **Pointer modifiers are still macOS's.** Drag and drop: Alt copies and Super moves
+  (`compositor/src/drag.rs`). Moving a window from anywhere needs `Ctrl+Super`+drag
+  (`compositor/src/grab.rs`); GNOME and KDE use Super+drag.
+- **Live config** (`~/.config/bande/config.kdl`): no shortcut or keyboard-binding overrides
+  (only `keyboard { caps-lock "escape" }`), so nothing stale overrides the defaults. bande-config
+  ships no KDL defaults for shortcuts; the table is compiled in (`bande-keyboard`).
+- **Outside this repo:** the `apps` repo's Mail (installed, `bande-mail 0.1.0-1`) and Calendar
+  still label and handle Super shortcuts (`apps/mail/src/menus.rs`, `ui/view.rs:1214` takes
+  Super or Ctrl, `apps/calendar/src/main.rs`). Not changed here; a follow-up for that repo.
+- Docs still describe the Super app shortcuts in `docs/design/features/*` (Files, windows, bar),
+  `docs/experience/*`, `compositor.md`, `behaviour.md`, `session.md` and the ADR.
+
+### Inventory and fix
+
+Every Super chord in the compositor (`compositor/src/input.rs`), the table
+(`libs/keyboard/src/shortcuts.rs`) and the labels. "System" means it stays on Super.
+
+| Chord today | Action | Verdict | New chord (convention) |
+| :--- | :--- | :--- | :--- |
+| Super tap, `Super+Space` | launcher | system | keep (owner); add `Super+A` (GNOME app grid) |
+| `Super+W` | close window | app action | removed; `Alt+F4` and the app's `Ctrl+W` |
+| `Super+Q` | quit app | app action | removed; the app's `Ctrl+Q` |
+| `Super+H` | hide app | Mac habit | removed (menu item stays, no chord) |
+| `Alt+Super+H` | hide others | Mac habit | removed (menu item stays, no chord) |
+| `Super+M` | minimize | system | `Super+H` (GNOME) |
+| `Ctrl+Super+F` | full screen | system | `Super+F11` |
+| `Super+Left/Right/Up/Down` | tile, maximize, restore | system | keep (GNOME) |
+| `Alt+Shift+Super+arrows` | move to display | system | `Shift+Super+arrows` (GNOME, KDE) |
+| `Super+Tab`, `Alt+Tab` | switch apps | system | keep (GNOME) |
+| ``Super+` `` | next window of the app | system | keep (GNOME) |
+| `Alt+Super+Escape` | force quit | system | `Ctrl+Alt+Escape` (KDE) |
+| `Alt+Super+Left/Right` | previous/next workspace | system | `Ctrl+Super+Left/Right` (KDE, Windows) |
+| `Alt+Super+1..9` | workspace by number | system | `Ctrl+Super+1..9` |
+| `Ctrl+Shift+Super+Left/Right` | carry window to workspace | system | keep |
+| `Alt+Super+Up` | overview | system | `Super+W` (KDE) and the Mission Control key |
+| `Alt+Super+Down` | app windows | system | keep (no GNOME/KDE equivalent) |
+| `Super+F11` | show desktop | system | `Super+D` (KDE, Windows, Ubuntu) |
+| `Alt+Super+Space` | input source | system | keep (`Super+Space` is the launcher) |
+| `Shift+Super+3` | capture screen | Mac habit | `Shift+Print` (GNOME) |
+| `Shift+Super+4` | capture area | Mac habit | `Shift+Super+S` (KDE, Windows) |
+| `Shift+Super+5`, `Print` | capture options | Mac habit | `Print` only (GNOME, KDE) |
+| `Shift+Super+V` | clipboard history | system | `Super+V` (KDE, Windows) |
+| `Ctrl+Super+Space` | emoji picker | Mac habit | `Super+.` (KDE, Windows) |
+| `Super+F2`, `Super+F3` | focus menu bar, taskbar | system | keep (no equivalent) |
+| `Shift+Super+/` | search menus | system | keep |
+| `Alt+Super+N` | notification center | system | `Super+N` (Windows; GNOME focuses notifications) |
+| `Alt+Super+C` | control center | system | `Super+S` (GNOME quick settings) |
+| `Ctrl+Super+Q` | lock | system | `Super+L` (GNOME, KDE) |
+| `Alt+Super+0` | zoom on/off | system | `Alt+Super+8` (GNOME) |
+| `Alt+Super+=/-` | zoom in/out | system | keep (GNOME) |
+| `Super+F5` | screen reader | system | `Alt+Super+S` (GNOME) |
+| Alt / Super while dragging | copy / move a drop | Mac habit | Ctrl copies, Shift moves (GTK, KDE) |
+| `Ctrl+Super`+drag | move/resize a window from anywhere | system | `Super`+drag (GNOME, KDE) |
+
+Labels follow: window menus (Minimize `Super+H`, Full Screen `Super+F11`, next display
+`Shift+Super+Right`, Quit without a chord), the bar (Lock `Super+L`, Hide and Hide Others
+without a chord, a third-party app's Quit `Ctrl+Q`), `app-menu` (Hide and Hide Others without a
+chord, Minimize `Super+H`), the text field's Emoji item `Super+.`.
+
+### Milestones
+
+1. Compositor chords, the Settings table, the pointer modifiers and every label above; remove the
+   Hide, Hide Others and Quit app shortcuts from the compositor. Tests first: the table test
+   (`every_shortcut_listed_in_settings_runs_its_action`), headless tests that `Super+W`,
+   `Super+Q` and `Super+C` reach the client untouched, that `Super+L` locks, `Super+D` shows the
+   desktop, `Super+A` opens the launcher, `Ctrl`-drag copies and `Shift`-drag moves.
+2. ADR 0005, `overview.md`, `compositor.md`, `behaviour.md`, `session.md` and the feature docs.
+3. Owner steps: rebuild and install the desktop (`rebuild-desktop`), then log out and in.

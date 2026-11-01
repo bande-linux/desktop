@@ -3,7 +3,7 @@ Hand written notes by a user when gaps are found. These need to be properly inve
 Status values: open, planning, planned, started, finished, dropped.
 
 swap Super->Ctrl like normal linux distros
-Status: finished ([plans/super-ctrl.md](plans/super-ctrl.md))
+Status: started ([plans/super-ctrl.md](plans/super-ctrl.md)); left: Super only for the system set (Follow-up 2026-11-01), docs
 
 keep in dock doesnt work for everything, for example launching -code- from terminal should still be able to save to dock. Also dock should be renamed to taskbar
 Status: finished ([plans/keep-in-taskbar.md](plans/keep-in-taskbar.md))

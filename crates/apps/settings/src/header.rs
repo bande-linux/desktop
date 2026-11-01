@@ -61,11 +61,7 @@ impl SettingsView {
     fn sidebar_row(&mut self, id: PaneId, label: Text, searching: bool) -> Box<dyn Widget> {
         let selected = id == self.pane || (!searching && self.pane.parent() == Some(id));
         let palette = self.palette();
-        let tint = if selected {
-            palette.accent
-        } else {
-            palette.ink2
-        };
+        let tint = if selected { palette.ink } else { palette.ink2 };
         let symbol = self.symbol(id.symbol(), SIDEBAR_SYMBOL, tint);
         let mut select = intent(&self.intents, Intent::SelectPane);
         let row = SidebarRow::new(

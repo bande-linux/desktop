@@ -145,6 +145,7 @@ pub struct Context {
     pub text: TextSystem,
     pub palette: Palette,
     pub keyboard_navigation: bool,
+    pub window_active: bool,
     pub reduce_motion: bool,
     pub caps_lock: bool,
     focus: Option<WidgetId>,
@@ -173,6 +174,7 @@ impl Context {
             text,
             palette,
             keyboard_navigation: false,
+            window_active: true,
             reduce_motion: false,
             caps_lock: false,
             focus: None,
@@ -650,6 +652,12 @@ impl Ui {
         let on_screen = (self.clock)().on_screen();
         self.cx.now = on_screen;
         self.cx.start = on_screen;
+    }
+
+    pub fn set_window_active(&mut self, active: bool) -> bool {
+        let changed = self.cx.window_active != active;
+        self.cx.window_active = active;
+        changed
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {

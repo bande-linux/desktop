@@ -261,11 +261,11 @@ impl App for Files {
                 }
                 true
             }
-            WindowEvent::Focus(true) => {
-                if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
+            WindowEvent::Focus(focused) => {
+                if focused && let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
                     tracing::warn!("{error}");
                 }
-                false
+                self.view.set_window_active(focused)
             }
             WindowEvent::MenuClosed => {
                 self.view.menu_closed();

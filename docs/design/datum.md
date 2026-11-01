@@ -118,8 +118,8 @@ Defined in **OKLCH** and generated, Linear-style, from a few inputs: a neutral h
 | `chassis` | `#ECEAE7` (L .938) | `#1F2329` (L .255) | window frame, sidebar, title bar, combined bar |
 | `sheet` | `#FCFBF9` (L .988) | `#272A30` (L .285) | content inside windows, Settings content, document background |
 | `overlay` | `#FFFFFF` | `#34373C` (L .335) | menus, popovers, notifications, alert body |
-| `well` | `#E2DFDB` (L .905) | `#31343A` (L .325) | control fill (buttons, segmented track, window-control well, search), unfocused selection |
-| `hairline` | `#D4D0CB` | `#3B3F45` (L .365) | separators |
+| `well` | `#E2DFDB` (L .905) | `#31343A` (L .325) | control fill (buttons, segmented track, window-control well, search), unfocused selection, sidebar selection |
+| `hairline` | `#D4D0CB` | `#3B3F45` (L .365) | separators, sidebar selection with keyboard focus |
 | `rim` | (= hairline) | `#494D54` (L .42) | the 1 pt edge of floating dark surfaces (sheet, menus, notifications, launcher, Control Center, labels); none in light |
 | `edge` | `#BAB7B2` | `#575B62` (L .47) | window and control outlines; raised chip in dark segmented |
 | `ink` | `#201E1A` | `#E4E6EA` (L .925) | primary text and glyphs |
@@ -224,7 +224,7 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 - **Alt held**: zoom shows a "+" (zoom to fit) instead of brackets, following DESIGN §1's progressive disclosure.
 - The hit target is the full 24×21 cell; the whole well area to the screen corner is clickable when maximised (Fitts).
 
-**Sidebar**: on `chassis` (part of the frame). It uses tracked labels ("PLACES"), 16 pt line symbols in `ink2`, a 28 pt row and a `well`-filled selection with radius 6. The selected symbol turns accent. Content selection (on the sheet) is accent-filled, so "where I am" (grey) and "what I picked" (signal) are never confused.
+**Sidebar**: on `chassis` (part of the frame). It uses tracked labels ("PLACES"), 16 pt line symbols in `ink2`, a 28 pt row and a tone-only selection with radius 6: `well` in the active window, `hairline` while the sidebar has the keyboard, and `well` halfway to `chassis` in an inactive window. The selected symbol turns `ink`; sidebar rows get no accent and no focus ring. Content selection (on the sheet) is accent-filled, so "where I am" (grey) and "what I picked" (signal) are never confused.
 
 **Sheet**: content on `sheet`, radius 8, inset 6.
 

@@ -51,6 +51,7 @@ impl App for FileDialog {
                 self.view.set_appearance(appearance);
                 true
             }
+            WindowEvent::Focus(focused) => self.view.set_window_active(focused),
             _ => false,
         };
         if redraw {

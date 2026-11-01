@@ -95,8 +95,7 @@ the commit. Fix the kernel and the image. Ship no disk swap by default.
    `Image modules` built with `kbuild`.
 2. **images**: done. `systemd-zram-generator` and `systemd-oomd` (with PackageKit, locales,
    Noto, BlueZ and the PipeWire Bluetooth plugin) are on the `mmdebstrap --include` list in
-   `build.sh` on `prep/os-installable`, the branch the image is built from (the repo has no
-   `main`). No image was built: that needs CI.
+   `build.sh` on `main`, the branch the image is built from. No image was built: that needs CI.
 3. **This mini**: waits on the owner. Install a kernel built from `bande-hw/integration`, then
    `sudo apt install systemd-oomd` (`systemd-zram-generator` is already installed), upgrade
    `bande-desktop`, reboot, and run the checks in step 3.

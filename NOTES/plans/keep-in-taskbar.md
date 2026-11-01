@@ -45,6 +45,11 @@ launcher; the interface, docs and code say taskbar (`bande-taskbar-model`, `task
 `taskbar_client.rs`, the layer namespace `taskbar`, `Action::FocusTaskbar`; the compositor's app
 operations live in `apps.rs`). The bar-level `keep.rs` test of milestone 4 is not written;
 `bande-xdg` tests the written launcher.
+Fixed 2026-11-01: kept Electron apps (VS Code, Claude) did not start from the taskbar. The
+compositor started the shell without `XDG_SESSION_TYPE` and `XDG_CURRENT_DESKTOP`, so apps the
+shell launched inherited neither; Electron then chose X11 and exited ("Missing X server or
+$DISPLAY"). From Terminal they worked only because `~/.bashrc` exports `XDG_SESSION_TYPE`. Session
+clients now get both.
 
 0. **Dependency: the bar reloads desktop entries** (`taskbar-icons.md` milestone 1, owned there). Land it first. On its own it fixes the owner's VS Code case. When it lands, also reload in `menu_bar_client.rs:759`, so the active app's name is right too. Suggest that plan put the watcher in `bande_xdg` so the bar, menu bar and launcher share it.
 

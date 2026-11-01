@@ -48,14 +48,14 @@ fn a_hidden_app_fades_out_loses_the_keyboard_and_comes_back_when_activated() {
 }
 
 #[test]
-fn super_h_hides_the_focused_app_and_show_app_brings_it_back_without_the_keyboard() {
+fn hiding_the_focused_app_and_show_app_brings_it_back_without_the_keyboard() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
     let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
     let mut menu_bar = shell(&mut server);
     settle(&mut server, 1000);
 
-    super_key(&mut server, KEY_H);
+    menu_bar.hide_app(&mut server, EDITOR);
     settle(&mut server, 1000);
     editor.exchange(&mut server);
     let hidden = pixel(&mut renderer, &mut server, 110, 80);
@@ -128,7 +128,7 @@ fn the_taskbar_learns_which_windows_are_minimised_and_can_bring_one_back() {
         .pop()
         .expect("a listed window");
 
-    super_key(&mut server, KEY_M);
+    super_key(&mut server, KEY_H);
     settle(&mut server, 1000);
     taskbar.exchange(&mut server);
     let minimized = pixel(&mut renderer, &mut server, 110, 80);

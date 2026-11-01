@@ -59,7 +59,7 @@ shot "terminal context menu"
 key escape
 wait 500ms
 note "Force Quit"
-key super+alt+escape
+key ctrl+alt+escape
 wait 2s
 shot "force quit"
 key escape

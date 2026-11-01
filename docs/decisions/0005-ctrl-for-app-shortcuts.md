@@ -1,6 +1,6 @@
 # Ctrl for App Shortcuts: Decision Record
 
-Status: **decided** (2026-11-01). Scope: which modifier runs shortcuts in Bande's own apps, text
+Status: **decided** (2026-11-01, amended the same day after the owner's review). Scope: which modifier runs shortcuts in Bande's own apps, text
 fields and shell, and which is left to the system. Replaces the "Super acts as Command" keyboard
 model of the [overview](../architecture/overview.md#keyboard-model).
 
@@ -36,32 +36,44 @@ model of the [overview](../architecture/overview.md#keyboard-model).
 
 Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell.
 
-- **Super keeps every system shortcut**, every row of the table in `bande-keyboard`: the launcher
-  (`Super+Space`), the switcher, workspaces, the overview, tiling, screenshots
-  (`Shift+Super+3/4/5`), panels, lock (`Ctrl+Super+Q`), Hide (`Super+H`), Minimize (`Super+M`),
-  and `Super+W` and `Super+Q` as close and quit that work in any app. `Alt+F4` also closes the
-  focused window.
+- **Super is only for the system**, in GNOME and KDE's chords, and nothing an app does (close,
+  quit, copy, paste, save, find, tabs) is on Super. The set, every row of the table in
+  `bande-keyboard`:
+  - launcher: a tap of Super, `Super+Space` (kept by the owner) and `Super+A`; clipboard history
+    `Super+V`; emoji `Super+.`; Notification Center `Super+N`; Control Center `Super+S`;
+    lock `Super+L`; menu bar and taskbar `Super+F2`/`Super+F3`; menu search `Shift+Super+/`;
+  - windows: `Alt+F4` close, `Super+H` minimize, `Super+Left/Right/Up/Down` tile, maximize and
+    restore, `Super+F11` full screen, `Shift+Super+arrows` to the display beside, Super+drag
+    moves and Super+right drag resizes;
+  - apps: `Super+Tab` and `Alt+Tab` switch, ``Super+` `` the app's next window,
+    `Ctrl+Alt+Escape` Force Quit;
+  - workspaces: `Ctrl+Super+Left/Right`, `Ctrl+Super+1..9`, `Ctrl+Shift+Super+Left/Right`
+    carries the window, `Super+W` the overview, `Alt+Super+Down` the app's windows, `Super+D`
+    the desktop;
+  - input sources `Alt+Super+Space`; screenshots `Print` (options), `Shift+Print` (screen),
+    `Shift+Super+S` (area); zoom `Alt+Super+8`, `Alt+Super+=`/`-`; screen reader `Alt+Super+S`.
+
+  Unbound Super chords reach the focused app, as in GNOME.
 - **Text fields** follow the Linux rules: `Ctrl+C/X/V/A`; `Ctrl+Z` undo, `Shift+Ctrl+Z` and
   `Ctrl+Y` redo; `Ctrl+Left/Right` by word, `Home`/`End` to the line ends, `Ctrl+Home/End` to the
   text ends, `Ctrl+Up/Down` by paragraph; `Ctrl+Backspace/Delete` delete a word. Alt and Super are
   not used in text fields.
 - **Ctrl+click** toggles an item in a selection. It is no longer a right click.
-- **App standard items**: Close Window `Ctrl+W` and Quit `Ctrl+Q`, handled inside the app. Hide
-  and Minimize stay on Super.
+- **App standard items**: Close Window `Ctrl+W` and Quit `Ctrl+Q`, handled inside the app.
+  Minimize is `Super+H`; Hide and Hide Others stay in the app menu without a chord.
 - **Apps take GNOME's bindings** where Linux convention differs from a plain swap: Files follows
   Nautilus (`Delete` to the Trash, `Alt+Up` to the enclosing folder, `Alt+Left/Right` back and
   forward, `Ctrl+L` Go to Folder, `Ctrl+H` hidden files, `F2` rename); Terminal puts its commands
   on `Shift+Ctrl` and sends every plain Ctrl+letter to the shell; Settings goes back with
   `Alt+Left`.
 - **Shortcut labels are words** in GNOME order (Shift, Ctrl, Alt, Super): "Shift+Ctrl+N",
-  "Alt+Super+H", "Page Up", "Esc", arrows as arrow symbols. The ⌃⌥⇧ symbols and the Super glyph
+  "Alt+Super+8", "Page Up", "Esc", arrows as arrow symbols. The ⌃⌥⇧ symbols and the Super glyph
   are gone.
 
 ## Consequences
 
 - Muscle memory from VS Code, Firefox and the terminal works the same in Bande's apps.
-- Drag and drop keeps its modifiers: Alt copies and Super moves, as Option and Command do on
-  macOS. Ctrl does not change a drop.
+- Drag and drop takes GTK and KDE's modifiers: Ctrl copies and Shift moves.
 - One parser in `widgets/src/shortcut.rs` reads a menu's shortcut string ("Shift+Ctrl+N") back
   into a key and modifiers. Terminal's menu labels are tested against its key handling with it;
   in the other apps a label and its handler are still written separately and must be changed
@@ -69,9 +81,11 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
 - On a non-Latin layout Ctrl+C does not match yet, because the toolkit matches the shifted
   keysym. This held for Super before, so it is not a regression; the compositor's Latin fallback
   is the fix when a non-Latin source is added.
-- Open, by the owner's choice: a tap of Super alone opening the launcher, `Alt+Tab` beside
-  `Super+Tab`, and `Super+Left/Right/Up` tiling as in GNOME. Super+arrows are free now that text
-  fields no longer use them.
+- The first version of this decision kept the macOS system chords on Super (`Super+W` close,
+  `Super+Q` quit, `Super+H` hide, `Super+M` minimize, `Ctrl+Super+Q` lock, `Shift+Super+3/4/5`
+  screenshots, `Ctrl+Super+Space` emoji, `Alt+Super+Escape` Force Quit). The owner found that
+  Super still ran a lot of shortcuts, so the amendment above replaced them with the GNOME and
+  KDE chords (`NOTES/plans/super-ctrl.md`, Follow-up 2026-11-01).
 
 ## Sources
 

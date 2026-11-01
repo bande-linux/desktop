@@ -3,7 +3,6 @@ use bande_compositor::{ARROW_FILL, ARROW_OUTLINE, BACKGROUND, Compositor, Render
 use bande_test_wayland::{RED, TestClient, roundtrip};
 use smithay::utils::{Logical, Point, Size};
 
-const KEY_W: u32 = 17;
 const KEY_C: u32 = 46;
 const KEY_F4: u32 = 62;
 
@@ -135,15 +134,18 @@ fn clicking_the_empty_desktop_leaves_no_window_focused() {
 }
 
 #[test]
-fn super_w_asks_the_focused_window_to_close_instead_of_typing() {
+fn super_w_super_q_and_super_c_never_close_or_quit_the_app() {
     let mut server = server();
     let mut client = client_with_window(&mut server, 32);
 
-    chord(&mut server, KEY_W);
+    for key in [KEY_Q, KEY_C, KEY_W] {
+        chord(&mut server, key);
+    }
     client.exchange(&mut server);
 
-    assert!(client.close_requested(0));
-    assert!(!client.keys().iter().any(|(key, _)| *key == KEY_W));
+    assert!(!client.close_requested(0));
+    assert!(client.keys().contains(&(KEY_Q, true)));
+    assert!(client.keys().contains(&(KEY_C, true)));
 }
 
 #[test]
@@ -173,7 +175,7 @@ fn ctrl_shortcuts_reach_the_app_and_alt_f4_closes_it() {
 }
 
 #[test]
-fn a_window_that_inhibits_shortcuts_gets_super_w_instead_of_closing() {
+fn a_window_that_inhibits_shortcuts_gets_super_w_instead_of_the_overview() {
     let mut server = server();
     let mut client = client_with_window(&mut server, 32);
     client.inhibit_shortcuts(&mut server, 0);
@@ -181,26 +183,24 @@ fn a_window_that_inhibits_shortcuts_gets_super_w_instead_of_closing() {
     chord(&mut server, KEY_W);
     client.exchange(&mut server);
 
-    assert!(!client.close_requested(0));
+    assert!(!server.overview_shown());
     assert!(client.keys().contains(&(KEY_W, true)));
 }
 
 #[test]
-fn control_super_drag_moves_a_window_from_anywhere_inside_it() {
+fn super_drag_moves_a_window_from_anywhere_inside_it() {
     let mut server = server();
     let mut client = client_with_window(&mut server, 64);
     client.exchange(&mut server);
     let before = geometry(&server);
     let inside = before.loc + Point::from((32, 32));
 
-    server.key(KEY_LEFTCTRL, true, 0);
     server.key(KEY_LEFTMETA, true, 0);
     server.move_pointer_to(inside.to_f64(), 1);
     server.press_button(BTN_LEFT, true, 2);
     server.move_pointer_to((inside + Point::from((20, 15))).to_f64(), 3);
     server.press_button(BTN_LEFT, false, 4);
     server.key(KEY_LEFTMETA, false, 5);
-    server.key(KEY_LEFTCTRL, false, 5);
     client.exchange(&mut server);
 
     assert_eq!(geometry(&server).loc, before.loc + Point::from((20, 15)));
@@ -226,100 +226,16 @@ fn a_plain_drag_inside_a_window_reaches_the_app_and_leaves_the_window_in_place()
 }
 
 #[test]
-fn super_q_asks_every_window_of_the_focused_app_to_close() {
-    let mut server = server();
-    let mut other = client_with_window(&mut server, 128);
-    let mut app = client_with_window(&mut server, 32);
-    let pixels = solid(RED, (16, 16));
-    app.show_window(&mut server, &xrgb(&pixels, (16, 16)));
-    roundtrip(&mut server, &mut [&mut other, &mut app]);
-
-    chord(&mut server, KEY_Q);
-    roundtrip(&mut server, &mut [&mut other, &mut app]);
-
-    assert!(app.close_requested(0));
-    assert!(app.close_requested(1));
-    assert!(!other.close_requested(0));
-}
-
-#[test]
-fn super_q_quits_every_process_of_the_focused_app() {
-    let mut server = server();
-    let pixels = solid(RED, (32, 32));
-    let mut other = TestClient::connect(&mut server);
-    other.use_seat(&mut server);
-    other.show_window_of(&mut server, &xrgb(&pixels, (32, 32)), "org.example.Editor");
-    let mut first = TestClient::connect(&mut server);
-    first.use_seat(&mut server);
-    first.show_window_of(
-        &mut server,
-        &xrgb(&pixels, (32, 32)),
-        "org.example.Terminal",
-    );
-    let mut second = TestClient::connect(&mut server);
-    second.use_seat(&mut server);
-    second.show_window_of(
-        &mut server,
-        &xrgb(&pixels, (32, 32)),
-        "org.example.Terminal",
-    );
-    roundtrip(&mut server, &mut [&mut other, &mut first, &mut second]);
-
-    chord(&mut server, KEY_Q);
-    roundtrip(&mut server, &mut [&mut other, &mut first, &mut second]);
-
-    assert!(first.close_requested(0));
-    assert!(second.close_requested(0));
-    assert!(!other.close_requested(0));
-}
-
-#[test]
-fn super_q_quits_the_active_app_after_it_closed_its_last_window() {
-    let mut server = server();
-    let mut other = client_with_window(&mut server, 128);
-    other.take_app_requests(&mut server);
-    let mut app = client_with_window(&mut server, 32);
-    app.take_app_requests(&mut server);
-    roundtrip(&mut server, &mut [&mut other, &mut app]);
-    app.close_window(&mut server, 0);
-    roundtrip(&mut server, &mut [&mut other, &mut app]);
-
-    chord(&mut server, KEY_Q);
-    roundtrip(&mut server, &mut [&mut other, &mut app]);
-
-    assert_eq!(app.quit_requests(), 1);
-    assert_eq!(other.quit_requests(), 0);
-}
-
-#[test]
-fn super_q_asks_an_app_that_takes_app_requests_to_quit_once_and_closes_nothing() {
-    let mut server = server();
-    let mut other = client_with_window(&mut server, 128);
-    other.take_app_requests(&mut server);
-    let mut app = client_with_window(&mut server, 32);
-    app.take_app_requests(&mut server);
-    let pixels = solid(RED, (16, 16));
-    app.show_window(&mut server, &xrgb(&pixels, (16, 16)));
-    roundtrip(&mut server, &mut [&mut other, &mut app]);
-
-    chord(&mut server, KEY_Q);
-    roundtrip(&mut server, &mut [&mut other, &mut app]);
-
-    assert_eq!(app.quit_requests(), 1);
-    assert!(!app.close_requested(0));
-    assert!(!app.close_requested(1));
-    assert_eq!(other.quit_requests(), 0);
-}
-
-#[test]
-fn super_option_escape_opens_force_quit_without_typing_escape() {
+fn ctrl_alt_escape_opens_force_quit_without_typing_escape() {
     let mut server = server();
     let mut client = client_with_window(&mut server, 32);
     server.set_force_quit(std::path::Path::new("/bin/true"));
 
+    server.key(KEY_LEFTCTRL, true, 18);
     server.key(KEY_LEFTALT, true, 19);
-    chord(&mut server, KEY_ESC);
+    tap(&mut server, KEY_ESC);
     server.key(KEY_LEFTALT, false, 22);
+    server.key(KEY_LEFTCTRL, false, 23);
     client.exchange(&mut server);
     let upkeep = server.keep_session_clients_running();
 

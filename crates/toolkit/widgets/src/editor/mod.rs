@@ -734,7 +734,7 @@ impl Editor {
             MenuItem::separator(),
             item("select-all", "Ctrl+A", !self.is_empty()),
             MenuItem::separator(),
-            item("emoji-and-symbols", "Ctrl+Super+Space", true),
+            item("emoji-and-symbols", "Super+.", true),
         ])
     }
 

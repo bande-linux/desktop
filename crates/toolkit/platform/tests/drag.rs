@@ -27,8 +27,8 @@ const FOLDER_ROW: f32 = 30.0;
 const COPY_ONLY_ROW: f32 = 100.0;
 const REPORT: &str = "file:///home/user/Report%20one.pdf";
 const KEY_ESC: u32 = 1;
-const KEY_LEFTALT: u32 = 56;
-const KEY_LEFTMETA: u32 = 125;
+const KEY_LEFTCTRL: u32 = 29;
+const KEY_LEFTSHIFT: u32 = 42;
 
 struct Shelf {
     events: Sender<WindowEvent>,
@@ -207,26 +207,26 @@ fn a_file_dropped_on_a_folder_row_of_another_app_moves_there() {
 }
 
 #[test]
-fn holding_option_while_still_over_the_folder_makes_the_drop_a_copy() {
-    let (finished, dropped) = drop_between_windows(Some(KEY_LEFTALT), 10);
+fn holding_ctrl_while_still_over_the_folder_makes_the_drop_a_copy() {
+    let (finished, dropped) = drop_between_windows(Some(KEY_LEFTCTRL), 10);
 
     assert_eq!(dropped.expect("a drop").3, Some(DragAction::Copy));
     assert_eq!(finished, Some(Some(DragAction::Copy)));
 }
 
 #[test]
-fn holding_super_moves_where_the_target_would_copy() {
+fn holding_shift_moves_where_the_target_would_copy() {
     let plain = drop_between_windows(None, 80);
-    let with_super = drop_between_windows(Some(KEY_LEFTMETA), 80);
+    let with_shift = drop_between_windows(Some(KEY_LEFTSHIFT), 80);
 
     assert_eq!(plain.0, Some(Some(DragAction::Copy)));
-    assert_eq!(with_super.1.expect("a drop").3, Some(DragAction::Move));
-    assert_eq!(with_super.0, Some(Some(DragAction::Move)));
+    assert_eq!(with_shift.1.expect("a drop").3, Some(DragAction::Move));
+    assert_eq!(with_shift.0, Some(Some(DragAction::Move)));
 }
 
 #[test]
-fn a_target_that_only_copies_keeps_the_drop_a_copy_with_super_held() {
-    let (finished, dropped) = drop_between_windows(Some(KEY_LEFTMETA), 110);
+fn a_target_that_only_copies_keeps_the_drop_a_copy_with_shift_held() {
+    let (finished, dropped) = drop_between_windows(Some(KEY_LEFTSHIFT), 110);
 
     assert_eq!(dropped.expect("a drop").3, Some(DragAction::Copy));
     assert_eq!(finished, Some(Some(DragAction::Copy)));
@@ -400,14 +400,14 @@ fn text_dragged_into_another_apps_field_is_copied_at_the_drop_point() {
 }
 
 #[test]
-fn holding_super_moves_dragged_text_out_of_the_other_field() {
+fn holding_shift_moves_dragged_text_out_of_the_other_field() {
     let mut desktop = Desktop::sized(OUTPUT);
     let (mut source, mut target) = desktop.notes_side_by_side("brave", "Hello world");
     let from = desktop.content_of("source", 10, 11);
     let to = desktop.content_of("target", 180, 11);
 
     desktop.drag_text(&mut [&mut source, &mut target], from, to);
-    desktop.server.key(KEY_LEFTMETA, true, 0);
+    desktop.server.key(KEY_LEFTSHIFT, true, 0);
     desktop.settle(&mut [&mut source, &mut target]);
     desktop.server.press_button(BTN_LEFT, false, 0);
     desktop.wait_for(
@@ -415,7 +415,7 @@ fn holding_super_moves_dragged_text_out_of_the_other_field() {
         |events| text_of(events) == Some(""),
         |_| true,
     );
-    desktop.server.key(KEY_LEFTMETA, false, 0);
+    desktop.server.key(KEY_LEFTSHIFT, false, 0);
     desktop.settle(&mut [&mut source, &mut target]);
 
     assert_eq!(text_of(&target.seen), Some("Hello worldbrave"));

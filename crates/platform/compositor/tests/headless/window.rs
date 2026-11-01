@@ -415,38 +415,44 @@ fn a_grabbing_popup_that_opens_under_a_still_pointer_has_it_at_once() {
 }
 
 #[test]
-fn ctrl_super_f_toggles_full_screen_for_the_key_window() {
+fn super_f11_toggles_full_screen_for_the_key_window() {
     let mut server = server();
     let mut editor = window(&mut server, RED, WINDOW);
     click(&mut server, 110, 80);
     roundtrip(&mut server, &mut [&mut editor]);
 
-    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_F]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_F11]);
     roundtrip(&mut server, &mut [&mut editor]);
     let configured = editor.configured(0).expect("a configure");
     assert!(configured.states.contains(&ToplevelState::Fullscreen));
     assert_eq!((configured.width, configured.height), OUTPUT);
-    assert!(!editor.keys().iter().any(|(key, _)| *key == KEY_F));
+    assert!(!editor.keys().iter().any(|(key, _)| *key == KEY_F11));
 
-    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_F]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_F11]);
     roundtrip(&mut server, &mut [&mut editor]);
     let configured = editor.configured(0).expect("a configure");
     assert!(!configured.states.contains(&ToplevelState::Fullscreen));
 }
 
 #[test]
-fn super_f_without_ctrl_reaches_the_app() {
+fn super_f_and_ctrl_super_f_reach_the_app() {
     let mut server = server();
     let mut editor = window(&mut server, RED, WINDOW);
     click(&mut server, 110, 80);
     roundtrip(&mut server, &mut [&mut editor]);
 
     chord(&mut server, &[KEY_LEFTMETA, KEY_F]);
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_F]);
     roundtrip(&mut server, &mut [&mut editor]);
 
     let configured = editor.configured(0).expect("a configure");
     assert!(!configured.states.contains(&ToplevelState::Fullscreen));
-    assert!(editor.keys().contains(&(KEY_F, true)));
+    let presses = editor
+        .keys()
+        .iter()
+        .filter(|key| **key == (KEY_F, true))
+        .count();
+    assert_eq!(presses, 2);
 }
 
 #[test]

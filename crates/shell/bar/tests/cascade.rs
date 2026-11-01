@@ -91,7 +91,7 @@ fn an_app_without_menus_gets_the_standard_app_row_its_actions_and_its_windows() 
     );
     assert!(!app_row.items[0].enabled);
     let quit = &app_row.items[6];
-    assert_eq!(quit.shortcut.as_deref(), Some("Super+Q"));
+    assert_eq!(quit.shortcut.as_deref(), Some("Ctrl+Q"));
     assert_eq!(Command::parse(&quit.action), Some(Command::QuitApp));
     assert_eq!(
         Command::parse(&menu.items[2].action),

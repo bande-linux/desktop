@@ -8,6 +8,9 @@
 # the shell's icon and default-handler tests.
 
 [apps]
+bande-terminal       org.bande.Terminal         recommends
+bande-software       org.bande.Software         recommends
+bande-installer      org.bande.Installer        recommends
 
 [debian]
 firefox-esr          -                          recommends

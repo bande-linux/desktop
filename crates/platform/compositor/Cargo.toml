@@ -45,7 +45,7 @@ wayland-protocols.workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, libvulkan1, mesa-vulkan-drivers | vulkan-icd, systemd"
-recommends = "bande-clipboard, bande-shell, bande-term, bande-lock, bande-screenshot, bande-files, bande-settings"
+recommends = "bande-clipboard, bande-shell, bande-lock, bande-screenshot, bande-files, bande-settings"
 suggests = "fcitx5"
 extended-description = """\
 Wayland compositor for the Bande desktop session, built on Smithay. It runs \

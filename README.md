@@ -17,8 +17,10 @@ Bande is early and not yet a daily driver.
   settings, the polkit agent protocol), packaged as `.deb` files and tested on every push.
 - **Early**: the UI toolkit (Vello drawing and Parley text are mature; widgets, menus, scroll
   views and lists are just starting) and therefore the shell clients and apps built on it:
-  Dock, menu bar, launcher, Control Center, lock screen, greeter, Files, Settings and Terminal
-  all exist in a basic form.
+  Dock, menu bar, launcher, Control Center, lock screen, greeter, Files, Settings and Activity
+  Monitor all exist in a basic form. Terminal, Software, the Package Installer, Mail and
+  Calendar live in [bande-linux/apps](https://github.com/bande-linux/apps) and are released on
+  their own.
 
 [`docs/parity.md`](docs/parity.md) tracks each feature against macOS, and
 [`NOTES/gaps.md`](NOTES/gaps.md) with [`NOTES/plans/`](NOTES/plans/) holds the open work.
@@ -33,7 +35,7 @@ them into role directories; the grouping below is that target.
 | Platform | `bande-compositor` (the Wayland compositor), `bande-render` (its Vulkan renderer), `bande-protocols` (private Wayland protocols for the shell) |
 | Toolkit | `bande-toolkit` (tokens, Vello drawing, Parley text, Wayland windows, widgets, AccessKit) |
 | Shell | `bande-shell` (one process hosting `bande-desktop-surface`, `bande-bar`, `bande-notifications`, `bande-controlcenter` and `bande-launcher`), `bande-screenshot`, `bande-lock`, `bande-greeter` |
-| Apps | `bande-files`, `bande-settings`, `bande-term` |
+| Apps | `bande-files`, `bande-settings`, `bande-monitor`, `bande-file-chooser` |
 | Services | `bande-config`, `bande-notify`, `bande-power`, `bande-clipboard`, `bande-tray`, `bande-automount`, `xdg-desktop-portal-bande`, `bande-polkit` |
 | Libraries | `bande-spring` (damped springs), `bande-xdg` (desktop entries, icons, launching), `bande-audio` (PipeWire), `bande-network` (NetworkManager), `bande-bluetooth` (BlueZ) |
 | Testing | `bande-test-bus` (private D-Bus session buses), `bande-test-wayland` (Wayland test clients), `bande-bench` (performance measurements), `bande-sample` (toolkit sample that `bande-bench` measures) |

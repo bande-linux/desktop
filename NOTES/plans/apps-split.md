@@ -143,11 +143,15 @@ M4a: Terminal and Monitor. M4b: Software (with catalog) and Installer.
 9. Check goldens against the apps CI's fonts; port ci/debian-fonts.sh into build-app.sh if they differ.
 10. CI dispatch `build.yml -f apps="term monitor software installer"` is a release-time step; locally the gate is enough. Desktop is unchanged, so both repos stay green.
 
+Status: done 2026-11-01 as one import, apps `main` up to be14abc. Terminal, Software (with catalog, now `apps/software/src/catalog/` and its tests and data in `apps/software/tests/`) and Installer, 95 commits of history from `git filter-repo` (unbound-term and apps/terminal never coexisted). Activity Monitor stays (M3), so no icon fixtures were needed. Each app is 0.1.0, `publish = false`, has `--version`, smoke.sh and build-depends, and its Cargo.lock started from desktop's. Software and Installer now only recommend `bande-polkit` (it is not in Debian, so a hard Depends broke `apt-get install` in the apps CI container). The metainfo homepages point at bande-linux/apps; Terminal's description says Shift+Ctrl+C/V. All five apps, Mail and Calendar included, pin desktop 97b1ba89.
+
 ### M5 (desktop). Remove the moved crates
 - Delete crates/apps/{terminal,monitor,software,installer} and crates/libs/catalog; remove their workspace entries plus alacritty_terminal and serde_yaml_ng.
 - `cargo check` once without `--locked` to prune Cargo.lock (removals only).
 - Update ci/release/packages and check-debs.sh, compositor recommends (drop bande-term), default-apps (the four are added to `[apps]`, their `(=)` Recommends removed from control), README, docs, review run.sh.
 - Gate and build-all.sh.
+
+Status: done 2026-11-01 for Terminal, Software, Installer and catalog (Activity Monitor stays, M3). Cargo.lock lost only the removed crates. build-all.sh passes: bande-desktop recommends `bande-terminal, bande-software, bande-installer` unversioned and still pins bande-monitor.
 
 ### M6 (apps and tooling). Pins, gate and rules
 - `ci/bump-desktop.sh [REV]`: default REV is desktop main (`git ls-remote`), later the newest `v*` tag (D8); checks REV is on main; sed across apps/*/Cargo.toml and template; `cargo metadata` per app to re-lock only the desktop source; runs `ci/gate.sh`; prints "Pin the desktop at <short>".

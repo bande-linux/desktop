@@ -85,30 +85,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alacritty_terminal"
-version = "0.26.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bda177466b9524d59f1b12f0dd30b68696788e9992a7e959021c4a0ed96fcf59"
-dependencies = [
- "base64",
- "bitflags 2.13.2",
- "home",
- "libc",
- "log",
- "miow",
- "parking_lot",
- "piper",
- "polling",
- "regex-automata",
- "rustix 1.1.6",
- "rustix-openpty",
- "signal-hook",
- "unicode-width 0.2.2",
- "vte",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -498,20 +474,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bande-catalog"
-version = "0.1.0"
-dependencies = [
- "bande-search",
- "bande-xdg",
- "flate2",
- "roxmltree",
- "serde",
- "serde_yaml_ng",
- "tempfile",
- "tracing",
-]
-
-[[package]]
 name = "bande-clipboard"
 version = "0.1.0"
 dependencies = [
@@ -765,24 +727,6 @@ name = "bande-inbox"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
-]
-
-[[package]]
-name = "bande-installer"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "bande-fs",
- "bande-golden",
- "bande-l10n",
- "bande-log",
- "bande-packages",
- "bande-test-bus",
- "bande-toolkit",
- "bande-xdg",
- "tempfile",
- "tracing",
- "zbus",
 ]
 
 [[package]]
@@ -1136,24 +1080,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bande-software"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "bande-catalog",
- "bande-golden",
- "bande-inbox",
- "bande-l10n",
- "bande-log",
- "bande-packages",
- "bande-test-bus",
- "bande-toolkit",
- "bande-xdg",
- "tracing",
- "zbus",
-]
-
-[[package]]
 name = "bande-sound"
 version = "0.1.0"
 dependencies = [
@@ -1197,27 +1123,6 @@ version = "0.1.0"
 dependencies = [
  "bande-config",
  "bande-inbox",
- "tracing",
- "zbus",
-]
-
-[[package]]
-name = "bande-term"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "alacritty_terminal",
- "bande-app-menu",
- "bande-app-settings",
- "bande-design",
- "bande-golden",
- "bande-l10n",
- "bande-log",
- "bande-notify",
- "bande-spring",
- "bande-toolkit",
- "bande-xdg",
- "tempfile",
  "tracing",
  "zbus",
 ]
@@ -1368,12 +1273,6 @@ dependencies = [
  "tracing",
  "zbus",
 ]
-
-[[package]]
-name = "base64"
-version = "0.22.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bindgen"
@@ -2376,15 +2275,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
-name = "home"
-version = "0.5.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
-dependencies = [
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "hybrid-array"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3236,15 +3126,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "miow"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "536bfad37a309d62069485248eeaba1e8d9853aaf951caaeaed0585a95346f08"
-dependencies = [
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4038,17 +3919,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustix-openpty"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1de16c7c59892b870a6336f185dc10943517f1327447096bbb7bb32cd85e2393"
-dependencies = [
- "errno",
- "libc",
- "rustix 1.1.6",
-]
-
-[[package]]
 name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4062,12 +3932,6 @@ checksum = "69e4ce4a039f42bf25920b95667e4d789e98749ab11bbb8d2c2936f788421bb5"
 dependencies = [
  "twox-hash",
 ]
-
-[[package]]
-name = "ryu"
-version = "1.0.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "same-file"
@@ -4166,19 +4030,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_yaml_ng"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b4db627b98b36d4203a7b458cf3573730f2bb591b28871d916dfa9efabfd41f"
-dependencies = [
- "indexmap",
- "itoa",
- "ryu",
- "serde",
- "unsafe-libyaml",
-]
-
-[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4230,16 +4081,6 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
-
-[[package]]
-name = "signal-hook"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b29ffa27d3d59a049bb328258de100f8012848d1b08d444e08bbc02ac468435e"
-dependencies = [
- "libc",
- "signal-hook-registry",
-]
 
 [[package]]
 name = "signal-hook-registry"
@@ -4770,12 +4611,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
-name = "unsafe-libyaml"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
-
-[[package]]
 name = "usvg"
 version = "0.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4886,19 +4721,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "vte"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5924018406ce0063cd67f8e008104968b74b563ee1b85dde3ed1f7cb87d3dbd"
-dependencies = [
- "arrayvec",
- "bitflags 2.13.2",
- "cursor-icon",
- "log",
- "memchr",
-]
 
 [[package]]
 name = "walkdir"

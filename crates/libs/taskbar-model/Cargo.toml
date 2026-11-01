@@ -1,5 +1,5 @@
 [package]
-name = "bande-dock-model"
+name = "bande-taskbar-model"
 description = "The apps kept in the bar, their order, badges and progress"
 version.workspace = true
 edition.workspace = true

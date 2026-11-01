@@ -66,7 +66,7 @@ pub enum Action {
     ShowClipboardHistory,
     ShowEmojiPicker,
     FocusMenuBar,
-    FocusDock,
+    FocusTaskbar,
     SearchMenus,
     ShowNotificationCenter,
     ShowControlCenter,
@@ -109,7 +109,7 @@ impl Action {
             | Self::ShowClipboardHistory
             | Self::ShowEmojiPicker
             | Self::FocusMenuBar
-            | Self::FocusDock
+            | Self::FocusTaskbar
             | Self::SearchMenus
             | Self::ShowNotificationCenter
             | Self::ShowControlCenter
@@ -148,7 +148,7 @@ impl Action {
             Self::ShowClipboardHistory => L10N.tr("show-clipboard-history"),
             Self::ShowEmojiPicker => L10N.tr("show-emoji-picker"),
             Self::FocusMenuBar => L10N.tr("focus-menu-bar"),
-            Self::FocusDock => L10N.tr("focus-dock"),
+            Self::FocusTaskbar => L10N.tr("focus-taskbar"),
             Self::SearchMenus => L10N.tr("search-menus"),
             Self::ShowNotificationCenter => L10N.tr("show-notification-center"),
             Self::ShowControlCenter => L10N.tr("show-control-center"),
@@ -205,7 +205,7 @@ pub const SHORTCUTS: [Shortcut; 42] = [
     shortcut(Action::ShowClipboardHistory, "Shift+Super+V"),
     shortcut(Action::ShowEmojiPicker, "Ctrl+Super+Space"),
     shortcut(Action::FocusMenuBar, "Super+F2"),
-    shortcut(Action::FocusDock, "Super+F3"),
+    shortcut(Action::FocusTaskbar, "Super+F3"),
     shortcut(Action::SearchMenus, "Shift+Super+/"),
     shortcut(Action::ShowNotificationCenter, "Alt+Super+N"),
     shortcut(Action::ShowControlCenter, "Alt+Super+C"),

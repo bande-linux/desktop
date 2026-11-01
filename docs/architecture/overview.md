@@ -92,7 +92,7 @@ launcher are one process, `bande-shell` (`crates/shell/shell`), with one Wayland
 GPU device, one font database and one connection per D-Bus bus. Each part is a library crate
 (`bande-desktop-surface`, `bande-bar`, `bande-notifications`, `bande-controlcenter`,
 `bande-launcher`) whose surfaces the shell hosts; the taskbar's models live in
-`bande-dock-model` and `bande-status` (`crates/libs`).
+`bande-taskbar-model` and `bande-status` (`crates/libs`).
 
 ## Process model
 

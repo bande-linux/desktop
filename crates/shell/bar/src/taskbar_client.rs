@@ -6,18 +6,18 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::L10N;
-use crate::dock::{
-    DockAction, DockApp, DockState, MenuTarget, Rail, Shared, dock_ui, exclusive_zone, scene,
-    surface_size,
-};
 use crate::installed_apps::InstalledApps;
 use crate::rail::surface_size as rail_surface_size;
+use crate::taskbar::{
+    MenuTarget, Rail, Shared, TaskbarAction, TaskbarApp, TaskbarState, exclusive_zone, scene,
+    surface_size, taskbar_ui,
+};
 use accesskit::TreeUpdate;
 use bande_config::{Bar as BarConfig, BarEdge};
-use bande_dock_model::arrange;
-use bande_dock_model::bus::{self, BusEvent};
 use bande_fs::{FolderWatch, Trash};
 use bande_inbox::Inbox;
+use bande_taskbar_model::arrange;
+use bande_taskbar_model::bus::{self, BusEvent};
 use bande_toolkit::ui::{Event, Menu, MenuItem, Ui};
 use bande_toolkit::{
     App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
@@ -40,7 +40,7 @@ const MENU_SHOW: &str = "show";
 const MENU_EMPTY_TRASH: &str = "empty-trash";
 const MENU_CONFIRM_EMPTY: &str = "confirm-empty-trash";
 const MENU_CANCEL: &str = "cancel";
-const DOCK_NAMESPACE: &str = "dock";
+const TASKBAR_NAMESPACE: &str = "taskbar";
 const KEYBOARD_GRACE: Duration = Duration::from_millis(60);
 
 const MENU_HIDE: &str = "hide";
@@ -79,7 +79,7 @@ impl TrashWatch {
     }
 }
 
-pub struct Dock {
+pub struct Taskbar {
     state: Shared,
     ui: Ui,
     apps: InstalledApps,
@@ -106,7 +106,7 @@ pub struct Dock {
     output: String,
 }
 
-impl Dock {
+impl Taskbar {
     fn pixels(&self) -> u32 {
         (f64::from(self.state.borrow().icon_size()) * self.icon_scale).ceil() as u32
     }
@@ -171,7 +171,7 @@ impl Dock {
         self.running = running;
     }
 
-    fn describe(&mut self, app_id: &str, kept: bool) -> Option<DockApp> {
+    fn describe(&mut self, app_id: &str, kept: bool) -> Option<TaskbarApp> {
         let running = self.running.iter().any(|running| running == app_id);
         let entry = self.entry(app_id).cloned();
         if kept && entry.is_none() && !running {
@@ -179,7 +179,7 @@ impl Dock {
         }
         let name = app_name(self.apps.entries(), app_id);
         let icon = self.icon(entry.as_ref().and_then(|entry| entry.icon.as_deref()));
-        Some(DockApp {
+        Some(TaskbarApp {
             app_id: app_id.to_owned(),
             name,
             icon,
@@ -237,12 +237,12 @@ impl Dock {
         let actions = self.state.borrow_mut().take_actions();
         for action in actions {
             match action {
-                DockAction::Open(app_id) => self.open(window, &app_id),
-                DockAction::OpenTrash => self.open_in_files(window, TRASH_URI),
-                DockAction::ShowInFiles(app_id) => self.show_in_files(window, &app_id),
-                DockAction::Menu { target, at } => self.show_menu(window, target, at),
-                DockAction::ReleaseKeyboard => self.release_keyboard(window),
-                DockAction::Keep(shown) => {
+                TaskbarAction::Open(app_id) => self.open(window, &app_id),
+                TaskbarAction::OpenTrash => self.open_in_files(window, TRASH_URI),
+                TaskbarAction::ShowInFiles(app_id) => self.show_in_files(window, &app_id),
+                TaskbarAction::Menu { target, at } => self.show_menu(window, target, at),
+                TaskbarAction::ReleaseKeyboard => self.release_keyboard(window),
+                TaskbarAction::Keep(shown) => {
                     let shown: Vec<String> = shown
                         .into_iter()
                         .filter(|app_id| {
@@ -465,7 +465,7 @@ impl Dock {
             .as_ref()
             .is_none_or(|keep| keep.send(kept).is_err())
         {
-            tracing::warn!("the Dock cannot save the apps kept in it");
+            tracing::warn!("the Taskbar cannot save the apps kept in it");
         }
     }
 
@@ -608,7 +608,7 @@ impl Dock {
                 self.menu = Some(target);
                 self.state.borrow_mut().set_menu_open(true, Instant::now());
             }
-            Err(error) => tracing::warn!("cannot show the Dock menu: {error}"),
+            Err(error) => tracing::warn!("cannot show the Taskbar menu: {error}"),
         }
     }
 
@@ -748,7 +748,7 @@ impl Dock {
         window.set_layer_anchor(anchor(edge));
         let icon_size = self.state.borrow().icon_size();
         if let Err(error) = window.set_layer_size(surface_size(edge, icon_size, (0, 0))) {
-            tracing::warn!("cannot move the Dock: {error}");
+            tracing::warn!("cannot move the Taskbar: {error}");
         }
     }
 
@@ -769,7 +769,7 @@ impl Dock {
             surface_size(edge, icon_size, (0, 0))
         };
         if let Err(error) = window.set_layer_size(size) {
-            tracing::warn!("cannot resize the Dock: {error}");
+            tracing::warn!("cannot resize the Taskbar: {error}");
         }
     }
 
@@ -800,7 +800,7 @@ impl Dock {
     }
 }
 
-impl Dock {
+impl Taskbar {
     pub fn set_rail(&mut self, rail: Rail) {
         self.state.borrow_mut().set_rail(rail);
     }
@@ -865,7 +865,7 @@ impl Dock {
     }
 }
 
-impl App for Dock {
+impl App for Taskbar {
     fn scene(&mut self, window: &mut Window) -> Scene {
         self.follow_scale(window);
         let scene = scene(&mut self.ui, window.size());
@@ -883,7 +883,7 @@ impl App for Dock {
                     .navigate(key, modifiers, Instant::now());
                 self.run_actions(window);
             }
-            WindowEvent::FocusShell(namespace) if namespace == DOCK_NAMESPACE => {
+            WindowEvent::FocusShell(namespace) if namespace == TASKBAR_NAMESPACE => {
                 self.release_at = None;
                 let active = self.active.clone();
                 self.state
@@ -1050,17 +1050,17 @@ pub fn anchor(edge: BarEdge) -> Edges {
     }
 }
 
-pub fn dock_role(edge: BarEdge, icon_size: f32) -> Role {
+pub fn taskbar_role(edge: BarEdge, icon_size: f32) -> Role {
     Role::Layer(LayerOptions {
         layer: LayerKind::Top,
         anchor: anchor(edge),
         exclusive_zone: exclusive_zone(icon_size).round() as i32,
         keyboard: KeyboardFocus::OnDemand,
-        namespace: DOCK_NAMESPACE.to_owned(),
+        namespace: TASKBAR_NAMESPACE.to_owned(),
     })
 }
 
-impl Dock {
+impl Taskbar {
     pub fn new(
         window: &Window,
         output: &str,
@@ -1076,15 +1076,15 @@ impl Dock {
             bus::follow(session, inbox.outbox());
         }
         let appearance = window.appearance();
-        let state = DockState::new(edge, icon_size);
+        let state = TaskbarState::new(edge, icon_size);
         state.borrow_mut().set_appearance(appearance);
         state
             .borrow_mut()
             .set_auto_hide(config.auto_hide, Instant::now());
-        let mut ui = dock_ui(state.clone(), appearance.palette(), text);
+        let mut ui = taskbar_ui(state.clone(), appearance.palette(), text);
         ui.set_appearance(appearance);
         let (config_home, home) = home;
-        let mut dock = Self {
+        let mut taskbar = Self {
             state,
             ui,
             apps: InstalledApps::load(),
@@ -1110,9 +1110,9 @@ impl Dock {
             names: config.names,
             output: output.to_owned(),
         };
-        dock.follow_windows(window);
-        dock.load_trash_icons();
-        dock.sync();
-        Ok(dock)
+        taskbar.follow_windows(window);
+        taskbar.load_trash_icons();
+        taskbar.sync();
+        Ok(taskbar)
     }
 }

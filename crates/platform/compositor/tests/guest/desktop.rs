@@ -489,7 +489,7 @@ fn the_lock_screen_is_on_screen_before_sleep_and_takes_the_password_after_wake()
     let mut keyboard = VirtualDevice::keyboard_and_mouse();
     let _desktop = start_desktop_with(&[("DBUS_SYSTEM_BUS_ADDRESS", bus.address())]);
     let icon = (32, 33);
-    wait_for("the Dock", STARTUP, || {
+    wait_for("the Taskbar", STARTUP, || {
         running("bande-shell")
             && current_scanout().is_some_and(|scanout| pixel(&scanout, icon.0, 200) != BACKGROUND)
     });

@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_config::{BAR_ICON_SIZE_RANGE, BarEdge, DEFAULT_BAR_ICON_SIZE};
-use bande_dock_model::{LauncherEntry, LauncherUpdate};
+use bande_taskbar_model::{LauncherEntry, LauncherUpdate};
 use bande_toolkit::ui::{
     Animated, Context, Cursor, Event, Key as KeyboardKey, Modifiers, PointerButton, Size, Spring,
     Ui, Widget, WidgetId,
@@ -64,7 +64,7 @@ const ROW_RADIUS: f32 = 6.0;
 pub const WELL_ALPHA: u8 = 14;
 
 #[derive(Debug, Clone)]
-pub struct DockApp {
+pub struct TaskbarApp {
     pub app_id: String,
     pub name: String,
     pub icon: Option<Image>,
@@ -94,7 +94,7 @@ struct More {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum DockAction {
+pub enum TaskbarAction {
     Open(String),
     OpenTrash,
     ShowInFiles(String),
@@ -121,7 +121,7 @@ impl Key {
 struct Slot {
     key: Key,
     id: WidgetId,
-    app: Option<DockApp>,
+    app: Option<TaskbarApp>,
     presence: Animated,
     leaving: bool,
     dot: Animated,
@@ -219,7 +219,7 @@ struct Label {
     text: Option<(String, Color, Paragraph)>,
 }
 
-pub struct DockState {
+pub struct TaskbarState {
     edge: BarEdge,
     icon_size: f32,
     scheme: Scheme,
@@ -230,7 +230,7 @@ pub struct DockState {
     attention: HashMap<String, Instant>,
     launcher: HashMap<String, LauncherEntry>,
     label: Label,
-    actions: Vec<DockAction>,
+    actions: Vec<TaskbarAction>,
     hold: Option<(Key, Instant)>,
     press_at: Option<Point>,
     drag: Option<Drag>,
@@ -254,7 +254,7 @@ pub struct DockState {
     more: Option<More>,
 }
 
-pub type Shared = Rc<RefCell<DockState>>;
+pub type Shared = Rc<RefCell<TaskbarState>>;
 
 fn vertical(edge: BarEdge) -> bool {
     matches!(edge, BarEdge::Left | BarEdge::Right)
@@ -291,7 +291,7 @@ fn badge_label(count: i64) -> String {
     }
 }
 
-impl DockState {
+impl TaskbarState {
     pub fn new(edge: BarEdge, icon_size: f32) -> Shared {
         let mut state = Self {
             edge,
@@ -376,7 +376,7 @@ impl DockState {
         self.trash.is_full = full;
     }
 
-    pub fn set_apps(&mut self, apps: Vec<DockApp>, now: Instant) {
+    pub fn set_apps(&mut self, apps: Vec<TaskbarApp>, now: Instant) {
         let animate = self.populated;
         self.populated = true;
         let reduce_motion = self.reduce_motion;
@@ -558,7 +558,7 @@ impl DockState {
         }
     }
 
-    pub fn take_actions(&mut self) -> Vec<DockAction> {
+    pub fn take_actions(&mut self) -> Vec<TaskbarAction> {
         std::mem::take(&mut self.actions)
     }
 
@@ -882,12 +882,12 @@ impl DockState {
             KeyboardKey::Enter | KeyboardKey::Space => {
                 self.activate(&selected);
                 if selected != Key::More {
-                    self.actions.push(DockAction::ReleaseKeyboard);
+                    self.actions.push(TaskbarAction::ReleaseKeyboard);
                 }
             }
             KeyboardKey::Menu => self.open_menu(&selected),
             KeyboardKey::Function(10) if modifiers.shift => self.open_menu(&selected),
-            KeyboardKey::Escape => self.actions.push(DockAction::ReleaseKeyboard),
+            KeyboardKey::Escape => self.actions.push(TaskbarAction::ReleaseKeyboard),
             _ => return false,
         }
         true
@@ -947,11 +947,11 @@ impl DockState {
         }
     }
 
-    fn beyond_dock(&self, point: Point) -> bool {
-        let dock = self
+    fn beyond_taskbar(&self, point: Point) -> bool {
+        let taskbar = self
             .rail
             .map_or(SCREEN_GAP + thickness(self.icon_size), |rail| rail.width);
-        self.depth_of(point) > dock + self.icon_size
+        self.depth_of(point) > taskbar + self.icon_size
     }
 
     fn press_at(&mut self, key: &Key, point: Point) {
@@ -1014,7 +1014,7 @@ impl DockState {
             (point.y - grab.y).clamp(half, (self.surface.height - half).max(half)),
         );
         self.slots[index].pinned = Some(center);
-        let removing = kept && self.beyond_dock(point);
+        let removing = kept && self.beyond_taskbar(point);
         if let Some(drag) = &mut self.drag {
             drag.at = point;
             drag.removing = removing;
@@ -1110,7 +1110,7 @@ impl DockState {
         }
         let after = self.kept_ids();
         if after != drag.kept_before {
-            self.actions.push(DockAction::Keep(after));
+            self.actions.push(TaskbarAction::Keep(after));
         }
     }
 
@@ -1503,19 +1503,20 @@ impl DockState {
         };
         self.label.pending = None;
         self.label.opacity.jump_to(0.0);
-        self.actions.push(DockAction::Menu { target, at });
+        self.actions.push(TaskbarAction::Menu { target, at });
     }
 
     fn show_in_files(&mut self, key: &Key) {
         if let Key::App(app_id) = key {
-            self.actions.push(DockAction::ShowInFiles(app_id.clone()));
+            self.actions
+                .push(TaskbarAction::ShowInFiles(app_id.clone()));
         }
     }
 
     fn activate(&mut self, key: &Key) {
         match key {
-            Key::App(app_id) => self.actions.push(DockAction::Open(app_id.clone())),
-            Key::Trash => self.actions.push(DockAction::OpenTrash),
+            Key::App(app_id) => self.actions.push(TaskbarAction::Open(app_id.clone())),
+            Key::Trash => self.actions.push(TaskbarAction::OpenTrash),
             Key::More => self.open_more(),
             Key::RunningSeparator | Key::TrashSeparator => {}
         }
@@ -1546,7 +1547,7 @@ impl DockState {
             return;
         };
         let at = Point::new(self.panel.x + self.panel.width + MENU_GAP, more.cell.y);
-        self.actions.push(DockAction::Menu {
+        self.actions.push(TaskbarAction::Menu {
             target: MenuTarget::More(more.hidden.clone()),
             at,
         });
@@ -2439,7 +2440,7 @@ impl Widget for MoreTile {
     }
 }
 
-struct Dock {
+struct Taskbar {
     id: WidgetId,
     more_id: WidgetId,
     state: Shared,
@@ -2447,7 +2448,7 @@ struct Dock {
     frame: Rect,
 }
 
-impl Widget for Dock {
+impl Widget for Taskbar {
     fn id(&self) -> WidgetId {
         self.id
     }
@@ -2519,9 +2520,9 @@ impl Widget for Dock {
     }
 }
 
-pub fn dock_ui(state: Shared, palette: Palette, text: TextSystem) -> Ui {
+pub fn taskbar_ui(state: Shared, palette: Palette, text: TextSystem) -> Ui {
     Ui::new(
-        Box::new(Dock {
+        Box::new(Taskbar {
             id: WidgetId::next(),
             more_id: WidgetId::next(),
             state,

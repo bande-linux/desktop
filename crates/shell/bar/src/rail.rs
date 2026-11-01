@@ -13,8 +13,8 @@ use bande_xdg::{ICON_THEMES, find_icon};
 use jiff::Zoned;
 
 use crate::L10N;
-use crate::dock::{Rail as AppsRegion, WELL_ALPHA};
 use crate::menu_bar::{Slot, StatusView};
+use crate::taskbar::{Rail as AppsRegion, WELL_ALPHA};
 
 pub const EDGE_PADDING: f32 = 24.0;
 pub const LABEL_ROOM: f32 = 280.0;

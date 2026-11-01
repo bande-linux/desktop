@@ -1,46 +1,43 @@
 # Windowless indicator and taskbar names
 
-## (a) A windowless app stays active after its last window closes
+## (a) A windowless app keeps the active bar
 
-**Seen**: close a Bande app's last window with the close button. The app keeps running (right),
-but its taskbar icon keeps the accent active bar and the App menu (the header under the logo
-and its "Type to search" cascade) keeps that app's menus.
+**Seen**: close a Bande app's last window with the close button. The app keeps running and
+stays active with its App menu (right, as on macOS), but its taskbar icon keeps the accent
+active bar instead of the running dot.
 
-**Cause**: deliberate, from c2ee81bd ("Keep an app active in the menu bar after it closes its
-last window"), which followed macOS. `State::refocus_after_losing`
-(`compositor/src/state/focus.rs:97-117`) looks only for another window of the *same* app
-(`frontmost(Some(owner))`); with none it focuses nothing, sets `windowless_app` to the closing
-app and calls `announce_active_app`, which falls back to `windowless_app`
-(`shell.rs:249-268`) and sends `active_app(<that app>)`. The shell only mirrors that event:
-the taskbar draws `RAIL_TICK` for `active == app_id` (`bar/src/taskbar.rs:1950-1983`), and
-`MenuBarClient` loads that app's menus for the App menu (`bar/src/menu_bar_client.rs:557-569`).
-No shell change is needed.
+**Owner decision (taken)**: keep the app active with its menus and key equivalents, as macOS
+does; only the indicator changes: the active bar means "active and has a window", a windowless
+app shows the running dot even while active. (macOS's Dock has no active marker at all.)
 
-**macOS** keeps the app frontmost with its menu bar (Cmd+N/Cmd+Q still reach it); the owner
-wants it to stop being active instead.
+**Cause**: the compositor keeps the app active on purpose (c2ee81bd): `refocus_after_losing`
+(`compositor/src/state/focus.rs:97-117`) sets `windowless_app` and `announce_active_app`
+(`shell.rs:249-268`) sends `active_app(<that app>)`; that stays. The taskbar draws the active
+bar for any `active == app_id` (`bar/src/taskbar.rs:1958`, set from `ActiveApp` in
+`bar/src/taskbar_client.rs:958-962` via `Taskbar::activated`, `taskbar.rs:517`) without asking
+whether the app still has a window.
 
-**Fix** (compositor only, `refocus_after_losing`): pick
-`frontmost(owner).or_else(|| frontmost(None))` and `focus` it; drop the `windowless` branch.
-- Focus goes to the next app's frontmost window on the active workspaces of any display (the
-  rule `release_exclusive_layer` uses); `sync_activated` announces it, so the active bar and the
-  App menu move to that app.
-- No window left on the active workspaces: focus is cleared and `active_app("")` is sent; the
-  App menu slot disappears (`rail.rs:258`), no icon has the active bar, the closed app keeps its
-  running dot. Other workspaces are not switched to.
-- Unchanged: a taskbar click, the switcher or a second launch reopens the app; the shell's
-  `activate_app` of a windowless app still activates it without a window (the only path left
-  into `windowless_app`, so `activate_next_app_if_the_windowless_one_quit` stays).
-- Docs: `apps.md` "Without windows" row: the app stops being active and focus goes to the next
-  app's frontmost window, else none; note the macOS difference in `parity.md`.
+**Fix** (shell only; compositor and menus unchanged):
+- Toolkit `crates/toolkit/platform/src/shell.rs`: `Window::is_windowless(app_id)` reading the
+  `windowless` list it already keeps from `bande_shell_v1.windowless_app` (it raises
+  `AppsChanged` when the list changes).
+- `taskbar_client.rs`: keep the raw active app id; on `ActiveApp` and `AppsChanged` hand the
+  taskbar `active.filter(|app| !window.is_windowless(app))` (mapped through `identity`).
+  `Taskbar::activated` keeps clearing attention and urgency on activation; split out a
+  `set_active(Option<&str>)` for the indicator so a windowless active app is drawn by the
+  running-dot branch of `paint_rail_indicators`.
+- Also covers activating a windowless app from the shell: menus show, the icon keeps its dot
+  until a window maps (the reopened window then brings the bar back through `AppsChanged`).
+- Docs: `behaviour.md` Taskbar (active bar only while the active app has a window); glossary.
 
-**Risk**: Ctrl+Q right after closing the last window now quits the *next* app (on macOS it
-quits the closed one), and Ctrl+N opens a window of the next app. Accepted by the owner's wish.
+**Risk**: low; one shell process, no protocol change. A non-Bande app that hides its last
+window without quitting is not in the windowless list but also not in `running_apps`, so it
+shows nothing, as today.
 
-**Verify** (owner, on the mini): Terminal and Files open; close Terminal's window with x:
-Terminal gets the running dot, Files gets the active bar and its App menu; with no other window
-left the App menu is gone and no icon is active; clicking Terminal reopens a window and it is
-active again. No new test (`libs/app/tests/app.rs` covers close-last-window then reopen).
-**Size**: ~10 lines in `focus.rs`, two doc lines.
+**Verify** (owner, on the mini): open Terminal, close its window with x: the icon shows the
+running dot, the App menu still shows Terminal's menus, Ctrl+N opens a window and the active
+bar returns. No new test. **Size**: ~25 lines in `taskbar_client.rs`, `taskbar.rs` and the
+toolkit, two doc lines.
 
 ## (b) Names for the taskbar's parts
 

@@ -251,6 +251,8 @@ impl Value {
     }
 }
 
+const MAX_TOKENS: usize = 256;
+
 struct Parser {
     tokens: Vec<Token>,
     position: usize,
@@ -487,7 +489,7 @@ pub fn calculate(text: &str) -> Option<String> {
         None => (text, None),
     };
     let mut parser = Parser {
-        tokens: tokens(expression)?,
+        tokens: tokens(expression).filter(|tokens| tokens.len() <= MAX_TOKENS)?,
         position: 0,
         operations: 0,
     };

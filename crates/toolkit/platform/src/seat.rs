@@ -32,6 +32,8 @@ struct Keymap {
     state: xkb::State,
 }
 
+const MIN_REPEAT_INTERVAL: Duration = Duration::from_millis(1);
+
 struct Repeat {
     keycode: Keycode,
     next: Instant,
@@ -178,6 +180,17 @@ fn shifted(character: char, shift: bool) -> char {
 }
 
 impl Input {
+    fn set_repeat_info(&mut self, rate: i32, delay: i32) {
+        self.repeat_interval = u64::try_from(rate)
+            .ok()
+            .filter(|rate| *rate > 0)
+            .map(|rate| Duration::from_micros(1_000_000 / rate).max(MIN_REPEAT_INTERVAL));
+        self.repeat_delay = Duration::from_millis(u64::try_from(delay).unwrap_or(0));
+        if self.repeat_interval.is_none() {
+            self.repeat = None;
+        }
+    }
+
     pub(crate) fn release(&mut self) {
         if let Some(device) = self.cursor_device.take() {
             device.destroy();
@@ -616,13 +629,7 @@ impl Dispatch<WlKeyboard, ()> for State {
                         .push(WindowEvent::Input(Event::ModifiersChanged(modifiers)));
                 }
             }
-            wl_keyboard::Event::RepeatInfo { rate, delay } => {
-                input.repeat_interval = u64::try_from(rate)
-                    .ok()
-                    .filter(|rate| *rate > 0)
-                    .map(|rate| Duration::from_micros(1_000_000 / rate));
-                input.repeat_delay = Duration::from_millis(u64::try_from(delay).unwrap_or(0));
-            }
+            wl_keyboard::Event::RepeatInfo { rate, delay } => input.set_repeat_info(rate, delay),
             wl_keyboard::Event::Key {
                 serial,
                 key,
@@ -659,3 +666,37 @@ impl Dispatch<WlKeyboard, ()> for State {
 
 delegate_noop!(State: ignore WpCursorShapeManagerV1);
 delegate_noop!(State: ignore WpCursorShapeDeviceV1);
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use xkbcommon::xkb::Keycode;
+
+    use super::{Input, Repeat};
+
+    fn held() -> Input {
+        Input {
+            repeat_interval: Some(Duration::from_millis(30)),
+            repeat: Some(Repeat {
+                keycode: Keycode::new(38),
+                next: Instant::now(),
+            }),
+            ..Input::default()
+        }
+    }
+
+    #[test]
+    fn turning_repeat_off_while_a_key_is_held_leaves_nothing_to_wake_for() {
+        let mut input = held();
+        input.set_repeat_info(0, 500);
+        assert_eq!(input.repeat_deadline(), None);
+    }
+
+    #[test]
+    fn a_huge_repeat_rate_still_waits_a_millisecond_between_repeats() {
+        let mut input = held();
+        input.set_repeat_info(i32::MAX, 500);
+        assert_eq!(input.repeat_interval, Some(Duration::from_millis(1)));
+    }
+}

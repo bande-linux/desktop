@@ -216,6 +216,12 @@ Contrast is unchanged: ink on sheet 15.9:1 and Lc 101, ink2 on chassis 5.8 and L
 chassis 3.3 and Lc 55, edge vs sheet 1.94. The light accents are untouched.
 
 ## Implementation plan
+Status (2026-11-01): milestones 1-4 and 7 done and merged. Milestone 5 ran as a golden review
+only (no live evening, nothing visible overnight). Milestone 6 is open. Left out on purpose:
+moving `shell/bar/src/dock.rs`'s two hard-coded panel shadow alphas onto `Elevation` (it would
+change light goldens), and the PNG mockups in `docs/design/datum` (no `rsvg-convert` on the mini;
+the SVGs are regenerated, the PNGs are stale).
+
 Milestones 1-4 go on one branch, `day/dark-slate`. Each is its own commit, and the full gate
 runs after each one. The branch merges only after the owner approves the preview (milestone 5).
 All builds and tests run on the mini (`BANDE_UPDATE_GOLDENS=1` only for the named crates).

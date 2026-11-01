@@ -74,6 +74,7 @@ impl View for Pane {
                 handled
             }
             WindowEvent::Accessibility(request) => self.0.perform(&request),
+            WindowEvent::ToplevelChanged(state) => self.0.set_on_screen(!state.suspended),
             _ => false,
         }
     }
@@ -158,6 +159,7 @@ fn open_main(
     cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
         if let Some(mut pane) = parked {
             pane.0.set_appearance(appearance);
+            pane.0.set_on_screen(true);
             return pane;
         }
         let mut view = SettingsView::new(appearance.palette(), TextSystem::new());
@@ -268,11 +270,18 @@ impl Program for Settings {
             Ok(main) => self.main = Some(main),
             Err(error) => tracing::warn!("cannot open the settings: {error}"),
         }
+        self.send_commands(cx);
     }
 
-    fn window_closed(&mut self, _cx: &mut Cx<Self>, window: WindowId, view: Pane) {
+    fn window_closed(&mut self, _cx: &mut Cx<Self>, window: WindowId, mut view: Pane) {
         if self.main == Some(window) {
             self.main = None;
+            view.0.set_on_screen(false);
+            for command in view.0.take_commands() {
+                if !matches!(command, Command::Reveal(_)) {
+                    self.services.send(command);
+                }
+            }
             self.parked = Some(view);
         }
     }

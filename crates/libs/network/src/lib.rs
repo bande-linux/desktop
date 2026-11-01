@@ -31,6 +31,9 @@ const WIRELESS: &str = "802-11-wireless";
 const WIRELESS_SECURITY: &str = "802-11-wireless-security";
 const CONNECTION: &str = "connection";
 const INTERFACE_NAME: &str = "interface-name";
+const ACCESS_POINT: &str = "org.freedesktop.NetworkManager.AccessPoint";
+const STRENGTH: &str = "Strength";
+const LAST_SEEN: &str = "LastSeen";
 
 #[derive(Debug)]
 pub enum Error {
@@ -135,6 +138,28 @@ fn sort_networks(networks: &mut [Network]) {
             .then(b.strength.cmp(&a.strength))
             .then(a.ssid.cmp(&b.ssid))
     });
+}
+
+pub fn strength_signal(message: &zbus::Message) -> Option<Option<u8>> {
+    if message
+        .header()
+        .member()
+        .is_none_or(|member| member.as_str() != "PropertiesChanged")
+    {
+        return None;
+    }
+    let (interface, changed, invalidated): (String, HashMap<String, OwnedValue>, Vec<String>) =
+        message.body().deserialize().ok()?;
+    let quiet = interface == ACCESS_POINT
+        && invalidated.is_empty()
+        && changed
+            .keys()
+            .all(|name| name == STRENGTH || name == LAST_SEEN);
+    quiet.then(|| {
+        changed
+            .get(STRENGTH)
+            .and_then(|value| u8::try_from(value).ok())
+    })
 }
 
 pub fn set_strength(networks: &mut [Network], access_point: &str, strength: u8) -> bool {

@@ -6,9 +6,9 @@ use std::sync::mpsc::RecvTimeoutError;
 
 use bande_audio::{Audio, Direction, Level, Meter};
 use bande_bluetooth::{Bluetooth, PairingPrompt, register_agent};
-use bande_network::{JoinOutcome, ManualIpv4, NetworkManager};
+use bande_network::{JoinOutcome, ManualIpv4, NetworkManager, set_strength, strength_signal};
 use zbus::blocking::{Connection, MessageIterator};
-use zbus::{MatchRule, message};
+use zbus::{MatchRule, Message, message};
 
 use crate::failure::unexpected;
 use crate::follow::Update;
@@ -195,7 +195,12 @@ pub fn follow_audio(updates: Updates) -> Sender<AudioCommand> {
     sender
 }
 
-fn signals(bus: &Connection, rule: MatchRule<'static>, changed: Sender<()>) {
+fn signals<T: Send + 'static>(
+    bus: &Connection,
+    rule: MatchRule<'static>,
+    changed: Sender<T>,
+    classify: impl Fn(&Message) -> Option<T> + Send + 'static,
+) {
     let bus = bus.clone();
     spawn("signals", move || {
         let iterator = match MessageIterator::for_match_rule(rule, &bus, None) {
@@ -205,8 +210,10 @@ fn signals(bus: &Connection, rule: MatchRule<'static>, changed: Sender<()>) {
                 return;
             }
         };
-        for _ in iterator.flatten() {
-            if changed.send(()).is_err() {
+        for message in iterator.flatten() {
+            if let Some(change) = classify(&message)
+                && changed.send(change).is_err()
+            {
                 break;
             }
         }
@@ -247,6 +254,60 @@ fn read_wifi(network: &NetworkManager) -> Option<WifiState> {
     Some(WifiState { enabled, networks })
 }
 
+enum NetworkChange {
+    Read,
+    Strength(String, u8),
+}
+
+fn network_change(message: &Message) -> Option<NetworkChange> {
+    match strength_signal(message) {
+        None => Some(NetworkChange::Read),
+        Some(strength) => Some(NetworkChange::Strength(
+            message.header().path()?.to_string(),
+            strength?,
+        )),
+    }
+}
+
+fn follow_wifi(reader: NetworkManager, updates: Updates, changes: Receiver<NetworkChange>) {
+    spawn("network", move || {
+        let mut wifi = read_wifi(&reader);
+        let publish = |wifi: &Option<WifiState>| {
+            updates.send(Update::Wifi(wifi.clone()))
+                && updates.send(Update::Network(read_network(&reader)))
+        };
+        if !publish(&wifi) {
+            return;
+        }
+        while let Ok(first) = changes.recv() {
+            std::thread::sleep(SETTLE);
+            let batch: Vec<NetworkChange> =
+                std::iter::once(first).chain(changes.try_iter()).collect();
+            if batch
+                .iter()
+                .any(|change| matches!(change, NetworkChange::Read))
+            {
+                wifi = read_wifi(&reader);
+                if !publish(&wifi) {
+                    break;
+                }
+                continue;
+            }
+            let mut moved = false;
+            if let Some(state) = wifi.as_mut() {
+                for change in batch {
+                    if let NetworkChange::Strength(access_point, strength) = change {
+                        moved |= set_strength(&mut state.networks, &access_point, strength);
+                    }
+                }
+            }
+            if moved && !updates.send(Update::Wifi(wifi.clone())) {
+                break;
+            }
+        }
+    });
+}
+
 fn read_network(network: &NetworkManager) -> NetworkState {
     NetworkState {
         ethernet: network.ethernet().ok().flatten(),
@@ -268,15 +329,9 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
             .path_namespace(NETWORK_MANAGER)?
             .build())
     }) {
-        signals(system, rule, changed);
+        signals(system, rule, changed, network_change);
     }
-    let reader = NetworkManager::new(system);
-    follow_state("network", updates.clone(), changes, move || {
-        vec![
-            Update::Wifi(read_wifi(&reader)),
-            Update::Network(read_network(&reader)),
-        ]
-    });
+    follow_wifi(NetworkManager::new(system), updates.clone(), changes);
     let (sender, receiver) = mpsc::channel();
     let network = NetworkManager::new(system);
     spawn("network-worker", move || {
@@ -387,7 +442,7 @@ pub fn follow_bluetooth(
             .sender(BLUEZ)?
             .build())
     }) {
-        signals(system, rule, changed);
+        signals(system, rule, changed, |_| Some(()));
     }
     let reader = Bluetooth::new(system);
     follow_state("bluetooth", updates.clone(), changes, move || {

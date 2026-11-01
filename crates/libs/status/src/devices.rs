@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -7,12 +6,12 @@ use std::time::Duration;
 use bande_audio::{Audio, Level, Snapshot};
 use bande_bluetooth::Bluetooth as BlueZ;
 use bande_inbox::Outbox;
-use bande_network::{NetworkManager, set_strength};
+use bande_network::{NetworkManager, set_strength, strength_signal};
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::names::BusName;
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::zvariant::OwnedObjectPath;
 use zbus::{MatchRule, Message, message};
 
 use crate::session::Ending;
@@ -25,9 +24,6 @@ const SOURCES: [(Source, &str); 3] = [
     (Source::Bluetooth, "org.bluez"),
 ];
 const BUS: &str = "org.freedesktop.DBus";
-const ACCESS_POINT: &str = "org.freedesktop.NetworkManager.AccessPoint";
-const STRENGTH: &str = "Strength";
-const LAST_SEEN: &str = "LastSeen";
 const UPOWER_CHARGING: u32 = 1;
 const UPOWER_FULL: u32 = 4;
 const UPOWER_BATTERY: u32 = 2;
@@ -310,28 +306,6 @@ fn device_rules() -> zbus::Result<Vec<MatchRule<'static>>> {
 
 type Owners = [Option<String>; SOURCES.len()];
 
-fn strength_only(message: &Message) -> Option<Option<u8>> {
-    if message
-        .header()
-        .member()
-        .is_none_or(|member| member.as_str() != "PropertiesChanged")
-    {
-        return None;
-    }
-    let (interface, changed, invalidated): (String, HashMap<String, OwnedValue>, Vec<String>) =
-        message.body().deserialize().ok()?;
-    let quiet = interface == ACCESS_POINT
-        && invalidated.is_empty()
-        && changed
-            .keys()
-            .all(|name| name == STRENGTH || name == LAST_SEEN);
-    quiet.then(|| {
-        changed
-            .get(STRENGTH)
-            .and_then(|value| u8::try_from(value).ok())
-    })
-}
-
 fn change_of(message: &Message, owners: &mut Owners) -> Option<Control> {
     let header = message.header();
     if header.message_type() != message::Type::Signal {
@@ -347,7 +321,7 @@ fn change_of(message: &Message, owners: &mut Owners) -> Option<Control> {
             .position(|owner| owner.as_deref() == Some(sender))?;
         let source = SOURCES[index].0;
         if source == Source::Wifi
-            && let Some(strength) = strength_only(message)
+            && let Some(strength) = strength_signal(message)
         {
             let access_point = header.path()?.to_string();
             return strength.map(|strength| Control::Strength(access_point, strength));

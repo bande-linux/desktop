@@ -111,7 +111,7 @@ watchdog), then test at the machine.
 
 - Milestone 1 done: `linux` `bande-hw/integration` dae396ce2567 (PSI, zram, zswap, the soft
   lockup and hung task detectors). Built with `kbuild` (Image + modules), not installed.
-- Milestone 2 done: `images` `prep/os-installable` faf3c3a (packages) and 7c5329e (watchdog,
+- Milestone 2 done: `images` `main` (then `prep/os-installable`) faf3c3a (packages) and 7c5329e (watchdog,
   panic reboot). No image built, since that needs CI.
 - Milestones 3 and 4 done in the desktop: the OOM-floor drop-ins in `packaging/bande-desktop`,
   `WatchdogSec=20s` with `WATCHDOG=1` keepalives from the compositor's event loop.

@@ -84,6 +84,11 @@ from the text below: the gap to the bar is 8 pt everywhere (no anchor too), so t
 banners moved 4 pt; Hold on the clock still opens the centre, only a right click opens the clock
 menu (the menu bar client has no hold timer); the moon is drawn from two discs (`ink3` and the
 frame tone) and covered by an accessibility-label test, not a rail golden.
+Fixed 2026-11-01 after the owner saw the centre still open under the taskbar: the shell maps the
+notifications layer before the bar, and the layer map gave a non-reserving layer only the space
+left by layers mapped before it. The notifications surface covered the whole screen while the
+anchor was relative to the area beside the bar, so the centre lay under the taskbar. The compositor
+now arranges a layer that reserves space before the non-reserving layers mapped earlier.
 
 
 Each milestone is one short branch from `main`, gated by fmt, workspace clippy `-D warnings` and workspace tests, then checked live on the mini.

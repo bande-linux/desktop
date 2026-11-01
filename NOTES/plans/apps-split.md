@@ -43,7 +43,7 @@ All are shared and stay in desktop unless noted.
 ### apt and images
 - **Live archive (checked 2026-11-01): `state/owners` lists only apt and kernel.** No desktop or app has published yet. The owners file locks a package name to the first source that publishes it, so the move must land before the first desktop `vX.Y.Z` tag. Otherwise apt needs a transfer list (e.g. conf/transfers, honoured in rebuild.sh when it builds `claims`) and the apps' versions must be higher than the desktop's.
 - publish.yml's verify step installs bande-desktop with `--no-install-recommends`, so apps-repo packages don't trip its "every bande-* at the desktop version" check.
-- images (prep/os-installable): fetch-desktop.sh downloads only packages owned by desktop or apt and requires each to equal the bande-desktop version; customize.sh runs `apt-get install --no-install-recommends /tmp/desktop/*.deb`. **Unless fetch-desktop.sh changes, the moved apps silently disappear from images.**
+- images (main): fetch-desktop.sh downloads only packages owned by desktop or apt and requires each to equal the bande-desktop version; customize.sh runs `apt-get install --no-install-recommends /tmp/desktop/*.deb`. **Unless fetch-desktop.sh changes, the moved apps silently disappear from images.**
 
 ### Gates
 - desktop: CLAUDE.md requires fmt, workspace clippy `-D warnings` and workspace tests on the hermetic bus (~/bande-linux/bin/desktop-gate) before merging to main. CI runs only on tags.
@@ -189,4 +189,4 @@ Bump in batches when an app needs a new API, not after every desktop merge. Befo
 - ci/release/build-all.sh, check-debs.sh, packages; ci/deb/install-test/run.sh
 - crates/platform/compositor/src/state/mod.rs and session.rs; crates/shell/bar/src/menu_bar_client.rs (Force Quit)
 - ~/bande-linux/repos/apps/ci/build-app.sh and apps/apps/mail/Cargo.toml (template for standalone apps)
-- ~/bande-linux/repos/images/fetch-desktop.sh (prep/os-installable); ~/bande-linux/bin/rebuild-desktop
+- ~/bande-linux/repos/images/fetch-desktop.sh (main); ~/bande-linux/bin/rebuild-desktop

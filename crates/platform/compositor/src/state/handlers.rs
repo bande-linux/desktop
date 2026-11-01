@@ -30,8 +30,8 @@ use smithay::wayland::selection::primary_selection::{
     PrimarySelectionHandler, PrimarySelectionState, set_primary_focus,
 };
 use smithay::wayland::shell::wlr_layer::{
-    KeyboardInteractivity, Layer, LayerSurface, LayerSurfaceData, WlrLayerShellHandler,
-    WlrLayerShellState,
+    ExclusiveZone, KeyboardInteractivity, Layer, LayerSurface, LayerSurfaceData,
+    WlrLayerShellHandler, WlrLayerShellState,
 };
 use smithay::wayland::shell::xdg::{
     Configure, PopupSurface, PositionerState, ShellClient, ToplevelSurface, XdgShellHandler,
@@ -66,6 +66,25 @@ impl State {
         else {
             return false;
         };
+        if matches!(
+            layer.cached_state().exclusive_zone,
+            ExclusiveZone::Exclusive(_)
+        ) {
+            let sharing: Vec<MappedLayer> = map
+                .layers()
+                .take_while(|known| **known != layer)
+                .filter(|known| known.cached_state().exclusive_zone == ExclusiveZone::Neutral)
+                .cloned()
+                .collect();
+            for known in &sharing {
+                map.unmap_layer(known);
+            }
+            for known in &sharing {
+                if map.map_layer(known).is_err() {
+                    known.layer_surface().send_close();
+                }
+            }
+        }
         map.arrange();
         let mapped = is_mapped(surface);
         let exclusive = (mapped

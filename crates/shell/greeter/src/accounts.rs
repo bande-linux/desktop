@@ -1,5 +1,4 @@
 use std::fs::{File, OpenOptions};
-use std::os::fd::AsRawFd;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
@@ -22,10 +21,6 @@ pub fn login_picture(folder: &Path, uid: u32) -> Option<File> {
         tracing::warn!("{} is not a picture {uid} shared", path.display());
     }
     trusted.then_some(file)
-}
-
-pub fn opened_path(file: &File) -> PathBuf {
-    PathBuf::from(format!("/proc/self/fd/{}", file.as_raw_fd()))
 }
 
 pub fn last_user_file(state_home: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {

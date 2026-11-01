@@ -1,7 +1,7 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use bande_graphics::{
-    Color, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene, Shape, TextAlign,
-    TextStyle, TextSystem, TitleBar, resize_zone, title_style, window_controls_area,
+    Color, Cut, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene, Shape, TextAlign,
+    TextStyle, TextSystem, TitleBar, resize_zone, shortened, title_style, window_controls_area,
 };
 
 use std::time::Instant;
@@ -392,7 +392,19 @@ impl Chrome {
             Some(header) => {
                 let text = self.text.get_or_insert_with(TextSystem::new);
                 let empty = text.paragraph("", style, None, TextAlign::Start);
-                (empty, Some((header.title_area(frame.width), title)))
+                let area = header.title_area(frame.width);
+                let title = match title.width() > area.width {
+                    true => {
+                        let shown = shortened(&self.title, Cut::End, |candidate| {
+                            text.paragraph(candidate, style, None, TextAlign::Start)
+                                .width()
+                                <= area.width
+                        });
+                        text.paragraph(&shown, style, None, TextAlign::Start)
+                    }
+                    false => title,
+                };
+                (empty, Some((area, title)))
             }
             None => (title, None),
         };

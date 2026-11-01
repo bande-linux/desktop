@@ -42,11 +42,12 @@ const NAME_ROW: f64 = 30.0;
 const OPEN_SCALE: f64 = 0.96;
 
 #[derive(Debug, Clone, PartialEq)]
-struct App {
+pub(crate) struct App {
     id: String,
     client: Option<ClientId>,
-    name: String,
-    icon: Option<String>,
+    pub(crate) name: String,
+    pub(crate) icon: Option<String>,
+    pub(crate) entry: Option<String>,
 }
 
 impl App {
@@ -131,7 +132,7 @@ pub(crate) struct Switcher {
     announcer: Announcer,
 }
 
-type IconKey = (String, u32);
+pub(crate) type IconKey = (String, u32);
 
 pub(crate) enum Loaded {
     Entries(Vec<DesktopEntry>),
@@ -187,7 +188,7 @@ impl Switcher {
         }
     }
 
-    fn load_icons(&mut self, wanted: Vec<IconKey>) {
+    pub(crate) fn load_icons(&mut self, wanted: Vec<IconKey>) {
         if wanted.is_empty() {
             return;
         }
@@ -237,7 +238,7 @@ impl Switcher {
         })
     }
 
-    fn app(&mut self, id: &str, title: &str) -> App {
+    pub(crate) fn app(&mut self, id: &str, title: &str) -> App {
         if let Some(known) = self.known.get(id) {
             return known.clone();
         }
@@ -260,6 +261,7 @@ impl Switcher {
             client: None,
             name,
             icon: entry.and_then(|entry| entry.icon.clone()),
+            entry: entry.map(|entry| entry.id.clone()),
         };
         if entry.is_some() {
             self.known.insert(id.to_owned(), app.clone());
@@ -267,7 +269,12 @@ impl Switcher {
         app
     }
 
-    fn image(&mut self, name: &str, pixels: u32, wanted: &mut Vec<IconKey>) -> Option<Image> {
+    pub(crate) fn image(
+        &mut self,
+        name: &str,
+        pixels: u32,
+        wanted: &mut Vec<IconKey>,
+    ) -> Option<Image> {
         let key = (name.to_owned(), pixels);
         match self.images.get(&key) {
             Some(image) => image.clone(),

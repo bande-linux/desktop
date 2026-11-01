@@ -11,7 +11,8 @@ repository.workspace = true
 accesskit.workspace = true
 accesskit_unix.workspace = true
 jiff.workspace = true
-rustix = { workspace = true, features = ["time"] }
+libc.workspace = true
+rustix = { workspace = true, features = ["net", "time"] }
 smithay = { workspace = true, features = ["backend_drm", "backend_gbm", "backend_libinput", "backend_session_libseat", "backend_udev", "desktop"] }
 tracing.workspace = true
 bande-bus.workspace = true

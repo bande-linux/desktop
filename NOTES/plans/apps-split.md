@@ -1,6 +1,6 @@
 # Moving Terminal, Activity Monitor, Software and Package Installer to bande-linux/apps
 
-Approved by the owner on 2026-11-01. **Status: M1, M2, M4-M7 done 2026-11-01; M3 skipped (Activity Monitor and Force Quit stay in desktop); the releases wait for the owner's tags. Final gates 2026-11-01: desktop-gate green on `main` plus split/finish (which fixed Files' Terminal check in tests, sunrise and sunset west of Greenwich in bande-datetime, the clamped-geometry test, portal clippy and the polkit goldens); apps ci/gate.sh green on all five apps at e9e10c5 (Installer and Terminal goldens regenerated).** Files, Settings and the file chooser stay in desktop: the file chooser depends on bande-files, and Files is the system file manager. Apps consume desktop crates as git dependencies pinned to one desktop rev.
+Approved by the owner on 2026-11-01. **Status: M1, M2, M4-M7 done 2026-11-01; M3 (Force Quit out of Activity Monitor, then Activity Monitor to apps) follows [force-quit](force-quit.md); the releases wait for the owner's tags. Final gates 2026-11-01: desktop-gate green on `main` plus split/finish (which fixed Files' Terminal check in tests, sunrise and sunset west of Greenwich in bande-datetime, the clamped-geometry test, portal clippy and the polkit goldens); apps ci/gate.sh green on all five apps at e9e10c5 (Installer and Terminal goldens regenerated).** Files, Settings and the file chooser stay in desktop: the file chooser depends on bande-files, and Files is the system file manager. Apps consume desktop crates as git dependencies pinned to one desktop rev.
 
 ## Findings
 
@@ -128,7 +128,7 @@ Status: done 2026-11-01. Differences from the plan: the ci/vm guest runner no lo
 - Drop `/usr/bin/bande-monitor` from session-clients and the MONITOR constant if unused. Monitor keeps its in-app Force Quit.
 - If D2 is declined: skip this, and when bande-monitor is missing the compositor quits the focused app after confirmation.
 
-Status: skipped. Decided 2026-11-01 (apps-split agent, D2's own fallback; owner may revisit): Force Quit and so Activity Monitor stay in the desktop repo. A shell Force Quit means porting monitor's Force Quit window together with the model and sampler it is built on (about 2,500 lines) into bande-shell and proving the four D2 cases with tests; that could not be shown at least as reliable as today in this pass, and the shell was being reworked for performance by another agent at the same time. Moving Activity Monitor later is the M4/M5 recipe for one more app plus this milestone. The moving apps are Terminal, Software (with catalog) and Installer; bande-monitor stays pinned in the control file like Files and Settings.
+Status: replaced by [force-quit](force-quit.md). The overnight fallback (Force Quit and so Activity Monitor stay in desktop) was declined by the owner on 2026-11-01: "do it like that as well even if it is more work, i prefer correctness." Force Quit moves into the compositor itself rather than bande-shell (it is the process that is always running and survives every hang, as macOS's loginwindow), Activity Monitor keeps only its per-process Quit and Force Quit, and it moves to the apps repo by the M4/M5 recipe. The four D2 cases are tested there.
 
 ### M4a / M4b (apps). Import with history and build standalone
 M4a: Terminal and Monitor. M4b: Software (with catalog) and Installer.

@@ -1,13 +1,12 @@
 use bande_protocols::server::bande_shell_v1::BandeShellV1;
 use bande_spring::Spring;
-use rustix::process::{Pid, Signal, kill_process};
 use smithay::desktop::layer_map_for_output;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Resource};
 use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 
 use crate::motion::{BAR_NAMESPACE, Look, TASKBAR_NAMESPACE};
-use crate::shell::{is_shell, toplevel_names};
+use crate::shell::toplevel_names;
 use crate::state::State;
 
 impl State {
@@ -90,23 +89,9 @@ impl State {
     }
 
     pub(crate) fn force_quit_app(&mut self, app_id: &str) {
-        let own = std::process::id() as i32;
+        let ids = self.app_ids(app_id);
         for client in self.app_clients(app_id) {
-            if is_shell(&client) {
-                continue;
-            }
-            let Ok(credentials) = client.get_credentials(&self.display_handle) else {
-                tracing::warn!("cannot tell which process runs {app_id}");
-                continue;
-            };
-            if credentials.pid == own {
-                continue;
-            }
-            if let Some(pid) = Pid::from_raw(credentials.pid)
-                && let Err(error) = kill_process(pid, Signal::KILL)
-            {
-                tracing::warn!("cannot force {app_id} to quit: {error}");
-            }
+            self.kill_client(&client, &ids);
         }
     }
 

@@ -910,3 +910,31 @@ fn typed_locations_expand_the_home_folder_and_resolve_against_the_shown_one() {
         shown.join("~bob")
     );
 }
+
+#[test]
+fn purging_removes_only_items_trashed_before_the_limit() {
+    let place = Place::new();
+    let home = place.trash.home();
+    let day = |day| jiff::civil::date(2026, 10, day).at(12, 0, 0, 0);
+    let old = home.put(&place.file("old", "o"), day(1)).expect("put");
+    let recent = home.put(&place.file("recent", "r"), day(21)).expect("put");
+    let undated = home.put(&place.file("undated", "u"), day(1)).expect("put");
+    fs::write(
+        place.path("Trash/info/undated.trashinfo"),
+        "[Trash Info]\nPath=/undated\n",
+    )
+    .expect("info");
+
+    place.trash.purge(day(11)).expect("purge");
+
+    let mut left: Vec<_> = place
+        .trash
+        .items()
+        .into_iter()
+        .map(|item| item.id)
+        .collect();
+    left.sort();
+    assert_eq!(left, [recent.id, undated.id]);
+    assert!(!old.path().exists());
+    assert!(!place.path("Trash/info/old.trashinfo").exists());
+}

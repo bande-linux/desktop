@@ -7,3 +7,4 @@ window = Window
 minimize = Minimize
 zoom = Zoom
 close-window = Close Window
+settings = Settings…

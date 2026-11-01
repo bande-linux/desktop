@@ -7,6 +7,7 @@ use bande_xdg::{config_home, data_home};
 use xdg_desktop_portal_bande::capture::{ScreenshotService, ScreenshotTool};
 use xdg_desktop_portal_bande::dialog_process::{DIALOG_PROGRAM, DialogProcess};
 use xdg_desktop_portal_bande::file_chooser::FileChooser;
+use xdg_desktop_portal_bande::gtk::GtkHomes;
 use xdg_desktop_portal_bande::screencast::{ScreenCast, close_sessions_streaming};
 use xdg_desktop_portal_bande::screenshot::Screenshot;
 use xdg_desktop_portal_bande::settings::{CursorSettings, Settings};
@@ -44,7 +45,9 @@ fn serve() -> zbus::Result<Connection> {
         &connection,
         system.as_ref(),
         CursorSettings::from_environment(),
-        config_home(),
+        config_home()
+            .zip(data_home())
+            .map(|(config, data)| GtkHomes { config, data }),
     )?;
     connection
         .object_server()

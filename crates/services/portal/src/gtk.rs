@@ -1,11 +1,18 @@
 use std::fmt::Write as _;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use bande_design::{Accent, Color, Contrast, Palette, Scheme, TextRole};
 
 pub const STYLESHEET: &str = "bande.css";
 pub const IMPORT: &str = "@import url(\"bande.css\");";
+pub const THEME: &str = "Bande";
+pub const DARK_THEME: &str = "Bande-dark";
+
+pub struct GtkHomes {
+    pub config: PathBuf,
+    pub data: PathBuf,
+}
 
 fn hex(color: Color) -> String {
     format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b)
@@ -110,11 +117,11 @@ windowcontrols > button:active > image {
 }
 ";
 
-fn window_title(css: &mut String) {
+fn window_title(css: &mut String, selectors: &str) {
     let spec = TextRole::WindowTitle.spec();
     let _ = write!(
         css,
-        "\nheaderbar .title,\nwindowtitle .title {{\n  font-family: \"{}\";\n  font-size: {}px;\n  font-weight: {};\n}}\n",
+        "\n{selectors} {{\n  font-family: \"{}\";\n  font-size: {}px;\n  font-weight: {};\n}}\n",
         spec.typeface.family(),
         spec.size,
         spec.weight
@@ -138,7 +145,7 @@ pub fn stylesheet(accent: Accent, current: Scheme) -> String {
         css.push_str("}\n");
     }
     css.push_str(WINDOW_CONTROLS);
-    window_title(&mut css);
+    window_title(&mut css, "headerbar .title,\nwindowtitle .title");
     css
 }
 
@@ -160,6 +167,154 @@ pub fn gtk3_stylesheet(accent: Accent, scheme: Scheme) -> String {
     })
 }
 
+pub fn theme_name(scheme: Scheme) -> &'static str {
+    match scheme {
+        Scheme::Light => THEME,
+        Scheme::Dark => DARK_THEME,
+    }
+}
+
+pub fn gtk3_theme(accent: Accent, scheme: Scheme) -> String {
+    let palette = Palette::generate(scheme, accent, Contrast::Standard);
+    let adwaita = match scheme {
+        Scheme::Light => "gtk-contained.css",
+        Scheme::Dark => "gtk-contained-dark.css",
+    };
+    let mut css = format!(
+        "@import url(\"resource:///org/gtk/libgtk/theme/Adwaita/{adwaita}\");\n\n{}",
+        gtk3_stylesheet(accent, scheme)
+    );
+    let (chassis, well, hairline) = (
+        hex(palette.chassis),
+        hex(palette.well),
+        hex(palette.hairline),
+    );
+    let (ink, ink2, ink3) = (hex(palette.ink), hex(palette.ink2), hex(palette.ink3));
+    let (danger, accent_fill, on_accent) = (
+        hex(palette.danger),
+        hex(palette.accent),
+        hex(palette.on_accent),
+    );
+    let _ = write!(
+        css,
+        "
+headerbar,
+.titlebar:not(headerbar) {{
+  background-color: {chassis};
+  background-image: none;
+  box-shadow: none;
+  color: {ink};
+}}
+
+headerbar:backdrop,
+.titlebar:not(headerbar):backdrop {{
+  background-color: {chassis};
+  background-image: none;
+}}
+
+button.titlebutton {{
+  min-width: 21px;
+  min-height: 24px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background-color: {well};
+  background-image: none;
+  box-shadow: none;
+  color: {ink2};
+  -gtk-icon-shadow: none;
+}}
+
+button.titlebutton.close {{
+  border-radius: 12px 0 0 12px;
+}}
+
+button.titlebutton.maximize {{
+  border-radius: 0 12px 12px 0;
+}}
+
+button.titlebutton:hover {{
+  color: {ink};
+}}
+
+button.titlebutton.close:hover {{
+  background-image: radial-gradient(circle, {danger} 7.5px, transparent 8px);
+  color: white;
+}}
+
+button.titlebutton:active {{
+  background-image: radial-gradient(circle, alpha({ink}, 0.12) 7.5px, transparent 8px);
+}}
+
+button.titlebutton:backdrop {{
+  background-color: transparent;
+  color: {ink3};
+  box-shadow: inset 0 1px {hairline}, inset 0 -1px {hairline};
+}}
+
+button.titlebutton.close:backdrop {{
+  box-shadow: inset 1px 0 {hairline}, inset 0 1px {hairline}, inset 0 -1px {hairline};
+}}
+
+button.titlebutton.maximize:backdrop {{
+  box-shadow: inset -1px 0 {hairline}, inset 0 1px {hairline}, inset 0 -1px {hairline};
+}}
+
+*:selected,
+button.suggested-action,
+switch:checked,
+check:checked,
+radio:checked,
+progressbar progress,
+scale highlight {{
+  background-color: {accent_fill};
+  background-image: none;
+  border-color: {accent_fill};
+}}
+
+*:selected,
+button.suggested-action,
+check:checked,
+radio:checked {{
+  color: {on_accent};
+}}
+"
+    );
+    window_title(&mut css, "headerbar .title,\n.titlebar .title");
+    css
+}
+
+fn gtk4_theme(scheme: Scheme) -> String {
+    let variant = match scheme {
+        Scheme::Light => "light",
+        Scheme::Dark => "dark",
+    };
+    format!("@import url(\"resource:///org/gtk/libgtk/theme/Default/Default-{variant}.css\");\n")
+}
+
+fn index_theme(name: &str) -> String {
+    format!(
+        "[Desktop Entry]\nType=X-GNOME-Metatheme\nName={name}\n\n[X-GNOME-Metatheme]\nGtkTheme={name}\n"
+    )
+}
+
+pub fn install_themes(data_home: &Path, accent: Accent) -> io::Result<()> {
+    for scheme in [Scheme::Light, Scheme::Dark] {
+        let name = theme_name(scheme);
+        let theme = data_home.join("themes").join(name);
+        for (directory, sheet) in [
+            ("gtk-3.0", gtk3_theme(accent, scheme)),
+            ("gtk-4.0", gtk4_theme(scheme)),
+        ] {
+            std::fs::create_dir_all(theme.join(directory))?;
+            replace(&theme.join(directory).join("gtk.css"), &sheet)?;
+        }
+        replace(&theme.join("index.theme"), &index_theme(name))?;
+    }
+    Ok(())
+}
+
 pub fn with_import(user: &str) -> Option<String> {
     if user.lines().any(|line| line.trim() == IMPORT) {
         return None;
@@ -171,17 +326,18 @@ fn replace(path: &Path, contents: &str) -> io::Result<()> {
     if std::fs::read_to_string(path).is_ok_and(|current| current == contents) {
         return Ok(());
     }
-    let staging = path.with_extension("css.new");
+    let staging = path.with_extension("new");
     std::fs::write(&staging, contents)?;
     std::fs::rename(staging, path)
 }
 
-pub fn install(config_home: &Path, accent: Accent, scheme: Scheme) -> io::Result<()> {
-    install_into(&config_home.join("gtk-4.0"), &stylesheet(accent, scheme))?;
+pub fn install(homes: &GtkHomes, accent: Accent, scheme: Scheme) -> io::Result<()> {
+    install_into(&homes.config.join("gtk-4.0"), &stylesheet(accent, scheme))?;
     install_into(
-        &config_home.join("gtk-3.0"),
+        &homes.config.join("gtk-3.0"),
         &gtk3_stylesheet(accent, scheme),
-    )
+    )?;
+    install_themes(&homes.data, accent)
 }
 
 fn install_into(directory: &Path, sheet: &str) -> io::Result<()> {

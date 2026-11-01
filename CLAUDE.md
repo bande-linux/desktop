@@ -14,7 +14,7 @@
 
 ## Factory Verification
 - **No panics**: No `.unwrap()` or `.expect()` in production code. Use proper error handling.
-- **Build first, test once**: each change only needs to compile (`desktop-check <worktree> -p <crate>`: fmt and `cargo check`). The full gate (fmt, workspace clippy `-D warnings`, workspace tests on the hermetic bus, goldens) runs once on `main` when a batch of work has merged, and `main` fixes whatever it finds then.
+- **Build first, test once**: each change only needs to compile (`desktop-check <worktree> -p <crate>`: fmt and `cargo check`). The full gate (fmt, workspace clippy `-D warnings`, workspace tests on the hermetic bus) runs once on `main` when a batch of work has merged, and `main` fixes whatever it finds then.
 
 ## Workflow
 - Trunk-based: `main` always builds. Each milestone is a short branch from `main`.

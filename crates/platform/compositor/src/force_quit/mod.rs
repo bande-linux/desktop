@@ -463,6 +463,7 @@ impl State {
             return true;
         }
         let Some(kind) = kind else {
+            self.swallowed_button = Some(button);
             return true;
         };
         open.held = Some(button);

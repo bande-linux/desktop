@@ -227,6 +227,14 @@ fn hotplug(app: &mut App<DrmBackend>) {
                 app.compositor.add_output(output);
             }
             sync_heads(app);
+            app.schedulers
+                .iter_mut()
+                .filter(|scheduler| {
+                    scheduler.output().is_some_and(|name| {
+                        changes.relinked.iter().any(|relinked| relinked == name)
+                    })
+                })
+                .for_each(FrameScheduler::resume);
         }
         Err(error) => tracing::warn!("cannot look for displays: {error}"),
     }

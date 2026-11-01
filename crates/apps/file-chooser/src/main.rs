@@ -12,12 +12,12 @@ use bande_file_chooser::{
 };
 use bande_files::{rows, sidebar_file, with_volumes};
 use bande_toolkit::ui::Alert;
-use bande_toolkit::{App, Image, Role, Scene, TextSystem, Window, WindowEvent};
+use bande_toolkit::{App, Image, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 use bande_volumes::{media_roots, mounted_volumes};
 use bande_wallpaper::Fit;
 use bande_xdg::{
     Locale, MimeDatabase, UserDir, app_name, applications, config_home, current_desktops,
-    data_dirs, state_home, user_dir,
+    data_dirs, replace_file, state_home, user_dir,
 };
 use xdg_desktop_portal_bande::dialog_process::{CANCELLED, CHOSEN, SET_WALLPAPER, encode, parse};
 use xdg_desktop_portal_bande::file_chooser::{Dialog, Mode, Selection};
@@ -79,6 +79,10 @@ impl App for FileDialog {
         self.view.animating()
     }
 
+    fn text_input_area(&self) -> Option<Rect> {
+        self.view.text_input_area()
+    }
+
     fn accessibility(&self) -> Option<TreeUpdate> {
         Some(self.view.accessibility())
     }
@@ -101,13 +105,7 @@ fn remember_folder(app_id: &str, folder: &Path) {
         app_id,
         folder,
     );
-    let staging = file.with_extension("new");
-    let written = file
-        .parent()
-        .map_or(Ok(()), std::fs::create_dir_all)
-        .and_then(|()| std::fs::write(&staging, updated))
-        .and_then(|()| std::fs::rename(&staging, &file));
-    if let Err(error) = written {
+    if let Err(error) = replace_file(&file, &updated) {
         tracing::warn!("cannot remember the folder: {error}");
     }
 }

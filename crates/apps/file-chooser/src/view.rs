@@ -1102,6 +1102,10 @@ impl ChooserView {
         self.ui.is_animating()
     }
 
+    pub fn text_input_area(&self) -> Option<Rect> {
+        self.ui.text_input_area()
+    }
+
     pub fn folder(&self) -> PathBuf {
         self.chooser.folder().to_path_buf()
     }

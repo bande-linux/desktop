@@ -1,5 +1,8 @@
+use std::fs::File;
 use std::io;
+use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::thread;
 
 use bande_inbox::Inbox;
@@ -7,16 +10,20 @@ use bande_toolkit::Image;
 use bande_wallpaper::{Choice, Variant, backdrop, read, render};
 use bande_xdg::data_dirs;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum BackdropSource {
     Session,
-    Picture(Option<PathBuf>),
+    Picture(Option<Arc<File>>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Look {
     Blurred,
     Sharp,
+}
+
+fn opened_path(file: &File) -> PathBuf {
+    PathBuf::from(format!("/proc/self/fd/{}", file.as_raw_fd()))
 }
 
 pub fn load_backdrop(
@@ -30,15 +37,22 @@ pub fn load_backdrop(
     thread::Builder::new()
         .name("backdrop".to_owned())
         .spawn(move || {
-            let choice = match source {
-                BackdropSource::Session => zbus::blocking::Connection::session()
-                    .map(|session| read(&session))
-                    .unwrap_or_default(),
-                BackdropSource::Picture(path) => Choice {
-                    light: path.clone(),
-                    dark: path,
-                    ..Choice::default()
-                },
+            let (choice, picture) = match source {
+                BackdropSource::Session => (
+                    bande_bus::session()
+                        .map(|session| read(&session))
+                        .unwrap_or_default(),
+                    None,
+                ),
+                BackdropSource::Picture(picture) => {
+                    let path = picture.as_deref().map(opened_path);
+                    let choice = Choice {
+                        light: path.clone(),
+                        dark: path,
+                        ..Choice::default()
+                    };
+                    (choice, picture)
+                }
             };
             let home = std::env::var_os("HOME").map(PathBuf::from);
             let Some(path) = choice.path(variant, home.as_deref(), &data_dirs()) else {
@@ -51,9 +65,10 @@ pub fn load_backdrop(
             };
             for look in looks {
                 let image = match draw(&path, look) {
-                    Ok(picture) => {
-                        let path = path.clone();
-                        Image::redrawable(picture.width, picture.height, picture.rgba, move || {
+                    Ok(drawn) => {
+                        let (path, picture) = (path.clone(), picture.clone());
+                        Image::redrawable(drawn.width, drawn.height, drawn.rgba, move || {
+                            let path = picture.as_deref().map_or_else(|| path.clone(), opened_path);
                             draw(&path, look).ok().map(|picture| picture.rgba)
                         })
                     }

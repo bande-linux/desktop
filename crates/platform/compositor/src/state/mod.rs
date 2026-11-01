@@ -149,6 +149,7 @@ pub struct State {
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
     pub(crate) cursor_status: CursorImageStatus,
+    pub(crate) cursor_owner: Option<ClientId>,
     pub(crate) cursor_theme: CursorTheme,
     cursor_arrow: Cursor,
     named_cursors: HashMap<CursorIcon, Option<Cursor>>,
@@ -285,6 +286,7 @@ impl Compositor {
             pointer_location: (center.w, center.h).into(),
             cursor_shown: false,
             cursor_status: CursorImageStatus::default_named(),
+            cursor_owner: None,
             cursor_theme: CursorTheme::builtin(),
             cursor_arrow: Cursor {
                 buffer: cursor::arrow(),
@@ -405,11 +407,21 @@ impl Compositor {
                 window.size.is_none() || (state.overview.is_shown() && window.visible())
             })
             .map(|window| window.surface().clone());
+        let cursor = match &state.cursor_status {
+            CursorImageStatus::Surface(surface) => Some(surface.clone()),
+            _ => None,
+        };
+        let drag_icon = state.drag_icon();
+        let pointed = (state.pointer_screen() == screen)
+            .then_some(cursor.into_iter().chain(drag_icon))
+            .into_iter()
+            .flatten();
         let roots = state
             .stack(screen)
             .into_iter()
             .map(|(surface, _)| surface)
             .chain(unmapped)
+            .chain(pointed)
             .collect::<Vec<_>>();
         let latched = &mut state.screens[screen];
         for root in roots {

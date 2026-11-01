@@ -309,6 +309,12 @@ impl SeatHandler for State {
             self.load_named_cursor(icon);
         }
         self.cursor_status = image;
+        self.cursor_owner = self
+            .seat
+            .get_pointer()
+            .and_then(|pointer| pointer.current_focus())
+            .and_then(|surface| surface.client())
+            .map(|client| client.id());
         self.needs_redraw = true;
     }
 

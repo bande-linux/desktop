@@ -143,13 +143,25 @@ impl State {
 
     pub(crate) fn confirm_lock(&mut self, screen: usize) {
         let name = self.screens[screen].name();
-        let names: Vec<String> = self.screens.iter().map(|screen| screen.name()).collect();
         let Some(lock) = &mut self.lock else {
             return;
         };
         if lock.latched.contains(&name) && !lock.presented.contains(&name) {
             lock.presented.push(name);
         }
+        self.settle_lock();
+    }
+
+    pub(crate) fn settle_lock(&mut self) {
+        let names: Vec<String> = self
+            .screens
+            .iter()
+            .map(|screen| screen.name())
+            .filter(|name| self.powered(name))
+            .collect();
+        let Some(lock) = &mut self.lock else {
+            return;
+        };
         if !names.iter().all(|name| lock.presented.contains(name)) {
             return;
         }
@@ -215,6 +227,7 @@ impl SessionLockHandler for State {
         });
         self.set_keyboard_focus(None);
         self.needs_redraw = true;
+        self.settle_lock();
     }
 
     fn unlock(&mut self) {

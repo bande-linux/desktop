@@ -34,15 +34,38 @@ impl InputSettings {
         Self::of(&Config::default())
     }
 
-    pub fn read() -> Self {
-        let home = std::env::var_os("HOME").map(PathBuf::from);
-        let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-        let config = config_path(config_home.as_deref(), home.as_deref())
-            .and_then(|path| std::fs::read_to_string(path).ok())
-            .and_then(|source| Config::parse(&source).ok())
-            .unwrap_or_default();
-        Self::of(&config)
+    pub fn read() -> Option<Self> {
+        user_config().map(|config| Self::of(&config))
     }
+}
+
+pub fn user_config() -> Option<Config> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
+    let Some(path) = config_path(config_home.as_deref(), home.as_deref()) else {
+        return Some(Config::default());
+    };
+    let source = match std::fs::read_to_string(&path) {
+        Ok(source) => source,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Some(Config::default());
+        }
+        Err(error) => {
+            tracing::warn!(
+                "cannot read {}, keeping the settings: {error}",
+                path.display()
+            );
+            return None;
+        }
+    };
+    Config::parse(&source)
+        .inspect_err(|error| {
+            tracing::warn!(
+                "{} is not valid, keeping the settings: {error}",
+                path.display()
+            );
+        })
+        .ok()
 }
 
 pub fn follow_input_settings(
@@ -55,9 +78,11 @@ pub fn follow_input_settings(
         .build()?
         .receive_properties_changed()?;
     thread::spawn(move || {
-        let mut known = InputSettings::read();
+        let mut known = InputSettings::read().unwrap_or_else(InputSettings::system);
         for _ in changes {
-            let read = InputSettings::read();
+            let Some(read) = InputSettings::read() else {
+                continue;
+            };
             if read != known {
                 known = read.clone();
                 if !publish(read) {

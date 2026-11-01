@@ -238,6 +238,7 @@ impl Widget for Stepper {
                 }
             }
             Event::PointerUp(pointer) if pointer.is_primary() => self.press = None,
+            Event::PointerLeave if self.press.is_some() => self.press = None,
             Event::Key {
                 key: Key::Up | Key::Right,
                 ..

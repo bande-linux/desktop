@@ -226,6 +226,7 @@ impl Widget for RadioGroup {
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 self.pressed = self.choice_at(pointer.position);
             }
+            Event::PointerLeave if self.pressed.is_some() => self.pressed = None,
             Event::PointerUp(pointer) if pointer.is_primary() => {
                 let chosen = self.pressed.take();
                 if let Some(index) =

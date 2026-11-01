@@ -541,7 +541,7 @@ impl ChooserView {
             .filter_map(|(index, row)| match row {
                 SidebarRow::Heading(title) => Some(Row::new(
                     format!("heading:{index}"),
-                    vec![Cell::new(title.as_str()).muted()],
+                    vec![Cell::new(title.as_str()).muted().label()],
                 )),
                 SidebarRow::Place(place) => place_key(place).map(|key| {
                     let icon = self.icons.first(&[place.icon.to_owned()]);

@@ -72,6 +72,7 @@ pub enum FramePath {
 pub enum Role {
     Toplevel { title: String, app_id: String },
     Dialog { title: String, app_id: String },
+    Utility { title: String, app_id: String },
     Layer(LayerOptions),
     Lock,
 }
@@ -86,6 +87,13 @@ impl Role {
 
     pub fn dialog(title: &str, app_id: &str) -> Self {
         Self::Dialog {
+            title: title.to_owned(),
+            app_id: app_id.to_owned(),
+        }
+    }
+
+    pub fn utility(title: &str, app_id: &str) -> Self {
+        Self::Utility {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
         }
@@ -356,9 +364,15 @@ impl Window {
             queue.roundtrip(&mut state)?;
         }
         let mut chrome = None;
-        let dialog = matches!(role, Role::Dialog { .. });
+        let (titled, fixed) = match &role {
+            Role::Dialog { .. } => (false, true),
+            Role::Utility { .. } => (true, true),
+            Role::Toplevel { .. } | Role::Layer(_) | Role::Lock => (true, false),
+        };
         let role = match role {
-            Role::Toplevel { title, app_id } | Role::Dialog { title, app_id } => {
+            Role::Toplevel { title, app_id }
+            | Role::Dialog { title, app_id }
+            | Role::Utility { title, app_id } => {
                 let wm_base = state
                     .wm_base
                     .clone()
@@ -367,10 +381,17 @@ impl Window {
                 let toplevel = xdg_surface.get_toplevel(&handle, ());
                 toplevel.set_title(title.clone());
                 toplevel.set_app_id(app_id);
-                if dialog {
-                    fix_size(&toplevel, size);
+                if fixed {
+                    let (width, height) = match titled {
+                        true => (
+                            size.0 + 2 * SHEET_INSET,
+                            size.1 + WINDOW_HEADER_HEIGHT + SHEET_INSET,
+                        ),
+                        false => size,
+                    };
+                    fix_size(&toplevel, (width, height));
                 }
-                chrome = Some(Chrome::new(title, !dialog));
+                chrome = Some(Chrome::new(title, titled, fixed));
                 ShellSurface::Toplevel(xdg_surface, toplevel)
             }
             Role::Layer(options) => {
@@ -517,14 +538,16 @@ impl Window {
 
     fn fix_dialog_size(&self, size: (u32, u32)) {
         if let ShellSurface::Toplevel(_, toplevel) = &self.role
-            && self.chrome.as_ref().is_some_and(|chrome| !chrome.titled)
+            && self.chrome.as_ref().is_some_and(|chrome| chrome.fixed)
         {
             fix_size(toplevel, size);
         }
     }
 
-    fn is_titled(&self) -> bool {
-        self.chrome.as_ref().is_some_and(|chrome| chrome.titled)
+    fn is_resizable(&self) -> bool {
+        self.chrome
+            .as_ref()
+            .is_some_and(|chrome| chrome.titled && !chrome.fixed)
     }
 
     fn geometry(&self) -> (u32, u32) {
@@ -542,7 +565,7 @@ impl Window {
 
     fn resize_radius(&self) -> Option<f32> {
         let toplevel = self.state.toplevel;
-        if !self.is_titled() || toplevel.maximized || toplevel.fullscreen {
+        if !self.is_resizable() || toplevel.maximized || toplevel.fullscreen {
             None
         } else if toplevel.tiled {
             Some(0.0)
@@ -558,7 +581,7 @@ impl Window {
             Gpu::Ready(gpu) => gpu.transparent,
             Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => true,
         };
-        if self.is_titled() && floating && transparent {
+        if self.is_resizable() && floating && transparent {
             RESIZE_MARGIN
         } else {
             0

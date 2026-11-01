@@ -164,6 +164,7 @@ Status: done 2026-11-01 for Terminal, Software, Installer and catalog (Activity 
 ### M7 (apt and images), then the first releases
 - images: the fetch-desktop.sh change above. apt: README table row, the Recommends check in publish.yml verify, a test for an apps package recommended by bande-desktop.
 - Release order: tag terminal-v0.1.0, monitor-v0.1.0, software-v0.1.0, installer-v0.1.0 (and mail, calendar) and wait for them to publish; bump `[workspace.package]` and tag desktop v0.1.0; build an image and check the apps are in it.
+- Next: app framework (NOTES/plans/app-framework.md)
 
 ### What a toolkit change costs afterwards
 1. Desktop branch, gate, merge.

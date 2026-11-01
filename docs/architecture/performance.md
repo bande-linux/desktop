@@ -62,7 +62,7 @@ eventfds. These are the only timers left; each runs only while its condition hol
 | :--- | :--- | :--- |
 | Compositor | every 10 s | systemd watchdog (`WatchdogSec=20s`) |
 | Night light | at the next scheduled change | real-time deadline; clock and time zone changes are events |
-| Bar clock, Calendar's today | at each minute boundary | the display unit |
+| Bar clock; Calendar's today while on screen | at each minute boundary | the display unit |
 | Countdowns (log out, screenshot timer), Now Playing | at each second boundary while shown | the display unit |
 | Notification Center | when an age label next changes, while open | the display unit (minutes, hours, midnight) |
 | Banners, alarms, calendar alerts | at their deadline | real deadlines |

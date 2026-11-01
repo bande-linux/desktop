@@ -73,11 +73,18 @@ static MONOSPACE_FAMILIES: [FontFamilyName<'static>; 3] = [
     FontFamilyName::Generic(GenericFamily::Monospace),
 ];
 
+static EMOJI_FAMILIES: [FontFamilyName<'static>; 3] = [
+    FontFamilyName::named(Typeface::Emoji.family()),
+    FontFamilyName::named(Typeface::Interface.family()),
+    FontFamilyName::Generic(GenericFamily::SansSerif),
+];
+
 fn families(typeface: Typeface) -> FontFamily<'static> {
     let families = match typeface {
         Typeface::Interface => INTERFACE_FAMILIES.as_slice(),
         Typeface::Display => DISPLAY_FAMILIES.as_slice(),
         Typeface::Monospace => MONOSPACE_FAMILIES.as_slice(),
+        Typeface::Emoji => EMOJI_FAMILIES.as_slice(),
     };
     FontFamily::List(families.into())
 }
@@ -141,6 +148,13 @@ impl TextStyle {
     pub const fn monospace(self) -> Self {
         Self {
             typeface: Typeface::Monospace,
+            ..self
+        }
+    }
+
+    pub const fn emoji(self) -> Self {
+        Self {
+            typeface: Typeface::Emoji,
             ..self
         }
     }

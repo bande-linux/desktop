@@ -6,6 +6,24 @@ measured with `bande-bench` (run by hand, no longer in CI); this page tracks mem
 
 ## How to measure
 
+Changes are no longer benchmarked one by one. A change only has to compile
+(`desktop-check <worktree> -p <crate>`); the full gate runs once on `main` after a batch has
+merged. Measure when a change is about memory, CPU or wake-ups, before and after, with release
+builds of both sides in the same worktree (`git stash`, build, copy the binaries away, unstash,
+build again), under `flock ~/bande-linux/kbuild.lock ~/bande-linux/bin/gentle` with the
+worktree's own target directory, and record the numbers in
+[`../quality/footprint.md`](../quality/footprint.md). Nothing is measured by restarting the
+owner's session: live numbers on the mini are read from `/proc` only.
+
+- **The whole session at idle:** `bande-idle` (`crates/testing/bench`) runs a headless
+  compositor with the session's services and apps from `--binaries <dir>` inside the test bus
+  and reports RSS and wake-ups per process with windows open, minimised and locked.
+- **One client's memory:** `bande-footprint` (below); for a precise number read
+  `Anonymous` from `/proc/<pid>/smaps_rollup` while it settles. `BANDE_RENDERER=gpu` makes
+  clients draw with lavapipe as a GPU, `BANDE_RENDERER=cpu` on the CPU path.
+- **A library on its own:** a throwaway crate in a scratch folder with a path dependency on
+  the crate (the file index, the catalogue, a D-Bus follower) is the quickest exact number.
+
 - **Shell clients:** `bande-footprint` (`crates/testing/bench`) starts each client as a shell
   client (so it sees `bande_shell_v1`) on a headless compositor with a 2928×1818 output, lets it settle, optionally moves the pointer
   back and forth 40 times, and prints RSS + swap, Vulkan device memory (the

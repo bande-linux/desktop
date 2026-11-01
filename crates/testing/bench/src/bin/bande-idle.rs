@@ -27,7 +27,7 @@ const SOFTWARE_RASTERISER: &str = "llvmpipe-";
 const TICK_MS: f64 = 10.0;
 const BUTTON_LEFT: u32 = 0x110;
 const KEY_LEFTMETA: u32 = 125;
-const KEY_M: u32 = 50;
+const KEY_H: u32 = 35;
 const SESSION_CLIENTS: [(&str, SessionRole); 3] = [
     (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
     (SHELL, SessionRole::Shell),
@@ -316,8 +316,8 @@ impl Session {
             self.server.press_button(BUTTON_LEFT, false, time);
             self.run_for(STEP)?;
             self.server.key(KEY_LEFTMETA, true, time);
-            self.server.key(KEY_M, true, time);
-            self.server.key(KEY_M, false, time);
+            self.server.key(KEY_H, true, time);
+            self.server.key(KEY_H, false, time);
             self.server.key(KEY_LEFTMETA, false, time);
             self.run_for(STEP)?;
         }

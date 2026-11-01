@@ -445,7 +445,7 @@ fn a_window_geometry_larger_than_the_surface_is_clamped_to_it() {
     client.set_window_geometry(&mut server, 0, (0, 0, i32::MAX / 2, i32::MAX / 2));
     renderer.render(&mut server).expect("frame");
 
-    assert_eq!(geometry(&server).size, WINDOW.into());
+    assert_eq!(geometry(&server).size, (WINDOW.0, WINDOW.1 + BAR).into());
 }
 
 #[test]

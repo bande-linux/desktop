@@ -1,7 +1,6 @@
 use bande_fs::Sort;
 use bande_toolkit::Point;
 use bande_toolkit::ui::Menu;
-use bande_xdg::{TERMINAL, find_executable};
 
 use crate::browser::Location;
 use std::path::PathBuf;
@@ -14,6 +13,8 @@ use crate::menus::{
 use crate::sidebar::{BookmarkEdit, PlaceKind, Row, SidebarEdit, favourites, layout_text};
 use crate::view::{FilesView, Hit, Request};
 use crate::views::{ListColumn, ViewMode};
+
+const TERMINAL_DESKTOP_ID: &str = "org.bande.Terminal.desktop";
 
 impl FilesView {
     pub(crate) fn context_click(&mut self, hit: Hit, at: Point) -> bool {
@@ -151,9 +152,13 @@ impl FilesView {
                 && selection
                     .iter()
                     .all(|entry| entry.is_folder() && entry.trashed.is_none()),
-            terminal: find_executable(TERMINAL).is_some(),
+            terminal: self.terminal_installed(),
             apps,
         })
+    }
+
+    pub fn terminal_installed(&self) -> bool {
+        self.apps.find(TERMINAL_DESKTOP_ID).is_some()
     }
 
     pub(crate) fn folder_menu(&self) -> Menu {
@@ -165,7 +170,7 @@ impl FilesView {
             mode: self.mode,
             hidden_shown: self.browser.shows_hidden(),
             paste: self.clipboard_files,
-            terminal: find_executable(TERMINAL).is_some(),
+            terminal: self.terminal_installed(),
         })
     }
 

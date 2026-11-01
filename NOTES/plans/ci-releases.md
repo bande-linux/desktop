@@ -101,14 +101,15 @@ was reviewed on paper only: same scripts and container, `ubuntu-24.04` runner. T
 Order (apps before the desktop, apps-split.md D9; package names are locked to the first repo
 that publishes them):
 
-1. **Before any tag.** apps-split M1-M6 have landed (the moved apps are gone from desktop's
-   `ci/release/packages`, the metapackage recommends them unversioned, the install test skips
-   them); desktop `main` and apps `main` pass their local gates; the apps pin the desktop rev
-   they will ship with. Check the org's artifact storage: release runs on 2026-10-31 failed
+1. **Before any tag.** apps-split M1-M7 have landed (done 2026-11-01: Terminal, Software and
+   Installer are gone from desktop's `ci/release/packages`, the metapackage recommends them
+   unversioned from `packaging/bande-desktop/default-apps`, the install test skips them;
+   Activity Monitor stays in desktop); desktop `main` and apps `main` pass their local gates; the
+   apps pin the desktop rev they will ship with. Check the org's artifact storage: release runs on 2026-10-31 failed
    with "Artifact storage quota has been hit" (the images' ISO artifacts, ~3.7 GB, were the
    bulk); delete stale ISO artifacts first. Check `state/owners` still lists only apt and kernel.
 2. **Apps, one tag each**, from apps `main`, each `apps/<app>/Cargo.toml` at 0.1.0:
-   `git tag <app>-v0.1.0 origin/main && git push origin <app>-v0.1.0` for terminal, monitor,
+   `git tag <app>-v0.1.0 origin/main && git push origin <app>-v0.1.0` for terminal,
    software, installer, mail, calendar (directory name = tag prefix, package `bande-<app>`).
    After each: `gh run list -R bande-linux/apps -w build.yml -e push` green (both
    architectures, and `debs` uploaded `bande-debs-arm64`/`-amd64`); then apt's `publish`

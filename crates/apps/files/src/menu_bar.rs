@@ -1,7 +1,6 @@
 use bande_app_menu::{Entry, app_submenu, close_window, settings, window_submenu};
 use bande_files::{FilesView, L10N};
 use bande_toolkit::ui::{Event, parse_shortcut};
-use bande_xdg::{TERMINAL, find_executable};
 
 const KEY_ACTION: &str = "key:";
 
@@ -39,7 +38,7 @@ pub fn app_menus(view: &FilesView) -> Vec<Entry> {
                 Entry::item(&L10N.tr("menu-duplicate"), "duplicate"),
                 shortcut("menu-add-to-sidebar", "Ctrl+D"),
                 Entry::item(&L10N.tr("menu-open-in-terminal"), "open-in-terminal")
-                    .enabled(find_executable(TERMINAL).is_some()),
+                    .enabled(view.terminal_installed()),
                 Entry::item(&L10N.tr("menu-compress-selection"), "compress"),
                 Entry::separator(),
                 shortcut("menu-move-to-trash", "Delete"),

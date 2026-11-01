@@ -86,6 +86,10 @@ impl Apps {
             .apps_for(&self.mime.ancestors(mime), &self.handlers)
     }
 
+    pub fn find(&self, id: &str) -> Option<&DesktopEntry> {
+        self.handlers.iter().find(|entry| entry.id == id)
+    }
+
     pub fn openers(&self) -> Vec<&DesktopEntry> {
         self.handlers
             .iter()

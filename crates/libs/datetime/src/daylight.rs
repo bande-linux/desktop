@@ -77,7 +77,7 @@ fn timestamp(julian: f64) -> Option<Timestamp> {
 
 fn daylight(noon: Timestamp, place: Place) -> Option<Daylight> {
     let julian = noon.as_second() as f64 / SECONDS_PER_DAY + UNIX_EPOCH_JULIAN;
-    let day = (julian - J2000 + 0.0008).ceil();
+    let day = (julian - J2000 + place.longitude / 360.0).round();
     let mean_noon = day - place.longitude / 360.0;
     let anomaly = (357.5291 + 0.985_600_28 * mean_noon).rem_euclid(360.0);
     let radians = anomaly.to_radians();

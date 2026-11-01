@@ -2,7 +2,8 @@
 
 use bande_keyboard::{Area, Layouts, SHORTCUTS, shortcuts_in};
 
-const RULES: &str = r#"<?xml version="1.0"?>
+const RULES: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE xkbConfigRegistry SYSTEM "xkb.dtd">
 <xkbConfigRegistry version="1.1">
   <layoutList>
     <layout>

@@ -1,4 +1,3 @@
-use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -11,11 +10,7 @@ const RUNNING_FILE: &str = "bande/running";
 const CRASHED_FILE: &str = "bande/crashed";
 
 fn state_file(name: &str) -> Option<PathBuf> {
-    env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state")))
-        .map(|state| state.join(name))
+    crate::state_home().map(|state| state.join(name))
 }
 
 pub fn reopen_file() -> Option<PathBuf> {

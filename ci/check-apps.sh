@@ -37,7 +37,7 @@ check() {
 }
 
 apps=("$@")
-[ $# -gt 0 ] || apps=(crates/apps/files crates/apps/settings crates/apps/monitor)
+[ $# -gt 0 ] || apps=(crates/apps/files crates/apps/settings)
 for app in "${apps[@]}"; do
     check "$app"
 done

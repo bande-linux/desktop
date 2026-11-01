@@ -680,7 +680,8 @@ Preconditions: apps-split M6 done (the shared pin, `ci/gate.sh`, `with-desktop.s
 - Files: `Launch::PerWindow` until one-process windows (F24); `Info.settings` replaces its
   `--settings` handling; Edit menu from `edit_menu`; delete `menu_bar_action`'s standard arms,
   the Ctrl+, special case and `key_event`.
-- Add `ci/check-apps.sh` for the three desktop apps.
+- Add `ci/check-apps.sh` for the desktop apps (Files and Settings; Activity Monitor moved to the
+  apps repo with Force Quit).
 - Done when: both compile, their tests pass; then **desktop-gate on `main`** for the batch.
 - **Status: done 2026-11-01** (`appfw/m6-settings-files`). Settings: one instance, a second
   `bande-settings <pane>` selects the pane in the running one (the update notice's click does

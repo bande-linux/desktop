@@ -34,6 +34,7 @@ enum ButtonRole {
     Primary,
     Cancel,
     Quiet,
+    Link,
     Destructive,
 }
 
@@ -91,6 +92,13 @@ impl Button {
         }
     }
 
+    pub fn link(self) -> Self {
+        Self {
+            role: ButtonRole::Link,
+            ..self
+        }
+    }
+
     pub fn destructive(self) -> Self {
         Self {
             role: ButtonRole::Destructive,
@@ -117,7 +125,7 @@ impl Button {
             ButtonRole::Destructive => {
                 TextStyle::new(FONT_SIZE, palette.on_danger).weight(TextStyle::MEDIUM)
             }
-            ButtonRole::Quiet => {
+            ButtonRole::Quiet | ButtonRole::Link => {
                 TextStyle::new(FONT_SIZE, palette.accent_text).weight(TextStyle::SEMIBOLD)
             }
             ButtonRole::Plain | ButtonRole::Cancel => {
@@ -142,6 +150,7 @@ impl Button {
         }
         match self.role {
             ButtonRole::Primary => Some(shaded(palette.accent)),
+            ButtonRole::Link => None,
             ButtonRole::Destructive => Some(shaded(palette.danger)),
             ButtonRole::Plain | ButtonRole::Cancel if self.symbol.is_none() => {
                 Some(inked(palette.well))
@@ -170,8 +179,12 @@ impl Widget for Button {
         let paragraph = cx
             .text
             .paragraph(&self.title, style, None, TextAlign::Start);
+        let padding = match self.role {
+            ButtonRole::Link => 0.0,
+            _ => PADDING,
+        };
         let size = Size::new(
-            (paragraph.width() + 2.0 * PADDING).ceil(),
+            (paragraph.width() + 2.0 * padding).ceil(),
             cx.control_height(ControlSize::Regular),
         );
         self.paragraph = Some(paragraph);
@@ -209,9 +222,13 @@ impl Widget for Button {
             );
         }
         if let Some(paragraph) = self.paragraph.as_ref().filter(|_| self.symbol.is_none()) {
+            let x = match self.role {
+                ButtonRole::Link => self.frame.x,
+                _ => self.frame.x + ((self.frame.width - paragraph.width()) / 2.0).round(),
+            };
             items.push(Item::Text {
                 origin: Point::new(
-                    self.frame.x + ((self.frame.width - paragraph.width()) / 2.0).round(),
+                    x,
                     self.frame.y + ((self.frame.height - paragraph.height()) / 2.0).round(),
                 ),
                 paragraph: paragraph.clone(),
@@ -279,7 +296,9 @@ impl Widget for Button {
         match self.role {
             ButtonRole::Primary => Some(Key::Enter),
             ButtonRole::Cancel => Some(Key::Escape),
-            ButtonRole::Plain | ButtonRole::Quiet | ButtonRole::Destructive => None,
+            ButtonRole::Plain | ButtonRole::Quiet | ButtonRole::Link | ButtonRole::Destructive => {
+                None
+            }
         }
     }
 }

@@ -8,6 +8,7 @@ pub struct Label {
     text: String,
     size: f32,
     weight: f32,
+    secondary: bool,
     paragraph: Option<Paragraph>,
     frame: Rect,
 }
@@ -19,6 +20,7 @@ impl Label {
             text: text.to_owned(),
             size: 13.0,
             weight: TextStyle::REGULAR,
+            secondary: false,
             paragraph: None,
             frame: Rect::default(),
         }
@@ -31,6 +33,13 @@ impl Label {
             ..Self::new(text)
         }
     }
+
+    pub fn secondary(self) -> Self {
+        Self {
+            secondary: true,
+            ..self
+        }
+    }
 }
 
 impl Widget for Label {
@@ -39,7 +48,11 @@ impl Widget for Label {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        let style = TextStyle::new(self.size, cx.palette.ink).weight(self.weight);
+        let ink = match self.secondary {
+            true => cx.palette.ink2,
+            false => cx.palette.ink,
+        };
+        let style = TextStyle::new(self.size, ink).weight(self.weight);
         let paragraph =
             cx.text
                 .paragraph(&self.text, style, Some(available.width), TextAlign::Start);

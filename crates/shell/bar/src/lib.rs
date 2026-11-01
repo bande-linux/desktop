@@ -1,7 +1,5 @@
 mod combined_client;
 pub mod dialogs;
-pub mod dock;
-mod dock_client;
 mod installed_apps;
 pub mod low_memory;
 pub mod menu_bar;
@@ -13,6 +11,8 @@ pub mod pairing;
 pub mod rail;
 pub mod surfaces;
 pub mod symbols;
+pub mod taskbar;
+mod taskbar_client;
 
 use std::sync::LazyLock;
 
@@ -27,7 +27,7 @@ mod tests {
     #[test]
     fn every_message_id_used_in_code_is_in_the_english_file() {
         let sources = [
-            include_str!("dock.rs"),
+            include_str!("taskbar.rs"),
             include_str!("menu_bar.rs"),
             include_str!("menus.rs"),
             include_str!("menu_search.rs"),
@@ -35,7 +35,7 @@ mod tests {
             include_str!("combined_client.rs"),
             include_str!("dialogs.rs"),
             include_str!("low_memory.rs"),
-            include_str!("dock_client.rs"),
+            include_str!("taskbar_client.rs"),
             include_str!("menu_bar_client.rs"),
             include_str!("pairing.rs"),
         ];

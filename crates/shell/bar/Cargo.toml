@@ -1,6 +1,6 @@
 [package]
 name = "bande-bar"
-description = "Bande bar: the Dock and the menu bar, or both as one bar on a screen edge, as a part of bande-shell"
+description = "Bande bar: the Taskbar and the menu bar, or both as one bar on a screen edge, as a part of bande-shell"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,7 +14,7 @@ tracing.workspace = true
 bande-bluetooth.workspace = true
 bande-config.workspace = true
 bande-datetime.workspace = true
-bande-dock-model.workspace = true
+bande-taskbar-model.workspace = true
 bande-fs.workspace = true
 bande-inbox.workspace = true
 bande-keyboard.workspace = true

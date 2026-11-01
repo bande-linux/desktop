@@ -118,9 +118,9 @@ fn corner_and_middle(radius: Option<u32>) -> (u8, u8) {
         &mut server,
         &image(&stripes, OUTPUT.0, OUTPUT.1, Format::Xrgb8888),
     );
-    let mut dock = TestClient::connect_as_shell(&mut server);
-    dock.join_shell(&mut server);
-    dock.show_layer(
+    let mut taskbar = TestClient::connect_as_shell(&mut server);
+    taskbar.join_shell(&mut server);
+    taskbar.show_layer(
         &mut server,
         &LayerRequest {
             layer: Layer::Top,
@@ -132,10 +132,10 @@ fn corner_and_middle(radius: Option<u32>) -> (u8, u8) {
         },
     );
     if let Some(radius) = radius {
-        dock.set_corner_radius(&mut server, 0, radius);
+        taskbar.set_corner_radius(&mut server, 0, radius);
     }
-    dock.blur_behind_layer(&mut server, 0, (0, 0, GLASS * 2, GLASS * 2));
-    roundtrip(&mut server, &mut [&mut below, &mut dock]);
+    taskbar.blur_behind_layer(&mut server, 0, (0, 0, GLASS * 2, GLASS * 2));
+    roundtrip(&mut server, &mut [&mut below, &mut taskbar]);
     let mut renderer = renderer(Effects::Full);
     renderer.render(&mut server).expect("frame");
     let snapshot = renderer.snapshot(&server).expect("read back");

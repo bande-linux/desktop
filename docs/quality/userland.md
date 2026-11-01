@@ -74,8 +74,8 @@ Line numbers are for `2d497b1`.
   - The lock screen, and so the greeter, links all of `bande-bar` for `symbols.rs`.
   - Control Center links the power service.
   - `bande-polkit` is a library that nothing uses and that has no binary (task 22).
-- **Oversized modules:** 15 files are over 1000 lines. `shell/bar/src/dock.rs` holds a single
-  1905-line `impl DockState` block (task 29).
+- **Oversized modules:** 15 files are over 1000 lines. `shell/bar/src/taskbar.rs` holds a single
+  1905-line `impl TaskbarState` block (task 29).
 
 ## Ranked fix tasks
 
@@ -159,7 +159,7 @@ with correctness and efficiency first.
 ### 4. Give `Rect` hit-testing and context-menu helpers to the toolkit
 
 - **Files:** the same half-open `fn contains(Rect, Point)` appears 18 times:
-  - `shell/bar/src/menubar.rs:200`, `dock.rs:275`, `menu_search.rs:246` and `rail.rs:106`;
+  - `shell/bar/src/menubar.rs:200`, `taskbar.rs:275`, `menu_search.rs:246` and `rail.rs:106`;
   - `shell/controlcenter/src/modules.rs:42`, `client.rs:161` and `now_playing.rs:65`;
   - `shell/notifications/src/card.rs:430`;
   - `shell/launcher/src/rows.rs:31`;
@@ -231,7 +231,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
   - String-property clients:
     - `shell/lock/src/main.rs:184-193`
     - `shell/bar/src/menu_bar_client.rs:51, 214-216`
-    - `libs/dock-model/src/bus.rs:15, 98-112, 161-182`
+    - `libs/taskbar-model/src/bus.rs:15, 98-112, 161-182`
 - **Change:**
   - Put one complete `ConfigProxy` with `gen_async = false` next to the interface, as
     `bande_config::client`. This mirrors `bande_notify::client` and `bande_sound`.
@@ -252,7 +252,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
   - `apps/settings/src/follow.rs:141-170`, `time.rs:135-160`, `locale.rs:145-170` and
     `about.rs:215-235`
   - `libs/wallpaper/src/choice.rs:124-160`
-  - `libs/dock-model/src/bus.rs:117-156`
+  - `libs/taskbar-model/src/bus.rs:117-156`
   - `shell/bar/src/menu_bar_client.rs:831-850`
   - `services/portal/src/settings.rs:429-470`
 
@@ -261,7 +261,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
 - **Change:**
   - Add `bande_bus::follow_properties(connection, destination, path, interface, FnMut(&HashMap<String, OwnedValue>) -> bool)`.
     It sends one `GetAll` first and then the `changed` dictionary of each signal.
-  - Map the dictionary to updates, the way `libs/dock-model/src/bus.rs:33` already does for the
+  - Map the dictionary to updates, the way `libs/taskbar-model/src/bus.rs:33` already does for the
     launcher API.
 - **Win:** a config change costs Settings one message instead of 41 round trips; it costs the
   wallpaper and taskbar followers zero extra calls.
@@ -301,7 +301,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
   - Desktop entries are parsed again by:
     - `shell/notifications/src/client.rs:325`
     - `shell/bar/src/dialogs.rs:32, 371`
-    - `shell/bar/src/dock_client.rs:1012`, per display
+    - `shell/bar/src/taskbar_client.rs:1012`, per display
     - `shell/bar/src/menu_bar_client.rs:755`, per display
     - `shell/desktop/src/client.rs:452`, on every "Change Wallpaper"
     - `shell/launcher/src/client.rs:469`
@@ -343,7 +343,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
   - `apps/file-chooser/src/view.rs:357-400`.
   - `apps/monitor/src/view.rs:45-66` and `main.rs:380-386`.
   - Ad hoc maps in `shell/launcher/src/client.rs:40-50, 420-426`, `shell/desktop/src/client.rs:160-166`,
-    `shell/bar/src/dock_client.rs:113-122`, `shell/bar/src/rail.rs:443-453, 552-558`,
+    `shell/bar/src/taskbar_client.rs:113-122`, `shell/bar/src/rail.rs:443-453, 552-558`,
     `shell/controlcenter/src/client.rs:97-110` and `apps/settings/src/header.rs:28-34`.
   - `shell/bar/src/menu_bar_client.rs:335-342` resolves and rasterizes the focused app's icon with
     no cache, on every focus change.
@@ -414,7 +414,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
   - `std::thread::spawn` panics if the OS refuses the thread, which breaks the no-panic rule, and
     its threads show up unnamed in `top -H`.
   - The logging spawn helper exists twice: `apps/settings/src/follow.rs:135` and
-    `libs/dock-model/src/bus.rs:54`.
+    `libs/taskbar-model/src/bus.rs:54`.
 - **Change:** add `bande_inbox::spawn(name, work) -> bool` and replace all the sites.
 - **Saves:** about 0 lines.
 - **Risk:** very low.
@@ -532,7 +532,7 @@ Do this as three tasks.
 - **c.** Control Center links the power service for `backlight` and `logind::own_session`
   (`shell/controlcenter/src/client.rs:20-21`). Move both into a library.
 
-  Also review `libs/xdg` → `bande-notify` (launch-failure notices) and `libs/dock-model` →
+  Also review `libs/xdg` → `bande-notify` (launch-failure notices) and `libs/taskbar-model` →
   `bande-config`. Task 6 settles the second.
 - **Risk:** low. These are moves only.
 
@@ -620,7 +620,7 @@ Do these as one batch.
 
 There is no behaviour change. Do one task per file.
 
-- **`shell/bar/src/dock.rs` (2555 lines):** the `impl DockState` block runs from 301 to 2206.
+- **`shell/bar/src/taskbar.rs` (2555 lines):** the `impl TaskbarState` block runs from 301 to 2206.
   Split it into `dock/`:
   - `layout.rs`: layout, icon_rect, along and reach;
   - `drag.rs`: Drag, Ghost and lines 664-893;

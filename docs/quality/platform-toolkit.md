@@ -75,7 +75,7 @@ Each task below is sized for one agent in at most 1 to 2 hours, unless it says o
 - **Evidence:**
   - `bande-shell-v1.xml:3` is at `version="17"` and `bande_app_v1` (`:463`) at `version="5"`, with 51 `since=` attributes.
   - The compositor and its clients are always built and shipped from one tree, and no backward compatibility is kept. Even so, the code checks versions in 49 places:
-    - compositor: `shell.rs` (18), `dock.rs` (4), `workspace.rs` (3), `watchdog.rs` (1);
+    - compositor: `shell.rs` (18), `apps.rs` (4), `workspace.rs` (3), `watchdog.rs` (1);
     - toolkit: `toolkit/platform/src/shell.rs` (23), plus the `shell_since` helper at `shell.rs:44-51`.
   - Binds hard-code versions too: `state.rs:307` (`17`), `toolkit/platform/src/window.rs:2387-2390` (`version.min(17)`, `min(5)`) and `test-wayland/src/shell.rs:176,284-295` (1, 2, 3).
 - **Change:**

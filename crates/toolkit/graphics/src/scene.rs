@@ -4,7 +4,7 @@ use std::io::Read;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 use resvg::{tiny_skia, usvg};
 use vello_cpu::{PixelMetadata, Pixmap};
@@ -157,11 +157,19 @@ impl From<Color> for Paint {
     }
 }
 
+type Redraw = Box<dyn Fn() -> Option<Vec<u8>> + Send + Sync>;
+
+pub(crate) struct Pixels {
+    kept: Mutex<Option<Arc<Pixmap>>>,
+    redraw: Option<Redraw>,
+}
+
 #[derive(Clone)]
 pub struct Image {
     id: u64,
-    pub(crate) pixmap: Arc<Pixmap>,
-    alive: Arc<()>,
+    width: u16,
+    height: u16,
+    pixels: Arc<Pixels>,
 }
 
 impl PartialEq for Image {
@@ -250,28 +258,58 @@ impl Image {
         Self::from_rgba(width, height, rgba)
     }
 
-    pub fn from_rgba(width: u32, height: u32, mut rgba: Vec<u8>) -> Option<Self> {
+    pub fn from_rgba(width: u32, height: u32, rgba: Vec<u8>) -> Option<Self> {
+        Self::with_pixels(width, height, rgba, None)
+    }
+
+    pub fn redrawable(
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+        redraw: impl Fn() -> Option<Vec<u8>> + Send + Sync + 'static,
+    ) -> Option<Self> {
+        Self::with_pixels(width, height, rgba, Some(Box::new(redraw)))
+    }
+
+    fn with_pixels(width: u32, height: u32, rgba: Vec<u8>, redraw: Option<Redraw>) -> Option<Self> {
         let (width, height) = (u16::try_from(width).ok()?, u16::try_from(height).ok()?);
-        if rgba.len() != usize::from(width) * usize::from(height) * 4 || width == 0 || height == 0 {
+        if width == 0 || height == 0 {
             return None;
         }
-        for pixel in rgba.as_chunks_mut::<4>().0 {
-            let alpha = u16::from(pixel[3]);
-            for channel in &mut pixel[..3] {
-                *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
-            }
-        }
+        let pixmap = premultiplied(width, height, rgba)?;
         static NEXT: AtomicU64 = AtomicU64::new(1);
         Some(Self {
             id: NEXT.fetch_add(1, Ordering::Relaxed),
-            pixmap: Arc::new(Pixmap::from_parts(
-                rgba,
-                width,
-                height,
-                PixelMetadata::default(),
-            )),
-            alive: Arc::new(()),
+            width,
+            height,
+            pixels: Arc::new(Pixels {
+                kept: Mutex::new(Some(Arc::new(pixmap))),
+                redraw,
+            }),
         })
+    }
+
+    pub(crate) fn pixmap(&self) -> Option<Arc<Pixmap>> {
+        let mut kept = self
+            .pixels
+            .kept
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if kept.is_none() {
+            let redrawn = self.pixels.redraw.as_ref().and_then(|redraw| redraw())?;
+            *kept = Some(Arc::new(premultiplied(self.width, self.height, redrawn)?));
+        }
+        kept.clone()
+    }
+
+    pub(crate) fn release_pixels(&self) {
+        if self.pixels.redraw.is_some() {
+            *self
+                .pixels
+                .kept
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner) = None;
+        }
     }
 
     pub fn tinted(&self, color: Color) -> Option<Self> {
@@ -292,21 +330,41 @@ impl Image {
         self.id
     }
 
-    pub(crate) fn liveness(&self) -> Weak<()> {
-        Arc::downgrade(&self.alive)
+    pub(crate) fn liveness(&self) -> Weak<Pixels> {
+        Arc::downgrade(&self.pixels)
     }
 
-    pub fn premultiplied_rgba(&self) -> &[u8] {
-        self.pixmap.data_as_u8_slice()
+    pub fn premultiplied_rgba(&self) -> Vec<u8> {
+        self.pixmap()
+            .map(|pixmap| pixmap.data_as_u8_slice().to_vec())
+            .unwrap_or_default()
     }
 
     pub fn width(&self) -> u32 {
-        u32::from(self.pixmap.width())
+        u32::from(self.width)
     }
 
     pub fn height(&self) -> u32 {
-        u32::from(self.pixmap.height())
+        u32::from(self.height)
     }
+}
+
+fn premultiplied(width: u16, height: u16, mut rgba: Vec<u8>) -> Option<Pixmap> {
+    if rgba.len() != usize::from(width) * usize::from(height) * 4 {
+        return None;
+    }
+    for pixel in rgba.as_chunks_mut::<4>().0 {
+        let alpha = u16::from(pixel[3]);
+        for channel in &mut pixel[..3] {
+            *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
+        }
+    }
+    Some(Pixmap::from_parts(
+        rgba,
+        width,
+        height,
+        PixelMetadata::default(),
+    ))
 }
 
 #[derive(Debug, Clone, PartialEq)]

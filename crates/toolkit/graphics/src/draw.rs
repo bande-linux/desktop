@@ -8,7 +8,7 @@ use vello_cpu::peniko::{ImageQuality, ImageSampler};
 use vello_cpu::{Glyph, ImageId, ImageSource, PaintType};
 
 use crate::outline::{GlyphOutlines, TOLERANCE};
-use crate::scene::{Image, Item, Paint, Path, PathElement, Shape};
+use crate::scene::{Image, Item, Paint, Path, PathElement, Pixels, Shape};
 use crate::text::GlyphRun;
 use bande_design::Color;
 
@@ -87,7 +87,7 @@ fn stroke_path(shape: &Shape, width: f32) -> BezPath {
 }
 
 #[derive(Default)]
-pub(crate) struct ImageIds(HashMap<u64, (ImageId, Weak<()>)>);
+pub(crate) struct ImageIds(HashMap<u64, (ImageId, Weak<Pixels>)>);
 
 impl ImageIds {
     pub(crate) fn get(&self, image: &Image) -> Option<ImageId> {

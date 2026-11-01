@@ -22,7 +22,9 @@ use bande_toolkit::{
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
 use bande_volumes::{eject, media_roots, mounted_volumes};
-use bande_wallpaper::{Choice, Fit, Picture, Variant, choose, follow, render, render_cached};
+use bande_wallpaper::{
+    Choice, Fit, Picture, RenderError, Variant, choose, follow, render, render_cached,
+};
 use bande_xdg::{
     Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, cache_home, config_dirs,
     config_home, data_dirs, file_uri, find_icon, launch, launch_with, launch_with_arguments,
@@ -98,12 +100,8 @@ impl DesktopSurface {
             return;
         }
         let loader = self.loaded.outbox();
-        let cache = cache_home().map(|cache| cache.join(WALLPAPER_CACHE));
         let work = move || {
-            let picture = match &cache {
-                Some(cache) => render_cached(cache, &key.path, key.fit, key.width, key.height),
-                None => render(&key.path, key.fit, key.width, key.height),
-            };
+            let picture = draw_wallpaper(&key);
             let rendered = match picture {
                 Ok(picture) => {
                     let luma = Luma::of(&picture);
@@ -785,12 +783,14 @@ impl App for DesktopSurface {
                 for (key, rendered) in self.loaded.drain() {
                     failed |= rendered.is_none();
                     let layer = rendered.and_then(|(picture, luma)| {
-                        Image::from_rgba(picture.width, picture.height, picture.rgba).map(|image| {
-                            Layer {
-                                key: key.clone(),
-                                image,
-                                luma,
-                            }
+                        let redrawn = key.clone();
+                        Image::redrawable(picture.width, picture.height, picture.rgba, move || {
+                            draw_wallpaper(&redrawn).ok().map(|picture| picture.rgba)
+                        })
+                        .map(|image| Layer {
+                            key: key.clone(),
+                            image,
+                            luma,
                         })
                     });
                     if let Some(layer) = layer {
@@ -846,6 +846,19 @@ impl App for DesktopSurface {
 
     fn accessibility(&self) -> Option<TreeUpdate> {
         Some(self.view.accessibility())
+    }
+}
+
+fn draw_wallpaper(key: &WallpaperKey) -> Result<Picture, RenderError> {
+    match cache_home() {
+        Some(cache) => render_cached(
+            &cache.join(WALLPAPER_CACHE),
+            &key.path,
+            key.fit,
+            key.width,
+            key.height,
+        ),
+        None => render(&key.path, key.fit, key.width, key.height),
     }
 }
 

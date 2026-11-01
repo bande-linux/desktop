@@ -64,7 +64,8 @@ struct Greeter {
     caps_lock: bool,
     minutes: MinuteTimer,
     backdrop: Option<Inbox<(Look, Image)>>,
-    backdrop_requested: bool,
+    backdrop_size: Option<(u32, u32)>,
+    sharp: Option<Inbox<(Look, Image)>>,
     picture: Option<File>,
     wallpaper: Option<Image>,
     last_user: Option<PathBuf>,
@@ -108,7 +109,8 @@ impl Greeter {
             .set_devices(self.corner.0, self.corner.1.as_ref());
         self.picture = login_picture(Path::new(LOGIN_PICTURES), self.users[self.user].uid);
         self.backdrop = None;
-        self.backdrop_requested = false;
+        self.backdrop_size = None;
+        self.sharp = None;
         if let Some(wallpaper) = &self.wallpaper {
             self.screen
                 .set_backdrop(wallpaper.clone(), Instant::now() - Duration::from_secs(1));
@@ -116,8 +118,37 @@ impl Greeter {
         true
     }
 
+    fn request_backdrop(
+        &mut self,
+        size: (u32, u32),
+        looks: Vec<Look>,
+    ) -> Option<Inbox<(Look, Image)>> {
+        let picture = self.picture.as_ref().map(opened_path);
+        load_backdrop(BackdropSource::Picture(picture), Variant::Dark, size, looks)
+            .inspect_err(|error| tracing::warn!("cannot load the wallpaper: {error}"))
+            .ok()
+    }
+
+    fn show_backdrop(&mut self, drawn: Vec<(Look, Image)>) {
+        for (look, image) in drawn {
+            match look {
+                Look::Blurred => {
+                    self.screen
+                        .set_backdrop(image.clone(), frame_time().on_screen());
+                    self.wallpaper = Some(image);
+                }
+                Look::Sharp => self.screen.set_wallpaper(image),
+            }
+        }
+    }
+
     fn sign_in(&mut self, password: Zeroizing<String>) {
         self.screen.set_message(None);
+        if self.sharp.is_none()
+            && let Some(size) = self.backdrop_size
+        {
+            self.sharp = self.request_backdrop(size, vec![Look::Sharp]);
+        }
         let sent = match &mut self.conversation {
             Some(conversation) if conversation.asking => {
                 conversation.asking = false;
@@ -224,18 +255,9 @@ impl Greeter {
 impl App for Greeter {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
-        if !self.backdrop_requested && width > 0 && height > 0 {
-            self.backdrop_requested = true;
-            let picture = self.picture.as_ref().map(opened_path);
-            match load_backdrop(
-                BackdropSource::Picture(picture),
-                Variant::Dark,
-                (width, height),
-                vec![Look::Blurred, Look::Sharp],
-            ) {
-                Ok(inbox) => self.backdrop = Some(inbox),
-                Err(error) => tracing::warn!("cannot load the wallpaper: {error}"),
-            }
+        if self.backdrop_size.is_none() && width > 0 && height > 0 {
+            self.backdrop_size = Some((width, height));
+            self.backdrop = self.request_backdrop((width, height), vec![Look::Blurred]);
         }
         self.screen.advance(frame_time().presentation);
         self.screen.scene(width, height)
@@ -288,6 +310,7 @@ impl App for Greeter {
         std::iter::once(self.minutes.as_fd())
             .chain(self.devices.as_ref().map(Devices::fd))
             .chain(self.backdrop.as_ref().map(Inbox::fd))
+            .chain(self.sharp.as_ref().map(Inbox::fd))
             .chain(
                 self.conversation
                     .as_ref()
@@ -315,19 +338,15 @@ impl App for Greeter {
             }
             return;
         }
-        match self.backdrop.as_mut().filter(|_| index == following + 1) {
-            Some(inbox) => {
-                for (look, image) in inbox.drain() {
-                    match look {
-                        Look::Blurred => {
-                            self.screen
-                                .set_backdrop(image.clone(), frame_time().on_screen());
-                            self.wallpaper = Some(image);
-                        }
-                        Look::Sharp => self.screen.set_wallpaper(image),
-                    }
-                }
-            }
+        let backdrop = following + 1;
+        let sharp = backdrop + usize::from(self.backdrop.is_some());
+        let drawn = match (&mut self.backdrop, &mut self.sharp) {
+            (Some(inbox), _) if index == backdrop => Some(inbox.drain()),
+            (_, Some(inbox)) if index == sharp => Some(inbox.drain()),
+            _ => None,
+        };
+        match drawn {
+            Some(drawn) => self.show_backdrop(drawn),
             None => self.converse(),
         }
         window.request_redraw();
@@ -399,7 +418,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         caps_lock: false,
         minutes: MinuteTimer::new()?,
         backdrop: None,
-        backdrop_requested: false,
+        backdrop_size: None,
+        sharp: None,
         picture,
         wallpaper: None,
         last_user,
@@ -464,7 +484,8 @@ mod tests {
             caps_lock: false,
             minutes: MinuteTimer::new().unwrap(),
             backdrop: None,
-            backdrop_requested: false,
+            backdrop_size: None,
+            sharp: None,
             picture: None,
             wallpaper: None,
             last_user: None,

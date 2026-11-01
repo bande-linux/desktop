@@ -163,17 +163,20 @@ Backend choices inside E:
   `/var/lib/apt/lists/*_dep11_Components-arm64.yml.gz`, linked from `/var/lib/swcatalog/yaml/`
   (`/var/lib/app-info` links to `/var/lib/swcatalog`); there is no `/usr/share/swcatalog`.
   Icons are expected in `/var/lib/swcatalog/icons/<origin>/<size>/` once `apt-config-icons`
-  is installed; this is not yet checked. Software's own metainfo validates with
-  `appstreamcli validate --no-net`; metainfo for Files, Terminal, Settings and Activity Monitor
-  is still to do.
-- Milestone 8 is started on branch `gap/store-install`: `bande-packages` gains `resolve`,
-  `install`, `native` and `debian_arch`, the fake PackageKit answers `InstallPackages` and
-  resolves `available` packages, and Software's app page installs the Debian package through a
-  worker and ends with Open. Not yet gated: run `desktop-gate` on it, then check an install on
-  the mini (not done overnight: no package installs on the mini).
-- Left: milestone 1's Recommends and metainfo, 6 (Flatpak backend), 8 (install through
-  `bande-packages`), 9 (Installed view and removal), the tile grid and the sidebar of 7, and
-  10 to 13.
+  is installed; this is not yet checked. Software's metainfo and the new ones for Files,
+  Terminal, Settings and Activity Monitor validate with `appstreamcli validate --no-net
+  --pedantic`. `bande-desktop` now Recommends `bande-software`, `packagekit`, `appstream` and
+  `apt-config-icons-hidpi`.
+- Milestone 8 done (gated and merged 2026-11-01): `bande-packages` gains `resolve`, `install`,
+  `native` and `debian_arch`, and Software's app page installs the Debian package through a
+  worker and ends with Open. Not yet tried on the mini (a package install there is the owner's).
+- Milestone 9 partly done: an installed Debian app has Remove beside Open. Remove first
+  simulates the removal and asks inline, naming every other package that would go with it
+  ("This also removes gnome-core."), and removes only after a second Remove. The Installed
+  section lists catalogue apps found among the desktop entries. An installed app with a pending
+  Debian update says so on its page, with Update All… opening Settings at Software Update.
+  Left of 9: rows for installed desktop entries without a catalogue entry, Flatpak removal.
+- Left: 6 (Flatpak backend), the rest of 9, the tile grid and the sidebar of 7, and 10 to 13.
 
 Decided overnight 2026-11-01: build our own store, option E (plan recommendation; owner may
 revisit).

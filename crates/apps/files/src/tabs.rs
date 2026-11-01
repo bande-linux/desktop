@@ -100,6 +100,7 @@ impl FilesView {
             browser.set_single(true);
         }
         browser.set_show_hidden(self.show_hidden);
+        browser.set_folders_first(self.folders_first);
         let parked = self.park(browser);
         self.tabs[self.active_tab] = Some(parked);
         self.active_tab += 1;
@@ -124,6 +125,7 @@ impl FilesView {
         self.grid_scroll = tab.grid_scroll;
         self.scrolls = tab.scrolls;
         self.browser.set_show_hidden(self.show_hidden);
+        self.browser.set_folders_first(self.folders_first);
         self.browser.reload();
         self.show_tab();
     }

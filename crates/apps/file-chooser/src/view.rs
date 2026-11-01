@@ -941,6 +941,7 @@ impl ChooserView {
                                 _ => SortBy::Name,
                             },
                             descending: !order.ascending,
+                            ..bande_fs::Sort::default()
                         });
                         let rows = self.file_rows();
                         if let Some(table) = self.ui.widget_as::<Table>(self.files) {

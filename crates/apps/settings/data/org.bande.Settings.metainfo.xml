@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Settings</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>System Settings</name>
+  <summary>Change the appearance, taskbar and lock screen</summary>
+  <description>
+    <p>Set up displays, networks, Bluetooth, sound, keyboard, mouse and trackpad, users, privacy and software updates for the Bande desktop.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Settings.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/desktop</url>
+</component>

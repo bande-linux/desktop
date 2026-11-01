@@ -81,6 +81,31 @@ fn panels_hear_where_their_bar_item_is_in_the_area_beside_the_bar() {
 }
 
 #[test]
+fn a_panel_opened_before_the_bar_still_lies_in_the_area_beside_it() {
+    let mut server = server();
+    let mut panels = TestClient::connect_as_shell(&mut server);
+    let everywhere = Anchor::Top | Anchor::Bottom | Anchor::Left | Anchor::Right;
+    let first = panels.show_layer(&mut server, &panel(Layer::Top, everywhere, (0, 0), 0));
+    assert_eq!(first, (OUTPUT.0 as u32, OUTPUT.1 as u32));
+    let mut bar = TestClient::connect_as_shell(&mut server);
+    bar.show_layer(
+        &mut server,
+        &panel(
+            Layer::Top,
+            Anchor::Left | Anchor::Top | Anchor::Bottom,
+            (40, 0),
+            40,
+        ),
+    );
+    roundtrip(&mut server, &mut [&mut panels, &mut bar]);
+
+    assert_eq!(
+        panels.layer_size(),
+        Some((OUTPUT.0 as u32 - 40, OUTPUT.1 as u32))
+    );
+}
+
+#[test]
 fn the_menu_bar_spans_the_whole_top_edge_even_when_the_taskbar_reserved_its_side_first() {
     let mut server = server();
     let mut shell = TestClient::connect(&mut server);

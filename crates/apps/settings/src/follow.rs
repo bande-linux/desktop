@@ -23,6 +23,7 @@ use crate::login::{LoginCommand, LoginItems, follow_login_items};
 use crate::notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
 use crate::permissions::{Grants, PermissionCommand, follow_permissions};
 use crate::pictures::{Pair, PictureCommand, choose_file, follow_pictures};
+use crate::pointing::{PointingDevices, UDEV_DATA, follow_pointing};
 use crate::privacy::clear_clipboard;
 use crate::privilege::{Privilege, follow_privileges};
 use crate::services::{
@@ -34,6 +35,7 @@ use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
 use bande_network::import_vpn;
 use bande_settings_panes::{SettingId, Value};
+use bande_watch::FolderWatch;
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
@@ -59,6 +61,7 @@ pub enum Update {
     NotificationApps(Vec<AppNotifications>),
     Software(SoftwareState),
     Locale(Option<LocaleState>),
+    Pointing(PointingDevices),
     InputLevel(f32),
     Failed(Option<SettingId>, String),
     Refused(Vec<Privilege>),
@@ -285,6 +288,7 @@ pub struct Services {
     default_apps: Sender<DefaultAppCommand>,
     permissions: Sender<PermissionCommand>,
     brightness: Option<Sender<f32>>,
+    _pointing: Option<FolderWatch>,
 }
 
 impl Services {
@@ -313,6 +317,9 @@ impl Services {
             default_apps: follow_default_apps(updates.clone()),
             permissions: follow_permissions(session, updates.clone()),
             brightness: system.and_then(|system| follow_brightness(system, updates.clone())),
+            _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
+                .inspect_err(|error| tracing::warn!("cannot watch {UDEV_DATA}: {error}"))
+                .ok(),
         }
     }
 

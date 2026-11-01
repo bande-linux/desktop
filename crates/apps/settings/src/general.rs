@@ -53,6 +53,7 @@ impl SettingsView {
                     Some(L10N.tr_args("updates-available", [("count", packages.len().into())]))
                 }
                 SoftwareState::UpToDate => Some(L10N.tr("up-to-date")),
+                SoftwareState::Unavailable => Some(L10N.tr("updates-unavailable")),
                 SoftwareState::Installed { restart: true } => Some(L10N.tr("restart-to-update")),
                 _ => None,
             },

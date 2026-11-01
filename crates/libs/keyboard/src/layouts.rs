@@ -1,12 +1,15 @@
 use roxmltree::{Document, Node};
 
 pub const EVDEV_RULES: &str = "/usr/share/X11/xkb/rules/evdev.xml";
+const CUSTOM: &str = "custom";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Layout {
     pub code: String,
     pub name: String,
     pub short: String,
+    pub countries: Vec<String>,
+    pub languages: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -20,14 +23,46 @@ fn text<'a>(node: Node<'a, '_>, name: &str) -> Option<&'a str> {
     child(node, name)?.text().map(str::trim)
 }
 
-fn layout(config: Node<'_, '_>, code: String, inherited_short: &str) -> Option<Layout> {
+fn codes(config: Node<'_, '_>, list: &str, item: &str) -> Vec<String> {
+    child(config, list)
+        .into_iter()
+        .flat_map(|list| list.children().filter(|node| node.has_tag_name(item)))
+        .filter_map(|node| node.text())
+        .map(|code| code.trim().to_lowercase())
+        .collect()
+}
+
+fn or_inherited(own: Vec<String>, inherited: &[String]) -> Vec<String> {
+    if own.is_empty() {
+        inherited.to_vec()
+    } else {
+        own
+    }
+}
+
+fn layout(config: Node<'_, '_>, code: String, base: &Layout) -> Option<Layout> {
     Some(Layout {
         code,
         name: text(config, "description")?.to_owned(),
         short: text(config, "shortDescription")
-            .unwrap_or(inherited_short)
+            .unwrap_or(&base.short)
             .to_uppercase(),
+        countries: or_inherited(codes(config, "countryList", "iso3166Id"), &base.countries),
+        languages: or_inherited(codes(config, "languageList", "iso639Id"), &base.languages),
     })
+}
+
+impl Layout {
+    fn matches(&self, word: &str) -> bool {
+        self.name.to_lowercase().contains(word)
+            || self.code == word
+            || self.countries.iter().any(|country| country == word)
+            || self.languages.iter().any(|language| language == word)
+    }
+
+    fn is_variant(&self) -> bool {
+        self.code.contains('(')
+    }
 }
 
 impl Layouts {
@@ -43,20 +78,29 @@ impl Layouts {
             let Some(config) = child(node, "configItem") else {
                 continue;
             };
-            let Some(name) = text(config, "name") else {
+            let Some(name) = text(config, "name").filter(|name| *name != CUSTOM) else {
                 continue;
             };
-            let short = text(config, "shortDescription").unwrap_or(name).to_owned();
-            layouts.extend(layout(config, name.to_owned(), &short));
+            let root = Layout {
+                code: name.to_owned(),
+                name: String::new(),
+                short: name.to_owned(),
+                countries: Vec::new(),
+                languages: Vec::new(),
+            };
+            let Some(base) = layout(config, name.to_owned(), &root) else {
+                continue;
+            };
             let variants = child(node, "variantList")
                 .into_iter()
                 .flat_map(|list| list.children().filter(|node| node.has_tag_name("variant")))
                 .filter_map(|variant| child(variant, "configItem"));
             for variant in variants {
                 if let Some(variant_name) = text(variant, "name") {
-                    layouts.extend(layout(variant, format!("{name}({variant_name})"), &short));
+                    layouts.extend(layout(variant, format!("{name}({variant_name})"), &base));
                 }
             }
+            layouts.push(base);
         }
         layouts.sort_by_cached_key(|layout| layout.name.to_lowercase());
         Self(layouts)
@@ -98,17 +142,29 @@ impl Layouts {
 
     pub fn search(&self, query: &str) -> Vec<&Layout> {
         let query = query.trim().to_lowercase();
-        let mut starting: Vec<&Layout> = Vec::new();
-        let mut containing: Vec<&Layout> = Vec::new();
-        for layout in &self.0 {
-            let name = layout.name.to_lowercase();
-            if name.starts_with(&query) || layout.code == query {
-                starting.push(layout);
-            } else if name.contains(&query) || layout.code.contains(&query) {
-                containing.push(layout);
-            }
+        let words: Vec<&str> = query.split_whitespace().collect();
+        if words.is_empty() {
+            return Vec::new();
         }
+        let (mut starting, containing): (Vec<&Layout>, Vec<&Layout>) = self
+            .0
+            .iter()
+            .filter(|layout| words.iter().all(|word| layout.matches(word)))
+            .partition(|layout| {
+                layout.code == query || layout.name.to_lowercase().starts_with(&query)
+            });
         starting.extend(containing);
         starting
+    }
+
+    pub fn suggested(&self, country: &str) -> Vec<&Layout> {
+        let country = country.to_lowercase();
+        let mut found: Vec<&Layout> = self
+            .0
+            .iter()
+            .filter(|layout| layout.countries.contains(&country))
+            .collect();
+        found.sort_by_key(|layout| layout.is_variant());
+        found
     }
 }

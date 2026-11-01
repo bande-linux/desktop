@@ -21,7 +21,7 @@ it seems like some apps are not getting the correct taskbar icon? this could als
 Status: started ([plans/taskbar-icons.md](plans/taskbar-icons.md)); M1 and M3 done, M2 waits on an owner decision
 
 its not possible to install more keyboard layouts or languages in settings *important*
-Status: started ([plans/keyboard-layouts-and-languages.md](plans/keyboard-layouts-and-languages.md))
+Status: started ([plans/keyboard-layouts-and-languages.md](plans/keyboard-layouts-and-languages.md)); M4 layout picker done
 
 grapping a window edge or corner in order to reseize it is a bit difficult, the resizer is too unprecise to the actual corner or edge
 Status: planned ([plans/window-resize-zones.md](plans/window-resize-zones.md))
@@ -30,13 +30,13 @@ the themes, especially the dark theme, looks a bit "dated". Review how modern da
 Status: planned ([plans/dark-theme.md](plans/dark-theme.md))
 
 the software update doesnt seem to work.
-Status: started ([plans/software-update.md](plans/software-update.md))
+Status: started ([plans/software-update.md](plans/software-update.md)); M3 plain states done
 
 changing time zone doesnt apply
 Status: finished ([plans/time-zone.md](plans/time-zone.md)); M5 polkit fix waits on an owner decision
 
 scrolling direction should have individual settings for trackpad and mouse. Also trackpad and mouse probably should have their own setting views with more option. The trackpad has 0 options for example.
-Status: started ([plans/mouse-and-trackpad.md](plans/mouse-and-trackpad.md))
+Status: started ([plans/mouse-and-trackpad.md](plans/mouse-and-trackpad.md)); M1-M5 done, gestures (M6-M7) left
 
 in settings the selected item in the sidebar has blue markers, that looks pretty bad. Its enough to highlight the selection i think
 Status: planned ([plans/sidebar-selection.md](plans/sidebar-selection.md))

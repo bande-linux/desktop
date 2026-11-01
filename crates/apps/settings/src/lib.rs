@@ -55,7 +55,7 @@ pub use night::{clock_text, night_summary};
 pub use notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
 pub use permissions::{Grant, Grants, PermissionCommand, follow_permissions};
 pub use pictures::{Pair, PictureCommand, bundled_pairs, thumbnail};
-pub use pointing::{PointingDevices, UDEV_DATA};
+pub use pointing::{PointingDevices, UDEV_DATA, follow_pointing};
 pub use power::charge_text;
 pub use privilege::{Privilege, refused};
 pub use services::{

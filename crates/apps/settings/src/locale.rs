@@ -44,6 +44,13 @@ pub struct LocaleState {
     pub region: Option<String>,
 }
 
+impl LocaleState {
+    pub fn territory(&self) -> Option<&str> {
+        let code = base(self.region.as_deref().unwrap_or(&self.language));
+        code.split_once('_').map(|(_, territory)| territory)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocaleCommand {
     Language(String),

@@ -19,14 +19,23 @@ const SILENT: [&str; 5] = [
     "NameHasNoOwner",
 ];
 
-pub fn sentence(error: &zbus::Error, service: &str) -> String {
-    tracing::warn!("{service}: {error}");
+fn kind(error: &zbus::Error) -> String {
     let name = match error {
         zbus::Error::MethodError(name, _, _) => name.to_string(),
         zbus::Error::FDO(error) => error.name().to_string(),
         _ => String::new(),
     };
-    let kind = name.rsplit('.').next().unwrap_or_default();
+    name.rsplit('.').next().unwrap_or_default().to_owned()
+}
+
+pub fn missing(error: &zbus::Error) -> bool {
+    kind(error) == "ServiceUnknown"
+}
+
+pub fn sentence(error: &zbus::Error, service: &str) -> String {
+    tracing::warn!("{service}: {error}");
+    let kind = kind(error);
+    let kind = kind.as_str();
     if REFUSED.contains(&kind) {
         L10N.tr("administrator-only")
     } else if SILENT.contains(&kind) {

@@ -172,6 +172,26 @@ pub trait Config {
     #[zbus(property)]
     fn set_trackpad_disable_while_typing(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn trackpad_acceleration(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_trackpad_acceleration(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn trackpad_dragging(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_trackpad_dragging(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn trackpad_scroll_method(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_trackpad_scroll_method(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn mouse_primary_button(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_mouse_primary_button(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn mouse_acceleration(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_mouse_acceleration(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn mouse_natural_scrolling(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_mouse_natural_scrolling(&self, on: bool) -> zbus::Result<()>;
@@ -230,7 +250,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 47] = [
+pub const CONFIG_SETTINGS: [SettingId; 52] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -272,8 +292,13 @@ pub const CONFIG_SETTINGS: [SettingId; 47] = [
     SettingId::TrackpadSpeed,
     SettingId::TrackpadSecondaryClick,
     SettingId::TrackpadDisableWhileTyping,
+    SettingId::TrackpadAcceleration,
+    SettingId::TrackpadDragging,
+    SettingId::TrackpadScrollMethod,
+    SettingId::MousePrimaryButton,
     SettingId::MouseNaturalScrolling,
     SettingId::MouseSpeed,
+    SettingId::MouseAcceleration,
     SettingId::AlertSound,
     SettingId::AlertVolume,
     SettingId::SoundEffects,
@@ -443,6 +468,13 @@ impl SettingsClient {
             }
             SettingId::MouseNaturalScrolling => Value::Flag(self.config.mouse_natural_scrolling()?),
             SettingId::MouseSpeed => Value::Number(speed_stop(self.config.mouse_speed()?)),
+            SettingId::TrackpadAcceleration => Value::Flag(self.config.trackpad_acceleration()?),
+            SettingId::TrackpadDragging => Value::Keyword(self.config.trackpad_dragging()?),
+            SettingId::TrackpadScrollMethod => {
+                Value::Keyword(self.config.trackpad_scroll_method()?)
+            }
+            SettingId::MousePrimaryButton => Value::Keyword(self.config.mouse_primary_button()?),
+            SettingId::MouseAcceleration => Value::Flag(self.config.mouse_acceleration()?),
             SettingId::AlertSound => Value::Keyword(self.config.alert_sound()?),
             SettingId::AlertVolume => Value::Fraction(self.config.alert_volume()? as f32),
             SettingId::SoundEffects => Value::Flag(self.config.sound_effects()?),
@@ -589,6 +621,21 @@ impl SettingsClient {
             }
             (SettingId::MouseSpeed, Value::Number(stop)) => {
                 self.config.set_mouse_speed(stop_speed(*stop))
+            }
+            (SettingId::TrackpadAcceleration, Value::Flag(on)) => {
+                self.config.set_trackpad_acceleration(*on)
+            }
+            (SettingId::TrackpadDragging, Value::Keyword(keyword)) => {
+                self.config.set_trackpad_dragging(keyword)
+            }
+            (SettingId::TrackpadScrollMethod, Value::Keyword(keyword)) => {
+                self.config.set_trackpad_scroll_method(keyword)
+            }
+            (SettingId::MousePrimaryButton, Value::Keyword(keyword)) => {
+                self.config.set_mouse_primary_button(keyword)
+            }
+            (SettingId::MouseAcceleration, Value::Flag(on)) => {
+                self.config.set_mouse_acceleration(*on)
             }
             (SettingId::DoNotDisturb, Value::Flag(enabled)) => {
                 self.notifications.set_do_not_disturb(*enabled)

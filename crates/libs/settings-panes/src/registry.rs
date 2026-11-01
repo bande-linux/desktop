@@ -33,7 +33,8 @@ pub enum PaneId {
     Sound,
     Keyboard,
     KeyboardShortcuts,
-    TrackpadMouse,
+    Mouse,
+    Trackpad,
     Power,
     PrivacySecurity,
     Camera,
@@ -49,7 +50,7 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 25] = [
+    const KEYWORDS: [(Self, &'static str); 26] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -62,7 +63,8 @@ impl PaneId {
         (Self::Sound, "sound"),
         (Self::Keyboard, "keyboard"),
         (Self::KeyboardShortcuts, "keyboard-shortcuts"),
-        (Self::TrackpadMouse, "trackpad-mouse"),
+        (Self::Mouse, "mouse"),
+        (Self::Trackpad, "trackpad"),
         (Self::Power, "power"),
         (Self::PrivacySecurity, "privacy-security"),
         (Self::Camera, "camera"),
@@ -83,7 +85,7 @@ impl PaneId {
             Self::Appearance | Self::Bar | Self::Notifications | Self::Accessibility => {
                 Some(Group::Desktop)
             }
-            Self::Displays | Self::Sound | Self::Keyboard | Self::TrackpadMouse => {
+            Self::Displays | Self::Sound | Self::Keyboard | Self::Mouse | Self::Trackpad => {
                 Some(Group::Devices)
             }
             Self::Power | Self::PrivacySecurity | Self::Apps | Self::LanguageTime | Self::About => {
@@ -114,7 +116,8 @@ impl PaneId {
             Self::NightLight => "night-light-symbolic",
             Self::Sound => "audio-volume-high-symbolic",
             Self::Keyboard | Self::KeyboardShortcuts => "input-keyboard-symbolic",
-            Self::TrackpadMouse => "input-mouse-symbolic",
+            Self::Mouse => "input-mouse-symbolic",
+            Self::Trackpad => "input-touchpad-symbolic",
             Self::Power => "system-shutdown-symbolic",
             Self::PrivacySecurity => "changes-prevent-symbolic",
             Self::Camera => "camera-photo-symbolic",
@@ -218,8 +221,13 @@ pub enum SettingId {
     TrackpadSpeed,
     TrackpadSecondaryClick,
     TrackpadDisableWhileTyping,
+    TrackpadAcceleration,
+    TrackpadDragging,
+    TrackpadScrollMethod,
+    MousePrimaryButton,
     MouseNaturalScrolling,
     MouseSpeed,
+    MouseAcceleration,
     ComputerName,
     AboutThisComputer,
     StorageUsage,
@@ -874,7 +882,8 @@ fn device_panes() -> Vec<Pane> {
                 vec![list(SettingId::Shortcuts, "shortcuts", List::Shortcuts)],
             )],
         ),
-        trackpad_mouse_pane(),
+        mouse_pane(),
+        trackpad_pane(),
     ]
 }
 
@@ -1111,14 +1120,57 @@ fn speed(id: SettingId, keywords: String) -> Setting {
     )
 }
 
-fn trackpad_mouse_pane() -> Pane {
+fn acceleration(id: SettingId) -> Setting {
+    switch(id, "pointer-acceleration").described("pointer-acceleration-description")
+}
+
+fn mouse_pane() -> Pane {
     pane(
-        PaneId::TrackpadMouse,
+        PaneId::Mouse,
+        vec![section(
+            None,
+            vec![
+                setting(
+                    SettingId::MousePrimaryButton,
+                    L10N.tr("primary-button"),
+                    L10N.tr("primary-button-keywords"),
+                    Kind::Choices(keyword_choices(vec![
+                        (L10N.tr("primary-button-left"), "left"),
+                        (L10N.tr("primary-button-right"), "right"),
+                    ])),
+                ),
+                setting(
+                    SettingId::MouseNaturalScrolling,
+                    L10N.tr("natural-scrolling"),
+                    L10N.tr("mouse-natural-scrolling-keywords"),
+                    Kind::Switch,
+                ),
+                speed(SettingId::MouseSpeed, L10N.tr("mouse-speed-keywords")),
+                acceleration(SettingId::MouseAcceleration),
+            ],
+        )],
+    )
+}
+
+fn trackpad_pane() -> Pane {
+    pane(
+        PaneId::Trackpad,
         vec![
             section(
-                Some(L10N.tr("trackpad")),
+                Some(L10N.tr("trackpad-click")),
                 vec![
                     switch(SettingId::TrackpadTapToClick, "tap-to-click"),
+                    setting(
+                        SettingId::TrackpadDragging,
+                        L10N.tr("dragging"),
+                        L10N.tr("dragging-keywords"),
+                        Kind::Menu(keyword_choices(vec![
+                            (L10N.tr("dragging-off"), "off"),
+                            (L10N.tr("dragging-tap"), "tap"),
+                            (L10N.tr("dragging-tap-with-lock"), "tap-with-lock"),
+                        ])),
+                    )
+                    .described("dragging-description"),
                     setting(
                         SettingId::TrackpadSecondaryClick,
                         L10N.tr("secondary-click"),
@@ -1128,24 +1180,32 @@ fn trackpad_mouse_pane() -> Pane {
                             (L10N.tr("secondary-click-corner"), "corner"),
                         ])),
                     ),
+                ],
+            ),
+            section(
+                Some(L10N.tr("trackpad-scroll")),
+                vec![
                     switch(SettingId::TrackpadNaturalScrolling, "natural-scrolling"),
-                    speed(SettingId::TrackpadSpeed, L10N.tr("trackpad-speed-keywords")),
-                    switch(
-                        SettingId::TrackpadDisableWhileTyping,
-                        "disable-while-typing",
+                    setting(
+                        SettingId::TrackpadScrollMethod,
+                        L10N.tr("scroll-method"),
+                        L10N.tr("scroll-method-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("scroll-method-two-fingers"), "two-fingers"),
+                            (L10N.tr("scroll-method-edge"), "edge"),
+                        ])),
                     ),
                 ],
             ),
             section(
-                Some(L10N.tr("mouse")),
+                Some(L10N.tr("trackpad-pointer")),
                 vec![
-                    setting(
-                        SettingId::MouseNaturalScrolling,
-                        L10N.tr("natural-scrolling"),
-                        L10N.tr("mouse-natural-scrolling-keywords"),
-                        Kind::Switch,
+                    speed(SettingId::TrackpadSpeed, L10N.tr("trackpad-speed-keywords")),
+                    acceleration(SettingId::TrackpadAcceleration),
+                    switch(
+                        SettingId::TrackpadDisableWhileTyping,
+                        "disable-while-typing",
                     ),
-                    speed(SettingId::MouseSpeed, L10N.tr("mouse-speed-keywords")),
                 ],
             ),
         ],

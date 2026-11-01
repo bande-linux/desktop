@@ -12,7 +12,7 @@ use bande_toolkit::{Rect, Scene, Surfaces, Window, WindowEvent};
 use crate::cx::Content;
 use crate::instance::{self, Claim, Instance, Request};
 use crate::menus::assemble;
-use crate::{Cx, Error, Info, Kind, Program, WindowId};
+use crate::{Cx, Error, Info, Program, WindowId};
 
 #[derive(Debug, Clone, Copy)]
 enum Source {
@@ -102,47 +102,6 @@ impl<P: Program> Runner<P> {
         }
     }
 
-    fn raise(&mut self, window: WindowId, token: Option<String>) {
-        let Some(index) = self.cx.index(window) else {
-            return;
-        };
-        let window = &mut self.cx.windows[index];
-        let token = match token {
-            Some(token) => Ok(token),
-            None => window.activation_token(self.cx.info.id),
-        };
-        if let Err(error) = token.and_then(|token| window.activate(&token)) {
-            tracing::warn!("cannot raise the window: {error}");
-        }
-    }
-
-    fn open_settings(&mut self) {
-        let Some(settings) = &self.cx.info.settings else {
-            return;
-        };
-        let shown = self
-            .cx
-            .views
-            .iter()
-            .zip(&self.cx.windows)
-            .find(|((_, content), window)| {
-                matches!(content, Content::Settings(_)) && !window.is_closed()
-            })
-            .map(|((id, _), _)| *id);
-        if let Some(window) = shown {
-            return self.raise(window, None);
-        }
-        let view = settings.view;
-        if let Err(error) = self.cx.open_content(
-            Kind::Main,
-            &(settings.title)(),
-            settings.size,
-            |appearance| Content::Settings(view(appearance)),
-        ) {
-            tracing::warn!("cannot open the settings: {error}");
-        }
-    }
-
     fn press(&mut self, window: WindowId, shortcut: &str) {
         let (Some(index), Some((key, modifiers))) =
             (self.cx.index(window), parse_shortcut(shortcut))
@@ -189,7 +148,7 @@ impl<P: Program> Runner<P> {
                 Ok(())
             }
             (Standard::Settings, _) => {
-                self.open_settings();
+                self.cx.open_settings();
                 Ok(())
             }
             (_, None) => Ok(()),
@@ -247,7 +206,7 @@ impl<P: Program> Runner<P> {
             .map(|(id, _)| *id)
             .filter(|id| Some(*id) != newest);
         if let Some(window) = opened.or_else(|| self.cx.focused()) {
-            self.raise(window, request.token);
+            self.cx.raise(window, request.token);
         }
     }
 

@@ -107,6 +107,47 @@ impl<P: Program> Cx<P> {
         }
     }
 
+    pub fn open_settings(&mut self) {
+        let Some(settings) = &self.info.settings else {
+            return;
+        };
+        let shown = self
+            .views
+            .iter()
+            .zip(&self.windows)
+            .find(|((_, content), window)| {
+                matches!(content, Content::Settings(_)) && !window.is_closed()
+            })
+            .map(|((id, _), _)| *id);
+        if let Some(window) = shown {
+            return self.raise(window, None);
+        }
+        let view = settings.view;
+        if let Err(error) = self.open_content(
+            Kind::Main,
+            &(settings.title)(),
+            settings.size,
+            |appearance| Content::Settings(view(appearance)),
+        ) {
+            tracing::warn!("cannot open the settings: {error}");
+        }
+    }
+
+    pub(crate) fn raise(&mut self, window: WindowId, token: Option<String>) {
+        let Some(index) = self.index(window) else {
+            return;
+        };
+        let id = self.info.id;
+        let window = &mut self.windows[index];
+        let token = match token {
+            Some(token) => Ok(token),
+            None => window.activation_token(id),
+        };
+        if let Err(error) = token.and_then(|token| window.activate(&token)) {
+            tracing::warn!("cannot raise the window: {error}");
+        }
+    }
+
     pub fn quit(&mut self) {
         self.quitting = true;
     }

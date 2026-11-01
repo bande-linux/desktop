@@ -80,8 +80,10 @@ impl CpuRenderer {
             self.resources.destroy_image(id);
         }
         for image in images {
-            if self.image_ids.get(&image).is_none() {
-                let id = self.resources.register_image(image.pixmap.clone());
+            if self.image_ids.get(&image).is_none()
+                && let Some(pixmap) = image.pixmap()
+            {
+                let id = self.resources.register_image(pixmap);
                 self.image_ids.insert(&image, id);
             }
         }

@@ -1,5 +1,5 @@
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread;
 
 use bande_inbox::Inbox;
@@ -44,13 +44,19 @@ pub fn load_backdrop(
             let Some(path) = choice.path(variant, home.as_deref(), &data_dirs()) else {
                 return;
             };
+            let fit = choice.fit;
+            let draw = move |path: &Path, look: Look| match look {
+                Look::Blurred => backdrop(path, fit, size.0, size.1),
+                Look::Sharp => render(path, fit, size.0, size.1),
+            };
             for look in looks {
-                let drawn = match look {
-                    Look::Blurred => backdrop(&path, choice.fit, size.0, size.1),
-                    Look::Sharp => render(&path, choice.fit, size.0, size.1),
-                };
-                let image = match drawn {
-                    Ok(picture) => Image::from_rgba(picture.width, picture.height, picture.rgba),
+                let image = match draw(&path, look) {
+                    Ok(picture) => {
+                        let path = path.clone();
+                        Image::redrawable(picture.width, picture.height, picture.rgba, move || {
+                            draw(&path, look).ok().map(|picture| picture.rgba)
+                        })
+                    }
                     Err(error) => {
                         tracing::warn!("cannot show the wallpaper {}: {error}", path.display());
                         None

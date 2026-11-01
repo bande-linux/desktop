@@ -87,6 +87,7 @@ pub(super) fn collect_found(
                     title,
                     strong: false,
                     alternate: None,
+                    shift_alternate: None,
                     ..item.clone()
                 });
             }
@@ -106,6 +107,7 @@ pub struct MenuItem {
     pub submenu: Option<Menu>,
     pub separator: bool,
     pub alternate: Option<Box<MenuItem>>,
+    pub shift_alternate: Option<Box<MenuItem>>,
 }
 
 impl MenuItem {
@@ -120,6 +122,7 @@ impl MenuItem {
             submenu: None,
             separator: false,
             alternate: None,
+            shift_alternate: None,
         }
     }
 
@@ -163,6 +166,13 @@ impl MenuItem {
     pub fn alternate(self, alternate: MenuItem) -> Self {
         Self {
             alternate: Some(Box::new(alternate)),
+            ..self
+        }
+    }
+
+    pub fn shift_alternate(self, alternate: MenuItem) -> Self {
+        Self {
+            shift_alternate: Some(Box::new(alternate)),
             ..self
         }
     }

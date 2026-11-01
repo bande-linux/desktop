@@ -41,8 +41,12 @@ impl Dialog {
             "../data/icons/Bande/scalable/apps/org.bande.ActivityMonitor.svg",
             36,
         );
-        let mut view =
-            LowMemoryView::new(Palette::for_scheme(scheme), TextSystem::new(), Some(disc));
+        let mut view = LowMemoryView::new(
+            Palette::for_scheme(scheme),
+            TextSystem::new(),
+            Some(disc),
+            true,
+        );
         let clock = Rc::new(Cell::new(Instant::now()));
         let now = Rc::clone(&clock);
         view.ui().set_clock(move || now.get());
@@ -110,4 +114,30 @@ fn the_low_memory_dialog_lists_the_heaviest_apps_and_asks_before_a_force_quit() 
     assert!(dark.press(Key::Escape).is_empty());
     assert!(!dark.view.ui().has_sheet());
     assert_eq!(dark.press(Key::Escape), [Effect::Close]);
+}
+
+#[test]
+fn without_activity_monitor_the_low_memory_dialog_offers_no_way_to_open_it() {
+    let labels = |monitor: bool| {
+        let mut view = LowMemoryView::new(
+            Palette::for_scheme(Scheme::Light),
+            TextSystem::new(),
+            None,
+            monitor,
+        );
+        view.scene(LOW_MEMORY_SIZE.0, LOW_MEMORY_SIZE.1);
+        view.ui()
+            .accessibility()
+            .nodes
+            .iter()
+            .filter_map(|(_, node)| node.label().map(str::to_owned))
+            .collect::<Vec<_>>()
+    };
+
+    assert!(labels(true).iter().any(|label| label == "Activity Monitor"));
+    assert!(
+        !labels(false)
+            .iter()
+            .any(|label| label == "Activity Monitor")
+    );
 }

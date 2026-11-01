@@ -4,7 +4,7 @@ use bande_graphics::{
     TextStyle, TextSystem,
 };
 
-use super::model::Menu;
+use super::model::{Menu, MenuItem};
 use super::{
     MENU_RADIUS, MENU_SHADOW_MARGIN, SEARCH_NODE, TEXT_START, VERTICAL_PADDING, menu_node,
     row_height,
@@ -39,9 +39,9 @@ pub(super) struct Row {
 }
 
 pub struct MenuPanel {
-    menus: [Menu; 2],
-    rows: [Vec<Row>; 2],
-    pub(super) alternates: bool,
+    menus: [Menu; 3],
+    rows: [Vec<Row>; 3],
+    pub(super) alternates: usize,
     size: Size,
     row_height: f32,
     content_height: f32,
@@ -77,17 +77,16 @@ impl MenuPanel {
             [palette.ink3, on_accent]
                 .map(|color| ShortcutText::new(text, shortcut, TextStyle::new(FONT_SIZE, color)))
         };
-        let alternate = Menu::new(
-            menu.items
-                .iter()
-                .map(|item| {
-                    item.alternate
-                        .as_deref()
-                        .cloned()
-                        .unwrap_or_else(|| item.clone())
-                })
-                .collect(),
-        );
+        let swapped = |pick: fn(&MenuItem) -> Option<&MenuItem>| {
+            Menu::new(
+                menu.items
+                    .iter()
+                    .map(|item| pick(item).cloned().unwrap_or_else(|| item.clone()))
+                    .collect(),
+            )
+        };
+        let alternate = swapped(|item| item.alternate.as_deref());
+        let shifted = swapped(|item| item.shift_alternate.as_deref());
         let mut widest_label: f32 = 0.0;
         let mut widest_shortcut: f32 = 0.0;
         let has_submenu = menu.items.iter().any(|item| item.submenu.is_some());
@@ -117,7 +116,7 @@ impl MenuPanel {
             Some(SearchLook::Query(_)) => (row_height + SEPARATOR_HEIGHT, 0.0, widen(SEARCH_WIDTH)),
             None => (0.0, 0.0, widen(MINIMUM_WIDTH)),
         };
-        let rows = [&menu, &alternate].map(|menu| {
+        let rows = [&menu, &alternate, &shifted].map(|menu| {
             let mut top = VERTICAL_PADDING + header;
             menu.items
                 .iter()
@@ -169,9 +168,9 @@ impl MenuPanel {
             .ceil();
         let height = top + VERTICAL_PADDING + footer;
         Self {
-            menus: [menu, alternate],
+            menus: [menu, alternate, shifted],
             rows,
-            alternates: false,
+            alternates: 0,
             size: Size::new(width, height),
             row_height,
             content_height: height,
@@ -283,16 +282,16 @@ impl MenuPanel {
         self.submenus_open_left = left;
     }
 
-    pub fn shows_alternates(&self) -> bool {
+    pub fn shows_alternates(&self) -> usize {
         self.alternates
     }
 
     pub fn menu(&self) -> &Menu {
-        &self.menus[usize::from(self.alternates)]
+        &self.menus[self.alternates]
     }
 
     fn current_rows(&self) -> &[Row] {
-        &self.rows[usize::from(self.alternates)]
+        &self.rows[self.alternates]
     }
 
     pub fn size(&self) -> Size {

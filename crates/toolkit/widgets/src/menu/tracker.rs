@@ -419,7 +419,12 @@ impl MenuTracker {
         }
     }
 
-    pub fn show_alternates(&mut self, shown: bool) -> MenuOutcome {
+    pub fn show_alternates(&mut self, modifiers: Modifiers) -> MenuOutcome {
+        let shown = match (modifiers.alt, modifiers.shift) {
+            (true, _) => 1,
+            (false, true) => 2,
+            (false, false) => 0,
+        };
         let mut changed = false;
         for panel in &mut self.panels {
             changed |= panel.alternates != shown;
@@ -433,7 +438,7 @@ impl MenuTracker {
 
     pub fn opened_submenu(&mut self, panel: MenuPanel, from_keyboard: bool) {
         let mut panel = entered(panel, from_keyboard);
-        panel.alternates = self.panels.first().is_some_and(|root| root.alternates);
+        panel.alternates = self.panels.first().map_or(0, |root| root.alternates);
         self.panels.push(panel);
     }
 

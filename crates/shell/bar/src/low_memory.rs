@@ -15,7 +15,8 @@ use bande_toolkit::{
     TextStyle, TextSystem, Window, WindowEvent,
 };
 use bande_xdg::{
-    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_icon, spawn_detached,
+    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_app, find_icon,
+    spawn_detached,
 };
 use zbus::blocking::Connection;
 
@@ -65,7 +66,7 @@ pub enum Effect {
 struct Controls {
     layout: WidgetId,
     table: WidgetId,
-    monitor: (WidgetId, f32),
+    monitor: Option<(WidgetId, f32)>,
     close: (WidgetId, f32),
     force_quit: (WidgetId, f32),
 }
@@ -94,7 +95,7 @@ fn paragraph(text: &mut TextSystem, content: &str, style: TextStyle, width: f32)
 }
 
 impl LowMemoryView {
-    pub fn new(palette: Palette, text: TextSystem, disc: Option<Image>) -> Self {
+    pub fn new(palette: Palette, text: TextSystem, disc: Option<Image>, monitor: bool) -> Self {
         let signals = Signals::default();
         let mut layout = FreeLayout::new();
         let selection = signals.clone();
@@ -114,11 +115,13 @@ impl LowMemoryView {
         force_quit.set_enabled(false);
         let mut cx = Context::new(text, palette);
         let table = layout.insert(table, Rect::default());
-        let monitor = Button::new(
-            &L10N.tr("low-memory-activity-monitor"),
-            sender(&signals, Signal::ActivityMonitor),
-        )
-        .quiet();
+        let monitor = monitor.then(|| {
+            Button::new(
+                &L10N.tr("low-memory-activity-monitor"),
+                sender(&signals, Signal::ActivityMonitor),
+            )
+            .quiet()
+        });
         let close = Button::new(
             &L10N.tr("low-memory-close"),
             sender(&signals, Signal::Close),
@@ -127,7 +130,7 @@ impl LowMemoryView {
         let controls = Controls {
             layout: layout.id(),
             table,
-            monitor: sized(monitor, &mut cx, &mut layout),
+            monitor: monitor.map(|monitor| sized(monitor, &mut cx, &mut layout)),
             close: sized(close, &mut cx, &mut layout),
             force_quit: sized(force_quit, &mut cx, &mut layout),
         };
@@ -190,7 +193,6 @@ impl LowMemoryView {
         let y = height - FOOTER + ((FOOTER - BUTTON_HEIGHT) / 2.0).round();
         let (force_quit_id, force_quit) = self.controls.force_quit;
         let (close_id, close) = self.controls.close;
-        let (monitor_id, monitor) = self.controls.monitor;
         let right = width - FOOTER_INSET;
         let frames = [
             (self.controls.table, list.inset(LIST_INSET)),
@@ -207,13 +209,13 @@ impl LowMemoryView {
                     BUTTON_HEIGHT,
                 ),
             ),
-            (
-                monitor_id,
-                Rect::new(FOOTER_INSET, y, monitor, BUTTON_HEIGHT),
-            ),
         ];
+        let monitor = self
+            .controls
+            .monitor
+            .map(|(id, width)| (id, Rect::new(FOOTER_INSET, y, width, BUTTON_HEIGHT)));
         if let Some(layout) = self.ui.widget_as::<FreeLayout>(self.controls.layout) {
-            for (id, frame) in frames {
+            for (id, frame) in frames.into_iter().chain(monitor) {
                 layout.set_frame(id, frame);
             }
         }
@@ -410,16 +412,18 @@ impl LowMemory {
         let disc_pixels = pixels(DISC);
         let disc = find_icon(ACTIVITY_MONITOR, disc_pixels, &[], &data_dirs())
             .and_then(|path| Image::load(&path, disc_pixels));
-        let mut view = LowMemoryView::new(window.appearance().palette(), text, disc);
+        let entries = applications(
+            &data_dirs(),
+            Locale::from_env().as_ref(),
+            &current_desktops(),
+        );
+        let monitor = find_app(&entries, ACTIVITY_MONITOR).is_some();
+        let mut view = LowMemoryView::new(window.appearance().palette(), text, disc, monitor);
         view.ui().set_appearance(window.appearance());
         let mut low_memory = Self {
             view,
             app_slice,
-            entries: applications(
-                &data_dirs(),
-                Locale::from_env().as_ref(),
-                &current_desktops(),
-            ),
+            entries,
             session,
             icons: HashMap::new(),
             pixels: disc_pixels,

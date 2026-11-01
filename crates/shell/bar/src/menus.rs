@@ -14,6 +14,13 @@ fn item(title: &str, command: &Command) -> MenuItem {
     MenuItem::new(title, &command.action())
 }
 
+fn keys_of(action: Action) -> Option<&'static str> {
+    SHORTCUTS
+        .iter()
+        .find(|shortcut| shortcut.action == action)
+        .map(|shortcut| shortcut.keys)
+}
+
 fn note(title: &str) -> MenuItem {
     MenuItem::new(title, "").enabled(false)
 }
@@ -38,13 +45,25 @@ pub fn clock_menu(quiet: bool) -> Menu {
     ])
 }
 
-pub fn system_menu(user: &str) -> Menu {
+pub fn system_menu(user: &str, frontmost: Option<&str>) -> Menu {
+    let force_quit = item(&L10N.tr("force-quit"), &Command::ForceQuit);
+    let force_quit = match keys_of(Action::ForceQuit) {
+        Some(keys) => force_quit.shortcut(keys),
+        None => force_quit,
+    };
+    let force_quit = match frontmost {
+        Some(app) => force_quit.shift_alternate(item(
+            &L10N.tr_args("force-quit-app", [("app", app.to_owned().into())]),
+            &Command::ForceQuitApp,
+        )),
+        None => force_quit,
+    };
     Menu::new(vec![
         item(&L10N.tr("about"), &Command::About),
         MenuItem::separator(),
         item(&L10N.tr("system-settings"), &Command::Settings(None)),
         MenuItem::separator(),
-        item(&L10N.tr("force-quit"), &Command::ForceQuit),
+        force_quit,
         MenuItem::separator(),
         item(&L10N.tr("sleep"), &Command::Sleep),
         item(&L10N.tr("restart"), &Command::Restart),
@@ -305,10 +324,7 @@ pub fn cascade(menus: &AppMenus<'_>) -> Menu {
             }
         }
     }
-    let shortcut = SHORTCUTS
-        .iter()
-        .find(|shortcut| shortcut.action == Action::SearchMenus)
-        .map_or("", |shortcut| shortcut.keys);
+    let shortcut = keys_of(Action::SearchMenus).unwrap_or_default();
     Menu::new(items).searchable(
         &L10N.tr("type-to-search"),
         shortcut,

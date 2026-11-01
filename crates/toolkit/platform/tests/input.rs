@@ -59,7 +59,8 @@ fn sample_menu() -> Menu {
             ]),
         ),
         MenuItem::new("Delete", "delete")
-            .alternate(MenuItem::new("Delete Immediately", "delete-now")),
+            .alternate(MenuItem::new("Delete Immediately", "delete-now"))
+            .shift_alternate(MenuItem::new("Delete All", "delete-all")),
     ])
 }
 
@@ -1245,6 +1246,29 @@ fn holding_alt_swaps_in_an_items_alternate() {
     assert_eq!(
         menu_events(&client.seen),
         [WindowEvent::MenuAction("delete-now".to_owned())]
+    );
+}
+
+#[test]
+fn holding_shift_swaps_in_an_items_shift_alternate() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "menu shift alternate");
+    open_menu(&mut desktop, &mut client);
+    desktop.server.press_button(BTN_RIGHT, false, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.server.key(KEY_LEFTSHIFT, true, 0);
+    desktop.settle(&mut [&mut client]);
+    desktop.point_into_content(30 + 40, 20 + 5 + 22 + 22 + 11 + 22 + 11);
+    desktop.click(BTN_LEFT);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| !menu_events(events).is_empty(),
+        |_| true,
+    );
+    desktop.server.key(KEY_LEFTSHIFT, false, 0);
+    assert_eq!(
+        menu_events(&client.seen),
+        [WindowEvent::MenuAction("delete-all".to_owned())]
     );
 }
 

@@ -127,6 +127,7 @@ fn every_command_survives_its_trip_through_a_menu_action() {
         Command::Settings(None),
         Command::Settings(Some("wifi".to_owned())),
         Command::ForceQuit,
+        Command::ForceQuitApp,
         Command::Sleep,
         Command::Restart,
         Command::ShutDown,
@@ -160,7 +161,7 @@ fn every_command_survives_its_trip_through_a_menu_action() {
 
 #[test]
 fn the_system_menu_offers_power_and_session_commands_with_the_users_name() {
-    let menu = system_menu("Ada Lovelace");
+    let menu = system_menu("Ada Lovelace", None);
     let shown = titles(&menu);
     assert_eq!(
         shown.first().map(|item| item.0.as_str()),
@@ -178,6 +179,28 @@ fn the_system_menu_offers_power_and_session_commands_with_the_users_name() {
         Command::parse(action_of(&menu, "Shut Down…")),
         Some(Command::ShutDown)
     );
+}
+
+#[test]
+fn shift_turns_force_quit_into_force_quitting_the_frontmost_app() {
+    let with_app = system_menu("Ada Lovelace", Some("Editor"));
+    let without_app = system_menu("Ada Lovelace", None);
+    let force_quit = |menu: &Menu| {
+        menu.items
+            .iter()
+            .find(|item| item.title == "Force Quit…")
+            .cloned()
+            .expect("a Force Quit item")
+    };
+
+    let item = force_quit(&with_app);
+    let shifted = item.shift_alternate.as_deref().expect("a Shift variant");
+
+    assert_eq!(item.shortcut.as_deref(), Some("Ctrl+Alt+Escape"));
+    assert_eq!(shifted.title, "Force Quit “Editor”");
+    assert_eq!(Command::parse(&shifted.action), Some(Command::ForceQuitApp));
+    assert!(item.alternate.is_none());
+    assert!(force_quit(&without_app).shift_alternate.is_none());
 }
 
 #[test]

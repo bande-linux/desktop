@@ -3,11 +3,12 @@ use std::error::Error;
 use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 use std::sync::mpsc;
-use std::sync::{Arc, Condvar, Mutex, PoisonError};
+use std::sync::Arc;
 
 use accesskit::TreeUpdate;
-use bande_inbox::{Inbox, Outbox};
-use bande_polkit::agent::{Agent, Answer, Conversation, Notice, Request, Subject};
+use bande_inbox::Inbox;
+use bande_polkit::agent::{Agent, Answer, Subject};
+use bande_polkit::bridge::Bridge;
 use bande_polkit::dialog::{Dialog, Message, Prompt};
 use bande_polkit::helper::HELPER;
 use bande_toolkit::{
@@ -20,54 +21,6 @@ use zbus::zvariant::OwnedObjectPath;
 
 const LOGIN: &str = "org.freedesktop.login1";
 const NAMESPACE: &str = "polkit-authentication";
-
-struct Bridge {
-    outbox: Outbox<Message>,
-    active: Mutex<Option<Request>>,
-    released: Condvar,
-}
-
-impl Conversation for Bridge {
-    fn respond(&self, request: &Request, user: &str, prompt: &str, _echo: bool) -> Answer {
-        {
-            let mut active = self.active.lock().unwrap_or_else(PoisonError::into_inner);
-            while active.as_ref().is_some_and(|active| active != request) {
-                active = self
-                    .released
-                    .wait(active)
-                    .unwrap_or_else(PoisonError::into_inner);
-            }
-            *active = Some(request.clone());
-        }
-        tracing::debug!("asking for {} ({prompt})", request.action_id);
-        let (reply, answer) = mpsc::channel();
-        let prompt = Prompt {
-            message: request.message.clone(),
-            identities: request.identities.clone(),
-            user: user.to_owned(),
-        };
-        if !self.outbox.send(Message::Prompt { prompt, reply }) {
-            return Answer::Cancel;
-        }
-        answer.recv().unwrap_or(Answer::Cancel)
-    }
-
-    fn notice(&self, request: &Request, notice: Notice) {
-        let active = self.active.lock().unwrap_or_else(PoisonError::into_inner);
-        if active.as_ref() == Some(request) {
-            self.outbox.send(Message::Notice(notice));
-        }
-    }
-
-    fn close(&self, request: &Request) {
-        let mut active = self.active.lock().unwrap_or_else(PoisonError::into_inner);
-        if active.as_ref() == Some(request) {
-            *active = None;
-            self.outbox.send(Message::Close);
-            self.released.notify_all();
-        }
-    }
-}
 
 struct Asking<'a> {
     dialog: Dialog,
@@ -204,11 +157,7 @@ fn serve() -> Result<(), Box<dyn Error>> {
         subject(&system)?,
         &locale,
         HELPER.into(),
-        Arc::new(Bridge {
-            outbox: inbox.outbox(),
-            active: Mutex::new(None),
-            released: Condvar::new(),
-        }),
+        Arc::new(Bridge::new(inbox.outbox())),
     )?;
     let mut pending = VecDeque::new();
     let mut declined = false;

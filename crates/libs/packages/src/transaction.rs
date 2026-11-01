@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use zbus::blocking::fdo::DBusProxy;
@@ -56,7 +55,8 @@ impl Canceller {
 
 fn left(message: &Message) -> bool {
     let header = message.header();
-    header.interface().is_some_and(|interface| interface == BUS)
+    header.sender().is_some_and(|sender| sender == BUS)
+        && header.interface().is_some_and(|interface| interface == BUS)
         && header
             .member()
             .is_some_and(|member| member == "NameOwnerChanged")
@@ -72,27 +72,6 @@ fn from_transaction(message: &Message, path: &OwnedObjectPath) -> bool {
         && header
             .path()
             .is_some_and(|from| from.as_str() == path.as_str())
-}
-
-fn finished(message: &Message) -> bool {
-    message
-        .header()
-        .member()
-        .is_some_and(|member| member == "Finished")
-}
-
-fn relay(messages: MessageIterator, path: OwnedObjectPath, relayed: Sender<Message>) {
-    for message in messages.flatten() {
-        let gone = left(&message);
-        let wanted = gone || from_transaction(&message, &path);
-        if !wanted {
-            continue;
-        }
-        let last = gone || finished(&message);
-        if relayed.send(message).is_err() || last {
-            break;
-        }
-    }
 }
 
 fn track(progress: &mut Progress, changed: &HashMap<String, OwnedValue>) {
@@ -116,10 +95,13 @@ fn track(progress: &mut Progress, changed: &HashMap<String, OwnedValue>) {
     }
 }
 
-fn listen(relayed: &Receiver<Message>, report: &dyn Fn(Progress)) -> Result<Outcome, Error> {
+fn listen(
+    messages: impl Iterator<Item = Message>,
+    report: &dyn Fn(Progress),
+) -> Result<Outcome, Error> {
     let mut outcome = Outcome::default();
     let mut progress = Progress::default();
-    for message in relayed.iter() {
+    for message in messages {
         if left(&message) {
             return Err(Error::Vanished);
         }
@@ -219,13 +201,7 @@ where
     let _: () = transaction.call("SetHints", &(&client.hints,))?;
     let bus = DBusProxy::new(system)?;
     let rules = rules(&path)?;
-    let (relayed, received) = mpsc::channel();
     let messages = MessageIterator::from(system);
-    let watched = path.clone();
-    std::thread::Builder::new()
-        .name("packagekit-signals".to_owned())
-        .spawn(move || relay(messages, watched, relayed))
-        .map_err(|error| Error::Bus(zbus::Error::InputOutput(Arc::new(error))))?;
     client.canceller.set(Some((system.clone(), path.clone())));
     let outcome = (|| -> Result<Outcome, Error> {
         for rule in &rules {
@@ -235,7 +211,12 @@ where
             return Err(Error::Vanished);
         }
         let _: () = transaction.call(method, body)?;
-        listen(&received, progress)
+        listen(
+            messages
+                .flatten()
+                .filter(|message| left(message) || from_transaction(message, &path)),
+            progress,
+        )
     })();
     client.canceller.set(None);
     for rule in rules {
@@ -244,4 +225,29 @@ where
         }
     }
     outcome
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use zbus::Message;
+
+    use super::{BUS, left};
+    use crate::SERVICE;
+
+    fn owner_changed(sender: &str) -> Message {
+        Message::signal("/org/freedesktop/DBus", BUS, "NameOwnerChanged")
+            .unwrap()
+            .sender(sender)
+            .unwrap()
+            .build(&(SERVICE, ":1.20", ""))
+            .unwrap()
+    }
+
+    #[test]
+    fn only_the_bus_itself_can_say_packagekit_left() {
+        assert!(left(&owner_changed(BUS)));
+        assert!(!left(&owner_changed(":1.66")));
+    }
 }

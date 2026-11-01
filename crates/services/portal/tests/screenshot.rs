@@ -77,6 +77,23 @@ fn a_screenshot_returns_the_file_uri() {
 }
 
 #[test]
+fn a_stored_permission_is_trusted_only_from_the_desktop_portal() {
+    let (portal, captures) = start(Some("/tmp/s.png"));
+    portal
+        .client
+        .release_name(xdg_desktop_portal_bande::FRONTEND)
+        .expect("release");
+    let options = Options::from([("permission_store_checked", Value::from(true))]);
+    portal.request(
+        INTERFACE,
+        "Screenshot",
+        &(handle(), "org.example.Paint", "", options),
+    );
+    let capture = captures.recv_timeout(WAIT).expect("capture");
+    assert!(capture.ask_permission);
+}
+
+#[test]
 fn without_a_stored_permission_the_user_is_asked() {
     let (portal, captures) = start(Some("/tmp/s.png"));
     portal.request(

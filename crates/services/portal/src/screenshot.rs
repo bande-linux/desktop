@@ -3,9 +3,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use bande_xdg::file_uri;
+use zbus::message::Header;
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
+use crate::from_frontend;
 use crate::request::{self, CANCELLED, Cancellation, OTHER, SUCCESS};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,12 +57,16 @@ impl Screenshot {
         parent_window: String,
         options: Options,
         #[zbus(object_server)] server: &ObjectServer,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: Header<'_>,
     ) -> (u32, Results) {
+        let checked = flag(&options, "permission_store_checked")
+            && from_frontend(connection, &header).await;
         let capture = Capture {
             app_id,
             parent_window,
             interactive: flag(&options, "interactive"),
-            ask_permission: !flag(&options, "permission_store_checked"),
+            ask_permission: !checked,
         };
         let ui = Arc::clone(&self.ui);
         let outcome = request::run(server, &handle, move |cancellation| {

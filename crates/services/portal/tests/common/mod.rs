@@ -25,6 +25,9 @@ impl Portal {
         serve(&service);
         service.request_name(BUS_NAME).expect("portal name");
         let client = bus.connect().expect("frontend connection");
+        client
+            .request_name(xdg_desktop_portal_bande::FRONTEND)
+            .expect("frontend name");
         Self {
             service,
             client,

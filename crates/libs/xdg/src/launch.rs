@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
-use std::os::fd::OwnedFd;
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use bande_inbox::{Inbox, Outbox};
 use bande_notify::Urgency;
 use bande_notify::client::{Request, notify};
-use rustix::event::{PollFd, PollFlags, poll};
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::fs::{Mode, OFlags};
 use rustix::io::Errno;
 use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open};
@@ -284,6 +284,44 @@ fn start(
         activation_token,
     )
     .map_err(LaunchError::Spawn)
+}
+
+pub fn wait_for_exit(
+    child: &mut Child,
+    deadline: Option<Instant>,
+    stop: Option<BorrowedFd<'_>>,
+) -> io::Result<Option<ExitStatus>> {
+    let exited = pidfd_open(Pid::from_child(child), PidfdFlags::empty())?;
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(Some(status));
+        }
+        let timeout = match deadline {
+            Some(deadline) => {
+                let left = deadline.saturating_duration_since(Instant::now());
+                if left.is_zero() {
+                    return Ok(None);
+                }
+                Some(Timespec {
+                    tv_sec: i64::try_from(left.as_secs()).unwrap_or(i64::MAX),
+                    tv_nsec: i64::from(left.subsec_nanos()),
+                })
+            }
+            None => None,
+        };
+        let mut fds: Vec<PollFd<'_>> = [exited.as_fd()]
+            .into_iter()
+            .chain(stop)
+            .map(|fd| PollFd::from_borrowed_fd(fd, PollFlags::IN))
+            .collect();
+        match poll(&mut fds, timeout.as_ref()) {
+            Ok(_) | Err(Errno::INTR) => {}
+            Err(error) => return Err(error.into()),
+        }
+        if fds.get(1).is_some_and(|fd| !fd.revents().is_empty()) {
+            return Ok(None);
+        }
+    }
 }
 
 pub fn spawn_detached(

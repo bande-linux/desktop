@@ -83,7 +83,8 @@ for entry in bande-config:org.bande.Config:org.bande.Config \
     grep -qx 'WantedBy=bande-session.target' "$unit"
     test -x "$root$(sed -n 's/^Exec=//p' "$service")"
     test -x "$root$(sed -n 's/^ExecStart=//p' "$unit")"
-    dpkg-deb --ctrl-tarfile "$debs/${package}_${version}_$architecture.deb" | tar -t | grep -qx './postinst'
+    dpkg-deb --control "$debs/${package}_${version}_$architecture.deb" "$root/DEBIAN"
+    test -x "$root/DEBIAN/postinst"
 done
 
 echo "== the automount service's user unit"

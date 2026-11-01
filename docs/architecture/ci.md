@@ -14,7 +14,7 @@ organization's self-hosted runners, Docker containers on Apple Silicon (setup:
 `bande-runner-2` carry `self-hosted, Linux, ARM64, bande`, and `bande-runner-kvm`
 carries `bande-kvm` and has `/dev/kvm`.
 
-The repository will be public, so only maintainers start runs: `release.yml` runs on a version
+The repository is public, so only maintainers start runs: `release.yml` runs on a version
 tag and on dispatch, `extended.yml` on dispatch only, and neither runs on pull requests.
 
 ## Headless graphics
@@ -84,22 +84,28 @@ Jobs:
   portal backend's registration and the login session; `ci/release/smoke.sh` starts the
   packaged settings service on a private bus to read a property and the packaged compositor
   headless. The job uploads `bande-debs-<arch>`.
-- `deb-all`: `ci/release/build-all.sh` builds the architecture-independent packages
-  (`bande-desktop`, `bande-os`, the APT source and keyring), checks that the meta-packages
-  pin their packages at the build's version, that `bande-desktop` never depends on
-  `bande-os`, the APT source, pin and signing key, and lints them with `lintian`. It
-  uploads `bande-debs-all`.
+- `deb-all`: `ci/release/build-all.sh` builds the architecture-independent meta-packages
+  `bande-desktop` and `bande-os`, checks that they pin their packages at the build's version,
+  that `bande-os` brings the system around the desktop and recommends `bande-apt-source`,
+  that `bande-desktop` never depends on `bande-os`, and lints them with `lintian`. It uploads
+  `bande-debs-all`. The APT source and keyring packages are built by the APT repository
+  itself.
 - `install (arm64)`, `install (amd64)`: in a clean `debian:testing` on the native runner,
   `ci/deb/install-test/run.sh` installs `bande-desktop` from that architecture's packages and
   the `all` packages alone, checks that every package has the same version, that every app it
   recommends has an installation candidate, that no X server, XWayland or X session came
   along, the greetd setup and the greeter's wallpaper permissions, that the installed
-  compositor serves Wayland clients, then installs `bande-os` and checks the APT source.
+  compositor serves Wayland clients, then installs `bande-os` and checks the system packages it
+  brings.
   `crates/services/portal/tests/frontend/run.sh` then reads the colour scheme through Debian's
   `xdg-desktop-portal` and checks it follows `config.kdl`.
 The APT repository publishes on its own: every 30 minutes it looks for new green `release.yml`
 runs for tags and takes their `bande-debs-arm64`, `bande-debs-amd64` and
-`bande-debs-all` artifacts into the `main` component of its `rolling` suite.
+`bande-debs-all` artifacts into the `main` component of its `rolling` suite. It refuses a run
+whose architectures do not carry the same packages at the tag's version, and after each deploy
+it installs `bande-desktop` from the live site on amd64 and on arm64 and checks that every
+package is that architecture's build (or `all`) at the published version
+([`bande-linux/apt`](https://github.com/bande-linux/apt)).
 
 Versions come from `ci/deb/version.sh`. A tag `vX.Y.Z` builds version `X.Y.Z` and must equal
 the `[workspace.package] version` in `Cargo.toml`, so a release is: bump the version, merge to

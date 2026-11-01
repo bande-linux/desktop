@@ -1,0 +1,26 @@
+[package]
+name = "bande-app"
+description = "The life of a Bande app: windows, menus, standard keys, appearance and activation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+tracing.workspace = true
+bande-app-menu.workspace = true
+bande-inbox.workspace = true
+bande-bus.workspace = true
+bande-log.workspace = true
+bande-toolkit.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+smithay.workspace = true
+bande-compositor.workspace = true
+bande-test-bus.workspace = true
+
+[lints]
+workspace = true

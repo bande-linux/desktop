@@ -158,6 +158,18 @@ pub fn close_window() -> Entry {
         .shortcut(Standard::CloseWindow.shortcut())
 }
 
+pub fn shortcut_action(menus: &[Entry], pressed: &dyn Fn(&str) -> bool) -> Option<String> {
+    menus
+        .iter()
+        .filter(|entry| entry.enabled)
+        .find_map(|entry| match &entry.shortcut {
+            Some(shortcut) if !entry.action.is_empty() && pressed(shortcut) => {
+                Some(entry.action.clone())
+            }
+            _ => shortcut_action(&entry.children, pressed),
+        })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
     label: String,
@@ -423,6 +435,12 @@ impl AppMenu {
         app_id: &str,
         entries: Vec<Entry>,
     ) -> Result<Self, Error> {
+        let menu = Self::serve(connection, app_id, entries)?;
+        menu.claim()?;
+        Ok(menu)
+    }
+
+    pub fn serve(connection: Connection, app_id: &str, entries: Vec<Entry>) -> Result<Self, Error> {
         let actions = Inbox::new()?;
         let menus = Arc::new(Mutex::new(Menus {
             revision: 1,
@@ -435,14 +453,12 @@ impl AppMenu {
                 actions: actions.outbox(),
             },
         )?;
-        let menu = Self {
+        Ok(Self {
             connection,
             app_id: app_id.to_owned(),
             menus,
             actions,
-        };
-        menu.claim()?;
-        Ok(menu)
+        })
     }
 
     pub fn claim(&self) -> Result<(), Error> {
@@ -484,7 +500,37 @@ impl AppMenu {
 
 #[cfg(test)]
 mod tests {
-    use super::Standard;
+    use super::{Entry, Standard, shortcut_action};
+
+    #[test]
+    fn a_pressed_shortcut_finds_the_enabled_entry_in_any_submenu() {
+        let menus = vec![
+            Entry::submenu(
+                "File",
+                vec![
+                    Entry::item("New Window", "new-window").shortcut("Ctrl+N"),
+                    Entry::item("Print", "print")
+                        .shortcut("Ctrl+P")
+                        .enabled(false),
+                ],
+            ),
+            Entry::submenu(
+                "View",
+                vec![Entry::submenu(
+                    "Zoom",
+                    vec![Entry::item("Bigger", "bigger").shortcut("Ctrl+=")],
+                )],
+            ),
+            Entry::submenu("Go", vec![Entry::item("Home", "home").shortcut("Ctrl+H")])
+                .enabled(false),
+        ];
+        let action = |held: &'static str| shortcut_action(&menus, &|shortcut| shortcut == held);
+        assert_eq!(action("Ctrl+N").as_deref(), Some("new-window"));
+        assert_eq!(action("Ctrl+=").as_deref(), Some("bigger"));
+        assert_eq!(action("Ctrl+P"), None);
+        assert_eq!(action("Ctrl+H"), None);
+        assert_eq!(action("Ctrl+K"), None);
+    }
 
     #[test]
     fn ctrl_w_and_ctrl_q_are_the_app_level_standard_shortcuts() {

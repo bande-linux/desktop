@@ -70,6 +70,7 @@ xkbcommon = "=0.8.0"
 zbus = "=5.19.0"
 zeroize = { version = "=1.8.1", features = ["serde"] }
 zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2"] }
+bande-app = { path = "crates/libs/app" }
 bande-app-menu = { path = "crates/libs/app-menu" }
 bande-app-settings = { path = "crates/libs/app-settings" }
 bande-audio = { path = "crates/libs/audio" }

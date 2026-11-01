@@ -619,6 +619,10 @@ Preconditions: apps-split M6 done (the shared pin, `ci/gate.sh`, `with-desktop.s
   windows, Ctrl+W closes the focused one, `should_close` can refuse, Ctrl+Q closes both, an
   appearance change reaches both views.
 - Done when: `desktop-check -p bande-app` passes; the tests pass on the hermetic bus.
+- **Status: done 2026-11-01** (`appfw/m2-core`). `bande_app::run_on` runs an app on a given
+  Wayland socket (the headless test, `tests/windows.rs`); `bande_app_menu::shortcut_action`
+  finds the enabled entry for a pressed shortcut. No `Launch` field: M3 makes every app single
+  instance (D3 as changed), so `PerWindow` never became API.
 
 **M3. Single instance and activation** (1.5 h)
 - One session connection with a method timeout; `org.freedesktop.Application` (`Activate`,
@@ -627,6 +631,16 @@ Preconditions: apps-split M6 done (the shared pin, `ci/gate.sh`, `with-desktop.s
 - Tests on the test bus: a second `run` forwards its arguments and token and returns success,
   and the first receives them; the menu stays exported under the app id throughout.
 - Done when: the tests pass; no second connection is opened for the menu.
+- **Status: done 2026-11-01** (`appfw/m3-instance`). Every app is single instance (D3 as
+  changed): the name is requested with `DoNotQueue` on the `bande_bus::session()` connection
+  (25 s method timeout) after `org.freedesktop.Application` is exported at the path the
+  specification derives from the app id; the menu is served on the same connection with
+  `AppMenu::serve` (no claim). A second launch calls `Activate` (no arguments: raise only) or
+  `Open` with its arguments, its `XDG_ACTIVATION_TOKEN` and its working folder as
+  `x-bande-directory` (bytes), so `Program::open(cx, arguments, directory)` resolves relative
+  paths where they were typed. The first raises the window `open` opened, else the focused
+  one, with that token (or one of its own when the launch had none). Arguments that are not
+  UTF-8 end the launch with an error instead of a panic.
 
 **M4. Settings…, the Edit menu, state paths** (1.5 h)
 - `Info.settings`: the menu entry, Ctrl+,, `--settings` dispatch, spawn with an activation

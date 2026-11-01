@@ -359,7 +359,7 @@ static WATCHER: LazyLock<Option<Outbox<Watch>>> = LazyLock::new(|| {
         let outbox = inbox.outbox();
         thread::Builder::new()
             .name("app-watcher".to_owned())
-            .spawn(move || Watcher::new(Connection::session).run(inbox))?;
+            .spawn(move || Watcher::new(bande_bus::session).run(inbox))?;
         Ok(outbox)
     });
     started

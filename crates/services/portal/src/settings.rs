@@ -63,8 +63,8 @@ impl ColorScheme {
 
     fn gtk_theme(self, increase_contrast: bool) -> &'static str {
         match (self, increase_contrast) {
-            (Self::PreferLight, false) => "Adwaita",
-            (Self::PreferDark, false) => "Adwaita-dark",
+            (Self::PreferLight, false) => gtk::THEME,
+            (Self::PreferDark, false) => gtk::DARK_THEME,
             (Self::PreferLight, true) => "HighContrast",
             (Self::PreferDark, true) => "HighContrastInverse",
         }
@@ -453,7 +453,7 @@ impl Settings {
         connection: &Connection,
         system: Option<&Connection>,
         cursor: CursorSettings,
-        gtk_home: Option<PathBuf>,
+        gtk_homes: Option<gtk::GtkHomes>,
     ) -> zbus::Result<()> {
         let changes = PropertiesProxy::builder(connection)
             .destination(CONFIG_BUS_NAME)?
@@ -463,8 +463,8 @@ impl Settings {
         let mut reader = Reader::new(connection)?;
         let (first, next) = reader.read(&bande_datetime::now());
         let style_gtk = move |look: Look| {
-            if let Some(home) = &gtk_home
-                && let Err(error) = gtk::install(home, look.accent, look.scheme.scheme())
+            if let Some(homes) = &gtk_homes
+                && let Err(error) = gtk::install(homes, look.accent, look.scheme.scheme())
             {
                 tracing::warn!("cannot give GTK apps the Bande colours: {error}");
             }

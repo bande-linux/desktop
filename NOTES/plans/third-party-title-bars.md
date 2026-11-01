@@ -56,15 +56,17 @@ Do 1, 3 and 2 in that order. For GTK 3, ship two small themes written by the por
 ## Implementation plan
 Branch per milestone, gate as in CLAUDE.md, verify on the mini.
 
-Status (2026-11-01): milestones 1-4 done and merged (branch `gap/kde-server-decoration`). A probe on a
+Status (2026-11-01): milestones 1-5 done and merged (branches `gap/kde-server-decoration` and
+`gap/gtk3-title-bars`). A probe on a
 private headless compositor (`--headless`, own runtime dir and session bus) with `WAYLAND_DEBUG=1`
 confirmed the order GTK 4.18 uses: a plain `GtkApplicationWindow` binds the KDE manager, reads
 default SERVER, creates its decoration and requests SERVER before `get_xdg_surface`, so the
 compositor keeps a mode requested before the toplevel exists. `gtk_window_set_titlebar` after
 mapping recreates the surface without a decoration (client-side). Calculator and Text Editor
 (libadwaita 1.7) bind the manager but create no decoration, so they stay client-side as planned.
-Milestone 5 (GTK 3 themes), the rest of milestone 6 (Firefox, Electron, the review scenario,
-the per-app table) and the three owner decisions below are still open.
+The GTK 3 and GTK 4 rules were parsed with libgtk-3 and libgtk-4 without errors but have not been
+seen on screen. Still open: the rest of milestone 6 (Firefox, Electron, the review scenario,
+which takes over the screen, and the per-app table) and the three owner decisions below.
 
 1. **KDE server-decoration** (about 2 h) — done
    - `compositor/src/state/globals.rs`: `KdeDecorationState::new::<State>(handle, DefaultMode::Server)`.
@@ -103,7 +105,9 @@ the per-app table) and the three owner decisions below are still open.
    - `data/icons/src/symbols.py`: redraw `window-close`, `-minimize`, `-maximize` (outward corners) and `-restore` (inward corners) as `title_bar.rs` glyphs on a 16 grid with a 1.5 stroke as filled outlines. Regenerate `data/icons/Bande*/symbolic/actions`.
    - Proof: refreshed `crates/shell/desktop/tests/golden/icons-{light,dark}.png`. The existing single-colour-fill test must still pass.
 
-5. **GTK 3 title bars and accent** (about 2 h)
+5. **GTK 3 title bars and accent** (about 2 h) — done; the dark-theme `@define-color` file in
+   `gtk-3.0/bande.css` stays (it still names the colours for apps' own CSS), the themes carry
+   literal colours
    - Coordinate with `dark-theme.md` milestone 4 and replace its GTK 3 `@define-color` file with this.
    - `portal/src/gtk.rs`: `install_gtk3_themes(data_home, accent)` writes `themes/Bande{,-dark}/index.theme` and `gtk-3.0/gtk.css`. Each `gtk.css` imports `resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained{,-dark}.css` and adds:
      - `headerbar` and `.titlebar` in chassis, with no gradient and no inset shadow.

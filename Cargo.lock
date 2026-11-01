@@ -1264,6 +1264,7 @@ dependencies = [
 name = "bande-xdg"
 version = "0.1.0"
 dependencies = [
+ "bande-inbox",
  "bande-l10n",
  "bande-notify",
  "bande-test-bus",

@@ -73,6 +73,14 @@ impl Shape {
     pub const fn rounded(rect: Rect, radius: f32) -> Self {
         Self { rect, radius }
     }
+
+    pub fn distance(self, point: Point) -> f32 {
+        let half = (self.rect.width / 2.0, self.rect.height / 2.0);
+        let radius = self.radius.min(half.0).min(half.1);
+        let x = (point.x - self.rect.x - half.0).abs() - half.0 + radius;
+        let y = (point.y - self.rect.y - half.1).abs() - half.1 + radius;
+        x.max(0.0).hypot(y.max(0.0)) + x.max(y).min(0.0) - radius
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

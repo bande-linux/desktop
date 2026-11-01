@@ -579,7 +579,7 @@ impl Ui {
 
     fn present(&mut self, widget: Box<dyn Widget>, floating: bool) {
         self.sync_event_clock();
-        self.captured = None;
+        self.cancel_capture();
         let previous_focus = self.cx.focus.take();
         let mut shown = Animated::new(0.0);
         self.cx.animate(&mut shown, 1.0, Spring::QUICK);
@@ -624,8 +624,16 @@ impl Ui {
         sheet.closing = true;
         self.cx.animate(&mut sheet.shown, 0.0, Spring::QUICK);
         self.cx.focus = sheet.previous_focus;
+        self.cancel_capture();
         self.hovered.clear();
-        self.captured = None;
+    }
+
+    fn cancel_capture(&mut self) -> bool {
+        let Some((target, _)) = self.captured.take() else {
+            return false;
+        };
+        self.hovered.retain(|id| *id != target);
+        self.deliver(target, &Event::PointerLeave)
     }
 
     pub fn layout(&mut self, size: Size) {
@@ -761,7 +769,12 @@ impl Ui {
                     self.cx.focus = Some(target);
                 }
                 if pointer.button == PointerButton::Secondary {
-                    self.captured = None;
+                    if self
+                        .captured
+                        .is_some_and(|(_, button)| button == PointerButton::Secondary)
+                    {
+                        self.captured = None;
+                    }
                     return self.request_menu(pointer.position) | delivered | hovered;
                 }
                 delivered | hovered
@@ -795,10 +808,7 @@ impl Ui {
                 let delivered = self.deliver(target, event);
                 delivered | self.hover(Some(pointer))
             }
-            Event::PointerLeave => {
-                self.captured = None;
-                self.hover(None)
-            }
+            Event::PointerLeave => self.cancel_capture() | self.hover(None),
             Event::Scroll(scroll) => {
                 self.tooltips.dismiss();
                 let pointer = Pointer::at(scroll.position).with_modifiers(scroll.modifiers);

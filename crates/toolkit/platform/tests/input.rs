@@ -311,6 +311,18 @@ fn caps_lock_changes_typed_letters_but_not_the_letter_of_a_shortcut() {
 }
 
 #[test]
+fn a_window_opened_with_a_title_longer_than_a_wayland_message_still_maps() {
+    let mut desktop = Desktop::new();
+    let title = "\u{e9}".repeat(40_000);
+    let mut client = desktop.open(Role::toplevel(&title, "test.long-title"), false);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| events.contains(&WindowEvent::Focus(true)),
+        Desktop::mapped,
+    );
+}
+
+#[test]
 fn a_held_key_repeats_after_the_compositors_delay() {
     let mut desktop = Desktop::new();
     let mut client = desktop.open(Role::toplevel("repeat", "test.repeat"), false);

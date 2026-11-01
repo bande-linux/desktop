@@ -379,7 +379,8 @@ impl Window {
                     .ok_or(WindowError::Missing("xdg_wm_base"))?;
                 let xdg_surface = wm_base.get_xdg_surface(&surface, &handle, ());
                 let toplevel = xdg_surface.get_toplevel(&handle, ());
-                toplevel.set_title(title.clone());
+                let title = &title[..title.floor_char_boundary(TITLE_BYTES_LIMIT)];
+                toplevel.set_title(title.to_owned());
                 toplevel.set_app_id(app_id);
                 if fixed {
                     let (width, height) = match titled {
@@ -391,7 +392,7 @@ impl Window {
                     };
                     fix_size(&toplevel, (width, height));
                 }
-                chrome = Some(Chrome::new(title, titled, fixed));
+                chrome = Some(Chrome::new(title.to_owned(), titled, fixed));
                 ShellSurface::Toplevel(xdg_surface, toplevel)
             }
             Role::Layer(options) => {

@@ -1072,11 +1072,12 @@ impl FilesView {
         y = self.paint_permissions(area, inner, y, &mut content);
         if !info.apps.is_empty() {
             y += 10.0;
-            let heading = self.paragraph(
+            let ink = self.palette.ink3;
+            let heading = self.text().paragraph(
                 &L10N.tr("open-with"),
-                SMALL_SIZE,
-                muted,
-                TextStyle::SEMIBOLD,
+                TextStyle::role(TextRole::Label, ink),
+                None,
+                TextAlign::Start,
             );
             content.push(Item::Text {
                 origin: Point::new(inner.x, y),
@@ -1151,11 +1152,12 @@ impl FilesView {
         let (runnable, access) = (controls.runnable, controls.access.clone());
         let (primary, muted) = (self.palette.ink, self.palette.ink2);
         y += 10.0;
-        let heading = self.paragraph(
+        let ink = self.palette.ink3;
+        let heading = self.text().paragraph(
             &L10N.tr("sharing-permissions"),
-            SMALL_SIZE,
-            muted,
-            TextStyle::SEMIBOLD,
+            TextStyle::role(TextRole::Label, ink),
+            None,
+            TextAlign::Start,
         );
         items.push(Item::Text {
             origin: Point::new(inner.x, y),

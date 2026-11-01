@@ -148,7 +148,7 @@ impl Widget for Slider {
         let track_y = (self.frame.y + (self.frame.height - TRACK_HEIGHT) / 2.0).round();
         items.push(Item::Fill {
             shape: Shape::rounded(
-                Rect::new(start, track_y, length, TRACK_HEIGHT),
+                Rect::new(self.frame.x, track_y, self.frame.width, TRACK_HEIGHT),
                 TRACK_HEIGHT / 2.0,
             ),
             paint: cx.palette.well.into(),
@@ -170,7 +170,12 @@ impl Widget for Slider {
         let filled = length * cx.sample(&self.knob).clamp(0.0, 1.0);
         items.push(Item::Fill {
             shape: Shape::rounded(
-                Rect::new(start, track_y, filled, TRACK_HEIGHT),
+                Rect::new(
+                    self.frame.x,
+                    track_y,
+                    start - self.frame.x + filled,
+                    TRACK_HEIGHT,
+                ),
                 TRACK_HEIGHT / 2.0,
             ),
             paint: cx.palette.accent.into(),

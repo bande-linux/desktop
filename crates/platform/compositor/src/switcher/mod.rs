@@ -35,7 +35,7 @@ const MARGIN: f64 = 48.0;
 const PAD: f64 = 12.0;
 const GAP: f64 = 4.0;
 const ICON: f64 = 72.0;
-const ICON_INSET: f64 = 12.0;
+const ICON_INSET: f64 = 8.0;
 const THUMBNAIL: (f64, f64) = (220.0, 140.0);
 const THUMBNAIL_INSET: f64 = 8.0;
 const NAME_ROW: f64 = 30.0;
@@ -806,11 +806,11 @@ mod tests {
 
     #[test]
     fn the_card_is_centred_and_its_tiles_sit_side_by_side_inside_it() {
-        let tile = Size::from((96.0, 96.0));
-        let layout = lay_out(&[tile; 3], ICON_INSET, room());
+        let side = ICON + 2.0 * ICON_INSET;
+        let layout = lay_out(&[Size::from((side, side)); 3], ICON_INSET, room());
 
         let card = layout.card;
-        assert_eq!(card.size.w, 3.0 * 96.0 + 2.0 * GAP + 2.0 * PAD);
+        assert_eq!(card.size.w, 3.0 * side + 2.0 * GAP + 2.0 * PAD);
         assert!((card.loc.x + card.size.w / 2.0 - 640.0).abs() <= 0.5);
         assert!((card.loc.y + card.size.h / 2.0 - 415.0).abs() <= 0.5);
         for pair in layout.tiles.windows(2) {

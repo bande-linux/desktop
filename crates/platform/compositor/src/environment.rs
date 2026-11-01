@@ -37,15 +37,23 @@ pub fn cursor_environment(cursor: &CursorTheme) -> [(&'static str, String); 2] {
     ]
 }
 
-fn session_environment(socket_name: &str, cursor: &CursorTheme) -> Vec<(&'static str, String)> {
+pub(crate) fn desktop_environment() -> [(&'static str, &'static str); 2] {
     [
-        ("WAYLAND_DISPLAY", socket_name.to_owned()),
-        ("XDG_CURRENT_DESKTOP", DESKTOP_NAME.to_owned()),
-        ("XDG_SESSION_TYPE", "wayland".to_owned()),
+        ("XDG_CURRENT_DESKTOP", DESKTOP_NAME),
+        ("XDG_SESSION_TYPE", "wayland"),
     ]
-    .into_iter()
-    .chain(cursor_environment(cursor))
-    .collect()
+}
+
+fn session_environment(socket_name: &str, cursor: &CursorTheme) -> Vec<(&'static str, String)> {
+    [("WAYLAND_DISPLAY", socket_name.to_owned())]
+        .into_iter()
+        .chain(
+            desktop_environment()
+                .into_iter()
+                .map(|(name, value)| (name, value.to_owned())),
+        )
+        .chain(cursor_environment(cursor))
+        .collect()
 }
 
 pub fn export_session_environment(

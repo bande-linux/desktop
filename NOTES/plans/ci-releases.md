@@ -38,7 +38,7 @@ places:
 | D4 | done as "apt pulls" above. The `dch` changelog stanza is not done. Decided overnight 2026-11-01: keep `DEB_VERSION_OVERRIDE` with `dh_gencontrol -v`; lintian is clean at 0.1.0 and nothing reads the changelog version (plan recommendation was dch; owner may revisit) |
 | A1, A2 | done on apt `main`; `tests/run-all.sh` green on the mini (240 checks) |
 | A3 | done, apt `5fc022d`: `verify` waits until the site serves the desktop version the build just put in, installs `bande-desktop` on amd64 and arm64, checks every installed `bande-*` package is that architecture or `all` at that version, starts the compositor headless. Checked against a fixture archive; it runs in CI with the first desktop publish |
-| I1 | done, images `ecdcaaf` on `prep/os-installable` (images has no `main`): `build.yml` fetches the desktop from the archive with `fetch-desktop.sh` (signature, index and package checksums, the desktop's and apt's packages from `state/owners`, optional `desktop-version` input) instead of the expired run 40739365836. Checked against fixture archives and the live site |
+| I1 | done, images `ecdcaaf` on `main` (then `prep/os-installable`): `build.yml` fetches the desktop from the archive with `fetch-desktop.sh` (signature, index and package checksums, the desktop's and apt's packages from `state/owners`, optional `desktop-version` input) instead of the expired run 40739365836. Checked against fixture archives and the live site |
 | R1 | not done (optional) |
 | M-final | waits for the owner's tag |
 

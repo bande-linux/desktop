@@ -153,6 +153,10 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn layer_size(&self) -> Option<(u32, u32)> {
+        self.globals.shell.layer_size
+    }
+
     pub fn reconfigure_layer(&mut self, server: &mut Compositor, index: usize) -> bool {
         self.globals.shell.layer_size = None;
         self.globals.shell.layers[index].0.commit();

@@ -1290,7 +1290,7 @@ impl StatusView for RailView {
     }
 }
 
-fn clock_mark(mark: ClockMark, dot: Rect, palette: &Palette, items: &mut Vec<Item>) {
+fn clock_mark(mark: ClockMark, dot: Rect, palette: Palette, items: &mut Vec<Item>) {
     let disc = |rect: Rect, paint: Color| Item::Fill {
         shape: Shape::rounded(rect, rect.width / 2.0),
         paint: paint.into(),

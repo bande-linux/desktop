@@ -1,8 +1,8 @@
 use bande_fs::format_size;
 use bande_packages::Class;
 use bande_settings_panes::SettingId;
-use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Button, Label, ProgressBar, Spinner, Stack, Widget};
+use bande_toolkit::{SessionEnd, Spacing};
 
 use crate::L10N;
 use crate::pages::{Widgets, boxed};
@@ -37,14 +37,9 @@ impl SettingsView {
         boxed(row)
     }
 
-    fn later_buttons(
-        &mut self,
-        title: &str,
-        command: SoftwareCommand,
-        need: Need,
-    ) -> Box<dyn Widget> {
+    fn later_buttons(&mut self, title: &str, ending: SessionEnd, need: Need) -> Box<dyn Widget> {
         let later = self.software_button(&L10N.tr("later"), Intent::Later(need), false);
-        let now = self.software_button(title, Intent::Software(command), true);
+        let now = self.software_button(title, Intent::EndSession(ending), true);
         boxed(Stack::new(
             Axis::Horizontal,
             Spacing::S as f32,
@@ -90,16 +85,12 @@ impl SettingsView {
                     L10N.tr("installs-on-restart"),
                 ),
             };
-            let buttons = self.later_buttons(
-                &L10N.tr("restart-now"),
-                SoftwareCommand::Restart,
-                Need::Reboot,
-            );
+            let buttons =
+                self.later_buttons(&L10N.tr("restart-now"), SessionEnd::Restart, Need::Reboot);
             rows.push(self.status_row(&title, Some(&detail), Some(buttons)));
         }
         if logout {
-            let buttons =
-                self.later_buttons(&L10N.tr("log-out"), SoftwareCommand::LogOut, Need::LogOut);
+            let buttons = self.later_buttons(&L10N.tr("log-out"), SessionEnd::LogOut, Need::LogOut);
             rows.push(self.status_row(
                 &L10N.tr("log-out-to-finish"),
                 Some(&L10N.tr("log-out-to-finish-hint")),
@@ -211,7 +202,7 @@ impl SettingsView {
             SoftwareState::Prepared(count) => {
                 let restart = self.software_button(
                     &L10N.tr("restart-now"),
-                    Intent::Software(SoftwareCommand::Restart),
+                    Intent::EndSession(SessionEnd::Restart),
                     true,
                 );
                 vec![self.status_row(

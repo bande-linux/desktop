@@ -208,7 +208,7 @@ impl Compositor {
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, BandeShellV1, ()>(1, ());
-        handle.create_global::<State, BandeAppV1, ()>(2, ());
+        handle.create_global::<State, BandeAppV1, ()>(3, ());
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());

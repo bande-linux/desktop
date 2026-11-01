@@ -461,7 +461,8 @@ system services an update replaced from apt's hook, never greetd, the buses, log
 restart through the user manager's `TryRestartUnit`; the compositor's service, the session bus or the
 login scope ask "Log out to finish updating the desktop" (Log Out / Later); apps in `app.slice`
 are listed as "Quit and reopen … to use the new versions", Settings itself left out. A restart is
-always the user's: Restart Now / Later, Log Out / Later. A pending restart is remembered with the
+always the user's: Restart Now / Later, Log Out / Later; Restart Now and Log Out ask for it through
+`bande_app_v1.end_session`, the Bande menu's confirmation, so every app is asked to quit first. A pending restart is remembered with the
 boot id in `$XDG_STATE_HOME/bande/restart-pending` (or `/run/reboot-required`), and the daily user
 timer (also 3 minutes after login) reminds about it, about a prepared offline update, or posts a
 notification when updates are waiting. Offline results are read once after the restart; Settings

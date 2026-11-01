@@ -4,7 +4,7 @@ use bande_protocols::client::bande_app_control_v1::{self, BandeAppControlV1};
 use bande_protocols::client::bande_app_v1::{self, BandeAppV1, Placement};
 use bande_protocols::client::bande_shell_v1::{self, BandeShellV1, SessionEnd};
 use wayland_client::protocol::wl_registry::WlRegistry;
-use wayland_client::{Connection, Dispatch, QueueHandle, WEnum, event_created_child};
+use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_created_child};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::{
     self, ExtForeignToplevelHandleV1,
 };
@@ -18,6 +18,8 @@ use wayland_protocols::xdg::activation::v1::client::xdg_activation_token_v1::{
 use bande_graphics::Rect;
 
 use crate::window::{State, Window, WindowError, WindowEvent};
+
+pub(crate) const END_SESSION_SINCE: u32 = 3;
 
 struct Toplevel {
     handle: ExtForeignToplevelHandleV1,
@@ -209,6 +211,15 @@ impl Window {
 
     pub fn insert_text(&mut self, text: &str) -> Result<(), WindowError> {
         self.shell()?.insert_text(text.to_owned());
+        self.flush()
+    }
+
+    pub fn ask_to_end_session(&mut self, ending: SessionEnd) -> Result<(), WindowError> {
+        let app = self.app()?;
+        if app.version() < END_SESSION_SINCE {
+            return Err(WindowError::Missing("bande_app_v1 end_session"));
+        }
+        app.end_session(ending);
         self.flush()
     }
 

@@ -184,6 +184,11 @@ impl Settings {
         for command in view.take_commands() {
             match command {
                 Command::Reveal(path) => reveal(window, &path),
+                Command::EndSession(ending) => {
+                    if let Err(error) = window.ask_to_end_session(ending) {
+                        tracing::warn!("cannot ask to end the session: {error}");
+                    }
+                }
                 command => self.services.send(command),
             }
         }

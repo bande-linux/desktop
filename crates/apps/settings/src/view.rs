@@ -11,7 +11,7 @@ use bande_toolkit::ui::{
     Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui, Widget,
     WidgetId,
 };
-use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, TextSystem};
+use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, SessionEnd, TextSystem};
 use jiff::Zoned;
 use std::time::{Duration, Instant};
 
@@ -87,6 +87,7 @@ pub(crate) enum Intent {
     SetAppRule(AppNotifications),
     Software(SoftwareCommand),
     Later(Need),
+    EndSession(SessionEnd),
     Network(NetworkCommand),
     ManualIpv4(bool),
     ImportVpn,
@@ -953,6 +954,7 @@ impl SettingsView {
                     *self.scroll.borrow_mut() = ScrollState::default();
                 }
                 Intent::Software(command) => self.commands.push(Command::Software(command)),
+                Intent::EndSession(ending) => self.commands.push(Command::EndSession(ending)),
                 Intent::Later(need) => {
                     if self.software.later(need) {
                         self.commands

@@ -131,7 +131,12 @@ Code:
 
 ## Implementation plan
 
-**Status (2026-11-01):** milestone 4 (layout picker) is on `main`. Milestone 1 (packages) belongs to the images and machine work; milestones 2, 3 and 5 are next; 6 is later.
+**Status (2026-11-01):** milestones 2-5 are on `main`, and milestone 1's desktop side (`bande-settings`
+depends on `locales`, `bande-desktop` depends on `fonts-noto-core` and `fonts-noto-cjk`). The image list and the
+packages on the mini are the images work. Step 3 tests the pending row and the caption in the view; the fake
+`org.freedesktop.locale1` worker test is not written. Milestone 6 (input methods) is later. Checks at the mini still
+to do: pick a language and watch `locale -a`; press "Use at Login Screen", read `/etc/vconsole.conf`, and type at the
+greeter (needs a logout, so it waits for the owner).
 
 
 Each step is one short branch from `main`, gated by fmt, workspace clippy `-D warnings` and workspace tests, and
@@ -230,8 +235,11 @@ checked on the mini before merge.
 
 1. **Per-user or system-wide language.** Recommended: system-wide for now (localed, administrators only). This is
    what exists, and the greeter and console follow it.
+   Decided overnight 2026-11-01: system-wide (plan recommendation; owner may revisit).
 2. **CJK fonts always or on demand.** Recommended: always (`fonts-noto-cjk` as a Depends, 91 MB). On demand needs
    PackageKit and a package-install grant.
+   Decided overnight 2026-11-01: always, `fonts-noto-cjk` is a Depends of `bande-desktop` (plan recommendation; owner may revisit).
 3. **Input methods (fcitx5) in Settings now or later.** Recommended: later, after layouts and languages land.
+   Decided overnight 2026-11-01: later (plan recommendation; owner may revisit).
 4. Which languages Bande's own UI ships first is already an open decision. This plan does not need it, but the
    step-3 caption keeps saying "English" until then.

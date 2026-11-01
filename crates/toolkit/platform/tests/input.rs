@@ -1435,8 +1435,8 @@ fn a_menu_taller_than_the_screen_is_shortened_and_reaches_every_item_by_keyboard
     let screen = desktop.server.usable_area();
     desktop.open_menu_at(&mut client, (20.0, 20.0), 1);
     let placed = desktop.server.popup_rects()[0];
-    assert_eq!(placed.loc.y, screen.loc.y);
-    assert_eq!(placed.size.h, screen.size.h);
+    assert_eq!(placed.loc.y, screen.loc.y + 6);
+    assert_eq!(placed.size.h, screen.size.h - 12);
     assert!(screen.contains_rect(placed));
 
     desktop.type_keys(&[KEY_END]);

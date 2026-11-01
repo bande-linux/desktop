@@ -18,6 +18,8 @@ use crate::motion::{BAR_NAMESPACE, TASKBAR_NAMESPACE};
 
 use crate::state::{Compositor, MENU_BAR_NAMESPACE, State};
 
+const SCREEN_MARGIN: i32 = 6;
+
 impl State {
     pub(crate) fn toplevel_of(&self, surface: &WlSurface) -> Option<WlSurface> {
         let root = self.root_of(surface)?;
@@ -73,7 +75,16 @@ impl State {
             .screen_at(anchor_centre.to_f64())
             .unwrap_or_else(|| self.screen_of_surface(&root));
         let area = self.popup_area(&root, screen);
-        positioner.get_unconstrained_geometry(Rectangle::new(area.loc - parent, area.size))
+        let geometry =
+            positioner.get_unconstrained_geometry(Rectangle::new(area.loc - parent, area.size));
+        if geometry.size.h >= positioner.rect_size.h {
+            return geometry;
+        }
+        let inset = Rectangle::new(
+            area.loc - parent + Point::from((0, SCREEN_MARGIN)),
+            (area.size.w, (area.size.h - 2 * SCREEN_MARGIN).max(1)).into(),
+        );
+        positioner.get_unconstrained_geometry(inset)
     }
 
     fn popup_area(&self, root: &WlSurface, screen: usize) -> Rectangle<i32, Logical> {

@@ -453,6 +453,7 @@ fn a_drag_out_of_a_menu_ends_the_menu_grab_when_it_drops() {
 }
 
 const MENU_SIZE: (i32, i32) = (60, 80);
+const SCREEN_MARGIN: i32 = 6;
 
 fn placed_menu(anchor: (i32, i32), size: (i32, i32)) -> PopupRequest {
     PopupRequest {
@@ -584,14 +585,17 @@ fn a_desktop_menu_stays_clear_of_the_bar_but_a_bar_menu_may_cover_its_own_bar() 
 }
 
 #[test]
-fn a_menu_taller_than_the_screen_is_shortened_to_the_usable_height() {
+fn a_menu_taller_than_the_screen_is_shortened_to_the_usable_height_less_a_margin() {
     let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
     let mut bar = bottom_bar(&mut server);
     let mut desk = desktop(&mut server);
     desk.open_layer_popup(&mut server, &placed_menu((100, 60), (60, 400)));
     roundtrip(&mut server, &mut [&mut bar, &mut desk]);
 
-    assert_eq!(desk.popup_geometry(0), Some((101, 0, 60, OUTPUT.1 - BAR)));
+    assert_eq!(
+        desk.popup_geometry(0),
+        Some((101, SCREEN_MARGIN, 60, OUTPUT.1 - BAR - 2 * SCREEN_MARGIN))
+    );
 }
 
 #[test]

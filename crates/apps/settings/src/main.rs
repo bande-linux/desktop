@@ -95,6 +95,10 @@ impl View for Pane {
         true
     }
 
+    fn animating(&self) -> bool {
+        self.0.animating()
+    }
+
     fn text_input_area(&self) -> Option<Rect> {
         self.0.text_input_area()
     }

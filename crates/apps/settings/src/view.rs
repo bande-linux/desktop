@@ -1669,6 +1669,10 @@ impl SettingsView {
         self.ui.text_input_area()
     }
 
+    pub fn animating(&self) -> bool {
+        self.ui.is_animating()
+    }
+
     pub fn accessibility(&self) -> TreeUpdate {
         self.ui.accessibility()
     }

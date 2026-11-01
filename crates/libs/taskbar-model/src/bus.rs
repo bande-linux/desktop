@@ -45,7 +45,8 @@ pub fn launcher_update(properties: &HashMap<String, OwnedValue>) -> LauncherUpda
         count_visible: flag("count-visible"),
         progress: properties
             .get("progress")
-            .and_then(|value| value.downcast_ref::<f64>().ok()),
+            .and_then(|value| value.downcast_ref::<f64>().ok())
+            .filter(|progress| progress.is_finite()),
         progress_visible: flag("progress-visible"),
         urgent: flag("urgent"),
     }

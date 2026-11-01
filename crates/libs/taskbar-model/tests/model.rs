@@ -51,4 +51,6 @@ fn launcher_entry_updates_merge_as_kde_reads_them() {
     entry.merge(update(&[("count-visible", Value::from(false))]));
     assert_eq!(entry.badge(), None);
     assert_eq!(entry.progress(), Some(1.0));
+    entry.merge(update(&[("progress", Value::from(f64::NAN))]));
+    assert_eq!(entry.progress(), Some(1.0));
 }

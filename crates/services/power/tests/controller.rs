@@ -162,7 +162,7 @@ impl Fixture {
 #[test]
 fn by_default_the_computer_locks_and_sleeps_when_the_display_turns_off() {
     let fixture = start("", "yes");
-    assert_eq!(fixture.idle.thresholds(), [5 * MINUTE, 10 * MINUTE]);
+    assert_eq!(fixture.idle.thresholds(), [MINUTE, 5 * MINUTE, 10 * MINUTE]);
 
     fixture.idle.idle_for(5 * MINUTE);
     fixture.quiet();
@@ -197,7 +197,7 @@ fn a_config_change_reaches_the_idle_policy() {
     std::fs::rename(&staging, &fixture.path).expect("rename");
 
     let deadline = std::time::Instant::now() + WAIT;
-    while fixture.idle.thresholds() != [5 * MINUTE, 10 * MINUTE, 60 * MINUTE] {
+    while fixture.idle.thresholds() != [MINUTE, 5 * MINUTE, 10 * MINUTE, 60 * MINUTE] {
         assert!(std::time::Instant::now() < deadline, "policy not updated");
         std::thread::sleep(Duration::from_millis(20));
     }

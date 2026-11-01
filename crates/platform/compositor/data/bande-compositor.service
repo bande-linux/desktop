@@ -10,5 +10,6 @@ Slice=session.slice
 Type=notify
 NotifyAccess=main
 ExecStart=/usr/bin/bande-compositor
+WatchdogSec=20s
 OOMScoreAdjust=100
 ManagedOOMPreference=avoid

@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use rustix::event::{PollFd, PollFlags, poll};
 use wayland_client::backend::WaylandError;
+use wayland_client::protocol::wl_output::WlOutput;
 use wayland_client::protocol::wl_registry::{self, WlRegistry};
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, delegate_noop};
@@ -13,13 +14,19 @@ use wayland_protocols::ext::idle_notify::v1::client::ext_idle_notification_v1::{
     self, ExtIdleNotificationV1,
 };
 use wayland_protocols::ext::idle_notify::v1::client::ext_idle_notifier_v1::ExtIdleNotifierV1;
+use wayland_protocols_wlr::output_power_management::v1::client::zwlr_output_power_manager_v1::ZwlrOutputPowerManagerV1;
+use wayland_protocols_wlr::output_power_management::v1::client::zwlr_output_power_v1::{
+    Mode, ZwlrOutputPowerV1,
+};
 
-use crate::controller::IdleController;
+use crate::controller::{IdleController, WaylandCommand};
 
 struct Watcher {
     controller: Arc<IdleController>,
     seat: Option<WlSeat>,
     notifier: Option<ExtIdleNotifierV1>,
+    power: Option<ZwlrOutputPowerManagerV1>,
+    outputs: Vec<WlOutput>,
     shortest: Option<Duration>,
 }
 
@@ -61,19 +68,32 @@ impl Watcher {
             })
             .collect()
     }
+
+    fn power_outputs(&self, mode: Mode, queue: &EventQueue<Self>) {
+        let Some(power) = &self.power else {
+            return;
+        };
+        for output in &self.outputs {
+            let control = power.get_output_power(output, &queue.handle(), ());
+            control.set_mode(mode);
+            control.destroy();
+        }
+    }
 }
 
 pub fn watch_idle(
     connection: Connection,
     controller: Arc<IdleController>,
 ) -> Result<JoinHandle<Result<(), WatchError>>, WatchError> {
-    let mut timer_restarts = controller.idle_timer_restarts().map_err(WatchError::Io)?;
+    let mut commands = controller.wayland_commands().map_err(WatchError::Io)?;
     let mut queue = connection.new_event_queue();
     connection.display().get_registry(&queue.handle(), ());
     let mut watcher = Watcher {
         controller,
         seat: None,
         notifier: None,
+        power: None,
+        outputs: Vec::new(),
         shortest: None,
     };
     queue.roundtrip(&mut watcher).map_err(wayland)?;
@@ -93,9 +113,9 @@ pub fn watch_idle(
             let Some(guard) = queue.prepare_read() else {
                 continue;
             };
-            let (wayland_ready, timers_restarted) = {
+            let (wayland_ready, commanded) = {
                 let connection_fd = guard.connection_fd();
-                let changes_fd = timer_restarts.as_fd();
+                let changes_fd = commands.as_fd();
                 let mut fds = [
                     PollFd::new(&connection_fd, PollFlags::IN),
                     PollFd::new(&changes_fd, PollFlags::IN),
@@ -115,15 +135,29 @@ pub fn watch_idle(
             } else {
                 drop(guard);
             }
-            if timers_restarted {
+            if commanded {
                 let mut drained = [0u8; 64];
-                if timer_restarts.read(&mut drained).map_err(WatchError::Io)? == 0 {
+                let read = commands.read(&mut drained).map_err(WatchError::Io)?;
+                if read == 0 {
                     return Ok(());
                 }
-                for notification in notifications.drain(..) {
-                    notification.destroy();
+                let received: Vec<WaylandCommand> = drained[..read]
+                    .iter()
+                    .filter_map(|byte| WaylandCommand::from_byte(*byte))
+                    .collect();
+                for command in &received {
+                    match command {
+                        WaylandCommand::DisplayOff => watcher.power_outputs(Mode::Off, &queue),
+                        WaylandCommand::DisplayOn => watcher.power_outputs(Mode::On, &queue),
+                        WaylandCommand::RestartIdleTimers => {}
+                    }
                 }
-                notifications = watcher.watch(&queue);
+                if received.contains(&WaylandCommand::RestartIdleTimers) {
+                    for notification in notifications.drain(..) {
+                        notification.destroy();
+                    }
+                    notifications = watcher.watch(&queue);
+                }
             }
         }
     }))
@@ -149,6 +183,10 @@ impl Dispatch<WlRegistry, ()> for Watcher {
                 "ext_idle_notifier_v1" => {
                     watcher.notifier = Some(registry.bind(name, 1, handle, ()));
                 }
+                "zwlr_output_power_manager_v1" => {
+                    watcher.power = Some(registry.bind(name, 1, handle, ()));
+                }
+                "wl_output" => watcher.outputs.push(registry.bind(name, 1, handle, ())),
                 _ => {}
             }
         }
@@ -175,4 +213,7 @@ impl Dispatch<ExtIdleNotificationV1, Duration> for Watcher {
 }
 
 delegate_noop!(Watcher: ignore WlSeat);
+delegate_noop!(Watcher: ignore WlOutput);
+delegate_noop!(Watcher: ZwlrOutputPowerManagerV1);
+delegate_noop!(Watcher: ignore ZwlrOutputPowerV1);
 delegate_noop!(Watcher: ExtIdleNotifierV1);

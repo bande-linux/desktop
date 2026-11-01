@@ -41,6 +41,7 @@ impl State {
     pub(crate) fn note_activity(&mut self) {
         self.idle.activity = true;
         self.watchdog.note_interaction();
+        self.power_on_every_output();
     }
 
     fn root_of_surface(surface: &WlSurface) -> WlSurface {

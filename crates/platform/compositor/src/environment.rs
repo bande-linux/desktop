@@ -4,6 +4,7 @@ use std::io;
 use std::os::linux::net::SocketAddrExt;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::net::{SocketAddr, UnixDatagram};
+use std::time::Duration;
 
 use zbus::blocking::Connection;
 
@@ -74,7 +75,7 @@ fn export(session: &Connection, environment: &[(&str, String)]) -> zbus::Result<
     SystemdManagerProxyBlocking::new(session)?.set_environment(&assignments)
 }
 
-pub fn notify_ready(notify_socket: Option<&OsStr>) -> io::Result<()> {
+pub fn notify_service_manager(notify_socket: Option<&OsStr>, state: &str) -> io::Result<()> {
     let Some(notify_socket) = notify_socket else {
         return Ok(());
     };
@@ -82,6 +83,19 @@ pub fn notify_ready(notify_socket: Option<&OsStr>) -> io::Result<()> {
         Some(name) => SocketAddr::from_abstract_name(name)?,
         None => SocketAddr::from_pathname(notify_socket)?,
     };
-    UnixDatagram::unbound()?.send_to_addr(b"READY=1", &address)?;
+    UnixDatagram::unbound()?.send_to_addr(state.as_bytes(), &address)?;
     Ok(())
+}
+
+pub fn watchdog_keepalive_interval(
+    watchdog_usec: Option<&OsStr>,
+    watchdog_pid: Option<&OsStr>,
+) -> Option<Duration> {
+    let ours = watchdog_pid.is_none_or(|pid| {
+        pid.to_str()
+            .and_then(|pid| pid.parse::<u32>().ok())
+            .is_some_and(|pid| pid == std::process::id())
+    });
+    let usec = watchdog_usec?.to_str()?.parse::<u64>().ok()?;
+    (ours && usec > 0).then(|| Duration::from_micros(usec) / 2)
 }

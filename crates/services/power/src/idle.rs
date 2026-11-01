@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+pub const LOCKED_DISPLAY_OFF_AFTER: Duration = Duration::from_secs(60);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Policy {
     pub dim_after: Duration,
@@ -20,6 +22,8 @@ pub enum Command {
     Dim,
     Undim,
     Lock,
+    DisplayOff,
+    DisplayOn,
     Suspend,
     RestartIdleTimers,
 }
@@ -29,6 +33,7 @@ pub struct IdleMachine {
     policy: Policy,
     stage: Stage,
     dimmed: bool,
+    display_off: bool,
     locked: bool,
     inhibited: bool,
 }
@@ -39,6 +44,7 @@ impl IdleMachine {
             policy,
             stage: Stage::Active,
             dimmed: false,
+            display_off: false,
             locked: false,
             inhibited: false,
         }
@@ -50,6 +56,7 @@ impl IdleMachine {
 
     pub fn thresholds(&self) -> Vec<Duration> {
         let mut thresholds: Vec<Duration> = [
+            Some(LOCKED_DISPLAY_OFF_AFTER),
             Some(self.policy.dim_after),
             Some(self.policy.lock_after),
             self.policy.suspend_after,
@@ -78,6 +85,12 @@ impl IdleMachine {
                 self.locked = true;
                 commands.push(Command::Lock);
             }
+        }
+        if !self.display_off
+            && (self.stage == Stage::Locked || (self.locked && idle >= LOCKED_DISPLAY_OFF_AFTER))
+        {
+            self.display_off = true;
+            commands.push(Command::DisplayOff);
         }
         if self.stage < Stage::Suspended
             && self
@@ -124,10 +137,13 @@ impl IdleMachine {
     }
 
     fn undim(&mut self) -> Vec<Command> {
-        if !self.dimmed {
-            return Vec::new();
+        let mut commands = Vec::new();
+        if std::mem::take(&mut self.dimmed) {
+            commands.push(Command::Undim);
         }
-        self.dimmed = false;
-        vec![Command::Undim]
+        if std::mem::take(&mut self.display_off) {
+            commands.push(Command::DisplayOn);
+        }
+        commands
     }
 }

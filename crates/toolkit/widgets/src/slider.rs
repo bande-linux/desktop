@@ -228,6 +228,7 @@ impl Widget for Slider {
                 self.set(cx, self.value_at(pointer.position), self.has_detents());
             }
             Event::PointerUp(pointer) if pointer.is_primary() => self.dragging = false,
+            Event::PointerLeave if self.dragging => self.dragging = false,
             Event::Key {
                 key: Key::Right | Key::Up,
                 ..

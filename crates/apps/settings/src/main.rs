@@ -70,8 +70,7 @@ impl View for Pane {
             }
             WindowEvent::MenuAction(_) | WindowEvent::Pasted(_) | WindowEvent::MenuClosed => {
                 let handled = View::event(self.0.ui(), window, event);
-                self.0.settle();
-                handled
+                self.0.settle() | handled
             }
             WindowEvent::Accessibility(request) => self.0.perform(&request),
             _ => false,

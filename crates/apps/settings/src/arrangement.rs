@@ -335,6 +335,7 @@ impl Widget for Arrangement {
                 }
                 self.release();
             }
+            Event::PointerLeave => return self.drag.take().is_some(),
             Event::Key {
                 key: Key::Space, ..
             } => {

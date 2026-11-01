@@ -606,6 +606,10 @@ impl Ui {
         self.sheet_top = top;
     }
 
+    pub fn pointer_captured(&self) -> bool {
+        self.captured.is_some()
+    }
+
     pub fn has_sheet(&self) -> bool {
         self.sheet.as_ref().is_some_and(|sheet| !sheet.closing)
     }

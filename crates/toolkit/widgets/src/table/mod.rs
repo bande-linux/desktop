@@ -1324,7 +1324,7 @@ impl Widget for Table {
             Event::PointerUp(_) => self.pointer_up() | self.scroll.pointer(cx, self.body(), event),
             Event::PointerLeave => {
                 self.drag = None;
-                false
+                self.scroll.pointer(cx, self.body(), event)
             }
             Event::Key { key, modifiers } => self.key(cx, *key, *modifiers),
             _ => false,

@@ -189,6 +189,7 @@ impl Widget for Checkbox {
     fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
         match event {
             Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
+            Event::PointerLeave if self.pressed => self.pressed = false,
             Event::PointerMove(pointer) if self.pressed => {
                 self.pressed = self.frame.contains(pointer.position);
             }

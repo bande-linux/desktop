@@ -216,8 +216,8 @@ pub struct SettingsView {
     pub(crate) refused: Vec<Privilege>,
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
     pub(crate) permissions: Grants,
-    pressed: bool,
     stale: bool,
+    rebuilt: bool,
     pub(crate) focus_next: Option<Anchor>,
     reveal_pending: bool,
     pub(crate) scroll: Rc<RefCell<ScrollState>>,
@@ -294,8 +294,8 @@ impl SettingsView {
             refused: Vec::new(),
             default_apps: None,
             permissions: Vec::new(),
-            pressed: false,
             stale: true,
+            rebuilt: false,
             focus_next: None,
             reveal_pending: false,
             scroll: Rc::default(),
@@ -711,17 +711,12 @@ impl SettingsView {
 
     fn invalidate(&mut self) {
         self.stale = true;
-        if !self.pressed {
+        if !self.ui.pointer_captured() {
             self.rebuild();
         }
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {
-        match event {
-            Event::PointerDown(_) => self.pressed = true,
-            Event::PointerUp(_) => self.pressed = false,
-            _ => {}
-        }
         let editing = self
             .focused_setting()
             .filter(|setting| self.drafts.contains_key(setting));
@@ -854,8 +849,7 @@ impl SettingsView {
             _ => self.ui.handle(event),
         };
         let handled = handled || self.type_into_search(event);
-        self.settle();
-        handled
+        self.settle() | handled
     }
 
     pub fn ui(&mut self) -> &mut Ui {
@@ -872,15 +866,17 @@ impl SettingsView {
         }
     }
 
-    pub fn settle(&mut self) {
+    pub fn settle(&mut self) -> bool {
+        self.rebuilt = false;
         self.process_intents();
         let focused = self.focused_setting();
         if self.drafts.keys().any(|setting| Some(*setting) != focused) {
             self.commit_drafts();
         }
-        if self.stale && !self.pressed {
+        if self.stale && !self.ui.pointer_captured() {
             self.rebuild();
         }
+        self.rebuilt
     }
 
     fn type_into_search(&mut self, event: &Event) -> bool {
@@ -1657,6 +1653,7 @@ impl SettingsView {
             }
         }
         self.stale = false;
+        self.rebuilt = true;
     }
 
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
@@ -1681,7 +1678,6 @@ impl SettingsView {
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
         let handled = self.ui.perform(request);
-        self.settle();
-        handled
+        self.settle() | handled
     }
 }

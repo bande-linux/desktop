@@ -268,7 +268,8 @@ impl Window {
         };
         chrome.content_buttons = 0;
         chrome.tab_press = None;
-        if chrome.hover(frame, None, now, reduce_motion) {
+        chrome.zoom_rest = None;
+        if chrome.hover(frame, None, now, reduce_motion) | chrome.pressed.take().is_some() {
             self.needs_redraw = true;
         }
         if std::mem::take(&mut chrome.pointer_in_content) {

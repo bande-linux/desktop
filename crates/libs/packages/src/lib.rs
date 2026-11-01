@@ -252,6 +252,23 @@ pub struct Applied {
     pub restart: bool,
 }
 
+pub fn native<'a>(packages: &'a [Package], name: &str, arch: &str) -> Option<&'a Package> {
+    let named = || packages.iter().filter(|package| package.name == name);
+    named()
+        .find(|package| package.arch == arch)
+        .or_else(|| named().find(|package| package.arch == "all"))
+}
+
+pub fn debian_arch() -> &'static str {
+    match std::env::consts::ARCH {
+        "aarch64" => "arm64",
+        "x86_64" => "amd64",
+        "arm" => "armhf",
+        "x86" => "i386",
+        other => other,
+    }
+}
+
 pub fn available(system: &Connection) -> zbus::Result<bool> {
     let bus = DBusProxy::new(system)?;
     let name = BusName::try_from(SERVICE)?;
@@ -341,6 +358,20 @@ impl Client {
             progress,
         )
         .map(drop)
+    }
+
+    pub fn resolve(&self, names: &[String]) -> Result<Vec<Package>, Error> {
+        Ok(self
+            .run("Resolve", &(FILTER_NONE, names), &|_| {})?
+            .packages)
+    }
+
+    pub fn install(&self, ids: &[String], progress: &dyn Fn(Progress)) -> Result<Applied, Error> {
+        let outcome = self.run("InstallPackages", &(ONLY_TRUSTED, ids), progress)?;
+        Ok(Applied {
+            packages: outcome.packages,
+            restart: outcome.restart,
+        })
     }
 
     pub fn resolve_installed(&self, name: &str) -> Result<Vec<Package>, Error> {

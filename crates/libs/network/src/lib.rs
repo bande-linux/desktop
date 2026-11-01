@@ -29,12 +29,15 @@ const CONNECTIVITY_PORTAL: u32 = 2;
 const ACTIVE_REASON_LOGIN_FAILED: u32 = 10;
 const WIRELESS: &str = "802-11-wireless";
 const WIRELESS_SECURITY: &str = "802-11-wireless-security";
+const CONNECTION: &str = "connection";
+const INTERFACE_NAME: &str = "interface-name";
 
 #[derive(Debug)]
 pub enum Error {
     Bus(zbus::Error),
     NoWifiDevice,
     PasswordRequired,
+    Refused(String),
     Unsupported(Security),
 }
 
@@ -44,6 +47,7 @@ impl fmt::Display for Error {
             Self::Bus(error) => write!(f, "NetworkManager: {error}"),
             Self::NoWifiDevice => f.write_str("this computer has no Wi-Fi device"),
             Self::PasswordRequired => f.write_str("the network requires a password"),
+            Self::Refused(reason) => f.write_str(reason),
             Self::Unsupported(security) => write!(f, "cannot join {security:?} networks yet"),
         }
     }
@@ -70,6 +74,13 @@ impl From<zbus::fdo::Error> for Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+fn refused(error: zbus::Error) -> Error {
+    match error {
+        zbus::Error::MethodError(_, Some(reason), _) => Error::Refused(reason),
+        other => Error::Bus(other),
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Security {
@@ -127,6 +138,26 @@ pub enum JoinOutcome {
     Joined,
     WrongPassword,
     Failed { reason: u32 },
+}
+
+impl fmt::Display for JoinOutcome {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Joined => "joined",
+            Self::WrongPassword => "the password is not correct",
+            Self::Failed { reason } => match *reason {
+                2 => "the connection was turned off",
+                3 => "the Wi-Fi device disconnected",
+                4 | 7 | 8 => "a network service stopped or did not start",
+                5 => "the network gave no usable address",
+                6 => "the network did not answer in time",
+                11 => "the saved network was removed",
+                12 => "a connection it depends on failed",
+                13 | 14 => "the Wi-Fi device went away",
+                _ => "the connection failed",
+            },
+        })
+    }
 }
 
 pub struct NetworkManager {
@@ -303,8 +334,15 @@ impl NetworkManager {
                 if let Some(psk) = password {
                     self.replace_password(&connection, psk)?;
                 }
-                let active =
-                    manager.activate_connection(&connection, &device, &network.access_point)?;
+                let activate = || {
+                    manager
+                        .activate_connection(&connection, &device, &network.access_point)
+                        .map_err(refused)
+                };
+                let active = match activate() {
+                    Err(_) if self.release_stale_interface(&connection)? => activate()?,
+                    activated => activated?,
+                };
                 (None, active)
             }
             (None, None) if key_management.is_some() => return Err(Error::PasswordRequired),
@@ -322,11 +360,9 @@ impl NetworkManager {
                         ]),
                     );
                 }
-                let (connection, active) = manager.add_and_activate_connection(
-                    settings,
-                    &device,
-                    &network.access_point,
-                )?;
+                let (connection, active) = manager
+                    .add_and_activate_connection(settings, &device, &network.access_point)
+                    .map_err(refused)?;
                 (Some(connection), active)
             }
         };
@@ -346,6 +382,34 @@ impl NetworkManager {
             }
         }
         Ok(())
+    }
+
+    fn interfaces(&self) -> Result<Vec<String>> {
+        let mut names = Vec::new();
+        for path in self.manager()?.get_devices()? {
+            names.push(
+                DeviceProxyBlocking::builder(&self.bus)
+                    .path(path)?
+                    .build()?
+                    .interface()?,
+            );
+        }
+        Ok(names)
+    }
+
+    fn release_stale_interface(&self, connection: &OwnedObjectPath) -> Result<bool> {
+        let proxy = self.settings_connection(connection)?;
+        let mut settings: ConnectionSettings = proxy.get_settings()?;
+        let Some(section) = settings.get_mut(CONNECTION) else {
+            return Ok(false);
+        };
+        let bound = connections::text(section, INTERFACE_NAME).unwrap_or_default();
+        if bound.is_empty() || self.interfaces()?.contains(&bound) {
+            return Ok(false);
+        }
+        section.remove(INTERFACE_NAME);
+        proxy.update(settings)?;
+        Ok(true)
     }
 
     fn replace_password(&self, connection: &OwnedObjectPath, psk: &str) -> Result<()> {

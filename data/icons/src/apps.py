@@ -60,6 +60,17 @@ def monitor():
     return tile(moss_top, moss_bottom, body)
 
 
+def installer():
+    top, bottom = hue_field(70, 0.62, 0.11)
+    seam = f'stroke="{bottom}" stroke-opacity="0.45" stroke-width="1.2"'
+    body = (path('M10 19 L24 13 L38 19 L38 33 L24 39 L10 33Z', PAPER)
+            + path('M10 19 L24 25 L38 19', 'none', seam + ' stroke-linejoin="round"')
+            + path('M24 25 L24 39', 'none', seam)
+            + stroke('M24 4.5 L24 15', PAPER, 2.5)
+            + stroke('M19.5 11 L24 15.5 L28.5 11', PAPER, 2.5))
+    return tile(top, bottom, body)
+
+
 def mark_shape(color, dot, width=3.6):
     return (stroke('M16.5 13.5v10a7.5 7.5 0 0 0 15 0v-10', color, width)
             + circle(24, 24, 2.7, dot))
@@ -153,6 +164,7 @@ ICONS = {
     'org.bande.Terminal': terminal,
     'org.bande.Settings': settings,
     'org.bande.ActivityMonitor': monitor,
+    'org.bande.Installer': installer,
     'org.bande.Launcher': launcher,
     'org.bande.About': about,
     'org.bande.Screenshot': screenshot,
@@ -169,4 +181,5 @@ HICOLOR = {
     'org.bande.Terminal': 'crates/apps/terminal/data/org.bande.Terminal.svg',
     'org.bande.Settings': 'crates/apps/settings/data/org.bande.Settings.svg',
     'org.bande.ActivityMonitor': 'crates/apps/monitor/data/org.bande.ActivityMonitor.svg',
+    'org.bande.Installer': 'crates/apps/installer/data/org.bande.Installer.svg',
 }

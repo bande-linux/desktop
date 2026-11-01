@@ -3,7 +3,11 @@ use std::os::linux::net::SocketAddrExt;
 use std::os::unix::net::{SocketAddr, UnixDatagram};
 use std::sync::{Arc, Mutex};
 
-use bande_compositor::{CursorTheme, export_session_environment, notify_ready};
+use std::time::Duration;
+
+use bande_compositor::{
+    CursorTheme, export_session_environment, notify_service_manager, watchdog_keepalive_interval,
+};
 use bande_test_bus::SessionBus;
 
 struct Systemd {
@@ -68,16 +72,47 @@ fn readiness_reaches_a_notify_socket_at_a_path() {
     let path = std::env::temp_dir().join(format!("bande-notify-{}", std::process::id()));
     let _ = std::fs::remove_file(&path);
     let socket = UnixDatagram::bind(&path).expect("notify socket");
-    notify_ready(Some(path.as_os_str())).expect("notified");
+    notify_service_manager(Some(path.as_os_str()), "READY=1").expect("notified");
     assert_eq!(received(&socket), "READY=1");
     std::fs::remove_file(&path).expect("remove the notify socket");
 }
 
 #[test]
-fn readiness_reaches_an_abstract_notify_socket() {
+fn keepalives_reach_an_abstract_notify_socket() {
     let name = format!("bande-notify-abstract-{}", std::process::id());
     let address = SocketAddr::from_abstract_name(name.as_bytes()).expect("abstract address");
     let socket = UnixDatagram::bind_addr(&address).expect("notify socket");
-    notify_ready(Some(OsStr::new(&format!("@{name}")))).expect("notified");
-    assert_eq!(received(&socket), "READY=1");
+    notify_service_manager(Some(OsStr::new(&format!("@{name}"))), "WATCHDOG=1").expect("notified");
+    assert_eq!(received(&socket), "WATCHDOG=1");
+}
+
+#[test]
+fn the_watchdog_is_reassured_twice_per_timeout_when_it_watches_this_process() {
+    let own = std::process::id().to_string();
+    assert_eq!(
+        watchdog_keepalive_interval(Some(OsStr::new("20000000")), None),
+        Some(Duration::from_secs(10))
+    );
+    assert_eq!(
+        watchdog_keepalive_interval(Some(OsStr::new("20000000")), Some(OsStr::new(&own))),
+        Some(Duration::from_secs(10))
+    );
+}
+
+#[test]
+fn no_watchdog_is_reassured_when_it_is_off_malformed_or_watches_another_process() {
+    let other = (std::process::id() + 1).to_string();
+    assert_eq!(watchdog_keepalive_interval(None, None), None);
+    assert_eq!(
+        watchdog_keepalive_interval(Some(OsStr::new("0")), None),
+        None
+    );
+    assert_eq!(
+        watchdog_keepalive_interval(Some(OsStr::new("soon")), None),
+        None
+    );
+    assert_eq!(
+        watchdog_keepalive_interval(Some(OsStr::new("20000000")), Some(OsStr::new(&other))),
+        None
+    );
 }

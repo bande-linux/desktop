@@ -112,8 +112,11 @@ at the mini. Once ten cycles pass, sleep comes back on.
 
 ## Status
 
-- Milestones 1-2: see the gap's status line in `NOTES/gaps2.md`.
-- Milestones 3, 5, 6 need someone at the machine.
+- Milestones 1, 2 and 4 done (2026-11-01). The compositor serves
+  `zwlr_output_power_manager_v1` (`output_power.rs`) and turns every display back on at the
+  first input. `bande-power` turns the displays off at the lock stage, and after 60 s idle on a
+  screen that is already locked. Neither is installed on the mini yet.
+- Milestones 3, 5 and 6 need someone at the machine. Milestone 7 is open (see decision 3).
 
 ## Decisions for the owner
 
@@ -125,4 +128,7 @@ at the mini. Once ten cycles pass, sleep comes back on.
    calls s2idle stable on the M2 mini? Recommend after ten cycles. Still open (needs a person
    at the machine).
 3. **Power button without sleep**: lock and display off (recommended), or show the Shut Down
-   dialog like macOS's power-key dialog. Still open.
+   dialog like macOS's power-key dialog.
+   Decided overnight 2026-11-01: lock and display off (plan recommendation; owner may revisit).
+   Not built yet: check first whether logind's `handle-power-key` inhibitor also blocks the
+   image's `HandlePowerKeyLongPress=poweroff`, the only way out of a hung session.

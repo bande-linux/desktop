@@ -109,8 +109,14 @@ watchdog), then test at the machine.
 
 ## Status
 
-- Milestones 1-4: see the gap's status line in `NOTES/gaps2.md`.
-- Milestone 5 needs the new kernel installed and a reboot.
+- Milestone 1 done: `linux` `bande-hw/integration` dae396ce2567 (PSI, zram, zswap, the soft
+  lockup and hung task detectors). Built with `kbuild` (Image + modules), not installed.
+- Milestone 2 done: `images` `prep/os-installable` faf3c3a (packages) and 7c5329e (watchdog,
+  panic reboot). No image built, since that needs CI.
+- Milestones 3 and 4 done in the desktop: the OOM-floor drop-ins in `packaging/bande-desktop`,
+  `WatchdogSec=20s` with `WATCHDOG=1` keepalives from the compositor's event loop.
+- Milestone 5 needs the new kernel installed and a reboot. Milestone 6 is open. Milestone 7:
+  coredump is in the image, ramoops is open.
 
 ## Decisions for the owner
 
@@ -125,7 +131,10 @@ watchdog), then test at the machine.
    Decided overnight 2026-11-01: on in the image, not applied to the running mini
    (plan recommendation; owner may revisit).
 4. **systemd-coredump in the image**: recommended (about 1 MB, and cores are kept under
-   `/var/lib/systemd/coredump` with size limits). Still open.
+   `/var/lib/systemd/coredump` with size limits).
+   Decided overnight 2026-11-01: in the image (`images` 24136a2) (plan recommendation; owner
+   may revisit). Not installed on the mini.
 5. **End the session when the session bus dies**, instead of leaving a desktop without D-Bus?
    Recommend not yet: with oomd and the OOM floor it should not happen, and ending the session
-   loses all apps. Still open.
+   loses all apps.
+   Decided overnight 2026-11-01: not yet (plan recommendation; owner may revisit).

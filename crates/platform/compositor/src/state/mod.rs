@@ -124,6 +124,7 @@ pub struct State {
     pub(crate) active_app: String,
     pub(crate) active_output: String,
     pub(crate) idle: crate::idle::Idle,
+    pub(crate) output_power: crate::output_power::OutputPower,
     pub(crate) lock_states: Option<std::sync::mpsc::Sender<bool>>,
     pub(crate) lock: Option<Lock>,
     pub(crate) popup_grab: Option<PopupGrab<State>>,
@@ -199,6 +200,7 @@ impl Compositor {
             .map_err(io::Error::other)?;
         seat.add_pointer();
         crate::idle::create_global(&handle);
+        crate::output_power::create_global(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, BandeShellV1, ()>(1, ());
@@ -254,6 +256,7 @@ impl Compositor {
             active_app: String::new(),
             active_output: String::new(),
             idle: crate::idle::Idle::default(),
+            output_power: crate::output_power::OutputPower::default(),
             lock_states: None,
             lock: None,
             popup_grab: None,

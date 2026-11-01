@@ -29,10 +29,35 @@ pub trait Config {
 
 type Executor = Box<dyn Fn(Command) + Send + Sync>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum WaylandCommand {
+    RestartIdleTimers = 1,
+    DisplayOff = 2,
+    DisplayOn = 3,
+}
+
+impl WaylandCommand {
+    fn of(command: Command) -> Option<Self> {
+        match command {
+            Command::RestartIdleTimers => Some(Self::RestartIdleTimers),
+            Command::DisplayOff => Some(Self::DisplayOff),
+            Command::DisplayOn => Some(Self::DisplayOn),
+            Command::Dim | Command::Undim | Command::Lock | Command::Suspend => None,
+        }
+    }
+
+    pub fn from_byte(byte: u8) -> Option<Self> {
+        [Self::RestartIdleTimers, Self::DisplayOff, Self::DisplayOn]
+            .into_iter()
+            .find(|command| *command as u8 == byte)
+    }
+}
+
 pub struct IdleController {
     machine: Mutex<IdleMachine>,
     execute: Executor,
-    timer_listeners: Mutex<Vec<UnixStream>>,
+    wayland_listeners: Mutex<Vec<UnixStream>>,
 }
 
 impl IdleController {
@@ -40,25 +65,26 @@ impl IdleController {
         Self {
             machine: Mutex::new(IdleMachine::new(policy)),
             execute: Box::new(execute),
-            timer_listeners: Mutex::new(Vec::new()),
+            wayland_listeners: Mutex::new(Vec::new()),
         }
     }
 
     fn run(&self, step: impl FnOnce(&mut IdleMachine) -> Vec<Command>) {
         let commands = step(&mut self.machine.lock().unwrap_or_else(PoisonError::into_inner));
         for command in commands {
-            if command == Command::RestartIdleTimers {
-                self.restart_idle_timers();
-            }
+            self.tell_wayland(command);
             (self.execute)(command);
         }
     }
 
-    fn restart_idle_timers(&self) {
-        self.timer_listeners
+    fn tell_wayland(&self, command: Command) {
+        let Some(byte) = WaylandCommand::of(command).map(|command| command as u8) else {
+            return;
+        };
+        self.wayland_listeners
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .retain_mut(|listener| listener.write_all(&[1]).is_ok());
+            .retain_mut(|listener| listener.write_all(&[byte]).is_ok());
     }
 
     pub fn idle_for(&self, idle: Duration) {
@@ -82,13 +108,13 @@ impl IdleController {
 
     pub fn set_policy(&self, policy: Policy) {
         self.run(|machine| machine.set_policy(policy));
-        self.restart_idle_timers();
+        self.tell_wayland(Command::RestartIdleTimers);
     }
 
-    pub fn idle_timer_restarts(&self) -> io::Result<UnixStream> {
+    pub fn wayland_commands(&self) -> io::Result<UnixStream> {
         let (changes, listener) = UnixStream::pair()?;
         listener.set_nonblocking(true)?;
-        self.timer_listeners
+        self.wayland_listeners
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(listener);
@@ -200,7 +226,7 @@ pub fn logind_executor(
                     .map_or(Ok(()), set_backlight)
                     .and(lit.map_or(Ok(()), set_keyboard))
             }
-            Command::RestartIdleTimers => Ok(()),
+            Command::RestartIdleTimers | Command::DisplayOff | Command::DisplayOn => Ok(()),
         };
         if let Err(error) = result {
             tracing::warn!("cannot carry out {command:?}: {error}");

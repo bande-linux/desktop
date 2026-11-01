@@ -9,9 +9,9 @@ use bande_graphics::{
     Item, Palette, Point, Rect, Scheme, TextAlign, TextSize, TextStyle, TextSystem,
 };
 use bande_widgets::{
-    Axis, BUTTON_HEIGHT, Button, CheckState, Checkbox, ComboBox, Context, Event, Key, Modifiers,
-    Pointer, PopUpButton, ProgressBar, RadioGroup, SegmentedControl, Size, Spinner, Stack, Stepper,
-    TOOLTIP_DELAY, TextField, Ui, Widget, WidgetId,
+    Axis, BUTTON_HEIGHT, Button, CheckState, Checkbox, ComboBox, Context, Event, Form, FormLine,
+    Key, Modifiers, Pointer, PopUpButton, ProgressBar, RadioGroup, SegmentedControl, Size, Spinner,
+    Stack, Stepper, TOOLTIP_DELAY, TextField, Toggle, Ui, Widget, WidgetId,
 };
 
 const NONE: Modifiers = Modifiers {
@@ -393,4 +393,32 @@ fn at_the_largest_text_size_controls_grow_and_a_field_still_fits_its_text() {
     assert!(line > 30.0, "the text doubled: {line}");
     assert!(field.height >= line + 8.0, "{} < {line}", field.height);
     assert!(button.height > BUTTON_HEIGHT && button.height >= line);
+}
+
+fn one_row_form(label: &str) -> (Size, Rect) {
+    let mut form = Form::new(
+        "Example",
+        vec![FormLine::Row(
+            label.to_owned(),
+            Box::new(Toggle::new(label, true, |_| {})),
+        )],
+    );
+    let mut cx = Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light));
+    let size = form.measure(&mut cx, Size::new(400.0, 600.0));
+    form.place(&mut cx, Rect::new(0.0, 0.0, size.width, size.height));
+    (size, form.children()[0].frame())
+}
+
+#[test]
+fn a_form_row_with_a_wrapping_label_grows_and_keeps_its_control_centred() {
+    let (short, _) = one_row_form("Sound");
+    let (long, control) = one_row_form(
+        "Play a sound and flash the window when a command that ran for a long time finishes",
+    );
+    assert!(long.height > short.height, "{long:?} <= {short:?}");
+    let centre = control.y + control.height / 2.0;
+    assert!(
+        (centre - long.height / 2.0).abs() <= 1.0,
+        "{centre} {long:?}"
+    );
 }

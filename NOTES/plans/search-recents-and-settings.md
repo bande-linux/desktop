@@ -50,14 +50,11 @@ System actions (lock/log out/restart), Calculator, Conversion (`calc.rs split_co
 Total (b): ~500 lines incl. locales; (a)+(b) ~530.
 
 ## Default (recommendation)
-All categories on, exclude list empty: macOS default, and today's behaviour, so no user sees a
-change until they opt out. The owner turns off "Recent documents" in one click.
+All on, exclude list empty: macOS default and today's behaviour; opting out is one click.
 
 ## Risks
-- Middle truncation on 2 lines needs the width check per candidate: ~log2(n) layouts per cell,
-  only when the name is too long; cached via the existing `painted` key.
-- Exclude pruning while the crawl is running: apply the list before the crawl starts and re-check
-  in `read_folder`; respawning the index is the fallback if pruning gets fiddly.
+2-line middle truncation costs ~log2(n) layouts per too-long name (cached by `painted`); exclude
+pruning during the first crawl: apply the list before crawling, respawn the index as fallback.
 
 ## Verification
 desktop-check per step; one gate at the end. Owner on the mini: Super+Space with long recent

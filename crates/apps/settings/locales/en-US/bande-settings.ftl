@@ -23,7 +23,7 @@ unavailable-hint = Its device or service isn't responding.
 pane-off = { $pane } is off
 wifi-off-hint = Turn on Wi-Fi to see networks nearby.
 bluetooth-off-hint = Turn on Bluetooth to connect headphones, keyboards and more.
-restart-to-update = Restart to finish updating
+restart-to-update = Restart to install updates
 no-match = No settings match “{ $query }”
 no-match-hint = Try another word, such as “sleep” or “wallpaper”.
 administrator-only = Only an administrator can change this.
@@ -200,22 +200,35 @@ checking-updates = Checking for updates…
 up-to-date = Your computer is up to date
 check-now = Check Now
 download-size = { $size } to download
-install-now = Install Now
+download-updates = Download Updates
 updates-available = { $count ->
     [one] 1 update is available
    *[other] { $count } updates are available
 }
 more-updates = and { $count } more
-installing-updates = Installing updates…
-installing-hint = You can keep working while updates install
-updates-installed = Updates are installed
-restart-to-finish = Restart to finish installing them
+downloading-updates = Downloading updates…
+downloading-hint = You can keep working while updates download
+restart-to-install = { $count ->
+    [one] Restart to install 1 update
+   *[other] Restart to install { $count } updates
+}
+installs-on-restart = Updates install while the computer restarts
+updates-were-installed = { $count ->
+    [one] 1 update was installed
+   *[other] { $count } updates were installed
+}
 restart-now = Restart Now
 updates-failed = Could not check for updates
+download-failed = Could not download updates
 install-failed = Could not install updates
 updates-unavailable = Updates aren't available on this computer
 updates-unavailable-hint = Install the packagekit package
 updates-service-stopped = The update service stopped. Try again in a moment.
+updates-no-network = You're offline. Connect to the internet and try again.
+updates-locked = Another installation is running. Try again when it finishes.
+updates-no-space = There isn't enough free space. Free up some space and try again.
+updates-cancelled = The update was cancelled.
+updates-went-wrong = Something went wrong. Try again later.
 try-again = Try Again
 updates-notification = Software updates are available
 updates-notification-body = { $count ->

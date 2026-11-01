@@ -12,7 +12,7 @@ its not possible to scroll in the settings app, for example bluetooth and wifi v
 Status: finished ([plans/settings-scroll-and-bluetooth-names.md](plans/settings-scroll-and-bluetooth-names.md))
 
 its not possible to install .deb files from Files, this needs an install tool like most distros provide
-Status: planned ([plans/deb-installer.md](plans/deb-installer.md))
+Status: started ([plans/deb-installer.md](plans/deb-installer.md)); M1-M6 and the wiring done, live check on the mini left (asks for a password)
 
 GTK apps do not fit with our window bar. Is that possible to solve so that all apps looks the same and adhere to bande window bar theme, for example also claude desktop and vscode also do not use the bande window bar
 Status: planned ([plans/third-party-title-bars.md](plans/third-party-title-bars.md))
@@ -30,7 +30,7 @@ the themes, especially the dark theme, looks a bit "dated". Review how modern da
 Status: planned ([plans/dark-theme.md](plans/dark-theme.md))
 
 the software update doesnt seem to work.
-Status: started ([plans/software-update.md](plans/software-update.md)); M3 plain states done
+Status: started ([plans/software-update.md](plans/software-update.md)); M1-M6 done (offline updates), live reboot test on the mini left
 
 changing time zone doesnt apply
 Status: finished ([plans/time-zone.md](plans/time-zone.md)); M5 polkit fix waits on an owner decision

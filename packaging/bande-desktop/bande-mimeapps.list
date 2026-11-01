@@ -1,5 +1,6 @@
 [Default Applications]
 inode/directory=org.bande.Files.desktop;
+application/vnd.debian.binary-package=org.bande.Installer.desktop;
 text/html=firefox-esr.desktop;
 application/xhtml+xml=firefox-esr.desktop;
 x-scheme-handler/http=firefox-esr.desktop;

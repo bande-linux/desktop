@@ -28,10 +28,6 @@ fn kind(error: &zbus::Error) -> String {
     name.rsplit('.').next().unwrap_or_default().to_owned()
 }
 
-pub fn missing(error: &zbus::Error) -> bool {
-    kind(error) == "ServiceUnknown"
-}
-
 pub fn sentence(error: &zbus::Error, service: &str) -> String {
     tracing::warn!("{service}: {error}");
     let kind = kind(error);

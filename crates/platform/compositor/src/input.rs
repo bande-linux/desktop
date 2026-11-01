@@ -66,6 +66,7 @@ enum Shortcut {
     TogglePanel(Panel),
     CancelGrab,
     MenuKey(u32, Modifiers),
+    ForceQuitKey(u32, Modifiers),
 }
 
 fn volume_key(keysym: u32) -> Option<VolumeKey> {
@@ -225,6 +226,10 @@ impl State {
             self.window_menu_key(keysym, modifiers);
             return;
         }
+        if let Shortcut::ForceQuitKey(keysym, modifiers) = shortcut {
+            self.force_quit_key(keysym, modifiers);
+            return;
+        }
         if let Shortcut::Volume(key, fine) = shortcut {
             self.volume_key(key, fine);
             return;
@@ -327,8 +332,7 @@ impl State {
             return;
         }
         if shortcut == Shortcut::ForceQuit {
-            self.force_quit_requested = true;
-            self.watchdog.ping_everyone();
+            self.open_force_quit();
             return;
         }
         let Some(focused) = self
@@ -379,7 +383,8 @@ impl State {
             | Shortcut::AssistKey(..)
             | Shortcut::InputSource { .. }
             | Shortcut::CancelGrab
-            | Shortcut::MenuKey(..) => {}
+            | Shortcut::MenuKey(..)
+            | Shortcut::ForceQuitKey(..) => {}
         }
     }
 }
@@ -484,6 +489,9 @@ impl Compositor {
     pub fn scroll(&mut self, frame: AxisFrame) {
         self.state.note_activity();
         let state = &mut self.state;
+        if state.force_quit_scroll(&frame) {
+            return;
+        }
         let Some(pointer) = state.seat.get_pointer() else {
             return;
         };
@@ -521,7 +529,7 @@ impl Compositor {
         if state.assist.is_open() {
             state.assist_pointer(location);
         }
-        if state.window_menu_pointer(location) {
+        if state.window_menu_pointer(location) || state.force_quit_pointer(location) {
             if let Some(pointer) = state.seat.get_pointer() {
                 pointer.motion(
                     state,
@@ -565,7 +573,7 @@ impl Compositor {
         self.state.note_activity();
         self.state.super_tap = false;
         let state = &mut self.state;
-        if state.window_menu_button(button, pressed) {
+        if state.window_menu_button(button, pressed) || state.force_quit_button(button, pressed) {
             return;
         }
         if !pressed && state.release_frame(button) {
@@ -752,6 +760,22 @@ impl State {
                 if state.window_menus.is_open() && !modifiers.logo && !sym.is_modifier_key() {
                     state.held_shortcut_keys.push(evdev_code);
                     return FilterResult::Intercept(Some(Shortcut::MenuKey(
+                        sym.raw(),
+                        Modifiers {
+                            shift: modifiers.shift,
+                            alt: modifiers.alt,
+                            control: modifiers.ctrl,
+                            logo: modifiers.logo,
+                        },
+                    )));
+                }
+                if state.force_quit.is_open()
+                    && !modifiers.logo
+                    && !sym.is_modifier_key()
+                    && !(sym.raw() == keysyms::KEY_Escape && modifiers.ctrl && modifiers.alt)
+                {
+                    state.held_shortcut_keys.push(evdev_code);
+                    return FilterResult::Intercept(Some(Shortcut::ForceQuitKey(
                         sym.raw(),
                         Modifiers {
                             shift: modifiers.shift,

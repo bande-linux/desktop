@@ -41,6 +41,7 @@ Plans share work. Land the shared pieces first:
 | [taskbar-width-and-options](taskbar-width-and-options.md) | The wide taskbar was a second layout with its own key, property, switch and drag; options inventory against macOS | 6 (1 done, 5 wait on the owner) |
 | [crash-management](crash-management.md) | Kernel OOM killed the session bus 6 times while the build lived (adj 200 vs 0); no PSI, no watchdogs | 7 |
 | [app-framework](app-framework.md) | Every app re-writes its main loop, menu bar, standard keys, About, activation and packaging above the toolkit; six of eight have drifted | 12 (after [apps-split](apps-split.md)) |
+| [force-quit](force-quit.md) | Force Quit was Activity Monitor's `--force-quit` window, started on demand, so Monitor could not leave the desktop | 4 (with [apps-split](apps-split.md) M3) |
 
 ## Decisions for the owner
 

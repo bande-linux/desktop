@@ -13,6 +13,7 @@ mod dmabuf;
 mod dnd;
 mod environment;
 mod focus;
+mod force_quit;
 mod frames;
 mod gesture;
 mod idle;

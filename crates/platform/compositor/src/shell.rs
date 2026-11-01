@@ -481,6 +481,7 @@ impl Dispatch<BandeShellV1, ()> for State {
             }
             bande_shell_v1::Request::QuitApp { app_id } => state.quit_app_named(&app_id),
             bande_shell_v1::Request::ForceQuitApp { app_id } => state.force_quit_app(&app_id),
+            bande_shell_v1::Request::ShowForceQuit => state.open_force_quit(),
             bande_shell_v1::Request::ActivateWindow { identifier } => {
                 state.activate_window(&identifier);
             }

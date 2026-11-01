@@ -229,7 +229,6 @@ fn a_plain_drag_inside_a_window_reaches_the_app_and_leaves_the_window_in_place()
 fn ctrl_alt_escape_opens_force_quit_without_typing_escape() {
     let mut server = server();
     let mut client = client_with_window(&mut server, 32);
-    server.set_force_quit(std::path::Path::new("/bin/true"));
 
     server.key(KEY_LEFTCTRL, true, 18);
     server.key(KEY_LEFTALT, true, 19);
@@ -237,10 +236,8 @@ fn ctrl_alt_escape_opens_force_quit_without_typing_escape() {
     server.key(KEY_LEFTALT, false, 22);
     server.key(KEY_LEFTCTRL, false, 23);
     client.exchange(&mut server);
-    let upkeep = server.keep_session_clients_running();
 
-    assert!(upkeep.failures.is_empty());
-    assert!(server.force_quit_pid().is_some());
+    assert!(server.force_quit_frame().is_some());
     assert!(!client.keys().iter().any(|(key, _)| *key == KEY_ESC));
 }
 

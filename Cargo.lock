@@ -535,6 +535,7 @@ dependencies = [
  "image",
  "image-compare",
  "jiff",
+ "libc",
  "rustix 1.1.6",
  "smithay",
  "tempfile",

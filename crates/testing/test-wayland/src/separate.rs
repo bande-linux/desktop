@@ -43,7 +43,11 @@ impl SeparateApp {
     }
 
     pub fn show_window(&mut self, server: &mut Compositor, side: i32) {
-        writeln!(self.orders, "{side}").expect("order a window");
+        self.show_window_of(server, side, "");
+    }
+
+    pub fn show_window_of(&mut self, server: &mut Compositor, side: i32, app_id: &str) {
+        writeln!(self.orders, "{side} {app_id}").expect("order a window");
         let deadline = Instant::now() + Duration::from_secs(10);
         while !server
             .windows()
@@ -74,20 +78,24 @@ pub fn act_as_separate_app() -> bool {
         windows: Vec::new(),
     };
     for order in std::io::stdin().lock().lines() {
-        let side = order.expect("order").parse().expect("window side");
-        client.show_window_blocking(side);
+        let order = order.expect("order");
+        let (side, app_id) = order.split_once(' ').unwrap_or((&order, ""));
+        client.show_window_blocking(side.parse().expect("window side"), app_id);
     }
     true
 }
 
 impl TestClient {
-    fn show_window_blocking(&mut self, side: i32) {
+    fn show_window_blocking(&mut self, side: i32, app_id: &str) {
         let qh = self.queue.handle();
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
         let wm_base = self.globals.wm_base.as_ref().expect("xdg_wm_base");
         let surface = compositor.create_surface(&qh, ());
         let xdg_surface = wm_base.get_xdg_surface(&surface, &qh, ());
         let toplevel = xdg_surface.get_toplevel(&qh, ());
+        if !app_id.is_empty() {
+            toplevel.set_app_id(app_id.to_owned());
+        }
         self.globals.configured = false;
         surface.commit();
         while !self.globals.configured {

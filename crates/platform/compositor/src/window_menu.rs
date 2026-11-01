@@ -68,6 +68,10 @@ pub(crate) struct WindowMenus {
 }
 
 impl WindowMenus {
+    pub(crate) fn text_size(&self) -> TextSize {
+        self.text_size
+    }
+
     pub(crate) fn is_open(&self) -> bool {
         self.open.as_ref().is_some_and(|open| !open.closing)
     }

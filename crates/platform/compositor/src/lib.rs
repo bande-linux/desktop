@@ -21,6 +21,7 @@ mod effect;
 mod element;
 mod environment;
 mod family;
+mod force_quit;
 mod frame;
 mod gesture;
 mod grab;
@@ -84,8 +85,8 @@ pub use pointing::PointerSettings;
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
 pub use session::{
-    CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, MONITOR, REVIEW, SCREENSHOT,
-    SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRole, SessionUpkeep,
+    CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, REVIEW, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE,
+    SHELL, SessionRole, SessionUpkeep,
 };
 pub use state::{Compositor, OutputElement, REFRESH, ScanoutDevice};
 pub use watchdog::UNRESPONSIVE_AFTER;
@@ -103,6 +104,8 @@ mod tests {
         let sources = [
             include_str!("access_keys.rs"),
             include_str!("alert.rs"),
+            include_str!("force_quit/mod.rs"),
+            include_str!("force_quit/view.rs"),
             include_str!("logind.rs"),
             include_str!("switcher/mod.rs"),
             include_str!("switcher/paint.rs"),

@@ -364,6 +364,10 @@ impl TestClient {
         self.shell_request(server, |shell| shell.quit_app(app_id.to_owned()));
     }
 
+    pub fn show_force_quit(&mut self, server: &mut Compositor) {
+        self.shell_request(server, BandeShellV1::show_force_quit);
+    }
+
     pub fn quit_all_apps(&mut self, server: &mut Compositor) {
         self.shell_request(server, BandeShellV1::quit_all_apps);
     }

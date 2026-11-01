@@ -334,6 +334,7 @@ fn change_of(message: &Message, owners: &mut Owners) -> Option<Control> {
     if header
         .member()
         .is_none_or(|member| member.as_str() != "NameOwnerChanged")
+        || header.sender().is_none_or(|sender| sender.as_str() != BUS)
     {
         return None;
     }
@@ -534,13 +535,17 @@ mod tests {
     }
 
     fn owner_changed(name: &str, owner: &str) -> Message {
+        owner_changed_from("org.freedesktop.DBus", name, owner)
+    }
+
+    fn owner_changed_from(sender: &str, name: &str, owner: &str) -> Message {
         Message::signal(
             "/org/freedesktop/DBus",
             "org.freedesktop.DBus",
             "NameOwnerChanged",
         )
         .unwrap()
-        .sender("org.freedesktop.DBus")
+        .sender(sender)
         .unwrap()
         .build(&(name, "", owner))
         .unwrap()
@@ -579,6 +584,22 @@ mod tests {
         assert_eq!(
             change_of(&owner_changed("org.example.Other", ":1.4"), &mut owners),
             None
+        );
+    }
+
+    #[test]
+    fn only_the_bus_itself_can_say_a_service_changed_owner() {
+        let mut owners: Owners = [Some(":1.5".to_owned()), None, None];
+        assert_eq!(
+            change_of(
+                &owner_changed_from(":1.66", "org.freedesktop.UPower", ""),
+                &mut owners
+            ),
+            None
+        );
+        assert_eq!(
+            change_of(&changed(":1.5"), &mut owners),
+            Some(Control::Refresh(Source::Battery))
         );
     }
 

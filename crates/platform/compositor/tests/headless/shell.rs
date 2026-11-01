@@ -329,6 +329,26 @@ fn super_space_asks_the_shell_for_the_launcher_and_is_not_delivered_to_the_app()
 }
 
 #[test]
+fn a_tap_of_super_alone_asks_for_the_launcher_but_super_with_a_click_does_not() {
+    let mut server = server();
+    let mut app = window(&mut server, RED, (32, 32));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+
+    tap(&mut server, KEY_LEFTMETA);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+    assert_eq!(shell.launcher_requests(), 1);
+
+    server.key(KEY_LEFTMETA, true, 0);
+    server.press_button(BTN_LEFT, true, 0);
+    server.press_button(BTN_LEFT, false, 0);
+    server.key(KEY_LEFTMETA, false, 0);
+    chord(&mut server, &[KEY_LEFTSHIFT, KEY_LEFTMETA]);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+    assert_eq!(shell.launcher_requests(), 1);
+}
+
+#[test]
 fn super_shift_3_asks_the_shell_for_a_screen_capture_and_is_not_delivered_to_the_app() {
     let mut server = server();
     let mut app = window(&mut server, RED, (32, 32));

@@ -54,12 +54,10 @@ fn settle(
 
 fn chord(server: &mut Compositor, client: &mut TestClient, key: u32) {
     for (code, pressed) in [
-        (KEY_LEFTCTRL, true),
         (KEY_LEFTMETA, true),
         (key, true),
         (key, false),
         (KEY_LEFTMETA, false),
-        (KEY_LEFTCTRL, false),
     ] {
         server.key(code, pressed, 0);
     }

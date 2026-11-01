@@ -3,7 +3,7 @@ Hand written notes by a user when gaps are found. These need to be properly inve
 Status values: open, planning, planned, started, finished, dropped.
 
 swap Super->Ctrl like normal linux distros
-Status: started ([plans/super-ctrl.md](plans/super-ctrl.md)); Ctrl for app shortcuts done (M1-M9), M10 Linux habits on Super open
+Status: finished ([plans/super-ctrl.md](plans/super-ctrl.md))
 
 keep in dock doesnt work for everything, for example launching -code- from terminal should still be able to save to dock. Also dock should be renamed to taskbar
 Status: started ([plans/keep-in-taskbar.md](plans/keep-in-taskbar.md)); keeping apps without an entry and the Taskbar name done, internal code rename (M6) left

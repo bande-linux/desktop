@@ -175,7 +175,7 @@ Linux convention differs:
 
 ## Implementation plan
 
-Progress (2026-11-01): milestones 1-9 done. Milestone 10 open. Deviations: the window menus show
+Progress (2026-11-01): milestones 1-10 done. Deviations: the window menus show
 Close as `Alt+F4` and Quit as `Super+Q` (both work in every app, Terminal included); Files'
 Duplicate has no shortcut (Ctrl+D is Add to Sidebar), Quick Look full screen is F11, Empty Trash
 is Shift+Ctrl+Delete and Delete in the Trash deletes immediately; Terminal's find previous is
@@ -303,6 +303,7 @@ each crate's tests on the mini. Each milestone refreshes its goldens with
 ## Decisions for the owner
 
 Decided overnight 2026-11-01: shortcut labels read as words, "Ctrl+C" (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: milestone 10, yes to a Super tap, Alt+Tab and Super+arrows (plan recommendation; owner may revisit).
 Decided overnight 2026-11-01: Super+W and Super+Q stay as compositor-level close and quit (plan recommendation; owner may revisit).
 
 1. Do shortcuts in menus read as words ("Ctrl+C", the GNOME style, recommended) or as macOS

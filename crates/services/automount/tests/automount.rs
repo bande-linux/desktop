@@ -1,17 +1,20 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use bande_automount::{Automounter, UDISKS, UDISKS_PATH};
+use bande_automount::{Automounter, LOGIN1, UDISKS, UDISKS_PATH};
 use bande_notify::{Notification, NotificationServer};
 use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
-use zbus::zvariant::OwnedValue;
+use zbus::object_server::SignalEmitter;
+use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
 const WAIT: Duration = Duration::from_secs(5);
 const QUIET: Duration = Duration::from_millis(300);
+const SESSION_PATH: &str = "/org/freedesktop/login1/session/_31";
 const USB: &str = "/org/freedesktop/UDisks2/block_devices/sdb1";
 
 #[derive(Clone)]
@@ -19,6 +22,43 @@ struct Hints {
     auto: bool,
     system: bool,
     label: &'static str,
+}
+
+struct FakeManager;
+
+#[zbus::interface(name = "org.freedesktop.login1.Manager")]
+impl FakeManager {
+    fn get_session(&self, _session_id: String) -> zbus::fdo::Result<OwnedObjectPath> {
+        OwnedObjectPath::try_from(SESSION_PATH)
+            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))
+    }
+}
+
+struct FakeSession {
+    locked: Arc<AtomicBool>,
+}
+
+#[zbus::interface(name = "org.freedesktop.login1.Session")]
+impl FakeSession {
+    async fn set_locked_hint(
+        &self,
+        locked: bool,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        self.locked.store(locked, Ordering::SeqCst);
+        self.locked_hint_changed(&emitter).await?;
+        Ok(())
+    }
+
+    #[zbus(property)]
+    fn active(&self) -> bool {
+        true
+    }
+
+    #[zbus(property)]
+    fn locked_hint(&self) -> bool {
+        self.locked.load(Ordering::SeqCst)
+    }
 }
 
 struct FakeBlock {
@@ -94,6 +134,7 @@ struct Fixture {
     mounts_sender: Arc<Mutex<Sender<String>>>,
     notifications: NotificationServer,
     _automounter: Arc<Automounter>,
+    _logind: Connection,
     _bus: SessionBus,
 }
 
@@ -134,7 +175,26 @@ fn usb() -> Hints {
 }
 
 fn start(already_plugged: bool) -> Fixture {
+    start_session(already_plugged, false)
+}
+
+fn start_session(already_plugged: bool, locked: bool) -> Fixture {
     let bus = SessionBus::start().expect("dbus-daemon");
+    let logind = bus.connect().expect("logind connection");
+    logind
+        .object_server()
+        .at("/org/freedesktop/login1", FakeManager)
+        .expect("manager");
+    logind
+        .object_server()
+        .at(
+            SESSION_PATH,
+            FakeSession {
+                locked: Arc::new(AtomicBool::new(locked)),
+            },
+        )
+        .expect("session");
+    logind.request_name(LOGIN1).expect("logind name");
     let notifications = NotificationServer::start(
         &bus.connect().expect("notify connection"),
         &bus.connect().expect("center connection"),
@@ -159,6 +219,7 @@ fn start(already_plugged: bool) -> Fixture {
         mounts_sender,
         notifications,
         _automounter: automounter,
+        _logind: logind,
         _bus: bus,
     }
 }
@@ -174,6 +235,18 @@ impl Fixture {
             assert!(Instant::now() < deadline, "still showing {active:?}");
             std::thread::sleep(Duration::from_millis(20));
         }
+    }
+
+    fn set_locked(&self, locked: bool) {
+        self.udisks
+            .call_method(
+                Some(LOGIN1),
+                SESSION_PATH,
+                Some("org.freedesktop.login1.Session"),
+                "SetLockedHint",
+                &(locked,),
+            )
+            .expect("SetLockedHint");
     }
 
     fn unmount(&self, path: &str) {
@@ -271,4 +344,42 @@ fn a_drive_pulled_right_after_ejecting_leaves_quietly() {
     }
     std::thread::sleep(QUIET);
     assert!(fixture.notifications.active().is_empty());
+}
+
+#[test]
+fn a_drive_plugged_in_while_locked_waits_for_unlock() {
+    let fixture = start_session(false, true);
+    plug(&fixture.udisks, USB, usb(), &fixture.mounts_sender);
+    assert!(fixture.mounts.recv_timeout(QUIET).is_err());
+    fixture.set_locked(false);
+    assert_eq!(fixture.mounts.recv_timeout(WAIT).expect("mounted"), USB);
+}
+
+#[test]
+fn a_drive_present_at_a_locked_login_waits_for_unlock() {
+    let fixture = start_session(true, true);
+    assert!(fixture.mounts.recv_timeout(QUIET).is_err());
+    fixture.set_locked(false);
+    assert_eq!(fixture.mounts.recv_timeout(WAIT).expect("mounted"), USB);
+}
+
+#[test]
+fn a_drive_removed_while_locked_is_not_mounted_on_unlock() {
+    let fixture = start_session(false, true);
+    plug(&fixture.udisks, USB, usb(), &fixture.mounts_sender);
+    std::thread::sleep(QUIET);
+    unplug(&fixture.udisks, USB);
+    std::thread::sleep(QUIET);
+    fixture.set_locked(false);
+    assert!(fixture.mounts.recv_timeout(QUIET).is_err());
+    assert!(fixture.notifications.active().is_empty());
+}
+
+#[test]
+fn locking_stops_automounting() {
+    let fixture = start(false);
+    fixture.set_locked(true);
+    std::thread::sleep(QUIET);
+    plug(&fixture.udisks, USB, usb(), &fixture.mounts_sender);
+    assert!(fixture.mounts.recv_timeout(QUIET).is_err());
 }

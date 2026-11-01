@@ -315,8 +315,10 @@ graph LR
   with an eject action.
   - Implemented in `crates/services/automount` (`bande-automount`, a session service): every
     filesystem UDisks2 hints for automounting (`HintAuto`, not `HintIgnore` or `HintSystem`) is
-    mounted when it appears, including drives present at login, as macOS mounts external
-    volumes; a drive removed while still mounted posts "Disk Not Ejected Properly", as macOS
+    mounted when it appears, including drives present at login, while the logind session is
+    active and unlocked (`Active`, not `LockedHint`), as GNOME does; drives that appear while it
+    is locked or inactive are mounted when it is unlocked again, unless removed meanwhile, and
+    manual mounts from Files are unaffected; a drive removed while still mounted posts "Disk Not Ejected Properly", as macOS
     does. Encrypted volumes and the eject control wait for the UI.
 - **Theme propagation**: GTK 3 and 4 (the Settings portal, with `GTK_USE_PORTAL=1` for GTK 3), Qt (`QT_QPA_PLATFORMTHEME`) and
   cursor themes (`XCURSOR_THEME`, `XCURSOR_SIZE`) follow the desktop's appearance.

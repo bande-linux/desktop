@@ -203,16 +203,13 @@ Fixed:
 | low | config `service.rs` | `replace()` turned a linked `config.kdl` (dotfiles) into a plain file, reset its mode and did not sync before the rename. It writes through the link, keeps the mode and syncs. | `0ac0249f` |
 | low | portal `gtk.rs` | The same for the user's own `gtk-3.0`/`gtk-4.0` `gtk.css`, where the portal adds its import: a linked stylesheet was replaced by a copy. | `4ac83ca1` |
 | low | clipboard `Cargo.toml` | Unused direct `wayland-backend` dependency. | `b67dfbeb` |
+| medium | automount `lib.rs` | `HintAuto` volumes were mounted while the session was locked or inactive, exposing the kernel to an untrusted filesystem at the lock screen. Owner decision 2026-11-01: like GNOME, automount only while the logind session is `Active` and not `LockedHint`; volumes that appear meanwhile are mounted on unlock unless removed. | this branch |
 
 Not fixed:
 
 - medium (design) — `org.bande.Clipboard` still serves the history to any session-bus caller (as
   listed above); Flatpak apps need an explicit talk permission. Its callers are the launcher and
   Settings, so a shell-only check needs a Settings path too.
-- medium (owner decision) — `bande-automount` mounts `HintAuto` volumes while the session is
-  locked or inactive (GNOME refuses then; macOS mounts). Mounting an untrusted filesystem at the
-  lock screen is kernel attack surface. Check `LockedHint`/`Active` before `Mount`, or keep the
-  macOS behaviour.
 - low — any client may `CloseNotification` or pass `replaces_id` for another app's notification
   (the specification does not tie ids to senders); remembering the sender would stop a
   sandboxed app replacing another's notification with its own text and actions.

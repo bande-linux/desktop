@@ -9,6 +9,7 @@ use std::thread;
 
 use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
 use bande_keyboard::Layouts;
+use bande_toolkit::SessionEnd;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
@@ -93,6 +94,7 @@ pub enum Command {
     Permission(PermissionCommand),
     Brightness(f32),
     Reveal(PathBuf),
+    EndSession(SessionEnd),
     ImportVpn,
     ExcludeFolder,
     ClearClipboard,
@@ -407,7 +409,7 @@ impl Services {
                 .battery
                 .as_ref()
                 .is_some_and(|battery| battery.send(command).is_ok()),
-            Command::Reveal(_) => false,
+            Command::Reveal(_) | Command::EndSession(_) => false,
             Command::ClearClipboard => {
                 let (session, updates) = (self.connection.clone(), self.updates.clone());
                 spawn("clear-clipboard", move || {

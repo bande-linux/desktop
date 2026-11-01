@@ -10,8 +10,6 @@ use bande_packages::offline::{self, Results};
 use bande_packages::{
     Class, Client, Error, ErrorCode, Failure, Mode, Progress, Restart, Status, running_release,
 };
-use bande_status::devices::end_session;
-use bande_status::session::Ending;
 use bande_xdg::{replace_file, state_home};
 use zbus::MatchRule;
 use zbus::blocking::fdo::DBusProxy;
@@ -23,7 +21,7 @@ use bande_notify::Urgency;
 use bande_notify::client::{Request, close, notify};
 
 use crate::L10N;
-use crate::failure::{sentence, unexpected};
+use crate::failure::sentence;
 use crate::follow::{Update, Updates, spawn};
 use crate::privilege::may_update_live;
 
@@ -137,8 +135,6 @@ pub enum SoftwareCommand {
     Open,
     Check,
     Update(Vec<Package>),
-    Restart,
-    LogOut,
     Repair,
 }
 
@@ -479,12 +475,6 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
     announce(session, &L10N.tr("updates-notification"), &body)
 }
 
-fn end(system: &Connection, ending: Ending, updates: &Updates) {
-    if let Err(error) = end_session(system, ending) {
-        updates.send(unexpected(error));
-    }
-}
-
 pub fn follow_software(
     session: &Connection,
     system: &Connection,
@@ -528,14 +518,6 @@ pub fn follow_software(
                         Ok(()) => check(&client, Refresh::WhenStale),
                         Err(error) => broken(Stage::Install, &error),
                     }
-                }
-                SoftwareCommand::Restart => {
-                    end(&system, Ending::Restart, &updates);
-                    continue;
-                }
-                SoftwareCommand::LogOut => {
-                    end(&system, Ending::LogOut, &updates);
-                    continue;
                 }
             };
             if !updates.send(Update::Software(state)) {

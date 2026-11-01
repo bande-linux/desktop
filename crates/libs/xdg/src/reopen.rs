@@ -7,13 +7,52 @@ use crate::entry::{DesktopEntry, Locale, applications, current_desktops, data_di
 use crate::identity::find_app;
 
 const REOPEN_FILE: &str = "bande/reopen";
+const RUNNING_FILE: &str = "bande/running";
+const CRASHED_FILE: &str = "bande/crashed";
 
-pub fn reopen_file() -> Option<PathBuf> {
+fn state_file(name: &str) -> Option<PathBuf> {
     env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
         .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state")))
-        .map(|state| state.join(REOPEN_FILE))
+        .map(|state| state.join(name))
+}
+
+pub fn reopen_file() -> Option<PathBuf> {
+    state_file(REOPEN_FILE)
+}
+
+pub fn running_apps_file() -> Option<PathBuf> {
+    state_file(RUNNING_FILE)
+}
+
+pub fn crashed_apps_file() -> Option<PathBuf> {
+    state_file(CRASHED_FILE)
+}
+
+pub fn set_aside_apps_of_unclean_end(
+    running: &Path,
+    reopen: &Path,
+    crashed: &Path,
+) -> io::Result<()> {
+    if !running.exists() {
+        return Ok(());
+    }
+    if reopen.exists() {
+        return fs::remove_file(running);
+    }
+    fs::rename(running, crashed)
+}
+
+pub fn write_running_apps(file: &Path, apps: &[String]) -> io::Result<()> {
+    if let Some(directory) = file.parent() {
+        fs::create_dir_all(directory)?;
+    }
+    let mut listed = apps.join("\n");
+    listed.push('\n');
+    let fresh = file.with_extension("new");
+    fs::write(&fresh, listed)?;
+    fs::rename(&fresh, file)
 }
 
 pub fn apps_to_reopen<'a>(entries: &'a [DesktopEntry], running: &[String]) -> Vec<&'a str> {

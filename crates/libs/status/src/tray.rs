@@ -278,7 +278,7 @@ fn tray_event(message: &Message) -> Option<TrayEvent> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Errand {
     ShowMenu { menu: String, parent: i32 },
     Clicked { menu: String, id: i32 },
@@ -302,36 +302,81 @@ fn layout(connection: &Connection, key: &str, parent: i32) -> zbus::Result<Node>
     Ok(tree(root))
 }
 
-pub fn run_errands(connection: &Connection, errands: &Receiver<Errand>, outbox: &Outbox<Update>) {
+fn without_repeated_app_menus(errands: impl Iterator<Item = Errand>) -> Vec<Errand> {
+    let mut kept: Vec<Errand> = Vec::new();
     for errand in errands {
-        let result = match errand {
-            Errand::ShowMenu { menu, parent } => layout(connection, &menu, parent).map(|root| {
-                outbox.send(Update::Menu { menu, root });
-            }),
-            Errand::Clicked { menu, id } => dbus_menu(connection, &menu)
-                .and_then(|proxy| proxy.event(id, "clicked", &Value::from(""), 0)),
-            Errand::Activate { item, x, y } => {
-                item_proxy(connection, &item).and_then(|proxy| proxy.activate(x, y))
-            }
-            Errand::AppMenu(app) => {
-                let key = format!("{app}{APP_MENU_PATH}");
-                let running = BusName::try_from(app.as_str()).is_ok_and(|name| {
-                    DBusProxy::new(connection)
-                        .and_then(|bus| Ok(bus.name_has_owner(name)?))
-                        .unwrap_or(false)
-                });
-                let root = running
-                    .then(|| {
-                        dbus_menu(connection, &key).and_then(|proxy| proxy.get_layout(0, -1, &[]))
-                    })
-                    .and_then(Result::ok)
-                    .map(|(_, root)| tree(root));
-                outbox.send(Update::AppMenu { app, root });
-                Ok(())
-            }
-        };
-        if let Err(error) = result {
-            tracing::warn!("a status item did not answer: {error}");
+        if matches!(errand, Errand::AppMenu(_)) && kept.contains(&errand) {
+            continue;
         }
+        kept.push(errand);
+    }
+    kept
+}
+
+pub fn run_errands(connection: &Connection, errands: &Receiver<Errand>, outbox: &Outbox<Update>) {
+    while let Ok(next) = errands.recv() {
+        let queued = std::iter::once(next).chain(errands.try_iter());
+        for errand in without_repeated_app_menus(queued) {
+            run_errand(connection, errand, outbox);
+        }
+    }
+}
+
+fn run_errand(connection: &Connection, errand: Errand, outbox: &Outbox<Update>) {
+    let result = match errand {
+        Errand::ShowMenu { menu, parent } => layout(connection, &menu, parent).map(|root| {
+            outbox.send(Update::Menu { menu, root });
+        }),
+        Errand::Clicked { menu, id } => dbus_menu(connection, &menu)
+            .and_then(|proxy| proxy.event(id, "clicked", &Value::from(""), 0)),
+        Errand::Activate { item, x, y } => {
+            item_proxy(connection, &item).and_then(|proxy| proxy.activate(x, y))
+        }
+        Errand::AppMenu(app) => {
+            let key = format!("{app}{APP_MENU_PATH}");
+            let running = BusName::try_from(app.as_str()).is_ok_and(|name| {
+                DBusProxy::new(connection)
+                    .and_then(|bus| Ok(bus.name_has_owner(name)?))
+                    .unwrap_or(false)
+            });
+            let root = running
+                .then(|| dbus_menu(connection, &key).and_then(|proxy| proxy.get_layout(0, -1, &[])))
+                .and_then(Result::ok)
+                .map(|(_, root)| tree(root));
+            outbox.send(Update::AppMenu { app, root });
+            Ok(())
+        }
+    };
+    if let Err(error) = result {
+        tracing::warn!("a status item did not answer: {error}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Errand, without_repeated_app_menus};
+
+    #[test]
+    fn queued_requests_for_the_same_app_menu_are_fetched_once() {
+        let clicked = Errand::Clicked {
+            menu: ":1.4/MenuBar".to_owned(),
+            id: 7,
+        };
+        let files = Errand::AppMenu("org.bande.Files".to_owned());
+        let settings = Errand::AppMenu("org.bande.Settings".to_owned());
+        assert_eq!(
+            without_repeated_app_menus(
+                [
+                    files.clone(),
+                    clicked.clone(),
+                    files.clone(),
+                    settings.clone(),
+                    clicked.clone(),
+                    files.clone(),
+                ]
+                .into_iter()
+            ),
+            [files, clicked.clone(), settings, clicked]
+        );
     }
 }

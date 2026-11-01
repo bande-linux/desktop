@@ -24,7 +24,7 @@ bande-test-bus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpers (>= 1.66), udisks2"
+depends = "$auto, default-dbus-session-bus | dbus-session-bus, init-system-helpers (>= 1.66), udisks2"
 extended-description = """\
 Mounts removable drives through UDisks2 as they appear, warns when a \
 mounted drive is disconnected without being ejected, and warns once when \

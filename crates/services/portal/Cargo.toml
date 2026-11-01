@@ -28,7 +28,7 @@ bande-test-bus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, xdg-desktop-portal (>= 1.18), dbus-session-bus | default-dbus-session-bus"
+depends = "$auto, xdg-desktop-portal (>= 1.18), default-dbus-session-bus | dbus-session-bus"
 recommends = "bande-config, bande-file-chooser, bande-screenshot, xdg-desktop-portal-gtk"
 extended-description = """\
 Implements xdg-desktop-portal's Settings, FileChooser, Screenshot and \

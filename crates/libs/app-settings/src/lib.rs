@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
+use bande_app::View;
 use bande_toolkit::ui::Ui;
 use bande_toolkit::{App, Appearance, Rect, Role, Scene, Window, WindowError, WindowEvent};
 use bande_watch::{Changes, FolderWatch};
@@ -154,7 +155,7 @@ impl<S: Stored> SettingsWindow<S> {
     }
 }
 
-impl<S: Stored> App for SettingsWindow<S> {
+impl<S: Stored> View for SettingsWindow<S> {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         let mut scene = self.ui.scene(width, height);
@@ -162,22 +163,59 @@ impl<S: Stored> App for SettingsWindow<S> {
         scene
     }
 
-    fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        if let Err(error) = window.drive(&mut self.ui, event) {
-            tracing::warn!("{error}");
-        }
+    fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        let handled = View::event(&mut self.ui, window, event);
         self.save();
+        handled
+    }
+
+    fn set_appearance(&mut self, appearance: Appearance) {
+        self.ui.set_appearance(appearance);
+    }
+
+    fn set_active(&mut self, active: bool) {
+        self.ui.set_window_active(active);
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         self.watch.iter().map(SettingsWatch::fd).collect()
     }
 
-    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+    fn source_ready(&mut self, window: &mut Window, _index: usize) -> bool {
         if let Some(watch) = &mut self.watch {
             watch.drain();
         }
-        if self.follow(window.appearance()) {
+        self.follow(window.appearance())
+    }
+
+    fn animating(&self) -> bool {
+        self.ui.is_animating()
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        Some(self.ui.accessibility())
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        self.ui.text_input_area()
+    }
+}
+
+impl<S: Stored> App for SettingsWindow<S> {
+    fn scene(&mut self, window: &mut Window) -> Scene {
+        View::scene(self, window)
+    }
+
+    fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        View::event(self, window, event);
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        View::sources(self)
+    }
+
+    fn source_ready(&mut self, window: &mut Window, index: usize) {
+        if View::source_ready(self, window, index) {
             window.request_redraw();
         }
     }
@@ -187,15 +225,15 @@ impl<S: Stored> App for SettingsWindow<S> {
     }
 
     fn animating(&self) -> bool {
-        self.ui.is_animating()
+        View::animating(self)
     }
 
     fn text_input_area(&self) -> Option<Rect> {
-        self.ui.text_input_area()
+        View::text_input_area(self)
     }
 
     fn accessibility(&self) -> Option<TreeUpdate> {
-        Some(self.ui.accessibility())
+        View::accessibility(self)
     }
 }
 

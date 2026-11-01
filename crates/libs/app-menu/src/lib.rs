@@ -13,6 +13,7 @@ pub const MENU_PATH: &str = "/org/bande/MenuBar";
 pub const SHELL_ACTION_PROPERTY: &str = "x-bande-shell-action";
 pub const VERSION_PROPERTY: &str = "x-bande-version";
 pub const SETTINGS_SHORTCUT: &str = "Ctrl+,";
+pub const KEY_ACTION: &str = "key:";
 const INTERFACE: &str = "com.canonical.dbusmenu";
 const ROOT: i32 = 0;
 const ENGLISH: &str = include_str!("../locales/en-US/bande-app-menu.ftl");
@@ -147,6 +148,27 @@ pub fn window_submenu(items: Vec<Entry>) -> Entry {
         entries.extend(items);
     }
     Entry::submenu(&L10N.tr("window"), entries)
+}
+
+pub fn key_item(label: &str, shortcut: &str) -> Entry {
+    Entry::item(label, &format!("{KEY_ACTION}{shortcut}")).shortcut(shortcut)
+}
+
+pub fn edit_submenu(extra: Vec<Entry>) -> Entry {
+    let mut entries = vec![
+        key_item(&L10N.tr("undo"), "Ctrl+Z"),
+        key_item(&L10N.tr("redo"), "Shift+Ctrl+Z"),
+        Entry::separator(),
+        key_item(&L10N.tr("cut"), "Ctrl+X"),
+        key_item(&L10N.tr("copy"), "Ctrl+C"),
+        key_item(&L10N.tr("paste"), "Ctrl+V"),
+        key_item(&L10N.tr("select-all"), "Ctrl+A"),
+    ];
+    if !extra.is_empty() {
+        entries.push(Entry::separator());
+        entries.extend(extra);
+    }
+    Entry::submenu(&L10N.tr("edit"), entries)
 }
 
 pub fn settings() -> Entry {

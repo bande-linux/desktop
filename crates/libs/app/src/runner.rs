@@ -5,19 +5,21 @@ use std::path::Path;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use bande_app_menu::{AppMenu, Standard, shortcut_action};
-use bande_toolkit::ui::{Event, shortcut_pressed};
+use bande_app_menu::{AppMenu, KEY_ACTION, Standard, shortcut_action};
+use bande_toolkit::ui::{Event, parse_shortcut, shortcut_pressed};
 use bande_toolkit::{Rect, Scene, Surfaces, Window, WindowEvent};
 
+use crate::cx::Content;
 use crate::instance::{self, Claim, Instance, Request};
 use crate::menus::assemble;
-use crate::{Cx, Error, Info, Program, View, WindowId};
+use crate::{Cx, Error, Info, Kind, Program, WindowId};
 
 #[derive(Debug, Clone, Copy)]
 enum Source {
     Menu,
     Instance,
     Program(usize),
+    View(WindowId, usize),
 }
 
 struct Runner<P: Program> {
@@ -88,10 +90,70 @@ impl<P: Program> Runner<P> {
         }
     }
 
+    fn is_settings(&self, window: WindowId) -> bool {
+        self.cx
+            .index(window)
+            .is_some_and(|index| matches!(self.cx.views[index].1, Content::Settings(_)))
+    }
+
     fn close(&mut self, window: WindowId) {
-        if self.program.should_close(&mut self.cx, window) {
+        if self.is_settings(window) || self.program.should_close(&mut self.cx, window) {
             self.cx.close(window);
         }
+    }
+
+    fn raise(&mut self, window: WindowId, token: Option<String>) {
+        let Some(index) = self.cx.index(window) else {
+            return;
+        };
+        let window = &mut self.cx.windows[index];
+        let token = match token {
+            Some(token) => Ok(token),
+            None => window.activation_token(self.cx.info.id),
+        };
+        if let Err(error) = token.and_then(|token| window.activate(&token)) {
+            tracing::warn!("cannot raise the window: {error}");
+        }
+    }
+
+    fn open_settings(&mut self) {
+        let Some(settings) = &self.cx.info.settings else {
+            return;
+        };
+        let shown = self
+            .cx
+            .views
+            .iter()
+            .zip(&self.cx.windows)
+            .find(|((_, content), window)| {
+                matches!(content, Content::Settings(_)) && !window.is_closed()
+            })
+            .map(|((id, _), _)| *id);
+        if let Some(window) = shown {
+            return self.raise(window, None);
+        }
+        let view = settings.view;
+        if let Err(error) = self.cx.open_content(
+            Kind::Main,
+            &(settings.title)(),
+            settings.size,
+            |appearance| Content::Settings(view(appearance)),
+        ) {
+            tracing::warn!("cannot open the settings: {error}");
+        }
+    }
+
+    fn press(&mut self, window: WindowId, shortcut: &str) {
+        let (Some(index), Some((key, modifiers))) =
+            (self.cx.index(window), parse_shortcut(shortcut))
+        else {
+            return;
+        };
+        self.deliver(
+            index,
+            window,
+            WindowEvent::Input(Event::Key { key, modifiers }),
+        );
     }
 
     fn quit(&mut self) {
@@ -101,14 +163,21 @@ impl<P: Program> Runner<P> {
     }
 
     fn perform(&mut self, window: WindowId, action: &str) {
+        if let Some(shortcut) = action.strip_prefix(KEY_ACTION) {
+            return self.press(window, shortcut);
+        }
         let Some(standard) = Standard::parse(action) else {
             self.program.command(&mut self.cx, window, action);
             self.cx.menus_changed = true;
             return;
         };
-        let result = match (standard, self.cx.window(window)) {
-            (Standard::Hide | Standard::Minimize, Some((window, _))) => window.minimize(),
-            (Standard::Zoom, Some((window, _))) => window.toggle_zoom(),
+        let shown = self
+            .cx
+            .index(window)
+            .map(|index| &mut self.cx.windows[index]);
+        let result = match (standard, shown) {
+            (Standard::Hide | Standard::Minimize, Some(window)) => window.minimize(),
+            (Standard::Zoom, Some(window)) => window.toggle_zoom(),
             (Standard::Quit, _) => {
                 self.quit();
                 Ok(())
@@ -117,7 +186,11 @@ impl<P: Program> Runner<P> {
                 self.close(window);
                 Ok(())
             }
-            (Standard::Settings, _) | (_, None) => Ok(()),
+            (Standard::Settings, _) => {
+                self.open_settings();
+                Ok(())
+            }
+            (_, None) => Ok(()),
         };
         if let Err(error) = result {
             tracing::warn!("cannot {action}: {error}");
@@ -127,16 +200,24 @@ impl<P: Program> Runner<P> {
     fn deliver(&mut self, index: usize, window: WindowId, event: WindowEvent) -> bool {
         let handled = self.cx.views[index]
             .1
+            .view()
             .event(&mut self.cx.windows[index], event);
         if handled {
             self.cx.windows[index].request_redraw();
-            self.program.changed(&mut self.cx, window);
+            self.changed(index, window);
         }
         handled
     }
 
+    fn changed(&mut self, index: usize, window: WindowId) {
+        if matches!(self.cx.views[index].1, Content::App(_)) {
+            self.program.changed(&mut self.cx, window);
+        }
+    }
+
     fn key(&mut self, index: usize, window: WindowId, input: Event) {
-        if let Some(standard) = self.cx.info.keys.standard(&input) {
+        let settings = self.cx.info.settings.is_some();
+        if let Some(standard) = self.cx.info.keys.standard(&input, settings) {
             return self.perform(window, standard.action());
         }
         if self.deliver(index, window, WindowEvent::Input(input.clone())) {
@@ -163,19 +244,8 @@ impl<P: Program> Runner<P> {
             .last()
             .map(|(id, _)| *id)
             .filter(|id| Some(*id) != newest);
-        let id = self.cx.info.id;
-        let Some((window, _)) = opened
-            .or_else(|| self.cx.focused())
-            .and_then(|target| self.cx.window(target))
-        else {
-            return;
-        };
-        let token = match request.token {
-            Some(token) => Ok(token),
-            None => window.activation_token(id),
-        };
-        if let Err(error) = token.and_then(|token| window.activate(&token)) {
-            tracing::warn!("cannot raise the window: {error}");
+        if let Some(window) = opened.or_else(|| self.cx.focused()) {
+            self.raise(window, request.token);
         }
     }
 
@@ -184,7 +254,7 @@ impl<P: Program> Runner<P> {
             self.cx.focused = Some(window);
             self.cx.menus_changed = true;
         }
-        self.cx.views[index].1.set_active(focused);
+        self.cx.views[index].1.view().set_active(focused);
         self.cx.windows[index].request_redraw();
     }
 }
@@ -199,7 +269,10 @@ impl<P: Program> Surfaces for Runner<P> {
     }
 
     fn scene(&mut self, index: usize) -> Scene {
-        self.cx.views[index].1.scene(&mut self.cx.windows[index])
+        self.cx.views[index]
+            .1
+            .view()
+            .scene(&mut self.cx.windows[index])
     }
 
     fn event(&mut self, index: usize, event: WindowEvent) {
@@ -212,7 +285,7 @@ impl<P: Program> Surfaces for Runner<P> {
             WindowEvent::QuitRequested => self.quit(),
             WindowEvent::Focus(focused) => self.focus(index, window, focused),
             WindowEvent::AppearanceChanged(appearance) => {
-                self.cx.views[index].1.set_appearance(appearance);
+                self.cx.views[index].1.view().set_appearance(appearance);
                 self.cx.windows[index].request_redraw();
             }
             WindowEvent::Input(input @ Event::Key { .. }) => self.key(index, window, input),
@@ -246,6 +319,15 @@ impl<P: Program> Surfaces for Runner<P> {
             fds.push(fd);
             sources.push(Source::Program(index));
         }
+        for ((window, content), shown) in self.cx.views.iter().zip(&self.cx.windows) {
+            if shown.is_closed() {
+                continue;
+            }
+            for (index, fd) in content.view_ref().sources().into_iter().enumerate() {
+                fds.push(fd);
+                sources.push(Source::View(*window, index));
+            }
+        }
         *self.sources.borrow_mut() = sources;
         fds
     }
@@ -276,6 +358,17 @@ impl<P: Program> Surfaces for Runner<P> {
                 }
             }
             Some(Source::Program(index)) => self.program.source_ready(&mut self.cx, index),
+            Some(Source::View(window, source)) => {
+                if let Some(index) = self.cx.index(window)
+                    && self.cx.views[index]
+                        .1
+                        .view()
+                        .source_ready(&mut self.cx.windows[index], source)
+                {
+                    self.cx.windows[index].request_redraw();
+                    self.changed(index, window);
+                }
+            }
             None => {}
         }
         self.publish_menus();
@@ -297,15 +390,15 @@ impl<P: Program> Surfaces for Runner<P> {
     }
 
     fn animating(&self, index: usize) -> bool {
-        self.cx.views[index].1.animating()
+        self.cx.views[index].1.view_ref().animating()
     }
 
     fn accessibility(&self, index: usize) -> Option<TreeUpdate> {
-        self.cx.views[index].1.accessibility()
+        self.cx.views[index].1.view_ref().accessibility()
     }
 
     fn text_input_area(&self, index: usize) -> Option<Rect> {
-        self.cx.views[index].1.text_input_area()
+        self.cx.views[index].1.view_ref().text_input_area()
     }
 
     fn closed(&mut self) -> bool {

@@ -27,6 +27,13 @@ pub struct Info {
     pub version: &'static str,
     pub name: fn() -> String,
     pub keys: Keys,
+    pub settings: Option<Settings>,
+}
+
+pub struct Settings {
+    pub title: fn() -> String,
+    pub size: (u32, u32),
+    pub view: fn(Appearance) -> Box<dyn View>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +63,14 @@ pub trait View {
     fn set_appearance(&mut self, appearance: Appearance);
 
     fn set_active(&mut self, _active: bool) {}
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        Vec::new()
+    }
+
+    fn source_ready(&mut self, _window: &mut Window, _index: usize) -> bool {
+        false
+    }
 
     fn animating(&self) -> bool {
         false

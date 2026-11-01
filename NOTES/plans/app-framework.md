@@ -650,6 +650,19 @@ Preconditions: apps-split M6 done (the shared pin, `ci/gate.sh`, `with-desktop.s
 - Tests: Copy from the Edit menu copies the selection of a focused text field (headless);
   `--settings` runs the settings function and not `start`.
 - Done when: the tests pass.
+- **Status: done 2026-11-01** (`appfw/m4-settings-edit`). Decided 2026-11-01 under D3 (one
+  process for all windows): Settings… opens a window of the app's own process, not a
+  `--settings` process, so there is no `<id>.Settings` name and no spawn.
+  `Info.settings: Option<Settings { title, size, view }>` builds the view (normally
+  `bande_app_settings::SettingsWindow`, now a `View` with its file watch as a view source);
+  Ctrl+, (Shift+Ctrl+, with `Keys::Shifted`) and the App menu entry open it or raise the open
+  one; Close Window closes it without asking the app. `View` gained `sources`/`source_ready`.
+  The Edit menu is `bande_app_menu::edit_submenu(extra)` (with `key_item` for apps that build
+  their own, as Files does); a `key:<shortcut>` action reaches the focused view as that key
+  press and never falls back to the menus again. The headless test clicks Edit ▸ Copy over
+  dbusmenu and checks the key reaches the focused view (the toolkit's own tests cover a text
+  field copying on Ctrl+C). `Cx::state_file(name)` is `$XDG_STATE_HOME/bande/<name>`.
+  `bande_app_settings::run` stays until Terminal migrates (M11), then goes in M12.
 
 **M5. Pilot: Activity Monitor** (2 h)
 - Monitor's `main.rs` moves onto `bande-app` (`Launch::Single`: a second `bande-monitor`

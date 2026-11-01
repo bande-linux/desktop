@@ -8,8 +8,8 @@ use std::sync::{Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use bande_app::{Cx, Error, Info, Keys, Kind, Menus, Program, View, WindowId};
-use bande_app_menu::Entry;
+use bande_app::{Cx, Error, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
+use bande_app_menu::{Entry, MENU_PATH, edit_submenu};
 use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
 use bande_test_bus::SessionBus;
 use bande_toolkit::ui::{Event, Key};
@@ -27,6 +27,7 @@ const KEY_Q: u32 = 16;
 const KEY_W: u32 = 17;
 const KEY_C: u32 = 46;
 const KEY_N: u32 = 49;
+const KEY_COMMA: u32 = 51;
 const NEW: &str = "new";
 const COPY_ALL: &str = "copy-all";
 
@@ -41,6 +42,8 @@ enum Seen {
     Command(WindowId, String),
     AskedToClose(WindowId),
     Asked(Vec<String>, PathBuf),
+    SettingsBuilt,
+    SettingsActive,
 }
 
 fn record(seen: Seen) {
@@ -102,6 +105,37 @@ impl View for Pane {
     }
 }
 
+struct SettingsPane;
+
+impl View for SettingsPane {
+    fn scene(&mut self, window: &mut Window) -> Scene {
+        let (width, height) = window.size();
+        Scene {
+            width,
+            height,
+            background: window.appearance().palette().sheet,
+            items: Vec::new(),
+        }
+    }
+
+    fn event(&mut self, _window: &mut Window, _event: WindowEvent) -> bool {
+        false
+    }
+
+    fn set_appearance(&mut self, _appearance: Appearance) {}
+
+    fn set_active(&mut self, active: bool) {
+        if active {
+            record(Seen::SettingsActive);
+        }
+    }
+}
+
+fn settings_pane(_appearance: Appearance) -> Box<dyn View> {
+    record(Seen::SettingsBuilt);
+    Box::new(SettingsPane)
+}
+
 struct Example {
     refused: bool,
 }
@@ -127,13 +161,16 @@ impl Program for Example {
 
     fn menus(&self, _cx: &Cx<Self>) -> Menus {
         Menus {
-            menus: vec![Entry::submenu(
-                "File",
-                vec![
-                    Entry::item("New", NEW).shortcut("Ctrl+N"),
-                    Entry::item("Copy All", COPY_ALL).shortcut("Ctrl+C"),
-                ],
-            )],
+            menus: vec![
+                Entry::submenu(
+                    "File",
+                    vec![
+                        Entry::item("New", NEW).shortcut("Ctrl+N"),
+                        Entry::item("Copy All", COPY_ALL).shortcut("Ctrl+C"),
+                    ],
+                ),
+                edit_submenu(Vec::new()),
+            ],
             window: Vec::new(),
         }
     }
@@ -158,15 +195,61 @@ static INFO: Info = Info {
     version: "1.2.3",
     name: || "Example".to_owned(),
     keys: Keys::Standard,
+    settings: Some(Settings {
+        title: || "Example Settings".to_owned(),
+        size: (160, 100),
+        view: settings_pane,
+    }),
 };
 
-struct Settings;
+struct Portal;
 
 #[zbus::interface(name = "org.freedesktop.portal.Settings")]
-impl Settings {
+impl Portal {
     fn read_all(&self, _namespaces: Vec<String>) -> HashMap<String, HashMap<String, OwnedValue>> {
         HashMap::new()
     }
+}
+
+type Layout = (i32, HashMap<String, OwnedValue>, Vec<OwnedValue>);
+
+fn menu_item(node: &Layout, wanted: &str) -> Option<i32> {
+    let (id, properties, children) = node;
+    let label = properties
+        .get("label")
+        .and_then(|label| String::try_from(label.try_clone().ok()?).ok());
+    if label.as_deref() == Some(wanted) {
+        return Some(*id);
+    }
+    children.iter().find_map(|child| {
+        let child: Layout = child.try_clone().ok()?.try_into().ok()?;
+        menu_item(&child, wanted)
+    })
+}
+
+fn click_menu_item(client: &zbus::blocking::Connection, label: &str) {
+    let (_, root): (u32, Layout) = client
+        .call_method(
+            Some(INFO.id),
+            MENU_PATH,
+            Some("com.canonical.dbusmenu"),
+            "GetLayout",
+            &(0, -1, Vec::<String>::new()),
+        )
+        .expect("GetLayout")
+        .body()
+        .deserialize()
+        .expect("layout");
+    let id = menu_item(&root, label).expect("the menu item");
+    client
+        .call_method(
+            Some(INFO.id),
+            MENU_PATH,
+            Some("com.canonical.dbusmenu"),
+            "Event",
+            &(id, "clicked", Value::from(""), 0u32),
+        )
+        .expect("Event");
 }
 
 struct Desktop {
@@ -232,7 +315,7 @@ fn windows_share_keys_menus_appearance_closing_and_quitting() {
     let portal = bus.connect().expect("portal connection");
     portal
         .object_server()
-        .at(PORTAL_PATH, Settings)
+        .at(PORTAL_PATH, Portal)
         .expect("serve the settings");
     portal
         .request_name("org.freedesktop.portal.Desktop")
@@ -305,6 +388,27 @@ fn windows_share_keys_menus_appearance_closing_and_quitting() {
     assert_eq!(
         desktop.since(mark),
         [Seen::Copied(second), Seen::Command(second, NEW.to_owned())]
+    );
+
+    let mark = desktop.seen.len();
+    let menu_bar = bus.connect().expect("menu bar connection");
+    click_menu_item(&menu_bar, "Copy");
+    desktop.wait_for_after(mark, &Seen::Copied(second));
+
+    desktop.chord(KEY_COMMA);
+    desktop.wait_for(&Seen::SettingsActive);
+    let mark = desktop.seen.len();
+    desktop.chord(KEY_COMMA);
+    desktop.settle();
+    desktop.chord(KEY_W);
+    desktop.wait_for_after(mark, &Seen::Active(second));
+    assert_eq!(
+        desktop
+            .seen
+            .iter()
+            .filter(|seen| **seen == Seen::SettingsBuilt)
+            .count(),
+        1
     );
 
     desktop.chord(KEY_W);

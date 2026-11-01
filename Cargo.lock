@@ -369,6 +369,7 @@ dependencies = [
  "bande-log",
  "bande-test-bus",
  "bande-toolkit",
+ "bande-xdg",
  "smithay",
  "tracing",
  "zbus",
@@ -389,6 +390,7 @@ name = "bande-app-settings"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bande-app",
  "bande-toolkit",
  "bande-watch",
  "bande-xdg",

@@ -122,6 +122,7 @@ pub struct Network {
     pub known: bool,
     pub current: bool,
     access_point: OwnedObjectPath,
+    access_points: Vec<(OwnedObjectPath, u8)>,
 }
 
 impl Network {
@@ -163,12 +164,28 @@ pub fn strength_signal(message: &zbus::Message) -> Option<Option<u8>> {
 }
 
 pub fn set_strength(networks: &mut [Network], access_point: &str, strength: u8) -> bool {
-    let Some(network) = networks
-        .iter_mut()
-        .find(|network| network.access_point.as_str() == access_point)
+    let Some(network) = networks.iter_mut().find(|network| {
+        network
+            .access_points
+            .iter()
+            .any(|(path, _)| path.as_str() == access_point)
+    }) else {
+        return false;
+    };
+    for (path, known) in &mut network.access_points {
+        if path.as_str() == access_point {
+            *known = strength;
+        }
+    }
+    let Some((strongest, strength)) = network
+        .access_points
+        .iter()
+        .max_by_key(|(_, strength)| *strength)
+        .cloned()
     else {
         return false;
     };
+    network.access_point = strongest;
     if network.strength == strength {
         return false;
     }
@@ -336,21 +353,26 @@ impl NetworkManager {
             if ssid.is_empty() {
                 continue;
             }
+            let strength = point.strength()?;
             let network = Network {
-                strength: point.strength()?,
+                strength,
                 security: Security::of(point.flags()?, point.wpa_flags()?, point.rsn_flags()?),
                 known: saved.iter().any(|(saved, _)| *saved == ssid),
                 current: path == active,
                 ssid,
-                access_point: path,
+                access_point: path.clone(),
+                access_points: vec![(path, strength)],
             };
             match networks.iter_mut().find(|seen| seen.ssid == network.ssid) {
                 Some(seen) => {
                     let current = seen.current || network.current;
+                    let mut access_points = std::mem::take(&mut seen.access_points);
+                    access_points.extend(network.access_points.iter().cloned());
                     if network.strength > seen.strength {
                         *seen = network;
                     }
                     seen.current = current;
+                    seen.access_points = access_points;
                 }
                 None => networks.push(network),
             }
@@ -384,8 +406,11 @@ impl NetworkManager {
                         .map_err(refused)
                 };
                 let active = match activate() {
-                    Err(_) if self.release_stale_interface(&connection)? => activate()?,
-                    activated => activated?,
+                    Err(error) => match self.release_stale_interface(&connection) {
+                        Ok(true) => activate()?,
+                        _ => return Err(error),
+                    },
+                    Ok(active) => active,
                 };
                 (None, active)
             }
@@ -501,13 +526,15 @@ mod tests {
     use super::{Network, Security, set_strength};
 
     fn network(ssid: &str, strength: u8, access_point: &str) -> Network {
+        let access_point = OwnedObjectPath::try_from(access_point).unwrap();
         Network {
             ssid: ssid.as_bytes().to_vec(),
             strength,
             security: Security::Open,
             known: false,
             current: false,
-            access_point: OwnedObjectPath::try_from(access_point).unwrap(),
+            access_point: access_point.clone(),
+            access_points: vec![(access_point, strength)],
         }
     }
 
@@ -523,5 +550,19 @@ mod tests {
         assert!(!set_strength(&mut networks, "/ap/2", 90));
         assert!(!set_strength(&mut networks, "/ap/3", 10));
         assert_eq!(networks[1].strength, 70);
+    }
+
+    #[test]
+    fn a_network_with_several_access_points_shows_the_strongest_as_each_one_changes() {
+        let mut home = network("home", 80, "/ap/1");
+        home.access_points
+            .push((OwnedObjectPath::try_from("/ap/2").unwrap(), 50));
+        let mut networks = vec![home, network("cafe", 60, "/ap/3")];
+        assert!(!set_strength(&mut networks, "/ap/2", 30));
+        assert_eq!(networks[0].strength, 80);
+        assert!(set_strength(&mut networks, "/ap/1", 20));
+        assert_eq!(networks[0].name(), "cafe");
+        assert_eq!(networks[1].strength, 30);
+        assert_eq!(networks[1].access_point.as_str(), "/ap/2");
     }
 }

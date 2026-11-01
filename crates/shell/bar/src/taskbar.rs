@@ -1300,7 +1300,8 @@ impl TaskbarState {
         let overflowing = wanted(icon) > room;
         let more_cell = icon + 2.0 * RAIL_PADDING;
         let limit = if overflowing { room - more_cell } else { room };
-        let cross = ((rail.width - thickness(self.icon_size)) / 2.0).round();
+        let thick = thickness(self.icon_size);
+        let cross = ((rail.width - thick) / 2.0).round();
         self.panel = Rect::new(0.0, rail.top, rail.width, rail.bottom - rail.top);
         let before = self
             .slots
@@ -1626,7 +1627,6 @@ impl TaskbarState {
                 }
                 Key::More => {}
                 Key::Trash => {
-                    self.paint_name(slot, cell, &mut slot_items);
                     let rect = scaled(self.icon_rect(cell), cx.sample(&slot.press));
                     let image = if self.trash.is_full {
                         self.trash.full.as_ref().or(self.trash.empty.as_ref())

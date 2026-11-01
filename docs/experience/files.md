@@ -40,6 +40,7 @@ Checked in `crates/apps/files/src`, `crates/libs/fs`, `crates/libs/preview` and 
 | Search | Ctrl+F; fuzzy name search over the `bande-search` index; scope "this folder" or Home; results in a list with a Where column; Recents (Shift+Ctrl+F) | `search.rs` |
 | Go | Back, Forward, Enclosing Folder, Desktop, Documents, Downloads, Home, Recents, Go to Folder (Ctrl+L, relative paths and `~`); Back and Forward on Alt+Left and Right, Enclosing Folder on Alt+Up, Home on Alt+Home | `menu_bar.rs`, `view.rs` |
 | Watching | inotify on shown folders, settled for 80 ms, then the whole folder is read again | `libs/fs/src/watch.rs`, `browser.rs` |
+| Settings | Files ▸ Settings… (Ctrl+,): where new windows open (Home, Desktop, Documents, Downloads, Recents), the default view for folders without a remembered one, show hidden files (also Ctrl+H, remembered for every window), warn before emptying the Trash, remove items from the Trash after 30 days (while Files runs, at start and daily; off by default), search in the current folder or Home. Saved to `~/.config/bande/files.conf` and applied live in every window. Extensions are always shown; long names are cut in the middle | `settings.rs`, `main.rs`, `libs/app-settings` |
 
 **What is missing or rough, in short:** the column view shows nothing for a selected file; the list
 view cannot open folders in place; Quick Look and the inspector are thin; there is no batch rename,
@@ -152,7 +153,6 @@ it, and on Select All in the list view. Slice F1 measures it; F2–F4 remove it.
 | The menu says "Undo", not "Undo Move of 3 Items" | You cannot tell what Ctrl+Z will do (proposal: the menu names the action) | now | S |
 | Copy progress only inside the window | Hidden behind other windows, a long copy is invisible; the bar shows progress for apps through LauncherEntry | now | S |
 | Eject fails without naming the app that holds the volume | "Busy" without a culprit is a dead end | later | M |
-| Remove from Trash after 30 days | One checkbox in the proposal; not before the basics | later | S |
 | Service menus and Quick Actions as a framework | Built-in actions (compress, terminal) cover the common ones | never | — |
 | Creating aliases or links | One kind of reference, the sidebar favourite, is enough (proposal) | never | — |
 

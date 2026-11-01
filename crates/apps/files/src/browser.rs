@@ -1101,8 +1101,14 @@ impl Browser {
     }
 
     pub fn toggle_hidden(&mut self) {
-        self.show_hidden = !self.show_hidden;
-        self.reload();
+        self.set_show_hidden(!self.show_hidden);
+    }
+
+    pub fn set_show_hidden(&mut self, show: bool) {
+        if show != self.show_hidden {
+            self.show_hidden = show;
+            self.reload();
+        }
     }
 
     pub fn reveal(&mut self, path: &Path) {

@@ -244,6 +244,23 @@ Each milestone is one branch from `main` and leaves it green. Files milestones 5
   (`terminal/src/keys.rs:288` and the Files view). Milestone 4 keeps the menu text in one
   constant, but each app still matches the key itself.
 
+## Status
+
+- M1 merged earlier.
+- M2-M4 merged: `crates/libs/app-settings` (`Stored`, `SettingsWatch`, `SettingsWindow`, `run`),
+  `bande_toolkit::ui::Form`, `bande_app_menu::settings()` / `Standard::Settings` on `Ctrl+,`
+  (Terminal keeps `Shift+Ctrl+,`). Terminal runs on them.
+- M5-M7 and M9 merged without `wip/files-depth-3` (still unmerged): Files ▸ Settings… with
+  General (new windows show, default view, show hidden files), Trash (warn before emptying,
+  remove after 30 days) and Search (search in). Ctrl+H flips the remembered setting for every
+  window and tab. Changes apply live through the watch. New Window (Ctrl+N) now opens the
+  "New windows show" place instead of the current folder, as in the Finder.
+- Left: "Keep folders on top" (needs `folders_first` in `bande_fs::Sort` and the file chooser),
+  "Last Folder" as a new-window choice (Files has no record of the last folder shown; the view
+  memory is ordered by view changes), and M8 (Sidebar section and following `files-sidebar`
+  with the watch). The default view applies to new windows only; an open window keeps its view.
+  The "Search in Home" choice has no test (it would index the real home in the test run).
+
 ## Decisions for the owner
 
 1. **Extensions**: always show them and truncate in the middle (recommended), or also add a
@@ -254,3 +271,8 @@ Each milestone is one branch from `main` and leaves it green. Files milestones 5
    in the Finder (recommended), or keep it per window and only set the starting value?
 4. **Trash after 30 days**: run it only while Files is running (recommended), or as a small
    session service that also runs when Files is closed?
+
+Decided overnight 2026-11-01: 1. extensions are always shown and long names are cut in the
+middle, with no toggle; 2. one small file per app, `~/.config/bande/<app>.conf`; 3. one
+remembered show-hidden setting that Ctrl+H flips for every window; 4. the 30-day purge runs only
+while Files runs (plan recommendation; owner may revisit).

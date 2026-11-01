@@ -1,0 +1,21 @@
+[package]
+name = "bande-app-settings"
+description = "Bande app settings: one small file per app, followed live, and the settings window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+tracing.workspace = true
+bande-toolkit.workspace = true
+bande-watch.workspace = true
+bande-xdg.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

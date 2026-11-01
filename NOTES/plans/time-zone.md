@@ -189,3 +189,7 @@ Verification on the mini after commit 3, and again after 4:
 
 None required. Commit 5 is outside the literal complaint; drop it if you want this kept
 strictly to the zone change.
+
+Decided overnight 2026-11-01: commit 5 kept and merged (plan recommendation; owner may revisit).
+The packagekit action is no longer checked on main, so the test makes the hostname action fail
+instead; an action that cannot be checked is logged and counts as refused.

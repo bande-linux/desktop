@@ -3,7 +3,9 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use bande_app_menu::{AppMenu, Entry, MENU_PATH, SHELL_ACTION_PROPERTY, ShellAction, app_submenu};
+use bande_app_menu::{
+    AppMenu, Entry, MENU_PATH, SHELL_ACTION_PROPERTY, ShellAction, Standard, app_submenu, settings,
+};
 use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
@@ -189,6 +191,35 @@ fn the_standard_app_menu_leaves_about_and_hiding_to_the_menu_bar() {
             ("Show All".to_owned(), Some(ShellAction::ShowAll)),
             ("Quit Example".to_owned(), None),
         ]
+    );
+}
+
+#[test]
+fn the_standard_settings_entry_sits_in_the_app_menu_with_its_shortcut() {
+    let bus = SessionBus::start().expect("bus");
+    let mut menu = AppMenu::export_on(
+        bus.connect().expect("app"),
+        APP,
+        vec![app_submenu("Example", vec![settings()])],
+    )
+    .expect("export");
+    let client = bus.connect().expect("client");
+
+    let (_, (_, _, items)) = get_layout(&client, 1);
+    let (id, _) = items
+        .iter()
+        .map(label)
+        .find(|(_, label)| label == "Settings…")
+        .expect("a Settings… entry");
+    let (_, (_, properties, _)) = get_layout(&client, id);
+    assert_eq!(
+        property(&properties, "shortcut").map(ToString::to_string),
+        Some(r#"[["Control", ","]]"#.to_owned())
+    );
+    click(&client, id);
+    assert_eq!(
+        wait_for_actions(&mut menu),
+        [Standard::Settings.action().to_owned()]
     );
 }
 

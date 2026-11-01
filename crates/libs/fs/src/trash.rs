@@ -436,6 +436,20 @@ impl Trash {
     pub fn empty(&self) -> io::Result<()> {
         self.items().iter().try_for_each(erase)
     }
+
+    pub fn purge(&self, before: DateTime) -> io::Result<()> {
+        let old = self
+            .items()
+            .into_iter()
+            .filter(|item| item.deleted.is_some_and(|deleted| deleted < before));
+        for item in old {
+            match erase(&item) {
+                Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error),
+                _ => {}
+            }
+        }
+        Ok(())
+    }
 }
 
 pub fn restore_to(item: &TrashItem, destination: &Path) -> io::Result<()> {

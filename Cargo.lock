@@ -392,6 +392,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-app-settings"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-toolkit",
+ "bande-watch",
+ "bande-xdg",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "bande-audio"
 version = "0.1.0"
 dependencies = [
@@ -644,6 +656,7 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "bande-app-menu",
+ "bande-app-settings",
  "bande-fs",
  "bande-golden",
  "bande-l10n",
@@ -656,6 +669,7 @@ dependencies = [
  "bande-volumes",
  "bande-xdg",
  "image",
+ "jiff",
  "rustix 1.1.6",
  "tempfile",
  "tracing",
@@ -1161,6 +1175,7 @@ dependencies = [
  "accesskit",
  "alacritty_terminal",
  "bande-app-menu",
+ "bande-app-settings",
  "bande-design",
  "bande-golden",
  "bande-l10n",
@@ -1168,7 +1183,6 @@ dependencies = [
  "bande-notify",
  "bande-spring",
  "bande-toolkit",
- "bande-watch",
  "bande-xdg",
  "tempfile",
  "tracing",

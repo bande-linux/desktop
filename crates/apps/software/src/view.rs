@@ -21,6 +21,9 @@ pub const WINDOW_SIZE: (u32, u32) = (720, 640);
 const SPACING: f32 = 12.0;
 const PADDING: f32 = 24.0;
 const MAX_ROWS: usize = 50;
+const SETTINGS: &str = "bande-settings";
+const SETTINGS_ID: &str = "org.bande.Settings";
+const SOFTWARE_UPDATE_PANE: &str = "software-update";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
@@ -37,6 +40,23 @@ enum Intent {
     Back,
     Install(usize),
     Open(usize),
+    Remove(usize),
+    UpdateAll,
+    ConfirmRemoval,
+    CancelRemoval,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Task {
+    Install,
+    Remove,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Removal {
+    key: String,
+    id: String,
+    also: Vec<String>,
 }
 
 type Widgets = Vec<Box<dyn Widget>>;
@@ -83,6 +103,13 @@ fn source(bundle: &Bundle) -> String {
     }
 }
 
+fn open_software_update() {
+    let command = [SETTINGS.to_owned(), SOFTWARE_UPDATE_PANE.to_owned()];
+    if let Err(error) = bande_xdg::spawn_detached(SETTINGS_ID, &command, None, None) {
+        tracing::warn!("cannot open Software Update: {error}");
+    }
+}
+
 fn deb(app: &Component) -> Option<&str> {
     app.bundles.iter().find_map(|bundle| match bundle {
         Bundle::Deb(package) => Some(package.as_str()),
@@ -93,8 +120,10 @@ fn deb(app: &Component) -> Option<&str> {
 pub struct Software {
     apps: Vec<Component>,
     installed: HashSet<String>,
-    installing: HashMap<String, Progress>,
-    failed: HashMap<String, String>,
+    busy: HashMap<String, (Task, Progress)>,
+    failed: HashMap<String, (Task, String)>,
+    removal: Option<Removal>,
+    updates: HashSet<String>,
     jobs: Sender<Job>,
     inbox: Inbox<Message>,
     page: Page,
@@ -116,6 +145,9 @@ impl Software {
         text: TextSystem,
     ) -> io::Result<Self> {
         let (jobs, inbox) = worker::start(client, arch.to_owned())?;
+        if jobs.send(Job::Updates).is_err() {
+            tracing::warn!("the software worker stopped");
+        }
         let intents: Rc<RefCell<Vec<Intent>>> = Rc::default();
         let typed = Rc::clone(&intents);
         let search = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
@@ -134,8 +166,10 @@ impl Software {
         let mut software = Self {
             apps: apps.into_iter().filter(|app| !app.needs_x11).collect(),
             installed,
-            installing: HashMap::new(),
+            busy: HashMap::new(),
             failed: HashMap::new(),
+            removal: None,
+            updates: HashSet::new(),
             jobs,
             inbox,
             page: Page::Discover,
@@ -186,7 +220,10 @@ impl Software {
         }
         for intent in intents {
             match intent {
-                Intent::Show(Page::App(index)) => self.page = Page::App(index),
+                Intent::Show(Page::App(index)) => {
+                    self.removal = None;
+                    self.page = Page::App(index);
+                }
                 Intent::Show(page) => {
                     self.section = page;
                     self.page = page;
@@ -195,9 +232,16 @@ impl Software {
                     self.query = query;
                     self.page = self.section;
                 }
-                Intent::Back => self.page = self.section,
+                Intent::Back => {
+                    self.removal = None;
+                    self.page = self.section;
+                }
                 Intent::Install(index) => self.install(index),
                 Intent::Open(index) => self.open(index),
+                Intent::Remove(index) => self.plan_removal(index),
+                Intent::UpdateAll => open_software_update(),
+                Intent::ConfirmRemoval => self.remove(),
+                Intent::CancelRemoval => self.removal = None,
             }
         }
         self.rebuild();
@@ -207,15 +251,27 @@ impl Software {
     fn receive(&mut self, message: Message) {
         match message {
             Message::Progress(key, progress) => {
-                self.installing.insert(key, progress);
+                if let Some((_, shown)) = self.busy.get_mut(&key) {
+                    *shown = progress;
+                }
             }
             Message::Installed(key) => {
-                self.installing.remove(&key);
+                self.busy.remove(&key);
                 self.installed.insert(key);
             }
+            Message::RemovalPlanned { key, id, also } => {
+                self.busy.remove(&key);
+                self.removal = Some(Removal { key, id, also });
+            }
+            Message::Updates(names) => self.updates = names.into_iter().collect(),
+            Message::Removed(key) => {
+                self.busy.remove(&key);
+                self.installed.remove(&key);
+            }
             Message::Failed(key, details) => {
-                self.installing.remove(&key);
-                self.failed.insert(key, details);
+                if let Some((task, _)) = self.busy.remove(&key) {
+                    self.failed.insert(key, (task, details));
+                }
             }
         }
     }
@@ -228,12 +284,37 @@ impl Software {
             return;
         };
         let key = app.key().to_owned();
-        self.failed.remove(&key);
-        self.installing.insert(key.clone(), Progress::default());
         let job = Job::Install {
-            key,
+            key: key.clone(),
             package: package.to_owned(),
         };
+        self.start(key, Task::Install, job);
+    }
+
+    fn plan_removal(&mut self, index: usize) {
+        let Some(app) = self.apps.get(index) else {
+            return;
+        };
+        let Some(package) = deb(app) else {
+            return;
+        };
+        let key = app.key().to_owned();
+        let job = Job::PlanRemoval {
+            key: key.clone(),
+            package: package.to_owned(),
+        };
+        self.start(key, Task::Remove, job);
+    }
+
+    fn remove(&mut self) {
+        if let Some(Removal { key, id, .. }) = self.removal.take() {
+            self.start(key.clone(), Task::Remove, Job::Remove { key, id });
+        }
+    }
+
+    fn start(&mut self, key: String, task: Task, job: Job) {
+        self.failed.remove(&key);
+        self.busy.insert(key, (task, Progress::default()));
         if self.jobs.send(job).is_err() {
             tracing::warn!("the software worker stopped");
         }
@@ -263,32 +344,79 @@ impl Software {
         let row =
             |button: Button| boxed(Stack::new(Axis::Horizontal, 0.0, 0.0, vec![boxed(button)]));
         let mut widgets: Widgets = Vec::new();
-        if let Some(progress) = self.installing.get(key) {
-            let status = L10N.tr("installing");
+        if let Some((task, progress)) = self.busy.get(key) {
+            let status = L10N.tr(match task {
+                Task::Install => "installing",
+                Task::Remove => "removing",
+            });
             widgets.push(boxed(ProgressBar::new(
                 &status,
                 progress.percent.map(|percent| percent as f32 / 100.0),
             )));
+        } else if let Some(removal) = self.removal.as_ref().filter(|removal| removal.key == key) {
+            widgets.extend(self.confirmation(app, removal));
         } else if self.installed.contains(key) {
+            let mut buttons: Widgets = Vec::new();
             if app.launchable.is_some() {
-                widgets.push(row(self
-                    .button(&L10N.tr("open"), Intent::Open(index))
-                    .primary()));
+                buttons.push(boxed(
+                    self.button(&L10N.tr("open"), Intent::Open(index)).primary(),
+                ));
+            }
+            if deb(app).is_some() {
+                buttons.push(boxed(
+                    self.button(&L10N.tr("remove"), Intent::Remove(index)),
+                ));
+            }
+            if !buttons.is_empty() {
+                widgets.push(boxed(Stack::new(Axis::Horizontal, SPACING, 0.0, buttons)));
+            }
+            if deb(app).is_some_and(|package| self.updates.contains(package)) {
+                widgets.push(boxed(Label::new(&L10N.tr("update-available"))));
+                widgets.push(row(self.button(&L10N.tr("update-all"), Intent::UpdateAll)));
             }
         } else if deb(app).is_some() {
             widgets.push(row(self
                 .button(&L10N.tr("install"), Intent::Install(index))
                 .primary()));
         }
-        if let Some(details) = self.failed.get(key) {
+        if let Some((task, details)) = self.failed.get(key) {
+            let message = match task {
+                Task::Install => "install-failed",
+                Task::Remove => "remove-failed",
+            };
             widgets.push(boxed(Label::new(&L10N.tr_args(
-                "install-failed",
+                message,
                 [
                     ("name", app.name.clone().into()),
                     ("details", details.clone().into()),
                 ],
             ))));
         }
+        widgets
+    }
+
+    fn confirmation(&self, app: &Component, removal: &Removal) -> Widgets {
+        let mut widgets = vec![boxed(Label::new(
+            &L10N.tr_args("remove-confirm", [("name", app.name.clone().into())]),
+        ))];
+        if !removal.also.is_empty() {
+            widgets.push(boxed(Label::new(&L10N.tr_args(
+                "remove-also",
+                [("packages", removal.also.join(", ").into())],
+            ))));
+        }
+        widgets.push(boxed(Stack::new(
+            Axis::Horizontal,
+            SPACING,
+            0.0,
+            vec![
+                boxed(
+                    self.button(&L10N.tr("remove"), Intent::ConfirmRemoval)
+                        .destructive(),
+                ),
+                boxed(self.button(&L10N.tr("cancel"), Intent::CancelRemoval)),
+            ],
+        )));
         widgets
     }
 

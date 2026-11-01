@@ -83,14 +83,14 @@ gnome-calculator     org.gnome.Calculator       recommends
 gnome-clocks         org.gnome.clocks           suggests
 ```
 
-Mail and Calendar are added once each has a published release (D3), with their theme icons drawn first. Until the four apps have moved (M5), they stay in the control file as today and are not in this list. Non-app Recommends (fonts, cups, keyring, oomd and so on) stay hand-written.
+Mail and Calendar are added once each has a published release (D3), with their theme icons drawn first. Until the four apps have moved (M5), they stay in the control file as today and are not in this list. Non-app Recommends (fonts, cups, keyring, oomd and so on) stay hand-written. Since 2026-11-01 bande-desktop is the only metapackage (single-metapackage.md): its hand-written relations also carry the system around the desktop (Depends `bande-greeter (= ${binary:Version}) | x-display-manager`, `pipewire-audio`; Recommends `bande-greeter (= ${binary:Version})`, `network-manager`, `bande-apt-source`), and the default apps stay in its Recommends.
 
 ### Generation at build time
 - `packaging/bande-desktop/debian/default-apps.sh <version>` (awk, about 20 lines) prints `bande:Recommends=...` and `bande:Suggests=...` and rejects unknown sections or relations and duplicate names.
 - debian/rules: `override_dh_gencontrol: debian/default-apps.sh $(DEB_VERSION_OVERRIDE) >> debian/bande-desktop.substvars; dh_gencontrol -- -v$(DEB_VERSION_OVERRIDE)`. Writing the literal version avoids recursive substvar expansion.
 - control: Depends unchanged (hand-written desktop packages); `Recommends: ${bande:Recommends}, bande-screenshot (= ${binary:Version}), ..., fonts...`; `Suggests: ${bande:Suggests}`.
 - build-all.sh: each listed package appears unversioned in Recommends/Suggests, and no desktop-repo package (ci/release/packages) is listed.
-- install-test/run.sh: drop `[apps]` names from the "recommended and in Debian testing" loop.
+- install-test/run.sh: add the `[apps]` names to `from_the_archive` in the "recommended and in Debian testing or built here" loop, next to `bande-apt-source`.
 - apt publish.yml verify: after installing, check every Recommends of bande-desktop has a candidate from Debian or the archive (warning at first).
 - rebuild-desktop: unchanged in principle; `pinned` is the `(=` pins in control.
 - images fetch-desktop.sh: also read bande-desktop's `Recommends:` from Packages.xz; also fetch packages owned by `apps` that bande-desktop recommends, without the version-equality check; fail if one is missing unless `ALLOW_MISSING_APPS=1`.

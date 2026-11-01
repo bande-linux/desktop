@@ -192,7 +192,7 @@ jobs:
         with:
           name: bande-debs-all
           path: install-debs
-      - name: Install bande-desktop and bande-os into a clean Debian testing
+      - name: Install bande-desktop into a clean Debian testing, alone and next to another display manager
         run: |
           test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
           ci/deb/install-test/run.sh install-debs

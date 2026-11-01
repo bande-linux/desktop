@@ -186,6 +186,7 @@ impl Frame {
 #[derive(Default)]
 pub(crate) struct Chrome {
     pub(crate) title: String,
+    pub(crate) titled: bool,
     text: Option<TextSystem>,
     title_paragraph: Option<(String, Color, Paragraph)>,
     hovered: Option<Option<Control>>,
@@ -204,9 +205,10 @@ pub(crate) struct Chrome {
 }
 
 impl Chrome {
-    pub(crate) fn new(title: String) -> Self {
+    pub(crate) fn new(title: String, titled: bool) -> Self {
         Self {
             title,
+            titled,
             ..Self::default()
         }
     }
@@ -250,9 +252,17 @@ impl Chrome {
                 f64::from(content.y),
             )));
         }
-        let mut window = Node::new(Role::Window);
+        let mut window = Node::new(match self.titled {
+            true => Role::Window,
+            false => Role::Dialog,
+        });
         window.set_label(self.title.clone());
         window.set_bounds(bounds(Rect::new(0.0, 0.0, frame.width, frame.height)));
+        if !self.titled {
+            window.set_children(vec![content]);
+            tree.nodes.push((WINDOW_NODE, window));
+            return tree;
+        }
         window.set_children(vec![TITLE_BAR_NODE, content]);
         let mut bar = Node::new(Role::TitleBar);
         bar.set_label(self.title.clone());
@@ -445,7 +455,7 @@ pub fn framed_scene(
         width,
         height,
     };
-    let mut chrome = Chrome::new(title.to_owned());
+    let mut chrome = Chrome::new(title.to_owned(), true);
     chrome.regions = regions;
     chrome.header = header;
     chrome.frame_scene(

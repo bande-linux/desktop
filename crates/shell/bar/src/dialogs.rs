@@ -5,10 +5,10 @@ use std::time::{Duration, Instant};
 use crate::L10N;
 use bande_status::devices::end_session;
 use bande_status::session::{Effect, Ending, SessionEnding, Stage, facts, quitting_apps};
-use bande_toolkit::ui::{Axis, Button, Event, Key, Label, Stack, Ui, Widget};
+use bande_toolkit::ui::{Alert, Axis, Event, Key, Label, Size, Stack, Ui, Widget};
 use bande_toolkit::{
-    App, Image, Item, Palette, Point, Rect, Role, Scene, TextAlign, TextStyle, TextSystem, Window,
-    WindowEvent,
+    App, Appearance, Image, Item, Palette, Point, Rect, Role, Scene, TextAlign, TextStyle,
+    TextSystem, Window, WindowEvent,
 };
 use bande_xdg::{
     Locale, applications, current_desktops, data_dirs, find_app, find_icon, reopen_file,
@@ -17,7 +17,6 @@ use bande_xdg::{
 use zbus::blocking::Connection;
 
 pub const DIALOGS: &str = "org.bande.MenuBar";
-pub const CONFIRMATION_SIZE: (u32, u32) = (420, 130);
 const ABOUT_SIZE: (u32, u32) = (280, 190);
 const ABOUT_ICON: f32 = 64.0;
 const ABOUT_PADDING: f32 = 28.0;
@@ -47,82 +46,92 @@ enum Choice {
     Confirm,
 }
 
-fn dialog_ui(lines: Widgets, buttons: Widgets, palette: Palette) -> Ui {
-    let mut rows = lines;
-    if !buttons.is_empty() {
-        rows.push(Box::new(Stack::new(Axis::Horizontal, 12.0, 0.0, buttons)));
-    }
+fn dialog_ui(lines: Widgets, palette: Palette) -> Ui {
     Ui::new(
-        Box::new(Stack::new(Axis::Vertical, 10.0, 20.0, rows)),
+        Box::new(Stack::new(Axis::Vertical, 10.0, 20.0, lines)),
         bande_toolkit::ui::Context::new(TextSystem::new(), palette),
     )
 }
 
-fn choice_button(title: &str, choice: &Rc<Cell<Choice>>, picked: Choice) -> Button {
-    let choice = Rc::clone(choice);
-    Button::new(title, move || choice.set(picked))
-}
-
 type Widgets = Vec<Box<dyn Widget>>;
+
+const CANCEL: &str = "cancel";
+const CONFIRM: &str = "confirm";
 
 fn confirmation_ui(
     session: &SessionEnding,
     choice: &Rc<Cell<Choice>>,
-    palette: Palette,
+    appearance: Appearance,
     now: Instant,
 ) -> Ui {
     let ending = session.ending;
-    let cancel = Box::new(choice_button(
-        &L10N.tr("button-cancel"),
-        choice,
-        Choice::Cancel,
-    ));
-    let (lines, buttons): (Widgets, Widgets) = match session.stage() {
-        Stage::Asking { .. } => (
-            vec![
-                Box::new(Label::new(&ending.question())),
-                Box::new(Label::new(
-                    &ending.countdown(session.left(now) + Duration::from_millis(999)),
-                )),
-            ],
-            vec![
-                cancel,
-                Box::new(choice_button(&ending.button(), choice, Choice::Confirm).primary()),
-            ],
-        ),
-        Stage::Quitting { .. } => (vec![Box::new(Label::new(&quitting_apps()))], vec![cancel]),
-        Stage::Blocked { app_id } => (
-            vec![Box::new(Label::new(&ending.blocked(&app_name(app_id))))],
-            vec![
-                cancel,
-                Box::new(choice_button(&ending.anyway(), choice, Choice::Confirm).destructive()),
-            ],
-        ),
-        Stage::Ending => (Vec::new(), Vec::new()),
+    let picked = Rc::clone(choice);
+    let on_choice = move |action: &str| {
+        picked.set(match action {
+            CONFIRM => Choice::Confirm,
+            _ => Choice::Cancel,
+        })
     };
-    dialog_ui(lines, buttons, palette)
+    let alert = match session.stage() {
+        Stage::Asking { .. } => Alert::new(
+            &ending.question(),
+            &ending.countdown(session.left(now) + Duration::from_millis(999)),
+            on_choice,
+        )
+        .primary(&ending.button(), CONFIRM),
+        Stage::Quitting { .. } => Alert::new(&quitting_apps(), "", on_choice),
+        Stage::Blocked { app_id } => Alert::new(&ending.blocked(&app_name(app_id)), "", on_choice)
+            .destructive(&ending.anyway(), CONFIRM),
+        Stage::Ending => Alert::new("", "", on_choice),
+    }
+    .cancel(&L10N.tr("button-cancel"), CANCEL);
+    let mut ui = Ui::new(
+        Box::new(alert),
+        bande_toolkit::ui::Context::new(TextSystem::new(), appearance.palette()),
+    );
+    ui.set_appearance(appearance);
+    ui
+}
+
+fn alert_scene(ui: &mut Ui, (width, height): (u32, u32)) -> Scene {
+    let mut scene = ui.scene(width, height);
+    scene.background = ui.context().palette.overlay;
+    scene
+}
+
+fn confirmation_size(ending: Ending, appearance: Appearance, now: Instant) -> (u32, u32) {
+    let asking = SessionEnding::new(ending, now);
+    let choice = Rc::new(Cell::new(Choice::Undecided));
+    let size = confirmation_ui(&asking, &choice, appearance, now)
+        .measure(Size::new(f32::INFINITY, f32::INFINITY));
+    (size.width.ceil() as u32, size.height.ceil() as u32)
 }
 
 pub fn session_ending_scene(
     session: &SessionEnding,
-    palette: Palette,
-    (width, height): (u32, u32),
+    appearance: Appearance,
     now: Instant,
 ) -> Scene {
     let choice = Rc::new(Cell::new(Choice::Undecided));
-    confirmation_ui(session, &choice, palette, now).scene(width, height)
+    let size = confirmation_size(session.ending, appearance, now);
+    alert_scene(
+        &mut confirmation_ui(session, &choice, appearance, now),
+        size,
+    )
 }
 
 struct Confirmation {
     session: SessionEnding,
     ui: Ui,
+    size: (u32, u32),
     choice: Rc<Cell<Choice>>,
 }
 
 impl Confirmation {
     fn rebuild(&mut self, window: &mut Window, now: Instant) {
-        let palette = window.appearance().palette();
-        self.ui = confirmation_ui(&self.session, &self.choice, palette, now);
+        let appearance = window.appearance();
+        self.size = confirmation_size(self.session.ending, appearance, now);
+        self.ui = confirmation_ui(&self.session, &self.choice, appearance, now);
         window.request_redraw();
     }
 
@@ -169,9 +178,8 @@ impl Confirmation {
 }
 
 impl App for Confirmation {
-    fn scene(&mut self, window: &mut Window) -> Scene {
-        let (width, height) = window.size();
-        self.ui.scene(width, height)
+    fn scene(&mut self, _window: &mut Window) -> Scene {
+        alert_scene(&mut self.ui, self.size)
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
@@ -194,10 +202,7 @@ impl App for Confirmation {
                     window.request_redraw();
                 }
             }
-            WindowEvent::AppearanceChanged(appearance) => {
-                self.ui.set_appearance(appearance);
-                window.request_redraw();
-            }
+            WindowEvent::AppearanceChanged(_) => self.rebuild(window, Instant::now()),
             WindowEvent::AppsRunning { app_id, count } => {
                 let now = Instant::now();
                 let effect = self.session.apps_running(app_id, count, now);
@@ -225,13 +230,17 @@ impl App for Confirmation {
 }
 
 pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>> {
-    let mut window = Window::open(Role::toplevel(&ending.button(), DIALOGS), CONFIRMATION_SIZE)?;
-    report("keep the dialog in front", window.set_keep_on_top(true));
     let now = Instant::now();
+    let size = confirmation_size(ending, Appearance::default(), now);
+    let mut window = Window::open(Role::dialog(&ending.button(), DIALOGS), size)?;
+    report("keep the dialog in front", window.set_keep_on_top(true));
+    let session = SessionEnding::new(ending, now);
+    let choice = Rc::new(Cell::new(Choice::Undecided));
     let mut confirmation = Confirmation {
-        session: SessionEnding::new(ending, now),
-        ui: dialog_ui(Vec::new(), Vec::new(), window.appearance().palette()),
-        choice: Rc::new(Cell::new(Choice::Undecided)),
+        ui: confirmation_ui(&session, &choice, window.appearance(), now),
+        session,
+        size,
+        choice,
     };
     confirmation.rebuild(&mut window, now);
     bande_toolkit::run(&mut window, &mut confirmation)?;
@@ -297,7 +306,7 @@ pub fn run_about() -> Result<(), Box<dyn std::error::Error>> {
         &L10N.tr("about-desktop"),
         &format!("Bande {}", env!("CARGO_PKG_VERSION")),
     ));
-    let ui = dialog_ui(lines, Vec::new(), window.appearance().palette());
+    let ui = dialog_ui(lines, window.appearance().palette());
     bande_toolkit::run(&mut window, &mut About { ui })?;
     Ok(())
 }

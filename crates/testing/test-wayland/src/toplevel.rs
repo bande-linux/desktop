@@ -145,6 +145,20 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn set_fixed_size(
+        &mut self,
+        server: &mut Compositor,
+        index: usize,
+        width: i32,
+        height: i32,
+    ) {
+        let toplevel = self.toplevel(index);
+        toplevel.set_min_size(width, height);
+        toplevel.set_max_size(width, height);
+        self.windows[index].0.commit();
+        self.exchange(server);
+    }
+
     pub fn set_maximized(&mut self, server: &mut Compositor, index: usize, maximized: bool) {
         let toplevel = self.toplevel(index);
         if maximized {

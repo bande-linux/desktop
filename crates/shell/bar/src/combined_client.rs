@@ -11,8 +11,8 @@ use bande_toolkit::{
     Window, WindowEvent,
 };
 
-use crate::dock_client::Dock;
 use crate::menu_bar_client::MenuBarClient;
+use crate::taskbar_client::Taskbar;
 
 const BAR_NAMESPACE: &str = "bar";
 const MENU_BAR_NAMESPACE: &str = "menubar";
@@ -40,7 +40,7 @@ pub fn combined_role(icon_size: f32) -> (Role, (u32, u32)) {
 }
 
 pub struct CombinedClient {
-    dock: Dock,
+    taskbar: Taskbar,
     status: MenuBarClient<RailView>,
     status_open: bool,
     resizing: Option<f32>,
@@ -61,9 +61,9 @@ fn pointer(event: &WindowEvent) -> bool {
 }
 
 impl CombinedClient {
-    pub fn new(dock: Dock, status: MenuBarClient<RailView>) -> Self {
+    pub fn new(taskbar: Taskbar, status: MenuBarClient<RailView>) -> Self {
         Self {
-            dock,
+            taskbar,
             status,
             status_open: false,
             resizing: None,
@@ -87,10 +87,10 @@ impl CombinedClient {
             }
             (WindowEvent::Input(Event::PointerUp(pointer)), Some(_)) => {
                 self.resizing = None;
-                let collapsed = bar_width(self.dock.icon_size());
+                let collapsed = bar_width(self.taskbar.icon_size());
                 let names = pointer.position.x > (collapsed + EXPANDED_WIDTH) / 2.0;
-                if names != self.dock.names() {
-                    self.dock.set_names(names);
+                if names != self.taskbar.names() {
+                    self.taskbar.set_names(names);
                     window.request_redraw();
                 }
             }
@@ -103,17 +103,17 @@ impl CombinedClient {
     fn route(&mut self, window: &mut Window, event: WindowEvent) {
         match &event {
             _ if pointer(&event) => {
-                self.dock.event(window, event.clone());
+                self.taskbar.event(window, event.clone());
                 self.status.event(window, event);
             }
             WindowEvent::FocusShell(namespace) if namespace == MENU_BAR_NAMESPACE => {
                 self.status.event(window, event);
             }
             WindowEvent::Input(_) | WindowEvent::Drag(_) | WindowEvent::FocusShell(_) => {
-                self.dock.event(window, event);
+                self.taskbar.event(window, event);
             }
-            WindowEvent::MenuAction(_) | WindowEvent::MenuClosed if self.dock.has_menu() => {
-                self.dock.event(window, event);
+            WindowEvent::MenuAction(_) | WindowEvent::MenuClosed if self.taskbar.has_menu() => {
+                self.taskbar.event(window, event);
             }
             WindowEvent::MenuAction(_) | WindowEvent::MenuClosed => {
                 self.status.event(window, event);
@@ -121,9 +121,9 @@ impl CombinedClient {
             WindowEvent::Accessibility(request) if owns_node(request.target_node) => {
                 self.status.event(window, event);
             }
-            WindowEvent::Accessibility(_) => self.dock.event(window, event),
+            WindowEvent::Accessibility(_) => self.taskbar.event(window, event),
             _ => {
-                self.dock.event(window, event.clone());
+                self.taskbar.event(window, event.clone());
                 self.status.event(window, event);
             }
         }
@@ -134,14 +134,14 @@ impl App for CombinedClient {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         let view = self.status.view_mut();
-        view.set_icon_size(self.dock.icon_size());
-        view.set_expanded(self.dock.names());
-        self.dock.set_rail(view.apps_region(height as f32));
+        view.set_icon_size(self.taskbar.icon_size());
+        view.set_expanded(self.taskbar.names());
+        self.taskbar.set_rail(view.apps_region(height as f32));
         let mut scene = self.status.scene(window);
-        let apps = self.dock.scene(window);
+        let apps = self.taskbar.scene(window);
         scene.width = width;
         scene.items.extend(apps.items);
-        let revealed = self.dock.revealed(Instant::now());
+        let revealed = self.taskbar.revealed(Instant::now());
         if revealed < 1.0 {
             let view = self.status.view_mut();
             let hidden = -(view.width() + HIDDEN_SHADOW) * (1.0 - revealed);
@@ -180,35 +180,39 @@ impl App for CombinedClient {
         let open = self.status.view_mut().open().is_some();
         if open != self.status_open {
             self.status_open = open;
-            self.dock.set_menu_open(open);
+            self.taskbar.set_menu_open(open);
         }
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = self.dock.sources();
+        let mut sources = self.taskbar.sources();
         sources.extend(self.status.sources());
         sources
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        let docked = self.dock.sources().len();
+        let docked = self.taskbar.sources().len();
         if index < docked {
-            self.dock.source_ready(window, index);
+            self.taskbar.source_ready(window, index);
         } else {
             self.status.source_ready(window, index - docked);
         }
     }
 
     fn deadline(&self) -> Option<Instant> {
-        [self.dock.deadline(), self.status.deadline()]
+        [self.taskbar.deadline(), self.status.deadline()]
             .into_iter()
             .flatten()
             .min()
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
-        if self.dock.deadline().is_some_and(|deadline| deadline <= now) {
-            self.dock.tick(window, now);
+        if self
+            .taskbar
+            .deadline()
+            .is_some_and(|deadline| deadline <= now)
+        {
+            self.taskbar.tick(window, now);
         }
         if self
             .status
@@ -220,11 +224,11 @@ impl App for CombinedClient {
     }
 
     fn animating(&self) -> bool {
-        self.dock.animating() || self.status.animating()
+        self.taskbar.animating() || self.status.animating()
     }
 
     fn accessibility(&self) -> Option<TreeUpdate> {
-        let apps = self.dock.accessibility()?;
+        let apps = self.taskbar.accessibility()?;
         let status = self.status.accessibility()?;
         let mut root = Node::new(AccessRole::Toolbar);
         root.set_label(L10N.tr("bar"));

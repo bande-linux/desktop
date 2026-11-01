@@ -19,8 +19,8 @@ impl Window {
         let toplevel = self.state.toplevel;
         let place = |key: &str| MenuItem::new(&L10N.tr(key), key);
         let mut items = vec![
-            place("place-left").shortcut("Ctrl+Super+Left"),
-            place("place-right").shortcut("Ctrl+Super+Right"),
+            place("place-left").shortcut("Super+Left"),
+            place("place-right").shortcut("Super+Right"),
             MenuItem::separator(),
             place("place-top-left"),
             place("place-top-right"),

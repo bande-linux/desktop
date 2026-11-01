@@ -428,7 +428,6 @@ dependencies = [
  "bande-config",
  "bande-controlcenter",
  "bande-datetime",
- "bande-dock-model",
  "bande-fs",
  "bande-golden",
  "bande-inbox",
@@ -438,6 +437,7 @@ dependencies = [
  "bande-notifications",
  "bande-sound",
  "bande-status",
+ "bande-taskbar-model",
  "bande-test-wayland",
  "bande-toolkit",
  "bande-xdg",
@@ -613,16 +613,6 @@ dependencies = [
  "bande-wallpaper",
  "bande-xdg",
  "tracing",
-]
-
-[[package]]
-name = "bande-dock-model"
-version = "0.1.0"
-dependencies = [
- "bande-config",
- "bande-inbox",
- "tracing",
- "zbus",
 ]
 
 [[package]]
@@ -1150,6 +1140,16 @@ dependencies = [
  "bande-xdg",
  "rustix 1.1.6",
  "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-taskbar-model"
+version = "0.1.0"
+dependencies = [
+ "bande-config",
+ "bande-inbox",
  "tracing",
  "zbus",
 ]

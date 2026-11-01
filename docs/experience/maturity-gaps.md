@@ -162,7 +162,7 @@ polish).
 
 | Gap | Why a picky user notices | Severity | Effort | Owner | Status |
 | :--- | :--- | :---: | :---: | :--- | :--- |
-| A window's app id is matched to its desktop entry only exactly (`entry` in `shell/bar/src/dock_client.rs` and `menu_bar_client.rs`): no `StartupWMClass`, no case-insensitive match, no fallback to the last reverse-DNS part or the `Exec` name | GIMP 3 (`gimp` against `org.gimp.GIMP`), Slack, Signal, JetBrains IDEs and many Electron apps get a letter placeholder and show their raw id in the bar header (the review capture `night/bar-reliability/mark-right-click.png` shows "org.…"). They also get a second icon next to the kept one, and no About or desktop actions | major | S | `libs/xdg`, `shell/bar`, `platform/compositor` (switcher), `shell/launcher` | Done (`79d0b41`) |
+| A window's app id is matched to its desktop entry only exactly (`entry` in `shell/bar/src/taskbar_client.rs` and `menu_bar_client.rs`): no `StartupWMClass`, no case-insensitive match, no fallback to the last reverse-DNS part or the `Exec` name | GIMP 3 (`gimp` against `org.gimp.GIMP`), Slack, Signal, JetBrains IDEs and many Electron apps get a letter placeholder and show their raw id in the bar header (the review capture `night/bar-reliability/mark-right-click.png` shows "org.…"). They also get a second icon next to the kept one, and no About or desktop actions | major | S | `libs/xdg`, `shell/bar`, `platform/compositor` (switcher), `shell/launcher` | Done (`79d0b41`) |
 | No app opens audio files: `bande-mimeapps.list` has no `audio/*` entry and no audio player is recommended (Decibels is not packaged in Debian 13) | Double-clicking an MP3 does nothing useful; every reference desktop plays it | major | S | `packaging/bande-desktop` | Owner decision |
 | No mail client and no `mailto:` handler | Clicking an email link does nothing. That is fine if the desktop says why | minor | S | packaging, `libs/xdg` | Open |
 | Nowhere to choose the default browser, mail, music or video app (→ Settings options) | macOS has Desktop & Dock ▸ Default web browser, and GNOME and Windows have Default Apps | major | S | `apps/settings` | Done (`3cc1848`) |
@@ -214,7 +214,7 @@ polish).
 
 | Gap | Why a picky user notices | Severity | Effort | Owner | Status |
 | :--- | :--- | :---: | :---: | :--- | :--- |
-| Some colours are still hard-coded instead of tokens (`shell/bar/src/dock.rs`, `shell/bar/src/menu_search.rs`) | Contrast and accent changes skip those pixels | minor | S | `shell/bar` | Open: only shadow colours remain literal |
+| Some colours are still hard-coded instead of tokens (`shell/bar/src/taskbar.rs`, `shell/bar/src/menu_search.rs`) | Contrast and accent changes skip those pixels | minor | S | `shell/bar` | Open: only shadow colours remain literal |
 | Settings reports failures as "Not changed: { $error }" with the raw D-Bus text. The compositor's start-failure alert is hard-coded English (`platform/compositor/src/alert.rs`) | "org.freedesktop.DBus.Error.InteractiveAuthorizationRequired" is not a message for a person | minor | S | `apps/settings`, `platform/compositor` | Done: Settings words failures (`3cc1848`); the start alert is localised |
 | The docs describe the first draft. `parity.md` lists finished features as "none". `compositor.md` and `behaviour.md` speak of traffic lights and translucency | They mislead agents and reviewers | minor | S | `docs` | Open |
 

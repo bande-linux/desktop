@@ -161,7 +161,7 @@ when they reach the screen is Bande's own.
   edge previews the half, within 64 pt of a corner the quarter, and against the top of the
   usable area zoom; the translucent rounded preview grows from the pointer (`quick`) only after
   the pointer has rested 150 ms within 2 pt, so a fast drag past an edge never tiles. Releasing
-  over a shown preview springs the window into it. `Ctrl+Super+Left/Right` tile halves,
+  over a shown preview springs the window into it. `Super+Left/Right` (or `Ctrl+Super+Left/Right`) tile halves,
   `Up/Down` on a half give its top or bottom quarter and on a quarter go back to the half,
   `Up` zooms a free window and `Down` returns a zoomed one. Tiles get xdg-shell's tiled states
   (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share

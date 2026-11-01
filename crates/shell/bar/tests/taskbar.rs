@@ -8,12 +8,13 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::Role;
-use bande_bar::dock::{
-    DockAction, DockApp, DockState, ICON_SIZE, MenuTarget, Shared, dock_ui, scene, surface_size,
+use bande_bar::taskbar::{
+    ICON_SIZE, MenuTarget, Shared, TaskbarAction, TaskbarApp, TaskbarState, scene, surface_size,
+    taskbar_ui,
 };
 use bande_config::BarEdge;
-use bande_dock_model::LauncherUpdate;
-use bande_dock_model::bus::launcher_update;
+use bande_taskbar_model::LauncherUpdate;
+use bande_taskbar_model::bus::launcher_update;
 use bande_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton, Ui};
 use bande_toolkit::{CpuRenderer, Image, Palette, Point, Rect, Scheme, TextSystem};
 use zbus::zvariant::{OwnedValue, Value};
@@ -33,8 +34,8 @@ fn blue_icon() -> Image {
     Image::from_rgba(size, size, pixels).expect("icon")
 }
 
-fn app(app_id: &str, name: &str, kept: bool, running: bool) -> DockApp {
-    DockApp {
+fn app(app_id: &str, name: &str, kept: bool, running: bool) -> TaskbarApp {
+    TaskbarApp {
         app_id: app_id.to_owned(),
         name: name.to_owned(),
         icon: (app_id == "org.bande.Terminal").then(blue_icon),
@@ -43,7 +44,7 @@ fn app(app_id: &str, name: &str, kept: bool, running: bool) -> DockApp {
     }
 }
 
-fn apps() -> Vec<DockApp> {
+fn apps() -> Vec<TaskbarApp> {
     vec![
         app("org.bande.Terminal", "Terminal", true, true),
         app("org.example.Editor", "Editor", false, true),
@@ -59,10 +60,10 @@ struct Harness {
 
 impl Harness {
     fn new(edge: BarEdge) -> Self {
-        let state = DockState::new(edge, ICON_SIZE);
+        let state = TaskbarState::new(edge, ICON_SIZE);
         let clock = Rc::new(Cell::new(Instant::now()));
         state.borrow_mut().set_apps(apps(), clock.get());
-        let mut ui = dock_ui(
+        let mut ui = taskbar_ui(
             state.clone(),
             Palette::for_scheme(Scheme::Light),
             TextSystem::new(),
@@ -142,10 +143,10 @@ impl Harness {
 }
 
 #[test]
-fn the_dock_matches_its_goldens_on_each_edge() {
+fn the_taskbar_matches_its_goldens_on_each_edge() {
     for (edge, name) in [
-        (BarEdge::Left, "dock-left-light"),
-        (BarEdge::Bottom, "dock-bottom-light"),
+        (BarEdge::Left, "taskbar-left-light"),
+        (BarEdge::Bottom, "taskbar-bottom-light"),
     ] {
         let mut harness = Harness::new(edge);
         harness.state.borrow_mut().update_launcher(
@@ -195,14 +196,14 @@ fn a_click_opens_the_app_or_the_trash_and_a_drag_off_cancels() {
     assert_eq!(
         harness.state.borrow_mut().take_actions(),
         [
-            DockAction::Open("org.example.Editor".to_owned()),
-            DockAction::Open("org.bande.Terminal".to_owned()),
-            DockAction::OpenTrash
+            TaskbarAction::Open("org.example.Editor".to_owned()),
+            TaskbarAction::Open("org.bande.Terminal".to_owned()),
+            TaskbarAction::OpenTrash
         ]
     );
 }
 
-fn three_apps() -> Vec<DockApp> {
+fn three_apps() -> Vec<TaskbarApp> {
     vec![
         app("org.bande.Terminal", "Terminal", true, true),
         app("org.bande.Files", "Files", true, false),
@@ -210,12 +211,12 @@ fn three_apps() -> Vec<DockApp> {
     ]
 }
 
-fn kept(ids: &[&str]) -> DockAction {
-    DockAction::Keep(ids.iter().map(|id| (*id).to_owned()).collect())
+fn kept(ids: &[&str]) -> TaskbarAction {
+    TaskbarAction::Keep(ids.iter().map(|id| (*id).to_owned()).collect())
 }
 
 #[test]
-fn dragging_a_kept_icon_reorders_the_dock_and_its_neighbours_slide_aside() {
+fn dragging_a_kept_icon_reorders_the_taskbar_and_its_neighbours_slide_aside() {
     let mut harness = Harness::new(BarEdge::Left);
     let now = harness.clock.get();
     harness.state.borrow_mut().set_apps(three_apps(), now);
@@ -240,7 +241,7 @@ fn dragging_a_kept_icon_reorders_the_dock_and_its_neighbours_slide_aside() {
 }
 
 #[test]
-fn dragging_a_kept_icon_off_the_dock_past_the_threshold_removes_it() {
+fn dragging_a_kept_icon_off_the_taskbar_past_the_threshold_removes_it() {
     let mut harness = Harness::new(BarEdge::Left);
     let now = harness.clock.get();
     harness.state.borrow_mut().set_apps(three_apps(), now);
@@ -292,7 +293,7 @@ fn dragging_a_running_app_into_the_kept_group_keeps_it() {
 }
 
 #[test]
-fn moving_the_dock_to_another_edge_slides_it_in_there() {
+fn moving_the_taskbar_to_another_edge_slides_it_in_there() {
     let mut harness = Harness::new(BarEdge::Left);
     let now = harness.clock.get();
     harness.state.borrow_mut().set_edge(BarEdge::Bottom, now);
@@ -431,7 +432,7 @@ fn badges_follow_launcher_entry_updates_as_kde_reads_them() {
 }
 
 #[test]
-fn right_click_or_holding_an_icon_opens_its_menu_beside_the_dock_without_opening_the_app() {
+fn right_click_or_holding_an_icon_opens_its_menu_beside_the_taskbar_without_opening_the_app() {
     let mut harness = Harness::new(BarEdge::Left);
     let editor = harness.center("org.example.Editor");
     let panel = harness.state.borrow().panel();
@@ -447,7 +448,7 @@ fn right_click_or_holding_an_icon_opens_its_menu_beside_the_dock_without_opening
     harness.advance(Duration::from_millis(600));
     harness.ui.handle(&Event::PointerUp(Pointer::at(editor)));
 
-    let menu = DockAction::Menu {
+    let menu = TaskbarAction::Menu {
         target: MenuTarget::App("org.example.Editor".to_owned()),
         at: Point::new(panel.x + panel.width + 6.0, icon.y),
     };
@@ -458,7 +459,7 @@ fn right_click_or_holding_an_icon_opens_its_menu_beside_the_dock_without_opening
 }
 
 #[test]
-fn an_auto_hidden_dock_slides_in_on_an_edge_push_and_out_after_the_pointer_leaves() {
+fn an_auto_hidden_taskbar_slides_in_on_an_edge_push_and_out_after_the_pointer_leaves() {
     let mut harness = Harness::new(BarEdge::Left);
     let now = harness.clock.get();
     harness.state.borrow_mut().set_auto_hide(true, now);
@@ -487,7 +488,7 @@ fn an_auto_hidden_dock_slides_in_on_an_edge_push_and_out_after_the_pointer_leave
 }
 
 #[test]
-fn the_icon_size_setting_resizes_the_dock_within_sensible_bounds() {
+fn the_icon_size_setting_resizes_the_taskbar_within_sensible_bounds() {
     let mut harness = Harness::new(BarEdge::Left);
     assert!(harness.state.borrow_mut().set_icon_size(52.0));
     assert!(!harness.state.borrow_mut().set_icon_size(52.0));
@@ -502,7 +503,7 @@ fn the_icon_size_setting_resizes_the_dock_within_sensible_bounds() {
 }
 
 #[test]
-fn super_f3_lets_the_keyboard_walk_the_dock_open_apps_and_menus_and_give_the_keyboard_back() {
+fn super_f3_lets_the_keyboard_walk_the_taskbar_open_apps_and_menus_and_give_the_keyboard_back() {
     let harness = Harness::new(BarEdge::Left);
     let now = harness.clock.get();
     let plain = Modifiers::default();
@@ -514,8 +515,8 @@ fn super_f3_lets_the_keyboard_walk_the_dock_open_apps_and_menus_and_give_the_key
     assert_eq!(
         state.take_actions(),
         [
-            DockAction::Open("org.example.Editor".to_owned()),
-            DockAction::ReleaseKeyboard
+            TaskbarAction::Open("org.example.Editor".to_owned()),
+            TaskbarAction::ReleaseKeyboard
         ]
     );
     assert!(state.navigate(Key::End, plain, now));
@@ -533,16 +534,16 @@ fn super_f3_lets_the_keyboard_walk_the_dock_open_apps_and_menus_and_give_the_key
     let actions = state.take_actions();
     assert_eq!(
         actions[..2],
-        [DockAction::OpenTrash, DockAction::ReleaseKeyboard]
+        [TaskbarAction::OpenTrash, TaskbarAction::ReleaseKeyboard]
     );
     assert!(matches!(
         &actions[2],
-        DockAction::Menu {
+        TaskbarAction::Menu {
             target: MenuTarget::App(app_id),
             ..
         } if app_id == "org.example.Editor"
     ));
-    assert_eq!(actions[3], DockAction::ReleaseKeyboard);
+    assert_eq!(actions[3], TaskbarAction::ReleaseKeyboard);
     state.end_navigation(now);
     assert!(!state.is_navigating());
     assert!(!state.navigate(Key::Down, plain, now));

@@ -85,7 +85,7 @@ bande-controlcenter = { path = "crates/shell/controlcenter" }
 bande-datetime = { path = "crates/libs/datetime" }
 bande-design = { path = "crates/toolkit/design" }
 bande-desktop-surface = { path = "crates/shell/desktop" }
-bande-dock-model = { path = "crates/libs/dock-model" }
+bande-taskbar-model = { path = "crates/libs/taskbar-model" }
 bande-edid = { path = "crates/libs/edid" }
 bande-files = { path = "crates/apps/files" }
 bande-fs = { path = "crates/libs/fs" }

@@ -217,8 +217,8 @@ impl State {
         let window = &self.windows[index];
         let zoomed = window.has_state(xdg_toplevel::State::Maximized);
         let mut items = vec![
-            item(L10N.tr("place-left"), "place-left").shortcut("Ctrl+Super+Left"),
-            item(L10N.tr("place-right"), "place-right").shortcut("Ctrl+Super+Right"),
+            item(L10N.tr("place-left"), "place-left").shortcut("Super+Left"),
+            item(L10N.tr("place-right"), "place-right").shortcut("Super+Right"),
             MenuItem::separator(),
             item(L10N.tr("place-top-left"), "place-top-left"),
             item(L10N.tr("place-top-right"), "place-top-right"),

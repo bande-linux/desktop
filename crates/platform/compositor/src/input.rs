@@ -22,7 +22,7 @@ use smithay::wayland::keyboard_shortcuts_inhibit::{
 use crate::frame::Target;
 use crate::gesture::Gesture;
 use crate::keyboard_monitor::KeyEvent;
-use crate::motion::DOCK_NAMESPACE;
+use crate::motion::TASKBAR_NAMESPACE;
 use crate::shell::toplevel_names;
 use crate::state::{Compositor, MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE, State};
 use crate::tile::Direction;
@@ -102,8 +102,11 @@ fn media_key(keysym: u32) -> Option<MediaKey> {
     }
 }
 
-fn without_super(keysym: u32, alt: bool) -> Option<Shortcut> {
+fn without_super(keysym: u32, alt: bool, shift: bool) -> Option<Shortcut> {
     match keysym {
+        keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab if alt => {
+            Some(Shortcut::NextApp { backwards: shift })
+        }
         keysyms::KEY_XF86LaunchA => Some(Shortcut::Overview),
         keysyms::KEY_Print => Some(Shortcut::CaptureOptions),
         keysyms::KEY_F4 if alt => Some(Shortcut::CloseWindow),
@@ -162,7 +165,7 @@ fn shortcut(
     match keysym {
         keysyms::KEY_Escape if alt => Some(Shortcut::ForceQuit),
         keysyms::KEY_F2 => Some(Shortcut::FocusShell(MENU_BAR_NAMESPACE)),
-        keysyms::KEY_F3 => Some(Shortcut::FocusShell(DOCK_NAMESPACE)),
+        keysyms::KEY_F3 => Some(Shortcut::FocusShell(TASKBAR_NAMESPACE)),
         keysyms::KEY_F5 => Some(Shortcut::ToggleScreenReader),
         keysyms::KEY_F11 | keysyms::KEY_XF86LaunchA => Some(Shortcut::ShowDesktop),
         keysyms::KEY_Left if ctrl && shift => Some(Shortcut::CarryWindow(false)),
@@ -175,10 +178,10 @@ fn shortcut(
         keysyms::KEY_Right if alt => Some(Shortcut::Workspace(true)),
         keysyms::KEY_Up if alt => Some(Shortcut::Overview),
         keysyms::KEY_Down if alt => Some(Shortcut::AppWindows),
-        keysyms::KEY_Left if ctrl => Some(Shortcut::Place(Direction::Left)),
-        keysyms::KEY_Right if ctrl => Some(Shortcut::Place(Direction::Right)),
-        keysyms::KEY_Up if ctrl => Some(Shortcut::Place(Direction::Up)),
-        keysyms::KEY_Down if ctrl => Some(Shortcut::Place(Direction::Down)),
+        keysyms::KEY_Left if !shift => Some(Shortcut::Place(Direction::Left)),
+        keysyms::KEY_Right if !shift => Some(Shortcut::Place(Direction::Right)),
+        keysyms::KEY_Up if !shift => Some(Shortcut::Place(Direction::Up)),
+        keysyms::KEY_Down if !shift => Some(Shortcut::Place(Direction::Down)),
         keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab if !ctrl && !alt => {
             Some(Shortcut::NextApp { backwards: shift })
         }
@@ -608,6 +611,7 @@ impl Compositor {
 
     pub fn press_button(&mut self, button: u32, pressed: bool, time: u32) {
         self.state.note_activity();
+        self.state.super_tap = false;
         let state = &mut self.state;
         if state.window_menu_button(button, pressed) {
             return;
@@ -753,6 +757,16 @@ impl State {
                 if !(modifiers.logo && modifiers.alt) {
                     state.input_sources.end_cycle();
                 }
+                let super_key = matches!(
+                    keysym.modified_sym().raw(),
+                    keysyms::KEY_Super_L | keysyms::KEY_Super_R
+                );
+                if pressed {
+                    state.super_tap =
+                        super_key && !(modifiers.ctrl || modifiers.alt || modifiers.shift);
+                } else if !super_key {
+                    state.super_tap = false;
+                }
                 if !pressed {
                     return if state.held_shortcut_keys.contains(&evdev_code) {
                         state.held_shortcut_keys.retain(|held| *held != evdev_code);
@@ -812,7 +826,7 @@ impl State {
                     )));
                 }
                 let inhibited = state.shortcuts_inhibited();
-                if let Some(shortcut) = without_super(sym.raw(), modifiers.alt)
+                if let Some(shortcut) = without_super(sym.raw(), modifiers.alt, modifiers.shift)
                     .filter(|_| !modifiers.logo && !state.is_locked() && !inhibited)
                 {
                     state.held_shortcut_keys.push(evdev_code);
@@ -870,6 +884,13 @@ impl State {
         if let Some(Some(shortcut)) = action {
             state.run(shortcut);
         }
+        if !pressed
+            && std::mem::take(&mut state.super_tap)
+            && !state.is_locked()
+            && !state.shortcuts_inhibited()
+        {
+            state.run(Shortcut::ShowLauncher);
+        }
         let after = keyboard.modifier_state();
         if after.alt != before.alt && state.has_server_side_frames() {
             state.needs_redraw = true;
@@ -877,7 +898,8 @@ impl State {
         if (after.alt, after.logo) != (before.alt, before.logo) {
             state.renegotiate_drag();
         }
-        if state.switcher.is_active() && !keyboard.modifier_state().logo {
+        let held = keyboard.modifier_state();
+        if state.switcher.is_active() && !held.logo && !held.alt {
             state.commit_switcher();
         }
     }
@@ -890,7 +912,7 @@ mod tests {
     use smithay::input::keyboard::keysyms;
 
     use super::{Shortcut, shortcut, without_super};
-    use crate::motion::DOCK_NAMESPACE;
+    use crate::motion::TASKBAR_NAMESPACE;
     use crate::state::{MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE};
     use crate::tile::Direction;
 
@@ -949,7 +971,7 @@ mod tests {
             Action::ShowClipboardHistory => Shortcut::OpenLauncher(LauncherMode::Clipboard),
             Action::ShowEmojiPicker => Shortcut::OpenLauncher(LauncherMode::Emoji),
             Action::FocusMenuBar => Shortcut::FocusShell(MENU_BAR_NAMESPACE),
-            Action::FocusDock => Shortcut::FocusShell(DOCK_NAMESPACE),
+            Action::FocusTaskbar => Shortcut::FocusShell(TASKBAR_NAMESPACE),
             Action::SearchMenus => Shortcut::FocusShell(MENU_SEARCH_NAMESPACE),
             Action::LockScreen => Shortcut::LockScreen,
             Action::ToggleZoom => Shortcut::ToggleZoom,
@@ -968,7 +990,7 @@ mod tests {
             let runs = if held("Super") {
                 shortcut(key, Some(key), held("Ctrl"), held("Alt"), held("Shift"))
             } else {
-                without_super(key, held("Alt"))
+                without_super(key, held("Alt"), held("Shift"))
             };
             assert_eq!(runs, Some(expected(listed.action)), "{}", listed.keys);
         }

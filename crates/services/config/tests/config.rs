@@ -39,6 +39,15 @@ fn apps_reopen_at_login_unless_turned_off() {
 }
 
 #[test]
+fn apps_reopen_after_a_crash_only_when_asked() {
+    assert!(!Config::default().reopen_apps_after_crash);
+    let (config, problems) =
+        Config::load("reopen-apps-after-crash #true\n").expect("well-formed KDL");
+    assert_eq!(problems, []);
+    assert!(config.reopen_apps_after_crash);
+}
+
+#[test]
 fn a_section_set_twice_is_reported_where_it_repeats() {
     assert_eq!(error_at("bar {\n}\nbar {\n}\n"), (3, 1));
 }

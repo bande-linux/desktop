@@ -9,14 +9,21 @@ apt-get install -y -qq --no-install-recommends apt-utils > /dev/null
 echo "deb [trusted=yes] file:$debs ./" > /etc/apt/sources.list.d/local.list
 apt-get update -qq
 
-echo "== bande-desktop resolves and installs from the packages alone"
-ours=$(cd "$debs" && for deb in *.deb; do dpkg-deb --field "$deb" Package; done | grep -v '^bande-os$')
+echo "== bande-desktop alone brings a login window and sound"
+apt-get install -y -q --no-install-recommends bande-desktop < /dev/null
+for package in bande-greeter greetd pipewire-audio wireplumber; do
+    [ "$(dpkg-query -W -f '${db:Status-Status}' "$package")" = installed ] || { echo "$package is missing"; exit 1; }
+done
+
+echo "== every package resolves and installs from the packages alone"
+ours=$(cd "$debs" && for deb in *.deb; do dpkg-deb --field "$deb" Package; done)
 apt-get install -y -q --no-install-recommends $ours < /dev/null
 
-echo "== every app bande-desktop recommends is in Debian testing"
+echo "== every package bande-desktop recommends is in Debian testing or built here"
+from_the_archive=" bande-apt-source "
 apt-cache show bande-desktop | sed -n 's/^Recommends: //p' | tr ',' '\n' | sed 's/^ *//; s/[ (].*//' |
     while read -r recommended; do
-        [ -n "$recommended" ] || continue
+        [ -n "$recommended" ] && [[ $from_the_archive != *" $recommended "* ]] || continue
         candidate=$(apt-cache policy "$recommended" | sed -n 's/^ *Candidate: //p')
         [ -n "$candidate" ] && [ "$candidate" != "(none)" ] || { echo "$recommended cannot be installed"; exit 1; }
     done
@@ -41,11 +48,15 @@ test -e /usr/share/wayland-sessions/bande.desktop
 
 echo "== greetd shows the Bande login window and is the display manager"
 greetd_config=/usr/share/bande-greeter/greetd-config.toml
-display_manager=/etc/systemd/system/display-manager.service
-grep -qx "ExecStart=/usr/sbin/greetd --config $greetd_config" /usr/lib/systemd/system/greetd.service.d/bande.conf
+greetd_dropin=/usr/lib/systemd/system/greetd.service.d/bande.conf
+grep -qx "ExecStart=/usr/sbin/greetd --config $greetd_config" "$greetd_dropin"
 test -x "$(sed -n 's/^command = "\([^ ]*\).*/\1/p' "$greetd_config")"
-[ "$(readlink "$display_manager")" = /usr/lib/systemd/system/greetd.service ]
-grep -qx /usr/sbin/greetd /etc/X11/default-display-manager
+default_display_manager() {
+    grep -qx "/usr/sbin/$1" /etc/X11/default-display-manager
+    [ "$(basename "$(readlink /etc/systemd/system/display-manager.service)")" = "$1.service" ]
+    [ "$(echo get shared/default-x-display-manager | debconf-communicate)" = "0 $1" ]
+}
+default_display_manager greetd
 grep -q 'agreety' /etc/greetd/config.toml
 
 echo "== a person's wallpaper reaches the login window and no one else"
@@ -65,20 +76,10 @@ refused runuser -u alan -- cat "$pictures/$(id -u ada)"
 refused runuser -u alan -- ls "$pictures"
 refused runuser -u alan -- rm -f "$pictures/$(id -u ada)"
 test -e "$pictures/$(id -u ada)"
-dpkg --purge --force-depends bande-greeter > /dev/null 2>&1
-test ! -e /etc/X11/default-display-manager
-test ! -e /usr/lib/systemd/system/greetd.service.d/bande.conf
+dpkg --purge --force-depends bande-greeter > /dev/null
+test ! -e "$greetd_dropin"
 test ! -e "$pictures"
-ln -sfn /usr/lib/systemd/system/gdm3.service "$display_manager"
-echo /usr/sbin/gdm3 > /etc/X11/default-display-manager
-apt-get install -y -q --no-install-recommends bande-greeter < /dev/null > /dev/null
-[ "$(readlink "$display_manager")" = /usr/lib/systemd/system/gdm3.service ]
-grep -qx /usr/sbin/gdm3 /etc/X11/default-display-manager
-rm "$display_manager" /etc/X11/default-display-manager
-dpkg --purge --force-depends bande-greeter > /dev/null 2>&1
-apt-get install -y -q --no-install-recommends bande-greeter < /dev/null > /dev/null
-[ "$(readlink "$display_manager")" = /usr/lib/systemd/system/greetd.service ]
-grep -qx /usr/sbin/greetd /etc/X11/default-display-manager
+default_display_manager greetd
 
 echo "== the installed compositor serves Wayland clients"
 export XDG_RUNTIME_DIR=$(mktemp -d)
@@ -88,11 +89,18 @@ cat /tmp/compositor.out
 [ "$status" = 124 ]
 grep -q '^WAYLAND_DISPLAY=wayland-' /tmp/compositor.out
 
-echo "== bande-os brings the system around the desktop"
-apt-get install -y -q --no-install-recommends bande-os < /dev/null > /dev/null
-for package in bande-desktop bande-greeter greetd network-manager pipewire wireplumber systemd-zram-generator; do
-    [ "$(dpkg-query -W -f '${db:Status-Status}' "$package")" = installed ] || { echo "$package is missing"; exit 1; }
-done
-[ "$(dpkg-query -W -f '${Version}' bande-os)" = "$version" ]
+echo "== next to another display manager, greetd is offered, not imposed"
+dpkg --purge bande-desktop greetd > /dev/null 2>&1
+apt-get install -y -q --no-install-recommends lightdm bsdutils < /dev/null > /dev/null
+default_display_manager lightdm
+apt-get install -y -q --no-install-recommends bande-desktop < /dev/null > /dev/null
+[ "$(dpkg-query -W -f '${db:Status-Status}' greetd 2>/dev/null || true)" != installed ]
+apt-get install -y -q --no-install-recommends bande-greeter < /dev/null > /dev/null
+default_display_manager lightdm
+echo metaget shared/default-x-display-manager choices | debconf-communicate | grep -qw greetd
+echo greetd | DEBIAN_FRONTEND=teletype script -qec 'dpkg-reconfigure greetd' /dev/null > /dev/null
+default_display_manager greetd
+apt-get remove -y -q bande-greeter greetd < /dev/null > /dev/null
+default_display_manager lightdm
 
 echo "install test passed"

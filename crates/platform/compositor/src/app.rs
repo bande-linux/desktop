@@ -7,15 +7,70 @@ use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
 
+use std::io;
 use std::os::fd::OwnedFd;
 use std::path::PathBuf;
+use std::sync::mpsc::{self, Sender};
+use std::time::Duration;
 
-use bande_xdg::remember_running_apps;
+use bande_xdg::{remember_running_apps, write_running_apps};
 
 use crate::shell::{is_shell, toplevel_names};
 use crate::state::{Compositor, State};
 
+const RUNNING_APPS_PAUSE: Duration = Duration::from_secs(1);
+
+pub(crate) struct RunningApps {
+    sender: Sender<Vec<String>>,
+    written: Vec<String>,
+}
+
+impl RunningApps {
+    fn start(file: PathBuf) -> io::Result<Self> {
+        let (sender, receiver) = mpsc::channel::<Vec<String>>();
+        std::thread::Builder::new()
+            .name("running-apps".to_owned())
+            .spawn(move || {
+                while let Ok(mut apps) = receiver.recv() {
+                    while let Ok(newer) = receiver.try_recv() {
+                        apps = newer;
+                    }
+                    if let Err(error) = write_running_apps(&file, &apps) {
+                        tracing::warn!("cannot note the running apps: {error}");
+                    }
+                    std::thread::sleep(RUNNING_APPS_PAUSE);
+                }
+            })?;
+        Ok(Self {
+            sender,
+            written: Vec::new(),
+        })
+    }
+}
+
 impl State {
+    pub(crate) fn note_running_apps(&mut self) {
+        if !std::mem::take(&mut self.apps_changed) || self.running_apps.is_none() {
+            return;
+        }
+        let mut apps: Vec<String> = Vec::new();
+        for (_, app_id) in self.app_owners() {
+            if !app_id.is_empty() && !apps.contains(&app_id) {
+                apps.push(app_id);
+            }
+        }
+        let Some(running) = self.running_apps.as_mut() else {
+            return;
+        };
+        if running.written == apps {
+            return;
+        }
+        running.written = apps.clone();
+        if running.sender.send(apps).is_err() {
+            self.running_apps = None;
+        }
+    }
+
     pub(crate) fn quit_app(&mut self, owner: Option<Client>) {
         let bound: Vec<&BandeAppV1> = self
             .app_resources
@@ -98,6 +153,13 @@ impl State {
 impl Compositor {
     pub fn remember_apps_to_reopen_in(&mut self, file: PathBuf) {
         self.state.reopen_file = Some(file);
+    }
+
+    pub fn note_running_apps_in(&mut self, file: PathBuf) {
+        match RunningApps::start(file) {
+            Ok(running) => self.state.running_apps = Some(running),
+            Err(error) => tracing::warn!("cannot note the running apps: {error}"),
+        }
     }
 
     pub fn shutting_down(&mut self, delay: OwnedFd) {

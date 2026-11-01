@@ -68,8 +68,13 @@ VS Code 1.144 on the same probe (default `window.titleBarStyle: custom`) binds b
 managers and asks `xdg-decoration` for client-side (`set_mode(1)`), so it keeps its own bar as
 expected; a `native` run and a framed Claude Desktop window were not probed. Firefox did not
 start a window in the probe and is still unchecked. The GTK 3 and GTK 4 rules were parsed with libgtk-3 and libgtk-4 without errors but have not been
-seen on screen. Still open: the rest of milestone 6 (Firefox, Electron, the review scenario,
-which takes over the screen, and the per-app table) and the three owner decisions below.
+seen on screen. A second probe the same way (2026-11-01, temporary home) recorded Papers (client-side,
+no decoration), Firefox ESR (server-side with its title bar on, client-side with tabs in the
+title bar, its default), VS Code `native` (`xdg-decoration` server-side) and Claude Desktop's
+main window (`xdg-decoration` client-side); the per-app table is in
+`docs/architecture/compositor.md`. Still open: the review scenario, which takes over the
+screen and so waits for the owner, a framed Claude Desktop artifact window, Electron's controls
+overlay and `button-layout`, and the three owner decisions below.
 
 1. **KDE server-decoration** (about 2 h) — done
    - `compositor/src/state/globals.rs`: `KdeDecorationState::new::<State>(handle, DefaultMode::Server)`.

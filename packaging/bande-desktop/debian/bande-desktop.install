@@ -1,5 +1,6 @@
 bande-mimeapps.list usr/share/applications/
 systemd/zram-generator.conf.d usr/lib/systemd/
+systemd/system/dev-zram0.device.d usr/lib/systemd/system/
 systemd/user/app.slice.d usr/lib/systemd/user/
 systemd/user/dbus.service.d usr/lib/systemd/user/
 systemd/user/pipewire.service.d usr/lib/systemd/user/

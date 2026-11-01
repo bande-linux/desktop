@@ -70,10 +70,21 @@ pub enum SortBy {
     Created,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Sort {
     pub by: SortBy,
     pub descending: bool,
+    pub folders_first: bool,
+}
+
+impl Default for Sort {
+    fn default() -> Self {
+        Self {
+            by: SortBy::default(),
+            descending: false,
+            folders_first: true,
+        }
+    }
 }
 
 pub fn compare(a: &Entry, b: &Entry, sort: Sort) -> Ordering {
@@ -88,7 +99,11 @@ pub fn compare(a: &Entry, b: &Entry, sort: Sort) -> Ordering {
         SortBy::Created => b.created.cmp(&a.created),
     }
     .then_with(|| finder_order(&a.name, &b.name));
-    b.is_folder().cmp(&a.is_folder()).then(if sort.descending {
+    let folders = match sort.folders_first {
+        true => b.is_folder().cmp(&a.is_folder()),
+        false => Ordering::Equal,
+    };
+    folders.then(if sort.descending {
         order.reverse()
     } else {
         order

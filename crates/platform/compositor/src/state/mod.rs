@@ -120,6 +120,8 @@ pub struct State {
     pub(crate) assist: crate::assist::Assist,
     pub(crate) recall: crate::recall::Recall,
     pub(crate) reopen_file: Option<std::path::PathBuf>,
+    pub(crate) running_apps: Option<crate::app::RunningApps>,
+    pub(crate) apps_changed: bool,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
     pub(crate) active_output: String,
@@ -253,6 +255,8 @@ impl Compositor {
             assist: crate::assist::Assist::default(),
             recall: crate::recall::Recall::default(),
             reopen_file: None,
+            running_apps: None,
+            apps_changed: false,
             gesture_route: None,
             active_app: String::new(),
             active_output: String::new(),
@@ -335,6 +339,7 @@ impl Compositor {
         self.state.deliver_pending_insert();
         self.state.activate_next_app_if_the_windowless_one_quit();
         self.state.announce_apps_running();
+        self.state.note_running_apps();
         self.state.popups.cleanup();
         self.state.end_orphaned_drag();
         self.state.keep_families_together();

@@ -607,11 +607,13 @@ fn the_list_view_shows_one_folder_sorted_by_the_chosen_column() {
     browser.set_sort(Sort {
         by: SortBy::Size,
         descending: false,
+        ..Sort::default()
     });
     assert_eq!(files(&browser), ["big.txt", "notes.txt"]);
     browser.set_sort(Sort {
         by: SortBy::Size,
         descending: true,
+        ..Sort::default()
     });
     assert_eq!(files(&browser), ["notes.txt", "big.txt"]);
     assert!(browser.columns()[0].entries[0].is_folder());
@@ -1100,7 +1102,8 @@ fn the_list_view_selects_by_click_sorts_by_header_and_opens_on_double_click() {
         view.browser().sort(),
         Sort {
             by: SortBy::Size,
-            descending: true
+            descending: true,
+            ..Sort::default()
         }
     );
     assert_eq!(selected_name(view.browser()).as_deref(), Some("big.txt"));
@@ -2046,6 +2049,7 @@ fn sorting_a_big_folder_by_size_after_select_all_keeps_every_mark() {
     browser.set_sort(Sort {
         by: SortBy::Size,
         descending: false,
+        ..Sort::default()
     });
 
     let column = &browser.columns()[0];
@@ -2194,6 +2198,7 @@ fn sorting_by_kind_groups_kinds_then_names() {
     browser.set_sort(Sort {
         by: SortBy::Kind,
         descending: false,
+        ..Sort::default()
     });
 
     assert_eq!(
@@ -3209,6 +3214,47 @@ fn applied_settings_show_hidden_files_in_new_tabs_and_empty_the_trash_without_as
     assert_eq!(view.sheet(), None);
     run_until(&mut view, idle);
     assert!(place.trash.is_empty());
+}
+
+#[test]
+fn turning_folders_on_top_off_resorts_the_open_folder_and_survives_its_remembered_view() {
+    let place = Place::new();
+    fs::write(place.home().join("apple"), "x").expect("file");
+    fs::create_dir(place.home().join("Banana")).expect("folder");
+    let mut view = place.view();
+    view.scene(1000, 600);
+    run_until(&mut view, idle);
+    let shown = |view: &FilesView| -> Vec<String> {
+        view.browser().columns()[0]
+            .entries
+            .iter()
+            .map(|entry| entry.name.clone())
+            .filter(|name| ["apple", "Banana"].contains(&name.as_str()))
+            .collect()
+    };
+    assert_eq!(shown(&view), ["Banana", "apple"]);
+
+    view.apply_settings(&FilesSettings {
+        folders_first: false,
+        ..FilesSettings::default()
+    });
+    assert_eq!(shown(&view), ["apple", "Banana"]);
+
+    let mut memory = ViewMemory::default();
+    memory
+        .remember(
+            &place.home(),
+            FolderView {
+                mode: ViewMode::List,
+                icon_size: 64,
+                sort: Sort::default(),
+            },
+        )
+        .expect("remember");
+    view.set_view_memory(memory);
+    view.scene(1000, 600);
+    assert!(!view.browser().sort().folders_first);
+    assert_eq!(shown(&view), ["apple", "Banana"]);
 }
 
 #[test]

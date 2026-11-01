@@ -17,8 +17,9 @@ use smithay::backend::session::{Event as SessionEvent, Session};
 use smithay::output::OutputModeSource;
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{EventLoop, Interest, Mode as Trigger, PostAction};
+use smithay::reexports::drm::control::atomic::AtomicModeReq;
 use smithay::reexports::drm::control::{
-    Device as ControlDevice, Mode, ModeTypeFlags, connector, crtc, property,
+    AtomicCommitFlags, Device as ControlDevice, Mode, ModeTypeFlags, connector, crtc, property,
 };
 use smithay::reexports::input::Libinput;
 use smithay::reexports::rustix::fs::OFlags;
@@ -82,6 +83,52 @@ pub struct DrmNotifiers {
 pub struct HeadChanges {
     pub connected: Vec<OutputConfig>,
     pub disconnected: Vec<String>,
+    pub relinked: Vec<String>,
+}
+
+const LINK_STATUS: &[u8] = b"link-status";
+const LINK_GOOD: u64 = 0;
+const LINK_BAD: u64 = 1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Rescanned {
+    Kept,
+    Relink,
+    Gone,
+}
+
+fn rescanned(present: bool, another_display: bool, link: Option<u64>) -> Rescanned {
+    match (present && !another_display, link) {
+        (false, _) => Rescanned::Gone,
+        (true, Some(LINK_BAD)) => Rescanned::Relink,
+        (true, _) => Rescanned::Kept,
+    }
+}
+
+fn link_status(device: &DrmDevice, handle: connector::Handle) -> Option<(property::Handle, u64)> {
+    let properties = device.get_properties(handle).ok()?;
+    properties.iter().find_map(|(property, value)| {
+        let info = device.get_property(*property).ok()?;
+        (info.name().to_bytes() == LINK_STATUS).then_some((*property, *value))
+    })
+}
+
+fn relink(device: &DrmDevice, head: &mut Head) {
+    if let Some((property, _)) = link_status(device, head.connector) {
+        let mut request = AtomicModeReq::new();
+        request.add_property(
+            head.connector,
+            property,
+            property::Value::UnsignedRange(LINK_GOOD),
+        );
+        if let Err(error) = device.atomic_commit(AtomicCommitFlags::ALLOW_MODESET, request) {
+            tracing::warn!("cannot retrain the link of {}: {error}", head.config.name);
+        }
+    }
+    if let Err(error) = head.compositor.reset_state() {
+        tracing::warn!("cannot reset {}: {error}", head.config.name);
+    }
+    head.warmth = None;
 }
 
 fn refresh_of(mode: &Mode) -> Duration {
@@ -386,15 +433,31 @@ impl DrmBackend {
         let mut index = 0;
         while index < self.heads.len() {
             let head = &self.heads[index];
-            let still = present
-                .iter()
-                .find(|info| info.handle() == head.connector)
-                .is_some_and(|info| {
-                    !shows_another_display(&head.config, edid_of(&self.device, info.handle()))
-                });
-            if still {
-                index += 1;
-                continue;
+            let info = present.iter().find(|info| info.handle() == head.connector);
+            let decision = rescanned(
+                info.is_some(),
+                info.is_some_and(|info| {
+                    shows_another_display(&head.config, edid_of(&self.device, info.handle()))
+                }),
+                link_status(&self.device, head.connector).map(|(_, value)| value),
+            );
+            match decision {
+                Rescanned::Kept => {
+                    index += 1;
+                    continue;
+                }
+                Rescanned::Relink => {
+                    tracing::info!(
+                        "the link to {} broke; setting its mode again",
+                        head.config.name
+                    );
+                    let head = &mut self.heads[index];
+                    relink(&self.device, head);
+                    changes.relinked.push(head.config.name.clone());
+                    index += 1;
+                    continue;
+                }
+                Rescanned::Gone => {}
             }
             let head = self.heads.remove(index);
             if let Err(error) = head.compositor.surface().clear() {
@@ -672,6 +735,11 @@ impl FrameOutput for DrmBackend {
             }
             return Ok(Submission::Paused);
         }
+        if head.dark
+            && link_status(&self.device, head.connector).map(|(_, value)| value) == Some(LINK_BAD)
+        {
+            relink(&self.device, head);
+        }
         head.dark = false;
         head.compositor
             .set_output_mode_source(OutputModeSource::Static {
@@ -705,7 +773,9 @@ mod tests {
     use bande_edid::Edid;
     use smithay::utils::Size;
 
-    use super::{shows_another_display, shows_connected_display};
+    use super::{
+        LINK_BAD, LINK_GOOD, Rescanned, rescanned, shows_another_display, shows_connected_display,
+    };
     use crate::screen::OutputConfig;
 
     fn display(serial: &str) -> Edid {
@@ -732,6 +802,15 @@ mod tests {
         assert!(!shows_another_display(&desk, Some(display("A1"))));
         assert!(shows_another_display(&desk, Some(display("B2"))));
         assert!(!shows_another_display(&desk, None));
+    }
+
+    #[test]
+    fn a_connector_that_stays_is_set_again_only_when_its_link_broke() {
+        assert_eq!(rescanned(true, false, Some(LINK_GOOD)), Rescanned::Kept);
+        assert_eq!(rescanned(true, false, None), Rescanned::Kept);
+        assert_eq!(rescanned(true, false, Some(LINK_BAD)), Rescanned::Relink);
+        assert_eq!(rescanned(true, true, Some(LINK_BAD)), Rescanned::Gone);
+        assert_eq!(rescanned(false, false, Some(LINK_BAD)), Rescanned::Gone);
     }
 
     fn connector(root: &std::path::Path, name: &str, status: &str, modes: &str) {

@@ -6,6 +6,7 @@ mod context_menu;
 mod control;
 mod disclosure;
 mod editor;
+mod form;
 mod free_layout;
 mod label;
 mod menu;
@@ -42,6 +43,7 @@ pub use clock::{FrameTime, frame_time, request_wake, set_frame_time, take_wake};
 pub use combo_box::ComboBox;
 pub use context_menu::ContextMenu;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
+pub use form::{Form, FormLine};
 pub use free_layout::FreeLayout;
 pub use label::Label;
 pub use menu::{
@@ -145,6 +147,7 @@ pub struct Context {
     pub text: TextSystem,
     pub palette: Palette,
     pub keyboard_navigation: bool,
+    pub window_active: bool,
     pub reduce_motion: bool,
     pub caps_lock: bool,
     focus: Option<WidgetId>,
@@ -173,6 +176,7 @@ impl Context {
             text,
             palette,
             keyboard_navigation: false,
+            window_active: true,
             reduce_motion: false,
             caps_lock: false,
             focus: None,
@@ -650,6 +654,12 @@ impl Ui {
         let on_screen = (self.clock)().on_screen();
         self.cx.now = on_screen;
         self.cx.start = on_screen;
+    }
+
+    pub fn set_window_active(&mut self, active: bool) -> bool {
+        let changed = self.cx.window_active != active;
+        self.cx.window_active = active;
+        changed
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {

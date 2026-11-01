@@ -12,7 +12,7 @@ its not possible to scroll in the settings app, for example bluetooth and wifi v
 Status: finished ([plans/settings-scroll-and-bluetooth-names.md](plans/settings-scroll-and-bluetooth-names.md))
 
 its not possible to install .deb files from Files, this needs an install tool like most distros provide
-Status: planned ([plans/deb-installer.md](plans/deb-installer.md))
+Status: started ([plans/deb-installer.md](plans/deb-installer.md)); M1-M6 and the wiring done, live check on the mini left (asks for a password)
 
 GTK apps do not fit with our window bar. Is that possible to solve so that all apps looks the same and adhere to bande window bar theme, for example also claude desktop and vscode also do not use the bande window bar
 Status: planned ([plans/third-party-title-bars.md](plans/third-party-title-bars.md))
@@ -30,7 +30,7 @@ the themes, especially the dark theme, looks a bit "dated". Review how modern da
 Status: finished ([plans/dark-theme.md](plans/dark-theme.md)); moving light to the slate family (M6) waits on the owner
 
 the software update doesnt seem to work.
-Status: started ([plans/software-update.md](plans/software-update.md)); M3 plain states done
+Status: started ([plans/software-update.md](plans/software-update.md)); M1-M6 done (offline updates), live reboot test on the mini left
 
 changing time zone doesnt apply
 Status: finished ([plans/time-zone.md](plans/time-zone.md)); M5 polkit fix waits on an owner decision
@@ -39,10 +39,10 @@ scrolling direction should have individual settings for trackpad and mouse. Also
 Status: finished ([plans/mouse-and-trackpad.md](plans/mouse-and-trackpad.md)); mouse scroll speed waits on an owner decision
 
 in settings the selected item in the sidebar has blue markers, that looks pretty bad. Its enough to highlight the selection i think
-Status: planned ([plans/sidebar-selection.md](plans/sidebar-selection.md))
+Status: finished ([plans/sidebar-selection.md](plans/sidebar-selection.md)); not yet checked live on the mini
 
 Files has no "settings" (and other inhouse apps who needs it), for example i want to show file extensions
-Status: started ([plans/app-settings.md](plans/app-settings.md))
+Status: finished ([plans/app-settings.md](plans/app-settings.md)); Files ▸ Settings… (Ctrl+,) with hidden files, default view, new window place, Trash and search, live in every window; extensions always shown; left: keep folders on top, the Sidebar section (M8), "Last Folder"
 
 we have no swap (granted this is not an official installation of debian) and it may not be up to bande-desktop, but quickly review how that should work and if we should do anything or if that is soley up to the debian installer
 Status: started ([plans/swap.md](plans/swap.md)); kernel config and image packages merged, the 0004 caveat written; the owner installs the kernel, enables zram and oomd and reboots

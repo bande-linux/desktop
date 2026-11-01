@@ -5,10 +5,12 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use bande_app_settings::Stored;
 use bande_files::{
-    BookmarkEdit, Browser, FilesView, ListColumn, Location, PATH_BAR_HEIGHT, ROW_HEIGHT, Request,
-    Row, SIDEBAR_WIDTH, Sheet, SidebarEdit, TAB_BAR_HEIGHT, TOOLBAR_HEIGHT, ViewMemory, ViewMode,
-    hidden_places, permissions, rows, with_bookmarks, with_volumes, without_bookmark,
+    BookmarkEdit, Browser, FilesSettings, FilesView, FolderView, ListColumn, Location,
+    PATH_BAR_HEIGHT, ROW_HEIGHT, Request, Row, SETTINGS_SIZE, SIDEBAR_WIDTH, Sheet, SidebarEdit,
+    StartFolder, TAB_BAR_HEIGHT, TOOLBAR_HEIGHT, ViewMemory, ViewMode, hidden_places, permissions,
+    rows, settings_view, with_bookmarks, with_volumes, without_bookmark,
 };
 use bande_fs::{FolderChanges, Sort, SortBy, Trash, list};
 use bande_preview::Preview;
@@ -18,8 +20,8 @@ use bande_toolkit::ui::{
     Table,
 };
 use bande_toolkit::{
-    CpuRenderer, DragAction, FrameRegions, Image, Item, Palette, Point, SHEET_INSET, Scheme,
-    TextSystem, framed_scene,
+    Appearance, CpuRenderer, DragAction, FrameRegions, Image, Item, Palette, Point, SHEET_INSET,
+    Scheme, TextSize, TextSystem, framed_scene,
 };
 use bande_xdg::{Apps, file_uri};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
@@ -1418,6 +1420,8 @@ fn the_icon_view_matches_its_golden_with_thumbnails_and_long_names() {
     view.handle(&press(Key::Right));
     settle_thumbnails(&mut view, GOLDEN_SIZE, 2);
     shoot("icons", &mut view);
+    view.set_window_active(false);
+    shoot("icons-inactive", &mut view);
 }
 
 fn shoot(name: &str, view: &mut FilesView) {
@@ -3128,4 +3132,126 @@ fn files_follows_the_text_size() {
     });
 
     assert!(widest_text(&view.scene(1000, 600).items) > regular * 1.5);
+}
+
+#[test]
+fn files_settings_keep_their_defaults_for_broken_values_and_round_trip() {
+    let settings = FilesSettings::parse(
+        "new-window = downloads\ndefault-view = sideways\nshow-hidden = maybe\nwarn-empty-trash = false\nsearch-in = home\n",
+    );
+    assert_eq!(settings.new_window, StartFolder::Downloads);
+    assert_eq!(settings.default_view, ViewMode::Columns);
+    assert!(!settings.show_hidden);
+    assert!(!settings.warn_empty_trash);
+    assert!(!settings.purge_trash);
+    assert!(settings.search_home);
+    assert_eq!(FilesSettings::parse(&settings.to_text()), settings);
+}
+
+#[test]
+fn each_start_folder_resolves_to_its_place() {
+    let home = Path::new("/home/ada");
+    let dirs = Some("XDG_DESKTOP_DIR=\"$HOME/Skrivbord\"\n");
+    let folder = |path: &str| Location::Folder(PathBuf::from(path));
+    assert_eq!(StartFolder::Home.location(home, dirs), folder("/home/ada"));
+    assert_eq!(
+        StartFolder::Desktop.location(home, dirs),
+        folder("/home/ada/Skrivbord")
+    );
+    assert_eq!(
+        StartFolder::Downloads.location(home, dirs),
+        folder("/home/ada/Downloads")
+    );
+    assert_eq!(StartFolder::Recents.location(home, dirs), Location::Recents);
+}
+
+fn has_profile(view: &FilesView) -> bool {
+    view.browser().columns()[0]
+        .entries
+        .iter()
+        .any(|entry| entry.name == ".profile")
+}
+
+#[test]
+fn control_h_shows_hidden_files_and_asks_to_remember_it() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.take_requests();
+
+    view.handle(&command(Key::Character('h'), false));
+
+    assert!(has_profile(&view));
+    assert!(view.take_requests().contains(&Request::ShowHidden(true)));
+}
+
+#[test]
+fn applied_settings_show_hidden_files_in_new_tabs_and_empty_the_trash_without_asking() {
+    let place = Place::new();
+    place
+        .trash
+        .put(&place.home().join("notes.txt"))
+        .expect("trash");
+    let mut view = place.view();
+    assert!(!has_profile(&view));
+
+    view.apply_settings(&FilesSettings {
+        show_hidden: true,
+        warn_empty_trash: false,
+        ..FilesSettings::default()
+    });
+    assert!(has_profile(&view));
+    view.handle(&command(Key::Character('t'), false));
+    assert_eq!(view.tab_count(), 2);
+    assert!(has_profile(&view));
+
+    view.handle(&command(Key::Delete, true));
+    assert_eq!(view.sheet(), None);
+    run_until(&mut view, idle);
+    assert!(place.trash.is_empty());
+}
+
+#[test]
+fn the_default_view_gives_way_to_a_remembered_one() {
+    let place = Place::new();
+    let mut view = place.view();
+    view.set_default_view(ViewMode::Icons);
+    view.scene(1000, 600);
+    assert_eq!(view.mode(), ViewMode::Icons);
+
+    let mut memory = ViewMemory::default();
+    memory
+        .remember(
+            &place.home(),
+            FolderView {
+                mode: ViewMode::List,
+                icon_size: 64,
+                sort: Sort::default(),
+            },
+        )
+        .expect("remember");
+    view.set_view_memory(memory);
+    view.scene(1000, 600);
+    assert_eq!(view.mode(), ViewMode::List);
+}
+
+#[test]
+fn the_settings_window_matches_its_goldens() {
+    let palette = Palette::for_scheme(Scheme::Light);
+    for (name, percent) in [("files-settings", 100), ("files-settings-150", 150)] {
+        let appearance = Appearance {
+            scheme: Scheme::Light,
+            text_size: TextSize::from_percent(percent),
+            ..Appearance::default()
+        };
+        let settings = std::rc::Rc::new(std::cell::RefCell::new(FilesSettings::default()));
+        let mut ui = settings_view(appearance, &settings);
+        let mut content = ui.scene(SETTINGS_SIZE.0, SETTINGS_SIZE.1);
+        content.background = palette.sheet;
+        let framed = framed_scene(&content, "Files Settings", None, None, &palette);
+        let mut rgba = vec![0; (framed.width * framed.height * 4) as usize];
+        CpuRenderer::new()
+            .render_into(&framed, 1.0, &mut rgba)
+            .expect("render");
+        bande_golden::assert_golden_rgba!(name, (framed.width, framed.height), rgba);
+    }
 }

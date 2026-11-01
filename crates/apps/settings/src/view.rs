@@ -308,6 +308,12 @@ impl SettingsView {
         view
     }
 
+    pub fn set_window_active(&mut self, active: bool) {
+        if self.ui.set_window_active(active) {
+            self.invalidate();
+        }
+    }
+
     pub fn set_appearance(&mut self, appearance: Appearance) {
         let cx = self.ui.context();
         let changed = cx.palette != appearance.palette()
@@ -1211,9 +1217,9 @@ impl SettingsView {
             PaneId::Notifications => self
                 .commands
                 .push(Command::Notifications(NotificationCommand::Refresh)),
-            PaneId::SoftwareUpdate if self.software == SoftwareState::Unknown => self
-                .commands
-                .push(Command::Software(SoftwareCommand::Check)),
+            PaneId::SoftwareUpdate if self.software == SoftwareState::Unknown => {
+                self.commands.push(Command::Software(SoftwareCommand::Open))
+            }
             PaneId::Sound => self
                 .commands
                 .push(Command::Audio(AudioCommand::Listen(true))),

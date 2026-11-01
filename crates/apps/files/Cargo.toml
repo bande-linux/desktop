@@ -12,6 +12,7 @@ accesskit.workspace = true
 rustix = { workspace = true, features = ["fs", "process"] }
 tracing.workspace = true
 bande-app-menu.workspace = true
+bande-app-settings.workspace = true
 bande-fs.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
@@ -22,6 +23,7 @@ bande-thumbnails.workspace = true
 bande-toolkit.workspace = true
 bande-volumes.workspace = true
 bande-xdg.workspace = true
+jiff.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]

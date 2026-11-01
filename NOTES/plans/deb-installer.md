@@ -183,6 +183,17 @@ boundary as `NOTES/plans/app-store.md` milestone 2):
 
 ## Implementation plan
 
+**Status (2026-11-01):** milestones 1-6 are on `main`, and the wiring of 7 (default handler in
+`bande-mimeapps.list`, Recommends in `bande-desktop`, the release package list and deb checks,
+`docs/architecture/packaging.md`, a test that the shipped list opens `.deb` in the installer).
+`crates/apps/installer` builds `bande-installer` on `bande-packages`. Differences from the plan:
+the installed version comes from PackageKit's `Resolve(installed)` instead of `dpkg-query`, so the
+fake can script it; there are no goldens yet; the Present state offers Remove and Done but not
+Open. Left: the live checks on the mini in milestone 7 (an install asks for the owner's password
+on screen), and the `#[ignore]` real-daemon tests of milestone 2. Checked read-only on the mini:
+`GetDetailsLocal` on `~/Downloads/Discord.deb` (amd64) answers with `discord;1.0.168;amd64;local`,
+so the architecture check has to come from `dpkg-deb`, as planned.
+
 Each milestone is one branch from `main` and must pass the full gate (fmt, clippy `-D warnings`,
 workspace tests on the hermetic bus). "Mini" means checked live on the M2 mini.
 
@@ -289,7 +300,11 @@ workspace tests on the hermetic bus). "Mini" means checked live on the M2 mini.
 
 1. **Standalone Package Installer** (recommended, like macOS's Installer.app), or the future
    Software store's "open a file" page. The store is about 9 to 15 agent hours away.
+   Decided overnight 2026-11-01: standalone Package Installer (plan recommendation; owner may
+   revisit).
 2. **Password for local packages:**
    - keep polkit's `package-install-untrusted` = `auth_admin`, a password on every install
      (recommended: the file's scripts run as root);
    - or add it to the password-free `sudo` rule next to `system-update`.
+   Decided overnight 2026-11-01: keep `auth_admin`, a password on every install (plan
+   recommendation; owner may revisit).

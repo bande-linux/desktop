@@ -18,7 +18,9 @@ pub enum ViewMode {
 }
 
 impl ViewMode {
-    fn name(self) -> &'static str {
+    pub const ALL: [Self; 3] = [Self::Icons, Self::List, Self::Columns];
+
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Icons => "icons",
             Self::List => "list",
@@ -26,10 +28,16 @@ impl ViewMode {
         }
     }
 
-    fn parse(name: &str) -> Option<Self> {
-        [Self::Icons, Self::List, Self::Columns]
-            .into_iter()
-            .find(|mode| mode.name() == name)
+    pub(crate) fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|mode| mode.name() == name)
+    }
+
+    pub(crate) fn message(self) -> &'static str {
+        match self {
+            Self::Icons => "view-icons",
+            Self::List => "view-list",
+            Self::Columns => "view-columns",
+        }
     }
 }
 

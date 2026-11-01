@@ -12,6 +12,7 @@ use zbus::zvariant::{OwnedValue, Structure, Value};
 pub const MENU_PATH: &str = "/org/bande/MenuBar";
 pub const SHELL_ACTION_PROPERTY: &str = "x-bande-shell-action";
 pub const VERSION_PROPERTY: &str = "x-bande-version";
+pub const SETTINGS_SHORTCUT: &str = "Ctrl+,";
 const INTERFACE: &str = "com.canonical.dbusmenu";
 const ROOT: i32 = 0;
 const ENGLISH: &str = include_str!("../locales/en-US/bande-app-menu.ftl");
@@ -25,6 +26,7 @@ pub enum Standard {
     Minimize,
     Zoom,
     CloseWindow,
+    Settings,
 }
 
 const APP_SHORTCUTS: [(Standard, &str); 2] = [
@@ -32,12 +34,13 @@ const APP_SHORTCUTS: [(Standard, &str); 2] = [
     (Standard::CloseWindow, "Ctrl+W"),
 ];
 
-const STANDARD: [(Standard, &str); 5] = [
+const STANDARD: [(Standard, &str); 6] = [
     (Standard::Hide, "app-menu:hide"),
     (Standard::Quit, "app-menu:quit"),
     (Standard::Minimize, "app-menu:minimize"),
     (Standard::Zoom, "app-menu:zoom"),
     (Standard::CloseWindow, "app-menu:close-window"),
+    (Standard::Settings, "app-menu:settings"),
 ];
 
 impl Standard {
@@ -146,6 +149,10 @@ pub fn window_submenu(items: Vec<Entry>) -> Entry {
         entries.extend(items);
     }
     Entry::submenu(&L10N.tr("window"), entries)
+}
+
+pub fn settings() -> Entry {
+    Entry::item(&L10N.tr("settings"), Standard::Settings.action()).shortcut(SETTINGS_SHORTCUT)
 }
 
 pub fn close_window() -> Entry {

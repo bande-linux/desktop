@@ -73,6 +73,7 @@ zbus = "=5.19.0"
 zeroize = { version = "=1.8.1", features = ["serde"] }
 zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2"] }
 bande-app-menu = { path = "crates/libs/app-menu" }
+bande-app-settings = { path = "crates/libs/app-settings" }
 bande-audio = { path = "crates/libs/audio" }
 bande-automount = { path = "crates/services/automount" }
 bande-bar = { path = "crates/shell/bar" }
@@ -94,6 +95,7 @@ bande-fs = { path = "crates/libs/fs" }
 bande-golden = { path = "crates/testing/golden" }
 bande-graphics = { path = "crates/toolkit/graphics" }
 bande-greeter = { path = "crates/shell/greeter" }
+bande-installer = { path = "crates/apps/installer" }
 bande-inbox = { path = "crates/libs/inbox" }
 bande-keyboard = { path = "crates/libs/keyboard" }
 bande-l10n = { path = "crates/libs/l10n" }
@@ -102,6 +104,7 @@ bande-lock = { path = "crates/shell/lock" }
 bande-log = { path = "crates/libs/log" }
 bande-monitor = { path = "crates/apps/monitor" }
 bande-network = { path = "crates/libs/network" }
+bande-packages = { path = "crates/libs/packages" }
 bande-notifications = { path = "crates/shell/notifications" }
 bande-notify = { path = "crates/services/notify" }
 bande-polkit = { path = "crates/services/polkit" }

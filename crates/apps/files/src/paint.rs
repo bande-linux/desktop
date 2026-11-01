@@ -210,6 +210,7 @@ impl FilesView {
 
     fn paint_sidebar(&mut self, items: &mut Vec<Item>) {
         let palette = self.palette;
+        let window_active = self.ui.context().window_active;
         let root = self.browser.root().clone();
         let trash_full = self.trash_full;
         self.hits.push((
@@ -247,7 +248,8 @@ impl FilesView {
                     );
                     let selected = place.location == root;
                     if selected {
-                        items.push(self.fill(rect, Radius::S, palette.well));
+                        let fill = palette.sidebar_selection(window_active, false);
+                        items.push(self.fill(rect, Radius::S, fill));
                     } else if self.hover == Some(Hit::Place(index)) {
                         items.push(self.fill(rect, Radius::S, palette.well.with_opacity(0.5)));
                     }
@@ -256,7 +258,7 @@ impl FilesView {
                         _ => place.icon,
                     };
                     let tint = match selected {
-                        true => palette.accent_text,
+                        true => palette.ink,
                         false => palette.ink2,
                     };
                     let symbol = format!("{icon}-symbolic");

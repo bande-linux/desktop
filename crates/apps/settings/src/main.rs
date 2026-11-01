@@ -6,7 +6,7 @@ use std::time::Instant;
 use bande_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
 use bande_settings::{
     Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView,
-    SoftwareCommand, UDEV_DATA, announce_updates, feed, sidebar_width,
+    SoftwareCommand, UDEV_DATA, announce_updates, clicked, feed, sidebar_width,
 };
 use bande_settings_panes::panes as panes_list;
 use bande_toolkit::ui::shortcut_pressed;
@@ -96,7 +96,7 @@ impl Settings {
                 window.close();
                 Ok(())
             }
-            None => {
+            Some(Standard::Settings) | None => {
                 if let Some(pane) = action
                     .strip_prefix(PANE_ACTION)
                     .and_then(PaneId::from_keyword)
@@ -162,8 +162,9 @@ impl App for Settings {
                 self.view.set_appearance(appearance);
                 window.set_frame_regions(frame_regions(appearance.text_size));
             }
-            WindowEvent::Focus(true) => {
-                if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
+            WindowEvent::Focus(focused) => {
+                self.view.set_window_active(focused);
+                if focused && let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
                     tracing::warn!("{error}");
                 }
             }
@@ -212,11 +213,33 @@ impl App for Settings {
 }
 
 const CHECK_UPDATES: &str = "--check-updates";
+const OPEN_ON_CLICK: &str = "--open-on-click";
 
 fn check_updates() -> Result<(), Box<dyn std::error::Error>> {
     let session = zbus::blocking::Connection::session()?;
     let system = zbus::blocking::Connection::system()?;
-    if announce_updates(&session, &system)? {
+    if let Some(id) = announce_updates(&session, &system)? {
+        let program = std::env::current_exe()?.to_string_lossy().into_owned();
+        let waiter = [
+            "systemd-run",
+            "--user",
+            "--scope",
+            "--quiet",
+            "--collect",
+            "--",
+            &program,
+            OPEN_ON_CLICK,
+            &id.to_string(),
+        ]
+        .map(str::to_owned);
+        spawn_detached("", &waiter, None, None)?;
+    }
+    Ok(())
+}
+
+fn open_on_click(id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let session = zbus::blocking::Connection::session()?;
+    if clicked(&session, id.parse()?)? {
         let program = std::env::current_exe()?.to_string_lossy().into_owned();
         let pane = PaneId::SoftwareUpdate.keyword().to_owned();
         spawn_detached(APP_ID, &[program, pane], None, None)?;
@@ -231,7 +254,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .ok();
     let (feed, updates) = feed()?;
     let services = Services::start(&session, system.as_ref(), &updates);
-    services.send(Command::Software(SoftwareCommand::Check));
+    services.send(Command::Software(SoftwareCommand::Open));
     let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
     window.set_frame_regions(frame_regions(window.appearance().text_size));
     let mut view = SettingsView::new(window.appearance().palette(), TextSystem::new());
@@ -265,8 +288,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() -> ExitCode {
     bande_log::init("bande-settings");
-    let checking = std::env::args().nth(1).as_deref() == Some(CHECK_UPDATES);
-    match if checking { check_updates() } else { run() } {
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    let outcome = match arguments.iter().map(String::as_str).collect::<Vec<_>>()[..] {
+        [CHECK_UPDATES] => check_updates(),
+        [OPEN_ON_CLICK, id] => open_on_click(id),
+        _ => run(),
+    };
+    match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!("{error}");

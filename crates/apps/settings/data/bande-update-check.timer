@@ -3,6 +3,7 @@ Description=Check for software updates once a day
 PartOf=graphical-session.target
 
 [Timer]
+OnStartupSec=3min
 OnCalendar=daily
 RandomizedDelaySec=1h
 Persistent=true

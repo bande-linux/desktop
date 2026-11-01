@@ -257,6 +257,18 @@ fn publish_changes(
         if before.trackpad.disable_while_typing != after.trackpad.disable_while_typing {
             let _ = guard.trackpad_disable_while_typing_changed(emitter).await;
         }
+        if before.trackpad.workspace_swipe != after.trackpad.workspace_swipe {
+            let _ = guard.trackpad_workspace_swipe_changed(emitter).await;
+        }
+        if before.trackpad.overview_swipe != after.trackpad.overview_swipe {
+            let _ = guard.trackpad_overview_swipe_changed(emitter).await;
+        }
+        if before.trackpad.desktop_spread != after.trackpad.desktop_spread {
+            let _ = guard.trackpad_desktop_spread_changed(emitter).await;
+        }
+        if before.trackpad.launcher_pinch != after.trackpad.launcher_pinch {
+            let _ = guard.trackpad_launcher_pinch_changed(emitter).await;
+        }
         if before.mouse.natural_scrolling != after.mouse.natural_scrolling {
             let _ = guard.mouse_natural_scrolling_changed(emitter).await;
         }
@@ -899,6 +911,46 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_trackpad_disable_while_typing(&self, on: bool) -> zbus::fdo::Result<()> {
         self.write(&Setting::TrackpadDisableWhileTyping(on))
+    }
+
+    #[zbus(property)]
+    fn trackpad_workspace_swipe(&self) -> bool {
+        self.store.current().trackpad.workspace_swipe
+    }
+
+    #[zbus(property)]
+    fn set_trackpad_workspace_swipe(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::TrackpadWorkspaceSwipe(on))
+    }
+
+    #[zbus(property)]
+    fn trackpad_overview_swipe(&self) -> bool {
+        self.store.current().trackpad.overview_swipe
+    }
+
+    #[zbus(property)]
+    fn set_trackpad_overview_swipe(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::TrackpadOverviewSwipe(on))
+    }
+
+    #[zbus(property)]
+    fn trackpad_desktop_spread(&self) -> bool {
+        self.store.current().trackpad.desktop_spread
+    }
+
+    #[zbus(property)]
+    fn set_trackpad_desktop_spread(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::TrackpadDesktopSpread(on))
+    }
+
+    #[zbus(property)]
+    fn trackpad_launcher_pinch(&self) -> bool {
+        self.store.current().trackpad.launcher_pinch
+    }
+
+    #[zbus(property)]
+    fn set_trackpad_launcher_pinch(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::TrackpadLauncherPinch(on))
     }
 
     #[zbus(property)]

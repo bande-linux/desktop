@@ -56,7 +56,7 @@ pub use secure_field::SecureField;
 pub use segmented::{SEGMENTED_HEIGHT, SegmentedControl};
 pub use sheet::Alert;
 use sheet::Sheet;
-pub use shortcut::{Shortcut, ShortcutKeys, ShortcutText, shortcut_keys};
+pub use shortcut::{Shortcut, ShortcutText, parse_shortcut, shortcut_label, shortcut_pressed};
 pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
 pub use stepper::{STEPPER_SIZE, Stepper};

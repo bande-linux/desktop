@@ -171,8 +171,9 @@ const fn shortcut(action: Action, keys: &'static str) -> Shortcut {
     Shortcut { action, keys }
 }
 
-pub const SHORTCUTS: [Shortcut; 40] = [
+pub const SHORTCUTS: [Shortcut; 41] = [
     shortcut(Action::CloseWindow, "Super+W"),
+    shortcut(Action::CloseWindow, "Alt+F4"),
     shortcut(Action::MinimizeWindow, "Super+M"),
     shortcut(Action::ToggleFullScreen, "Ctrl+Super+F"),
     shortcut(Action::TileWindow, "Ctrl+Super+Left"),

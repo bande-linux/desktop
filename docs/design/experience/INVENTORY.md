@@ -7,7 +7,7 @@ Inputs follow section 2 of [`../DESIGN.md`](../DESIGN.md).
 | Surface | Click | Double click | Right click | Modifier click | Hover | Drag | Alt-drag | Drop | Scroll | Keyboard | Shortcuts | Escape | Gestures | Screen reader |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | Desktop | | | | | | | | | | | | | | |
-| Dock | | | | | | | | | | | | | | |
+| Taskbar | | | | | | | | | | | | | | |
 | Menu bar | | | | | | | | | | | | | | |
 | Launcher | | | | | | | | | | | | | | |
 | Control Center | | | | | | | | | | | | | | |

@@ -8,7 +8,8 @@ Status: **none** (missing), **basic** (works, far from macOS), **parity** (behav
 
 Default apps follow a hybrid plan: Finder, System Settings, Terminal, Activity Monitor and
 Spotlight are ours; Firefox, GNOME Text Editor, Loupe, Papers, Calculator, Showtime and Clocks are
-preinstalled. The Dock sits on the left by default, the menu bar on top.
+preinstalled. The taskbar sits on the left by default and holds the menu bar too; a setting moves the
+menu bar back to the top.
 
 ## Foundations
 

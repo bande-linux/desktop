@@ -95,7 +95,7 @@ principles above and from what other systems use.
 | Menu dismiss without choice | Fades out | 120 ms opacity fade |
 | Sheet | Slides down out of the title bar | `standard` spring on translate-y and clip; dims the parent |
 | Popover | Fades and scales slightly from its anchor | `quick` spring, scale 0.95 to 1 from the arrow tip, plus opacity |
-| Dock launch bounce | Bounces until the app is up | DESIGN uses a gentle pulse instead (dock.md). Keep that; no bounce |
+| Dock launch bounce | Bounces until the app is up | DESIGN uses a gentle pulse instead (taskbar.md). Keep that; no bounce |
 | Dock magnification | Icons scale with pointer distance, tracking 1:1 | Direct mapping, no spring while hovering; spring back with `quick` on leave |
 | Spotlight / launcher | Appears instantly, fades | 100 ms fade plus 0.98 to 1 scale. Text input is live from frame 1 |
 | Notification banner | Slides in from the right edge, stacks | `standard` slide plus fade; the stack reflows with `standard`; dismiss by flick uses `momentum` |

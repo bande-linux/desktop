@@ -98,7 +98,7 @@ struct Row {
     frame: Rect,
     path: Option<Paragraph>,
     title: Paragraph,
-    shortcut: Option<(ShortcutText, Color)>,
+    shortcut: Option<ShortcutText>,
     selected: bool,
 }
 
@@ -150,16 +150,13 @@ impl Card {
                 (cx.palette.ink, cx.palette.ink2)
             };
             let shortcut = item.shortcut.as_deref().map(|shortcut| {
-                (
-                    ShortcutText::new(&mut cx.text, shortcut, TextStyle::new(TEXT_SIZE, muted)),
-                    muted,
-                )
+                ShortcutText::new(&mut cx.text, shortcut, TextStyle::new(TEXT_SIZE, muted))
             });
             let room = width
                 - 2.0 * TEXT_INSET
                 - shortcut
                     .as_ref()
-                    .map_or(0.0, |(shortcut, _)| shortcut.width() + SHORTCUT_GAP);
+                    .map_or(0.0, |shortcut| shortcut.width() + SHORTCUT_GAP);
             let title = leaf(&item.title);
             let prefix = item
                 .title
@@ -230,13 +227,12 @@ impl Card {
             origin: Point::new(x.round(), baseline(&row.title)),
             paragraph: row.title.clone(),
         });
-        if let Some((shortcut, color)) = &row.shortcut {
+        if let Some(shortcut) = &row.shortcut {
             shortcut.paint(
                 Point::new(
                     (row.frame.x + row.frame.width - TEXT_INSET - shortcut.width()).round(),
                     (row.frame.y + (row.frame.height - shortcut.height()) / 2.0).round(),
                 ),
-                *color,
                 items,
             );
         }

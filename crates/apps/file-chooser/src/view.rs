@@ -7,8 +7,8 @@ use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use bande_files::{Place, Row as SidebarRow};
 use bande_fs::{Entry, SortBy, format_date, format_size};
 use bande_toolkit::ui::{
-    Alert, Axis, Button, Cell, Column, Context, Cursor, Event, Key, Label, PopUpButton, Row, Size,
-    Sort, Stack, TEXT_FIELD_HEIGHT, Table, TextField, Ui, Widget, WidgetId,
+    Alert, Axis, Button, Cell, Column, Context, Cursor, Event, Key, Label, Modifiers, PopUpButton,
+    Row, Size, Sort, Stack, TEXT_FIELD_HEIGHT, Table, TextField, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, Image, Item, Rect, Scene, Shape, TextSystem};
 use bande_xdg::{OCTET_STREAM, UserDir, config_home, find_icon, user_dir};
@@ -989,70 +989,71 @@ impl ChooserView {
         self.selected = paths.to_vec();
     }
 
-    fn shortcut(&mut self, key: Key, logo: bool, shift: bool) -> bool {
-        if self.ui.has_sheet() {
+    fn shortcut(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        if self.ui.has_sheet() || modifiers.logo {
             return false;
         }
-        if !logo {
-            return match key {
-                Key::Character(typed @ ('/' | '~')) if self.ui.focus() == Some(self.files) => {
-                    push(&self.intents, Intent::AskGoTo(typed.to_string()));
-                    self.drain();
-                    true
-                }
-                _ => false,
-            };
-        }
+        let Modifiers {
+            shift,
+            alt,
+            control,
+            ..
+        } = modifiers;
         match key {
-            Key::Up => {
+            Key::Character(typed @ ('/' | '~'))
+                if !control && !alt && self.ui.focus() == Some(self.files) =>
+            {
+                push(&self.intents, Intent::AskGoTo(typed.to_string()));
+            }
+            Key::Up if alt => {
                 if let Some(parent) = self.chooser.folder().parent() {
                     let child = self.chooser.folder().to_path_buf();
                     self.go(parent.to_path_buf());
                     self.select(&[child]);
                 }
-                true
+                return true;
             }
-            Key::Down => {
+            Key::Down if alt => {
                 if let [only] = self.selected.as_slice()
                     && only.is_dir()
                 {
                     self.go(only.clone());
                 }
-                true
+                return true;
             }
-            Key::Character('[') if !shift => {
+            Key::Left if alt => {
                 self.step(true);
-                true
+                return true;
             }
-            Key::Character(']') if !shift => {
+            Key::Right if alt => {
                 self.step(false);
-                true
+                return true;
             }
-            Key::Character(letter) if shift => {
-                match letter.to_ascii_lowercase() {
-                    'n' => push(&self.intents, Intent::NewFolder),
-                    'g' => push(&self.intents, Intent::AskGoTo(self.shown_folder())),
-                    'h' => push(&self.intents, Intent::Go(self.home.clone())),
-                    'd' => push(
+            Key::Home if alt => push(&self.intents, Intent::Go(self.home.clone())),
+            Key::Character(letter) if control && !alt => {
+                match (letter.to_ascii_lowercase(), shift) {
+                    ('l', false) => push(&self.intents, Intent::AskGoTo(self.shown_folder())),
+                    ('n', true) => push(&self.intents, Intent::NewFolder),
+                    ('d', true) => push(
                         &self.intents,
                         Intent::Go(self.user_folder(UserDir::Desktop)),
                     ),
-                    'o' => push(
+                    ('o', true) => push(
                         &self.intents,
                         Intent::Go(self.user_folder(UserDir::Documents)),
                     ),
                     _ => return false,
                 }
-                self.drain();
-                true
             }
-            _ => false,
+            _ => return false,
         }
+        self.drain();
+        true
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {
         if let Event::Key { key, modifiers } = event
-            && self.shortcut(*key, modifiers.logo, modifiers.shift)
+            && self.shortcut(*key, *modifiers)
         {
             return true;
         }

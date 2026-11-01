@@ -1165,9 +1165,7 @@ impl FilesView {
         let Some(hit) = self.hit(pointer.position) else {
             return false;
         };
-        if pointer.button == PointerButton::Secondary
-            || (pointer.is_primary() && pointer.modifiers.control)
-        {
+        if pointer.button == PointerButton::Secondary {
             return self.context_click(hit, pointer.position);
         }
         if pointer.button == PointerButton::Middle {
@@ -1180,7 +1178,7 @@ impl FilesView {
         match hit {
             Hit::Row { column, row } => {
                 let modifiers = pointer.modifiers;
-                let plain = !modifiers.logo && !modifiers.shift;
+                let plain = !modifiers.control && !modifiers.shift;
                 let Some(shown) = self.browser.columns().get(column) else {
                     return false;
                 };
@@ -1199,7 +1197,7 @@ impl FilesView {
                     && shown.is_marked(row)
                     && shown.marked.len() > 1;
                 let folder_in_tab = pointer.count >= 2
-                    && modifiers.logo
+                    && modifiers.control
                     && entry.is_folder()
                     && entry.trashed.is_none();
                 self.commit_rename();
@@ -1214,7 +1212,7 @@ impl FilesView {
                     return true;
                 }
                 if keep {
-                } else if modifiers.logo {
+                } else if modifiers.control {
                     self.browser.toggle(column, row);
                 } else if modifiers.shift {
                     self.browser.extend_to(column, row);
@@ -1222,9 +1220,9 @@ impl FilesView {
                     self.browser.select(column, row);
                 }
                 self.selection_changed();
-                if pointer.count >= 2 && !modifiers.logo && !modifiers.shift {
+                if pointer.count >= 2 && !modifiers.control && !modifiers.shift {
                     self.open();
-                } else if already && pointer.count == 1 && !modifiers.logo && !modifiers.shift {
+                } else if already && pointer.count == 1 && !modifiers.control && !modifiers.shift {
                     self.pending_rename = Some((Instant::now() + SLOW_CLICK_RENAME, path));
                 }
             }
@@ -1483,28 +1481,38 @@ impl FilesView {
     }
 
     pub(crate) fn key(&mut self, key: Key, modifiers: Modifiers) -> bool {
-        let command = modifiers.logo;
+        if modifiers.logo {
+            return false;
+        }
+        let command = modifiers.control;
         let shift = modifiers.shift;
         let alt = modifiers.alt;
+        let plain = !command && !alt;
         match key {
-            Key::Space if !command => self.toggle_quick_look(),
-            Key::Character('y' | 'Y') if command && !alt => self.toggle_quick_look(),
-            Key::Character('y' | 'Y') if command => self.toggle_quick_look_full_screen(),
+            Key::Space if plain => self.toggle_quick_look(),
+            Key::Function(11) if plain => self.toggle_quick_look_full_screen(),
             Key::Escape if self.searching.is_some() => self.end_search(),
             Key::Character('f' | 'F') if command && shift => self.go(Location::Recents),
             Key::Character('f' | 'F') if command => self.focus_search(),
-            Key::Character('.' | '>') if command && shift => self.toggle_hidden(),
+            Key::Character('h' | 'H') if command && !shift => self.toggle_hidden(),
             Key::Function(10) if shift => self.keyboard_menu(),
-            Key::Up if command => {
+            Key::Up if alt => {
                 self.browser.enclosing_folder();
                 self.selection_changed();
             }
-            Key::Down if command => self.open(),
+            Key::Down if alt => self.open(),
+            Key::Left if alt => self.back(),
+            Key::Right if alt => {
+                self.end_search();
+                self.browser.go_forward();
+                self.selection_changed();
+            }
+            Key::Home if alt => self.go(Location::Folder(home())),
             Key::Character('o' | 'O') if command && !shift => self.open(),
-            Key::Enter if !command => self.open(),
+            Key::Enter if plain => self.open(),
             Key::Function(2) => self.start_rename(),
             Key::Up | Key::Down | Key::Left | Key::Right | Key::Home | Key::End
-                if self.mode == ViewMode::Icons =>
+                if self.mode == ViewMode::Icons && !alt =>
             {
                 return self.grid_key(key, modifiers);
             }
@@ -1536,10 +1544,10 @@ impl FilesView {
                 }
                 self.selection_changed();
             }
-            Key::Character('{' | '[') if command && shift => self.step_tab(false),
-            Key::Character('}' | ']') if command && shift => self.step_tab(true),
-            Key::Tab if modifiers.control => self.step_tab(!shift),
-            Key::Character('t' | 'T') if command && modifiers.control => self.add_to_sidebar(),
+            Key::PageUp if command => self.step_tab(false),
+            Key::PageDown if command => self.step_tab(true),
+            Key::Tab if command => self.step_tab(!shift),
+            Key::Character('d' | 'D') if command && !shift => self.add_to_sidebar(),
             Key::Character('t' | 'T') if command && !shift => {
                 self.open_tab(self.browser.root().clone());
             }
@@ -1547,31 +1555,21 @@ impl FilesView {
                 let location = self.browser.current_location();
                 self.requests.push(Request::NewWindow(location));
             }
-            Key::Character('[') if command => self.back(),
-            Key::Character(']') if command => {
-                self.end_search();
-                self.browser.go_forward();
-                self.selection_changed();
-            }
-            Key::Backspace if command && shift => self.ask_to_empty_trash(),
-            Key::Backspace if command && alt => self.confirm_delete(),
-            Key::Backspace if command => self.trash_or_put_back(),
+            Key::Delete if command && shift => self.ask_to_empty_trash(),
+            Key::Delete if shift || self.selection_is_trashed() => self.confirm_delete(),
+            Key::Delete if plain => self.trash_or_put_back(),
             Key::Character('z' | 'Z') if command && shift => self.redo(),
             Key::Character('z' | 'Z') if command => self.undo(),
             Key::Character('n' | 'N') if command && shift => self.new_folder(),
-            Key::Character('g' | 'G') if command && shift => self.ask_go_to(),
+            Key::Character('l' | 'L') if command && !shift => self.ask_go_to(),
             Key::Character('d' | 'D') if command && shift => {
                 self.go(Location::Folder(user_folder(UserDir::Desktop)));
             }
-            Key::Character('d' | 'D') if command => self.duplicate(),
             Key::Character('e' | 'E') if command => self.eject_current(),
-            Key::Character('h' | 'H') if command && shift => {
-                self.go(Location::Folder(home()));
-            }
             Key::Character('o' | 'O') if command && shift => {
                 self.go(Location::Folder(user_folder(UserDir::Documents)));
             }
-            Key::Character('l' | 'L') if command && alt => {
+            Key::Character('l' | 'L') if command && shift => {
                 self.go(Location::Folder(user_folder(UserDir::Downloads)));
             }
             Key::Character('/') if command => self.toggle_status_bar(),
@@ -1588,16 +1586,23 @@ impl FilesView {
                 self.browser.select_all();
                 self.selection_changed();
             }
-            Key::Character('c' | 'C') if command && alt && shift => self.copy_paths(),
+            Key::Character('c' | 'C') if command && shift => self.copy_paths(),
             Key::Character('c' | 'C') if command => self.copy_selection(false),
             Key::Character('x' | 'X') if command => self.copy_selection(true),
-            Key::Character('v' | 'V') if command => self.paste(alt),
-            Key::Character(character) if !command && !modifiers.control => {
+            Key::Character('v' | 'V') if command => self.paste(shift),
+            Key::Character(character) if plain => {
                 return self.type_select(character);
             }
             _ => return false,
         }
         true
+    }
+
+    fn selection_is_trashed(&self) -> bool {
+        self.browser
+            .selection()
+            .iter()
+            .any(|entry| entry.trashed.is_some())
     }
 
     pub fn show_inspector(&mut self) {

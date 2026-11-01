@@ -584,11 +584,19 @@ fn trackpad_and_mouse_settings_are_read_with_mac_like_defaults() {
     assert!(defaults.mouse.acceleration && defaults.trackpad.acceleration);
     assert_eq!(defaults.trackpad.dragging, Dragging::Tap);
     assert_eq!(defaults.trackpad.scroll_method, ScrollMethod::TwoFingers);
+    assert!(
+        defaults.trackpad.workspace_swipe
+            && defaults.trackpad.overview_swipe
+            && defaults.trackpad.desktop_spread
+            && defaults.trackpad.launcher_pinch
+    );
     let config = Config::parse(
-        "trackpad {\n    tap-to-click #false\n    speed 0.5\n    acceleration #false\n    secondary-click \"corner\"\n    dragging \"tap-with-lock\"\n    scroll-method \"edge\"\n    disable-while-typing #false\n}\nmouse {\n    primary-button \"right\"\n    natural-scrolling #true\n    speed -1\n    acceleration #false\n}\n",
+        "trackpad {\n    tap-to-click #false\n    speed 0.5\n    acceleration #false\n    secondary-click \"corner\"\n    dragging \"tap-with-lock\"\n    scroll-method \"edge\"\n    disable-while-typing #false\n    overview-swipe #false\n    launcher-pinch #false\n}\nmouse {\n    primary-button \"right\"\n    natural-scrolling #true\n    speed -1\n    acceleration #false\n}\n",
     )
     .expect("valid");
     assert!(!config.trackpad.acceleration);
+    assert!(config.trackpad.workspace_swipe && !config.trackpad.overview_swipe);
+    assert!(config.trackpad.desktop_spread && !config.trackpad.launcher_pinch);
     assert_eq!(config.trackpad.dragging, Dragging::TapWithLock);
     assert_eq!(config.trackpad.scroll_method, ScrollMethod::Edge);
     assert_eq!(config.mouse.primary_button, PrimaryButton::Right);

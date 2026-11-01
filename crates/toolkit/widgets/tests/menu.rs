@@ -11,14 +11,14 @@ fn app_menus() -> Menu {
             "Files",
             Menu::new(vec![
                 MenuItem::new("About Files", "about"),
-                MenuItem::new("Quit Files", "quit").shortcut("Super+Q"),
+                MenuItem::new("Quit Files", "quit").shortcut("Ctrl+Q"),
             ]),
         ),
         MenuItem::submenu(
             "Edit",
             Menu::new(vec![
-                MenuItem::new("Copy", "copy").shortcut("Super+C"),
-                MenuItem::new("Find", "find").shortcut("Super+F"),
+                MenuItem::new("Copy", "copy").shortcut("Ctrl+C"),
+                MenuItem::new("Find", "find").shortcut("Ctrl+F"),
                 MenuItem::new("Find Next", "find-next").enabled(false),
             ]),
         ),
@@ -76,7 +76,7 @@ fn typing_in_a_searchable_menu_lists_every_enabled_item_with_its_path_and_enter_
     );
     assert_eq!(
         tracker.panels()[0].menu().items[0].shortcut.as_deref(),
-        Some("Super+F")
+        Some("Ctrl+F")
     );
     assert!(tracker.panels()[0].size().width >= size.width);
     assert_eq!(

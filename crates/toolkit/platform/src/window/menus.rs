@@ -100,7 +100,7 @@ impl Window {
         items.extend([
             MenuItem::new(&L10N.tr("move"), "move").enabled(!toplevel.fullscreen),
             MenuItem::separator(),
-            MenuItem::new(&L10N.tr("close"), "close").shortcut("Super+W"),
+            MenuItem::new(&L10N.tr("close"), "close").shortcut("Alt+F4"),
             MenuItem::new(&L10N.tr("quit-app"), "quit").shortcut("Super+Q"),
         ]);
         let offset = self.content_offset();

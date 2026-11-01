@@ -27,10 +27,10 @@ item-count = { $count ->
     [one] { $count } item
    *[other] { $count } items
 }
-hint-calculation = Return or Super+C to copy
+hint-calculation = Return or Ctrl+C to copy
 hint-application = Return to open
 hint-setting = Return to open in System Settings
-hint-file = Return to open · Super+Return to show in Files · Super+C to copy path
+hint-file = Return to open · Ctrl+Return to show in Files · Ctrl+C to copy path
 hint-copied = Copied
 menu-open = Open
 menu-show-in-files = Show in Files
@@ -52,7 +52,7 @@ emoji-symbols = Symbols
 emoji-flags = Flags
 emoji-characters = Characters
 hint-emoji-insert = Return to insert
-hint-emoji-copy = Return to copy, then paste with Super+V
+hint-emoji-copy = Return to copy, then paste with Ctrl+V
 menu-insert = Insert
 skin-tone = Skin Tone
 tone-default = Default
@@ -75,7 +75,7 @@ character-count = { $count ->
 }
 info-copied = Copied
 hint-clip-insert = Return to paste · Delete to remove
-hint-clip-copy = Return to copy, then paste with Super+V · Delete to remove
+hint-clip-copy = Return to copy, then paste with Ctrl+V · Delete to remove
 menu-paste = Paste
 menu-delete = Delete
 menu-clear-history = Clear History

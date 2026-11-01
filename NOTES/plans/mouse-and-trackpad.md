@@ -70,7 +70,7 @@ Option A with gesture option 2.
 
 ## Implementation plan
 
-**Status (2026-11-01):** milestones 1-5 are on `main`. Milestones 6-7 (gestures) are next.
+**Status (2026-11-01):** all seven milestones are on `main`. Live checks on trackpad hardware are still to do (no touchpad on the mini).
 
 
 Each milestone is one branch from `main`, merged when the local gate is green. Start after `day/platform-quality-2` merges, so that `report()` is there.
@@ -146,4 +146,6 @@ Each milestone is one branch from `main`, merged when the local gate is green. S
 ## Decisions for the owner
 
 1. **Gestures.** Ship the on/off switches (milestones 6-7) now, or leave the gestures fixed for now?
-2. **Mouse scroll speed.** Add it now? It means one extra milestone that scales wheel deltas, including `v120`, in `input.rs:456-471`, the way KDE does. The spec has it as "later".
+   Decided overnight 2026-11-01: on/off switch per gesture, shipped (plan recommendation; owner may revisit).
+   A four-finger pinch stays claimed while either Show desktop or Launcher is on; with both off it reaches the app.
+2. **Mouse scroll speed.** Still open (the plan gives no recommendation; the spec says later). Add it now? It means one extra milestone that scales wheel deltas, including `v120`, in `input.rs:456-471`, the way KDE does. The spec has it as "later".

@@ -2,7 +2,9 @@
 
 Status: research and build plan of 2026-10-30, branch `night/files-monitor-spec`. Built on
 2026-10-31 in `night/monitor-depth`: M2 to M6, M8, M9, the request plumbing of M7 and the redraw
-part of M1 (see §9). It reads with the principles in [`../design/DESIGN.md`](../design/DESIGN.md)
+part of M1 (see §9). Since 2026-11-01 its shortcuts use Ctrl, not Super
+([decision 0005](../decisions/0005-ctrl-for-app-shortcuts.md)); the records in §9 to §11 keep the
+keys of their day. It reads with the principles in [`../design/DESIGN.md`](../design/DESIGN.md)
 and the design language [`../design/datum.md`](../design/datum.md). There is no feature proposal
 for Activity Monitor; roadmap item C6 (inspector, GPU tab, column chooser) is done.
 
@@ -21,12 +23,12 @@ Checked in `crates/apps/monitor/src` and its goldens.
 
 | Area | What works | Where |
 | :--- | :--- | :--- |
-| Tabs | CPU, Memory, Disk, Network, and GPU once DRM `fdinfo` reports use; Super+1 to Super+5 | `model.rs`, `monitor_view.rs` |
+| Tabs | CPU, Memory, Disk, Network, and GPU once DRM `fdinfo` reports use; Ctrl+1 to Ctrl+5 | `model.rs`, `monitor_view.rs` |
 | Rows | Processes grouped by app (desktop entry or systemd unit), expandable to their processes; kernel threads in one group; other users' processes included | `apps.rs`, `model.rs` |
 | Columns | Per tab, chosen by right-clicking the header, remembered in `~/.local/state/bande/monitor`; sort by header, the selection stays on its row while numbers reorder | `model.rs`, `menu.rs` |
 | Measures | % CPU, CPU time, threads, PID, user, proportional memory (only while shown), resident, disk read and write per second and in total, GPU %, GPU time, GPU memory; network per interface | `sampler.rs`, `system.rs`, `proc.rs` |
 | Footer | Up to three rows of label and value per column (CPU: System, User, Idle, Processes, Threads; Memory: Physical, Used, Cached Files, Swap, Compressed (zram), Pressure as a %) and a 240 × 88 pt bar graph of the last 60 samples | `monitor_view.rs` |
-| Actions | Quit (SIGTERM to the group's roots) and Force Quit (SIGKILL to all, Alt) with an alert; several rows at once; other users' processes refused; Inspect (Super+I, double click); Show in Files (Shift+Super+R, starts `bande-files <path>`); Copy Name, Copy PID; Super+F searches names and PIDs | `menu.rs`, `signal.rs`, `view.rs` |
+| Actions | Quit (SIGTERM to the group's roots) and Force Quit (SIGKILL to all, Alt) with an alert; several rows at once; other users' processes refused; Quit is Ctrl+E; Inspect (Ctrl+I, double click); Show in Files (Shift+Ctrl+R, starts `bande-files <path>`); Copy Name, Copy PID; Ctrl+F searches names and PIDs | `menu.rs`, `signal.rs`, `view.rs` |
 | Inspector | A window per process: Info (parent, children, state, user, command, executable, running for, CPU, threads, resident, virtual), Threads, Open Files, Memory Map | `inspector.rs`, `inspect.rs` |
 | Force Quit | Alt+Super+Esc window listing your apps, Not Responding in red, Force Quit | `force_quit.rs` |
 | Sampling | Every 2 s (first after 0.5 s), PSS and GPU only while a column needs them; every window is asked to redraw on every tick | `main.rs` |
@@ -90,7 +92,7 @@ How the graphs and readouts should look, so every slice draws the same way:
 | Memory pressure is a bare "3.2 %" | Nobody knows if 3.2 % is good; macOS answers with green, yellow, red | now | S |
 | The inspector's Info section is a raw two-column table | It reads as a dump, not a designed panel | now | S |
 | Only light goldens | Dark mode regressions slip through | now | S |
-| A live CPU graph on the bar icon | macOS shows it in the Dock; needs a shell protocol for live icons | later | M |
+| A live CPU graph on the taskbar icon | macOS shows it in the Dock; needs a shell protocol for live icons | later | M |
 | The graph slides smoothly instead of stepping every 2 s | A finer touch; costs frames every 2 s | later | S |
 
 ### Measures
@@ -222,17 +224,17 @@ The expanded state is remembered. Escape or the same command collapses it.
 Info becomes grouped facts on the sheet: PROCESS (name, PID, state, user, app or unit), PARENT AND
 CHILDREN (clickable, opening their inspectors), COMMAND (command line, executable with "Show in
 Files"), RESOURCES (CPU, CPU time, threads, resident, virtual, running for), labels in the Label
-role and values tabular, every value selectable and copyable with Super+C. Threads, Open Files and
+role and values tabular, every value selectable and copyable with Ctrl+C. Threads, Open Files and
 Memory Map keep their tables.
 
-- Tests: Super+C on the PID row copies the PID; activating a child opens its inspector; the app or
+- Tests: Ctrl+C on the PID row copies the PID; activating a child opens its inspector; the app or
   unit row names the systemd unit from the fixture `cgroup`.
 - Goldens: `inspector` (updated) light and dark.
 
 ### M6. View filter
 
 View ▸ All Processes, My Processes, Apps (groups with a desktop entry), as radio items without
-shortcuts (Alt+Super+digits switch workspaces); remembered in the state file beside the columns. Search applies within
+shortcuts (Ctrl+digits switch tabs); remembered in the state file beside the columns. Search applies within
 the filter. The window title stays "Activity Monitor"; the filter shows as a quiet label beside
 the search field when it is not All.
 
@@ -306,7 +308,7 @@ it; packets in and out per second as choosable columns; down interfaces hidden.
 
 "No processes match “text”" centred in `ink3` with a quiet "Clear Search" button; the footer
 readouts publish label and value; the Energy and GPU tabs announce themselves when they appear.
-The keyboard path that works today (Super+F, Return or Down into the list, Return to expand a group
+The keyboard path that works today (Ctrl+F, Return or Down into the list, Return to expand a group
 or inspect a process, Escape to close the inspector) gets one end-to-end test so it stays working.
 
 - Tests: a search for a missing name shows the message and Clear Search restores the rows; the

@@ -197,8 +197,8 @@ impl FilesView {
     }
 
     pub(crate) fn quick_look_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
-        let command = modifiers.logo;
-        let plain = !command && !modifiers.shift && !modifiers.alt && !modifiers.control;
+        let command = modifiers.control;
+        let plain = !command && !modifiers.shift && !modifiers.alt && !modifiers.logo;
         match key {
             Key::Escape => match &mut self.quick_look {
                 Some(shown) if shown.full_screen => shown.full_screen = false,
@@ -208,9 +208,7 @@ impl FilesView {
             Key::PageDown | Key::PageUp if plain => {
                 return self.page_quick_look(key == Key::PageDown);
             }
-            Key::Character('y' | 'Y') if command && modifiers.alt => {
-                self.toggle_quick_look_full_screen();
-            }
+            Key::Function(11) => self.toggle_quick_look_full_screen(),
             Key::Character('=' | '+') if command => return self.zoom_quick_look(true),
             Key::Character('-') if command => return self.zoom_quick_look(false),
             _ => return false,

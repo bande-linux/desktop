@@ -1,6 +1,8 @@
+use std::cell::RefCell;
 use std::error::Error;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -22,8 +24,8 @@ use bande_status::memory::{
 };
 use bande_toolkit::{App, Rect, Role, Scene, Surfaces, TextSystem, Window, WindowEvent};
 use bande_xdg::{
-    Locale, applications, apps_to_reopen, crashed_apps_file, current_desktops, data_dirs, find_app,
-    follow_oom_kills, launch, reopen_file, take_apps_to_reopen,
+    Apps, Locale, applications, apps_to_reopen, config_dirs, crashed_apps_file, current_desktops,
+    data_dirs, find_app, follow_oom_kills, launch, reopen_file, take_apps_to_reopen,
 };
 use zbus::blocking::Connection;
 
@@ -44,6 +46,7 @@ struct Context {
     session: Option<Connection>,
     system: Option<Connection>,
     status: StatusHub,
+    apps: Rc<RefCell<Apps>>,
     config_home: Option<PathBuf>,
     home: Option<PathBuf>,
     app_slice: Option<PathBuf>,
@@ -77,6 +80,7 @@ impl Context {
             session,
             system,
             status,
+            apps: Rc::new(RefCell::new(Apps::load(data_dirs(), &config_dirs()))),
             config_home: std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
             home: std::env::var_os("HOME").map(PathBuf::from),
             app_slice: own_app_slice(),
@@ -85,7 +89,12 @@ impl Context {
 
     fn launcher(&self, window: &mut Window) -> std::io::Result<Box<dyn App>> {
         window.share_fonts(&self.text);
-        let part = LauncherShell::new(window, self.text.sharing_fonts(), self.session.as_ref())?;
+        let part = LauncherShell::new(
+            window,
+            self.text.sharing_fonts(),
+            self.session.as_ref(),
+            Rc::clone(&self.apps),
+        )?;
         Ok(Box::new(part))
     }
 
@@ -135,6 +144,7 @@ impl Context {
                     display.main,
                     &self.config(),
                     self.text.sharing_fonts(),
+                    Rc::clone(&self.apps),
                 )?;
                 Ok((vec![(window, Box::new(part))], None))
             }

@@ -44,6 +44,7 @@ impl Session {
                 session: None,
                 system: None,
                 status: status_hub(None, None).unwrap(),
+                apps: Rc::new(RefCell::new(Apps::load(data_dirs(), &config_dirs()))),
                 config_home: Some(home.clone()),
                 home: Some(home),
                 app_slice: None,

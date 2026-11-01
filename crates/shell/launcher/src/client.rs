@@ -22,8 +22,7 @@ use bande_toolkit::{
 };
 use bande_xdg::{
     Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, MimeDatabase, applications,
-    config_dirs, current_desktops, data_dirs, find_icon, launch, launch_with,
-    launch_with_arguments,
+    current_desktops, data_dirs, find_icon, launch, launch_with, launch_with_arguments,
 };
 
 const FALLBACK_DOCUMENT: &str = "application-x-generic";
@@ -515,6 +514,7 @@ impl LauncherShell {
         window: &mut Window,
         text: TextSystem,
         session: Option<&zbus::blocking::Connection>,
+        apps_by_type: Rc<RefCell<Apps>>,
     ) -> std::io::Result<Self> {
         let dirs = data_dirs();
         let entries = applications(&dirs, Locale::from_env().as_ref(), &current_desktops());
@@ -542,7 +542,6 @@ impl LauncherShell {
             .unwrap_or(&home)
             .join("launcher-skin-tone");
         let usage = usage_file.map(Usage::load).unwrap_or_default();
-        let apps_by_type = Rc::new(RefCell::new(Apps::load(dirs.clone(), &config_dirs())));
         let library = Library {
             apps: apps_by_type.clone(),
             app_icons: app_icons(&entries, &dirs),

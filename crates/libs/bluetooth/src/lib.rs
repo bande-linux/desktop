@@ -145,6 +145,41 @@ impl Device {
     }
 }
 
+const SHOWN: [(&str, &[&str]); 3] = [
+    (ADAPTER, &["Powered"]),
+    (
+        DEVICE,
+        &["Address", "Alias", "Name", "Icon", "Paired", "Connected"],
+    ),
+    (BATTERY, &["Percentage"]),
+];
+
+pub fn shown_change(message: &zbus::Message) -> bool {
+    if message
+        .header()
+        .member()
+        .is_none_or(|member| member.as_str() != "PropertiesChanged")
+    {
+        return true;
+    }
+    let Ok((interface, changed, invalidated)) =
+        message
+            .body()
+            .deserialize::<(String, HashMap<String, OwnedValue>, Vec<String>)>()
+    else {
+        return true;
+    };
+    SHOWN
+        .iter()
+        .find(|(shown, _)| *shown == interface)
+        .is_some_and(|(_, names)| {
+            changed
+                .keys()
+                .chain(&invalidated)
+                .any(|name| names.contains(&name.as_str()))
+        })
+}
+
 fn bluez_running(bus: &Connection) -> zbus::Result<bool> {
     Ok(DBusProxy::new(bus)?.name_has_owner(SERVICE.try_into()?)?)
 }

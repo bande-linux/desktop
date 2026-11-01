@@ -127,6 +127,31 @@ impl Network {
     }
 }
 
+fn sort_networks(networks: &mut [Network]) {
+    networks.sort_by(|a, b| {
+        b.current
+            .cmp(&a.current)
+            .then(b.known.cmp(&a.known))
+            .then(b.strength.cmp(&a.strength))
+            .then(a.ssid.cmp(&b.ssid))
+    });
+}
+
+pub fn set_strength(networks: &mut [Network], access_point: &str, strength: u8) -> bool {
+    let Some(network) = networks
+        .iter_mut()
+        .find(|network| network.access_point.as_str() == access_point)
+    else {
+        return false;
+    };
+    if network.strength == strength {
+        return false;
+    }
+    network.strength = strength;
+    sort_networks(networks);
+    true
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Wired {
     pub cable: bool,
@@ -305,13 +330,7 @@ impl NetworkManager {
                 None => networks.push(network),
             }
         }
-        networks.sort_by(|a, b| {
-            b.current
-                .cmp(&a.current)
-                .then(b.known.cmp(&a.known))
-                .then(b.strength.cmp(&a.strength))
-                .then(a.ssid.cmp(&b.ssid))
-        });
+        sort_networks(&mut networks);
         Ok(networks)
     }
 
@@ -447,5 +466,37 @@ impl NetworkManager {
         Err(Error::Bus(zbus::Error::Failure(
             "NetworkManager left the bus during activation".to_owned(),
         )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use zbus::zvariant::OwnedObjectPath;
+
+    use super::{Network, Security, set_strength};
+
+    fn network(ssid: &str, strength: u8, access_point: &str) -> Network {
+        Network {
+            ssid: ssid.as_bytes().to_vec(),
+            strength,
+            security: Security::Open,
+            known: false,
+            current: false,
+            access_point: OwnedObjectPath::try_from(access_point).unwrap(),
+        }
+    }
+
+    #[test]
+    fn a_stronger_signal_moves_a_network_up_and_an_unlisted_access_point_changes_nothing() {
+        let mut networks = vec![
+            network("cafe", 70, "/ap/1"),
+            network("library", 40, "/ap/2"),
+        ];
+        assert!(set_strength(&mut networks, "/ap/2", 90));
+        assert_eq!(networks[0].name(), "library");
+        assert_eq!(networks[0].strength, 90);
+        assert!(!set_strength(&mut networks, "/ap/2", 90));
+        assert!(!set_strength(&mut networks, "/ap/3", 10));
+        assert_eq!(networks[1].strength, 70);
     }
 }

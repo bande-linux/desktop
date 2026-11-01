@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -6,12 +7,12 @@ use std::time::Duration;
 use bande_audio::{Audio, Level, Snapshot};
 use bande_bluetooth::Bluetooth as BlueZ;
 use bande_inbox::Outbox;
-use bande_network::NetworkManager;
+use bande_network::{NetworkManager, set_strength};
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::names::BusName;
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::{MatchRule, Message, message};
 
 use crate::session::Ending;
@@ -24,6 +25,9 @@ const SOURCES: [(Source, &str); 3] = [
     (Source::Bluetooth, "org.bluez"),
 ];
 const BUS: &str = "org.freedesktop.DBus";
+const ACCESS_POINT: &str = "org.freedesktop.NetworkManager.AccessPoint";
+const STRENGTH: &str = "Strength";
+const LAST_SEEN: &str = "LastSeen";
 const UPOWER_CHARGING: u32 = 1;
 const UPOWER_FULL: u32 = 4;
 const UPOWER_BATTERY: u32 = 2;
@@ -184,10 +188,12 @@ fn bluetooth(bluez: &BlueZ) -> Option<Bluetooth> {
 
 pub type Devices = (Option<Battery>, Option<Wifi>, Option<Bluetooth>);
 
+#[derive(Debug, PartialEq)]
 pub enum Control {
     Run(Command),
     Scan,
     Refresh(Source),
+    Strength(String, u8),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -304,7 +310,25 @@ fn device_rules() -> zbus::Result<Vec<MatchRule<'static>>> {
 
 type Owners = [Option<String>; SOURCES.len()];
 
-fn changed_source(message: &Message, owners: &mut Owners) -> Option<Source> {
+fn strength_only(message: &Message) -> Option<Option<u8>> {
+    if message
+        .header()
+        .member()
+        .is_none_or(|member| member.as_str() != "PropertiesChanged")
+    {
+        return None;
+    }
+    let (interface, changed, invalidated): (String, HashMap<String, OwnedValue>, Vec<String>) =
+        message.body().deserialize().ok()?;
+    let quiet = interface == ACCESS_POINT
+        && invalidated.is_empty()
+        && changed
+            .keys()
+            .all(|name| name == STRENGTH || name == LAST_SEEN);
+    quiet.then(|| changed.get(STRENGTH).and_then(|value| u8::try_from(value).ok()))
+}
+
+fn change_of(message: &Message, owners: &mut Owners) -> Option<Control> {
     let header = message.header();
     if header.message_type() != message::Type::Signal {
         return None;
@@ -317,7 +341,14 @@ fn changed_source(message: &Message, owners: &mut Owners) -> Option<Source> {
         let index = owners
             .iter()
             .position(|owner| owner.as_deref() == Some(sender))?;
-        return Some(SOURCES[index].0);
+        let source = SOURCES[index].0;
+        if source == Source::Wifi
+            && let Some(strength) = strength_only(message)
+        {
+            let access_point = header.path()?.to_string();
+            return strength.map(|strength| Control::Strength(access_point, strength));
+        }
+        return Some(Control::Refresh(source));
     }
     if header
         .member()
@@ -328,7 +359,7 @@ fn changed_source(message: &Message, owners: &mut Owners) -> Option<Source> {
     let (name, _, owner): (String, String, String) = message.body().deserialize().ok()?;
     let index = SOURCES.iter().position(|(_, service)| *service == name)?;
     owners[index] = (!owner.is_empty()).then_some(owner);
-    Some(SOURCES[index].0)
+    Some(Control::Refresh(SOURCES[index].0))
 }
 
 fn refresh_all(controls: &Sender<Control>) -> bool {
@@ -353,8 +384,8 @@ fn watch_devices(system: &Connection, controls: &Sender<Control>) -> zbus::Resul
         return Ok(());
     }
     for message in messages.flatten() {
-        if let Some(source) = changed_source(&message, &mut owners)
-            && controls.send(Control::Refresh(source)).is_err()
+        if let Some(control) = change_of(&message, &mut owners)
+            && controls.send(control).is_err()
         {
             break;
         }
@@ -378,6 +409,12 @@ fn run_controls(system: &Connection, controls: &Receiver<Control>, outbox: &Outb
                 Control::Scan => report("scan for networks", network.scan()),
                 Control::Refresh(source) => {
                     stale.push(source);
+                    continue;
+                }
+                Control::Strength(access_point, strength) => {
+                    if let Some(wifi) = devices.1.as_mut() {
+                        set_strength(&mut wifi.networks, &access_point, strength);
+                    }
                     continue;
                 }
             }
@@ -503,7 +540,11 @@ pub fn follow_sound(outbox: Outbox<Update>) -> Sender<SoundControl> {
 mod tests {
     use zbus::Message;
 
-    use super::{Owners, Source, changed_source};
+    use std::collections::HashMap;
+
+    use zbus::zvariant::Value;
+
+    use super::{Control, Owners, Source, change_of};
 
     fn changed(sender: &str) -> Message {
         Message::signal(
@@ -535,35 +576,83 @@ mod tests {
     fn a_signal_refreshes_only_the_service_that_sent_it() {
         let mut owners: Owners = [Some(":1.5".to_owned()), Some(":1.6".to_owned()), None];
         assert_eq!(
-            changed_source(&changed(":1.5"), &mut owners),
-            Some(Source::Battery)
+            change_of(&changed(":1.5"), &mut owners),
+            Some(Control::Refresh(Source::Battery))
         );
         assert_eq!(
-            changed_source(&changed(":1.6"), &mut owners),
-            Some(Source::Wifi)
+            change_of(&changed(":1.6"), &mut owners),
+            Some(Control::Refresh(Source::Wifi))
         );
-        assert_eq!(changed_source(&changed(":1.7"), &mut owners), None);
+        assert_eq!(change_of(&changed(":1.7"), &mut owners), None);
     }
 
     #[test]
     fn a_service_that_starts_or_restarts_is_followed_under_its_new_name() {
         let mut owners: Owners = [None, None, None];
         assert_eq!(
-            changed_source(&owner_changed("org.bluez", ":1.9"), &mut owners),
-            Some(Source::Bluetooth)
+            change_of(&owner_changed("org.bluez", ":1.9"), &mut owners),
+            Some(Control::Refresh(Source::Bluetooth))
         );
         assert_eq!(
-            changed_source(&changed(":1.9"), &mut owners),
-            Some(Source::Bluetooth)
+            change_of(&changed(":1.9"), &mut owners),
+            Some(Control::Refresh(Source::Bluetooth))
         );
         assert_eq!(
-            changed_source(&owner_changed("org.bluez", ""), &mut owners),
-            Some(Source::Bluetooth)
+            change_of(&owner_changed("org.bluez", ""), &mut owners),
+            Some(Control::Refresh(Source::Bluetooth))
         );
-        assert_eq!(changed_source(&changed(":1.9"), &mut owners), None);
+        assert_eq!(change_of(&changed(":1.9"), &mut owners), None);
         assert_eq!(
-            changed_source(&owner_changed("org.example.Other", ":1.4"), &mut owners),
+            change_of(&owner_changed("org.example.Other", ":1.4"), &mut owners),
             None
+        );
+    }
+
+    fn access_point_changed(changes: &[(&str, Value<'_>)]) -> Message {
+        let changes: HashMap<&str, &Value<'_>> =
+            changes.iter().map(|(name, value)| (*name, value)).collect();
+        Message::signal(
+            "/org/freedesktop/NetworkManager/AccessPoint/4",
+            "org.freedesktop.DBus.Properties",
+            "PropertiesChanged",
+        )
+        .unwrap()
+        .sender(":1.6")
+        .unwrap()
+        .build(&(
+            "org.freedesktop.NetworkManager.AccessPoint",
+            changes,
+            Vec::<&str>::new(),
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn an_access_point_whose_strength_alone_changes_is_updated_without_reading_wifi_again() {
+        let mut owners: Owners = [None, Some(":1.6".to_owned()), None];
+        assert_eq!(
+            change_of(
+                &access_point_changed(&[("Strength", Value::U8(73)), ("LastSeen", Value::I32(9))]),
+                &mut owners
+            ),
+            Some(Control::Strength(
+                "/org/freedesktop/NetworkManager/AccessPoint/4".to_owned(),
+                73
+            ))
+        );
+        assert_eq!(
+            change_of(
+                &access_point_changed(&[("LastSeen", Value::I32(10))]),
+                &mut owners
+            ),
+            None
+        );
+        assert_eq!(
+            change_of(
+                &access_point_changed(&[("Strength", Value::U8(60)), ("Ssid", Value::U8(0))]),
+                &mut owners
+            ),
+            Some(Control::Refresh(Source::Wifi))
         );
     }
 }

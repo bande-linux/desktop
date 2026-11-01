@@ -2,8 +2,8 @@
 Type=Application
 Name=System Settings
 GenericName=Settings
-Comment=Change the appearance, dock and lock screen
+Comment=Change the appearance, taskbar and lock screen
 Icon=org.bande.Settings
 Exec=bande-settings
 Categories=Settings;DesktopSettings;
-Keywords=preferences;appearance;dark;dock;panel;lock;sleep;
+Keywords=preferences;appearance;dark;taskbar;dock;panel;lock;sleep;

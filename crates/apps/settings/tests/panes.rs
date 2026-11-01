@@ -375,7 +375,7 @@ fn sound_offers_the_alert_effects_a_live_input_level_and_a_volume_per_app() {
             && node.value() == Some("Mallet")
     }));
 
-    open(&mut view, "Bar");
+    open(&mut view, "Taskbar");
     assert!(
         view.take_commands()
             .contains(&Command::Audio(AudioCommand::Listen(false)))
@@ -656,7 +656,7 @@ fn the_bar_pane_has_position_size_names_auto_hide_and_the_menu_bar() {
         (SettingId::BarNames, Value::Flag(false)),
         (SettingId::BarMenuBar, Value::Keyword("in-bar".to_owned())),
     ]));
-    open(&mut view, "Bar");
+    open(&mut view, "Taskbar");
     let size = find(&mut view, Role::Slider, "Size").expect("size slider");
     view.perform(&ActionRequest {
         action: Action::Increment,

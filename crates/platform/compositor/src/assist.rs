@@ -180,7 +180,7 @@ impl State {
         let Some(index) = self.window_index(&surface) else {
             return;
         };
-        self.tile_window(index, opposite);
+        self.tile_window(index, opposite, Spring::STANDARD);
         self.focus(Some(surface));
     }
 

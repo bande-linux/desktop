@@ -312,7 +312,7 @@ impl State {
                 self.animate_window(index, Spring::STANDARD, from);
             }
             Placement::Maximized => self.maximize(surface),
-            Placement::Tiled(tile) => self.tile_window(index, tile),
+            Placement::Tiled(tile) => self.tile_window(index, tile, Spring::STANDARD),
         }
         if let Some(index) = self.window_index(surface) {
             self.windows[index].restore = restore;

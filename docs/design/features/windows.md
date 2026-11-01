@@ -92,12 +92,13 @@ tiled window away, or Return to Previous Size, restores its earlier size [4]. Tw
 tiled side by side share their edge: dragging it resizes both (KDE [19]).
 Inputs: drag to the left or right edge of the visible area for halves (a taskbar on that
 side counts as edge) and to a corner for quarters. A translucent outline previews the
-target after the pointer rests for about 150 ms, so fast drags past an edge do not tile. This answers the accidental-tile complaint in [4].
+target as soon as the pointer reaches the edge of the free area. Between two displays the
+pointer must rest 250 ms, so moving a window across does not tile it.
 Keyboard: `Ctrl+Super+Left/Right` for halves. Pressing `Ctrl+Super+Up/Down` on a half then
 gives its top or bottom quarter. `Ctrl+Super+Down` on an untiled or zoomed window returns
 it to its previous size. Every tile is also in the window menu.
-Motion: the outline grows from the pointer, and the window springs into the outline when
-released.
+Motion: the outline grows from the pointer in about 0.12 s, and the window springs into the
+outline in about 0.18 s when released.
 
 **Minimize** — sends the window into its app's icon in the panel. There are no separate
 window tiles in the panel (macOS's "Minimize windows into application icon" [9], made the

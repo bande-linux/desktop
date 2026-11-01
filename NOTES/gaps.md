@@ -54,4 +54,4 @@ we have no app store, should we build one?
 Status: planned ([plans/app-store.md](plans/app-store.md))
 
 snapping windows to the sides is a bit slow and also to the left requires you do drag to the screen edge but dragging to the taskbar should be enough since thats the real edge of the window. So the screen estate is the whole screen minus the taskbar, not the whole screen like now.
-Status: started ([plans/window-snapping.md](plans/window-snapping.md))
+Status: finished ([plans/window-snapping.md](plans/window-snapping.md)); not yet checked live on the mini

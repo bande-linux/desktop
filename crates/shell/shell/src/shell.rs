@@ -20,7 +20,8 @@ use bande_notifications::Notifications;
 use bande_status::captive::{follow_captive_portal, open_page};
 use bande_status::hub::StatusHub;
 use bande_status::memory::{
-    CGROUP_ROOT, OWN_CGROUP, PressureTrigger, SYSTEM_PRESSURE, Streak, app_slice,
+    CGROUP_ROOT, MEMINFO, OWN_CGROUP, PressureTrigger, SYSTEM_PRESSURE, Streak, app_slice,
+    memory_exhausted,
 };
 use bande_toolkit::{App, Rect, Role, Scene, Surfaces, TextSystem, Window, WindowEvent};
 use bande_xdg::{
@@ -236,7 +237,9 @@ impl Shell {
     }
 
     fn memory_stalled(&mut self) {
-        if self.streak.stalled(Instant::now()) {
+        let exhausted =
+            std::fs::read_to_string(MEMINFO).is_ok_and(|meminfo| memory_exhausted(&meminfo));
+        if self.streak.stalled(Instant::now(), exhausted) {
             tracing::warn!("memory is running low");
             self.reconcile = true;
         }

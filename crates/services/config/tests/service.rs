@@ -429,6 +429,10 @@ fn every_pointer_option_round_trips_and_is_signalled() {
         ("TrackpadAcceleration", Value::from(false)),
         ("TrackpadDragging", Value::from("tap-with-lock")),
         ("TrackpadScrollMethod", Value::from("edge")),
+        ("TrackpadWorkspaceSwipe", Value::from(false)),
+        ("TrackpadOverviewSwipe", Value::from(false)),
+        ("TrackpadDesktopSpread", Value::from(false)),
+        ("TrackpadLauncherPinch", Value::from(false)),
     ];
     for (property, value) in &options {
         set(&fixture.client, property, value.try_clone().expect("clone")).expect(property);

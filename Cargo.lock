@@ -829,25 +829,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bande-monitor"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "bande-app-menu",
- "bande-golden",
- "bande-l10n",
- "bande-log",
- "bande-status",
- "bande-test-bus",
- "bande-toolkit",
- "bande-xdg",
- "rustix 1.1.6",
- "tempfile",
- "tracing",
- "zbus",
-]
-
-[[package]]
 name = "bande-network"
 version = "0.1.0"
 dependencies = [

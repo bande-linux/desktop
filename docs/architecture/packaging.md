@@ -16,7 +16,7 @@ profiles. Sizes are tracked in [performance.md](performance.md).
   (`bande-config`, `bande-notify`, `bande-power`, `bande-clipboard`, `bande-tray`,
   `bande-automount`, `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
-  `bande-settings`, `bande-monitor`, `bande-file-chooser`). Package names stay `bande-*` whatever directory the crate lives in
+  `bande-settings`, `bande-file-chooser`). Package names stay `bande-*` whatever directory the crate lives in
   ([decision 0003](../decisions/0003-repository-layout.md)). `bande-shell` installs the one
   shell binary that hosts the desktop, the bar, the notifications, Control Center and the
   launcher, together with the Bande wallpapers and icon theme; the crates of those parts are
@@ -31,11 +31,11 @@ profiles. Sizes are tracked in [performance.md](performance.md).
   window under greetd, or the display manager the system already has. It recommends
   `bande-greeter` anyway (greetd then asks which display manager to start), `network-manager`,
   `bande-apt-source`, the screenshot
-  tool, Files, Settings, Activity Monitor, tray and automount services, `gnome-keyring` with
+  tool, Files, Settings, tray and automount services, `gnome-keyring` with
   `libpam-gnome-keyring`, Qt's portal platform theme (so Qt apps follow dark mode), `fonts-inter`,
   `xdg-user-dirs`, `upower` and `udisks2`, all of them built here at the same version. It also
   recommends, unversioned, the default apps listed in `packaging/bande-desktop/default-apps`:
-  Terminal, Software and the Package Installer from
+  Terminal, Activity Monitor, Software and the Package Installer from
   [bande-linux/apps](https://github.com/bande-linux/apps), which are released on their own, and
   the everyday Debian apps a fresh install needs (`firefox-esr`, `gnome-text-editor`, `loupe`,
   `papers`, `showtime`, `gnome-calculator`), and suggests `gnome-clocks`. `debian/default-apps.sh`

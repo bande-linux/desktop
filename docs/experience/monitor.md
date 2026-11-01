@@ -19,7 +19,7 @@ Never means left out on purpose, with the reason.
 
 ## 1. What Activity Monitor does today
 
-Checked in `crates/apps/monitor/src` and its goldens.
+Checked in `crates/apps/monitor/src` and its goldens (since 2026-11-01 `apps/monitor` in bande-linux/apps).
 
 | Area | What works | Where |
 | :--- | :--- | :--- |

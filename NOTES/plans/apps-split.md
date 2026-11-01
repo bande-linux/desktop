@@ -1,6 +1,6 @@
 # Moving Terminal, Activity Monitor, Software and Package Installer to bande-linux/apps
 
-Approved by the owner on 2026-11-01. **Status: M1, M2, M4-M7 done 2026-11-01; M3 (Force Quit out of Activity Monitor, then Activity Monitor to apps) follows [force-quit](force-quit.md); the releases wait for the owner's tags. Final gates 2026-11-01: desktop-gate green on `main` plus split/finish (which fixed Files' Terminal check in tests, sunrise and sunset west of Greenwich in bande-datetime, the clamped-geometry test, portal clippy and the polkit goldens); apps ci/gate.sh green on all five apps at e9e10c5 (Installer and Terminal goldens regenerated).** Files, Settings and the file chooser stay in desktop: the file chooser depends on bande-files, and Files is the system file manager. Apps consume desktop crates as git dependencies pinned to one desktop rev.
+Approved by the owner on 2026-11-01. **Status: M1, M2, M4-M7 done 2026-11-01; M3 done 2026-11-01 by [force-quit](force-quit.md) (Force Quit in the compositor, Activity Monitor in the apps repo); the releases wait for the owner's tags. Final gates 2026-11-01: desktop-gate green on `main` plus split/finish (which fixed Files' Terminal check in tests, sunrise and sunset west of Greenwich in bande-datetime, the clamped-geometry test, portal clippy and the polkit goldens); apps ci/gate.sh green on all five apps at e9e10c5 (Installer and Terminal goldens regenerated).** Files, Settings and the file chooser stay in desktop: the file chooser depends on bande-files, and Files is the system file manager. Apps consume desktop crates as git dependencies pinned to one desktop rev.
 
 ## Findings
 
@@ -128,7 +128,7 @@ Status: done 2026-11-01. Differences from the plan: the ci/vm guest runner no lo
 - Drop `/usr/bin/bande-monitor` from session-clients and the MONITOR constant if unused. Monitor keeps its in-app Force Quit.
 - If D2 is declined: skip this, and when bande-monitor is missing the compositor quits the focused app after confirmation.
 
-Status: replaced by [force-quit](force-quit.md). The overnight fallback (Force Quit and so Activity Monitor stay in desktop) was declined by the owner on 2026-11-01: "do it like that as well even if it is more work, i prefer correctness." Force Quit moves into the compositor itself rather than bande-shell (it is the process that is always running and survives every hang, as macOS's loginwindow), Activity Monitor keeps only its per-process Quit and Force Quit, and it moves to the apps repo by the M4/M5 recipe. The four D2 cases are tested there.
+Status: done 2026-11-01 by [force-quit](force-quit.md), not as written above. The overnight fallback (Force Quit and so Activity Monitor stay in desktop) was declined by the owner on 2026-11-01: "do it like that as well even if it is more work, i prefer correctness." Force Quit moves into the compositor itself rather than bande-shell (it is the process that is always running and survives every hang, as macOS's loginwindow), Activity Monitor keeps only its per-process Quit and Force Quit, and it moves to the apps repo by the M4/M5 recipe. The four D2 cases are tested there.
 
 ### M4a / M4b (apps). Import with history and build standalone
 M4a: Terminal and Monitor. M4b: Software (with catalog) and Installer.
@@ -165,7 +165,7 @@ Status: done 2026-11-01. gate.sh and bump-desktop.sh were already on apps `main`
 
 ### M7 (apt and images), then the first releases
 - images: the fetch-desktop.sh change above. apt: README table row, the Recommends check in publish.yml verify, a test for an apps package recommended by bande-desktop.
-- Release order: tag terminal-v0.1.0, software-v0.1.0, installer-v0.1.0 (and mail, calendar; Activity Monitor stays in desktop, M3) and wait for them to publish; tag desktop v0.1.0; build an image and check the apps are in it.
+- Release order: tag terminal-v0.1.0, software-v0.1.0, installer-v0.1.0, monitor-v0.1.0 (and mail, calendar) and wait for them to publish; tag desktop v0.1.0; build an image and check the apps are in it.
 - Next: app framework (NOTES/plans/app-framework.md)
 
 Status: the code is done 2026-11-01; the releases wait for the owner. images 587b692: fetch-desktop.sh reads bande-desktop's Recommends from the signed index, fetches the `apps`-owned packages it recommends without the version check, and fails on a missing one unless `ALLOW_MISSING_APPS=1` (checked against a fixture archive). apt 8214bc8: the README rows, a `verify` step that warns about any Recommends without a candidate, and rebuild tests for a desktop that recommends an app (tests/run-all.sh green). Until terminal, software and installer are published, an image build from the archive needs `ALLOW_MISSING_APPS=1`.

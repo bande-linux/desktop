@@ -11,6 +11,7 @@
 bande-terminal       org.bande.Terminal         recommends
 bande-software       org.bande.Software         recommends
 bande-installer      org.bande.Installer        recommends
+bande-monitor        org.bande.ActivityMonitor  recommends
 
 [debian]
 firefox-esr          -                          recommends

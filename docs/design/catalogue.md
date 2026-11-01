@@ -27,7 +27,7 @@ keyboard model of [`overview.md`](../architecture/overview.md#keyboard-model).
 - Works via the compositor's `wl_display.ping` heartbeat. If a client stops responding to `pong` for >3s, its window is desaturated and marked unresponsive.
 - Pressing `Super+Escape` opens an unkillable, lightweight process viewer showing unresponsive apps, CPU/RAM stats, and instant `SIGTERM` / `SIGKILL` termination.
 
-## 4. `bande-monitor` (Activity Monitor & Profiler)
+## 4. `bande-monitor` (Activity Monitor & Profiler, in bande-linux/apps)
 - Real-time CPU per-core utilization topology.
 - Memory pressure gauge: Active, Wired, Cached, and zram/swap.
 - GPU engine load and VRAM occupancy via DRM sysfs.

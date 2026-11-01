@@ -110,10 +110,11 @@ fn shell(stream: UnixStream, labels: Sender<Vec<String>>) {
     root.share_fonts(&text);
     let notifications =
         Notifications::new(&mut root, text.sharing_fonts(), None).expect("notifications");
+    let status = surfaces::status_hub(None, None).expect("status");
     let services = Services {
         text: &text,
         session: None,
-        system: None,
+        status: &status,
         config_home: None,
         home: None,
     };

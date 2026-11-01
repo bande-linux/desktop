@@ -43,6 +43,7 @@ impl Session {
                 text: TextSystem::new(),
                 session: None,
                 system: None,
+                status: status_hub(None, None).unwrap(),
                 config_home: Some(home.clone()),
                 home: Some(home),
                 app_slice: None,

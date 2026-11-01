@@ -477,20 +477,7 @@ fn control_sound(audio: &Audio, control: SoundControl) -> Result<(), bande_audio
     }
 }
 
-fn run_sound(controls: Receiver<SoundControl>, outbox: &Outbox<Update>) {
-    let audio = match Audio::connect() {
-        Ok(audio) => Arc::new(audio),
-        Err(error) => {
-            tracing::warn!("no sound: {error}");
-            return;
-        }
-    };
-    let controlled = Arc::clone(&audio);
-    thread::spawn(move || {
-        for control in controls {
-            report("change the sound", control_sound(&controlled, control));
-        }
-    });
+fn run_sound(audio: &Audio, outbox: &Outbox<Update>) {
     let mut generation = None;
     let mut capturing = None;
     loop {
@@ -508,9 +495,15 @@ fn run_sound(controls: Receiver<SoundControl>, outbox: &Outbox<Update>) {
     }
 }
 
-pub fn follow_sound(outbox: Outbox<Update>) -> Sender<SoundControl> {
-    let (controls, received) = mpsc::channel();
-    thread::spawn(move || run_sound(received, &outbox));
+pub(crate) fn follow_sound(audio: Arc<Audio>, outbox: Outbox<Update>) -> Sender<SoundControl> {
+    let (controls, received) = mpsc::channel::<SoundControl>();
+    let controlled = Arc::clone(&audio);
+    thread::spawn(move || {
+        for control in received {
+            report("change the sound", control_sound(&controlled, control));
+        }
+    });
+    thread::spawn(move || run_sound(&audio, &outbox));
     controls
 }
 

@@ -8,7 +8,7 @@ use accesskit::TreeUpdate;
 use bande_bar::dialogs::DIALOGS;
 use bande_bar::low_memory::{LOW_MEMORY_SIZE, LowMemory};
 use bande_bar::pairing::PairingDialogs;
-use bande_bar::surfaces::{self, Display, Restart, Services};
+use bande_bar::surfaces::{self, Display, Restart, Services, status_hub};
 use bande_bluetooth::register_agent;
 use bande_config::{Config, config_path};
 use bande_controlcenter::ControlCenter;
@@ -16,6 +16,7 @@ use bande_desktop_surface::DesktopSurface;
 use bande_launcher::LauncherShell;
 use bande_notifications::Notifications;
 use bande_status::captive::{follow_captive_portal, open_page};
+use bande_status::hub::StatusHub;
 use bande_status::memory::{
     CGROUP_ROOT, OWN_CGROUP, PressureTrigger, SYSTEM_PRESSURE, Streak, app_slice,
 };
@@ -42,6 +43,7 @@ struct Context {
     text: TextSystem,
     session: Option<Connection>,
     system: Option<Connection>,
+    status: StatusHub,
     config_home: Option<PathBuf>,
     home: Option<PathBuf>,
     app_slice: Option<PathBuf>,
@@ -60,21 +62,25 @@ impl Context {
         Services {
             text: &self.text,
             session: self.session.as_ref(),
-            system: self.system.as_ref(),
+            status: &self.status,
             config_home: self.config_home.as_deref(),
             home: self.home.as_deref(),
         }
     }
 
-    fn from_env() -> Self {
-        Context {
+    fn from_env() -> std::io::Result<Self> {
+        let session = bus(Connection::session(), "session");
+        let system = bus(Connection::system(), "system");
+        let status = status_hub(session.as_ref(), system.as_ref())?;
+        Ok(Context {
             text: TextSystem::new(),
-            session: bus(Connection::session(), "session"),
-            system: bus(Connection::system(), "system"),
+            session,
+            system,
+            status,
             config_home: std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
             home: std::env::var_os("HOME").map(PathBuf::from),
             app_slice: own_app_slice(),
-        }
+        })
     }
 
     fn launcher(&self, window: &mut Window) -> std::io::Result<Box<dyn App>> {
@@ -108,6 +114,7 @@ impl Context {
                     self.text.sharing_fonts(),
                     self.session.as_ref(),
                     self.system.as_ref(),
+                    self.status.audio(),
                 )?;
                 Ok((vec![(window, Box::new(part))], None))
             }
@@ -435,7 +442,7 @@ fn root_role() -> bande_toolkit::Role {
 
 pub fn run() -> Result<(), Box<dyn Error>> {
     let root = Window::open(root_role(), (0, 0))?;
-    let context = Context::from_env();
+    let context = Context::from_env()?;
     let config = context.config();
     reopen_apps(config.reopen_apps, config.reopen_apps_after_crash);
     if let Some(session) = &context.session {

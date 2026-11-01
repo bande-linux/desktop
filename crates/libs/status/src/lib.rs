@@ -4,6 +4,7 @@ pub mod clock;
 pub mod dbusmenu;
 pub mod devices;
 pub mod history;
+pub mod hub;
 pub mod memory;
 pub mod session;
 pub mod status;

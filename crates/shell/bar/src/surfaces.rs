@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use bande_config::Config;
+use bande_status::hub::StatusHub;
 use bande_toolkit::{App, TextSystem, Window};
 use zbus::blocking::Connection;
 
@@ -11,7 +12,7 @@ use crate::rail::RailView;
 use crate::taskbar::surface_size;
 use crate::taskbar_client::{Taskbar, taskbar_role};
 
-pub use crate::menu_bar_client::Restart;
+pub use crate::menu_bar_client::{Restart, status_hub};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Display {
@@ -22,7 +23,7 @@ pub struct Display {
 pub struct Services<'a> {
     pub text: &'a TextSystem,
     pub session: Option<&'a Connection>,
-    pub system: Option<&'a Connection>,
+    pub status: &'a StatusHub,
     pub config_home: Option<&'a Path>,
     pub home: Option<&'a Path>,
 }
@@ -40,7 +41,6 @@ pub fn open(
 ) -> Result<Bar, Box<dyn std::error::Error>> {
     let text = services.text;
     let homes = (services.config_home, services.home);
-    let buses = (services.session, services.system);
     let open_window = |role, size| -> Result<Window, Box<dyn std::error::Error>> {
         let mut window = beside.open_beside_on(&display.output, role, size)?;
         window.share_fonts(text);
@@ -68,7 +68,7 @@ pub fn open(
                 bande_xdg::data_dirs(),
                 icon_size,
             );
-            let status = MenuBarClient::with_view(view, display.clone(), buses, layout)?;
+            let status = MenuBarClient::with_view(view, display.clone(), services.status, layout)?;
             let shared = (status.handoff(), status.restart());
             surfaces.push((window, Box::new(CombinedClient::new(taskbar, status))));
             shared
@@ -79,7 +79,7 @@ pub fn open(
                 &mut window,
                 text.sharing_fonts(),
                 display.clone(),
-                buses,
+                services.status,
                 layout,
             )?;
             let shared = (client.handoff(), client.restart());

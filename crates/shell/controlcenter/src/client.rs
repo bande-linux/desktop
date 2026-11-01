@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::mpsc::{self, Sender};
 use std::time::{Duration, Instant};
 
@@ -54,7 +55,7 @@ pub struct ControlCenter {
     changes: Changes,
     pointer: Point,
     anchor: Option<Anchor>,
-    audio: Option<Audio>,
+    audio: Option<Arc<Audio>>,
     network: Option<NetworkManager>,
     bluetooth: Option<Bluetooth>,
     system: Option<Connection>,
@@ -197,7 +198,7 @@ impl ControlCenter {
             .notification_center()
             .and_then(|center| center.do_not_disturb().ok())
             .unwrap_or(false);
-        let snapshot = self.audio.as_ref().map(Audio::snapshot);
+        let snapshot = self.audio.as_deref().map(Audio::snapshot);
         let output = snapshot
             .as_ref()
             .and_then(|snapshot| snapshot.default_output());
@@ -883,10 +884,8 @@ impl ControlCenter {
         text: TextSystem,
         session: Option<&Connection>,
         system: Option<&Connection>,
+        audio: Option<Arc<Audio>>,
     ) -> std::io::Result<Self> {
-        let audio = Audio::connect()
-            .inspect_err(|error| tracing::warn!("no sound: {error}"))
-            .ok();
         let player_updates = Inbox::new()?;
         let player_commands = session.map(|connection| {
             let (commands, received) = mpsc::channel();

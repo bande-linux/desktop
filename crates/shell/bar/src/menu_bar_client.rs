@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::mpsc::{self, Sender};
 use std::thread;
 use std::time::Instant;
 
@@ -18,13 +17,13 @@ use bande_config::{BUS_NAME, BarEdge, MenuBarPlacement, OBJECT_PATH};
 use bande_datetime::DateFormats;
 use bande_inbox::{Inbox, Outbox};
 use bande_keyboard::Layouts;
-use bande_status::clock::{follow_minutes, follow_zone};
 use bande_status::dbusmenu::{APP_MENU_PATH, Node};
-use bande_status::devices::{Control, SoundControl, follow_devices, follow_sound};
+use bande_status::devices::{Control, SoundControl};
+use bande_status::hub::StatusHub;
 use bande_status::session::full_name;
 use bande_status::status::{InputSource, InputSources};
-use bande_status::tray::{Errand, TrayIcon, TrayItem, host, run_errands};
-use bande_status::unread::{ClockMark, follow_unread, set_do_not_disturb};
+use bande_status::tray::{Errand, TrayIcon, TrayItem};
+use bande_status::unread::{ClockMark, set_do_not_disturb};
 use bande_status::{Command, Update};
 use bande_toolkit::ui::{Event, Menu, MenuItem, PointerButton};
 use bande_toolkit::{
@@ -64,9 +63,7 @@ pub struct MenuBarClient<V> {
     anchors: Vec<(Panel, Rect)>,
     apps: InstalledApps,
     inbox: Inbox<Update>,
-    controls: Option<Sender<Control>>,
-    sound: Sender<SoundControl>,
-    errands: Sender<Errand>,
+    status: StatusHub,
     tray: Vec<TrayItem>,
     tray_icons: HashMap<(String, u32), Option<Image>>,
     open_anchor: Option<Rect>,
@@ -167,12 +164,6 @@ impl<V: StatusView> MenuBarClient<V> {
             .unwrap_or_else(|| "bande-shell".to_owned())
     }
 
-    fn control(&self, control: Control) {
-        if let Some(controls) = &self.controls {
-            let _ = controls.send(control);
-        }
-    }
-
     fn run(&mut self, window: &mut Window, command: Command) {
         let myself = self.myself();
         match command {
@@ -188,13 +179,13 @@ impl<V: StatusView> MenuBarClient<V> {
             Command::ShutDown => confirm_session_end(window, SessionEnd::ShutDown),
             Command::LogOut => confirm_session_end(window, SessionEnd::LogOut),
             Command::SetMuted(muted) => {
-                let _ = self.sound.send(SoundControl::SetMuted(muted));
+                self.status.sound(SoundControl::SetMuted(muted));
             }
             Command::UseOutput(name) => {
-                let _ = self.sound.send(SoundControl::UseOutput(name));
+                self.status.sound(SoundControl::UseOutput(name));
             }
             Command::Item { item, id } => {
-                let _ = self.errands.send(Errand::Clicked { menu: item, id });
+                self.status.errand(Errand::Clicked { menu: item, id });
             }
             Command::AboutApp(version) => {
                 let app = self.app_id.clone();
@@ -256,10 +247,10 @@ impl<V: StatusView> MenuBarClient<V> {
                 if needs_password {
                     self.launch(window, SETTINGS, &["bande-settings", "wifi"]);
                 } else {
-                    self.control(Control::Run(Command::Join(ssid)));
+                    self.status.control(Control::Run(Command::Join(ssid)));
                 }
             }
-            command => self.control(Control::Run(command)),
+            command => self.status.control(Control::Run(command)),
         }
     }
 
@@ -377,7 +368,7 @@ impl<V: StatusView> MenuBarClient<V> {
                 .as_ref()
                 .map(|battery| battery_menu(battery, self.bar.battery_percentage())),
             Slot::Wifi => {
-                self.control(Control::Scan);
+                self.status.control(Control::Scan);
                 status.wifi.as_ref().map(wifi_menu)
             }
             Slot::Sound => status
@@ -420,7 +411,7 @@ impl<V: StatusView> MenuBarClient<V> {
                     self.bar.set_open(Some(slot));
                     window.request_redraw();
                     self.open_anchor = Some(anchor);
-                    let _ = self.errands.send(Errand::ShowMenu { menu, parent });
+                    self.status.errand(Errand::ShowMenu { menu, parent });
                 }
             }
             Slot::Tray(index) => self.open_tray(window, index, anchor, false),
@@ -463,7 +454,7 @@ impl<V: StatusView> MenuBarClient<V> {
         match (&item.menu, menu_first) {
             (Some(menu), true) => {
                 self.open_anchor = Some(anchor);
-                let _ = self.errands.send(Errand::ShowMenu {
+                self.status.errand(Errand::ShowMenu {
                     menu: menu.clone(),
                     parent: 0,
                 });
@@ -471,7 +462,7 @@ impl<V: StatusView> MenuBarClient<V> {
                 window.request_redraw();
             }
             _ => {
-                let _ = self.errands.send(Errand::Activate {
+                self.status.errand(Errand::Activate {
                     item: item.id.clone(),
                     x: (anchor.x + anchor.width / 2.0) as i32,
                     y: (anchor.y + anchor.height) as i32,
@@ -554,7 +545,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 if app_id != self.app_id {
                     self.app_root = None;
                     self.bar.set_app_menus(Vec::new());
-                    let _ = self.errands.send(Errand::AppMenu(app_id.clone()));
+                    self.status.errand(Errand::AppMenu(app_id.clone()));
                     self.app_id = app_id;
                     self.follow_app_icon(window);
                     window.request_redraw();
@@ -597,7 +588,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 );
                 if over_sound && scroll.delta.y != 0.0 {
                     let delta = -scroll.delta.y.signum() * SCROLL_STEP;
-                    let _ = self.sound.send(SoundControl::Nudge(delta));
+                    self.status.sound(SoundControl::Nudge(delta));
                 }
             }
             WindowEvent::MenuAction(action) => {
@@ -722,7 +713,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 }
                 Update::AppMenuChanged => {
                     if !self.app_id.is_empty() {
-                        let _ = self.errands.send(Errand::AppMenu(self.app_id.clone()));
+                        self.status.errand(Errand::AppMenu(self.app_id.clone()));
                     }
                 }
                 Update::AppMenu { app, root } => {
@@ -786,11 +777,11 @@ impl MenuBarClient<MenuBar> {
         window: &mut Window,
         text: TextSystem,
         display: Display,
-        buses: (Option<&Connection>, Option<&Connection>),
+        status: &StatusHub,
         layout: (MenuBarPlacement, BarEdge),
     ) -> std::io::Result<Self> {
         let bar = MenuBar::new(window.appearance().palette(), text, String::new());
-        MenuBarClient::with_view(bar, display, buses, layout)
+        MenuBarClient::with_view(bar, display, status, layout)
     }
 }
 
@@ -798,46 +789,11 @@ impl<V: StatusView> MenuBarClient<V> {
     pub fn with_view(
         mut view: V,
         display: Display,
-        (session, system): (Option<&Connection>, Option<&Connection>),
+        status: &StatusHub,
         layout: (MenuBarPlacement, BarEdge),
     ) -> std::io::Result<Self> {
         let inbox = Inbox::new()?;
-        let controls = system.map(|system| follow_devices(system, inbox.outbox()));
-        let sound = follow_sound(inbox.outbox());
-        let minutes = inbox.outbox();
-        thread::spawn(move || {
-            if let Err(error) = follow_minutes(&minutes) {
-                tracing::warn!("the clock does not advance: {error}");
-            }
-        });
-        if let Some(system) = system
-            && let Err(error) = follow_zone(system, inbox.outbox())
-        {
-            tracing::warn!("the clock does not follow time zone changes: {error}");
-        }
-        let (errands, errand_queue) = mpsc::channel();
-        if let Some(session) = session {
-            let (hosting, outbox) = (session.clone(), inbox.outbox());
-            thread::spawn(move || {
-                if let Err(error) = host(&hosting, &outbox) {
-                    tracing::warn!("cannot host status items: {error}");
-                }
-            });
-            let (following, outbox) = (session.clone(), inbox.outbox());
-            thread::spawn(move || {
-                if let Err(error) = follow_unread(&following, &outbox) {
-                    tracing::info!("cannot follow unread notifications: {error}");
-                }
-            });
-            let (config, outbox) = (session.clone(), inbox.outbox());
-            thread::spawn(move || {
-                if let Err(error) = follow_config(&config, &outbox) {
-                    tracing::warn!("the bar does not follow its settings: {error}");
-                }
-            });
-            let (session, outbox) = (session.clone(), inbox.outbox());
-            thread::spawn(move || run_errands(&session, &errand_queue, &outbox));
-        }
+        status.subscribe(inbox.outbox());
         let dates = DateFormats::from_env();
         view.set_time(&bande_datetime::now(), &dates);
         Ok(Self {
@@ -851,9 +807,7 @@ impl<V: StatusView> MenuBarClient<V> {
             anchors: Vec::new(),
             apps: InstalledApps::load(),
             inbox,
-            controls,
-            sound,
-            errands,
+            status: status.clone(),
             tray: Vec::new(),
             tray_icons: HashMap::new(),
             open_anchor: None,
@@ -864,6 +818,22 @@ impl<V: StatusView> MenuBarClient<V> {
             dates,
         })
     }
+}
+
+pub fn status_hub(
+    session: Option<&Connection>,
+    system: Option<&Connection>,
+) -> std::io::Result<StatusHub> {
+    let hub = StatusHub::start(session, system)?;
+    if let Some(session) = session {
+        let (config, outbox) = (session.clone(), hub.publisher());
+        thread::spawn(move || {
+            if let Err(error) = follow_config(&config, &outbox) {
+                tracing::warn!("the bar does not follow its settings: {error}");
+            }
+        });
+    }
+    Ok(hub)
 }
 
 fn config(session: &Connection) -> zbus::Result<zbus::blocking::Proxy<'static>> {

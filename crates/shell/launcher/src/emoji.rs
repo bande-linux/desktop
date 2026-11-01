@@ -12,6 +12,7 @@ pub const TONES: [char; 5] = [
     '\u{1F3FE}',
     '\u{1F3FF}',
 ];
+const PLAIN_CHARACTERS: &str = "characters";
 const KEYWORD_PENALTY: u32 = 150;
 
 pub struct Emoji {
@@ -67,6 +68,11 @@ impl EmojiSet {
 
     pub fn find(&self, character: &str) -> Option<&Emoji> {
         self.emoji.iter().find(|emoji| emoji.character == character)
+    }
+
+    pub fn is_plain_character(&self, character: &str) -> bool {
+        self.find(character)
+            .is_some_and(|emoji| self.groups.get(emoji.group) == Some(&PLAIN_CHARACTERS))
     }
 
     pub fn has_tones(&self, character: &str) -> bool {
@@ -130,5 +136,12 @@ mod tests {
         );
         assert_eq!(EMOJI.with_tone("😀", Some(2)), "😀");
         assert_eq!(EMOJI.with_tone("👋", None), "👋");
+    }
+
+    #[test]
+    fn only_the_characters_group_is_drawn_as_plain_text() {
+        assert!(EMOJI.is_plain_character("\u{2013}"));
+        assert!(!EMOJI.is_plain_character("\u{23E9}"));
+        assert!(!EMOJI.is_plain_character("\u{1F44B}\u{1F3FD}"));
     }
 }

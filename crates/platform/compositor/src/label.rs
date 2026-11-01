@@ -79,12 +79,8 @@ impl Labels {
             shape,
             paint: fill.into(),
         });
-        if look == Look::Card && scheme == Scheme::Dark {
-            items.push(Item::Stroke {
-                shape: Shape::rounded(shape.rect.inset(0.5), radius - 0.5),
-                width: 1.0,
-                paint: palette.hairline.into(),
-            });
+        if look == Look::Card {
+            items.extend(Item::rim(shape, &palette));
         }
         items.push(Item::Text {
             origin: Point::new(margin + padding.0, margin + padding.1),

@@ -6,8 +6,8 @@ One plan per item in `NOTES/gaps.md` and `NOTES/gaps2.md`. Each plan has finding
 
 Plans share work. Land the shared pieces first:
 
-1. **Packages on the machine.** `packagekit`, `locales`, `fonts-noto-core`, `systemd-zram-generator`, `systemd-oomd`, `bluez`, `libspa-0.2-bluetooth` are missing because the image and the first install use `--no-install-recommends`. This alone fixes what the owner sees in software update and languages. Images repo plus the mini.
-2. **Kernel:** `CONFIG_PSI=y`, `CONFIG_ZRAM=m` ([swap](swap.md)).
+1. **Packages on the machine.** `packagekit`, `locales`, `fonts-noto-core`, `systemd-zram-generator`, `systemd-oomd`, `bluez`, `libspa-0.2-bluetooth` are missing because the image and the first install use `--no-install-recommends`. This alone fixes what the owner sees in software update and languages. Images repo plus the mini. Done 2026-11-01: all seven in `images` `prep/os-installable`; on the mini `packagekit`, `locales` and `fonts-noto-core` are installed (`systemd-zram-generator` already was), `systemd-oomd` waits for the PSI kernel, `bluez`/`libspa-0.2-bluetooth` are left to the Bluetooth work.
+2. **Kernel:** `CONFIG_PSI=y`, `CONFIG_ZRAM=m` ([swap](swap.md)). Done 2026-11-01 in `linux` `bande-hw/integration`; not installed on the mini yet.
 3. **App entry reload in the bar** ([taskbar-icons](taskbar-icons.md) M1). Step 0 of [keep-in-taskbar](keep-in-taskbar.md).
 4. **`crates/libs/packages`**, the shared PackageKit client, created by whichever of [software-update](software-update.md), [deb-installer](deb-installer.md) and [app-store](app-store.md) lands first.
 5. **Dark theme tokens** ([dark-theme](dark-theme.md)) before [sidebar-selection](sidebar-selection.md) takes its dark values. [third-party-title-bars](third-party-title-bars.md) M5 replaces dark-theme M4's GTK 3 part.
@@ -37,6 +37,8 @@ Plans share work. Land the shared pieces first:
 | [app-store](app-store.md) | Only the apt CLI; recommends building our own Software app | 13 (MVP 9) |
 | [window-snapping](window-snapping.md) | Left/right trigger at the screen edge behind the taskbar; 150 ms dwell reset by 2 px drift | 3 |
 | [notifications-placement](notifications-placement.md) | Banners hard-wired top right while the centre opens beside a left taskbar | 4 (+1 optional) |
+| [power-management](power-management.md) | Nothing turns the display off; sleep is off at the system level after an s2idle abort | 7 |
+| [crash-management](crash-management.md) | Kernel OOM killed the session bus 6 times while the build lived (adj 200 vs 0); no PSI, no watchdogs | 7 |
 
 ## Decisions for the owner
 
@@ -48,3 +50,5 @@ Each plan's last section lists its decisions with a recommendation. The ones tha
 - **Packages:** offline-only updates; Flathub on or off; own store or GNOME Software as a stopgap.
 - **Notifications:** everything opens from the clock corner, or banners stay top right.
 - **Swap:** no disk swap (zram plus oomd) or swapfile plus zswap.
+- **Power:** re-enable sleep after ten clean s2idle cycles; what the power button does while sleep is unavailable.
+- **Crashes:** systemd-coredump in the image; whether losing the session bus should end the session.

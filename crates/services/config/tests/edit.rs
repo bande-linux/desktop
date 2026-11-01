@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use bande_config::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
-    DisplaySettings, InputSource, LidOnPower, NightLight, NightSchedule, Placement, Rotation,
-    Setting, Suspend, WallpaperFit, WallpaperVariant,
+    DisplaySettings, Dragging, InputSource, LidOnPower, NightLight, NightSchedule, Placement,
+    PrimaryButton, Rotation, ScrollMethod, Setting, Suspend, WallpaperFit, WallpaperVariant,
 };
 
 fn apply(setting: Setting, source: &str) -> String {
@@ -367,6 +367,28 @@ fn pointer_settings_equal_to_the_defaults_leave_no_trace() {
     let natural = apply(Setting::MouseNaturalScrolling(true), "");
     assert_eq!(natural, "mouse {\n    natural-scrolling #true\n}\n");
     assert_eq!(apply(Setting::MouseNaturalScrolling(false), &natural), "");
+    let right = apply(Setting::MousePrimaryButton(PrimaryButton::Right), "");
+    assert_eq!(right, "mouse {\n    primary-button \"right\"\n}\n");
+    let flat = apply(Setting::MouseAcceleration(false), &right);
+    assert!(flat.contains("acceleration #false"), "{flat}");
+    let left = apply(Setting::MousePrimaryButton(PrimaryButton::Left), &flat);
+    assert_eq!(apply(Setting::MouseAcceleration(true), &left), "");
+    let edge = apply(Setting::TrackpadScrollMethod(ScrollMethod::Edge), "");
+    assert_eq!(edge, "trackpad {\n    scroll-method \"edge\"\n}\n");
+    let locked = apply(Setting::TrackpadDragging(Dragging::TapWithLock), &edge);
+    assert!(locked.contains("dragging \"tap-with-lock\""), "{locked}");
+    let flat = apply(Setting::TrackpadAcceleration(false), &locked);
+    let defaults = [
+        Setting::TrackpadScrollMethod(ScrollMethod::TwoFingers),
+        Setting::TrackpadDragging(Dragging::Tap),
+        Setting::TrackpadAcceleration(true),
+    ];
+    assert_eq!(
+        defaults
+            .into_iter()
+            .fold(flat, |text, setting| apply(setting, &text)),
+        ""
+    );
     let reset = apply(
         Setting::TrackpadTapToClick(true),
         &apply(Setting::TrackpadSpeed(0.0), &tapless),

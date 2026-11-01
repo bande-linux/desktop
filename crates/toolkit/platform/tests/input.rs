@@ -815,31 +815,97 @@ fn a_drag_from_a_header_tab_or_empty_header_space_moves_the_window_but_header_bu
     );
 }
 
+fn drag_from(desktop: &mut Desktop, client: &mut Client, from: (i32, i32), by: (i32, i32)) {
+    let at = |(x, y): (i32, i32)| Point::from((f64::from(x), f64::from(y)));
+    desktop.server.move_pointer_to(at(from), 0);
+    desktop.server.press_button(BTN_LEFT, true, 0);
+    desktop.settle(&mut [client]);
+    desktop
+        .server
+        .move_pointer_to(at((from.0 + by.0, from.1 + by.1)), 0);
+    desktop.settle(&mut [client]);
+    desktop.server.press_button(BTN_LEFT, false, 0);
+}
+
+fn window_rect(desktop: &Desktop) -> (i32, i32, i32, i32) {
+    let geometry = desktop.server.windows()[0].geometry().expect("mapped");
+    (
+        geometry.loc.x,
+        geometry.loc.y,
+        geometry.size.w,
+        geometry.size.h,
+    )
+}
+
 #[test]
 fn dragging_just_outside_the_right_edge_resizes_the_window() {
     let mut desktop = Desktop::new();
     let mut client = pointed_window(&mut desktop, "resize");
-    let origin = desktop.server.windows()[0].location();
-    let framed = (WINDOW.0 + 2 * SHEET_INSET) as i32;
-    let edge = origin.x + framed;
-    desktop.server.move_pointer_to(
-        Point::from((f64::from(edge + 3), f64::from(origin.y + 60))),
-        0,
+    let (x, y, width, height) = window_rect(&desktop);
+
+    drag_from(&mut desktop, &mut client, (x + width + 3, y + 60), (40, 0));
+
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| window_rect(desktop) == (x, y, width + 40, height),
     );
-    desktop.server.press_button(BTN_LEFT, true, 0);
-    desktop.settle(&mut [&mut client]);
-    desktop.server.move_pointer_to(
-        Point::from((f64::from(edge + 43), f64::from(origin.y + 60))),
-        0,
+}
+
+#[test]
+fn dragging_just_inside_the_right_edge_resizes_the_window_without_a_press_in_the_content() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "resize-inside");
+    let (x, y, width, height) = window_rect(&desktop);
+
+    drag_from(&mut desktop, &mut client, (x + width - 2, y + 60), (40, 0));
+
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| window_rect(desktop) == (x, y, width + 40, height),
     );
-    let wider = |desktop: &Desktop| {
-        desktop.server.windows()[0]
-            .geometry()
-            .is_some_and(|geometry| geometry.size.w == framed + 40)
-    };
-    desktop.settle(&mut [&mut client]);
-    desktop.server.press_button(BTN_LEFT, false, 0);
-    desktop.wait_for(&mut [&mut client], |_| true, wider);
+    assert!(presses(&client.seen).is_empty());
+}
+
+#[test]
+fn dragging_the_wedge_of_the_bottom_right_corner_resizes_both_ways() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "resize-corner");
+    let (x, y, width, height) = window_rect(&desktop);
+
+    drag_from(
+        &mut desktop,
+        &mut client,
+        (x + width - 1, y + height - 1),
+        (40, 20),
+    );
+
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| window_rect(desktop) == (x, y, width + 40, height + 20),
+    );
+}
+
+#[test]
+fn dragging_the_bottom_rim_further_in_still_moves_the_window() {
+    let mut desktop = Desktop::new();
+    let mut client = pointed_window(&mut desktop, "move-rim");
+    let (x, y, width, height) = window_rect(&desktop);
+
+    drag_from(
+        &mut desktop,
+        &mut client,
+        (x + width / 2, y + height - 5),
+        (-20, -10),
+    );
+
+    desktop.wait_for(
+        &mut [&mut client],
+        |_| true,
+        |desktop| window_rect(desktop) == (x - 20, y - 10, width, height),
+    );
 }
 
 fn menu_events(events: &[WindowEvent]) -> Vec<WindowEvent> {

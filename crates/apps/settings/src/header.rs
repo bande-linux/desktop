@@ -84,7 +84,7 @@ impl SettingsView {
         let searching = !self.query.trim().is_empty();
         let mut rows: Widgets = Vec::new();
         if !searching && let Some(attention) = self.attention() {
-            let accent = self.palette().accent;
+            let accent = self.palette().accent_text;
             let symbol = self.symbol(ATTENTION_SYMBOL, SIDEBAR_SYMBOL, accent);
             let mut open = intent(&self.intents, |()| {
                 Intent::SelectPane(PaneId::SoftwareUpdate)
@@ -241,7 +241,8 @@ impl SettingsView {
             | PaneId::Bar
             | PaneId::Accessibility
             | PaneId::KeyboardShortcuts
-            | PaneId::TrackpadMouse
+            | PaneId::Mouse
+            | PaneId::Trackpad
             | PaneId::Apps
             | PaneId::PrivacySecurity
             | PaneId::Camera

@@ -375,12 +375,71 @@ impl SecondaryClick {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Dragging {
+    Off,
+    #[default]
+    Tap,
+    TapWithLock,
+}
+
+impl Dragging {
+    pub const ALL: [Self; 3] = [Self::Off, Self::Tap, Self::TapWithLock];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Tap => "tap",
+            Self::TapWithLock => "tap-with-lock",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ScrollMethod {
+    #[default]
+    TwoFingers,
+    Edge,
+}
+
+impl ScrollMethod {
+    pub const ALL: [Self; 2] = [Self::TwoFingers, Self::Edge];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::TwoFingers => "two-fingers",
+            Self::Edge => "edge",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PrimaryButton {
+    #[default]
+    Left,
+    Right,
+}
+
+impl PrimaryButton {
+    pub const ALL: [Self; 2] = [Self::Left, Self::Right];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Left => "left",
+            Self::Right => "right",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Trackpad {
     pub tap_to_click: bool,
     pub natural_scrolling: bool,
     pub speed: f64,
+    pub acceleration: bool,
     pub secondary_click: SecondaryClick,
+    pub dragging: Dragging,
+    pub scroll_method: ScrollMethod,
     pub disable_while_typing: bool,
 }
 
@@ -390,16 +449,32 @@ impl Default for Trackpad {
             tap_to_click: true,
             natural_scrolling: true,
             speed: 0.0,
+            acceleration: true,
             secondary_click: SecondaryClick::TwoFingers,
+            dragging: Dragging::Tap,
+            scroll_method: ScrollMethod::TwoFingers,
             disable_while_typing: true,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Mouse {
+    pub primary_button: PrimaryButton,
     pub natural_scrolling: bool,
     pub speed: f64,
+    pub acceleration: bool,
+}
+
+impl Default for Mouse {
+    fn default() -> Self {
+        Self {
+            primary_button: PrimaryButton::Left,
+            natural_scrolling: false,
+            speed: 0.0,
+            acceleration: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1196,6 +1271,19 @@ impl Parser<'_> {
                 "tap-to-click" => trackpad.tap_to_click = self.flag(child)?,
                 "natural-scrolling" => trackpad.natural_scrolling = self.flag(child)?,
                 "speed" => trackpad.speed = self.number_in(child, POINTER_SPEED_RANGE)?,
+                "acceleration" => trackpad.acceleration = self.flag(child)?,
+                "dragging" => {
+                    trackpad.dragging = self.keyword(
+                        child,
+                        &Dragging::ALL.map(|choice| (choice.keyword(), choice)),
+                    )?
+                }
+                "scroll-method" => {
+                    trackpad.scroll_method = self.keyword(
+                        child,
+                        &ScrollMethod::ALL.map(|choice| (choice.keyword(), choice)),
+                    )?
+                }
                 "secondary-click" => {
                     trackpad.secondary_click = self.keyword(
                         child,
@@ -1234,8 +1322,15 @@ impl Parser<'_> {
         let mut mouse = Mouse::default();
         self.section(node, |child| {
             match child.name().value() {
+                "primary-button" => {
+                    mouse.primary_button = self.keyword(
+                        child,
+                        &PrimaryButton::ALL.map(|choice| (choice.keyword(), choice)),
+                    )?
+                }
                 "natural-scrolling" => mouse.natural_scrolling = self.flag(child)?,
                 "speed" => mouse.speed = self.number_in(child, POINTER_SPEED_RANGE)?,
+                "acceleration" => mouse.acceleration = self.flag(child)?,
                 _ => return Err(self.unknown_child("mouse", child)),
             }
             Ok(())

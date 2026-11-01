@@ -4,6 +4,7 @@ pub enum Typeface {
     Interface,
     Display,
     Monospace,
+    Emoji,
 }
 
 impl Typeface {
@@ -12,6 +13,7 @@ impl Typeface {
             Self::Interface => "Inter",
             Self::Display => "Manrope",
             Self::Monospace => "JetBrains Mono",
+            Self::Emoji => "Noto Color Emoji",
         }
     }
 
@@ -22,6 +24,7 @@ impl Typeface {
             (Self::Display, false) => "",
             (Self::Display, true) => "\"tnum\"",
             (Self::Monospace, _) => "\"zero\"",
+            (Self::Emoji, _) => "",
         }
     }
 }

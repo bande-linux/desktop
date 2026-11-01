@@ -70,6 +70,9 @@ Option A with gesture option 2.
 
 ## Implementation plan
 
+**Status (2026-11-01):** milestones 1-5 are on `main`. Milestones 6-7 (gestures) are next.
+
+
 Each milestone is one branch from `main`, merged when the local gate is green. Start after `day/platform-quality-2` merges, so that `report()` is there.
 
 1. **Config: pointer options (slice 6 plus dragging and scroll method).**

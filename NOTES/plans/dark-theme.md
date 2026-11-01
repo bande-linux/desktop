@@ -216,6 +216,12 @@ Contrast is unchanged: ink on sheet 15.9:1 and Lc 101, ink2 on chassis 5.8 and L
 chassis 3.3 and Lc 55, edge vs sheet 1.94. The light accents are untouched.
 
 ## Implementation plan
+Status (2026-11-01): milestones 1-4 and 7 done and merged. Milestone 5 ran as a golden review
+only (no live evening, nothing visible overnight). Milestone 6 is open. Left out on purpose:
+moving `shell/bar/src/dock.rs`'s two hard-coded panel shadow alphas onto `Elevation` (it would
+change light goldens), and the PNG mockups in `docs/design/datum` (no `rsvg-convert` on the mini;
+the SVGs are regenerated, the PNGs are stale).
+
 Milestones 1-4 go on one branch, `day/dark-slate`. Each is its own commit, and the full gate
 runs after each one. The branch merges only after the owner approves the preview (milestone 5).
 All builds and tests run on the mini (`BANDE_UPDATE_GOLDENS=1` only for the named crates).
@@ -382,6 +388,12 @@ once.
   Agree the order with them so goldens are regenerated once.
 
 ## Decisions for the owner
+Decided overnight 2026-11-01: neutral hue 262 dusk slate (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: mid-tone selection fill with white text in dark (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: Midnight keeps a deliberately deep background, `deep` `#161A21` (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: merged without the before/after preview or a live evening, since the owner was asleep and asked for autonomous work; the regenerated dark goldens in the merge are the preview (owner may revisit).
+Still open: 3 (light to slate, milestone 6) waits on the owner seeing dark first, as recommended; light is unchanged.
+
 1. Neutral hue: dusk slate 262 (recommended), or a more neutral 255, or keep warm 80 and only
    brighten (option A).
 2. Selection in dark: mid-tone fill with white text (recommended), or keep Datum's light

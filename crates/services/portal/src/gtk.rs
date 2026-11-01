@@ -11,9 +11,10 @@ fn hex(color: Color) -> String {
     format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b)
 }
 
-fn variables(scheme: Scheme, accent: Accent) -> [(&'static str, Color); 27] {
+fn variables(scheme: Scheme, accent: Accent) -> [(&'static str, Color); 28] {
     let palette = Palette::generate(scheme, accent, Contrast::Standard);
     [
+        ("accent-color", palette.accent_text),
         ("accent-bg-color", palette.accent),
         ("accent-fg-color", palette.on_accent),
         ("window-bg-color", palette.chassis),
@@ -29,7 +30,7 @@ fn variables(scheme: Scheme, accent: Accent) -> [(&'static str, Color); 27] {
         ("secondary-sidebar-bg-color", palette.chassis),
         ("secondary-sidebar-fg-color", palette.ink),
         ("secondary-sidebar-backdrop-color", palette.chassis),
-        ("card-bg-color", palette.sheet),
+        ("card-bg-color", palette.well),
         ("card-fg-color", palette.ink),
         ("dialog-bg-color", palette.sheet),
         ("dialog-fg-color", palette.ink),
@@ -63,6 +64,24 @@ pub fn stylesheet(accent: Accent, current: Scheme) -> String {
     css
 }
 
+pub fn gtk3_stylesheet(accent: Accent, scheme: Scheme) -> String {
+    let palette = Palette::generate(scheme, accent, Contrast::Standard);
+    [
+        ("theme_bg_color", palette.chassis),
+        ("theme_fg_color", palette.ink),
+        ("theme_base_color", palette.sheet),
+        ("theme_text_color", palette.ink),
+        ("theme_selected_bg_color", palette.accent),
+        ("theme_selected_fg_color", palette.on_accent),
+        ("borders", palette.edge),
+    ]
+    .into_iter()
+    .fold(String::new(), |mut css, (name, color)| {
+        let _ = writeln!(css, "@define-color {name} {};", hex(color));
+        css
+    })
+}
+
 pub fn with_import(user: &str) -> Option<String> {
     if user.lines().any(|line| line.trim() == IMPORT) {
         return None;
@@ -80,9 +99,16 @@ fn replace(path: &Path, contents: &str) -> io::Result<()> {
 }
 
 pub fn install(config_home: &Path, accent: Accent, scheme: Scheme) -> io::Result<()> {
-    let directory = config_home.join("gtk-4.0");
-    std::fs::create_dir_all(&directory)?;
-    replace(&directory.join(STYLESHEET), &stylesheet(accent, scheme))?;
+    install_into(&config_home.join("gtk-4.0"), &stylesheet(accent, scheme))?;
+    install_into(
+        &config_home.join("gtk-3.0"),
+        &gtk3_stylesheet(accent, scheme),
+    )
+}
+
+fn install_into(directory: &Path, sheet: &str) -> io::Result<()> {
+    std::fs::create_dir_all(directory)?;
+    replace(&directory.join(STYLESHEET), sheet)?;
     let user_path = directory.join("gtk.css");
     let user = match std::fs::read_to_string(&user_path) {
         Ok(user) => user,

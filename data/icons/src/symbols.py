@@ -568,6 +568,10 @@ def mouse():
     return layers(S().frame(3.6, 1.6, 8.8, 12.8, 4.4, 1.4).line(8, 3.8, 8, 6.4, 1.6))
 
 
+def touchpad():
+    return layers(S().frame(1.4, 2.2, 13.2, 11.6, 2, 1.4).line(2, 10.2, 14, 10.2, 1.2).line(8, 10.2, 8, 13.2, 1.2))
+
+
 def printer():
     shape = S().frame(1.4, 5.6, 13.2, 6, 1.6, 1.4).polyline([(4.4, 5.4), (4.4, 1.6), (11.6, 1.6), (11.6, 5.4)], 1.3)
     shape.frame(4.6, 9.6, 6.8, 4.8, 0.4, 1.3).circle(12, 7.8, 0.8)
@@ -743,6 +747,7 @@ DEVICES = {
     'video-display-symbolic': desktop,
     'audio-headphones-symbolic': headphones,
     'input-mouse-symbolic': mouse,
+    'input-touchpad-symbolic': touchpad,
     'printer-symbolic': printer,
     'phone-symbolic': phone,
 }

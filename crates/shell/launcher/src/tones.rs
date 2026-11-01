@@ -85,7 +85,7 @@ impl Widget for Tones {
                 items.push(Item::Stroke {
                     shape: Shape::rounded(swatch.inset(-RING), SWATCH / 2.0 + RING),
                     width: RING,
-                    paint: cx.palette.accent.into(),
+                    paint: cx.palette.accent_text.into(),
                 });
             }
         }

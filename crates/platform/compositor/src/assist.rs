@@ -313,7 +313,7 @@ impl State {
             elements.push(OutputElement::Fill(FillElement::new(
                 offer.ids[0].clone(),
                 rounded(around.to_physical(scale), RING_RADIUS * scale),
-                premultiplied(palette.accent, alpha),
+                premultiplied(palette.accent_text, alpha),
             )));
         }
         let shape = rounded(look.rect.to_physical(scale), PANEL_RADIUS * factor * scale);

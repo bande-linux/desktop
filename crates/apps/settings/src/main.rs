@@ -160,8 +160,6 @@ impl App for Settings {
                 if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
                     tracing::warn!("{error}");
                 }
-                self.view
-                    .set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
             }
             _ => return,
         }

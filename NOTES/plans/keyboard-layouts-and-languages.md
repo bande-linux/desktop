@@ -131,6 +131,9 @@ Code:
 
 ## Implementation plan
 
+**Status (2026-11-01):** milestone 4 (layout picker) is on `main`. Milestone 1 (packages) belongs to the images and machine work; milestones 2, 3 and 5 are next; 6 is later.
+
+
 Each step is one short branch from `main`, gated by fmt, workspace clippy `-D warnings` and workspace tests, and
 checked on the mini before merge.
 

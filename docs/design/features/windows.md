@@ -74,8 +74,8 @@ Inputs: left drag. `Ctrl+Super`+drag anywhere in a window moves it, for apps who
 bars are hard to grab. Ctrl+Super is already the compositor's window chord (`Ctrl+Super+F`),
 and plain Super+drag stays with apps as Command-drag.
 
-**Resize** — drag any edge or corner through an invisible grab margin of about 6 px outside
-the window. The cursor shows the direction. Edges snap to the screen and to neighbours.
+**Resize** — drag any edge or corner through a grab band that reaches 8 pt outside the
+window and 3 pt inside its rounded outline; corners reach 24 pt along each edge. The cursor shows the direction. Edges snap to the screen and to neighbours.
 Inputs: left drag. Alt+drag resizes symmetrically about the centre (macOS Option behaviour,
 unverified). Double click on an edge extends that side to the screen edge [2].
 

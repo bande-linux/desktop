@@ -15,7 +15,9 @@ use crate::L10N;
 use crate::arrangement::{Area, Arrangement, Screen};
 use crate::follow::Command;
 use crate::forget::Forget;
+use crate::locale::LocaleCommand;
 use crate::pictures::{Pair, PictureCommand, expand};
+use crate::privilege::Privilege;
 use crate::state::{Answer, Display, Question};
 use crate::view::{
     Anchor, Intent, Intents, MIRROR_PREFIX, Picker, SettingsView, USE_EXTENDED, USE_MAIN, intent,
@@ -834,6 +836,13 @@ impl SettingsView {
                 .detail(Text::new(&short, Tone::Muted).caption());
             rows.push(self.item_row(code.clone(), row));
         }
+        if let Some(login) = self
+            .locale
+            .as_ref()
+            .map(|locale| locale.login_sources.clone())
+        {
+            rows.push(self.login_layouts_row(&sources, &login));
+        }
         let picking = self
             .picking
             .clone()
@@ -855,6 +864,23 @@ impl SettingsView {
             )),
         }
         rows
+    }
+
+    fn login_layouts_row(&mut self, sources: &[String], login: &[String]) -> Box<dyn Widget> {
+        if sources == login {
+            return muted_row(&L10N.tr("login-layouts-same"));
+        }
+        let button = (!self.refused.contains(&Privilege::Keyboard)).then(|| {
+            let codes = sources.to_vec();
+            let mut send = intent(&self.intents, Intent::Locale);
+            boxed(Button::new(&L10N.tr("use-at-login"), move || {
+                send(LocaleCommand::LoginKeyboard(codes.clone()))
+            }))
+        });
+        boxed(Row::new(
+            Text::new(&L10N.tr("login-layouts-differ"), Tone::Muted).caption(),
+            button,
+        ))
     }
 
     pub(crate) fn source_matches(&mut self, query: &str) -> Vec<String> {

@@ -4,6 +4,7 @@ polkit.addRule(function(action, subject) {
         "org.freedesktop.timedate1.set-ntp",
         "org.freedesktop.timedate1.set-time",
         "org.freedesktop.locale1.set-locale",
+        "org.freedesktop.locale1.set-keyboard",
         "org.freedesktop.hostname1.set-static-hostname",
         "org.freedesktop.hostname1.set-machine-info",
         "org.freedesktop.packagekit.system-update"

@@ -9,8 +9,8 @@ use bande_bluetooth::Bluetooth;
 use bande_keyboard::Layouts;
 use bande_settings::sidebar_width;
 use bande_settings::{
-    About, App, AppNotifications, BatteryState, BluetoothState, Category, Charge, DefaultApp,
-    Display, Grant, InstalledLocale, LocaleState, LoginItems, Mode, Package, Pair, PaneId,
+    About, App, AppNotifications, AvailableLocale, BatteryState, BluetoothState, Category, Charge,
+    DefaultApp, Display, Grant, LocaleState, LoginItems, Mode, Package, Pair, PaneId,
     PointingDevices, SettingId, SettingsView, SoftwareState, Storage, TimeState, Update, Value,
     WifiState, thumbnail,
 };
@@ -501,18 +501,20 @@ fn apps(scheme: Scheme) -> SettingsView {
 fn language_time(scheme: Scheme) -> SettingsView {
     let mut view = new_view(scheme);
     view.apply(Update::Locale(Some(LocaleState {
-        installed: vec![
-            InstalledLocale {
+        available: vec![
+            AvailableLocale {
                 code: "en_US.UTF-8".to_owned(),
                 name: "English (US)".to_owned(),
             },
-            InstalledLocale {
+            AvailableLocale {
                 code: "sv_SE.UTF-8".to_owned(),
                 name: "Swedish (Sweden)".to_owned(),
             },
         ],
         language: "en_US.UTF-8".to_owned(),
         region: Some("sv_SE.UTF-8".to_owned()),
+        pending: false,
+        login_sources: Vec::new(),
     })));
     view.apply(Update::Time(Some(TimeState {
         automatic: true,

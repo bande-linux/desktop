@@ -20,7 +20,8 @@ use crate::pictures::{Pair, PictureCommand, expand};
 use crate::privilege::Privilege;
 use crate::state::{Answer, Display, Question};
 use crate::view::{
-    Anchor, Intent, Intents, MIRROR_PREFIX, Picker, SettingsView, USE_EXTENDED, USE_MAIN, intent,
+    Anchor, Intent, Intents, MIRROR_PREFIX, PICK_RESULTS, Picker, SettingsView, USE_EXTENDED,
+    USE_MAIN, intent,
 };
 use crate::widgets::{
     Caption, Captioned, Card, Check, Column, Fade, Row, SIDEBAR_SYMBOL, Signal, Swatch, Swatches,
@@ -899,6 +900,7 @@ impl SettingsView {
         found
             .into_iter()
             .filter(|layout| !added.contains(&layout.code))
+            .take(PICK_RESULTS)
             .map(|layout| layout.code.clone())
             .collect()
     }

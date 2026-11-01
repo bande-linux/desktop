@@ -1,12 +1,12 @@
-use std::cell::{Cell, OnceCell, RefCell};
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::LazyLock;
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
 use bande_audio::{Direction, Snapshot, meter_level};
 use bande_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
-use bande_datetime::daylight::Place;
 use bande_toolkit::ui::{
     Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui, Widget,
     WidgetId,
@@ -39,10 +39,12 @@ use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::widgets::{Column, Crossfade, Root};
 use bande_keyboard::Layouts;
-use bande_settings_panes::{AUTOMATIC, Pane, PaneId, Permission, SettingId, Value, panes};
+use bande_settings_panes::{
+    AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
+};
 use bande_settings_panes::{PaneHit, search};
 
-const PICK_RESULTS: usize = 8;
+pub(crate) const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
 pub(crate) const USE_MAIN: &str = "main";
 pub(crate) const USE_EXTENDED: &str = "extended";
@@ -226,7 +228,6 @@ pub struct SettingsView {
     pub(crate) sidebar_scroll: Rc<RefCell<ScrollState>>,
     pub(crate) icon_dirs: Vec<PathBuf>,
     pub(crate) symbols: HashMap<Symbol, Option<Image>>,
-    pub(crate) place: OnceCell<Option<Place>>,
     pub(crate) clock: Box<dyn Fn() -> Zoned>,
 }
 
@@ -304,7 +305,6 @@ impl SettingsView {
             sidebar_scroll: Rc::default(),
             icon_dirs: bande_xdg::data_dirs(),
             symbols: HashMap::new(),
-            place: OnceCell::new(),
             clock: Box::new(bande_datetime::now),
         };
         view.rebuild();
@@ -328,9 +328,8 @@ impl SettingsView {
         }
     }
 
-    pub fn set_clock(&mut self, clock: impl Fn() -> Zoned + 'static, place: Option<Place>) {
+    pub fn set_clock(&mut self, clock: impl Fn() -> Zoned + 'static) {
         self.clock = Box::new(clock);
-        self.place = OnceCell::from(place);
         self.invalidate();
     }
 
@@ -347,11 +346,6 @@ impl SettingsView {
 
     pub fn message(&self) -> Option<&str> {
         self.message.as_deref()
-    }
-
-    pub fn set_layouts(&mut self, layouts: Layouts) {
-        self.layouts = Some(layouts);
-        self.invalidate();
     }
 
     pub fn set_pointing_devices(&mut self, devices: PointingDevices) {
@@ -395,8 +389,9 @@ impl SettingsView {
         }
     }
 
-    pub(crate) fn layouts(&mut self) -> &Layouts {
-        self.layouts.get_or_insert_with(Layouts::load)
+    pub(crate) fn layouts(&self) -> &Layouts {
+        static UNLOADED: LazyLock<Layouts> = LazyLock::new(Layouts::default);
+        self.layouts.as_ref().unwrap_or(&UNLOADED)
     }
 
     fn edit_sources(&mut self, edit: impl FnOnce(&mut Vec<String>)) {
@@ -414,13 +409,111 @@ impl SettingsView {
         }
     }
 
-    pub fn apply(&mut self, update: Update) {
-        match update {
-            Update::InputLevel(peak) => {
-                self.input_level
-                    .set(meter_level(peak, self.input_level.get()));
-                return;
+    pub fn apply(&mut self, updates: Vec<Update>) {
+        let mut changes = Vec::new();
+        for update in updates {
+            match update {
+                Update::InputLevel(peak) => {
+                    self.input_level
+                        .set(meter_level(peak, self.input_level.get()));
+                }
+                update => changes.push(update),
             }
+        }
+        if changes.is_empty() {
+            return;
+        }
+        let before = self.outline();
+        let mut shown = false;
+        for update in changes {
+            shown |= self.shows(&update);
+            self.take(update);
+        }
+        self.refresh_hits();
+        if shown || self.outline() != before {
+            self.invalidate();
+        }
+    }
+
+    fn outline(&self) -> (PaneId, Vec<PaneId>, Vec<bool>, Option<String>) {
+        let available = self
+            .panes
+            .iter()
+            .map(|pane| self.available(pane.id))
+            .collect();
+        (self.pane, self.visible_panes(), available, self.attention())
+    }
+
+    fn shows(&self, update: &Update) -> bool {
+        let (owner, settings): (Option<PaneId>, &[SettingId]) = match update {
+            Update::Wifi(_) => (
+                Some(PaneId::Wifi),
+                &[SettingId::WifiPower, SettingId::Networks],
+            ),
+            Update::Bluetooth(_) => (
+                Some(PaneId::Bluetooth),
+                &[
+                    SettingId::BluetoothPower,
+                    SettingId::PairedDevices,
+                    SettingId::NearbyDevices,
+                ],
+            ),
+            Update::Network(_) => (
+                Some(PaneId::Network),
+                &[
+                    SettingId::Ethernet,
+                    SettingId::Vpns,
+                    SettingId::EthernetAddress,
+                    SettingId::EthernetRouter,
+                    SettingId::EthernetDns,
+                ],
+            ),
+            Update::Audio(_) => (
+                Some(PaneId::Sound),
+                &[
+                    SettingId::OutputDevice,
+                    SettingId::OutputVolume,
+                    SettingId::OutputMuted,
+                    SettingId::InputDevice,
+                    SettingId::InputVolume,
+                    SettingId::InputMuted,
+                    SettingId::InputLevel,
+                    SettingId::AppVolumes,
+                ],
+            ),
+            Update::Battery(_) => (
+                Some(PaneId::Power),
+                &[
+                    SettingId::BatteryLevel,
+                    SettingId::PowerMode,
+                    SettingId::LowPowerOnBattery,
+                    SettingId::LidOnPower,
+                ],
+            ),
+            Update::Storage(_) => (
+                Some(PaneId::Storage),
+                &[SettingId::StorageUsage, SettingId::LargeFiles],
+            ),
+            Update::Software(_) => (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates]),
+            Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
+            _ => return true,
+        };
+        let feeds = |setting: &Setting| {
+            settings.contains(&setting.id)
+                || matches!(setting.kind, Kind::Page(child) if Some(child) == owner)
+        };
+        owner == Some(self.pane)
+            || self
+                .panes
+                .iter()
+                .find(|pane| pane.id == self.pane)
+                .is_some_and(|pane| pane.settings().any(feeds))
+    }
+
+    fn take(&mut self, update: Update) {
+        match update {
+            Update::InputLevel(_) => {}
+            Update::Layouts(layouts) => self.layouts = Some(layouts),
             Update::Values(values) => {
                 for (id, value) in values {
                     self.values.insert(id, value);
@@ -532,7 +625,6 @@ impl SettingsView {
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
             Update::Permissions(permissions) => self.permissions = permissions,
         }
-        self.availability_changed();
     }
 
     fn apply_audio(&mut self, snapshot: Option<Snapshot>) {
@@ -656,7 +748,7 @@ impl SettingsView {
             (Some((Picker::Language, query)), _) => self
                 .locale
                 .as_ref()
-                .map(|locale| locale_matches(&locale.available, query))
+                .map(|locale| locale_matches(&locale.available, query, PICK_RESULTS))
                 .unwrap_or_default(),
             (Some((Picker::Region, query)), _) if query.trim().is_empty() => {
                 vec![SAME_AS_LANGUAGE.to_owned()]
@@ -664,7 +756,7 @@ impl SettingsView {
             (Some((Picker::Region, query)), _) => self
                 .locale
                 .as_ref()
-                .map(|locale| locale_matches(&locale.available, query))
+                .map(|locale| locale_matches(&locale.available, query, PICK_RESULTS))
                 .unwrap_or_default(),
             (Some((Picker::Zone, query)), Some(time)) => {
                 zone_matches(&time.zones, query, PICK_RESULTS)
@@ -696,6 +788,11 @@ impl SettingsView {
     }
 
     fn availability_changed(&mut self) {
+        self.refresh_hits();
+        self.invalidate();
+    }
+
+    fn refresh_hits(&mut self) {
         if !self.query.is_empty() {
             self.hits = self.search_hits(&self.query.clone());
             let visible = self.visible_panes();
@@ -705,7 +802,6 @@ impl SettingsView {
                 self.select_pane(first);
             }
         }
-        self.invalidate();
     }
 
     fn invalidate(&mut self) {

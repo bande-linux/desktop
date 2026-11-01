@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::sync::mpsc::{self, Sender};
+use std::sync::{Arc, OnceLock};
 
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -216,9 +217,11 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
     let (sender, receiver) = mpsc::channel();
     let reader = system.clone();
     let feed = updates.clone();
+    let supported: Arc<OnceLock<Vec<AvailableLocale>>> = Arc::default();
+    let cached = Arc::clone(&supported);
     spawn("locale", move || {
         let follow = || -> zbus::Result<()> {
-            let available = read_supported();
+            let available = cached.get_or_init(read_supported);
             let locale = LocaleProxyBlocking::builder(&reader)
                 .cache_properties(zbus::proxy::CacheProperties::No)
                 .build()?;
@@ -227,11 +230,11 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 .path(LOCALE_PATH)?
                 .build()?
                 .receive_properties_changed()?;
-            if !feed.send(Update::Locale(read(&locale, &available))) {
+            if !feed.send(Update::Locale(read(&locale, available))) {
                 return Ok(());
             }
             for _ in changes {
-                if !feed.send(Update::Locale(read(&locale, &available))) {
+                if !feed.send(Update::Locale(read(&locale, available))) {
                     break;
                 }
             }
@@ -256,7 +259,10 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                     locale.set_x11_keyboard(&layouts, "", &variants, "", false, true)
                 {
                     updates.send(failed(SettingId::InputSources, &error, "service-locale"));
-                    updates.send(Update::Locale(read(&locale, &read_supported())));
+                    updates.send(Update::Locale(read(
+                        &locale,
+                        supported.get_or_init(read_supported),
+                    )));
                 }
                 continue;
             }
@@ -284,7 +290,10 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             }));
             if let Err(error) = locale.set_locale(wanted, true) {
                 updates.send(failed(setting, &error, "service-locale"));
-                updates.send(Update::Locale(read(&locale, &read_supported())));
+                updates.send(Update::Locale(read(
+                    &locale,
+                    supported.get_or_init(read_supported),
+                )));
             }
         }
     });

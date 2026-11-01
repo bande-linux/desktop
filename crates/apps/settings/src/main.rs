@@ -296,9 +296,7 @@ impl Program for Settings {
             _ => self.displays.as_mut().and_then(Displays::dispatch),
         };
         if let Some(view) = settings_view(cx, self.main, &mut self.parked) {
-            for update in updates {
-                view.apply(update);
-            }
+            view.apply(updates);
             if let Some(displays) = displays {
                 view.set_displays(displays);
             }

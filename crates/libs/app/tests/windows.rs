@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Mutex, PoisonError};
 use std::thread;
@@ -39,6 +40,7 @@ enum Seen {
     Copied(WindowId),
     Command(WindowId, String),
     AskedToClose(WindowId),
+    Asked(Vec<String>, PathBuf),
 }
 
 fn record(seen: Seen) {
@@ -138,6 +140,10 @@ impl Program for Example {
 
     fn command(&mut self, _cx: &mut Cx<Self>, window: WindowId, command: &str) {
         record(Seen::Command(window, command.to_owned()));
+    }
+
+    fn open(&mut self, _cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
+        record(Seen::Asked(arguments, directory.to_path_buf()));
     }
 
     fn should_close(&mut self, _cx: &mut Cx<Self>, window: WindowId) -> bool {
@@ -280,6 +286,17 @@ fn windows_share_keys_menus_appearance_closing_and_quitting() {
         .expect("emit SettingChanged");
     desktop.wait_for(&Seen::Dark(first));
     desktop.wait_for(&Seen::Dark(second));
+
+    let (unused, _) = UnixStream::pair().expect("socket pair");
+    let second_launch = thread::spawn(move || {
+        bande_app::run_on::<Example>(&INFO, vec!["second".to_owned()], unused)
+            .map_err(|error| error.to_string())
+    });
+    desktop.wait_for(&Seen::Asked(
+        vec!["second".to_owned()],
+        std::env::current_dir().expect("directory"),
+    ));
+    assert_eq!(second_launch.join().expect("second launch"), Ok(()));
 
     let mark = desktop.seen.len();
     desktop.chord(KEY_C);

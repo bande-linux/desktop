@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::os::fd::BorrowedFd;
 use std::os::unix::net::UnixStream;
+use std::path::Path;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
@@ -8,12 +9,14 @@ use bande_app_menu::{AppMenu, Standard, shortcut_action};
 use bande_toolkit::ui::{Event, shortcut_pressed};
 use bande_toolkit::{Rect, Scene, Surfaces, Window, WindowEvent};
 
+use crate::instance::{self, Claim, Instance, Request};
 use crate::menus::assemble;
 use crate::{Cx, Error, Info, Program, View, WindowId};
 
 #[derive(Debug, Clone, Copy)]
 enum Source {
     Menu,
+    Instance,
     Program(usize),
 }
 
@@ -21,6 +24,7 @@ struct Runner<P: Program> {
     program: P,
     cx: Cx<P>,
     menu: Option<AppMenu>,
+    instance: Option<Instance>,
     sources: RefCell<Vec<Source>>,
 }
 
@@ -30,15 +34,31 @@ pub(crate) fn run<P: Program>(
     display: Option<UnixStream>,
 ) -> Result<(), Error> {
     let session = bande_bus::session()
-        .inspect_err(|error| tracing::warn!("no session bus, so no menu bar: {error}"))
+        .inspect_err(|error| {
+            tracing::warn!("no session bus, so no menu bar and no single instance: {error}");
+        })
         .ok();
+    let claimed = session
+        .as_ref()
+        .map(|session| instance::claim(session, info.id))
+        .transpose()
+        .inspect_err(|error| tracing::warn!("cannot claim {}: {error}", info.id))
+        .ok()
+        .flatten();
+    let instance = match (claimed, &session) {
+        (Some(Claim::Running), Some(session)) => {
+            return instance::forward(session, info.id, Request::from_launch(arguments)?);
+        }
+        (Some(Claim::First(instance)), _) => Some(instance),
+        _ => None,
+    };
     let mut cx = Cx::new(info, display, session);
     let program = P::start(&mut cx, arguments)?;
     if cx.windows().next().is_none() {
         return Ok(());
     }
     let menu = cx.session().cloned().and_then(|session| {
-        AppMenu::export_on(session, info.id, assemble(info, program.menus(&cx)))
+        AppMenu::serve(session, info.id, assemble(info, program.menus(&cx)))
             .inspect_err(|error| tracing::warn!("{error}"))
             .ok()
     });
@@ -47,6 +67,7 @@ pub(crate) fn run<P: Program>(
         program,
         cx,
         menu,
+        instance,
         sources: RefCell::new(Vec::new()),
     };
     bande_toolkit::run_surfaces(&mut runner)?;
@@ -129,13 +150,39 @@ impl<P: Program> Runner<P> {
         }
     }
 
+    fn activated(&mut self, request: Request) {
+        let newest = self.cx.views.last().map(|(id, _)| *id);
+        if !request.arguments.is_empty() {
+            let directory = request.directory.as_deref().unwrap_or(Path::new("/"));
+            self.program
+                .open(&mut self.cx, request.arguments.clone(), directory);
+        }
+        let opened = self
+            .cx
+            .views
+            .last()
+            .map(|(id, _)| *id)
+            .filter(|id| Some(*id) != newest);
+        let id = self.cx.info.id;
+        let Some((window, _)) = opened
+            .or_else(|| self.cx.focused())
+            .and_then(|target| self.cx.window(target))
+        else {
+            return;
+        };
+        let token = match request.token {
+            Some(token) => Ok(token),
+            None => window.activation_token(id),
+        };
+        if let Err(error) = token.and_then(|token| window.activate(&token)) {
+            tracing::warn!("cannot raise the window: {error}");
+        }
+    }
+
     fn focus(&mut self, index: usize, window: WindowId, focused: bool) {
         if focused {
             self.cx.focused = Some(window);
             self.cx.menus_changed = true;
-            if let Some(Err(error)) = self.menu.as_ref().map(AppMenu::claim) {
-                tracing::warn!("{error}");
-            }
         }
         self.cx.views[index].1.set_active(focused);
         self.cx.windows[index].request_redraw();
@@ -191,6 +238,10 @@ impl<P: Program> Surfaces for Runner<P> {
             fds.push(menu.fd());
             sources.push(Source::Menu);
         }
+        if let Some(instance) = &self.instance {
+            fds.push(instance.fd());
+            sources.push(Source::Instance);
+        }
         for (index, fd) in self.program.sources().into_iter().enumerate() {
             fds.push(fd);
             sources.push(Source::Program(index));
@@ -212,6 +263,16 @@ impl<P: Program> Surfaces for Runner<P> {
                     if let Some(window) = self.cx.focused() {
                         self.perform(window, &action);
                     }
+                }
+            }
+            Some(Source::Instance) => {
+                let requests = self
+                    .instance
+                    .as_mut()
+                    .map(Instance::take_requests)
+                    .unwrap_or_default();
+                for request in requests {
+                    self.activated(request);
                 }
             }
             Some(Source::Program(index)) => self.program.source_ready(&mut self.cx, index),

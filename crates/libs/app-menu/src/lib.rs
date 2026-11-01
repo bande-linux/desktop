@@ -435,6 +435,12 @@ impl AppMenu {
         app_id: &str,
         entries: Vec<Entry>,
     ) -> Result<Self, Error> {
+        let menu = Self::serve(connection, app_id, entries)?;
+        menu.claim()?;
+        Ok(menu)
+    }
+
+    pub fn serve(connection: Connection, app_id: &str, entries: Vec<Entry>) -> Result<Self, Error> {
         let actions = Inbox::new()?;
         let menus = Arc::new(Mutex::new(Menus {
             revision: 1,
@@ -447,14 +453,12 @@ impl AppMenu {
                 actions: actions.outbox(),
             },
         )?;
-        let menu = Self {
+        Ok(Self {
             connection,
             app_id: app_id.to_owned(),
             menus,
             actions,
-        };
-        menu.claim()?;
-        Ok(menu)
+        })
     }
 
     pub fn claim(&self) -> Result<(), Error> {

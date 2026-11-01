@@ -1,9 +1,12 @@
 mod cx;
+mod instance;
 mod menus;
 mod runner;
 
+use std::ffi::OsString;
 use std::os::fd::BorrowedFd;
 use std::os::unix::net::UnixStream;
+use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
@@ -112,6 +115,8 @@ pub trait Program: Sized + 'static {
 
     fn command(&mut self, _cx: &mut Cx<Self>, _window: WindowId, _command: &str) {}
 
+    fn open(&mut self, _cx: &mut Cx<Self>, _arguments: Vec<String>, _directory: &Path) {}
+
     fn changed(&mut self, _cx: &mut Cx<Self>, _window: WindowId) {}
 
     fn should_close(&mut self, _cx: &mut Cx<Self>, _window: WindowId) -> bool {
@@ -139,12 +144,23 @@ pub trait Program: Sized + 'static {
 }
 
 pub fn run<P: Program>(info: &'static Info) -> ExitCode {
-    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    let arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
     if arguments == [VERSION_FLAG] {
         println!("{} {}", info.package, info.version);
         return ExitCode::SUCCESS;
     }
     bande_log::init(info.package);
+    let arguments = match arguments
+        .into_iter()
+        .map(OsString::into_string)
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(arguments) => arguments,
+        Err(argument) => {
+            tracing::error!("the argument {} is not UTF-8", argument.display());
+            return ExitCode::FAILURE;
+        }
+    };
     match runner::run::<P>(info, arguments, None) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

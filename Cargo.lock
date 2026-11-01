@@ -365,6 +365,7 @@ dependencies = [
  "bande-app-menu",
  "bande-bus",
  "bande-compositor",
+ "bande-inbox",
  "bande-log",
  "bande-test-bus",
  "bande-toolkit",

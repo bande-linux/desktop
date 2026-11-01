@@ -242,6 +242,15 @@ impl Window {
         Ok(())
     }
 
+    pub fn activate(&mut self, token: &str) -> Result<(), WindowError> {
+        self.state
+            .activation
+            .as_ref()
+            .ok_or(WindowError::Missing("xdg_activation_v1"))?
+            .activate(token.to_owned(), &self.surface);
+        self.flush()
+    }
+
     pub fn activation_token(&mut self, app_id: &str) -> Result<String, WindowError> {
         let activation = self
             .state

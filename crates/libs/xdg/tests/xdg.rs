@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use bande_xdg::{
-    DesktopEntry, ExecError, ICON_THEMES, Locale, TERMINAL, UserDir, app_name, applications,
+    Apps, DesktopEntry, ExecError, ICON_THEMES, Locale, TERMINAL, UserDir, app_name, applications,
     apps_to_reopen, autostart_dir, find_app, find_app_for_process, find_icon, launch,
     opens_at_login, remember_apps, running_app, set_aside_apps_of_unclean_end, set_open_at_login,
     take_apps_to_reopen, user_dir, write_launcher, write_running_apps,
@@ -568,4 +568,25 @@ fn the_running_apps_are_set_aside_only_when_the_session_ended_without_rememberin
 
     set_aside_apps_of_unclean_end(&running, &reopen, &crashed).expect("nothing to set aside");
     assert!(!crashed.exists());
+}
+
+#[test]
+fn a_launcher_file_runs_only_when_installed_or_marked_executable_by_its_owner() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let data = TempDir::new().expect("data");
+    let downloads = TempDir::new().expect("downloads");
+    let entry = "[Desktop Entry]\nType=Application\nName=Tool\nExec=tool\n";
+    let installed = data.path().join("applications/tool.desktop");
+    fs::create_dir_all(installed.parent().expect("folder")).expect("folder");
+    fs::write(&installed, entry).expect("installed");
+    let downloaded = downloads.path().join("tool.desktop");
+    fs::write(&downloaded, entry).expect("downloaded");
+    let apps = Apps::load(vec![data.path().to_path_buf()], &[]);
+    let mime = "application/x-desktop";
+
+    assert!(apps.launcher(&installed, mime).is_some());
+    assert!(apps.launcher(&downloaded, mime).is_none());
+    fs::set_permissions(&downloaded, fs::Permissions::from_mode(0o755)).expect("chmod");
+    assert!(apps.launcher(&downloaded, mime).is_some());
 }

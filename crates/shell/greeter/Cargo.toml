@@ -25,6 +25,7 @@ zbus.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
+rustix.workspace = true
 tempfile.workspace = true
 
 [package.metadata.deb]

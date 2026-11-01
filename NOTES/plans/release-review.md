@@ -41,7 +41,7 @@ Counts: 4 critical, 11 high, 27 medium, about 53 low. Fixed: 28 (3 critical, 8 h
 | medium | compositor `main.rs`, `input_settings.rs` | A `config.kdl` read or parse error silently became defaults and was applied mid-session (layouts, sticky keys, display scales reset). The current settings are kept and the error is logged. | `720496b8` |
 | low | toolkit `presentation.rs` | `now + (at - clock)` and `Duration::new` panicked on a far-future presentation time. Saturating. | `4a8ee9b2` |
 | low | installer `deb.rs`, status `tray.rs` | `Installed-Size * 1024`, tray `width * height * 4` and `(width - 32).abs()` overflowed on crafted values. Saturating/checked. | `4a8ee9b2` |
-| low | greeter `Cargo.toml` | Unused `jiff` and dev `rustix`. Removed. | `102e3c9e` |
+| low | greeter `Cargo.toml` | Unused `jiff`. Removed (dev `rustix` is used by a shared test module). | `102e3c9e` |
 | low | `bande-session`, docs, ci | "an Bande" left from the rename (one shown to users). Fixed. lock `Cargo.toml` said Control-Super-Q; it is Super+L. | `102e3c9e` |
 
 ## Not fixed

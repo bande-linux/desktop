@@ -27,6 +27,11 @@ pub enum Standard {
     CloseWindow,
 }
 
+const APP_SHORTCUTS: [(Standard, &str); 2] = [
+    (Standard::Quit, "Ctrl+Q"),
+    (Standard::CloseWindow, "Ctrl+W"),
+];
+
 const STANDARD: [(Standard, &str); 5] = [
     (Standard::Hide, "app-menu:hide"),
     (Standard::Quit, "app-menu:quit"),
@@ -48,6 +53,20 @@ impl Standard {
             .iter()
             .find(|(_, known)| *known == action)
             .map(|(standard, _)| *standard)
+    }
+
+    pub fn for_shortcut(pressed: impl Fn(&str) -> bool) -> Option<Self> {
+        APP_SHORTCUTS
+            .iter()
+            .find(|(_, shortcut)| pressed(shortcut))
+            .map(|(standard, _)| *standard)
+    }
+
+    fn shortcut(self) -> &'static str {
+        APP_SHORTCUTS
+            .iter()
+            .find(|(standard, _)| *standard == self)
+            .map_or("", |(_, shortcut)| shortcut)
     }
 }
 
@@ -83,6 +102,10 @@ impl ShellAction {
 }
 
 pub fn app_submenu(app: &str, items: Vec<Entry>) -> Entry {
+    app_submenu_quitting_on(app, items, Standard::Quit.shortcut())
+}
+
+pub fn app_submenu_quitting_on(app: &str, items: Vec<Entry>, quit: &str) -> Entry {
     let mut entries = vec![
         Entry::item(&L10N.tr_args("about-app", [("app", app.into())]), "")
             .shell_action(ShellAction::About),
@@ -108,7 +131,7 @@ pub fn app_submenu(app: &str, items: Vec<Entry>) -> Entry {
             &L10N.tr_args("quit-app", [("app", app.into())]),
             Standard::Quit.action(),
         )
-        .shortcut("Super+Q"),
+        .shortcut(quit),
     ]);
     Entry::submenu(app, entries)
 }
@@ -126,7 +149,8 @@ pub fn window_submenu(items: Vec<Entry>) -> Entry {
 }
 
 pub fn close_window() -> Entry {
-    Entry::item(&L10N.tr("close-window"), Standard::CloseWindow.action()).shortcut("Super+W")
+    Entry::item(&L10N.tr("close-window"), Standard::CloseWindow.action())
+        .shortcut(Standard::CloseWindow.shortcut())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -219,7 +243,13 @@ impl Entry {
             properties.insert("toggle-state".to_owned(), Value::from(i32::from(selected)));
         }
         if let Some(shortcut) = &self.shortcut {
-            let keys = shortcut.split('+').map(str::to_owned).collect::<Vec<_>>();
+            let keys = shortcut
+                .split('+')
+                .map(|key| match key {
+                    "Ctrl" => "Control".to_owned(),
+                    key => key.to_owned(),
+                })
+                .collect::<Vec<_>>();
             properties.insert("shortcut".to_owned(), Value::from(vec![keys]));
         }
         if let Some(action) = self.shell_action {
@@ -450,6 +480,23 @@ impl AppMenu {
 
 #[cfg(test)]
 mod tests {
+    use super::Standard;
+
+    #[test]
+    fn ctrl_w_and_ctrl_q_are_the_app_level_standard_shortcuts() {
+        let pressed = |held: &'static str| move |shortcut: &str| shortcut == held;
+        assert_eq!(
+            Standard::for_shortcut(pressed("Ctrl+W")),
+            Some(Standard::CloseWindow)
+        );
+        assert_eq!(
+            Standard::for_shortcut(pressed("Ctrl+Q")),
+            Some(Standard::Quit)
+        );
+        assert_eq!(Standard::for_shortcut(pressed("Shift+Ctrl+W")), None);
+        assert_eq!(Standard::for_shortcut(pressed("Super+H")), None);
+    }
+
     #[test]
     fn every_message_id_used_in_code_is_in_the_english_file() {
         assert_eq!(

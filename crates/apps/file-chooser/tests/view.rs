@@ -185,17 +185,6 @@ fn type_text(view: &mut ChooserView, text: &str) {
     }
 }
 
-fn super_shift(view: &mut ChooserView, letter: char) {
-    view.handle(&Event::Key {
-        key: Key::Character(letter),
-        modifiers: Modifiers {
-            shift: true,
-            logo: true,
-            ..Modifiers::default()
-        },
-    });
-}
-
 #[test]
 fn typing_a_path_goes_to_its_folder_and_selects_a_file_there() {
     let home = home();
@@ -206,7 +195,7 @@ fn typing_a_path_goes_to_its_folder_and_selects_a_file_there() {
             directory: false,
         },
     );
-    super_shift(&mut view, 'h');
+    alt_key(&mut view, Key::Home);
     assert_eq!(view.folder(), home.home);
     render(&mut view);
     type_text(&mut view, "~/Documents/Receipts");
@@ -232,18 +221,18 @@ fn typing_a_path_goes_to_its_folder_and_selects_a_file_there() {
     assert_eq!(selection.paths, [home.home.join("Documents/Letter.txt")]);
 }
 
-fn super_key(view: &mut ChooserView, key: Key) {
+fn alt_key(view: &mut ChooserView, key: Key) {
     view.handle(&Event::Key {
         key,
         modifiers: Modifiers {
-            logo: true,
+            alt: true,
             ..Modifiers::default()
         },
     });
 }
 
 #[test]
-fn super_brackets_go_back_and_forward_through_the_folders_visited() {
+fn alt_arrows_go_back_and_forward_through_the_folders_visited() {
     let home = home();
     let mut view = view(
         &home.home,
@@ -257,19 +246,19 @@ fn super_brackets_go_back_and_forward_through_the_folders_visited() {
     render(&mut view);
     key(&mut view, Key::Character('r'));
     key(&mut view, Key::Enter);
-    super_shift(&mut view, 'h');
+    alt_key(&mut view, Key::Home);
     assert_eq!(view.folder(), home.home);
 
-    super_key(&mut view, Key::Character('['));
+    alt_key(&mut view, Key::Left);
     assert_eq!(view.folder(), receipts);
-    super_key(&mut view, Key::Character('['));
+    alt_key(&mut view, Key::Left);
     assert_eq!(view.folder(), documents);
     render(&mut view);
     key(&mut view, Key::Enter);
     assert_eq!(view.folder(), receipts);
-    super_key(&mut view, Key::Character(']'));
+    alt_key(&mut view, Key::Right);
     assert_eq!(view.folder(), receipts);
-    super_key(&mut view, Key::Character('['));
-    super_key(&mut view, Key::Character(']'));
+    alt_key(&mut view, Key::Left);
+    alt_key(&mut view, Key::Right);
     assert_eq!(view.folder(), receipts);
 }

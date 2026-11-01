@@ -737,15 +737,8 @@ impl SettingsView {
             Event::Key {
                 key: Key::Character('f'),
                 modifiers,
-            } if modifiers.logo && !modifiers.control && !modifiers.alt => {
+            } if modifiers.control && !modifiers.logo && !modifiers.alt => {
                 self.ui.perform(&request(Action::Focus, self.search, None));
-                true
-            }
-            Event::Key {
-                key: Key::Character('['),
-                modifiers,
-            } if modifiers.logo && self.can_go_back() => {
-                self.intents.borrow_mut().push(Intent::Back);
                 true
             }
             Event::Key {

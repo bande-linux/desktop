@@ -700,7 +700,7 @@ impl Table {
         };
         if modifiers.shift {
             self.select_range(index);
-        } else if modifiers.logo {
+        } else if modifiers.control {
             if let Some(selected) = self.selected.get_mut(index) {
                 *selected = !*selected;
             }
@@ -710,7 +710,7 @@ impl Table {
             self.select_only(index);
         }
         self.notify_selection();
-        if count >= 2 && !modifiers.shift && !modifiers.logo {
+        if count >= 2 && !modifiers.shift && !modifiers.control {
             let keys = self.selection();
             (self.on_activate)(&keys);
         }
@@ -740,9 +740,10 @@ impl Table {
         let last = self.shown.len().saturating_sub(1);
         let cursor = self.cursor;
         let extend = modifiers.shift;
+        if modifiers.logo {
+            return false;
+        }
         match key {
-            Key::Up if modifiers.logo => self.step(cx, 0, extend),
-            Key::Down if modifiers.logo => self.step(cx, last, extend),
             Key::Up => self.step(
                 cx,
                 cursor.map_or(last, |index| index.saturating_sub(1)),
@@ -770,7 +771,7 @@ impl Table {
                 (self.on_activate)(&keys);
                 true
             }
-            Key::Character('c') if modifiers.logo && !self.selection().is_empty() => {
+            Key::Character('c') if modifiers.control && !self.selection().is_empty() => {
                 let text = self
                     .shown
                     .iter()
@@ -789,13 +790,13 @@ impl Table {
                 cx.copy(&text);
                 true
             }
-            Key::Character('a') if modifiers.logo => {
+            Key::Character('a') if modifiers.control => {
                 self.selected = vec![true; self.shown.len()];
                 self.notify_selection();
                 true
             }
             Key::Character(character)
-                if !modifiers.logo && !modifiers.control && !character.is_control() =>
+                if !modifiers.control && !modifiers.alt && !character.is_control() =>
             {
                 self.type_select(cx, character)
             }
@@ -916,7 +917,7 @@ impl Table {
             return true;
         }
         let modifiers = pointer.modifiers;
-        let plain = !modifiers.shift && !modifiers.logo;
+        let plain = !modifiers.shift && !modifiers.control;
         let collapse = plain
             && pointer.count == 1
             && index.is_some_and(|index| self.selected.get(index).copied().unwrap_or(false));

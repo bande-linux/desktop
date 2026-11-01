@@ -45,7 +45,7 @@ fn menus() -> Menu {
                 2,
                 "File",
                 vec![
-                    shortcut(node(20, "New Window", Vec::new()), "Super+N"),
+                    shortcut(node(20, "New Window", Vec::new()), "Ctrl+N"),
                     node(21, "Find in Folder", Vec::new()),
                 ],
             ),
@@ -53,8 +53,8 @@ fn menus() -> Menu {
                 3,
                 "Edit",
                 vec![
-                    shortcut(node(30, "Copy", Vec::new()), "Super+C"),
-                    shortcut(node(31, "Find", Vec::new()), "Super+F"),
+                    shortcut(node(30, "Copy", Vec::new()), "Ctrl+C"),
+                    shortcut(node(31, "Find", Vec::new()), "Ctrl+F"),
                     Node {
                         enabled: false,
                         ..node(32, "Paste", Vec::new())
@@ -98,8 +98,8 @@ fn opened() -> (MenuSearch, Rc<Cell<Instant>>) {
 fn every_enabled_item_is_listed_with_its_path_and_shortcut() {
     let (search, _) = opened();
     let results = search.results();
-    assert!(results.contains(&("Edit › Find".to_owned(), Some("Super+F".to_owned()))));
-    assert!(results.contains(&("File › New Window".to_owned(), Some("Super+N".to_owned()))));
+    assert!(results.contains(&("Edit › Find".to_owned(), Some("Ctrl+F".to_owned()))));
+    assert!(results.contains(&("File › New Window".to_owned(), Some("Ctrl+N".to_owned()))));
     assert!(results.contains(&("Files › About Files".to_owned(), None)));
     assert!(results.iter().all(|(title, _)| !title.ends_with("Paste")));
 }

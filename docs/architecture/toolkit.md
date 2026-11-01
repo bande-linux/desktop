@@ -185,7 +185,7 @@ writes a hex value, a corner radius or a font name of its own.
   | `.quiet()` | `accent_text` 600, `well` fill on hover only |
   | `.destructive()` | danger fill, `on_danger` text; only for the destructive verb |
   | `Button::symbol(image, label, action)` | 28×28 icon button: a symbolic `Image` tinted `ink2` (`ink` on hover), `well` on hover; `label` is its tooltip and accessible name; `set_enabled(false)` dims any button to `ink3` and ignores it |
-  | `TextField`, `TextView`, `SecureField` | `field` fill (`overlay` light, `well` dark), 1 pt `edge` outline, placeholder `ink3`, 1.5 pt accent caret, selection `accent_soft` (`well` when unfocused); `SecureField` shows a Caps Lock sign while focused with Caps Lock on (`Context::caps_lock`, set by `Window::drive`) |
+  | `TextField`, `TextView`, `SecureField` | `field` fill (`overlay` light, `well` dark), 1 pt `edge` outline, placeholder `ink3`, 1.5 pt accent caret, selection `accent_soft` (`well` when unfocused); `SecureField` shows a Caps Lock sign while focused with Caps Lock on (`Context::caps_lock`, set by `Window::drive`), and Ctrl+Backspace clears it |
   | `SearchField` | `well` fill, radius 8, no outline, magnifier `ink3`, clear button |
   | `ComboBox` | a text field with a single down chevron |
   | `Toggle` (switch) | 36×20 pill, `edge` off, accent on, white 15 pt knob with a small shadow |
@@ -199,12 +199,12 @@ writes a hex value, a corner radius or a font name of its own.
   | `Spinner` | 12 `ink2` spokes |
   | `Disclosure` | chevron that turns, content fades in |
   | Tooltip | `ink` fill with `chassis` text 12/500, radius 6, no arrow |
-  | `Shortcut::new("Alt+Super+K")` | key symbols in `ink2`, with the Super glyph (a 9.5 pt rounded square with a 3 pt square inside) instead of ⌘; `shortcut_keys` splits a shortcut into modifier symbols, Super and key |
+  | `Shortcut::new("Shift+Ctrl+N")` | the shortcut as words in `ink2`, modifiers in GNOME order (Shift, Ctrl, Alt, Super), arrows as arrow symbols, "Page Up", "Esc"; `shortcut_label` writes the label, `parse_shortcut` reads a shortcut string back into a key and modifiers (`Ctrl` or `Control`), and `shortcut_pressed` tells whether a key event matches one |
 
 - **Menus** (golden `platform/tests/golden/menu-submenu-*.png`). Opaque `overlay`, radius 10
   (`MENU_RADIUS`) with the Datum overlay shadow pair and no blur; 4 pt inset, 28 pt rows, 9 pt
   separators in `hairline`, the highlight accent radius 6 with `on_accent` text, disabled items
-  `ink3`, the shortcut column right-aligned in `ink3` with the Super glyph, square-capped
+  `ink3`, the shortcut column right-aligned in `ink3` as words, square-capped
   checkmarks, submenu chevrons. Searchable menus (`Menu::searchable`) have a `well` search
   field; Alt swaps items for their `alternate`.
 - **Alerts and sheets** (golden `platform/tests/golden/alert-*.png`). `Alert` is a card of radius
@@ -230,12 +230,12 @@ writes a hex value, a corner radius or a font name of its own.
   only when visible or under the caret, with estimated heights for the rest, so a 100,000-line
   `TextView` types without delay. Movement uses Parley's cursors, so arrows move visually
   through mixed left-to-right and right-to-left text and each paragraph takes its own
-  direction. Bindings follow the [keyboard model](overview.md#keyboard-model) with Super as
-  Command: Super+Left/Right and Home/End to the line ends, Super+Up/Down to the document ends,
-  Alt+Left/Right by word, Alt+Up/Down by paragraph, Up/Down by line keeping the column (to the
-  ends of a single-line field, as `NSTextField`), Page Up/Down by a page, Shift extending,
-  Alt+Backspace/Delete and Super+Backspace deleting a word and to the line start, Super+A,
-  Super+X/C/V. Super+Z and Shift+Super+Z undo and redo; typing undoes a word at a time, and
+  direction. Bindings follow the [keyboard model](overview.md#keyboard-model), as in GNOME:
+  Home/End to the line ends, Ctrl+Home/End to the document ends, Ctrl+Left/Right by word,
+  Ctrl+Up/Down by paragraph, Up/Down by line keeping the column (to the ends of a single-line
+  field), Page Up/Down by a page, Shift extending, Ctrl+Backspace/Delete deleting a word,
+  Ctrl+A, Ctrl+X/C/V. Ctrl+Z undoes, Shift+Ctrl+Z and Ctrl+Y redo; Alt and Super are not used.
+  Typing undoes a word at a time, and
   deleting, pasting, cutting and composing each undo as one step. Double click selects a word,
   triple click a paragraph, and dragging after either extends by that unit; dragging past the
   edge scrolls. The context menu offers Undo, Redo, Cut, Copy, Paste and Select All. Input
@@ -263,13 +263,14 @@ writes a hex value, a corner radius or a font name of its own.
   window with a button, field, pop-up button, table and menu, and clicks, types and chooses through it.
 - **Input.** `wl_seat` up to version 9. Pointer events carry the button (primary, secondary,
   middle, back, forward), the click count (a press within 500 ms and 4 pt of the previous press
-  of the same button counts up) and the modifiers; Ctrl+primary is a secondary click. Scrolling
+  of the same button counts up) and the modifiers; Ctrl+primary stays a primary click with Ctrl
+  held, which toggles an item in a selection. Scrolling
   arrives as `Event::Scroll` with its source (wheel, finger, continuous) and phase (a finger
   scroll begins, changes and ends at `axis_stop`, so momentum can start from its end).
   Modifier-only changes arrive as `Event::ModifiersChanged`. `Ui` sends `PointerEnter` and
   `PointerLeave` to every widget on the hit path, bubbles scrolling from the innermost widget
   outwards, and reports the hovered widget's cursor, which `Window::set_cursor` shows through
-  `wp_cursor_shape_v1`. A close request (close button, Super+W) asks `App::should_close`, so an
+  `wp_cursor_shape_v1`. A close request (close button, Super+W, Alt+F4) asks `App::should_close`, so an
   app can keep its window open, ask first or close a tab instead; `Window::close` closes it.
 
 Since `wayland-backend` is built with `client_system`, every Wayland client in a workspace

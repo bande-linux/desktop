@@ -22,7 +22,10 @@ const SHIFT: Modifiers = Modifiers {
     shift: true,
     ..NONE
 };
-const LOGO: Modifiers = Modifiers { logo: true, ..NONE };
+const CTRL: Modifiers = Modifiers {
+    control: true,
+    ..NONE
+};
 const ALT: Modifiers = Modifiers { alt: true, ..NONE };
 
 #[derive(Default)]
@@ -125,13 +128,13 @@ impl Fixture {
 const NAMES: [&str; 5] = ["alpha", "bravo", "charlie", "delta", "echo"];
 
 #[test]
-fn clicks_select_and_shift_and_super_extend_like_a_finder_list() {
+fn clicks_select_and_shift_and_ctrl_extend_the_selection() {
     let mut fixture = Fixture::new(&NAMES);
     fixture.click(1, NONE, 1);
     assert_eq!(fixture.selection(), keys(&["bravo"]));
     fixture.click(3, SHIFT, 1);
     assert_eq!(fixture.selection(), keys(&["bravo", "charlie", "delta"]));
-    fixture.click(2, LOGO, 1);
+    fixture.click(2, CTRL, 1);
     assert_eq!(fixture.selection(), keys(&["bravo", "delta"]));
     fixture.click(0, NONE, 1);
     assert_eq!(fixture.selection(), keys(&["alpha"]));
@@ -156,7 +159,7 @@ fn arrows_move_and_extend_the_selection_and_return_opens_it() {
     fixture.key(Key::Up, NONE);
     assert_eq!(fixture.selection(), keys(&["bravo"]));
     fixture.key(Key::Enter, NONE);
-    fixture.key(Key::Character('a'), LOGO);
+    fixture.key(Key::Character('a'), CTRL);
     assert_eq!(fixture.selection(), keys(&NAMES));
     assert_eq!(fixture.log.borrow().activated, [keys(&["bravo"])]);
 }
@@ -331,11 +334,11 @@ fn dragging_a_header_divider_resizes_the_column() {
 }
 
 #[test]
-fn super_c_copies_the_selected_rows_as_tab_separated_lines() {
+fn ctrl_c_copies_the_selected_rows_as_tab_separated_lines() {
     let mut fixture = Fixture::new(&NAMES);
     fixture.click(1, NONE, 1);
     fixture.click(2, SHIFT, 1);
-    fixture.key(Key::Character('c'), LOGO);
+    fixture.key(Key::Character('c'), CTRL);
     assert_eq!(
         fixture.ui.take_clipboard_request(),
         Some(ClipboardRequest::Copy(

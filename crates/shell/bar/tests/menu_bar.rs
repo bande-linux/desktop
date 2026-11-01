@@ -492,7 +492,7 @@ fn an_app_menu_shows_shortcuts_and_leaves_about_and_hiding_to_the_menu_bar() {
             3,
             &[
                 ("label", Value::from("New Folder")),
-                ("shortcut", Value::from(vec![vec!["Shift", "Super", "N"]])),
+                ("shortcut", Value::from(vec![vec!["Shift", "Control", "N"]])),
             ],
             Vec::new(),
         ),
@@ -527,7 +527,7 @@ fn an_app_menu_shows_shortcuts_and_leaves_about_and_hiding_to_the_menu_bar() {
     assert_eq!(converted.items[1].shortcut.as_deref(), Some("Super+H"));
     assert_eq!(
         converted.items[2].shortcut.as_deref(),
-        Some("Shift+Super+N")
+        Some("Shift+Control+N")
     );
 }
 

@@ -455,7 +455,7 @@ line and word breaking, and Chinese and Japanese word selection), 15 binaries.
 | Option | Saving | Cost |
 | :--- | ---: | :--- |
 | Drop `complex-scripts` | 2.9 MB × 15 | Thai, Lao, Khmer and Burmese text no longer wraps between words (lines break only at spaces), double-click selects whole runs of CJK text. Unacceptable for a desktop that shows arbitrary file names and notifications. |
-| Enable it only in some packages | 2.9 MB per package left out | Any package that shows user text needs it (Files, notifications, launcher, Settings, terminal, dock tooltips), so little is saved. |
+| Enable it only in some packages | 2.9 MB per package left out | Any package that shows user text needs it (Files, notifications, launcher, Settings, terminal, taskbar tooltips), so little is saved. |
 | Load the data at run time from one ICU4X blob in `/usr/share/bande/icu/` | 2.9 MB × 14, one shared page-cache copy | Needs a data-provider hook in Parley (`parley_engine` calls the compiled-data constructors directly); an upstream change. |
 | One multicall binary for the GUI programs | the whole shared stack, about 15 MB × 14 | Packaging work; also fixes this. |
 

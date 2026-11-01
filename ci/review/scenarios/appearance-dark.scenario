@@ -24,7 +24,7 @@ key escape
 wait 500ms
 click right 75 735
 wait 1s
-shot "dark dock menu"
+shot "dark taskbar menu"
 key escape
 wait 500ms
 click 2800 22

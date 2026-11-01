@@ -9,14 +9,14 @@ wait-for-window "org.bande.ActivityMonitor"
 wait 6s
 shot "cpu footer"
 note "Memory: pressure graph and what holds memory"
-key super+2
+key ctrl+2
 wait 4s
 shot "memory footer"
-key super+3
+key ctrl+3
 wait 2s
 shot "disk footer"
-key super+4
+key ctrl+4
 wait 2s
 shot "network footer"
-key super+1
+key ctrl+1
 wait 1s

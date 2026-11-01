@@ -148,18 +148,20 @@ impl MarkupApp {
             Event::Key {
                 key: Key::Character('z' | 'Z'),
                 modifiers,
-            } if modifiers.logo => {
+            } if modifiers.control => {
                 self.markup.undo();
                 true
             }
             Event::Key {
                 key: Key::Character('c' | 'C'),
                 modifiers,
-            } if modifiers.logo && !self.markup.is_typing() => {
+            } if modifiers.control && !self.markup.is_typing() => {
                 self.copy(window);
                 true
             }
-            Event::Key { key, modifiers } if self.markup.is_typing() && !modifiers.logo => {
+            Event::Key { key, modifiers }
+                if self.markup.is_typing() && !modifiers.control && !modifiers.logo =>
+            {
                 self.markup.key(*key)
             }
             Event::Key {
@@ -172,7 +174,7 @@ impl MarkupApp {
             Event::Key {
                 key: Key::Backspace | Key::Delete,
                 modifiers,
-            } if modifiers.logo => {
+            } if modifiers.control => {
                 self.delete(window);
                 true
             }

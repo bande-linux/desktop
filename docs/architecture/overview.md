@@ -47,7 +47,7 @@ graph TB
     subgraph "Shell clients (started by the compositor)"
         subgraph "bande-shell"
             DESKTOP[Desktop]
-            DOCK[Dock]
+            DOCK[Taskbar]
             MENUBAR[Menu bar]
             NOTES[Notifications]
             LAUNCHER[Launcher]
@@ -87,11 +87,11 @@ graph TB
     SETTINGS & MENUBAR & CC <-->|D-Bus| CONFIG
 ```
 
-The desktop, the Dock and the menu bar of every display, the notifications, Control Center and the
+The desktop and the taskbar of every display (with the menu bar when it is separate), the notifications, Control Center and the
 launcher are one process, `bande-shell` (`crates/shell/shell`), with one Wayland connection, one
 GPU device, one font database and one connection per D-Bus bus. Each part is a library crate
 (`bande-desktop-surface`, `bande-bar`, `bande-notifications`, `bande-controlcenter`,
-`bande-launcher`) whose surfaces the shell hosts; the bar's models live in
+`bande-launcher`) whose surfaces the shell hosts; the taskbar's models live in
 `bande-dock-model` and `bande-status` (`crates/libs`).
 
 ## Process model
@@ -103,7 +103,7 @@ thinks of it as part of the system:
   surface. It renders with its own renderer (`bande-render`); title bars and the rest of the
   visible UI are drawn by clients.
 - **Shell clients.** Wayland clients that make up the desktop around the apps: the shell (desktop,
-  Dock, menu bar, notifications, launcher, Control Center), the screenshot tool, the lock screen
+  taskbar, menu bar, notifications, launcher, Control Center), the screenshot tool, the lock screen
   and the greeter. The compositor starts them on
   socket pairs and restarts them when they exit; only these connections see the private
   `bande_shell_v1` protocol and `ext-foreign-toplevel-list-v1`
@@ -142,21 +142,25 @@ Bande is a Wayland-only desktop by design:
 
 ## Keyboard model
 
-Linux conflates clipboard copy with the terminal's `SIGINT` on `Ctrl+C` and works around it
-with `Ctrl+Shift+C`. Bande gives each modifier one meaning across the whole desktop; Super
-acts as macOS's Command:
+Bande follows the Linux convention of GNOME and KDE: Ctrl runs shortcuts inside apps and Super
+belongs to the system ([decision 0005](../decisions/0005-ctrl-for-app-shortcuts.md)). Bande's
+own apps and third-party apps use the same keys, so the compositor translates nothing.
 
 | Modifier | Role | Examples |
 | :--- | :--- | :--- |
-| **`Super`** | Primary action in every app and the terminal | `Super+C` (copy), `Super+V` (paste), `Super+X` (cut), `Super+Z` (undo), `Super+W` (close), `Super+Q` (quit), `Super+,` (settings) |
-| **`Ctrl`** | Terminal signals and readline navigation | `Ctrl+C` (SIGINT), `Ctrl+D` (EOF), `Ctrl+Z` (SIGTSTP), `Ctrl+A` (line start), `Ctrl+E` (line end), `Ctrl+K` (kill to line end) |
-| **`Alt`** | Alternate or precise modification | `Alt+Drag` (duplicate, precise move), `Alt+Click` (toggle disclosure), `Alt+Super+Space` (next input source, where macOS uses Control+Space) |
-| **`Shift`** | Reversal and extending a selection | `Super+Shift+Z` (redo), `Super+Shift+3/4/5` (screenshots) |
+| **`Ctrl`** | Shortcuts inside apps and text fields | `Ctrl+C` (copy), `Ctrl+V` (paste), `Ctrl+X` (cut), `Ctrl+Z` (undo), `Ctrl+W` (close window), `Ctrl+Q` (quit), `Ctrl+F` (find), `Ctrl+click` (toggle an item in a selection) |
+| **`Super`** | The compositor and the shell, in every app | `Super+Space` (launcher), `Super+Tab` (switcher), `Super+W` and `Super+Q` (close and quit any app), `Super+H` (hide), `Super+M` (minimize), `Shift+Super+3/4/5` (screenshots), `Ctrl+Super+Q` (lock) |
+| **`Alt`** | Navigation in apps, alternate actions | `Alt+Left/Right` (back and forward), `Alt+Up` (enclosing folder), `Alt+F4` (close window), `Alt+Drag` (copy), `Alt+Click` (toggle disclosure) |
+| **`Shift`** | Reversal, extending a selection, the second set of commands | `Shift+Ctrl+Z` (redo), `Shift+Ctrl+N` (new folder), Terminal's `Shift+Ctrl+C/V` |
 
-- **Text navigation**: every text field supports `Super+Left/Right` (line start and end) and
-  `Alt+Left/Right` (word backward and forward), with `Shift` extending the selection.
-- In the terminal, `Super+C` copies and `Super+V` pastes, leaving `Ctrl+C` to interrupt the
-  running process.
+- **Text fields**: `Ctrl+Left/Right` move by word, `Home`/`End` to the line ends,
+  `Ctrl+Home/End` to the text ends, `Ctrl+Up/Down` by paragraph, and `Ctrl+Backspace/Delete`
+  delete a word; `Shift` extends the selection. `Ctrl+Y` also redoes. Alt and Super are not used
+  in text fields.
+- **Terminal**: every plain `Ctrl+letter` goes to the shell (`Ctrl+C` interrupts, `Ctrl+D` ends
+  input), so the Terminal's own commands are on `Shift+Ctrl`, as in GNOME Terminal and Konsole.
+- **Menus** write shortcuts as words in GNOME order (Shift, Ctrl, Alt, Super): "Shift+Ctrl+N",
+  "Alt+Super+H".
 
 ## Configuration
 
@@ -174,16 +178,10 @@ control writes to it, and it can be edited by hand while the session runs.
   duplicates and out-of-range values are reported with the line and column of the offending
   node or value and ignored (the first of duplicates wins; an `idle` time shorter than the one
   before it is raised to match), so one mistake never costs the rest of the file. Names from
-  earlier versions keep working: `panel { }` is read as `dock { }`, and `output "<connector>"
-  { }` applies its display settings to whatever display is on that connector until a
-  `display` block names that display. When `bande-config` starts it rewrites them in place,
-  keeping comments and layout: `panel` becomes `dock`, and an `output` block whose connector
-  has a display connected (found in `/sys/class/drm`, named from its EDID exactly as the
-  compositor names it) becomes `display "<name>"`, or is dropped if that display already has a
-  block. Every Settings write also renames old sections first.
+  earlier versions (`panel`, `dock`, `output`) are no longer read.
   ```kdl
   appearance "automatic"        // "dark" | "light" | "automatic"
-  dock {
+  bar {
       edge "left"               // "left" | "bottom" | "right" | "top"
   }
   idle {
@@ -241,13 +239,13 @@ control writes to it, and it can be edited by hand while the session runs.
       display "LG HDR 4K 104NTAB7K123" mirror="BOE NE135A1M"
   }
   ```
-  The values shown for `appearance`, `dock`, `idle`, `keyboard` (except `input-sources`), `trackpad`, `mouse` and `sound` are the defaults. The
+  The values shown for `appearance`, `bar`, `idle`, `keyboard` (except `input-sources`), `trackpad`, `mouse` and `sound` are the defaults. The
   wallpaper used is the one matching the current appearance; the desktop expands a leading `~/`.
   A section left empty by a Settings write is removed from the file. A readable file is parsed
   into a shadow `Config` and swapped in as one `Arc`, so readers see either the old or the new
   configuration, never a mix. `ConfigService` owns `org.bande.Config` on the session bus and
   serves the active values as properties of interface `org.bande.Config` at
-  `/org/bande/Config` (`Appearance`, `DockEdge`, `IdleDimAfter`, `IdleLockAfter` and
+  `/org/bande/Config` (`Appearance`, `BarEdge`, `IdleDimAfter`, `IdleLockAfter` and
   `IdleSuspendAfter` in seconds, 0 meaning never, `IdleSuspendWithDisplay` true while
   `suspend-after` is unset and sleep follows the display (writing true removes the explicit
   value), `KeyRepeatRate` per second and

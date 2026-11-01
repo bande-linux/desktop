@@ -1,4 +1,5 @@
 mod access;
+mod app_connection;
 mod appearance;
 mod chrome;
 mod clipboard;
@@ -21,6 +22,7 @@ const ENGLISH: &str = include_str!("../locales/en-US/bande-toolkit-platform.ftl"
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
+pub use app_connection::{AppConnection, AppRequest};
 pub use bande_graphics::ResizeEdge;
 pub use bande_protocols::client::bande_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, SessionEnd, VolumeKey,

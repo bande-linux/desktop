@@ -61,6 +61,9 @@ pub(crate) struct Shell {
     quit_requests: usize,
     apps_running: Vec<(String, u32)>,
     app_processes: Vec<(String, i32)>,
+    windowless: Vec<(String, bool)>,
+    reopens: Vec<String>,
+    app_keys: Vec<(u32, u32)>,
     toplevels: Vec<(ExtForeignToplevelHandleV1, String, bool)>,
     toplevel_updates: usize,
     workspaces: Option<(u32, u32)>,
@@ -384,6 +387,24 @@ impl TestClient {
         &self.globals.shell.app_processes
     }
 
+    pub fn keep_running(&mut self, server: &mut Compositor, app_id: &str) {
+        let app: BandeAppV1 = self.bind("bande_app_v1", 2);
+        app.keep_running(app_id.to_owned());
+        self.exchange(server);
+    }
+
+    pub fn windowless_apps(&self) -> &[(String, bool)] {
+        &self.globals.shell.windowless
+    }
+
+    pub fn reopen_tokens(&self) -> &[String] {
+        &self.globals.shell.reopens
+    }
+
+    pub fn app_keys(&self) -> &[(u32, u32)] {
+        &self.globals.shell.app_keys
+    }
+
     pub fn activate_window(&mut self, server: &mut Compositor, identifier: &str) {
         self.shell_request(server, |shell| shell.activate_window(identifier.to_owned()));
     }
@@ -436,6 +457,10 @@ impl TestClient {
 
     pub fn activate_app(&mut self, server: &mut Compositor, app_id: &str) {
         self.shell_request(server, |shell| shell.activate_app(app_id.to_owned()));
+    }
+
+    pub fn reopen_app(&mut self, server: &mut Compositor, app_id: &str) {
+        self.shell_request(server, |shell| shell.reopen_app(app_id.to_owned()));
     }
 
     pub fn toplevel_updates(&self) -> usize {
@@ -660,6 +685,9 @@ impl Dispatch<BandeShellV1, ()> for Globals {
             bande_shell_v1::Event::AppProcess { app_id, pid } => {
                 globals.shell.app_processes.push((app_id, pid));
             }
+            bande_shell_v1::Event::WindowlessApp {
+                app_id, windowless, ..
+            } => globals.shell.windowless.push((app_id, windowless != 0)),
             bande_shell_v1::Event::AppResponding {
                 pid,
                 app_id,
@@ -682,8 +710,13 @@ impl Dispatch<BandeAppV1, ()> for Globals {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let bande_app_v1::Event::QuitRequested = event {
-            globals.shell.quit_requests += 1;
+        match event {
+            bande_app_v1::Event::QuitRequested => globals.shell.quit_requests += 1,
+            bande_app_v1::Event::Reopen { token } => globals.shell.reopens.push(token),
+            bande_app_v1::Event::Key { keysym, modifiers } => {
+                globals.shell.app_keys.push((keysym, modifiers));
+            }
+            _ => {}
         }
     }
 }

@@ -20,6 +20,17 @@ pub(crate) struct TextInput {
     pending_preedit: Option<Preedit>,
 }
 
+impl TextInput {
+    pub(crate) fn release(&mut self) {
+        if let Some(text_input) = self.text_input.take() {
+            text_input.destroy();
+        }
+        if let Some(manager) = self.manager.take() {
+            manager.destroy();
+        }
+    }
+}
+
 impl State {
     pub(crate) fn join_text_input(&mut self, surface: &WlSurface, handle: &QueueHandle<Self>) {
         let (Some(manager), Some(seat)) = (&self.text_input.manager, &self.seat) else {

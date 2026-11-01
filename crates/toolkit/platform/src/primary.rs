@@ -35,6 +35,23 @@ fn offered_types(offer: &ZwpPrimarySelectionOfferV1) -> Vec<String> {
         .unwrap_or_default()
 }
 
+impl Primary {
+    pub(crate) fn release(&mut self) {
+        if let Some(offer) = self.selection.take() {
+            offer.destroy();
+        }
+        if let Some((source, _)) = self.selected.take() {
+            source.destroy();
+        }
+        if let Some(device) = self.device.take() {
+            device.destroy();
+        }
+        if let Some(manager) = self.manager.take() {
+            manager.destroy();
+        }
+    }
+}
+
 impl State {
     pub(crate) fn join_primary_selection(&mut self, handle: &QueueHandle<Self>) {
         let primary = &mut self.clipboard.primary;

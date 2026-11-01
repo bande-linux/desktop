@@ -100,6 +100,8 @@ pub struct State {
     pub(crate) capture_resources: Vec<bande_protocols::server::bande_capture_v1::BandeCaptureV1>,
     pub(crate) pending_insert: Option<crate::shell::PendingInsert>,
     pub(crate) app_resources: Vec<BandeAppV1>,
+    pub(crate) kept_apps: Vec<(BandeAppV1, String)>,
+    pub(crate) announced_windowless: Vec<(String, i32)>,
     pub(crate) app_control_resources: Vec<BandeAppControlV1>,
     pub(crate) exclusive_layer: Option<ExclusiveLayer>,
     exclusive_candidates: Vec<(WlSurface, Layer)>,
@@ -206,7 +208,7 @@ impl Compositor {
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, BandeShellV1, ()>(1, ());
-        handle.create_global::<State, BandeAppV1, ()>(1, ());
+        handle.create_global::<State, BandeAppV1, ()>(2, ());
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
@@ -234,6 +236,8 @@ impl Compositor {
             capture_resources: Vec::new(),
             pending_insert: None,
             app_resources: Vec::new(),
+            kept_apps: Vec::new(),
+            announced_windowless: Vec::new(),
             app_control_resources: Vec::new(),
             exclusive_layer: None,
             exclusive_candidates: Vec::new(),
@@ -348,6 +352,7 @@ impl Compositor {
         self.display.dispatch_clients(&mut self.state)?;
         self.state.deliver_pending_insert();
         self.state.activate_next_app_if_the_windowless_one_quit();
+        self.state.announce_windowless_apps();
         self.state.announce_apps_running();
         self.state.note_running_apps();
         self.state.popups.cleanup();

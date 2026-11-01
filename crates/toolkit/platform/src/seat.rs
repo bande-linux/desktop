@@ -7,7 +7,7 @@ use wayland_client::protocol::wl_keyboard::{self, KeymapFormat, WlKeyboard};
 use wayland_client::protocol::wl_pointer::{self, WlPointer};
 use wayland_client::protocol::wl_seat::{self, Capability, WlSeat};
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, Dispatch, QueueHandle, WEnum, delegate_noop};
+use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, delegate_noop};
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::{
     Shape, WpCursorShapeDeviceV1,
 };
@@ -95,6 +95,24 @@ pub(crate) struct Input {
     pub(crate) serial: Option<u32>,
     pointer_elsewhere: bool,
     keyboard_elsewhere: bool,
+}
+
+impl Input {
+    pub(crate) fn release(&mut self) {
+        if let Some(device) = self.cursor_device.take() {
+            device.destroy();
+        }
+        if let Some(pointer) = self.pointer.take()
+            && pointer.version() >= 3
+        {
+            pointer.release();
+        }
+        if let Some(keyboard) = self.keyboard.take()
+            && keyboard.version() >= 3
+        {
+            keyboard.release();
+        }
+    }
 }
 
 pub(crate) fn key_for(keysym: Keysym) -> Option<Key> {

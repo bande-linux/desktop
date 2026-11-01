@@ -28,7 +28,7 @@ use wayland_client::protocol::wl_data_device_manager::WlDataDeviceManager;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, EventQueue};
+use wayland_client::{Connection, EventQueue, Proxy};
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
@@ -223,6 +223,27 @@ pub(crate) struct State {
 }
 
 impl State {
+    fn release(&mut self) {
+        self.clipboard.release();
+        self.text_input.release();
+        self.input.release();
+        self.shell.release();
+        if let Some(seat) = self.seat.take()
+            && seat.version() >= 5
+        {
+            seat.release();
+        }
+        if let Some(manager) = self.cursor_shape_manager.take() {
+            manager.destroy();
+        }
+        if let Some(activation) = self.activation.take() {
+            activation.destroy();
+        }
+        if let Some(wm_base) = self.wm_base.take() {
+            wm_base.destroy();
+        }
+    }
+
     pub(crate) fn configure(&mut self, width: u32, height: u32) {
         self.configured = true;
         if width > 0 && height > 0 {
@@ -330,7 +351,7 @@ impl Window {
         )
     }
 
-    fn on(
+    pub(crate) fn on(
         connection: Connection,
         role: Role,
         size: (u32, u32),
@@ -1254,6 +1275,7 @@ impl Drop for Window {
             ShellSurface::Lock(_) => {}
         }
         self.surface.destroy();
+        self.state.release();
         let _ = self.connection.flush();
     }
 }

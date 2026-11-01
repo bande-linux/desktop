@@ -220,6 +220,17 @@ impl State {
                 }),
             }
         }
+        for (client, app_id) in self.windowless_apps() {
+            match found.iter_mut().find(|known| known.key == app_id) {
+                Some(known) => known.clients.push(client),
+                None => found.push(Candidate {
+                    key: app_id.clone(),
+                    app_id,
+                    title: String::new(),
+                    clients: vec![client],
+                }),
+            }
+        }
         found
     }
 

@@ -286,7 +286,7 @@ impl Taskbar {
 
     fn open(&mut self, window: &mut Window, app_id: &str) {
         if self.running.iter().any(|running| running == app_id) {
-            if let Err(error) = window.activate_app(&self.window_app(app_id)) {
+            if let Err(error) = window.reopen_app(&self.window_app(app_id)) {
                 tracing::warn!("cannot activate {app_id}: {error}");
             }
             return;

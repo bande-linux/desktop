@@ -321,6 +321,11 @@ impl State {
                 found.push(owner);
             }
         }
+        for (_, app_id) in self.windowless_apps() {
+            if !found.iter().any(|known| known.1 == app_id) {
+                found.push((String::new(), app_id, None));
+            }
+        }
         if let Some(index) = key.and_then(|key| {
             found
                 .iter()
@@ -579,7 +584,7 @@ impl State {
         self.end_switcher();
         if let Some(app) = chosen_app {
             match app.client {
-                None => self.activate_app(&app.id),
+                None => self.reopen_app(&app.id),
                 Some(_) => {
                     if let Some(front) = self.windows_of(&app, false).first() {
                         self.bring_forward(front);

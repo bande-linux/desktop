@@ -294,3 +294,62 @@ fn asking_to_end_the_session_starts_the_confirmation_as_a_shell_client() {
     assert!(upkeep.failures.is_empty());
     assert!(server.session_dialog_pid().is_some());
 }
+
+#[test]
+fn an_app_that_keeps_running_stays_active_listed_and_reachable_after_its_last_window_closes() {
+    let mut server = server();
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
+    editor.keep_running(&mut server, EDITOR);
+    let mut taskbar = shell(&mut server);
+    roundtrip(&mut server, &mut [&mut editor, &mut taskbar]);
+
+    editor.close_window(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut editor, &mut taskbar]);
+    let active = taskbar.active_apps().last().cloned();
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_Q]);
+    editor.exchange(&mut server);
+    server.show_force_quit();
+    let listed = server.force_quit_rows();
+    tap(&mut server, KEY_ESC);
+    taskbar.activate_app(&mut server, EDITOR);
+    editor.exchange(&mut server);
+    let reopened_on_activation = editor.reopen_tokens().len();
+    taskbar.reopen_app(&mut server, EDITOR);
+    editor.exchange(&mut server);
+    let token = editor.reopen_tokens().last().cloned().unwrap_or_default();
+    editor.show_window_activated(&mut server, &xrgb(&solid(RED, (32, 32)), (32, 32)), &token);
+    roundtrip(&mut server, &mut [&mut editor, &mut taskbar]);
+
+    assert_eq!(active.as_deref(), Some(EDITOR));
+    assert_eq!(editor.app_keys(), [(u32::from('q'), 2)]);
+    assert_eq!(listed, ["Editor"]);
+    assert_eq!(reopened_on_activation, 0);
+    assert_eq!(editor.reopen_tokens().len(), 1);
+    assert!(editor.keyboard_focus_on(0));
+    assert_eq!(
+        taskbar.windowless_apps(),
+        [(EDITOR.to_owned(), true), (EDITOR.to_owned(), false)]
+    );
+}
+
+#[test]
+fn quitting_and_ending_the_session_reach_an_app_without_windows_once() {
+    let mut server = server();
+    let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
+    editor.keep_running(&mut server, EDITOR);
+    let mut dialog = shell(&mut server);
+    roundtrip(&mut server, &mut [&mut editor, &mut dialog]);
+    editor.close_window(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut editor, &mut dialog]);
+
+    dialog.quit_app(&mut server, EDITOR);
+    editor.exchange(&mut server);
+    let asked = editor.quit_requests();
+    dialog.quit_all_apps(&mut server);
+    editor.exchange(&mut server);
+    dialog.exchange(&mut server);
+
+    assert_eq!(asked, 1);
+    assert_eq!(editor.quit_requests(), 2);
+    assert_eq!(dialog.apps_running().last(), Some(&(EDITOR.to_owned(), 1)));
+}

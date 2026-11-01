@@ -267,6 +267,35 @@ fn readable_type(types: &[String], uris: bool) -> Option<String> {
         .map(str::to_owned)
 }
 
+impl Clipboard {
+    pub(crate) fn release(&mut self) {
+        let offers = [self.selection.take()]
+            .into_iter()
+            .chain(
+                [self.incoming.take(), self.pending_drop.take()]
+                    .map(|incoming| incoming.map(|incoming| incoming.offer)),
+            )
+            .flatten();
+        for offer in offers {
+            offer.destroy();
+        }
+        let sources = [self.copied.take().map(|(source, _)| source)]
+            .into_iter()
+            .chain([self.dragged.take().map(|outgoing| outgoing.source)])
+            .flatten();
+        for source in sources {
+            source.destroy();
+        }
+        self.readings.clear();
+        if let Some(device) = self.device.take()
+            && device.version() >= 2
+        {
+            device.release();
+        }
+        self.primary.release();
+    }
+}
+
 impl State {
     pub(crate) fn join_data_device(&mut self, handle: &QueueHandle<Self>) {
         if let (Some(manager), Some(seat)) = (&self.data_device_manager, &self.seat) {

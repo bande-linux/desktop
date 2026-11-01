@@ -321,10 +321,15 @@ impl State {
                 window.visible() && toplevel_names(window.toplevel.wl_surface()).1 == app_id
             })
             .map(|window| window.toplevel.wl_surface().clone());
-        if let Some(frontmost) = frontmost {
-            self.needs_redraw = true;
-            if self.exclusive_layer.is_none() {
-                self.focus(Some(frontmost));
+        match frontmost {
+            Some(frontmost) => {
+                self.needs_redraw = true;
+                if self.exclusive_layer.is_none() {
+                    self.focus(Some(frontmost));
+                }
+            }
+            None => {
+                self.activate_windowless_app(app_id);
             }
         }
     }
@@ -426,6 +431,7 @@ impl GlobalDispatch<BandeShellV1, ()> for State {
         state.send_workspaces(&shell);
         state.announce_input_sources_to(&shell);
         state.announce_app_processes_to(&shell);
+        state.announce_windowless_apps_to(&shell);
         for anchor in &state.panel_anchors {
             send_panel_anchor(&shell, anchor);
         }
@@ -453,6 +459,7 @@ impl Dispatch<BandeShellV1, ()> for State {
     ) {
         match request {
             bande_shell_v1::Request::ActivateApp { app_id } => state.activate_app(&app_id),
+            bande_shell_v1::Request::ReopenApp { app_id } => state.reopen_app(&app_id),
             bande_shell_v1::Request::InsertText { text } => {
                 if let Some(client) = resource.client() {
                     state.insert_text(text, client.id());

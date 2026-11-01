@@ -67,6 +67,7 @@ enum Shortcut {
     CancelGrab,
     MenuKey(u32, Modifiers),
     ForceQuitKey(u32, Modifiers),
+    AppKey(u32, Modifiers),
 }
 
 fn volume_key(keysym: u32) -> Option<VolumeKey> {
@@ -230,6 +231,10 @@ impl State {
             self.force_quit_key(keysym, modifiers);
             return;
         }
+        if let Shortcut::AppKey(keysym, modifiers) = shortcut {
+            self.send_app_key(keysym, modifiers);
+            return;
+        }
         if let Shortcut::Volume(key, fine) = shortcut {
             self.volume_key(key, fine);
             return;
@@ -384,7 +389,8 @@ impl State {
             | Shortcut::InputSource { .. }
             | Shortcut::CancelGrab
             | Shortcut::MenuKey(..)
-            | Shortcut::ForceQuitKey(..) => {}
+            | Shortcut::ForceQuitKey(..)
+            | Shortcut::AppKey(..) => {}
         }
     }
 }
@@ -856,6 +862,21 @@ impl State {
                     Some(shortcut) => {
                         state.held_shortcut_keys.push(evdev_code);
                         FilterResult::Intercept(Some(shortcut))
+                    }
+                    None if !sym.is_modifier_key()
+                        && state.focused().is_none()
+                        && state.kept_app_is_active() =>
+                    {
+                        state.held_shortcut_keys.push(evdev_code);
+                        FilterResult::Intercept(Some(Shortcut::AppKey(
+                            sym.raw(),
+                            Modifiers {
+                                shift: modifiers.shift,
+                                alt: modifiers.alt,
+                                control: modifiers.ctrl,
+                                logo: modifiers.logo,
+                            },
+                        )))
                     }
                     None => {
                         if !keysym.modified_sym().is_modifier_key() {

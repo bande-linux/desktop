@@ -1120,7 +1120,12 @@ impl App for Screenshots {
     fn deadline(&self) -> Option<Instant> {
         let countdown = match &self.mode {
             Mode::Countdown(until, _) => {
-                Some((*until).min(Instant::now() + Duration::from_millis(250)))
+                let now = Instant::now();
+                let into_second = until.saturating_duration_since(now).subsec_nanos();
+                Some(match into_second {
+                    0 => (*until).min(now + Duration::from_secs(1)),
+                    nanos => now + Duration::from_nanos(u64::from(nanos)),
+                })
             }
             _ => None,
         };

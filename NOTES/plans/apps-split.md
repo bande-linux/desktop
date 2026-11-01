@@ -66,7 +66,7 @@ It lists only the swappable apps: those from the apps repo and from Debian. Ever
 # crates/shell/desktop/tests/icons.rs and images fetch-desktop.sh.
 
 [apps]
-bande-term           org.bande.Terminal         recommends
+bande-terminal       org.bande.Terminal         recommends
 bande-monitor        org.bande.ActivityMonitor  recommends
 bande-software       org.bande.Software         recommends
 bande-installer      org.bande.Installer        recommends
@@ -101,7 +101,7 @@ Mail and Calendar are added once each has a published release (D3), with their t
 Land or park everything that touches the moving folders, the metapackage or the shared files edited in M1-M2:
 - fix/super-keys (every app), the store-remove work in wt/desktop-gaps (software, metainfo in terminal/monitor/files/settings, control), origin/wip/terminal-scopes, fix/zram-device-timeout (bande-desktop.install), fix/taskbar-launch (compositor session.rs; before M3).
 
-Settings keyboard, Wi-Fi UI and compositor DRM work don't conflict. Then: freeze crates/apps/{terminal,monitor,software,installer} and crates/libs/catalog from M4 until M5 merges (about 4-6 h); re-check the live `state/owners`; `apt install git-filter-repo`. Late patches can be carried over: `git format-patch --relative=crates/apps/terminal main..branch`, then in apps `git am --directory=apps/term`.
+Settings keyboard, Wi-Fi UI and compositor DRM work don't conflict. Then: freeze crates/apps/{terminal,monitor,software,installer} and crates/libs/catalog from M4 until M5 merges (about 4-6 h); re-check the live `state/owners`; `apt install git-filter-repo`. Late patches can be carried over: `git format-patch --relative=crates/apps/terminal main..branch`, then in apps `git am --directory=apps/terminal`.
 
 ### M1 (desktop). Default-apps and the generated control file
 - Add default-apps with `[debian]` filled in (and `[apps]` empty until M5); add default-apps.sh and the rules/control substvars.
@@ -116,7 +116,7 @@ Settings keyboard, Wi-Fi UI and compositor DRM work don't conflict. Then: freeze
 - Compositor guest test, ci/vm/guest-tests.sh and session-bench type into bande-sample (crates/testing, records typed text to a file) instead of bande-term.
 - ci/review/run.sh builds only desktop packages; scenarios needing a moved app check /usr/bin and say so.
 - data/icons/src/apps.py HICOLOR keeps only Files and Settings; theme icons for Terminal, ActivityMonitor, Installer and Software stay.
-- Missing-app behaviour: Files hides "Open in Terminal" without `bande-term` on PATH; `Terminal=true` launches return a clear LaunchError; the low-memory dialog hides "Open Activity Monitor" when it's missing.
+- Missing-app behaviour: Files hides "Open in Terminal" without `bande-terminal` on PATH; `Terminal=true` launches return a clear LaunchError; the low-memory dialog hides "Open Activity Monitor" when it's missing.
 
 ### M3 (desktop). Move Force Quit into the shell (D2)
 - `bande-shell --force-quit` on bande-status::memory (`force_quit`, `heaviest_apps`), with the look of monitor's force_quit.rs.
@@ -126,7 +126,7 @@ Settings keyboard, Wi-Fi UI and compositor DRM work don't conflict. Then: freeze
 
 ### M4a / M4b (apps). Import with history and build standalone
 M4a: Terminal and Monitor. M4b: Software (with catalog) and Installer.
-1. In a scratch clone of desktop: `git filter-repo --path crates/apps/terminal/ --path crates/unbound-term/ --path crates/apps/monitor/ --path crates/apps/software/ --path crates/apps/installer/ --path crates/libs/catalog/ --path-rename crates/apps/terminal/:apps/term/ --path-rename crates/unbound-term/:apps/term/ --path-rename crates/apps/monitor/:apps/monitor/ --path-rename crates/apps/software/:apps/software/ --path-rename crates/apps/installer/:apps/installer/ --path-rename crates/libs/catalog/:apps/software/catalog-history/` (first check unbound-term and apps/terminal never coexisted).
+1. In a scratch clone of desktop: `git filter-repo --path crates/apps/terminal/ --path crates/unbound-term/ --path crates/apps/monitor/ --path crates/apps/software/ --path crates/apps/installer/ --path crates/libs/catalog/ --path-rename crates/apps/terminal/:apps/terminal/ --path-rename crates/unbound-term/:apps/terminal/ --path-rename crates/apps/monitor/:apps/monitor/ --path-rename crates/apps/software/:apps/software/ --path-rename crates/apps/installer/:apps/installer/ --path-rename crates/libs/catalog/:apps/software/catalog-history/` (first check unbound-term and apps/terminal never coexisted).
 2. In apps: `git fetch <scratch> main && git merge --allow-unrelated-histories`.
 3. Standalone Cargo.toml per app, following mail: explicit version 0.1.0, edition, license, `publish = false`; third-party deps at the desktop workspace's exact versions; desktop crates as `{ git = "https://github.com/bande-linux/desktop", rev = "<desktop main after M3>" }`; lints and profiles from mail; keep metadata.deb and assets.
 4. Fold catalog into `apps/software/src/catalog/` (D5); delete catalog-history.
@@ -153,7 +153,7 @@ M4a: Terminal and Monitor. M4b: Software (with catalog) and Installer.
 
 ### M7 (apt and images), then the first releases
 - images: the fetch-desktop.sh change above. apt: README table row, the Recommends check in publish.yml verify, a test for an apps package recommended by bande-desktop.
-- Release order: tag term-v0.1.0, monitor-v0.1.0, software-v0.1.0, installer-v0.1.0 (and mail, calendar) and wait for them to publish; bump `[workspace.package]` and tag desktop v0.1.0; build an image and check the apps are in it.
+- Release order: tag terminal-v0.1.0, monitor-v0.1.0, software-v0.1.0, installer-v0.1.0 (and mail, calendar) and wait for them to publish; bump `[workspace.package]` and tag desktop v0.1.0; build an image and check the apps are in it.
 
 ### What a toolkit change costs afterwards
 1. Desktop branch, gate, merge.
@@ -172,17 +172,17 @@ Bump in batches when an app needs a new API, not after every desktop merge. Befo
 - Golden drift from different fonts or GPU setup in the apps CI; check in M4.
 - Latent bug: check-debs.sh requires `Section = misc`, but bande-software and bande-installer say `admin`, so a desktop tag could fail on it until the move.
 
-## Decisions for the owner (recommendation in brackets)
-- **D1. Desktop-repo apps** (decided by the owner, 2026-11-01): not in the default-apps list; they are part of the desktop and stay in the control file as today.
-- **D2. Force Quit into bande-shell before Monitor moves** [yes]: the macOS model. The alternative is keeping Monitor in the desktop repo.
-- **D3. Mail and Calendar as default apps** [yes, Recommends, after their first publish, with theme icons drawn].
-- **D4. Terminal's package name** [keep bande-term, folder apps/term]; renaming to bande-terminal is free until something publishes.
-- **D5. bande-catalog** [fold into Software as a module].
-- **D6. History** [git filter-repo, one combined import including crates/unbound-term].
-- **D7. One pin shared by all apps** [yes, enforced by bump-desktop.sh].
-- **D8. Pin target** [desktop release tags after the first desktop release; main commits until then].
-- **D9. Versions** [apps start at 0.1.0; first desktop tag waits until after M5].
-- **D10. Cargo.lock** [start from desktop's lock and prune].
+## Decisions (owner, 2026-11-01)
+- **D1. Desktop-repo apps:** not in the default-apps list; they are part of the desktop and stay in the control file.
+- **D2. Force Quit:** move it into the shell like macOS, but only if it is at least as reliable as today: it must open and kill under memory pressure, with Activity Monitor absent, with the bar or a client hung, and from the keyboard shortcut. M3 includes tests for each of those; if any of them can't match today's behaviour, Force Quit (and so Activity Monitor) stays in the desktop repo.
+- **D3. Mail and Calendar as default apps:** yes, in `[apps]` after their first published release, with theme icons drawn.
+- **D4. Terminal's package:** rename to `bande-terminal` (package, binary, the xdg TERMINAL constant, bench, review and guest scripts), folder `apps/terminal`. Do it in the move, before anything is published.
+- **D5.** Fold bande-catalog into Software as a module.
+- **D6.** git filter-repo, one combined import including crates/unbound-term.
+- **D7.** One desktop pin shared by all apps, enforced by bump-desktop.sh.
+- **D8.** Pin to desktop release tags after the first desktop release; main commits until then.
+- **D9.** Apps start at 0.1.0; the first desktop tag waits until M5 has landed.
+- **D10.** Each app's Cargo.lock starts from desktop's and is pruned.
 
 ## Critical files
 - packaging/bande-desktop/debian/control, rules, and the new default-apps and default-apps.sh

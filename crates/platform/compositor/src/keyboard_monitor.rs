@@ -5,7 +5,7 @@ use std::thread;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::message::Header;
-use zbus::names::{OwnedUniqueName, UniqueName};
+use zbus::names::{BusName, OwnedUniqueName, UniqueName};
 
 use crate::state::{Compositor, State};
 
@@ -93,42 +93,79 @@ struct Monitor {
     listeners: Arc<Mutex<Listeners>>,
 }
 
-fn sender<'a>(header: &'a Header<'_>) -> zbus::fdo::Result<&'a UniqueName<'a>> {
-    header
-        .sender()
-        .ok_or_else(|| zbus::fdo::Error::AccessDenied("no sender".to_owned()))
+pub const SCREEN_READER_NAME: &str = "org.gnome.Orca.KeyboardMonitor";
+
+async fn screen_reader(
+    connection: &zbus::Connection,
+    header: &Header<'_>,
+) -> zbus::fdo::Result<OwnedUniqueName> {
+    let denied = || {
+        zbus::fdo::Error::AccessDenied("only the screen reader may monitor the keyboard".to_owned())
+    };
+    let sender = header.sender().ok_or_else(denied)?;
+    let owner = zbus::fdo::DBusProxy::new(connection)
+        .await?
+        .get_name_owner(BusName::from_static_str_unchecked(SCREEN_READER_NAME))
+        .await
+        .map_err(|_| denied())?;
+    match owner.as_str() == sender.as_str() {
+        true => Ok(owner),
+        false => Err(denied()),
+    }
 }
 
 #[zbus::interface(name = "org.freedesktop.a11y.KeyboardMonitor")]
 impl Monitor {
-    fn grab_keyboard(&self, #[zbus(header)] header: Header<'_>) -> zbus::fdo::Result<()> {
-        lock(&self.listeners).of(sender(&header)?).grabbing = true;
+    async fn grab_keyboard(
+        &self,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let reader = screen_reader(connection, &header).await?;
+        lock(&self.listeners).of(&reader).grabbing = true;
         Ok(())
     }
 
-    fn ungrab_keyboard(&self, #[zbus(header)] header: Header<'_>) -> zbus::fdo::Result<()> {
-        lock(&self.listeners).of(sender(&header)?).grabbing = false;
+    async fn ungrab_keyboard(
+        &self,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let reader = screen_reader(connection, &header).await?;
+        lock(&self.listeners).of(&reader).grabbing = false;
         Ok(())
     }
 
-    fn watch_keyboard(&self, #[zbus(header)] header: Header<'_>) -> zbus::fdo::Result<()> {
-        lock(&self.listeners).of(sender(&header)?).watching = true;
+    async fn watch_keyboard(
+        &self,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let reader = screen_reader(connection, &header).await?;
+        lock(&self.listeners).of(&reader).watching = true;
         Ok(())
     }
 
-    fn unwatch_keyboard(&self, #[zbus(header)] header: Header<'_>) -> zbus::fdo::Result<()> {
-        lock(&self.listeners).of(sender(&header)?).watching = false;
+    async fn unwatch_keyboard(
+        &self,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let reader = screen_reader(connection, &header).await?;
+        lock(&self.listeners).of(&reader).watching = false;
         Ok(())
     }
 
-    fn set_key_grabs(
+    async fn set_key_grabs(
         &self,
         modifiers: Vec<u32>,
         keystrokes: Vec<(u32, u32)>,
+        #[zbus(connection)] connection: &zbus::Connection,
         #[zbus(header)] header: Header<'_>,
     ) -> zbus::fdo::Result<()> {
+        let reader = screen_reader(connection, &header).await?;
         let mut listeners = lock(&self.listeners);
-        let listener = listeners.of(sender(&header)?);
+        let listener = listeners.of(&reader);
         listener.modifiers = modifiers;
         listener.keystrokes = keystrokes;
         Ok(())

@@ -3,7 +3,8 @@ use std::time::{Duration, Instant};
 
 use crate::support::*;
 use bande_compositor::{
-    Compositor, KEYBOARD_MONITOR_NAME, Renderer, Snapshot, serve_keyboard_monitor,
+    Compositor, KEYBOARD_MONITOR_NAME, Renderer, SCREEN_READER_NAME, Snapshot,
+    serve_keyboard_monitor,
 };
 use bande_config::Accessibility;
 use bande_test_bus::SessionBus;
@@ -216,7 +217,19 @@ fn a_screen_reader_hears_every_key_and_keeps_its_own_commands_from_the_app() {
     let mut app = focused_app(&mut server);
     let handle = serve_keyboard_monitor(&bus.connect().expect("connection")).expect("monitor");
     server.monitor_keyboard(handle);
+    let stranger = bus.connect().expect("other connection");
+    let refused = stranger.call_method(
+        Some(KEYBOARD_MONITOR_NAME),
+        MONITOR_PATH,
+        Some(MONITOR),
+        "GrabKeyboard",
+        &(),
+    );
+    assert!(refused.is_err(), "only the screen reader may grab the keyboard");
     let reader = bus.connect().expect("screen reader connection");
+    reader
+        .request_name(SCREEN_READER_NAME)
+        .expect("screen reader name");
     let rule = MatchRule::builder()
         .msg_type(message::Type::Signal)
         .interface(MONITOR)

@@ -9,7 +9,7 @@ use accesskit::{Action, ActionRequest, Role, TreeId};
 use bande_packages::Client;
 use bande_settings::{
     Command, Feed, Package, PaneId, Refresh, SettingsView, SoftwareCommand, SoftwareState,
-    announce_updates, check, clicked, feed, follow_software, open_updates,
+    UpdateNotice, announce_updates, check, feed, follow_software, open_updates,
 };
 use bande_test_bus::SessionBus;
 use bande_test_bus::packagekit::{
@@ -229,12 +229,25 @@ fn a_failed_check_and_packagekit_stopping_mid_download_read_as_plain_sentences()
     assert!(find(&mut settings.view, Role::Button, "Try Again").is_some());
 }
 
+fn click(notifications: &zbus::blocking::Connection, id: u32) {
+    notifications
+        .emit_signal(
+            None::<&str>,
+            "/org/freedesktop/Notifications",
+            "org.freedesktop.Notifications",
+            "ActionInvoked",
+            &(id, "default"),
+        )
+        .expect("click");
+}
+
 #[test]
-fn the_daily_check_announces_without_waiting_and_a_click_is_heard_separately() {
+fn a_click_right_after_the_daily_announcement_is_heard() {
     let (bus, _fake, system) = start(updates());
     let notifications = bus.connect().expect("notifications connection");
     let server = bande_notify::NotificationServer::start(&notifications).expect("server");
     let session = bus.connect().expect("session");
+    let notice = UpdateNotice::listen(&session).expect("listen");
     let started = Instant::now();
     let id = announce_updates(&session, &system)
         .expect("announce")
@@ -244,21 +257,43 @@ fn the_daily_check_announces_without_waiting_and_a_click_is_heard_separately() {
     assert_eq!(shown.len(), 1);
     assert_eq!(shown[0].summary, "Software updates are available");
 
-    let waiter = bus.connect().expect("waiter");
-    let heard = std::thread::spawn(move || clicked(&waiter, id).expect("clicked"));
+    click(&notifications, id);
+    assert!(notice.clicked(id).expect("clicked"));
+}
+
+#[test]
+fn a_newer_announcement_retires_the_older_notice_and_its_waiter() {
+    let (bus, _fake, system) = start(updates());
+    let notifications = bus.connect().expect("notifications connection");
+    let server = bande_notify::NotificationServer::start(&notifications).expect("server");
+    let yesterday = bus.connect().expect("yesterday");
+    let older = UpdateNotice::listen(&yesterday).expect("listen");
+    let old_id = announce_updates(&yesterday, &system)
+        .expect("announce")
+        .expect("a notification");
+    let waiting = std::thread::spawn(move || older.clicked(old_id).expect("clicked"));
+
+    let today = bus.connect().expect("today");
+    let newer = UpdateNotice::listen(&today).expect("listen");
+    let new_id = announce_updates(&today, &system)
+        .expect("announce")
+        .expect("a notification");
+
     let deadline = Instant::now() + WAIT;
-    while !heard.is_finished() {
-        assert!(Instant::now() < deadline, "the click was never heard");
-        notifications
-            .emit_signal(
-                None::<&str>,
-                "/org/freedesktop/Notifications",
-                "org.freedesktop.Notifications",
-                "ActionInvoked",
-                &(id, "default"),
-            )
-            .expect("click");
-        std::thread::sleep(Duration::from_millis(50));
+    while !waiting.is_finished() {
+        assert!(Instant::now() < deadline, "the older waiter never left");
+        std::thread::sleep(Duration::from_millis(20));
     }
-    assert!(heard.join().expect("join"));
+    assert!(!waiting.join().expect("join"));
+    let deadline = Instant::now() + WAIT;
+    while server.active().len() != 1 {
+        assert!(
+            Instant::now() < deadline,
+            "the older notice stayed: {:?}",
+            server.active()
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    click(&notifications, new_id);
+    assert!(newer.clicked(new_id).expect("clicked"));
 }

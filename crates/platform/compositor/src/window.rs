@@ -231,6 +231,11 @@ impl Window {
         })
     }
 
+    pub(crate) fn fixed_size(&self) -> bool {
+        let (min, max) = self.size_limits();
+        min.w > 0 && min.h > 0 && min == max
+    }
+
     pub(crate) fn clamp_size(&self, outer: Size<i32, Logical>) -> Size<i32, Logical> {
         let (min, max) = self.size_limits();
         let bar = self.title_bar_height();

@@ -227,6 +227,14 @@ fn hotplug(app: &mut App<DrmBackend>) {
                 app.compositor.add_output(output);
             }
             sync_heads(app);
+            app.schedulers
+                .iter_mut()
+                .filter(|scheduler| {
+                    scheduler.output().is_some_and(|name| {
+                        changes.relinked.iter().any(|relinked| relinked == name)
+                    })
+                })
+                .for_each(FrameScheduler::resume);
         }
         Err(error) => tracing::warn!("cannot look for displays: {error}"),
     }
@@ -369,6 +377,9 @@ fn run_drm(
         }
     })?;
     sync_heads(&mut app);
+    if matches!(session, Session::User) {
+        note_running_apps(&mut app);
+    }
     let App {
         compositor, output, ..
     } = serve(&mut event_loop, app, session)?;
@@ -484,6 +495,20 @@ fn follow_session_bus<O: 'static>(
         |sender| follow_input_settings(bus, move |settings| sender.send(settings).is_ok()),
         |app, settings| app.compositor.apply_input_settings(settings),
     )
+}
+
+fn note_running_apps<O>(app: &mut App<O>) {
+    let (Some(running), Some(reopen), Some(crashed)) = (
+        bande_xdg::running_apps_file(),
+        bande_xdg::reopen_file(),
+        bande_xdg::crashed_apps_file(),
+    ) else {
+        return;
+    };
+    if let Err(error) = bande_xdg::set_aside_apps_of_unclean_end(&running, &reopen, &crashed) {
+        tracing::warn!("cannot set aside the apps of the last session: {error}");
+    }
+    app.compositor.note_running_apps_in(running);
 }
 
 fn start_user_session<O: 'static>(

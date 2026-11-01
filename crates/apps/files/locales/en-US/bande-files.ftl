@@ -234,6 +234,7 @@ settings-home = Home
 settings-current-folder = Current Folder
 settings-default-view = Default view
 settings-show-hidden = Show hidden files
+settings-folders-first = Keep folders on top
 settings-trash = Trash
 settings-warn-empty-trash = Warn before emptying the Trash
 settings-purge-trash = Remove items from the Trash after 30 days

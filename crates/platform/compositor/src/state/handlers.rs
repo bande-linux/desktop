@@ -30,8 +30,8 @@ use smithay::wayland::selection::primary_selection::{
     PrimarySelectionHandler, PrimarySelectionState, set_primary_focus,
 };
 use smithay::wayland::shell::wlr_layer::{
-    KeyboardInteractivity, Layer, LayerSurface, LayerSurfaceData, WlrLayerShellHandler,
-    WlrLayerShellState,
+    ExclusiveZone, KeyboardInteractivity, Layer, LayerSurface, LayerSurfaceData,
+    WlrLayerShellHandler, WlrLayerShellState,
 };
 use smithay::wayland::shell::xdg::{
     Configure, PopupSurface, PositionerState, ShellClient, ToplevelSurface, XdgShellHandler,
@@ -66,6 +66,25 @@ impl State {
         else {
             return false;
         };
+        if matches!(
+            layer.cached_state().exclusive_zone,
+            ExclusiveZone::Exclusive(_)
+        ) {
+            let sharing: Vec<MappedLayer> = map
+                .layers()
+                .take_while(|known| **known != layer)
+                .filter(|known| known.cached_state().exclusive_zone == ExclusiveZone::Neutral)
+                .cloned()
+                .collect();
+            for known in &sharing {
+                map.unmap_layer(known);
+            }
+            for known in &sharing {
+                if map.map_layer(known).is_err() {
+                    known.layer_surface().send_close();
+                }
+            }
+        }
         map.arrange();
         let mapped = is_mapped(surface);
         let exclusive = (mapped
@@ -166,10 +185,12 @@ impl XdgShellHandler for State {
     fn new_toplevel(&mut self, toplevel: ToplevelSurface) {
         let workspace = self.screens[self.pointer_screen()].workspaces.active_id();
         self.windows.push(Window::new(toplevel.clone(), workspace));
+        self.apps_changed = true;
         self.decorate_as_requested_before(&toplevel);
     }
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
+        self.apps_changed = true;
         self.withdraw_toplevel(toplevel.wl_surface());
         if let Some(index) = self.window_index(toplevel.wl_surface())
             && self.windows[index].size.is_some()
@@ -193,6 +214,7 @@ impl XdgShellHandler for State {
     }
 
     fn app_id_changed(&mut self, toplevel: ToplevelSurface) {
+        self.apps_changed = true;
         self.recall_late(toplevel.wl_surface());
         self.publish_toplevel(toplevel.wl_surface());
         let key = self.key_window();

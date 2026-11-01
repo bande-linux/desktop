@@ -38,21 +38,21 @@ places:
 | D4 | done as "apt pulls" above. The `dch` changelog stanza is not done. Decided overnight 2026-11-01: keep `DEB_VERSION_OVERRIDE` with `dh_gencontrol -v`; lintian is clean at 0.1.0 and nothing reads the changelog version (plan recommendation was dch; owner may revisit) |
 | A1, A2 | done on apt `main`; `tests/run-all.sh` green on the mini (240 checks) |
 | A3 | done, apt `5fc022d`: `verify` waits until the site serves the desktop version the build just put in, installs `bande-desktop` on amd64 and arm64, checks every installed `bande-*` package is that architecture or `all` at that version, starts the compositor headless. Checked against a fixture archive; it runs in CI with the first desktop publish |
-| I1 | done, images `ecdcaaf` on `prep/os-installable` (images has no `main`): `build.yml` fetches the desktop from the archive with `fetch-desktop.sh` (signature, index and package checksums, the desktop's and apt's packages from `state/owners`, optional `desktop-version` input) instead of the expired run 40739365836. Checked against fixture archives and the live site |
+| I1 | done, images `ecdcaaf` on `main` (then `prep/os-installable`): `build.yml` fetches the desktop from the archive with `fetch-desktop.sh` (signature, index and package checksums, the desktop's and apt's packages from `state/owners`, optional `desktop-version` input) instead of the expired run 40739365836. Checked against fixture archives and the live site |
 | R1 | not done (optional) |
 | M-final | waits for the owner's tag |
 
 Dry review of tag -> build -> publish, overnight, without CI: `version-test.sh`;
 `check-debs.sh` and `smoke.sh` against the mini's 19 arm64 debs (fixed: `check-debs.sh` read
 the control archive through a pipe that `grep -q` broke, exit 141); `build-all.sh` with
-lintian at 0.1.0; every arch package is reachable from `bande-desktop` or `bande-os`;
+lintian at 0.1.0; every arch package is reachable from `bande-desktop` (`bande-os` was folded into it later, see single-metapackage.md);
 shellcheck of every workflow `run:` block; the action versions, cargo-deb 3.8.0 and actionlint
 1.7.12 exist; fetch-run's per-architecture completeness and version checks; `all` packages in
 both indices. actionlint itself is not packaged for Debian, so only the `lint` job runs it.
 
 Still open:
 - **Image suite (owner).** The image is Debian 13 (`trixie`), the archive's packages are built
-  for Debian testing (`bande-os` says "Debian testing installation"). dpkg-shlibdeps minimum
+  for Debian testing (`bande-desktop` says "on Debian testing"). dpkg-shlibdeps minimum
   versions usually still fit trixie, but a library only testing has makes the image build fail
   at `apt-get install`, and installed images follow `rolling` for updates. Move the image to
   testing, or build a trixie set as well?

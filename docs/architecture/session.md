@@ -387,18 +387,19 @@ before greetd runs the session. When the session ends greetd starts the greeter 
 `bande-greeter` package ships its configuration as
 `/usr/share/bande-greeter/greetd-config.toml` and a drop-in,
 `/usr/lib/systemd/system/greetd.service.d/bande.conf`, that starts greetd with
-`--config` pointing at it. greetd's own package makes `greetd.service` the
-`display-manager.service` when no other display manager holds that link; `bande-greeter`
-does the same on its first installation (never on upgrades, never over an existing link) and
-then records `/usr/sbin/greetd` in `/etc/X11/default-display-manager` if that file is absent,
-which it removes again on purge. An existing GDM, SDDM or LightDM therefore stays in charge.
-To override:
+`--config` pointing at it. Which display manager runs is greetd's business, done the Debian
+way (greetd >= 0.10.3-6, which `bande-greeter` depends on): greetd provides
+`x-display-manager` and shares the debconf question `shared/default-x-display-manager` with
+GDM, SDDM and LightDM. On a system without one, greetd becomes the default; next to another,
+debconf asks which to start (a noninteractive install keeps the existing one), and greetd's
+scripts write `/etc/X11/default-display-manager` and point `display-manager.service` at the
+choice. `bande-greeter` itself never touches either. To override:
 
 - another greetd configuration: copy the drop-in to
   `/etc/systemd/system/greetd.service.d/bande.conf` and change its `--config`, or mask it with
   `ln -s /dev/null /etc/systemd/system/greetd.service.d/bande.conf` to go back to
   `/etc/greetd/config.toml`;
-- another display manager: `systemctl enable --force gdm3` (or `dpkg-reconfigure gdm3`).
+- another display manager: `dpkg-reconfigure greetd` (or `gdm3`, `sddm`, `lightdm`) and pick it.
 
 Either takes effect after `systemctl daemon-reload` and a restart of the display manager,
 which ends the sessions it started.

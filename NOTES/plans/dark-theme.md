@@ -217,9 +217,9 @@ chassis 3.3 and Lc 55, edge vs sheet 1.94. The light accents are untouched.
 
 ## Implementation plan
 Status (2026-11-01): milestones 1-4 and 7 done and merged. Milestone 5 ran as a golden review
-only (no live evening, nothing visible overnight). Milestone 6 is open. Left out on purpose:
-moving `shell/bar/src/dock.rs`'s two hard-coded panel shadow alphas onto `Elevation` (it would
-change light goldens), and the PNG mockups in `docs/design/datum` (no `rsvg-convert` on the mini;
+only (no live evening, nothing visible overnight). Milestone 6 is open. The taskbar panel and its
+name pill now take the `Overlay` elevation's shadows instead of hard-coded alphas (the bar
+goldens were regenerated). Left out on purpose: the PNG mockups in `docs/design/datum` (no `rsvg-convert` on the mini;
 the SVGs are regenerated, the PNGs are stale).
 
 Milestones 1-4 go on one branch, `day/dark-slate`. Each is its own commit, and the full gate

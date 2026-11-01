@@ -43,7 +43,7 @@ All are shared and stay in desktop unless noted.
 ### apt and images
 - **Live archive (checked 2026-11-01): `state/owners` lists only apt and kernel.** No desktop or app has published yet. The owners file locks a package name to the first source that publishes it, so the move must land before the first desktop `vX.Y.Z` tag. Otherwise apt needs a transfer list (e.g. conf/transfers, honoured in rebuild.sh when it builds `claims`) and the apps' versions must be higher than the desktop's.
 - publish.yml's verify step installs bande-desktop with `--no-install-recommends`, so apps-repo packages don't trip its "every bande-* at the desktop version" check.
-- images (prep/os-installable): fetch-desktop.sh downloads only packages owned by desktop or apt and requires each to equal the bande-desktop version; customize.sh runs `apt-get install --no-install-recommends /tmp/desktop/*.deb`. **Unless fetch-desktop.sh changes, the moved apps silently disappear from images.**
+- images (main): fetch-desktop.sh downloads only packages owned by desktop or apt and requires each to equal the bande-desktop version; customize.sh runs `apt-get install --no-install-recommends /tmp/desktop/*.deb`. **Unless fetch-desktop.sh changes, the moved apps silently disappear from images.**
 
 ### Gates
 - desktop: CLAUDE.md requires fmt, workspace clippy `-D warnings` and workspace tests on the hermetic bus (~/bande-linux/bin/desktop-gate) before merging to main. CI runs only on tags.
@@ -83,14 +83,14 @@ gnome-calculator     org.gnome.Calculator       recommends
 gnome-clocks         org.gnome.clocks           suggests
 ```
 
-Mail and Calendar are added once each has a published release (D3), with their theme icons drawn first. Until the four apps have moved (M5), they stay in the control file as today and are not in this list. Non-app Recommends (fonts, cups, keyring, oomd and so on) stay hand-written.
+Mail and Calendar are added once each has a published release (D3), with their theme icons drawn first. Until the four apps have moved (M5), they stay in the control file as today and are not in this list. Non-app Recommends (fonts, cups, keyring, oomd and so on) stay hand-written. Since 2026-11-01 bande-desktop is the only metapackage (single-metapackage.md): its hand-written relations also carry the system around the desktop (Depends `bande-greeter (= ${binary:Version}) | x-display-manager`, `pipewire-audio`; Recommends `bande-greeter (= ${binary:Version})`, `network-manager`, `bande-apt-source`), and the default apps stay in its Recommends.
 
 ### Generation at build time
 - `packaging/bande-desktop/debian/default-apps.sh <version>` (awk, about 20 lines) prints `bande:Recommends=...` and `bande:Suggests=...` and rejects unknown sections or relations and duplicate names.
 - debian/rules: `override_dh_gencontrol: debian/default-apps.sh $(DEB_VERSION_OVERRIDE) >> debian/bande-desktop.substvars; dh_gencontrol -- -v$(DEB_VERSION_OVERRIDE)`. Writing the literal version avoids recursive substvar expansion.
 - control: Depends unchanged (hand-written desktop packages); `Recommends: ${bande:Recommends}, bande-screenshot (= ${binary:Version}), ..., fonts...`; `Suggests: ${bande:Suggests}`.
 - build-all.sh: each listed package appears unversioned in Recommends/Suggests, and no desktop-repo package (ci/release/packages) is listed.
-- install-test/run.sh: drop `[apps]` names from the "recommended and in Debian testing" loop.
+- install-test/run.sh: add the `[apps]` names to `from_the_archive` in the "recommended and in Debian testing or built here" loop, next to `bande-apt-source`.
 - apt publish.yml verify: after installing, check every Recommends of bande-desktop has a candidate from Debian or the archive (warning at first).
 - rebuild-desktop: unchanged in principle; `pinned` is the `(=` pins in control.
 - images fetch-desktop.sh: also read bande-desktop's `Recommends:` from Packages.xz; also fetch packages owned by `apps` that bande-desktop recommends, without the version-equality check; fail if one is missing unless `ALLOW_MISSING_APPS=1`.
@@ -189,4 +189,4 @@ Bump in batches when an app needs a new API, not after every desktop merge. Befo
 - ci/release/build-all.sh, check-debs.sh, packages; ci/deb/install-test/run.sh
 - crates/platform/compositor/src/state/mod.rs and session.rs; crates/shell/bar/src/menu_bar_client.rs (Force Quit)
 - ~/bande-linux/repos/apps/ci/build-app.sh and apps/apps/mail/Cargo.toml (template for standalone apps)
-- ~/bande-linux/repos/images/fetch-desktop.sh (prep/os-installable); ~/bande-linux/bin/rebuild-desktop
+- ~/bande-linux/repos/images/fetch-desktop.sh (main); ~/bande-linux/bin/rebuild-desktop

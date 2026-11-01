@@ -15,7 +15,7 @@ its not possible to install .deb files from Files, this needs an install tool li
 Status: started ([plans/deb-installer.md](plans/deb-installer.md)); M1-M6 and the wiring done, live check on the mini left (asks for a password)
 
 GTK apps do not fit with our window bar. Is that possible to solve so that all apps looks the same and adhere to bande window bar theme, for example also claude desktop and vscode also do not use the bande window bar
-Status: started ([plans/third-party-title-bars.md](plans/third-party-title-bars.md)); M1-M5 done (GTK windows without a header bar get our bar, our window menu on client headers, GTK 4 headers and GTK 3 themes styled like ours), M6 (live review, Electron) and three owner decisions open
+Status: started ([plans/third-party-title-bars.md](plans/third-party-title-bars.md)); M1-M5 done (GTK windows without a header bar get our bar, our window menu on client headers, GTK 4 headers and GTK 3 themes styled like ours), M6's per-app table done from a private probe; the live review scenario and three owner decisions open
 
 it seems like some apps are not getting the correct taskbar icon? this could also be that they simply dont have one. So dont dwell too deeply in that.
 Status: finished ([plans/taskbar-icons.md](plans/taskbar-icons.md)); not yet checked live on the mini
@@ -42,7 +42,7 @@ in settings the selected item in the sidebar has blue markers, that looks pretty
 Status: finished ([plans/sidebar-selection.md](plans/sidebar-selection.md)); not yet checked live on the mini
 
 Files has no "settings" (and other inhouse apps who needs it), for example i want to show file extensions
-Status: finished ([plans/app-settings.md](plans/app-settings.md)); Files ▸ Settings… (Ctrl+,) with hidden files, default view, new window place, Trash and search, live in every window; extensions always shown; left: keep folders on top, the Sidebar section (M8), "Last Folder"
+Status: finished ([plans/app-settings.md](plans/app-settings.md)); Files ▸ Settings… (Ctrl+,) with hidden files, default view, new window place, Trash and search, live in every window; extensions always shown, keep folders on top; left: the Sidebar section (M8), "Last Folder"
 
 we have no swap (granted this is not an official installation of debian) and it may not be up to bande-desktop, but quickly review how that should work and if we should do anything or if that is soley up to the debian installer
 Status: started ([plans/swap.md](plans/swap.md)); kernel config and image packages merged, the 0004 caveat written; the owner installs the kernel, enables zram and oomd and reboots
@@ -51,7 +51,7 @@ review the CI, its performance and result has been abysmal. Right now it only st
 Status: finished up to the first tag, which the owner cuts ([plans/ci-releases.md](plans/ci-releases.md), "Cutting the first release")
 
 we have no app store, should we build one?
-Status: started ([plans/app-store.md](plans/app-store.md)): the catalogue library and a browse-only Software app are on main; installing, removal, Flatpak and Flathub are left
+Status: started ([plans/app-store.md](plans/app-store.md)): the catalogue library and the Software app are on main and install and remove Debian apps (M3-M5, M8, most of M9; recommended by bande-desktop); Flatpak, Flathub, the tile grid, screenshots and the rest of M9 are left
 
 snapping windows to the sides is a bit slow and also to the left requires you do drag to the screen edge but dragging to the taskbar should be enough since thats the real edge of the window. So the screen estate is the whole screen minus the taskbar, not the whole screen like now.
 Status: finished ([plans/window-snapping.md](plans/window-snapping.md)); not yet checked live on the mini

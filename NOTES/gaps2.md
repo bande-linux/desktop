@@ -6,13 +6,14 @@ The notifications bar open up under the task bar. Given that notifications open 
 Status: finished ([plans/notifications-placement.md](plans/notifications-placement.md)); M5 (several displays) left as optional
 
 power management seems to not work. Screen saver, sleep/wake (wake with keyboard), display sleep, computer sleep
-Status: started ([plans/power-management.md](plans/power-management.md)); display off at the lock stage, after a minute on a locked screen, and wake on input done (M1, M2, M4), sleep waits on the s2idle hardware test with a person at the mini (M3, M5-6)
+Status: started ([plans/power-management.md](plans/power-management.md)); display off at the lock stage, after a minute on a locked screen, and wake on input done (M1, M2, M4), the power button locks with a five-second power-off (M7), a display whose link broke in standby is set again; sleep waits on the s2idle hardware test with a person at the mini (M3, M5-6)
 
 crash management, bande-desktop is quite fragile and when it runs out of ram or crashes for some other reason it is quite common that it brings down the whole computer or just freezes. This never happens in MacOS so there must be better ways to handle such events. Investigate it, this is super important.
-Status: started ([plans/crash-management.md](plans/crash-management.md)); kernel PSI/zram/lockup detectors, image oomd/zram/hardware watchdog, session bus at the OOM floor and the compositor watchdog done (M1-4); the owner installs the kernel and tests (M5), reopen after a crash (M6) and coredumps (M7) left
+Status: started ([plans/crash-management.md](plans/crash-management.md)); kernel PSI/zram/lockup detectors, image oomd/zram/hardware watchdog, session bus at the OOM floor and the compositor watchdog done (M1-4); reopen after a crash done as an opt-in (M6); the owner installs the kernel and tests (M5), ramoops (M7) left
 
 
 remove the ability to drag out the taskbar into the wide state. That looks bad and is another feature to support that wont be used. I want sensible options for the bande desktop but not bloated options (KDE for example has way too many options and if feels bad. Gnome has way too few options and it feels limiting. We want a sweetspot like MacOS where the user can customize what is reasonable that an average user would want but not more. Too many options will likely bring bugs as well.)
 
 UI polish: the ui needs to be polished and improved in some ways. Like the restart window. Is way to large and looks hacky. Go over the OS and make sure each view/item/panel is professional, clean and modern looking.
+Status: started ([plans/ui-polish.md](plans/ui-polish.md)); audit done, M1 (restart/shut down/log out as a compact alert dialog, dialogs no longer borrow remembered frames) finished; M2-M6 (other prompts, polkit, app alerts, consistency) left
 

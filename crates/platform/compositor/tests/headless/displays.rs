@@ -1,5 +1,5 @@
 use smithay::utils::{Logical, Point, Rectangle, Size};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bande_compositor::{Compositor, OutputConfig, OutputMode, Renderer};
 use bande_config::Config;
@@ -213,6 +213,19 @@ fn a_window_menu_on_an_unplugged_display_closes_with_it() {
     roundtrip(&mut server, &mut [&mut app]);
 
     assert!(server.window_menu().is_empty());
+}
+
+#[test]
+fn force_quit_on_an_unplugged_display_closes_with_it() {
+    let mut server = two_displays();
+    server.move_pointer_to(at(10.0, 10.0), 0);
+    server.show_force_quit();
+    assert!(server.force_quit_frame().is_some());
+
+    server.remove_output(MAIN);
+    server.force_quit_tick(Instant::now());
+
+    assert!(server.force_quit_frame().is_none());
 }
 
 #[test]

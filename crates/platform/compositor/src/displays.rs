@@ -478,6 +478,7 @@ impl State {
         self.end_switcher();
         self.dismiss_assist();
         self.drop_window_menu();
+        self.close_force_quit();
         self.announce_outputs();
         self.pointer_location = self.nearest_on_screens(self.pointer_location);
         self.sync_surface_outputs();

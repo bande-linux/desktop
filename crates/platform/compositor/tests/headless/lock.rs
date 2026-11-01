@@ -137,11 +137,17 @@ fn an_input_method_keyboard_grab_does_not_see_keys_typed_into_the_lock_screen() 
     let mut lock = locker(&mut server);
     lock.lock_session(&mut server);
     lock.show_lock_surface(&mut server, BLUE);
-    roundtrip(&mut server, &mut [&mut lock, &mut editor, &mut input_method]);
+    roundtrip(
+        &mut server,
+        &mut [&mut lock, &mut editor, &mut input_method],
+    );
 
     server.key(KEY_A, true, 1);
     server.key(KEY_A, false, 2);
-    roundtrip(&mut server, &mut [&mut lock, &mut editor, &mut input_method]);
+    roundtrip(
+        &mut server,
+        &mut [&mut lock, &mut editor, &mut input_method],
+    );
 
     assert!(input_method.grabbed_keys().is_empty());
     assert!(lock.keys().contains(&(KEY_A, true)));

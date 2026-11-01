@@ -2,8 +2,8 @@ use std::collections::VecDeque;
 use std::error::Error;
 use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::mpsc;
 
 use accesskit::TreeUpdate;
 use bande_inbox::Inbox;

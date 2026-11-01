@@ -418,8 +418,12 @@ impl Trash {
         let mut dirs = vec![self.home.clone()];
         for topdir in mount_points() {
             let shared = topdir.join(".Trash");
-            let shared_is_dir = fs::symlink_metadata(&shared).is_ok_and(|metadata| metadata.is_dir());
-            for root in [shared.join(uid.to_string()), topdir.join(format!(".Trash-{uid}"))] {
+            let shared_is_dir =
+                fs::symlink_metadata(&shared).is_ok_and(|metadata| metadata.is_dir());
+            for root in [
+                shared.join(uid.to_string()),
+                topdir.join(format!(".Trash-{uid}")),
+            ] {
                 let real = (shared_is_dir || !root.starts_with(&shared))
                     && usable_root(&root, uid)
                     && root.join("info").is_dir();

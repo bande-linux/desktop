@@ -41,7 +41,10 @@ fn text(path: &Path) -> Option<String> {
 fn image<I>(path: &Path, picture: impl FnOnce(u32, u32, Vec<u8>) -> Option<I>) -> Option<I> {
     let mut limits = image::Limits::default();
     limits.max_alloc = Some(DECODE_BYTES_LIMIT);
-    let mut reader = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?;
+    let mut reader = image::ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?;
     reader.limits(limits);
     let decoded = reader.decode().ok()?;
     let decoded = if decoded.width().max(decoded.height()) > IMAGE_PREVIEW_PIXELS {

@@ -60,8 +60,8 @@ impl Screenshot {
         #[zbus(connection)] connection: &zbus::Connection,
         #[zbus(header)] header: Header<'_>,
     ) -> (u32, Results) {
-        let checked = flag(&options, "permission_store_checked")
-            && from_frontend(connection, &header).await;
+        let checked =
+            flag(&options, "permission_store_checked") && from_frontend(connection, &header).await;
         let capture = Capture {
             app_id,
             parent_window,

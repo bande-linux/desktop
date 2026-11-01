@@ -151,7 +151,9 @@ fn a_fifo_is_named_by_its_kind_without_being_opened() {
     let (sender, named) = std::sync::mpsc::channel();
     std::thread::spawn(move || sender.send(database.for_path(&fifo)));
     assert_eq!(
-        named.recv_timeout(std::time::Duration::from_secs(5)).as_deref(),
+        named
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .as_deref(),
         Ok("inode/fifo")
     );
 }

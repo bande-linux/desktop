@@ -129,8 +129,7 @@ impl Apps {
             .any(|dir| path.starts_with(dir.join("applications")));
         installed
             || fs::metadata(path).is_ok_and(|metadata| {
-                metadata.uid() == rustix::process::getuid().as_raw()
-                    && metadata.mode() & 0o111 != 0
+                metadata.uid() == rustix::process::getuid().as_raw() && metadata.mode() & 0o111 != 0
             })
     }
 

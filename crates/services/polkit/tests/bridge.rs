@@ -67,8 +67,5 @@ fn a_request_withdrawn_while_waiting_its_turn_never_blocks_the_next_one() {
 
     let asking = Arc::clone(&bridge);
     thread::spawn(move || asking.respond(&third, "ada", "Password:", false));
-    assert!(matches!(
-        next_message(&mut inbox),
-        Message::Prompt { .. }
-    ));
+    assert!(matches!(next_message(&mut inbox), Message::Prompt { .. }));
 }

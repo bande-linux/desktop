@@ -73,7 +73,8 @@ fn vblank_at_or_after(anchor: Instant, refresh: Duration, earliest: Instant) -> 
 }
 
 fn monotonic_instant(seconds: u64, nanoseconds: u32) -> Instant {
-    let at = Duration::from_secs(seconds).saturating_add(Duration::from_nanos(u64::from(nanoseconds)));
+    let at =
+        Duration::from_secs(seconds).saturating_add(Duration::from_nanos(u64::from(nanoseconds)));
     let now = Instant::now();
     let clock = clock_gettime(ClockId::Monotonic);
     let clock = Duration::new(

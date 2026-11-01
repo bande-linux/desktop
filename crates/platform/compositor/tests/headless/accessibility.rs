@@ -225,7 +225,10 @@ fn a_screen_reader_hears_every_key_and_keeps_its_own_commands_from_the_app() {
         "GrabKeyboard",
         &(),
     );
-    assert!(refused.is_err(), "only the screen reader may grab the keyboard");
+    assert!(
+        refused.is_err(),
+        "only the screen reader may grab the keyboard"
+    );
     let reader = bus.connect().expect("screen reader connection");
     reader
         .request_name(SCREEN_READER_NAME)

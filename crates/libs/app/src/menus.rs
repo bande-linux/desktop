@@ -38,7 +38,7 @@ impl Keys {
     }
 }
 
-pub(crate) fn assemble(info: &Info, menus: Menus) -> Vec<Entry> {
+pub(crate) fn assemble(info: &Info, menus: Menus, windowed: bool) -> Vec<Entry> {
     let name = (info.name)();
     let items = match info.settings {
         Some(_) => vec![settings(info.keys.settings())],
@@ -49,12 +49,17 @@ pub(crate) fn assemble(info: &Info, menus: Menus) -> Vec<Entry> {
     let mut window = vec![close_window(info.keys.close())];
     window.extend(menus.window);
     entries.push(window_submenu(window));
-    entries
+    match windowed {
+        true => entries,
+        false => entries.into_iter().map(Entry::without_window).collect(),
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use bande_app_menu::{Entry, Standard, app_submenu, close_window, settings, window_submenu};
+    use bande_app_menu::{
+        Entry, Standard, app_submenu, close_window, settings, shortcut_action, window_submenu,
+    };
     use bande_toolkit::Appearance;
     use bande_toolkit::ui::{Event, Key, Modifiers};
 
@@ -109,7 +114,7 @@ mod tests {
             window: vec![tab.clone()],
         };
         assert_eq!(
-            assemble(&INFO, menus),
+            assemble(&INFO, menus, true),
             [
                 app_submenu("Example", "1.2.3", Vec::new(), "Ctrl+Q"),
                 file,
@@ -121,7 +126,7 @@ mod tests {
     #[test]
     fn shifted_keys_move_close_and_quit_to_shift_ctrl_in_the_menus() {
         assert_eq!(
-            assemble(&with_settings(Keys::Shifted), Menus::default()),
+            assemble(&with_settings(Keys::Shifted), Menus::default(), true),
             [
                 app_submenu(
                     "Example",
@@ -137,7 +142,7 @@ mod tests {
     #[test]
     fn settings_sit_in_the_app_menu_only_for_an_app_with_settings() {
         assert_eq!(
-            assemble(&with_settings(Keys::Standard), Menus::default())[0],
+            assemble(&with_settings(Keys::Standard), Menus::default(), true)[0],
             app_submenu("Example", "1.2.3", vec![settings("Ctrl+,")], "Ctrl+Q")
         );
     }
@@ -159,5 +164,22 @@ mod tests {
         assert_eq!(shifted('w', true, false), Some(Standard::CloseWindow));
         assert_eq!(shifted('q', true, false), Some(Standard::Quit));
         assert_eq!(shifted(',', true, true), Some(Standard::Settings));
+    }
+
+    #[test]
+    fn without_a_window_the_window_items_are_disabled_and_the_rest_still_answer_their_keys() {
+        let file = Entry::submenu("File", vec![Entry::item("New", "new").shortcut("Ctrl+N")]);
+        let menus = assemble(
+            &INFO,
+            Menus {
+                menus: vec![file],
+                window: Vec::new(),
+            },
+            false,
+        );
+        let action = |wanted: &str| shortcut_action(&menus, &|shortcut| shortcut == wanted);
+        assert_eq!(action("Ctrl+W"), None);
+        assert_eq!(action("Ctrl+N").as_deref(), Some("new"));
+        assert_eq!(action("Ctrl+Q").as_deref(), Some(Standard::Quit.action()));
     }
 }

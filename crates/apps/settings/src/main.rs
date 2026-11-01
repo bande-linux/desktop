@@ -109,7 +109,8 @@ impl View for Pane {
 }
 
 struct Settings {
-    main: WindowId,
+    main: Option<WindowId>,
+    parked: Option<Pane>,
     feed: Feed,
     displays: Option<Displays>,
     services: Services,
@@ -137,9 +138,47 @@ fn select_pane(view: &mut SettingsView, keyword: &str) {
     }
 }
 
+fn settings_view<'a>(
+    cx: &'a mut Cx<Settings>,
+    main: Option<WindowId>,
+    parked: &'a mut Option<Pane>,
+) -> Option<&'a mut SettingsView> {
+    match main.and_then(|main| cx.window(main)) {
+        Some((_, Pane(view))) => Some(view),
+        None => parked.as_mut().map(|Pane(view)| view),
+    }
+}
+
+fn open_main(
+    cx: &mut Cx<Settings>,
+    parked: Option<Pane>,
+    arguments: &[String],
+    displays: Option<&Displays>,
+) -> Result<WindowId, bande_toolkit::WindowError> {
+    cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
+        if let Some(mut pane) = parked {
+            pane.0.set_appearance(appearance);
+            return pane;
+        }
+        let mut view = SettingsView::new(appearance.palette(), TextSystem::new());
+        view.set_appearance(appearance);
+        view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
+        if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
+            view.hide_screen_reader();
+        }
+        if let Some(keyword) = arguments.first() {
+            select_pane(&mut view, keyword);
+        }
+        if let Some(displays) = displays {
+            view.set_displays(displays.list());
+        }
+        Pane(view)
+    })
+}
+
 impl Settings {
     fn send_commands(&mut self, cx: &mut Cx<Self>) {
-        let Some((window, Pane(view))) = cx.window(self.main) else {
+        let Some((window, Pane(view))) = self.main.and_then(|main| cx.window(main)) else {
             return;
         };
         for command in view.take_commands() {
@@ -164,23 +203,10 @@ impl Program for Settings {
         let services = Services::start(&session, system.as_ref(), &updates);
         services.send(Command::Software(SoftwareCommand::Open));
         let displays = Displays::connect();
-        let main = cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
-            let mut view = SettingsView::new(appearance.palette(), TextSystem::new());
-            view.set_appearance(appearance);
-            view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
-            if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
-                view.hide_screen_reader();
-            }
-            if let Some(keyword) = arguments.first() {
-                select_pane(&mut view, keyword);
-            }
-            if let Some(displays) = &displays {
-                view.set_displays(displays.list());
-            }
-            Pane(view)
-        })?;
+        let main = open_main(cx, None, &arguments, displays.as_ref())?;
         Ok(Self {
-            main,
+            main: Some(main),
+            parked: None,
             feed,
             displays,
             services,
@@ -209,20 +235,46 @@ impl Program for Settings {
         }
     }
 
-    fn command(&mut self, cx: &mut Cx<Self>, _window: WindowId, command: &str) {
-        if let Some(keyword) = command.strip_prefix(PANE_ACTION)
-            && let Some((_, Pane(view))) = cx.window(self.main)
-        {
-            select_pane(view, keyword);
+    fn command(&mut self, cx: &mut Cx<Self>, _window: Option<WindowId>, command: &str) {
+        if let Some(keyword) = command.strip_prefix(PANE_ACTION) {
+            if let Some(view) = settings_view(cx, self.main, &mut self.parked) {
+                select_pane(view, keyword);
+            }
+            if self.main.is_none() {
+                self.reopen(cx);
+            }
         }
         self.send_commands(cx);
     }
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, _directory: &Path) {
-        if let (Some(keyword), Some((_, Pane(view)))) = (arguments.first(), cx.window(self.main)) {
+        if let (Some(keyword), Some(view)) = (
+            arguments.first(),
+            settings_view(cx, self.main, &mut self.parked),
+        ) {
             select_pane(view, keyword);
         }
+        if self.main.is_none() {
+            self.reopen(cx);
+        }
         self.send_commands(cx);
+    }
+
+    fn reopen(&mut self, cx: &mut Cx<Self>) {
+        if self.main.is_some() {
+            return;
+        }
+        match open_main(cx, self.parked.take(), &[], self.displays.as_ref()) {
+            Ok(main) => self.main = Some(main),
+            Err(error) => tracing::warn!("cannot open the settings: {error}"),
+        }
+    }
+
+    fn window_closed(&mut self, _cx: &mut Cx<Self>, window: WindowId, view: Pane) {
+        if self.main == Some(window) {
+            self.main = None;
+            self.parked = Some(view);
+        }
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, _window: WindowId) {
@@ -236,12 +288,19 @@ impl Program for Settings {
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {
-        if let Some((_, Pane(view))) = cx.window(self.main) {
-            if index == FEED {
-                for update in self.feed.drain() {
-                    view.apply(update);
-                }
-            } else if let Some(displays) = self.displays.as_mut().and_then(Displays::dispatch) {
+        let updates = match index {
+            FEED => self.feed.drain(),
+            _ => Vec::new(),
+        };
+        let displays = match index {
+            FEED => None,
+            _ => self.displays.as_mut().and_then(Displays::dispatch),
+        };
+        if let Some(view) = settings_view(cx, self.main, &mut self.parked) {
+            for update in updates {
+                view.apply(update);
+            }
+            if let Some(displays) = displays {
                 view.set_displays(displays);
             }
         }

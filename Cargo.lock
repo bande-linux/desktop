@@ -370,6 +370,8 @@ dependencies = [
  "bande-test-bus",
  "bande-toolkit",
  "bande-xdg",
+ "libc",
+ "rustix 1.1.6",
  "smithay",
  "tracing",
  "zbus",

@@ -39,7 +39,7 @@ enum Seen {
     Active(WindowId),
     Dark(WindowId),
     Copied(WindowId),
-    Command(WindowId, String),
+    Command(Option<WindowId>, String),
     AskedToClose(WindowId),
     Asked(Vec<String>, PathBuf),
     SettingsBuilt,
@@ -175,8 +175,12 @@ impl Program for Example {
         }
     }
 
-    fn command(&mut self, _cx: &mut Cx<Self>, window: WindowId, command: &str) {
+    fn command(&mut self, _cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
         record(Seen::Command(window, command.to_owned()));
+    }
+
+    fn reopen(&mut self, cx: &mut Cx<Self>) {
+        open(cx);
     }
 
     fn open(&mut self, _cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
@@ -307,7 +311,7 @@ impl Desktop {
 }
 
 #[test]
-fn windows_share_keys_menus_appearance_closing_and_quitting() {
+fn windows_share_keys_menus_appearance_closing_and_the_app_runs_on_without_them_until_quit() {
     let bus = SessionBus::start().expect("private session bus");
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
@@ -384,10 +388,13 @@ fn windows_share_keys_menus_appearance_closing_and_quitting() {
     let mark = desktop.seen.len();
     desktop.chord(KEY_C);
     desktop.chord(KEY_N);
-    desktop.wait_for(&Seen::Command(second, NEW.to_owned()));
+    desktop.wait_for(&Seen::Command(Some(second), NEW.to_owned()));
     assert_eq!(
         desktop.since(mark),
-        [Seen::Copied(second), Seen::Command(second, NEW.to_owned())]
+        [
+            Seen::Copied(second),
+            Seen::Command(Some(second), NEW.to_owned())
+        ]
     );
 
     let mark = desktop.seen.len();
@@ -417,12 +424,48 @@ fn windows_share_keys_menus_appearance_closing_and_quitting() {
     let mark = desktop.seen.len();
     desktop.chord(KEY_W);
     desktop.wait_for_after(mark, &Seen::Active(first));
+    desktop.chord(KEY_W);
+    desktop.wait_for(&Seen::AskedToClose(first));
+    desktop.settle();
+    let running_without_windows = !app.is_finished();
+
+    desktop.chord(KEY_N);
+    desktop.wait_for(&Seen::Command(None, NEW.to_owned()));
+    let (unused, _) = UnixStream::pair().expect("socket pair");
+    let launched_again = thread::spawn(move || {
+        bande_app::run_on::<Example>(&INFO, Vec::new(), unused).map_err(|error| error.to_string())
+    });
+    let deadline = Instant::now() + TIMEOUT;
+    let reopened = loop {
+        desktop.pump();
+        let opened = desktop.seen.iter().rev().find_map(|seen| match seen {
+            Seen::Opened(window) if ![first, second].contains(window) => Some(*window),
+            _ => None,
+        });
+        if let Some(reopened) = opened {
+            break reopened;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "launching again opened no window"
+        );
+    };
+    assert_eq!(launched_again.join().expect("second launch"), Ok(()));
+    desktop.wait_for(&Seen::Active(reopened));
+    desktop.chord(KEY_W);
+    desktop.wait_for(&Seen::AskedToClose(reopened));
+    desktop.settle();
+
     desktop.chord(KEY_Q);
     let deadline = Instant::now() + TIMEOUT;
     while !app.is_finished() {
         desktop.pump();
-        assert!(Instant::now() < deadline, "Ctrl+Q did not quit");
+        assert!(
+            Instant::now() < deadline,
+            "Ctrl+Q without a window did not quit"
+        );
     }
+    assert!(running_without_windows);
     assert_eq!(app.join().expect("app thread"), Ok(()));
     assert_eq!(
         desktop
@@ -434,6 +477,7 @@ fn windows_share_keys_menus_appearance_closing_and_quitting() {
             &Seen::AskedToClose(second),
             &Seen::AskedToClose(second),
             &Seen::AskedToClose(first),
+            &Seen::AskedToClose(reopened),
         ]
     );
 }

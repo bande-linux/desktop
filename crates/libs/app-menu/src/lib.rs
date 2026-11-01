@@ -51,6 +51,10 @@ impl Standard {
             .find(|(_, known)| *known == action)
             .map(|(standard, _)| *standard)
     }
+
+    pub fn needs_window(self) -> bool {
+        matches!(self, Self::Minimize | Self::Zoom | Self::CloseWindow)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -224,6 +228,19 @@ impl Entry {
 
     pub fn enabled(self, enabled: bool) -> Self {
         Self { enabled, ..self }
+    }
+
+    pub fn without_window(self) -> Self {
+        let needs_window = Standard::parse(&self.action).is_some_and(Standard::needs_window);
+        Self {
+            enabled: self.enabled && !needs_window,
+            children: self
+                .children
+                .into_iter()
+                .map(Entry::without_window)
+                .collect(),
+            ..self
+        }
     }
 
     pub fn radio(self, selected: bool) -> Self {

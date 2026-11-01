@@ -33,7 +33,7 @@ the software update doesnt seem to work.
 Status: started ([plans/software-update.md](plans/software-update.md)); M1-M6 done (offline updates), live reboot test on the mini left
 
 changing time zone doesnt apply
-Status: finished ([plans/time-zone.md](plans/time-zone.md)); M5 polkit fix waits on an owner decision
+Status: finished ([plans/time-zone.md](plans/time-zone.md))
 
 scrolling direction should have individual settings for trackpad and mouse. Also trackpad and mouse probably should have their own setting views with more option. The trackpad has 0 options for example.
 Status: finished ([plans/mouse-and-trackpad.md](plans/mouse-and-trackpad.md)); mouse scroll speed waits on an owner decision

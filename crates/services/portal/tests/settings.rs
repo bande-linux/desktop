@@ -492,6 +492,40 @@ fn a_users_own_gtk_stylesheet_keeps_its_rules_below_the_import() {
 }
 
 #[test]
+fn a_linked_gtk_stylesheet_gets_the_import_through_its_link() {
+    let homes = tempfile::tempdir().expect("homes");
+    let config = homes.path().join("config");
+    let dotfiles = homes.path().join("dotfiles");
+    std::fs::create_dir_all(config.join("gtk-4.0")).expect("gtk-4.0");
+    std::fs::create_dir(&dotfiles).expect("dotfiles");
+    let user = "window { font-size: 2em; }\n";
+    std::fs::write(dotfiles.join("gtk.css"), user).expect("user stylesheet");
+    let link = config.join("gtk-4.0").join("gtk.css");
+    std::os::unix::fs::symlink(dotfiles.join("gtk.css"), &link).expect("link");
+
+    gtk::install(
+        &gtk::GtkHomes {
+            config,
+            data: homes.path().join("data"),
+        },
+        Accent::Plum,
+        Scheme::Dark,
+    )
+    .expect("install");
+
+    assert!(
+        std::fs::symlink_metadata(&link)
+            .expect("link")
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(
+        std::fs::read_to_string(dotfiles.join("gtk.css")).expect("read"),
+        format!("@import url(\"bande.css\");\n{user}")
+    );
+}
+
+#[test]
 fn the_sound_effects_switch_drives_gtk_event_sounds() {
     let fixture = start("sound {\n    effects #false\n}\n");
     let all = fixture.read_all(&["org.gnome.desktop.sound"]);

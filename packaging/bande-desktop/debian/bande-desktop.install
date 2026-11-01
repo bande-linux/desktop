@@ -3,7 +3,10 @@ systemd/zram-generator.conf.d usr/lib/systemd/
 systemd/system/dev-zram0.device.d usr/lib/systemd/system/
 systemd/user/app.slice.d usr/lib/systemd/user/
 systemd/user/dbus.service.d usr/lib/systemd/user/
-systemd/user/pipewire.service.d usr/lib/systemd/user/
+systemd/user/filter-chain.service.d usr/lib/systemd/user/
 systemd/user/pipewire-pulse.service.d usr/lib/systemd/user/
+systemd/user/pipewire-pulse.socket.d usr/lib/systemd/user/
+systemd/user/pipewire.service.d usr/lib/systemd/user/
+systemd/user/pipewire.socket.d usr/lib/systemd/user/
 systemd/user/wireplumber.service.d usr/lib/systemd/user/
 systemd/user/xdg-desktop-portal.service.d usr/lib/systemd/user/

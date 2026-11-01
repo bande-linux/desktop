@@ -51,11 +51,12 @@ impl Table {
         widths: &[f32],
     ) -> TextKey {
         let cell = &line.cells[column];
-        let color = match (lit, cell.tint, cell.muted) {
-            (true, _, _) => cx.palette.on_accent,
-            (false, Some(tint), _) => tint,
-            (false, None, true) => cx.palette.ink2,
-            (false, None, false) => cx.palette.ink,
+        let color = match (lit, cell.tint, cell.label, cell.muted) {
+            (true, _, _, _) => cx.palette.on_accent,
+            (false, Some(tint), _, _) => tint,
+            (false, None, true, _) => cx.palette.ink3,
+            (false, None, false, true) => cx.palette.ink2,
+            (false, None, false, false) => cx.palette.ink,
         };
         let indent = if column == 0 { self.indent(line) } else { 0.0 };
         let width = widths[column] - 2.0 * CELL_PADDING - self.icon_space(column, cell) - indent;

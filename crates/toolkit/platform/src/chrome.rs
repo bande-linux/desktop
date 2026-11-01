@@ -1,7 +1,7 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use bande_graphics::{
-    Color, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene, Scheme, Shape,
-    TextAlign, TextStyle, TextSystem, TitleBar, resize_edge, title_style, window_controls_area,
+    Color, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene, Shape, TextAlign,
+    TextStyle, TextSystem, TitleBar, resize_zone, title_style, window_controls_area,
 };
 
 use std::time::Instant;
@@ -14,7 +14,6 @@ pub(crate) use bande_graphics::RESIZE_MARGIN;
 pub use bande_graphics::WINDOW_HEADER_HEIGHT;
 pub const SHEET_INSET: u32 = 6;
 pub(crate) use bande_graphics::WindowControl as Control;
-const RESIZE_BAND: f32 = RESIZE_MARGIN as f32;
 const TITLE_TRAILING_GAP: f32 = 12.0;
 
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
@@ -94,6 +93,7 @@ impl Header {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Frame {
     pub(crate) margin: f32,
+    pub(crate) resize_radius: Option<f32>,
     pub(crate) title: f32,
     pub(crate) inset: f32,
     pub(crate) regions: Option<FrameRegions>,
@@ -158,6 +158,12 @@ impl Frame {
 
     pub(crate) fn zone_at(&self, point: Point) -> Zone {
         let window = self.window();
+        if let Some(edge) = self
+            .resize_radius
+            .and_then(|radius| resize_zone(window, radius, self.margin, point))
+        {
+            return Zone::Resize(edge);
+        }
         if window.contains(point) {
             let local = Point::new(point.x - window.x, point.y - window.y);
             if local.y < self.title {
@@ -169,14 +175,11 @@ impl Frame {
                 Zone::TitleBar
             };
         }
-        if self.margin == 0.0 || !window.inset(-RESIZE_BAND).contains(point) {
-            return Zone::Outside;
-        }
-        Zone::Resize(resize_edge(window, point))
+        Zone::Outside
     }
 
     pub(crate) fn input_area(&self) -> Rect {
-        self.window().inset(-RESIZE_BAND)
+        self.window().inset(-self.margin)
     }
 }
 
@@ -314,7 +317,6 @@ impl Chrome {
         frame: &Frame,
         content: Scene,
         palette: &Palette,
-        scheme: Scheme,
         look: Look,
         now: Instant,
     ) -> Scene {
@@ -350,12 +352,8 @@ impl Chrome {
             offset: Point::new(placed.x, placed.y),
             items: drawn,
         });
-        if scheme == Scheme::Dark && frame.inset > 0.0 {
-            items.push(Item::Stroke {
-                shape: Shape::rounded(sheet.inset(0.5), radius - 0.5),
-                width: 1.0,
-                paint: palette.hairline.into(),
-            });
+        if frame.inset > 0.0 {
+            items.extend(Item::rim(Shape::rounded(sheet, radius), palette));
         }
         Scene {
             width: (frame.width + 2.0 * frame.margin) as u32,
@@ -439,6 +437,7 @@ pub fn framed_scene(
     };
     let frame = Frame {
         margin: 0.0,
+        resize_radius: None,
         title: header_height,
         inset,
         regions,
@@ -453,7 +452,6 @@ pub fn framed_scene(
         &frame,
         content.clone(),
         palette,
-        palette.scheme,
         Look {
             active: true,
             zoomed: false,

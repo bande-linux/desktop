@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use bande_config::{ConfigService, ConfigStore};
 use bande_datetime::daylight::{Sky, place_of, sky};
 use bande_datetime::timedate::TimedateProxyBlocking;
-use bande_design::{Accent, Color, Palette, Scheme};
+use bande_design::{Accent, Color, Contrast, Palette, Scheme};
 use bande_test_bus::timedate::FakeTimedate;
 use common::Portal;
 use jiff::Timestamp;
@@ -92,6 +92,10 @@ impl Fixture {
     fn stylesheet(&self) -> String {
         std::fs::read_to_string(self.gtk_home.join("gtk-4.0/bande.css")).unwrap_or_default()
     }
+
+    fn gtk3_stylesheet(&self) -> String {
+        std::fs::read_to_string(self.gtk_home.join("gtk-3.0/bande.css")).unwrap_or_default()
+    }
 }
 
 impl Fixture {
@@ -132,7 +136,7 @@ impl Fixture {
 }
 
 fn accent(scheme: Scheme) -> (f64, f64, f64) {
-    let color = Palette::for_scheme(scheme).accent;
+    let color = Palette::for_scheme(scheme).accent_text;
     (
         f64::from(color.r) / 255.0,
         f64::from(color.g) / 255.0,
@@ -429,16 +433,35 @@ fn gtk_apps_get_the_accent_and_frame_tones_through_an_import_in_their_own_styles
     assert!(unconditional.contains(&hex(Palette::for_scheme(Scheme::Dark).chassis)));
     assert!(!unconditional.contains(&hex(Palette::for_scheme(Scheme::Light).chassis)));
     for scheme in [Scheme::Light, Scheme::Dark] {
-        assert!(css.contains(&hex(Accent::Plum.color(scheme))), "{css}");
+        let palette = Palette::generate(scheme, Accent::Plum, Contrast::Standard);
+        for color in [
+            palette.chassis,
+            palette.sheet,
+            palette.accent,
+            palette.accent_text,
+        ] {
+            assert!(css.contains(&hex(color)), "{css}");
+        }
+    }
+    let dark = Palette::generate(Scheme::Dark, Accent::Plum, Contrast::Standard);
+    let gtk3 = fixture.gtk3_stylesheet();
+    for (name, color) in [
+        ("theme_bg_color", dark.chassis),
+        ("theme_base_color", dark.sheet),
+        ("theme_selected_bg_color", dark.accent),
+    ] {
         assert!(
-            css.contains(&hex(Palette::for_scheme(scheme).chassis)),
-            "{css}"
+            gtk3.contains(&format!("@define-color {name} {};", hex(color))),
+            "{gtk3}"
         );
     }
-    assert_eq!(
-        std::fs::read_to_string(fixture.gtk_home.join("gtk-4.0/gtk.css")).expect("gtk.css"),
-        "@import url(\"bande.css\");\n"
-    );
+    for version in ["gtk-3.0", "gtk-4.0"] {
+        assert_eq!(
+            std::fs::read_to_string(fixture.gtk_home.join(version).join("gtk.css"))
+                .expect("gtk.css"),
+            "@import url(\"bande.css\");\n"
+        );
+    }
 
     fixture.write_config("appearance \"dark\"\naccent \"moss\"\n");
     let deadline = Instant::now() + WAIT;

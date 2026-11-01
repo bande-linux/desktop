@@ -15,8 +15,8 @@ use std::time::{Duration, Instant};
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_graphics::{
-    Appearance, CpuRenderer, Cursor, Event, Point, Rect, Region, ResizeEdge, Scene, TextSize,
-    TextSystem, damage, pixels,
+    Appearance, CpuRenderer, Cursor, Event, Point, Radius, Rect, Region, ResizeEdge, Scene,
+    TextSize, TextSystem, damage, pixels,
 };
 use bande_protocols::client::bande_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
@@ -508,6 +508,17 @@ impl Window {
         }
     }
 
+    fn resize_radius(&self) -> Option<f32> {
+        let toplevel = self.state.toplevel;
+        if self.chrome.is_none() || toplevel.maximized || toplevel.fullscreen {
+            None
+        } else if toplevel.tiled {
+            Some(0.0)
+        } else {
+            Some(Radius::XL)
+        }
+    }
+
     fn resize_margin(&self) -> u32 {
         let toplevel = self.state.toplevel;
         let floating = !(toplevel.maximized || toplevel.fullscreen || toplevel.tiled);
@@ -527,6 +538,7 @@ impl Window {
         let title = self.title_height();
         Frame {
             margin: self.resize_margin() as f32,
+            resize_radius: self.resize_radius(),
             title: title as f32,
             inset: if title > 0 { SHEET_INSET as f32 } else { 0.0 },
             regions: self.chrome.as_ref().and_then(|chrome| chrome.regions),
@@ -963,14 +975,9 @@ impl Window {
             zoomed: toplevel.maximized || toplevel.fullscreen,
         };
         match &mut self.chrome {
-            Some(chrome) => chrome.frame_scene(
-                frame,
-                scene,
-                &appearance.palette(),
-                appearance.scheme,
-                look,
-                presentation,
-            ),
+            Some(chrome) => {
+                chrome.frame_scene(frame, scene, &appearance.palette(), look, presentation)
+            }
             None => scene,
         }
     }

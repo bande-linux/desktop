@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use bande_compositor::{Compositor, Renderer, Snapshot};
+use bande_compositor::{Compositor, OutputConfig, Renderer, Snapshot};
 use bande_test_wayland::{
     Anchor, GREEN, KeyboardInteractivity, Layer, LayerRequest, RED, ShmImage, TestClient, roundtrip,
 };
@@ -8,6 +8,8 @@ use smithay::utils::{Logical, Point, Rectangle, Size};
 use wayland_client::protocol::wl_shm::Format;
 
 pub const OUTPUT: (i32, i32) = (256, 192);
+pub const SIDE: &str = "HEADLESS-2";
+pub const SIDE_SIZE: (i32, i32) = (320, 240);
 pub const BTN_LEFT: u32 = 0x110;
 pub const KEY_ESC: u32 = 1;
 pub const KEY_TAB: u32 = 15;
@@ -30,6 +32,16 @@ pub const VIEWER: &str = "org.example.Viewer";
 
 pub fn server() -> Compositor {
     Compositor::new(Size::from(OUTPUT)).expect("headless compositor")
+}
+
+pub fn side_display() -> OutputConfig {
+    OutputConfig::virtual_display(SIDE, Size::from(SIDE_SIZE))
+}
+
+pub fn two_displays() -> Compositor {
+    let mut server = server();
+    server.add_output(side_display());
+    server
 }
 
 pub fn solid(color: [u8; 4], (width, height): (i32, i32)) -> Vec<u8> {

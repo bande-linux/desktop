@@ -261,7 +261,7 @@ impl Widget for Arrangement {
                 shape: Shape::rounded(rect.inset(0.5), RADIUS - 0.5),
                 width: 1.0,
                 paint: if selected {
-                    cx.palette.accent.into()
+                    cx.palette.accent_text.into()
                 } else {
                     cx.palette.hairline.into()
                 },

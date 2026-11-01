@@ -16,7 +16,7 @@ use bande_toolkit::ui::{
     Axis, Context, LevelIndicator, Menu, MenuItem, PopUpButton, Size, Slider, Stack, Ui, Widget,
 };
 use bande_toolkit::{
-    Color, DisplayEdge, Elevation, Image, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape,
+    Color, DisplayEdge, Elevation, Image, Item, Palette, Point, Radius, Rect, Scene, Shape,
     Spacing, TextAlign, TextRole, TextStyle, TextSystem,
 };
 
@@ -407,13 +407,7 @@ pub fn card(palette: &Palette, rect: Rect, items: &mut Vec<Item>) {
         shape,
         paint: palette.chassis.into(),
     });
-    if palette.scheme == Scheme::Dark {
-        items.push(Item::Stroke {
-            shape: Shape::rounded(rect.inset(0.5), Radius::XL - 0.5),
-            width: 1.0,
-            paint: palette.hairline.into(),
-        });
-    }
+    items.extend(Item::rim(shape, palette));
 }
 
 pub fn panel_items(ui: &mut Ui, palette: &Palette, rect: Rect) -> Vec<Item> {

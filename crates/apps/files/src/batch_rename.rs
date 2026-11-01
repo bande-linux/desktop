@@ -209,7 +209,7 @@ impl Widget for RenameSheet {
         self.problem_text = self.problem.as_ref().map(|problem| {
             cx.text.paragraph(
                 problem,
-                TextStyle::role(TextRole::Callout, palette.danger),
+                TextStyle::role(TextRole::Callout, palette.danger_text),
                 Some(text_width),
                 TextAlign::Start,
             )

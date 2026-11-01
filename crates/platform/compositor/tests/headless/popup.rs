@@ -1,5 +1,5 @@
 use crate::support::*;
-use bande_compositor::{Compositor, OutputConfig};
+use bande_compositor::Compositor;
 use bande_test_wayland::{
     Anchor, BLUE, ConstraintAdjustment, GREEN, KeyboardInteractivity, Layer, LayerRequest,
     PopupRequest, RED, ShmImage, TestClient, roundtrip, roundtrip_until,
@@ -453,7 +453,6 @@ fn a_drag_out_of_a_menu_ends_the_menu_grab_when_it_drops() {
 }
 
 const MENU_SIZE: (i32, i32) = (60, 80);
-const SIDE: &str = "HEADLESS-2";
 
 fn placed_menu(anchor: (i32, i32), size: (i32, i32)) -> PopupRequest {
     PopupRequest {
@@ -597,8 +596,7 @@ fn a_menu_taller_than_the_screen_is_shortened_to_the_usable_height() {
 
 #[test]
 fn a_window_menu_is_kept_on_the_display_of_its_anchor() {
-    let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
-    server.add_output(OutputConfig::virtual_display(SIDE, Size::from((320, 240))));
+    let mut server = two_displays();
     server.move_pointer_to(at((OUTPUT.0 + 160, 120)), 0);
     let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);
     let side = server.output_rect(SIDE).expect("side display");

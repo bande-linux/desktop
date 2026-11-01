@@ -8,7 +8,7 @@ use resvg::{tiny_skia, usvg};
 use vello_cpu::{PixelMetadata, Pixmap};
 
 use crate::text::Paragraph;
-use bande_design::{Color, Elevation, Scheme};
+use bande_design::{Color, Elevation, Palette, Scheme};
 
 const SYMBOLIC_INK: &str = "#201E1A";
 
@@ -72,6 +72,14 @@ impl Shape {
 
     pub const fn rounded(rect: Rect, radius: f32) -> Self {
         Self { rect, radius }
+    }
+
+    pub fn distance(self, point: Point) -> f32 {
+        let half = (self.rect.width / 2.0, self.rect.height / 2.0);
+        let radius = self.radius.min(half.0).min(half.1);
+        let x = (point.x - self.rect.x - half.0).abs() - half.0 + radius;
+        let y = (point.y - self.rect.y - half.1).abs() - half.1 + radius;
+        x.max(0.0).hypot(y.max(0.0)) + x.max(y).min(0.0) - radius
     }
 }
 
@@ -351,6 +359,14 @@ impl Item {
                 blur_radius: shadow.blur,
                 color: Color::BLACK.with_opacity(shadow.opacity),
             })
+    }
+
+    pub fn rim(shape: Shape, palette: &Palette) -> Option<Self> {
+        (palette.scheme == Scheme::Dark).then(|| Self::Stroke {
+            shape: Shape::rounded(shape.rect.inset(0.5), shape.radius - 0.5),
+            width: 1.0,
+            paint: palette.rim.into(),
+        })
     }
 }
 

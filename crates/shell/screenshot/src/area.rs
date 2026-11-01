@@ -162,7 +162,7 @@ impl AreaSelection {
             items.push(Item::Stroke {
                 shape: Shape::rect(frame.inset(0.5)),
                 width: 1.0,
-                paint: palette.accent.into(),
+                paint: palette.accent_text.into(),
             });
         }
         if let Some(at) = self.pointer {

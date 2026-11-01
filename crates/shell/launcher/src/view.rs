@@ -15,7 +15,7 @@ use bande_toolkit::ui::{
     Widget, WidgetId,
 };
 use bande_toolkit::{
-    Color, Elevation, Image, Item, Point, Radius, Rect, Scene, Scheme, Shape, TextAlign, TextRole,
+    Color, Elevation, Image, Item, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole,
     TextStyle, TextSystem,
 };
 
@@ -506,13 +506,7 @@ impl Widget for Card {
             shape,
             paint: cx.palette.overlay.into(),
         });
-        if cx.palette.scheme == Scheme::Dark {
-            items.push(Item::Stroke {
-                shape: Shape::rounded(self.frame.inset(0.5), CARD_RADIUS - 0.5),
-                width: 1.0,
-                paint: cx.palette.hairline.into(),
-            });
-        }
+        items.extend(Item::rim(shape, &cx.palette));
         let glyph = Rect::new(
             self.frame.x + 20.0,
             self.frame.y + ((FIELD_ROW - GLYPH_SIZE) / 2.0).round(),

@@ -356,6 +356,7 @@ impl ScrollState {
                 }
                 grabbed
             }
+            Event::PointerLeave => self.knob_grab.take().is_some(),
             _ => false,
         }
     }

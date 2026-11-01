@@ -203,7 +203,9 @@ checking-updates = Checking for updates…
 up-to-date = Your computer is up to date
 check-now = Check Now
 download-size = { $size } to download
-download-updates = Download Updates
+download-size-restart = { $size } to download. Some updates need a restart.
+updates-need-restart = Some updates need a restart
+update-now = Update Now
 updates-available = { $count ->
     [one] 1 update is available
    *[other] { $count } updates are available
@@ -211,6 +213,8 @@ updates-available = { $count ->
 more-updates = and { $count } more
 downloading-updates = Downloading updates…
 downloading-hint = You can keep working while updates download
+installing-updates = Installing updates…
+installing-hint = You can keep working while updates install
 restart-to-install = { $count ->
     [one] Restart to install 1 update
    *[other] Restart to install { $count } updates
@@ -221,6 +225,17 @@ updates-were-installed = { $count ->
    *[other] { $count } updates were installed
 }
 restart-now = Restart Now
+restart-to-finish = Restart to finish updating
+restart-to-finish-hint = Some updates take effect after a restart
+log-out-to-finish = Log out to finish updating the desktop
+log-out-to-finish-hint = The desktop keeps running its old version until you log out
+log-out = Log Out
+later = Later
+reopen-apps = Quit and reopen { $apps } to use the new versions
+apps-and = { $apps } and { $last }
+updates-interrupted = Updates didn't finish installing
+updates-interrupted-hint = Finish installing them before you install anything else
+finish-installing = Finish Installing
 updates-failed = Could not check for updates
 download-failed = Could not download updates
 install-failed = Could not install updates
@@ -258,6 +273,11 @@ configure-ipv4 = Configure IPv4
 import-vpn = Import Configuration…
 import-vpn-hint = Add a WireGuard (.conf) or OpenVPN (.ovpn) file
 import-vpn-title = Import a VPN Configuration
+no-excluded-folders = Every folder in your home folder is searched
+exclude-folder = Add Folder…
+exclude-folder-hint = Files in these folders never appear in search
+include-folder-tooltip = Search this folder again
+choose-excluded-folder = Choose a Folder to Keep Out of Search
 vpn-files = VPN configurations
 no-locales = Language support is not installed
 locale-setting-up = Setting up { $name }…

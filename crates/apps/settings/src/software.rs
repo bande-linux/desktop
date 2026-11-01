@@ -1,8 +1,16 @@
+mod stale;
+
+use std::cell::Cell;
 use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 
 use bande_packages::offline::{self, Results};
-use bande_packages::{Client, Error, ErrorCode, Failure};
+use bande_packages::{
+    Class, Client, Error, ErrorCode, Failure, Mode, Progress, Restart, Status, running_release,
+};
+use bande_xdg::{replace_file, state_home};
 use zbus::MatchRule;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
@@ -13,19 +21,15 @@ use bande_notify::Urgency;
 use bande_notify::client::{Request, close, notify};
 
 use crate::L10N;
-use crate::failure::{sentence, unexpected};
+use crate::failure::sentence;
 use crate::follow::{Update, Updates, spawn};
+use crate::privilege::may_update_live;
 
 const FRESH_SECONDS: u32 = 60 * 60;
-
-#[zbus::proxy(
-    interface = "org.freedesktop.login1.Manager",
-    default_service = "org.freedesktop.login1",
-    default_path = "/org/freedesktop/login1"
-)]
-trait Login {
-    fn reboot(&self, interactive: bool) -> zbus::Result<()>;
-}
+const REBOOT_REQUIRED: &str = "/run/reboot-required";
+const BOOT_ID: &str = "/proc/sys/kernel/random/boot_id";
+const RESTART_FILE: &str = "bande/restart-pending";
+const INTERRUPTED: &str = "dpkg --configure -a";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Package {
@@ -34,6 +38,7 @@ pub struct Package {
     pub version: String,
     pub summary: String,
     pub size: u64,
+    pub class: Class,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,6 +54,18 @@ pub enum Refresh {
     WhenStale,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reboot {
+    Finish,
+    Install(usize),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Need {
+    Reboot,
+    LogOut,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum SoftwareState {
     #[default]
@@ -60,20 +77,65 @@ pub enum SoftwareState {
     Downloading {
         percent: Option<u32>,
     },
+    Installing {
+        percent: Option<u32>,
+    },
     Prepared(usize),
-    Installed(usize),
+    Installed {
+        count: usize,
+        reboot: Option<Reboot>,
+        logout: bool,
+        apps: Vec<String>,
+    },
+    Interrupted,
     Failed {
         during: Stage,
         reason: String,
     },
 }
 
+impl SoftwareState {
+    pub(crate) fn pending(&self) -> Option<String> {
+        match self {
+            Self::Prepared(_)
+            | Self::Installed {
+                reboot: Some(Reboot::Install(_)),
+                ..
+            } => Some(L10N.tr("restart-to-update")),
+            Self::Installed {
+                reboot: Some(Reboot::Finish),
+                ..
+            } => Some(L10N.tr("restart-to-finish")),
+            Self::Installed { logout: true, .. } => Some(L10N.tr("log-out-to-finish")),
+            Self::Interrupted => Some(L10N.tr("updates-interrupted")),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn later(&mut self, need: Need) -> bool {
+        let Self::Installed {
+            count,
+            reboot,
+            logout,
+            ..
+        } = self
+        else {
+            return false;
+        };
+        match need {
+            Need::Reboot => *reboot = None,
+            Need::LogOut => *logout = false,
+        }
+        *count == 0 && reboot.is_none() && !*logout
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SoftwareCommand {
     Open,
     Check,
-    Download(Vec<String>),
-    Restart,
+    Update(Vec<Package>),
+    Repair,
 }
 
 fn explain(failure: &Failure) -> String {
@@ -91,6 +153,9 @@ fn explain(failure: &Failure) -> String {
 fn broken(during: Stage, error: &Error) -> SoftwareState {
     let reason = match error {
         Error::Missing => return SoftwareState::Unavailable,
+        Error::Failed(failure) if failure.details.contains(INTERRUPTED) => {
+            return SoftwareState::Interrupted;
+        }
         Error::Vanished => L10N.tr("updates-service-stopped"),
         Error::Failed(failure) => explain(failure),
         Error::Bus(error) => sentence(error, "service-updates"),
@@ -113,9 +178,20 @@ pub fn check(client: &Client, refresh: Refresh) -> SoftwareState {
             .into_iter()
             .map(|details| (details.id, details.size))
             .collect();
+        let restarts: HashMap<String, Restart> = client
+            .update_details(&ids)?
+            .into_iter()
+            .map(|detail| (detail.id, detail.restart))
+            .collect();
+        let release = running_release();
         let mut packages: Vec<Package> = found
             .into_iter()
             .map(|package| Package {
+                class: Class::of(
+                    &package,
+                    restarts.get(&package.id).copied().unwrap_or_default(),
+                    &release,
+                ),
                 size: sizes.get(&package.id).copied().unwrap_or(0),
                 id: package.id,
                 name: package.name,
@@ -137,7 +213,12 @@ fn finished_offline(system: &Connection) -> Result<Option<SoftwareState>, Error>
         tracing::warn!("cannot clear the offline update results: {error}");
     }
     Ok(Some(match results {
-        Results::Installed(ids) => SoftwareState::Installed(ids.len()),
+        Results::Installed(ids) => SoftwareState::Installed {
+            count: ids.len(),
+            reboot: None,
+            logout: false,
+            apps: Vec::new(),
+        },
         Results::Failed(failure) => SoftwareState::Failed {
             during: Stage::Install,
             reason: explain(&failure),
@@ -160,27 +241,133 @@ pub fn open_updates(system: &Connection, client: &Client) -> SoftwareState {
     });
     match pending {
         Ok(Some(state)) => state,
+        Ok(None) if restart_pending() => SoftwareState::Installed {
+            count: 0,
+            reboot: Some(Reboot::Finish),
+            logout: false,
+            apps: Vec::new(),
+        },
         Ok(None) => check(client, Refresh::WhenStale),
         Err(error) => broken(Stage::Check, &error),
     }
 }
 
-fn download(
+fn restart_file() -> Option<PathBuf> {
+    state_home().map(|state| state.join(RESTART_FILE))
+}
+
+fn boot_id() -> Option<String> {
+    fs::read_to_string(BOOT_ID).ok()
+}
+
+fn remember_restart() {
+    if let Some((file, boot)) = restart_file().zip(boot_id())
+        && let Err(error) = replace_file(&file, &boot)
+    {
+        tracing::warn!("cannot remember the pending restart: {error}");
+    }
+}
+
+fn restart_pending() -> bool {
+    Path::new(REBOOT_REQUIRED).exists()
+        || restart_file()
+            .and_then(|file| fs::read_to_string(file).ok())
+            .zip(boot_id())
+            .is_some_and(|(remembered, boot)| remembered == boot)
+}
+
+fn ids(packages: &[&Package]) -> Vec<String> {
+    packages.iter().map(|package| package.id.clone()).collect()
+}
+
+fn prepare(
     system: &Connection,
     client: &Client,
     ids: &[String],
-    updates: &Updates,
-) -> SoftwareState {
-    let prepared = client
+    report: &dyn Fn(SoftwareState),
+) -> Result<(), (Stage, Error)> {
+    client
         .download(ids, &|progress| {
-            updates.send(Update::Software(SoftwareState::Downloading {
+            report(SoftwareState::Downloading {
                 percent: progress.percent,
-            }));
+            });
         })
-        .and_then(|()| offline::trigger(system));
-    match prepared {
-        Ok(()) => SoftwareState::Prepared(ids.len()),
-        Err(error) => broken(Stage::Download, &error),
+        .and_then(|()| offline::trigger(system))
+        .map_err(|error| (Stage::Download, error))
+}
+
+pub fn update(
+    system: &Connection,
+    client: &Client,
+    packages: &[Package],
+    live: bool,
+    report: &dyn Fn(SoftwareState),
+) -> SoftwareState {
+    let (offline, now): (Vec<&Package>, Vec<&Package>) = packages
+        .iter()
+        .partition(|package| !live || package.class == Class::Offline);
+    let installing = Cell::new(false);
+    let installed = || -> Result<SoftwareState, (Stage, Error)> {
+        let now_ids = ids(&now);
+        let release = running_release();
+        let pulls_offline = !now.is_empty()
+            && client
+                .update(&now_ids, Mode::Simulate, &|_| {})
+                .map_err(|error| (Stage::Install, error))?
+                .packages
+                .iter()
+                .any(|package| Class::of(package, Restart::None, &release) == Class::Offline);
+        if now.is_empty() || pulls_offline {
+            let all: Vec<&Package> = packages.iter().collect();
+            prepare(system, client, &ids(&all), report)?;
+            return Ok(SoftwareState::Prepared(packages.len()));
+        }
+        let applied = client
+            .update(&now_ids, Mode::Apply, &|progress: Progress| {
+                installing.set(
+                    installing.get()
+                        || matches!(progress.status, Status::Installing | Status::Removing),
+                );
+                let percent = progress.percent;
+                report(if installing.get() {
+                    SoftwareState::Installing { percent }
+                } else {
+                    SoftwareState::Downloading { percent }
+                });
+            })
+            .map_err(|error| (Stage::Install, error))?;
+        let reboot = if offline.is_empty() {
+            (applied.restart
+                || now.iter().any(|package| package.class == Class::Boot)
+                || Path::new(REBOOT_REQUIRED).exists())
+            .then_some(Reboot::Finish)
+        } else {
+            prepare(system, client, &ids(&offline), report)?;
+            Some(Reboot::Install(offline.len()))
+        };
+        Ok(SoftwareState::Installed {
+            count: now.len(),
+            reboot,
+            logout: false,
+            apps: Vec::new(),
+        })
+    };
+    installed().unwrap_or_else(|(stage, error)| broken(stage, &error))
+}
+
+fn settle(session: &Connection, state: SoftwareState) -> SoftwareState {
+    let SoftwareState::Installed { count, reboot, .. } = state else {
+        return state;
+    };
+    if reboot == Some(Reboot::Finish) {
+        remember_restart();
+    }
+    let stale = stale::finish_in_session(session);
+    SoftwareState::Installed {
+        count,
+        reboot,
+        logout: stale.logout,
+        apps: stale.apps,
     }
 }
 
@@ -257,7 +444,7 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
         None
     });
     match finished {
-        Some(SoftwareState::Installed(count)) => {
+        Some(SoftwareState::Installed { count, .. }) => {
             let summary = L10N.tr_args("updates-were-installed", [("count", count.into())]);
             return announce(session, &summary, "");
         }
@@ -266,8 +453,16 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
         }
         _ => {}
     }
-    if matches!(waiting_offline(system), Ok(Some(_))) {
-        return Ok(None);
+    if let Ok(Some(SoftwareState::Prepared(count))) = waiting_offline(system) {
+        let summary = L10N.tr_args("restart-to-install", [("count", count.into())]);
+        return announce(session, &summary, &L10N.tr("installs-on-restart"));
+    }
+    if restart_pending() {
+        return announce(
+            session,
+            &L10N.tr("restart-to-finish"),
+            &L10N.tr("restart-to-finish-hint"),
+        );
     }
     let SoftwareState::Available(packages) = check(&Client::background(system), Refresh::Always)
     else {
@@ -280,8 +475,13 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
     announce(session, &L10N.tr("updates-notification"), &body)
 }
 
-pub fn follow_software(system: &Connection, updates: Updates) -> Sender<SoftwareCommand> {
+pub fn follow_software(
+    session: &Connection,
+    system: &Connection,
+    updates: Updates,
+) -> Sender<SoftwareCommand> {
     let (sender, receiver) = mpsc::channel();
+    let session = session.clone();
     let system = system.clone();
     spawn("software", move || {
         let client = Client::new(&system);
@@ -295,19 +495,29 @@ pub fn follow_software(system: &Connection, updates: Updates) -> Sender<Software
                     updates.send(Update::Software(SoftwareState::Checking));
                     check(&client, Refresh::Always)
                 }
-                SoftwareCommand::Download(ids) => {
+                SoftwareCommand::Update(packages) => {
                     updates.send(Update::Software(SoftwareState::Downloading {
                         percent: None,
                     }));
-                    download(&system, &client, &ids, &updates)
+                    let live = may_update_live(&system);
+                    let state = update(&system, &client, &packages, live, &|state| {
+                        updates.send(Update::Software(state));
+                    });
+                    settle(&session, state)
                 }
-                SoftwareCommand::Restart => {
-                    if let Err(error) =
-                        LoginProxyBlocking::new(&system).and_then(|login| login.reboot(true))
-                    {
-                        updates.send(unexpected(error));
+                SoftwareCommand::Repair => {
+                    updates.send(Update::Software(SoftwareState::Installing {
+                        percent: None,
+                    }));
+                    let repaired = client.repair(&|progress| {
+                        updates.send(Update::Software(SoftwareState::Installing {
+                            percent: progress.percent,
+                        }));
+                    });
+                    match repaired {
+                        Ok(()) => check(&client, Refresh::WhenStale),
+                        Err(error) => broken(Stage::Install, &error),
                     }
-                    continue;
                 }
             };
             if !updates.send(Update::Software(state)) {

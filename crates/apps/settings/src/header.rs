@@ -45,8 +45,7 @@ impl SettingsView {
             SoftwareState::Available(packages) if !packages.is_empty() => {
                 Some(L10N.tr_args("updates-available", [("count", packages.len().into())]))
             }
-            SoftwareState::Prepared(_) => Some(L10N.tr("restart-to-update")),
-            _ => None,
+            state => state.pending(),
         }
     }
 
@@ -238,6 +237,7 @@ impl SettingsView {
             PaneId::NightLight => self.night_light_summary(),
             PaneId::Appearance
             | PaneId::Bar
+            | PaneId::Search
             | PaneId::Accessibility
             | PaneId::KeyboardShortcuts
             | PaneId::Mouse

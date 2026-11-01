@@ -183,7 +183,7 @@ small `key = value` file each next to it (`files.conf`, `terminal.conf`).
 - **Schema** (`crates/services/config`, KDL 2.0): top-level `appearance`, `accent`,
   `tinted-frame`, `clock`, `reopen-apps`, `reopen-apps-after-crash`, and the sections
   `accessibility`, `bar`, `idle`, `keyboard`, `trackpad`, `mouse`, `power`, `sound`, `wallpaper`,
-  `night-light`, `display "<name>"` (one per display, named by EDID maker, model and serial) and
+  `night-light`, `search`, `display "<name>"` (one per display, named by EDID maker, model and serial) and
   `arrangement` (one per set of displays). Every setting is optional and has a default.
   ```kdl
   appearance "automatic"        // "dark" | "light" | "automatic"
@@ -191,6 +191,7 @@ small `key = value` file each next to it (`files.conf`, `terminal.conf`).
   idle { dim-after "5m"; lock-after "10m" }   // suspend-after follows lock-after unless set
   keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape" }
   trackpad { tap-to-click #true; natural-scrolling #true }
+  search { recent-documents #false; exclude "~/Private" }   // every category is shown unless #false
   display "Dell DELL U2720Q 7ZD5K53" { scale 1.5; refresh-rate 120 }
   arrangement {
       display "BOE NE135A1M" x=0 y=0 main=#true

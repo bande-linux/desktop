@@ -1,17 +1,17 @@
-use std::cell::{Cell, OnceCell, RefCell};
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::LazyLock;
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
 use bande_audio::{Direction, Snapshot, meter_level};
 use bande_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
-use bande_datetime::daylight::Place;
 use bande_toolkit::ui::{
     Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui, Widget,
     WidgetId,
 };
-use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, TextSystem};
+use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, SessionEnd, TextSystem};
 use jiff::Zoned;
 use std::time::{Duration, Instant};
 
@@ -33,16 +33,18 @@ use crate::pointing::PointingDevices;
 use crate::privacy::focus_after_asking;
 use crate::privilege::Privilege;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
-use crate::software::{SoftwareCommand, SoftwareState};
+use crate::software::{Need, SoftwareCommand, SoftwareState};
 use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::widgets::{Column, Crossfade, Root};
 use bande_keyboard::Layouts;
-use bande_settings_panes::{AUTOMATIC, Pane, PaneId, Permission, SettingId, Value, panes};
+use bande_settings_panes::{
+    AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
+};
 use bande_settings_panes::{PaneHit, search};
 
-const PICK_RESULTS: usize = 8;
+pub(crate) const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
 pub(crate) const USE_MAIN: &str = "main";
 pub(crate) const USE_EXTENDED: &str = "extended";
@@ -86,9 +88,13 @@ pub(crate) enum Intent {
     OpenApp(String),
     SetAppRule(AppNotifications),
     Software(SoftwareCommand),
+    Later(Need),
+    EndSession(SessionEnd),
     Network(NetworkCommand),
     ManualIpv4(bool),
     ImportVpn,
+    ExcludeFolder,
+    IncludeFolder(String),
     Locale(LocaleCommand),
     DefaultApp(&'static str, String),
     Grant(Permission, String, bool),
@@ -212,8 +218,8 @@ pub struct SettingsView {
     pub(crate) refused: Vec<Privilege>,
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
     pub(crate) permissions: Grants,
-    pressed: bool,
     stale: bool,
+    rebuilt: bool,
     pub(crate) focus_next: Option<Anchor>,
     reveal_pending: bool,
     pub(crate) scroll: Rc<RefCell<ScrollState>>,
@@ -223,7 +229,6 @@ pub struct SettingsView {
     pub(crate) sidebar_scroll: Rc<RefCell<ScrollState>>,
     pub(crate) icon_dirs: Vec<PathBuf>,
     pub(crate) symbols: HashMap<Symbol, Option<Image>>,
-    pub(crate) place: OnceCell<Option<Place>>,
     pub(crate) clock: Box<dyn Fn() -> Zoned>,
     on_screen: bool,
 }
@@ -291,8 +296,8 @@ impl SettingsView {
             refused: Vec::new(),
             default_apps: None,
             permissions: Vec::new(),
-            pressed: false,
             stale: true,
+            rebuilt: false,
             focus_next: None,
             reveal_pending: false,
             scroll: Rc::default(),
@@ -302,7 +307,6 @@ impl SettingsView {
             sidebar_scroll: Rc::default(),
             icon_dirs: bande_xdg::data_dirs(),
             symbols: HashMap::new(),
-            place: OnceCell::new(),
             clock: Box::new(bande_datetime::now),
             on_screen: true,
         };
@@ -327,9 +331,8 @@ impl SettingsView {
         }
     }
 
-    pub fn set_clock(&mut self, clock: impl Fn() -> Zoned + 'static, place: Option<Place>) {
+    pub fn set_clock(&mut self, clock: impl Fn() -> Zoned + 'static) {
         self.clock = Box::new(clock);
-        self.place = OnceCell::from(place);
         self.invalidate();
     }
 
@@ -346,11 +349,6 @@ impl SettingsView {
 
     pub fn message(&self) -> Option<&str> {
         self.message.as_deref()
-    }
-
-    pub fn set_layouts(&mut self, layouts: Layouts) {
-        self.layouts = Some(layouts);
-        self.invalidate();
     }
 
     pub fn set_pointing_devices(&mut self, devices: PointingDevices) {
@@ -387,8 +385,16 @@ impl SettingsView {
         }
     }
 
-    pub(crate) fn layouts(&mut self) -> &Layouts {
-        self.layouts.get_or_insert_with(Layouts::load)
+    pub(crate) fn excluded_folders(&self) -> Vec<String> {
+        match self.values.get(&SettingId::SearchExcluded) {
+            Some(Value::Codes(folders)) => folders.clone(),
+            _ => Vec::new(),
+        }
+    }
+
+    pub(crate) fn layouts(&self) -> &Layouts {
+        static UNLOADED: LazyLock<Layouts> = LazyLock::new(Layouts::default);
+        self.layouts.as_ref().unwrap_or(&UNLOADED)
     }
 
     fn edit_sources(&mut self, edit: impl FnOnce(&mut Vec<String>)) {
@@ -406,13 +412,111 @@ impl SettingsView {
         }
     }
 
-    pub fn apply(&mut self, update: Update) {
-        match update {
-            Update::InputLevel(peak) => {
-                self.input_level
-                    .set(meter_level(peak, self.input_level.get()));
-                return;
+    pub fn apply(&mut self, updates: Vec<Update>) {
+        let mut changes = Vec::new();
+        for update in updates {
+            match update {
+                Update::InputLevel(peak) => {
+                    self.input_level
+                        .set(meter_level(peak, self.input_level.get()));
+                }
+                update => changes.push(update),
             }
+        }
+        if changes.is_empty() {
+            return;
+        }
+        let before = self.outline();
+        let mut shown = false;
+        for update in changes {
+            shown |= self.shows(&update);
+            self.take(update);
+        }
+        self.refresh_hits();
+        if shown || self.outline() != before {
+            self.invalidate();
+        }
+    }
+
+    fn outline(&self) -> (PaneId, Vec<PaneId>, Vec<bool>, Option<String>) {
+        let available = self
+            .panes
+            .iter()
+            .map(|pane| self.available(pane.id))
+            .collect();
+        (self.pane, self.visible_panes(), available, self.attention())
+    }
+
+    fn shows(&self, update: &Update) -> bool {
+        let (owner, settings): (Option<PaneId>, &[SettingId]) = match update {
+            Update::Wifi(_) => (
+                Some(PaneId::Wifi),
+                &[SettingId::WifiPower, SettingId::Networks],
+            ),
+            Update::Bluetooth(_) => (
+                Some(PaneId::Bluetooth),
+                &[
+                    SettingId::BluetoothPower,
+                    SettingId::PairedDevices,
+                    SettingId::NearbyDevices,
+                ],
+            ),
+            Update::Network(_) => (
+                Some(PaneId::Network),
+                &[
+                    SettingId::Ethernet,
+                    SettingId::Vpns,
+                    SettingId::EthernetAddress,
+                    SettingId::EthernetRouter,
+                    SettingId::EthernetDns,
+                ],
+            ),
+            Update::Audio(_) => (
+                Some(PaneId::Sound),
+                &[
+                    SettingId::OutputDevice,
+                    SettingId::OutputVolume,
+                    SettingId::OutputMuted,
+                    SettingId::InputDevice,
+                    SettingId::InputVolume,
+                    SettingId::InputMuted,
+                    SettingId::InputLevel,
+                    SettingId::AppVolumes,
+                ],
+            ),
+            Update::Battery(_) => (
+                Some(PaneId::Power),
+                &[
+                    SettingId::BatteryLevel,
+                    SettingId::PowerMode,
+                    SettingId::LowPowerOnBattery,
+                    SettingId::LidOnPower,
+                ],
+            ),
+            Update::Storage(_) => (
+                Some(PaneId::Storage),
+                &[SettingId::StorageUsage, SettingId::LargeFiles],
+            ),
+            Update::Software(_) => (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates]),
+            Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
+            _ => return true,
+        };
+        let feeds = |setting: &Setting| {
+            settings.contains(&setting.id)
+                || matches!(setting.kind, Kind::Page(child) if Some(child) == owner)
+        };
+        owner == Some(self.pane)
+            || self
+                .panes
+                .iter()
+                .find(|pane| pane.id == self.pane)
+                .is_some_and(|pane| pane.settings().any(feeds))
+    }
+
+    fn take(&mut self, update: Update) {
+        match update {
+            Update::InputLevel(_) => {}
+            Update::Layouts(layouts) => self.layouts = Some(layouts),
             Update::Values(values) => {
                 for (id, value) in values {
                     self.values.insert(id, value);
@@ -524,7 +628,6 @@ impl SettingsView {
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
             Update::Permissions(permissions) => self.permissions = permissions,
         }
-        self.availability_changed();
     }
 
     fn apply_audio(&mut self, snapshot: Option<Snapshot>) {
@@ -595,6 +698,7 @@ impl SettingsView {
             PaneId::Appearance
             | PaneId::Accessibility
             | PaneId::Bar
+            | PaneId::Search
             | PaneId::Keyboard
             | PaneId::KeyboardShortcuts
             | PaneId::Power
@@ -647,7 +751,7 @@ impl SettingsView {
             (Some((Picker::Language, query)), _) => self
                 .locale
                 .as_ref()
-                .map(|locale| locale_matches(&locale.available, query))
+                .map(|locale| locale_matches(&locale.available, query, PICK_RESULTS))
                 .unwrap_or_default(),
             (Some((Picker::Region, query)), _) if query.trim().is_empty() => {
                 vec![SAME_AS_LANGUAGE.to_owned()]
@@ -655,7 +759,7 @@ impl SettingsView {
             (Some((Picker::Region, query)), _) => self
                 .locale
                 .as_ref()
-                .map(|locale| locale_matches(&locale.available, query))
+                .map(|locale| locale_matches(&locale.available, query, PICK_RESULTS))
                 .unwrap_or_default(),
             (Some((Picker::Zone, query)), Some(time)) => {
                 zone_matches(&time.zones, query, PICK_RESULTS)
@@ -687,6 +791,11 @@ impl SettingsView {
     }
 
     fn availability_changed(&mut self) {
+        self.refresh_hits();
+        self.invalidate();
+    }
+
+    fn refresh_hits(&mut self) {
         if !self.query.is_empty() {
             self.hits = self.search_hits(&self.query.clone());
             let visible = self.visible_panes();
@@ -696,22 +805,16 @@ impl SettingsView {
                 self.select_pane(first);
             }
         }
-        self.invalidate();
     }
 
     fn invalidate(&mut self) {
         self.stale = true;
-        if !self.pressed {
+        if !self.ui.pointer_captured() {
             self.rebuild();
         }
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {
-        match event {
-            Event::PointerDown(_) => self.pressed = true,
-            Event::PointerUp(_) => self.pressed = false,
-            _ => {}
-        }
         let editing = self
             .focused_setting()
             .filter(|setting| self.drafts.contains_key(setting));
@@ -844,8 +947,7 @@ impl SettingsView {
             _ => self.ui.handle(event),
         };
         let handled = handled || self.type_into_search(event);
-        self.settle();
-        handled
+        self.settle() | handled
     }
 
     pub fn ui(&mut self) -> &mut Ui {
@@ -862,15 +964,17 @@ impl SettingsView {
         }
     }
 
-    pub fn settle(&mut self) {
+    pub fn settle(&mut self) -> bool {
+        self.rebuilt = false;
         self.process_intents();
         let focused = self.focused_setting();
         if self.drafts.keys().any(|setting| Some(*setting) != focused) {
             self.commit_drafts();
         }
-        if self.stale && !self.pressed {
+        if self.stale && !self.ui.pointer_captured() {
             self.rebuild();
         }
+        self.rebuilt
     }
 
     fn type_into_search(&mut self, event: &Event) -> bool {
@@ -944,9 +1048,23 @@ impl SettingsView {
                     *self.scroll.borrow_mut() = ScrollState::default();
                 }
                 Intent::Software(command) => self.commands.push(Command::Software(command)),
+                Intent::EndSession(ending) => self.commands.push(Command::EndSession(ending)),
+                Intent::Later(need) => {
+                    if self.software.later(need) {
+                        self.commands
+                            .push(Command::Software(SoftwareCommand::Check));
+                    }
+                }
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
                 Intent::Network(command) => self.commands.push(Command::Network(command)),
                 Intent::ImportVpn => self.commands.push(Command::ImportVpn),
+                Intent::ExcludeFolder => self.commands.push(Command::ExcludeFolder),
+                Intent::IncludeFolder(folder) => {
+                    self.focus_next = Some(Anchor::Setting(SettingId::SearchExcluded, None));
+                    let mut excluded = self.excluded_folders();
+                    excluded.retain(|known| *known != folder);
+                    self.change(SettingId::SearchExcluded, Value::Codes(excluded));
+                }
                 Intent::DefaultApp(role, id) => {
                     if let Some(known) = self
                         .default_apps
@@ -1643,6 +1761,7 @@ impl SettingsView {
             }
         }
         self.stale = false;
+        self.rebuilt = true;
     }
 
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
@@ -1667,7 +1786,6 @@ impl SettingsView {
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
         let handled = self.ui.perform(request);
-        self.settle();
-        handled
+        self.settle() | handled
     }
 }

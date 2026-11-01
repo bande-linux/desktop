@@ -528,10 +528,7 @@ impl Dispatch<BandeShellV1, ()> for State {
             ),
             bande_shell_v1::Request::ConfirmSessionEnd {
                 ending: WEnum::Value(ending),
-            } => {
-                state.session_end_requested = Some(ending);
-                state.remember_apps_to_reopen(None);
-            }
+            } => state.confirm_session_end(ending),
             bande_shell_v1::Request::QuitAllApps => state.quit_all_apps(resource.clone()),
             bande_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);

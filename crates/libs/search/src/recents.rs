@@ -49,7 +49,16 @@ pub fn recently_used(xbel: &str) -> Vec<(PathBuf, u64)> {
         .collect()
 }
 
-pub fn recent_files(xbel: Option<&str>, usage: &Usage, limit: usize) -> Vec<PathBuf> {
+pub fn is_excluded(path: &Path, excluded: &[PathBuf]) -> bool {
+    excluded.iter().any(|folder| path.starts_with(folder))
+}
+
+pub fn recent_files(
+    xbel: Option<&str>,
+    usage: &Usage,
+    excluded: &[PathBuf],
+    limit: usize,
+) -> Vec<PathBuf> {
     let mut latest: HashMap<PathBuf, u64> = HashMap::new();
     let used = usage
         .last_used(FILE_KEY)
@@ -63,7 +72,7 @@ pub fn recent_files(xbel: Option<&str>, usage: &Usage, limit: usize) -> Vec<Path
     ordered
         .into_iter()
         .map(|(path, _)| path)
-        .filter(|path| path.is_file())
+        .filter(|path| !is_excluded(path, excluded) && path.is_file())
         .take(limit)
         .collect()
 }

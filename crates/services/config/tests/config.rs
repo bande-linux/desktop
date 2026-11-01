@@ -1,8 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use bande_config::{Appearance, BarEdge, Config, ConfigError, Setting};
+use bande_config::{Appearance, BarEdge, Config, ConfigError, SearchCategory, Setting};
 
 #[test]
 fn kdl_problems_are_reported_where_they_are_while_every_valid_setting_applies() {
@@ -40,5 +41,39 @@ fn changing_a_setting_keeps_every_comment_and_line_around_it() {
             .apply("")
             .expect("edit"),
         "appearance \"light\"\n"
+    );
+}
+
+#[test]
+fn search_hides_categories_and_excludes_folders_and_writes_them_back() {
+    let (config, problems) = Config::load(
+        "search {\n    folders #false\n    exclude \"~/Private\" \"/srv/tax\" \"notes\"\n}\n",
+    )
+    .expect("well-formed KDL");
+    assert_eq!(problems.len(), 1);
+    assert!(!config.search.shows(SearchCategory::Folders));
+    assert!(config.search.shows(SearchCategory::RecentDocuments));
+    assert!(config.search.exclude.is_empty());
+
+    let mut search = Config::parse("search {\n    folders #false\n}\n")
+        .expect("valid")
+        .search;
+    search.set_shown(SearchCategory::Folders, true);
+    search.set_shown(SearchCategory::RecentDocuments, false);
+    search.exclude = vec![PathBuf::from("~/Private"), PathBuf::from("/srv/tax")];
+    let edited = Setting::Search(search.clone())
+        .apply("search {\n    folders #false\n}\n")
+        .expect("edit");
+    assert_eq!(
+        edited,
+        "search {\n    recent-documents #false\n    exclude \"~/Private\" \"/srv/tax\"\n}\n"
+    );
+    assert_eq!(Config::parse(&edited).expect("valid").search, search);
+    assert_eq!(
+        search.excluded(Some(Path::new("/home/ada"))),
+        [
+            PathBuf::from("/home/ada/Private"),
+            PathBuf::from("/srv/tax")
+        ]
     );
 }

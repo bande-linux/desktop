@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
-use bande_config::{ArrangedDisplay, DisplaySettings, NightLightValue, Placement, Rotation};
+use bande_config::{
+    ArrangedDisplay, DisplaySettings, NightLightValue, Placement, Rotation, SearchCategory,
+};
 use bande_datetime::DateFormats;
 use bande_notify::client::NotificationCenter;
 use zbus::blocking::Connection;
@@ -180,6 +182,14 @@ pub trait Config {
     #[zbus(property)]
     fn set_trackpad_desktop_spread(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn search_shows(&self) -> zbus::Result<HashMap<String, bool>>;
+    #[zbus(property)]
+    fn set_search_shows(&self, shows: HashMap<String, bool>) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn search_excluded(&self) -> zbus::Result<Vec<String>>;
+    #[zbus(property)]
+    fn set_search_excluded(&self, paths: Vec<String>) -> zbus::Result<()>;
+    #[zbus(property)]
     fn trackpad_launcher_pinch(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_trackpad_launcher_pinch(&self, on: bool) -> zbus::Result<()>;
@@ -262,7 +272,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 55] = [
+pub const CONFIG_SETTINGS: [SettingId; 65] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -318,7 +328,32 @@ pub const CONFIG_SETTINGS: [SettingId; 55] = [
     SettingId::AlertVolume,
     SettingId::SoundEffects,
     SettingId::VolumeFeedback,
+    SettingId::SearchApplications,
+    SettingId::SearchRecentApps,
+    SettingId::SearchRecentDocuments,
+    SettingId::SearchDocuments,
+    SettingId::SearchFolders,
+    SettingId::SearchSettings,
+    SettingId::SearchSystem,
+    SettingId::SearchCalculator,
+    SettingId::SearchConversion,
+    SettingId::SearchExcluded,
 ];
+
+fn search_category(id: SettingId) -> Option<SearchCategory> {
+    Some(match id {
+        SettingId::SearchApplications => SearchCategory::Applications,
+        SettingId::SearchRecentApps => SearchCategory::RecentApps,
+        SettingId::SearchRecentDocuments => SearchCategory::RecentDocuments,
+        SettingId::SearchDocuments => SearchCategory::Documents,
+        SettingId::SearchFolders => SearchCategory::Folders,
+        SettingId::SearchSettings => SearchCategory::Settings,
+        SettingId::SearchSystem => SearchCategory::System,
+        SettingId::SearchCalculator => SearchCategory::Calculator,
+        SettingId::SearchConversion => SearchCategory::Conversion,
+        _ => return None,
+    })
+}
 
 const ZOOM_WHEN_TURNED_ON: f64 = 2.0;
 
@@ -422,7 +457,14 @@ impl SettingsClient {
     }
 
     pub fn get(&self, id: SettingId) -> zbus::Result<Value> {
+        if let Some(category) = search_category(id) {
+            let shows = self.config.search_shows()?;
+            return Ok(Value::Flag(
+                shows.get(category.keyword()).copied().unwrap_or(true),
+            ));
+        }
         Ok(match id {
+            SettingId::SearchExcluded => Value::Codes(self.config.search_excluded()?),
             SettingId::NightLight => Value::Flag(self.config.night_light()?.0),
             SettingId::NightSchedule => Value::Keyword(self.config.night_light()?.1),
             SettingId::NightFrom => Value::Text(self.config.night_light()?.2),
@@ -517,7 +559,15 @@ impl SettingsClient {
     }
 
     pub fn set(&self, id: SettingId, value: &Value) -> zbus::Result<()> {
+        if let (Some(category), Value::Flag(shown)) = (search_category(id), value) {
+            return self
+                .config
+                .set_search_shows(HashMap::from([(category.keyword().to_owned(), *shown)]));
+        }
         match (id, value) {
+            (SettingId::SearchExcluded, Value::Codes(paths)) => {
+                self.config.set_search_excluded(paths.clone())
+            }
             (SettingId::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
             (SettingId::Accent, Value::Keyword(keyword)) => self.config.set_accent(keyword),
             (SettingId::TintedFrame, Value::Flag(tinted)) => self.config.set_tinted_frame(*tinted),

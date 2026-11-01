@@ -20,7 +20,8 @@ use crate::pictures::{Pair, PictureCommand, expand};
 use crate::privilege::Privilege;
 use crate::state::{Answer, Display, Question};
 use crate::view::{
-    Anchor, Intent, Intents, MIRROR_PREFIX, Picker, SettingsView, USE_EXTENDED, USE_MAIN, intent,
+    Anchor, Intent, Intents, MIRROR_PREFIX, PICK_RESULTS, Picker, SettingsView, USE_EXTENDED,
+    USE_MAIN, intent,
 };
 use crate::widgets::{
     Caption, Captioned, Card, Check, Column, Fade, Row, SIDEBAR_SYMBOL, Signal, Swatch, Swatches,
@@ -773,6 +774,7 @@ impl SettingsView {
             List::Regions => self.region_rows(),
             List::DefaultApps => self.default_app_rows(),
             List::Clipboard => self.clipboard_rows(),
+            List::SearchExcluded => self.excluded_rows(),
             List::Permissions(permission) => self.permission_rows(permission),
         }
     }
@@ -898,6 +900,7 @@ impl SettingsView {
         found
             .into_iter()
             .filter(|layout| !added.contains(&layout.code))
+            .take(PICK_RESULTS)
             .map(|layout| layout.code.clone())
             .collect()
     }
@@ -1312,6 +1315,9 @@ impl SettingsView {
                 )));
             }
             body.push(boxed(Card::new(rows)));
+            if let Some(note) = &section.note {
+                body.push(boxed(Caption::new(Text::new(note, Tone::Muted))));
+            }
             if section
                 .settings
                 .iter()

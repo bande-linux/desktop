@@ -551,6 +551,7 @@ impl Widget for NowPlaying {
                 }
                 _ => return false,
             },
+            Event::PointerLeave if self.press.is_some() => self.press = None,
             Event::PointerUp(pointer) if pointer.is_primary() => {
                 let point = pointer.position;
                 match self.press.take() {

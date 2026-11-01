@@ -136,7 +136,7 @@ impl MarkupApp {
                 self.markup.drag_to(at);
                 true
             }
-            Event::PointerUp(_) if self.dragging => {
+            Event::PointerUp(_) | Event::PointerLeave if self.dragging => {
                 self.dragging = false;
                 self.markup.release();
                 true

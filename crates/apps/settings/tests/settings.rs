@@ -2,11 +2,12 @@
 
 use std::sync::Arc;
 
+use accesskit::Role;
 use bande_config::{Config, ConfigService, ConfigStore};
 use bande_settings::{Command, PaneId, SettingId, SettingsClient, SettingsView, Value};
 use bande_test_bus::SessionBus;
-use bande_toolkit::ui::{Event, Key, Modifiers};
-use bande_toolkit::{Palette, Scheme, TextSystem};
+use bande_toolkit::ui::{Event, Key, Modifiers, Pointer};
+use bande_toolkit::{Palette, Point, Scheme, TextSystem};
 
 const SIZE: (u32, u32) = (900, 720);
 
@@ -58,5 +59,30 @@ fn a_setting_found_by_search_and_changed_from_the_keyboard_is_written_to_the_con
     assert_eq!(
         client.get(SettingId::KeyRepeatRate).expect("repeat rate"),
         Value::Number(30)
+    );
+}
+
+#[test]
+fn a_pane_chosen_after_a_press_lost_to_a_pop_up_grab_is_shown_at_once() {
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
+    view.scene(SIZE.0, SIZE.1);
+    let centre = Point::new(SIZE.0 as f32 / 2.0, SIZE.1 as f32 / 2.0);
+    view.handle(&Event::PointerDown(Pointer::at(centre)));
+    view.handle(&Event::PointerLeave);
+
+    view.select_pane(PaneId::LanguageTime);
+    view.scene(SIZE.0, SIZE.1);
+
+    let name = bande_settings_panes::panes()
+        .into_iter()
+        .find(|pane| pane.id == PaneId::LanguageTime)
+        .expect("Language & Time pane")
+        .name;
+    let tree = view.accessibility();
+    assert!(
+        tree.nodes
+            .iter()
+            .any(|(_, node)| node.role() == Role::Heading && node.label() == Some(name.as_str())),
+        "the content still shows the previous pane"
     );
 }

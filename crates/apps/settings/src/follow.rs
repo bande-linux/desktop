@@ -2,12 +2,14 @@ use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
+use bande_keyboard::Layouts;
+use bande_toolkit::SessionEnd;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
@@ -61,6 +63,7 @@ pub enum Update {
     NotificationApps(Vec<AppNotifications>),
     Software(SoftwareState),
     Locale(Option<LocaleState>),
+    Layouts(Layouts),
     Pointing(PointingDevices),
     InputLevel(f32),
     Failed(Option<SettingId>, String),
@@ -91,7 +94,9 @@ pub enum Command {
     Permission(PermissionCommand),
     Brightness(f32),
     Reveal(PathBuf),
+    EndSession(SessionEnd),
     ImportVpn,
+    ExcludeFolder,
     ClearClipboard,
 }
 
@@ -205,6 +210,34 @@ pub fn follow_notifications(session: &Connection, updates: Updates) {
     );
 }
 
+fn exclude_folder(session: &Connection) -> zbus::Result<()> {
+    let Some(folder) = choose_file(session, &L10N.tr("choose-excluded-folder"), None)? else {
+        return Ok(());
+    };
+    let client = SettingsClient::connect(session)?;
+    let mut excluded = match client.get(SettingId::SearchExcluded)? {
+        Value::Codes(paths) => paths,
+        _ => Vec::new(),
+    };
+    let folder = match std::env::home_dir().and_then(|home| {
+        folder
+            .strip_prefix(home)
+            .ok()
+            .filter(|rest| !rest.as_os_str().is_empty())
+            .map(|rest| Path::new("~").join(rest))
+    }) {
+        Some(under_home) => under_home,
+        None => folder,
+    }
+    .to_string_lossy()
+    .into_owned();
+    if excluded.contains(&folder) {
+        return Ok(());
+    }
+    excluded.push(folder);
+    client.set(SettingId::SearchExcluded, &Value::Codes(excluded))
+}
+
 fn replaces(queued: &Command, command: &Command) -> bool {
     match (queued, command) {
         (Command::Set(queued, _), Command::Set(id, _)) => queued == id,
@@ -295,6 +328,10 @@ impl Services {
     pub fn start(session: &Connection, system: Option<&Connection>, updates: &Updates) -> Self {
         follow_config(session, updates.clone());
         follow_notifications(session, updates.clone());
+        let layouts = updates.clone();
+        spawn("layouts", move || {
+            layouts.send(Update::Layouts(Layouts::load()));
+        });
         if let Some(system) = system {
             follow_privileges(system, updates.clone());
         }
@@ -312,7 +349,7 @@ impl Services {
             login: follow_login_items(updates.clone()),
             battery: system.map(|system| follow_battery(system, updates.clone())),
             notifications: follow_app_notifications(session, updates.clone()),
-            software: system.map(|system| follow_software(system, updates.clone())),
+            software: system.map(|system| follow_software(session, system, updates.clone())),
             locale: system.map(|system| follow_locale(system, updates.clone())),
             default_apps: follow_default_apps(updates.clone()),
             permissions: follow_permissions(session, updates.clone()),
@@ -372,11 +409,20 @@ impl Services {
                 .battery
                 .as_ref()
                 .is_some_and(|battery| battery.send(command).is_ok()),
-            Command::Reveal(_) => false,
+            Command::Reveal(_) | Command::EndSession(_) => false,
             Command::ClearClipboard => {
                 let (session, updates) = (self.connection.clone(), self.updates.clone());
                 spawn("clear-clipboard", move || {
                     if let Err(error) = clear_clipboard(&session) {
+                        updates.send(unexpected(error));
+                    }
+                });
+                true
+            }
+            Command::ExcludeFolder => {
+                let (session, updates) = (self.connection.clone(), self.updates.clone());
+                spawn("exclude-folder", move || {
+                    if let Err(error) = exclude_folder(&session) {
                         updates.send(unexpected(error));
                     }
                 });
@@ -388,10 +434,10 @@ impl Services {
                     let chosen = choose_file(
                         &session,
                         &L10N.tr("import-vpn-title"),
-                        (
+                        Some((
                             L10N.tr("vpn-files"),
                             vec![(0, "*.conf".to_owned()), (0, "*.ovpn".to_owned())],
-                        ),
+                        )),
                     );
                     let imported = match chosen {
                         Ok(Some(file)) => import_vpn(&file).map_err(|error| error.to_string()),

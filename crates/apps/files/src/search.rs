@@ -117,7 +117,7 @@ pub(crate) struct Searching {
 
 pub(crate) struct Index {
     root: PathBuf,
-    index: FileIndex,
+    pub(crate) index: FileIndex,
     generation: u64,
 }
 
@@ -230,7 +230,7 @@ impl FilesView {
         })
     }
 
-    fn query(&mut self) {
+    pub(crate) fn query(&mut self) {
         let (Some(scope), Some(text)) = (
             self.scope(),
             self.searching
@@ -249,7 +249,7 @@ impl FilesView {
             .as_ref()
             .is_some_and(|index| covered(&index.root, &scope))
         {
-            match FileIndex::spawn(root.clone()) {
+            match FileIndex::spawn(root.clone(), self.search_excluded.clone()) {
                 Ok(index) => {
                     self.index = Some(Index {
                         root,

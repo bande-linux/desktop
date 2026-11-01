@@ -507,7 +507,7 @@
     </event>
   </interface>
 
-  <interface name="bande_app_v1" version="2">
+  <interface name="bande_app_v1" version="3">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -629,6 +629,16 @@
       <arg name="keysym" type="uint"/>
       <arg name="modifiers" type="uint"/>
     </event>
+      <request name="end_session" since="3">
+      <description summary="ask the user to log out or restart, as the Bande menu does">
+        Opens the same confirmation as the Bande menu's Log Out, Restart and
+        Shut Down (bande_shell_v1.confirm_session_end), or brings forward the
+        one already open. If the user confirms, every app is asked to quit
+        first and an app with unsaved work can stop it, as on a Mac. Sent by
+        Software Update's Restart Now and Log Out.
+      </description>
+      <arg name="ending" type="uint" enum="bande_shell_v1.session_end"/>
+    </request>
   </interface>
   <interface name="bande_app_control_v1" version="1">
     <description summary="quitting apps and watching them answer, for Activity Monitor">

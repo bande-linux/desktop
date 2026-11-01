@@ -17,9 +17,9 @@ use crate::{
     ACCENTS, Accessibility, AlertSound, Appearance, BarEdge, CURSOR_SIZE_RANGE, CapsLock,
     ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, Dragging, InputSource,
     LidOnPower, Loaded, MenuBarPlacement, NIGHT_LIGHT_WARMTH_RANGE, NightLight, NightSchedule,
-    Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SecondaryClick, Setting,
-    Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE, accent_keyword,
-    read_system_input_sources,
+    Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory, SecondaryClick,
+    Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE, accent_keyword,
+    is_wallpaper_path, read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
@@ -317,6 +317,12 @@ fn publish_changes(
         }
         if before.night_light != after.night_light {
             let _ = guard.night_light_changed(emitter).await;
+        }
+        if before.search.hidden != after.search.hidden {
+            let _ = guard.search_shows_changed(emitter).await;
+        }
+        if before.search.exclude != after.search.exclude {
+            let _ = guard.search_excluded_changed(emitter).await;
         }
         if before.displays != after.displays {
             let _ = guard.displays_changed(emitter).await;
@@ -1144,6 +1150,59 @@ impl ConfigInterface {
             warmth,
         };
         self.write(&Setting::NightLight(night))
+    }
+
+    #[zbus(property)]
+    fn search_shows(&self) -> HashMap<String, bool> {
+        let search = &self.store.current().search;
+        SearchCategory::ALL
+            .into_iter()
+            .map(|category| (category.keyword().to_owned(), search.shows(category)))
+            .collect()
+    }
+
+    #[zbus(property)]
+    fn set_search_shows(&self, shows: HashMap<String, bool>) -> zbus::fdo::Result<()> {
+        let changes = shows
+            .into_iter()
+            .map(|(keyword, shown)| {
+                SearchCategory::from_keyword(&keyword)
+                    .map(|category| (category, shown))
+                    .ok_or_else(|| InvalidArgs(format!("unknown search category `{keyword}`")))
+            })
+            .collect::<zbus::fdo::Result<Vec<_>>>()?;
+        self.write_from(|config| {
+            let mut search = config.search.clone();
+            for (category, shown) in changes {
+                search.set_shown(category, shown);
+            }
+            Setting::Search(search)
+        })
+    }
+
+    #[zbus(property)]
+    fn search_excluded(&self) -> Vec<String> {
+        self.store
+            .current()
+            .search
+            .exclude
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[zbus(property)]
+    fn set_search_excluded(&self, paths: Vec<String>) -> zbus::fdo::Result<()> {
+        if let Some(path) = paths.iter().find(|path| !is_wallpaper_path(path)) {
+            return Err(InvalidArgs(format!(
+                "\"{path}\" is not an absolute path or one starting with \"~/\""
+            )));
+        }
+        self.write_from(|config| {
+            let mut search = config.search.clone();
+            search.exclude = paths.into_iter().map(PathBuf::from).collect();
+            Setting::Search(search)
+        })
     }
 
     #[zbus(property)]

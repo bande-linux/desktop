@@ -226,6 +226,11 @@ impl State {
         }
     }
 
+    pub(crate) fn confirm_session_end(&mut self, ending: bande_shell_v1::SessionEnd) {
+        self.session_end_requested = Some(ending);
+        self.remember_apps_to_reopen(None);
+    }
+
     pub(crate) fn remember_apps_to_reopen(&self, delay: Option<OwnedFd>) {
         let Some(file) = self.reopen_file.clone() else {
             return;
@@ -359,6 +364,9 @@ impl Dispatch<BandeAppV1, ()> for State {
                     );
                 }
             }
+            bande_app_v1::Request::EndSession {
+                ending: WEnum::Value(ending),
+            } => state.confirm_session_end(ending),
             bande_app_v1::Request::ShowEmojiPicker => {
                 state.open_launcher(bande_shell_v1::LauncherMode::Emoji);
             }

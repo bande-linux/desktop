@@ -443,8 +443,30 @@ prompts (they are answered in the secure field), and power and accessibility men
 ## Updates
 
 Packages come from Bande's signed APT repository ([packaging](packaging.md)). Settings ▸
-Software Update checks through PackageKit (`bande-packages`), downloads trusted updates and
-installs them offline at the next restart, without a password; the results are read once after
-the restart; Settings refreshes the cache when it is older than an hour. A daily user timer
-(also 3 minutes after login) checks and posts a notification when updates are waiting. There is no first-run
-assistant yet.
+Software Update checks through PackageKit (`bande-packages`) and classifies each update by name
+and by PackageKit's `GetUpdateDetail` restart answer. **Offline** (installed at the next restart):
+`libc6`, `systemd`, `libsystemd0`, `udev`, `dbus*`, the running kernel's own packages
+(`linux-{image,modules,binary,base}-$(uname -r)`, which an upgrade replaces in place), security
+updates to `greetd` or `libpam*`, and anything else PackageKit says needs a system restart.
+**Boot** (installed now, "Restart to finish updating"): other kernels, `firmware-*`,
+`initramfs-tools` and bootloaders. Everything else is **live**. Update Now first simulates the live
+set; if apt would pull in an offline package, or the user may not update without a password
+(polkit `system-update`, which PackageKit grants active sudo members), everything goes offline:
+download, `Offline.Trigger`, "Restart to install n updates", with no password. Otherwise the live
+set installs now with `UpdatePackages`, then the offline set is downloaded and triggered.
+needrestart (recommended by `bande-desktop`, `/etc/needrestart/conf.d/bande.conf`) restarts the
+system services an update replaced from apt's hook, never greetd, the buses, logind, getty,
+`user@`, polkit or PackageKit. Settings then looks at the user's own processes that map a deleted
+`/usr` or `/opt` executable or library and groups them by cgroup: services in `session.slice`
+restart through the user manager's `TryRestartUnit`; the compositor's service, the session bus or the
+login scope ask "Log out to finish updating the desktop" (Log Out / Later); apps in `app.slice`
+are listed as "Quit and reopen … to use the new versions", Settings itself left out. A restart is
+always the user's: Restart Now / Later, Log Out / Later; Restart Now and Log Out ask for it through
+`bande_app_v1.end_session`, the Bande menu's confirmation, so every app is asked to quit first. A pending restart is remembered with the
+boot id in `$XDG_STATE_HOME/bande/restart-pending` (or `/run/reboot-required`), and the daily user
+timer (also 3 minutes after login) reminds about it, about a prepared offline update, or posts a
+notification when updates are waiting. Offline results are read once after the restart; Settings
+refreshes the cache when it is older than an hour. An apt "dpkg was interrupted" failure shows
+"Finish Installing", which runs PackageKit's `RepairSystem`. While dpkg runs, packagekitd holds
+a logind `shutdown:idle` block inhibitor (not sleep), and Settings shows only the progress. There
+is no first-run assistant yet.

@@ -9,15 +9,13 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::{MatchRule, OwnedMatchRule};
 
 use crate::{
-    Client, Details, Error, ErrorCode, Failure, Info, Package, PackageKitProxyBlocking, Progress,
-    SERVICE, Status,
+    Applied, Client, Details, Error, ErrorCode, Failure, Info, Package, PackageKitProxyBlocking,
+    Progress, Restart, SERVICE, Status, UpdateDetail,
 };
 
 const BUS: &str = "org.freedesktop.DBus";
 const TRANSACTION: &str = "org.freedesktop.PackageKit.Transaction";
 const UNKNOWN_PERCENTAGE: u32 = 101;
-const RESTART_SYSTEM: u32 = 4;
-const RESTART_SECURITY_SYSTEM: u32 = 6;
 const EXIT_SUCCESS: u32 = 1;
 const EXIT_CANCELLED: u32 = 3;
 
@@ -26,9 +24,34 @@ pub(crate) struct Outcome {
     pub(crate) packages: Vec<Package>,
     pub(crate) details: Vec<Details>,
     pub(crate) files: Vec<String>,
-    pub(crate) restart: bool,
+    pub(crate) update_details: Vec<UpdateDetail>,
+    pub(crate) restarts: Vec<Restart>,
     pub(crate) failure: Option<Failure>,
 }
+
+impl Outcome {
+    pub(crate) fn applied(self) -> Applied {
+        Applied {
+            restart: self.restarts.iter().any(|restart| restart.reboots()),
+            packages: self.packages,
+        }
+    }
+}
+
+type UpdateDetailSignal = (
+    String,
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+    u32,
+    String,
+    String,
+    u32,
+    String,
+    String,
+);
 
 type Running = Option<(Connection, OwnedObjectPath)>;
 
@@ -125,9 +148,22 @@ fn listen(
                     outcome.files.extend(files);
                 }
             }
+            Some("UpdateDetail") => {
+                if let Ok((id, .., restart, _, _, _, _, _)) =
+                    body.deserialize::<UpdateDetailSignal>()
+                {
+                    outcome.update_details.push(UpdateDetail {
+                        id,
+                        restart: Restart::from_raw(restart),
+                    });
+                }
+            }
             Some("RequireRestart") => {
                 if let Ok((kind, _)) = body.deserialize::<(u32, String)>() {
-                    outcome.restart |= matches!(kind, RESTART_SYSTEM | RESTART_SECURITY_SYSTEM);
+                    let restart = Restart::from_raw(kind);
+                    if !outcome.restarts.contains(&restart) {
+                        outcome.restarts.push(restart);
+                    }
                 }
             }
             Some("ErrorCode") => {

@@ -172,6 +172,11 @@ impl Widget for SearchField {
                 true
             }
             Event::PointerMove(_) if self.clear_pressed => true,
+            Event::PointerLeave if self.clear_pressed => {
+                self.clear_pressed = false;
+                self.field.handle(cx, event);
+                true
+            }
             Event::PointerUp(pointer) if self.clear_pressed => {
                 self.clear_pressed = false;
                 if on_clear(pointer.position) {

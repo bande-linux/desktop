@@ -955,7 +955,13 @@ impl Screen {
             }
             Event::PointerLeave => {
                 self.pointer = None;
-                if !self.open && self.drag.is_none() {
+                self.pressed = None;
+                if let Some(drag) = self.drag.take()
+                    && drag.moved
+                {
+                    self.release(&drag, now);
+                }
+                if !self.open {
                     self.follow_hover(now);
                 }
                 true

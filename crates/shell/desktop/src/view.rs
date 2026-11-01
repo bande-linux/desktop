@@ -168,7 +168,6 @@ pub struct DesktopView {
     size: (f32, f32),
     scale: f32,
     gesture: Gesture,
-    modifiers: Modifiers,
     rename: Option<Rename>,
     rename_when_listed: Option<PathBuf>,
     typed: String,
@@ -281,7 +280,6 @@ impl DesktopView {
             size: (1.0, 1.0),
             scale: 1.0,
             gesture: Gesture::Idle,
-            modifiers: Modifiers::default(),
             rename: None,
             rename_when_listed: None,
             typed: String::new(),
@@ -628,10 +626,7 @@ impl DesktopView {
             }
             Event::PointerMove(pointer) => self.pointer_move(pointer),
             Event::PointerUp(pointer) => self.pointer_up(pointer),
-            Event::ModifiersChanged(modifiers) => {
-                self.modifiers = *modifiers;
-                true
-            }
+            Event::PointerLeave => self.pointer_left(event),
             Event::Key { key, modifiers } => self.key(*key, *modifiers, now),
             Event::Commit(_) | Event::Preedit { .. } if self.rename.is_some() => self.edit(event),
             Event::Commit(text) => {
@@ -742,6 +737,17 @@ impl DesktopView {
                 true
             }
             Gesture::Drag { .. } => false,
+        }
+    }
+
+    fn pointer_left(&mut self, event: &Event) -> bool {
+        let edited = std::mem::take(&mut self.editing) && self.edit(event);
+        match self.gesture {
+            Gesture::Pressed { .. } | Gesture::Band { .. } => {
+                self.gesture = Gesture::Idle;
+                true
+            }
+            Gesture::Idle | Gesture::Drag { .. } => edited,
         }
     }
 

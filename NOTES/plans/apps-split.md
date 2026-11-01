@@ -120,11 +120,15 @@ Status: done 2026-11-01. `default-apps.sh [file]` takes no version (the default 
 - data/icons/src/apps.py HICOLOR keeps only Files and Settings; theme icons for Terminal, ActivityMonitor, Installer and Software stay.
 - Missing-app behaviour: Files hides "Open in Terminal" without `bande-terminal` on PATH; `Terminal=true` launches return a clear LaunchError; the low-memory dialog hides "Open Activity Monitor" when it's missing.
 
+Status: done 2026-11-01. Differences from the plan: the ci/vm guest runner no longer exists (ci/hil runs only the scanout test), so the dormant guest test now waits for `bande-terminal` instead of being rewritten around bande-sample; bande-session-bench and bande-idle start `bande-terminal` from the binaries folder or else from PATH, so the terminal-typing scenario keeps measuring a terminal. The xdg `TERMINAL` constant is `bande-terminal` (D4); Files hides "Open in Terminal" in its context menus and disables it in the menu bar without it; `Terminal=true` launches fail with `LaunchError::NoTerminal`. Activity Monitor stays (M3), so the low-memory dialog is unchanged. ci/review/run.sh no longer builds Terminal and refuses a scenario that needs an apps-repo app missing from /usr/bin.
+
 ### M3 (desktop). Move Force Quit into the shell (D2)
 - `bande-shell --force-quit` on bande-status::memory (`force_quit`, `heaviest_apps`), with the look of monitor's force_quit.rs.
 - Compositor `Summoned::new(SHELL)` for Force Quit; the bar asks the compositor (or runs bande-shell).
 - Drop `/usr/bin/bande-monitor` from session-clients and the MONITOR constant if unused. Monitor keeps its in-app Force Quit.
 - If D2 is declined: skip this, and when bande-monitor is missing the compositor quits the focused app after confirmation.
+
+Status: skipped. Decided 2026-11-01 (apps-split agent, D2's own fallback; owner may revisit): Force Quit and so Activity Monitor stay in the desktop repo. A shell Force Quit means porting monitor's Force Quit window together with the model and sampler it is built on (about 2,500 lines) into bande-shell and proving the four D2 cases with tests; that could not be shown at least as reliable as today in this pass, and the shell was being reworked for performance by another agent at the same time. Moving Activity Monitor later is the M4/M5 recipe for one more app plus this milestone. The moving apps are Terminal, Software (with catalog) and Installer; bande-monitor stays pinned in the control file like Files and Settings.
 
 ### M4a / M4b (apps). Import with history and build standalone
 M4a: Terminal and Monitor. M4b: Software (with catalog) and Installer.

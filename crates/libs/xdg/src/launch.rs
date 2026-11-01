@@ -18,13 +18,13 @@ use zbus::{MatchRule, message};
 
 use crate::L10N;
 use crate::entry::{
-    DesktopAction, DesktopEntry, Locale, applications, current_desktops, data_dirs,
+    DesktopAction, DesktopEntry, Locale, applications, current_desktops, data_dirs, find_executable,
 };
 use crate::identity::{app_name, find_app};
 use crate::units::{scope_name, unit_app_ids, unit_of_object_path};
 use crate::uri::file_uri;
 
-pub const TERMINAL: &str = "bande-term";
+pub const TERMINAL: &str = "bande-terminal";
 pub const ACTIVATION_TOKEN: &str = "XDG_ACTIVATION_TOKEN";
 const APP_OOM_SCORE: &[u8] = b"200";
 
@@ -211,6 +211,7 @@ impl DesktopEntry {
 #[derive(Debug)]
 pub enum LaunchError {
     Exec(ExecError),
+    NoTerminal,
     Spawn(io::Error),
 }
 
@@ -218,6 +219,10 @@ impl fmt::Display for LaunchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Exec(error) => write!(f, "{error}"),
+            Self::NoTerminal => write!(
+                f,
+                "the app runs in a terminal and {TERMINAL} is not installed"
+            ),
             Self::Spawn(error) => write!(f, "cannot start the app: {error}"),
         }
     }
@@ -264,6 +269,9 @@ fn start(
     command: &[String],
     activation_token: Option<&str>,
 ) -> Result<u32, LaunchError> {
+    if entry.terminal && find_executable(TERMINAL).is_none() {
+        return Err(LaunchError::NoTerminal);
+    }
     spawn_detached(
         entry.app_id(),
         command,

@@ -178,8 +178,5 @@ ICONS = {
 
 HICOLOR = {
     'org.bande.Files': 'crates/apps/files/data/org.bande.Files.svg',
-    'org.bande.Terminal': 'crates/apps/terminal/data/org.bande.Terminal.svg',
     'org.bande.Settings': 'crates/apps/settings/data/org.bande.Settings.svg',
-    'org.bande.ActivityMonitor': 'crates/apps/monitor/data/org.bande.ActivityMonitor.svg',
-    'org.bande.Installer': 'crates/apps/installer/data/org.bande.Installer.svg',
 }

@@ -9,6 +9,7 @@ use bande_compositor::{
     Compositor, FrameClock, FrameOutput, FrameScheduler, FrameStats, REFRESH, RenderError,
     Renderer, Submission,
 };
+use bande_xdg::find_executable;
 use smithay::backend::input::{Axis, AxisSource};
 use smithay::input::pointer::AxisFrame;
 use smithay::utils::{Point, Size};
@@ -30,6 +31,7 @@ const KEY_UP: u32 = 103;
 const TICK_MS: f64 = 10.0;
 const FILES: &str = "org.bande.Files";
 const TERMINAL: &str = "org.bande.Terminal";
+const TERMINAL_PROGRAM: &str = "bande-terminal";
 
 type Scenario = fn(&mut Bench) -> Result<(), Box<dyn Error>>;
 
@@ -202,10 +204,14 @@ impl Bench {
                 .env("HOME", home),
             "bande-files",
         )?;
-        bench.open_app(
-            Command::new(binaries.join("bande-term")).env("HOME", home),
-            "bande-term",
-        )?;
+        let built = binaries.join(TERMINAL_PROGRAM);
+        let terminal = if built.exists() {
+            built
+        } else {
+            find_executable(TERMINAL_PROGRAM)
+                .ok_or("bande-terminal is neither built nor installed")?
+        };
+        bench.open_app(Command::new(terminal).env("HOME", home), TERMINAL_PROGRAM)?;
         bench.run_for(SETTLE)?;
         bench.move_aside(FILES)?;
         Ok(bench)

@@ -124,6 +124,7 @@ pub struct Selection {
     pub away: bool,
     pub folders: bool,
     pub files: bool,
+    pub terminal: bool,
     pub apps: Vec<App>,
 }
 
@@ -144,7 +145,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
     if selection.folders {
         items.push(item("menu-open-in-new-tab", &Command::OpenInNewTab));
     }
-    if selection.folders && count == 1 {
+    if selection.folders && count == 1 && selection.terminal {
         items.push(item("menu-open-in-terminal", &Command::OpenInTerminal));
     }
     if selection.files {
@@ -227,6 +228,7 @@ pub struct Folder {
     pub mode: ViewMode,
     pub hidden_shown: bool,
     pub paste: bool,
+    pub terminal: bool,
 }
 
 pub fn folder_menu(folder: Folder) -> Menu {
@@ -256,7 +258,7 @@ pub fn folder_menu(folder: Folder) -> Menu {
         );
     }
     items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
-    if !folder.trash {
+    if !folder.trash && folder.terminal {
         items.push(item("menu-open-in-terminal", &Command::OpenInTerminal));
     }
     let sorts = SORTS

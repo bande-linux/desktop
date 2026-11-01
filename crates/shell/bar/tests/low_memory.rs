@@ -37,7 +37,10 @@ struct Dialog {
 
 impl Dialog {
     fn new(scheme: Scheme) -> Self {
-        let disc = repository_icon("apps/monitor/data/org.bande.ActivityMonitor.svg", 36);
+        let disc = repository_icon(
+            "../data/icons/Bande/scalable/apps/org.bande.ActivityMonitor.svg",
+            36,
+        );
         let mut view =
             LowMemoryView::new(Palette::for_scheme(scheme), TextSystem::new(), Some(disc));
         let clock = Rc::new(Cell::new(Instant::now()));
@@ -46,7 +49,10 @@ impl Dialog {
         let icons = HashMap::from([
             (
                 "org.bande.Terminal".to_owned(),
-                repository_icon("apps/terminal/data/org.bande.Terminal.svg", 36),
+                repository_icon(
+                    "../data/icons/Bande/scalable/apps/org.bande.Terminal.svg",
+                    36,
+                ),
             ),
             (
                 "org.bande.Files".to_owned(),

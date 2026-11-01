@@ -23,7 +23,7 @@ use crate::uinput::{
 
 const COMPOSITOR: &str = "/usr/bin/bande-compositor";
 const RUNTIME_DIR: &str = "/run/user/0";
-const TYPED: &str = "/tmp/typed-in-bande-term";
+const TYPED: &str = "/tmp/typed-in-bande-terminal";
 const STARTUP: Duration = Duration::from_secs(60);
 const LAUNCHER_SELECTION_PIXELS: usize = 2000;
 
@@ -211,7 +211,7 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     scanout().save("m14-launcher-results");
 
     keyboard.tap(KEY_ENTER);
-    wait_for("the terminal", STARTUP, || running("bande-term"));
+    wait_for("the terminal", STARTUP, || running("bande-terminal"));
     let palette = Palette::for_scheme(Scheme::Light);
     let (sheet, accent) = (palette.sheet, palette.accent);
     let accent_pixels = |scanout: &Scanout| {
@@ -231,7 +231,7 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
     });
     thread::sleep(Duration::from_secs(2));
 
-    keyboard.type_text("echo typed from the keyboard > /tmp/typed-in-bande-term\n");
+    keyboard.type_text("echo typed from the keyboard > /tmp/typed-in-bande-terminal\n");
     wait_for("the shell to run the typed command", STARTUP, || {
         fs::read_to_string(TYPED).is_ok_and(|text| text.trim() == "typed from the keyboard")
     });

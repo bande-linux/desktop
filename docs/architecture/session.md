@@ -458,7 +458,7 @@ needrestart (recommended by `bande-desktop`, `/etc/needrestart/conf.d/bande.conf
 system services an update replaced from apt's hook, never greetd, the buses, logind, getty,
 `user@`, polkit or PackageKit. Settings then looks at the user's own processes that map a deleted
 `/usr` or `/opt` executable or library and groups them by cgroup: services in `session.slice`
-restart with `systemctl --user try-restart`; the compositor's service, the session bus or the
+restart through the user manager's `TryRestartUnit`; the compositor's service, the session bus or the
 login scope ask "Log out to finish updating the desktop" (Log Out / Later); apps in `app.slice`
 are listed as "Quit and reopen … to use the new versions", Settings itself left out. A restart is
 always the user's: Restart Now / Later, Log Out / Later. A pending restart is remembered with the
@@ -466,5 +466,6 @@ boot id in `$XDG_STATE_HOME/bande/restart-pending` (or `/run/reboot-required`), 
 timer (also 3 minutes after login) reminds about it, about a prepared offline update, or posts a
 notification when updates are waiting. Offline results are read once after the restart; Settings
 refreshes the cache when it is older than an hour. An apt "dpkg was interrupted" failure shows
-"Finish Installing", which runs PackageKit's `RepairSystem`. There is no first-run
-assistant yet.
+"Finish Installing", which runs PackageKit's `RepairSystem`. While dpkg runs, packagekitd holds
+a logind `shutdown:idle` block inhibitor (not sleep), and Settings shows only the progress. There
+is no first-run assistant yet.

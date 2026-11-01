@@ -219,11 +219,15 @@ fn the_menu_bar_is_in_the_bar_unless_set_apart() {
         Config::parse("bar {\n    menu-bar \"separate\"\n}\n").map(|config| config.bar.menu_bar),
         Ok(MenuBarPlacement::Separate)
     );
-    assert_eq!(
-        Config::parse("bar {\n    names #true\n}\n").map(|config| config.bar.names),
-        Ok(true)
-    );
     assert_eq!(error_at("bar {\n    menu-bar \"floating\"\n}\n"), (2, 14));
+}
+
+#[test]
+fn a_bar_saved_with_the_removed_names_setting_loads_without_problems() {
+    let (config, problems) =
+        Config::load("bar {\n    names #true\n    size 40\n}\n").expect("config");
+    assert!(problems.is_empty());
+    assert_eq!(config.bar.icon_size, 40);
 }
 
 #[test]

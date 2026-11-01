@@ -174,12 +174,7 @@ fn install_apps() {
     });
 }
 
-fn shell(
-    stream: UnixStream,
-    names: bool,
-    events: Sender<(Part, WindowEvent)>,
-    targets: Sender<Targets>,
-) {
+fn shell(stream: UnixStream, events: Sender<(Part, WindowEvent)>, targets: Sender<Targets>) {
     let text = TextSystem::new();
     let mut root =
         Window::open_on(stream, bande_notifications::role(), (0, 0)).expect("notifications");
@@ -187,7 +182,6 @@ fn shell(
     let notifications =
         Notifications::new(&mut root, text.sharing_fonts(), None).expect("notifications");
     let mut config = Config::default();
-    config.bar.names = names;
     config.bar.apps = [EDITOR.to_owned()]
         .into_iter()
         .chain((0..KEPT).map(app_id))
@@ -237,7 +231,6 @@ fn shell(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Target {
     Mark,
-    Search,
     Header,
     KeptApp,
     RunningApp,
@@ -273,12 +266,11 @@ struct Desktop {
     targets: Targets,
     client: Option<JoinHandle<()>>,
     editor: Option<TestClient>,
-    expanded: bool,
     time: u32,
 }
 
 impl Desktop {
-    fn new(expanded: bool) -> Self {
+    fn new() -> Self {
         install_apps();
         let mut server = Compositor::new(Size::from(OUTPUT)).expect("headless compositor");
         let (client_end, server_end) = UnixStream::pair().expect("socket pair");
@@ -287,7 +279,7 @@ impl Desktop {
             .expect("insert the shell");
         let (events, received) = mpsc::channel();
         let (targets, target_updates) = mpsc::channel();
-        let client = thread::spawn(move || shell(client_end, expanded, events, targets));
+        let client = thread::spawn(move || shell(client_end, events, targets));
         let mut desktop = Self {
             server,
             renderer: Renderer::new().expect("renderer"),
@@ -299,7 +291,6 @@ impl Desktop {
             targets: Vec::new(),
             client: Some(client),
             editor: None,
-            expanded,
             time: 0,
         };
         desktop.wait_until(|desktop| desktop.bar_width().is_some());
@@ -426,8 +417,7 @@ impl Desktop {
     fn label(&self, target: Target) -> Option<String> {
         let more = |count: i64| L10N.tr_args("more-apps-name", [("count", count.into())]);
         let wanted = match target {
-            Target::Mark if self.expanded => L10N.tr("system-menu"),
-            Target::Mark | Target::Search => L10N.tr("launcher"),
+            Target::Mark => L10N.tr("launcher"),
             Target::Header => L10N.tr_args("app-menus", [("app", "Editor".into())]),
             Target::KeptApp => "App 1".to_owned(),
             Target::RunningApp => "Editor".to_owned(),
@@ -454,11 +444,9 @@ impl Desktop {
             .targets
             .iter()
             .filter(|(known, _)| Some(known) == label.as_ref());
-        let (_, (x0, y0, x1, y1)) = match target {
-            Target::Search => found.next_back(),
-            _ => found.next(),
-        }
-        .unwrap_or_else(|| panic!("no {target:?} ({label:?}) in {:?}", self.targets));
+        let (_, (x0, y0, x1, y1)) = found
+            .next()
+            .unwrap_or_else(|| panic!("no {target:?} ({label:?}) in {:?}", self.targets));
         ((x0 + x1) / 2.0, (y0 + y1) / 2.0)
     }
 
@@ -583,11 +571,13 @@ const fn case(target: Target, press: Press, outcome: Outcome) -> Case {
     }
 }
 
-fn shared_cases() -> Vec<Case> {
-    use Outcome::{Menu, NotificationCenter};
+fn cases() -> Vec<Case> {
+    use Outcome::{Launcher, Menu, NotificationCenter};
     use Press::*;
     use Target::*;
     vec![
+        case(Mark, Primary, Launcher),
+        case(Mark, Hold, Launcher),
         case(Mark, Secondary, Menu),
         case(Header, Primary, Menu),
         case(Header, Secondary, Menu),
@@ -606,25 +596,6 @@ fn shared_cases() -> Vec<Case> {
         case(Clock, Secondary, Menu),
         case(Clock, Hold, NotificationCenter),
     ]
-}
-
-fn compact_cases() -> Vec<Case> {
-    let mut cases = vec![
-        case(Target::Mark, Press::Primary, Outcome::Launcher),
-        case(Target::Mark, Press::Hold, Outcome::Launcher),
-    ];
-    cases.extend(shared_cases());
-    cases
-}
-
-fn expanded_cases() -> Vec<Case> {
-    let mut cases = vec![
-        case(Target::Mark, Press::Primary, Outcome::Menu),
-        case(Target::Mark, Press::Hold, Outcome::Menu),
-        case(Target::Search, Press::Primary, Outcome::Launcher),
-    ];
-    cases.extend(shared_cases());
-    cases
 }
 
 fn another(outcome: Outcome) -> (Target, Press, Outcome) {
@@ -650,16 +621,15 @@ fn expect(desktop: &mut Desktop, what: &str, expected: Outcome) -> Option<String
     (later != expected).then(|| format!("{what}: {expected:?} turned into {later:?}"))
 }
 
-fn restore(desktop: &mut Desktop, failures: &mut Vec<String>, name: &str, expanded: bool) {
+fn restore(desktop: &mut Desktop, failures: &mut Vec<String>, name: &str) {
     if let Some(stuck) = desktop.reset() {
         failures.push(format!("{name}: {stuck}"));
-        *desktop = Desktop::new(expanded);
+        *desktop = Desktop::new();
     }
 }
 
-fn sweep(expanded: bool, cases: Vec<Case>) {
-    let mode = if expanded { "expanded" } else { "compact" };
-    let mut desktop = Desktop::new(expanded);
+fn sweep(cases: Vec<Case>) {
+    let mut desktop = Desktop::new();
     let mut failures = Vec::new();
     for Case {
         target,
@@ -667,20 +637,20 @@ fn sweep(expanded: bool, cases: Vec<Case>) {
         outcome,
     } in cases
     {
-        let name = format!("{mode} {target:?} {press:?}");
+        let name = format!("{target:?} {press:?}");
         desktop.press(target, press);
         failures.extend(expect(&mut desktop, &name, outcome));
         if press == Press::Primary || (press == Press::Secondary && outcome == Outcome::Menu) {
-            desktop.shot(&format!("{mode}-{target:?}-{press:?}").to_lowercase());
+            desktop.shot(&format!("{target:?}-{press:?}").to_lowercase());
         }
         if outcome == Outcome::Nothing {
-            restore(&mut desktop, &mut failures, &name, expanded);
+            restore(&mut desktop, &mut failures, &name);
             continue;
         }
         desktop.key(KEY_ESC);
         let escaped = format!("{name}, then Escape");
         failures.extend(expect(&mut desktop, &escaped, Outcome::Nothing));
-        restore(&mut desktop, &mut failures, &escaped, expanded);
+        restore(&mut desktop, &mut failures, &escaped);
 
         desktop.press(target, press);
         desktop.await_outcome(outcome);
@@ -692,7 +662,7 @@ fn sweep(expanded: bool, cases: Vec<Case>) {
         desktop.press(target, again);
         let twice = format!("{name}, then {again:?} again");
         failures.extend(expect(&mut desktop, &twice, Outcome::Nothing));
-        restore(&mut desktop, &mut failures, &twice, expanded);
+        restore(&mut desktop, &mut failures, &twice);
 
         desktop.press(target, press);
         desktop.await_outcome(outcome);
@@ -700,7 +670,7 @@ fn sweep(expanded: bool, cases: Vec<Case>) {
         desktop.press(next, next_press);
         let moved = format!("{name}, then {next:?} {next_press:?}");
         failures.extend(expect(&mut desktop, &moved, next_outcome));
-        restore(&mut desktop, &mut failures, &moved, expanded);
+        restore(&mut desktop, &mut failures, &moved);
 
         if outcome == Outcome::Menu {
             desktop.press(target, press);
@@ -709,28 +679,23 @@ fn sweep(expanded: bool, cases: Vec<Case>) {
             desktop.key(KEY_DOWN);
             let walked = format!("{name}, then Down Down");
             failures.extend(expect(&mut desktop, &walked, Outcome::Menu));
-            restore(&mut desktop, &mut failures, &walked, expanded);
+            restore(&mut desktop, &mut failures, &walked);
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 #[test]
-fn every_compact_bar_target_answers_every_press() {
-    sweep(false, compact_cases());
-}
-
-#[test]
-fn every_expanded_bar_target_answers_every_press() {
-    sweep(true, expanded_cases());
+fn every_bar_target_answers_every_press() {
+    sweep(cases());
 }
 
 #[test]
 fn the_keyboard_opens_the_app_menus_and_walks_the_apps_and_gives_the_keyboard_back() {
-    let mut desktop = Desktop::new(false);
+    let mut desktop = Desktop::new();
     desktop.chord(KEY_LEFTMETA, KEY_F2);
     assert_eq!(desktop.outcome(), Outcome::Menu);
-    desktop.shot("compact-keyboard-app-menus");
+    desktop.shot("keyboard-app-menus");
     desktop.pump_for(Duration::from_millis(300));
     assert_eq!(desktop.outcome(), Outcome::Menu);
     desktop.key(KEY_ESC);
@@ -747,7 +712,7 @@ fn the_keyboard_opens_the_app_menus_and_walks_the_apps_and_gives_the_keyboard_ba
 
 #[test]
 fn the_clock_over_control_center_closes_it() {
-    let mut desktop = Desktop::new(false);
+    let mut desktop = Desktop::new();
     desktop.press(Target::ControlCenter, Press::Primary);
     desktop.await_outcome(Outcome::ControlCenter);
     desktop.press(Target::Clock, Press::Primary);
@@ -765,7 +730,7 @@ fn the_clock_over_control_center_closes_it() {
 
 #[test]
 fn control_center_over_the_notification_center_closes_it() {
-    let mut desktop = Desktop::new(false);
+    let mut desktop = Desktop::new();
     desktop.press(Target::Clock, Press::Primary);
     desktop.await_outcome(Outcome::NotificationCenter);
     desktop.press(Target::ControlCenter, Press::Primary);
@@ -783,7 +748,7 @@ fn control_center_over_the_notification_center_closes_it() {
 
 #[test]
 fn a_bar_menu_opened_over_control_center_closes_it() {
-    let mut desktop = Desktop::new(false);
+    let mut desktop = Desktop::new();
     desktop.press(Target::ControlCenter, Press::Primary);
     desktop.await_outcome(Outcome::ControlCenter);
     desktop.press(Target::Mark, Press::Secondary);

@@ -108,10 +108,6 @@ pub trait Config {
     #[zbus(property)]
     fn set_bar_auto_hide(&self, auto_hide: bool) -> zbus::Result<()>;
     #[zbus(property)]
-    fn bar_names(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_bar_names(&self, names: bool) -> zbus::Result<()>;
-    #[zbus(property)]
     fn bar_edge(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_bar_edge(&self, value: &str) -> zbus::Result<()>;
@@ -266,7 +262,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 56] = [
+pub const CONFIG_SETTINGS: [SettingId; 55] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -293,7 +289,6 @@ pub const CONFIG_SETTINGS: [SettingId; 56] = [
     SettingId::WallpaperFit,
     SettingId::BarIconSize,
     SettingId::BarAutoHide,
-    SettingId::BarNames,
     SettingId::BarEdge,
     SettingId::BarMenuBar,
     SettingId::DimAfter,
@@ -462,7 +457,6 @@ impl SettingsClient {
             SettingId::WallpaperFit => Value::Keyword(self.config.wallpaper_fit()?),
             SettingId::BarIconSize => Value::Number(self.config.bar_icon_size()?),
             SettingId::BarAutoHide => Value::Flag(self.config.bar_auto_hide()?),
-            SettingId::BarNames => Value::Flag(self.config.bar_names()?),
             SettingId::BarEdge => Value::Keyword(self.config.bar_edge()?),
             SettingId::BarMenuBar => Value::Keyword(self.config.bar_menu_bar()?),
             SettingId::DimAfter => Value::Seconds(self.config.idle_dim_after()?),
@@ -590,7 +584,6 @@ impl SettingsClient {
             (SettingId::BarAutoHide, Value::Flag(auto_hide)) => {
                 self.config.set_bar_auto_hide(*auto_hide)
             }
-            (SettingId::BarNames, Value::Flag(names)) => self.config.set_bar_names(*names),
 
             (SettingId::DimAfter, Value::Seconds(seconds)) => {
                 self.config.set_idle_dim_after(*seconds)

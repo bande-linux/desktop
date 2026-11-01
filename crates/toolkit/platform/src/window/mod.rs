@@ -830,7 +830,11 @@ impl Window {
                     )?;
                 }
                 self.set_cursor(ui.cursor());
-                (changed, None)
+                let unhandled = match input {
+                    Event::Key { .. } if !changed => Some(WindowEvent::Input(input)),
+                    _ => None,
+                };
+                (changed, unhandled)
             }
             WindowEvent::Drag(drag) => self.drive_drag(ui, drag),
 

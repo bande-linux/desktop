@@ -619,6 +619,10 @@ Preconditions: apps-split M6 done (the shared pin, `ci/gate.sh`, `with-desktop.s
   windows, Ctrl+W closes the focused one, `should_close` can refuse, Ctrl+Q closes both, an
   appearance change reaches both views.
 - Done when: `desktop-check -p bande-app` passes; the tests pass on the hermetic bus.
+- **Status: done 2026-11-01** (`appfw/m2-core`). `bande_app::run_on` runs an app on a given
+  Wayland socket (the headless test, `tests/windows.rs`); `bande_app_menu::shortcut_action`
+  finds the enabled entry for a pressed shortcut. No `Launch` field: M3 makes every app single
+  instance (D3 as changed), so `PerWindow` never became API.
 
 **M3. Single instance and activation** (1.5 h)
 - One session connection with a method timeout; `org.freedesktop.Application` (`Activate`,

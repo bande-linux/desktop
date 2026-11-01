@@ -191,7 +191,7 @@ fn tab_reaches_a_control_and_arrows_change_it() {
 fn clicking_a_pane_and_then_a_choice_selects_both() {
     let mut view = view();
     view.set_value(SettingId::BarEdge, keyword("left"));
-    let row = node(&mut view, Role::ListItem, "Bar")
+    let row = node(&mut view, Role::ListItem, "Taskbar")
         .bounds()
         .expect("bounds");
     click(

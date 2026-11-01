@@ -1,6 +1,6 @@
 # Experience specs
 
-An experience spec describes one surface (the Dock, a Files window, the lock screen) precisely
+An experience spec describes one surface (the taskbar, a Files window, the lock screen) precisely
 enough that it can be built, tested and signed off without further questions. It is written
 once the owner has accepted the features of an area in its proposal
 ([`../features/`](../features/)), and it is measured against the principles in

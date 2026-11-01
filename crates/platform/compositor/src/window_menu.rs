@@ -294,7 +294,7 @@ impl State {
                 Menu::new(self.desktop_items(index)),
             ),
             MenuItem::separator(),
-            item(L10N.tr("close"), "close").shortcut("Super+W"),
+            item(L10N.tr("close"), "close").shortcut("Alt+F4"),
         ])
     }
 

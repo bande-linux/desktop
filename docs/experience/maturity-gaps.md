@@ -103,7 +103,7 @@ Rows that touch these areas say "(→ that work)" and name only what lies outsid
 
 | Gap | Why a picky user notices | Severity | Effort | Owner | Status |
 | :--- | :--- | :---: | :---: | :--- | :--- |
-| Super acts as Command only in Bande's own apps. Firefox, GTK, Qt and Electron apps keep `Ctrl+C`, `V`, `Z`, `S`, `F` and `T`, because the compositor translates nothing (`architecture/overview.md`, keyboard model) | The keyboard model promises that `Super+C` copies in every app. In practice copy is `Super+C` in Files and `Ctrl+C` in Firefox, and in a third-party terminal `Ctrl+C` interrupts. On a Mac, Command works everywhere, and Toshy and Kinto exist because Linux breaks this. For Firefox alone, `ui.key.accelKey` can be set to Super instead, but editing keys did not follow it until Firefox 157 (Mozilla bug 2069698) | major | M | `platform/compositor`; owner decision | Owner decision |
+| Super acts as Command only in Bande's own apps. Firefox, GTK, Qt and Electron apps keep `Ctrl+C`, `V`, `Z`, `S`, `F` and `T`, because the compositor translates nothing (`architecture/overview.md`, keyboard model) | The keyboard model promises that `Super+C` copies in every app. In practice copy is `Super+C` in Files and `Ctrl+C` in Firefox, and in a third-party terminal `Ctrl+C` interrupts. On a Mac, Command works everywhere, and Toshy and Kinto exist because Linux breaks this. For Firefox alone, `ui.key.accelKey` can be set to Super instead, but editing keys did not follow it until Firefox 157 (Mozilla bug 2069698) | major | M | `platform/compositor`; owner decision | Done: the other way round. Ctrl is the app key in Bande's own apps too and Super is the system key, as in GNOME and KDE, so nothing is translated ([decision 0005](../decisions/0005-ctrl-for-app-shortcuts.md)) |
 | No custom shortcuts (to launch an app or run a command) and no rebinding. Settings ▸ Keyboard lists the shortcuts read-only, and `services/config` has no shortcut section | All four reference desktops allow both | major | M | `services/config`, `platform/compositor` (+ Settings options) | Open |
 | No shortcut opens Notification Center or Control Center | macOS has Fn-N and Fn-C, Windows Win+N and Win+A, GNOME Super+V and Super+S. Someone who works only with the keyboard cannot read their notifications | major | S | `platform/compositor`, `platform/protocols`, `shell/bar` | Done (`2efda70`) |
 | The shortcut table (`libs/keyboard/src/shortcuts.rs`) leaves out shortcuts that are bound: `Shift+Super+5`, `Alt+Shift+Super+arrows` (move to the next display), ``Shift+Super+` `` and the Mission Control key | The list in Settings is the only cheat sheet, so a missing row hides the feature | minor | S | `libs/keyboard` | Done (`13ae4fe`) |
@@ -114,7 +114,7 @@ Rows that touch these areas say "(→ that work)" and name only what lies outsid
 
 | Gap | Why a picky user notices | Severity | Effort | Owner | Status |
 | :--- | :--- | :---: | :---: | :--- | :--- |
-| Emoji & Symbols types its character only when an input method runs; otherwise it copies it ("Return to copy, then paste with Super+V", `shell/launcher` strings) | macOS inserts the character into the field, and so does Windows' Win+. picker. Copying and then pasting feels broken | major | M | `platform/compositor` (commit through text-input itself), `shell/launcher` | Done: types into any focused text field through text-input; copies only without one |
+| Emoji & Symbols types its character only when an input method runs; otherwise it copies it ("Return to copy, then paste with Ctrl+V", `shell/launcher` strings) | macOS inserts the character into the field, and so does Windows' Win+. picker. Copying and then pasting feels broken | major | M | `platform/compositor` (commit through text-input itself), `shell/launcher` | Done: types into any focused text field through text-input; copies only without one |
 | Input methods are not offered as input sources (`behaviour.md`), and fcitx5 is only Suggested | A Chinese, Japanese or Korean user must install and set up fcitx5 by hand before typing a word. GNOME and Plasma list input methods next to the layouts | major (CJK) | M | `platform/compositor`, `apps/settings`, packaging | Open |
 | No press-and-hold accent picker | Typing é, ü or ø on a US layout this way is a macOS signature | minor | M | `platform/compositor` | Open |
 | No fallback fonts for other scripts: `fonts-noto-core` and `fonts-noto-cjk` are in no package's Depends or Recommends (`packaging.md` lists them as not yet pulled in) | Arabic, Hebrew, Thai, Devanagari and CJK file names, notifications and launcher results show tofu boxes | major | S | `packaging/bande-desktop` | Done: `fonts-noto-core` and `fonts-noto-cjk` recommended |
@@ -155,7 +155,7 @@ polish).
 | :--- | :--- | :---: | :---: | :--- | :--- |
 | File search matches names in the home folder only, never contents (`libs/search`) | Spotlight, GNOME (TinySPARQL) and Plasma (Baloo) find a PDF by a phrase inside it | major | L | `libs/search` | Open |
 | The launcher has no system commands (Lock, Sleep, Restart, Log Out, Empty Trash) and no "Search the web" fallback (→ launcher polish) | KRunner has both, and Spotlight offers web suggestions | minor | S | `shell/launcher` | Done: Lock Screen, Sleep, Log Out, Restart and Shut Down; web search is a Never |
-| No spring-loading. A dragged file held over a bar icon does not bring that app's window forward, and a folder on the desktop does not open under a held drag (→ Files depth for its own folders) | Windows brings the window forward from the taskbar, and macOS springs folders and Dock items open. Without it, dropping into a covered window means rearranging windows first | major | M | `shell/bar`, `shell/desktop` | Open |
+| No spring-loading. A dragged file held over a taskbar icon does not bring that app's window forward, and a folder on the desktop does not open under a held drag (→ Files depth for its own folders) | Windows brings the window forward from the taskbar, and macOS springs folders and Dock items open. Without it, dropping into a covered window means rearranging windows first | major | M | `shell/bar`, `shell/desktop` | Open |
 | Dropping a file on the app header (`features/bar.md`) is specified but not built | | minor | S | `shell/bar` | Open |
 
 ## 9. Files, default apps and app identity
@@ -228,13 +228,15 @@ polish).
 | No measured budget for login to a usable desktop, or for an app's first frame (Files, Settings): `performance.md` measures memory and frames, not cold starts | "Fast" is never checked | minor | S | `testing/bench` | Partly: time to desktop measured (`418ed6d`); app first frames open |
 | Every graphical program carries the whole stack and its own copy of the ICU segmentation data (`performance.md`) | Disk and page cache; the one-process shell already solved this for the shell | minor | L | packaging | Open |
 
-## Top 25: user impact ÷ effort
+## Top 24: user impact ÷ effort
 
 Each item is scoped so that one agent can finish it in 1–2 hours, with the proof the night
 brief asks for.
 
-**Status on 2026-10-31:** items 1–4, 6–10 and 13–24 are done. Item 5 is done except the
-audio player, and items 11 and 12 wait on the owner. Item 25, Larger Text, is open. Of the
+**Status on 2026-10-31:** items 1–4, 6–10 and 12–23 are done. Item 5 is done except the
+audio player, and item 11 waits on the owner. Item 24, Larger Text, is open. The former item 11,
+translating Super to Ctrl for third-party apps, was dropped on 2026-11-01: Ctrl is now the app
+key everywhere ([decision 0005](../decisions/0005-ctrl-for-app-shortcuts.md)). Of the
 "next" items, modifier-drag, Wi-Fi Forget, closing from the overview and typing emoji are
 done; hidden networks and Do Not Disturb schedules are open.
 
@@ -262,7 +264,7 @@ and M as 2. Items with the same score are ordered by impact.
    - Parse `StartupWMClass` in `entry.rs`.
    - Add one lookup that tries, in order: exact, case-insensitive, `StartupWMClass`, the last
      reverse-DNS part, the `Exec` name.
-   - Use it in the bar (Dock and header), the switcher and overview names, and the launcher's
+   - Use it in the taskbar (apps and header), the switcher and overview names, and the launcher's
      running apps.
    - Proof: unit tests with real pairs (`gimp`/`org.gimp.GIMP`, `Slack`/`slack`,
      `signal`/`signal-desktop`), and a bar golden in which a mismatched id shows its own icon
@@ -313,14 +315,7 @@ and M as 2. Items with the same score are ordered by impact.
     - Restart and Shut Down ask first, as the system menu does.
     - Proof: a greeter test against a fake logind (as `services/power/tests/logind.rs` serves
       one), and light and dark goldens.
-11. **Command works in third-party apps** (`platform/compositor`; M; owner decision first).
-    - For clients that never bind `bande_app_v1`, send `Super+letter` and `Super+digit` that
-      the compositor does not use itself as `Ctrl` with the same key.
-    - For apps whose desktop entry has `Categories=TerminalEmulator`, send `Ctrl+Shift` instead.
-    - Proof: a headless test with a non-toolkit client that receives `Ctrl+C` for `Super+C`,
-      and a terminal client that receives `Ctrl+Shift+C`.
-    - The narrower fallback: set Firefox's `ui.key.accelKey` to Super (see §4).
-12. **Swedish for the shell** (`crates/shell/*/locales`, `libs/keyboard`, `toolkit/*/locales`;
+11. **Swedish for the shell** (`crates/shell/*/locales`, `libs/keyboard`, `toolkit/*/locales`;
     M).
     - Add `sv-SE` `.ftl` files for the bar, launcher, notifications, Control Center, lock
       screen, login window, desktop and toolkit strings.
@@ -328,76 +323,76 @@ and M as 2. Items with the same score are ordered by impact.
       a review screenshot of the bar and launcher.
     - Owner: the owner's language first; the same task repeats per language and group of
       crates.
-13. **Tell the user when an app fails to open or quits unexpectedly** (`libs/xdg`,
+12. **Tell the user when an app fails to open or quits unexpectedly** (`libs/xdg`,
     `shell/bar`, `shell/launcher`; S–M).
     - `spawn_detached` reports the exit through a channel.
     - An exit before the first window: "<App> could not be opened", with its last stderr line.
     - An exit by a signal: a "<App> quit unexpectedly" notification with Reopen.
     - Proof: tests with `/bin/false` and with `sh -c 'kill -SEGV $$'`.
-14. **Microphone and camera in-use indicator** (`libs/audio`, `shell/bar`; S–M).
+13. **Microphone and camera in-use indicator** (`libs/audio`, `shell/bar`; S–M).
     - Detect `Stream/Input/Audio` and `Stream/Input/Video` nodes of other apps, leaving out
       our own level meter.
     - The bar shows an accent dot, and its menu lists the apps that use them.
     - Proof: a graph model test, and a bar golden.
-15. **Captive portal sign-in** (`libs/network`, `shell/bar`, packaging; S–M).
+14. **Captive portal sign-in** (`libs/network`, `shell/bar`, packaging; S–M).
     - Follow NetworkManager's `Connectivity`. On `PORTAL`, post "Sign in to <network>", which
       opens the browser at the check URI; the Wi-Fi menu shows the same line.
     - Recommend `network-manager-config-connectivity-debian`.
     - Proof: a network model test on the NetworkManager fake of `testing/test-bus`.
-16. **A month calendar in the Notification Center** (`shell/notifications`, `libs/datetime`;
+15. **A month calendar in the Notification Center** (`shell/notifications`, `libs/datetime`;
     S–M).
     - Add a month grid above the stacks, starting on the locale's first weekday (ICU4X), with
       today marked and arrows (and Page Up and Down) to change month.
     - Proof: a `libs/datetime` test of week starts for en-US and sv-SE, and light and dark
       goldens.
-17. **Apps run in their own systemd scopes** (`libs/xdg`; S).
+16. **Apps run in their own systemd scopes** (`libs/xdg`; S).
     - After spawning, move the pid into `app-bande-<id>-<random>.scope` in `app.slice`
       through `org.freedesktop.systemd1.Manager.StartTransientUnit`.
     - Skip this quietly without a user manager.
     - Proof: a unit test of the unit name (no `-` in the id part, as systemd requires), and a
       VM check with `systemctl --user status`.
-18. **"Set as Background" works** (`services/portal`; S).
+17. **"Set as Background" works** (`services/portal`; S).
     - Implement `org.freedesktop.impl.portal.Wallpaper.SetWallpaperURI`: copy the picture as
       Settings ▸ Wallpaper's "Add Picture" does, write it to the config, and add it to
       `bande.portal` and `bande-portals.conf`.
     - Proof: a portal test that calls it and reads back `org.bande.Config`.
-19. **Shortcuts for Show Desktop, the Notification Center and Control Center**
+18. **Shortcuts for Show Desktop, the Notification Center and Control Center**
     (`platform/compositor`, `platform/protocols`, `shell/bar`, `libs/keyboard`; S–M).
     - Bind keys the owner approves (proposal: `Super+F11` and Super with the Mission Control
       key for Show Desktop, `Alt+Super+N`, `Alt+Super+C`).
     - Add an `bande_shell_v1` event that toggles a panel.
     - Complete the shortcut table with every bound shortcut (§4).
     - Proof: compositor tests, and the existing table-against-handler test.
-20. **A tiling menu on the zoom control** (`toolkit/platform`, `platform/compositor`; S–M).
+19. **A tiling menu on the zoom control** (`toolkit/platform`, `platform/compositor`; S–M).
     - Resting 500 ms on the zoom control, or pressing and holding it, opens the Move & Resize
       submenu of the window menu at the control.
     - Do it in the toolkit's chrome and in the server-side frame (`decoration.rs`).
     - Proof: a toolkit test that the hold opens the menu, and a golden.
-21. **Bluetooth: Forget, battery and pairing at any time** (`libs/bluetooth`,
+20. **Bluetooth: Forget, battery and pairing at any time** (`libs/bluetooth`,
     `shell/controlcenter`; S–M).
     - Add `RemoveDevice` and the `Battery1` percentage to the library.
     - Show both in Control Center's device list.
     - Register the pairing agent in the shell process, so a device can pair while Settings is
       closed.
     - Proof: tests on the BlueZ fake of `testing/test-bus`.
-22. **Reopen apps at login** (`shell/shell`, `libs/xdg`; M).
+21. **Reopen apps at login** (`shell/shell`, `libs/xdg`; M).
     - When the session ends through the confirmation, save the ids of the running apps to
       `$XDG_STATE_HOME/bande/reopen`.
     - Launch them once at the next session start, leaving out the shell's own surfaces; window
       memory then puts the frames back.
     - Proof: a model test of the file, and a VM check.
-23. **Night Light, first slice** (`platform/compositor`; M).
+22. **Night Light, first slice** (`platform/compositor`; M).
     - On DRM, apply a warm gamma ramp (CRTC `GAMMA_LUT`) from a `display { night-light }`
       setting, scheduled from sunset to sunrise with the portal's `daylight.rs` (which moves to
       `crates/libs` as it gains a second consumer).
     - The ramp fades in over a minute.
     - Proof: a unit test of the ramp and the schedule, and a `ci/vm` vkms readback.
-24. **Battery and network on the lock screen** (`shell/lock`; S).
+23. **Battery and network on the lock screen** (`shell/lock`; S).
     - Show the battery level, charging state and Wi-Fi glyph in a corner, live from UPower and
       NetworkManager.
     - Proof: lock goldens in light and dark, with a fake UPower at 12 % (as in
       `libs/status/tests/devices.rs`).
-25. **The toolkit follows Larger Text** (`toolkit/graphics`, `toolkit/widgets`; M).
+24. **The toolkit follows Larger Text** (`toolkit/graphics`, `toolkit/widgets`; M).
     - Scale the type roles, and the control heights that derive from them, by the portal's
       `text-size` (100–200), live on `SettingChanged`.
     - Proof: control goldens at 100 % and 150 %, and a test that a 200 % field still fits its

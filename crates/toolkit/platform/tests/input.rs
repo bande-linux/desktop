@@ -48,7 +48,7 @@ const BUSY: Duration = Duration::from_millis(900);
 
 fn sample_menu() -> Menu {
     Menu::new(vec![
-        MenuItem::new("Open", "open").shortcut("Super+O"),
+        MenuItem::new("Open", "open").shortcut("Ctrl+O"),
         MenuItem::new("Rename", "rename").enabled(false),
         MenuItem::separator(),
         MenuItem::submenu(
@@ -405,7 +405,7 @@ fn quick_clicks_in_one_place_count_up_and_a_moved_click_starts_over() {
 }
 
 #[test]
-fn control_click_is_a_secondary_click_and_modifier_changes_arrive_alone() {
+fn control_click_is_a_primary_click_with_control_held_and_modifier_changes_arrive_alone() {
     let mut desktop = Desktop::new();
     let mut client = pointed_window(&mut desktop, "control");
     desktop.server.key(KEY_LEFTCTRL, true, 0);
@@ -425,7 +425,7 @@ fn control_click_is_a_secondary_click_and_modifier_changes_arrive_alone() {
 
     let pressed = presses(&client.seen);
     assert_eq!(pressed.len(), 1);
-    assert_eq!(pressed[0].button, PointerButton::Secondary);
+    assert_eq!(pressed[0].button, PointerButton::Primary);
     assert!(pressed[0].modifiers.control);
     assert!(
         client

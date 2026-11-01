@@ -4,6 +4,8 @@ use bande_test_wayland::{RED, TestClient, roundtrip};
 use smithay::utils::{Logical, Point, Size};
 
 const KEY_W: u32 = 17;
+const KEY_C: u32 = 46;
+const KEY_F4: u32 = 62;
 
 fn client_with_window(server: &mut Compositor, side: i32) -> TestClient {
     window(server, RED, (side, side))
@@ -142,6 +144,32 @@ fn super_w_asks_the_focused_window_to_close_instead_of_typing() {
 
     assert!(client.close_requested(0));
     assert!(!client.keys().iter().any(|(key, _)| *key == KEY_W));
+}
+
+#[test]
+fn ctrl_shortcuts_reach_the_app_and_alt_f4_closes_it() {
+    let mut server = server();
+    let mut client = client_with_window(&mut server, 32);
+
+    for key in [KEY_W, KEY_Q, KEY_C] {
+        server.key(KEY_LEFTCTRL, true, 20);
+        tap(&mut server, key);
+        server.key(KEY_LEFTCTRL, false, 21);
+    }
+    client.exchange(&mut server);
+
+    assert!(!client.close_requested(0));
+    for key in [KEY_W, KEY_Q, KEY_C] {
+        assert!(client.keys().contains(&(key, true)), "{key}");
+    }
+
+    server.key(KEY_LEFTALT, true, 30);
+    tap(&mut server, KEY_F4);
+    server.key(KEY_LEFTALT, false, 31);
+    client.exchange(&mut server);
+
+    assert!(client.close_requested(0));
+    assert!(!client.keys().iter().any(|(key, _)| *key == KEY_F4));
 }
 
 #[test]

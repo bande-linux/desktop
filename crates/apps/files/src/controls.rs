@@ -226,8 +226,10 @@ fn type_key(name: &str, folder: bool) -> Cow<'_, str> {
 
 fn table_key(key: Key, modifiers: Modifiers) -> bool {
     match key {
-        Key::Up | Key::Down | Key::Home | Key::End | Key::PageUp | Key::PageDown => !modifiers.logo,
-        Key::Character('a' | 'A') if modifiers.logo => !modifiers.shift && !modifiers.alt,
+        Key::Up | Key::Down | Key::Home | Key::End | Key::PageUp | Key::PageDown => {
+            !modifiers.logo && !modifiers.alt && !modifiers.control
+        }
+        Key::Character('a' | 'A') if modifiers.control => !modifiers.shift && !modifiers.alt,
         _ => false,
     }
 }
@@ -431,8 +433,7 @@ impl FilesView {
 
     fn table_down(&mut self, event: &Event, pointer: &Pointer, table: Rect) -> bool {
         let at = pointer.position;
-        let menu = pointer.button == PointerButton::Secondary
-            || (pointer.is_primary() && pointer.modifiers.control);
+        let menu = pointer.button == PointerButton::Secondary;
         if at.y < table.y + Table::HEADER_HEIGHT && menu && !self.browser.searching() {
             let menu = columns_menu(&self.list_columns);
             self.show_menu(menu, at);
@@ -446,7 +447,7 @@ impl FilesView {
         let row = self.table_row_at(at);
         let column = &self.browser.columns()[0];
         let modifiers = pointer.modifiers;
-        let plain = !modifiers.shift && !modifiers.logo && !modifiers.control;
+        let plain = !modifiers.shift && !modifiers.control;
         let rename = row
             .filter(|row| {
                 pointer.is_primary()
@@ -460,8 +461,7 @@ impl FilesView {
         self.press = Some(Press::Table { rename });
         let handled = self.ui.handle(event);
         self.drain_signals();
-        let menu = pointer.button == PointerButton::Secondary
-            || (pointer.is_primary() && modifiers.control);
+        let menu = pointer.button == PointerButton::Secondary;
         if menu {
             let menu = match row {
                 Some(_) => self.selection_menu(),

@@ -24,8 +24,9 @@ use bande_toolkit::{
     MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowEvent,
 };
 use bande_xdg::{
-    DesktopEntry, ICON_THEMES, app_name, autostart_dir, data_dirs, find_app, find_app_for_process,
-    find_icon, launch_with_arguments, opens_at_login, path_from_file_uri, set_open_at_login,
+    DesktopEntry, ICON_THEMES, app_name, autostart_dir, data_dirs, data_home, find_app,
+    find_app_for_process, find_icon, launch_with_arguments, opens_at_login, path_from_file_uri,
+    set_open_at_login, write_launcher,
 };
 use zbus::blocking::Connection;
 
@@ -242,6 +243,12 @@ impl Dock {
                 DockAction::Menu { target, at } => self.show_menu(window, target, at),
                 DockAction::ReleaseKeyboard => self.release_keyboard(window),
                 DockAction::Keep(shown) => {
+                    let shown: Vec<String> = shown
+                        .into_iter()
+                        .filter(|app_id| {
+                            self.kept.contains(app_id) || self.keep_launcher(window, app_id)
+                        })
+                        .collect();
                     let kept = arrange(&self.kept, &shown, |app_id| self.hidden(app_id));
                     self.set_kept(kept);
                 }
@@ -414,6 +421,35 @@ impl Dock {
         }
     }
 
+    fn can_keep(&self, window: &Window, app_id: &str) -> bool {
+        self.entry(app_id).is_some()
+            || self.kept.iter().any(|kept| kept == app_id)
+            || window.app_pid(&self.window_app(app_id)).is_some()
+    }
+
+    fn keep_launcher(&mut self, window: &Window, app_id: &str) -> bool {
+        if self.entry(app_id).is_some() {
+            return true;
+        }
+        let Some(pid) = window.app_pid(&self.window_app(app_id)) else {
+            return false;
+        };
+        let Some(home) = data_home() else {
+            return false;
+        };
+        match write_launcher(&home, app_id, Path::new(PROC), pid) {
+            Ok(_) => {
+                self.apps.reload();
+                self.follow_windows(window);
+                self.entry(app_id).is_some()
+            }
+            Err(error) => {
+                tracing::warn!("cannot write a launcher to keep {app_id}: {error}");
+                false
+            }
+        }
+    }
+
     fn hidden(&self, app_id: &str) -> bool {
         self.entry(app_id).is_none() && !self.running.iter().any(|running| running == app_id)
     }
@@ -545,7 +581,8 @@ impl Dock {
                 }
                 items.push(
                     MenuItem::new(&L10N.tr("menu-keep"), MENU_KEEP)
-                        .checked(self.kept.contains(app_id)),
+                        .checked(self.kept.contains(app_id))
+                        .enabled(self.can_keep(window, app_id)),
                 );
                 items.push(
                     MenuItem::new(&L10N.tr("menu-login"), MENU_LOGIN)
@@ -598,7 +635,8 @@ impl Dock {
                     Some(position) => {
                         kept.remove(position);
                     }
-                    None => kept.push(app_id),
+                    None if self.keep_launcher(window, &app_id) => kept.push(app_id),
+                    None => return,
                 }
                 self.set_kept(kept);
             }

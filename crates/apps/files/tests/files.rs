@@ -107,7 +107,7 @@ fn command(key: Key, shift: bool) -> Event {
     Event::Key {
         key,
         modifiers: Modifiers {
-            logo: true,
+            control: true,
             shift,
             ..Modifiers::default()
         },
@@ -468,7 +468,7 @@ fn moving_to_the_trash_and_putting_back() {
     let mut view = place.view();
     view.handle(&press(Key::Up));
 
-    view.handle(&command(Key::Backspace, false));
+    view.handle(&press(Key::Delete));
     run_until(&mut view, idle);
     assert!(!place.home().join("notes.txt").exists());
     assert_eq!(
@@ -488,7 +488,7 @@ fn moving_to_the_trash_and_putting_back() {
     )
     .expect("view");
     view.scene(1000, 600);
-    view.handle(&command(Key::Backspace, false));
+    assert!(view.menu_action("put-back"));
     run_until(&mut view, idle);
     assert_eq!(
         fs::read_to_string(place.home().join("notes.txt")).expect("back"),
@@ -563,7 +563,7 @@ fn cut_files_paste_as_a_move_and_paste_waits_for_files_on_the_clipboard() {
     view.set_clipboard_has_files(true);
     assert!(paste_enabled(&mut view));
 
-    view.handle(&command(Key::Character('G'), true));
+    view.handle(&command(Key::Character('l'), false));
     view.scene(1000, 600);
     view.handle(&Event::Commit("Documents".to_owned()));
     view.handle(&press(Key::Enter));
@@ -620,7 +620,7 @@ fn go_to_folder_accepts_relative_paths_and_reveals_files() {
     let place = Place::new();
     let mut view = place.view();
     let go_to = |view: &mut FilesView, typed: &str| {
-        view.handle(&command(Key::Character('G'), true));
+        view.handle(&command(Key::Character('l'), false));
         assert!(matches!(view.sheet(), Some(Sheet::GoTo(_))));
         view.handle(&Event::Commit(typed.to_owned()));
         view.handle(&press(Key::Enter));
@@ -683,7 +683,7 @@ fn clicks_select_extend_toggle_and_open() {
         1,
         1,
         Modifiers {
-            logo: true,
+            control: true,
             ..Modifiers::default()
         },
     );
@@ -1255,7 +1255,7 @@ fn the_icon_view_moves_in_two_dimensions_and_is_remembered_per_folder() {
     );
     assert_eq!(view.mode(), ViewMode::Icons);
     view.handle(&command(Key::Character('3'), false));
-    view.handle(&command(Key::Character('['), false));
+    view.handle(&alt(Key::Left));
     assert_eq!(view.browser().root(), &Location::Folder(place.home()));
     assert_eq!(view.mode(), ViewMode::Icons);
     view.handle(&command(Key::Character('='), false));
@@ -1484,7 +1484,7 @@ fn tabs_keep_their_own_folders_and_close_back_to_one() {
     view.handle(&command(Key::Character('t'), false));
     assert_eq!((view.tab_count(), view.active_tab()), (2, 1));
     view.handle(&press(Key::Down));
-    view.handle(&command(Key::Down, false));
+    view.handle(&alt(Key::Down));
     assert_eq!(
         view.browser().root(),
         &Location::Folder(place.home().join("Documents"))
@@ -1492,10 +1492,10 @@ fn tabs_keep_their_own_folders_and_close_back_to_one() {
     assert_eq!(view.tab_titles(), ["home", "Documents"]);
     assert_eq!(view.title(), "Documents");
 
-    view.handle(&command(Key::Character('['), true));
+    view.handle(&command(Key::PageUp, false));
     assert_eq!(view.active_tab(), 0);
     assert_eq!(view.browser().root(), &Location::Folder(place.home()));
-    view.handle(&command(Key::Character(']'), true));
+    view.handle(&command(Key::PageDown, false));
     assert_eq!(view.active_tab(), 1);
 
     view.scene(1000, 600);
@@ -1548,7 +1548,7 @@ fn files_dropped_on_a_tab_move_into_its_folder_and_hovering_springs_it_open() {
         view.drag_entered(over_documents, &uris),
         Some(DragAction::Move)
     );
-    view.handle(&command(Key::Character('['), true));
+    view.handle(&command(Key::PageUp, false));
     view.scene(1000, 600);
     assert_eq!(view.drag_moved(over_documents), Some(DragAction::Move));
     assert!(view.dropped(over_documents, &uris, Some(DragAction::Move)));
@@ -1617,7 +1617,7 @@ fn compressing_makes_an_undoable_zip_and_opening_it_extracts_beside_it() {
         Some("notes.txt.zip")
     );
 
-    view.handle(&command(Key::Down, false));
+    view.handle(&alt(Key::Down));
     run_until(&mut view, idle);
     let extracted = place.home().join("notes 2.txt");
     assert_eq!(
@@ -1914,7 +1914,7 @@ fn go_to_folder_on_a_file_in_a_big_folder_selects_it() {
     let mut view = place.view();
     let wanted = folder.join("File 12345");
 
-    view.handle(&command(Key::Character('G'), true));
+    view.handle(&command(Key::Character('l'), false));
     view.handle(&Event::Commit(wanted.display().to_string()));
     view.handle(&press(Key::Enter));
     run_until(&mut view, |view| {
@@ -1994,7 +1994,7 @@ fn a_file_written_into_a_shown_big_folder_appears_in_place() {
     let folder = big_folder(&place);
     let mut view = place.view();
     view.handle(&command(Key::Character('2'), false));
-    view.handle(&command(Key::Character('G'), true));
+    view.handle(&command(Key::Character('l'), false));
     view.handle(&Event::Commit(folder.display().to_string()));
     view.handle(&press(Key::Enter));
     run_until(&mut view, |view| !view.browser().columns()[0].is_listing());
@@ -2055,7 +2055,7 @@ fn select_all_in_the_list_view_of_a_big_folder_marks_every_row_once() {
     let folder = big_folder(&place);
     let mut view = place.view();
     view.handle(&command(Key::Character('2'), false));
-    view.handle(&command(Key::Character('G'), true));
+    view.handle(&command(Key::Character('l'), false));
     view.handle(&Event::Commit(folder.display().to_string()));
     view.handle(&press(Key::Enter));
     run_until(&mut view, |view| !view.browser().columns()[0].is_listing());
@@ -2204,7 +2204,7 @@ fn each_folder_keeps_its_own_sort_across_restarts() {
     fs::create_dir(&downloads).expect("downloads");
     let memory = place.root.path().join("state/files-views");
     let go = |view: &mut FilesView, folder: &Path| {
-        view.handle(&command(Key::Character('G'), true));
+        view.handle(&command(Key::Character('l'), false));
         view.handle(&Event::Commit(folder.display().to_string()));
         view.handle(&press(Key::Enter));
     };
@@ -2359,12 +2359,12 @@ fn a_selection_across_levels_drags_all_its_paths() {
 
     view.handle(&Event::PointerDown(Pointer::at(list_row(2.0))));
     view.handle(&Event::PointerUp(Pointer::at(list_row(2.0))));
-    let logo = Modifiers {
-        logo: true,
+    let control = Modifiers {
+        control: true,
         ..Modifiers::default()
     };
     view.handle(&Event::PointerDown(
-        Pointer::at(list_row(4.0)).with_modifiers(logo),
+        Pointer::at(list_row(4.0)).with_modifiers(control),
     ));
     view.handle(&Event::PointerUp(Pointer::at(list_row(4.0))));
     view.scene(1000, 600);
@@ -2411,11 +2411,10 @@ fn the_list_with_an_open_folder_matches_its_golden() {
     shoot("list-expanded", &mut view);
 }
 
-fn alt_command(key: Key) -> Event {
+fn alt(key: Key) -> Event {
     Event::Key {
         key,
         modifiers: Modifiers {
-            logo: true,
             alt: true,
             ..Modifiers::default()
         },
@@ -2466,7 +2465,7 @@ fn quick_look_opens_its_item_with_the_default_app() {
     let place = Place::new();
     let mut view = place.view();
     view.handle(&press(Key::Up));
-    view.handle(&command(Key::Character('y'), false));
+    view.handle(&press(Key::Space));
     view.scene(1000, 600);
     let button = view
         .hit_frame(&bande_files::Hit::QuickLookOpen)
@@ -2522,7 +2521,7 @@ fn quick_look_in_full_screen_covers_the_window_and_escape_returns() {
     let panel = view.quick_look_frame();
     assert!(panel.width < 1000.0);
 
-    view.handle(&alt_command(Key::Character('y')));
+    view.handle(&press(Key::Function(11)));
     let full = view.quick_look_frame();
     assert_eq!(
         (full.x, full.y, full.width, full.height),
@@ -2823,8 +2822,7 @@ fn copying_as_pathname_puts_one_absolute_path_per_line() {
     view.handle(&Event::Key {
         key: Key::Character('C'),
         modifiers: Modifiers {
-            logo: true,
-            alt: true,
+            control: true,
             shift: true,
             ..Modifiers::default()
         },
@@ -2848,9 +2846,8 @@ fn add_to_sidebar_bookmarks_the_selected_folder() {
     view.handle(&press(Key::Down));
 
     view.handle(&Event::Key {
-        key: Key::Character('t'),
+        key: Key::Character('d'),
         modifiers: Modifiers {
-            logo: true,
             control: true,
             ..Modifiers::default()
         },
@@ -2893,7 +2890,7 @@ fn the_edit_menu_names_the_action_to_undo_and_redo() {
 
     view.handle(&press(Key::Down));
     view.handle(&shift(Key::Down));
-    view.handle(&command(Key::Backspace, false));
+    view.handle(&press(Key::Delete));
     run_until(&mut view, idle);
     assert_eq!(
         plain(view.undo_title()).as_deref(),

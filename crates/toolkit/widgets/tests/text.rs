@@ -19,10 +19,13 @@ const NONE: Modifiers = Modifiers {
     control: false,
     logo: false,
 };
-const LOGO: Modifiers = Modifiers { logo: true, ..NONE };
-const SHIFT_LOGO: Modifiers = Modifiers {
+const CTRL: Modifiers = Modifiers {
+    control: true,
+    ..NONE
+};
+const SHIFT_CTRL: Modifiers = Modifiers {
     shift: true,
-    logo: true,
+    control: true,
     ..NONE
 };
 const AREA: Size = Size::new(320.0, 240.0);
@@ -151,23 +154,63 @@ fn fills(items: &[Item], out: &mut Vec<Rect>) {
 fn undo_takes_back_typing_a_word_at_a_time_and_redo_brings_it_back() {
     let mut editing = Editing::field("");
     editing.type_text("hello brave world");
-    editing.press(Key::Character('z'), LOGO);
+    editing.press(Key::Character('z'), CTRL);
     assert_eq!(editing.text(), "hello brave ");
-    editing.press(Key::Character('z'), LOGO);
+    editing.press(Key::Character('z'), CTRL);
     assert_eq!(editing.text(), "hello ");
-    editing.press(Key::Character('z'), SHIFT_LOGO);
+    editing.press(Key::Character('z'), SHIFT_CTRL);
     assert_eq!(editing.text(), "hello brave ");
-    editing.press(Key::Character('z'), LOGO);
-    editing.press(Key::Character('z'), LOGO);
+    editing.press(Key::Character('z'), CTRL);
+    editing.press(Key::Character('z'), CTRL);
     assert_eq!(editing.text(), "");
-    editing.press(Key::Character('z'), SHIFT_LOGO);
-    editing.press(Key::Character('z'), SHIFT_LOGO);
-    editing.press(Key::Character('z'), SHIFT_LOGO);
+    editing.press(Key::Character('z'), SHIFT_CTRL);
+    editing.press(Key::Character('z'), SHIFT_CTRL);
+    editing.press(Key::Character('z'), SHIFT_CTRL);
     assert_eq!(editing.text(), "hello brave world");
     assert_eq!(
         editing.changes.borrow().last().map(String::as_str),
         Some("hello brave world")
     );
+}
+
+#[test]
+fn ctrl_moves_and_deletes_by_word_and_home_and_end_reach_the_line_and_text_ends() {
+    let mut editing = Editing::view("one two three\nfour five");
+    editing.press(Key::Home, CTRL);
+    editing.press(Key::Right, CTRL);
+    editing.press(Key::Right, CTRL);
+    assert_eq!(editing.selection(), 7..7);
+    editing.press(Key::Left, SHIFT_CTRL);
+    assert_eq!(editing.selected(), "two");
+    editing.press(Key::End, NONE);
+    assert_eq!(editing.selection(), 13..13);
+    editing.press(Key::End, CTRL);
+    assert_eq!(editing.selection(), 23..23);
+    editing.press(Key::Backspace, CTRL);
+    assert_eq!(editing.text(), "one two three\nfour ");
+    editing.press(Key::Character('z'), CTRL);
+    assert_eq!(editing.text(), "one two three\nfour five");
+    editing.press(Key::Character('y'), CTRL);
+    assert_eq!(editing.text(), "one two three\nfour ");
+}
+
+#[test]
+fn super_no_longer_edits_and_a_read_only_view_refuses_ctrl_v() {
+    let mut editing = Editing::field("Invoice");
+    let logo = Modifiers { logo: true, ..NONE };
+    editing.press(Key::Character('a'), CTRL);
+    editing.ui.take_clipboard_request();
+    editing.press(Key::Character('c'), logo);
+    assert_eq!(editing.ui.take_clipboard_request(), None);
+    editing.press(Key::Character('c'), CTRL);
+    assert_eq!(
+        editing.ui.take_clipboard_request(),
+        Some(ClipboardRequest::Copy("Invoice".to_owned()))
+    );
+
+    let mut reading = Editing::with(|_| Box::new(TextView::new("", "Report", |_| {}).read_only()));
+    reading.press(Key::Character('v'), CTRL);
+    assert_eq!(reading.ui.take_clipboard_request(), None);
 }
 
 #[test]
@@ -177,11 +220,11 @@ fn moving_the_caret_ends_an_undo_step_and_new_typing_clears_redo() {
     editing.press(Key::Left, NONE);
     editing.type_text("X");
     assert_eq!(editing.text(), "aXb");
-    editing.press(Key::Character('z'), LOGO);
+    editing.press(Key::Character('z'), CTRL);
     assert_eq!(editing.text(), "ab");
     assert_eq!(editing.selection(), 1..1, "undo puts the caret back");
     editing.type_text("Y");
-    editing.press(Key::Character('z'), SHIFT_LOGO);
+    editing.press(Key::Character('z'), SHIFT_CTRL);
     assert_eq!(
         editing.text(),
         "aYb",
@@ -196,11 +239,11 @@ fn deleting_and_pasting_undo_as_whole_steps_restoring_the_selection() {
         editing.press(Key::Backspace, NONE);
     }
     assert_eq!(editing.text(), "Quarterly report");
-    editing.press(Key::Character('z'), LOGO);
+    editing.press(Key::Character('z'), CTRL);
     assert_eq!(editing.text(), "Quarterly report draft");
 
-    editing.press(Key::Character('a'), LOGO);
-    editing.press(Key::Character('v'), LOGO);
+    editing.press(Key::Character('a'), CTRL);
+    editing.press(Key::Character('v'), CTRL);
     assert_eq!(
         editing.ui.take_clipboard_request(),
         Some(ClipboardRequest::Paste)
@@ -212,7 +255,7 @@ fn deleting_and_pasting_undo_as_whole_steps_restoring_the_selection() {
         "Annual summary",
         "a field keeps to one line"
     );
-    editing.press(Key::Character('z'), LOGO);
+    editing.press(Key::Character('z'), CTRL);
     assert_eq!(editing.text(), "Quarterly report draft");
     assert_eq!(editing.selected(), "Quarterly report draft");
 }
@@ -304,7 +347,7 @@ fn composition_shows_underlined_in_place_without_changing_the_value_until_commit
     });
     assert_eq!(editing.text(), "Tokyo 東京");
     assert_eq!(underlines(&mut editing), 0);
-    editing.press(Key::Character('z'), LOGO);
+    editing.press(Key::Character('z'), CTRL);
     assert_eq!(editing.text(), "Tokyo ");
 }
 
@@ -328,7 +371,7 @@ fn clicking_while_composing_keeps_the_reading_and_resets_the_input_method() {
 #[test]
 fn arrows_move_visually_through_mixed_left_to_right_and_right_to_left_text() {
     let mut editing = Editing::field("abc אבג def");
-    editing.press(Key::Left, LOGO);
+    editing.press(Key::Home, NONE);
     let mut positions = vec![editing.caret().x];
     for _ in 0..11 {
         editing.press(Key::Right, NONE);
@@ -367,7 +410,7 @@ fn double_click_drag_extends_by_whole_words() {
     let y = frame.y + frame.height / 2.0;
     editing.press(Key::Up, NONE);
     let start = editing.caret().x;
-    editing.press(Key::Right, LOGO);
+    editing.press(Key::End, NONE);
     let end = editing.caret().x;
     let at = |fraction: f32| Point::new(start + (end - start) * fraction, y);
     editing.send(Event::PointerDown(Pointer::at(at(0.05)).with_count(2)));
@@ -386,7 +429,7 @@ fn pressing_on_a_selection_and_moving_drags_its_text_while_a_click_there_places_
     let y = frame.y + frame.height / 2.0;
     editing.press(Key::Up, NONE);
     let start = editing.caret().x;
-    editing.press(Key::Right, LOGO);
+    editing.press(Key::End, NONE);
     let end = editing.caret().x;
     let at = |fraction: f32| Point::new(start + (end - start) * fraction, y);
     let select_brave = |editing: &mut Editing| {
@@ -442,10 +485,10 @@ fn a_long_field_scrolls_to_keep_the_caret_visible_and_drags_scroll_it() {
     let text = "a long line that is wider than the field so it has to scroll sideways to show the caret at the end";
     let mut editing = Editing::field(text);
     let frame = editing.frame();
-    editing.press(Key::Right, LOGO);
+    editing.press(Key::End, NONE);
     let caret = editing.caret();
     assert!(caret.x <= frame.x + frame.width && caret.x >= frame.x);
-    editing.press(Key::Left, LOGO);
+    editing.press(Key::Home, NONE);
     let caret = editing.caret();
     assert!(caret.x >= frame.x && caret.x < frame.x + 10.0);
 
@@ -515,9 +558,9 @@ fn a_text_view_wraps_inserts_new_lines_and_moves_between_lines_keeping_the_colum
     let mut editing = Editing::view("");
     editing.type_text("first line\nsecond\nthird line here");
     assert_eq!(editing.text(), "first line\nsecond\nthird line here");
-    editing.press(Key::Up, LOGO);
+    editing.press(Key::Home, CTRL);
     assert_eq!(editing.selection(), 0..0);
-    editing.press(Key::Right, LOGO);
+    editing.press(Key::End, NONE);
     assert_eq!(editing.selection(), 10..10);
     editing.press(Key::Down, NONE);
     assert_eq!(
@@ -531,15 +574,9 @@ fn a_text_view_wraps_inserts_new_lines_and_moves_between_lines_keeping_the_colum
         (26..=29).contains(&column),
         "the next line returns to the remembered column: {column}"
     );
-    editing.press(
-        Key::Up,
-        Modifiers {
-            shift: true,
-            ..LOGO
-        },
-    );
+    editing.press(Key::Home, SHIFT_CTRL);
     assert_eq!(editing.selected(), editing.text()[..column].to_owned());
-    editing.press(Key::Character('z'), LOGO);
+    editing.press(Key::Character('z'), CTRL);
     assert_eq!(editing.text(), "first line\nsecond\nthird line ");
 }
 
@@ -561,7 +598,7 @@ fn a_text_view_scrolls_to_follow_the_caret() {
         .join("\n");
     let mut editing = Editing::view(&text);
     let frame = editing.frame();
-    editing.press(Key::Down, LOGO);
+    editing.press(Key::End, CTRL);
     let caret = editing.caret();
     assert!(
         caret.y >= frame.y && caret.y + caret.height <= frame.y + frame.height,
@@ -580,8 +617,8 @@ fn a_read_only_text_view_selects_and_copies_but_never_edits() {
     assert!(!editing.press(Key::Character('x'), NONE));
     editing.send(Event::Commit("typed".to_owned()));
     assert_eq!(editing.text(), "Release notes");
-    editing.press(Key::Character('a'), LOGO);
-    editing.press(Key::Character('c'), LOGO);
+    editing.press(Key::Character('a'), CTRL);
+    editing.press(Key::Character('c'), CTRL);
     assert_eq!(
         editing.ui.take_clipboard_request(),
         Some(ClipboardRequest::Copy("Release notes".to_owned()))
@@ -612,7 +649,7 @@ fn typing_in_a_hundred_thousand_line_text_view_stays_instant() {
         .collect::<Vec<_>>()
         .join("\n");
     let mut editing = Editing::view(&text);
-    editing.press(Key::Down, LOGO);
+    editing.press(Key::End, CTRL);
     let started = Instant::now();
     for character in "typing at the end".chars() {
         editing.press(Key::Character(character), NONE);
@@ -645,7 +682,7 @@ fn a_search_field_searches_as_you_type_and_escape_or_the_clear_button_empties_it
         !editing.press(Key::Escape, NONE),
         "Escape in an empty search field goes on to the window"
     );
-    editing.press(Key::Character('z'), LOGO);
+    editing.press(Key::Character('z'), CTRL);
     assert_eq!(editing.text(), "tax", "clearing can be undone");
 
     let frame = editing.frame();
@@ -709,7 +746,7 @@ fn a_settled_selection_becomes_the_primary_selection_once() {
     let y = frame.y + frame.height / 2.0;
     editing.press(Key::Up, NONE);
     let start = editing.caret().x;
-    editing.press(Key::Right, LOGO);
+    editing.press(Key::End, NONE);
     let end = editing.caret().x;
     let brave = Point::new(start + (end - start) * 0.4, y);
     editing.ui.take_clipboard_request();

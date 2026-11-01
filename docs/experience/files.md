@@ -2,7 +2,9 @@
 
 Status: research and build plan of 2026-10-30, branch `night/files-monitor-spec`. Slices F1–F7
 were built on 2026-10-31 in `night/files-depth-1`, F8–F14 and lazy list rows in
-`day/files-depth-2`; see "Built" under §6. It reads with the accepted proposal [`../design/features/files.md`](../design/features/files.md),
+`day/files-depth-2`; see "Built" under §6. On 2026-11-01 Files moved from Super to Nautilus-style
+Ctrl shortcuts ([decision 0005](../decisions/0005-ctrl-for-app-shortcuts.md)): §1 lists the
+current keys, and the slices in §6 keep the keys they were written with. It reads with the accepted proposal [`../design/features/files.md`](../design/features/files.md),
 the principles in [`../design/DESIGN.md`](../design/DESIGN.md) and the design language
 [`../design/datum.md`](../design/datum.md).
 
@@ -24,19 +26,19 @@ Checked in `crates/apps/files/src`, `crates/libs/fs`, `crates/libs/preview` and 
 
 | Area | What works | Where |
 | :--- | :--- | :--- |
-| Window | Header with back, forward, title, view switch (icons, list, columns) and search; sidebar; path bar and status (items, free space) at the bottom, hidden with Super+/ and remembered | `toolbar.rs`, `paint.rs`, `views.rs` |
+| Window | Header with back, forward, title, view switch (icons, list, columns) and search; sidebar; path bar and status (items, free space) at the bottom, hidden with Ctrl+/ and remembered | `toolbar.rs`, `paint.rs`, `views.rs` |
 | Sidebar | Favourites: Recents, Home, user folders, GTK bookmarks; Locations: mounted volumes with an eject button, Trash. Drag folders in, reorder, remove, restore the defaults | `sidebar.rs`, `context.rs`, `drag.rs` |
 | Views | Columns (default, arrow-key driven), list (sortable Name, Date Modified, Size; Kind unsortable), icons with thumbnails, a size slider (32–256 pt) and band selection; view and icon size remembered per folder | `browser.rs`, `controls.rs`, `grid.rs`, `views.rs` |
-| Tabs | Super+T, Shift+Super+[ and ], Ctrl+Tab; a tab bar from two tabs; dropping on a tab springs it open | `tabs.rs` |
-| Selection | Click, Shift, Super, Super+A, band in icons, type-to-select | `browser.rs`, `view.rs` |
-| Open | Double click, Return, Super+Down, Super+O; Open With submenu; Open in Terminal; middle click opens a folder in a new tab | `context.rs`, `menus.rs` |
-| Operations | Copy, Cut, Paste, Move Here (Alt+Super+V), Duplicate, New Folder, New Document from Templates, Rename (F2, slow click, Tab to the next), Compress to zip, extract by opening an archive, Trash with Put Back, Delete Immediately (Alt), Empty Trash with a sound, Eject; all in the background with progress and cancel; Undo and Redo | `libs/fs/src/ops.rs`, `operations.rs`, `undo.rs` |
+| Tabs | Ctrl+T, Ctrl+Page Up and Page Down, Ctrl+Tab; a tab bar from two tabs; dropping on a tab springs it open | `tabs.rs` |
+| Selection | Click, Shift, Ctrl, Ctrl+A, band in icons, type-to-select | `browser.rs`, `view.rs` |
+| Open | Double click, Return, Alt+Down, Ctrl+O; Open With submenu; Open in Terminal; middle click opens a folder in a new tab | `context.rs`, `menus.rs` |
+| Operations | Copy, Cut, Paste, Move Here (Shift+Ctrl+V), Duplicate, New Folder, New Document from Templates, Rename (F2, slow click, Tab to the next), Compress to zip, extract by opening an archive, Trash with Put Back (Delete), Delete Immediately (Shift+Delete, or Alt in the menu), Empty Trash with a sound (Shift+Ctrl+Delete), Eject; all in the background with progress and cancel; Undo and Redo | `libs/fs/src/ops.rs`, `operations.rs`, `undo.rs` |
 | Conflicts | Replace, Skip, Keep Both, Stop, Apply to all | `controls.rs` |
 | Drag and drop | Drag to any app; drop on folders, sidebar, tabs and path bar segments; spring-loading after 0.9 s; Alt copies and Super moves (the compositor picks the action) | `drag.rs`, `platform/compositor/src/drag.rs` |
 | Quick Look | Space toggles, arrows move the selection under it: images, text (first lines), folder counts, other files through installed thumbnailers (PDF, video) | `paint.rs`, `libs/preview` |
-| Inspector | Super+I shows one panel that follows the selection: preview, kind, size (folders counted in the background), modified, where, permissions as text, link target, Open With with Use for All | `paint.rs`, `view.rs` |
-| Search | Super+F; fuzzy name search over the `bande-search` index; scope "this folder" or Home; results in a list with a Where column; Recents (Shift+Super+F) | `search.rs` |
-| Go | Back, Forward, Enclosing Folder, Desktop, Documents, Downloads, Home, Recents, Go to Folder (Shift+Super+G, relative paths and `~`) | `menu_bar.rs`, `view.rs` |
+| Inspector | Ctrl+I shows one panel that follows the selection: preview, kind, size (folders counted in the background), modified, where, permissions as text, link target, Open With with Use for All | `paint.rs`, `view.rs` |
+| Search | Ctrl+F; fuzzy name search over the `bande-search` index; scope "this folder" or Home; results in a list with a Where column; Recents (Shift+Ctrl+F) | `search.rs` |
+| Go | Back, Forward, Enclosing Folder, Desktop, Documents, Downloads, Home, Recents, Go to Folder (Ctrl+L, relative paths and `~`); Back and Forward on Alt+Left and Right, Enclosing Folder on Alt+Up, Home on Alt+Home | `menu_bar.rs`, `view.rs` |
 | Watching | inotify on shown folders, settled for 80 ms, then the whole folder is read again | `libs/fs/src/watch.rs`, `browser.rs` |
 
 **What is missing or rough, in short:** the column view shows nothing for a selected file; the list
@@ -95,7 +97,7 @@ it, and on Select All in the list view. Slice F1 measures it; F2–F4 remove it.
 | :--- | :--- | :---: | :---: |
 | Folders are read on the UI thread | Opening a big Downloads, a photo dump or `/usr/lib` freezes the window; the Finder shows the first items at once | now | S |
 | A change reads the whole folder again | A download or a build writing into a big folder makes the window stutter every 80 ms | now | S |
-| Selection and list rows scale with the folder | Super+A, Shift-click and switching to the list view hitch on big folders | now | S |
+| Selection and list rows scale with the folder | Ctrl+A, Shift-click and switching to the list view hitch on big folders | now | S |
 | No number for big folders | `bande-session-bench` measures Files on 400 files only; regressions go unseen | now | S |
 
 ### Views
@@ -112,17 +114,17 @@ it, and on Select All in the list view. Slice F1 measures it; F2–F4 remove it.
 | Small thumbnails in list and column rows | The Finder shows icon previews at every size | later | S |
 | Groups (by Kind or Date Added) | Useful in Downloads and Recents; a second axis most people never touch | later | M |
 | Gallery view | Icons, the preview column and Quick Look cover it; a fourth view is one concept too many | never | — |
-| A View Options panel (Super+J) | Remembered per-folder choices replace a panel of options | never | — |
+| A View Options panel (the Finder's Command-J) | Remembered per-folder choices replace a panel of options | never | — |
 
 ### Navigation and windows
 
 | Gap | Why a user notices | Now/later/never | Effort |
 | :--- | :--- | :---: | :---: |
 | No entry for the whole disk | You cannot reach `/` or see the system disk's free space from the sidebar; the Datum mockup shows "Internal" | now | S |
-| The sidebar cannot be hidden | Alt+Super+S does nothing; small screens lose 200 pt | now | S |
+| The sidebar cannot be hidden | No shortcut or menu item hides it; small screens lose 200 pt | now | S |
 | No "Add to Sidebar" on a folder | Only drag adds favourites; Control-Command-T and the menu item are missing | now | S |
 | Go to Folder does not complete | Typing `/usr/sh` and Tab does nothing; GNOME and the Finder complete paths, and typing `/` in the view does not open the field | now | S |
-| Each window is a separate process | Undo does not reach a move made in another window, every Super+N is a cold start, tabs cannot move between windows | now | M |
+| Each window is a separate process | Undo does not reach a move made in another window, every Ctrl+N is a cold start, tabs cannot move between windows | now | M |
 | No `org.freedesktop.FileManager1` | Firefox "Show in Folder" and Activity Monitor "Show in Files" cannot select the item in a running window | now | S |
 | Drag a tab out to a window, Merge All Windows | Expected from browsers and the Finder | later | S |
 | Connect to Server (SFTP, SMB) | NAS and server users need it; needs the gvfs-or-FUSE decision (roadmap: Later) | later | L |
@@ -147,7 +149,7 @@ it, and on Select All in the list view. Slice F1 measures it; F2–F4 remove it.
 | No Copy Path | Pasting a path into a terminal or a chat is a daily task (Explorer "Copy as path", Finder Option-Command-C) | now | S |
 | No Merge when a folder meets a folder | Replace throws away the other folder's files; the Finder offers Merge | now | S |
 | Errors arrive after the fact as raw text in a 5-second notice ("Permission denied (os error 13) (3 more)"), and nothing checks free space before a copy | A copy fails halfway through and the message is gone before it is read; the Finder refuses up front, says how much space is missing, and asks at the first failure | now | S |
-| The menu says "Undo", not "Undo Move of 3 Items" | You cannot tell what Super+Z will do (proposal: the menu names the action) | now | S |
+| The menu says "Undo", not "Undo Move of 3 Items" | You cannot tell what Ctrl+Z will do (proposal: the menu names the action) | now | S |
 | Copy progress only inside the window | Hidden behind other windows, a long copy is invisible; the bar shows progress for apps through LauncherEntry | now | S |
 | Eject fails without naming the app that holds the volume | "Busy" without a culprit is a dead end | later | M |
 | Remove from Trash after 30 days | One checkbox in the proposal; not before the basics | later | S |
@@ -170,7 +172,7 @@ it, and on Select All in the list view. Slice F1 measures it; F2–F4 remove it.
 | Nothing Files paints moves | Selection blinks instead of gliding, the inspector and Quick Look pop, views switch with a cut; DESIGN §3 and Datum §11 ask for motion everywhere | now | M |
 | Sidebar, columns, icon grid, path bar, inspector and Quick Look are missing from the accessibility tree | A screen reader sees the toolbar and nothing of the default (column) view | now | M |
 | The sidebar cannot be reached from the keyboard | Tab never leaves the content; arrows cannot move between places | now | S |
-| Missing shortcuts: Super+Y, Alt+Super+S, Ctrl+Super+T, Shift+Super+C, Alt+Super+C | Muscle memory from the Finder fails silently | now | S |
+| Missing shortcuts: Finder's Command-Y, Option-Command-S, Control-Command-T, Shift-Command-C, Option-Command-C | Muscle memory from the Finder fails silently (since 2026-11-01 Files follows Nautilus instead: Space, Ctrl+D, Shift+Ctrl+C) | now | S |
 
 ### Empty states and consistency
 
@@ -187,9 +189,9 @@ Where this plan departs from or settles [`../design/features/files.md`](../desig
    most visible "Files is simple" gap after the preview column.
 2. **One process, many windows.** The toolkit already runs several windows per process
    (`run_surfaces`, used by Activity Monitor). It makes Undo span windows as the proposal asks, makes
-   Super+N instant and lets Files own `org.freedesktop.FileManager1`. Drag a tab out stays Later.
+   Ctrl+N instant and lets Files own `org.freedesktop.FileManager1`. Drag a tab out stays Later.
 3. **The preview column is the column view's own preview, not a fourth view.** Gallery stays never.
-4. **Copy Path is the Alt alternative of Copy** (Alt+Super+C), as Delete Immediately is of Move to
+4. **Copy Path is the Alt alternative of Copy** (Shift+Ctrl+C), as Delete Immediately is of Move to
    Trash: no new top-level item.
 5. **"Allow running as a program" in the inspector,** with simple Access pop-ups for owner, group
    and others. No full ACL editor.
@@ -490,8 +492,9 @@ thumbnail, size and date, and "Newer" beside the newer one.
 ### F18. Disk in the sidebar, and hiding the sidebar
 
 Under Locations, before volumes: the system disk, named after the computer's pretty hostname or
-"Internal", opening `/`, with Shift+Super+C. Alt+Super+S hides and shows the sidebar with a
-`standard` slide (Reduce Motion: fade), remembered like the status bar.
+"Internal", opening `/`, without a shortcut (Shift+Ctrl+C is Copy Path). F9 hides and shows the
+sidebar, as in Nautilus, with a `standard` slide (Reduce Motion: fade), remembered like the status
+bar.
 
 - Tests: the disk row opens `/`; hiding the sidebar is remembered for the next window; the content
   frame widens by the sidebar width.
@@ -515,7 +518,7 @@ Uses the toolkit's animation module.
 
 - Tests: with a fixed clock, the selection rectangle is between the two rows mid-animation and on
   the new row when settled; with Reduce Motion it never sits between rows.
-- Review: record arrow-key presses and Super+I at 120 Hz; frames in the report show no dropped
+- Review: record arrow-key presses and Ctrl+I at 120 Hz; frames in the report show no dropped
   frames (frame times from the bench, p99 under 8 ms).
 
 ### F21. Motion: Quick Look and changing rows
@@ -526,7 +529,7 @@ its sorted place.
 
 - Tests: Quick Look's frame starts at the item's icon rectangle; a removed row's space closes over
   the animation; Reduce Motion fades in place.
-- Review: Space on an icon and Super+Backspace on a row; frames in the report.
+- Review: Space on an icon and Delete on a row; frames in the report.
 
 ### F22. Accessibility: sidebar, columns, path bar
 
@@ -546,18 +549,18 @@ dialog named after the item, the progress row as a progress bar with its value.
 
 ### F24. One process, many windows
 
-Files runs every window in one process with `run_surfaces`: Super+N, Open in New Window and a
+Files runs every window in one process with `run_surfaces`: Ctrl+N, Open in New Window and a
 second launch open a window in the running process. Each window keeps its own browser, tabs and
 view; apps, icons, thumbnails and the search index are shared.
 
-- Tests: Super+N adds a window to the same process; closing one window keeps the others; Super+Q
+- Tests: Ctrl+N adds a window to the same process; closing one window keeps the others; Ctrl+Q
   closes all.
-- Acceptance: Super+N to first frame under 100 ms (before and after numbers).
+- Acceptance: Ctrl+N to first frame under 100 ms (before and after numbers).
 
 ### F25. Shared operations, Undo across windows, progress on the bar
 
 `Operations` and the undo history move from the view to the app: a move started in one window is
-undone with Super+Z in another, and progress shows in every window. Copy progress also goes to the
+undone with Ctrl+Z in another, and progress shows in every window. Copy progress also goes to the
 bar icon through `com.canonical.Unity.LauncherEntry`; the terminal's sender moves to a shared lib
 as its second consumer.
 
@@ -578,8 +581,8 @@ then selects the executable.
 ## 7. Polish checklist (every slice)
 
 - Every new action is in a menu with its shortcut, in the context menu where it applies, and
-  reachable without a pointer. New shortcuts are checked against the compositor's table in
-  `libs/keyboard/src/shortcuts.rs` (Alt+Super+digits, arrows, `=`, `-` and `0` are taken).
+  reachable without a pointer. New shortcuts use Ctrl, Alt or plain keys as Nautilus does, never
+  Super, which is the compositor's (`libs/keyboard/src/shortcuts.rs`).
 - Every new surface has hover, pressed, focused, disabled and drag-over states, light and dark, at
   1× and 1.5×.
 - Values come from Datum tokens: radii from the concentric rule, text roles, `ink` tiers, the

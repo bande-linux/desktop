@@ -385,3 +385,39 @@ fn holding_alt_redraws_the_zoom_button_as_a_plus() {
         well
     ));
 }
+
+#[test]
+fn dragging_just_outside_a_client_side_window_without_a_margin_resizes_it() {
+    let mut server = server();
+    let mut client = window(&mut server, RED, WINDOW);
+    let top_left = origin(&server);
+
+    drag(
+        &mut server,
+        &mut client,
+        (top_left.0 + WINDOW.0 + 4, top_left.1 + 20),
+        (30, 0),
+    );
+
+    assert_eq!(configured_size(&client), Some((WINDOW.0 + 30, WINDOW.1)));
+}
+
+#[test]
+fn a_client_side_window_with_its_own_margin_gets_the_press_itself() {
+    const MARGIN: i32 = 12;
+    let mut server = server();
+    let size = (WINDOW.0 + 2 * MARGIN, WINDOW.1 + 2 * MARGIN);
+    let mut client = window(&mut server, RED, size);
+    client.set_window_geometry(&mut server, 0, (MARGIN, MARGIN, WINDOW.0, WINDOW.1));
+    let top_left = origin(&server);
+
+    drag(
+        &mut server,
+        &mut client,
+        (top_left.0 + WINDOW.0 + 4, top_left.1 + 20),
+        (30, 0),
+    );
+
+    assert!(!client.buttons().is_empty());
+    assert_ne!(configured_size(&client), Some((WINDOW.0 + 30, WINDOW.1)));
+}

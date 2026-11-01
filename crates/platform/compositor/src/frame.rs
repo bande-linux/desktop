@@ -100,6 +100,19 @@ fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
         .then(|| WindowControl::at(point, bar as f32).map_or(Zone::TitleBar, Zone::Control))
 }
 
+fn outer_band(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
+    if window.title_bar_height() != 0 {
+        return None;
+    }
+    let rect = window.geometry()?;
+    let point = local_point(rect, location);
+    let frame = Rect::new(0.0, 0.0, rect.size.w as f32, rect.size.h as f32);
+    if frame.contains(point) {
+        return None;
+    }
+    resize_band(window, frame, point).map(Zone::Resize)
+}
+
 fn resize_band(window: &Window, frame: Rect, point: bande_graphics::Point) -> Option<ResizeEdge> {
     if window.has_state(xdg_toplevel::State::Maximized)
         || window.has_state(xdg_toplevel::State::Fullscreen)
@@ -186,7 +199,11 @@ impl State {
                 Placed::Surface(surface, origin) => surface_at(&surface, origin, location),
                 Placed::Window(_, window) => zone_at(window, location)
                     .map(|zone| Target::Frame(window.surface().clone(), zone))
-                    .or_else(|| surface_at(window.surface(), window.surface_origin(), location)),
+                    .or_else(|| surface_at(window.surface(), window.surface_origin(), location))
+                    .or_else(|| {
+                        outer_band(window, location)
+                            .map(|zone| Target::Frame(window.surface().clone(), zone))
+                    }),
                 Placed::Scrim(owner, _) => Some(Target::Scrim(owner)),
                 Placed::Closing(_) | Placed::Overview(_) | Placed::Backdrop(_) => None,
             })

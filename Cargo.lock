@@ -391,6 +391,7 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "bande-app",
+ "bande-inbox",
  "bande-toolkit",
  "bande-watch",
  "bande-xdg",

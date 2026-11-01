@@ -11,6 +11,7 @@ repository.workspace = true
 accesskit.workspace = true
 tracing.workspace = true
 bande-app.workspace = true
+bande-inbox.workspace = true
 bande-toolkit.workspace = true
 bande-watch.workspace = true
 bande-xdg.workspace = true

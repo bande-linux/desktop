@@ -1,13 +1,13 @@
 use std::cell::RefCell;
 use std::fs;
-use std::io::{self, Read};
-use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::net::UnixStream;
+use std::io;
+use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use accesskit::TreeUpdate;
 use bande_app::View;
+use bande_inbox::Inbox;
 use bande_toolkit::ui::Ui;
 use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 use bande_watch::{Changes, FolderWatch};
@@ -52,26 +52,26 @@ pub fn flag(value: &str) -> Option<bool> {
 
 pub struct SettingsWatch {
     _watch: FolderWatch,
-    wake: UnixStream,
+    changes: Inbox<()>,
 }
 
 impl SettingsWatch {
     pub fn start(folder: &Path, file: &'static str) -> Option<Self> {
         let started = fs::create_dir_all(folder).and_then(|()| {
-            let (wake, mut signal) = UnixStream::pair()?;
-            wake.set_nonblocking(true)?;
+            let changes = Inbox::new()?;
+            let changed = changes.outbox();
             let watch = FolderWatch::spawn(Changes::Saved, move |paths| {
                 if paths
                     .iter()
                     .any(|path| path.file_name().is_some_and(|name| name == file))
                 {
-                    io::Write::write_all(&mut signal, &[1]).ok();
+                    changed.send(());
                 }
             })?;
             watch.watch(folder)?;
             Ok(Self {
                 _watch: watch,
-                wake,
+                changes,
             })
         });
         started
@@ -80,16 +80,11 @@ impl SettingsWatch {
     }
 
     pub fn fd(&self) -> BorrowedFd<'_> {
-        self.wake.as_fd()
+        self.changes.fd()
     }
 
     pub fn drain(&mut self) -> bool {
-        let mut buffer = [0u8; 64];
-        let mut woken = false;
-        while matches!(self.wake.read(&mut buffer), Ok(read) if read > 0) {
-            woken = true;
-        }
-        woken
+        !self.changes.drain().is_empty()
     }
 }
 
@@ -99,6 +94,7 @@ pub struct SettingsWindow<S: Stored> {
     ui: Ui,
     settings: Shared<S>,
     saved: S,
+    unsaved: Option<S>,
     folder: Option<PathBuf>,
     watch: Option<SettingsWatch>,
     build: Build<S>,
@@ -115,6 +111,7 @@ impl<S: Stored> SettingsWindow<S> {
             ui: build(appearance, &settings),
             settings,
             saved,
+            unsaved: None,
             folder,
             watch,
             build,
@@ -141,15 +138,21 @@ impl<S: Stored> SettingsWindow<S> {
 
     fn save(&mut self) {
         let settings = self.settings();
-        if settings == self.saved {
+        if settings == self.saved || self.unsaved.as_ref() == Some(&settings) {
             return;
         }
         let Some(folder) = &self.folder else {
             return;
         };
         match settings.save(folder) {
-            Ok(()) => self.saved = settings,
-            Err(error) => tracing::warn!("cannot save {}: {error}", S::FILE),
+            Ok(()) => {
+                self.saved = settings;
+                self.unsaved = None;
+            }
+            Err(error) => {
+                tracing::warn!("cannot save {}: {error}", S::FILE);
+                self.unsaved = Some(settings);
+            }
         }
     }
 }

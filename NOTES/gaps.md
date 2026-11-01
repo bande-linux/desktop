@@ -24,7 +24,7 @@ its not possible to install more keyboard layouts or languages in settings *impo
 Status: started ([plans/keyboard-layouts-and-languages.md](plans/keyboard-layouts-and-languages.md))
 
 grapping a window edge or corner in order to reseize it is a bit difficult, the resizer is too unprecise to the actual corner or edge
-Status: planned ([plans/window-resize-zones.md](plans/window-resize-zones.md))
+Status: finished ([plans/window-resize-zones.md](plans/window-resize-zones.md)); not yet checked live on the mini
 
 the themes, especially the dark theme, looks a bit "dated". Review how modern dark themes look in 2026. This is too dark and hard on the eyes with strong contrast. I think MacOS dark theme is nicer on the eyes, a bit more slated. DO not copy that however, rely on the investigation.
 Status: planned ([plans/dark-theme.md](plans/dark-theme.md))

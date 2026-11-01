@@ -88,7 +88,7 @@ Option C, done as B first and then the fallback:
 
 Each milestone is one branch from `main`, gated by fmt, workspace clippy `-D warnings` and tests, and checked live on the mini before merging.
 
-### M1. One rounded, straddling hit test; the toolkit chrome uses it (about 2 h)
+### M1. One rounded, straddling hit test; the toolkit chrome uses it (about 2 h) Done.
 
 - `crates/toolkit/graphics/src/scene.rs`: add `Shape::distance(self, point: Point) -> f32`, the signed distance to the rounded outline (negative inside).
   - The same formula exists twice already: `rounded_distance` (`crates/platform/compositor/src/scene.rs:165`) and `rounded_box` (`crates/shell/screenshot/src/indicator.rs:119`).
@@ -119,7 +119,7 @@ Each milestone is one branch from `main`, gated by fmt, workspace clippy `-D war
     - A drag from 4 pt inside the bottom rim still moves the window.
 - Docs: `docs/architecture/toolkit.md:142` and `docs/design/features/windows.md:77`, with the new numbers.
 
-### M2. Server-side frames use the same test (about 1-1.5 h)
+### M2. Server-side frames use the same test (about 1-1.5 h) Done.
 
 - `crates/platform/compositor/src/frame.rs`:
   - `zone_at` calls `resize_zone` before the "inside the frame" branch, with `CORNER_RADIUS`, or 0 and outside = 0 for tiled windows (`TILED`, `scene.rs:947`).
@@ -132,7 +132,7 @@ Each milestone is one branch from `main`, gated by fmt, workspace clippy `-D war
   - A press 10 pt outside the right edge does not resize.
 - Docs: `docs/architecture/compositor.md:55`.
 
-### M3. Compositor fallback band for client-side windows (about 1.5 h)
+### M3. Compositor fallback band for client-side windows (about 1.5 h) Done.
 
 - `crates/platform/compositor/src/frame.rs`, `pointer_target`:
   - For a `Placed::Window` with `title_bar_height() == 0` that is floating, try `surface_at` first.
@@ -160,3 +160,7 @@ Live check on the mini after each milestone: resize Files, Settings, a terminal,
    - Alternatively 10 + 3, which matches GTK more closely but steals more from the window behind.
 2. **Inside band on third-party server-side windows.** 3 pt is recommended; 0 leaves app pixels alone at the cost of consistency.
 3. **Fallback band for CSD apps (M3).** Ship it, or leave Electron and other CSD apps to their own margins until the "GTK apps do not fit our window bar" item settles whether they move to server-side frames.
+
+Decided overnight 2026-11-01: 8 pt outside + 3 pt inside, corners following the curve (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: 3 pt inside band on third-party server-side windows too (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: ship the CSD fallback band; it does not depend on the third-party title bar work (plan recommendation; owner may revisit).

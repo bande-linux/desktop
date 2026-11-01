@@ -390,6 +390,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }),
         (0, 0),
     )?;
+    let devices = system.as_ref().and_then(Devices::follow);
     let mut greeter = Greeter {
         users,
         user,
@@ -408,7 +409,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         text,
         system,
         powers,
-        devices: Devices::follow(),
+        devices,
         corner: (None, None),
     };
     bande_toolkit::run(&mut window, &mut greeter)?;

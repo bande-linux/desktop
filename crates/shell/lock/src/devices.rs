@@ -12,14 +12,11 @@ pub struct Devices {
 }
 
 impl Devices {
-    pub fn follow() -> Option<Self> {
-        let system = zbus::blocking::Connection::system()
-            .inspect_err(|error| tracing::warn!("no system bus: {error}"))
-            .ok()?;
+    pub fn follow(system: &zbus::blocking::Connection) -> Option<Self> {
         let inbox = Inbox::new()
             .inspect_err(|error| tracing::warn!("cannot follow the battery and Wi-Fi: {error}"))
             .ok()?;
-        let controls = follow_devices(&system, inbox.outbox());
+        let controls = follow_devices(system, inbox.outbox());
         Some(Self {
             inbox,
             _controls: controls,

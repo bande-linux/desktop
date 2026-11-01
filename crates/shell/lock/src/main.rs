@@ -204,7 +204,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         minutes: MinuteTimer::new()?,
         backdrop: None,
         backdrop_requested: false,
-        devices: Devices::follow(),
+        devices: zbus::blocking::Connection::system()
+            .inspect_err(|error| tracing::warn!("no system bus: {error}"))
+            .ok()
+            .as_ref()
+            .and_then(Devices::follow),
         layouts: Layouts::load(),
         unlocked: false,
     };

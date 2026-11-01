@@ -27,6 +27,13 @@ pub fn is_sensitive(contents: &Contents) -> bool {
     })
 }
 
+pub fn privacy_hint_unread(offered: &[String], contents: &Contents) -> bool {
+    offered.iter().any(|mime| {
+        (mime == PASSWORD_HINT || mime == CONCEALED)
+            && !contents.iter().any(|(read, _)| read == mime)
+    })
+}
+
 pub fn text_of(contents: &Contents) -> Option<String> {
     TEXT_MIMES.iter().find_map(|wanted| {
         contents

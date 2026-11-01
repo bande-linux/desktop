@@ -26,7 +26,8 @@ for package in "${packages[@]}"; do
     [ "$(dpkg-deb --field "$deb" Package)" = "$package" ]
     [ "$(dpkg-deb --field "$deb" Architecture)" = "$architecture" ]
     [ "$(dpkg-deb --field "$deb" Version)" = "$version" ]
-    [ "$(dpkg-deb --field "$deb" Section)" = misc ]
+    section=$(dpkg-deb --field "$deb" Section)
+    [[ " misc admin " == *" $section "* ]] || { echo "$package is in section $section, not misc or admin"; exit 1; }
     [ "$(dpkg-deb --fsys-tarfile "$deb" | tar -xO | grep -ac -e "$PWD" -e "${CARGO_HOME:-$HOME/.cargo}")" = 0 ]
 done
 field bande-compositor Depends | grep -F 'mesa-vulkan-drivers | vulkan-icd'

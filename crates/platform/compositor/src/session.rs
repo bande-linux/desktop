@@ -33,6 +33,7 @@ pub const REVIEW: &str = "/usr/bin/bande-review";
 const CONFIRM_ARGUMENT: &str = "--confirm";
 
 pub const SESSION_CLIENT_RESTART_THROTTLE: Duration = Duration::from_secs(10);
+const LOCK_SCREEN_RELAUNCH_AFTER: Duration = Duration::from_secs(10);
 
 pub(crate) struct SessionClient {
     executable: PathBuf,
@@ -160,6 +161,23 @@ impl Compositor {
         }
     }
 
+    pub(crate) fn relaunch_hung_lock_screen(&mut self, now: Duration) -> Option<Duration> {
+        if !self.state.is_locked() {
+            return None;
+        }
+        let child = self.lock_screen.child.as_mut()?;
+        let pid = i32::try_from(child.id()).ok()?;
+        let due = self.state.watchdog.hung_since(pid)? + LOCK_SCREEN_RELAUNCH_AFTER;
+        if now < due {
+            return Some(due);
+        }
+        tracing::warn!("the lock screen stopped responding; starting it again");
+        if let Err(error) = child.kill() {
+            tracing::warn!("cannot end the lock screen: {error}");
+        }
+        None
+    }
+
     pub fn lock_screen_pid(&self) -> Option<u32> {
         self.lock_screen.child.as_ref().map(Child::id)
     }
@@ -243,10 +261,7 @@ impl Compositor {
             }
             client.last_restart = Some(Instant::now());
             let (executable, role) = (client.executable.clone(), client.role);
-            match self
-                .spawn_session_command(Command::new(&executable), role)
-                .map(|(child, _)| child)
-            {
+            match self.spawn_session_client(&executable, role) {
                 Ok(child) => self.session_clients[index].child = Some(child),
                 Err(error) => {
                     upkeep.failures.push((executable, error));
@@ -259,8 +274,11 @@ impl Compositor {
     }
 
     fn spawn_session_client(&mut self, executable: &Path, role: SessionRole) -> io::Result<Child> {
-        self.spawn_session_command(Command::new(executable), role)
-            .map(|(child, _)| child)
+        let (child, client) = self.spawn_session_command(Command::new(executable), role)?;
+        if executable == Path::new(SHELL) {
+            self.state.desktop_shell = Some(client);
+        }
+        Ok(child)
     }
 
     fn spawn_session_command(

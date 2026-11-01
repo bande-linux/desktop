@@ -179,7 +179,7 @@ impl XdgShellHandler for State {
     }
 
     fn client_pong(&mut self, client: ShellClient) {
-        self.pong(&client);
+        self.pong(client);
     }
 
     fn new_toplevel(&mut self, toplevel: ToplevelSurface) {

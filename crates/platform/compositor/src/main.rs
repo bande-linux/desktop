@@ -26,6 +26,8 @@ use zbus::blocking::fdo::PropertiesProxy;
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
 const SHELL_READY_TIMEOUT: Duration = Duration::from_millis(2500);
+const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
+const GREETER_HANG_CHECK: Duration = Duration::from_secs(10);
 
 enum Backend {
     Headless,
@@ -435,6 +437,16 @@ fn listen<O: 'static>(
     Ok(())
 }
 
+fn end_greeter_when_hung<O: 'static>(
+    handle: &LoopHandle<'static, App<O>>,
+) -> Result<(), Box<dyn Error>> {
+    handle.insert_source(Timer::immediate(), |_, _, _| {
+        unsafe { libc::alarm(GREETER_HANG_LIMIT_SECONDS) };
+        TimeoutAction::ToDuration(GREETER_HANG_CHECK)
+    })?;
+    Ok(())
+}
+
 fn follow<O: 'static, T: 'static>(
     handle: &LoopHandle<'static, App<O>>,
     what: &str,
@@ -578,6 +590,7 @@ where
             (None, start_user_session(event_loop, &mut app)?)
         }
         Session::Greeter => {
+            end_greeter_when_hung(&event_loop.handle())?;
             app.compositor.apply_input_settings(InputSettings::system());
             (Some(Greeter::start(&mut app.compositor)), None)
         }
@@ -624,6 +637,9 @@ where
         if compositor.take_outputs_powered_on() {
             schedulers.iter_mut().for_each(FrameScheduler::resume);
         }
+        if let Some(number) = compositor.take_virtual_terminal() {
+            output.switch_virtual_terminal(number);
+        }
         let reveal_wait = compositor
             .reveal_wake(now())
             .map(|at| at.saturating_sub(now()));
@@ -639,6 +655,20 @@ where
             match scheduler.poll(now, compositor, output) {
                 Ok(frame) => frame_wake = frame_wake.into_iter().chain(frame.wake_at).min(),
                 Err(error) => tracing::warn!("cannot show a frame: {}", error.into()),
+            }
+        }
+        match output.renew_lost_renderer() {
+            Ok(true) => {
+                schedulers.iter_mut().for_each(FrameScheduler::resume);
+                frame_wake = Some(now());
+            }
+            Ok(false) => {}
+            Err(error) => {
+                return Err(format!(
+                    "the GPU was lost and the renderer cannot start again: {}",
+                    error.into()
+                )
+                .into());
             }
         }
         let frame_wait = frame_wake.map(|at: Duration| at.saturating_sub(now()));

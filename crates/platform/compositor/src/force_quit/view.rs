@@ -22,6 +22,7 @@ const FOOTER: f32 = 60.0;
 const BUTTON_MIN_WIDTH: f32 = 96.0;
 const CAPTION_GAP: f32 = 12.0;
 const FORCE_QUIT: &str = "force-quit";
+pub(crate) const SHELL_KEY: &str = ":shell";
 const CANCEL: &str = "cancel";
 
 #[derive(Clone)]
@@ -96,10 +97,15 @@ impl ForceQuitView {
         .primary();
         button.set_enabled(false);
         let mut cx = Context::new(text, appearance.palette());
-        let width = button
-            .measure(&mut cx, Size::new(f32::MAX, BUTTON_HEIGHT))
-            .width
-            .max(BUTTON_MIN_WIDTH);
+        let width = [L10N.tr("force-quit-relaunch"), L10N.tr("force-quit-button")]
+            .iter()
+            .map(|title| {
+                button.set_title(title);
+                button
+                    .measure(&mut cx, Size::new(f32::MAX, BUTTON_HEIGHT))
+                    .width
+            })
+            .fold(BUTTON_MIN_WIDTH, f32::max);
         let mut layout = FreeLayout::new();
         let table = layout.insert(table, Rect::default());
         let button = layout.insert(button, Rect::default());
@@ -168,9 +174,14 @@ impl ForceQuitView {
             .borrow_mut()
             .retain(|signal| !matches!(signal, Signal::Selected(_)));
         let enabled = !keys.is_empty();
+        let title = match keys.as_slice() {
+            [key] if key == SHELL_KEY => "force-quit-relaunch",
+            _ => "force-quit-button",
+        };
         self.selected = keys;
         if let Some(button) = self.ui.widget_as::<Button>(self.button.0) {
             button.set_enabled(enabled);
+            button.set_title(&L10N.tr(title));
         }
     }
 
@@ -286,8 +297,11 @@ impl ForceQuitView {
         items
     }
 
-    fn ask(&mut self) {
+    fn ask(&mut self) -> Option<Effect> {
         let keys = self.selected.clone();
+        if matches!(keys.as_slice(), [key] if key == SHELL_KEY) {
+            return Some(Effect::ForceQuit(keys));
+        }
         let names: Vec<&str> = self
             .listed
             .iter()
@@ -295,7 +309,7 @@ impl ForceQuitView {
             .map(|app| app.name.as_str())
             .collect();
         let title = match names.as_slice() {
-            [] => return,
+            [] => return None,
             [name] => L10N.tr_args("force-quit-confirm", [("name", (*name).to_owned().into())]),
             _ => L10N.tr_args("force-quit-confirm-many", [("count", names.len().into())]),
         };
@@ -323,6 +337,7 @@ impl ForceQuitView {
         };
         self.confirming = keys;
         self.ui.present_dialog(alert);
+        None
     }
 
     pub(crate) fn handle(&mut self, event: &Event) -> (bool, Vec<Effect>) {
@@ -359,7 +374,7 @@ impl ForceQuitView {
             for signal in signals {
                 match signal {
                     Signal::Selected(keys) => self.select(keys),
-                    Signal::Ask => self.ask(),
+                    Signal::Ask => effects.extend(self.ask()),
                     Signal::Chosen(choice) => {
                         let keys = std::mem::take(&mut self.confirming);
                         if choice == FORCE_QUIT && !keys.is_empty() {

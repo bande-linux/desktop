@@ -10,7 +10,7 @@ use std::io::{Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::os::fd::{AsRawFd, BorrowedFd, IntoRawFd, OwnedFd};
 use std::slice;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use ash::vk;
@@ -285,6 +285,7 @@ pub struct VulkanRenderer {
     copies: Vec<PendingCopy>,
     counters: Counters,
     blur_chains: HashMap<(i32, i32, vk::Format, u32), frame::BlurChain>,
+    lost: AtomicBool,
     _entry: ash::Entry,
 }
 
@@ -481,6 +482,7 @@ impl VulkanRenderer {
             copies: Vec::new(),
             counters: Counters::default(),
             blur_chains: HashMap::new(),
+            lost: AtomicBool::new(false),
             instance,
             device,
             _entry: entry,
@@ -1124,16 +1126,27 @@ impl VulkanRenderer {
         }
     }
 
+    pub fn is_lost(&self) -> bool {
+        self.lost.load(Ordering::Relaxed)
+    }
+
     fn submit_and_wait(&self) -> Result<(), RenderError> {
         let submit =
             vk::SubmitInfo::default().command_buffers(slice::from_ref(&self.command_buffer));
         unsafe {
             self.device
-                .queue_submit(self.queue, slice::from_ref(&submit), self.fence)?;
-            self.device
-                .wait_for_fences(slice::from_ref(&self.fence), true, u64::MAX)?;
-            self.device.reset_fences(slice::from_ref(&self.fence))?;
+                .queue_submit(self.queue, slice::from_ref(&submit), self.fence)
+                .and_then(|()| {
+                    self.device
+                        .wait_for_fences(slice::from_ref(&self.fence), true, u64::MAX)
+                })
+                .and_then(|()| self.device.reset_fences(slice::from_ref(&self.fence)))
         }
+        .inspect_err(|error| {
+            if *error == vk::Result::ERROR_DEVICE_LOST {
+                self.lost.store(true, Ordering::Relaxed);
+            }
+        })?;
         Ok(())
     }
 

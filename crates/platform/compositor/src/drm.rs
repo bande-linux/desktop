@@ -700,7 +700,35 @@ impl FrameOutput for DrmBackend {
         }
     }
 
+    fn switch_virtual_terminal(&mut self, number: i32) {
+        if let Err(error) = self.session.change_vt(number) {
+            tracing::warn!("cannot switch to virtual terminal {number}: {error}");
+        }
+    }
+
     fn submit(
+        &mut self,
+        compositor: &mut Compositor,
+        output: &str,
+    ) -> Result<Submission, DrmBackendError> {
+        self.present(compositor, output)
+    }
+
+    fn renew_lost_renderer(&mut self) -> Result<bool, DrmBackendError> {
+        if !self.renderer.is_lost() {
+            return Ok(false);
+        }
+        tracing::error!("the GPU was lost; starting the renderer again");
+        self.renderer = VulkanRenderer::new()?;
+        for head in &mut self.heads {
+            head.compositor.reset_buffers();
+        }
+        Ok(true)
+    }
+}
+
+impl DrmBackend {
+    fn present(
         &mut self,
         compositor: &mut Compositor,
         output: &str,

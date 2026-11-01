@@ -391,13 +391,14 @@ impl Dispatch<BandeAppV1, ()> for State {
 impl Dispatch<BandeShellV1, ()> for State {
     fn event(
         state: &mut Self,
-        _: &BandeShellV1,
+        shell: &BandeShellV1,
         event: bande_shell_v1::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
         match event {
+            bande_shell_v1::Event::Ping { serial } => shell.pong(serial),
             bande_shell_v1::Event::ShowLauncher => state.events.push(WindowEvent::ShowLauncher),
             bande_shell_v1::Event::ScrimPressed { surface } => {
                 if state.own_surface.as_ref() == Some(&surface) {

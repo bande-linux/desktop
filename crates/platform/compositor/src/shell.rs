@@ -530,6 +530,7 @@ impl Dispatch<BandeShellV1, ()> for State {
                 ending: WEnum::Value(ending),
             } => state.confirm_session_end(ending),
             bande_shell_v1::Request::QuitAllApps => state.quit_all_apps(resource.clone()),
+            bande_shell_v1::Request::Pong { .. } => state.shell_pong(resource.clone()),
             bande_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);
                 state.quitting.retain(|(shell, _)| shell != resource);

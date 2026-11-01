@@ -15,9 +15,24 @@ use crate::state::{Compositor, State};
 pub const UNRESPONSIVE_AFTER: Duration = Duration::from_secs(3);
 const PING_INTERVAL: Duration = Duration::from_secs(1);
 
+#[derive(PartialEq)]
+enum Pinged {
+    App(ShellClient),
+    Shell(BandeShellV1),
+}
+
+impl Pinged {
+    fn alive(&self) -> bool {
+        match self {
+            Self::App(client) => client.alive(),
+            Self::Shell(shell) => shell.is_alive(),
+        }
+    }
+}
+
 struct Ping {
     owner: ClientId,
-    client: ShellClient,
+    pinged: Pinged,
     pid: i32,
     app_id: String,
     sent: Duration,
@@ -50,6 +65,13 @@ impl Watchdog {
     pub(crate) fn has_unresponsive(&self) -> bool {
         self.pings.iter().any(|ping| ping.unresponsive)
     }
+
+    pub(crate) fn hung_since(&self, pid: i32) -> Option<Duration> {
+        self.pings
+            .iter()
+            .find(|ping| ping.unresponsive && ping.pid == pid)
+            .map(|ping| ping.sent)
+    }
 }
 
 fn announce(
@@ -58,6 +80,9 @@ fn announce(
     ping: &Ping,
     responding: bool,
 ) {
+    if matches!(ping.pinged, Pinged::Shell(_)) {
+        return;
+    }
     for shell in shells {
         shell.app_responding(ping.pid, ping.app_id.clone(), u32::from(responding));
     }
@@ -82,12 +107,20 @@ impl State {
         }
     }
 
-    pub(crate) fn pong(&mut self, client: &ShellClient) {
+    pub(crate) fn pong(&mut self, client: ShellClient) {
+        self.answered(&Pinged::App(client));
+    }
+
+    pub(crate) fn shell_pong(&mut self, shell: BandeShellV1) {
+        self.answered(&Pinged::Shell(shell));
+    }
+
+    fn answered(&mut self, pinged: &Pinged) {
         let Some(ping) = self
             .watchdog
             .pings
             .iter_mut()
-            .find(|ping| &ping.client == client && ping.pending)
+            .find(|ping| &ping.pinged == pinged && ping.pending)
         else {
             return;
         };
@@ -151,9 +184,32 @@ impl State {
             pinged.insert(id.clone());
             self.watchdog.pings.push(Ping {
                 owner: id,
-                client,
+                pinged: Pinged::App(client),
                 pid,
                 app_id: toplevel_names(window.toplevel.wl_surface()).1,
+                sent: now,
+                pending: true,
+                unresponsive: false,
+            });
+        }
+        for shell in &self.shell_resources {
+            let Some(owner) = shell.client() else {
+                continue;
+            };
+            let id = owner.id();
+            if (!everyone && !interacting.contains(&id)) || pinged.contains(&id) {
+                continue;
+            }
+            shell.ping(SERIAL_COUNTER.next_serial().into());
+            let pid = owner
+                .get_credentials(&self.display_handle)
+                .map_or(0, |credentials| credentials.pid);
+            pinged.insert(id.clone());
+            self.watchdog.pings.push(Ping {
+                owner: id,
+                pinged: Pinged::Shell(shell.clone()),
+                pid,
+                app_id: String::new(),
                 sent: now,
                 pending: true,
                 unresponsive: false,
@@ -166,7 +222,7 @@ impl State {
         let controls = &self.app_control_resources;
         let mut changed = false;
         self.watchdog.pings.retain(|ping| {
-            let alive = ping.client.alive();
+            let alive = ping.pinged.alive();
             let quiet = !ping.pending && now >= ping.sent + PING_INTERVAL;
             if !alive && ping.unresponsive {
                 announce(shells, controls, ping, true);
@@ -201,6 +257,9 @@ impl State {
 
 impl Compositor {
     pub fn watchdog_tick(&mut self, now: Duration) -> Option<Duration> {
-        self.state.watchdog_due(now)
+        let due = self.state.watchdog_due(now);
+        due.into_iter()
+            .chain(self.relaunch_hung_lock_screen(now))
+            .min()
     }
 }

@@ -55,6 +55,10 @@ impl Button {
         }
     }
 
+    pub fn set_title(&mut self, title: &str) {
+        title.clone_into(&mut self.title);
+    }
+
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
         if !enabled {

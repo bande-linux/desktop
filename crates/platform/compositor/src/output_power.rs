@@ -78,6 +78,10 @@ impl Compositor {
     pub fn take_outputs_powered_on(&mut self) -> bool {
         std::mem::take(&mut self.state.output_power.turned_on)
     }
+
+    pub fn take_virtual_terminal(&mut self) -> Option<i32> {
+        self.state.virtual_terminal.take()
+    }
 }
 
 impl GlobalDispatch<ZwlrOutputPowerManagerV1, ()> for State {

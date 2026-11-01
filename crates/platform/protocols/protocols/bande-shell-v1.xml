@@ -505,6 +505,23 @@
       <arg name="pid" type="int"/>
       <arg name="windowless" type="uint"/>
     </event>
+
+    <event name="ping">
+      <description summary="check that the client still responds">
+        As xdg_wm_base.ping, for shell clients, whose surfaces are not
+        toplevels: the client answers with pong at once. Sent while the user
+        works with the client's surfaces and when Force Quit opens. A client
+        that has not answered after 3 seconds is not responding.
+      </description>
+      <arg name="serial" type="uint"/>
+    </event>
+
+    <request name="pong">
+      <description summary="answer a ping">
+        Answers the ping event with its serial.
+      </description>
+      <arg name="serial" type="uint"/>
+    </request>
   </interface>
 
   <interface name="bande_app_v1" version="3">

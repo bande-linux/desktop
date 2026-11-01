@@ -21,8 +21,8 @@ use bande_status::memory::{
 };
 use bande_toolkit::{App, Rect, Role, Scene, Surfaces, TextSystem, Window, WindowEvent};
 use bande_xdg::{
-    Locale, applications, current_desktops, data_dirs, find_app, follow_oom_kills, launch,
-    reopen_file, take_apps_to_reopen,
+    Locale, applications, apps_to_reopen, crashed_apps_file, current_desktops, data_dirs, find_app,
+    follow_oom_kills, launch, reopen_file, take_apps_to_reopen,
 };
 use zbus::blocking::Connection;
 
@@ -387,12 +387,21 @@ fn bus(connection: zbus::Result<Connection>, name: &str) -> Option<Connection> {
         .ok()
 }
 
-fn reopen_apps(wanted: bool) {
-    let Some(file) = reopen_file() else {
-        return;
-    };
-    let apps = take_apps_to_reopen(&file);
-    if !wanted || apps.is_empty() {
+fn reopen_apps(wanted: bool, after_crash: bool) {
+    let remembered = reopen_file()
+        .map(|file| take_apps_to_reopen(&file))
+        .unwrap_or_default();
+    let crashed = crashed_apps_file()
+        .map(|file| take_apps_to_reopen(&file))
+        .unwrap_or_default();
+    let mut apps = Vec::new();
+    if wanted {
+        apps.extend(remembered);
+    }
+    if after_crash {
+        apps.extend(crashed);
+    }
+    if apps.is_empty() {
         return;
     }
     let entries = applications(
@@ -400,8 +409,8 @@ fn reopen_apps(wanted: bool) {
         Locale::from_env().as_ref(),
         &current_desktops(),
     );
-    for app in apps {
-        if let Some(entry) = find_app(&entries, &app)
+    for app in apps_to_reopen(&entries, &apps) {
+        if let Some(entry) = find_app(&entries, app)
             && let Err(error) = launch(entry, None)
         {
             tracing::warn!("cannot reopen {app}: {error}");
@@ -427,7 +436,8 @@ fn root_role() -> bande_toolkit::Role {
 pub fn run() -> Result<(), Box<dyn Error>> {
     let root = Window::open(root_role(), (0, 0))?;
     let context = Context::from_env();
-    reopen_apps(context.config().reopen_apps);
+    let config = context.config();
+    reopen_apps(config.reopen_apps, config.reopen_apps_after_crash);
     if let Some(session) = &context.session {
         follow_oom_kills(session.clone());
     }

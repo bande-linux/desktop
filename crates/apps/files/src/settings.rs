@@ -69,6 +69,7 @@ pub struct FilesSettings {
     pub new_window: StartFolder,
     pub default_view: ViewMode,
     pub show_hidden: bool,
+    pub folders_first: bool,
     pub warn_empty_trash: bool,
     pub purge_trash: bool,
     pub search_home: bool,
@@ -80,6 +81,7 @@ impl Default for FilesSettings {
             new_window: StartFolder::default(),
             default_view: ViewMode::default(),
             show_hidden: false,
+            folders_first: true,
             warn_empty_trash: true,
             purge_trash: false,
             search_home: false,
@@ -104,6 +106,9 @@ impl Stored for FilesSettings {
                     settings.default_view = ViewMode::parse(value).unwrap_or(settings.default_view);
                 }
                 "show-hidden" => settings.show_hidden = flag(value).unwrap_or(settings.show_hidden),
+                "folders-first" => {
+                    settings.folders_first = flag(value).unwrap_or(settings.folders_first);
+                }
                 "warn-empty-trash" => {
                     settings.warn_empty_trash = flag(value).unwrap_or(settings.warn_empty_trash);
                 }
@@ -123,10 +128,11 @@ impl Stored for FilesSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "new-window = {}\ndefault-view = {}\nshow-hidden = {}\nwarn-empty-trash = {}\npurge-trash = {}\nsearch-in = {}\n",
+            "new-window = {}\ndefault-view = {}\nshow-hidden = {}\nfolders-first = {}\nwarn-empty-trash = {}\npurge-trash = {}\nsearch-in = {}\n",
             self.new_window.name(),
             self.default_view.name(),
             self.show_hidden,
+            self.folders_first,
             self.warn_empty_trash,
             self.purge_trash,
             if self.search_home { "home" } else { "folder" },
@@ -229,6 +235,12 @@ fn form(settings: &Shared<FilesSettings>) -> Form {
                 "settings-show-hidden",
                 current.show_hidden,
                 |settings, on| settings.show_hidden = on,
+            ),
+            toggle(
+                settings,
+                "settings-folders-first",
+                current.folders_first,
+                |settings, on| settings.folders_first = on,
             ),
             heading("settings-trash"),
             toggle(

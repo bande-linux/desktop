@@ -32,13 +32,14 @@ tempfile.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter, greetd, bande-compositor"
+depends = "$auto, fonts-inter, greetd (>= 0.10.3-6), bande-compositor"
 extended-description = """\
 The login window of the Bande desktop: greetd runs it as its greeter \
 inside bande-compositor --greeter, and it lists the people who can \
 sign in, asks for the chosen person's password and has greetd start \
 their Bande session. It becomes greetd's greeter through a drop-in for \
-greetd.service, and the display manager on systems that have none."""
+greetd.service; greetd itself asks which display manager to start when \
+another one is installed."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/bande-greeter", "usr/bin/", "755"],

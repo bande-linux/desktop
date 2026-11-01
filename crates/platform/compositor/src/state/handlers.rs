@@ -185,10 +185,12 @@ impl XdgShellHandler for State {
     fn new_toplevel(&mut self, toplevel: ToplevelSurface) {
         let workspace = self.screens[self.pointer_screen()].workspaces.active_id();
         self.windows.push(Window::new(toplevel.clone(), workspace));
+        self.apps_changed = true;
         self.decorate_as_requested_before(&toplevel);
     }
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
+        self.apps_changed = true;
         self.withdraw_toplevel(toplevel.wl_surface());
         if let Some(index) = self.window_index(toplevel.wl_surface())
             && self.windows[index].size.is_some()
@@ -212,6 +214,7 @@ impl XdgShellHandler for State {
     }
 
     fn app_id_changed(&mut self, toplevel: ToplevelSurface) {
+        self.apps_changed = true;
         self.recall_late(toplevel.wl_surface());
         self.publish_toplevel(toplevel.wl_surface());
         let key = self.key_window();

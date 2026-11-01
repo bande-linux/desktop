@@ -115,8 +115,14 @@ watchdog), then test at the machine.
   panic reboot). No image built, since that needs CI.
 - Milestones 3 and 4 done in the desktop: the OOM-floor drop-ins in `packaging/bande-desktop`,
   `WatchdogSec=20s` with `WATCHDOG=1` keepalives from the compositor's event loop.
-- Milestone 5 needs the new kernel installed and a reboot. Milestone 6 is open. Milestone 7:
-  coredump is in the image, ramoops is open.
+- Milestone 5 needs the new kernel installed and a reboot.
+- Milestone 6 done as an opt-in: the compositor keeps the open apps in
+  `$XDG_STATE_HOME/bande/running` while the session runs; a session that ended without writing
+  `reopen` leaves it, the next compositor moves it to `bande/crashed`, and the shell reopens
+  those apps when the config says `reopen-apps-after-crash #true` (default off: an app that
+  took the session down would come back with it). No Settings switch yet. Not yet seen after a
+  real crash on the mini.
+- Milestone 7: coredump is in the image, ramoops is open.
 
 ## Decisions for the owner
 
@@ -138,3 +144,6 @@ watchdog), then test at the machine.
    Recommend not yet: with oomd and the OOM floor it should not happen, and ending the session
    loses all apps.
    Decided overnight 2026-11-01: not yet (plan recommendation; owner may revisit).
+6. **Reopen apps after a crash**: on by default, or opt-in?
+   Decided 2026-11-01: opt-in (`reopen-apps-after-crash`), since an app that brought the
+   session down would come straight back; owner may revisit.

@@ -71,7 +71,7 @@ grep -qx 'Exec=bande-software' "$root/usr/share/applications/org.bande.Software.
 test -s "$root/usr/share/metainfo/org.bande.Software.metainfo.xml"
 root=$(extract bande-greeter)
 grep -qx 'command = "/usr/bin/bande-compositor --greeter"' "$root/usr/share/bande-greeter/greetd-config.toml"
-field bande-greeter Depends | grep -qw greetd
+field bande-greeter Depends | grep -qF 'greetd (>= 0.10.3-6)'
 root=$(extract bande-lock)
 grep -qx '@include common-auth' "$root/etc/pam.d/bande-lock"
 field bande-lock Depends | grep -q libpam0g

@@ -38,9 +38,9 @@ them into role directories; the grouping below is that target.
 | Libraries | `bande-spring` (damped springs), `bande-xdg` (desktop entries, icons, launching), `bande-audio` (PipeWire), `bande-network` (NetworkManager), `bande-bluetooth` (BlueZ) |
 | Testing | `bande-test-bus` (private D-Bus session buses), `bande-test-wayland` (Wayland test clients), `bande-bench` (performance measurements), `bande-sample` (toolkit sample for `ci/perf`) |
 
-Other directories: `packaging/` holds the `bande-desktop` and `bande-os` meta-packages and
-the APT source packages, `ci/` the scripts CI runs (release packages, install test, guest VM,
-hardware-in-the-loop), and `docs/` the documentation.
+Other directories: `packaging/` holds the `bande-desktop` meta-package, `ci/` the scripts CI
+runs (release packages, install test, guest VM, hardware-in-the-loop), and `docs/` the
+documentation.
 
 ## Building and testing
 
@@ -88,26 +88,21 @@ on Debian 13 (trixie).
         https://github.com/bande-linux/apt/releases/latest/download/bande-apt-source.deb
    sudo apt install ./bande-archive-keyring.deb ./bande-apt-source.deb
    ```
-2. Install the desktop alone, next to the desktop you have:
+2. Install Bande:
 
    ```bash
    sudo apt update
    sudo apt install bande-desktop
    ```
 
-   Log out and choose **Bande** at the login screen. You need a display manager that lists
-   Wayland sessions, such as GDM, SDDM or a greetd front-end.
-
-   Or turn the system into bande-os, with Bande's login window as the display manager,
-   NetworkManager, PipeWire and compressed swap in memory:
-
-   ```bash
-   sudo apt update
-   sudo apt install bande-os
-   ```
+   This brings the whole system: the desktop, its login window under greetd, NetworkManager,
+   PipeWire, the everyday apps and compressed swap in memory. If another display manager such
+   as GDM is installed, apt asks which one to start; `sudo dpkg-reconfigure greetd` asks again
+   later. Both list the **Bande** session. With `--no-install-recommends` you get only the
+   desktop, a way to log in and sound.
 
 Updates arrive with `sudo apt upgrade`. The APT source lists the `main` component, with the
-desktop and `bande-os`, and the `apple` component, with the kernel for Apple Silicon Macs;
+desktop, and the `apple` component, with the kernel for Apple Silicon Macs;
 its pin lets the repository provide only Bande's own packages. The repository is signed with
 the key `6287 DE66 4599 29AA 1C01  E146 495A 6C19 8264 7E05`.
 

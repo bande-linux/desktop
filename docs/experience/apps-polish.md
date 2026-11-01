@@ -9,13 +9,13 @@ Gap tables for four of our own apps, each against its best-in-class counterparts
 Compared with macOS Terminal, iTerm2, GNOME Console, Ptyxis and Windows Terminal.
 
 Already there: profiles, text size, cursor shape, bell (flash or badge), notifications when long commands finish, find,
-URL detection with Super+click, links from OSC 8 escapes, dropping files to paste their quoted paths, splits, tabs,
+URL detection with Ctrl+click, links from OSC 8 escapes, dropping files to paste their quoted paths, splits, tabs,
 window restore, and Show in Files for the folder the shell is in.
 
 | Now | Later | Never |
 | --- | --- | --- |
-| **Built:** paths in the output are links. Super+hover underlines a path that exists (relative to the shell's folder, `~/…`, or absolute, with any `:line:column` suffix dropped). Super+click opens it. Its menu offers Open, Copy Path and Show in Files, and Show in Files selects that item. | Jump to the previous or next prompt (Super+Up/Down) from OSC 133 marks. The marks are already parsed for notifications; the jump also needs grid positions that survive scrollback trimming and reflow. | A font-family picker for any installed font: the profile stays on the Datum monospace. |
-| | Super+click on `file:line` opens the default editor at that line (iTerm2's semantic history). Needs a desktop-wide "open at line" convention. | Background transparency and blur. |
+| **Built:** paths in the output are links. Ctrl+hover underlines a path that exists (relative to the shell's folder, `~/…`, or absolute, with any `:line:column` suffix dropped). Ctrl+click opens it. Its menu offers Open, Copy Path and Show in Files, and Show in Files selects that item. | Jump to the previous or next prompt (Shift+Ctrl+Up/Down) from OSC 133 marks. The marks are already parsed for notifications; the jump also needs grid positions that survive scrollback trimming and reflow. | A font-family picker for any installed font: the profile stays on the Datum monospace. |
+| | Ctrl+click on `file:line` opens the default editor at that line (iTerm2's semantic history). Needs a desktop-wide "open at line" convention. | Background transparency and blur. |
 | | A per-profile palette editor. Today the profiles are curated, and that is enough. | Quake-style drop-down window. |
 | | "Not responding" detection for a hung foreground job. | |
 
@@ -41,14 +41,14 @@ arrow, rectangle, text and highlight.
 Compared with the macOS open and save panels and the GTK file chooser.
 
 Already there: a sidebar with the same places as Files, a path bar, sortable columns, type-to-select, filters, New
-Folder (Super+Shift+N), Super+Up and Super+Down, a confirmation before replacing a file, the last folder remembered for
+Folder (Shift+Ctrl+N), Alt+Up and Alt+Down, a confirmation before replacing a file, the last folder remembered for
 each app.
 
 | Now | Later | Never |
 | --- | --- | --- |
-| **Built:** Go to Folder. Super+Shift+G opens a sheet with the shown folder already typed in. Typing `/` or `~` in the file list opens it with that character, as in macOS and GTK. A folder opens; a file opens its folder and selects it, so Return then chooses it. A path that does not exist gets an alert that says so. | A preview pane for the selected file (Quick Look-style), sharing Files' previews. | Bookmark editing inside the dialog: the sidebar mirrors Files. |
-| **Built:** go straight to a folder from the keyboard: Super+Shift+H (Home), Super+Shift+D (Desktop) and Super+Shift+O (Documents), the same keys as macOS. | Back and forward buttons in the path bar. | |
-| **Built:** Super+[ and Super+] go back and forward through the folders visited. Going back selects the folder you came from. | | |
+| **Built:** Go to Folder. Ctrl+L opens a sheet with the shown folder already typed in. Typing `/` or `~` in the file list opens it with that character, as in macOS and GTK. A folder opens; a file opens its folder and selects it, so Return then chooses it. A path that does not exist gets an alert that says so. | A preview pane for the selected file (Quick Look-style), sharing Files' previews. | Bookmark editing inside the dialog: the sidebar mirrors Files. |
+| **Built:** go straight to a folder from the keyboard: Alt+Home (Home), Shift+Ctrl+D (Desktop) and Shift+Ctrl+O (Documents), the same keys as Files. | Back and forward buttons in the path bar. | |
+| **Built:** Alt+Left and Alt+Right go back and forward through the folders visited. Going back selects the folder you came from. | | |
 | | A Recent place listing recently used files. | |
 | | An icon view next to the list. | |
 
@@ -58,7 +58,7 @@ Compared with Spotlight, GNOME Shell search and KDE KRunner.
 
 Already there: a fuzzy search across apps, System Settings panes, folders and documents, ranked by how often and how
 recently each was used; a calculator with unit conversion (length, mass, time, data, temperature, volume, speed);
-Super+Return to show a file in Files, Super+C to copy a path or result; previews; emoji and clipboard modes; an empty
+Ctrl+Return to show a file in Files, Ctrl+C to copy a path or result; previews; emoji and clipboard modes; an empty
 state with recent apps and documents.
 
 | Now | Later | Never |

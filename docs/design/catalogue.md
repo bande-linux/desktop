@@ -18,7 +18,7 @@ proposals.
   - **Displays**: Resolution, fractional scale (100%–200%), refresh rate (60Hz–240Hz), VRR/FreeSync, visual multi-monitor arrangement.
   - **Sound**: PipeWire default sinks/sources, per-device volume profiles, microphone noise gate.
   - **Network**: Wi-Fi network scanner, VPN toggles, DNS configuration.
-  - **Panels & Dock**: Edge anchor selection (Left, Bottom, Right, Top), icon size, autohide timing, multi-monitor behavior.
+  - **Taskbar**: Edge anchor selection (Left, Bottom, Right, Top), icon size, autohide timing, multi-monitor behavior.
   - **Gestures & Shortcuts**: 3-finger trackpad swipe mappings, global keyboard hotkeys.
 - **Deep Full-Text Search**: In-memory index across all setting labels, sub-options, and descriptions, filtering matching sections and highlighting controls in real-time without hunting through menus.
 

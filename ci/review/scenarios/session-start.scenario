@@ -1,5 +1,5 @@
-# The desktop right after login, then the menus of the desktop, the Dock and the menu bar.
-note "A fresh session: wallpaper, menu bar, Dock"
+# The desktop right after login, then the menus of the desktop, the taskbar and the menu bar.
+note "A fresh session: wallpaper, menu bar, taskbar"
 wait 2s
 shot "desktop after login"
 note "Right-click the empty desktop"
@@ -8,10 +8,10 @@ wait 1s
 shot "desktop menu"
 key escape
 wait 500ms
-note "Right-click the first Dock icon"
+note "Right-click the first taskbar icon"
 click right 75 735
 wait 1s
-shot "dock menu"
+shot "taskbar menu"
 key escape
 wait 500ms
 note "The system menu at the far left of the menu bar"

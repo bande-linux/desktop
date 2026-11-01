@@ -127,7 +127,7 @@ with correctness and efficiency first.
     the lookup in explicitly, whichever the 18 callers fit better.
   - Invalidate on a theme folder's mtime if the cache has to live long.
 - **Win:**
-  - Cold icon loads in Launcher, Files, Dock, Desktop and Monitor drop from O(folders × bases × 3)
+  - Cold icon loads in Launcher, Files, taskbar, Desktop and Monitor drop from O(folders × bases × 3)
     stat() calls plus a theme parse each, to one `read_dir` per folder ever touched.
   - Expect 10–100× fewer syscalls when Launcher first opens. Measure with `strace -c` before and
     after.
@@ -264,7 +264,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
   - Map the dictionary to updates, the way `libs/dock-model/src/bus.rs:33` already does for the
     launcher API.
 - **Win:** a config change costs Settings one message instead of 41 round trips; it costs the
-  wallpaper and dock followers zero extra calls.
+  wallpaper and taskbar followers zero extra calls.
 - **Saves:** about 120 lines.
 - **Risk:** medium, because properties can be missing from the dictionary. Keep a read when
   `invalidated` is not empty.
@@ -470,7 +470,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
 
 ### 19. Merge the two `FolderWatch` types
 
-- **Files:** `libs/fs/src/watch.rs` is fd-based and fits the event loop; it is used by the dock,
+- **Files:** `libs/fs/src/watch.rs` is fd-based and fits the event loop; it is used by the taskbar,
   Desktop and Files. `libs/watch/src/lib.rs` is a thread plus a callback; it is used by the config
   daemon, search and Terminal. The two types share a name and work differently.
 - **Change:**

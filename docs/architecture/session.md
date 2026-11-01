@@ -100,8 +100,8 @@ graph LR
   bookmarks and volumes in a sidebar (from Files), a path bar from the home folder, a sortable
   Name, Date Modified and Size list with type-to-jump, folder icons from the accent icon
   theme, the app's filters as a pop-up, Save As with the name selected up to its extension,
-  "Replace?" before overwriting, New Folder when saving or choosing folders, `Super+Up` and
-  `Super+Down` to move up and into folders, and the last folder remembered per app in
+  "Replace?" before overwriting, New Folder when saving or choosing folders, `Alt+Up` and
+  `Alt+Down` to move up and into folders, and the last folder remembered per app in
   `$XDG_STATE_HOME/bande/file-chooser-folders`. Choices are answered with their initial
   values, and the dialog is not yet parented to the app window (xdg-foreign).
 - Implemented in `crates/services/portal`: `Settings` (version 2) publishes
@@ -171,7 +171,7 @@ graph LR
   and, for pictures, `image/png`) into any app, and a click opens Markup. Clipboard captures are
   offered as `image/png` without a file or thumbnail.
 - **Markup** (`bande-screenshot --markup <file>`): a window with Crop, Arrow, Rectangle, Text and
-  Highlight, Undo (also `Super+Z`), Delete (to the Trash, `Super+Backspace`), Copy (`Super+C`,
+  Highlight, Undo (also `Ctrl+Z`), Delete (to the Trash, `Ctrl+Delete`), Copy (`Ctrl+C`,
   the marked-up picture as `image/png` and the file) and Done (Return or Escape, which writes the
   marks into the file; closing the window does the same). Marks are drawn on the picture's own
   pixels by the toolkit's CPU renderer, so what is saved is what was shown.
@@ -289,8 +289,8 @@ graph LR
     export their menus through `crates/libs/app-menu` (`bande-app-menu`), which also builds
     the standard app and Window menus; the window that gains focus claims the name, so the menu
     bar talks to the process the user is working in. The menu bar reads the menu again on
-    `LayoutUpdated` and shows each item's `shortcut` right-aligned with key symbols (⌃ ⌥ ⇧ ⌘,
-    Super being ⌘ as the Command key of the Apple keyboards Bande runs on). Items of the
+    `LayoutUpdated` and shows each item's `shortcut` right-aligned as words ("Shift+Ctrl+N";
+    `bande-app-menu` exports Ctrl as `Control`, as the dbusmenu spec asks). Items of the
     standard app menu carry `x-bande-shell-action`, which the menu bar performs itself
     through `bande_shell_v1`, since an app cannot hide itself: About (a small window with the
     app's icon and name from its desktop entry and the version in `x-bande-version`), Hide
@@ -426,7 +426,7 @@ prompts (they are answered in the secure field), and power and accessibility men
 ## First-run setup and updates
 
 - **Setup assistant** (planned): on first login a short, non-blocking assistant asks for the
-  appearance (dark, light or automatic), the Dock position, the scrolling direction, and shows
+  appearance (dark, light or automatic), the taskbar position, the scrolling direction, and shows
   the essential shortcuts (`Super+Space` launcher, `Super+Shift+4` screenshot, `Super+Escape`
   Force Quit).
 - **Updates**: packages come from Bande's signed APT repository (see the top-level

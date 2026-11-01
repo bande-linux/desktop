@@ -22,7 +22,7 @@ note "Right arrow picks Dark"
 key right
 wait 2s
 shot "dark mode"
-note "Everything open should follow: the menu bar, the dock and the window"
+note "Everything open should follow: the menu bar, the taskbar and the window"
 wait 1500ms
 note "Back to Auto, the default"
 key right

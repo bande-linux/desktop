@@ -1,4 +1,4 @@
-# Drag a file from Files to the desktop, from the desktop to the Trash in the Dock, and from Files straight to the Trash.
+# Drag a file from Files to the desktop, from the desktop to the Trash in the taskbar, and from Files straight to the Trash.
 key super+space
 wait 600ms
 type "terminal"
@@ -20,7 +20,7 @@ note "Drag review-drag.txt onto the desktop"
 drag 980 902 to 2750 1100
 wait 1500ms
 shot "dropped on the desktop"
-note "Drag it from the desktop onto the Trash in the Dock"
+note "Drag it from the desktop onto the Trash in the taskbar"
 drag 2750 1090 to 75 1120
 wait 1500ms
 shot "dropped on the trash"

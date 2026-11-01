@@ -7,8 +7,9 @@ the browser inside every Open and Save dialog through the portal FileChooser. It
 calm as the Finder and be faster to drive from the keyboard, with one obvious way to do each
 thing and the rest behind the context menu, a modifier or the inspector.
 
-Modifier names follow the decided mapping: Super acts as Command. Alt is assumed to stand in for
-Option (not yet recorded in `docs/architecture/overview.md`). Ctrl is free in Files.
+Modifier names below were written when Super acted as Command. Since 2026-11-01 Files uses
+Nautilus-style Ctrl shortcuts instead ([decision 0005](../../decisions/0005-ctrl-for-app-shortcuts.md));
+the keys that shipped are listed in [`../../experience/files.md`](../../experience/files.md) §1.
 
 ## Reference survey
 
@@ -97,12 +98,12 @@ Motion: new item fades in at its sorted position; a renamed item glides to its n
 within a volume and copies across volumes; Alt while dragging forces a copy [4]; Super while
 dragging forces a move (unverified as macOS behaviour). The cursor badge shows "+" for copy.
 Operations run in the background, never block the window, and can be cancelled.
-Inputs: keyboard, drag, drop on folders, sidebar, path bar, Dock icons and other apps.
+Inputs: keyboard, drag, drop on folders, sidebar, path bar, taskbar icons and other apps.
 Motion: dropped items fly to their place; a cancelled drag flies back.
 
 **Progress** — A progress row appears in the window's status area after 0.5 s with items,
-bytes, time left and a cancel button; the same progress shows on the Files Dock icon through
-`LauncherEntry` (see `dock.md`).
+bytes, time left and a cancel button; the same progress shows on the Files taskbar icon through
+`LauncherEntry` (see `taskbar.md`).
 Motion: the row slides in and out; the bar animates.
 
 **Conflicts** — One sheet per operation: Replace, Skip, Keep Both (adds a number), and for

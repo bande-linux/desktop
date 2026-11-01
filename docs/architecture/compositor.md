@@ -16,7 +16,7 @@ when they reach the screen is Bande's own.
   blur region becomes a flat scrim of the sheet colour at 72 % that does not depend on what
   lies beneath it, so moving something under the bar no longer redraws the bar.
 - **Motion**: a spring model ($\ddot{x} + 2\zeta\omega\dot{x} + \omega^2\Delta x = 0$) drives
-  window snapping, minimizing to the Dock and moving between workspaces.
+  window snapping, minimizing to the taskbar and moving between workspaces.
 
 ## Implemented
 
@@ -106,9 +106,9 @@ when they reach the screen is Bande's own.
   The desktop surface and the menu bar are drawn on every
   display: the compositor tells the shell the displays that show their own picture, the main one
   first (`bande_shell_v1.displays`, since 15, on binding and whenever a display comes, goes,
-  starts or stops mirroring or the main display changes), and the shell opens a desktop and a bar
+  starts or stops mirroring or the main display changes), and the shell opens a desktop and a taskbar
   on each of them in its one process; on every display but the main one the desktop shows only
-  the wallpaper and no icons, and the Dock, the menu search and the notifications stay on the main
+  the wallpaper and no icons, and the separate layout's apps strip, the menu search and the notifications stay on the main
   display. The lock
   screen asks for the password on the main display; while locked, every other display shows only
   its wallpaper.
@@ -144,8 +144,8 @@ when they reach the screen is Bande's own.
   invisible: within 0.25 physical pixel (1/512 for opacity) and slower than that per 20 ms.
   Opening grows from 96 % and fades in (`standard`); closing keeps the last frame's textures
   and shrinks to 98 % while fading out (`quick`); minimising scales
-  into the app's Dock icon, reported with `bande_shell_v1.set_icon_rect`, or toward the
-  Dock's centre (the bottom edge without a Dock), drawn above the Dock (`gentle`); restoring
+  into the app's taskbar icon, reported with `bande_shell_v1.set_icon_rect`, or toward the
+  taskbar's centre (the bottom edge without a taskbar), drawn above the taskbar (`gentle`); restoring
   plays it back. Zoom and full screen (`standard`) start at the request and stretch
   the current buffer until the app commits its new size. Each operation only sets a new
   destination, so a second action mid-flight turns back from the current position and
@@ -164,10 +164,10 @@ when they reach the screen is Bande's own.
   (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share
   resizes both; dragging a tiled window away gives back its earlier size under the pointer.
 - **Drag and drop.** The compositor draws the drag icon a client passes to `start_drag` at the
-  pointer, offset by the icon's attach offset, below the pointer. Holding Option (Alt) makes a
+  pointer, offset by the icon's attach offset, below the pointer. Holding Alt makes a
   drop a copy and Super a move, when source and destination offer it; otherwise the
   destination's preferred action wins. The choice is made when the destination sets its
-  actions; pressing or releasing Option or Super mid-drag sends the destination a motion at the
+  actions; pressing or releasing Alt or Super mid-drag sends the destination a motion at the
   same place, so a destination that sets its actions again on motion (ours and GTK do) gets the
   new action without the pointer moving. The icon is drawn on every display it overlaps, and
   the pointer shows what a drop would do: `copy` for a copy, `move` (the arrow in most themes)
@@ -199,15 +199,15 @@ when they reach the screen is Bande's own.
   keyboard goes to the frontmost window there. A three-finger horizontal swipe tracks the
   fingers 1:1 (350 units per workspace, rubber band past either end) and settles like the
   show-desktop pinch, with `momentum` above 2 workspaces/s; a new swipe during the settle
-  takes over from where the row is. Keyboard (Super is the command key, Ctrl stays with
-  terminals, so `Ctrl+Left/Right` is not taken): `Alt+Super+Left/Right` switch to the
+  takes over from where the row is. Keyboard (Super is the system key and Ctrl belongs to
+  apps, so `Ctrl+Left/Right` is not taken): `Alt+Super+Left/Right` switch to the
   neighbour, `Alt+Super+1`…`9` to a workspace by position, and `Ctrl+Super+Shift+Left/Right`
   carry the focused window along (the window stays put on screen while the row slides
   under it; past the last workspace a new one is made). A window being dragged by its title
   bar comes along to whichever workspace the user switches to. A switch started while the
   row is still moving keeps its velocity. `bande_app_v1.move_to_workspace`
   (v3) moves a window from its menu without following it: it slides off the screen and the
-  keyboard goes to the next window. Focusing a window anywhere (the Dock's activate app or
+  keyboard goes to the next window. Focusing a window anywhere (the taskbar's activate app or
   window, Super+Tab, an activation token) shows its workspace first. Shell clients learn the
   row through `bande_shell_v1` v9: `workspaces(count, active)`, sent on binding and on
   every change. With Reduce Motion a switch crossfades the two workspaces in place.
@@ -234,7 +234,7 @@ when they reach the screen is Bande's own.
   windows (App Exposé) show only one app's windows from every workspace without the strip:
   `Alt+Super+Down` or a three-finger swipe down for the focused app, and
   `bande_shell_v1.show_windows(app_id)` (v9; an empty app id opens the plain overview) for
-  the Dock. With Reduce Motion the windows stay where they are and fade out while the
+  the taskbar. With Reduce Motion the windows stay where they are and fade out while the
   overview fades in.
 - **Switcher, window memory and the other half.** `switcher.rs` holds the Super+Tab and
   Super+` session (behaviour.md has the rules): a dwell of 150 ms counted in vblank time, then
@@ -274,7 +274,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `linux-dmabuf-v1` | Zero-copy GPU buffer import | P0 | implemented (see above) |
 | `linux-drm-syncobj-v1` | Explicit sync | P0 | built, guest tests failing |
 | `xdg_wm_base` | Application windows and popups | P0 | implemented |
-| `wlr-layer-shell-unstable-v1` | Dock, menu bar, notifications, overlays | P0 | implemented |
+| `wlr-layer-shell-unstable-v1` | Taskbar, menu bar, notifications, overlays | P0 | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | P0 | implemented |
 | `wp_presentation` | Presentation timing, VSync | P0 | implemented |
 | `ext-session-lock-v1` | Screen locking | P0 | implemented |
@@ -283,7 +283,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `ext-data-control-v1` | Clipboard daemon access | P0 | implemented, trusted connection only |
 | `ext-idle-notify-v1` / `idle-inhibit-v1` | Idle transitions, video playback | P0 | implemented |
 | `xdg_activation_v1` | Focus-stealing prevention | P0 | implemented |
-| `ext-foreign-toplevel-list-v1` | Window list for the Dock | P0 | implemented, shell clients only |
+| `ext-foreign-toplevel-list-v1` | Window list for the taskbar | P0 | implemented, shell clients only |
 | `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented |
 | `zxdg_decoration_manager_v1` | Decoration negotiation (server-side unless the client asks for client-side) | P1 | implemented |
 | `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | implemented (v4; enabled heads only, no custom modes) |
@@ -293,6 +293,6 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
-| `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, Dock icon rectangles, apps that stopped responding; for the Dock (v7): hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the Dock and menu bar; v9: workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
+| `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, taskbar icon rectangles, apps that stopped responding; for the taskbar (v7): hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the taskbar and menu bar; v9: workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
 | `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window; v2 `place_window` (halves, quarters, restore) for the window menu; v3 `move_to_workspace` (previous, next) for the window menu | P0 | implemented, every client |
 | `ext-background-effect-v1` | Blur behind the launcher's scrim (the overview's scrim and blur are the compositor's own) | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

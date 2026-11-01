@@ -23,18 +23,18 @@ better.
 
 ## 2. Everything responds
 
-- **Every object is right-clickable.** Windows, title bars, Dock icons, desktop, files, text,
+- **Every object is right-clickable.** Windows, title bars, taskbar icons, desktop, files, text,
   menu bar items, notifications. The context menu lists what can be done to that object, most
-  common first. Ctrl+click is the same as right click.
+  common first.
 - **Every action is keyboard-reachable.** Every menu item, every control, every list. Shortcuts
-  are shown in menus. Super is the command key (see the [keyboard model](../architecture/overview.md#keyboard-model)).
+  are shown in menus. Ctrl runs app shortcuts and Super the system (see the [keyboard model](../architecture/overview.md#keyboard-model)).
 - **Every pointer state is visible.** Hover, press, drag-over and disabled each look different,
   and the cursor shape tells what a click or drag will do.
 - **Double click opens, drag moves, Alt-drag copies, Escape cancels.** Everywhere, the same.
-- **Selection is consistent.** Click selects, Shift extends a range, Super toggles one item,
-  dragging on empty space draws a selection rectangle, Super+A selects all.
+- **Selection is consistent.** Click selects, Shift extends a range, Ctrl toggles one item,
+  dragging on empty space draws a selection rectangle, Ctrl+A selects all.
 - **Drag and drop works between any two places** where the object makes sense: files to apps,
-  to the Dock, to the desktop, text between apps.
+  to the taskbar, to the desktop, text between apps.
 
 ## 3. Motion
 
@@ -65,8 +65,8 @@ better.
 
 ## 5. Trust
 
-- **No dead ends.** Every state has a way out: Escape, a close button, Super+W, undo.
-- **Undo before confirmation.** Prefer an undoable action (Trash with Put Back, Super+Z for
+- **No dead ends.** Every state has a way out: Escape, a close button, Ctrl+W, undo.
+- **Undo before confirmation.** Prefer an undoable action (Trash with Put Back, Ctrl+Z for
   file operations) to a "are you sure" dialog.
 - **The desktop never freezes.** A hung app is shown as such and can be force-quit; the shell
   keeps responding.
@@ -78,7 +78,7 @@ better.
 - One combined bar ([bar](features/bar.md)) on the left edge by default holds the launcher mark,
   the active app's menus, the apps, status and the clock; a separate top menu bar is an option.
 - Window controls sit on the left as one neutral pill, not traffic lights.
-- Super is the command key; Ctrl is left to terminals and readline.
+- Ctrl runs app shortcuts and Super the system, as on GNOME and KDE, not Command as on macOS.
 - Pure Wayland; no X11 compatibility layer.
 - Configuration is a human-readable file (`config.kdl`); every Settings control writes to it.
 

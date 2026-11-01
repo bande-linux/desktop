@@ -62,11 +62,14 @@
       <arg name="fine" type="uint"/>
     </event>
 
-    <request name="toggle_control_center">
-      <description summary="open or close Control Center">
-        Sent by the menu bar when its Control Center item is clicked. The
-        compositor relays it to every shell client as toggle_panel.
+    <request name="toggle_panel">
+      <description summary="open or close a panel">
+        Sent by the bar when its Control Center item or its clock is clicked.
+        The compositor relays it to every shell client as toggle_panel, so the
+        client that draws the panel opens or closes it and the other panel
+        closes.
       </description>
+      <arg name="panel" type="uint" enum="panel"/>
     </request>
 
     <request name="set_icon_rect">
@@ -447,10 +450,10 @@
 
     <event name="toggle_panel">
       <description summary="the user asked to open or close a panel">
-        Sent to every shell client when the menu bar asks for Control Center
-        or a keyboard shortcut asks for Control Center or the Notification
-        Center. The client that draws the panel opens it, or closes it when
-        it is open.
+        Sent to every shell client when the bar or a keyboard shortcut asks
+        for Control Center or the Notification Center. The client that draws
+        the panel opens it, or closes it when it is open; the client that
+        draws the other panel closes it, so one panel is open at a time.
       </description>
       <arg name="panel" type="uint" enum="panel"/>
     </event>

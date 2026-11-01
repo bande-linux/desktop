@@ -28,7 +28,7 @@ pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US
 
 pub const BANNER_WIDTH: f32 = 344.0;
 pub const CENTER_WIDTH: f32 = 368.0;
-const MARGIN: f32 = 12.0;
+const MARGIN: f32 = Spacing::S as f32;
 const GAP: f32 = 10.0;
 const MAX_BANNERS: usize = 4;
 const BANNER_BODY_LINES: usize = 3;
@@ -73,6 +73,19 @@ struct Banner {
     x: Animated,
     y: Animated,
     leaving: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Stacking {
+    Down(f32),
+    Up(f32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Column {
+    x: f32,
+    away: f32,
+    stacking: Stacking,
 }
 
 struct Drag {
@@ -318,11 +331,23 @@ impl Screen {
             .take(MAX_BANNERS)
             .cloned()
             .collect();
+        let column = self.column();
+        let hidden = self.banner_hidden(column);
         let mut kept = Vec::new();
-        let mut y = MARGIN;
+        let mut cursor = match column.stacking {
+            Stacking::Down(top) | Stacking::Up(top) => top,
+        };
         for stack in &stacks {
             let card = self.card(stack, stack.notifications.len(), 0, now, false);
             let height = card.height + card.depth();
+            let y = match column.stacking {
+                Stacking::Down(_) => cursor,
+                Stacking::Up(_) => cursor - height,
+            };
+            cursor = match column.stacking {
+                Stacking::Down(_) => y + height + GAP,
+                Stacking::Up(_) => y - GAP,
+            };
             let banner = match self
                 .banners
                 .iter()
@@ -337,7 +362,7 @@ impl Screen {
                     banner
                 }
                 None => {
-                    let mut x = Animated::points(hidden_offset(BANNER_WIDTH));
+                    let mut x = Animated::points(hidden);
                     x.animate_at(now, self.reduce_motion, 0.0, Spring::STANDARD);
                     Banner {
                         card,
@@ -348,17 +373,13 @@ impl Screen {
                 }
             };
             kept.push(banner);
-            y += height + GAP;
         }
         for mut banner in self.banners.drain(..) {
             if !banner.leaving {
                 banner.leaving = true;
-                banner.x.animate_at(
-                    now,
-                    self.reduce_motion,
-                    hidden_offset(BANNER_WIDTH),
-                    Spring::STANDARD,
-                );
+                banner
+                    .x
+                    .animate_at(now, self.reduce_motion, hidden, Spring::STANDARD);
             }
             kept.push(banner);
         }
@@ -535,11 +556,61 @@ impl Screen {
             .map_or(0.0, |row| row.y + row.height + CENTER_PADDING)
     }
 
-    pub fn set_anchor(&mut self, edge: DisplayEdge, item: Rect) {
+    pub fn set_anchor(&mut self, edge: DisplayEdge, item: Rect, now: Instant) {
         self.anchor = Some((edge, item));
         if !self.open {
             self.center_x.jump_to(self.hidden_offset());
         }
+        self.rebuild_banners(now);
+    }
+
+    fn column(&self) -> Column {
+        let (width, height) = self.size;
+        let right_aligned = |item: Rect| {
+            (item.x + item.width - BANNER_WIDTH)
+                .clamp(MARGIN, (width - MARGIN - BANNER_WIDTH).max(MARGIN))
+        };
+        let above = |item: Rect| (item.y + item.height).min(height - MARGIN);
+        match self.anchor {
+            Some((DisplayEdge::Left, item)) => Column {
+                x: item.x + item.width + MARGIN,
+                away: -1.0,
+                stacking: Stacking::Up(above(item)),
+            },
+            Some((DisplayEdge::Right, item)) => Column {
+                x: item.x - MARGIN - BANNER_WIDTH,
+                away: 1.0,
+                stacking: Stacking::Up(above(item)),
+            },
+            Some((DisplayEdge::Bottom, item)) => Column {
+                x: right_aligned(item),
+                away: 1.0,
+                stacking: Stacking::Up((item.y - MARGIN).min(height - MARGIN)),
+            },
+            Some((_, item)) => Column {
+                x: right_aligned(item),
+                away: 1.0,
+                stacking: Stacking::Down(item.y + item.height + MARGIN),
+            },
+            None => Column {
+                x: width - MARGIN - BANNER_WIDTH,
+                away: 1.0,
+                stacking: Stacking::Down(MARGIN),
+            },
+        }
+    }
+
+    fn banner_hidden(&self, column: Column) -> f32 {
+        let room = if column.away < 0.0 {
+            column.x + BANNER_WIDTH
+        } else {
+            self.size.0 - column.x
+        };
+        room + CLOSE_REACH
+    }
+
+    fn banner_x(&self, column: Column, shift: f32) -> f32 {
+        column.x + column.away * shift
     }
 
     fn panel_frame(&self) -> (f32, f32, f32) {
@@ -616,6 +687,21 @@ impl Screen {
             .animate_at(now, self.reduce_motion, hidden, Spring::STANDARD);
     }
 
+    pub fn make_way(&mut self, now: Instant) {
+        self.close(now);
+        let hidden = self.banner_hidden(self.column());
+        for banner in &mut self.banners {
+            if banner.leaving {
+                continue;
+            }
+            banner.leaving = true;
+            banner
+                .x
+                .animate_at(now, self.reduce_motion, hidden, Spring::STANDARD);
+            self.requests.push(Request::HideBanner(banner.card.id));
+        }
+    }
+
     pub fn toggle(&mut self, now: Instant) {
         if self.open {
             self.close(now);
@@ -657,13 +743,14 @@ impl Screen {
         if self.open {
             return None;
         }
+        let column = self.column();
         Some(
             self.banners
                 .iter()
                 .filter(|banner| !banner.leaving)
                 .map(|banner| {
                     banner.card.bounds(Point::new(
-                        self.size.0 - MARGIN - BANNER_WIDTH + banner.x.target(),
+                        self.banner_x(column, banner.x.target()),
                         banner.y.target(),
                     ))
                 })
@@ -673,7 +760,7 @@ impl Screen {
 
     fn banner_origin(&self, banner: &Banner, now: Instant) -> Point {
         Point::new(
-            self.size.0 - MARGIN - BANNER_WIDTH + banner.x.value_at(now).0,
+            self.banner_x(self.column(), banner.x.value_at(now).0),
             banner.y.value_at(now).0,
         )
     }
@@ -838,11 +925,12 @@ impl Screen {
         match event {
             Event::PointerEnter(pointer) | Event::PointerMove(pointer) => {
                 self.pointer = Some(pointer.position);
+                let away = self.column().away;
                 if let Some(drag) = &mut self.drag {
-                    let dx = pointer.position.x - drag.start.x;
+                    let dx = (pointer.position.x - drag.start.x) * away;
                     let elapsed = now.saturating_duration_since(drag.last.1).as_secs_f32();
                     if elapsed > 0.0 {
-                        drag.velocity = (pointer.position.x - drag.last.0) / elapsed;
+                        drag.velocity = (pointer.position.x - drag.last.0) * away / elapsed;
                     }
                     drag.last = (pointer.position.x, now);
                     drag.moved |= dx.abs() > DRAG_SLOP
@@ -956,6 +1044,7 @@ impl Screen {
     }
 
     fn release(&mut self, drag: &Drag, now: Instant) {
+        let hidden = self.banner_hidden(self.column());
         let Some(banner) = self
             .banners
             .iter_mut()
@@ -973,12 +1062,9 @@ impl Screen {
             || (x > BANNER_WIDTH * DISMISS_FRACTION && velocity > -FLICK_SPEED);
         if flung {
             banner.leaving = true;
-            banner.x.animate_at(
-                now,
-                self.reduce_motion,
-                hidden_offset(BANNER_WIDTH),
-                Spring::MOMENTUM,
-            );
+            banner
+                .x
+                .animate_at(now, self.reduce_motion, hidden, Spring::MOMENTUM);
             self.requests.push(Request::HideBanner(banner.card.id));
         } else {
             banner

@@ -6,7 +6,7 @@ use bande_datetime::{DateFormats, posix_locale};
 use bande_notifications::{BANNER_WIDTH, CENTER_WIDTH, Request, Screen, Sender, age_label};
 use bande_notify::{Notification, Presentation, Stack};
 use bande_toolkit::ui::{Event, Key, Modifiers, Pointer};
-use bande_toolkit::{DisplayEdge, Palette, Point, Rect, Scheme, TextSystem};
+use bande_toolkit::{DisplayEdge, Item, Palette, Point, Rect, Scene, Scheme, TextSystem};
 use jiff::Zoned;
 use jiff::civil::date;
 
@@ -96,6 +96,134 @@ fn a_banner_slides_in_from_the_right_edge_and_rests_at_the_top_right() {
     assert!(resting.x + resting.width > WIDTH as f32 - 24.0);
     assert!(resting.y < 24.0);
     assert!(!screen.animating(start + SETTLED));
+
+    screen.set_anchor(
+        DisplayEdge::Top,
+        Rect::new(WIDTH as f32 - 120.0, -24.0, 100.0, 24.0),
+        start,
+    );
+    let under_the_clock = region(&screen)[0];
+    assert!(under_the_clock.x + under_the_clock.width <= WIDTH as f32 - 20.0 + 1.0);
+    assert!(under_the_clock.x + under_the_clock.width > WIDTH as f32 - 40.0);
+    assert!(under_the_clock.y < 24.0);
+}
+
+const LEFT_CLOCK: Rect = Rect {
+    x: -64.0,
+    y: 700.0,
+    width: 64.0,
+    height: 52.0,
+};
+
+fn two_stacks() -> Presentation {
+    banners(vec![
+        stack("chat", vec![notification(2, "Chat", "Yo", &[])]),
+        stack("mail", vec![notification(1, "Mail", "Hi", &[])]),
+    ])
+}
+
+#[test]
+fn a_left_bar_shows_banners_beside_it_with_the_newest_nearest_the_clock() {
+    let start = Instant::now();
+    let mut screen = screen();
+    screen.set_anchor(DisplayEdge::Left, LEFT_CLOCK, start);
+    screen.present(two_stacks(), start);
+
+    let placed = region(&screen);
+    let newest = placed[0];
+    let older = placed[1];
+    let clock_bottom = LEFT_CLOCK.y + LEFT_CLOCK.height;
+    assert!(
+        placed
+            .iter()
+            .all(|rect| rect.x + rect.width > 8.0 + BANNER_WIDTH - 1.0
+                && rect.x + rect.width < 8.0 + BANNER_WIDTH + 1.0)
+    );
+    assert!(newest.y > older.y, "the newest lies lowest");
+    assert!((newest.y + newest.height - clock_bottom).abs() < 1.0);
+    let entering = leftmost(&screen.scene(start).items);
+    let rested = leftmost(&screen.scene(start + SETTLED).items);
+    assert!(entering < rested, "it slides out from under the bar");
+}
+
+#[test]
+fn a_bottom_bar_stacks_banners_up_from_its_clock_at_the_right() {
+    let start = Instant::now();
+    let mut screen = screen();
+    let clock = Rect::new(WIDTH as f32 - 90.0, HEIGHT as f32 + 8.0, 80.0, 48.0);
+    screen.set_anchor(DisplayEdge::Bottom, clock, start);
+    screen.present(two_stacks(), start);
+
+    let placed = region(&screen);
+    assert!((placed[0].x + placed[0].width - (clock.x + clock.width)).abs() < 1.0);
+    assert!(placed[0].y > placed[1].y);
+    assert!(placed[0].y + placed[0].height <= HEIGHT as f32);
+    assert!(placed[0].y + placed[0].height > HEIGHT as f32 - 24.0);
+}
+
+#[test]
+fn swiping_a_banner_towards_a_left_bar_puts_it_away_and_away_from_it_springs_back() {
+    let start = Instant::now() + SETTLED;
+    let mut screen = screen();
+    screen.set_anchor(DisplayEdge::Left, LEFT_CLOCK, start - SETTLED);
+    screen.present(
+        banners(vec![stack(
+            "mail",
+            vec![notification(1, "Mail", "Hi", &[])],
+        )]),
+        start - SETTLED,
+    );
+    let card = region(&screen)[0];
+    let from = center_of(card);
+
+    screen.handle(&pointer(Event::PointerDown, from), start);
+    let wrong_way = Point::new(from.x + BANNER_WIDTH * 0.6, from.y);
+    let later = start + Duration::from_millis(400);
+    screen.handle(&pointer(Event::PointerMove, wrong_way), later);
+    screen.handle(&pointer(Event::PointerUp, wrong_way), later);
+    assert!(!screen.take_requests().contains(&Request::HideBanner(1)));
+    assert_eq!(region(&screen)[0].x, card.x);
+
+    let begin = later + SETTLED;
+    screen.handle(&pointer(Event::PointerDown, from), begin);
+    let far = Point::new(from.x - BANNER_WIDTH * 0.6, from.y);
+    let end = begin + Duration::from_millis(400);
+    screen.handle(&pointer(Event::PointerMove, far), end);
+    screen.handle(&pointer(Event::PointerUp, far), end);
+    assert!(screen.take_requests().contains(&Request::HideBanner(1)));
+    assert!(region(&screen).is_empty());
+}
+
+#[test]
+fn a_banner_that_times_out_on_a_left_bar_leaves_towards_it() {
+    let start = Instant::now();
+    let mut screen = screen();
+    screen.set_anchor(DisplayEdge::Left, LEFT_CLOCK, start);
+    screen.present(
+        banners(vec![stack(
+            "mail",
+            vec![notification(1, "Mail", "Hi", &[])],
+        )]),
+        start,
+    );
+    let rested = start + SETTLED;
+    let resting = screen.scene(rested);
+    screen.present(Presentation::default(), rested);
+    let leaving = screen.scene(rested + Duration::from_millis(120));
+    let left_of = |scene: &Scene| leftmost(&scene.items);
+    assert!(left_of(&leaving) < left_of(&resting) - 4.0);
+}
+
+fn leftmost(items: &[Item]) -> f32 {
+    items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Opacity { items, .. } => Some(leftmost(items)),
+            Item::Translate { offset, items } => Some(offset.x + leftmost(items)),
+            Item::Fill { shape, .. } => Some(shape.rect.x),
+            _ => None,
+        })
+        .fold(f32::MAX, f32::min)
 }
 
 #[test]
@@ -323,9 +451,9 @@ fn a_left_bar_opens_the_center_beside_its_clock_instead_of_at_the_right() {
         )]),
         now,
     );
-    screen.set_anchor(DisplayEdge::Left, Rect::new(0.0, 724.0, 64.0, 52.0));
+    screen.set_anchor(DisplayEdge::Left, Rect::new(0.0, 724.0, 64.0, 52.0), now);
     screen.open(now);
-    let inside = Point::new(64.0 + 12.0 + 40.0, 30.0);
+    let inside = Point::new(64.0 + 8.0 + 40.0, 30.0);
     screen.handle(&pointer(Event::PointerDown, inside), now + SETTLED);
     assert!(screen.is_open());
     let right = Point::new(WIDTH as f32 - 40.0, 30.0);
@@ -398,4 +526,27 @@ fn banners_go_quiet_only_while_the_display_in_use_shows_a_full_screen_app() {
 
     screen.set_active_output("eDP-1");
     assert_eq!(screen.take_requests(), [Request::QuietForFullScreen(true)]);
+}
+
+#[test]
+fn control_center_opening_closes_the_center_and_puts_the_banners_away_into_it() {
+    let now = Instant::now();
+    let mut screen = screen();
+    screen.present(two_stacks(), now);
+    assert_eq!(region(&screen).len(), 2);
+
+    screen.make_way(now);
+    assert!(region(&screen).is_empty());
+    let requests = screen.take_requests();
+    assert!(requests.contains(&Request::HideBanner(1)));
+    assert!(requests.contains(&Request::HideBanner(2)));
+    assert!(!requests.iter().any(|request| matches!(
+        request,
+        Request::Dismiss(_) | Request::Clear(_) | Request::ClearAll
+    )));
+
+    screen.open(now);
+    assert!(screen.is_open());
+    screen.make_way(now);
+    assert!(!screen.is_open());
 }

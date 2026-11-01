@@ -19,6 +19,7 @@ use bande_status::dbusmenu::Node;
 use bande_status::status::{
     Battery, Bluetooth, Capture, Gadget, InputSource, InputSources, Power, Sense, Sound, Wifi,
 };
+use bande_status::unread::ClockMark;
 use bande_taskbar_model::LauncherUpdate;
 use bande_toolkit::ui::{
     Event, Key, MenuOutcome, MenuPanel, MenuTracker, Modifiers, Pointer, PointerButton, Ui,
@@ -148,7 +149,7 @@ impl Rail {
             ("Sync".to_owned(), tray_icon()),
             ("Weather".to_owned(), tray_icon()),
         ]);
-        view.set_unread(true);
+        view.set_clock_mark(ClockMark::Unread);
         view.set_app("Files");
         view.set_app_icon(Image::load(
             &data().join("icons/Bande/scalable/apps/org.bande.Files.svg"),
@@ -353,6 +354,23 @@ fn every_status_cell_is_a_named_button() {
     assert!(labels.contains(&"Control Center".to_owned()));
     assert!(labels.contains(&"14:32 Thu 29, unread notifications".to_owned()));
     assert!(labels.contains(&"Desktop 2".to_owned()));
+}
+
+#[test]
+fn the_clock_says_do_not_disturb_and_draws_a_mark_in_place_of_the_dot() {
+    let mut rail = Rail::new(Scheme::Light, HEIGHT, apps(1.0));
+    let unread = rail.frame(1.0);
+    rail.view.set_clock_mark(ClockMark::Quiet);
+    let quiet = rail.frame(1.0);
+    assert_ne!(unread, quiet);
+    let tree = rail.view.accessibility();
+    let labels: Vec<String> = tree
+        .nodes
+        .iter()
+        .map(|(_, node)| node.label().unwrap_or_default().to_owned())
+        .collect();
+    assert!(labels.contains(&"14:32 Thu 29, Do Not Disturb".to_owned()));
+    assert!(!rail.view.unread());
 }
 
 #[test]

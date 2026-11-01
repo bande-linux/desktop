@@ -107,10 +107,18 @@ the windowless process is kept small (see "Resources").
 Measured headless (in-process compositor, private session bus, private `HOME`, lavapipe,
 debug builds), `smaps_rollup` 8 s after start and 8 s after `Ctrl+W` closed the last window:
 
-| App | With window: RSS / anon MiB | Windowless: RSS / anon MiB | Threads |
-| --- | ---: | ---: | ---: |
-| Files | 95.6 / 14.5 | 89.7 / 10.4 | 12 → 8 |
-| Settings (view parked) | 104.7 / 19.8 | 100.7 / 15.9 | 34 → 34 |
+| App | With window: RSS / anon MiB | Windowless: RSS / anon MiB | Kept while windowless |
+| --- | ---: | ---: | --- |
+| Files | 95.6 / 14.5 | 89.7 / 10.4 | nothing |
+| Settings | 104.7 / 19.8 | 100.7 / 15.9 | the main view, fed by its services |
+| Mail | 98.2 / 15.6 | 93.9 / 11.5 | the viewer and its sync engine |
+| Calendar | 96.4 / 15.8 | 91.6 / 11.1 | the view, its library and alerts |
+| Activity Monitor | 93.4 / 15.0 | 86.9 / 10.9 | nothing; sampling stops |
+| Terminal | 86.5 / 11.5 | 84.1 / 10.2 | nothing; each window's shells end with it |
+| Software | 95.3 / 19.8 | 92.0 / 16.5 | the view and its jobs |
+
+Every app used 0 CPU ticks over 8 s without a window (no busy loop on an undrained source).
+Threads: Files 12 → 8; the others keep their worker threads.
 
 Most of the remaining RSS is file-backed and shared: lavapipe's `libLLVM` (44 MiB, a test
 artefact) and the debug binary's text. GPU buffers (swapchain images, glyph atlases) go with
@@ -129,9 +137,14 @@ the window; on the mini's GPU they are device memory, which the lavapipe run can
    quits). Done.
 4. Files and Settings. Done.
 5. Apps repo: Terminal, Activity Monitor, Mail, Calendar, Software, Installer, template at the
-   new pin.
+   new pin. Done (apps `410a85c`, desktop pin `828e4975`).
 
 ## Gaps
 
 - Hide for a windowless app does nothing (macOS hides the app and activates the next one).
 - The Taskbar's icon menu for a windowless app has no "New Window" item; a click reopens.
+- Calendar's and Activity Monitor's menus are empty without a window (Mail's too); Files and
+  Terminal offer New Window, Settings its panes.
+- Parked views (Settings, Mail, Calendar, Software, Installer) keep their widget trees and text
+  layout caches; splitting each app's model from its view would save a few more MiB.
+- Not measured: Installer (needs a package) and device memory on the mini's GPU.

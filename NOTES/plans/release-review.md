@@ -187,44 +187,6 @@ Not fixed:
 - low — the lock's wallpaper is read with `fs::read` of the user's own configured path (no size or file-kind check); self-inflicted only.
 - Earlier open shell items (tray/dbusmenu calls and `force_quit` on the UI thread, image decoding on the UI thread, PAM messages, desktop bar edge, screenshot shutter) are unchanged.
 
-<<<<<<< HEAD
-## Component review 2026-11-01 evening: libs
-
-Scope: `crates/toolkit/*` and `crates/libs/*`, today's changes first (bande-app, bande-xdg, bus,
-network, bluetooth, search, thumbnails, preview, fs, volumes, status hub, packages, app-settings).
-Compile-checked per change; no tests added (test policy of 3e32ab75).
-
-### Fixed
-
-| Sev | Where | Finding | Commit |
-| --- | --- | --- | --- |
-| medium | toolkit `seat.rs` | With Caps Lock on, Ctrl+C arrived as `C` without Shift, so copy, paste, undo, select all, Ctrl+W/Q/, and every menu shortcut did nothing. Letters of Ctrl/Alt/Super keys are cased by Shift only. | `d8fc15b3` |
-| medium | toolkit `Drop for Window` | Every window binds its own seat objects; closing an `open_beside` window (every bande-app window, bars, Control Center) left its keyboard, pointer, data device, primary device and text input alive, so each later key, motion and copy still went to every closed window. Released on drop; landed on main independently in `d01af772`, so this branch keeps main's version. | `d01af772` |
-| medium | status `devices.rs` | `NameOwnerChanged` was taken from any sender; any local user could send one to the watcher's unique name and freeze battery, Wi-Fi and Bluetooth status in every bar and the lock screen. Only the bus itself is believed. | `89509986` |
-| medium | status `tray.rs` (hub) | With one bar per display, each focus change or menu change queued N identical app-menu fetches on the one errand thread, and every reply rebuilt all N bars (N²). Queued fetches for the same app are done once. | `fe30ac1b` |
-| low | packages `transaction.rs` | PackageKit's exit was also taken from any sender (a fake signal failed the running install as "PackageKit stopped"); the relay thread outlived early errors on the shared system connection. Bus-only sender; the caller reads the messages itself. | `64f9cef3` |
-| low | network `lib.rs` | A network with several access points (dual band, mesh) followed only the strongest one's later strength signals, so it showed that one fading while another was strong. Each access point's strength is kept and the strongest shown. | `9c94f20b` |
-| low | network `join` | When the stale-interface check failed (polkit refusing `Update`), its error replaced NetworkManager's refusal. The refusal is kept. | `9c94f20b` |
-| low | xdg `launch.rs` | The launched-app watcher used a session connection without a method timeout; a hung systemd stopped reaping and scoping every later app. Uses `bande_bus::session`. | `c1b1c43b` |
-| low | toolkit `seat.rs` | A repeat rate of 0 (or above 1 MHz) while a key was held made the loop spin at 100% CPU. Repeat stops when turned off and waits at least 1 ms. | `3b93d805` |
-| low | toolkit `window/mod.rs` | The 1 KiB title cap applied only to `set_title`; a window opened with a long title was disconnected. | `31609b4c` |
-| low | app-settings | A failed settings save retried and warned on every event, pointer motion included; the wake pipe copied `bande-inbox` with a blocking writer. Retries only when the settings change; uses `Inbox`. | `e4c2028b` |
-| low | xdg `reopen.rs` | Duplicate of `state_home`. Reused. | `f7296ae3` |
-
-### Not fixed
-
-- **medium — file index is O(n²) for bulk changes in one folder** (search `index.rs` `child`/`insert`/`remove`, since `daa5d5e2`): siblings are a linked list walked per event, so extracting or deleting tens of thousands of files in one folder keeps the `file-index` thread busy for tens of seconds and launcher file queries wait. Not the UI thread. Needs a prev-sibling link and a per-folder name map for big folders; a data-structure change, not for tonight.
-- **medium — shortcuts on non-Latin layouts and Shift+Ctrl+punctuation** (toolkit `seat.rs` `key_event`): Ctrl+C on a Russian layout gives a Cyrillic letter, and `Shift+Ctrl+,` (Terminal's Settings) and Terminal's `Shift+Ctrl+]`/`[` arrive as `<`, `}`, `{` and never match. The fix (level-1 keysym of the first Latin layout while Ctrl/Alt/Super is held) changes what Terminal's key encoder receives (Ctrl+Shift+2 → NUL needs `@`), so it needs Terminal changed with it.
-- low — redrawable images (wallpaper, lock backdrop) redraw on the UI thread after an atlas reset or GPU fallback, and a failing redraw is retried every frame (`graphics/scene.rs:499`, `gpu.rs:432`).
-- low — `Trash::dirs` stats `.Trash` paths on every mount (proc, sysfs, FUSE, autofs, network) on each call, and Files calls `is_empty` on its UI thread: a hung network mount blocks Files. Skip system mount types as GIO does.
-- low — status hub: one `worker_lost` flag for all three workers, so only the first stopped worker is logged.
-- low — packages `from_transaction` accepts transaction-path signals from any sender (path hard to guess); check PackageKit's unique name.
-- low — volume trash in `fs::trash::dirs` does not require the sticky bit on `.Trash` as `TrashDir::for_volume` does (owner and link checks still apply).
-- low — dead or test-only `pub` items: `fs::remove_all`, `fs::restore_to`, `thumbnails::MAX_QUEUED`, `search::format_number`, `datetime::WEEKS`, `audio::INTERNAL_PREFIX`, `network::ipv4_settings`, `network::vpn_type_of`, `TrashDir::for_volume`, `settings_panes::TEXT_SIZES`, `PaneHit::best`, `Spring::angular_frequency` (no caller), `pointer_speed_choices`, `devices::sound_of`, `battery_of`, `pixmap_rgba`, `without_mnemonics`, `history::charge_samples`, taskbar-model `app_id_from_uri`, `launcher_update`.
-- low, docs (outside these paths) — `docs/design/features/windows.md:18,112,125` still list Super+M, Ctrl+Super+F, Super+W and Super+Q; `docs/architecture/behaviour.md:40` says Control-click opens the taskbar menu, which the toolkit no longer does.
-
-Checked and sound: bande-app's runner (source mapping, quit, close/tab order, Settings window, activation and single instance, no idle wakeups), `bande_inbox`, the icon lookup cache, `write_launcher` quoting, the FIFO-safe MIME sniffing, `replace_file` users, the status hub relay, the BlueZ agent, app-menu exports (nothing left unused by bande-app), and no "unbound" names or unused dependencies.
-=======
 ## Component review 2026-11-01 evening: services
 
 Scope: `crates/services/*` (automount, clipboard, config, notify, polkit, portal, power, sound,
@@ -274,4 +236,40 @@ and clear, Do Not Disturb toggles from Control Center, Settings > Notifications 
 and `busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications
 org.bande.NotificationCenter GetPresentation` fails while the same call on
 `org.bande.NotificationCenter` works.
->>>>>>> origin/main
+
+## Component review 2026-11-01 evening: libs
+
+Scope: `crates/toolkit/*` and `crates/libs/*`, today's changes first (bande-app, bande-xdg, bus,
+network, bluetooth, search, thumbnails, preview, fs, volumes, status hub, packages, app-settings).
+Compile-checked per change; no tests added (test policy of 3e32ab75).
+
+### Fixed
+
+| Sev | Where | Finding | Commit |
+| --- | --- | --- | --- |
+| medium | toolkit `seat.rs` | With Caps Lock on, Ctrl+C arrived as `C` without Shift, so copy, paste, undo, select all, Ctrl+W/Q/, and every menu shortcut did nothing. Letters of Ctrl/Alt/Super keys are cased by Shift only. | `d8fc15b3` |
+| medium | toolkit `Drop for Window` | Every window binds its own seat objects; closing an `open_beside` window (every bande-app window, bars, Control Center) left its keyboard, pointer, data device, primary device and text input alive, so each later key, motion and copy still went to every closed window. Released on drop; landed on main independently in `d01af772`, so this branch keeps main's version. | `d01af772` |
+| medium | status `devices.rs` | `NameOwnerChanged` was taken from any sender; any local user could send one to the watcher's unique name and freeze battery, Wi-Fi and Bluetooth status in every bar and the lock screen. Only the bus itself is believed. | `89509986` |
+| medium | status `tray.rs` (hub) | With one bar per display, each focus change or menu change queued N identical app-menu fetches on the one errand thread, and every reply rebuilt all N bars (N²). Queued fetches for the same app are done once. | `fe30ac1b` |
+| low | packages `transaction.rs` | PackageKit's exit was also taken from any sender (a fake signal failed the running install as "PackageKit stopped"); the relay thread outlived early errors on the shared system connection. Bus-only sender; the caller reads the messages itself. | `64f9cef3` |
+| low | network `lib.rs` | A network with several access points (dual band, mesh) followed only the strongest one's later strength signals, so it showed that one fading while another was strong. Each access point's strength is kept and the strongest shown. | `9c94f20b` |
+| low | network `join` | When the stale-interface check failed (polkit refusing `Update`), its error replaced NetworkManager's refusal. The refusal is kept. | `9c94f20b` |
+| low | xdg `launch.rs` | The launched-app watcher used a session connection without a method timeout; a hung systemd stopped reaping and scoping every later app. Uses `bande_bus::session`. | `c1b1c43b` |
+| low | toolkit `seat.rs` | A repeat rate of 0 (or above 1 MHz) while a key was held made the loop spin at 100% CPU. Repeat stops when turned off and waits at least 1 ms. | `3b93d805` |
+| low | toolkit `window/mod.rs` | The 1 KiB title cap applied only to `set_title`; a window opened with a long title was disconnected. | `31609b4c` |
+| low | app-settings | A failed settings save retried and warned on every event, pointer motion included; the wake pipe copied `bande-inbox` with a blocking writer. Retries only when the settings change; uses `Inbox`. | `e4c2028b` |
+| low | xdg `reopen.rs` | Duplicate of `state_home`. Reused. | `f7296ae3` |
+
+### Not fixed
+
+- **medium — file index is O(n²) for bulk changes in one folder** (search `index.rs` `child`/`insert`/`remove`, since `daa5d5e2`): siblings are a linked list walked per event, so extracting or deleting tens of thousands of files in one folder keeps the `file-index` thread busy for tens of seconds and launcher file queries wait. Not the UI thread. Needs a prev-sibling link and a per-folder name map for big folders; a data-structure change, not for tonight.
+- **medium — shortcuts on non-Latin layouts and Shift+Ctrl+punctuation** (toolkit `seat.rs` `key_event`): Ctrl+C on a Russian layout gives a Cyrillic letter, and `Shift+Ctrl+,` (Terminal's Settings) and Terminal's `Shift+Ctrl+]`/`[` arrive as `<`, `}`, `{` and never match. The fix (level-1 keysym of the first Latin layout while Ctrl/Alt/Super is held) changes what Terminal's key encoder receives (Ctrl+Shift+2 → NUL needs `@`), so it needs Terminal changed with it.
+- low — redrawable images (wallpaper, lock backdrop) redraw on the UI thread after an atlas reset or GPU fallback, and a failing redraw is retried every frame (`graphics/scene.rs:499`, `gpu.rs:432`).
+- low — `Trash::dirs` stats `.Trash` paths on every mount (proc, sysfs, FUSE, autofs, network) on each call, and Files calls `is_empty` on its UI thread: a hung network mount blocks Files. Skip system mount types as GIO does.
+- low — status hub: one `worker_lost` flag for all three workers, so only the first stopped worker is logged.
+- low — packages `from_transaction` accepts transaction-path signals from any sender (path hard to guess); check PackageKit's unique name.
+- low — volume trash in `fs::trash::dirs` does not require the sticky bit on `.Trash` as `TrashDir::for_volume` does (owner and link checks still apply).
+- low — dead or test-only `pub` items: `fs::remove_all`, `fs::restore_to`, `thumbnails::MAX_QUEUED`, `search::format_number`, `datetime::WEEKS`, `audio::INTERNAL_PREFIX`, `network::ipv4_settings`, `network::vpn_type_of`, `TrashDir::for_volume`, `settings_panes::TEXT_SIZES`, `PaneHit::best`, `Spring::angular_frequency` (no caller), `pointer_speed_choices`, `devices::sound_of`, `battery_of`, `pixmap_rgba`, `without_mnemonics`, `history::charge_samples`, taskbar-model `app_id_from_uri`, `launcher_update`.
+- low, docs (outside these paths) — `docs/design/features/windows.md:18,112,125` still list Super+M, Ctrl+Super+F, Super+W and Super+Q; `docs/architecture/behaviour.md:40` says Control-click opens the taskbar menu, which the toolkit no longer does.
+
+Checked and sound: bande-app's runner (source mapping, quit, close/tab order, Settings window, activation and single instance, no idle wakeups), `bande_inbox`, the icon lookup cache, `write_launcher` quoting, the FIFO-safe MIME sniffing, `replace_file` users, the status hub relay, the BlueZ agent, app-menu exports (nothing left unused by bande-app), and no "unbound" names or unused dependencies.

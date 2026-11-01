@@ -351,4 +351,3 @@ fn run_errand(connection: &Connection, errand: Errand, outbox: &Outbox<Update>) 
         tracing::warn!("a status item did not answer: {error}");
     }
 }
-

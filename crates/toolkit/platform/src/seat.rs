@@ -668,4 +668,3 @@ impl Dispatch<WlKeyboard, ()> for State {
 
 delegate_noop!(State: ignore WpCursorShapeManagerV1);
 delegate_noop!(State: ignore WpCursorShapeDeviceV1);
-

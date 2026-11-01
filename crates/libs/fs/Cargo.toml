@@ -12,7 +12,7 @@ bzip2.workspace = true
 flate2.workspace = true
 jiff.workspace = true
 lzma-rust2.workspace = true
-rustix = { workspace = true, features = ["fs", "process"] }
+rustix = { workspace = true, features = ["event", "fs", "process"] }
 ruzstd.workspace = true
 tar.workspace = true
 bande-datetime.workspace = true

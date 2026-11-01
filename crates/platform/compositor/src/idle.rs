@@ -87,7 +87,12 @@ impl Compositor {
                 watch.idled = false;
             }
         }
-        let inhibited = state.inhibited();
+        let inhibited = state
+            .idle
+            .watches
+            .iter()
+            .any(|watch| !watch.idled && watch.obeys_inhibitors)
+            && state.inhibited();
         let last = state.idle.last_activity.unwrap_or(now);
         let mut next = None::<Duration>;
         for watch in state.idle.watches.iter_mut().filter(|watch| !watch.idled) {

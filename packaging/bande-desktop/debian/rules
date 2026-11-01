@@ -8,4 +8,5 @@ endif
 	dh $@
 
 override_dh_gencontrol:
+	debian/default-apps.sh >> debian/bande-desktop.substvars
 	dh_gencontrol -- -v$(DEB_VERSION_OVERRIDE)

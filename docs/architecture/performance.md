@@ -34,11 +34,13 @@ measured with `bande-bench` (run by hand, no longer in CI); this page tracks mem
   <dir>` writes the screen after each action as PPM. Run it inside the test bus:
 
   ```sh
-  cargo build --release -p bande-bench -p bande-shell -p bande-files -p bande-term \
-      -p bande-notify
+  cargo build --release -p bande-bench -p bande-shell -p bande-files -p bande-notify
   dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- \
       env -u WAYLAND_DISPLAY target/release/bande-session-bench
   ```
+
+  The terminal-typing action needs `bande-terminal` (bande-linux/apps) in `target/release` or on
+  PATH.
 
   Other developers' builds share the VM's ten cores, so wall-clock frame times move with the
   load average the tool prints; compare runs taken back to back, and the CPU columns, which

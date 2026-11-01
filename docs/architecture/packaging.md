@@ -15,8 +15,8 @@ profiles. Sizes are tracked in [performance.md](performance.md).
 - **Per crate** (`cargo deb`, one build per architecture; the list is `ci/release/packages`): `bande-compositor`, the session services
   (`bande-config`, `bande-notify`, `bande-power`, `bande-clipboard`, `bande-tray`,
   `bande-automount`, `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
-  `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-term`, `bande-files`,
-  `bande-settings`). Package names stay `bande-*` whatever directory the crate lives in
+  `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
+  `bande-settings`, `bande-monitor`, `bande-file-chooser`). Package names stay `bande-*` whatever directory the crate lives in
   ([decision 0003](../decisions/0003-repository-layout.md)). `bande-shell` installs the one
   shell binary that hosts the desktop, the bar, the notifications, Control Center and the
   launcher, together with the Bande wallpapers and icon theme; the crates of those parts are
@@ -30,12 +30,17 @@ profiles. Sizes are tracked in [performance.md](performance.md).
   `bande-greeter | x-display-manager`, so there is always a way to log in: the Bande login
   window under greetd, or the display manager the system already has. It recommends
   `bande-greeter` anyway (greetd then asks which display manager to start), `network-manager`,
-  `bande-apt-source`, the terminal, screenshot
-  tool, Files, Settings, Activity Monitor, the Package Installer (which opens `.deb` files and
-  depends on `packagekit`), tray and automount services, `gnome-keyring` with
-  `libpam-gnome-keyring`, Qt's portal platform theme (so Qt apps follow dark mode), the everyday apps a fresh install needs (`firefox-esr`,
-  `gnome-text-editor`, `loupe`, `papers`, `showtime`, `gnome-calculator`), `fonts-inter`,
-  `xdg-user-dirs`, `upower` and `udisks2`, and suggests `gnome-clocks`. It installs
+  `bande-apt-source`, the screenshot
+  tool, Files, Settings, Activity Monitor, tray and automount services, `gnome-keyring` with
+  `libpam-gnome-keyring`, Qt's portal platform theme (so Qt apps follow dark mode), `fonts-inter`,
+  `xdg-user-dirs`, `upower` and `udisks2`, all of them built here at the same version. It also
+  recommends, unversioned, the default apps listed in `packaging/bande-desktop/default-apps`:
+  Terminal, Software and the Package Installer from
+  [bande-linux/apps](https://github.com/bande-linux/apps), which are released on their own, and
+  the everyday Debian apps a fresh install needs (`firefox-esr`, `gnome-text-editor`, `loupe`,
+  `papers`, `showtime`, `gnome-calculator`), and suggests `gnome-clocks`. `debian/default-apps.sh`
+  turns that file into the `${bande:Recommends}` and `${bande:Suggests}` substitution variables
+  at build time, so any default app can be removed or replaced. It installs
   `/usr/share/applications/bande-mimeapps.list`, read only in a Bande session, which
   opens folders in Files, web pages in Firefox, text in Text Editor, pictures in Loupe, PDFs
   in Papers and videos in Showtime; a person's own choice in `~/.config/mimeapps.list` still

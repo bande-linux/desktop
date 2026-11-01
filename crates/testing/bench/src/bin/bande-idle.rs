@@ -11,6 +11,7 @@ use bande_compositor::{
     CLIPBOARD_DAEMON, Compositor, FrameClock, FrameScheduler, LOCK_SCREEN, REFRESH, Renderer,
     SCREENSHOT, SHELL, SessionRole,
 };
+use bande_xdg::find_executable;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use smithay::utils::{Clock, Monotonic, Point, Size};
 
@@ -47,7 +48,7 @@ const SERVICES: [&str; 7] = [
 const APPS: [(&str, &str); 4] = [
     ("bande-files", "org.bande.Files"),
     ("bande-settings", "org.bande.Settings"),
-    ("bande-term", "org.bande.Terminal"),
+    ("bande-terminal", "org.bande.Terminal"),
     ("bande-monitor", "org.bande.ActivityMonitor"),
 ];
 
@@ -232,7 +233,14 @@ impl Session {
         }
         session.run_for(START)?;
         for (app, app_id) in APPS {
-            session.open_app(&binaries.join(app), home)?;
+            let built = binaries.join(app);
+            let executable = if built.exists() {
+                built
+            } else {
+                find_executable(app)
+                    .ok_or_else(|| format!("{app} is neither built nor installed"))?
+            };
+            session.open_app(&executable, home)?;
             session.wait_for_window(app_id)?;
         }
         Ok(session)

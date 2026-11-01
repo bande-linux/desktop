@@ -6,10 +6,11 @@ cargo=${REVIEW_CARGO:-cargo}
 packages=(
     bande-compositor bande-notify bande-clipboard bande-config bande-power bande-sound
     xdg-desktop-portal-bande bande-file-chooser bande-tray bande-automount bande-polkit
-    bande-shell bande-term bande-lock bande-screenshot bande-files
+    bande-shell bande-lock bande-screenshot bande-files
     bande-settings bande-monitor bande-greeter
 )
 screenshot=/usr/bin/bande-screenshot
+apps_repo=(org.bande.Terminal:bande-terminal org.bande.Software:bande-software org.bande.Installer:bande-installer)
 runtime="${XDG_RUNTIME_DIR:?needs a user session}/bande-review"
 build=1
 take_over=0
@@ -103,6 +104,13 @@ record() {
     local scenario=$1
     local name out cursor
     name=$(basename "$scenario" .scenario)
+    for app in "${apps_repo[@]}"; do
+        if grep -qF "\"${app%%:*}\"" "$scenario" && [ ! -x "/usr/bin/${app#*:}" ]; then
+            echo "run.sh: $name needs ${app#*:} from bande-linux/apps; install it first" >&2
+            failed=1
+            return
+        fi
+    done
     out="$repo/review-out/$name-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$out" "$runtime"
     echo "Recording $name into $out"

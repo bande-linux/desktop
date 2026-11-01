@@ -43,17 +43,13 @@ contains bande-clipboard usr/bin/bande-clipboard
 field bande-compositor Recommends | grep -qw bande-clipboard
 
 echo "== the shell's packages"
-for package in bande-shell bande-term bande-lock bande-screenshot bande-files bande-settings; do
+for package in bande-shell bande-lock bande-screenshot bande-files bande-settings; do
     field bande-compositor Recommends | grep -q "$package"
     contains "$package" "usr/bin/$package"
 done
 for variant in light dark; do
     contains bande-shell "usr/share/bande/wallpapers/drift-$variant.svg"
 done
-root=$(extract bande-term)
-grep -qx 'Exec=bande-term' "$root/usr/share/applications/org.bande.Terminal.desktop"
-grep -qx 'Icon=org.bande.Terminal' "$root/usr/share/applications/org.bande.Terminal.desktop"
-test -s "$root/usr/share/icons/hicolor/scalable/apps/org.bande.Terminal.svg"
 root=$(extract bande-files)
 grep -qx 'Exec=bande-files' "$root/usr/share/applications/org.bande.Files.desktop"
 test -s "$root/usr/share/icons/hicolor/scalable/apps/org.bande.Files.svg"
@@ -62,14 +58,6 @@ grep -qx 'Exec=bande-settings' "$root/usr/share/applications/org.bande.Settings.
 root=$(extract bande-monitor)
 test -x "$root/usr/bin/bande-monitor"
 grep -qx 'Exec=bande-monitor' "$root/usr/share/applications/org.bande.ActivityMonitor.desktop"
-root=$(extract bande-installer)
-test -x "$root/usr/bin/bande-installer"
-grep -qx 'MimeType=application/vnd.debian.binary-package;application/x-deb;' "$root/usr/share/applications/org.bande.Installer.desktop"
-field bande-installer Depends | grep -qw packagekit
-root=$(extract bande-software)
-test -x "$root/usr/bin/bande-software"
-grep -qx 'Exec=bande-software' "$root/usr/share/applications/org.bande.Software.desktop"
-test -s "$root/usr/share/metainfo/org.bande.Software.metainfo.xml"
 root=$(extract bande-greeter)
 grep -qx 'command = "/usr/bin/bande-compositor --greeter"' "$root/usr/share/bande-greeter/greetd-config.toml"
 field bande-greeter Depends | grep -qF 'greetd (>= 0.10.3-6)'

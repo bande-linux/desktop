@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use bande_toolkit::{Color, CpuRenderer, Image, Item, Rect, Scene};
-use bande_xdg::{ICON_THEMES, find_icon};
+use bande_xdg::find_icon;
 
 const SIZES: [u32; 5] = [16, 24, 32, 48, 64];
 const GAP: f32 = 8.0;
@@ -143,49 +143,6 @@ fn symbolic_icons_are_single_colour_fills_that_toolkits_can_recolour() {
             BTreeSet::from([SYMBOLIC_INK]),
             "{} paints other colours",
             path.display()
-        );
-    }
-}
-
-#[test]
-fn every_app_we_ship_or_recommend_has_an_icon_in_the_theme() {
-    let dirs = vec![data()];
-    let mut names: Vec<String> =
-        fs::read_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps"))
-            .unwrap()
-            .filter_map(|app| fs::read_dir(app.unwrap().path().join("data")).ok())
-            .flatten()
-            .map(|entry| entry.unwrap().path())
-            .filter(|path| {
-                path.extension()
-                    .is_some_and(|extension| extension == "desktop")
-            })
-            .map(|path| {
-                fs::read_to_string(&path)
-                    .unwrap()
-                    .lines()
-                    .find_map(|line| line.strip_prefix("Icon="))
-                    .unwrap()
-                    .to_owned()
-            })
-            .collect();
-    assert_eq!(names.len(), 6);
-    names.extend(
-        [
-            "org.gnome.TextEditor",
-            "org.gnome.Loupe",
-            "org.gnome.Papers",
-            "org.gnome.Showtime",
-            "org.gnome.Calculator",
-            "org.gnome.clocks",
-        ]
-        .map(str::to_owned),
-    );
-    for name in names {
-        assert_eq!(
-            find_icon(&name, 48, &ICON_THEMES, &dirs),
-            Some(theme().join(format!("scalable/apps/{name}.svg"))),
-            "{name}"
         );
     }
 }

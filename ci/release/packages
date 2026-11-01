@@ -10,12 +10,9 @@ bande-tray
 bande-automount
 bande-polkit
 bande-shell
-bande-term
 bande-lock
 bande-screenshot
 bande-files
 bande-settings
 bande-greeter
 bande-monitor
-bande-installer
-bande-software

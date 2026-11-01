@@ -651,8 +651,8 @@ There is no behaviour change. Do one task per file.
   - `serde` comes before `ruzstd`;
   - the block from `naga` to `wgpu` is unordered;
   - `bande-datetime` comes before `bande-controlcenter`.
-- **Package names that differ from their folders:** `bande-term` lives in `apps/terminal`, and
-  `bande-desktop-surface` lives in `shell/desktop`.
+- **Package names that differ from their folders:** `bande-desktop-surface` lives in
+  `shell/desktop` (Terminal moved to bande-linux/apps as `bande-terminal`).
 - **Bar module names:** `menubar.rs` sits next to `menu_bar_client.rs`.
 - **Saves:** about 0 lines.
 - **Risk:** very low.

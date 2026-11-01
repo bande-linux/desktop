@@ -23,6 +23,7 @@ bande-xdg.workspace = true
 
 [dev-dependencies]
 bande-golden.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

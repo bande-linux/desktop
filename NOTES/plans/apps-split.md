@@ -111,6 +111,8 @@ Settings keyboard, Wi-Fi UI and compositor DRM work don't conflict. Then: freeze
 - Update rebuild-desktop.
 - Done when `dpkg-deb -f bande-desktop Depends Recommends Suggests` is unchanged, and build-all.sh and the gate are green.
 
+Status: done 2026-11-01. `default-apps.sh [file]` takes no version (the default apps are unversioned). The handler test is `crates/shell/desktop/tests/default_apps.rs`: every default in bande-mimeapps.list resolves, through the bande-xdg parser, to a desktop-repo app or a default app; the app-icon test moved there too. rebuild-desktop needed no change (its `pinned` reads only Depends). Depends, Recommends and Suggests of the built bande-desktop are the same set as before.
+
 ### M2 (desktop). Cut the code and test couplings
 - bar tests/low_memory.rs loads icons from `data/icons/Bande/scalable/apps/` (same bytes; goldens unchanged).
 - Compositor guest test, ci/vm/guest-tests.sh and session-bench type into bande-sample (crates/testing, records typed text to a file) instead of bande-term.
@@ -118,11 +120,15 @@ Settings keyboard, Wi-Fi UI and compositor DRM work don't conflict. Then: freeze
 - data/icons/src/apps.py HICOLOR keeps only Files and Settings; theme icons for Terminal, ActivityMonitor, Installer and Software stay.
 - Missing-app behaviour: Files hides "Open in Terminal" without `bande-terminal` on PATH; `Terminal=true` launches return a clear LaunchError; the low-memory dialog hides "Open Activity Monitor" when it's missing.
 
+Status: done 2026-11-01. Differences from the plan: the ci/vm guest runner no longer exists (ci/hil runs only the scanout test), so the dormant guest test now waits for `bande-terminal` instead of being rewritten around bande-sample; bande-session-bench and bande-idle start `bande-terminal` from the binaries folder or else from PATH, so the terminal-typing scenario keeps measuring a terminal. The xdg `TERMINAL` constant is `bande-terminal` (D4); Files hides "Open in Terminal" in its context menus and disables it in the menu bar without it; `Terminal=true` launches fail with `LaunchError::NoTerminal`. Activity Monitor stays (M3), so the low-memory dialog is unchanged. ci/review/run.sh no longer builds Terminal and refuses a scenario that needs an apps-repo app missing from /usr/bin.
+
 ### M3 (desktop). Move Force Quit into the shell (D2)
 - `bande-shell --force-quit` on bande-status::memory (`force_quit`, `heaviest_apps`), with the look of monitor's force_quit.rs.
 - Compositor `Summoned::new(SHELL)` for Force Quit; the bar asks the compositor (or runs bande-shell).
 - Drop `/usr/bin/bande-monitor` from session-clients and the MONITOR constant if unused. Monitor keeps its in-app Force Quit.
 - If D2 is declined: skip this, and when bande-monitor is missing the compositor quits the focused app after confirmation.
+
+Status: skipped. Decided 2026-11-01 (apps-split agent, D2's own fallback; owner may revisit): Force Quit and so Activity Monitor stay in the desktop repo. A shell Force Quit means porting monitor's Force Quit window together with the model and sampler it is built on (about 2,500 lines) into bande-shell and proving the four D2 cases with tests; that could not be shown at least as reliable as today in this pass, and the shell was being reworked for performance by another agent at the same time. Moving Activity Monitor later is the M4/M5 recipe for one more app plus this milestone. The moving apps are Terminal, Software (with catalog) and Installer; bande-monitor stays pinned in the control file like Files and Settings.
 
 ### M4a / M4b (apps). Import with history and build standalone
 M4a: Terminal and Monitor. M4b: Software (with catalog) and Installer.
@@ -137,11 +143,15 @@ M4a: Terminal and Monitor. M4b: Software (with catalog) and Installer.
 9. Check goldens against the apps CI's fonts; port ci/debian-fonts.sh into build-app.sh if they differ.
 10. CI dispatch `build.yml -f apps="term monitor software installer"` is a release-time step; locally the gate is enough. Desktop is unchanged, so both repos stay green.
 
+Status: done 2026-11-01 as one import, apps `main` up to be14abc. Terminal, Software (with catalog, now `apps/software/src/catalog/` and its tests and data in `apps/software/tests/`) and Installer, 95 commits of history from `git filter-repo` (unbound-term and apps/terminal never coexisted). Activity Monitor stays (M3), so no icon fixtures were needed. Each app is 0.1.0, `publish = false`, has `--version`, smoke.sh and build-depends, and its Cargo.lock started from desktop's. Software and Installer now only recommend `bande-polkit` (it is not in Debian, so a hard Depends broke `apt-get install` in the apps CI container). The metainfo homepages point at bande-linux/apps; Terminal's description says Shift+Ctrl+C/V. All five apps, Mail and Calendar included, pin desktop 97b1ba89.
+
 ### M5 (desktop). Remove the moved crates
 - Delete crates/apps/{terminal,monitor,software,installer} and crates/libs/catalog; remove their workspace entries plus alacritty_terminal and serde_yaml_ng.
 - `cargo check` once without `--locked` to prune Cargo.lock (removals only).
 - Update ci/release/packages and check-debs.sh, compositor recommends (drop bande-term), default-apps (the four are added to `[apps]`, their `(=)` Recommends removed from control), README, docs, review run.sh.
 - Gate and build-all.sh.
+
+Status: done 2026-11-01 for Terminal, Software, Installer and catalog (Activity Monitor stays, M3). Cargo.lock lost only the removed crates. build-all.sh passes: bande-desktop recommends `bande-terminal, bande-software, bande-installer` unversioned and still pins bande-monitor.
 
 ### M6 (apps and tooling). Pins, gate and rules
 - `ci/bump-desktop.sh [REV]`: default REV is desktop main (`git ls-remote`), later the newest `v*` tag (D8); checks REV is on main; sed across apps/*/Cargo.toml and template; `cargo metadata` per app to re-lock only the desktop source; runs `ci/gate.sh`; prints "Pin the desktop at <short>".

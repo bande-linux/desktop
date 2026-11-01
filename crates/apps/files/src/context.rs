@@ -1,6 +1,7 @@
 use bande_fs::Sort;
 use bande_toolkit::Point;
 use bande_toolkit::ui::Menu;
+use bande_xdg::{TERMINAL, find_executable};
 
 use crate::browser::Location;
 use std::path::PathBuf;
@@ -150,6 +151,7 @@ impl FilesView {
                 && selection
                     .iter()
                     .all(|entry| entry.is_folder() && entry.trashed.is_none()),
+            terminal: find_executable(TERMINAL).is_some(),
             apps,
         })
     }
@@ -163,6 +165,7 @@ impl FilesView {
             mode: self.mode,
             hidden_shown: self.browser.shows_hidden(),
             paste: self.clipboard_files,
+            terminal: find_executable(TERMINAL).is_some(),
         })
     }
 

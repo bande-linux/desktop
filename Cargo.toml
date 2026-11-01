@@ -18,7 +18,6 @@ panic = "deny"
 ab_glyph = "=0.2.32"
 accesskit = "=0.25.2"
 accesskit_unix = "=0.24.1"
-alacritty_terminal = { version = "=0.26.0", default-features = false }
 ash = "=0.38.0"
 atspi-common = "=0.13.0"
 blocking = "=1.6.2"
@@ -49,7 +48,6 @@ rustix = { version = "=1.1.6", features = ["event", "param", "process"] }
 ruzstd = "=0.9.1"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
-serde_yaml_ng = "=0.10.0"
 skrifa = "=0.44.0"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
 tar = "=0.4.46"
@@ -80,7 +78,6 @@ bande-bar = { path = "crates/shell/bar" }
 bande-bench = { path = "crates/testing/bench" }
 bande-bluetooth = { path = "crates/libs/bluetooth" }
 bande-bus = { path = "crates/libs/bus" }
-bande-catalog = { path = "crates/libs/catalog" }
 bande-clipboard = { path = "crates/services/clipboard" }
 bande-compositor = { path = "crates/platform/compositor" }
 bande-config = { path = "crates/services/config" }
@@ -95,7 +92,6 @@ bande-fs = { path = "crates/libs/fs" }
 bande-golden = { path = "crates/testing/golden" }
 bande-graphics = { path = "crates/toolkit/graphics" }
 bande-greeter = { path = "crates/shell/greeter" }
-bande-installer = { path = "crates/apps/installer" }
 bande-inbox = { path = "crates/libs/inbox" }
 bande-keyboard = { path = "crates/libs/keyboard" }
 bande-l10n = { path = "crates/libs/l10n" }
@@ -119,11 +115,9 @@ bande-search = { path = "crates/libs/search" }
 bande-settings = { path = "crates/apps/settings" }
 bande-settings-panes = { path = "crates/libs/settings-panes" }
 bande-shell = { path = "crates/shell/shell" }
-bande-software = { path = "crates/apps/software" }
 bande-sound = { path = "crates/services/sound", default-features = false }
 bande-spring = { path = "crates/libs/spring" }
 bande-status = { path = "crates/libs/status" }
-bande-term = { path = "crates/apps/terminal" }
 bande-test-bus = { path = "crates/testing/test-bus" }
 bande-test-wayland = { path = "crates/testing/test-wayland" }
 bande-thumbnails = { path = "crates/libs/thumbnails" }

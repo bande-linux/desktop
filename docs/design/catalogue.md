@@ -63,7 +63,7 @@ keyboard model of [`overview.md`](../architecture/overview.md#keyboard-model).
 - **Keyboard Shortcuts**: `Super+Left/Right` splits active window to half screen, `Super+Up` maximizes, `Super+Down` restores or minimizes.
 - **Layout Persistence**: Tiled windows maintain their proportional splits when display resolution or orientation changes.
 
-## 9. `bande-term` (GPU-Accelerated Terminal Emulator)
+## 9. `bande-terminal` (GPU-Accelerated Terminal Emulator, in bande-linux/apps)
 - Built in pure Rust on **`bande-toolkit`** (Vello and Parley) with glyph caching.
 - **Semantic Shortcut Cleanliness**: `Super+C` copies selected text and `Super+V` pastes from clipboard; `Ctrl+C` sends standard `SIGINT` to the running process without collision or mode switching.
 - **Productivity Features**: Native split panes, tabs, scrollback search, clickable URL detection, and automatic theme synchronization with desktop light/dark appearance.

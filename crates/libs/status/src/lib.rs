@@ -36,7 +36,7 @@ pub enum Update {
     ClockFormat(String),
     Minute,
     BatteryPercentage(bool),
-    Unread(bool),
+    ClockMark(unread::ClockMark),
     BarLayout { menu_bar: String, edge: String },
 }
 

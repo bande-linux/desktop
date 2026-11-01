@@ -3,7 +3,7 @@ Hand written notes by a user when gaps are found. These need to be properly inve
 Status values: open, planning, planned, started, finished, dropped.
 
 The notifications bar open up under the task bar. Given that notifications open in the top right, should the notifications bar open there as well? or should we move the notifications to some kind of window on the left? on integrate them into the taskbar or notifications bar? How can we enhance this
-Status: planned ([plans/notifications-placement.md](plans/notifications-placement.md))
+Status: finished ([plans/notifications-placement.md](plans/notifications-placement.md)); M5 (several displays) left as optional
 
 power management seems to not work. Screen saver, sleep/wake (wake with keyboard), display sleep, computer sleep
 Status: started ([plans/power-management.md](plans/power-management.md)); display off at the lock stage, after a minute on a locked screen, and wake on input done (M1, M2, M4), sleep waits on the s2idle hardware test with a person at the mini (M3, M5-6)

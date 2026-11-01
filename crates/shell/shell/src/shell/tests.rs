@@ -45,7 +45,6 @@ impl Session {
                 system: None,
                 config_home: Some(home.clone()),
                 home: Some(home),
-                notification_center: Rc::new(RefCell::new(Box::new(|| {}))),
                 app_slice: None,
             };
             let mut shell = Shell::start(context, root, None).unwrap();

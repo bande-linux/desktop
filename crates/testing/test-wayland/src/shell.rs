@@ -239,9 +239,9 @@ impl TestClient {
         &self.globals.shell.panel_toggles
     }
 
-    pub fn toggle_control_center(&mut self, server: &mut Compositor) {
+    pub fn toggle_panel(&mut self, server: &mut Compositor, panel: bande_shell_v1::Panel) {
         let shell = self.globals.shell.shell.as_ref().expect("joined the shell");
-        shell.toggle_control_center();
+        shell.toggle_panel(panel);
         self.exchange(server);
     }
 

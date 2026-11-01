@@ -25,6 +25,19 @@ fn settings(pane: &str) -> MenuItem {
     )
 }
 
+pub fn clock_menu(quiet: bool) -> Menu {
+    Menu::new(vec![
+        item(
+            &L10N.tr("do-not-disturb"),
+            &Command::SetDoNotDisturb(!quiet),
+        )
+        .checked(quiet),
+        MenuItem::separator(),
+        settings("notifications"),
+        settings("language-time"),
+    ])
+}
+
 pub fn system_menu(user: &str) -> Menu {
     Menu::new(vec![
         item(&L10N.tr("about"), &Command::About),

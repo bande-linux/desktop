@@ -43,6 +43,7 @@ struct Fixture {
     portal: Portal,
     path: PathBuf,
     gtk_home: PathBuf,
+    data_home: PathBuf,
     _config: ConfigService,
     _directory: tempfile::TempDir,
 }
@@ -52,6 +53,7 @@ fn start(config: &str) -> Fixture {
     let path = directory.path().join("config.kdl");
     std::fs::write(&path, config).expect("config");
     let gtk_home = directory.path().join("config-home");
+    let data_home = directory.path().join("data-home");
     let mut service = None;
     let portal = Portal::start(|connection| {
         service = Some(
@@ -64,7 +66,10 @@ fn start(config: &str) -> Fixture {
             CursorSettings {
                 theme: "Adwaita".to_owned(),
             },
-            Some(gtk_home.clone()),
+            Some(gtk::GtkHomes {
+                config: gtk_home.clone(),
+                data: data_home.clone(),
+            }),
         )
         .expect("settings");
     });
@@ -72,6 +77,7 @@ fn start(config: &str) -> Fixture {
         portal,
         path,
         gtk_home,
+        data_home,
         _config: service.expect("config"),
         _directory: directory,
     }
@@ -348,7 +354,7 @@ fn switching_to_light_signals_the_gnome_color_scheme_and_gtk_theme() {
 
     assert_eq!(
         gnome_changes(&changes, 2),
-        pairs(&[("color-scheme", "prefer-light"), ("gtk-theme", "Adwaita")])
+        pairs(&[("color-scheme", "prefer-light"), ("gtk-theme", "Bande")])
     );
 }
 
@@ -356,7 +362,7 @@ fn switching_to_light_signals_the_gnome_color_scheme_and_gtk_theme() {
 fn gtk_apps_get_the_bande_fonts_theme_and_motion() {
     let fixture = start("appearance \"dark\"\n");
     let interface = |key: &str| fixture.string(GNOME_INTERFACE, key);
-    assert_eq!(interface("gtk-theme"), "Adwaita-dark");
+    assert_eq!(interface("gtk-theme"), "Bande-dark");
     assert_eq!(interface("font-name"), "Inter 10");
     assert_eq!(interface("document-font-name"), "Inter 11");
     assert_eq!(interface("monospace-font-name"), "JetBrains Mono 10");
@@ -610,4 +616,34 @@ fn gtk_window_controls_take_the_colours_of_our_title_bar_in_each_scheme() {
     }
     assert!(css.contains("windowcontrols {"));
     assert!(css.contains("font-family: \"Manrope\";\n  font-size: 15px;\n  font-weight: 700;"));
+}
+
+#[test]
+fn gtk3_apps_get_a_bande_theme_per_scheme_on_top_of_adwaita() {
+    let fixture = start("appearance \"light\"\naccent \"teal\"\n");
+    for (name, scheme, adwaita) in [
+        ("Bande", Scheme::Light, "Adwaita/gtk-contained.css"),
+        ("Bande-dark", Scheme::Dark, "Adwaita/gtk-contained-dark.css"),
+    ] {
+        let theme = fixture.data_home.join("themes").join(name);
+        let css = std::fs::read_to_string(theme.join("gtk-3.0/gtk.css")).expect("gtk.css");
+        let palette = Palette::generate(scheme, Accent::Teal, Contrast::Standard);
+        assert!(css.starts_with(&format!(
+            "@import url(\"resource:///org/gtk/libgtk/theme/{adwaita}\");"
+        )));
+        for color in [
+            palette.chassis,
+            palette.well,
+            palette.accent,
+            palette.danger,
+        ] {
+            assert!(css.contains(&hex(color)), "{name}: {css}");
+        }
+        assert!(
+            std::fs::read_to_string(theme.join("index.theme"))
+                .expect("index.theme")
+                .contains(&format!("GtkTheme={name}"))
+        );
+        assert!(theme.join("gtk-4.0/gtk.css").exists());
+    }
 }

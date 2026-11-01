@@ -45,7 +45,7 @@ menu bar back to the top.
 | Feature | Status | Milestone |
 |---|---|---|
 | Browser, text editor, image and PDF viewer, calculator, video, clocks preinstalled | none | M4 |
-| GTK apps follow accent colour and dark mode | basic (sandboxed only) | M4 |
+| GTK apps follow accent colour and dark mode | basic (libadwaita and GTK 4 colours, GTK 3 Bande themes with the accent and our title bar) | M4 |
 | Default app per file type (Open With) | none | M4 |
 | App menus in the menu bar | none (app name only) | M4 |
 | Finder: sidebar, icon/list/column/gallery views, Get Info, Trash, Quick Look | basic (columns, PNG and text Quick Look) | M7 |

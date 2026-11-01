@@ -195,12 +195,19 @@ graph LR
   and Save dialogs through the portal. libadwaita and GTK 4 apps read `color-scheme` and
   `accent-color` from the Settings portal themselves. GTK 3 reads its settings from GSettings
   unless `GTK_USE_PORTAL=1` (`gdk_should_use_portal`), so `bande-session` sets it: GTK 3 then
-  takes `gtk-theme` (Adwaita, Adwaita-dark, or HighContrast under Increase Contrast),
+  takes `gtk-theme` (`Bande` or `Bande-dark`, or HighContrast under Increase Contrast),
   `font-name` (Inter 10), `document-font-name`, `monospace-font-name` (JetBrains Mono 10),
   `enable-animations` (off under Reduce Motion), the cursor and the text size from the portal's
   `org.gnome.desktop.interface`, and sends its native Open and Save dialogs to our chooser. A
   key the portal leaves out falls to GTK's built-in default, not to GSettings, so the portal
-  serves every key above. Qt apps run natively on Wayland through
+  serves every key above. GTK 3's Adwaita uses literal colours, so `@define-color` cannot
+  restyle it: the portal writes two themes to `$XDG_DATA_HOME/themes`, `Bande` and
+  `Bande-dark`, whose `gtk-3.0/gtk.css` imports GTK's built-in Adwaita (or Adwaita-dark) and
+  adds the title bar (chassis, no gradient or inset shadow, Manrope title, the title buttons as
+  one pill like ours) and the accent on selections, suggested actions, switches, checks, radios,
+  progress bars and scales, rewritten when the accent changes. Serving them as `gtk-theme`
+  makes running GTK 3 apps switch live with the scheme. Their `gtk-4.0/gtk.css` imports GTK's
+  `Default` theme, so plain GTK 4 apps that read the same name look as before. Qt apps run natively on Wayland through
   `qt6-wayland`, which Qt's own packages recommend. The backend lives in
   `/usr/libexec` and is started by D-Bus activation through its user unit, as Debian's portal
   backends are. The `install` jobs install the packages into Debian testing with its `xdg-desktop-portal`

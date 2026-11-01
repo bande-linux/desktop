@@ -23,6 +23,21 @@ const SIMULATE: u64 = 1 << 2;
 const ONLY_DOWNLOAD: u64 = 1 << 3;
 const ROLE_REFRESH_CACHE: u32 = 13;
 const INFO_MASK: u32 = 0xffff;
+const OS_RELEASE: &str = "/proc/sys/kernel/osrelease";
+const OFFLINE_PACKAGES: [&str; 4] = ["libc6", "systemd", "libsystemd0", "udev"];
+const KERNEL_PACKAGES: [&str; 4] = [
+    "linux-image-",
+    "linux-modules-",
+    "linux-binary-",
+    "linux-base-",
+];
+const BOOT_PACKAGES: [&str; 5] = [
+    "firmware-",
+    "initramfs-tools",
+    "u-boot",
+    "grub",
+    "systemd-boot",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Info {
@@ -82,6 +97,76 @@ impl Package {
             summary: summary.to_owned(),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Restart {
+    #[default]
+    None,
+    Application,
+    Session,
+    System,
+    SecuritySession,
+    SecuritySystem,
+}
+
+impl Restart {
+    fn from_raw(raw: u32) -> Self {
+        match raw {
+            2 => Self::Application,
+            3 => Self::Session,
+            4 => Self::System,
+            5 => Self::SecuritySession,
+            6 => Self::SecuritySystem,
+            _ => Self::None,
+        }
+    }
+
+    pub fn reboots(self) -> bool {
+        matches!(self, Self::System | Self::SecuritySystem)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum Class {
+    #[default]
+    Live,
+    Boot,
+    Offline,
+}
+
+impl Class {
+    pub fn of(package: &Package, restart: Restart, release: &str) -> Self {
+        let name = package.name.as_str();
+        let kernel = KERNEL_PACKAGES
+            .iter()
+            .find_map(|prefix| name.strip_prefix(prefix));
+        let login = name == "greetd" || name.starts_with("libpam");
+        let core = OFFLINE_PACKAGES.contains(&name) || name.starts_with("dbus");
+        if core
+            || kernel == Some(release)
+            || (login && package.info == Info::Security)
+            || (restart.reboots() && kernel.is_none())
+        {
+            Self::Offline
+        } else if kernel.is_some() || BOOT_PACKAGES.iter().any(|prefix| name.starts_with(prefix)) {
+            Self::Boot
+        } else {
+            Self::Live
+        }
+    }
+}
+
+pub fn running_release() -> String {
+    std::fs::read_to_string(OS_RELEASE)
+        .map(|release| release.trim().to_owned())
+        .unwrap_or_default()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateDetail {
+    pub id: String,
+    pub restart: Restart,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -351,6 +436,32 @@ impl Client {
         Ok(self.run("GetDetails", &(ids,), &|_| {})?.details)
     }
 
+    pub fn update_details(&self, ids: &[String]) -> Result<Vec<UpdateDetail>, Error> {
+        Ok(self
+            .run("GetUpdateDetail", &(ids,), &|_| {})?
+            .update_details)
+    }
+
+    pub fn update(
+        &self,
+        ids: &[String],
+        mode: Mode,
+        progress: &dyn Fn(Progress),
+    ) -> Result<Applied, Error> {
+        Ok(self
+            .run(
+                "UpdatePackages",
+                &(ONLY_TRUSTED | mode.flags(), ids),
+                progress,
+            )?
+            .applied())
+    }
+
+    pub fn repair(&self, progress: &dyn Fn(Progress)) -> Result<(), Error> {
+        self.run("RepairSystem", &(ONLY_TRUSTED,), progress)
+            .map(drop)
+    }
+
     pub fn download(&self, ids: &[String], progress: &dyn Fn(Progress)) -> Result<(), Error> {
         self.run(
             "UpdatePackages",
@@ -367,11 +478,9 @@ impl Client {
     }
 
     pub fn install(&self, ids: &[String], progress: &dyn Fn(Progress)) -> Result<Applied, Error> {
-        let outcome = self.run("InstallPackages", &(ONLY_TRUSTED, ids), progress)?;
-        Ok(Applied {
-            packages: outcome.packages,
-            restart: outcome.restart,
-        })
+        Ok(self
+            .run("InstallPackages", &(ONLY_TRUSTED, ids), progress)?
+            .applied())
     }
 
     pub fn resolve_installed(&self, name: &str) -> Result<Vec<Package>, Error> {
@@ -398,15 +507,13 @@ impl Client {
         progress: &dyn Fn(Progress),
     ) -> Result<Applied, Error> {
         let file = path.to_string_lossy().into_owned();
-        let outcome = self.run(
-            "InstallFiles",
-            &(mode.flags(), std::slice::from_ref(&file)),
-            progress,
-        )?;
-        Ok(Applied {
-            packages: outcome.packages,
-            restart: outcome.restart,
-        })
+        Ok(self
+            .run(
+                "InstallFiles",
+                &(mode.flags(), std::slice::from_ref(&file)),
+                progress,
+            )?
+            .applied())
     }
 
     pub fn remove(
@@ -415,14 +522,12 @@ impl Client {
         mode: Mode,
         progress: &dyn Fn(Progress),
     ) -> Result<Applied, Error> {
-        let outcome = self.run(
-            "RemovePackages",
-            &(mode.flags(), ids, true, false),
-            progress,
-        )?;
-        Ok(Applied {
-            packages: outcome.packages,
-            restart: outcome.restart,
-        })
+        Ok(self
+            .run(
+                "RemovePackages",
+                &(mode.flags(), ids, true, false),
+                progress,
+            )?
+            .applied())
     }
 }

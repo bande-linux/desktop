@@ -1,4 +1,5 @@
 bande-mimeapps.list usr/share/applications/
+needrestart/bande.conf etc/needrestart/conf.d/
 systemd/zram-generator.conf.d usr/lib/systemd/
 systemd/system/dev-zram0.device.d usr/lib/systemd/system/
 systemd/user/app.slice.d usr/lib/systemd/user/

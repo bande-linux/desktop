@@ -300,7 +300,9 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                     let outcome = match network.join(&target, password.as_deref()) {
                         Ok(JoinOutcome::Joined) => Joined::Joined,
                         Ok(JoinOutcome::WrongPassword) => Joined::WrongPassword,
-                        Ok(JoinOutcome::Failed { reason }) => Joined::Failed(reason.to_string()),
+                        Ok(failed @ JoinOutcome::Failed { .. }) => {
+                            Joined::Failed(failed.to_string())
+                        }
                         Err(bande_network::Error::PasswordRequired) => Joined::WrongPassword,
                         Err(error) => Joined::Failed(error.to_string()),
                     };

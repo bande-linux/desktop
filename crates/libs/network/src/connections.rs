@@ -117,7 +117,7 @@ pub fn ipv4_settings(manual: Option<&ManualIpv4>) -> HashMap<String, OwnedValue>
     ipv4
 }
 
-fn text(entry: &HashMap<String, OwnedValue>, key: &str) -> Option<String> {
+pub(crate) fn text(entry: &HashMap<String, OwnedValue>, key: &str) -> Option<String> {
     String::try_from(entry.get(key)?.try_clone().ok()?).ok()
 }
 

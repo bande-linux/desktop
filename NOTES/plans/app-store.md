@@ -166,6 +166,11 @@ Backend choices inside E:
   is installed; this is not yet checked. Software's own metainfo validates with
   `appstreamcli validate --no-net`; metainfo for Files, Terminal, Settings and Activity Monitor
   is still to do.
+- Milestone 8 is started on branch `gap/store-install`: `bande-packages` gains `resolve`,
+  `install`, `native` and `debian_arch`, the fake PackageKit answers `InstallPackages` and
+  resolves `available` packages, and Software's app page installs the Debian package through a
+  worker and ends with Open. Not yet gated: run `desktop-gate` on it, then check an install on
+  the mini (not done overnight: no package installs on the mini).
 - Left: milestone 1's Recommends and metainfo, 6 (Flatpak backend), 8 (install through
   `bande-packages`), 9 (Installed view and removal), the tile grid and the sidebar of 7, and
   10 to 13.

@@ -695,8 +695,7 @@ impl FilesView {
         for column in &self.list_columns {
             let text = match column {
                 ListColumn::Modified => modified.clone(),
-                ListColumn::Created => entry
-                    .created
+                ListColumn::Created => crate::view::created_at(entry.created, entry.modified)
                     .map(|time| cached_date(time, formats))
                     .unwrap_or_default(),
                 ListColumn::Size => size.clone(),

@@ -999,7 +999,7 @@ impl FilesView {
                         ),
                     ));
                 }
-                if let Some(created) = entry.created {
+                if let Some(created) = crate::view::created_at(entry.created, entry.modified) {
                     facts.push((L10N.tr("info-created"), format_date(created)));
                 }
                 if let Some(modified) = entry.modified {

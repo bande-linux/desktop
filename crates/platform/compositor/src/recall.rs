@@ -111,7 +111,8 @@ impl State {
                 && sibling.size.is_some()
                 && toplevel_names(sibling.surface()).1 == app_id
         });
-        (!app_id.is_empty() && window.toplevel.parent().is_none() && alone).then_some(app_id)
+        (!app_id.is_empty() && window.toplevel.parent().is_none() && !window.fixed_size() && alone)
+            .then_some(app_id)
     }
 
     pub(crate) fn recall_frame(&mut self, index: usize) {

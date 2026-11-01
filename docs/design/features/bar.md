@@ -200,8 +200,13 @@ owns it, on the content side, with an 8 pt gap, aligned to the item and kept on 
   Out…) and Settings, so session actions are reachable without the right-click system menu.
 - **Notification Center** — full-height sheet beside the bar (`08-notification-center.png`),
   sliding out of the bar edge with the `standard` spring.
-- **Banners** stay at the top of the far side (top right for a left bar), where they cover the
-  least work; when put away they fly toward the clock and its unread dot appears.
+- **Banners** follow one rule with the panels: everything opens from the clock corner. On a
+  side bar they stack up beside the bar from the clock's end, newest nearest the clock, slide out
+  from under the bar's edge and go back into it when swiped, flicked or timed out. On a bottom
+  bar they stack up above the clock at the right; on a top bar or a separate menu bar they hang
+  below the clock at the top right, entering from the right screen edge (macOS). They never
+  cover the window controls at the top left. The gap to the bar is 8 pt, as for Control
+  Center.
 - **Volume/brightness level card** — at the status button.
 
 On a bottom bar they open upwards, right-aligned to the item, exactly as today's top-right panels
@@ -354,9 +359,10 @@ bar {
   reverses that; the separate-menu-bar setting preserves the old split.
 - **Width on small laptops**: 64 pt on 1366 wide is 4.7 %; auto-hide is the escape, and the
   status/clock never hide.
-- **Banners at the far corner from the clock** break the "everything from the bar" rule for one
-  transient element; the alternative (banners beside the bar) covers the title bars of left-tiled
-  windows.
+- **Banners beside a side bar** cover the bottom of the work area next to the clock (a terminal
+  prompt, a status bar) for up to 5 s; resting the pointer holds them and a swipe towards the
+  bar clears them. Top-left banners would cover window controls, so the fallback is banners at
+  the top right, not top left.
 - **Third-party app menus** will be thin until `org_kde_kwin_appmenu` is supported, and GTK4/
   Electron apps will never export; the header must never look empty (§3.3).
 - **Multi-display bars on every screen** repeat the app list; some people will want the apps on

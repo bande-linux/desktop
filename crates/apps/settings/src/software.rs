@@ -4,11 +4,13 @@ use std::sync::mpsc::{self, Sender};
 use bande_packages::offline::{self, Results};
 use bande_packages::{Client, Error, ErrorCode, Failure};
 use zbus::MatchRule;
+use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
+use zbus::fdo::RequestNameFlags;
 use zbus::message;
 
 use bande_notify::Urgency;
-use bande_notify::client::{Request, notify};
+use bande_notify::client::{Request, close, notify};
 
 use crate::L10N;
 use crate::failure::{sentence, unexpected};
@@ -201,24 +203,52 @@ fn announce(session: &Connection, summary: &str, body: &str) -> zbus::Result<Opt
     .map(Some)
 }
 
-pub fn clicked(session: &Connection, id: u32) -> zbus::Result<bool> {
-    let rule = MatchRule::builder()
-        .msg_type(message::Type::Signal)
-        .interface("org.freedesktop.Notifications")?
-        .build();
-    for message in MessageIterator::for_match_rule(rule, session, None)?.flatten() {
-        let header = message.header();
-        match header.member().map(|member| member.as_str()) {
-            Some("ActionInvoked") if message.body().deserialize::<(u32, String)>()?.0 == id => {
-                return Ok(true);
-            }
-            Some("NotificationClosed") if message.body().deserialize::<(u32, u32)>()?.0 == id => {
-                return Ok(false);
-            }
-            _ => {}
-        }
+const NOTICE_NAME: &str = "org.bande.Settings.UpdateNotice";
+
+pub struct UpdateNotice {
+    session: Connection,
+    messages: MessageIterator,
+}
+
+impl UpdateNotice {
+    pub fn listen(session: &Connection) -> zbus::Result<Self> {
+        let messages = MessageIterator::from(session);
+        let rule = MatchRule::builder()
+            .msg_type(message::Type::Signal)
+            .interface("org.freedesktop.Notifications")?
+            .build();
+        DBusProxy::new(session)?.add_match_rule(rule)?;
+        session.request_name_with_flags(
+            NOTICE_NAME,
+            RequestNameFlags::ReplaceExisting | RequestNameFlags::AllowReplacement,
+        )?;
+        Ok(Self {
+            session: session.clone(),
+            messages,
+        })
     }
-    Ok(false)
+
+    pub fn clicked(self, id: u32) -> zbus::Result<bool> {
+        for message in self.messages.flatten() {
+            let header = message.header();
+            match header.member().map(|member| member.as_str()) {
+                Some("ActionInvoked") if message.body().deserialize::<(u32, String)>()?.0 == id => {
+                    return Ok(true);
+                }
+                Some("NotificationClosed")
+                    if message.body().deserialize::<(u32, u32)>()?.0 == id =>
+                {
+                    return Ok(false);
+                }
+                Some("NameLost") if message.body().deserialize::<&str>()? == NOTICE_NAME => {
+                    close(&self.session, id)?;
+                    return Ok(false);
+                }
+                _ => {}
+            }
+        }
+        Ok(false)
+    }
 }
 
 pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Result<Option<u32>> {

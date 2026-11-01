@@ -16,8 +16,8 @@ worktree's own target directory, and record the numbers in
 owner's session: live numbers on the mini are read from `/proc` only.
 
 - **The whole session at idle:** `bande-idle` (`crates/testing/bench`) runs a headless
-  compositor with the session's services and apps from `--binaries <dir>` inside the test bus
-  and reports RSS and wake-ups per process with windows open, minimised and locked.
+  compositor with the session's services and apps from `--binaries <dir>` on a private bus of
+  its own (the test bus) and reports RSS and wake-ups per process with windows open, minimised and locked.
 - **One client's memory:** `bande-footprint` (below); for a precise number read
   `Anonymous` from `/proc/<pid>/smaps_rollup` while it settles. `BANDE_RENDERER=gpu` makes
   clients draw with lavapipe as a GPU, `BANDE_RENDERER=cpu` on the CPU path.
@@ -49,12 +49,12 @@ owner's session: live numbers on the mini are read from `/proc` only.
   its CPU time per frame (including lavapipe's threads), the clients' CPU time per frame, the
   cores kept busy and the pixels repainted per frame. Arguments filter the actions by name;
   `--frames` lists every frame, `--full-effects` keeps blur on a CPU renderer, `--snapshots
-  <dir>` writes the screen after each action as PPM. Run it inside the test bus:
+  <dir>` writes the screen after each action as PPM. It starts its own test bus, so the apps
+  never reach the running session's single-instance apps:
 
   ```sh
   cargo build --release -p bande-bench -p bande-shell -p bande-files -p bande-notify
-  dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- \
-      env -u WAYLAND_DISPLAY target/release/bande-session-bench
+  env -u WAYLAND_DISPLAY target/release/bande-session-bench
   ```
 
   The terminal-typing action needs `bande-terminal` (bande-linux/apps) in `target/release` or on

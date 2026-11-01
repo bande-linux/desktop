@@ -88,6 +88,16 @@ struct Row {
 }
 
 fn main() -> ExitCode {
+    let bus = match bande_test_bus::SessionBus::start() {
+        Ok(bus) => bus,
+        Err(error) => {
+            eprintln!("bande-idle: cannot start a private session bus: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    unsafe {
+        std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
+    }
     bande_log::init("bande-idle");
     match run() {
         Ok(true) => ExitCode::SUCCESS,

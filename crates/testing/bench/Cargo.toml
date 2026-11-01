@@ -18,6 +18,7 @@ bande-files.workspace = true
 bande-fs.workspace = true
 bande-log.workspace = true
 bande-sample.workspace = true
+bande-test-bus.workspace = true
 bande-test-wayland.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true

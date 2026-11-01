@@ -465,6 +465,7 @@ dependencies = [
  "bande-fs",
  "bande-log",
  "bande-sample",
+ "bande-test-bus",
  "bande-test-wayland",
  "bande-toolkit",
  "bande-xdg",

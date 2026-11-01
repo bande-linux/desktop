@@ -104,16 +104,17 @@ impl ShellAction {
     }
 }
 
-pub fn app_submenu(app: &str, items: Vec<Entry>) -> Entry {
-    app_submenu_quitting_on(app, items, Standard::Quit.shortcut())
+pub fn app_submenu(app: &str, version: &str, items: Vec<Entry>) -> Entry {
+    app_submenu_quitting_on(app, version, items, Standard::Quit.shortcut())
 }
 
-pub fn app_submenu_quitting_on(app: &str, items: Vec<Entry>, quit: &str) -> Entry {
-    let mut entries = vec![
-        Entry::item(&L10N.tr_args("about-app", [("app", app.into())]), "")
-            .shell_action(ShellAction::About),
-        Entry::separator(),
-    ];
+pub fn app_submenu_quitting_on(app: &str, version: &str, items: Vec<Entry>, quit: &str) -> Entry {
+    let about = Entry {
+        version: Some(version.to_owned()),
+        ..Entry::item(&L10N.tr_args("about-app", [("app", app.into())]), "")
+            .shell_action(ShellAction::About)
+    };
+    let mut entries = vec![about, Entry::separator()];
     if !items.is_empty() {
         entries.extend(items);
         entries.push(Entry::separator());
@@ -163,6 +164,7 @@ pub struct Entry {
     action: String,
     shortcut: Option<String>,
     shell_action: Option<ShellAction>,
+    version: Option<String>,
     enabled: bool,
     separator: bool,
     selected: Option<bool>,
@@ -176,6 +178,7 @@ impl Entry {
             action: action.to_owned(),
             shortcut: None,
             shell_action: None,
+            version: None,
             enabled: true,
             separator: false,
             selected: None,
@@ -261,12 +264,9 @@ impl Entry {
                 SHELL_ACTION_PROPERTY.to_owned(),
                 Value::from(action.keyword()),
             );
-            if action == ShellAction::About {
-                properties.insert(
-                    VERSION_PROPERTY.to_owned(),
-                    Value::from(env!("CARGO_PKG_VERSION")),
-                );
-            }
+        }
+        if let Some(version) = &self.version {
+            properties.insert(VERSION_PROPERTY.to_owned(), Value::from(version.clone()));
         }
         properties
     }

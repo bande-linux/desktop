@@ -24,7 +24,11 @@ fn titled(title: Option<String>, message: &str, keys: &str) -> Entry {
 
 pub fn app_menus(view: &FilesView) -> Vec<Entry> {
     vec![
-        app_submenu(&L10N.tr("app-name"), vec![settings()]),
+        app_submenu(
+            &L10N.tr("app-name"),
+            env!("CARGO_PKG_VERSION"),
+            vec![settings()],
+        ),
         submenu(
             "menu-file",
             vec![

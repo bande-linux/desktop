@@ -72,8 +72,8 @@ impl Context {
     }
 
     fn from_env() -> std::io::Result<Self> {
-        let session = bus(Connection::session(), "session");
-        let system = bus(Connection::system(), "system");
+        let session = bus(bande_bus::session(), "session");
+        let system = bus(bande_bus::system(), "system");
         let status = status_hub(session.as_ref(), system.as_ref())?;
         Ok(Context {
             text: TextSystem::new(),

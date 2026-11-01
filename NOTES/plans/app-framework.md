@@ -602,6 +602,8 @@ Preconditions: apps-split M6 done (the shared pin, `ci/gate.sh`, `with-desktop.s
   callers in the desktop pass their `CARGO_PKG_VERSION` (apps-repo callers follow at the M7 bump).
 - Done when: an `app-menu` export test shows the version passed in; Files, Settings and Monitor
   compile.
+- **Status: done 2026-11-01** (`appfw/m1-helpers`). Also `mimeapps.list`, the running-apps
+  list and `Stored::save` write through `replace_file`.
 
 **M2. `bande-app`: run, windows, menus, keys, appearance** (2 h)
 - Toolkit: `Window::drive` returns `Some(Input)` for a key press the `Ui` did not take (one
@@ -753,6 +755,18 @@ multicall if the re-measurement clears the bar.
 - **D11. Font Depends**: every app depends on `fonts-inter`, `fonts-manrope` and
   `fonts-jetbrains-mono` (checked by `ci/check-app.sh`), not on a new font metapackage.
   *Recommended.*
+
+### Owner decisions 2026-11-01
+
+D1–D11 approved, with two changes the coordinator proposed and the owner accepted:
+
+- **D2 changed: pilot on Activity Monitor after it moves to the apps repo** (the Force Quit work,
+  NOTES/plans/force-quit.md, moves it). M1–M4 don't wait for it. Piloting an apps-repo app also
+  proves the pin/bump path before the desktop apps migrate.
+- **D3 changed: one process for all windows in every app, Files and Terminal included** (F24),
+  as on macOS. A second window costs a view, not another 70–80 MiB process. Files and Terminal
+  get one-process windows in their migration milestones; `Launch::PerWindow` is then deleted
+  instead of kept as API.
 
 ## Critical files
 

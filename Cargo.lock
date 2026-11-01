@@ -705,6 +705,7 @@ name = "bande-greeter"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bande-bus",
  "bande-config",
  "bande-datetime",
  "bande-keyboard",
@@ -776,6 +777,7 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "bande-bar",
+ "bande-bus",
  "bande-datetime",
  "bande-golden",
  "bande-inbox",
@@ -1064,6 +1066,7 @@ dependencies = [
  "accesskit",
  "bande-bar",
  "bande-bluetooth",
+ "bande-bus",
  "bande-compositor",
  "bande-config",
  "bande-controlcenter",

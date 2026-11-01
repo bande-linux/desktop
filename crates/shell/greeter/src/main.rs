@@ -386,7 +386,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let text = TextSystem::new();
     let mut screen = Greeter::screen_for(chosen, text.sharing_fonts());
     screen.set_position(user, users.len());
-    let system = zbus::blocking::Connection::system()
+    let system = bande_bus::system()
         .inspect_err(|error| tracing::warn!("no system bus: {error}"))
         .ok();
     let powers = system

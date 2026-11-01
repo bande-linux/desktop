@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use bande_app_menu::{
-    AppMenu, Entry, MENU_PATH, SHELL_ACTION_PROPERTY, ShellAction, Standard, app_submenu, settings,
+    AppMenu, Entry, MENU_PATH, SHELL_ACTION_PROPERTY, ShellAction, Standard, VERSION_PROPERTY,
+    app_submenu, settings,
 };
 use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
@@ -164,13 +165,13 @@ fn the_standard_app_menu_leaves_about_and_hiding_to_the_menu_bar() {
     let _menu = AppMenu::export_on(
         bus.connect().expect("app"),
         APP,
-        vec![app_submenu("Example", Vec::new())],
+        vec![app_submenu("Example", "1.2.3", Vec::new())],
     )
     .expect("export");
     let client = bus.connect().expect("client");
 
     let (_, (_, _, items)) = get_layout(&client, 1);
-    let shell_actions: Vec<(String, Option<ShellAction>)> = items
+    let shell_actions: Vec<(String, Option<ShellAction>, Option<String>)> = items
         .iter()
         .map(|item| {
             let (_, properties, _): Layout = item.try_clone().unwrap().try_into().expect("node");
@@ -178,18 +179,30 @@ fn the_standard_app_menu_leaves_about_and_hiding_to_the_menu_bar() {
                 Some(Value::Str(keyword)) => ShellAction::parse(keyword),
                 _ => None,
             };
-            (label(item).1, action)
+            let version = match property(&properties, VERSION_PROPERTY) {
+                Some(Value::Str(version)) => Some(version.to_string()),
+                _ => None,
+            };
+            (label(item).1, action, version)
         })
-        .filter(|(label, _)| !label.is_empty())
+        .filter(|(label, _, _)| !label.is_empty())
         .collect();
     assert_eq!(
         shell_actions,
         [
-            ("About Example".to_owned(), Some(ShellAction::About)),
-            ("Hide Example".to_owned(), Some(ShellAction::Hide)),
-            ("Hide Others".to_owned(), Some(ShellAction::HideOthers)),
-            ("Show All".to_owned(), Some(ShellAction::ShowAll)),
-            ("Quit Example".to_owned(), None),
+            (
+                "About Example".to_owned(),
+                Some(ShellAction::About),
+                Some("1.2.3".to_owned())
+            ),
+            ("Hide Example".to_owned(), Some(ShellAction::Hide), None),
+            (
+                "Hide Others".to_owned(),
+                Some(ShellAction::HideOthers),
+                None
+            ),
+            ("Show All".to_owned(), Some(ShellAction::ShowAll), None),
+            ("Quit Example".to_owned(), None, None),
         ]
     );
 }
@@ -200,7 +213,7 @@ fn the_standard_settings_entry_sits_in_the_app_menu_with_its_shortcut() {
     let mut menu = AppMenu::export_on(
         bus.connect().expect("app"),
         APP,
-        vec![app_submenu("Example", vec![settings()])],
+        vec![app_submenu("Example", "1.2.3", vec![settings()])],
     )
     .expect("export");
     let client = bus.connect().expect("client");

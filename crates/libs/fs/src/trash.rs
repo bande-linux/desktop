@@ -1,13 +1,15 @@
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::os::fd::OwnedFd;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 
 use bande_xdg::{percent_decode, percent_encode};
 use jiff::civil::DateTime;
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::fs::{
     AtFlags, CWD, Dir, FileType, Mode, OFlags, StatxFlags, openat, statat, statx, unlinkat,
 };
@@ -306,13 +308,47 @@ pub struct Trash {
     uid: u32,
 }
 
-fn mount_points() -> Vec<PathBuf> {
-    fs::read_to_string("/proc/self/mounts")
-        .unwrap_or_default()
+struct Mounts {
+    table: fs::File,
+    points: Vec<PathBuf>,
+}
+
+static MOUNTS: Mutex<Option<Mounts>> = Mutex::new(None);
+
+fn mounts_changed(table: &fs::File) -> bool {
+    let mut fds = [PollFd::new(table, PollFlags::PRI)];
+    poll(&mut fds, Some(&Timespec::default())).map_or(true, |_| !fds[0].revents().is_empty())
+}
+
+fn read_mount_points(mut table: &fs::File) -> io::Result<Vec<PathBuf>> {
+    let mut text = String::new();
+    table.seek(SeekFrom::Start(0))?;
+    table.read_to_string(&mut text)?;
+    Ok(text
         .lines()
         .filter_map(|line| line.split(' ').nth(1))
         .map(unescape_mount_field)
-        .collect()
+        .collect())
+}
+
+fn mount_points() -> Vec<PathBuf> {
+    let mut mounts = MOUNTS.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(known) = mounts.as_ref()
+        && !mounts_changed(&known.table)
+    {
+        return known.points.clone();
+    }
+    let read = fs::File::open("/proc/self/mounts").and_then(|table| {
+        let points = read_mount_points(&table)?;
+        Ok(Mounts { table, points })
+    });
+    match read {
+        Ok(read) => mounts.insert(read).points.clone(),
+        Err(_) => {
+            *mounts = None;
+            Vec::new()
+        }
+    }
 }
 
 fn unescape_mount_field(field: &str) -> PathBuf {

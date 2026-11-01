@@ -26,10 +26,7 @@ pub trait Stored: Clone + PartialEq + Default + 'static {
     }
 
     fn save(&self, folder: &Path) -> io::Result<()> {
-        fs::create_dir_all(folder)?;
-        let staging = folder.join(format!("{}.new", Self::FILE));
-        fs::write(&staging, self.to_text())?;
-        fs::rename(staging, folder.join(Self::FILE))
+        bande_xdg::replace_file(&folder.join(Self::FILE), &self.to_text())
     }
 }
 

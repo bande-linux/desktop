@@ -45,14 +45,9 @@ pub fn set_aside_apps_of_unclean_end(
 }
 
 pub fn write_running_apps(file: &Path, apps: &[String]) -> io::Result<()> {
-    if let Some(directory) = file.parent() {
-        fs::create_dir_all(directory)?;
-    }
     let mut listed = apps.join("\n");
     listed.push('\n');
-    let fresh = file.with_extension("new");
-    fs::write(&fresh, listed)?;
-    fs::rename(&fresh, file)
+    crate::replace_file(file, &listed)
 }
 
 pub fn apps_to_reopen<'a>(entries: &'a [DesktopEntry], running: &[String]) -> Vec<&'a str> {

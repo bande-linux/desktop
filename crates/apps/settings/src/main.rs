@@ -81,7 +81,7 @@ fn app_menus() -> Vec<Entry> {
         ));
     }
     vec![
-        app_submenu(&L10N.tr("title"), Vec::new()),
+        app_submenu(&L10N.tr("title"), env!("CARGO_PKG_VERSION"), Vec::new()),
         Entry::submenu(&L10N.tr("menu-view"), panes),
         window_submenu(Vec::new()),
     ]

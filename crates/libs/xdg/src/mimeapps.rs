@@ -233,10 +233,5 @@ pub fn set_default_app(list: &Path, mime: &str, desktop_id: &str) -> io::Result<
     );
     let text = set_key(&text, DEFAULTS, mime, &format!("{desktop_id};"));
     let text = set_key(&text, ADDED, mime, &(associations.join(";") + ";"));
-    if let Some(parent) = list.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let staging = list.with_extension("list.new");
-    fs::write(&staging, text)?;
-    fs::rename(staging, list)
+    crate::replace_file(list, &text)
 }

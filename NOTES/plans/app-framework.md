@@ -602,6 +602,8 @@ Preconditions: apps-split M6 done (the shared pin, `ci/gate.sh`, `with-desktop.s
   callers in the desktop pass their `CARGO_PKG_VERSION` (apps-repo callers follow at the M7 bump).
 - Done when: an `app-menu` export test shows the version passed in; Files, Settings and Monitor
   compile.
+- **Status: done 2026-11-01** (`appfw/m1-helpers`). Also `mimeapps.list`, the running-apps
+  list and `Stored::save` write through `replace_file`.
 
 **M2. `bande-app`: run, windows, menus, keys, appearance** (2 h)
 - Toolkit: `Window::drive` returns `Some(Input)` for a key press the `Ui` did not take (one

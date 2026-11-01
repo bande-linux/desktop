@@ -67,7 +67,7 @@ pub struct MenuBarClient<V> {
     inbox: Inbox<Update>,
     status: StatusHub,
     tray: Vec<TrayItem>,
-    tray_icons: HashMap<(String, u32), Option<Image>>,
+    tray_icons: TrayIcons,
     open_anchor: Option<Rect>,
     app_id: String,
     app_root: Option<Node>,
@@ -102,6 +102,27 @@ fn tray_image(icon: &TrayIcon, pixels: u32) -> Option<Image> {
             rgba,
         } => Image::from_rgba(*width, *height, rgba.clone()),
     }
+}
+
+type TrayIcons = HashMap<String, (TrayIcon, u32, Option<Image>)>;
+
+fn tray_images(
+    items: &[TrayItem],
+    known: &mut TrayIcons,
+    pixels: u32,
+) -> Vec<(String, Option<Image>)> {
+    let mut previous = std::mem::take(known);
+    items
+        .iter()
+        .map(|item| {
+            let image = match previous.remove(&item.id) {
+                Some((icon, size, image)) if icon == item.icon && size == pixels => image,
+                _ => tray_image(&item.icon, pixels.max(16)),
+            };
+            known.insert(item.id.clone(), (item.icon.clone(), pixels, image.clone()));
+            (item.title.clone(), image)
+        })
+        .collect()
 }
 
 impl<V: StatusView> MenuBarClient<V> {
@@ -479,18 +500,7 @@ impl<V: StatusView> MenuBarClient<V> {
 
     fn refresh_tray_icons(&mut self, window: &Window) {
         let pixels = ((f64::from(TRAY_PIXELS) / 2.0) * window.scale()).round() as u32;
-        let icons = self
-            .tray
-            .iter()
-            .map(|item| {
-                let icon = self
-                    .tray_icons
-                    .entry((format!("{}{:?}", item.id, item.icon), pixels))
-                    .or_insert_with(|| tray_image(&item.icon, pixels.max(16)))
-                    .clone();
-                (item.title.clone(), icon)
-            })
-            .collect();
+        let icons = tray_images(&self.tray, &mut self.tray_icons, pixels);
         self.bar.set_tray(icons);
     }
 
@@ -875,4 +885,37 @@ fn follow_config(session: &Connection, outbox: &Outbox<Update>) -> zbus::Result<
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use bande_status::tray::{TrayIcon, TrayItem};
+
+    use super::{TrayIcons, tray_images};
+
+    fn frame(shade: u8) -> TrayItem {
+        TrayItem {
+            id: ":1.42/StatusNotifierItem".to_owned(),
+            title: "Sync".to_owned(),
+            icon: TrayIcon::Pixels {
+                width: 2,
+                height: 2,
+                rgba: [shade, shade, shade, 255].repeat(4),
+            },
+            menu: None,
+            item_is_menu: false,
+        }
+    }
+
+    #[test]
+    fn an_animated_tray_icon_keeps_only_its_current_frame() {
+        let mut known = TrayIcons::new();
+        for shade in 0..=255 {
+            let shown = tray_images(&[frame(shade)], &mut known, 32);
+            assert!(shown[0].1.is_some());
+        }
+        assert_eq!(known.len(), 1);
+        tray_images(&[], &mut known, 32);
+        assert!(known.is_empty());
+    }
 }

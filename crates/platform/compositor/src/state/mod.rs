@@ -107,7 +107,7 @@ pub struct State {
     pub(crate) windows: Vec<Window>,
     pub(crate) popups: PopupManager,
     pub(crate) lock_screen_requested: bool,
-    pub(crate) force_quit_requested: bool,
+    pub(crate) force_quit: crate::force_quit::ForceQuit,
     pub(crate) session_end_requested: Option<bande_protocols::server::bande_shell_v1::SessionEnd>,
     pub(crate) quitting: Vec<(BandeShellV1, Option<(String, u32)>)>,
     pub(crate) refused_tokens: Vec<XdgActivationToken>,
@@ -170,7 +170,6 @@ pub struct Compositor {
     pub(crate) state: State,
     pub(crate) session_clients: Vec<SessionClient>,
     pub(crate) lock_screen: LockScreen,
-    pub(crate) force_quit: Summoned,
     pub(crate) session_dialog: Summoned,
     pub(crate) socket_name: Option<OsString>,
 }
@@ -242,7 +241,7 @@ impl Compositor {
             windows: Vec::new(),
             popups: PopupManager::default(),
             lock_screen_requested: false,
-            force_quit_requested: false,
+            force_quit: crate::force_quit::ForceQuit::default(),
             session_end_requested: None,
             quitting: Vec::new(),
             refused_tokens: Vec::new(),
@@ -311,22 +310,33 @@ impl Compositor {
             })
             .map_err(|error| io::Error::other(error.error))?;
         state.switcher.load_with(catalog);
+        let (actions, requests) = smithay::reexports::calloop::channel::channel();
+        fences
+            .handle()
+            .insert_source(requests, |event, _, state: &mut State| {
+                if let smithay::reexports::calloop::channel::Event::Msg(request) = event {
+                    state.force_quit_action(request);
+                }
+            })
+            .map_err(|error| io::Error::other(error.error))?;
+        state.force_quit.take_actions(actions);
         Ok(Self {
             display,
             fences,
             state,
             session_clients: Vec::new(),
             lock_screen: LockScreen::new(),
-            force_quit: Summoned::new(crate::session::MONITOR),
             session_dialog: Summoned::new(crate::session::SHELL),
             socket_name: None,
         })
     }
 
     pub fn insert_client(&mut self, stream: UnixStream) -> io::Result<Client> {
-        self.display
-            .handle()
-            .insert_client(stream, Arc::new(ClientState::default()))
+        let state = ClientState {
+            process: crate::force_quit::Process::of_peer(&stream),
+            ..ClientState::default()
+        };
+        self.display.handle().insert_client(stream, Arc::new(state))
     }
 
     pub(crate) fn display_handle(&self) -> DisplayHandle {
@@ -505,6 +515,7 @@ pub(crate) struct ClientState {
     pub(crate) compositor_state: CompositorClientState,
     pub(crate) role: Option<SessionRole>,
     pub(crate) departed: AtomicBool,
+    pub(crate) process: Option<crate::force_quit::Process>,
 }
 
 impl ClientData for ClientState {

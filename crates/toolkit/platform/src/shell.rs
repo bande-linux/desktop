@@ -132,6 +132,11 @@ impl Window {
         self.flush()
     }
 
+    pub fn show_force_quit(&mut self) -> Result<(), WindowError> {
+        self.shell()?.show_force_quit();
+        self.flush()
+    }
+
     pub fn activate_window(&mut self, identifier: &str) -> Result<(), WindowError> {
         self.shell()?.activate_window(identifier.to_owned());
         self.flush()

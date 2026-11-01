@@ -125,9 +125,10 @@
 
     <request name="force_quit_app">
       <description summary="end an app at once">
-        Kills every process on the other end of a connection with a window of
-        the app with this app id, without asking. Shell clients are never
-        killed.
+        Kills the app with this app id without asking, as Force Quit does:
+        the process on the other end of each connection with a window of the
+        app, taken when it connected, and the app's own cgroup scope when it
+        has one. Shell and session clients are never killed.
       </description>
       <arg name="app_id" type="string"/>
     </request>
@@ -469,6 +470,14 @@
       <arg name="app_id" type="string"/>
       <arg name="pid" type="int"/>
     </event>
+
+    <request name="show_force_quit">
+      <description summary="open Force Quit">
+        Opens the compositor's Force Quit window, or brings it forward when
+        it is open, as Ctrl+Alt+Escape does. Sent by the system menu's Force
+        Quit item.
+      </description>
+    </request>
   </interface>
 
   <interface name="bande_app_v1" version="1">

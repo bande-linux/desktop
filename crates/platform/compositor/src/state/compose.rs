@@ -124,6 +124,7 @@ impl Compositor {
         self.state.paint_title_bars(renderer);
         self.state.prepare_switcher(screen);
         self.state.prepare_window_menu(screen);
+        self.state.prepare_force_quit(screen);
         let (elements, drawn, icon) = self.compose(renderer, screen, true);
         if self.state.pointer_screen() == screen {
             self.state.remember_drag_icon(icon);
@@ -209,6 +210,7 @@ impl Compositor {
         elements.extend(self.state.alert_elements(renderer, screen, scale));
         elements.extend(self.state.flash_elements(screen, scale));
         elements.extend(self.state.source_hud_element(renderer, screen, scale));
+        elements.extend(self.state.force_quit_elements(renderer, screen, scale));
         elements.extend(self.state.switcher_elements(renderer, screen, scale));
         elements.extend(self.state.assist_elements(renderer, screen, scale));
         elements.extend(self.state.window_menu_elements(renderer, screen, scale));

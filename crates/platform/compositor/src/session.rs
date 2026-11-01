@@ -30,8 +30,6 @@ pub const SCREENSHOT: &str = "/usr/bin/bande-screenshot";
 pub const SHELL: &str = "/usr/bin/bande-shell";
 pub const GREETER: &str = "/usr/bin/bande-greeter";
 pub const REVIEW: &str = "/usr/bin/bande-review";
-pub const MONITOR: &str = "/usr/bin/bande-monitor";
-const FORCE_QUIT_ARGUMENT: &str = "--force-quit";
 const CONFIRM_ARGUMENT: &str = "--confirm";
 
 pub const SESSION_CLIENT_RESTART_THROTTLE: Duration = Duration::from_secs(10);
@@ -149,14 +147,6 @@ impl Compositor {
         self.state.lock_states = Some(states);
     }
 
-    pub fn set_force_quit(&mut self, executable: &Path) {
-        self.force_quit.executable = executable.to_path_buf();
-    }
-
-    pub fn force_quit_pid(&self) -> Option<u32> {
-        self.force_quit.pid()
-    }
-
     pub fn set_session_dialog(&mut self, executable: &Path) {
         self.session_dialog.executable = executable.to_path_buf();
     }
@@ -244,12 +234,6 @@ impl Compositor {
     pub fn keep_session_clients_running(&mut self) -> SessionUpkeep {
         let mut upkeep = SessionUpkeep::default();
         self.keep_lock_screen(&mut upkeep);
-        let force_quit = std::mem::take(&mut self.state.force_quit_requested);
-        self.keep_summoned(
-            |compositor| &mut compositor.force_quit,
-            force_quit.then_some([FORCE_QUIT_ARGUMENT].as_slice()),
-            &mut upkeep,
-        );
         let confirm = self
             .state
             .session_end_requested
@@ -351,21 +335,14 @@ impl Compositor {
 
 #[cfg(test)]
 mod tests {
-    use super::{CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, MONITOR, SCREENSHOT, SHELL};
+    use super::{CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, SCREENSHOT, SHELL};
 
     #[test]
     fn the_shipped_session_client_list_names_every_executable_the_compositor_starts() {
         let shipped: Vec<&str> = include_str!("../data/session-clients").lines().collect();
         assert_eq!(
             shipped,
-            [
-                CLIPBOARD_DAEMON,
-                LOCK_SCREEN,
-                SCREENSHOT,
-                SHELL,
-                GREETER,
-                MONITOR
-            ]
+            [CLIPBOARD_DAEMON, LOCK_SCREEN, SCREENSHOT, SHELL, GREETER]
         );
     }
 }

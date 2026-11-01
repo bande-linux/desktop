@@ -4,7 +4,7 @@ Owner, 2026-11-01, on the apps-split M3 fallback (Force Quit and so Activity Mon
 desktop): "do it like that as well even if it is more work, i prefer correctness." So Force Quit
 leaves Activity Monitor, and Activity Monitor moves to `bande-linux/apps` (apps-split M3, M4, M5).
 
-**Status: planned 2026-11-01.**
+**Status: M1 done 2026-11-01 (the compositor window, pidfd kill, `show_force_quit`; tests for the four cases). M2-M4 follow.**
 
 ## How macOS does it
 - `Cmd+Opt+Esc`, Apple menu ▸ Force Quit…, and holding Shift in the Apple menu turns the item into

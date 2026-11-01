@@ -6,6 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::L10N;
+use crate::dialogs::DIALOGS;
 use crate::dock::{
     DockAction, DockApp, DockState, MenuTarget, Rail, Shared, dock_ui, exclusive_zone, scene,
     surface_size,
@@ -30,6 +31,7 @@ use bande_xdg::{
 use zbus::blocking::Connection;
 
 const FILES: &str = "org.bande.Files";
+const HIDDEN: [&str; 2] = [DIALOGS, "org.bande.FileChooser"];
 const PROC: &str = "/proc";
 const TRASH_URI: &str = "trash:///";
 const MENU_OPEN: &str = "open";
@@ -110,8 +112,7 @@ impl Dock {
         (f64::from(self.state.borrow().icon_size()) * self.icon_scale).ceil() as u32
     }
 
-    fn icon(&mut self, name: Option<&str>) -> Option<Image> {
-        let name = name?;
+    fn icon(&mut self, name: &str) -> Option<Image> {
         let pixels = self.pixels();
         self.icons
             .entry(name.to_owned())
@@ -150,6 +151,7 @@ impl Dock {
         let windows: Vec<(String, String)> = window
             .running_apps()
             .into_iter()
+            .filter(|window_app| !HIDDEN.contains(&window_app.as_str()))
             .map(|window_app| {
                 let identity = find_app(entries, &window_app)
                     .or_else(|| {
@@ -177,7 +179,12 @@ impl Dock {
             return None;
         }
         let name = app_name(self.apps.entries(), app_id);
-        let icon = self.icon(entry.as_ref().and_then(|entry| entry.icon.as_deref()));
+        let icon = self.icon(
+            entry
+                .as_ref()
+                .and_then(|entry| entry.icon.as_deref())
+                .unwrap_or(app_id),
+        );
         Some(DockApp {
             app_id: app_id.to_owned(),
             name,
@@ -201,8 +208,8 @@ impl Dock {
     }
 
     fn load_trash_icons(&mut self) {
-        let empty = self.icon(Some("user-trash"));
-        let full = self.icon(Some("user-trash-full"));
+        let empty = self.icon("user-trash");
+        let full = self.icon("user-trash-full");
         let mut state = self.state.borrow_mut();
         state.set_trash_icons(empty, full);
         if let Some(trash) = &self.trash {

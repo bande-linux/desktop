@@ -208,7 +208,7 @@ impl Desktop {
         thread::sleep(Duration::from_micros(300));
     }
 
-    pub fn wait_for_label(&mut self, label: &str) {
+    pub fn wait_for_label(&mut self, label: &str) -> &[String] {
         let deadline = Instant::now() + Duration::from_secs(20);
         while !self.labels.iter().any(|known| known == label) {
             self.pump();
@@ -218,5 +218,6 @@ impl Desktop {
                 self.labels
             );
         }
+        &self.labels
     }
 }

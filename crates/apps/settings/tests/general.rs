@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 
 use accesskit::{Action, ActionRequest, Role, TreeId};
 use bande_settings::{
-    About, AboutCommand, App, Category, Command, DefaultAppCommand, InstalledLocale, LocaleState,
-    LoginCommand, LoginItems, NetworkCommand, Package, PaneId, SettingId, SettingsView,
-    SoftwareState, Storage, StorageCommand, Update, Value, WifiState, assignments, categorize,
-    chip_name, installed_locales, locale_name, login_items, login_matches, memory_bytes,
-    parse_assignments, static_hostname, system_version, tally,
+    About, AboutCommand, App, AvailableLocale, Category, Command, DefaultAppCommand, LocaleCommand,
+    LocaleState, LoginCommand, LoginItems, NetworkCommand, Package, PaneId, SettingId,
+    SettingsView, SoftwareState, Storage, StorageCommand, Update, Value, WifiState, assignments,
+    categorize, chip_name, locale_name, login_items, login_matches, memory_bytes,
+    parse_assignments, static_hostname, supported_locales, system_version, tally,
 };
 use bande_toolkit::ui::{Event, Key, Modifiers};
 use bande_toolkit::{Item, Palette, Scheme, TextSystem};
@@ -527,25 +527,34 @@ fn ethernet_switches_to_a_manual_address_and_vpns_connect_from_their_row() {
 }
 
 #[test]
-fn languages_come_from_installed_locales_and_write_lang_language_and_formats() {
+fn languages_come_from_every_supported_utf8_locale_and_write_lang_language_and_formats() {
     let sources = tempfile::tempdir().expect("sources");
     std::fs::write(
         sources.path().join("sv_SE"),
         "title      \"Swedish locale for Sweden\"\nlanguage   \"Swedish\"\nterritory  \"Sweden\"\n",
     )
     .expect("source");
-    let installed = installed_locales(
-        "C\nC.utf8\nPOSIX\nsv_SE.utf8\nen_GB.utf8\nde_DE\n",
+    std::fs::write(
+        sources.path().join("sr_RS@latin"),
+        "language   \"Serbian\"\nterritory  \"Serbia\"\n",
+    )
+    .expect("source");
+    let available = supported_locales(
+        "C.UTF-8 UTF-8\nen_GB.UTF-8 UTF-8\nen_GB ISO-8859-1\nsr_RS@latin UTF-8\nsv_SE ISO-8859-1\nsv_SE.UTF-8 UTF-8\nsv_SE.UTF-8 UTF-8\n",
         sources.path(),
     );
     assert_eq!(
-        installed,
+        available,
         [
-            InstalledLocale {
+            AvailableLocale {
                 code: "en_GB.UTF-8".to_owned(),
                 name: "en_GB".to_owned()
             },
-            InstalledLocale {
+            AvailableLocale {
+                code: "sr_RS.UTF-8@latin".to_owned(),
+                name: "Serbian (Serbia), latin".to_owned()
+            },
+            AvailableLocale {
                 code: "sv_SE.UTF-8".to_owned(),
                 name: "Swedish (Sweden)".to_owned()
             },
@@ -575,16 +584,52 @@ fn languages_come_from_installed_locales_and_write_lang_language_and_formats() {
 
     let mut view = general_view();
     view.apply(Update::Locale(Some(LocaleState {
-        installed,
+        available: available.clone(),
         language: "en_GB.UTF-8".to_owned(),
         region: None,
+        pending: false,
+        login_sources: Vec::new(),
     })));
     view.select_pane(PaneId::LanguageTime);
     assert!(has_text(
         &mut view,
         "Changes take effect the next time you log in"
     ));
-    let region = find(&mut view, Role::ComboBox, "Region").expect("Region menu");
+    assert!(!has_text(&mut view, "stay in English"));
+    assert!(has_text(&mut view, "Sat 14 Mar, 13:45"));
+    let change = find(&mut view, Role::Button, "Change…").expect("Change");
+    click(&mut view, change);
+    for character in "swed".chars() {
+        key(&mut view, Key::Character(character), Modifiers::default());
+    }
+    let swedish = find(&mut view, Role::Button, "Swedish (Sweden)").expect("Swedish");
+    click(&mut view, swedish);
+    assert_eq!(
+        view.take_commands(),
+        [Command::Locale(LocaleCommand::Language(
+            "sv_SE.UTF-8".to_owned()
+        ))]
+    );
+    assert!(has_text(&mut view, "Setting up Swedish (Sweden)…"));
+    assert!(has_text(
+        &mut view,
+        "Bande's own apps stay in English for now; other apps use this language."
+    ));
+    view.apply(Update::Locale(Some(LocaleState {
+        available: available.clone(),
+        language: "sv_SE.UTF-8".to_owned(),
+        region: None,
+        pending: false,
+        login_sources: Vec::new(),
+    })));
+    assert!(!has_text(&mut view, "Setting up"));
+
+    let region = nodes(&mut view)
+        .into_iter()
+        .filter(|(_, node)| node.role() == Role::Button && node.label() == Some("Change…"))
+        .map(|(id, _)| id)
+        .nth(1)
+        .expect("Region Change");
     view.perform(&ActionRequest {
         action: Action::Focus,
         target_tree: TreeId::ROOT,
@@ -592,7 +637,13 @@ fn languages_come_from_installed_locales_and_write_lang_language_and_formats() {
         data: None,
     });
     assert_eq!(view.focused_setting(), Some(SettingId::Region));
-    assert!(has_text(&mut view, "Sat 14 Mar, 13:45"));
+    click(&mut view, region);
+    let same = find(&mut view, Role::Button, "Same as language").expect("Same as language");
+    click(&mut view, same);
+    assert_eq!(
+        view.take_commands(),
+        [Command::Locale(LocaleCommand::Region(None))]
+    );
 }
 
 fn crossfade(items: &[Item]) -> Vec<f32> {

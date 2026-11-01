@@ -21,7 +21,7 @@ it seems like some apps are not getting the correct taskbar icon? this could als
 Status: started ([plans/taskbar-icons.md](plans/taskbar-icons.md)); M1 and M3 done, M2 waits on an owner decision
 
 its not possible to install more keyboard layouts or languages in settings *important*
-Status: started ([plans/keyboard-layouts-and-languages.md](plans/keyboard-layouts-and-languages.md)); M4 layout picker done
+Status: started ([plans/keyboard-layouts-and-languages.md](plans/keyboard-layouts-and-languages.md)); desktop side done (M2-M5, package Depends), input methods (M6) later
 
 grapping a window edge or corner in order to reseize it is a bit difficult, the resizer is too unprecise to the actual corner or edge
 Status: finished ([plans/window-resize-zones.md](plans/window-resize-zones.md)); not yet checked live on the mini

@@ -56,7 +56,17 @@ Do 1, 3 and 2 in that order. For GTK 3, ship two small themes written by the por
 ## Implementation plan
 Branch per milestone, gate as in CLAUDE.md, verify on the mini.
 
-1. **KDE server-decoration** (about 2 h)
+Status (2026-11-01): milestones 1-4 done and merged (branch `gap/kde-server-decoration`). A probe on a
+private headless compositor (`--headless`, own runtime dir and session bus) with `WAYLAND_DEBUG=1`
+confirmed the order GTK 4.18 uses: a plain `GtkApplicationWindow` binds the KDE manager, reads
+default SERVER, creates its decoration and requests SERVER before `get_xdg_surface`, so the
+compositor keeps a mode requested before the toplevel exists. `gtk_window_set_titlebar` after
+mapping recreates the surface without a decoration (client-side). Calculator and Text Editor
+(libadwaita 1.7) bind the manager but create no decoration, so they stay client-side as planned.
+Milestone 5 (GTK 3 themes), the rest of milestone 6 (Firefox, Electron, the review scenario,
+the per-app table) and the three owner decisions below are still open.
+
+1. **KDE server-decoration** (about 2 h) — done
    - `compositor/src/state/globals.rs`: `KdeDecorationState::new::<State>(handle, DefaultMode::Server)`.
    - `compositor/src/decoration.rs`: implement `KdeDecorationHandler` and `delegate_kde_decoration!`. `new_decoration` applies Server, and `request_mode` maps Server to `ServerSide` and Client or None to `ClientSide`. Both go through the existing `State::decorate`, looking up the toplevel with `window_index(surface)`. A decoration for a surface with no toplevel is ignored.
    - `testing/test-wayland/src/decoration.rs`: `show_kde_decorated_window(server, image, Option<KdeMode>)` (`wayland-protocols-misc` client, already a dependency) and `kde_default_mode()`.
@@ -67,7 +77,8 @@ Branch per milestone, gate as in CLAUDE.md, verify on the mini.
      - Server then Client drops the bar and gives the height back.
    - Docs: `docs/architecture/compositor.md:43-47`. Fix the stale "28 pt, centred title" text too. Add a protocol table row, and update `docs/design/features/windows.md:15-16`.
 
-2. **Window menu for client-drawn headers** (about 1 h)
+2. **Window menu for client-drawn headers** (about 1 h) — done; a release while the client
+   holds the button still reaches the client
    - `compositor/src/state/handlers.rs`: `show_window_menu` checks that the serial belongs to the current pointer press (as `grab.rs:102` does). It then opens the menu at the surface location plus the given point.
    - `window_menu.rs`: `open_window_menu` takes the point.
    - `test-wayland`: `request_window_menu(x, y)` on the toplevel.
@@ -75,7 +86,8 @@ Branch per milestone, gate as in CLAUDE.md, verify on the mini.
      - A press followed by a request with its serial opens the menu at that point.
      - A request with a stale serial opens nothing.
 
-3. **GTK 4 and libadwaita headers in our style** (about 2 h)
+3. **GTK 4 and libadwaita headers in our style** (about 2 h) — done (not yet seen on screen; the
+   pill margin and libadwaita padding want a look in the milestone 6 review)
    - `portal/src/settings.rs`: serve `org.gnome.desktop.wm.preferences` with `button-layout` `"close,minimize,maximize:"`.
    - `portal/src/gtk.rs`: add `--bande-well`, `-hairline`, `-ink`, `-ink2`, `-ink3` and `-danger` per scheme. Add rules for:
      - `headerbar` (chassis, no shade line).
@@ -87,7 +99,7 @@ Branch per milestone, gate as in CLAUDE.md, verify on the mini.
      - The pill variables in the light and dark blocks equal `Palette::generate(...).well`, `hairline`, `ink2`, `ink3` and `danger`. This catches drift from `TitleBar`.
      - A user's `gtk.css` is still left alone.
 
-4. **Window-control icons that match the bar** (about 1 h)
+4. **Window-control icons that match the bar** (about 1 h) — done
    - `data/icons/src/symbols.py`: redraw `window-close`, `-minimize`, `-maximize` (outward corners) and `-restore` (inward corners) as `title_bar.rs` glyphs on a 16 grid with a 1.5 stroke as filled outlines. Regenerate `data/icons/Bande*/symbolic/actions`.
    - Proof: refreshed `crates/shell/desktop/tests/golden/icons-{light,dark}.png`. The existing single-colour-fill test must still pass.
 
@@ -121,6 +133,8 @@ Branch per milestone, gate as in CLAUDE.md, verify on the mini.
 - Milestone 6 relies on Electron's behaviour as read from its source, not yet seen live.
 
 ## Decisions for the owner
+Still open (not decided overnight: they change the owner's own app settings or need a report to
+Anthropic, and none blocks milestones 1-4).
 1. VS Code: switch to `"window.titleBarStyle": "native"` on this machine for our real bar (menus move to a row below it, and the command centre goes), or keep VS Code's own bar styled as it is?
 2. Claude Desktop's main window cannot get our bar from the desktop side. Accept that, or report it to Anthropic as a request for a native frame on Linux Wayland?
 3. libadwaita apps will look close to ours but keep a centred title and a 47 pt header. Is that acceptable, or should replacing those GNOME apps with Bande apps be planned instead?

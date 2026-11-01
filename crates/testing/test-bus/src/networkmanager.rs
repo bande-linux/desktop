@@ -24,6 +24,8 @@ const ACTIVATION_DELAY: Duration = Duration::from_millis(100);
 const CONNECTIVITY_FULL: u32 = 4;
 pub const CONNECTIVITY_PORTAL: u32 = 2;
 pub const CHECK_URI: &str = "http://check.example/";
+const WIFI_INTERFACE: &str = "wld0";
+const ETHERNET_INTERFACE: &str = "end0";
 
 #[derive(Default)]
 struct World {
@@ -51,6 +53,19 @@ pub fn ssid_of(settings: &Settings) -> Option<Vec<u8>> {
         .ok()?
         .try_into()
         .ok()
+}
+
+pub fn interface_of(settings: &Settings) -> Option<String> {
+    let name = settings.get("connection")?.get("interface-name")?;
+    String::try_from(name.try_clone().ok()?).ok()
+}
+
+fn interface_at(device: &OwnedObjectPath) -> &'static str {
+    if device.as_str() == WIFI {
+        WIFI_INTERFACE
+    } else {
+        ETHERNET_INTERFACE
+    }
 }
 
 fn psk_of(settings: &Settings) -> Option<String> {
@@ -113,7 +128,7 @@ impl Manager {
     async fn activate_connection(
         &self,
         connection: OwnedObjectPath,
-        _device: OwnedObjectPath,
+        device: OwnedObjectPath,
         _specific_object: OwnedObjectPath,
         #[zbus(object_server)] server: &zbus::ObjectServer,
         #[zbus(connection)] bus: &zbus::Connection,
@@ -124,6 +139,12 @@ impl Manager {
             .find(|(saved, _)| *saved == connection)
             .map(|(_, settings)| settings.clone())
             .ok_or_else(|| UnknownObject(connection.to_string()))?;
+        let interface = interface_at(&device);
+        if interface_of(&settings).is_some_and(|bound| bound != interface) {
+            return Err(zbus::fdo::Error::Failed(format!(
+                "Connection is not available on device {interface} because profile is not compatible with device (mismatching interface name)"
+            )));
+        }
         self.activate(server, bus, &settings).await
     }
 
@@ -179,6 +200,7 @@ impl Manager {
 struct Device {
     device_type: u32,
     state: u32,
+    interface: &'static str,
 }
 
 #[zbus::interface(name = "org.freedesktop.NetworkManager.Device")]
@@ -191,6 +213,11 @@ impl Device {
     #[zbus(property)]
     fn state(&self) -> u32 {
         self.state
+    }
+
+    #[zbus(property)]
+    fn interface(&self) -> &str {
+        self.interface
     }
 }
 
@@ -297,12 +324,23 @@ impl SavedConnection {
         Ok(settings)
     }
 
-    fn update(&self, properties: Settings) {
+    fn update(&self, mut properties: Settings) {
         if let Some((_, settings)) = lock(&self.world)
             .connections
             .iter_mut()
             .find(|(path, _)| *path == self.path)
         {
+            if psk_of(&properties).is_none()
+                && let Some(kept) = settings
+                    .get("802-11-wireless-security")
+                    .and_then(|security| security.get("psk"))
+                    .and_then(|psk| psk.try_clone().ok())
+            {
+                properties
+                    .entry("802-11-wireless-security".to_owned())
+                    .or_default()
+                    .insert("psk".to_owned(), kept);
+            }
             *settings = properties;
         }
     }
@@ -423,6 +461,7 @@ impl FakeNetworkManager {
             Device {
                 device_type: 2,
                 state: 100,
+                interface: WIFI_INTERFACE,
             },
         )?;
         server.at(
@@ -438,6 +477,7 @@ impl FakeNetworkManager {
             Device {
                 device_type: 1,
                 state: 30,
+                interface: ETHERNET_INTERFACE,
             },
         )?;
         server.at(ETHERNET, WiredDevice)?;
@@ -479,6 +519,24 @@ impl FakeNetworkManager {
 
     pub fn scans(&self) -> u32 {
         *lock(&self.scans)
+    }
+
+    pub fn bind_saved(&self, interface: &str) -> zbus::Result<()> {
+        if let Some((_, settings)) = lock(&self.world).connections.first_mut() {
+            settings.entry("connection".to_owned()).or_default().insert(
+                "interface-name".to_owned(),
+                OwnedValue::try_from(Value::from(interface))?,
+            );
+        }
+        Ok(())
+    }
+
+    pub fn saved_interfaces(&self) -> Vec<Option<String>> {
+        lock(&self.world)
+            .connections
+            .iter()
+            .map(|(_, settings)| interface_of(settings))
+            .collect()
     }
 
     pub fn saved_ssids(&self) -> Vec<Vec<u8>> {

@@ -221,7 +221,7 @@ fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Co
                 .into_iter()
                 .find(|candidate| candidate.ssid == ssid);
             if let Some(found) = found {
-                report("join the network", network.join(&found, None).map(|_| ()));
+                crate::captive::join_network(network, &found);
             }
         }
         Command::SetBluetooth(on) => report("switch Bluetooth", bluez.set_powered(on)),

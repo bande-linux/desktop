@@ -2,17 +2,18 @@
 
 ## Goal
 
-Bande (`bande-desktop`) is a Linux desktop environment written in Rust for Debian 13 on
-arm64, with Apple Silicon as the primary hardware. It is its own desktop: macOS is the bar for
+Bande (`bande-desktop`) is a Linux desktop environment written in Rust for Debian testing on
+arm64 and amd64, with Apple Silicon as the primary hardware. It is its own desktop: macOS is the bar for
 how polished, smooth and finished it feels, and the main reference for which basics a modern
 desktop needs, but the structure, feature set and look are ours. The principles that decide
 design questions are in [`../design/DESIGN.md`](../design/DESIGN.md).
 
-Everything lives in one Cargo workspace in this repository: compositor, renderer, toolkit, shell
-clients, apps, session services, libraries and test harnesses. The layout of that workspace is
+The desktop lives in one Cargo workspace in this repository: compositor, renderer, toolkit,
+shell clients, session services, Files, Settings, libraries and test harnesses. Its layout is
 recorded in [`../decisions/0003-repository-layout.md`](../decisions/0003-repository-layout.md).
-The autonomous software factory that drives development lives in its own repository and is not
-described here.
+The other Bande apps (Terminal, Activity Monitor, Software, the Package Installer, Mail,
+Calendar) live in [bande-linux/apps](https://github.com/bande-linux/apps), built on the same
+toolkit and app framework ([apps.md](apps.md)).
 
 The architecture is split by subject:
 
@@ -22,9 +23,10 @@ The architecture is split by subject:
 | [`toolkit.md`](toolkit.md) | the UI toolkit that the shell and the apps draw with |
 | [`session.md`](session.md) | session services, D-Bus, the greeter, supervision, setup and updates |
 | [`behaviour.md`](behaviour.md) | recorded behaviour decisions and their macOS precedents |
-| [`ci.md`](ci.md) | CI runners, jobs and the verification funnel |
+| [`apps.md`](apps.md) | the app framework every app is built on |
+| [`ci.md`](ci.md) | the local gate, the release workflow and how a release is cut |
 | [`packaging.md`](packaging.md) | Debian packages and the meta-package |
-| [`performance.md`](performance.md) | measured memory, CPU and size of the shell, and how to measure them |
+| [`performance.md`](performance.md) | how to measure memory, CPU and wake-ups, and the current numbers |
 
 ## Component map
 
@@ -41,6 +43,7 @@ graph TB
         SMITHAY[Smithay: DRM backend, input, Wayland protocols]
         RENDER[bande-render: Vulkan renderer on ash]
         SPRING[bande-spring: damped springs]
+        FQ[Force Quit window]
         SMITHAY --> RENDER
     end
 
@@ -58,17 +61,17 @@ graph TB
         GREETER[Greeter]
     end
 
-    subgraph "Apps"
+    subgraph "Apps (bande-app)"
         FILES[Files]
         SETTINGS[Settings]
-        TERM[Terminal]
-        MONITOR[Activity Monitor]
+        TERM["Terminal, Activity Monitor, Software, ... (bande-linux/apps)"]
     end
 
     subgraph "Session services"
         CONFIG[bande-config: org.bande.Config]
         NOTIFY[bande-notify]
         POWER[bande-power]
+        SOUND[bande-sound]
         CLIP[bande-clipboard]
         TRAY[bande-tray]
         AUTOMOUNT[bande-automount]
@@ -80,9 +83,9 @@ graph TB
 
     DRM & INPUT & SEAT --> SMITHAY
     DOCK & MENUBAR & LAUNCHER & CC & SHOT & LOCK & GREETER -->|Wayland| SMITHAY
-    FILES & SETTINGS & TERM & MONITOR -->|Wayland| SMITHAY
+    FILES & SETTINGS & TERM -->|Wayland| SMITHAY
     CLIP -->|Wayland, trusted socket| SMITHAY
-    DOCK & MENUBAR & LAUNCHER & FILES & SETTINGS & TERM & MONITOR --- TOOLKIT
+    DOCK & MENUBAR & LAUNCHER & FILES & SETTINGS & TERM --- TOOLKIT
     CONFIG & NOTIFY & POWER & TRAY & AUTOMOUNT & PORTAL & POLKIT <-->|D-Bus| SYS
     SETTINGS & MENUBAR & CC <-->|D-Bus| CONFIG
 ```
@@ -100,22 +103,25 @@ Bande has four kinds of component, split by the role a process plays, not by whe
 thinks of it as part of the system:
 
 - **Compositor.** One process, `bande-compositor`, owns the display, input and every Wayland
-  surface. It renders with its own renderer (`bande-render`); title bars and the rest of the
-  visible UI are drawn by clients.
+  surface. It renders with its own renderer (`bande-render`) and draws what must work when
+  every client hangs: Force Quit, the window menu, the switcher and overview, and title bars
+  for apps that ask for server-side ones. Everything else is drawn by clients.
 - **Shell clients.** Wayland clients that make up the desktop around the apps: the shell (desktop,
   taskbar, menu bar, notifications, launcher, Control Center), the screenshot tool, the lock screen
   and the greeter. The compositor starts them on
   socket pairs and restarts them when they exit; only these connections see the private
   `bande_shell_v1` protocol and `ext-foreign-toplevel-list-v1`
   ([behaviour](behaviour.md)).
-- **Apps.** Ordinary Wayland clients started by the user: Files, Settings, Terminal, Activity
-  Monitor. Settings and Activity Monitor are apps like any other; they have no special access.
+- **Apps.** Ordinary Wayland clients started by the user, each one process for all its windows
+  on `bande-app` ([apps](apps.md)): Files and Settings here, the rest in bande-linux/apps.
+  Settings and Activity Monitor have no special access. Closing an app's last window leaves it
+  running until Quit, as on macOS.
 - **Session services.** Processes without windows that own D-Bus names for the session
-  (configuration, notifications, power, clipboard, tray, automount, portal, polkit). They are
+  (configuration, notifications, power, sound, clipboard, tray, automount, portal, polkit). They are
   started by systemd user units or D-Bus activation ([session](session.md)).
 
-Shared code that is not UI lives in libraries (`bande-spring`, `bande-xdg`,
-`bande-audio`, `bande-network`, `bande-bluetooth`, `bande-protocols`), and the shell
+Shared code that is not UI lives in `crates/libs` (`bande-xdg`, `bande-fs`, `bande-audio`,
+`bande-network`, `bande-bluetooth`, `bande-packages`, `bande-spring` and more), and the shell
 and apps draw with `bande-toolkit`.
 
 ## Inter-process communication
@@ -169,107 +175,37 @@ own apps and third-party apps use the same keys, so the compositor translates no
 
 ## Configuration
 
-All user configuration is one human-readable [KDL](https://kdl.dev) file. Every Settings
-control writes to it, and it can be edited by hand while the session runs.
+All user configuration of the desktop is one human-readable [KDL](https://kdl.dev) file,
+`$XDG_CONFIG_HOME/bande/config.kdl` (`~/.config/bande/config.kdl`). Every Settings control writes
+to it, and it can be edited by hand while the session runs. Apps keep their own settings in one
+small `key = value` file each next to it (`files.conf`, `terminal.conf`).
 
-- **Design**: node-based, validated against a schema, reloaded live without restarting the
-  session. A changed file is parsed into a shadow copy and swapped in atomically, and
-  subscribers are told through `org.bande.Config`. A setting that is unknown or invalid is
-  skipped and reported with its line, column and message while every other setting applies;
-  only a file that is not KDL at all keeps the active configuration as it was.
-- **Implemented schema (`crates/services/config`)**: KDL 2.0 syntax. The file is
-  `$XDG_CONFIG_HOME/bande/config.kdl`, or `~/.config/bande/config.kdl` when
-  `XDG_CONFIG_HOME` is unset or relative. Every setting is optional; unknown settings,
-  duplicates and out-of-range values are reported with the line and column of the offending
-  node or value and ignored (the first of duplicates wins; an `idle` time shorter than the one
-  before it is raised to match), so one mistake never costs the rest of the file. Names from
-  earlier versions (`panel`, `dock`, `output`) are no longer read.
+- **Schema** (`crates/services/config`, KDL 2.0): top-level `appearance`, `accent`,
+  `tinted-frame`, `clock`, `reopen-apps`, `reopen-apps-after-crash`, and the sections
+  `accessibility`, `bar`, `idle`, `keyboard`, `trackpad`, `mouse`, `power`, `sound`, `wallpaper`,
+  `night-light`, `display "<name>"` (one per display, named by EDID maker, model and serial) and
+  `arrangement` (one per set of displays). Every setting is optional and has a default.
   ```kdl
   appearance "automatic"        // "dark" | "light" | "automatic"
-  bar {
-      edge "left"               // "left" | "bottom" | "right" | "top"
-  }
-  idle {
-      dim-after "5m"            // positive "<n>s" | "<n>m" | "<n>h"
-      lock-after "10m"          // not shorter than dim-after
-      suspend-after "10m"       // not shorter than lock-after, or "never"
-  }
-  keyboard {
-      repeat-rate 25            // 1 to 60 characters per second
-      repeat-delay 600          // 150 to 2000 milliseconds before repeating starts
-      input-sources "se" "us(dvorak)" // xkb layout(variant), at most 4; unset means
-                                // the system layouts (/etc/vconsole.conf, then /etc/default/keyboard)
-      caps-lock "caps-lock"     // "caps-lock" | "escape" | "control" | "compose" | "off"
-  }
-  trackpad {
-      tap-to-click #true
-      natural-scrolling #true
-      speed 0.0                 // -1.0 to 1.0
-      acceleration #true        // #false is libinput's flat profile
-      secondary-click "two-fingers" // "two-fingers" | "corner"
-      dragging "tap"            // "off" | "tap" | "tap-with-lock"
-      scroll-method "two-fingers" // "two-fingers" | "edge"
-      disable-while-typing #true
-      workspace-swipe #true      // three fingers left or right
-      overview-swipe #true       // three fingers up or down
-      desktop-spread #true       // spread four fingers
-      launcher-pinch #true       // pinch four fingers
-  }
-  mouse {
-      primary-button "left"     // "left" | "right"
-      natural-scrolling #false
-      speed 0.0                 // -1.0 to 1.0
-      acceleration #true
-  }
-  sound {
-      effects #true             // screenshot, Trash, power and battery sounds
-      volume-feedback #true     // a tick on each volume key press
-      alert "mallet"            // "mallet" | "knock" | "low" | "tick"
-      alert-volume 0.75         // 0.0 to 1.0, scales every event sound
-  }
-  wallpaper {                   // absolute path or "~/..."; unset means the built-in picture
-      light "/usr/share/backgrounds/bande/day.jpg"
-      dark "~/Pictures/night.jpg"
-  }
-  display "Dell DELL U2720Q 7ZD5K53" {  // once per display, named by its EDID maker, model, serial
-      resolution 3840 2160      // one of the display's modes; unset means its preferred one
-      refresh-rate 120          // 60 to 240 Hz; the closest the resolution offers
-      scale 1.5                 // 1.0 to 3.0 (100%-300%); unset means automatic
-      rotation 90               // 0, 90, 180 or 270
-      variable-refresh-rate #true
-  }
-  arrangement {                 // once per set of displays connected together
+  bar { edge "left"; size 40; auto-hide #false; menu-bar "in-bar" }
+  idle { dim-after "5m"; lock-after "10m" }   // suspend-after follows lock-after unless set
+  keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape" }
+  trackpad { tap-to-click #true; natural-scrolling #true }
+  display "Dell DELL U2720Q 7ZD5K53" { scale 1.5; refresh-rate 120 }
+  arrangement {
       display "BOE NE135A1M" x=0 y=0 main=#true
       display "Dell DELL U2720Q 7ZD5K53" x=1504 y=-300
-      display "LG HDR 4K 104NTAB7K123" mirror="BOE NE135A1M"
   }
   ```
-  The values shown for `appearance`, `bar`, `idle`, `keyboard` (except `input-sources`), `trackpad`, `mouse` and `sound` are the defaults. The
-  wallpaper used is the one matching the current appearance; the desktop expands a leading `~/`.
-  A section left empty by a Settings write is removed from the file. A readable file is parsed
-  into a shadow `Config` and swapped in as one `Arc`, so readers see either the old or the new
-  configuration, never a mix. `ConfigService` owns `org.bande.Config` on the session bus and
-  serves the active values as properties of interface `org.bande.Config` at
-  `/org/bande/Config` (`Appearance`, `BarEdge`, `IdleDimAfter`, `IdleLockAfter` and
-  `IdleSuspendAfter` in seconds, 0 meaning never, `IdleSuspendWithDisplay` true while
-  `suspend-after` is unset and sleep follows the display (writing true removes the explicit
-  value), `KeyRepeatRate` per second and
-  `KeyRepeatDelay` in milliseconds as `u`, `InputSources` as `as` of layout codes (the system layouts while unset; writing an empty list is rejected), `CapsLock`, `TrackpadTapToClick`, `TrackpadNaturalScrolling`, `TrackpadSpeed` (`d`), `TrackpadAcceleration`, `TrackpadSecondaryClick`, `TrackpadDragging`, `TrackpadScrollMethod`, `TrackpadDisableWhileTyping`, `TrackpadWorkspaceSwipe`, `TrackpadOverviewSwipe`, `TrackpadDesktopSpread`, `TrackpadLauncherPinch`, `MousePrimaryButton`, `MouseNaturalScrolling`, `MouseSpeed` (`d`) and `MouseAcceleration`, `WallpaperLight` and `WallpaperDark` as paths, empty
-  meaning unset, `Displays` as `a{sa{sv}}` and `Arrangements` as `aa(siibs)`: name, x, y, main
-  and the mirrored display's name, empty when it mirrors nothing). It watches the
-  directory and reloads when the file is closed after writing or renamed into place;
-  `PropertiesChanged` lists only the properties that changed. The `bande-config` daemon runs
-  the service for the session and posts the file's errors as one notification through
-  `bande-notify` with the first error's line, column and message, how many more lines have
-  errors, and an "Open in Editor" action (`xdg-open` on the file). The same set of errors is
-  posted once, even after the notification is dismissed and the file is reloaded; a different
-  set replaces it and a file without errors closes it. The
-  compositor does not draw a toast of its own. The scalar properties are writable and
-  `SetDisplay(s name, a{sv} settings)` replaces one display's settings (an empty dictionary
-  removes it) and `SetArrangement(a(siibs))` the arrangement of the same set of displays: a
-  write edits only the affected node of the file, keeping the user's comments
-
-  and layout, validates the whole result, replaces the file by rename and applies it, so the
-  file stays the single source of truth. A value the schema rejects fails with `InvalidArgs`;
-  errors already in the file are left for the user and do not block writes, but a file that is
-  not KDL is never overwritten.
+- **Errors**: an unknown setting, a duplicate or an out-of-range value is skipped and reported
+  with its line and column while every other setting applies; a file that is not KDL keeps the
+  active configuration. `bande-config` posts the errors as one notification with an "Open in
+  Editor" action, once per distinct set of errors.
+- **Live reload**: the service watches the directory, parses a changed file into a shadow copy
+  and swaps it in atomically, so readers never see a mix.
+- **`org.bande.Config`** (`/org/bande/Config`, session bus) serves every value as a property and
+  signals only the properties that changed. The scalar properties are writable, and
+  `SetDisplay` and `SetArrangement` replace one display's settings or one arrangement. A write
+  edits only the affected node, keeping the user's comments and layout, validates the whole
+  result and replaces the file by rename; a value the schema rejects fails with `InvalidArgs`,
+  and a file that is not KDL is never overwritten.

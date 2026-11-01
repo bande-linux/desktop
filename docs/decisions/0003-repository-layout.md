@@ -5,13 +5,9 @@ depend on each other, and the conventions every crate follows.
 
 ## Context
 
-- The workspace has 31 crates side by side in `crates/`, from the compositor to test harnesses,
-  with nothing in the layout saying which are libraries, which are processes, and which role a
-  process plays.
-- The project will grow much larger: more apps, more shell clients, more session services, and
-  shared logic that today sits inside the first crate that needed it.
-- Several agents work in parallel on separate branches. Each needs to know which directory it
-  owns and which dependencies it may add without asking.
+The workspace had 31 crates side by side in `crates/`, with nothing saying which were libraries,
+which were processes and which role a process played, while several agents work in parallel and
+each needs to know which directory it owns.
 
 ## Decision
 
@@ -20,19 +16,25 @@ Crates are grouped by role:
 ```
 crates/
   platform/  compositor, render, protocols
-  toolkit/   toolkit, graphics, platform, widgets
-  shell/     dock, menubar, launcher, controlcenter, screenshot, lock, greeter,
-             desktop, notifications
-  apps/      files, settings, terminal, monitor
-  services/  config, notify, power, clipboard, tray, automount, portal, polkit
-  libs/      spring, xdg, fs, preview, audio, network, bluetooth, l10n, log
-  testing/   test-bus, test-wayland, bench, sample
+  toolkit/   toolkit, design, graphics, platform, widgets
+  shell/     shell, bar, desktop, notifications, controlcenter, launcher,
+             screenshot, lock, greeter
+  apps/      files, settings, file-chooser
+  services/  config, notify, power, sound, clipboard, tray, automount, portal, polkit
+  libs/      app, app-menu, app-settings, settings-panes, xdg, fs, preview, thumbnails,
+             search, status, taskbar-model, packages, audio, network, bluetooth, volumes,
+             keyboard, datetime, l10n, log, bus, inbox, watch, wallpaper, edid, spring
+  testing/   test-bus, test-wayland, bench, sample, review
 data/        shared assets (wallpapers, icons, sounds)
 ```
 
+The other apps live in [bande-linux/apps](https://github.com/bande-linux/apps) and depend on
+these crates at a pinned revision.
+
 - **`platform/`**: the compositor, its Vulkan renderer and the private Wayland protocols.
-- **`toolkit/`**: `toolkit` is a facade that re-exports the other three. `graphics` holds the
-  scene, the Vello renderers, Parley text and the design tokens, and has no Wayland dependency.
+- **`toolkit/`**: `toolkit` is a facade that re-exports the others. `design` holds the Datum
+  tokens with no dependencies; `graphics` holds the scene, the Vello renderers and Parley text,
+  and has no Wayland dependency.
   `platform` holds the Wayland window, seat, clipboard, text input, layer and xdg shell
   surfaces, and the accessibility adapter. `widgets` holds the UI tree, the widgets and
   animation.
@@ -40,7 +42,8 @@ data/        shared assets (wallpapers, icons, sounds)
   process that hosts the parts `desktop`, `bar`, `notifications`, `controlcenter` and `launcher`
   (library crates, see [overview](../architecture/overview.md)); `screenshot`, `lock` and
   `greeter` stay processes of their own.
-- **`apps/`**: one crate per app.
+- **`apps/`**: one crate per app built here, each on `bande-app` (`libs/app`); the file chooser
+  is the portal's dialog.
 - **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-bande`.
 - **`libs/`**: shared logic without UI. `xdg` holds desktop entries, icons, MIME types,
   `mimeapps.list`, user directories and `Apps`, the one answer to "which apps open this path";
@@ -48,8 +51,9 @@ data/        shared assets (wallpapers, icons, sounds)
   operations with their running queue and undo, and watching; `preview` reads the Quick Look
   content of a file and hands decoded pixels to a constructor the caller passes, so it needs no
   toolkit type.
-- **`testing/`**: `test-bus` (with the shared D-Bus fakes of system services), `test-wayland`,
-  the benchmarks and the toolkit sample.
+- **`testing/`**: `test-bus` (private D-Bus buses and fakes of system services),
+  `test-wayland`, the benchmarks, the toolkit sample and `review` (records a scenario on a live
+  session).
 
 Rules:
 
@@ -58,7 +62,7 @@ Rules:
 2. **One crate per process.** Each app, shell client and service is its own crate; each part
    hosted by `bande-shell` is its own library crate.
 3. **Dependency direction.** `libs` ← `toolkit` ← `shell` and `apps`. Services never depend on
-   the widget crates; CI checks this.
+   the widget crates (except the polkit agent, which shows a dialog); `ci/release/lint.sh` checks this.
 4. **Crate structure.** In each app and shell crate, `main.rs` is thin, model modules hold no
    toolkit types, and view modules build on the toolkit. Logic that a second crate needs moves
    to `libs`.
@@ -75,8 +79,6 @@ Rules:
 
 ## Consequences
 
-- The moves are done once, each crate with `git mv` so that history follows; afterwards a new
-  crate goes straight into its directory.
 - The `shell/`, `apps/` and `services/` split is by process role, not by "system" versus "user"
   software. Settings and Activity Monitor are ordinary apps with no special access.
 - Shared assets live in `data/` at the root; everything else a package installs stays with its

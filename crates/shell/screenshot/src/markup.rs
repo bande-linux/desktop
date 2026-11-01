@@ -519,6 +519,7 @@ impl Widget for Toolbar {
                 self.pressed = self.segment_at(pointer.position);
                 self.pressed.is_some()
             }
+            Event::PointerLeave => self.pressed.take().is_some(),
             Event::PointerUp(pointer) => {
                 let released = self.segment_at(pointer.position);
                 if let Some(index) = self.pressed.take().filter(|index| Some(*index) == released) {

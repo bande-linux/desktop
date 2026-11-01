@@ -447,6 +447,12 @@ impl Widget for Palette {
                 self.hovered = hovered;
                 changed
             }
+            Event::PointerLeave => {
+                let changed = self.hovered.is_some() || self.pressed.is_some();
+                self.hovered = None;
+                self.pressed = None;
+                changed
+            }
             Event::PointerDown(pointer) if pointer.is_primary() => {
                 self.pressed = self.segment_at(pointer.position);
                 if let Some(index) = self.pressed {

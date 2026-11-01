@@ -937,6 +937,9 @@ impl App for Taskbar {
                 self.swallow_release = false;
             }
             WindowEvent::Input(input) => {
+                if input == Event::PointerLeave {
+                    self.swallow_release = false;
+                }
                 if self.ui.handle(&input) {
                     window.request_redraw();
                 }

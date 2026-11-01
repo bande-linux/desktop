@@ -170,7 +170,7 @@ impl Widget for PopUpButton {
             Event::Key {
                 key: Key::Space | Key::Up | Key::Down,
                 modifiers,
-            } if !modifiers.logo => self.open(cx),
+            } if !modifiers.logo && !modifiers.control => self.open(cx),
             _ => return false,
         }
         true

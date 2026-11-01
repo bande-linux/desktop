@@ -56,20 +56,21 @@ nothing to configure separately (M17 and M24 gaps).
 names on a grid. Removable and network volumes appear as well, so a plugged-in drive is
 visible at once. Internal disks never appear. Items behave exactly as they do in Files,
 using the same model, menus and Quick Look.
-Inputs: left click selects; double click opens with the default app; `Return` and
-`Super+Down` open (open question 1); hover shows the full name when it is truncated;
-`Space` toggles Quick Look; `Super+I` shows Get Info; `Super+Backspace` moves to Trash;
-`Super+C`, `Super+V` and `Super+D` (Duplicate, unverified as a desktop shortcut) work as in
-Files; `Shift+Super+D` opens the Desktop folder in Files [6].
+Inputs: left click selects; double click opens with the default app; `Return`, `Ctrl+O`
+and `Alt+Down` open; hover shows the full name when it is truncated; `Space` toggles Quick
+Look; `Ctrl+I` shows Get Info; `Delete` moves to Trash and `Shift+Delete` deletes at once;
+`Ctrl+C`, `Ctrl+X`, `Ctrl+V` (`Shift+Ctrl+V` moves), `Ctrl+Z` and `Shift+Ctrl+Z` work as in
+Files; `Shift+Ctrl+N` makes a folder and `Shift+Ctrl+D` opens the Desktop folder in Files.
+Shortcuts follow [decision 0005](../../decisions/0005-ctrl-for-app-shortcuts.md).
 Motion: a new item fades and scales in at its slot. Items moved by Clean Up glide to their
 new slots.
 
-**Selection** — click selects one item. `Super+click` toggles an item and `Shift+click`
+**Selection** — click selects one item. `Ctrl+click` toggles an item and `Shift+click`
 extends the selection. Dragging on empty desktop draws a rubber band that selects
-everything it touches, live. `Super+A` selects all. Arrow keys move the selection, and
+everything it touches, live. `Ctrl+A` selects all. Arrow keys move the selection, and
 typing the start of a name selects it. Clicking empty desktop clears the selection and
 leaves no window focused (`docs/architecture/behaviour.md`).
-Inputs: left click, `Super`/`Shift` + click, left drag on empty space, keyboard.
+Inputs: left click, `Ctrl`/`Shift` + click, left drag on empty space, keyboard.
 Motion: the rubber band is drawn every frame. Selection highlights fade in over about
 80 ms.
 

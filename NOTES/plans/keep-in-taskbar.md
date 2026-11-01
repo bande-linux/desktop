@@ -40,6 +40,11 @@ Do C on top of the reload from `taskbar-icons.md`. Call the whole bar "Taskbar" 
 
 ## Implementation plan
 
+Progress (2026-11-01): milestones 1-5 and 7 done (the bar keeps an app with no entry by writing a
+launcher; the interface and docs say Taskbar). Milestone 6, the code rename, is left: other
+branches were still editing `crates/shell/bar` and the compositor. The bar-level `keep.rs` test of
+milestone 4 is not written; `bande-xdg` tests the written launcher.
+
 0. **Dependency: the bar reloads desktop entries** (`taskbar-icons.md` milestone 1, owned there). Land it first. On its own it fixes the owner's VS Code case. When it lands, also reload in `menu_bar_client.rs:759`, so the active app's name is right too. Suggest that plan put the watcher in `bande_xdg` so the bar, menu bar and launcher share it.
 
 1. **The compositor tells the shell each app's process** (~1.5 h)
@@ -108,6 +113,10 @@ Do C on top of the reload from `taskbar-icons.md`. Call the whole bar "Taskbar" 
 - **Today's config.** It already holds `com.microsoft.VSCode`, `dev.zed.Zed` and `com.anthropic.Claude`. These appear correctly after the next login even before any fix.
 
 ## Decisions for the owner
+
+Decided overnight 2026-11-01: "Taskbar" for the whole combined bar, Settings ▸ Taskbar (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: written launchers show in the launcher (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: keep the `bar { … }` config key (plan recommendation; owner may revisit).
 
 1. **Name scope.** Recommended: "Taskbar" for the whole combined bar (Settings ▸ Taskbar). The alternative is "Taskbar" only for the apps area, keeping "Bar" as the whole.
 2. **Written launchers show in the launcher.** Keeping an app with no desktop file adds a launcher for it in `~/.local/share/applications`, so it also appears in the launcher and search. Recommended: yes, as macOS treats anything in the Dock as an app. The alternative is to mark it hidden from the launcher, which needs a separate exception in `applications()`.

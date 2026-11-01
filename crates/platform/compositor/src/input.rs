@@ -102,10 +102,11 @@ fn media_key(keysym: u32) -> Option<MediaKey> {
     }
 }
 
-fn without_super(keysym: u32) -> Option<Shortcut> {
+fn without_super(keysym: u32, alt: bool) -> Option<Shortcut> {
     match keysym {
         keysyms::KEY_XF86LaunchA => Some(Shortcut::Overview),
         keysyms::KEY_Print => Some(Shortcut::CaptureOptions),
+        keysyms::KEY_F4 if alt => Some(Shortcut::CloseWindow),
         _ => None,
     }
 }
@@ -811,7 +812,7 @@ impl State {
                     )));
                 }
                 let inhibited = state.shortcuts_inhibited();
-                if let Some(shortcut) = without_super(sym.raw())
+                if let Some(shortcut) = without_super(sym.raw(), modifiers.alt)
                     .filter(|_| !modifiers.logo && !state.is_locked() && !inhibited)
                 {
                     state.held_shortcut_keys.push(evdev_code);
@@ -904,6 +905,7 @@ mod tests {
             "Down" => keysyms::KEY_Down,
             "F2" => keysyms::KEY_F2,
             "F3" => keysyms::KEY_F3,
+            "F4" => keysyms::KEY_F4,
             "F5" => keysyms::KEY_F5,
             "F11" => keysyms::KEY_F11,
             "Mission Control" => keysyms::KEY_XF86LaunchA,
@@ -966,7 +968,7 @@ mod tests {
             let runs = if held("Super") {
                 shortcut(key, Some(key), held("Ctrl"), held("Alt"), held("Shift"))
             } else {
-                without_super(key)
+                without_super(key, held("Alt"))
             };
             assert_eq!(runs, Some(expected(listed.action)), "{}", listed.keys);
         }

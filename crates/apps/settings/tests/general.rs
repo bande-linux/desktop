@@ -70,9 +70,9 @@ fn about_opens_storage_and_software_update_and_back_returns_to_the_row_you_came_
 
     key(
         &mut view,
-        Key::Character('['),
+        Key::Left,
         Modifiers {
-            logo: true,
+            alt: true,
             ..Modifiers::default()
         },
     );

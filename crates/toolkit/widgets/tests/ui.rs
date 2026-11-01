@@ -22,8 +22,10 @@ const SHIFT: Modifiers = Modifiers {
     shift: true,
     ..NONE
 };
-const ALT: Modifiers = Modifiers { alt: true, ..NONE };
-const LOGO: Modifiers = Modifiers { logo: true, ..NONE };
+const CTRL: Modifiers = Modifiers {
+    control: true,
+    ..NONE
+};
 const AREA: Size = Size::new(320.0, 240.0);
 
 fn context() -> Context {
@@ -83,30 +85,30 @@ impl Field {
 }
 
 #[test]
-fn logo_arrows_move_to_the_line_ends_and_shift_extends() {
+fn home_and_end_move_to_the_line_ends_and_shift_extends() {
     let mut field = Field::with("hello brave world");
-    field.press(Key::Left, LOGO);
+    field.press(Key::Home, NONE);
     assert_eq!(field.field.selection(), 0..0);
-    field.press(
-        Key::Right,
-        Modifiers {
-            shift: true,
-            ..LOGO
-        },
-    );
+    field.press(Key::End, SHIFT);
     assert_eq!(field.selected(), "hello brave world");
-    field.press(Key::Right, LOGO);
+    field.press(Key::End, NONE);
     assert_eq!(field.field.selection(), 17..17);
 }
 
 #[test]
-fn alt_arrows_move_by_word_and_shift_extends() {
+fn ctrl_arrows_move_by_word_and_shift_extends() {
     let mut field = Field::with("hello brave world");
-    field.press(Key::Left, ALT);
+    field.press(Key::Left, CTRL);
     assert_eq!(field.field.selection(), 12..12);
-    field.press(Key::Left, Modifiers { shift: true, ..ALT });
+    field.press(
+        Key::Left,
+        Modifiers {
+            shift: true,
+            ..CTRL
+        },
+    );
     assert_eq!(field.selected(), "brave ");
-    field.press(Key::Right, ALT);
+    field.press(Key::Right, CTRL);
     field.press(Key::Left, SHIFT);
     assert_eq!(field.selected(), "e");
 }
@@ -114,11 +116,12 @@ fn alt_arrows_move_by_word_and_shift_extends() {
 #[test]
 fn deletion_follows_the_same_units() {
     let mut field = Field::with("hello brave world");
-    field.press(Key::Backspace, ALT);
+    field.press(Key::Backspace, CTRL);
     assert_eq!(field.field.text(), "hello brave ");
     field.press(Key::Backspace, NONE);
     assert_eq!(field.field.text(), "hello brave");
-    field.press(Key::Backspace, LOGO);
+    field.press(Key::Home, SHIFT);
+    field.press(Key::Backspace, NONE);
     assert_eq!(field.field.text(), "");
     assert_eq!(
         field.changes.borrow().as_slice(),
@@ -129,13 +132,19 @@ fn deletion_follows_the_same_units() {
 #[test]
 fn typing_replaces_the_selection() {
     let mut field = Field::with("hello world");
-    field.press(Key::Left, Modifiers { shift: true, ..ALT });
+    field.press(
+        Key::Left,
+        Modifiers {
+            shift: true,
+            ..CTRL
+        },
+    );
     for character in "there".chars() {
         field.press(Key::Character(character), NONE);
     }
     field.press(Key::Space, NONE);
     assert_eq!(field.field.text(), "hello there ");
-    field.press(Key::Character('a'), LOGO);
+    field.press(Key::Character('a'), CTRL);
     assert_eq!(field.selected(), "hello there ");
 }
 
@@ -301,26 +310,32 @@ fn return_and_escape_press_the_primary_and_cancel_buttons_from_a_text_field() {
 }
 
 #[test]
-fn super_c_x_and_v_go_through_the_clipboard() {
+fn ctrl_c_x_and_v_go_through_the_clipboard() {
     let field = TextField::new("Name", "Quarterly report", |_| {});
     let id = field.id();
     let mut ui = Ui::new(Box::new(field), context());
     ui.layout(AREA);
     ui.handle(&key(Key::Tab, NONE));
     ui.handle(&key(Key::Down, NONE));
-    ui.handle(&key(Key::Left, Modifiers { shift: true, ..ALT }));
-    ui.handle(&key(Key::Character('c'), LOGO));
+    ui.handle(&key(
+        Key::Left,
+        Modifiers {
+            shift: true,
+            ..CTRL
+        },
+    ));
+    ui.handle(&key(Key::Character('c'), CTRL));
     assert_eq!(
         ui.take_clipboard_request(),
         Some(ClipboardRequest::Copy("report".to_owned()))
     );
-    ui.handle(&key(Key::Character('x'), LOGO));
+    ui.handle(&key(Key::Character('x'), CTRL));
     assert_eq!(
         ui.take_clipboard_request(),
         Some(ClipboardRequest::Copy("report".to_owned()))
     );
     assert!(!ui.pasted("ignored"), "nothing was asked for");
-    ui.handle(&key(Key::Character('v'), LOGO));
+    ui.handle(&key(Key::Character('v'), CTRL));
     assert_eq!(ui.take_clipboard_request(), Some(ClipboardRequest::Paste));
     assert!(ui.pasted("summary"));
     let text = ui
@@ -540,21 +555,19 @@ fn a_secure_field_submits_what_was_typed_and_backspace_removes_one_character() {
 }
 
 #[test]
-fn logo_or_alt_backspace_clears_a_secure_field_since_its_words_are_hidden() {
-    for modifiers in [LOGO, ALT] {
-        let mut secret = Secret::new();
-        secret.type_text("two words");
-        secret.press(Key::Backspace, modifiers);
-        assert_eq!(secret.submit(), "");
-    }
+fn ctrl_backspace_clears_a_secure_field_since_its_words_are_hidden() {
+    let mut secret = Secret::new();
+    secret.type_text("two words");
+    secret.press(Key::Backspace, CTRL);
+    assert_eq!(secret.submit(), "");
 }
 
 #[test]
 fn a_secure_field_does_not_take_copy_or_paste_shortcuts() {
     let mut secret = Secret::new();
     secret.type_text("abc");
-    assert!(!secret.press(Key::Character('c'), LOGO));
-    assert!(!secret.press(Key::Character('v'), LOGO));
+    assert!(!secret.press(Key::Character('c'), CTRL));
+    assert!(!secret.press(Key::Character('v'), CTRL));
     assert_eq!(secret.submit(), "abc");
 }
 

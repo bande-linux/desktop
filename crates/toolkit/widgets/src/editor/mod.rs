@@ -719,20 +719,20 @@ impl Editor {
         let selected = self.has_selection();
         if self.read_only {
             return Menu::new(vec![
-                item("copy", "Super+C", selected),
+                item("copy", "Ctrl+C", selected),
                 MenuItem::separator(),
-                item("select-all", "Super+A", !self.is_empty()),
+                item("select-all", "Ctrl+A", !self.is_empty()),
             ]);
         }
         Menu::new(vec![
-            item("undo", "Super+Z", self.can_undo()),
-            item("redo", "Shift+Super+Z", self.can_redo()),
+            item("undo", "Ctrl+Z", self.can_undo()),
+            item("redo", "Shift+Ctrl+Z", self.can_redo()),
             MenuItem::separator(),
-            item("cut", "Super+X", selected),
-            item("copy", "Super+C", selected),
-            item("paste", "Super+V", true),
+            item("cut", "Ctrl+X", selected),
+            item("copy", "Ctrl+C", selected),
+            item("paste", "Ctrl+V", true),
             MenuItem::separator(),
-            item("select-all", "Super+A", !self.is_empty()),
+            item("select-all", "Ctrl+A", !self.is_empty()),
             MenuItem::separator(),
             item("emoji-and-symbols", "Ctrl+Super+Space", true),
         ])
@@ -744,7 +744,7 @@ impl Editor {
                 Key::Character(character),
                 Modifiers {
                     shift,
-                    logo: true,
+                    control: true,
                     ..Modifiers::default()
                 },
             )

@@ -59,8 +59,8 @@ pub fn desktop_menu(sort: SortBy, paste: bool) -> Menu {
         })
         .collect();
     Menu::new(vec![
-        item("new-folder", "new-folder").shortcut("Shift+Super+N"),
-        item("paste", "paste").shortcut("Super+V").enabled(paste),
+        item("new-folder", "new-folder").shortcut("Shift+Ctrl+N"),
+        item("paste", "paste").shortcut("Ctrl+V").enabled(paste),
         MenuItem::separator(),
         item("get-info", "desktop-info"),
         MenuItem::separator(),
@@ -69,7 +69,7 @@ pub fn desktop_menu(sort: SortBy, paste: bool) -> Menu {
         MenuItem::submenu(&L10N.tr("sort-by"), Menu::new(sorts)),
         item("clean-up", "clean-up").enabled(sort == SortBy::None),
         MenuItem::separator(),
-        item("show-desktop-folder", "show-desktop-folder").shortcut("Shift+Super+D"),
+        item("show-desktop-folder", "show-desktop-folder").shortcut("Shift+Ctrl+D"),
     ])
 }
 
@@ -77,7 +77,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
     let count = selection.count;
     let volumes = selection.kinds.iter().all(|kind| *kind == Kind::Volume);
     let any_volume = selection.kinds.contains(&Kind::Volume);
-    let mut items = vec![item("open", "open").shortcut("Super+Down")];
+    let mut items = vec![item("open", "open").shortcut("Ctrl+O")];
     if !selection.apps.is_empty() {
         let apps = selection
             .apps
@@ -87,19 +87,15 @@ pub fn items_menu(selection: &Selection) -> Menu {
         items.push(MenuItem::submenu(&L10N.tr("open-with"), Menu::new(apps)));
     }
     items.push(MenuItem::separator());
-    items.push(item("get-info", "info").shortcut("Super+I"));
+    items.push(item("get-info", "info").shortcut("Ctrl+I"));
     items.push(
         item("rename", "rename")
             .shortcut("F2")
             .enabled(count == 1 && !any_volume),
     );
-    items.push(
-        item("duplicate", "duplicate")
-            .shortcut("Super+D")
-            .enabled(!any_volume),
-    );
-    items.push(item("cut", "cut").shortcut("Super+X").enabled(!any_volume));
-    items.push(item("copy", "copy").shortcut("Super+C"));
+    items.push(item("duplicate", "duplicate").enabled(!any_volume));
+    items.push(item("cut", "cut").shortcut("Ctrl+X").enabled(!any_volume));
+    items.push(item("copy", "copy").shortcut("Ctrl+C"));
     if selection.picture && count == 1 {
         items.push(MenuItem::separator());
         items.push(item("set-wallpaper", "set-wallpaper"));
@@ -115,11 +111,11 @@ pub fn items_menu(selection: &Selection) -> Menu {
         };
         items.push(
             MenuItem::new(&title, "trash")
-                .shortcut("Super+Backspace")
+                .shortcut("Delete")
                 .enabled(!any_volume)
                 .alternate(
                     item("delete-immediately", "delete-immediately")
-                        .shortcut("Alt+Super+Backspace")
+                        .shortcut("Shift+Delete")
                         .enabled(!any_volume),
                 ),
         );

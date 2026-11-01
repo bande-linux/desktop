@@ -1,15 +1,16 @@
-# Dock
-Status: superseded by the [combined bar](bar.md) (owner, 2026-10-30), which is the default since E5: the bar holds the app menus, status items, tray, workspaces and clock, and "Clock, tray icons, workspace switcher in the Dock: never" below is reversed. There is no `bande-dock` binary or package any more and Settings ▸ Dock became Settings ▸ Bar. The rules below still hold for the apps area of the bar and for the "separate menu bar" layout.
+# Taskbar
+Status: superseded by the [combined bar](bar.md) (owner, 2026-10-30), which is the default since E5. "Taskbar" is the user-facing name for that whole bar (launcher, apps, tray, clock) and for the side strip in the "separate menu bar" layout (owner, 2026-11-01). The bar holds the app menus, status items, tray, workspaces and clock, so "Clock, tray icons, workspace switcher in the taskbar: never" below is reversed. There is no `bande-dock` binary or package any more, and Settings ▸ Dock became Settings ▸ Bar and then Settings ▸ Taskbar. The config key stays `bar { … }`, the D-Bus properties stay `BarApps`, `BarEdge` and so on, and the code still says dock (`crates/shell/bar/src/dock.rs`, `dock_client.rs`, `crates/libs/dock-model`). The rules below still hold for the apps area of the taskbar. This page was `dock.md` until 2026-11-01.
 
 ## Purpose
-The Dock (`bande-dock`) is where apps are started, found again and quit. It shows the apps a
+The taskbar's apps area (once the separate `bande-dock`) is where apps are started, found again and quit. It shows the apps a
 person keeps, the apps that are running, and the Trash, and every icon answers a left click, a
 right click, a drag and a dropped file. It does one job well: it is not a window list, a clock,
 a system tray or a launcher grid, all of which have their own homes (menu bar, launcher,
 Exposé).
 
-Modifier names below follow the decided mapping: Super acts as Command. Alt is assumed to stand
-in for Option (not yet recorded in `docs/architecture/overview.md`).
+Modifier names below were written when Super acted as Command. Since 2026-11-01 Ctrl is the
+app key and Super the system key ([decision 0005](../../decisions/0005-ctrl-for-app-shortcuts.md)),
+so a Command-click is a Ctrl+click. Alt stands in for Option.
 
 ## Reference survey
 
@@ -53,32 +54,36 @@ slides in at the end of its group as the launch starts, not when the window appe
 Motion: pulse in place; neighbours slide apart to make room.
 
 **Hover label** — The app's name in a small label beside the icon, on the screen side (right of
-the icon for a left Dock). The first label waits about 400 ms; moving to the next icon swaps the
+the icon for a left taskbar). The first label waits about 400 ms; moving to the next icon swaps the
 label instantly. Pressing the mouse hides it.
 Inputs: hover.
 Motion: fade in; the label glides between icons rather than reappearing.
 
 **Click to open or activate** — Not running: start it. Running: bring all its windows forward
 with the frontmost focused; if every window is minimized, restore the latest (M15 behaviour).
-Inputs: left click opens or activates; Super+click shows the app in Files; Alt+click activates
+Inputs: left click opens or activates; Ctrl+click shows the app in Files; Alt+click activates
 and hides the previously active app; Alt+Super+click hides all others [1].
 
 **Icon menu** — One menu per icon, in this order:
 1. Open windows by title, the focused one checked, minimized ones marked (choosing one restores
    and focuses it).
 2. The app's desktop entry actions (for example New Window, New Private Window) [12].
-3. Keep in Dock (checkmark), Open at Login (checkmark), Show in Files.
+3. Keep in Taskbar (checkmark), Open at Login (checkmark), Show in Files.
 4. Hide, Quit.
 Quit becomes Force Quit while Alt is held, and is shown as Force Quit without Alt when the
 watchdog marks the app unresponsive. No "Options" submenu: three checkmarks do not need one.
-Inputs: right click, or press and hold for 500 ms; Menu key or Shift+F10 when the Dock has
+Inputs: right click, or press and hold for 500 ms; Menu key or Shift+F10 when the taskbar has
 keyboard focus.
 Motion: menu scales out from the icon; closes on Escape or a click elsewhere.
 
-**Keep and remove** — Keep in Dock from the menu, or drag an app from Files or the launcher into
-the kept group. Remove by unchecking Keep in Dock, or by dragging the icon out of the Dock: past
+**Keep and remove** — Keep in Taskbar from the menu, or drag an app from Files or the launcher into
+the kept group. Remove by unchecking Keep in Taskbar, or by dragging the icon out of the taskbar: past
 about one icon width a "Remove" label appears, and releasing there removes it. A running app
 dragged out stays in the running group. Kept apps are written to `config.kdl`.
+Keep resolves an app in this order: the desktop entry matching its app id, then the process's
+trusted systemd scope, then the process's executable, and last a launcher it writes to
+`~/.local/share/applications/<app_id>.desktop` (marked `X-Bande-Kept=true`, never overwriting an
+existing file), which also shows in the launcher and search.
 Inputs: drag in, drag out, right click.
 Motion: neighbours close the gap; the removed icon shrinks and fades at the pointer.
 
@@ -111,15 +116,15 @@ Motion: badge pops in with a small overshoot; progress animates between values.
 the icon menu and a click on the icon restores the latest. No separate minimized-window area.
 Motion: the window shrinks toward the icon (M5 genie-like effect in our own style).
 
-**Keyboard reach** — A shortcut focuses the Dock (proposed Super+Alt+K, unverified as free);
-Up/Down (or Left/Right on a horizontal Dock) move, Return opens, Menu key opens the menu, Escape
+**Keyboard reach** — A shortcut focuses the taskbar (proposed Super+Alt+K, unverified as free);
+Up/Down (or Left/Right on a horizontal taskbar) move, Return opens, Menu key opens the menu, Escape
 returns focus. Super+Alt+D toggles auto-hide [4]. Every icon is an AccessKit button with its
 name, running state, badge and progress.
 
-**Size, position, auto-hide** — Three settings in Desktop & Dock: icon size slider, edge
-(left default, bottom, right, top), automatically hide. With auto-hide, the Dock slides in when
+**Size, position, auto-hide** — Three settings in Settings ▸ Taskbar: icon size slider, edge
+(left default, bottom, right, top), automatically hide. With auto-hide, the taskbar slides in when
 the pointer touches its edge and slides out after the pointer leaves. Dragging the divider
-before Trash resizes the Dock directly [1].
+before Trash resizes the taskbar directly [1].
 Motion: slide, interruptible: touching the edge again mid-hide reverses it.
 
 ### Later (power features worth having)
@@ -137,7 +142,7 @@ just its windows (macOS does this from Control-Down Arrow [4]; the click mapping
 **Middle click opens a new window** — Runs the desktop entry's New Window action when it exists
 (GNOME and KDE convention, unverified).
 
-**Multi-display follow** — Dock on the primary display; pushing the pointer against the Dock
+**Multi-display follow** — Taskbar on the primary display; pushing the pointer against the taskbar
 edge of another display moves it there (macOS behaviour, unverified on the fetched pages).
 
 **Recent documents in the icon menu** — Per app, from `recently-used.xbel`, like Windows jump
@@ -149,7 +154,7 @@ lists [9].
 labels is simpler and every major Linux and Windows dock does without it.
 
 **Recent and suggested apps** — Running apps already appear; a second automatic group adds a
-concept that reshuffles the Dock without being asked.
+concept that reshuffles the taskbar without being asked.
 
 **Separate minimized-window area** — Two places to find a window is one too many; the icon menu
 lists minimized windows.
@@ -161,10 +166,10 @@ and a short pulse bother nobody enough to need switches.
 
 **Fan and list stack styles, per-stack display options** — One stack view done well.
 
-**Clock, tray icons, workspace switcher in the Dock** — They belong to the menu bar and
-Mission Control; the Dock stays about apps.
+**Clock, tray icons, workspace switcher in the taskbar** — They belong to the menu bar and
+Mission Control; the taskbar stays about apps.
 
-**Arbitrary files kept in the Dock** — Folders only (Later); individual documents belong in
+**Arbitrary files kept in the taskbar** — Folders only (Later); individual documents belong in
 Files favourites or Recents.
 
 ## Open questions for the owner

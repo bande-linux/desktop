@@ -20,7 +20,7 @@ fn menus() -> Vec<Entry> {
             vec![
                 Entry::item("About Example", "about"),
                 Entry::separator(),
-                Entry::item("Quit Example", "quit").shortcut("Super+Q"),
+                Entry::item("Quit Example", "quit").shortcut("Ctrl+Q"),
             ],
         ),
         Entry::submenu(
@@ -106,7 +106,7 @@ fn the_menu_bar_reads_the_menus_and_clicks_come_back_as_actions() {
     let (_, (_, quit, _)) = get_layout(&client, 4);
     assert_eq!(
         property(&quit, "shortcut").map(ToString::to_string),
-        Some(r#"[["Super", "Q"]]"#.to_owned())
+        Some(r#"[["Control", "Q"]]"#.to_owned())
     );
 
     click(&client, 6);

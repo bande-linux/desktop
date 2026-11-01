@@ -208,7 +208,7 @@ impl FilesView {
         let origin = self.grid_origin();
         let at = Point::new(pointer.position.x - origin.x, pointer.position.y - origin.y);
         self.press = Some(Press::Band);
-        let keep = pointer.modifiers.shift || pointer.modifiers.logo;
+        let keep = pointer.modifiers.shift || pointer.modifiers.control;
         if !keep {
             self.browser.focus_column(0);
         }
@@ -220,7 +220,7 @@ impl FilesView {
             } else {
                 Vec::new()
             },
-            toggle: pointer.modifiers.logo,
+            toggle: pointer.modifiers.control,
         });
     }
 

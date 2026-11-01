@@ -12,7 +12,7 @@ use smithay::backend::renderer::element::{Id, Kind};
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Rectangle, Size};
 
-use super::layout::fitted;
+use super::layout::{Layout, fitted};
 use super::{App, Card, Content, Frame, NAME_ROW, OPEN_SCALE, Painted, Switcher};
 use crate::label::Labels;
 use crate::motion::{Look, Motion};
@@ -24,7 +24,6 @@ use crate::scene::{
 use crate::state::{OutputElement, State};
 
 const CARD_RADIUS: f64 = Radius::XL as f64;
-const TILE_RADIUS: f64 = Radius::L as f64;
 const THUMBNAIL_RADIUS: f64 = Radius::S as f64;
 const ICON_ROUNDING: f32 = 0.225;
 const INITIAL_SHARE: f32 = 0.45;
@@ -59,6 +58,18 @@ pub(super) fn placeholder(
             paragraph,
         },
     ]
+}
+
+fn ring_radius(content: &Content, layout: &Layout) -> f64 {
+    let (Some(tile), Some(inner)) = (layout.tiles.first(), layout.contents.first()) else {
+        return THUMBNAIL_RADIUS;
+    };
+    let inset = (tile.size.w - inner.size.w) / 2.0;
+    let inner_radius = match content {
+        Content::Icons(_) => inner.size.w * f64::from(ICON_ROUNDING),
+        Content::Windows(_) => THUMBNAIL_RADIUS,
+    };
+    inner_radius + inset
 }
 
 impl Switcher {
@@ -342,9 +353,10 @@ impl State {
             }
         }
         let ring = place(card.ring.look().rect);
+        let ring_radius = ring_radius(&card.content, layout);
         elements.push(OutputElement::Fill(FillElement::new(
             card.ids[0].clone(),
-            rounded(ring.to_physical(scale), TILE_RADIUS * factor * scale),
+            rounded(ring.to_physical(scale), ring_radius * factor * scale),
             fill(palette.hairline),
         )));
         let shape = rounded(look.rect.to_physical(scale), CARD_RADIUS * factor * scale);

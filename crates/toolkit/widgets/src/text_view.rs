@@ -19,6 +19,7 @@ pub struct TextView {
     scroll: ScrollState,
     offset: f32,
     visible_lines: Option<u16>,
+    borderless: bool,
     frame: Rect,
 }
 
@@ -35,6 +36,7 @@ impl TextView {
             scroll: ScrollState::default(),
             offset: 0.0,
             visible_lines: None,
+            borderless: false,
             frame: Rect::default(),
         }
     }
@@ -42,6 +44,13 @@ impl TextView {
     pub fn read_only(mut self) -> Self {
         self.editor.set_read_only(true);
         self
+    }
+
+    pub fn borderless(self) -> Self {
+        Self {
+            borderless: true,
+            ..self
+        }
     }
 
     pub fn visible_lines(self, lines: u16) -> Self {
@@ -156,7 +165,9 @@ impl Widget for TextView {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let focused = cx.is_focused(self.id);
-        paint_field(cx, self.frame, focused, items);
+        if !self.borderless {
+            paint_field(cx, self.frame, focused, items);
+        }
         let content = self.content();
         let mut inner = Vec::new();
         if self.editor.is_empty()

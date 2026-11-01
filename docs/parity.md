@@ -27,7 +27,7 @@ the left and holds the menu bar; a setting moves the menu bar to the top.
 | Files | basic | icons, list and columns, Quick Look, Get Info, tabs, batch rename, settings; no network locations or tags |
 | Settings | basic | grouped panes with search; no Users pane, printers or custom shortcuts |
 | Terminal, Activity Monitor | basic | apps repo; Terminal has tabs, splits and profiles |
-| Software, Package Installer, offline updates | basic | Debian packages only; no Flatpak yet |
+| Software, Package Installer, software updates | basic | live updates, offline only for reboot-class packages; Debian packages only; no Flatpak yet |
 | Screenshots, recording, Markup | parity | |
 | Force Quit, Not Responding, low-memory window | parity | in the compositor, works when the shell hangs |
 | Sleep and wake | basic | display sleep works; system sleep is off on the M2 mini until s2idle is reliable |

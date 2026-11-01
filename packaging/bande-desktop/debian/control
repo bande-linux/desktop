@@ -38,6 +38,7 @@ Recommends: ${bande:Recommends},
             bande-file-chooser (= ${binary:Version}),
             bande-polkit (= ${binary:Version}),
             packagekit,
+            needrestart,
             appstream,
             apt-config-icons-hidpi,
             gnome-keyring,
@@ -74,3 +75,8 @@ Description: Bande desktop environment
  zstd) and systemd-oomd, and makes the apps' slice the place where
  systemd-oomd closes an app when memory stays under pressure, so the
  compositor and the session services keep running.
+ .
+ Updates install while the computer runs. needrestart, which it
+ recommends, restarts the system services an update replaced, except the
+ login manager, the buses, logind, polkit and PackageKit, without asking;
+ Software Update in Settings handles the session and the apps.

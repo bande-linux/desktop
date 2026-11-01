@@ -59,6 +59,7 @@ use crate::shell::Shell;
 use crate::text_input::TextInput;
 
 pub const ACTIVATION_TOKEN_VARIABLE: &str = "XDG_ACTIVATION_TOKEN";
+const TITLE_BYTES_LIMIT: usize = 1024;
 const RELEASE_HIDDEN_AFTER: Duration = Duration::from_secs(30);
 const TILING_MENU_AFTER: Duration = Duration::from_millis(500);
 
@@ -584,6 +585,7 @@ impl Window {
     }
 
     pub fn set_title(&mut self, title: &str) {
+        let title = &title[..title.floor_char_boundary(TITLE_BYTES_LIMIT)];
         if let ShellSurface::Toplevel(_, toplevel) = &self.role {
             toplevel.set_title(title.to_owned());
         }

@@ -256,20 +256,25 @@ def chevron(turns):
     return layers(S().polyline(rotate([(10, 3.2), (5.2, 8), (10, 12.8)], turns), 1.8))
 
 
-def cross():
-    return layers(S().line(3.6, 3.6, 12.4, 12.4, W).line(12.4, 3.6, 3.6, 12.4, W))
+TITLE_BAR_STROKE = 1.5
 
 
-def minimize():
-    return layers(S().line(3.2, 8, 12.8, 8, W))
+def window_close():
+    return layers(S().line(4.5, 4.5, 11.5, 11.5, TITLE_BAR_STROKE).line(4.5, 11.5, 11.5, 4.5, TITLE_BAR_STROKE))
 
 
-def maximize():
-    return layers(S().frame(2.6, 2.6, 10.8, 10.8, 2, W))
+def window_minimize():
+    return layers(S().line(4, 8, 12, 8, TITLE_BAR_STROKE))
 
 
-def restore():
-    return layers(S().frame(2.4, 5.2, 8.4, 8.4, 1.6, 1.4).polyline([(5.2, 3.2), (5.6, 2.4), (12.4, 2.4), (13.6, 3.6), (13.6, 10.4), (12.8, 10.8)], 1.4))
+def window_zoom():
+    return layers(S().polyline([(3.5, 7), (3.5, 3.5), (7, 3.5)], TITLE_BAR_STROKE)
+                  .polyline([(12.5, 9), (12.5, 12.5), (9, 12.5)], TITLE_BAR_STROKE))
+
+
+def window_unzoom():
+    return layers(S().polyline([(3.5, 7), (7, 7), (7, 3.5)], TITLE_BAR_STROKE)
+                  .polyline([(12.5, 9), (9, 9), (9, 12.5)], TITLE_BAR_STROKE))
 
 
 def plus(minus=False):
@@ -682,10 +687,10 @@ ACTIONS = {
     'pan-up-symbolic': lambda: chevron(1),
     'pan-end-symbolic': lambda: chevron(2),
     'pan-down-symbolic': lambda: chevron(3),
-    'window-close-symbolic': cross,
-    'window-minimize-symbolic': minimize,
-    'window-maximize-symbolic': maximize,
-    'window-restore-symbolic': restore,
+    'window-close-symbolic': window_close,
+    'window-minimize-symbolic': window_minimize,
+    'window-maximize-symbolic': window_zoom,
+    'window-restore-symbolic': window_unzoom,
     'list-add-symbolic': plus,
     'list-remove-symbolic': lambda: plus(True),
     'edit-delete-symbolic': trash,

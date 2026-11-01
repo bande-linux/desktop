@@ -23,6 +23,7 @@ const ROW_HEIGHT: f32 = 32.0;
 const VISIBLE_ROWS: usize = 10;
 const PADDING: f32 = 8.0;
 const TEXT_INSET: f32 = 12.0;
+const FIELD_PADDING: f32 = 8.0;
 const TEXT_SIZE: f32 = 13.0;
 const SHORTCUT_GAP: f32 = 24.0;
 const TOP_FRACTION: f32 = 0.22;
@@ -253,12 +254,12 @@ impl Widget for Card {
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
         let field = &mut self.children[0];
-        let width = frame.width - 2.0 * (PADDING + TEXT_INSET);
+        let width = frame.width - 2.0 * (PADDING + TEXT_INSET - FIELD_PADDING);
         let height = field.measure(cx, Size::new(width, FIELD_ROW)).height;
         field.place(
             cx,
             Rect::new(
-                frame.x + PADDING + TEXT_INSET,
+                frame.x + PADDING + TEXT_INSET - FIELD_PADDING,
                 frame.y + ((FIELD_ROW - height) / 2.0).round(),
                 width,
                 height,

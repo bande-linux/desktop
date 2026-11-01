@@ -1,7 +1,6 @@
-use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 
-use bande_toolkit::{Appearance, Role, Window, WindowError};
+use bande_toolkit::{AppConnection, Appearance, Role, Window, WindowError};
 use zbus::blocking::Connection;
 
 use crate::{Info, Kind, Program, View};
@@ -32,7 +31,7 @@ impl<V: View> Content<V> {
 
 pub struct Cx<P: Program> {
     pub(crate) info: &'static Info,
-    display: Option<UnixStream>,
+    pub(crate) link: AppConnection,
     pub(crate) windows: Vec<Window>,
     pub(crate) views: Vec<(WindowId, Content<P::View>)>,
     next: u32,
@@ -45,12 +44,12 @@ pub struct Cx<P: Program> {
 impl<P: Program> Cx<P> {
     pub(crate) fn new(
         info: &'static Info,
-        display: Option<UnixStream>,
+        link: AppConnection,
         session: Option<Connection>,
     ) -> Self {
         Self {
             info,
-            display,
+            link,
             windows: Vec::new(),
             views: Vec::new(),
             next: 0,
@@ -85,10 +84,9 @@ impl<P: Program> Cx<P> {
             Kind::Dialog => Role::dialog(title, self.info.id),
             Kind::Utility => Role::utility(title, self.info.id),
         };
-        let window = match (self.windows.first(), self.display.take()) {
-            (Some(beside), _) => beside.open_beside(role, size)?,
-            (None, Some(display)) => Window::open_on(display, role, size)?,
-            (None, None) => Window::open(role, size)?,
+        let window = match self.windows.first() {
+            Some(beside) => beside.open_beside(role, size)?,
+            None => self.link.open(role, size)?,
         };
         let id = WindowId(self.next);
         self.next += 1;
@@ -206,16 +204,20 @@ impl<P: Program> Cx<P> {
             .filter(|index| !self.windows[*index].is_closed())
     }
 
-    pub(crate) fn remove_closed(&mut self) {
+    pub(crate) fn remove_closed(&mut self) -> Vec<(WindowId, P::View)> {
+        let mut removed = Vec::new();
         let mut index = 0;
         while index < self.windows.len() {
             if self.windows[index].is_closed() {
                 self.windows.remove(index);
-                self.views.remove(index);
+                if let (id, Content::App(view)) = self.views.remove(index) {
+                    removed.push((id, view));
+                }
                 self.menus_changed = true;
             } else {
                 index += 1;
             }
         }
+        removed
     }
 }

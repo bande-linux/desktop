@@ -1,60 +1,27 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
-pub mod clipboard;
-pub use bande_protocols::client::bande_app_v1::{Placement, Workspace};
-pub use bande_protocols::client::bande_shell_v1::{
-    BrightnessKey, Edge as PanelEdge, LauncherMode, MediaKey, Panel, SessionEnd, VolumeKey,
-};
-pub use capture::{CaptureConstraints, CaptureOutcome};
-pub use cursor::CursorShape;
-pub use decoration::{DecorationMode, KdeDefaultMode, KdeMode};
-pub use fence::SwSyncTimeline;
-pub use gesture::ClientGesture;
-pub use idle::IdleEvent;
 pub use separate::{SeparateApp, act_as_separate_app};
-pub use shell::{Anchor, KeyboardInteractivity, Layer, LayerRequest};
-pub use toplevel::{Configured, PopupRequest};
+pub use toplevel::PopupRequest;
 pub use wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment;
-pub use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, State as ToplevelState};
-mod capture;
-mod constraint;
-mod cursor;
-mod decoration;
-mod dnd;
-mod effect;
-mod fence;
-mod gesture;
-mod idle;
 mod ime;
 mod lock;
 mod seat;
 mod separate;
 mod shell;
 mod toplevel;
-mod udmabuf;
 
 use std::io::Write;
-use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
-use std::time::{Duration, Instant};
 
-use bande_compositor::{Compositor, SessionRole};
+use bande_compositor::Compositor;
 use wayland_client::protocol::wl_buffer::WlBuffer;
-use wayland_client::protocol::wl_callback::{self, WlCallback};
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_registry::{self, WlRegistry};
 use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, delegate_noop};
-use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_buffer_params_v1::{
-    Flags, ZwpLinuxBufferParamsV1,
-};
-use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
-use wayland_protocols::wp::presentation_time::client::wp_presentation::WpPresentation;
-use wayland_protocols::wp::presentation_time::client::wp_presentation_feedback::{
-    self, WpPresentationFeedback,
-};
 use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::{self, XdgWmBase};
@@ -63,26 +30,6 @@ pub const RED: [u8; 4] = [0x00, 0x00, 0xff, 0xff];
 pub const GREEN: [u8; 4] = [0x00, 0xff, 0x00, 0xff];
 pub const BLUE: [u8; 4] = [0xff, 0x00, 0x00, 0xff];
 pub const HALF_WHITE: [u8; 4] = [0x80, 0x80, 0x80, 0x80];
-
-pub const LINEAR: u64 = 0;
-
-const PAGE: u64 = 4096;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Presented {
-    pub time: Duration,
-    pub refresh: Duration,
-    pub sequence: u64,
-    pub vsync: bool,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Memory<'a> {
-    Shm,
-    Dmabuf,
-    Udmabuf,
-    UdmabufWrittenUntil(BorrowedFd<'a>),
-}
 
 pub fn quadrants(width: usize, height: usize, stride: usize) -> Vec<u8> {
     let mut pixels = vec![0u8; stride * height];
@@ -113,31 +60,14 @@ pub struct ShmImage<'a> {
 struct Globals {
     compositor: Option<WlCompositor>,
     shm: Option<WlShm>,
-    dmabuf: Option<ZwpLinuxDmabufV1>,
-    presentation: Option<WpPresentation>,
-    presented: Vec<Presented>,
-    discarded: usize,
     wm_base: Option<XdgWmBase>,
     configured: bool,
-    frames_done: usize,
     registry: Option<WlRegistry>,
     advertised: Vec<(u32, String)>,
-    clipboard: clipboard::Clipboard,
     input: seat::Input,
-    shell: shell::Shell,
     toplevels: toplevel::Toplevels,
     lock: lock::SessionLock,
-    capture: capture::Capture,
-    idle: idle::Idle,
-    constraint: constraint::Constraint,
-    decoration_modes: Vec<decoration::DecorationMode>,
-    kde_decoration: decoration::KdeDecoration,
-    text_input: ime::TextInput,
     input_method: ime::InputMethod,
-    gestures: Vec<gesture::ClientGesture>,
-    dnd: dnd::Dnd,
-    hung: bool,
-    unanswered_pings: Vec<(XdgWmBase, u32)>,
 }
 
 pub struct TestClient {
@@ -148,29 +78,9 @@ pub struct TestClient {
 }
 
 impl TestClient {
-    pub fn hang(&mut self) {
-        self.globals.hung = true;
-    }
-
-    pub fn recover(&mut self, server: &mut Compositor) {
-        self.globals.hung = false;
-        for (wm_base, serial) in self.globals.unanswered_pings.drain(..) {
-            wm_base.pong(serial);
-        }
-        self.exchange(server);
-    }
-
     pub fn connect(server: &mut Compositor) -> Self {
         let (client_end, server_end) = UnixStream::pair().expect("socket pair");
         server.insert_client(server_end).expect("insert client");
-        Self::from_socket(server, client_end)
-    }
-
-    pub fn connect_as_clipboard_daemon(server: &mut Compositor) -> Self {
-        let (client_end, server_end) = UnixStream::pair().expect("socket pair");
-        server
-            .insert_session_client(server_end, SessionRole::ClipboardDaemon)
-            .expect("insert clipboard daemon");
         Self::from_socket(server, client_end)
     }
 
@@ -186,13 +96,6 @@ impl TestClient {
         };
         client.exchange(server);
         client
-    }
-
-    pub fn advertises(&self, interface: &str) -> bool {
-        self.globals
-            .advertised
-            .iter()
-            .any(|(_, advertised)| advertised == interface)
     }
 
     pub fn exchange(&mut self, server: &mut Compositor) {
@@ -215,35 +118,9 @@ impl TestClient {
     }
 
     pub fn show_window(&mut self, server: &mut Compositor, image: &ShmImage) {
-        self.show_window_in(server, image, Memory::Shm);
-    }
-
-    pub fn show_window_in(&mut self, server: &mut Compositor, image: &ShmImage, memory: Memory) {
-        self.map_window(server, image, memory, |_, _, _| {});
-    }
-
-    pub(crate) fn map_window(
-        &mut self,
-        server: &mut Compositor,
-        image: &ShmImage,
-        memory: Memory,
-        before_buffer: impl FnOnce(&Self, &WlSurface, &XdgToplevel),
-    ) {
-        self.map_window_after(server, image, memory, |_, _| {}, before_buffer);
-    }
-
-    pub(crate) fn map_window_after(
-        &mut self,
-        server: &mut Compositor,
-        image: &ShmImage,
-        memory: Memory,
-        before_role: impl FnOnce(&mut Self, &WlSurface),
-        before_buffer: impl FnOnce(&Self, &WlSurface, &XdgToplevel),
-    ) {
         let qh = self.queue.handle();
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
         let surface = compositor.create_surface(&qh, ());
-        before_role(self, &surface);
         let wm_base = self.globals.wm_base.as_ref().expect("xdg_wm_base");
         let xdg_surface = wm_base.get_xdg_surface(&surface, &qh, ());
         let toplevel = xdg_surface.get_toplevel(&qh, ());
@@ -251,26 +128,14 @@ impl TestClient {
         surface.commit();
         self.exchange(server);
         assert!(self.globals.configured, "initial configure");
-
-        before_buffer(self, &surface, &toplevel);
-        self.attach(&surface, image, (0, 0, image.width, image.height), memory);
+        self.attach(&surface, image, (0, 0, image.width, image.height));
         self.exchange(server);
         self.windows.push((surface, xdg_surface, toplevel));
     }
 
     pub fn commit_buffer(&mut self, index: usize, image: &ShmImage, damage: (i32, i32, i32, i32)) {
-        self.commit_buffer_in(index, image, damage, Memory::Shm);
-    }
-
-    pub fn commit_buffer_in(
-        &mut self,
-        index: usize,
-        image: &ShmImage,
-        damage: (i32, i32, i32, i32),
-        memory: Memory,
-    ) {
         let surface = self.windows[index].0.clone();
-        self.attach(&surface, image, damage, memory);
+        self.attach(&surface, image, damage);
         self.connection.flush().expect("client flush");
     }
 
@@ -278,75 +143,12 @@ impl TestClient {
         &self,
         surface: &WlSurface,
         image: &ShmImage,
-        damage: (i32, i32, i32, i32),
-        memory: Memory,
+        (x, y, width, height): (i32, i32, i32, i32),
     ) {
-        let buffer = match memory {
-            Memory::Shm => self.shm_buffer(image),
-            Memory::Dmabuf => self.dmabuf_buffer(image, LINEAR),
-            Memory::Udmabuf => self.wrap_dmabuf(
-                &udmabuf::create(image.bytes).expect("udmabuf from a sealed memfd"),
-                image,
-                LINEAR,
-            ),
-            Memory::UdmabufWrittenUntil(fence) => {
-                let dmabuf = udmabuf::create(image.bytes).expect("udmabuf from a sealed memfd");
-                fence::add_write_fence(&dmabuf, fence).expect("a write fence on the udmabuf");
-                self.wrap_dmabuf(&dmabuf, image, LINEAR)
-            }
-        };
-        let (x, y, width, height) = damage;
+        let buffer = self.shm_buffer(image);
         surface.attach(Some(&buffer), 0, 0);
         surface.damage_buffer(x, y, width, height);
         surface.commit();
-    }
-
-    pub fn create_dmabuf(&mut self, server: &mut Compositor, image: &ShmImage, modifier: u64) {
-        self.dmabuf_buffer(image, modifier);
-        let _ = self.connection.flush();
-        server.dispatch().expect("server dispatch");
-        if let Some(guard) = self.connection.prepare_read() {
-            let _ = guard.read();
-        }
-        let _ = self.queue.dispatch_pending(&mut self.globals);
-    }
-
-    pub fn protocol_error(&self) -> Option<u32> {
-        self.connection.protocol_error().map(|error| error.code)
-    }
-
-    fn dmabuf_buffer(&self, image: &ShmImage, modifier: u64) -> WlBuffer {
-        let file = tempfile::tempfile().expect("dma-buf file");
-        (&file).write_all(image.bytes).expect("dma-buf write");
-        let length = u64::try_from(image.bytes.len()).expect("dma-buf size");
-        file.set_len(length.next_multiple_of(PAGE))
-            .expect("dma-buf length");
-        self.wrap_dmabuf(&OwnedFd::from(file), image, modifier)
-    }
-
-    fn wrap_dmabuf(&self, fd: &OwnedFd, image: &ShmImage, modifier: u64) -> WlBuffer {
-        let qh = self.queue.handle();
-        let dmabuf = self.globals.dmabuf.as_ref().expect("zwp_linux_dmabuf_v1");
-        let params = dmabuf.create_params(&qh, ());
-        let stride = u32::try_from(image.stride).expect("stride");
-        params.add(
-            fd.as_fd(),
-            0,
-            0,
-            stride,
-            (modifier >> 32) as u32,
-            modifier as u32,
-        );
-        let buffer = params.create_immed(
-            image.width,
-            image.height,
-            fourcc(image.format),
-            Flags::empty(),
-            &qh,
-            (),
-        );
-        params.destroy();
-        buffer
     }
 
     pub(crate) fn shm_buffer(&self, image: &ShmImage) -> WlBuffer {
@@ -368,38 +170,6 @@ impl TestClient {
         pool.destroy();
         buffer
     }
-
-    pub fn close_window(&mut self, server: &mut Compositor, index: usize) {
-        let (surface, xdg_surface, toplevel) = self.windows.remove(index);
-        toplevel.destroy();
-        xdg_surface.destroy();
-        surface.destroy();
-        self.exchange(server);
-    }
-
-    pub fn request_frame(&mut self, server: &mut Compositor) {
-        let (surface, _, _) = self.windows.last().expect("a shown window");
-        surface.frame(&self.queue.handle(), ());
-        surface.commit();
-        self.exchange(server);
-    }
-
-    pub fn request_presentation(&mut self, index: usize) {
-        let presentation = self.globals.presentation.as_ref().expect("wp_presentation");
-        presentation.feedback(&self.windows[index].0, &self.queue.handle(), ());
-    }
-
-    pub fn presented(&self) -> &[Presented] {
-        &self.globals.presented
-    }
-
-    pub fn discarded(&self) -> usize {
-        self.globals.discarded
-    }
-
-    pub fn frames_done(&self) -> usize {
-        self.globals.frames_done
-    }
 }
 
 pub fn roundtrip(server: &mut Compositor, clients: &mut [&mut TestClient]) {
@@ -417,22 +187,6 @@ pub fn roundtrip(server: &mut Compositor, clients: &mut [&mut TestClient]) {
                 .dispatch_pending(&mut client.globals)
                 .expect("client dispatch");
         }
-    }
-}
-
-pub fn roundtrip_until(
-    server: &mut Compositor,
-    clients: &mut [&mut TestClient],
-    condition: impl Fn(&[&mut TestClient]) -> bool,
-) {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        roundtrip(server, clients);
-        if condition(clients) {
-            return;
-        }
-        assert!(Instant::now() < deadline, "condition not met within 10 s");
-        std::thread::sleep(Duration::from_millis(5));
     }
 }
 
@@ -455,8 +209,6 @@ impl Dispatch<WlRegistry, ()> for Globals {
                 "wl_compositor" => globals.compositor = Some(registry.bind(name, 4, qh, ())),
                 "wl_shm" => globals.shm = Some(registry.bind(name, 1, qh, ())),
                 "xdg_wm_base" => globals.wm_base = Some(registry.bind(name, 6, qh, ())),
-                "zwp_linux_dmabuf_v1" => globals.dmabuf = Some(registry.bind(name, 3, qh, ())),
-                "wp_presentation" => globals.presentation = Some(registry.bind(name, 1, qh, ())),
                 _ => {}
             }
         }
@@ -465,7 +217,7 @@ impl Dispatch<WlRegistry, ()> for Globals {
 
 impl Dispatch<XdgWmBase, ()> for Globals {
     fn event(
-        globals: &mut Self,
+        _: &mut Self,
         wm_base: &XdgWmBase,
         event: xdg_wm_base::Event,
         _: &(),
@@ -473,11 +225,7 @@ impl Dispatch<XdgWmBase, ()> for Globals {
         _: &QueueHandle<Self>,
     ) {
         if let xdg_wm_base::Event::Ping { serial } = event {
-            if globals.hung {
-                globals.unanswered_pings.push((wm_base.clone(), serial));
-            } else {
-                wm_base.pong(serial);
-            }
+            wm_base.pong(serial);
         }
     }
 }
@@ -498,71 +246,8 @@ impl Dispatch<XdgSurface, ()> for Globals {
     }
 }
 
-impl Dispatch<WlCallback, ()> for Globals {
-    fn event(
-        globals: &mut Self,
-        _: &WlCallback,
-        event: wl_callback::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-        if let wl_callback::Event::Done { .. } = event {
-            globals.frames_done += 1;
-        }
-    }
-}
-
 delegate_noop!(Globals: WlCompositor);
 delegate_noop!(Globals: WlShmPool);
 delegate_noop!(Globals: ignore WlShm);
 delegate_noop!(Globals: ignore WlSurface);
 delegate_noop!(Globals: ignore WlBuffer);
-delegate_noop!(Globals: ignore ZwpLinuxDmabufV1);
-delegate_noop!(Globals: ignore WpPresentation);
-
-impl Dispatch<WpPresentationFeedback, ()> for Globals {
-    fn event(
-        globals: &mut Self,
-        _: &WpPresentationFeedback,
-        event: wp_presentation_feedback::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-        match event {
-            wp_presentation_feedback::Event::Presented {
-                tv_sec_hi,
-                tv_sec_lo,
-                tv_nsec,
-                refresh,
-                seq_hi,
-                seq_lo,
-                flags,
-            } => {
-                let seconds = (u64::from(tv_sec_hi) << 32) | u64::from(tv_sec_lo);
-                let vsync = flags
-                    .into_result()
-                    .is_ok_and(|flags| flags.contains(wp_presentation_feedback::Kind::Vsync));
-                globals.presented.push(Presented {
-                    time: Duration::new(seconds, tv_nsec),
-                    refresh: Duration::from_nanos(u64::from(refresh)),
-                    sequence: (u64::from(seq_hi) << 32) | u64::from(seq_lo),
-                    vsync,
-                });
-            }
-            wp_presentation_feedback::Event::Discarded => globals.discarded += 1,
-            _ => {}
-        }
-    }
-}
-delegate_noop!(Globals: ignore ZwpLinuxBufferParamsV1);
-
-fn fourcc(format: Format) -> u32 {
-    let code = match format {
-        Format::Argb8888 => *b"AR24",
-        Format::Xrgb8888 => *b"XR24",
-        other => panic!("no dma-buf fourcc for {other:?}"),
-    };
-    u32::from_le_bytes(code)
-}

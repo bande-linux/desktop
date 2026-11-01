@@ -13,7 +13,9 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Sender};
 use std::time::Duration;
 
+use bande_graphics::Modifiers;
 use bande_xdg::{remember_running_apps, write_running_apps};
+use smithay::wayland::xdg_activation::XdgActivationTokenData;
 
 use crate::shell::{is_shell, toplevel_names};
 use crate::state::{Compositor, State};
@@ -72,11 +74,20 @@ impl State {
     }
 
     pub(crate) fn quit_app(&mut self, owner: Option<Client>) {
-        let bound: Vec<&BandeAppV1> = self
-            .app_resources
+        let kept: Vec<&BandeAppV1> = self
+            .kept_apps
             .iter()
-            .filter(|app| app.client() == owner)
+            .filter(|(app, _)| app.client() == owner)
+            .map(|(app, _)| app)
             .collect();
+        let bound: Vec<&BandeAppV1> = match kept.is_empty() {
+            true => self
+                .app_resources
+                .iter()
+                .filter(|app| app.client() == owner)
+                .collect(),
+            false => kept,
+        };
         if bound.is_empty() {
             self.windows
                 .iter()
@@ -98,7 +109,121 @@ impl State {
                 owners.push((client, toplevel_names(surface).1));
             }
         }
+        owners.extend(self.windowless_apps());
         owners
+    }
+
+    pub(crate) fn windowless_apps(&self) -> Vec<(Client, String)> {
+        let mut found: Vec<(Client, String)> = Vec::new();
+        for (resource, app_id) in &self.kept_apps {
+            let Some(client) = resource.client() else {
+                continue;
+            };
+            let shown = self
+                .windows
+                .iter()
+                .any(|window| window.toplevel.wl_surface().client().as_ref() == Some(&client));
+            if !shown && !is_shell(&client) && !found.iter().any(|(known, _)| *known == client) {
+                found.push((client, app_id.clone()));
+            }
+        }
+        found
+    }
+
+    pub(crate) fn kept_app_is_active(&self) -> bool {
+        self.windowless_app.as_ref().is_some_and(|(client, _)| {
+            self.kept_apps
+                .iter()
+                .any(|(app, _)| app.client().as_ref() == Some(client))
+        })
+    }
+
+    pub(crate) fn send_app_key(&self, keysym: u32, modifiers: Modifiers) {
+        let Some((client, _)) = &self.windowless_app else {
+            return;
+        };
+        let bits = [
+            modifiers.shift,
+            modifiers.control,
+            modifiers.alt,
+            modifiers.logo,
+        ]
+        .into_iter()
+        .enumerate()
+        .filter(|(_, held)| *held)
+        .fold(0, |bits, (bit, _)| bits | 1 << bit);
+        for (app, _) in &self.kept_apps {
+            if app.client().as_ref() == Some(client) {
+                app.key(keysym, bits);
+            }
+        }
+    }
+
+    pub(crate) fn activate_windowless_app(&mut self, app_id: &str) -> Option<Client> {
+        let (client, _) = self
+            .windowless_apps()
+            .into_iter()
+            .find(|(_, windowless)| windowless == app_id)?;
+        if self.exclusive_layer.is_none() {
+            self.focus(None);
+            self.windowless_app = Some((client.clone(), app_id.to_owned()));
+            self.announce_active_app(None);
+        }
+        Some(client)
+    }
+
+    pub(crate) fn reopen_app(&mut self, app_id: &str) {
+        if !self.app_windows(app_id).is_empty() {
+            return self.activate_app(app_id);
+        }
+        let Some(client) = self.activate_windowless_app(app_id) else {
+            return;
+        };
+        let data = XdgActivationTokenData {
+            app_id: Some(app_id.to_owned()),
+            ..XdgActivationTokenData::default()
+        };
+        let token = self
+            .globals
+            .activation_state
+            .create_external_token(data)
+            .0
+            .to_string();
+        for (app, _) in &self.kept_apps {
+            if app.client().as_ref() == Some(&client) {
+                app.reopen(token.clone());
+            }
+        }
+    }
+
+    pub(crate) fn announce_windowless_apps(&mut self) {
+        let now: Vec<(String, i32)> = self
+            .windowless_apps()
+            .into_iter()
+            .map(|(client, app_id)| {
+                let pid = client
+                    .get_credentials(&self.display_handle)
+                    .map_or(0, |credentials| credentials.pid);
+                (app_id, pid)
+            })
+            .collect();
+        if now == self.announced_windowless {
+            return;
+        }
+        let before = std::mem::replace(&mut self.announced_windowless, now.clone());
+        for (app_id, pid) in before.iter().filter(|app| !now.contains(app)) {
+            self.each_shell(|shell| shell.windowless_app(app_id.clone(), *pid, 0));
+        }
+        for (app_id, pid) in now.iter().filter(|app| !before.contains(app)) {
+            self.each_shell(|shell| shell.windowless_app(app_id.clone(), *pid, 1));
+        }
+        self.apps_changed = true;
+    }
+
+    pub(crate) fn announce_windowless_apps_to(&self, shell: &BandeShellV1) {
+        for (app_id, pid) in &self.announced_windowless {
+            shell.windowless_app(app_id.clone(), *pid, 1);
+        }
     }
 
     pub(crate) fn remember_apps_to_reopen(&self, delay: Option<OwnedFd>) {
@@ -237,8 +362,13 @@ impl Dispatch<BandeAppV1, ()> for State {
             bande_app_v1::Request::ShowEmojiPicker => {
                 state.open_launcher(bande_shell_v1::LauncherMode::Emoji);
             }
+            bande_app_v1::Request::KeepRunning { app_id } => {
+                state.kept_apps.retain(|(app, _)| app != resource);
+                state.kept_apps.push((resource.clone(), app_id));
+            }
             bande_app_v1::Request::Destroy => {
                 state.app_resources.retain(|app| app != resource);
+                state.kept_apps.retain(|(app, _)| app != resource);
             }
             _ => {}
         }
@@ -246,6 +376,7 @@ impl Dispatch<BandeAppV1, ()> for State {
 
     fn destroyed(state: &mut Self, _client: ClientId, resource: &BandeAppV1, _data: &()) {
         state.app_resources.retain(|app| app != resource);
+        state.kept_apps.retain(|(app, _)| app != resource);
     }
 }
 

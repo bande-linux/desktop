@@ -946,14 +946,33 @@ impl SettingsView {
         let mut page = Vec::new();
         for area in bande_keyboard::Area::ALL {
             page.push(boxed(Caption::new(Text::label(&area.title()))));
-            let rows = shortcuts_in(area)
-                .filter(|shortcut| {
-                    shortcut.action != Action::ToggleScreenReader || self.offers_screen_reader()
-                })
-                .map(|shortcut| {
+            let mut bindings: Vec<(Action, Vec<&str>)> = Vec::new();
+            for shortcut in shortcuts_in(area).filter(|shortcut| {
+                shortcut.action != Action::ToggleScreenReader || self.offers_screen_reader()
+            }) {
+                match bindings
+                    .iter_mut()
+                    .find(|(action, _)| *action == shortcut.action)
+                {
+                    Some((_, keys)) => keys.push(shortcut.keys),
+                    None => bindings.push((shortcut.action, vec![shortcut.keys])),
+                }
+            }
+            let rows = bindings
+                .into_iter()
+                .map(|(action, keys)| {
+                    let keys = keys
+                        .into_iter()
+                        .map(|keys| boxed(Shortcut::new(keys)))
+                        .collect();
                     boxed(Row::new(
-                        Text::new(&shortcut.action.label(), Tone::Primary),
-                        Some(boxed(Shortcut::new(shortcut.keys))),
+                        Text::new(&action.label(), Tone::Primary),
+                        Some(boxed(Stack::new(
+                            Axis::Horizontal,
+                            Spacing::M as f32,
+                            0.0,
+                            keys,
+                        ))),
                     ))
                 })
                 .collect();

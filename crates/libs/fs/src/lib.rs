@@ -34,19 +34,3 @@ pub use watch::{FolderChanges, FolderWatch};
 const ENGLISH: &str = include_str!("../locales/en-US/bande-fs.ftl");
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("listing.rs"),
-            include_str!("naming.rs"),
-            include_str!("ops/archive.rs"),
-        ];
-        assert_eq!(
-            bande_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
-}

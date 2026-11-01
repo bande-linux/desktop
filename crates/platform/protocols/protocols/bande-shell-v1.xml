@@ -12,7 +12,9 @@
       <description summary="bring an app forward">
         Focuses and raises the frontmost window of the app with this app id and
         raises its other windows behind it, as clicking a running app in the Taskbar
-        does. Ignored when the app has no mapped window.
+        does. An app that runs without a window (bande_app_v1.keep_running)
+        becomes the active app with no keyboard focus; other apps without a
+        mapped window are ignored.
       </description>
       <arg name="app_id" type="string"/>
     </request>
@@ -478,9 +480,34 @@
         Quit item.
       </description>
     </request>
+
+    <request name="reopen_app">
+      <description summary="bring an app forward, reopening it without a window">
+        As activate_app, which makes an app without a window the active app
+        but opens nothing; when the app runs without a window
+        (bande_app_v1.keep_running), it is also sent bande_app_v1.reopen so it
+        opens its main window. Sent for a click on a running app's Taskbar icon
+        and on a notification, as the Dock sends the reopen event.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <event name="windowless_app">
+      <description summary="an app runs on without a window">
+        Sent with windowless 1 when an app that keeps running
+        (bande_app_v1.keep_running) has no window left, and on binding for
+        every such app; sent with windowless 0 when it shows a window again,
+        stops keeping running or exits. The Taskbar keeps showing such an app
+        as running, as the Dock keeps its dot under a Mac app with no window.
+        Pid is the process on the other end of the app's connection.
+      </description>
+      <arg name="app_id" type="string"/>
+      <arg name="pid" type="int"/>
+      <arg name="windowless" type="uint"/>
+    </event>
   </interface>
 
-  <interface name="bande_app_v1" version="1">
+  <interface name="bande_app_v1" version="2">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -561,6 +588,47 @@
         character is typed into the app's focused text field.
       </description>
     </request>
+
+    <request name="keep_running" since="2">
+      <description summary="keep the app running after its last window closes">
+        Says that this client is the app with this app id and keeps running
+        when its last window closes, as a Mac app does, until it destroys this
+        object or disconnects. While it has no window the compositor still
+        counts it as a running app: the Taskbar shows it as running
+        (bande_shell_v1.windowless_app), it stays the active app in the menu
+        bar when it was active, Force Quit and the app switcher list it,
+        quit_app and quit_all_apps ask it to quit and the apps to reopen at
+        the next login include it. Quit requests for the client are then sent
+        only to this object. Asking again changes the app id.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <event name="reopen" since="2">
+      <description summary="the user asked for the app while it has no window">
+        Sent to an object that asked to keep_running when the app has no
+        window and the user asks for it, by clicking its Taskbar icon or a
+        notification or picking it in the app switcher
+        (bande_shell_v1.reopen_app), as macOS sends the reopen event. The
+        app becomes the active app at once and should open its main window,
+        activating it with this xdg_activation_v1 token.
+      </description>
+      <arg name="token" type="string"/>
+    </event>
+
+    <event name="key" since="2">
+      <description summary="a key pressed while the app is active without a window">
+        Sent to an object that asked to keep_running for each key the user
+        presses while its app is the active app, no surface has the keyboard
+        and the key is not one of the compositor's own shortcuts, as a Mac
+        sends key equivalents to the active app's menus when it has no
+        window. Keysym is the xkb keysym with the modifiers applied, such as
+        q for Ctrl+Q and W for Shift+Ctrl+W. Modifiers adds 1 for Shift, 2
+        for Control, 4 for Alt and 8 for Super.
+      </description>
+      <arg name="keysym" type="uint"/>
+      <arg name="modifiers" type="uint"/>
+    </event>
   </interface>
   <interface name="bande_app_control_v1" version="1">
     <description summary="quitting apps and watching them answer, for Activity Monitor">

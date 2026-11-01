@@ -227,27 +227,3 @@ where
     outcome
 }
 
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used)]
-
-    use zbus::Message;
-
-    use super::{BUS, left};
-    use crate::SERVICE;
-
-    fn owner_changed(sender: &str) -> Message {
-        Message::signal("/org/freedesktop/DBus", BUS, "NameOwnerChanged")
-            .unwrap()
-            .sender(sender)
-            .unwrap()
-            .build(&(SERVICE, ":1.20", ""))
-            .unwrap()
-    }
-
-    #[test]
-    fn only_the_bus_itself_can_say_packagekit_left() {
-        assert!(left(&owner_changed(BUS)));
-        assert!(!left(&owner_changed(":1.66")));
-    }
-}

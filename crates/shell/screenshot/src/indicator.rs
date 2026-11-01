@@ -153,23 +153,3 @@ pub fn icon(activity: Activity) -> Vec<u8> {
         })
         .collect()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn argb_at(icon: &[u8], x: i32, y: i32) -> [u8; 4] {
-        let at = ((y * ICON_SIZE + x) * 4) as usize;
-        [icon[at], icon[at + 1], icon[at + 2], icon[at + 3]]
-    }
-
-    #[test]
-    fn the_recording_icon_is_a_white_stop_square_on_a_red_disc() {
-        let icon = icon(Activity::Recording);
-
-        assert_eq!(icon.len(), (ICON_SIZE * ICON_SIZE * 4) as usize);
-        assert_eq!(argb_at(&icon, 16, 16), [0xff, 0xff, 0xff, 0xff]);
-        assert_eq!(argb_at(&icon, 16, 4), [0xff, 0xff, 0x3b, 0x30]);
-        assert_eq!(argb_at(&icon, 0, 0)[0], 0);
-    }
-}

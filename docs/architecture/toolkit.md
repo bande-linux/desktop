@@ -152,12 +152,10 @@ writes a hex value, a corner radius or a font name of its own.
     content then also covers the header (`Window::header_height` is 0 in full screen), the
     toolkit draws the title at `title_x` (clipped before the next item), presses on `items`
     (content coordinates) go to the app, and the rest of the header still moves, zooms and
-    opens the window menu. `framed_scene` composes an app's scene with the frame for goldens. The header
-    and its buttons are published to screen readers above the app's tree. Server-side frames
+    opens the window menu. The header and its buttons are published to screen readers above the app's tree. Server-side frames
     for third-party apps (`compositor/src/frame.rs`) draw the same header and pill from
     `title_bar.rs`, 40 pt high, and redraw when Alt is pressed or released so the zoom glyph
-    follows it. Goldens: `platform/tests/golden/window-frame-*.png`, including an inactive
-    window behind a second one. When the only Vulkan device renders on the CPU (lavapipe or
+    follows it. When the only Vulkan device renders on the CPU (lavapipe or
   llvmpipe, as in VMs) every window stays on `CpuRenderer` and presents `wl_shm` buffers with
   only the changed regions damaged; `BANDE_RENDERER=gpu` or `=cpu` overrides the choice. A
   window whose background is opaque declares its window rectangle as its opaque region, so
@@ -171,7 +169,7 @@ writes a hex value, a corner radius or a font name of its own.
   setting (off by default) does; tabbing into a field selects its text. A widget opens a menu
   of its own (a pop-up button's choices) with `Context::show_menu`; the choice comes back to it
   through `menu_action`.
-- **Controls** (Datum §9, golden `widgets/tests/golden/controls-*.png`). Regular controls are
+- **Controls** (Datum §9). Regular controls are
   28 pt high (`ControlSize::Regular`), radius 6 (`Radius::S`). Focus is a 2 pt `focus` ring at a
   1 pt gap (radius + 3); fields instead turn their outline into a 1.5 pt accent line and add the
   ring at 35 %. Text and glyphs on the accent use `on_accent`, on danger `on_danger` (dark ink
@@ -201,20 +199,20 @@ writes a hex value, a corner radius or a font name of its own.
   | Tooltip | `ink` fill with `chassis` text 12/500, radius 6, no arrow |
   | `Shortcut::new("Shift+Ctrl+N")` | the shortcut as words in `ink2`, modifiers in GNOME order (Shift, Ctrl, Alt, Super), arrows as arrow symbols, "Page Up", "Esc"; `shortcut_label` writes the label, `parse_shortcut` reads a shortcut string back into a key and modifiers (`Ctrl` or `Control`), and `shortcut_pressed` tells whether a key event matches one |
 
-- **Menus** (golden `platform/tests/golden/menu-submenu-*.png`). Opaque `overlay`, radius 10
+- **Menus**. Opaque `overlay`, radius 10
   (`MENU_RADIUS`) with the Datum overlay shadow pair and no blur; 4 pt inset, 28 pt rows, 9 pt
   separators in `hairline`, the highlight accent radius 6 with `on_accent` text, disabled items
   `ink3`, the shortcut column right-aligned in `ink3` as words, square-capped
   checkmarks, submenu chevrons. Searchable menus (`Menu::searchable`) have a `well` search
   field; Alt swaps items for their `alternate`.
-- **Alerts and sheets** (golden `platform/tests/golden/alert-*.png`). `Alert` is a card of radius
+- **Alerts and sheets**. `Alert` is a card of radius
   14: the body on `overlay` with an optional 36 pt icon (`.icon(image)`), a Manrope `Heading`
   and the message in `ink2`; a footer tray on `chassis` holds the buttons: default at the right
   (`.primary` or `.destructive`), cancel left of it, alternatives (`.other`) as quiet buttons at
   the far left. When they do not fit side by side they stack, default on top. The parent dims
   with `scrim` (18 % light, 40 % dark); `Ui::present_sheet` drops the card from under the header (`Ui::set_sheet_top` for an app whose content covers the header),
   `Ui::present_dialog` centres it.
-- **Tables** (golden `platform/tests/golden/table-*.png`). Rows 32, header 28 with `Label`-style
+- **Tables**. Rows 32, header 28 with `Label`-style
   tracked capitals in `ink3` (`ink2` for the sorted column) over a `hairline` underline, no
   stripes and no column separators. Contiguous selected rows form one block of radius 6 inset
   4 × 1: accent with `on_accent` text while focused, `well` otherwise. A single selected run

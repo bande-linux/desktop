@@ -25,6 +25,9 @@ impl TextInput {
         if let Some(text_input) = self.text_input.take() {
             text_input.destroy();
         }
+        if let Some(manager) = self.manager.take() {
+            manager.destroy();
+        }
     }
 }
 

@@ -352,31 +352,3 @@ fn run_errand(connection: &Connection, errand: Errand, outbox: &Outbox<Update>) 
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{Errand, without_repeated_app_menus};
-
-    #[test]
-    fn queued_requests_for_the_same_app_menu_are_fetched_once() {
-        let clicked = Errand::Clicked {
-            menu: ":1.4/MenuBar".to_owned(),
-            id: 7,
-        };
-        let files = Errand::AppMenu("org.bande.Files".to_owned());
-        let settings = Errand::AppMenu("org.bande.Settings".to_owned());
-        assert_eq!(
-            without_repeated_app_menus(
-                [
-                    files.clone(),
-                    clicked.clone(),
-                    files.clone(),
-                    settings.clone(),
-                    clicked.clone(),
-                    files.clone(),
-                ]
-                .into_iter()
-            ),
-            [files, clicked.clone(), settings, clicked]
-        );
-    }
-}

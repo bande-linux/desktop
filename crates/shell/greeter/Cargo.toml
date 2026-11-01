@@ -25,10 +25,6 @@ bande-toolkit.workspace = true
 zbus.workspace = true
 zeroize.workspace = true
 
-[dev-dependencies]
-rustix.workspace = true
-tempfile.workspace = true
-
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"

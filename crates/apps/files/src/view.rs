@@ -537,9 +537,10 @@ impl FilesView {
             self.apps.kind_for_name(&entry.name, entry.is_folder())
         });
         let created = entry.as_ref().and_then(|entry| {
-            std::fs::metadata(&entry.path)
+            let born = std::fs::metadata(&entry.path)
                 .and_then(|metadata| metadata.created())
-                .ok()
+                .ok();
+            created_at(born, entry.modified)
         });
         self.column_preview = Some(ColumnPreview {
             entry,
@@ -1148,14 +1149,6 @@ impl FilesView {
         self.scrolls
             .get_mut(column)
             .is_some_and(|(_, state)| state.scroll(cx, scroll))
-    }
-
-    pub fn hit_frame(&self, hit: &Hit) -> Option<Rect> {
-        self.hits
-            .iter()
-            .rev()
-            .find(|(_, known)| known == hit)
-            .map(|(rect, _)| *rect)
     }
 
     pub(crate) fn hit(&self, at: Point) -> Option<Hit> {
@@ -2187,5 +2180,15 @@ impl FilesView {
             self.browser.reveal_all(&shown);
         }
         self.selection_changed();
+    }
+}
+
+pub(crate) fn created_at(
+    born: Option<SystemTime>,
+    modified: Option<SystemTime>,
+) -> Option<SystemTime> {
+    match (born, modified) {
+        (Some(born), Some(modified)) => Some(born.min(modified)),
+        (born, _) => born,
     }
 }

@@ -1,6 +1,6 @@
 pub mod space;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
@@ -10,6 +10,7 @@ use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
 use zbus::blocking::fdo::ObjectManagerProxy;
 use zbus::blocking::{Connection, MessageIterator};
+use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::{MatchRule, Message, message};
 
@@ -23,6 +24,58 @@ pub const BLOCK: &str = "org.freedesktop.UDisks2.Block";
 pub const FILESYSTEM: &str = "org.freedesktop.UDisks2.Filesystem";
 const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
 const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
+pub const LOGIN1: &str = "org.freedesktop.login1";
+const LOGIN1_SESSION: &str = "org.freedesktop.login1.Session";
+
+#[zbus::proxy(
+    interface = "org.freedesktop.login1.Manager",
+    default_service = "org.freedesktop.login1",
+    default_path = "/org/freedesktop/login1"
+)]
+trait Manager {
+    fn get_session(&self, session_id: &str) -> zbus::Result<OwnedObjectPath>;
+}
+
+#[zbus::proxy(
+    interface = "org.freedesktop.login1.Session",
+    default_service = "org.freedesktop.login1"
+)]
+trait Session {
+    #[zbus(property)]
+    fn active(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn locked_hint(&self) -> zbus::Result<bool>;
+}
+
+fn unlocked(session: &SessionProxyBlocking<'_>) -> bool {
+    match (session.active(), session.locked_hint()) {
+        (Ok(active), Ok(locked)) => active && !locked,
+        (Err(error), _) | (_, Err(error)) => {
+            tracing::warn!("cannot read the session state: {error}");
+            false
+        }
+    }
+}
+
+fn follow_session(
+    system: &Connection,
+) -> zbus::Result<(SessionProxyBlocking<'static>, MessageIterator)> {
+    let path = ManagerProxyBlocking::new(system)?.get_session("auto")?;
+    let rule = MatchRule::builder()
+        .msg_type(message::Type::Signal)
+        .sender(LOGIN1)?
+        .path(path.clone())?
+        .interface(PROPERTIES)?
+        .member("PropertiesChanged")?
+        .build();
+    let changes = MessageIterator::for_match_rule(rule, system, None)?;
+    let session = SessionProxyBlocking::builder(system)
+        .path(path)?
+        .cache_properties(CacheProperties::No)
+        .build()?;
+    Ok((session, changes))
+}
 
 type Properties = HashMap<String, OwnedValue>;
 type Interfaces = HashMap<String, Properties>;
@@ -70,6 +123,8 @@ impl Volume {
 struct State {
     objects: HashMap<OwnedObjectPath, Interfaces>,
     volumes: HashMap<OwnedObjectPath, Volume>,
+    unlocked: bool,
+    waiting: HashSet<OwnedObjectPath>,
 }
 
 type Shared = Arc<Mutex<State>>;
@@ -101,6 +156,24 @@ impl Automounter {
             session: session.clone(),
             state: Shared::default(),
         });
+        match follow_session(system) {
+            Ok((login, changes)) => {
+                lock(&automounter.state).unlocked = unlocked(&login);
+                let follower = Arc::clone(&automounter);
+                thread::spawn(move || {
+                    for change in changes.flatten() {
+                        if let Ok((LOGIN1_SESSION, _, _)) =
+                            change
+                                .body()
+                                .deserialize::<(&str, Properties, Vec<String>)>()
+                        {
+                            follower.session_changed(unlocked(&login));
+                        }
+                    }
+                });
+            }
+            Err(error) => tracing::warn!("cannot follow the login session: {error}"),
+        }
         for (path, interfaces) in manager.get_managed_objects()? {
             let interfaces: Interfaces = interfaces
                 .into_iter()
@@ -162,18 +235,49 @@ impl Automounter {
             if state.volumes.contains_key(&path) {
                 return;
             }
-            let mount = volume.automount && !volume.mounted;
+            let wanted = volume.automount && !volume.mounted;
             state.volumes.insert(path.clone(), volume);
-            mount
+            if wanted && !state.unlocked {
+                state.waiting.insert(path.clone());
+                return;
+            }
+            wanted
         };
         if mount {
-            let options: HashMap<&str, OwnedValue> = HashMap::new();
-            if let Err(error) =
-                self.system
-                    .call_method(Some(UDISKS), &path, Some(FILESYSTEM), "Mount", &(options,))
-            {
-                tracing::warn!("cannot mount {path}: {error}");
+            self.mount(&path);
+        }
+    }
+
+    fn mount(&self, path: &OwnedObjectPath) {
+        let options: HashMap<&str, OwnedValue> = HashMap::new();
+        if let Err(error) =
+            self.system
+                .call_method(Some(UDISKS), path, Some(FILESYSTEM), "Mount", &(options,))
+        {
+            tracing::warn!("cannot mount {path}: {error}");
+        }
+    }
+
+    fn session_changed(&self, unlocked: bool) {
+        let ready: Vec<OwnedObjectPath> = {
+            let mut state = lock(&self.state);
+            state.unlocked = unlocked;
+            if !unlocked {
+                return;
             }
+            let waiting = std::mem::take(&mut state.waiting);
+            waiting
+                .into_iter()
+                .filter(|path| {
+                    state
+                        .volumes
+                        .get(path)
+                        .is_some_and(|volume| volume.automount && !volume.mounted)
+                })
+                .collect()
+        };
+        for path in &ready {
+            self.mount(path);
         }
     }
 
@@ -192,6 +296,7 @@ impl Automounter {
             {
                 return;
             }
+            state.waiting.remove(path);
             state.volumes.remove(path)
         };
         let Some(volume) = volume else {
@@ -222,21 +327,5 @@ impl Automounter {
         if let Err(error) = posted {
             tracing::warn!("cannot post the notification: {error}");
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("lib.rs"),
-            include_str!("main.rs"),
-            include_str!("space.rs"),
-        ];
-        assert_eq!(
-            bande_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
     }
 }

@@ -25,14 +25,10 @@ tag and on dispatch, never on pushes or pull requests.
   modesetting without a GPU. It runs inside a QEMU/KVM guest, not in the job containers: a
   container cannot load kernel modules, and neither Debian 12's nor Debian 13's stock kernel
   ships `vkms`. The guest boots a kernel built with `CONFIG_DRM_VKMS`.
-- **Offscreen rendering**: the compositor renders into an offscreen image that tests read back,
-  so geometry, damage tracking and pixels are checked with no screen attached.
-- **Visual regression**: render tests compare against expected images. The compositor's
-  baselines live next to the tests (`crates/<crate>/tests/golden/*.png`) and are computed from
-  the scene description, not captured from the renderer; a test asserts SSIM ≥ 0.995 and bounds
-  every channel to within 2 of the baseline, since SSIM alone tolerates small uniform colour
-  shifts. The toolkit computes its expected images in the test (see the `test` job below).
-  On failure CI uploads the rendered frames.
+- **Offscreen rendering**: the compositor renders into an offscreen image, so its tests run
+  with no screen attached. Tests assert behaviour (focus, keys, protocol events, the
+  accessibility tree), never pixels against stored images; see
+  [`../quality/tests.md`](../quality/tests.md).
 
 ## Release workflow (`.github/workflows/release.yml`)
 
@@ -55,24 +51,15 @@ Jobs:
   `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`,
   and the dependency rules: no session service except the polkit agent, which shows a dialog,
   depends on the widget crates, and the graphics and widget crates stay off Wayland.
-- `test` (arm64): `cargo test --workspace`, including the compositor and toolkit render
-  tests on lavapipe. D-Bus tests start a private `dbus-daemon` session bus each
-  (`crates/testing/test-bus`) from `crates/testing/test-bus/data/session.conf`, which lists no
-  service directories: a test bus never D-Bus-activates the services installed on the machine
-  (an installed `bande-config` would read the developer's own `config.kdl` and post into the
-  test), so a test talks only to the services it starts itself. To run tests the same way on a
-  machine with a live Bande session, wrap them in a bus from that file, which also keeps the
-  session's portal settings out of the goldens:
+- `test` (arm64): `cargo test --workspace`, the few tests listed in
+  [`../quality/tests.md`](../quality/tests.md), on lavapipe. D-Bus tests start a private
+  `dbus-daemon` session bus each (`crates/testing/test-bus`) from
+  `crates/testing/test-bus/data/session.conf`, which lists no service directories: a test bus
+  never D-Bus-activates the services installed on the machine (an installed `bande-config`
+  would read the developer's own `config.kdl` and post into the test), so a test talks only to
+  the services it starts itself. To run tests the same way on a machine with a live Bande
+  session, wrap them in a bus from that file:
   `dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- cargo test -p <package>`.
-  The toolkit's render tests use Inter (`fonts-inter`) and Noto Sans CJK (`fonts-noto-cjk`)
-  through fontconfig; their expected images are computed in the test from the scene (exact
-  area coverage of shapes and of glyph outlines read with `ab_glyph`, Gaussian shadows by
-  numeric integration), so they depend neither on Vello nor on the font version, and both
-  renderers must match them. The apps' and shell's goldens are images rendered on Debian 13
-  and do depend on the fonts, so `ci/debian-fonts.sh` installs Debian 13's own font packages
-  (DejaVu, Inter, Manrope, JetBrains Mono, Noto Sans CJK, Noto Color Emoji), pinned by version
-  and checksum. Updating a pin means regenerating the goldens with `BANDE_UPDATE_GOLDENS=1`.
-  On failure the job uploads the rendered frames.
 - `debs (arm64)`, `debs (amd64)`: each on its native runner, `ci/release/build-debs.sh` runs
   `cargo build --profile dist` for the crates in `ci/release/packages` and `cargo deb` for each
   at the version from `ci/deb/version.sh`. cargo-deb takes the architecture from the native
@@ -99,7 +86,7 @@ Jobs:
   installed compositor serves Wayland clients. Last, next to LightDM: installing the greeter keeps
   LightDM the default and offers greetd, `dpkg-reconfigure greetd` switches to it, removing
   greetd hands the display back to LightDM.
-  `crates/services/portal/tests/frontend/run.sh` then reads the colour scheme through Debian's
+  `ci/deb/install-test/portal-frontend.sh` then reads the colour scheme through Debian's
   `xdg-desktop-portal` and checks it follows `config.kdl`.
 The APT repository publishes on its own: every 30 minutes it looks for new green `release.yml`
 runs for tags and takes their `bande-debs-arm64`, `bande-debs-amd64` and
@@ -119,17 +106,6 @@ registry, the installed `cargo-deb` and the target directory, keyed per job and 
 and saved only from runs on `main`, whose caches every branch and tag can read. The `test` and `debs` jobs first free disk on the host by emptying
 the .NET, Android and GHC installations they mount, and `debs` builds two crates at a time so
 the fat-LTO links stay within the runner's memory.
-
-## Guest tests
-
-The `guest` test executables (compositor DRM, scanout, input and handover on vkms and
-virtio-gpu, the greeter's login, the screenshot and audio tests against PipeWire) are
-`#[ignore]`d: they need a KVM guest with vkms, and the guest tooling and the self-hosted
-runners that ran it are gone. They run only by hand, with `--ignored`, on a machine that
-provides what each test's ignore reason names.
-
-`ci/hil` holds scripts for hardware-in-the-loop tests that boot a guest test on an Apple Silicon
-Mac over debug USB; they are not part of the release workflow.
 
 ## Planned infrastructure
 
@@ -152,7 +128,7 @@ flowchart TD
     T2["Tier 2: protocol fuzzing (planned)<br/>cargo-fuzz on Wayland and D-Bus input"] --> T3
     T3["Tier 3: mutation testing (planned)<br/>cargo-mutants, at least 90% of mutants killed"] --> T4
     T4["Tier 4: model checking (planned)<br/>Kani on sync queues and PAM helpers"] --> T5
-    T5["Tier 5: visual regression<br/>offscreen Vulkan and Vello renders against expected images"] --> VM
+    T5["Tier 5: end-to-end tests<br/>headless compositor, test bus, real apps"] --> VM
     VM["System gate<br/>Debian testing install test"]
 ```
 
@@ -168,8 +144,8 @@ flowchart TD
    tests must assert real behaviour.
 5. **Tier 4, formal verification** (planned): Kani proofs of panic freedom and invariants in
    explicit-sync buffer queues and PAM helpers.
-6. **Tier 5, visual regression** (implemented: `test`): offscreen renders compared
-   with expected images, SSIM ≥ 0.995 for the compositor, computed coverage for the toolkit.
+6. **Tier 5, end-to-end tests** (implemented: `test`): a couple of scenarios per app or
+   feature and the security regressions, listed in [`../quality/tests.md`](../quality/tests.md).
 7. **System gate** (partly implemented: `install`): packages install into a clean Debian
    testing. Running the compositor and shell on real DRM in a KVM guest and the full
    `greetd` → PAM → compositor login are planned (see above).

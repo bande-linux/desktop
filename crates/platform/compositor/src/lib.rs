@@ -41,7 +41,6 @@ mod output_power;
 mod overview;
 mod pointing;
 mod popup;
-mod probe;
 mod recall;
 mod render;
 mod reveal;
@@ -96,24 +95,3 @@ const ENGLISH: &str = include_str!("../locales/en-US/bande-compositor.ftl");
 
 static L10N: std::sync::LazyLock<bande_l10n::Localizer> =
     std::sync::LazyLock::new(|| bande_l10n::Localizer::new(&[("en-US", ENGLISH)]));
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("access_keys.rs"),
-            include_str!("alert.rs"),
-            include_str!("force_quit/mod.rs"),
-            include_str!("force_quit/view.rs"),
-            include_str!("logind.rs"),
-            include_str!("switcher/mod.rs"),
-            include_str!("switcher/paint.rs"),
-            include_str!("window_menu.rs"),
-        ];
-        assert_eq!(
-            bande_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
-}

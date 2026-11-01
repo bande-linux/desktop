@@ -1,5 +1,7 @@
 # Activity Monitor: depth and polish
 
+> Since 2026-11-01 the desktop has no golden images (see [`../quality/tests.md`](../quality/tests.md)). Where a slice below names goldens as its proof, check the change by eye in light and dark, and assert behaviour through the accessibility tree if it needs a test.
+
 Status: research and build plan of 2026-10-30, branch `night/files-monitor-spec`. Built on
 2026-10-31 in `night/monitor-depth`: M2 to M6, M8, M9, the request plumbing of M7 and the redraw
 part of M1 (see §9). Since 2026-11-01 its shortcuts use Ctrl, not Super

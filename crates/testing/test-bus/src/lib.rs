@@ -1,9 +1,3 @@
-pub mod bluez;
-pub mod networkmanager;
-pub mod packagekit;
-pub mod permission_store;
-pub mod timedate;
-
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 

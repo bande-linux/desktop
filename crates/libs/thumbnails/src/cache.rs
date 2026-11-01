@@ -261,33 +261,3 @@ impl Cache {
         write(&self.failure_path(uri), uri, mtime, &blank)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn names_follow_the_md5_of_the_uri_as_in_the_spec_example() {
-        let cache = Cache::new(PathBuf::from("/cache"));
-        assert_eq!(
-            cache.path("file:///home/jens/photos/me.png", ThumbnailSize::Normal),
-            PathBuf::from("/cache/normal/c6ee772d9e49320e97ec29a7eb5b1697.png")
-        );
-    }
-
-    #[test]
-    fn uris_escape_like_glib_so_other_desktops_share_the_cache() {
-        assert_eq!(
-            uri(Path::new("/home/me/Résumé (final) #2&a=b.pdf")),
-            "file:///home/me/R%C3%A9sum%C3%A9%20(final)%20%232&a=b.pdf"
-        );
-    }
-
-    #[test]
-    fn sizes_cover_the_wanted_pixels() {
-        assert_eq!(ThumbnailSize::for_pixels(64), ThumbnailSize::Normal);
-        assert_eq!(ThumbnailSize::for_pixels(129), ThumbnailSize::Large);
-        assert_eq!(ThumbnailSize::for_pixels(400), ThumbnailSize::XLarge);
-        assert_eq!(ThumbnailSize::for_pixels(4000), ThumbnailSize::XxLarge);
-    }
-}

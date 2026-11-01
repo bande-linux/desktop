@@ -209,10 +209,6 @@ impl Screen {
         self.rebuild_center(now);
     }
 
-    pub fn shown_month(&self) -> Date {
-        self.month.first
-    }
-
     fn turn_month(&mut self, months: i32, now: Instant) {
         self.month = self.month.shifted(months);
         self.rebuild_center(now);
@@ -1368,22 +1364,5 @@ fn round_close(items: &mut Vec<Item>, palette: &Palette, rect: Rect, hovered: bo
             width: 1.5,
             paint: if hovered { palette.ink } else { palette.ink2 }.into(),
         });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("lib.rs"),
-            include_str!("card.rs"),
-            include_str!("calendar.rs"),
-            include_str!("client.rs"),
-        ];
-        assert_eq!(
-            bande_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
     }
 }

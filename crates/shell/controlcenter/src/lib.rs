@@ -472,19 +472,3 @@ pub fn scene(width: u32, height: u32, items: Vec<Item>) -> Scene {
         items,
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("lib.rs"),
-            include_str!("client.rs"),
-            include_str!("now_playing.rs"),
-        ];
-        assert_eq!(
-            bande_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
-}

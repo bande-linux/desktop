@@ -10,7 +10,7 @@ use crate::shell::toplevel_names;
 use crate::state::State;
 
 impl State {
-    fn app_windows(&self, app_id: &str) -> Vec<usize> {
+    pub(crate) fn app_windows(&self, app_id: &str) -> Vec<usize> {
         self.windows
             .iter()
             .enumerate()
@@ -27,6 +27,11 @@ impl State {
             if let Some(client) = self.windows[index].surface().client()
                 && !clients.contains(&client)
             {
+                clients.push(client);
+            }
+        }
+        for (client, windowless) in self.windowless_apps() {
+            if windowless == app_id && !clients.contains(&client) {
                 clients.push(client);
             }
         }

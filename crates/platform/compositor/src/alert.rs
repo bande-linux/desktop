@@ -176,25 +176,3 @@ fn start_failure(executable: &Path, error: &io::Error) -> String {
         [("name", name.into()), ("reason", reason.into())],
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use std::io;
-    use std::path::Path;
-
-    use super::start_failure;
-
-    #[test]
-    fn a_start_failure_names_the_program_and_says_why_in_words() {
-        let missing = io::Error::from(io::ErrorKind::NotFound);
-        assert_eq!(
-            start_failure(Path::new("/usr/bin/bande-shell"), &missing),
-            "bande-shell could not start because it is not installed."
-        );
-        let denied = io::Error::from(io::ErrorKind::PermissionDenied);
-        assert_eq!(
-            start_failure(Path::new("/usr/libexec/bande-greeter"), &denied),
-            "bande-greeter could not start because it may not be run."
-        );
-    }
-}

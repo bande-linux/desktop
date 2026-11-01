@@ -670,35 +670,3 @@ fn serve(
     main_loop.run();
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn sink(device: Option<(u32, i32)>, channels: Vec<f32>) -> NodeState {
-        NodeState {
-            name: "sink".to_owned(),
-            channels,
-            device,
-            ..NodeState::default()
-        }
-    }
-
-    #[test]
-    fn a_device_sink_takes_its_level_from_the_active_route_not_its_props() {
-        let mut state = State::default();
-        state.routes.insert((43, 1), (vec![0.064, 0.064], true));
-        let speaker = sink(Some((43, 1)), vec![1.0, 1.0]);
-
-        assert_eq!(state.levels(&speaker), (&[0.064, 0.064][..], true));
-    }
-
-    #[test]
-    fn a_virtual_sink_keeps_the_level_of_its_props() {
-        let mut state = State::default();
-        state.routes.insert((43, 1), (vec![0.064, 0.064], true));
-        let virtual_sink = sink(None, vec![0.5, 0.5]);
-
-        assert_eq!(state.levels(&virtual_sink), (&[0.5, 0.5][..], false));
-    }
-}

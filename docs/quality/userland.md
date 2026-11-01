@@ -1,5 +1,7 @@
 # Userland code quality review
 
+> Since 2026-11-01 the desktop keeps only the few tests in [`tests.md`](tests.md) and no golden images. The test files, goldens and test helpers this review cites are gone, and its items about them no longer apply.
+
 Date: 2026-10-31, at local `main` `2d497b1`. Scope: `crates/shell`, `crates/services`, `crates/apps`
 and `crates/libs`: 47 crates, about 118 000 lines of Rust. The bar is a codebase fit for the
 official Debian archive: no rot, maximal reuse, simple, efficient, best practice.

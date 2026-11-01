@@ -384,15 +384,6 @@ impl Client {
             .packages)
     }
 
-    pub fn details_local(&self, path: &Path) -> Result<Option<Details>, Error> {
-        let file = path.to_string_lossy().into_owned();
-        Ok(self
-            .run("GetDetailsLocal", &(std::slice::from_ref(&file),), &|_| {})?
-            .details
-            .into_iter()
-            .next())
-    }
-
     pub fn files_local(&self, path: &Path) -> Result<Vec<String>, Error> {
         let file = path.to_string_lossy().into_owned();
         Ok(self

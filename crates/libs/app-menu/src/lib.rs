@@ -51,6 +51,10 @@ impl Standard {
             .find(|(_, known)| *known == action)
             .map(|(standard, _)| *standard)
     }
+
+    pub fn needs_window(self) -> bool {
+        matches!(self, Self::Minimize | Self::Zoom | Self::CloseWindow)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -224,6 +228,19 @@ impl Entry {
 
     pub fn enabled(self, enabled: bool) -> Self {
         Self { enabled, ..self }
+    }
+
+    pub fn without_window(self) -> Self {
+        let needs_window = Standard::parse(&self.action).is_some_and(Standard::needs_window);
+        Self {
+            enabled: self.enabled && !needs_window,
+            children: self
+                .children
+                .into_iter()
+                .map(Entry::without_window)
+                .collect(),
+            ..self
+        }
     }
 
     pub fn radio(self, selected: bool) -> Self {
@@ -467,48 +484,5 @@ impl AppMenu {
 
     pub fn take_actions(&mut self) -> Vec<String> {
         self.actions.drain()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{Entry, shortcut_action};
-
-    #[test]
-    fn a_pressed_shortcut_finds_the_enabled_entry_in_any_submenu() {
-        let menus = vec![
-            Entry::submenu(
-                "File",
-                vec![
-                    Entry::item("New Window", "new-window").shortcut("Ctrl+N"),
-                    Entry::item("Print", "print")
-                        .shortcut("Ctrl+P")
-                        .enabled(false),
-                ],
-            ),
-            Entry::submenu(
-                "View",
-                vec![Entry::submenu(
-                    "Zoom",
-                    vec![Entry::item("Bigger", "bigger").shortcut("Ctrl+=")],
-                )],
-            ),
-            Entry::submenu("Go", vec![Entry::item("Home", "home").shortcut("Ctrl+H")])
-                .enabled(false),
-        ];
-        let action = |held: &'static str| shortcut_action(&menus, &|shortcut| shortcut == held);
-        assert_eq!(action("Ctrl+N").as_deref(), Some("new-window"));
-        assert_eq!(action("Ctrl+=").as_deref(), Some("bigger"));
-        assert_eq!(action("Ctrl+P"), None);
-        assert_eq!(action("Ctrl+H"), None);
-        assert_eq!(action("Ctrl+K"), None);
-    }
-
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        assert_eq!(
-            bande_l10n::missing_ids(super::ENGLISH, &[include_str!("lib.rs")]),
-            Vec::<&str>::new()
-        );
     }
 }

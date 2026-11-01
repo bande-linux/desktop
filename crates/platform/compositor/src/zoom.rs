@@ -165,10 +165,6 @@ impl State {
 }
 
 impl Compositor {
-    pub fn zoom_level(&self) -> f64 {
-        self.state.zoom.level()
-    }
-
     pub fn render_scale(&self, output: &str) -> Option<f64> {
         Some(self.state.render_scale(self.state.screen_named(output)?))
     }

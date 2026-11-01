@@ -236,26 +236,6 @@ pub(crate) struct Clipboard {
     pub(crate) primary: Primary,
 }
 
-impl Clipboard {
-    pub(crate) fn release(&mut self) {
-        let incoming = [self.incoming.take(), self.pending_drop.take()];
-        for offer in self.selection.take().into_iter().chain(
-            incoming
-                .into_iter()
-                .flatten()
-                .map(|incoming| incoming.offer),
-        ) {
-            offer.destroy();
-        }
-        if let Some(device) = self.device.take()
-            && device.version() >= 2
-        {
-            device.release();
-        }
-        self.primary.release();
-    }
-}
-
 #[derive(Default)]
 pub(crate) struct OfferState {
     types: Mutex<Vec<String>>,
@@ -285,6 +265,35 @@ fn readable_type(types: &[String], uris: bool) -> Option<String> {
         .into_iter()
         .find(|mime| types.iter().any(|offered| offered == mime))
         .map(str::to_owned)
+}
+
+impl Clipboard {
+    pub(crate) fn release(&mut self) {
+        let offers = [self.selection.take()]
+            .into_iter()
+            .chain(
+                [self.incoming.take(), self.pending_drop.take()]
+                    .map(|incoming| incoming.map(|incoming| incoming.offer)),
+            )
+            .flatten();
+        for offer in offers {
+            offer.destroy();
+        }
+        let sources = [self.copied.take().map(|(source, _)| source)]
+            .into_iter()
+            .chain([self.dragged.take().map(|outgoing| outgoing.source)])
+            .flatten();
+        for source in sources {
+            source.destroy();
+        }
+        self.readings.clear();
+        if let Some(device) = self.device.take()
+            && device.version() >= 2
+        {
+            device.release();
+        }
+        self.primary.release();
+    }
 }
 
 impl State {

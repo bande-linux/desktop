@@ -23,17 +23,6 @@ pub(crate) struct Primary {
     selected: Option<(ZwpPrimarySelectionSourceV1, String)>,
 }
 
-impl Primary {
-    pub(crate) fn release(&mut self) {
-        if let Some(offer) = self.selection.take() {
-            offer.destroy();
-        }
-        if let Some(device) = self.device.take() {
-            device.destroy();
-        }
-    }
-}
-
 #[derive(Default)]
 pub(crate) struct PrimaryOffer {
     types: Mutex<Vec<String>>,
@@ -44,6 +33,23 @@ fn offered_types(offer: &ZwpPrimarySelectionOfferV1) -> Vec<String> {
         .data::<PrimaryOffer>()
         .and_then(|state| state.types.lock().ok().map(|types| types.clone()))
         .unwrap_or_default()
+}
+
+impl Primary {
+    pub(crate) fn release(&mut self) {
+        if let Some(offer) = self.selection.take() {
+            offer.destroy();
+        }
+        if let Some((source, _)) = self.selected.take() {
+            source.destroy();
+        }
+        if let Some(device) = self.device.take() {
+            device.destroy();
+        }
+        if let Some(manager) = self.manager.take() {
+            manager.destroy();
+        }
+    }
 }
 
 impl State {

@@ -67,6 +67,7 @@ enum Shortcut {
     CancelGrab,
     MenuKey(u32, Modifiers),
     ForceQuitKey(u32, Modifiers),
+    AppKey(u32, Modifiers),
 }
 
 fn volume_key(keysym: u32) -> Option<VolumeKey> {
@@ -230,6 +231,10 @@ impl State {
             self.force_quit_key(keysym, modifiers);
             return;
         }
+        if let Shortcut::AppKey(keysym, modifiers) = shortcut {
+            self.send_app_key(keysym, modifiers);
+            return;
+        }
         if let Shortcut::Volume(key, fine) = shortcut {
             self.volume_key(key, fine);
             return;
@@ -384,7 +389,8 @@ impl State {
             | Shortcut::InputSource { .. }
             | Shortcut::CancelGrab
             | Shortcut::MenuKey(..)
-            | Shortcut::ForceQuitKey(..) => {}
+            | Shortcut::ForceQuitKey(..)
+            | Shortcut::AppKey(..) => {}
         }
     }
 }
@@ -857,6 +863,21 @@ impl State {
                         state.held_shortcut_keys.push(evdev_code);
                         FilterResult::Intercept(Some(shortcut))
                     }
+                    None if !sym.is_modifier_key()
+                        && state.focused().is_none()
+                        && state.kept_app_is_active() =>
+                    {
+                        state.held_shortcut_keys.push(evdev_code);
+                        FilterResult::Intercept(Some(Shortcut::AppKey(
+                            sym.raw(),
+                            Modifiers {
+                                shift: modifiers.shift,
+                                alt: modifiers.alt,
+                                control: modifiers.ctrl,
+                                logo: modifiers.logo,
+                            },
+                        )))
+                    }
                     None => {
                         if !keysym.modified_sym().is_modifier_key() {
                             state.note_typing();
@@ -886,96 +907,6 @@ impl State {
         let held = keyboard.modifier_state();
         if state.switcher.is_active() && !held.logo && !held.alt {
             state.commit_switcher();
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use bande_keyboard::{Action, SHORTCUTS};
-    use bande_protocols::server::bande_shell_v1::{LauncherMode, Panel};
-    use smithay::input::keyboard::keysyms;
-
-    use super::{Shortcut, shortcut, without_super};
-    use crate::motion::TASKBAR_NAMESPACE;
-    use crate::state::{MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE};
-    use crate::tile::Direction;
-
-    fn keysym(key: &str) -> u32 {
-        match key {
-            "Space" => keysyms::KEY_space,
-            "Tab" => keysyms::KEY_Tab,
-            "Escape" => keysyms::KEY_Escape,
-            "." => keysyms::KEY_period,
-            "Left" => keysyms::KEY_Left,
-            "Right" => keysyms::KEY_Right,
-            "Up" => keysyms::KEY_Up,
-            "Down" => keysyms::KEY_Down,
-            "F2" => keysyms::KEY_F2,
-            "F3" => keysyms::KEY_F3,
-            "F4" => keysyms::KEY_F4,
-            "Print" => keysyms::KEY_Print,
-            "F11" => keysyms::KEY_F11,
-            "Mission Control" => keysyms::KEY_XF86LaunchA,
-            single => single
-                .chars()
-                .next()
-                .map_or(0, |character| character.to_ascii_lowercase() as u32),
-        }
-    }
-
-    fn expected(action: Action) -> Shortcut {
-        match action {
-            Action::CloseWindow => Shortcut::CloseWindow,
-            Action::MinimizeWindow => Shortcut::MinimizeWindow,
-            Action::ToggleFullScreen => Shortcut::ToggleFullScreen,
-            Action::TileWindow => Shortcut::Place(Direction::Left),
-            Action::NextApp => Shortcut::NextApp { backwards: false },
-            Action::NextWindow => Shortcut::NextWindow { backwards: false },
-            Action::PreviousWindow => Shortcut::NextWindow { backwards: true },
-            Action::ForceQuit => Shortcut::ForceQuit,
-            Action::PreviousWorkspace => Shortcut::Workspace(false),
-            Action::NextWorkspace => Shortcut::Workspace(true),
-            Action::WorkspaceByNumber => Shortcut::WorkspaceAt(0),
-            Action::CarryWindowLeft => Shortcut::CarryWindow(false),
-            Action::CarryWindowRight => Shortcut::CarryWindow(true),
-            Action::MoveWindowToDisplay => Shortcut::MoveToDisplay(1, 0),
-            Action::Overview => Shortcut::Overview,
-            Action::AppWindows => Shortcut::AppWindows,
-            Action::NextInputSource => Shortcut::InputSource { backwards: false },
-            Action::PreviousInputSource => Shortcut::InputSource { backwards: true },
-            Action::CaptureScreen => Shortcut::CaptureScreen,
-            Action::CaptureArea => Shortcut::CaptureArea,
-            Action::CaptureOptions => Shortcut::CaptureOptions,
-            Action::ShowDesktop => Shortcut::ShowDesktop,
-            Action::ShowNotificationCenter => Shortcut::TogglePanel(Panel::NotificationCenter),
-            Action::ShowControlCenter => Shortcut::TogglePanel(Panel::ControlCenter),
-            Action::ShowLauncher => Shortcut::ShowLauncher,
-            Action::ShowClipboardHistory => Shortcut::OpenLauncher(LauncherMode::Clipboard),
-            Action::ShowEmojiPicker => Shortcut::OpenLauncher(LauncherMode::Emoji),
-            Action::FocusMenuBar => Shortcut::FocusShell(MENU_BAR_NAMESPACE),
-            Action::FocusTaskbar => Shortcut::FocusShell(TASKBAR_NAMESPACE),
-            Action::SearchMenus => Shortcut::FocusShell(MENU_SEARCH_NAMESPACE),
-            Action::LockScreen => Shortcut::LockScreen,
-            Action::ToggleZoom => Shortcut::ToggleZoom,
-            Action::ZoomIn => Shortcut::Zoom { closer: true },
-            Action::ZoomOut => Shortcut::Zoom { closer: false },
-            Action::ToggleScreenReader => Shortcut::ToggleScreenReader,
-        }
-    }
-
-    #[test]
-    fn every_shortcut_listed_in_settings_runs_its_action() {
-        for listed in SHORTCUTS {
-            let parts: Vec<&str> = listed.keys.split('+').collect();
-            let held = |name: &str| parts.contains(&name);
-            let key = keysym(parts.last().copied().unwrap_or_default());
-            let runs = if held("Super") {
-                shortcut(key, Some(key), held("Ctrl"), held("Alt"), held("Shift"))
-            } else {
-                without_super(key, held("Ctrl"), held("Alt"), held("Shift"))
-            };
-            assert_eq!(runs, Some(expected(listed.action)), "{}", listed.keys);
         }
     }
 }

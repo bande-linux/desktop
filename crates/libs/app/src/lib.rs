@@ -136,9 +136,13 @@ pub trait Program: Sized + 'static {
         Menus::default()
     }
 
-    fn command(&mut self, _cx: &mut Cx<Self>, _window: WindowId, _command: &str) {}
+    fn command(&mut self, _cx: &mut Cx<Self>, _window: Option<WindowId>, _command: &str) {}
 
     fn open(&mut self, _cx: &mut Cx<Self>, _arguments: Vec<String>, _directory: &Path) {}
+
+    fn reopen(&mut self, cx: &mut Cx<Self>);
+
+    fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, _view: Self::View) {}
 
     fn changed(&mut self, _cx: &mut Cx<Self>, _window: WindowId) {}
 

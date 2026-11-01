@@ -220,6 +220,17 @@ impl State {
                 }),
             }
         }
+        for (client, app_id) in self.windowless_apps() {
+            match found.iter_mut().find(|known| known.key == app_id) {
+                Some(known) => known.clients.push(client),
+                None => found.push(Candidate {
+                    key: app_id.clone(),
+                    app_id,
+                    title: String::new(),
+                    clients: vec![client],
+                }),
+            }
+        }
         found
     }
 
@@ -611,10 +622,6 @@ impl Compositor {
         self.state.force_quit_due(now)
     }
 
-    pub fn force_quit_frame(&self) -> Option<Rectangle<f64, Logical>> {
-        self.state.force_quit.open.as_ref().map(|open| open.rect)
-    }
-
     pub fn force_quit_rows(&self) -> Vec<String> {
         self.state
             .force_quit
@@ -624,27 +631,11 @@ impl Compositor {
             .unwrap_or_default()
     }
 
-    pub fn force_quit_selection(&self) -> Vec<String> {
-        let Some(open) = self.state.force_quit.open.as_ref() else {
-            return Vec::new();
-        };
-        open.view
-            .listed()
-            .iter()
-            .filter(|app| open.view.selected().contains(&app.key))
-            .map(|app| app.name.clone())
-            .collect()
-    }
-
     pub fn force_quit_asks(&self) -> bool {
         self.state
             .force_quit
             .open
             .as_ref()
             .is_some_and(|open| open.view.is_asking())
-    }
-
-    pub fn force_quit_accessibility(&self) -> Option<TreeUpdate> {
-        Some(self.state.force_quit.open.as_ref()?.view.accessibility())
     }
 }

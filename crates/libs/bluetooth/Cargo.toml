@@ -11,8 +11,5 @@ repository.workspace = true
 blocking.workspace = true
 zbus.workspace = true
 
-[dev-dependencies]
-bande-test-bus.workspace = true
-
 [lints]
 workspace = true

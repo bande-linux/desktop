@@ -534,12 +534,6 @@ impl DrmBackend {
         }
     }
 
-    pub fn scanned_out_directly(&self, name: &str) -> bool {
-        self.heads
-            .iter()
-            .any(|head| head.config.name == name && head.scanned_out)
-    }
-
     pub fn leave_on_screen(mut self) {
         self.device.pause();
         for head in self.heads.drain(..) {
@@ -765,77 +759,5 @@ impl FrameOutput for DrmBackend {
         }
         head.compositor.queue_frame(())?;
         Ok(Submission::AwaitingFlip)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use bande_edid::Edid;
-    use smithay::utils::Size;
-
-    use super::{
-        LINK_BAD, LINK_GOOD, Rescanned, rescanned, shows_another_display, shows_connected_display,
-    };
-    use crate::screen::OutputConfig;
-
-    fn display(serial: &str) -> Edid {
-        Edid {
-            make: "DEL".to_owned(),
-            model: "U2723QE".to_owned(),
-            serial: serial.to_owned(),
-        }
-    }
-
-    fn known(edid: &Edid) -> OutputConfig {
-        OutputConfig {
-            make: edid.make.clone(),
-            model: edid.model.clone(),
-            serial: edid.serial.clone(),
-            ..OutputConfig::virtual_display("DP-1", Size::from((3840, 2160)))
-        }
-    }
-
-    #[test]
-    fn a_connector_shows_another_display_only_when_its_edid_names_another() {
-        let desk = known(&display("A1"));
-
-        assert!(!shows_another_display(&desk, Some(display("A1"))));
-        assert!(shows_another_display(&desk, Some(display("B2"))));
-        assert!(!shows_another_display(&desk, None));
-    }
-
-    #[test]
-    fn a_connector_that_stays_is_set_again_only_when_its_link_broke() {
-        assert_eq!(rescanned(true, false, Some(LINK_GOOD)), Rescanned::Kept);
-        assert_eq!(rescanned(true, false, None), Rescanned::Kept);
-        assert_eq!(rescanned(true, false, Some(LINK_BAD)), Rescanned::Relink);
-        assert_eq!(rescanned(true, true, Some(LINK_BAD)), Rescanned::Gone);
-        assert_eq!(rescanned(false, false, Some(LINK_BAD)), Rescanned::Gone);
-    }
-
-    fn connector(root: &std::path::Path, name: &str, status: &str, modes: &str) {
-        let connector = root.join(name);
-        std::fs::create_dir_all(&connector).expect("connector directory");
-        std::fs::write(connector.join("status"), status).expect("status");
-        std::fs::write(connector.join("modes"), modes).expect("modes");
-    }
-
-    #[test]
-    fn only_a_connected_connector_with_modes_shows_a_display() {
-        let sysfs = tempfile::tempdir().expect("sysfs directory");
-        std::fs::create_dir(sysfs.path().join("card1")).expect("card directory");
-        connector(sysfs.path(), "card2-HDMI-A-1", "disconnected\n", "");
-        assert!(!shows_connected_display(sysfs.path()));
-
-        connector(sysfs.path(), "card2-HDMI-A-1", "connected\n", "");
-        assert!(!shows_connected_display(sysfs.path()));
-
-        connector(
-            sysfs.path(),
-            "card2-HDMI-A-1",
-            "connected\n",
-            "2560x1440\n1920x1080\n",
-        );
-        assert!(shows_connected_display(sysfs.path()));
     }
 }

@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use accesskit::TreeUpdate;
 use bande_compositor::{Compositor, FrameClock, FrameScheduler, REFRESH, Renderer};
 use bande_test_bus::SessionBus;
-use bande_toolkit::ui::{Axis, Button, Context, Label, Stack, Ui};
+use bande_toolkit::ui::{Button, Context, Ui};
 use bande_toolkit::{App, Palette, Role, Scene, Scheme, TextSystem, Window, WindowEvent};
 use smithay::utils::Size;
 use zbus::blocking::{Connection, Proxy, connection, proxy};
@@ -136,8 +136,7 @@ fn find_named(atspi: &Connection, object: &ObjectRef, name: &str) -> Option<Obje
 
 #[test]
 fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
-    let bus =
-        SessionBus::start().expect("private bus standing in for the session and AT-SPI buses");
+    let bus = SessionBus::start().expect("private session and AT-SPI bus");
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
         std::env::set_var("AT_SPI_BUS_ADDRESS", bus.address());
@@ -156,18 +155,9 @@ fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
         .expect("window");
         let greeted = Rc::new(Cell::new(false));
         let pressed = greeted.clone();
-        let root = Stack::new(
-            Axis::Vertical,
-            8.0,
-            8.0,
-            vec![
-                Box::new(Label::new("Hello")),
-                Box::new(Button::new("Greet", move || pressed.set(true))),
-            ],
-        );
         let mut greeting = Greeting {
             ui: Ui::new(
-                Box::new(root),
+                Box::new(Button::new("Greet", move || pressed.set(true))),
                 Context::new(TextSystem::new(), Palette::for_scheme(Scheme::Light)),
             ),
             greeted,

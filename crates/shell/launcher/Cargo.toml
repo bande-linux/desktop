@@ -23,10 +23,5 @@ bande-toolkit.workspace = true
 bande-xdg.workspace = true
 zbus.workspace = true
 
-[dev-dependencies]
-rustix = { workspace = true, features = ["time"] }
-tempfile.workspace = true
-bande-golden.workspace = true
-
 [lints]
 workspace = true

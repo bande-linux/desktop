@@ -3,7 +3,7 @@
 Status: adopted by the owner on 2026-10-30 (app menus: cascade from the app header, option A). Implementation order: `docs/roadmap.md`, wave D.
 Name: since 2026-11-01 people see this bar as the **Taskbar** (Settings ▸ Taskbar, "Keep in Taskbar"), and the side strip in the separate-menu-bar layout is the taskbar too. This page says "bar" for the same thing; "today's Dock" means the separate Dock that came before it. The config key stays `bar { … }` and the D-Bus properties stay `BarApps`, `BarEdge` and so on.
 The expanded width (248 pt, "Show names", dragging the inner edge) was removed by the owner on 2026-11-01 ([plan](../../../NOTES/plans/taskbar-width-and-options.md)); the bar has one width, set by the Size slider.
-The proposal's mockups were removed on 2026-11-01; the bar's goldens (`crates/shell/bar/tests/golden/`) show what was built.
+The proposal's mockups were removed on 2026-11-01; the running bar shows what was built.
 
 Shortcuts below are the proposal's. The shipped chords follow GNOME and KDE (Ctrl in apps, Super
 only for the system, [decision 0005](../../decisions/0005-ctrl-for-app-shortcuts.md)); the
@@ -138,7 +138,7 @@ its height follows the results. Alternatives drawn in light and dark (in the rev
 in the repo): **A** the field on top (the first build), **B** a "Search Menus… `Shift+Super+/`"
 row at the bottom, **C** the footer tray (chosen). B reads cleanly but is a row that does what
 typing already does, and clicking it still asks for the keyboard; C teaches both the gesture and
-the global shortcut without adding a target. Goldens: `crates/shell/bar/tests/golden/cascade-*`.
+the global shortcut without adding a target.
 
 **Header states.** At rest the header is a `well` group (radius 8) with the 24 pt icon and the
 bold caption; hover adds 7 % `ink`, and from press until the cascade closes it holds 12 % `ink`,

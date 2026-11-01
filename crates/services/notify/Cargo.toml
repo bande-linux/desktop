@@ -16,7 +16,6 @@ bande-sound.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 bande-test-bus.workspace = true
 
 [package.metadata.deb]
@@ -26,11 +25,13 @@ depends = "$auto, default-dbus-session-bus | dbus-session-bus"
 provides = "notification-daemon"
 extended-description = """\
 Serves org.freedesktop.Notifications (specification 1.2) on the session \
-bus. The bus starts it on the first notification through D-Bus \
-activation."""
+bus, and the Notification Center under its own name, org.bande.NotificationCenter, \
+so that apps allowed to post notifications cannot read or dismiss others'. \
+The bus starts it on the first notification through D-Bus activation."""
 assets = [
     ["target/release/bande-notify", "usr/bin/", "755"],
     ["data/org.bande.Notify.service", "usr/share/dbus-1/services/", "644"],
+    ["data/org.bande.NotificationCenter.service", "usr/share/dbus-1/services/", "644"],
 ]
 
 [lints]

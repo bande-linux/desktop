@@ -6,9 +6,7 @@ use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_manager_v
 use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_surface_v1::{
     self, ExtSessionLockSurfaceV1,
 };
-use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_v1::{
-    self, ExtSessionLockV1,
-};
+use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_v1::ExtSessionLockV1;
 
 use crate::{Compositor, Globals, ShmImage, TestClient};
 
@@ -17,30 +15,16 @@ pub(crate) struct SessionLock {
     lock: Option<ExtSessionLockV1>,
     surface: Option<WlSurface>,
     size: Option<(u32, u32)>,
-    locked: bool,
-    finished: bool,
 }
 
 impl TestClient {
-    pub fn can_lock_session(&self) -> bool {
-        self.advertises("ext_session_lock_manager_v1")
-    }
-
     pub fn lock_session(&mut self, server: &mut Compositor) {
         let manager: ExtSessionLockManagerV1 = self.bind("ext_session_lock_manager_v1", 1);
         self.globals.lock.lock = Some(manager.lock(&self.queue.handle(), ()));
         self.exchange(server);
     }
 
-    pub fn session_locked(&self) -> bool {
-        self.globals.lock.locked
-    }
-
-    pub fn lock_refused(&self) -> bool {
-        self.globals.lock.finished
-    }
-
-    pub fn show_lock_surface(&mut self, server: &mut Compositor, color: [u8; 4]) -> (u32, u32) {
+    pub fn show_lock_surface(&mut self, server: &mut Compositor, color: [u8; 4]) {
         let qh = self.queue.handle();
         let output: WlOutput = self.bind("wl_output", 1);
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
@@ -66,36 +50,11 @@ impl TestClient {
         surface.commit();
         self.globals.lock.surface = Some(surface);
         self.exchange(server);
-        (width, height)
     }
 
     pub fn lock_surface_has_keyboard(&self) -> bool {
         self.globals.lock.surface.is_some()
-            && self.globals.input.keyboard_surface() == self.globals.lock.surface.as_ref()
-    }
-
-    pub fn unlock_session(&mut self, server: &mut Compositor) {
-        if let Some(lock) = self.globals.lock.lock.take() {
-            lock.unlock_and_destroy();
-        }
-        self.exchange(server);
-    }
-}
-
-impl Dispatch<ExtSessionLockV1, ()> for Globals {
-    fn event(
-        globals: &mut Self,
-        _: &ExtSessionLockV1,
-        event: ext_session_lock_v1::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-        match event {
-            ext_session_lock_v1::Event::Locked => globals.lock.locked = true,
-            ext_session_lock_v1::Event::Finished => globals.lock.finished = true,
-            _ => {}
-        }
+            && self.globals.input.keyboard_focus == self.globals.lock.surface
     }
 }
 
@@ -121,4 +80,5 @@ impl Dispatch<ExtSessionLockSurfaceV1, ()> for Globals {
 }
 
 delegate_noop!(Globals: ExtSessionLockManagerV1);
+delegate_noop!(Globals: ignore ExtSessionLockV1);
 delegate_noop!(Globals: ignore WlOutput);

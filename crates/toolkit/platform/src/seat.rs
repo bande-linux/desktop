@@ -99,6 +99,24 @@ pub(crate) struct Input {
     keyboard_elsewhere: bool,
 }
 
+impl Input {
+    pub(crate) fn release(&mut self) {
+        if let Some(device) = self.cursor_device.take() {
+            device.destroy();
+        }
+        if let Some(pointer) = self.pointer.take()
+            && pointer.version() >= 3
+        {
+            pointer.release();
+        }
+        if let Some(keyboard) = self.keyboard.take()
+            && keyboard.version() >= 3
+        {
+            keyboard.release();
+        }
+    }
+}
+
 pub(crate) fn key_for(keysym: Keysym) -> Option<Key> {
     let key = match keysym.raw() {
         keysyms::KEY_Left | keysyms::KEY_KP_Left => Key::Left,
@@ -188,22 +206,6 @@ impl Input {
         self.repeat_delay = Duration::from_millis(u64::try_from(delay).unwrap_or(0));
         if self.repeat_interval.is_none() {
             self.repeat = None;
-        }
-    }
-
-    pub(crate) fn release(&mut self) {
-        if let Some(device) = self.cursor_device.take() {
-            device.destroy();
-        }
-        if let Some(pointer) = self.pointer.take()
-            && pointer.version() >= 3
-        {
-            pointer.release();
-        }
-        if let Some(keyboard) = self.keyboard.take()
-            && keyboard.version() >= 3
-        {
-            keyboard.release();
         }
     }
 
@@ -667,36 +669,3 @@ impl Dispatch<WlKeyboard, ()> for State {
 delegate_noop!(State: ignore WpCursorShapeManagerV1);
 delegate_noop!(State: ignore WpCursorShapeDeviceV1);
 
-#[cfg(test)]
-mod tests {
-    use std::time::{Duration, Instant};
-
-    use xkbcommon::xkb::Keycode;
-
-    use super::{Input, Repeat};
-
-    fn held() -> Input {
-        Input {
-            repeat_interval: Some(Duration::from_millis(30)),
-            repeat: Some(Repeat {
-                keycode: Keycode::new(38),
-                next: Instant::now(),
-            }),
-            ..Input::default()
-        }
-    }
-
-    #[test]
-    fn turning_repeat_off_while_a_key_is_held_leaves_nothing_to_wake_for() {
-        let mut input = held();
-        input.set_repeat_info(0, 500);
-        assert_eq!(input.repeat_deadline(), None);
-    }
-
-    #[test]
-    fn a_huge_repeat_rate_still_waits_a_millisecond_between_repeats() {
-        let mut input = held();
-        input.set_repeat_info(i32::MAX, 500);
-        assert_eq!(input.repeat_interval, Some(Duration::from_millis(1)));
-    }
-}

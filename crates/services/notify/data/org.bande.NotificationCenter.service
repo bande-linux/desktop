@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.bande.NotificationCenter
+Exec=/usr/bin/bande-notify

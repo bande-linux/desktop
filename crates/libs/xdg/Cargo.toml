@@ -17,9 +17,7 @@ bande-notify.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
-image.workspace = true
 tempfile.workspace = true
-bande-test-bus.workspace = true
 
 [lints]
 workspace = true

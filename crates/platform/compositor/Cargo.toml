@@ -30,17 +30,9 @@ bande-xdg.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
-image.workspace = true
-image-compare.workspace = true
-rustix = { workspace = true, features = ["fs", "mm"] }
-tempfile.workspace = true
-bande-golden.workspace = true
-bande-greeter.workspace = true
-bande-keyboard.workspace = true
 bande-test-bus.workspace = true
 bande-test-wayland.workspace = true
 wayland-client.workspace = true
-wayland-protocols.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"

@@ -432,11 +432,18 @@ impl Program for Files {
         cx.focused()
             .and_then(|id| cx.view(id))
             .or_else(|| cx.windows().last().and_then(|id| cx.view(id)))
-            .map(|pane| menu_bar::app_menus(&pane.view))
-            .unwrap_or_default()
+            .map_or_else(menu_bar::windowless_menus, |pane| {
+                menu_bar::app_menus(&pane.view)
+            })
     }
 
-    fn command(&mut self, cx: &mut Cx<Self>, window: WindowId, command: &str) {
+    fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
+        let Some(window) = window else {
+            if command == menu_bar::NEW_WINDOW {
+                self.reopen(cx);
+            }
+            return;
+        };
         let Some((shown, pane)) = cx.window(window) else {
             return;
         };
@@ -450,6 +457,12 @@ impl Program for Files {
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
         if let Err(error) = self.open_window(cx, &arguments, Some(directory)) {
+            tracing::warn!("cannot open a window: {error}");
+        }
+    }
+
+    fn reopen(&mut self, cx: &mut Cx<Self>) {
+        if let Err(error) = self.open_window(cx, &[], None) {
             tracing::warn!("cannot open a window: {error}");
         }
     }

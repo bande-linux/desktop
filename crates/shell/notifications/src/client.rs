@@ -190,7 +190,7 @@ impl Notifications {
 
     fn focus(&self, window: &mut Window, app: &str, token: &str) {
         if let Some(running) = running_app(&self.entries, &window.running_apps(), app) {
-            report("bring the app forward", window.activate_app(running));
+            report("bring the app forward", window.reopen_app(running));
             return;
         }
         if let Some(entry) = find_app(&self.entries, app) {

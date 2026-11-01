@@ -47,10 +47,6 @@ pub(crate) fn location_title(location: &Location) -> String {
 }
 
 impl FilesView {
-    pub fn tab_count(&self) -> usize {
-        self.tabs.len()
-    }
-
     pub fn active_tab(&self) -> usize {
         self.active_tab
     }

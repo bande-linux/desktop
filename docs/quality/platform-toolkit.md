@@ -1,5 +1,7 @@
 # Quality review: platform, toolkit and test-wayland
 
+> Since 2026-11-01 the desktop keeps only the few tests in [`tests.md`](tests.md) and no golden images. The test files, goldens and test helpers this review cites are gone, and its items about them no longer apply.
+
 Scope: `crates/platform/{compositor,render,protocols}`, `crates/toolkit/{design,graphics,widgets,platform,toolkit}` and `crates/testing/test-wayland`, at `main` 2d497b1 (2026-10-31).
 That is about 70,500 lines of Rust in 230 files.
 

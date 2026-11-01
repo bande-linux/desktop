@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::io;
 use std::os::fd::BorrowedFd;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
@@ -7,7 +8,10 @@ use std::time::Instant;
 use accesskit::TreeUpdate;
 use bande_app_menu::{AppMenu, KEY_ACTION, Standard, shortcut_action};
 use bande_toolkit::ui::{Event, parse_shortcut, shortcut_pressed};
-use bande_toolkit::{Rect, Scene, Surfaces, Window, WindowEvent};
+use bande_toolkit::{
+    AppConnection, AppRequest, Rect, Scene, Surfaces, Window, WindowError, WindowEvent,
+};
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 use crate::cx::Content;
 use crate::instance::{self, Claim, Instance, Request};
@@ -54,13 +58,17 @@ pub(crate) fn run<P: Program>(
         (Some(Claim::First(instance)), _) => Some(instance),
         _ => None,
     };
-    let mut cx = Cx::new(info, display, session);
+    let link = match display {
+        Some(display) => AppConnection::connect_on(display, info.id)?,
+        None => AppConnection::connect(info.id)?,
+    };
+    let mut cx = Cx::new(info, link, session);
     let program = P::start(&mut cx, arguments)?;
     if cx.windows().next().is_none() {
         return Ok(());
     }
     let menu = cx.session().cloned().and_then(|session| {
-        AppMenu::serve(session, assemble(info, program.menus(&cx)))
+        AppMenu::serve(session, assemble(info, program.menus(&cx), true))
             .inspect_err(|error| tracing::warn!("{error}"))
             .ok()
     });
@@ -72,11 +80,91 @@ pub(crate) fn run<P: Program>(
         instance,
         sources: RefCell::new(Vec::new()),
     };
-    bande_toolkit::run_surfaces(&mut runner)?;
-    Ok(())
+    runner.run()
+}
+
+fn release_freed_memory() {
+    unsafe {
+        libc::malloc_trim(0);
+    }
+}
+
+fn timeout(deadline: Instant) -> Timespec {
+    let wait = deadline.saturating_duration_since(Instant::now());
+    Timespec {
+        tv_sec: i64::try_from(wait.as_secs()).unwrap_or(i64::MAX),
+        tv_nsec: i64::from(wait.subsec_nanos()),
+    }
 }
 
 impl<P: Program> Runner<P> {
+    fn run(&mut self) -> Result<(), Error> {
+        loop {
+            if !self.cx.windows.is_empty() {
+                bande_toolkit::run_surfaces(self)?;
+            }
+            if self.cx.quitting || !self.cx.link.keeps_running() {
+                return Ok(());
+            }
+            if self.cx.windows.is_empty() {
+                release_freed_memory();
+            }
+            while self.cx.windows.is_empty() && !self.cx.quitting {
+                self.wait_without_windows()?;
+            }
+        }
+    }
+
+    fn wait_without_windows(&mut self) -> Result<(), WindowError> {
+        self.publish_menus();
+        self.cx.link.flush()?;
+        let deadline = Surfaces::deadline(self);
+        let (link_ready, ready) = {
+            let link = self.cx.link.fd();
+            let sources = Surfaces::sources(self);
+            let mut fds = Vec::with_capacity(1 + sources.len());
+            fds.push(PollFd::new(&link, PollFlags::IN));
+            for fd in &sources {
+                fds.push(PollFd::new(fd, PollFlags::IN | PollFlags::PRI));
+            }
+            match poll(&mut fds, deadline.map(timeout).as_ref()) {
+                Ok(_) | Err(rustix::io::Errno::INTR) => {}
+                Err(error) => return Err(io::Error::from(error).into()),
+            }
+            let ready: Vec<usize> = (0..sources.len())
+                .filter(|at| !fds[1 + at].revents().is_empty())
+                .collect();
+            (!fds[0].revents().is_empty(), ready)
+        };
+        if link_ready {
+            let requests = self.cx.link.read()?;
+            self.serve_requests(requests);
+        }
+        for index in ready {
+            Surfaces::source_ready(self, index);
+        }
+        let now = Instant::now();
+        if deadline.is_some_and(|deadline| deadline <= now) {
+            Surfaces::tick(self, now);
+        }
+        Ok(())
+    }
+
+    fn serve_requests(&mut self, requests: Vec<AppRequest>) {
+        for request in requests {
+            match request {
+                AppRequest::Reopen(token) => self.activated(Request {
+                    arguments: Vec::new(),
+                    directory: None,
+                    token: Some(token),
+                }),
+                AppRequest::Key(input) => self.key_without_window(&input),
+                AppRequest::Quit => self.quit(),
+            }
+        }
+        self.publish_menus();
+    }
+
     fn publish_menus(&mut self) {
         if !std::mem::take(&mut self.cx.menus_changed) {
             return;
@@ -84,7 +172,8 @@ impl<P: Program> Runner<P> {
         let Some(menu) = &self.menu else {
             return;
         };
-        let entries = assemble(self.cx.info, self.program.menus(&self.cx));
+        let windowed = !self.cx.windows.is_empty();
+        let entries = assemble(self.cx.info, self.program.menus(&self.cx), windowed);
         if let Err(error) = menu.update(entries) {
             tracing::warn!("cannot update the menus: {error}");
         }
@@ -121,18 +210,20 @@ impl<P: Program> Runner<P> {
         }
     }
 
-    fn perform(&mut self, window: WindowId, action: &str) {
+    fn perform(&mut self, window: Option<WindowId>, action: &str) {
         if let Some(shortcut) = action.strip_prefix(KEY_ACTION) {
-            return self.press(window, shortcut);
+            if let Some(window) = window {
+                self.press(window, shortcut);
+            }
+            return;
         }
         let Some(standard) = Standard::parse(action) else {
             self.program.command(&mut self.cx, window, action);
             self.cx.menus_changed = true;
             return;
         };
-        let shown = self
-            .cx
-            .index(window)
+        let shown = window
+            .and_then(|window| self.cx.index(window))
             .map(|index| &mut self.cx.windows[index]);
         let result = match (standard, shown) {
             (Standard::Hide | Standard::Minimize, Some(window)) => window.minimize(),
@@ -141,8 +232,10 @@ impl<P: Program> Runner<P> {
                 self.quit();
                 Ok(())
             }
-            (Standard::CloseWindow, _) => {
-                if self.is_settings(window) || !self.program.close_tab(&mut self.cx, window) {
+            (Standard::CloseWindow, Some(_)) => {
+                if let Some(window) = window
+                    && (self.is_settings(window) || !self.program.close_tab(&mut self.cx, window))
+                {
                     self.close(window);
                 }
                 Ok(())
@@ -179,14 +272,26 @@ impl<P: Program> Runner<P> {
     fn key(&mut self, index: usize, window: WindowId, input: Event) {
         let settings = self.cx.info.settings.is_some();
         if let Some(standard) = self.cx.info.keys.standard(&input, settings) {
-            return self.perform(window, standard.action());
+            return self.perform(Some(window), standard.action());
         }
         if self.deliver(index, window, WindowEvent::Input(input.clone())) {
             return;
         }
-        let menus = assemble(self.cx.info, self.program.menus(&self.cx));
-        if let Some(action) =
-            shortcut_action(&menus, &|shortcut| shortcut_pressed(&input, shortcut))
+        self.menu_shortcut(Some(window), &input);
+    }
+
+    fn key_without_window(&mut self, input: &Event) {
+        let settings = self.cx.info.settings.is_some();
+        match self.cx.info.keys.standard(input, settings) {
+            Some(standard) => self.perform(self.cx.focused(), standard.action()),
+            None => self.menu_shortcut(self.cx.focused(), input),
+        }
+    }
+
+    fn menu_shortcut(&mut self, window: Option<WindowId>, input: &Event) {
+        let windowed = !self.cx.windows.is_empty();
+        let menus = assemble(self.cx.info, self.program.menus(&self.cx), windowed);
+        if let Some(action) = shortcut_action(&menus, &|shortcut| shortcut_pressed(input, shortcut))
         {
             self.perform(window, &action);
         }
@@ -198,6 +303,8 @@ impl<P: Program> Runner<P> {
             let directory = request.directory.as_deref().unwrap_or(Path::new("/"));
             self.program
                 .open(&mut self.cx, request.arguments.clone(), directory);
+        } else if self.cx.windows.is_empty() {
+            self.program.reopen(&mut self.cx);
         }
         let opened = self
             .cx
@@ -251,10 +358,10 @@ impl<P: Program> Surfaces for Runner<P> {
             }
             WindowEvent::Input(input @ Event::Key { .. }) => self.key(index, window, input),
             WindowEvent::MenuAction(action) => match Standard::parse(&action) {
-                Some(_) => self.perform(window, &action),
+                Some(_) => self.perform(Some(window), &action),
                 None => {
                     if !self.deliver(index, window, WindowEvent::MenuAction(action.clone())) {
-                        self.perform(window, &action);
+                        self.perform(Some(window), &action);
                     }
                 }
             },
@@ -303,9 +410,7 @@ impl<P: Program> Surfaces for Runner<P> {
                     .map(AppMenu::take_actions)
                     .unwrap_or_default();
                 for action in actions {
-                    if let Some(window) = self.cx.focused() {
-                        self.perform(window, &action);
-                    }
+                    self.perform(self.cx.focused(), &action);
                 }
             }
             Some(Source::Instance) => {
@@ -393,7 +498,13 @@ impl<P: Program> Surfaces for Runner<P> {
     }
 
     fn closed(&mut self) -> bool {
-        self.cx.remove_closed();
+        match self.cx.link.take_requests() {
+            Ok(requests) => self.serve_requests(requests),
+            Err(error) => tracing::warn!("cannot read the app's requests: {error}"),
+        }
+        for (window, view) in self.cx.remove_closed() {
+            self.program.window_closed(&mut self.cx, window, view);
+        }
         self.publish_menus();
         self.cx.quitting || self.cx.windows.is_empty()
     }

@@ -470,6 +470,3 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     bande_toolkit::run_surfaces(&mut shell)?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests;

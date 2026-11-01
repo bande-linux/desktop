@@ -786,25 +786,4 @@ impl Compositor {
             })
             .unwrap_or_default()
     }
-
-    pub fn window_menu_item(&self, title: &str) -> Option<Point<f64, Logical>> {
-        let open = self.state.window_menus.open.as_ref()?;
-        open.tracker
-            .panels()
-            .iter()
-            .zip(&open.panels)
-            .rev()
-            .find_map(|(panel, shown)| {
-                let index = panel
-                    .menu()
-                    .items
-                    .iter()
-                    .position(|item| item.title == title)?;
-                let row = panel.row_rect(index);
-                Some(Point::from((
-                    shown.rect.loc.x + f64::from(row.x + row.width / 2.0),
-                    shown.rect.loc.y + f64::from(row.y + row.height / 2.0),
-                )))
-            })
-    }
 }

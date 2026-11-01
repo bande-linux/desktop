@@ -1,4 +1,3 @@
-use smithay::backend::renderer::utils::with_renderer_surface_state;
 use smithay::desktop::{
     PopupKeyboardGrab, PopupKind, PopupPointerGrab, PopupUngrabStrategy, WindowSurfaceType,
     find_popup_root_surface, get_popup_toplevel_coords, layer_map_for_output,
@@ -17,6 +16,8 @@ use smithay::wayland::shell::xdg::{PopupSurface, PositionerState};
 use crate::motion::{BAR_NAMESPACE, TASKBAR_NAMESPACE};
 
 use crate::state::{Compositor, MENU_BAR_NAMESPACE, State};
+
+const SCREEN_MARGIN: i32 = 6;
 
 impl State {
     pub(crate) fn toplevel_of(&self, surface: &WlSurface) -> Option<WlSurface> {
@@ -73,7 +74,16 @@ impl State {
             .screen_at(anchor_centre.to_f64())
             .unwrap_or_else(|| self.screen_of_surface(&root));
         let area = self.popup_area(&root, screen);
-        positioner.get_unconstrained_geometry(Rectangle::new(area.loc - parent, area.size))
+        let geometry =
+            positioner.get_unconstrained_geometry(Rectangle::new(area.loc - parent, area.size));
+        if geometry.size.h >= positioner.rect_size.h {
+            return geometry;
+        }
+        let inset = Rectangle::new(
+            area.loc - parent + Point::from((0, SCREEN_MARGIN)),
+            (area.size.w, (area.size.h - 2 * SCREEN_MARGIN).max(1)).into(),
+        );
+        positioner.get_unconstrained_geometry(inset)
     }
 
     fn popup_area(&self, root: &WlSurface, screen: usize) -> Rectangle<i32, Logical> {
@@ -274,39 +284,4 @@ impl State {
     }
 }
 
-impl Compositor {
-    pub fn popup_rects(&self) -> Vec<Rectangle<i32, Logical>> {
-        (0..self.state.screens.len())
-            .flat_map(|screen| self.state.stack(screen))
-            .filter_map(|(surface, origin)| {
-                let geometry = self.state.popups.find_popup(&surface)?.geometry();
-                let drawn = with_renderer_surface_state(&surface, |state| {
-                    state.buffer().and(state.surface_size())
-                })??;
-                Some(Rectangle {
-                    loc: origin + geometry.loc,
-                    size: match geometry.size.is_empty() {
-                        true => drawn,
-                        false => geometry.size,
-                    },
-                })
-            })
-            .collect()
-    }
-
-    pub fn pointer_grabbed(&self) -> bool {
-        self.state.popup_grab.is_some()
-            || self
-                .state
-                .seat
-                .get_pointer()
-                .is_some_and(|pointer| pointer.is_grabbed())
-    }
-
-    pub fn keyboard_grabbed(&self) -> bool {
-        self.state
-            .seat
-            .get_keyboard()
-            .is_some_and(|keyboard| keyboard.is_grabbed())
-    }
-}
+impl Compositor {}

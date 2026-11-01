@@ -187,26 +187,27 @@ Not fixed:
 - low — the lock's wallpaper is read with `fs::read` of the user's own configured path (no size or file-kind check); self-inflicted only.
 - Earlier open shell items (tray/dbusmenu calls and `force_quit` on the UI thread, image decoding on the UI thread, PAM messages, desktop bar edge, screenshot shutter) are unchanged.
 
+<<<<<<< HEAD
 ## Component review 2026-11-01 evening: libs
 
 Scope: `crates/toolkit/*` and `crates/libs/*`, today's changes first (bande-app, bande-xdg, bus,
 network, bluetooth, search, thumbnails, preview, fs, volumes, status hub, packages, app-settings).
-Compile-checked per change; the new tests run in the final gate.
+Compile-checked per change; no tests added (test policy of 3e32ab75).
 
 ### Fixed
 
 | Sev | Where | Finding | Commit |
 | --- | --- | --- | --- |
-| medium | toolkit `seat.rs` | With Caps Lock on, Ctrl+C arrived as `C` without Shift, so copy, paste, undo, select all, Ctrl+W/Q/, and every menu shortcut did nothing. Letters of Ctrl/Alt/Super keys are cased by Shift only. Test: `caps_lock_changes_typed_letters_but_not_the_letter_of_a_shortcut`. | `d8fc15b3` |
-| medium | toolkit `Drop for Window` | Every window binds its own seat objects; closing an `open_beside` window (every bande-app window, bars, Control Center) left its keyboard, pointer, data device, primary device and text input alive, so each later key, motion and copy still went to every closed window. Released on drop. No test: needs resource counting in the test compositor. | `0e9f25ba` |
-| medium | status `devices.rs` | `NameOwnerChanged` was taken from any sender; any local user could send one to the watcher's unique name and freeze battery, Wi-Fi and Bluetooth status in every bar and the lock screen. Only the bus itself is believed. Test added. | `89509986` |
-| medium | status `tray.rs` (hub) | With one bar per display, each focus change or menu change queued N identical app-menu fetches on the one errand thread, and every reply rebuilt all N bars (N²). Queued fetches for the same app are done once. Test added. | `fe30ac1b` |
-| low | packages `transaction.rs` | PackageKit's exit was also taken from any sender (a fake signal failed the running install as "PackageKit stopped"); the relay thread outlived early errors on the shared system connection. Bus-only sender; the caller reads the messages itself. Test added. | `64f9cef3` |
-| low | network `lib.rs` | A network with several access points (dual band, mesh) followed only the strongest one's later strength signals, so it showed that one fading while another was strong. Each access point's strength is kept and the strongest shown. Test added. | `9c94f20b` |
-| low | network `join` | When the stale-interface check failed (polkit refusing `Update`), its error replaced NetworkManager's refusal. The refusal is kept. No test: the fake NetworkManager cannot refuse `Update`. | `9c94f20b` |
+| medium | toolkit `seat.rs` | With Caps Lock on, Ctrl+C arrived as `C` without Shift, so copy, paste, undo, select all, Ctrl+W/Q/, and every menu shortcut did nothing. Letters of Ctrl/Alt/Super keys are cased by Shift only. | `d8fc15b3` |
+| medium | toolkit `Drop for Window` | Every window binds its own seat objects; closing an `open_beside` window (every bande-app window, bars, Control Center) left its keyboard, pointer, data device, primary device and text input alive, so each later key, motion and copy still went to every closed window. Released on drop; landed on main independently in `d01af772`, so this branch keeps main's version. | `d01af772` |
+| medium | status `devices.rs` | `NameOwnerChanged` was taken from any sender; any local user could send one to the watcher's unique name and freeze battery, Wi-Fi and Bluetooth status in every bar and the lock screen. Only the bus itself is believed. | `89509986` |
+| medium | status `tray.rs` (hub) | With one bar per display, each focus change or menu change queued N identical app-menu fetches on the one errand thread, and every reply rebuilt all N bars (N²). Queued fetches for the same app are done once. | `fe30ac1b` |
+| low | packages `transaction.rs` | PackageKit's exit was also taken from any sender (a fake signal failed the running install as "PackageKit stopped"); the relay thread outlived early errors on the shared system connection. Bus-only sender; the caller reads the messages itself. | `64f9cef3` |
+| low | network `lib.rs` | A network with several access points (dual band, mesh) followed only the strongest one's later strength signals, so it showed that one fading while another was strong. Each access point's strength is kept and the strongest shown. | `9c94f20b` |
+| low | network `join` | When the stale-interface check failed (polkit refusing `Update`), its error replaced NetworkManager's refusal. The refusal is kept. | `9c94f20b` |
 | low | xdg `launch.rs` | The launched-app watcher used a session connection without a method timeout; a hung systemd stopped reaping and scoping every later app. Uses `bande_bus::session`. | `c1b1c43b` |
-| low | toolkit `seat.rs` | A repeat rate of 0 (or above 1 MHz) while a key was held made the loop spin at 100% CPU. Repeat stops when turned off and waits at least 1 ms. Tests added. | `3b93d805` |
-| low | toolkit `window/mod.rs` | The 1 KiB title cap applied only to `set_title`; a window opened with a long title was disconnected. Test: `a_window_opened_with_a_title_longer_than_a_wayland_message_still_maps`. | `31609b4c` |
+| low | toolkit `seat.rs` | A repeat rate of 0 (or above 1 MHz) while a key was held made the loop spin at 100% CPU. Repeat stops when turned off and waits at least 1 ms. | `3b93d805` |
+| low | toolkit `window/mod.rs` | The 1 KiB title cap applied only to `set_title`; a window opened with a long title was disconnected. | `31609b4c` |
 | low | app-settings | A failed settings save retried and warned on every event, pointer motion included; the wake pipe copied `bande-inbox` with a blocking writer. Retries only when the settings change; uses `Inbox`. | `e4c2028b` |
 | low | xdg `reopen.rs` | Duplicate of `state_home`. Reused. | `f7296ae3` |
 
@@ -223,3 +224,54 @@ Compile-checked per change; the new tests run in the final gate.
 - low, docs (outside these paths) — `docs/design/features/windows.md:18,112,125` still list Super+M, Ctrl+Super+F, Super+W and Super+Q; `docs/architecture/behaviour.md:40` says Control-click opens the taskbar menu, which the toolkit no longer does.
 
 Checked and sound: bande-app's runner (source mapping, quit, close/tab order, Settings window, activation and single instance, no idle wakeups), `bande_inbox`, the icon lookup cache, `write_launcher` quoting, the FIFO-safe MIME sniffing, `replace_file` users, the status hub relay, the BlueZ agent, app-menu exports (nothing left unused by bande-app), and no "unbound" names or unused dependencies.
+=======
+## Component review 2026-11-01 evening: services
+
+Scope: `crates/services/*` (automount, clipboard, config, notify, polkit, portal, power, sound,
+tray), with today's display-off/lock-stage power changes, the polkit bridge and the portal's
+frontend trust read line by line. No panics, `unwrap`/`expect` or leftover "unbound" names in
+production code.
+
+Fixed:
+
+| Severity | Where | Defect | Commit |
+| --- | --- | --- | --- |
+| high | notify `lib.rs`, `client.rs` | `org.bande.NotificationCenter` was served on the `org.freedesktop.Notifications` connection, and Flatpak's proxy grants a name's whole connection. Any app allowed to post notifications (Signal, Discord, Telegram…) could read every other app's notifications (`GetPresentation`, `PresentationChanged`: codes, messages), invoke their actions, clear them and switch Do Not Disturb or app rules. The center now has its own connection and name (`org.bande.NotificationCenter`, D-Bus activatable), requested before the specification name; the specification's signals still come from the specification's connection. | `3c36a36c` |
+| medium | clipboard `main.rs`, `history.rs` | A copy whose `x-kde-passwordManagerHint` (or concealed type) did not answer in time was kept in the on-disk history, so a slow password manager's password was written to disk. Such a copy is now treated as a secret. | `ad638cfc` |
+| low | config `service.rs` | `replace()` turned a linked `config.kdl` (dotfiles) into a plain file, reset its mode and did not sync before the rename. It writes through the link, keeps the mode and syncs. | `0ac0249f` |
+| low | portal `gtk.rs` | The same for the user's own `gtk-3.0`/`gtk-4.0` `gtk.css`, where the portal adds its import: a linked stylesheet was replaced by a copy. | `4ac83ca1` |
+| low | clipboard `Cargo.toml` | Unused direct `wayland-backend` dependency. | `b67dfbeb` |
+| medium | automount `lib.rs` | `HintAuto` volumes were mounted while the session was locked or inactive, exposing the kernel to an untrusted filesystem at the lock screen. Owner decision 2026-11-01: like GNOME, automount only while the logind session is `Active` and not `LockedHint`; volumes that appear meanwhile are mounted on unlock unless removed. | this branch |
+
+Not fixed:
+
+- medium (design) — `org.bande.Clipboard` still serves the history to any session-bus caller (as
+  listed above); Flatpak apps need an explicit talk permission. Its callers are the launcher and
+  Settings, so a shell-only check needs a Settings path too.
+- low — any client may `CloseNotification` or pass `replaces_id` for another app's notification
+  (the specification does not tie ids to senders); remembering the sender would stop a
+  sandboxed app replacing another's notification with its own text and actions.
+- low — the `org.freedesktop.impl.portal.*` methods (ScreenCast `Start`, Screenshot, Wallpaper)
+  accept any session caller; only the restore data and stored permission are frontend-checked.
+  An unsandboxed same-user process could call `Start` on a frontend session path first; it can
+  read the screen in other ways anyway.
+- low — notify keeps summary/body unbounded: 200 large notifications can push
+  `PresentationChanged` past the bus's message limit, which then fails until they are cleared.
+- low — power: `bande-power` keeps every `wl_output` it ever saw (no `global_remove`), so each
+  replug adds one; ScreenSaver `Inhibit` calls logind synchronously inside the async handler;
+  commands of two threads (`idle_for` vs `set_inhibited`) run outside the machine lock and can
+  interleave (Dim after Undim).
+- low — clipboard paste threads (`serve`) block on `write_all` without a deadline; a reader that
+  never reads keeps a thread.
+- low — automount's `ActionInvoked` match accepts the signal from any sender (worst case: opens
+  Storage settings).
+- note — `adapter.rs` and `battery.rs` declare the same `UPower` proxy.
+- `ci/release/check-debs.sh` (not this component) could also check
+  `org.bande.NotificationCenter.service`.
+
+What to check on the machine: after the rebuild, the notification banners and center still fill
+and clear, Do Not Disturb toggles from Control Center, Settings > Notifications lists the apps,
+and `busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications
+org.bande.NotificationCenter GetPresentation` fails while the same call on
+`org.bande.NotificationCenter` works.
+>>>>>>> origin/main

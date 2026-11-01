@@ -30,16 +30,6 @@ wayland-client.workspace = true
 wayland-protocols.workspace = true
 zbus.workspace = true
 
-[dev-dependencies]
-serde.workspace = true
-smithay.workspace = true
-tempfile.workspace = true
-bande-compositor.workspace = true
-bande-golden.workspace = true
-bande-test-bus.workspace = true
-bande-test-wayland.workspace = true
-xdg-desktop-portal-bande.workspace = true
-
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"

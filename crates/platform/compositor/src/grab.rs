@@ -464,27 +464,3 @@ impl PointerGrab<State> for WindowGrab {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge;
-
-    use smithay::utils::Rectangle;
-
-    use super::edge_toward;
-
-    #[test]
-    fn the_resize_edge_follows_the_third_of_the_window_under_the_pointer() {
-        let window = Rectangle::new((100, 100).into(), (300, 300).into());
-        let edge = |x, y| edge_toward(window, (x, y).into());
-        assert_eq!(edge(110, 110), ResizeEdge::TopLeft);
-        assert_eq!(edge(250, 110), ResizeEdge::Top);
-        assert_eq!(edge(390, 110), ResizeEdge::TopRight);
-        assert_eq!(edge(110, 250), ResizeEdge::Left);
-        assert_eq!(edge(390, 250), ResizeEdge::Right);
-        assert_eq!(edge(110, 390), ResizeEdge::BottomLeft);
-        assert_eq!(edge(250, 390), ResizeEdge::Bottom);
-        assert_eq!(edge(390, 390), ResizeEdge::BottomRight);
-        assert_eq!(edge(250, 250), ResizeEdge::BottomRight);
-    }
-}

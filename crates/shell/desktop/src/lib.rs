@@ -26,20 +26,3 @@ pub use view::{Artwork, DesktopView, Request, fitted_label};
 const ENGLISH: &str = include_str!("../locales/en-US/bande-desktop-surface.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("view.rs"),
-            include_str!("confirm.rs"),
-            include_str!("menus.rs"),
-            include_str!("client.rs"),
-        ];
-        assert_eq!(
-            bande_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
-}

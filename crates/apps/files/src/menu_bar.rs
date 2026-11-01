@@ -15,6 +15,18 @@ fn titled(title: Option<String>, message: &str, keys: &str) -> Entry {
     key_item(&title.unwrap_or_else(|| L10N.tr(message)), keys).enabled(enabled)
 }
 
+pub const NEW_WINDOW: &str = "new-window";
+
+pub fn windowless_menus() -> Menus {
+    Menus {
+        menus: vec![submenu(
+            "menu-file",
+            vec![Entry::item(&L10N.tr("menu-new-window"), NEW_WINDOW).shortcut("Ctrl+N")],
+        )],
+        window: Vec::new(),
+    }
+}
+
 pub fn app_menus(view: &FilesView) -> Menus {
     let menus = vec![
         submenu(

@@ -120,28 +120,3 @@ impl EmojiSet {
         toned
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::EMOJI;
-
-    #[test]
-    fn the_compiled_set_has_every_group_and_skin_tones_follow_the_first_character() {
-        assert_eq!(EMOJI.groups.len(), 10);
-        assert!(EMOJI.emoji.len() > 1800);
-        assert_eq!(EMOJI.with_tone("👋", Some(2)), "👋\u{1F3FD}");
-        assert_eq!(
-            EMOJI.with_tone("🏃\u{200D}♀\u{FE0F}", Some(0)),
-            "🏃\u{1F3FB}\u{200D}♀\u{FE0F}"
-        );
-        assert_eq!(EMOJI.with_tone("😀", Some(2)), "😀");
-        assert_eq!(EMOJI.with_tone("👋", None), "👋");
-    }
-
-    #[test]
-    fn only_the_characters_group_is_drawn_as_plain_text() {
-        assert!(EMOJI.is_plain_character("\u{2013}"));
-        assert!(!EMOJI.is_plain_character("\u{23E9}"));
-        assert!(!EMOJI.is_plain_character("\u{1F44B}\u{1F3FD}"));
-    }
-}

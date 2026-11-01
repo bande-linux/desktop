@@ -16,6 +16,8 @@ bande-bus.workspace = true
 bande-log.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
+libc.workspace = true
+rustix.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]

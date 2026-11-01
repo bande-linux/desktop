@@ -43,9 +43,24 @@ pub(crate) struct Shell {
     app_control: Option<BandeAppControlV1>,
     toplevels: Vec<Toplevel>,
     processes: HashMap<String, u32>,
+    windowless: Vec<String>,
     minimized: Vec<String>,
     token: Option<String>,
     displays: Vec<String>,
+}
+
+impl Shell {
+    pub(crate) fn release(&mut self) {
+        if let Some(app) = self.app.take() {
+            app.destroy();
+        }
+        if let Some(control) = self.app_control.take() {
+            control.destroy();
+        }
+        if let Some(protocol) = self.protocol.take() {
+            protocol.destroy();
+        }
+    }
 }
 
 impl Window {
@@ -213,9 +228,15 @@ impl Window {
     }
     pub fn running_apps(&self) -> Vec<String> {
         let mut apps = Vec::new();
-        for toplevel in &self.state.shell.toplevels {
-            if !toplevel.app_id.is_empty() && !apps.contains(&toplevel.app_id) {
-                apps.push(toplevel.app_id.clone());
+        let shell = &self.state.shell;
+        let app_ids = shell
+            .toplevels
+            .iter()
+            .map(|toplevel| &toplevel.app_id)
+            .chain(&shell.windowless);
+        for app_id in app_ids {
+            if !app_id.is_empty() && !apps.contains(app_id) {
+                apps.push(app_id.clone());
             }
         }
         apps
@@ -227,6 +248,11 @@ impl Window {
 
     pub fn activate_app(&mut self, app_id: &str) -> Result<(), WindowError> {
         self.shell()?.activate_app(app_id.to_owned());
+        self.flush()
+    }
+
+    pub fn reopen_app(&mut self, app_id: &str) -> Result<(), WindowError> {
+        self.shell()?.reopen_app(app_id.to_owned());
         self.flush()
     }
 
@@ -470,6 +496,21 @@ impl Dispatch<BandeShellV1, ()> for State {
                 state
                     .events
                     .push(WindowEvent::AppsRunning { app_id, count });
+            }
+            bande_shell_v1::Event::WindowlessApp {
+                app_id,
+                pid,
+                windowless,
+            } => {
+                let shell = &mut state.shell;
+                shell.windowless.retain(|known| *known != app_id);
+                if windowless != 0 {
+                    if let Ok(pid) = u32::try_from(pid) {
+                        shell.processes.insert(app_id.clone(), pid);
+                    }
+                    shell.windowless.push(app_id);
+                }
+                state.events.push(WindowEvent::AppsChanged);
             }
             bande_shell_v1::Event::AppProcess { app_id, pid } => {
                 let Ok(pid) = u32::try_from(pid) else {

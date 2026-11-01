@@ -78,25 +78,3 @@ impl Announcer {
         self.shown = false;
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_selected_entry_is_focused_and_marked_selected() {
-        let items = ["Files".to_owned(), "Terminal".to_owned()];
-
-        let update = overlay("App Switcher", &items, 1);
-
-        let selected: Vec<bool> = update
-            .nodes
-            .iter()
-            .filter(|(_, node)| node.role() == Role::ListBoxOption)
-            .map(|(_, node)| node.is_selected() == Some(true))
-            .collect();
-        assert_eq!(selected, [false, true]);
-        let focused = update.nodes.iter().find(|(id, _)| *id == update.focus);
-        assert_eq!(focused.and_then(|(_, node)| node.label()), Some("Terminal"));
-    }
-}

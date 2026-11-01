@@ -274,12 +274,4 @@ impl Compositor {
             tracing::warn!("cannot send the keyboard settings: {error}");
         }
     }
-
-    pub fn active_input_source(&self) -> Option<String> {
-        self.state
-            .input_sources
-            .codes()
-            .get(self.state.input_sources.active())
-            .cloned()
-    }
 }

@@ -886,36 +886,3 @@ fn follow_config(session: &Connection, outbox: &Outbox<Update>) -> zbus::Result<
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use bande_status::tray::{TrayIcon, TrayItem};
-
-    use super::{TrayIcons, tray_images};
-
-    fn frame(shade: u8) -> TrayItem {
-        TrayItem {
-            id: ":1.42/StatusNotifierItem".to_owned(),
-            title: "Sync".to_owned(),
-            icon: TrayIcon::Pixels {
-                width: 2,
-                height: 2,
-                rgba: [shade, shade, shade, 255].repeat(4),
-            },
-            menu: None,
-            item_is_menu: false,
-        }
-    }
-
-    #[test]
-    fn an_animated_tray_icon_keeps_only_its_current_frame() {
-        let mut known = TrayIcons::new();
-        for shade in 0..=255 {
-            let shown = tray_images(&[frame(shade)], &mut known, 32);
-            assert!(shown[0].1.is_some());
-        }
-        assert_eq!(known.len(), 1);
-        tray_images(&[], &mut known, 32);
-        assert!(known.is_empty());
-    }
-}

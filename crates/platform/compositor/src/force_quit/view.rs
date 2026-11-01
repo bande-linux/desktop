@@ -126,10 +126,6 @@ impl ForceQuitView {
         &self.listed
     }
 
-    pub(crate) fn selected(&self) -> &[String] {
-        &self.selected
-    }
-
     pub(crate) fn set_apps(&mut self, listed: Vec<Listed>) -> bool {
         let same = listed.len() == self.listed.len()
             && listed

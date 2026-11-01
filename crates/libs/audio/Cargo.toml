@@ -12,9 +12,5 @@ pipewire.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 
-[dev-dependencies]
-tempfile.workspace = true
-bande-test-bus.workspace = true
-
 [lints]
 workspace = true

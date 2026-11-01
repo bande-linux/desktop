@@ -338,8 +338,4 @@ impl State {
     }
 }
 
-impl Compositor {
-    pub fn other_half_offered(&self) -> bool {
-        self.state.assist.is_open()
-    }
-}
+impl Compositor {}

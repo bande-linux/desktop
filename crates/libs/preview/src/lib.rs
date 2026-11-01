@@ -6,6 +6,7 @@ use bande_fs::{Entry, is_hidden};
 
 pub const TEXT_PREVIEW_BYTES: u64 = 64 * 1024;
 pub const IMAGE_PREVIEW_PIXELS: u32 = 2048;
+const DECODE_BYTES_LIMIT: u64 = 256 << 20;
 
 #[derive(Debug, Clone)]
 pub enum Preview<I> {
@@ -38,12 +39,11 @@ fn text(path: &Path) -> Option<String> {
 }
 
 fn image<I>(path: &Path, picture: impl FnOnce(u32, u32, Vec<u8>) -> Option<I>) -> Option<I> {
-    let decoded = image::ImageReader::open(path)
-        .ok()?
-        .with_guessed_format()
-        .ok()?
-        .decode()
-        .ok()?;
+    let mut limits = image::Limits::default();
+    limits.max_alloc = Some(DECODE_BYTES_LIMIT);
+    let mut reader = image::ImageReader::open(path).ok()?.with_guessed_format().ok()?;
+    reader.limits(limits);
+    let decoded = reader.decode().ok()?;
     let decoded = if decoded.width().max(decoded.height()) > IMAGE_PREVIEW_PIXELS {
         decoded.thumbnail(IMAGE_PREVIEW_PIXELS, IMAGE_PREVIEW_PIXELS)
     } else {
@@ -75,6 +75,12 @@ pub fn preview<I>(
                     .filter(|entry| !is_hidden(&entry.file_name().to_string_lossy()))
                     .count()
             }),
+        };
+    }
+    let metadata = fs::metadata(&entry.path);
+    if !metadata.as_ref().is_ok_and(fs::Metadata::is_file) {
+        return Preview::Other {
+            size: metadata.map_or(0, |metadata| metadata.len()),
         };
     }
     if let Some(image) = image(&entry.path, picture) {

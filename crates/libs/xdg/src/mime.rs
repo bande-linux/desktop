@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::fs::{self, File};
+use std::fs;
 use std::io::Read;
+use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 use crate::entry::Locale;
@@ -451,15 +452,35 @@ impl MimeDatabase {
 
     fn sniff(&self, path: &Path) -> Vec<u8> {
         let mut data = Vec::new();
-        if let Ok(file) = File::open(path) {
+        let opened = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
+            .open(path);
+        if let Ok(file) = opened {
             let _ = file.take(self.sniff_bytes as u64).read_to_end(&mut data);
         }
         data
     }
 
     pub fn for_path(&self, path: &Path) -> String {
-        if path.is_dir() {
-            return DIRECTORY.to_owned();
+        let file_type = fs::metadata(path).map(|metadata| metadata.file_type());
+        if let Ok(file_type) = file_type {
+            let special = if file_type.is_dir() {
+                Some(DIRECTORY)
+            } else if file_type.is_fifo() {
+                Some("inode/fifo")
+            } else if file_type.is_socket() {
+                Some("inode/socket")
+            } else if file_type.is_char_device() {
+                Some("inode/chardevice")
+            } else if file_type.is_block_device() {
+                Some("inode/blockdevice")
+            } else {
+                None
+            };
+            if let Some(special) = special {
+                return special.to_owned();
+            }
         }
         let name = path
             .file_name()

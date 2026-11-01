@@ -514,8 +514,11 @@ impl TaskbarState {
         self.rail
     }
 
+    pub fn set_active(&mut self, app_id: Option<&str>) {
+        self.active = app_id.map(str::to_owned);
+    }
+
     pub fn activated(&mut self, app_id: &str) {
-        self.active = (!app_id.is_empty()).then(|| app_id.to_owned());
         self.attention.remove(app_id);
         if let Some(state) = self.launcher.get_mut(app_id) {
             state.urgent = false;

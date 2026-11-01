@@ -193,6 +193,15 @@ impl Taskbar {
         self.running = running;
     }
 
+    fn show_active(&self, window: &Window) {
+        let shown = self
+            .active
+            .as_deref()
+            .filter(|app_id| !window.is_windowless(app_id))
+            .map(|app_id| self.identity(app_id));
+        self.state.borrow_mut().set_active(shown.as_deref());
+    }
+
     fn describe(&mut self, app_id: &str, kept: bool) -> Option<TaskbarApp> {
         let running = self.running.iter().any(|running| running == app_id);
         let entry = self.entry(app_id).cloned();
@@ -945,6 +954,7 @@ impl App for Taskbar {
                 let running = &self.running;
                 self.unresponsive.retain(|app_id| running.contains(app_id));
                 self.sync();
+                self.show_active(window);
                 window.request_redraw();
             }
             WindowEvent::MenuAction(action) => {
@@ -958,6 +968,7 @@ impl App for Taskbar {
             WindowEvent::ActiveApp(app_id) => {
                 self.state.borrow_mut().activated(&self.identity(&app_id));
                 self.active = (!app_id.is_empty()).then_some(app_id);
+                self.show_active(window);
                 window.request_redraw();
             }
             WindowEvent::AppResponding {

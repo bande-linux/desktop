@@ -67,4 +67,4 @@ Method: I read the goldens (light and dark where they exist) against `docs/desig
 
 ## Status
 
-M1 finished (merged). M2-M6 open.
+M1 finished. M2 partly finished: the Bluetooth pairing prompts are alerts (the toolkit `Alert` gained an accessory slot for the PIN field), and Low Memory is a dialog window, so it no longer shares the remembered frame. Left in M2: About This Computer and About App, and fitting the Low Memory table to its rows. M3-M6 open.

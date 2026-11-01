@@ -93,18 +93,21 @@ fn confirmation_ui(
     ui
 }
 
-fn alert_scene(ui: &mut Ui, (width, height): (u32, u32)) -> Scene {
+pub(crate) fn alert_scene(ui: &mut Ui, (width, height): (u32, u32)) -> Scene {
     let mut scene = ui.scene(width, height);
     scene.background = ui.context().palette.overlay;
     scene
 }
 
+pub(crate) fn fitted(ui: &mut Ui) -> (u32, u32) {
+    let size = ui.measure(Size::new(f32::INFINITY, f32::INFINITY));
+    (size.width.ceil() as u32, size.height.ceil() as u32)
+}
+
 fn confirmation_size(ending: Ending, appearance: Appearance, now: Instant) -> (u32, u32) {
     let asking = SessionEnding::new(ending, now);
     let choice = Rc::new(Cell::new(Choice::Undecided));
-    let size = confirmation_ui(&asking, &choice, appearance, now)
-        .measure(Size::new(f32::INFINITY, f32::INFINITY));
-    (size.width.ceil() as u32, size.height.ceil() as u32)
+    fitted(&mut confirmation_ui(&asking, &choice, appearance, now))
 }
 
 pub fn session_ending_scene(

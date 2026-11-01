@@ -209,3 +209,33 @@ fn alert_buttons_sit_in_the_footer_with_alternatives_apart_and_stack_when_narrow
         "the default is on top"
     );
 }
+
+#[test]
+fn an_alert_accessory_sits_under_the_message_above_the_buttons_and_takes_the_typing() {
+    let typed = Rc::new(RefCell::new(String::new()));
+    let into = typed.clone();
+    let field = TextField::new("PIN", "", move |text| *into.borrow_mut() = text.to_owned());
+    let field_id = field.id();
+    let mut window = Window::new();
+    window.ui.present_dialog(
+        Alert::new("Enter the PIN for Keyboard.", "", |_| {})
+            .accessory(field)
+            .cancel("Cancel", "cancel")
+            .primary("Pair", "pair"),
+    );
+    window.settle();
+    assert_eq!(window.ui.focus(), Some(field_id));
+    window.ui.handle(&Event::Commit("1234".to_owned()));
+    assert_eq!(typed.borrow().as_str(), "1234");
+    let field = window.ui.widget(field_id).expect("field").frame();
+    let pair = window
+        .ui
+        .accessibility()
+        .nodes
+        .into_iter()
+        .find(|(_, node)| node.role() == Role::Button && node.label() == Some("Pair"))
+        .and_then(|(_, node)| node.bounds())
+        .expect("pair button");
+    assert!(field.height > 0.0);
+    assert!(f64::from(field.y + field.height) < pair.y0);
+}

@@ -8,9 +8,10 @@ use std::time::Duration;
 
 use bande_config::{
     AlertSound, Appearance, BarEdge, CapsLock, Config, ConfigError, ConfigStore, DEFAULT_BAR_APPS,
-    DisplaySettings, InputSource, MenuBarPlacement, NightLight, NightSchedule, Placement,
-    ReloadError, Rotation, SecondaryClick, Suspend, WallpaperFit, WallpaperVariant, config_path,
-    copy_login_picture, login_picture, login_picture_file, system_input_sources,
+    DisplaySettings, Dragging, InputSource, MenuBarPlacement, NightLight, NightSchedule, Placement,
+    PrimaryButton, ReloadError, Rotation, ScrollMethod, SecondaryClick, Suspend, WallpaperFit,
+    WallpaperVariant, config_path, copy_login_picture, login_picture, login_picture_file,
+    system_input_sources,
 };
 
 fn problems(source: &str) -> Vec<ConfigError> {
@@ -579,10 +580,19 @@ fn trackpad_and_mouse_settings_are_read_with_mac_like_defaults() {
     assert!(defaults.trackpad.tap_to_click);
     assert!(defaults.trackpad.natural_scrolling);
     assert!(!defaults.mouse.natural_scrolling);
+    assert_eq!(defaults.mouse.primary_button, PrimaryButton::Left);
+    assert!(defaults.mouse.acceleration && defaults.trackpad.acceleration);
+    assert_eq!(defaults.trackpad.dragging, Dragging::Tap);
+    assert_eq!(defaults.trackpad.scroll_method, ScrollMethod::TwoFingers);
     let config = Config::parse(
-        "trackpad {\n    tap-to-click #false\n    speed 0.5\n    secondary-click \"corner\"\n    disable-while-typing #false\n}\nmouse {\n    natural-scrolling #true\n    speed -1\n}\n",
+        "trackpad {\n    tap-to-click #false\n    speed 0.5\n    acceleration #false\n    secondary-click \"corner\"\n    dragging \"tap-with-lock\"\n    scroll-method \"edge\"\n    disable-while-typing #false\n}\nmouse {\n    primary-button \"right\"\n    natural-scrolling #true\n    speed -1\n    acceleration #false\n}\n",
     )
     .expect("valid");
+    assert!(!config.trackpad.acceleration);
+    assert_eq!(config.trackpad.dragging, Dragging::TapWithLock);
+    assert_eq!(config.trackpad.scroll_method, ScrollMethod::Edge);
+    assert_eq!(config.mouse.primary_button, PrimaryButton::Right);
+    assert!(!config.mouse.acceleration);
     assert!(!config.trackpad.tap_to_click);
     assert_eq!(config.trackpad.speed, 0.5);
     assert_eq!(config.trackpad.secondary_click, SecondaryClick::Corner);
@@ -590,6 +600,10 @@ fn trackpad_and_mouse_settings_are_read_with_mac_like_defaults() {
     assert!(config.mouse.natural_scrolling);
     assert_eq!(config.mouse.speed, -1.0);
     assert_eq!(error_at("mouse {\n    speed 2\n}\n"), (2, 11));
+    assert_eq!(
+        error_at("trackpad {\n    dragging \"always\"\n}\n"),
+        (2, 14)
+    );
 }
 
 #[test]

@@ -12,9 +12,9 @@ use bande_audio::{AppStream, Device, Direction, Level, Snapshot};
 use bande_config::{DisplaySettings, Placement};
 use bande_keyboard::Layouts;
 use bande_settings::{
-    Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, Mode, NetworkCommand, Pair,
-    PaneId, PictureCommand, PointingDevices, SettingId, SettingsView, Update, Value, bundled_pairs,
-    feed, follow_bluetooth, follow_network,
+    Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, LocaleState, Mode,
+    NetworkCommand, Pair, PaneId, PictureCommand, PointingDevices, SettingId, SettingsView, Update,
+    Value, bundled_pairs, feed, follow_bluetooth, follow_network,
 };
 use bande_test_bus::SessionBus;
 use bande_test_bus::bluez::{FakeBluez, PHONE};
@@ -382,6 +382,80 @@ fn sound_offers_the_alert_effects_a_live_input_level_and_a_volume_per_app() {
     );
 }
 
+#[test]
+fn the_new_pointer_rows_send_their_settings_and_dragging_follows_tap_to_click() {
+    let mut view = view();
+    view.set_pointing_devices(PointingDevices {
+        trackpad: true,
+        mouse: true,
+    });
+    view.apply(Update::Values(vec![
+        (
+            SettingId::MousePrimaryButton,
+            Value::Keyword("left".to_owned()),
+        ),
+        (SettingId::MouseAcceleration, Value::Flag(true)),
+        (SettingId::TrackpadTapToClick, Value::Flag(true)),
+        (
+            SettingId::TrackpadDragging,
+            Value::Keyword("tap".to_owned()),
+        ),
+        (
+            SettingId::TrackpadScrollMethod,
+            Value::Keyword("two-fingers".to_owned()),
+        ),
+        (SettingId::TrackpadAcceleration, Value::Flag(true)),
+    ]));
+
+    open(&mut view, "Mouse");
+    let right = find(&mut view, Role::RadioButton, "Right").expect("Right");
+    click(&mut view, right);
+    let acceleration = find(&mut view, Role::Switch, "Pointer acceleration").expect("switch");
+    click(&mut view, acceleration);
+    assert_eq!(
+        view.take_commands(),
+        [
+            Command::Set(
+                SettingId::MousePrimaryButton,
+                Value::Keyword("right".to_owned())
+            ),
+            Command::Set(SettingId::MouseAcceleration, Value::Flag(false)),
+        ]
+    );
+
+    open(&mut view, "Trackpad");
+    let edge = find(&mut view, Role::RadioButton, "One finger along the edge").expect("edge");
+    click(&mut view, edge);
+    let acceleration = find(&mut view, Role::Switch, "Pointer acceleration").expect("switch");
+    click(&mut view, acceleration);
+    let dragging = find(&mut view, Role::ComboBox, "Dragging").expect("dragging");
+    click(&mut view, dragging);
+    assert!(view.ui().menu_action("2"));
+    view.settle();
+    assert_eq!(
+        view.take_commands(),
+        [
+            Command::Set(
+                SettingId::TrackpadScrollMethod,
+                Value::Keyword("edge".to_owned())
+            ),
+            Command::Set(SettingId::TrackpadAcceleration, Value::Flag(false)),
+            Command::Set(
+                SettingId::TrackpadDragging,
+                Value::Keyword("tap-with-lock".to_owned())
+            ),
+        ]
+    );
+
+    let tap = find(&mut view, Role::Switch, "Tap to click").expect("tap");
+    click(&mut view, tap);
+    view.apply(Update::Values(vec![(
+        SettingId::TrackpadTapToClick,
+        Value::Flag(false),
+    )]));
+    assert!(find(&mut view, Role::ComboBox, "Dragging").is_none());
+}
+
 fn display(connector: &str, rates: &[i32]) -> Display {
     let modes: Vec<Mode> = rates
         .iter()
@@ -674,10 +748,12 @@ fn the_bar_pane_has_position_size_names_auto_hide_and_the_menu_bar() {
 }
 
 const RULES: &str = r#"<xkbConfigRegistry><layoutList>
-<layout><configItem><name>se</name><shortDescription>sv</shortDescription><description>Swedish</description></configItem></layout>
+<layout><configItem><name>se</name><shortDescription>sv</shortDescription><description>Swedish</description><countryList><iso3166Id>SE</iso3166Id></countryList></configItem>
+<variantList><variant><configItem><name>mac</name><description>Swedish (Macintosh)</description></configItem></variant></variantList></layout>
 <layout><configItem><name>us</name><shortDescription>en</shortDescription><description>English (US)</description></configItem>
 <variantList><variant><configItem><name>dvorak</name><description>English (Dvorak)</description></configItem></variant></variantList></layout>
-<layout><configItem><name>de</name><shortDescription>de</shortDescription><description>German</description></configItem></layout>
+<layout><configItem><name>de</name><shortDescription>de</shortDescription><description>German</description></configItem>
+<variantList><variant><configItem><name>mac</name><description>German (Macintosh)</description></configItem></variant></variantList></layout>
 </layoutList></xkbConfigRegistry>"#;
 
 fn keyboard_view(codes: &[&str]) -> SettingsView {
@@ -721,14 +797,45 @@ fn a_layout_is_added_by_searching_its_name_and_pressing_return() {
     for character in "germ".chars() {
         press(&mut view, Key::Character(character));
     }
-    assert_eq!(view.adding_source(), Some("germ"));
-    assert!(has_text(&mut view, "German"));
+    assert_eq!(view.picking(), Some("germ"));
+    assert!(has_text(&mut view, "German (Macintosh)"));
     assert!(!has_text(&mut view, "English (Dvorak)"));
-    assert_eq!(view.adding_source(), Some("germ"));
 
     press(&mut view, Key::Enter);
     assert_eq!(view.take_commands(), [codes(&["se", "de"])]);
-    assert_eq!(view.adding_source(), None);
+    assert_eq!(view.picking(), None);
+}
+
+#[test]
+fn the_layout_search_suggests_the_region_and_finds_every_word() {
+    let mut view = keyboard_view(&["us"]);
+    view.apply(Update::Locale(Some(LocaleState {
+        installed: Vec::new(),
+        language: "en_US.UTF-8".to_owned(),
+        region: Some("sv_SE.UTF-8".to_owned()),
+    })));
+    let add = find(&mut view, Role::Button, "Add Input Source…").expect("add button");
+    click(&mut view, add);
+    let shown: Vec<String> = nodes(&mut view)
+        .into_iter()
+        .filter(|(_, node)| node.role() == Role::Button)
+        .filter_map(|(_, node)| node.label().map(str::to_owned))
+        .filter(|label| label.contains(", "))
+        .collect();
+    assert_eq!(shown, ["Swedish, se", "Swedish (Macintosh), se(mac)"]);
+    assert!(!has_text(&mut view, "German"));
+    assert!(has_text(
+        &mut view,
+        "Type a language, country or layout name"
+    ));
+
+    for character in "mac ger".chars() {
+        press(&mut view, Key::Character(character));
+    }
+    assert!(!has_text(&mut view, "Swedish (Macintosh)"));
+    let german = find(&mut view, Role::Button, "German (Macintosh)").expect("German (Macintosh)");
+    click(&mut view, german);
+    assert_eq!(view.take_commands(), [codes(&["us", "de(mac)"])]);
 }
 
 #[test]
@@ -737,7 +844,7 @@ fn escape_stops_adding_a_layout_and_a_full_list_offers_no_more() {
     let add = find(&mut view, Role::Button, "Add Input Source…").expect("add button");
     click(&mut view, add);
     press(&mut view, Key::Escape);
-    assert_eq!(view.adding_source(), None);
+    assert_eq!(view.picking(), None);
     assert!(view.take_commands().is_empty());
 
     let mut full = keyboard_view(&["se", "us", "de", "us(dvorak)"]);
@@ -761,20 +868,27 @@ fn the_desktop_shortcuts_live_on_their_own_page_and_switching_sources_shows_its_
 }
 
 #[test]
-fn trackpad_settings_appear_only_with_a_trackpad_and_mouse_settings_only_with_a_mouse() {
+fn the_trackpad_pane_appears_only_with_a_trackpad_and_the_mouse_pane_only_with_a_mouse() {
     let mut view = view();
     view.apply(Update::Values(vec![
         (SettingId::TrackpadTapToClick, Value::Flag(true)),
         (SettingId::MouseNaturalScrolling, Value::Flag(false)),
         (SettingId::MouseSpeed, Value::Number(5)),
     ]));
-    assert!(find(&mut view, Role::ListItem, "Trackpad & Mouse").is_none());
+    assert!(find(&mut view, Role::ListItem, "Mouse").is_none());
+    assert!(find(&mut view, Role::ListItem, "Trackpad").is_none());
 
     view.set_pointing_devices(PointingDevices {
         trackpad: false,
         mouse: true,
     });
-    open(&mut view, "Trackpad & Mouse");
+    assert!(find(&mut view, Role::ListItem, "Trackpad").is_none());
+    for character in "scroll direction".chars() {
+        press(&mut view, Key::Character(character));
+    }
+    assert_eq!(view.visible_panes(), [PaneId::Mouse]);
+    press(&mut view, Key::Escape);
+    open(&mut view, "Mouse");
     assert!(find(&mut view, Role::Switch, "Tap to click").is_none());
     let natural = find(&mut view, Role::Switch, "Natural scrolling").expect("mouse scrolling");
     click(&mut view, natural);
@@ -788,7 +902,9 @@ fn trackpad_settings_appear_only_with_a_trackpad_and_mouse_settings_only_with_a_
 
     view.set_pointing_devices(PointingDevices {
         trackpad: true,
-        mouse: true,
+        mouse: false,
     });
+    assert!(find(&mut view, Role::ListItem, "Mouse").is_none());
+    open(&mut view, "Trackpad");
     assert!(find(&mut view, Role::Switch, "Tap to click").is_some());
 }

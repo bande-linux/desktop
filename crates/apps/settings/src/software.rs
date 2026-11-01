@@ -1,18 +1,22 @@
 use std::collections::HashMap;
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, Receiver, Sender};
 
+use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
+use zbus::message::{self, Message};
+use zbus::names::BusName;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
-use zbus::{MatchRule, message};
+use zbus::{MatchRule, OwnedMatchRule};
 
 use bande_notify::Urgency;
 use bande_notify::client::{Request, notify};
 
 use crate::L10N;
-use crate::failure::{sentence, unexpected};
+use crate::failure::{missing, sentence, unexpected};
 use crate::follow::{Update, Updates, spawn};
 
 const PACKAGEKIT: &str = "org.freedesktop.PackageKit";
+const BUS: &str = "org.freedesktop.DBus";
 const TRANSACTION: &str = "org.freedesktop.PackageKit.Transaction";
 const FILTER_NONE: u64 = 1 << 1;
 const ONLY_TRUSTED: u64 = 1 << 1;
@@ -61,10 +65,17 @@ impl Package {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    Check,
+    Install,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum SoftwareState {
     #[default]
     Unknown,
+    Unavailable,
     Checking,
     UpToDate,
     Available(Vec<Package>),
@@ -74,7 +85,10 @@ pub enum SoftwareState {
     Installed {
         restart: bool,
     },
-    Failed(String),
+    Failed {
+        during: Stage,
+        reason: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,22 +113,50 @@ fn size_of(details: &HashMap<String, OwnedValue>) -> Option<u64> {
         .filter(|size| *size > 0)
 }
 
-fn run(
-    system: &Connection,
-    call: &dyn Fn(&zbus::blocking::Proxy<'_>) -> zbus::Result<()>,
-    progress: &dyn Fn(u32),
-) -> zbus::Result<Outcome> {
-    let path = PackageKitProxyBlocking::new(system)?.create_transaction()?;
-    let rule = MatchRule::builder()
-        .msg_type(message::Type::Signal)
-        .path(path.clone())?
-        .build();
-    let signals = MessageIterator::for_match_rule(rule, system, None)?;
-    let transaction = zbus::blocking::Proxy::new(system, PACKAGEKIT, path, TRANSACTION)?;
-    let _: () = transaction.call("SetHints", &(vec!["interactive=true"],))?;
-    call(&transaction)?;
+fn left(message: &Message) -> bool {
+    let header = message.header();
+    header.interface().is_some_and(|interface| interface == BUS)
+        && header
+            .member()
+            .is_some_and(|member| member == "NameOwnerChanged")
+        && message
+            .body()
+            .deserialize::<(String, String, String)>()
+            .is_ok_and(|(name, old, _)| name == PACKAGEKIT && !old.is_empty())
+}
+
+fn from_transaction(message: &Message, path: &OwnedObjectPath) -> bool {
+    let header = message.header();
+    header.message_type() == message::Type::Signal
+        && header
+            .path()
+            .is_some_and(|from| from.as_str() == path.as_str())
+}
+
+fn finished(message: &Message) -> bool {
+    message
+        .header()
+        .member()
+        .is_some_and(|member| member == "Finished")
+}
+
+fn relay(messages: MessageIterator, path: OwnedObjectPath, relayed: Sender<Option<Message>>) {
+    for message in messages.flatten() {
+        let wanted = left(&message) || from_transaction(&message, &path);
+        let last = left(&message) || (wanted && finished(&message));
+        if relayed.send(wanted.then_some(message)).is_err() || last {
+            break;
+        }
+    }
+}
+
+fn listen(relayed: &Receiver<Option<Message>>, progress: &dyn Fn(u32)) -> Outcome {
     let mut outcome = Outcome::default();
-    for message in signals.flatten() {
+    for message in relayed.iter().flatten() {
+        if left(&message) {
+            outcome.error = Some(L10N.tr("updates-service-stopped"));
+            break;
+        }
         let header = message.header();
         let body = message.body();
         match header.member().map(|member| member.as_str()) {
@@ -166,11 +208,75 @@ fn run(
             _ => {}
         }
     }
-    Ok(outcome)
+    outcome
 }
 
-fn failed(outcome: &Outcome) -> Option<SoftwareState> {
-    outcome.error.clone().map(SoftwareState::Failed)
+fn run(
+    system: &Connection,
+    call: &dyn Fn(&zbus::blocking::Proxy<'_>) -> zbus::Result<()>,
+    progress: &dyn Fn(u32),
+) -> zbus::Result<Outcome> {
+    let path = PackageKitProxyBlocking::new(system)?.create_transaction()?;
+    let transaction = zbus::blocking::Proxy::new(system, PACKAGEKIT, &path, TRANSACTION)?;
+    let _: () = transaction.call("SetHints", &(vec!["interactive=true"],))?;
+    let bus = DBusProxy::new(system)?;
+    let rules: [OwnedMatchRule; 2] = [
+        MatchRule::builder()
+            .msg_type(message::Type::Signal)
+            .path(path.clone())?
+            .build()
+            .into(),
+        MatchRule::builder()
+            .msg_type(message::Type::Signal)
+            .sender(BUS)?
+            .interface(BUS)?
+            .member("NameOwnerChanged")?
+            .arg(0, PACKAGEKIT)?
+            .build()
+            .into(),
+    ];
+    let (relayed, received) = mpsc::channel();
+    let messages = MessageIterator::from(system);
+    let watched = path.clone();
+    spawn("packagekit-signals", move || {
+        relay(messages, watched, relayed)
+    });
+    let outcome = (|| -> zbus::Result<Outcome> {
+        for rule in &rules {
+            bus.add_match_rule(rule.inner().clone())?;
+        }
+        if !bus.name_has_owner(BusName::try_from(PACKAGEKIT)?)? {
+            return Ok(Outcome {
+                error: Some(L10N.tr("updates-service-stopped")),
+                ..Outcome::default()
+            });
+        }
+        call(&transaction)?;
+        Ok(listen(&received, progress))
+    })();
+    for rule in rules {
+        if let Err(error) = bus.remove_match_rule(rule.into_inner()) {
+            tracing::warn!("cannot remove a PackageKit match rule: {error}");
+        }
+    }
+    outcome
+}
+
+fn failed(during: Stage, outcome: &Outcome) -> Option<SoftwareState> {
+    outcome
+        .error
+        .clone()
+        .map(|reason| SoftwareState::Failed { during, reason })
+}
+
+fn broken(during: Stage, error: &zbus::Error) -> SoftwareState {
+    if missing(error) {
+        return SoftwareState::Unavailable;
+    }
+    SoftwareState::Failed {
+        during,
+        reason: sentence(error, "service-updates"),
+    }
 }
 
 pub fn check(system: &Connection) -> SoftwareState {
@@ -180,7 +286,7 @@ pub fn check(system: &Connection) -> SoftwareState {
             &|transaction| transaction.call("RefreshCache", &(false,)),
             &|_| {},
         )?;
-        if let Some(failure) = failed(&refresh) {
+        if let Some(failure) = failed(Stage::Check, &refresh) {
             return Ok(failure);
         }
         let updates = run(
@@ -188,7 +294,7 @@ pub fn check(system: &Connection) -> SoftwareState {
             &|transaction| transaction.call("GetUpdates", &(FILTER_NONE,)),
             &|_| {},
         )?;
-        if let Some(failure) = failed(&updates) {
+        if let Some(failure) = failed(Stage::Check, &updates) {
             return Ok(failure);
         }
         let mut packages = updates.packages;
@@ -207,7 +313,7 @@ pub fn check(system: &Connection) -> SoftwareState {
         packages.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(SoftwareState::Available(packages))
     };
-    checked().unwrap_or_else(|error| SoftwareState::Failed(error.to_string()))
+    checked().unwrap_or_else(|error| broken(Stage::Check, &error))
 }
 
 fn install(system: &Connection, ids: Vec<String>, updates: &Updates) -> SoftwareState {
@@ -221,10 +327,10 @@ fn install(system: &Connection, ids: Vec<String>, updates: &Updates) -> Software
         },
     );
     match installed {
-        Ok(outcome) => failed(&outcome).unwrap_or(SoftwareState::Installed {
+        Ok(outcome) => failed(Stage::Install, &outcome).unwrap_or(SoftwareState::Installed {
             restart: outcome.restart,
         }),
-        Err(error) => SoftwareState::Failed(sentence(&error, "service-updates")),
+        Err(error) => broken(Stage::Install, &error),
     }
 }
 

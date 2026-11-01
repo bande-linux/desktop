@@ -233,14 +233,14 @@ fn strokes_of(items: &[Item], color: &Paint) -> usize {
 #[test]
 fn a_clicked_sidebar_row_takes_the_keys_without_a_focus_ring() {
     let mut view = view();
-    let row = node(&mut view, Role::ListItem, "Bar")
+    let row = node(&mut view, Role::ListItem, "Taskbar")
         .bounds()
         .expect("bounds");
     click(
         &mut view,
         Point::new(row.x0 as f32 + 10.0, row.y0 as f32 + 10.0),
     );
-    assert_eq!(focused_label(&view).as_deref(), Some("Bar"));
+    assert_eq!(focused_label(&view).as_deref(), Some("Taskbar"));
 
     let scene = view.scene(SIZE.0, SIZE.1);
     let focus = Paint::from(Palette::for_scheme(Scheme::Light).focus);

@@ -51,8 +51,10 @@ profiles. Sizes are tracked in [performance.md](performance.md).
 
 The packages pull in the runtime stack the architecture relies on:
 
-- `bande-desktop` recommends `fonts-noto-core` and `fonts-noto-cjk`, the fallback faces
-  for scripts Inter does not cover, and `cups` for printing;
+- `bande-desktop` depends on `fonts-noto-core` and `fonts-noto-cjk`, the fallback faces
+  for scripts Inter does not cover (so an image built without recommends still has them),
+  and recommends `cups` for printing; `bande-settings` depends on `locales`, so localed can
+  generate any language picked in Settings;
 - `bande-shell` recommends PipeWire, WirePlumber, NetworkManager with Debian's
   connectivity check, BlueZ and the Adwaita icon theme, and `bande-settings` adds
   PackageKit and power-profiles-daemon;

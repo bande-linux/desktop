@@ -37,7 +37,7 @@ draws the panes (`pages.rs`, `view.rs`, `widgets.rs`) and talks to the services.
 | ↳ Software Update | status with Check Now, Install Now or Restart Now; the package list | PackageKit and logind; `bande-update-check.timer` |
 | ↳ Storage | usage bar by category; Trash with Empty Trash…; Largest files with Show in Files | statvfs and Settings' own scan (`storage.rs`) |
 | ↳ Date & Time | Set time automatically; manual date and time; Time zone with a Change… picker; 24-hour time | timedated; the config's `clock-format` |
-| ↳ Language & Region | Language; Region with a formats preview | localed and the installed locales |
+| ↳ Language & Region | Language; Region with a formats preview | localed and every UTF-8 locale in `/usr/share/i18n/SUPPORTED` |
 | ↳ Login Items | Open at login: a list with Add… and Remove | XDG autostart files (`login.rs`) |
 | Appearance | Appearance (Light, Dark, Auto); Accent colour; Tint window frames with the wallpaper | the config |
 | Accessibility | Screen reader (only when Orca is installed), Zoom, Increase contrast, Reduce transparency, Reduce motion, Pointer size; Flash the screen; Sticky, Slow and Bounce keys | the config, applied by the compositor and served by the portal |
@@ -594,7 +594,8 @@ notifications per app.
 | Language, formats with preview, 24-hour time | M W G K | have | — | merged into Language & Time |
 | Automatic time, time zone, manual time | M W G K | have | — | merged |
 | Automatic time zone | M W G | missing | later | geoclue |
-| Preferred language order, install a language | M W G K | one language from installed locales | later | locale-gen needs root |
+| Install a language | M W G K | have | — | any supported locale; localed runs locale-gen, "Setting up…" while it works |
+| Preferred language order | M W G K | one language | later | — |
 | Separate overrides for number, date and measurement formats | M W K | the region decides | never | one region choice is enough |
 | Administrators change time, language and name without a prompt | — | fails without an agent | now (slice 2) | polkit rules (maturity gaps #2) |
 | Computer name, About, Storage, Software Update | M W G K | have | — | moved under About |

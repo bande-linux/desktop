@@ -92,7 +92,7 @@ launcher are one process, `bande-shell` (`crates/shell/shell`), with one Wayland
 GPU device, one font database and one connection per D-Bus bus. Each part is a library crate
 (`bande-desktop-surface`, `bande-bar`, `bande-notifications`, `bande-controlcenter`,
 `bande-launcher`) whose surfaces the shell hosts; the taskbar's models live in
-`bande-dock-model` and `bande-status` (`crates/libs`).
+`bande-taskbar-model` and `bande-status` (`crates/libs`).
 
 ## Process model
 
@@ -193,7 +193,7 @@ control writes to it, and it can be edited by hand while the session runs.
       repeat-rate 25            // 1 to 60 characters per second
       repeat-delay 600          // 150 to 2000 milliseconds before repeating starts
       input-sources "se" "us(dvorak)" // xkb layout(variant), at most 4; unset means
-                                // the layouts of /etc/default/keyboard
+                                // the system layouts (/etc/vconsole.conf, then /etc/default/keyboard)
       caps-lock "caps-lock"     // "caps-lock" | "escape" | "control" | "compose" | "off"
   }
   trackpad {

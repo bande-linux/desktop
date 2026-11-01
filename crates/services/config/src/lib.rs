@@ -44,7 +44,7 @@ pub const ZOOM_RANGE: (f64, f64) = (1.0, 16.0);
 pub const TEXT_SIZE_RANGE: (u32, u32) = (100, 200);
 pub const CURSOR_SIZE_RANGE: (u32, u32) = (24, 128);
 pub const DEFAULT_CURSOR_SIZE: u32 = 24;
-pub const SYSTEM_KEYBOARD: &str = "/etc/default/keyboard";
+pub const SYSTEM_KEYBOARDS: [&str; 2] = ["/etc/vconsole.conf", "/etc/default/keyboard"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Appearance {
@@ -297,8 +297,23 @@ pub fn system_input_sources(default_keyboard: &str) -> Vec<InputSource> {
     sources
 }
 
+pub fn system_keyboard<'a>(files: &[&'a str]) -> &'a str {
+    files
+        .iter()
+        .copied()
+        .find(|text| {
+            text.lines().any(|line| {
+                line.trim()
+                    .strip_prefix("XKBLAYOUT=")
+                    .is_some_and(|value| !value.trim().trim_matches('"').is_empty())
+            })
+        })
+        .unwrap_or_default()
+}
+
 pub fn read_system_input_sources() -> Vec<InputSource> {
-    system_input_sources(&std::fs::read_to_string(SYSTEM_KEYBOARD).unwrap_or_default())
+    let files = SYSTEM_KEYBOARDS.map(|path| std::fs::read_to_string(path).unwrap_or_default());
+    system_input_sources(system_keyboard(&files.each_ref().map(String::as_str)))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

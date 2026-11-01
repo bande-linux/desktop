@@ -81,13 +81,13 @@ fn panels_hear_where_their_bar_item_is_in_the_area_beside_the_bar() {
 }
 
 #[test]
-fn the_menu_bar_spans_the_whole_top_edge_even_when_the_dock_reserved_its_side_first() {
+fn the_menu_bar_spans_the_whole_top_edge_even_when_the_taskbar_reserved_its_side_first() {
     let mut server = server();
     let mut shell = TestClient::connect(&mut server);
     shell.show_named_layer(
         &mut server,
         &panel(Layer::Top, Anchor::Left, (40, 120), 40),
-        "dock",
+        "taskbar",
     );
     let bar = shell.show_named_layer(
         &mut server,

@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used)]
 
-use bande_dock_model::bus::{app_id_from_uri, launcher_update};
-use bande_dock_model::{LauncherEntry, arrange};
+use bande_taskbar_model::bus::{app_id_from_uri, launcher_update};
+use bande_taskbar_model::{LauncherEntry, arrange};
 use zbus::zvariant::{OwnedValue, Value};
 
 #[test]

@@ -22,7 +22,7 @@ use smithay::wayland::keyboard_shortcuts_inhibit::{
 use crate::frame::Target;
 use crate::gesture::Gesture;
 use crate::keyboard_monitor::KeyEvent;
-use crate::motion::DOCK_NAMESPACE;
+use crate::motion::TASKBAR_NAMESPACE;
 use crate::shell::toplevel_names;
 use crate::state::{Compositor, MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE, State};
 use crate::tile::Direction;
@@ -165,7 +165,7 @@ fn shortcut(
     match keysym {
         keysyms::KEY_Escape if alt => Some(Shortcut::ForceQuit),
         keysyms::KEY_F2 => Some(Shortcut::FocusShell(MENU_BAR_NAMESPACE)),
-        keysyms::KEY_F3 => Some(Shortcut::FocusShell(DOCK_NAMESPACE)),
+        keysyms::KEY_F3 => Some(Shortcut::FocusShell(TASKBAR_NAMESPACE)),
         keysyms::KEY_F5 => Some(Shortcut::ToggleScreenReader),
         keysyms::KEY_F11 | keysyms::KEY_XF86LaunchA => Some(Shortcut::ShowDesktop),
         keysyms::KEY_Left if ctrl && shift => Some(Shortcut::CarryWindow(false)),
@@ -912,7 +912,7 @@ mod tests {
     use smithay::input::keyboard::keysyms;
 
     use super::{Shortcut, shortcut, without_super};
-    use crate::motion::DOCK_NAMESPACE;
+    use crate::motion::TASKBAR_NAMESPACE;
     use crate::state::{MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE};
     use crate::tile::Direction;
 
@@ -971,7 +971,7 @@ mod tests {
             Action::ShowClipboardHistory => Shortcut::OpenLauncher(LauncherMode::Clipboard),
             Action::ShowEmojiPicker => Shortcut::OpenLauncher(LauncherMode::Emoji),
             Action::FocusMenuBar => Shortcut::FocusShell(MENU_BAR_NAMESPACE),
-            Action::FocusDock => Shortcut::FocusShell(DOCK_NAMESPACE),
+            Action::FocusTaskbar => Shortcut::FocusShell(TASKBAR_NAMESPACE),
             Action::SearchMenus => Shortcut::FocusShell(MENU_SEARCH_NAMESPACE),
             Action::LockScreen => Shortcut::LockScreen,
             Action::ToggleZoom => Shortcut::ToggleZoom,

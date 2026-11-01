@@ -11,7 +11,7 @@
     <request name="activate_app">
       <description summary="bring an app forward">
         Focuses and raises the frontmost window of the app with this app id and
-        raises its other windows behind it, as clicking a running app in the Dock
+        raises its other windows behind it, as clicking a running app in the Taskbar
         does. Ignored when the app has no mapped window.
       </description>
       <arg name="app_id" type="string"/>
@@ -74,11 +74,11 @@
 
     <request name="set_icon_rect">
       <description summary="say where an app's icon is shown">
-        Tells the compositor where the Dock shows the icon of the app with this
+        Tells the compositor where the Taskbar shows the icon of the app with this
         app id, as a rectangle in the surface coordinates of the given surface.
         The compositor minimises the app's windows into this rectangle and
         restores them out of it. A width or height of 0 forgets the rectangle,
-        as when the icon leaves the Dock. The rectangle is also forgotten when
+        as when the icon leaves the Taskbar. The rectangle is also forgotten when
         the surface is destroyed.
       </description>
       <arg name="app_id" type="string"/>
@@ -107,7 +107,7 @@
     <request name="hide_app">
       <description summary="hide every window of an app">
         Fades out every window of the app with this app id, as Hide in a Mac's
-        Dock menu or Command-H does. The windows take no input while hidden.
+        Taskbar menu or Command-H does. The windows take no input while hidden.
         activate_app, activate_window or an activation request from the app shows
         them again.
       </description>
@@ -136,7 +136,7 @@
       <description summary="bring one window forward">
         Shows, restores if minimised, raises and focuses the window whose
         ext_foreign_toplevel_handle_v1 identifier is given, as picking a window
-        from a Dock icon's menu does. The Dock lists the windows, their titles
+        from a Taskbar icon's menu does. The Taskbar lists the windows, their titles
         and app ids through ext_foreign_toplevel_list_v1.
       </description>
       <arg name="identifier" type="string"/>
@@ -146,7 +146,7 @@
       <description summary="a window was minimised or restored">
         Sent whenever the window with this ext_foreign_toplevel_handle_v1
         identifier is minimised (1) or restored (0), and on binding for every
-        minimised window, so the Dock icon menu can mark minimised windows.
+        minimised window, so the Taskbar icon menu can mark minimised windows.
       </description>
       <arg name="identifier" type="string"/>
       <arg name="minimized" type="uint"/>
@@ -156,7 +156,7 @@
       <description summary="an app wants the user's attention">
         Sent when an app asks to be activated without a valid activation token,
         for example when it finishes work in the background. The compositor does
-        not raise it; the Dock bounces its icon instead.
+        not raise it; the Taskbar bounces its icon instead.
       </description>
       <arg name="app_id" type="string"/>
     </event>
@@ -165,7 +165,7 @@
       <description summary="round the background effect of a surface">
         Rounds each blur region the surface set through
         ext_background_effect_surface_v1 with this radius, in surface
-        coordinates, so a rounded Dock or menu blurs exactly behind its shape.
+        coordinates, so a rounded Taskbar or menu blurs exactly behind its shape.
         0 means square corners, the default.
       </description>
       <arg name="surface" type="object" interface="wl_surface"/>
@@ -174,10 +174,10 @@
 
     <event name="focus_shell">
       <description summary="the user asked to reach a shell element from the keyboard">
-        Sent with the layer namespace "dock" for Super+F3, "menubar" for
+        Sent with the layer namespace "taskbar" for Super+F3, "menubar" for
         Super+F2 and "menu-search" for Shift+Super+/, after the compositor gave
         the keyboard to the layer surface with that namespace or, when there is
-        none, to the bar or the Dock.
+        none, to the bar or the Taskbar.
         The client shows its keyboard selection. To give the keyboard back, for
         example on Escape, it calls activate_app with the active app.
       </description>
@@ -536,7 +536,7 @@
         Sets or clears the window menu's Keep on Top toggle for the toplevel.
         While set, the window stays in front of every window without it on
         its workspace, even when another window is focused, and still below
-        the menu bar, the Dock and other shell surfaces. Windows that keep on
+        the menu bar, the Taskbar and other shell surfaces. Windows that keep on
         top stack among themselves by focus as usual. The state lasts until
         it is cleared or the window closes. Ignored for a toplevel of another
         client.

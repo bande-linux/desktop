@@ -43,7 +43,7 @@ bande-test-bus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter, bande-config"
+depends = "$auto, fonts-inter, bande-config, locales"
 extended-description = """\
 System Settings of the Bande desktop in four groups: Connections \
 (Wi-Fi, Bluetooth, network), Desktop (appearance and wallpaper, the bar, \
@@ -53,8 +53,9 @@ and time, about this computer with storage and software update), with a \
 search field that ranks the matching settings and marks them. Every pane \
 follows changes made elsewhere while it is open. Desktop settings go \
 through org.bande.Config, which writes config.kdl. A polkit rule lets \
-administrators (members of sudo) change the time, language, computer \
-name and install updates without a password prompt."""
+administrators (members of sudo) change the time, language, login screen \
+keyboard layouts, computer name and install updates without a password \
+prompt. Any supported language can be chosen; localed generates it."""
 recommends = "bande-polkit, network-manager, bluez, pipewire, wireplumber, bande-notify, packagekit, power-profiles-daemon, upower"
 maintainer-scripts = "debian/"
 assets = [

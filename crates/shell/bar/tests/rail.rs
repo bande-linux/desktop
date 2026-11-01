@@ -7,18 +7,20 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use bande_bar::dock::{DockAction, DockApp, DockState, MenuTarget, Shared, dock_ui, scene};
 use bande_bar::menu_bar::{Slot, StatusView};
 use bande_bar::menus::{AppMenus, bluetooth_menu, cascade, wifi_menu};
 use bande_bar::rail::{RailView, bar_width, surface_size};
+use bande_bar::taskbar::{
+    MenuTarget, Shared, TaskbarAction, TaskbarApp, TaskbarState, scene, taskbar_ui,
+};
 use bande_config::BarEdge;
 use bande_datetime::{DateFormats, posix_locale};
-use bande_dock_model::LauncherUpdate;
 use bande_status::dbusmenu::Node;
 use bande_status::status::{
     Battery, Bluetooth, Capture, Gadget, InputSource, InputSources, Power, Sense, Sound, Wifi,
 };
 use bande_status::unread::ClockMark;
+use bande_taskbar_model::LauncherUpdate;
 use bande_toolkit::ui::{
     Event, Key, MenuOutcome, MenuPanel, MenuTracker, Modifiers, Pointer, PointerButton, Ui,
 };
@@ -44,8 +46,8 @@ fn app_icon(name: &str, scale: f64) -> Option<Image> {
     )
 }
 
-fn app(app_id: &str, name: &str, kept: bool, running: bool, scale: f64) -> DockApp {
-    DockApp {
+fn app(app_id: &str, name: &str, kept: bool, running: bool, scale: f64) -> TaskbarApp {
+    TaskbarApp {
         app_id: app_id.to_owned(),
         name: name.to_owned(),
         icon: app_icon(app_id, scale),
@@ -54,7 +56,7 @@ fn app(app_id: &str, name: &str, kept: bool, running: bool, scale: f64) -> DockA
     }
 }
 
-fn apps(scale: f64) -> Vec<DockApp> {
+fn apps(scale: f64) -> Vec<TaskbarApp> {
     vec![
         app("org.bande.Files", "Files", true, true, scale),
         app("org.bande.Terminal", "Terminal", true, true, scale),
@@ -63,7 +65,7 @@ fn apps(scale: f64) -> Vec<DockApp> {
     ]
 }
 
-fn numbered(count: usize) -> Vec<DockApp> {
+fn numbered(count: usize) -> Vec<TaskbarApp> {
     (0..count)
         .map(|index| {
             app(
@@ -98,11 +100,11 @@ struct Rail {
 }
 
 impl Rail {
-    fn new(scheme: Scheme, height: u32, apps: Vec<DockApp>) -> Self {
+    fn new(scheme: Scheme, height: u32, apps: Vec<TaskbarApp>) -> Self {
         Self::at_scale(scheme, height, apps, 1.0)
     }
 
-    fn at_scale(scheme: Scheme, height: u32, apps: Vec<DockApp>, scale: f64) -> Self {
+    fn at_scale(scheme: Scheme, height: u32, apps: Vec<TaskbarApp>, scale: f64) -> Self {
         let palette = Palette::for_scheme(scheme);
         let mut view = RailView::new(palette, TextSystem::new(), vec![data()], ICON);
         let status = view.status_mut();
@@ -158,7 +160,7 @@ impl Rail {
             .parse()
             .expect("time");
         view.set_time(&at, &DateFormats::for_locale(&posix_locale("en_GB")));
-        let state = DockState::new(BarEdge::Left, ICON);
+        let state = TaskbarState::new(BarEdge::Left, ICON);
         state.borrow_mut().set_appearance(Appearance {
             scheme,
             ..Appearance::default()
@@ -172,7 +174,7 @@ impl Rail {
         let clock = Rc::new(Cell::new(Instant::now()));
         state.borrow_mut().set_apps(apps, clock.get());
         state.borrow_mut().activated("org.bande.Files");
-        let mut ui = dock_ui(state.clone(), palette, TextSystem::new());
+        let mut ui = taskbar_ui(state.clone(), palette, TextSystem::new());
         let time = clock.clone();
         ui.set_clock(move || time.get());
         Self {
@@ -323,7 +325,7 @@ fn apps_shrink_once_and_then_fold_the_rest_into_a_more_cell_above_the_trash() {
     let more = Point::new(bar_width(ICON) / 2.0, last.y + last.height + 24.0);
     rail.ui.handle(&Event::PointerDown(Pointer::at(more)));
     let actions = rail.state.borrow_mut().take_actions();
-    let Some(DockAction::Menu {
+    let Some(TaskbarAction::Menu {
         target: MenuTarget::More(hidden),
         ..
     }) = actions.first()
@@ -701,7 +703,7 @@ fn the_keyboard_reaches_the_more_cell_between_the_apps_and_the_trash_and_opens_i
     assert!(state.navigate(Key::Enter, plain, now));
     let actions = state.take_actions();
     let [
-        DockAction::Menu {
+        TaskbarAction::Menu {
             target: MenuTarget::More(hidden),
             ..
         },

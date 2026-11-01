@@ -505,7 +505,7 @@ fn night_light_is_written_whole_and_rejects_a_bad_time_schedule_or_warmth() {
 }
 
 #[test]
-fn the_dock_apps_size_auto_hide_and_wallpaper_fit_are_writable_and_signalled() {
+fn the_taskbar_apps_size_auto_hide_and_wallpaper_fit_are_writable_and_signalled() {
     let fixture = start("bar {\n    apps \"org.bande.Files\" // mine\n}\n");
     let changes = watch_changes(&fixture.client);
 

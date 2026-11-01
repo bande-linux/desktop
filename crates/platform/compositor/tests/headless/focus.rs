@@ -133,12 +133,12 @@ fn an_app_opening_unasked_while_you_type_opens_behind_and_asks_for_attention() {
         return;
     }
     let mut server = server();
-    let mut dock = TestClient::connect_as_shell(&mut server);
-    dock.use_seat(&mut server);
-    dock.join_shell(&mut server);
+    let mut taskbar = TestClient::connect_as_shell(&mut server);
+    taskbar.use_seat(&mut server);
+    taskbar.join_shell(&mut server);
     let mut terminal = app(&mut server);
     open_window(&mut server, &mut terminal, 2);
-    roundtrip(&mut server, &mut [&mut dock, &mut terminal]);
+    roundtrip(&mut server, &mut [&mut taskbar, &mut terminal]);
     let mut intruder = SeparateApp::launch(
         &mut server,
         "focus::an_app_opening_unasked_while_you_type_opens_behind_and_asks_for_attention",
@@ -146,11 +146,11 @@ fn an_app_opening_unasked_while_you_type_opens_behind_and_asks_for_attention() {
     type_a_key(&mut server);
 
     intruder.show_window(&mut server, 4);
-    roundtrip(&mut server, &mut [&mut dock, &mut terminal]);
+    roundtrip(&mut server, &mut [&mut taskbar, &mut terminal]);
 
     assert!(terminal.has_keyboard_focus());
     assert_eq!(stacking_by_side(&server), vec![4, 2]);
-    assert_eq!(dock.attention_requests().len(), 1);
+    assert_eq!(taskbar.attention_requests().len(), 1);
 }
 
 #[test]

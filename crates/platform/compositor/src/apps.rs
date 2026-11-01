@@ -6,7 +6,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Resource};
 use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 
-use crate::motion::{BAR_NAMESPACE, DOCK_NAMESPACE, Look};
+use crate::motion::{BAR_NAMESPACE, Look, TASKBAR_NAMESPACE};
 use crate::shell::{is_shell, toplevel_names};
 use crate::state::State;
 
@@ -168,7 +168,7 @@ impl State {
         };
         let surface = find(namespace)
             .or_else(|| find(BAR_NAMESPACE))
-            .or_else(|| find(DOCK_NAMESPACE));
+            .or_else(|| find(TASKBAR_NAMESPACE));
 
         let Some(surface) = surface else {
             return;

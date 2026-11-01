@@ -10,3 +10,9 @@ Status: started ([plans/power-management.md](plans/power-management.md)); displa
 
 crash management, bande-desktop is quite fragile and when it runs out of ram or crashes for some other reason it is quite common that it brings down the whole computer or just freezes. This never happens in MacOS so there must be better ways to handle such events. Investigate it, this is super important.
 Status: started ([plans/crash-management.md](plans/crash-management.md)); kernel PSI/zram/lockup detectors, image oomd/zram/hardware watchdog, session bus at the OOM floor and the compositor watchdog done (M1-4); the owner installs the kernel and tests (M5), reopen after a crash (M6) and coredumps (M7) left
+
+
+remove the ability to drag out the taskbar into the wide state. That looks bad and is another feature to support that wont be used. I want sensible options for the bande desktop but not bloated options (KDE for example has way too many options and if feels bad. Gnome has way too few options and it feels limiting. We want a sweetspot like MacOS where the user can customize what is reasonable that an average user would want but not more. Too many options will likely bring bugs as well.)
+
+UI polish: the ui needs to be polished and improved in some ways. Like the restart window. Is way to large and looks hacky. Go over the OS and make sure each view/item/panel is professional, clean and modern looking.
+

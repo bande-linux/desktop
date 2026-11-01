@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use bande_network::NetworkManager;
+use bande_network::{JoinOutcome, Network, NetworkManager};
 use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
 use zbus::blocking::{Connection, MessageIterator};
@@ -26,6 +26,34 @@ fn sign_in_summary(network: Option<&str>) -> String {
     match network {
         Some(network) => L10N.tr_args("sign-in-to", [("network", network.to_owned().into())]),
         None => L10N.tr("sign-in-to-network"),
+    }
+}
+
+pub fn join_network(network: &NetworkManager, found: &Network) {
+    let reason = match network.join(found, None) {
+        Ok(JoinOutcome::Joined) => return,
+        Ok(outcome) => outcome.to_string(),
+        Err(error) => error.to_string(),
+    };
+    tracing::warn!("cannot join {}: {reason}", found.name());
+    let summary = L10N.tr_args("join-failed", [("network", found.name().into())]);
+    let posted = Connection::session().and_then(|session| {
+        client::notify(
+            &session,
+            &Request {
+                app_name: &L10N.tr("network"),
+                replaces_id: 0,
+                app_icon: NETWORK_ICON,
+                summary: &summary,
+                body: &reason,
+                actions: &[],
+                urgency: Urgency::Normal,
+                sound: None,
+            },
+        )
+    });
+    if let Err(error) = posted {
+        tracing::warn!("cannot tell why joining failed: {error}");
     }
 }
 

@@ -628,6 +628,7 @@ impl FilesView {
         self.browser.set_sort(Sort {
             by,
             descending: !order.ascending,
+            ..self.browser.sort()
         });
         self.remember_view();
         self.selection_changed();

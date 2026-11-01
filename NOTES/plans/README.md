@@ -40,6 +40,7 @@ Plans share work. Land the shared pieces first:
 | [power-management](power-management.md) | Nothing turns the display off; sleep is off at the system level after an s2idle abort | 7 |
 | [taskbar-width-and-options](taskbar-width-and-options.md) | The wide taskbar was a second layout with its own key, property, switch and drag; options inventory against macOS | 6 (1 done, 5 wait on the owner) |
 | [crash-management](crash-management.md) | Kernel OOM killed the session bus 6 times while the build lived (adj 200 vs 0); no PSI, no watchdogs | 7 |
+| [app-framework](app-framework.md) | Every app re-writes its main loop, menu bar, standard keys, About, activation and packaging above the toolkit; six of eight have drifted | 12 (after [apps-split](apps-split.md)) |
 
 ## Decisions for the owner
 
@@ -54,3 +55,4 @@ Each plan's last section lists its decisions with a recommendation. The ones tha
 - **Power:** re-enable sleep after ten clean s2idle cycles; what the power button does while sleep is unavailable.
 - **Crashes:** systemd-coredump in the image; whether losing the session bus should end the session.
 - **Taskbar options:** drop Top from Position, Menu bar row only on the left, trackpad trims, VRR into Refresh rate, one display-off timer, where `reopen-apps` lives ([taskbar-width-and-options](taskbar-width-and-options.md)).
+- **App framework:** pilot on Activity Monitor; the apps repo as one Cargo workspace; the desktop's `dist` profile for app releases; patch-tag every app after a framework bump; no multicall or dylib for now ([app-framework](app-framework.md)).

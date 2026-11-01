@@ -9,7 +9,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use bande_fs::{
     Action, Answer, Change, Entry, Finished, FolderChanges, FolderWatch, Operations, Purpose,
-    RenameError, Resolution, Step, Task, TrashItem, archive_path, can_extract,
+    RenameError, Resolution, Sort, Step, Task, TrashItem, archive_path, can_extract,
 };
 use bande_preview::Preview;
 use bande_search::{Usage, recent_files};
@@ -215,6 +215,7 @@ pub struct FilesView {
     pub(crate) mode: ViewMode,
     pub(crate) icon_size: u32,
     pub(crate) show_hidden: bool,
+    pub(crate) folders_first: bool,
     warn_empty_trash: bool,
     pub(crate) search_home: bool,
     views: ViewMemory,
@@ -342,6 +343,7 @@ impl FilesView {
             mode: ViewMode::default(),
             icon_size: DEFAULT_ICON_SIZE,
             show_hidden: false,
+            folders_first: true,
             warn_empty_trash: true,
             search_home: false,
             views: ViewMemory::default(),
@@ -623,8 +625,12 @@ impl FilesView {
         };
         if let Some(view) = self.views.get(folder) {
             self.icon_size = view.icon_size;
-            if view.sort != self.browser.sort() {
-                self.browser.set_sort(view.sort);
+            let sort = Sort {
+                folders_first: self.folders_first,
+                ..view.sort
+            };
+            if sort != self.browser.sort() {
+                self.browser.set_sort(sort);
             }
             if view.mode != self.mode {
                 self.mode = view.mode;
@@ -1628,6 +1634,11 @@ impl FilesView {
     pub fn apply_settings(&mut self, settings: &FilesSettings) {
         self.warn_empty_trash = settings.warn_empty_trash;
         self.search_home = settings.search_home;
+        if settings.folders_first != self.folders_first {
+            self.folders_first = settings.folders_first;
+            self.browser.set_folders_first(self.folders_first);
+            self.selection_changed();
+        }
         if settings.show_hidden != self.show_hidden {
             self.show_hidden = settings.show_hidden;
             self.browser.set_show_hidden(self.show_hidden);

@@ -78,6 +78,7 @@ fn parse_sort(text: &str) -> Option<Sort> {
         .map(|(by, _)| Sort {
             by: *by,
             descending,
+            ..Sort::default()
         })
 }
 

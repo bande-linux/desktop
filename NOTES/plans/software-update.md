@@ -266,5 +266,8 @@ Seven milestones. Step 1 alone fixes what the owner sees today.
    push to main" feed no longer runs now that CI is tag-only.
    Still open: needs the CI/apt item to publish first.
 3. **The daily check waits for the notification.** Fixed overnight 2026-11-01:
-   `--check-updates` sends the notification and exits; a `--open-on-click` waiter in its own
-   `systemd-run --user --scope` opens Software Update on a click, so the timer is never held.
+   `--check-updates` starts `--announce-updates` in its own `systemd-run --user --scope` and
+   exits, so the timer is never held. The announcer listens for the click before it sends the
+   notification (a click in the first second used to be lost) and owns
+   `org.bande.Settings.UpdateNotice`; a newer announcement takes the name, and the older one
+   closes its notification and exits, so waiters no longer pile up one a day.

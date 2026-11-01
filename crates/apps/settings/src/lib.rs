@@ -62,7 +62,7 @@ pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };
 pub use software::{
-    Package, Refresh, SoftwareCommand, SoftwareState, announce_updates, check, clicked,
+    Package, Refresh, SoftwareCommand, SoftwareState, UpdateNotice, announce_updates, check,
     follow_software, open_updates,
 };
 pub use state::{Answer, BluetoothState, Display, Joined, Mode, NetworkState, Question, WifiState};

@@ -6,7 +6,7 @@ use std::time::Instant;
 use bande_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
 use bande_settings::{
     Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView,
-    SoftwareCommand, UDEV_DATA, announce_updates, clicked, feed, sidebar_width,
+    SoftwareCommand, UDEV_DATA, UpdateNotice, announce_updates, feed, sidebar_width,
 };
 use bande_settings_panes::panes as panes_list;
 use bande_toolkit::ui::shortcut_pressed;
@@ -213,33 +213,33 @@ impl App for Settings {
 }
 
 const CHECK_UPDATES: &str = "--check-updates";
-const OPEN_ON_CLICK: &str = "--open-on-click";
+const ANNOUNCE_UPDATES: &str = "--announce-updates";
 
 fn check_updates() -> Result<(), Box<dyn std::error::Error>> {
-    let session = zbus::blocking::Connection::session()?;
-    let system = zbus::blocking::Connection::system()?;
-    if let Some(id) = announce_updates(&session, &system)? {
-        let program = std::env::current_exe()?.to_string_lossy().into_owned();
-        let waiter = [
-            "systemd-run",
-            "--user",
-            "--scope",
-            "--quiet",
-            "--collect",
-            "--",
-            &program,
-            OPEN_ON_CLICK,
-            &id.to_string(),
-        ]
-        .map(str::to_owned);
-        spawn_detached("", &waiter, None, None)?;
-    }
+    let program = std::env::current_exe()?.to_string_lossy().into_owned();
+    let announcer = [
+        "systemd-run",
+        "--user",
+        "--scope",
+        "--quiet",
+        "--collect",
+        "--",
+        &program,
+        ANNOUNCE_UPDATES,
+    ]
+    .map(str::to_owned);
+    spawn_detached("", &announcer, None, None)?;
     Ok(())
 }
 
-fn open_on_click(id: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn announce_and_open_on_click() -> Result<(), Box<dyn std::error::Error>> {
     let session = zbus::blocking::Connection::session()?;
-    if clicked(&session, id.parse()?)? {
+    let system = zbus::blocking::Connection::system()?;
+    let notice = UpdateNotice::listen(&session)?;
+    let Some(id) = announce_updates(&session, &system)? else {
+        return Ok(());
+    };
+    if notice.clicked(id)? {
         let program = std::env::current_exe()?.to_string_lossy().into_owned();
         let pane = PaneId::SoftwareUpdate.keyword().to_owned();
         spawn_detached(APP_ID, &[program, pane], None, None)?;
@@ -291,7 +291,7 @@ fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let outcome = match arguments.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         [CHECK_UPDATES] => check_updates(),
-        [OPEN_ON_CLICK, id] => open_on_click(id),
+        [ANNOUNCE_UPDATES] => announce_and_open_on_click(),
         _ => run(),
     };
     match outcome {

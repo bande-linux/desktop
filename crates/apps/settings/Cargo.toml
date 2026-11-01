@@ -64,6 +64,7 @@ maintainer-scripts = "debian/"
 assets = [
     ["target/release/bande-settings", "usr/bin/", "755"],
     ["data/org.bande.Settings.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.Settings.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Settings.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["data/bande-update-check.service", "usr/lib/systemd/user/", "644"],
     ["data/bande-update-check.timer", "usr/lib/systemd/user/", "644"],

@@ -51,6 +51,20 @@ when they reach the screen is Bande's own.
   draws its own with: 40 pt high, a pill on the left with close, minimise and zoom, a flush-left
   Manrope title, colours of the light or dark palette (followed from the portal's
   `color-scheme`) and active, inactive and hover states.
+  What installed apps ask for, recorded with `WAYLAND_DEBUG=1` on a private headless
+  compositor (own runtime dir and session bus) on 2026-11-01:
+
+  | App | Protocol | Asks for | Title bar |
+  |---|---|---|---|
+  | GTK 4 window without a header bar | KDE | server | ours |
+  | Calculator, Text Editor (libadwaita 1.7) | KDE manager, no decoration | none | their own |
+  | Papers (libadwaita) | KDE manager, no decoration | none | its own |
+  | Firefox ESR, title bar on (`browser.tabs.inTitlebar` 0) | KDE | server | ours |
+  | Firefox ESR, default (tabs in the title bar) | KDE | client | its own |
+  | VS Code 1.144, `window.titleBarStyle` `custom` (default) | `xdg-decoration` | client | its own |
+  | VS Code 1.144, `native` | `xdg-decoration` | server | ours, menus in a row below |
+  | Claude Desktop main window | `xdg-decoration` | client | its own |
+
   It is rasterised on the CPU at its display's scale whenever its look changes (and stretched
   to fit while it is drawn on another display mid-drag or in a mirror) and becomes part
   of the window: inside its rounded clip and shadow, in the opening, closing and overview

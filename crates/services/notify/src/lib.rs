@@ -20,7 +20,7 @@ use crate::alarm::Alarm;
 
 pub use center::{
     App, AppRule, BANNER_DURATION, BANNER_LINGER, Banners, Center, CloseReason, HiddenBanner,
-    Invoked, Notification, Presentation, Stack, Timeout, Urgency,
+    Invoked, MAX_NOTIFICATIONS, Notification, Presentation, Stack, Timeout, Urgency,
 };
 pub use picture::{MAX_PICTURE, Picture};
 pub use wire::{WireNotification, WirePresentation, WireStack};

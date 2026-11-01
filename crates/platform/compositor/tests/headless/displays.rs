@@ -193,6 +193,29 @@ fn windows_of_an_unplugged_display_come_over_and_go_back_when_it_returns() {
 }
 
 #[test]
+fn a_window_menu_on_an_unplugged_display_closes_with_it() {
+    let mut server = two_displays();
+    server.move_pointer_to(at(400.0, 100.0), 0);
+    let mut app = window(&mut server, RED, WINDOW);
+    app.exchange(&mut server);
+    let origin = geometry(&server).loc;
+    server.move_pointer_to(at(f64::from(origin.x + 10), f64::from(origin.y + 10)), 10);
+    server.press_button(0x111, true, 10);
+    app.exchange(&mut server);
+    app.request_window_menu(&mut server, 0, 10, 10);
+    server.press_button(0x111, false, 11);
+    app.exchange(&mut server);
+    assert!(!server.window_menu().is_empty());
+
+    server.remove_output(SIDE);
+    server.key(KEY_RIGHT, true, 20);
+    server.key(KEY_RIGHT, false, 21);
+    roundtrip(&mut server, &mut [&mut app]);
+
+    assert!(server.window_menu().is_empty());
+}
+
+#[test]
 fn each_display_has_its_own_row_of_workspaces() {
     let mut server = two_displays();
     server.move_pointer_to(at(400.0, 100.0), 0);

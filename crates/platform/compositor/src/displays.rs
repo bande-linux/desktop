@@ -477,6 +477,7 @@ impl State {
     fn after_screens_changed(&mut self) {
         self.end_switcher();
         self.dismiss_assist();
+        self.window_menus.open = None;
         self.announce_outputs();
         self.pointer_location = self.nearest_on_screens(self.pointer_location);
         self.sync_surface_outputs();

@@ -100,3 +100,25 @@ Notify sends the whole presentation, pixels included, on every change; Software 
 ## Checked and sound
 
 The `is_shell` trust (socket pairs only, `WAYLAND_SOCKET` not inherited); capture, foreign-toplevel, session-lock and data-control globals; move/resize/menu serials; lock-client crash keeps the session locked and blank; greeter starts only `bande-session`; polkit accepts calls only from polkitd and switches only to listed identities; PAM buffers are zeroised; notify `image-data` parsing is bounds-checked; Exec splitting never uses a shell; `remove_all` does not follow links; zip extraction refuses paths through links; Activity Monitor signals by pidfd with a start-time check; no `unwrap`/`expect`/`todo!` in production code; packaging assets and Exec lines all resolve.
+
+## Component review 2026-11-01 evening: shell
+
+Scope: `crates/shell/*`, weighted on today's status hub, Control Center worker, wallpaper redraw, greeter lazy wallpaper, shared app catalogue, Trash check, dialogs and notification placement.
+
+Fixed:
+
+| Severity | Where | Defect | Commit |
+|---|---|---|---|
+| medium | greeter `main.rs`, lock `backdrop.rs` | The greeter handed the backdrop worker `/proc/self/fd/N` of the login picture and the new redrawable wallpaper kept that path for redraws. Choosing another person closed the file while the old blurred wallpaper stayed on screen (and a worker could still be starting), so N could be reused by the next file or an `Inbox` pipe; a redraw then read the wrong picture or blocked the login window reading a pipe. The worker and every redraw now hold the opened file. | `2dc9a91d` |
+| low | lock `backdrop.rs` | The lock's wallpaper lookup still opened an unbounded session bus connection. Uses `bande_bus::session`. | `2dc9a91d` |
+| medium | bar `menu_bar_client.rs` | The tray icon cache was keyed by the `Debug` text of each pixel buffer (tens of KB per key, formatted on every refresh) and never pruned, so an animated tray icon grew the shell without bound. Only the current icon of each item is kept. | `2c1c39a2` |
+
+Not fixed:
+
+- medium — Control Center still runs `scan`/`networks`/`sign_in_page` (`choose_network`, `join`) and the Wi-Fi, Bluetooth and Do Not Disturb setters on the shell's UI thread; now bounded by the 25 s bus timeout, not removed. Needs the setters moved onto the `control-status` worker; a design change rather than a launch fix.
+- low — Control Center shows the Wi-Fi/Bluetooth state from the last time it was opened for the first frame, then the worker's fresh read (the panel can change height once). No signal following while it is open; external changes show on the next open.
+- low — the status hub broadcasts `Update::Menu` replies to every bar; with several displays a bar that still thinks a menu is open could show another bar's tray menu at its own anchor. Needs a requester id on `Errand::ShowMenu` (in `bande-status`, outside this component).
+- low — Trash checks run on a new thread per change; two overlapping checks can finish out of order and leave the stale answer. Changes are debounced, so rare.
+- low — redrawable wallpapers are redrawn synchronously on the UI thread when the GPU drops them (atlas growth); a full decode and blur in the lock or greeter. Toolkit behaviour, not changed here.
+- low — the lock's wallpaper is read with `fs::read` of the user's own configured path (no size or file-kind check); self-inflicted only.
+- Earlier open shell items (tray/dbusmenu calls and `force_quit` on the UI thread, image decoding on the UI thread, PAM messages, desktop bar edge, screenshot shutter) are unchanged.

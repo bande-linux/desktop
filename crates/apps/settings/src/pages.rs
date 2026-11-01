@@ -1115,11 +1115,7 @@ impl SettingsView {
             }
         }
         Some(vec![
-            boxed(Caption::new(
-                Text::new(&L10N.tr("pairing-request"), Tone::Muted)
-                    .caption()
-                    .semibold(),
-            )),
+            boxed(Caption::new(Text::label(&L10N.tr("pairing-request")))),
             boxed(Card::new(vec![boxed(
                 Row::new(Text::new(&text, Tone::Primary), control).highlighted(true),
             )])),
@@ -1201,11 +1197,7 @@ impl SettingsView {
             }
         });
         Some(vec![
-            boxed(Caption::new(
-                Text::new(&L10N.tr("arrangement"), Tone::Muted)
-                    .caption()
-                    .semibold(),
-            )),
+            boxed(Caption::new(Text::label(&L10N.tr("arrangement")))),
             boxed(Card::new(vec![boxed(canvas)])),
             boxed(Caption::new(Text::new(
                 &L10N.tr("arrangement-hint"),

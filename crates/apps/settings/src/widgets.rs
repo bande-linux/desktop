@@ -36,6 +36,7 @@ const NOTICE_PADDING: f32 = Spacing::XL as f32;
 const ROW_PADDING: f32 = Spacing::M as f32;
 const ROW_MIN_HEIGHT: f32 = 44.0;
 const ROW_GAP: f32 = Spacing::M as f32;
+const SECTION_LEAD: f32 = Spacing::M as f32;
 const CONTROL_WIDTH: f32 = 320.0;
 const UNBOUNDED: f32 = 1.0e6;
 
@@ -397,6 +398,13 @@ impl Caption {
         self.inset = inset;
         self
     }
+
+    fn lead(&self) -> f32 {
+        match self.text.role {
+            Some(TextRole::Label) => SECTION_LEAD,
+            _ => 0.0,
+        }
+    }
 }
 
 impl Widget for Caption {
@@ -405,7 +413,7 @@ impl Widget for Caption {
     }
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
-        Size::new(available.width, self.text.measure(cx).height)
+        Size::new(available.width, self.lead() + self.text.measure(cx).height)
     }
 
     fn place(&mut self, _cx: &mut Context, frame: Rect) {
@@ -419,7 +427,7 @@ impl Widget for Caption {
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         self.text.paint(
             cx,
-            Point::new(self.frame.x + self.inset, self.frame.y),
+            Point::new(self.frame.x + self.inset, self.frame.y + self.lead()),
             items,
         );
     }

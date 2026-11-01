@@ -13,6 +13,7 @@ use crate::shell::toplevel_names;
 use crate::state::{Compositor, State};
 
 pub const UNRESPONSIVE_AFTER: Duration = Duration::from_secs(3);
+pub(crate) const PING_SINCE: u32 = 2;
 const PING_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(PartialEq)]
@@ -192,7 +193,11 @@ impl State {
                 unresponsive: false,
             });
         }
-        for shell in &self.shell_resources {
+        for shell in self
+            .shell_resources
+            .iter()
+            .filter(|shell| shell.version() >= PING_SINCE)
+        {
             let Some(owner) = shell.client() else {
                 continue;
             };

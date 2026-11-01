@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="bande_shell_v1">
-  <interface name="bande_shell_v1" version="1">
+  <interface name="bande_shell_v1" version="2">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the shell and the screenshot tool), never on the listening socket.
@@ -506,7 +506,7 @@
       <arg name="windowless" type="uint"/>
     </event>
 
-    <event name="ping">
+    <event name="ping" since="2">
       <description summary="check that the client still responds">
         As xdg_wm_base.ping, for shell clients, whose surfaces are not
         toplevels: the client answers with pong at once. Sent while the user
@@ -516,7 +516,7 @@
       <arg name="serial" type="uint"/>
     </event>
 
-    <request name="pong">
+    <request name="pong" since="2">
       <description summary="answer a ping">
         Answers the ping event with its serial.
       </description>

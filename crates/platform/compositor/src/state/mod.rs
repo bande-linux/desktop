@@ -53,6 +53,7 @@ use crate::scene::{BlurElement, Closing, FillElement, PieceElement, ShadowElemen
 use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::session::{LockScreen, SessionClient, SessionRole, Summoned};
 use crate::tile::{Preview, SnapDrag};
+use crate::watchdog::PING_SINCE;
 use crate::window::Window;
 
 mod compose;
@@ -209,7 +210,7 @@ impl Compositor {
         crate::output_power::create_global(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, BandeShellV1, ()>(1, ());
+        handle.create_global::<State, BandeShellV1, ()>(PING_SINCE, ());
         handle.create_global::<State, BandeAppV1, ()>(3, ());
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());

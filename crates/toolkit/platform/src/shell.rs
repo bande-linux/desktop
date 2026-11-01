@@ -20,6 +20,7 @@ use bande_graphics::Rect;
 use crate::window::{State, Window, WindowError, WindowEvent};
 
 pub(crate) const END_SESSION_SINCE: u32 = 3;
+pub(crate) const PING_SINCE: u32 = 2;
 
 struct Toplevel {
     handle: ExtForeignToplevelHandleV1,

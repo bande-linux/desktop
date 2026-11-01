@@ -17,4 +17,5 @@ done
 for manifest in crates/toolkit/graphics/Cargo.toml crates/toolkit/widgets/Cargo.toml; do
     forbid "$manifest" 'wayland-[a-z-]+|bande-toolkit-platform'
 done
+ci/check-apps.sh
 echo "lint passed"

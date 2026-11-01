@@ -125,6 +125,13 @@ impl<P: Program> Cx<P> {
         }
     }
 
+    pub fn view(&self, window: WindowId) -> Option<&P::View> {
+        match &self.views[self.index(window)?].1 {
+            Content::App(view) => Some(view),
+            Content::Settings(_) => None,
+        }
+    }
+
     pub fn windows(&self) -> impl Iterator<Item = WindowId> + '_ {
         self.shown()
             .filter(|(_, content)| matches!(content, Content::App(_)))

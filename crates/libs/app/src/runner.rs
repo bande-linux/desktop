@@ -183,7 +183,9 @@ impl<P: Program> Runner<P> {
                 Ok(())
             }
             (Standard::CloseWindow, _) => {
-                self.close(window);
+                if self.is_settings(window) || !self.program.close_tab(&mut self.cx, window) {
+                    self.close(window);
+                }
                 Ok(())
             }
             (Standard::Settings, _) => {
@@ -375,7 +377,14 @@ impl<P: Program> Surfaces for Runner<P> {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.program.deadline()
+        self.cx
+            .views
+            .iter()
+            .zip(&self.cx.windows)
+            .filter(|(_, window)| !window.is_closed())
+            .filter_map(|((_, content), _)| content.view_ref().deadline())
+            .chain(self.program.deadline())
+            .min()
     }
 
     fn tick(&mut self, now: Instant) {
@@ -385,6 +394,29 @@ impl<P: Program> Surfaces for Runner<P> {
             .is_some_and(|deadline| deadline <= now)
         {
             self.program.tick(&mut self.cx, now);
+        }
+        let due: Vec<WindowId> = self
+            .cx
+            .views
+            .iter()
+            .filter(|(_, content)| {
+                content
+                    .view_ref()
+                    .deadline()
+                    .is_some_and(|deadline| deadline <= now)
+            })
+            .map(|(window, _)| *window)
+            .collect();
+        for window in due {
+            if let Some(index) = self.cx.index(window)
+                && self.cx.views[index]
+                    .1
+                    .view()
+                    .tick(&mut self.cx.windows[index], now)
+            {
+                self.cx.windows[index].request_redraw();
+                self.changed(index, window);
+            }
         }
         self.publish_menus();
     }

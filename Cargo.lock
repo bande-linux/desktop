@@ -652,12 +652,12 @@ name = "bande-files"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bande-app",
  "bande-app-menu",
  "bande-app-settings",
  "bande-fs",
  "bande-golden",
  "bande-l10n",
- "bande-log",
  "bande-preview",
  "bande-search",
  "bande-sound",
@@ -1021,6 +1021,7 @@ name = "bande-settings"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bande-app",
  "bande-app-menu",
  "bande-audio",
  "bande-bluetooth",

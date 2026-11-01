@@ -680,8 +680,22 @@ Preconditions: apps-split M6 done (the shared pin, `ci/gate.sh`, `with-desktop.s
 - Files: `Launch::PerWindow` until one-process windows (F24); `Info.settings` replaces its
   `--settings` handling; Edit menu from `edit_menu`; delete `menu_bar_action`'s standard arms,
   the Ctrl+, special case and `key_event`.
-- Add `ci/check-apps.sh` for the three desktop apps.
+- Add `ci/check-apps.sh` for the desktop apps (Files and Settings; Activity Monitor moved to the
+  apps repo with Force Quit).
 - Done when: both compile, their tests pass; then **desktop-gate on `main`** for the batch.
+- **Status: done 2026-11-01** (`appfw/m6-settings-files`). Settings: one instance, a second
+  `bande-settings <pane>` selects the pane in the running one (the update notice's click does
+  the same); its services keep their own unbounded session connection (Bluetooth pairing waits
+  for the user, footprint M7), the framework's bounded one carries the menu and the instance.
+  Files: every window in one process (D3, F24's process model): Ctrl+N, File ▸ New Window, the
+  `.desktop` "New Window" action (now `bande-files --new-window`) and `bande-files <path>` from
+  a second launch open a window in the running process; a plain second launch raises it.
+  `Program::close_tab` lets Close Window (Ctrl+W, menu) close the active tab first, while the
+  close button and the compositor close the whole window (Terminal is the second user). Close
+  Window moved from Files' File menu to the Window menu. F24's sharing of apps, icons and
+  thumbnails between windows is left to F24 itself (each window still loads its own).
+  `ci/check-apps.sh` (in `ci/release/lint.sh`, warnings until M12); Files and Settings gained
+  `StartupNotify=true` and the Manrope and JetBrains Mono font Depends (D11).
 
 ### Batch 2: apps repo
 

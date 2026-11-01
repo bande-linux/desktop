@@ -78,6 +78,9 @@ fn sender_lookup(
     move |notification, group| {
         let picture = notification.picture.as_ref().and_then(|picture| {
             if let Picture::File(name) = picture {
+                if icons.len() >= MAX_CACHED_PICTURES && !icons.contains_key(name) {
+                    icons.clear();
+                }
                 return icons
                     .entry(name.clone())
                     .or_insert_with(|| image_named(name, &directories))

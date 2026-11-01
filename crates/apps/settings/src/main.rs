@@ -231,7 +231,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .ok();
     let (feed, updates) = feed()?;
     let services = Services::start(&session, system.as_ref(), &updates);
-    services.send(Command::Software(SoftwareCommand::Check));
+    services.send(Command::Software(SoftwareCommand::Open));
     let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
     window.set_frame_regions(frame_regions(window.appearance().text_size));
     let mut view = SettingsView::new(window.appearance().palette(), TextSystem::new());

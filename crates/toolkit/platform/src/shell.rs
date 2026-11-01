@@ -225,8 +225,8 @@ impl Window {
         self.flush()
     }
 
-    pub fn toggle_control_center(&mut self) -> Result<(), WindowError> {
-        self.shell()?.toggle_control_center();
+    pub fn toggle_panel(&mut self, panel: bande_shell_v1::Panel) -> Result<(), WindowError> {
+        self.shell()?.toggle_panel(panel);
         self.flush()
     }
 

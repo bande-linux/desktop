@@ -1,8 +1,6 @@
-use std::cell::RefCell;
 use std::error::Error;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -46,7 +44,6 @@ struct Context {
     system: Option<Connection>,
     config_home: Option<PathBuf>,
     home: Option<PathBuf>,
-    notification_center: Rc<RefCell<Box<dyn Fn()>>>,
     app_slice: Option<PathBuf>,
 }
 
@@ -60,14 +57,12 @@ impl Context {
     }
 
     fn services(&self) -> Services<'_> {
-        let toggle = self.notification_center.clone();
         Services {
             text: &self.text,
             session: self.session.as_ref(),
             system: self.system.as_ref(),
             config_home: self.config_home.as_deref(),
             home: self.home.as_deref(),
-            notification_center: Rc::new(move || (toggle.borrow())()),
         }
     }
 
@@ -78,7 +73,6 @@ impl Context {
             system: bus(Connection::system(), "system"),
             config_home: std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
             home: std::env::var_os("HOME").map(PathBuf::from),
-            notification_center: Rc::new(RefCell::new(Box::new(|| {}))),
             app_slice: own_app_slice(),
         }
     }
@@ -92,7 +86,6 @@ impl Context {
     fn notifications(&self, window: &mut Window) -> std::io::Result<Box<dyn App>> {
         window.share_fonts(&self.text);
         let part = Notifications::new(window, self.text.sharing_fonts(), self.session.as_ref())?;
-        *self.notification_center.borrow_mut() = Box::new(part.toggle());
         Ok(Box::new(part))
     }
 

@@ -7,7 +7,9 @@ use jiff::civil::date;
 
 use bande_notifications::{Screen, Sender};
 use bande_notify::{Notification, Picture, Presentation, Stack};
-use bande_toolkit::{Color, CpuRenderer, Image, Palette, Scene, Scheme, TextSystem};
+use bande_toolkit::{
+    Color, CpuRenderer, DisplayEdge, Image, Palette, Rect, Scene, Scheme, TextSystem,
+};
 
 const SIZE: (u32, u32) = (420, 460);
 const SETTLED: Duration = Duration::from_secs(2);
@@ -97,6 +99,20 @@ fn banners_match_their_golden() {
     };
     let mut screen = screen(presentation, now);
     check_golden("banners-light", screen.scene(now + SETTLED));
+}
+
+#[test]
+fn banners_beside_a_left_bar_match_their_golden() {
+    let now = Instant::now();
+    let presentation = Presentation {
+        banners: stacks(),
+        center: Vec::new(),
+        ..Presentation::default()
+    };
+    let mut screen = screen(presentation, now);
+    let clock = Rect::new(-64.0, SIZE.1 as f32 - 60.0, 64.0, 52.0);
+    screen.set_anchor(DisplayEdge::Left, clock, now);
+    check_golden("banners-left-light", screen.scene(now + SETTLED));
 }
 
 #[test]

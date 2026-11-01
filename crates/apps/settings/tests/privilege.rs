@@ -40,6 +40,6 @@ fn only_actions_without_a_password_challenge_are_refused() {
     let settings = bus.connect().expect("settings connection");
     assert_eq!(
         refused(&settings).expect("refused"),
-        vec![Privilege::Hostname, Privilege::Updates]
+        vec![Privilege::Hostname, Privilege::Keyboard]
     );
 }

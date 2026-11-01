@@ -25,7 +25,8 @@ profiles. Sizes are tracked in [performance.md](performance.md).
   It depends on the compositor, the core session services, the shell, the lock
   screen and the portal backend at the same version, and on `xdg-desktop-portal`,
   `dbus-user-session`, logind and `libpam-systemd`; it recommends the terminal, screenshot
-  tool, Files, Settings, Activity Monitor, tray and automount services, `gnome-keyring` with
+  tool, Files, Settings, Activity Monitor, the Package Installer (which opens `.deb` files and
+  depends on `packagekit`), tray and automount services, `gnome-keyring` with
   `libpam-gnome-keyring`, Qt's portal platform theme (so Qt apps follow dark mode), the everyday apps a fresh install needs (`firefox-esr`,
   `gnome-text-editor`, `loupe`, `papers`, `showtime`, `gnome-calculator`), `fonts-inter`,
   `xdg-user-dirs`, `upower` and `udisks2`, and suggests `gnome-clocks`. It installs
@@ -51,8 +52,10 @@ profiles. Sizes are tracked in [performance.md](performance.md).
 
 The packages pull in the runtime stack the architecture relies on:
 
-- `bande-desktop` recommends `fonts-noto-core` and `fonts-noto-cjk`, the fallback faces
-  for scripts Inter does not cover, and `cups` for printing;
+- `bande-desktop` depends on `fonts-noto-core` and `fonts-noto-cjk`, the fallback faces
+  for scripts Inter does not cover (so an image built without recommends still has them),
+  and recommends `cups` for printing; `bande-settings` depends on `locales`, so localed can
+  generate any language picked in Settings;
 - `bande-shell` recommends PipeWire, WirePlumber, NetworkManager with Debian's
   connectivity check, BlueZ and the Adwaita icon theme, and `bande-settings` adds
   PackageKit and power-profiles-daemon;

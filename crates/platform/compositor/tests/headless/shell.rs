@@ -769,17 +769,21 @@ fn volume_brightness_and_media_keys_go_to_the_shell_and_option_shift_makes_them_
 }
 
 #[test]
-fn the_menu_bar_toggles_control_center_through_the_compositor() {
+fn the_bar_toggles_both_panels_through_the_compositor() {
     let mut server = server();
-    let mut menu_bar = TestClient::connect_as_shell(&mut server);
-    menu_bar.join_shell(&mut server);
-    let mut control_center = TestClient::connect_as_shell(&mut server);
-    control_center.join_shell(&mut server);
+    let mut bar = TestClient::connect_as_shell(&mut server);
+    bar.join_shell(&mut server);
+    let mut panels = TestClient::connect_as_shell(&mut server);
+    panels.join_shell(&mut server);
 
-    menu_bar.toggle_control_center(&mut server);
-    roundtrip(&mut server, &mut [&mut menu_bar, &mut control_center]);
+    bar.toggle_panel(&mut server, Panel::ControlCenter);
+    bar.toggle_panel(&mut server, Panel::NotificationCenter);
+    roundtrip(&mut server, &mut [&mut bar, &mut panels]);
 
-    assert_eq!(control_center.panel_toggles(), [Panel::ControlCenter]);
+    assert_eq!(
+        panels.panel_toggles(),
+        [Panel::ControlCenter, Panel::NotificationCenter]
+    );
 }
 
 #[test]

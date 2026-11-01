@@ -1,38 +1,20 @@
 use std::collections::HashMap;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Sender};
 
-use zbus::blocking::fdo::DBusProxy;
+use bande_packages::offline::{self, Results};
+use bande_packages::{Client, Error, ErrorCode, Failure};
+use zbus::MatchRule;
 use zbus::blocking::{Connection, MessageIterator};
-use zbus::message::{self, Message};
-use zbus::names::BusName;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
-use zbus::{MatchRule, OwnedMatchRule};
+use zbus::message;
 
 use bande_notify::Urgency;
 use bande_notify::client::{Request, notify};
 
 use crate::L10N;
-use crate::failure::{missing, sentence, unexpected};
+use crate::failure::{sentence, unexpected};
 use crate::follow::{Update, Updates, spawn};
 
-const PACKAGEKIT: &str = "org.freedesktop.PackageKit";
-const BUS: &str = "org.freedesktop.DBus";
-const TRANSACTION: &str = "org.freedesktop.PackageKit.Transaction";
-const FILTER_NONE: u64 = 1 << 1;
-const ONLY_TRUSTED: u64 = 1 << 1;
-const UNKNOWN_PERCENTAGE: u32 = 101;
-const RESTART_SYSTEM: u32 = 4;
-const RESTART_SECURITY_SYSTEM: u32 = 6;
-const EXIT_SUCCESS: u32 = 1;
-
-#[zbus::proxy(
-    interface = "org.freedesktop.PackageKit",
-    default_service = "org.freedesktop.PackageKit",
-    default_path = "/org/freedesktop/PackageKit"
-)]
-trait PackageKit {
-    fn create_transaction(&self) -> zbus::Result<OwnedObjectPath>;
-}
+const FRESH_SECONDS: u32 = 60 * 60;
 
 #[zbus::proxy(
     interface = "org.freedesktop.login1.Manager",
@@ -52,23 +34,17 @@ pub struct Package {
     pub size: u64,
 }
 
-impl Package {
-    pub fn from_id(id: &str, summary: &str) -> Self {
-        let mut parts = id.split(';');
-        Self {
-            id: id.to_owned(),
-            name: parts.next().unwrap_or_default().to_owned(),
-            version: parts.next().unwrap_or_default().to_owned(),
-            summary: summary.to_owned(),
-            size: 0,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stage {
     Check,
+    Download,
     Install,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refresh {
+    Always,
+    WhenStale,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -79,12 +55,11 @@ pub enum SoftwareState {
     Checking,
     UpToDate,
     Available(Vec<Package>),
-    Installing {
+    Downloading {
         percent: Option<u32>,
     },
-    Installed {
-        restart: bool,
-    },
+    Prepared(usize),
+    Installed(usize),
     Failed {
         during: Stage,
         reason: String,
@@ -93,261 +68,126 @@ pub enum SoftwareState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SoftwareCommand {
+    Open,
     Check,
-    Install(Vec<String>),
+    Download(Vec<String>),
     Restart,
 }
 
-#[derive(Debug, Default)]
-struct Outcome {
-    packages: Vec<Package>,
-    sizes: HashMap<String, u64>,
-    restart: bool,
-    error: Option<String>,
-}
-
-fn size_of(details: &HashMap<String, OwnedValue>) -> Option<u64> {
-    ["download-size", "size"]
-        .iter()
-        .find_map(|key| u64::try_from(details.get(*key)?).ok())
-        .filter(|size| *size > 0)
-}
-
-fn left(message: &Message) -> bool {
-    let header = message.header();
-    header.interface().is_some_and(|interface| interface == BUS)
-        && header
-            .member()
-            .is_some_and(|member| member == "NameOwnerChanged")
-        && message
-            .body()
-            .deserialize::<(String, String, String)>()
-            .is_ok_and(|(name, old, _)| name == PACKAGEKIT && !old.is_empty())
-}
-
-fn from_transaction(message: &Message, path: &OwnedObjectPath) -> bool {
-    let header = message.header();
-    header.message_type() == message::Type::Signal
-        && header
-            .path()
-            .is_some_and(|from| from.as_str() == path.as_str())
-}
-
-fn finished(message: &Message) -> bool {
-    message
-        .header()
-        .member()
-        .is_some_and(|member| member == "Finished")
-}
-
-fn relay(messages: MessageIterator, path: OwnedObjectPath, relayed: Sender<Option<Message>>) {
-    for message in messages.flatten() {
-        let wanted = left(&message) || from_transaction(&message, &path);
-        let last = left(&message) || (wanted && finished(&message));
-        if relayed.send(wanted.then_some(message)).is_err() || last {
-            break;
-        }
+fn explain(failure: &Failure) -> String {
+    tracing::warn!("PackageKit: {:?}: {}", failure.code, failure.details);
+    match failure.code {
+        ErrorCode::NoNetwork => L10N.tr("updates-no-network"),
+        ErrorCode::Locked => L10N.tr("updates-locked"),
+        ErrorCode::NoSpace => L10N.tr("updates-no-space"),
+        ErrorCode::NotAuthorized => L10N.tr("administrator-only"),
+        ErrorCode::Cancelled => L10N.tr("updates-cancelled"),
+        _ => L10N.tr("updates-went-wrong"),
     }
 }
 
-fn listen(relayed: &Receiver<Option<Message>>, progress: &dyn Fn(u32)) -> Outcome {
-    let mut outcome = Outcome::default();
-    for message in relayed.iter().flatten() {
-        if left(&message) {
-            outcome.error = Some(L10N.tr("updates-service-stopped"));
-            break;
-        }
-        let header = message.header();
-        let body = message.body();
-        match header.member().map(|member| member.as_str()) {
-            Some("Package") => {
-                if let Ok((_, id, summary)) = body.deserialize::<(u32, String, String)>() {
-                    outcome.packages.push(Package::from_id(&id, &summary));
-                }
-            }
-            Some("Details") => {
-                if let Ok(details) = body.deserialize::<HashMap<String, OwnedValue>>()
-                    && let Some(id) = details
-                        .get("package-id")
-                        .and_then(|id| String::try_from(id.try_clone().ok()?).ok())
-                    && let Some(size) = size_of(&details)
-                {
-                    outcome.sizes.insert(id, size);
-                }
-            }
-            Some("RequireRestart") => {
-                if let Ok((kind, _)) = body.deserialize::<(u32, String)>() {
-                    outcome.restart |= matches!(kind, RESTART_SYSTEM | RESTART_SECURITY_SYSTEM);
-                }
-            }
-            Some("ErrorCode") => {
-                if let Ok((_, details)) = body.deserialize::<(u32, String)>() {
-                    outcome.error = Some(details);
-                }
-            }
-            Some("PropertiesChanged") => {
-                if let Ok((_, changed, _)) =
-                    body.deserialize::<(String, HashMap<String, OwnedValue>, Vec<String>)>()
-                    && let Some(percent) = changed
-                        .get("Percentage")
-                        .and_then(|value| u32::try_from(value).ok())
-                        .filter(|percent| *percent < UNKNOWN_PERCENTAGE)
-                {
-                    progress(percent);
-                }
-            }
-            Some("Finished") => {
-                if let Ok((exit, _)) = body.deserialize::<(u32, u32)>()
-                    && exit != EXIT_SUCCESS
-                    && outcome.error.is_none()
-                {
-                    outcome.error = Some(format!("PackageKit stopped with code {exit}"));
-                }
-                break;
-            }
-            _ => {}
-        }
-    }
-    outcome
+fn broken(during: Stage, error: &Error) -> SoftwareState {
+    let reason = match error {
+        Error::Missing => return SoftwareState::Unavailable,
+        Error::Vanished => L10N.tr("updates-service-stopped"),
+        Error::Failed(failure) => explain(failure),
+        Error::Bus(error) => sentence(error, "service-updates"),
+    };
+    SoftwareState::Failed { during, reason }
 }
 
-fn run(
-    system: &Connection,
-    call: &dyn Fn(&zbus::blocking::Proxy<'_>) -> zbus::Result<()>,
-    progress: &dyn Fn(u32),
-) -> zbus::Result<Outcome> {
-    let path = PackageKitProxyBlocking::new(system)?.create_transaction()?;
-    let transaction = zbus::blocking::Proxy::new(system, PACKAGEKIT, &path, TRANSACTION)?;
-    let _: () = transaction.call("SetHints", &(vec!["interactive=true"],))?;
-    let bus = DBusProxy::new(system)?;
-    let rules: [OwnedMatchRule; 2] = [
-        MatchRule::builder()
-            .msg_type(message::Type::Signal)
-            .path(path.clone())?
-            .build()
-            .into(),
-        MatchRule::builder()
-            .msg_type(message::Type::Signal)
-            .sender(BUS)?
-            .interface(BUS)?
-            .member("NameOwnerChanged")?
-            .arg(0, PACKAGEKIT)?
-            .build()
-            .into(),
-    ];
-    let (relayed, received) = mpsc::channel();
-    let messages = MessageIterator::from(system);
-    let watched = path.clone();
-    spawn("packagekit-signals", move || {
-        relay(messages, watched, relayed)
-    });
-    let outcome = (|| -> zbus::Result<Outcome> {
-        for rule in &rules {
-            bus.add_match_rule(rule.inner().clone())?;
+pub fn check(client: &Client, refresh: Refresh) -> SoftwareState {
+    let checked = || -> Result<SoftwareState, Error> {
+        if refresh == Refresh::Always || client.seconds_since_refresh()? >= FRESH_SECONDS {
+            client.refresh(false)?;
         }
-        if !bus.name_has_owner(BusName::try_from(PACKAGEKIT)?)? {
-            return Ok(Outcome {
-                error: Some(L10N.tr("updates-service-stopped")),
-                ..Outcome::default()
-            });
-        }
-        call(&transaction)?;
-        Ok(listen(&received, progress))
-    })();
-    for rule in rules {
-        if let Err(error) = bus.remove_match_rule(rule.into_inner()) {
-            tracing::warn!("cannot remove a PackageKit match rule: {error}");
-        }
-    }
-    outcome
-}
-
-fn failed(during: Stage, outcome: &Outcome) -> Option<SoftwareState> {
-    outcome
-        .error
-        .clone()
-        .map(|reason| SoftwareState::Failed { during, reason })
-}
-
-fn broken(during: Stage, error: &zbus::Error) -> SoftwareState {
-    if missing(error) {
-        return SoftwareState::Unavailable;
-    }
-    SoftwareState::Failed {
-        during,
-        reason: sentence(error, "service-updates"),
-    }
-}
-
-pub fn check(system: &Connection) -> SoftwareState {
-    let checked = || -> zbus::Result<SoftwareState> {
-        let refresh = run(
-            system,
-            &|transaction| transaction.call("RefreshCache", &(false,)),
-            &|_| {},
-        )?;
-        if let Some(failure) = failed(Stage::Check, &refresh) {
-            return Ok(failure);
-        }
-        let updates = run(
-            system,
-            &|transaction| transaction.call("GetUpdates", &(FILTER_NONE,)),
-            &|_| {},
-        )?;
-        if let Some(failure) = failed(Stage::Check, &updates) {
-            return Ok(failure);
-        }
-        let mut packages = updates.packages;
-        if packages.is_empty() {
+        let found = client.updates()?;
+        if found.is_empty() {
             return Ok(SoftwareState::UpToDate);
         }
-        let ids: Vec<String> = packages.iter().map(|package| package.id.clone()).collect();
-        let details = run(
-            system,
-            &|transaction| transaction.call("GetDetails", &(ids.clone(),)),
-            &|_| {},
-        )?;
-        for package in &mut packages {
-            package.size = details.sizes.get(&package.id).copied().unwrap_or(0);
-        }
+        let ids: Vec<String> = found.iter().map(|package| package.id.clone()).collect();
+        let sizes: HashMap<String, u64> = client
+            .details(&ids)?
+            .into_iter()
+            .map(|details| (details.id, details.size))
+            .collect();
+        let mut packages: Vec<Package> = found
+            .into_iter()
+            .map(|package| Package {
+                size: sizes.get(&package.id).copied().unwrap_or(0),
+                id: package.id,
+                name: package.name,
+                version: package.version,
+                summary: package.summary,
+            })
+            .collect();
         packages.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(SoftwareState::Available(packages))
     };
     checked().unwrap_or_else(|error| broken(Stage::Check, &error))
 }
 
-fn install(system: &Connection, ids: Vec<String>, updates: &Updates) -> SoftwareState {
-    let installed = run(
-        system,
-        &|transaction| transaction.call("UpdatePackages", &(ONLY_TRUSTED, ids.clone())),
-        &|percent| {
-            updates.send(Update::Software(SoftwareState::Installing {
-                percent: Some(percent),
-            }));
+fn finished_offline(system: &Connection) -> Result<Option<SoftwareState>, Error> {
+    let Some(results) = offline::results(system)? else {
+        return Ok(None);
+    };
+    if let Err(error) = offline::clear_results(system) {
+        tracing::warn!("cannot clear the offline update results: {error}");
+    }
+    Ok(Some(match results {
+        Results::Installed(ids) => SoftwareState::Installed(ids.len()),
+        Results::Failed(failure) => SoftwareState::Failed {
+            during: Stage::Install,
+            reason: explain(&failure),
         },
-    );
-    match installed {
-        Ok(outcome) => failed(Stage::Install, &outcome).unwrap_or(SoftwareState::Installed {
-            restart: outcome.restart,
-        }),
-        Err(error) => broken(Stage::Install, &error),
+    }))
+}
+
+fn waiting_offline(system: &Connection) -> Result<Option<SoftwareState>, Error> {
+    if !offline::triggered(system)? {
+        return Ok(None);
+    }
+    let prepared = offline::prepared(system)?;
+    Ok((!prepared.is_empty()).then_some(SoftwareState::Prepared(prepared.len())))
+}
+
+pub fn open_updates(system: &Connection, client: &Client) -> SoftwareState {
+    let pending = finished_offline(system).and_then(|finished| match finished {
+        Some(state) => Ok(Some(state)),
+        None => waiting_offline(system),
+    });
+    match pending {
+        Ok(Some(state)) => state,
+        Ok(None) => check(client, Refresh::WhenStale),
+        Err(error) => broken(Stage::Check, &error),
     }
 }
 
-pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Result<bool> {
-    let SoftwareState::Available(packages) = check(system) else {
-        return Ok(false);
-    };
+fn download(
+    system: &Connection,
+    client: &Client,
+    ids: &[String],
+    updates: &Updates,
+) -> SoftwareState {
+    let prepared = client
+        .download(ids, &|progress| {
+            updates.send(Update::Software(SoftwareState::Downloading {
+                percent: progress.percent,
+            }));
+        })
+        .and_then(|()| offline::trigger(system));
+    match prepared {
+        Ok(()) => SoftwareState::Prepared(ids.len()),
+        Err(error) => broken(Stage::Download, &error),
+    }
+}
+
+fn announce(session: &Connection, summary: &str, body: &str) -> zbus::Result<bool> {
     let rule = MatchRule::builder()
         .msg_type(message::Type::Signal)
         .interface("org.freedesktop.Notifications")?
         .build();
     let signals = MessageIterator::for_match_rule(rule, session, None)?;
-    let title = L10N.tr("updates-notification");
-    let body = L10N.tr_args(
-        "updates-notification-body",
-        [("count", packages.len().into())],
-    );
     let show = L10N.tr("show-updates");
     let app_name = L10N.tr("title");
     let id = notify(
@@ -356,8 +196,8 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
             app_name: &app_name,
             replaces_id: 0,
             app_icon: "org.bande.Settings",
-            summary: &title,
-            body: &body,
+            summary,
+            body,
             actions: &[("default", &show)],
             urgency: Urgency::Normal,
             sound: None,
@@ -378,21 +218,55 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
     Ok(false)
 }
 
+pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Result<bool> {
+    let finished = finished_offline(system).unwrap_or_else(|error| {
+        tracing::warn!("cannot read the offline update results: {error}");
+        None
+    });
+    match finished {
+        Some(SoftwareState::Installed(count)) => {
+            let summary = L10N.tr_args("updates-were-installed", [("count", count.into())]);
+            return announce(session, &summary, "");
+        }
+        Some(SoftwareState::Failed { reason, .. }) => {
+            return announce(session, &L10N.tr("install-failed"), &reason);
+        }
+        _ => {}
+    }
+    if matches!(waiting_offline(system), Ok(Some(_))) {
+        return Ok(false);
+    }
+    let SoftwareState::Available(packages) = check(&Client::background(system), Refresh::Always)
+    else {
+        return Ok(false);
+    };
+    let body = L10N.tr_args(
+        "updates-notification-body",
+        [("count", packages.len().into())],
+    );
+    announce(session, &L10N.tr("updates-notification"), &body)
+}
+
 pub fn follow_software(system: &Connection, updates: Updates) -> Sender<SoftwareCommand> {
     let (sender, receiver) = mpsc::channel();
     let system = system.clone();
     spawn("software", move || {
+        let client = Client::new(&system);
         for command in receiver {
             let state = match command {
+                SoftwareCommand::Open => {
+                    updates.send(Update::Software(SoftwareState::Checking));
+                    open_updates(&system, &client)
+                }
                 SoftwareCommand::Check => {
                     updates.send(Update::Software(SoftwareState::Checking));
-                    check(&system)
+                    check(&client, Refresh::Always)
                 }
-                SoftwareCommand::Install(ids) => {
-                    updates.send(Update::Software(SoftwareState::Installing {
+                SoftwareCommand::Download(ids) => {
+                    updates.send(Update::Software(SoftwareState::Downloading {
                         percent: None,
                     }));
-                    install(&system, ids, &updates)
+                    download(&system, &client, &ids, &updates)
                 }
                 SoftwareCommand::Restart => {
                     if let Err(error) =

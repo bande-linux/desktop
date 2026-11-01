@@ -11,7 +11,7 @@ use bande_config::{
     DisplaySettings, Dragging, InputSource, MenuBarPlacement, NightLight, NightSchedule, Placement,
     PrimaryButton, ReloadError, Rotation, ScrollMethod, SecondaryClick, Suspend, WallpaperFit,
     WallpaperVariant, config_path, copy_login_picture, login_picture, login_picture_file,
-    system_input_sources,
+    system_input_sources, system_keyboard,
 };
 
 fn problems(source: &str) -> Vec<ConfigError> {
@@ -572,6 +572,20 @@ fn without_input_sources_the_system_keyboard_layouts_are_used() {
         ]
     );
     assert_eq!(system_input_sources(""), [source("us", None)]);
+    let vconsole = "KEYMAP=se-mac\nXKBLAYOUT=se\nXKBVARIANT=mac\n";
+    let default = "XKBLAYOUT=\"de\"\n";
+    assert_eq!(
+        system_input_sources(system_keyboard(&[vconsole, default])),
+        [source("se", Some("mac"))]
+    );
+    assert_eq!(
+        system_input_sources(system_keyboard(&["KEYMAP=us\nXKBLAYOUT=\n", default])),
+        [source("de", None)]
+    );
+    assert_eq!(
+        system_input_sources(system_keyboard(&["", ""])),
+        [source("us", None)]
+    );
 }
 
 #[test]

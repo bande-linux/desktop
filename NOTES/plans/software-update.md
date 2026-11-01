@@ -151,7 +151,16 @@ installer and store plans add theirs to the same crate and fake.
 
 ## Implementation plan
 
-**Status (2026-11-01):** milestone 3 (plain states) is on `main`. The shared PackageKit crate and milestones 2 and 4-7 are separate work.
+**Status (2026-11-01):** milestones 1-6 are on `main`, and the docs part of 7. `crates/libs/packages`
+(`bande-packages`) holds the PackageKit client and `bande-test-bus` the `FakePackageKit`. Settings
+downloads with `ONLY_TRUSTED|ONLY_DOWNLOAD`, triggers an offline update, shows Restart Now, reads
+the results once after the restart (Settings and the timer, which now also runs 3 minutes after
+login) and refreshes the cache on open only when it is older than an hour. The polkit grant for
+`system-update` and `Privilege::Updates` are gone. Left: the live end-to-end run of milestone 7
+(download, trigger, reboot, `journalctl -b -u packagekit-offline-update`), which needs a reboot of
+the mini with someone at it. Checked read-only against the real daemon on the mini: GetUpdates
+lists `libnss3` with info `0x80008` (severity in the high 16 bits, which the client masks), and
+`Offline.GetResults` without results fails with a pk-engine error, read as "no results".
 
 
 Each step is a short branch from `main`, verified on the mini and passing the full local gate.
@@ -250,7 +259,12 @@ Seven milestones. Step 1 alone fixes what the owner sees today.
 1. **Offline only, or live install too?** Offline (install at restart, no password, like GNOME
    and macOS) is recommended. The alternative keeps a live install for administrators, behind a
    password prompt and our polkit rule.
+   Decided overnight 2026-11-01: offline only (plan recommendation; owner may revisit).
 2. **Which Bande packages the mini follows.** It can follow the repository's testing channel
    once it publishes, or stay on local builds, where Software Update covers only Debian and the
    third-party repositories. This depends on the CI/apt item. The testing channel's "every green
    push to main" feed no longer runs now that CI is tag-only.
+   Still open: needs the CI/apt item to publish first.
+3. **The daily check waits for the notification.** `bande-settings --check-updates` stays
+   running until the notification is clicked or closed, so while it waits the timer does not
+   start another check. Noted overnight 2026-11-01, not changed.

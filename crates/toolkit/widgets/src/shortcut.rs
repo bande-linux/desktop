@@ -1,145 +1,135 @@
 use accesskit::{Node, Role};
-use bande_graphics::{
-    Color, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem,
-};
+use bande_graphics::{Item, Paragraph, Point, Rect, TextAlign, TextStyle, TextSystem};
 
-use super::{Context, Size, Widget, WidgetId};
+use super::{Context, Event, Key, Modifiers, Size, Widget, WidgetId};
 
-const MODIFIER_SYMBOLS: [(&[&str], char); 3] = [
-    (&["Ctrl", "Control"], '⌃'),
-    (&["Alt", "Option"], '⌥'),
-    (&["Shift"], '⇧'),
+const MODIFIER_NAMES: [(&[&str], &str); 4] = [
+    (&["Shift"], "Shift"),
+    (&["Ctrl", "Control"], "Ctrl"),
+    (&["Alt", "Option"], "Alt"),
+    (&["Super", "Logo", "Meta"], "Super"),
 ];
-const SUPER_NAMES: [&str; 3] = ["Super", "Logo", "Meta"];
 
-const KEY_SYMBOLS: [(&str, &str); 14] = [
-    ("Backspace", "⌫"),
-    ("Delete", "⌦"),
-    ("Return", "↩"),
-    ("Enter", "↩"),
-    ("Escape", "⎋"),
-    ("Tab", "⇥"),
-    ("Left", "←"),
-    ("Right", "→"),
-    ("Up", "↑"),
-    ("Down", "↓"),
-    ("PageUp", "⇞"),
-    ("PageDown", "⇟"),
-    ("Home", "↖"),
-    ("End", "↘"),
+const KEY_NAMES: [(&[&str], &str, Key); 16] = [
+    (&["Left"], "←", Key::Left),
+    (&["Right"], "→", Key::Right),
+    (&["Up"], "↑", Key::Up),
+    (&["Down"], "↓", Key::Down),
+    (&["Backspace"], "Backspace", Key::Backspace),
+    (&["Delete", "Del"], "Delete", Key::Delete),
+    (&["Enter", "Return"], "Enter", Key::Enter),
+    (&["Tab"], "Tab", Key::Tab),
+    (&["Escape", "Esc"], "Esc", Key::Escape),
+    (&["Space"], "Space", Key::Space),
+    (&["Home"], "Home", Key::Home),
+    (&["End"], "End", Key::End),
+    (&["PageUp", "PgUp"], "Page Up", Key::PageUp),
+    (&["PageDown", "PgDn"], "Page Down", Key::PageDown),
+    (&["Insert"], "Insert", Key::Insert),
+    (&["Menu"], "Menu", Key::Menu),
 ];
 
 const BODY_SIZE: f32 = 13.0;
-const GLYPH: f32 = 9.5;
-const GLYPH_RADIUS: f32 = 2.5;
-const GLYPH_CENTRE: f32 = 3.0;
-const GLYPH_STROKE: f32 = 1.1;
-const GLYPH_GAP: f32 = 1.5;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShortcutKeys {
-    pub modifiers: String,
-    pub logo: bool,
-    pub key: String,
+fn split(shortcut: &str) -> (Vec<&str>, &str) {
+    let parts: Vec<&str> = shortcut.split('+').collect();
+    match parts.split_last() {
+        Some((&"", rest)) if rest.last() == Some(&"") => (rest[..rest.len() - 1].to_vec(), "+"),
+        Some((key, rest)) => (rest.to_vec(), *key),
+        None => (Vec::new(), ""),
+    }
 }
 
-pub fn shortcut_keys(shortcut: &str) -> ShortcutKeys {
-    let parts: Vec<&str> = shortcut.split('+').collect();
-    let (key, modifiers) = match parts.split_last() {
-        Some((&"", rest)) if rest.last() == Some(&"") => ("+", &rest[..rest.len() - 1]),
-        Some((key, rest)) => (*key, rest),
-        None => ("", &[][..]),
-    };
-    let named = |names: &[&str]| {
-        modifiers
-            .iter()
-            .any(|modifier| names.iter().any(|name| name.eq_ignore_ascii_case(modifier)))
-    };
-    let key = match KEY_SYMBOLS
+fn key_name(key: &str) -> Option<&'static (&'static [&'static str], &'static str, Key)> {
+    KEY_NAMES
         .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case(key))
-    {
-        Some((_, symbol)) => (*symbol).to_owned(),
+        .find(|(names, _, _)| names.iter().any(|name| name.eq_ignore_ascii_case(key)))
+}
+
+pub fn shortcut_label(shortcut: &str) -> String {
+    let (modifiers, key) = split(shortcut);
+    let key = match key_name(key) {
+        Some((_, label, _)) => (*label).to_owned(),
         None if key.chars().count() == 1 => key.chars().flat_map(char::to_uppercase).collect(),
         None => key.to_owned(),
     };
-    ShortcutKeys {
-        modifiers: MODIFIER_SYMBOLS
+    MODIFIER_NAMES
+        .iter()
+        .filter(|(names, _)| {
+            modifiers
+                .iter()
+                .any(|modifier| names.iter().any(|name| name.eq_ignore_ascii_case(modifier)))
+        })
+        .map(|(_, label)| *label)
+        .chain([key.as_str()])
+        .collect::<Vec<_>>()
+        .join("+")
+}
+
+pub fn parse_shortcut(shortcut: &str) -> Option<(Key, Modifiers)> {
+    let (names, key) = split(shortcut);
+    let mut modifiers = Modifiers::default();
+    for name in names {
+        let held = MODIFIER_NAMES
             .iter()
-            .filter(|(names, _)| named(names))
-            .map(|(_, symbol)| *symbol)
-            .collect(),
-        logo: named(&SUPER_NAMES),
-        key,
+            .find(|(names, _)| names.iter().any(|known| known.eq_ignore_ascii_case(name)))
+            .map(|(_, label)| *label)?;
+        match held {
+            "Shift" => modifiers.shift = true,
+            "Ctrl" => modifiers.control = true,
+            "Alt" => modifiers.alt = true,
+            _ => modifiers.logo = true,
+        }
     }
+    let function = key
+        .strip_prefix(['F', 'f'])
+        .and_then(|number| number.parse::<u8>().ok())
+        .filter(|number| (1..=24).contains(number));
+    let key = match (key_name(key), function) {
+        (Some((_, _, named)), _) => *named,
+        (None, Some(number)) => Key::Function(number),
+        (None, None) => {
+            let mut characters = key.chars();
+            let (Some(character), None) = (characters.next(), characters.next()) else {
+                return None;
+            };
+            Key::Character(match modifiers.shift {
+                true => character.to_ascii_uppercase(),
+                false => character.to_ascii_lowercase(),
+            })
+        }
+    };
+    Some((key, modifiers))
+}
+
+pub fn shortcut_pressed(event: &Event, shortcut: &str) -> bool {
+    matches!(event, Event::Key { key, modifiers } if parse_shortcut(shortcut) == Some((*key, *modifiers)))
 }
 
 #[derive(Debug, Clone)]
 pub struct ShortcutText {
-    modifiers: Option<Paragraph>,
-    logo: Option<f32>,
-    key: Paragraph,
+    label: Paragraph,
 }
 
 impl ShortcutText {
     pub fn new(text: &mut TextSystem, shortcut: &str, style: TextStyle) -> Self {
-        let keys = shortcut_keys(shortcut);
-        let mut paragraph = |content: &str| text.paragraph(content, style, None, TextAlign::Start);
         Self {
-            modifiers: (!keys.modifiers.is_empty()).then(|| paragraph(&keys.modifiers)),
-            logo: keys.logo.then_some(GLYPH * style.size / BODY_SIZE),
-            key: paragraph(&keys.key),
+            label: text.paragraph(&shortcut_label(shortcut), style, None, TextAlign::Start),
         }
     }
 
     pub fn width(&self) -> f32 {
-        self.modifiers.as_ref().map_or(0.0, Paragraph::width)
-            + self.logo.map_or(0.0, |glyph| glyph + 2.0 * GLYPH_GAP)
-            + self.key.width()
+        self.label.width()
     }
 
     pub fn height(&self) -> f32 {
-        self.key.height()
+        self.label.height()
     }
 
-    pub fn paint(&self, origin: Point, color: Color, items: &mut Vec<Item>) {
-        let mut x = origin.x;
-        if let Some(modifiers) = &self.modifiers {
-            items.push(Item::Text {
-                origin: Point::new(x, origin.y),
-                paragraph: modifiers.clone(),
-            });
-            x += modifiers.width();
-        }
-        if let Some(glyph) = self.logo {
-            x += GLYPH_GAP;
-            let scale = glyph / GLYPH;
-            let top = origin.y + ((self.key.height() - glyph) / 2.0).round();
-            let outline = Rect::new(x, top, glyph, glyph);
-            let stroke = GLYPH_STROKE * scale;
-            items.push(Item::Stroke {
-                shape: Shape::rounded(
-                    outline.inset(stroke / 2.0),
-                    GLYPH_RADIUS * scale - stroke / 2.0,
-                ),
-                width: stroke,
-                paint: color.into(),
-            });
-            let centre = GLYPH_CENTRE * scale;
-            items.push(Item::Fill {
-                shape: Shape::rect(Rect::new(
-                    x + (glyph - centre) / 2.0,
-                    top + (glyph - centre) / 2.0,
-                    centre,
-                    centre,
-                )),
-                paint: color.into(),
-            });
-            x += glyph + GLYPH_GAP;
-        }
+    pub fn paint(&self, origin: Point, items: &mut Vec<Item>) {
         items.push(Item::Text {
-            origin: Point::new(x, origin.y),
-            paragraph: self.key.clone(),
+            origin,
+            paragraph: self.label.clone(),
         });
     }
 }
@@ -186,50 +176,88 @@ impl Widget for Shortcut {
         self.frame
     }
 
-    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+    fn paint(&self, _cx: &Context, items: &mut Vec<Item>) {
         if let Some(text) = &self.text {
-            text.paint(
-                Point::new(self.frame.x, self.frame.y),
-                cx.palette.ink2,
-                items,
-            );
+            text.paint(Point::new(self.frame.x, self.frame.y), items);
         }
     }
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Label);
-        node.set_label(self.shortcut.clone());
-        node.set_keyboard_shortcut(self.shortcut.clone());
+        node.set_label(shortcut_label(&self.shortcut));
+        node.set_keyboard_shortcut(shortcut_label(&self.shortcut));
         node
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ShortcutKeys, shortcut_keys};
+    use super::{Key, Modifiers, parse_shortcut, shortcut_label};
 
-    fn keys(modifiers: &str, logo: bool, key: &str) -> ShortcutKeys {
-        ShortcutKeys {
-            modifiers: modifiers.to_owned(),
+    #[test]
+    fn shortcuts_read_as_words_in_the_standard_modifier_order() {
+        assert_eq!(shortcut_label("Super+Q"), "Super+Q");
+        assert_eq!(shortcut_label("Ctrl+Shift+n"), "Shift+Ctrl+N");
+        assert_eq!(
+            shortcut_label("Super+Control+Alt+Shift+z"),
+            "Shift+Ctrl+Alt+Super+Z"
+        );
+        assert_eq!(shortcut_label("Alt+Super+Backspace"), "Alt+Super+Backspace");
+        assert_eq!(shortcut_label("Ctrl+Super+Left"), "Ctrl+Super+←");
+        assert_eq!(shortcut_label("Ctrl++"), "Ctrl++");
+        assert_eq!(shortcut_label("Ctrl+PgDn"), "Ctrl+Page Down");
+        assert_eq!(shortcut_label("Escape"), "Esc");
+        assert_eq!(shortcut_label("F2"), "F2");
+    }
+
+    fn held(shift: bool, control: bool, alt: bool, logo: bool) -> Modifiers {
+        Modifiers {
+            shift,
+            alt,
+            control,
             logo,
-            key: key.to_owned(),
         }
     }
 
     #[test]
-    fn shortcuts_read_as_key_symbols_in_the_standard_modifier_order() {
-        assert_eq!(shortcut_keys("Super+Q"), keys("", true, "Q"));
-        assert_eq!(shortcut_keys("Shift+Super+N"), keys("⇧", true, "N"));
+    fn menu_shortcuts_parse_to_the_key_events_that_trigger_them() {
         assert_eq!(
-            shortcut_keys("Super+Ctrl+Alt+Shift+z"),
-            keys("⌃⌥⇧", true, "Z")
+            parse_shortcut("Shift+Ctrl+N"),
+            Some((Key::Character('N'), held(true, true, false, false)))
         );
-        assert_eq!(shortcut_keys("Control+Shift+q"), keys("⌃⇧", false, "Q"));
-        assert_eq!(shortcut_keys("Alt+Super+Backspace"), keys("⌥", true, "⌫"));
-        assert_eq!(shortcut_keys("Ctrl+Super+Left"), keys("⌃", true, "←"));
-        assert_eq!(shortcut_keys("Super++"), keys("", true, "+"));
-        assert_eq!(shortcut_keys("Shift+Super+."), keys("⇧", true, "."));
-        assert_eq!(shortcut_keys("F2"), keys("", false, "F2"));
-        assert_eq!(shortcut_keys("Space"), keys("", false, "Space"));
+        assert_eq!(
+            parse_shortcut("Control+c"),
+            Some((Key::Character('c'), held(false, true, false, false)))
+        );
+        assert_eq!(
+            parse_shortcut("Ctrl+="),
+            Some((Key::Character('='), held(false, true, false, false)))
+        );
+        assert_eq!(
+            parse_shortcut("Ctrl++"),
+            Some((Key::Character('+'), held(false, true, false, false)))
+        );
+        assert_eq!(
+            parse_shortcut("Alt+Up"),
+            Some((Key::Up, held(false, false, true, false)))
+        );
+        assert_eq!(
+            parse_shortcut("Shift+Delete"),
+            Some((Key::Delete, held(true, false, false, false)))
+        );
+        assert_eq!(
+            parse_shortcut("Ctrl+PgUp"),
+            Some((Key::PageUp, held(false, true, false, false)))
+        );
+        assert_eq!(
+            parse_shortcut("Super+Space"),
+            Some((Key::Space, held(false, false, false, true)))
+        );
+        assert_eq!(
+            parse_shortcut("F2"),
+            Some((Key::Function(2), Modifiers::default()))
+        );
+        assert_eq!(parse_shortcut("Hyper+C"), None);
+        assert_eq!(parse_shortcut("Ctrl+Word"), None);
     }
 }

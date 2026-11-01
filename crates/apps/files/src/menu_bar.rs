@@ -1,6 +1,6 @@
 use bande_app_menu::{Entry, app_submenu, close_window, window_submenu};
 use bande_files::{FilesView, L10N};
-use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::ui::{Event, parse_shortcut};
 
 const KEY_ACTION: &str = "key:";
 
@@ -28,23 +28,23 @@ pub fn app_menus(view: &FilesView) -> Vec<Entry> {
         submenu(
             "menu-file",
             vec![
-                shortcut("menu-new-window", "Super+N"),
-                shortcut("menu-new-tab", "Super+T"),
-                shortcut("menu-new-folder", "Shift+Super+N"),
-                shortcut("menu-open", "Super+O"),
+                shortcut("menu-new-window", "Ctrl+N"),
+                shortcut("menu-new-tab", "Ctrl+T"),
+                shortcut("menu-new-folder", "Shift+Ctrl+N"),
+                shortcut("menu-open", "Ctrl+O"),
                 Entry::separator(),
-                shortcut("menu-get-info", "Super+I"),
+                shortcut("menu-get-info", "Ctrl+I"),
                 shortcut("menu-rename", "F2"),
-                shortcut("menu-duplicate", "Super+D"),
-                shortcut("menu-add-to-sidebar", "Control+Super+T"),
+                Entry::item(&L10N.tr("menu-duplicate"), "duplicate"),
+                shortcut("menu-add-to-sidebar", "Ctrl+D"),
                 Entry::item(&L10N.tr("menu-open-in-terminal"), "open-in-terminal"),
                 Entry::item(&L10N.tr("menu-compress-selection"), "compress"),
                 Entry::separator(),
-                shortcut("menu-move-to-trash", "Super+Backspace"),
-                shortcut("menu-delete-immediately", "Alt+Super+Backspace"),
+                shortcut("menu-move-to-trash", "Delete"),
+                shortcut("menu-delete-immediately", "Shift+Delete"),
                 Entry::separator(),
-                shortcut("menu-eject", "Super+E"),
-                shortcut("menu-find", "Super+F"),
+                shortcut("menu-eject", "Ctrl+E"),
+                shortcut("menu-find", "Ctrl+F"),
                 Entry::separator(),
                 close_window(),
             ],
@@ -52,85 +52,57 @@ pub fn app_menus(view: &FilesView) -> Vec<Entry> {
         submenu(
             "menu-edit",
             vec![
-                titled(view.undo_title(), "menu-undo", "Super+Z"),
-                titled(view.redo_title(), "menu-redo", "Shift+Super+Z"),
+                titled(view.undo_title(), "menu-undo", "Ctrl+Z"),
+                titled(view.redo_title(), "menu-redo", "Shift+Ctrl+Z"),
                 Entry::separator(),
-                shortcut("menu-cut", "Super+X"),
-                shortcut("menu-copy", "Super+C"),
-                shortcut("menu-copy-path", "Alt+Shift+Super+C"),
-                shortcut("menu-paste", "Super+V"),
-                shortcut("menu-move-item-here", "Alt+Super+V"),
-                shortcut("menu-select-all", "Super+A"),
+                shortcut("menu-cut", "Ctrl+X"),
+                shortcut("menu-copy", "Ctrl+C"),
+                shortcut("menu-copy-path", "Shift+Ctrl+C"),
+                shortcut("menu-paste", "Ctrl+V"),
+                shortcut("menu-move-item-here", "Shift+Ctrl+V"),
+                shortcut("menu-select-all", "Ctrl+A"),
             ],
         ),
         submenu(
             "menu-view",
             vec![
-                shortcut("menu-as-icons", "Super+1"),
-                shortcut("menu-as-list", "Super+2"),
-                shortcut("menu-as-columns", "Super+3"),
+                shortcut("menu-as-icons", "Ctrl+1"),
+                shortcut("menu-as-list", "Ctrl+2"),
+                shortcut("menu-as-columns", "Ctrl+3"),
                 Entry::separator(),
-                shortcut("menu-bigger-icons", "Super+="),
-                shortcut("menu-smaller-icons", "Super+-"),
+                shortcut("menu-bigger-icons", "Ctrl+="),
+                shortcut("menu-smaller-icons", "Ctrl+-"),
                 Entry::separator(),
-                shortcut("menu-show-hidden-files", "Shift+Super+."),
-                shortcut("menu-status-bar", "Super+/"),
-                shortcut("menu-quick-look", "Super+Y"),
-                shortcut("menu-quick-look-full-screen", "Alt+Super+Y"),
+                shortcut("menu-show-hidden-files", "Ctrl+H"),
+                shortcut("menu-status-bar", "Ctrl+/"),
+                shortcut("menu-quick-look", "Space"),
+                shortcut("menu-quick-look-full-screen", "F11"),
             ],
         ),
         submenu(
             "menu-go",
             vec![
-                shortcut("menu-back", "Super+["),
-                shortcut("menu-forward", "Super+]"),
-                shortcut("menu-enclosing-folder", "Super+Up"),
+                shortcut("menu-back", "Alt+Left"),
+                shortcut("menu-forward", "Alt+Right"),
+                shortcut("menu-enclosing-folder", "Alt+Up"),
                 Entry::separator(),
-                shortcut("menu-desktop", "Shift+Super+D"),
-                shortcut("menu-documents", "Shift+Super+O"),
-                shortcut("menu-downloads", "Alt+Super+L"),
-                shortcut("menu-home", "Shift+Super+H"),
-                shortcut("recents", "Shift+Super+F"),
+                shortcut("menu-desktop", "Shift+Ctrl+D"),
+                shortcut("menu-documents", "Shift+Ctrl+O"),
+                shortcut("menu-downloads", "Shift+Ctrl+L"),
+                shortcut("menu-home", "Alt+Home"),
+                shortcut("recents", "Shift+Ctrl+F"),
                 Entry::separator(),
-                shortcut("menu-go-to-folder", "Shift+Super+G"),
+                shortcut("menu-go-to-folder", "Ctrl+L"),
             ],
         ),
         window_submenu(vec![
-            shortcut("menu-previous-tab", "Shift+Super+["),
-            shortcut("menu-next-tab", "Shift+Super+]"),
+            shortcut("menu-previous-tab", "Ctrl+PgUp"),
+            shortcut("menu-next-tab", "Ctrl+PgDn"),
         ]),
     ]
 }
 
 pub fn key_event(action: &str) -> Option<Event> {
-    let keys = action.strip_prefix(KEY_ACTION)?;
-    let (modifiers, key) = keys.rsplit_once('+').unwrap_or(("", keys));
-    let mut held = Modifiers::default();
-    for modifier in modifiers.split('+').filter(|modifier| !modifier.is_empty()) {
-        match modifier {
-            "Shift" => held.shift = true,
-            "Super" => held.logo = true,
-            "Alt" => held.alt = true,
-            "Control" => held.control = true,
-            _ => return None,
-        }
-    }
-    let key = match key {
-        "Up" => Key::Up,
-        "Down" => Key::Down,
-        "Backspace" => Key::Backspace,
-        "Space" => Key::Space,
-        "F2" => Key::Function(2),
-        _ => {
-            let mut characters = key.chars();
-            match (characters.next(), characters.next()) {
-                (Some(character), None) => Key::Character(character.to_ascii_lowercase()),
-                _ => return None,
-            }
-        }
-    };
-    Some(Event::Key {
-        key,
-        modifiers: held,
-    })
+    let (key, modifiers) = parse_shortcut(action.strip_prefix(KEY_ACTION)?)?;
+    Some(Event::Key { key, modifiers })
 }

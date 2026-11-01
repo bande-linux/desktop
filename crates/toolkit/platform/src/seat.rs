@@ -307,12 +307,9 @@ impl State {
             self.pointer_event(Event::PointerUp(pointer));
             return;
         }
-        let Some(mut button) = button_for(code) else {
+        let Some(button) = button_for(code) else {
             return;
         };
-        if button == PointerButton::Primary && input.modifiers.control {
-            button = PointerButton::Secondary;
-        }
         input.keyboard_initiated = false;
         input.held.retain(|(held, _)| *held != code);
         input.held.push((code, button));

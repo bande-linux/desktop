@@ -468,7 +468,6 @@ impl MenuPanel {
                         (trailing - shortcut.width()).round(),
                         (centre - shortcut.height() / 2.0).round(),
                     ),
-                    if lit { palette.on_accent } else { palette.ink3 },
                     &mut items,
                 );
             }
@@ -562,7 +561,6 @@ impl MenuPanel {
                 (tray.width - TRAILING_PADDING - shortcut.width()).round(),
                 (centre - shortcut.height() / 2.0).round(),
             ),
-            palette.ink3,
             &mut footer,
         );
         items.push(Item::Clip {

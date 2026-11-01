@@ -29,7 +29,7 @@ fn sidebar(window: &mut Window) -> Option<Ui> {
 
 fn show_menu(window: &mut Window) -> Option<Ui> {
     let menu = Menu::new(vec![
-        MenuItem::new("Open", "open").shortcut("Super+O"),
+        MenuItem::new("Open", "open").shortcut("Ctrl+O"),
         MenuItem::new("Rename", "rename").enabled(false),
         MenuItem::separator(),
         MenuItem::submenu(
@@ -39,8 +39,8 @@ fn show_menu(window: &mut Window) -> Option<Ui> {
                 MenuItem::new("Date Modified", "sort-date"),
             ]),
         ),
-        MenuItem::new("Move to Trash", "trash").shortcut("Super+Backspace"),
-        MenuItem::new("Show Inspector", "inspector").shortcut("Alt+Super+I"),
+        MenuItem::new("Move to Trash", "trash").shortcut("Delete"),
+        MenuItem::new("Show Inspector", "inspector").shortcut("Ctrl+I"),
     ]);
     window
         .show_menu(menu, MenuPlacement::AtPoint(Point::new(30.0, 10.0)))

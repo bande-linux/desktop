@@ -288,7 +288,7 @@ impl Widget for Grid {
                 let Some(index) = self.tile_at(pointer.position) else {
                     return false;
                 };
-                let toggle = pointer.modifiers.logo || pointer.modifiers.shift;
+                let toggle = pointer.modifiers.control || pointer.modifiers.shift;
                 self.select(index, toggle);
                 if pointer.count >= 2 {
                     (self.share)();

@@ -185,17 +185,19 @@ impl Widget for SecureField {
         let Event::Key { key, modifiers } = event else {
             return matches!(event, Event::PointerDown(pointer) if pointer.is_primary());
         };
-        if modifiers.control {
+        if modifiers.logo {
             return false;
         }
         match key {
             Key::Enter => (self.on_submit)(&self.secret),
-            Key::Backspace if modifiers.logo || modifiers.alt => {
+            Key::Backspace if modifiers.control => {
                 self.secret = Zeroizing::default();
             }
             Key::Backspace => remove_last(&mut self.secret),
-            Key::Character(character) if !modifiers.logo => push(&mut self.secret, *character),
-            Key::Space if !modifiers.logo => push(&mut self.secret, ' '),
+            Key::Character(character) if !modifiers.control && !modifiers.alt => {
+                push(&mut self.secret, *character)
+            }
+            Key::Space if !modifiers.control && !modifiers.alt => push(&mut self.secret, ' '),
             _ => return false,
         }
         true

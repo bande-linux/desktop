@@ -815,7 +815,7 @@ impl Launcher {
             let selected_frame = state.selected_frame;
             let model = &mut state.model;
             let handled = match key {
-                Key::Down | Key::Up if modifiers.logo => {
+                Key::Down | Key::Up if modifiers.control => {
                     model.select_next_group(*key == Key::Down);
                     true
                 }
@@ -843,7 +843,7 @@ impl Launcher {
                     model.select_next_group(!modifiers.shift);
                     true
                 }
-                Key::Enter if modifiers.logo => {
+                Key::Enter if modifiers.control => {
                     model.reveal();
                     true
                 }
@@ -851,12 +851,12 @@ impl Launcher {
                     model.activate();
                     true
                 }
-                Key::Character('c') if modifiers.logo => model.copy(),
+                Key::Character('c') if modifiers.control => model.copy(),
                 Key::Delete if model.mode == Mode::Clipboard && model.query.is_empty() => {
                     model.remove_clip();
                     true
                 }
-                Key::Backspace if model.mode == Mode::Clipboard && modifiers.logo => {
+                Key::Backspace if model.mode == Mode::Clipboard && modifiers.control => {
                     model.remove_clip();
                     true
                 }

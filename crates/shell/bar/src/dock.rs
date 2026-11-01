@@ -2324,10 +2324,7 @@ impl Widget for Tile {
                 }
                 state.hover_leave(&self.key, now);
             }
-            Event::PointerDown(pointer)
-                if pointer.button == PointerButton::Secondary
-                    || (pointer.is_primary() && pointer.modifiers.control) =>
-            {
+            Event::PointerDown(pointer) if pointer.button == PointerButton::Secondary => {
                 self.state.borrow_mut().open_menu(&self.key);
             }
             Event::PointerDown(pointer) if pointer.is_primary() => {
@@ -2366,7 +2363,7 @@ impl Widget for Tile {
                 self.press(cx, false, false);
                 let mut state = self.state.borrow_mut();
                 state.hold = None;
-                if inside && pointer.modifiers.logo {
+                if inside && pointer.modifiers.control {
                     state.show_in_files(&self.key);
                 } else if inside {
                     state.activate(&self.key);
@@ -2509,7 +2506,7 @@ impl Widget for Dock {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Toolbar);
-        node.set_label(L10N.tr("dock"));
+        node.set_label(L10N.tr("taskbar"));
         node
     }
 

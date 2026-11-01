@@ -656,9 +656,7 @@ impl DesktopView {
         }
         let hit = self.desktop.hit(at.x, at.y).map(|item| item.path.clone());
         let modifiers = pointer.modifiers;
-        if pointer.button == PointerButton::Secondary
-            || pointer.button == PointerButton::Primary && modifiers.control
-        {
+        if pointer.button == PointerButton::Secondary {
             match &hit {
                 Some(path) if !self.desktop.is_selected(path) => self.desktop.select_only(path),
                 Some(_) => {}
@@ -676,14 +674,14 @@ impl DesktopView {
         }
         match hit {
             Some(path) => {
-                if pointer.count >= 2 && !modifiers.logo && !modifiers.shift {
+                if pointer.count >= 2 && !modifiers.control && !modifiers.shift {
                     self.desktop.select_only(&path);
                     self.requests.push(Request::Open(vec![path]));
                     self.gesture = Gesture::Idle;
                     return true;
                 }
                 let was_sole = self.desktop.selected() == [path.clone()];
-                if modifiers.logo {
+                if modifiers.control {
                     self.desktop.toggle(&path);
                 } else if modifiers.shift {
                     self.desktop.extend(&path);
@@ -699,11 +697,11 @@ impl DesktopView {
                     at,
                     hit: Some(path),
                     on_label,
-                    was_sole: was_sole && !modifiers.logo && !modifiers.shift,
+                    was_sole: was_sole && !modifiers.control && !modifiers.shift,
                 };
             }
             None => {
-                let keep: BTreeSet<PathBuf> = if modifiers.logo || modifiers.shift {
+                let keep: BTreeSet<PathBuf> = if modifiers.control || modifiers.shift {
                     self.desktop.selected().into_iter().collect()
                 } else {
                     self.desktop.clear_selection();
@@ -762,7 +760,7 @@ impl DesktopView {
                 let modifiers = pointer.modifiers;
                 if was_sole && on_label {
                     self.start_rename(&path);
-                } else if !modifiers.logo && !modifiers.shift {
+                } else if !modifiers.control && !modifiers.shift {
                     self.desktop.select_only(&path);
                 }
                 true
@@ -1033,10 +1031,13 @@ impl DesktopView {
         if self.rename.is_some() {
             return self.rename_key(key, modifiers);
         }
+        if modifiers.logo {
+            return false;
+        }
         let selected = self.desktop.selected();
-        let command = modifiers.logo;
+        let command = modifiers.control;
         match key {
-            Key::Down if command => {
+            Key::Down if modifiers.alt => {
                 if !selected.is_empty() {
                     self.requests.push(Request::Open(selected));
                 }
@@ -1051,10 +1052,10 @@ impl DesktopView {
                     self.start_rename(path);
                 }
             }
-            Key::Backspace | Key::Delete if command && modifiers.alt && !selected.is_empty() => {
+            Key::Delete if modifiers.shift && !selected.is_empty() => {
                 self.ask_to_delete(selected);
             }
-            Key::Backspace | Key::Delete if command && !selected.is_empty() => {
+            Key::Delete if !command && !modifiers.alt && !selected.is_empty() => {
                 self.on_files(selected, Request::Trash);
             }
             Key::Function(10) if modifiers.shift => self.menu_from_keyboard(),
@@ -1064,13 +1065,13 @@ impl DesktopView {
             }
             Key::Character(letter) if command => match letter.to_ascii_lowercase() {
                 'a' => self.desktop.select_all(),
+                'o' if !selected.is_empty() => self.requests.push(Request::Open(selected)),
                 'n' if modifiers.shift => self.requests.push(Request::NewFolder),
                 'd' if modifiers.shift => self.requests.push(Request::OpenDesktopFolder),
-                'd' if !selected.is_empty() => self.on_files(selected, Request::Duplicate),
                 'c' if !selected.is_empty() => self.requests.push(Request::Copy(selected)),
                 'x' if !selected.is_empty() => self.on_files(selected, Request::Cut),
                 'v' => self.requests.push(Request::Paste {
-                    moves: modifiers.alt,
+                    moves: modifiers.shift,
                 }),
                 'i' => {
                     if let Some(path) = selected.first() {

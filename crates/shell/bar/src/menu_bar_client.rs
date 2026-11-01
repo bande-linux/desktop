@@ -11,8 +11,8 @@ use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
 use crate::menu_bar::{HEIGHT, MenuBar, Slot, StatusView};
 use crate::menus::{
-    AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, input_source_menu, sound_menu,
-    system_menu, wifi_menu,
+    AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, clock_menu, input_source_menu,
+    sound_menu, system_menu, wifi_menu,
 };
 use bande_config::{BUS_NAME, BarEdge, MenuBarPlacement, OBJECT_PATH};
 use bande_datetime::DateFormats;
@@ -24,7 +24,7 @@ use bande_status::devices::{Control, SoundControl, follow_devices, follow_sound}
 use bande_status::session::full_name;
 use bande_status::status::{InputSource, InputSources};
 use bande_status::tray::{Errand, TrayIcon, TrayItem, host, run_errands};
-use bande_status::unread::follow_unread;
+use bande_status::unread::{ClockMark, follow_unread, set_do_not_disturb};
 use bande_status::{Command, Update};
 use bande_toolkit::ui::{Event, Menu, MenuItem, PointerButton};
 use bande_toolkit::{
@@ -39,7 +39,7 @@ use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::menu_search_client::SharedHandoff;
-use crate::surfaces::{Display, NotificationCenter};
+use crate::surfaces::Display;
 
 const TRAY_PIXELS: u32 = 32;
 const SCROLL_STEP: f32 = 1.0 / 16.0;
@@ -56,11 +56,11 @@ pub type Restart = Rc<Cell<bool>>;
 pub struct MenuBarClient<V> {
     bar: V,
     display: Display,
-    notification_center: NotificationCenter,
     handoff: SharedHandoff,
     layout: (MenuBarPlacement, BarEdge),
     restart: Restart,
     workspaces: (usize, usize),
+    clock_mark: ClockMark,
     anchors: Vec<(Panel, Rect)>,
     apps: InstalledApps,
     inbox: Inbox<Update>,
@@ -218,6 +218,15 @@ impl<V: StatusView> MenuBarClient<V> {
                     });
                     if let Err(error) = written {
                         tracing::warn!("cannot save the battery percentage setting: {error}");
+                    }
+                });
+            }
+            Command::SetDoNotDisturb(on) => {
+                thread::spawn(move || {
+                    let written =
+                        Connection::session().and_then(|session| set_do_not_disturb(&session, on));
+                    if let Err(error) = written {
+                        tracing::warn!("cannot switch Do Not Disturb: {error}");
                     }
                 });
             }
@@ -395,9 +404,15 @@ impl<V: StatusView> MenuBarClient<V> {
         }
         match slot {
             Slot::ControlCenter | Slot::Wifi | Slot::Sound | Slot::Bluetooth | Slot::Battery => {
-                report("open Control Center", window.toggle_control_center());
+                report(
+                    "open Control Center",
+                    window.toggle_panel(Panel::ControlCenter),
+                );
             }
-            Slot::Clock => (self.notification_center)(),
+            Slot::Clock => report(
+                "open the Notification Center",
+                window.toggle_panel(Panel::NotificationCenter),
+            ),
             Slot::App | Slot::AppMenu(_) => {
                 if let Some(node) = self.app_menu_node(slot) {
                     let menu = format!("{}{APP_MENU_PATH}", self.app_id);
@@ -494,6 +509,20 @@ impl<V: StatusView> MenuBarClient<V> {
         if self.bar.open() == Some(slot) {
             window.close_menu();
             self.bar.set_open(None);
+            window.request_redraw();
+            return;
+        }
+        if let (Slot::Clock, PointerButton::Secondary) = (slot, button)
+            && let Some(anchor) = self.bar.slot_rect(slot)
+        {
+            self.bar.set_open(Some(slot));
+            report(
+                "open the clock menu",
+                window.show_menu(
+                    clock_menu(self.clock_mark == ClockMark::Quiet),
+                    self.bar.menu_placement(anchor),
+                ),
+            );
             window.request_redraw();
             return;
         }
@@ -677,8 +706,9 @@ impl<V: StatusView> App for MenuBarClient<V> {
                         self.restart.set(true);
                     }
                 }
-                Update::Unread(unread) => {
-                    self.bar.set_unread(unread);
+                Update::ClockMark(mark) => {
+                    self.clock_mark = mark;
+                    self.bar.set_clock_mark(mark);
                 }
                 Update::BatteryPercentage(shown) => {
                     self.bar.set_battery_percentage(shown);
@@ -755,19 +785,19 @@ impl MenuBarClient<MenuBar> {
     pub fn new(
         window: &mut Window,
         text: TextSystem,
-        place: (Display, NotificationCenter),
+        display: Display,
         buses: (Option<&Connection>, Option<&Connection>),
         layout: (MenuBarPlacement, BarEdge),
     ) -> std::io::Result<Self> {
         let bar = MenuBar::new(window.appearance().palette(), text, String::new());
-        MenuBarClient::with_view(bar, place, buses, layout)
+        MenuBarClient::with_view(bar, display, buses, layout)
     }
 }
 
 impl<V: StatusView> MenuBarClient<V> {
     pub fn with_view(
         mut view: V,
-        (display, notification_center): (Display, NotificationCenter),
+        display: Display,
         (session, system): (Option<&Connection>, Option<&Connection>),
         layout: (MenuBarPlacement, BarEdge),
     ) -> std::io::Result<Self> {
@@ -813,11 +843,11 @@ impl<V: StatusView> MenuBarClient<V> {
         Ok(Self {
             bar: view,
             display,
-            notification_center,
             handoff: SharedHandoff::default(),
             layout,
             restart: Restart::default(),
             workspaces: (1, 0),
+            clock_mark: ClockMark::Clear,
             anchors: Vec::new(),
             apps: InstalledApps::load(),
             inbox,

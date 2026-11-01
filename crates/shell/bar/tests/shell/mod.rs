@@ -1,7 +1,6 @@
 use std::os::fd::BorrowedFd;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -117,7 +116,6 @@ fn shell(stream: UnixStream, labels: Sender<Vec<String>>) {
         system: None,
         config_home: None,
         home: None,
-        notification_center: Rc::new(notifications.toggle()),
     };
     let display = Display {
         output: "HEADLESS-1".to_owned(),
@@ -208,7 +206,7 @@ impl Desktop {
         thread::sleep(Duration::from_micros(300));
     }
 
-    pub fn wait_for_label(&mut self, label: &str) {
+    pub fn wait_for_label(&mut self, label: &str) -> &[String] {
         let deadline = Instant::now() + Duration::from_secs(20);
         while !self.labels.iter().any(|known| known == label) {
             self.pump();
@@ -218,5 +216,6 @@ impl Desktop {
                 self.labels
             );
         }
+        &self.labels
     }
 }

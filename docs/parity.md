@@ -1,8 +1,8 @@
 # macOS parity
 
 How close Bande is to modern macOS, feature by feature. Each row names the milestone that
-brings it to parity (`NOTES/backlog.md`); the status is updated when a milestone lands and is
-checked live on the dev VM, not only in tests.
+brought or brings it to parity; the status is updated when work lands and is checked live on
+the Mac mini, not only in tests. Open work is in `NOTES/gaps.md` and `NOTES/plans/`.
 
 Status: **none** (missing), **basic** (works, far from macOS), **parity** (behaves like macOS 15).
 

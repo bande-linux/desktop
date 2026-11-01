@@ -166,6 +166,7 @@ Status: done 2026-11-01. gate.sh and bump-desktop.sh were already on apps `main`
 ### M7 (apt and images), then the first releases
 - images: the fetch-desktop.sh change above. apt: README table row, the Recommends check in publish.yml verify, a test for an apps package recommended by bande-desktop.
 - Release order: tag terminal-v0.1.0, software-v0.1.0, installer-v0.1.0 (and mail, calendar; Activity Monitor stays in desktop, M3) and wait for them to publish; tag desktop v0.1.0; build an image and check the apps are in it.
+- Next: app framework (NOTES/plans/app-framework.md)
 
 Status: the code is done 2026-11-01; the releases wait for the owner. images 587b692: fetch-desktop.sh reads bande-desktop's Recommends from the signed index, fetches the `apps`-owned packages it recommends without the version check, and fails on a missing one unless `ALLOW_MISSING_APPS=1` (checked against a fixture archive). apt 8214bc8: the README rows, a `verify` step that warns about any Recommends without a candidate, and rebuild tests for a desktop that recommends an app (tests/run-all.sh green). Until terminal, software and installer are published, an image build from the archive needs `ALLOW_MISSING_APPS=1`.
 

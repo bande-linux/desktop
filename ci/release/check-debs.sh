@@ -65,6 +65,10 @@ root=$(extract bande-installer)
 test -x "$root/usr/bin/bande-installer"
 grep -qx 'MimeType=application/vnd.debian.binary-package;application/x-deb;' "$root/usr/share/applications/org.bande.Installer.desktop"
 field bande-installer Depends | grep -qw packagekit
+root=$(extract bande-software)
+test -x "$root/usr/bin/bande-software"
+grep -qx 'Exec=bande-software' "$root/usr/share/applications/org.bande.Software.desktop"
+test -s "$root/usr/share/metainfo/org.bande.Software.metainfo.xml"
 root=$(extract bande-greeter)
 grep -qx 'command = "/usr/bin/bande-compositor --greeter"' "$root/usr/share/bande-greeter/greetd-config.toml"
 field bande-greeter Depends | grep -qw greetd

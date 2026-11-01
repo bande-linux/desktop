@@ -146,6 +146,41 @@ Backend choices inside E:
 6. Hide X11-only apps by default. A "Show apps that need X11" choice in the View menu shows them
    with a warning.
 
+## Status
+
+- Milestones 3, 4 and 5 are done: `crates/libs/catalog` (`bande-catalog`) parses AppStream XML
+  (Flathub, swcatalog) and DEP-11 YAML, merges ids across sources (`foo.desktop` and `foo` are one
+  app, Debian first), resolves cached and stock icons, ranks search (name, keywords, summary),
+  maps 9 store categories and marks X11-only debs from the APT `Packages` index and Flatpaks
+  from their `[Context] sockets`.
+- Milestone 7 is done without the tile grid: `crates/apps/software` (`bande-software`) shows a
+  section pop-up (Discover, the 9 categories, Installed), a search field and a list of apps
+  (name and summary) with an app page (developer, description, version, licence, sources). It
+  hides X11-only apps and reads the catalogue synchronously at start. It is packaged but not
+  yet in `bande-desktop`'s Recommends, because it cannot install anything until milestone 8.
+- Milestone 1, checked on the mini 2026-11-01: `packagekit` and `appstream` are installed;
+  `apt-config-icons` is not, so there are no catalogue icons yet. DEP-11 YAML lands in
+  `/var/lib/apt/lists/*_dep11_Components-arm64.yml.gz`, linked from `/var/lib/swcatalog/yaml/`
+  (`/var/lib/app-info` links to `/var/lib/swcatalog`); there is no `/usr/share/swcatalog`.
+  Icons are expected in `/var/lib/swcatalog/icons/<origin>/<size>/` once `apt-config-icons`
+  is installed; this is not yet checked. Software's own metainfo validates with
+  `appstreamcli validate --no-net`; metainfo for Files, Terminal, Settings and Activity Monitor
+  is still to do.
+- Left: milestone 1's Recommends and metainfo, 6 (Flatpak backend), 8 (install through
+  `bande-packages`), 9 (Installed view and removal), the tile grid and the sidebar of 7, and
+  10 to 13.
+
+Decided overnight 2026-11-01: build our own store, option E (plan recommendation; owner may
+revisit).
+Decided overnight 2026-11-01: Flathub off until the user turns it on, unfiltered (plan
+recommendation; owner may revisit).
+Decided overnight 2026-11-01: Flatpak installs system-wide with a polkit rule for sudo members
+(plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: YAML parser `serde_yaml_ng` 0.10 for DEP-11 (plan option; owner
+may revisit). The HTTP client for screenshots is still open.
+Decided overnight 2026-11-01: X11-only apps hidden (plan recommendation; owner may revisit).
+Still open: bringing the store forward from roadmap "Later" into wave B.
+
 ## Implementation plan
 
 Each milestone is one branch, sized for about 1 to 2 agent hours, and must pass the full gate.

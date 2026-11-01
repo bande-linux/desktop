@@ -119,6 +119,7 @@ bande-search = { path = "crates/libs/search" }
 bande-settings = { path = "crates/apps/settings" }
 bande-settings-panes = { path = "crates/libs/settings-panes" }
 bande-shell = { path = "crates/shell/shell" }
+bande-software = { path = "crates/apps/software" }
 bande-sound = { path = "crates/services/sound", default-features = false }
 bande-spring = { path = "crates/libs/spring" }
 bande-status = { path = "crates/libs/status" }

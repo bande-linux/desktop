@@ -51,7 +51,7 @@ review the CI, its performance and result has been abysmal. Right now it only st
 Status: finished up to the first tag, which the owner cuts ([plans/ci-releases.md](plans/ci-releases.md), "Cutting the first release")
 
 we have no app store, should we build one?
-Status: planned ([plans/app-store.md](plans/app-store.md))
+Status: started ([plans/app-store.md](plans/app-store.md)): the catalogue library and a browse-only Software app are on main; installing, removal, Flatpak and Flathub are left
 
 snapping windows to the sides is a bit slow and also to the left requires you do drag to the screen edge but dragging to the taskbar should be enough since thats the real edge of the window. So the screen estate is the whole screen minus the taskbar, not the whole screen like now.
 Status: finished ([plans/window-snapping.md](plans/window-snapping.md)); not yet checked live on the mini

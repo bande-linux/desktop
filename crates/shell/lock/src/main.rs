@@ -172,7 +172,7 @@ impl App for Locker {
 }
 
 fn clock_format() -> zbus::Result<String> {
-    let session = zbus::blocking::Connection::session()?;
+    let session = bande_bus::session()?;
     zbus::blocking::Proxy::new(
         &session,
         "org.bande.Config",
@@ -204,7 +204,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         minutes: MinuteTimer::new()?,
         backdrop: None,
         backdrop_requested: false,
-        devices: zbus::blocking::Connection::system()
+        devices: bande_bus::system()
             .inspect_err(|error| tracing::warn!("no system bus: {error}"))
             .ok()
             .as_ref()

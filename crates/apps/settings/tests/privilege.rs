@@ -73,8 +73,5 @@ fn only_actions_without_a_password_challenge_are_refused() {
 
 #[test]
 fn an_unregistered_action_counts_as_refused_without_failing_the_others() {
-    assert_eq!(
-        refused_by(PartialAuthority),
-        vec![Privilege::Hostname]
-    );
+    assert_eq!(refused_by(PartialAuthority), vec![Privilege::Hostname]);
 }

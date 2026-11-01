@@ -330,9 +330,14 @@ impl Choice {
             Form::Row => self.compose_row(cx, hit, selected, color),
             Form::Cell => self.compose_cell(cx, hit, selected, color),
             Form::Glyph => {
+                let style = TextStyle::new(GLYPH_SIZE, color);
                 let glyph = cx.text.paragraph(
                     glyph,
-                    TextStyle::new(GLYPH_SIZE, color),
+                    if EMOJI.is_plain_character(glyph) {
+                        style
+                    } else {
+                        style.emoji()
+                    },
                     None,
                     TextAlign::Start,
                 );

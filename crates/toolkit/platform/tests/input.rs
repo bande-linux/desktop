@@ -271,6 +271,46 @@ fn typed_keys_arrive_as_characters_with_their_modifiers() {
 }
 
 #[test]
+fn caps_lock_changes_typed_letters_but_not_the_letter_of_a_shortcut() {
+    let mut desktop = Desktop::new();
+    let mut client = desktop.open(Role::toplevel("caps keys", "test.caps-keys"), false);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| events.contains(&WindowEvent::Focus(true)),
+        Desktop::mapped,
+    );
+
+    desktop.type_keys(&[KEY_CAPSLOCK]);
+    desktop.type_keys(&[KEY_A]);
+    desktop.type_keys(&[KEY_LEFTCTRL, KEY_C]);
+    desktop.type_keys(&[KEY_LEFTSHIFT, KEY_LEFTCTRL, KEY_C]);
+    desktop.wait_for(
+        &mut [&mut client],
+        |events| typed(events).len() >= 3,
+        |_| true,
+    );
+
+    let control = Modifiers {
+        control: true,
+        ..Modifiers::default()
+    };
+    assert_eq!(
+        typed(&client.seen),
+        [
+            (Key::Character('A'), Modifiers::default()),
+            (Key::Character('c'), control),
+            (
+                Key::Character('C'),
+                Modifiers {
+                    shift: true,
+                    ..control
+                }
+            ),
+        ]
+    );
+}
+
+#[test]
 fn a_held_key_repeats_after_the_compositors_delay() {
     let mut desktop = Desktop::new();
     let mut client = desktop.open(Role::toplevel("repeat", "test.repeat"), false);

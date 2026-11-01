@@ -166,10 +166,29 @@ fn shape_for(cursor: Cursor) -> Shape {
     }
 }
 
+fn shifted(character: char, shift: bool) -> char {
+    let mut cased = match shift {
+        true => character.to_uppercase().collect::<Vec<_>>(),
+        false => character.to_lowercase().collect::<Vec<_>>(),
+    };
+    match (cased.pop(), cased.is_empty()) {
+        (Some(cased), true) => cased,
+        _ => character,
+    }
+}
+
 impl Input {
     fn key_event(&self, keycode: Keycode) -> Option<WindowEvent> {
         let keymap = self.keymap.as_ref()?;
-        let key = key_for(keymap.state.key_get_one_sym(keycode))?;
+        let key = match key_for(keymap.state.key_get_one_sym(keycode))? {
+            Key::Character(character)
+                if self.caps_lock
+                    && (self.modifiers.control || self.modifiers.alt || self.modifiers.logo) =>
+            {
+                Key::Character(shifted(character, self.modifiers.shift))
+            }
+            key => key,
+        };
         Some(WindowEvent::Input(Event::Key {
             key,
             modifiers: self.modifiers,

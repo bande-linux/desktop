@@ -202,12 +202,12 @@ impl Editor {
             logo,
             control,
         } = modifiers;
-        if control {
+        if logo {
             return false;
         }
         let edits = match key {
-            Key::Character('z' | 'Z' | 'x' | 'v') if logo => true,
-            Key::Character(_) | Key::Space => !logo,
+            Key::Character('z' | 'Z' | 'y' | 'x' | 'v') if control => true,
+            Key::Character(_) | Key::Space => !control && !alt,
             Key::Backspace | Key::Delete | Key::Enter => true,
             _ => false,
         };
@@ -216,14 +216,18 @@ impl Editor {
         }
         let text = &mut cx.text;
         match key {
-            Key::Character('z' | 'Z') if logo && shift => {
+            _ if alt => return false,
+            Key::Character('z' | 'Z') if control && shift => {
                 self.redo();
             }
-            Key::Character('z') if logo => {
+            Key::Character('y') if control => {
+                self.redo();
+            }
+            Key::Character('z') if control => {
                 self.undo();
             }
-            Key::Character('a') if logo => self.select_all(),
-            Key::Character('c' | 'x') if logo => {
+            Key::Character('a') if control => self.select_all(),
+            Key::Character('c' | 'x') if control => {
                 if self.selection.is_collapsed() {
                     return true;
                 }
@@ -235,34 +239,30 @@ impl Editor {
                     self.history.open = false;
                 }
             }
-            Key::Character('v') if logo => cx.clipboard = Some(ClipboardRequest::Paste),
-            Key::Left | Key::Right if !shift && !alt && !logo && !self.selection.is_collapsed() => {
+            Key::Character('v') if control => cx.clipboard = Some(ClipboardRequest::Paste),
+            Key::Left | Key::Right if !shift && !control && !self.selection.is_collapsed() => {
                 let edge = match key == Key::Right {
                     true => self.selection.end(),
                     false => self.selection.start(),
                 };
                 self.go((edge, self.selection.affinity), false);
             }
-            Key::Left | Key::Right if logo => {
-                let to = self.line_edge(text, key == Key::Right);
+            Key::Left | Key::Right => {
+                let to = self.horizontal(text, key == Key::Right, control);
+                self.go(to, shift);
+            }
+            Key::Home | Key::End if control => {
+                let to = match key == Key::End {
+                    true => (self.end(), Affinity::Upstream),
+                    false => (Position::default(), Affinity::Downstream),
+                };
                 self.go(to, shift);
             }
             Key::Home | Key::End => {
                 let to = self.line_edge(text, key == Key::End);
                 self.go(to, shift);
             }
-            Key::Left | Key::Right => {
-                let to = self.horizontal(text, key == Key::Right, alt);
-                self.go(to, shift);
-            }
-            Key::Up | Key::Down if logo => {
-                let to = match key == Key::Down {
-                    true => (self.end(), Affinity::Upstream),
-                    false => (Position::default(), Affinity::Downstream),
-                };
-                self.go(to, shift);
-            }
-            Key::Up | Key::Down if alt => {
+            Key::Up | Key::Down if control => {
                 let to = self.paragraph_edge(key == Key::Down);
                 self.go(to, shift);
             }
@@ -274,20 +274,13 @@ impl Editor {
             Key::PageDown if self.multi_line => {
                 self.move_vertically(text, self.page.max(self.line_height), shift);
             }
-            Key::Backspace if logo => {
-                if self.selection.is_collapsed() {
-                    let to = self.line_edge(text, false);
-                    self.go(to, true);
-                }
-                self.delete(text, false, false);
-            }
-            Key::Backspace => self.delete(text, false, alt),
-            Key::Delete => self.delete(text, true, alt),
-            Key::Enter if self.multi_line && !logo => self.insert("\n"),
-            Key::Character(character) if !logo => {
+            Key::Backspace => self.delete(text, false, control),
+            Key::Delete => self.delete(text, true, control),
+            Key::Enter if self.multi_line && !control => self.insert("\n"),
+            Key::Character(character) if !control => {
                 self.replace_selection(character.encode_utf8(&mut [0; 4]), EditKind::Typing);
             }
-            Key::Space if !logo => self.replace_selection(" ", EditKind::Typing),
+            Key::Space if !control => self.replace_selection(" ", EditKind::Typing),
             _ => return false,
         }
         true

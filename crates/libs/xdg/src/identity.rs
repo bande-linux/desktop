@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use crate::entry::{DesktopEntry, find_executable};
@@ -114,4 +115,83 @@ pub fn find_app_for_process<'a>(
             .iter()
             .find(|entry| entry.executable().as_ref() == Some(&executable))
     })
+}
+
+fn exec_argument(argument: &str) -> String {
+    let mut quoted = String::from("\"");
+    for character in argument.chars() {
+        match character {
+            '"' | '`' | '$' | '\\' => {
+                quoted.push('\\');
+                quoted.push(character);
+            }
+            '%' => quoted.push_str("%%"),
+            _ => quoted.push(character),
+        }
+    }
+    quoted.push('"');
+    quoted.replace('\\', "\\\\")
+}
+
+fn is_interpreter(executable: &Path) -> bool {
+    executable
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            let unversioned = name
+                .trim_end_matches(|character: char| character.is_ascii_digit() || character == '.');
+            LAUNCHERS.contains(&name) || LAUNCHERS.contains(&unversioned)
+        })
+}
+
+fn script(process: &Path) -> Option<PathBuf> {
+    let cmdline = fs::read(process.join("cmdline")).ok()?;
+    let script = cmdline
+        .split(|byte| *byte == 0)
+        .skip(1)
+        .filter_map(|argument| std::str::from_utf8(argument).ok())
+        .find(|argument| !argument.is_empty() && !argument.starts_with('-'))?;
+    Some(
+        fs::read_link(process.join("cwd"))
+            .map(|cwd| cwd.join(script))
+            .unwrap_or_else(|_| PathBuf::from(script)),
+    )
+}
+
+pub fn write_launcher(
+    data_home: &Path,
+    app_id: &str,
+    proc_root: &Path,
+    pid: u32,
+) -> io::Result<PathBuf> {
+    let unknown = || io::Error::new(io::ErrorKind::NotFound, "the app's program is unknown");
+    if app_id.is_empty() || app_id.contains(['/', '\n']) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "no usable app id",
+        ));
+    }
+    let process = proc_root.join(pid.to_string());
+    let executable = process_executable(&process).ok_or_else(unknown)?;
+    let program = executable.to_str().ok_or_else(unknown)?;
+    let mut command = vec![exec_argument(program)];
+    if is_interpreter(&executable) {
+        let script = script(&process).ok_or_else(unknown)?;
+        command.push(exec_argument(script.to_str().ok_or_else(unknown)?));
+    }
+    let folder = data_home.join("applications");
+    fs::create_dir_all(&folder)?;
+    let path = folder.join(format!("{app_id}.desktop"));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
+    let name = last_part(app_id).unwrap_or(app_id);
+    write!(
+        file,
+        "[Desktop Entry]\nType=Application\nName={name}\nExec={}\nTryExec={}\nIcon={app_id}\nStartupWMClass={app_id}\nX-Bande-Kept=true\n",
+        command.join(" "),
+        program.replace('\\', "\\\\"),
+    )?;
+    Ok(path)
 }

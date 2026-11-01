@@ -8,6 +8,7 @@ use bande_xdg::{
     DesktopEntry, ExecError, ICON_THEMES, Locale, TERMINAL, UserDir, app_name, applications,
     apps_to_reopen, autostart_dir, find_app, find_app_for_process, find_icon, launch,
     opens_at_login, remember_apps, running_app, set_open_at_login, take_apps_to_reopen, user_dir,
+    write_launcher,
 };
 use tempfile::TempDir;
 
@@ -484,6 +485,45 @@ fn a_window_finds_its_app_through_its_own_scope_or_its_program() {
     assert_eq!(found(44), None);
     assert_eq!(found(45), Some("org.example.Paint"));
     assert_eq!(found(46), None);
+}
+
+#[test]
+fn a_kept_app_without_an_entry_gets_a_launcher_that_starts_its_program() {
+    let dir = TempDir::new().expect("dir");
+    let bin = dir.path().join("my bin");
+    let (editor, python) = (bin.join("dev \"build\""), bin.join("python3"));
+    executable(&editor);
+    executable(&python);
+    let root = dir.path().join("proc");
+    process(&root, 50, "app-bande-org.bande.Terminal-7.scope", &editor);
+    process(&root, 51, "app-bande-org.bande.Terminal-7.scope", &python);
+    write(&root.join("51/cmdline"), "python3\0-u\0tool.py\0--fast\0");
+    std::os::unix::fs::symlink(&bin, root.join("51/cwd")).expect("cwd link");
+    let data_home = dir.path().join("data");
+
+    let written = write_launcher(&data_home, "org.example.Stray", &root, 50).expect("a launcher");
+    write_launcher(&data_home, "org.example.Script", &root, 51).expect("a launcher");
+    assert_eq!(
+        written,
+        data_home.join("applications/org.example.Stray.desktop")
+    );
+    let entries = applications(std::slice::from_ref(&data_home), None, &desktops());
+    let stray = find_app(&entries, "org.example.Stray").expect("the written entry");
+    assert_eq!(stray.name, "Stray");
+    assert_eq!(stray.command(), Ok(vec![editor.display().to_string()]));
+    let script = find_app(&entries, "org.example.Script").expect("the written entry");
+    assert_eq!(
+        script.command(),
+        Ok(vec![
+            python.display().to_string(),
+            bin.join("tool.py").display().to_string()
+        ])
+    );
+
+    let before = fs::read_to_string(&written).expect("launcher");
+    assert!(write_launcher(&data_home, "org.example.Stray", &root, 51).is_err());
+    assert_eq!(fs::read_to_string(&written).expect("launcher"), before);
+    assert!(write_launcher(&data_home, "org.example.Gone", &root, 99).is_err());
 }
 
 #[test]

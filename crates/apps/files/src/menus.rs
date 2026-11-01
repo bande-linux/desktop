@@ -131,17 +131,16 @@ pub fn items_menu(selection: &Selection) -> Menu {
     let count = selection.count;
     let mut items = Vec::new();
     if selection.trashed {
-        items.push(item("menu-put-back", &Command::PutBack).shortcut("Super+Backspace"));
+        items.push(item("menu-put-back", &Command::PutBack));
         items.push(
-            item("menu-delete-immediately", &Command::DeleteImmediately)
-                .shortcut("Alt+Super+Backspace"),
+            item("menu-delete-immediately", &Command::DeleteImmediately).shortcut("Shift+Delete"),
         );
         items.push(MenuItem::separator());
         items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
-        items.push(item("menu-get-info", &Command::Info).shortcut("Super+I"));
+        items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
         return Menu::new(items);
     }
-    items.push(item("open", &Command::Open).shortcut("Super+Down"));
+    items.push(item("open", &Command::Open).shortcut("Ctrl+O"));
     if selection.folders {
         items.push(item("menu-open-in-new-tab", &Command::OpenInNewTab));
     }
@@ -165,7 +164,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
     }
     items.push(MenuItem::separator());
     items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
-    items.push(item("menu-get-info", &Command::Info).shortcut("Super+I"));
+    items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
     if selection.away {
         items.push(item(
             "menu-show-in-enclosing-folder",
@@ -178,13 +177,13 @@ pub fn items_menu(selection: &Selection) -> Menu {
         _ => L10N.tr_args("menu-rename-items", [("count", count.into())]),
     };
     items.push(MenuItem::new(&rename, action(&Command::Rename)).shortcut("F2"));
-    items.push(item("menu-duplicate", &Command::Duplicate).shortcut("Super+D"));
+    items.push(item("menu-duplicate", &Command::Duplicate));
     let compress = match count {
         1 => L10N.tr_args("menu-compress", [("name", selection.name.clone().into())]),
         _ => L10N.tr_args("menu-compress-items", [("count", count.into())]),
     };
     items.push(MenuItem::new(&compress, action(&Command::Compress)));
-    items.push(item("menu-cut", &Command::Cut).shortcut("Super+X"));
+    items.push(item("menu-cut", &Command::Cut).shortcut("Ctrl+X"));
     let copy_path = match count {
         1 => L10N.tr_args(
             "menu-copy-path-of",
@@ -194,13 +193,13 @@ pub fn items_menu(selection: &Selection) -> Menu {
     };
     items.push(
         item("menu-copy", &Command::Copy)
-            .shortcut("Super+C")
+            .shortcut("Ctrl+C")
             .alternate(
-                MenuItem::new(&copy_path, action(&Command::CopyPath)).shortcut("Alt+Shift+Super+C"),
+                MenuItem::new(&copy_path, action(&Command::CopyPath)).shortcut("Shift+Ctrl+C"),
             ),
     );
     if selection.folders {
-        items.push(item("menu-add-to-sidebar", &Command::AddToSidebar).shortcut("Control+Super+T"));
+        items.push(item("menu-add-to-sidebar", &Command::AddToSidebar).shortcut("Ctrl+D"));
     }
     items.push(MenuItem::separator());
     let trash = if count == 1 {
@@ -210,10 +209,10 @@ pub fn items_menu(selection: &Selection) -> Menu {
     };
     items.push(
         MenuItem::new(&trash, action(&Command::Trash))
-            .shortcut("Super+Backspace")
+            .shortcut("Delete")
             .alternate(
                 item("menu-delete-immediately", &Command::DeleteImmediately)
-                    .shortcut("Alt+Super+Backspace"),
+                    .shortcut("Shift+Delete"),
             ),
     );
     Menu::new(items)
@@ -234,14 +233,14 @@ pub fn folder_menu(folder: Folder) -> Menu {
     let mut items = if folder.trash {
         vec![
             item("menu-empty-trash", &Command::EmptyTrash)
-                .shortcut("Shift+Super+Backspace")
+                .shortcut("Shift+Ctrl+Delete")
                 .enabled(!folder.trash_empty),
         ]
     } else {
         vec![
-            item("menu-new-folder", &Command::NewFolder).shortcut("Shift+Super+N"),
+            item("menu-new-folder", &Command::NewFolder).shortcut("Shift+Ctrl+N"),
             item("menu-paste", &Command::Paste)
-                .shortcut("Super+V")
+                .shortcut("Ctrl+V")
                 .enabled(folder.paste),
         ]
     };
@@ -256,7 +255,7 @@ pub fn folder_menu(folder: Folder) -> Menu {
             MenuItem::submenu(&L10N.tr("menu-new-document"), Menu::new(documents)),
         );
     }
-    items.push(item("menu-get-info", &Command::Info).shortcut("Super+I"));
+    items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
     if !folder.trash {
         items.push(item("menu-open-in-terminal", &Command::OpenInTerminal));
     }
@@ -271,12 +270,12 @@ pub fn folder_menu(folder: Folder) -> Menu {
     ));
     items.push(MenuItem::separator());
     for (message, command, keys, mode) in [
-        ("menu-as-icons", Command::Icons, "Super+1", ViewMode::Icons),
-        ("menu-as-list", Command::List, "Super+2", ViewMode::List),
+        ("menu-as-icons", Command::Icons, "Ctrl+1", ViewMode::Icons),
+        ("menu-as-list", Command::List, "Ctrl+2", ViewMode::List),
         (
             "menu-as-columns",
             Command::Columns,
-            "Super+3",
+            "Ctrl+3",
             ViewMode::Columns,
         ),
     ] {
@@ -291,7 +290,7 @@ pub fn folder_menu(folder: Folder) -> Menu {
     } else {
         "menu-show-hidden-files"
     };
-    items.push(item(hidden, &Command::ToggleHidden).shortcut("Shift+Super+."));
+    items.push(item(hidden, &Command::ToggleHidden).shortcut("Ctrl+H"));
     Menu::new(items)
 }
 
@@ -311,7 +310,7 @@ pub fn place_menu(place: Place) -> Menu {
         Place::Folder => {}
         Place::Volume => {
             items.push(MenuItem::separator());
-            items.push(item("menu-eject", &Command::Eject).shortcut("Super+E"));
+            items.push(item("menu-eject", &Command::Eject).shortcut("Ctrl+E"));
         }
         Place::Trash { empty } => {
             items.push(MenuItem::separator());

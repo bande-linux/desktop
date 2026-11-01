@@ -1,6 +1,7 @@
-# The combined bar: Dock and menu bar as one bar
+# The taskbar: Dock and menu bar as one bar
 
 Status: adopted by the owner on 2026-10-30 (app menus: cascade from the app header, option A). Implementation order: `docs/roadmap.md`, wave D.
+Name: since 2026-11-01 people see this bar as the **Taskbar** (Settings ▸ Taskbar, "Keep in Taskbar"), and the side strip in the separate-menu-bar layout is the taskbar too. This page says "bar" for the same thing; "today's Dock" means the separate Dock that came before it. The config key stays `bar { … }` and the D-Bus properties stay `BarApps`, `BarEdge` and so on.
 Mockups: `../bar/` (SVG + PNG; regenerate with
 `python3 generate.py <outdir>` and any SVG renderer; the PNGs were drawn with resvg 0.49, the
 version the workspace pins).
@@ -231,13 +232,13 @@ mirrored.
   300 ms (longer than the 120 ms auto-hide dwell, so games and video do not reveal it by accident)
   slides it in over the app; `Super+F2`/`F3` and `Super+Space` reveal it instantly.
 - **Auto-hide.** As today's Dock (120 ms dwell on a 2 pt strip, leaves 450 ms after the pointer,
-  never while a menu or panel is open, slides in for drags). `Alt+Super+D` toggles (proposed in dock.md; no compositor binding found today). Hidden bars
+  never while a menu or panel is open, slides in for drags). `Alt+Super+D` toggles (proposed in taskbar.md; no compositor binding found today). Hidden bars
   show a 2 pt sliver of the unread-notification accent at the corner when something is unread.
 - **Drag and drop.** Unchanged from the Dock: files onto apps (accepting icon grows, others dim)
   and Trash, reorder by drag after 4 pt, drag out to remove, drag apps from the launcher or Files
   into the kept group. New: dragging a file onto the app header hands it to the active app.
 - **Right click everywhere.** Every region has a menu (table in 3.1); the bar background menu
-  has Show Names, Automatically Hide, Position ▸ (Left, Bottom, Right, Top), Bar Settings….
+  has Show Names, Automatically Hide, Position ▸ (Left, Bottom, Right, Top), Taskbar Settings….
 - **Keyboard.** `Super+F2`: app menu open with the first title selected (macOS Ctrl+F2 analogue,
   as today). `Super+F3`: the apps (today). `Shift+Super+/`: menu search. Inside the bar, Up/Down move
   within a region, Tab/Shift+Tab move between regions (launcher → header → apps → Trash →
@@ -258,7 +259,7 @@ mirrored.
   (today's menu bar); the edge bar keeps launcher, apps, Trash, workspaces (today's Dock). This is
   today's layout, so it is also the migration safety net.
 
-## 4. Settings (Desktop & Bar pane, all in `config.kdl`)
+## 4. Settings (Taskbar pane, all in `config.kdl`)
 
 Only where people genuinely differ:
 
@@ -346,7 +347,7 @@ bar {
 9. **Multi-display, full screen, auto-hide polish** (depends on roadmap A3).
 10. **Third-party menus** via `org_kde_kwin_appmenu`.
 11. Docs: update `docs/architecture/behaviour.md` (Dock, Menu bar paragraphs → Bar),
-    `docs/design/features/dock.md` ("Clock, tray icons, workspace switcher in the Dock: never" is
+    `docs/design/features/taskbar.md` ("Clock, tray icons, workspace switcher in the Dock: never" is
     reversed by this proposal and needs the owner's decision), and an experience spec with the
     interaction table.
 

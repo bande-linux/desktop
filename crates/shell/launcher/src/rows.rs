@@ -225,13 +225,13 @@ pub fn hit_menu(hit: &Hit, model: &Model) -> Menu {
             items
         }
         Target::Value(_) => {
-            vec![MenuItem::new(&L10N.tr("menu-copy"), COPY).shortcut("Super+C")]
+            vec![MenuItem::new(&L10N.tr("menu-copy"), COPY).shortcut("Ctrl+C")]
         }
         Target::Path(_) => vec![
             MenuItem::new(&L10N.tr("menu-open"), OPEN).shortcut("Return"),
-            MenuItem::new(&L10N.tr("menu-show-in-files"), REVEAL).shortcut("Super+Return"),
+            MenuItem::new(&L10N.tr("menu-show-in-files"), REVEAL).shortcut("Ctrl+Enter"),
             MenuItem::separator(),
-            MenuItem::new(&L10N.tr("menu-copy-path"), COPY).shortcut("Super+C"),
+            MenuItem::new(&L10N.tr("menu-copy-path"), COPY).shortcut("Ctrl+C"),
         ],
         Target::App(_) | Target::Settings(_) | Target::Command(_) => {
             vec![MenuItem::new(&L10N.tr("menu-open"), OPEN).shortcut("Return")]
@@ -493,7 +493,7 @@ impl Widget for Choice {
                 if pointer.is_primary() && self.visible.contains(pointer.position) =>
             {
                 state.model.select(self.position);
-                if pointer.modifiers.logo {
+                if pointer.modifiers.control {
                     state.model.reveal();
                 } else {
                     state.model.activate();

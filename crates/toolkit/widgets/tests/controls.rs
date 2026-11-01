@@ -355,7 +355,10 @@ fn a_combo_box_takes_typing_or_a_choice_from_its_menu() {
     harness.key(Key::Character('z'));
     harness.ui.handle(&Event::Key {
         key: Key::Character('z'),
-        modifiers: Modifiers { logo: true, ..NONE },
+        modifiers: Modifiers {
+            control: true,
+            ..NONE
+        },
     });
     harness.ui.layout(AREA);
     assert_eq!(texts.borrow().last().map(String::as_str), Some("14"));

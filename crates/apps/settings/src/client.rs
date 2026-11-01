@@ -172,6 +172,22 @@ pub trait Config {
     #[zbus(property)]
     fn set_trackpad_disable_while_typing(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn trackpad_workspace_swipe(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_trackpad_workspace_swipe(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn trackpad_overview_swipe(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_trackpad_overview_swipe(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn trackpad_desktop_spread(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_trackpad_desktop_spread(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn trackpad_launcher_pinch(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_trackpad_launcher_pinch(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn trackpad_acceleration(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_trackpad_acceleration(&self, on: bool) -> zbus::Result<()>;
@@ -250,7 +266,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 52] = [
+pub const CONFIG_SETTINGS: [SettingId; 56] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -292,6 +308,10 @@ pub const CONFIG_SETTINGS: [SettingId; 52] = [
     SettingId::TrackpadSpeed,
     SettingId::TrackpadSecondaryClick,
     SettingId::TrackpadDisableWhileTyping,
+    SettingId::TrackpadWorkspaceSwipe,
+    SettingId::TrackpadOverviewSwipe,
+    SettingId::TrackpadDesktopSpread,
+    SettingId::TrackpadLauncherPinch,
     SettingId::TrackpadAcceleration,
     SettingId::TrackpadDragging,
     SettingId::TrackpadScrollMethod,
@@ -466,6 +486,12 @@ impl SettingsClient {
             SettingId::TrackpadDisableWhileTyping => {
                 Value::Flag(self.config.trackpad_disable_while_typing()?)
             }
+            SettingId::TrackpadWorkspaceSwipe => {
+                Value::Flag(self.config.trackpad_workspace_swipe()?)
+            }
+            SettingId::TrackpadOverviewSwipe => Value::Flag(self.config.trackpad_overview_swipe()?),
+            SettingId::TrackpadDesktopSpread => Value::Flag(self.config.trackpad_desktop_spread()?),
+            SettingId::TrackpadLauncherPinch => Value::Flag(self.config.trackpad_launcher_pinch()?),
             SettingId::MouseNaturalScrolling => Value::Flag(self.config.mouse_natural_scrolling()?),
             SettingId::MouseSpeed => Value::Number(speed_stop(self.config.mouse_speed()?)),
             SettingId::TrackpadAcceleration => Value::Flag(self.config.trackpad_acceleration()?),
@@ -615,6 +641,18 @@ impl SettingsClient {
             }
             (SettingId::TrackpadDisableWhileTyping, Value::Flag(on)) => {
                 self.config.set_trackpad_disable_while_typing(*on)
+            }
+            (SettingId::TrackpadWorkspaceSwipe, Value::Flag(on)) => {
+                self.config.set_trackpad_workspace_swipe(*on)
+            }
+            (SettingId::TrackpadOverviewSwipe, Value::Flag(on)) => {
+                self.config.set_trackpad_overview_swipe(*on)
+            }
+            (SettingId::TrackpadDesktopSpread, Value::Flag(on)) => {
+                self.config.set_trackpad_desktop_spread(*on)
+            }
+            (SettingId::TrackpadLauncherPinch, Value::Flag(on)) => {
+                self.config.set_trackpad_launcher_pinch(*on)
             }
             (SettingId::MouseNaturalScrolling, Value::Flag(on)) => {
                 self.config.set_mouse_natural_scrolling(*on)

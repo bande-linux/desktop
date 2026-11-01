@@ -15,6 +15,7 @@ use bande_files::{
 use bande_fs::Trash;
 use bande_search::{recently_used_path, usage_path};
 use bande_thumbnails::Thumbnails;
+use bande_toolkit::ui::shortcut_pressed;
 use bande_toolkit::{
     App, Appearance, DragAction, DragEvent, FrameRegions, Header, MenuPlacement, Rect, Role, Scene,
     TextSystem, Transfer, Window, WindowEvent,
@@ -225,7 +226,12 @@ impl App for Files {
                 self.view.set_appearance(appearance);
                 true
             }
-            WindowEvent::Input(input) => self.view.handle(&input),
+            WindowEvent::Input(input) => {
+                match Standard::for_shortcut(|shortcut| shortcut_pressed(&input, shortcut)) {
+                    Some(standard) => self.menu_bar_action(window, standard.action()),
+                    None => self.view.handle(&input),
+                }
+            }
             WindowEvent::Accessibility(request) => self.view.perform(&request),
             WindowEvent::Pasted(text) => self.view.pasted(&text),
             WindowEvent::PastedTransfer(transfer) => {

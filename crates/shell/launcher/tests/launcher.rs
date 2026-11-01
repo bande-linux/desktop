@@ -143,11 +143,11 @@ fn key(launcher: &mut Launcher, key: Key) {
     });
 }
 
-fn super_key(launcher: &mut Launcher, key: Key) {
+fn ctrl_key(launcher: &mut Launcher, key: Key) {
     launcher.handle(&Event::Key {
         key,
         modifiers: Modifiers {
-            logo: true,
+            control: true,
             ..Modifiers::default()
         },
     });
@@ -423,9 +423,9 @@ fn tab_and_super_arrows_move_between_groups() {
     assert_eq!(launcher.selection().unwrap().title, "Text Editor");
     key(&mut launcher, Key::Tab);
     assert_eq!(launcher.selection().unwrap().title, "tests");
-    super_key(&mut launcher, Key::Down);
+    ctrl_key(&mut launcher, Key::Down);
     assert_eq!(launcher.selection().unwrap().title, "tea.txt");
-    super_key(&mut launcher, Key::Up);
+    ctrl_key(&mut launcher, Key::Up);
     assert_eq!(launcher.selection().unwrap().title, "tests");
 }
 
@@ -436,7 +436,7 @@ fn a_calculation_is_the_top_hit_and_return_or_super_c_copies_it() {
     let top = launcher.selection().unwrap();
     assert_eq!(top.kind, Kind::Calculation);
     assert_eq!(top.title, "180");
-    super_key(&mut launcher, Key::Character('c'));
+    ctrl_key(&mut launcher, Key::Character('c'));
     assert_eq!(launcher.take_actions(), [Action::Copy("180".to_owned())]);
     key(&mut launcher, Key::Enter);
     assert_eq!(
@@ -450,8 +450,8 @@ fn super_return_shows_a_file_in_files_and_super_c_copies_its_path() {
     let mut launcher = launcher();
     typed(&mut launcher, "budget");
     files(&mut launcher, &[("budget.ods", false, PREFIX)]);
-    super_key(&mut launcher, Key::Enter);
-    super_key(&mut launcher, Key::Character('c'));
+    ctrl_key(&mut launcher, Key::Enter);
+    ctrl_key(&mut launcher, Key::Character('c'));
     let path = PathBuf::from("/home/someone/budget.ods");
     assert_eq!(
         launcher.take_actions(),

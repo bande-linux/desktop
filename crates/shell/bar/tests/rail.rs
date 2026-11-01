@@ -537,17 +537,17 @@ fn files_menus() -> Node {
                 "Files",
                 vec![
                     leaf(10, "About Files"),
-                    shortcut(leaf(11, "Quit Files"), "Super+Q"),
+                    shortcut(leaf(11, "Quit Files"), "Ctrl+Q"),
                 ],
             ),
-            menu_node(2, "File", vec![shortcut(leaf(20, "New Window"), "Super+N")]),
+            menu_node(2, "File", vec![shortcut(leaf(20, "New Window"), "Ctrl+N")]),
             menu_node(
                 3,
                 "Edit",
                 vec![
-                    shortcut(leaf(30, "Copy"), "Super+C"),
-                    shortcut(leaf(31, "Find"), "Super+F"),
-                    shortcut(leaf(32, "Find Next"), "Super+G"),
+                    shortcut(leaf(30, "Copy"), "Ctrl+C"),
+                    shortcut(leaf(31, "Find"), "Ctrl+F"),
+                    shortcut(leaf(32, "Find Next"), "Ctrl+G"),
                 ],
             ),
             menu_node(4, "View", vec![leaf(40, "Find in Sidebar")]),

@@ -375,7 +375,7 @@ fn sound_offers_the_alert_effects_a_live_input_level_and_a_volume_per_app() {
             && node.value() == Some("Mallet")
     }));
 
-    open(&mut view, "Bar");
+    open(&mut view, "Taskbar");
     assert!(
         view.take_commands()
             .contains(&Command::Audio(AudioCommand::Listen(false)))
@@ -454,6 +454,44 @@ fn the_new_pointer_rows_send_their_settings_and_dragging_follows_tap_to_click() 
         Value::Flag(false),
     )]));
     assert!(find(&mut view, Role::ComboBox, "Dragging").is_none());
+}
+
+#[test]
+fn each_gesture_switch_sends_its_setting() {
+    let mut view = view();
+    view.set_pointing_devices(PointingDevices {
+        trackpad: true,
+        mouse: false,
+    });
+    let gestures = [
+        (
+            SettingId::TrackpadWorkspaceSwipe,
+            "Swipe between workspaces",
+        ),
+        (SettingId::TrackpadOverviewSwipe, "Overview"),
+        (SettingId::TrackpadDesktopSpread, "Show desktop"),
+        (SettingId::TrackpadLauncherPinch, "Launcher"),
+    ];
+    view.apply(Update::Values(
+        gestures
+            .iter()
+            .map(|(id, _)| (*id, Value::Flag(true)))
+            .collect(),
+    ));
+
+    open(&mut view, "Trackpad");
+    for (_, name) in gestures {
+        let switch = find(&mut view, Role::Switch, name).expect(name);
+        click(&mut view, switch);
+    }
+
+    assert_eq!(
+        view.take_commands(),
+        gestures
+            .iter()
+            .map(|(id, _)| Command::Set(*id, Value::Flag(false)))
+            .collect::<Vec<_>>()
+    );
 }
 
 fn display(connector: &str, rates: &[i32]) -> Display {
@@ -730,7 +768,7 @@ fn the_bar_pane_has_position_size_names_auto_hide_and_the_menu_bar() {
         (SettingId::BarNames, Value::Flag(false)),
         (SettingId::BarMenuBar, Value::Keyword("in-bar".to_owned())),
     ]));
-    open(&mut view, "Bar");
+    open(&mut view, "Taskbar");
     let size = find(&mut view, Role::Slider, "Size").expect("size slider");
     view.perform(&ActionRequest {
         action: Action::Increment,

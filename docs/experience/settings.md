@@ -270,8 +270,8 @@ set of `data/icons/Bande/symbolic` (roadmap D3). Until they exist, slice 1 uses
 
 Every pane and subpage is built from the same parts, in this order.
 
-1. **Back** (subpages only). A quiet "‹ Pane" button at the top left. Super+[, Alt+Left and the
-   mouse's back button do the same. Focus returns to the row that opened the subpage. This
+1. **Back** (subpages only). A quiet "‹ Pane" button at the top left. Alt+Left and the mouse's
+   back button do the same. Focus returns to the row that opened the subpage. This
    exists today.
 2. **Header.**
    - A 40 pt tile (`well`, radius 10) holds the pane's symbol at 24 pt in `ink`.
@@ -311,7 +311,7 @@ Every pane and subpage is built from the same parts, in this order.
 | Sound | MacBook Pro Speakers · 60 % |
 | Keyboard | English (US) · 2 input sources |
 | Mouse | Buttons, scrolling and tracking speed |
-| Trackpad | Tapping, clicking, scrolling and tracking speed |
+| Trackpad | Tapping, clicking, scrolling, tracking speed and gestures |
 | Power | 82 % · 4 h 10 min left · On power adapter |
 | Privacy & Security | Which apps may use the camera, take screenshots or share the screen |
 | Apps | Which apps open your files and links, and which open at login |
@@ -344,7 +344,7 @@ anywhere on the row operates the control: it flips a switch, opens a pop-up, foc
   first result, Escape cancels.
 - **Object pages.** An object with several settings of its own (an app's notifications, an app's
   permissions) opens a subpage of its own. It does not expand in place.
-- **Shortcuts** are drawn with the `Shortcut` widget and the Super glyph, never ⌘ or ⌥ in text.
+- **Shortcuts** are drawn with the `Shortcut` widget, as words ("Alt+Super+Space"), never ⌘ or ⌥.
   This fixes `switch-sources-hint`.
 
 **Where explanations go.** There are three places, one sentence each at most:
@@ -416,7 +416,7 @@ anywhere on the row operates the control: it flips a switch, opens a pop-up, foc
   - While searching, the sidebar drops its group labels and shows one ranked list.
   - Subpages show their path: "About › Storage", "Displays › Night Light".
   - A disclosure row whose subpage matches is tinted on its parent page.
-  - Super+F focuses the search field.
+  - Ctrl+F focuses the search field.
   - With no result, the page says: No settings match "xyz".
 - **Vocabulary.** Every setting's keywords carry the other platforms' words, so people find
   things with the words they bring:
@@ -436,7 +436,7 @@ anywhere on the row operates the control: it flips a switch, opens a pop-up, foc
 
 - Tab moves through rows and Shift+Tab back.
 - In the sidebar, Up and Down move between panes and Return opens one.
-- Super+[ goes back.
+- Alt+Left goes back.
 - Escape closes, in this order: a confirmation, then a picker, then the search.
 - The View menu lists the panes by group, with separators between groups.
 
@@ -565,7 +565,7 @@ notifications per app.
 | Pointer acceleration off (flat) | M W G K | have | slice 6 | libinput accel profile; S |
 | Scroll speed | M W K | missing | later | the compositor must scale it; S–M |
 | Three-finger drag | M | missing | later | roadmap |
-| Gesture choices | M W K | one fixed set | never | one way per task |
+| Gesture switches (workspaces, overview, show desktop, launcher) | M W K | have | slice 6 | one fixed set, each can be turned off and then reaches the app |
 
 **System**
 
@@ -656,7 +656,7 @@ Owns `libs/settings-panes`, `apps/settings` and one constant in `shell/desktop`.
    - Sound reorders to Output, Input, Sound effects, Apps.
    - Keyboard Shortcuts become a subpage.
    - The attention row for updates.
-   - Super+F focuses search.
+   - Ctrl+F focuses search.
    - The View menu groups the panes.
    - The default window becomes 900×720.
    - `shell/desktop` opens `appearance` instead of `wallpaper`.
@@ -804,7 +804,10 @@ Owns `services/config`, `platform/compositor` and `apps/settings`.
    description "Faster movements move the pointer farther". Trackpad groups its rows into Click
    (Tap to click; Dragging, shown while tapping is on; Secondary click), Scroll (Natural
    scrolling; Scroll with two fingers or along the edge) and Pointer (Tracking speed, Pointer
-   acceleration, Ignore the trackpad while typing).
+   acceleration, Ignore the trackpad while typing), then Gestures: Swipe between workspaces,
+   Overview, Show desktop and Launcher, each a switch. `trackpad { workspace-swipe;
+   overview-swipe; desktop-spread; launcher-pinch }` hold them; a gesture that is off goes to
+   the app under the pointer.
 4. **Proof.**
    - A config round-trip test.
    - A headless compositor test where the device reports the configured options.
@@ -857,7 +860,7 @@ off state; a pane without its device or service shows the unavailable state inst
 away; a search without hits says so. General, Wallpaper, Lock Screen, Battery, Date & Time,
 Language & Region and Login Items are gone; Power, Apps, Language & Time and Keyboard Shortcuts
 are new. Five or more choices are pop-ups. Sound runs Output, Input, Sound effects, Apps. The
-input source hint shows the real keys. Super+F focuses search, the View menu is grouped, the
+input source hint shows the real keys. Super+F focused search (Ctrl+F since 2026-11-01), the View menu is grouped, the
 window opens at 900×720 and the desktop's "Change Wallpaper…" opens Appearance.
 
 **Slice 2.** `data/50-bande-settings.rules` lets local, active members of `sudo` change the time
@@ -913,7 +916,7 @@ the page into the off state with the fade preset, which stays under Reduce motio
 - **Text size.** The toolkit follows the portal's `text-size` (100–200 %) live: the text system
   scales every paragraph and the editor, and buttons, pop-ups, segmented controls, fields,
   steppers, disclosures and alert buttons grow by the extra line height. App windows follow
-  it; the bar, dock, panels, lock screen and menus keep their size. Appearance has a Text size
+  it; the taskbar, panels, lock screen and menus keep their size. Appearance has a Text size
   slider (Default to Largest, five stops); Accessibility ▸ Vision links to it with its value
   and opens Appearance with the slider focused. The Settings sidebar widens with the text.
 

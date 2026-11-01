@@ -301,7 +301,7 @@ impl App for Form {
             return;
         }
         let menu = Menu::new(vec![
-            MenuItem::new("Open", "open").shortcut("Super+O"),
+            MenuItem::new("Open", "open").shortcut("Ctrl+O"),
             MenuItem::new("Rename", "rename"),
         ]);
         window

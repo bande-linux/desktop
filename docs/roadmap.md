@@ -35,7 +35,7 @@ fonts) so it restyles for free.
 | # | Step | Contents | Depends on |
 |---|---|---|---|
 | D1 | Tokens and window chrome | `bande-design` crate: OKLCH palette generator with 8 accents, radii (4/6/8/10/14, concentric rule), spacing and control sizes, type roles, elevation, contrast tests (WCAG + APCA) that fail CI; fonts (Inter features cv05/cv08/ss07/ss08/tnum, Manrope, JetBrains Mono); the 48 pt frame header with flush-left title and the left control pill in the toolkit and the compositor's server-side frame; corner radius 14; frame/sheet split | — |
-| D2 | Controls | Every widget on the tokens: buttons, fields, switches, checkbox, square radio, segmented, pop-up, stepper, fader slider, segmented progress, tooltips, tables with gliding selection, menus with the Super glyph, alerts with the footer tray, sheets, scroll bars | D1 |
+| D2 | Controls | Every widget on the tokens: buttons, fields, switches, checkbox, square radio, segmented, pop-up, stepper, fader slider, segmented progress, tooltips, tables with gliding selection, menus with shortcuts written as words, alerts with the footer tray, sheets, scroll bars | D1 |
 | D3 | Icons | The Bande icon theme: rounded-square app icons in the style of `design/bar/01-desktop-left-collapsed.png` for our apps (and replacements for the default third-party apps), sheet+label file types, stone folders with an accent tab, the 16 pt symbol set; reproducible generators | — |
 | D4 | Apps | Files, Settings, Terminal (JetBrains Mono, accent-derived ANSI), Activity Monitor on frame and sheet with the toolbar in the header | D2 |
 | D5 | Shell surfaces | Launcher, notifications, Control Center, lock, greeter, screenshot, overview and HUDs on the tokens (opaque, scrim + blur only where Datum allows) | D2 |
@@ -49,7 +49,7 @@ fonts) so it restyles for free.
 | E2 | Vertical bar | Bottom group: Trash, workspaces, tray grid with overflow, the Control Center button (2×2), clock with unread dot; launcher mark at the top corner (click: launcher, right-click: system menu) | E1 |
 | E3 | App header and cascade | Active app header; one cascade menu with the app row and each menu as a row, filtered by typing; `Super+F2`; right-click everywhere; fallback content for apps without menus | E2 |
 | E4 | Menu search | `Shift+Super+/` card that finds any menu item with its path and shortcut | E3 |
-| E5 | Default and settings | Combined left bar is the default for new installs; Settings ▸ Bar: position, size, show names, auto-hide, separate menu bar; config migration from `dock {}` | E3 |
+| E5 | Default and settings | Combined left bar (the taskbar) is the default for new installs; Settings ▸ Taskbar (was Settings ▸ Bar): position, size, show names, auto-hide, separate menu bar; config migration from `dock {}` | E3 |
 | E6 | Expanded, horizontal, panels | Pinned expanded mode with names and window rows; bottom/top layouts with inline menu titles; Control Center and Notification Center open beside their item on any edge; full-screen reveal; per display | E5 |
 | E7 | One shell process | Desktop surface, notifications, Control Center and launcher hosted in the bar's process (one Wayland connection, one GPU device, one font database); lock screen and greeter stay separate | E5 |
 | E8 | Third-party menus | `org_kde_kwin_appmenu` so Qt/KDE apps' menus appear in the header | E3 |
@@ -62,7 +62,7 @@ Datum styles the bar from E2 on; E1 changes nothing visible.
 |---|---|---|---|
 | A1 | Third-party apps | Server-side title bars in our style for apps that ask for them (Qt, SDL, Electron, foot) instead of forcing client-side; register our FileChooser, Screenshot and ScreenCast portals (browser screen sharing); unlocked secret service at login (gnome-keyring + PAM); Qt follows dark mode and accent; GTK apps get our accent | Today such apps have **no title bar** and cannot be moved or closed; browsers and editors nag for the keyring; screen sharing fails |
 | A2 | Default apps | Recommend a browser, text editor, image viewer, PDF viewer, calculator, video player, clocks in `bande-desktop`; recommend `bande-monitor` (built but never installed) | A fresh install cannot open a PDF or a photo |
-| A3 | Multiple displays | Hotplug, per-display scale and mode, arrangement, mirroring, move windows between displays (shortcut, drag, window menu), menu bar on every display, Dock on the main one, workspaces per display; Settings ▸ Displays arrangement and resolution | Only the first connector is driven; plugging in a monitor does nothing |
+| A3 | Multiple displays | Hotplug, per-display scale and mode, arrangement, mirroring, move windows between displays (shortcut, drag, window menu), menu bar on every display, the taskbar on the main one, workspaces per display; Settings ▸ Displays arrangement and resolution | Only the first connector is driven; plugging in a monitor does nothing |
 | A4 | Keyboard and pointer | Input sources (xkb layouts and IMEs) with a menu bar indicator and switching shortcut; Settings ▸ Keyboard input sources and a shortcut list; Settings ▸ Trackpad & Mouse (tap to click, natural scrolling, speed, secondary click, three-finger drag later) | Anyone who types in more than one language, or wants tap-to-click, is stuck |
 | A5 | Text foundations | Undo/redo in every text field; visible IME pre-edit; a multi-line `TextView`; search field; missing controls: checkbox, radio, segmented control, pop-up button, stepper, progress bar and spinner, tooltip | Typing is the most common act on a computer; CJK input is effectively unusable |
 
@@ -83,20 +83,20 @@ Datum styles the bar from E2 on; E1 changes nothing visible.
 |---|---|---|
 | C1 | Visual coherence | Moved to wave D (Datum D3 and the design review in D4–D5) |
 | C2 | Launcher | Empty query shows recent apps and files and doubles as the all-apps view (no separate Launchpad); clipboard history as a launcher mode (Super+Shift+V); emoji and symbols picker (Ctrl+Super+Space) |
-| C3 | Terminal | Settings window (font, profiles from a few designed themes), split panes, visual bell and Dock badge, notify when a long command finishes in a background tab, restore windows and tabs |
+| C3 | Terminal | Settings window (font, profiles from a few designed themes), split panes, visual bell and taskbar badge, notify when a long command finishes in a background tab, restore windows and tabs |
 | C4 | Languages | Ship Swedish, German, French and Spanish for every string; date, number and unit formats per locale; RTL mirroring later |
-| C5 | First run | Setup assistant: language, keyboard, Wi-Fi, appearance, account picture; a short welcome showing the Dock, launcher and gestures |
+| C5 | First run | Setup assistant: language, keyboard, Wi-Fi, appearance, account picture; a short welcome showing the taskbar, launcher and gestures |
 | C6 | Activity Monitor | Process inspector (open files, threads, memory map), GPU tab, column chooser |
 
 ## Later
 
 Network locations in Files (SMB/SFTP/WebDAV through gvfs), tags, batch rename, printers (CUPS
-pane and the Print portal), users and fast user switching, an app store, Dock stacks
+pane and the Print portal), users and fast user switching, an app store, taskbar stacks
 (Downloads), inline notification reply, colour/date/font pickers, crash reporter, backup.
 
 ## Never (for now, by design)
 
-Dock magnification, Launchpad as a separate grid, widgets/Today view, Focus modes beyond Do Not
+Taskbar magnification, Launchpad as a separate grid, widgets/Today view, Focus modes beyond Do Not
 Disturb, text expansion, dictation, a hot corner by default.
 
 ## Decisions on open questions
@@ -104,6 +104,6 @@ Disturb, text expansion, dictation, a hot corner by default.
 - The launcher's empty query shows recents (C2); clipboard history is a launcher mode (C2).
 - Notification Center slides over windows, as on macOS.
 - Battery percentage: a "Show Percentage" item in the battery menu itself, no Settings switch.
-- Cut stays on Super+X and in the Edit menu; item context menus stay short and drop it.
+- Cut stays on Ctrl+X and in the Edit menu; item context menus stay short and drop it.
 - The lock screen clock follows the locale's 12/24-hour preference.
 - Empty workspaces disappear once you leave them; the overview's "+" adds one.

@@ -331,11 +331,11 @@ fn key(view: &mut DesktopView, key: Key, modifiers: Modifiers) {
     view.handle(&Event::Key { key, modifiers }, Instant::now());
 }
 
-const SUPER: Modifiers = Modifiers {
+const CTRL: Modifiers = Modifiers {
     shift: false,
     alt: false,
-    control: false,
-    logo: true,
+    control: true,
+    logo: false,
 };
 
 #[test]
@@ -365,17 +365,20 @@ fn clicks_and_keys_ask_for_the_right_file_actions() {
         vec![Request::Open(vec![path("Notes.txt")])]
     );
     let projects = at(&view, "Projects");
-    click(&mut view, projects, 1, SUPER);
-    key(&mut view, Key::Backspace, SUPER);
+    click(&mut view, projects, 1, CTRL);
+    key(&mut view, Key::Delete, Modifiers::default());
     assert_eq!(
         view.take_requests(),
         vec![Request::Trash(vec![path("Projects"), path("Notes.txt")])]
     );
-    key(&mut view, Key::Character('x'), SUPER);
+    key(&mut view, Key::Character('x'), CTRL);
     key(
         &mut view,
-        Key::Character('v'),
-        Modifiers { alt: true, ..SUPER },
+        Key::Character('V'),
+        Modifiers {
+            shift: true,
+            ..CTRL
+        },
     );
     assert_eq!(
         view.take_requests(),
@@ -391,10 +394,10 @@ fn clicks_and_keys_ask_for_the_right_file_actions() {
         Key::Character('n'),
         Modifiers {
             shift: true,
-            ..SUPER
+            ..CTRL
         },
     );
-    key(&mut view, Key::Character('z'), SUPER);
+    key(&mut view, Key::Character('z'), CTRL);
     assert_eq!(
         view.take_requests(),
         vec![Request::NewFolder, Request::Undo]
@@ -664,7 +667,7 @@ fn dragging_several_icons_carries_a_count_badge_and_one_icon_does_not() {
         let first = at(&view, names[0]);
         for name in names {
             let point = at(&view, name);
-            click(&mut view, point, 1, SUPER);
+            click(&mut view, point, 1, CTRL);
         }
         view.handle(&Event::PointerDown(Pointer::at(first)), Instant::now());
         view.handle(

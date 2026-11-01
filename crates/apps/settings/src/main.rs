@@ -9,6 +9,7 @@ use bande_settings::{
     SoftwareCommand, UDEV_DATA, announce_updates, feed, sidebar_width,
 };
 use bande_settings_panes::panes as panes_list;
+use bande_toolkit::ui::shortcut_pressed;
 use bande_toolkit::{
     App, FrameRegions, MenuPlacement, Rect, Role, Scene, TextSize, TextSystem, Window, WindowEvent,
 };
@@ -140,7 +141,12 @@ impl App for Settings {
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::Input(input) => {
-                self.view.handle(&input);
+                match Standard::for_shortcut(|shortcut| shortcut_pressed(&input, shortcut)) {
+                    Some(standard) => self.menu_action(window, standard.action()),
+                    None => {
+                        self.view.handle(&input);
+                    }
+                }
                 self.after_input(window);
             }
             WindowEvent::MenuAction(_) | WindowEvent::Pasted(_) | WindowEvent::MenuClosed => {

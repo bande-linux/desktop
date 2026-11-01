@@ -3,10 +3,10 @@ Hand written notes by a user when gaps are found. These need to be properly inve
 Status values: open, planning, planned, started, finished, dropped.
 
 swap Super->Ctrl like normal linux distros
-Status: planned ([plans/super-ctrl.md](plans/super-ctrl.md))
+Status: started ([plans/super-ctrl.md](plans/super-ctrl.md)); Ctrl for app shortcuts done (M1-M9), M10 Linux habits on Super open
 
 keep in dock doesnt work for everything, for example launching -code- from terminal should still be able to save to dock. Also dock should be renamed to taskbar
-Status: started ([plans/keep-in-taskbar.md](plans/keep-in-taskbar.md)); process matching done, launcher and rename wait on owner decisions
+Status: started ([plans/keep-in-taskbar.md](plans/keep-in-taskbar.md)); keeping apps without an entry and the Taskbar name done, internal code rename (M6) left
 
 its not possible to scroll in the settings app, for example bluetooth and wifi views. Also bluetooth devices have no names, so i have no idea which device is my mouse etc.
 Status: finished ([plans/settings-scroll-and-bluetooth-names.md](plans/settings-scroll-and-bluetooth-names.md))
@@ -36,7 +36,7 @@ changing time zone doesnt apply
 Status: finished ([plans/time-zone.md](plans/time-zone.md)); M5 polkit fix waits on an owner decision
 
 scrolling direction should have individual settings for trackpad and mouse. Also trackpad and mouse probably should have their own setting views with more option. The trackpad has 0 options for example.
-Status: started ([plans/mouse-and-trackpad.md](plans/mouse-and-trackpad.md)); M1-M5 done, gestures (M6-M7) left
+Status: finished ([plans/mouse-and-trackpad.md](plans/mouse-and-trackpad.md)); mouse scroll speed waits on an owner decision
 
 in settings the selected item in the sidebar has blue markers, that looks pretty bad. Its enough to highlight the selection i think
 Status: planned ([plans/sidebar-selection.md](plans/sidebar-selection.md))

@@ -52,7 +52,7 @@ impl InstalledApps {
         changed
     }
 
-    fn reload(&mut self) {
+    pub fn reload(&mut self) {
         let dirs = data_dirs();
         if let Some(watch) = &mut self.watch {
             let mut folders: Vec<PathBuf> =

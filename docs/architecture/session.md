@@ -280,7 +280,7 @@ graph LR
   shown one at a time. Once the field hands the password over, it stays in zeroized buffers
   up to the helper's standard input. Settings checks its actions without interaction and
   leaves rows changeable when polkit answers with a challenge, so changing them brings up the
-  dialog. `ci/polkit` runs the agent against the real polkitd and PAM of Debian 13 in a container.
+  dialog. Its polkitd test (ignored; it needs polkitd on the system bus) runs the agent against the real polkitd and PAM.
 
 ## Tier 2: full desktop polish
 

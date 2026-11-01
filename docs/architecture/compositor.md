@@ -38,7 +38,7 @@ when they reach the screen is Bande's own.
   have neither and keep direct scanout. A window's opaque region loses exactly the corner
   pixels its shape leaves uncovered, so damage below an opaque window is still skipped, and a
   shadow's element covers its blur reach, so moving or focusing a window damages its shadow.
-  `ci/perf` damages a 64 × 64 patch inside the top window rather than at its corner, since the
+  `bande-bench` damages a 64 × 64 patch inside the top window rather than at its corner, since the
   corner now lets what lies below show through by design.
 - **Title bars for other toolkits.** A window that binds `xdg-decoration` gets a server-side
   title bar unless it asks for client-side (Qt, foot, SDL and Electron ask for or accept server
@@ -78,7 +78,7 @@ when they reach the screen is Bande's own.
   the session. A display is named by its EDID (maker from the PNP id, model and serial from the
   descriptors, falling back to the product code and serial number; two displays with the same
   name are told apart by their connector). A fullscreen opaque dma-buf window is put on the
-  primary plane without composition. Tested on vkms in the `ci/vm` guest by reading the CRTC's
+  primary plane without composition. Tested on vkms in a KVM guest (an ignored guest test) by reading the CRTC's
   framebuffer back.
 - **Displays.** Every output lives in one logical coordinate space in points. Its mode, scale
   (fractional too), rotation and place come from `display` and `arrangement` in `config.kdl`

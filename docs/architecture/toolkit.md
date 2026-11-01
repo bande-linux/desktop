@@ -161,7 +161,7 @@ writes a hex value, a corner radius or a font name of its own.
   llvmpipe, as in VMs) every window stays on `CpuRenderer` and presents `wl_shm` buffers with
   only the changed regions damaged; `BANDE_RENDERER=gpu` or `=cpu` overrides the choice. A
   window whose background is opaque declares its window rectangle as its opaque region, so
-  the compositor shades nothing beneath it. `crates/testing/sample` is a settings card on the toolkit that `ci/perf` starts
+  the compositor shades nothing beneath it. `crates/testing/sample` is a settings card on the toolkit that `bande-bench` starts
   to measure.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a
   column stretches its children across, a row centres them), `Label`, `Shortcut`, the controls

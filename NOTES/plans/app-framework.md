@@ -673,6 +673,14 @@ Preconditions: apps-split M6 done (the shared pin, `ci/gate.sh`, `with-desktop.s
   menus, Ctrl+W closes an inspector, Ctrl+Q quits, Force Quit opens from Ctrl+Alt+Escape, and a
   second launch raises the first; `ci/review` monitor-depth scenario unchanged. Gaps in the API
   found here are fixed in `bande-app` in this milestone.
+- **Status: done 2026-11-01** in the apps repo (`ec1f20e`, after the pin bump `93e4b3c` to
+  desktop 49ab65b0), per D2 as changed: Activity Monitor on `bande-app`, one instance (a second
+  `bande-monitor --memory`, as the low-memory dialog runs it, shows the Memory tab in the running
+  one), inspectors as `Kind::Utility` windows, closing the main window quits; its Edit menu is
+  `edit_submenu` with Copy Name, Copy PID and Find. `main.rs` 521 → 438 lines; `due_redraws`,
+  `smoke.sh` and `build-depends` gone. Force Quit is the compositor's now (force-quit.md). Still
+  for the owner on the mini: the bar shows its menus, Ctrl+W closes an inspector, Ctrl+Q quits,
+  a second launch raises the first.
 
 **M6. Settings and Files** (2 h)
 - Settings: `Launch::Single` (a second `bande-settings <pane>` selects the pane in the running
@@ -709,23 +717,48 @@ Preconditions: apps-split M6 done (the shared pin, `ci/gate.sh`, `with-desktop.s
   one line; `build-app.sh` and `changed-apps.sh` use `-p bande-<app>`.
 - Done when: `ci/new-app.sh scratch Scratch "Scratch"` produces an app that passes
   `ci/check-app.sh` and `cargo check` (then delete it); the template compiles.
+- **Status: done 2026-11-01** (apps `0cf197d`). D6: one workspace (`Cargo.toml`, one
+  `Cargo.lock`, workspace dependencies with the one desktop rev, workspace lints); D7: the
+  release profile is the desktop's `dist` (fat LTO, one codegen unit, `panic = "abort"`). The
+  template is a real `bande-app` app, gated with the apps. `ci/new-app.sh`, `ci/check-app.sh`
+  (warnings until M12), `ci/smoke.sh` (`--version`, `dpkg -L`, `desktop-file-validate`,
+  `appstreamcli validate`); `gate.sh`, `build-app.sh`, `with-desktop.sh`, `bump-desktop.sh`,
+  `version.sh` and the workflow's cache work on the workspace; the packages every app needs are
+  in `build-app.sh`, so `build-depends` lists only extras. D8: `ci/release-all.sh` raises every
+  app's patch version and prints the tags (it changes no git state). `new-app.sh scratch Scratch
+  "Scratch Pad"` passed `check-app.sh` and `cargo check`, then was deleted.
 
 **M8. Software and Installer** (1 h)
 - Both on `bande-app` with `Launch::Single`. They gain the App and Window menus, About, Ctrl+Q
   and Ctrl+W, and Installer an Edit menu for its text. Delete their `main()` glue and `smoke.sh`
   (the generic one covers it).
 - Done when: both compile and their tests pass.
+- **Status: done 2026-11-01** (apps `cde075c`). Both on `bande-app` with App, Edit and Window
+  menus, About, Ctrl+Q/Ctrl+W, single instance, and their views driven through the toolkit's
+  `Window::drive` (so menus and the clipboard in their fields work as everywhere else). A
+  second `bande-installer other.deb` opens a second Installer window in the running process; a
+  finished install closes its window. Installer gained a metainfo file.
 
 **M9. Calendar** (1.5 h)
 - `Launch::Single`: opening an `.ics` or `webcal:` link while Calendar runs imports it in the
   running Calendar. Edit menu. Delete its standard arms, menu plumbing and `main()` glue.
 - Done when: compiles; tests pass.
+- **Status: done 2026-11-01** (apps `bc545cb`). `.ics` and `webcal:` from a later launch reach
+  `Program::open` in the running Calendar (relative paths resolved in the launching folder);
+  Edit menu; metainfo; `build-depends` keeps only `python3-radicale` for its tests.
 
 **M10. Mail** (2 h)
 - `Launch::Single` replaces `instance.rs` (deleted); `mailto:` from a second launch opens a
   compose window in the first. Compose as `Kind::Main`; `should_close` keeps asking about
   unsent drafts. Edit menu. Delete the `Surfaces` impl and its index arithmetic.
 - Done when: compiles; tests pass; a `mailto:` test on the test bus reaches the running Mail.
+- **Status: done 2026-11-01** (apps `63f95d3`). `instance.rs` (75 lines) and the private
+  `org.bande.Mail.Open` are gone: a second `bande-mail mailto:…` reaches `Program::open` through
+  `org.freedesktop.Application`, which composes in the running Mail. Compose windows are
+  `Kind::Main`; closing one keeps its unsent draft, closing the main window or quitting keeps all
+  drafts and stops the mail workers. Edit menu, metainfo. The `mailto:` hand-over is covered by
+  `bande-app`'s own tests (the `instance.rs` unit test and the headless second launch in
+  `tests/windows.rs`); a Mail-level test would need its store and GUI and was not written.
 
 **M11. Terminal** (2 h)
 - `Launch::PerWindow`, `Keys::Shifted`, `Info.settings` over its settings window; keeps

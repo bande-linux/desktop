@@ -5,5 +5,6 @@ GenericName=Settings
 Comment=Change the appearance, taskbar and lock screen
 Icon=org.bande.Settings
 Exec=bande-settings
+StartupNotify=true
 Categories=Settings;DesktopSettings;
 Keywords=preferences;appearance;dark;taskbar;dock;panel;lock;sleep;

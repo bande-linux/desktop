@@ -9,13 +9,13 @@ repository.workspace = true
 
 [dependencies]
 accesskit.workspace = true
+bande-app.workspace = true
 rustix = { workspace = true, features = ["fs", "process"] }
 tracing.workspace = true
 bande-app-menu.workspace = true
 bande-app-settings.workspace = true
 bande-fs.workspace = true
 bande-l10n.workspace = true
-bande-log.workspace = true
 bande-preview.workspace = true
 bande-search.workspace = true
 bande-sound.workspace = true
@@ -35,7 +35,7 @@ bande-golden.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-dejavu-core, fonts-inter"
+depends = "$auto, fonts-dejavu-core, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 extended-description = """\
 The file manager of the Bande desktop: folders open in Miller columns \
 driven by the arrow keys, as in the Finder's column view, and Space shows \

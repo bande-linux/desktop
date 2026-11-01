@@ -5,6 +5,7 @@ GenericName=File Manager
 Comment=Browse your folders and files
 Icon=org.bande.Files
 Exec=bande-files %U
+StartupNotify=true
 MimeType=inode/directory;
 Categories=System;FileTools;FileManager;
 Keywords=folder;finder;browse;directory;
@@ -12,4 +13,5 @@ Actions=new-window;
 
 [Desktop Action new-window]
 Name=New Window
-Exec=bande-files
+Exec=bande-files --new-window
+StartupNotify=true

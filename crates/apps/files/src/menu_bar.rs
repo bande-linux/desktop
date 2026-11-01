@@ -1,11 +1,9 @@
-use bande_app_menu::{Entry, app_submenu, close_window, settings, window_submenu};
+use bande_app::Menus;
+use bande_app_menu::{Entry, key_item};
 use bande_files::{FilesView, L10N};
-use bande_toolkit::ui::{Event, parse_shortcut};
-
-const KEY_ACTION: &str = "key:";
 
 fn shortcut(message: &str, keys: &str) -> Entry {
-    Entry::item(&L10N.tr(message), &format!("{KEY_ACTION}{keys}")).shortcut(keys)
+    key_item(&L10N.tr(message), keys)
 }
 
 fn submenu(message: &str, entries: Vec<Entry>) -> Entry {
@@ -14,21 +12,11 @@ fn submenu(message: &str, entries: Vec<Entry>) -> Entry {
 
 fn titled(title: Option<String>, message: &str, keys: &str) -> Entry {
     let enabled = title.is_some();
-    Entry::item(
-        &title.unwrap_or_else(|| L10N.tr(message)),
-        &format!("{KEY_ACTION}{keys}"),
-    )
-    .shortcut(keys)
-    .enabled(enabled)
+    key_item(&title.unwrap_or_else(|| L10N.tr(message)), keys).enabled(enabled)
 }
 
-pub fn app_menus(view: &FilesView) -> Vec<Entry> {
-    vec![
-        app_submenu(
-            &L10N.tr("app-name"),
-            env!("CARGO_PKG_VERSION"),
-            vec![settings()],
-        ),
+pub fn app_menus(view: &FilesView) -> Menus {
+    let menus = vec![
         submenu(
             "menu-file",
             vec![
@@ -50,8 +38,6 @@ pub fn app_menus(view: &FilesView) -> Vec<Entry> {
                 Entry::separator(),
                 shortcut("menu-eject", "Ctrl+E"),
                 shortcut("menu-find", "Ctrl+F"),
-                Entry::separator(),
-                close_window(),
             ],
         ),
         submenu(
@@ -100,14 +86,12 @@ pub fn app_menus(view: &FilesView) -> Vec<Entry> {
                 shortcut("menu-go-to-folder", "Ctrl+L"),
             ],
         ),
-        window_submenu(vec![
+    ];
+    Menus {
+        menus,
+        window: vec![
             shortcut("menu-previous-tab", "Ctrl+PgUp"),
             shortcut("menu-next-tab", "Ctrl+PgDn"),
-        ]),
-    ]
-}
-
-pub fn key_event(action: &str) -> Option<Event> {
-    let (key, modifiers) = parse_shortcut(action.strip_prefix(KEY_ACTION)?)?;
-    Some(Event::Key { key, modifiers })
+        ],
+    }
 }

@@ -72,6 +72,14 @@ pub trait View {
         false
     }
 
+    fn deadline(&self) -> Option<Instant> {
+        None
+    }
+
+    fn tick(&mut self, _window: &mut Window, _now: Instant) -> bool {
+        false
+    }
+
     fn animating(&self) -> bool {
         false
     }
@@ -133,6 +141,10 @@ pub trait Program: Sized + 'static {
     fn open(&mut self, _cx: &mut Cx<Self>, _arguments: Vec<String>, _directory: &Path) {}
 
     fn changed(&mut self, _cx: &mut Cx<Self>, _window: WindowId) {}
+
+    fn close_tab(&mut self, _cx: &mut Cx<Self>, _window: WindowId) -> bool {
+        false
+    }
 
     fn should_close(&mut self, _cx: &mut Cx<Self>, _window: WindowId) -> bool {
         true

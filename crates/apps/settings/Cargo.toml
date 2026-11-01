@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 accesskit.workspace = true
+bande-app.workspace = true
 jiff.workspace = true
 rustix = { workspace = true, features = ["fs"] }
 tracing.workspace = true
@@ -44,7 +45,7 @@ bande-test-bus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter, bande-config, locales"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, bande-config, locales"
 extended-description = """\
 System Settings of the Bande desktop in four groups: Connections \
 (Wi-Fi, Bluetooth, network), Desktop (appearance and wallpaper, the bar, \

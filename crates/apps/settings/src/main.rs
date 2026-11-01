@@ -1,17 +1,18 @@
+use std::ffi::OsString;
 use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use bande_app_menu::{AppMenu, Entry, Standard, app_submenu, window_submenu};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
+use bande_app_menu::Entry;
 use bande_settings::{
     Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView,
     SoftwareCommand, UDEV_DATA, UpdateNotice, announce_updates, feed, sidebar_width,
 };
 use bande_settings_panes::panes as panes_list;
-use bande_toolkit::ui::shortcut_pressed;
 use bande_toolkit::{
-    App, FrameRegions, MenuPlacement, Rect, Role, Scene, TextSize, TextSystem, Window, WindowEvent,
+    Appearance, FrameRegions, MenuPlacement, Rect, Scene, TextSize, TextSystem, Window, WindowEvent,
 };
 use bande_xdg::spawn_detached;
 
@@ -22,17 +23,20 @@ const PANE_ACTION: &str = "pane:";
 const FILES_APP_ID: &str = "org.bande.Files";
 const FILES: &str = "bande-files";
 
-struct Settings {
-    view: SettingsView,
-    feed: Feed,
-    displays: Option<Displays>,
-    services: Services,
-    app_menu: Option<AppMenu>,
-}
+static INFO: Info = Info {
+    id: APP_ID,
+    package: env!("CARGO_PKG_NAME"),
+    version: env!("CARGO_PKG_VERSION"),
+    name: || L10N.tr("title"),
+    keys: Keys::Standard,
+    settings: None,
+};
 
-impl Settings {
+struct Pane(SettingsView);
+
+impl Pane {
     fn after_input(&mut self, window: &mut Window) {
-        let ui = self.view.ui();
+        let ui = self.0.ui();
         let menu = ui.take_menu_request();
         let clipboard = ui.take_clipboard_request();
         window.set_cursor(ui.cursor());
@@ -47,6 +51,64 @@ impl Settings {
             tracing::warn!("cannot use the clipboard: {error}");
         }
     }
+}
+
+impl View for Pane {
+    fn scene(&mut self, window: &mut Window) -> Scene {
+        window.set_frame_regions(frame_regions(window.appearance().text_size));
+        self.0.set_full_screen(window.header_height() == 0);
+        let (width, height) = window.size();
+        self.0.scene(width, height)
+    }
+
+    fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        match event {
+            WindowEvent::Input(input) => {
+                let handled = self.0.handle(&input);
+                self.after_input(window);
+                handled
+            }
+            WindowEvent::MenuAction(_) | WindowEvent::Pasted(_) | WindowEvent::MenuClosed => {
+                let handled = View::event(self.0.ui(), window, event);
+                self.0.settle();
+                handled
+            }
+            WindowEvent::Accessibility(request) => self.0.perform(&request),
+            _ => false,
+        }
+    }
+
+    fn set_appearance(&mut self, appearance: Appearance) {
+        self.0.set_appearance(appearance);
+    }
+
+    fn set_active(&mut self, active: bool) {
+        self.0.set_window_active(active);
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.0.deadline()
+    }
+
+    fn tick(&mut self, _window: &mut Window, now: Instant) -> bool {
+        self.0.tick(now);
+        true
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        self.0.text_input_area()
+    }
+
+    fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
+        Some(self.0.accessibility())
+    }
+}
+
+struct Settings {
+    main: WindowId,
+    feed: Feed,
+    displays: Option<Displays>,
+    services: Services,
 }
 
 fn reveal(window: &mut Window, path: &Path) {
@@ -64,151 +126,122 @@ fn frame_regions(text: TextSize) -> FrameRegions {
     }
 }
 
-fn app_menus() -> Vec<Entry> {
-    let mut panes = Vec::new();
-    let mut group = None;
-    for pane in panes_list() {
-        let Some(own) = pane.id.group() else {
-            continue;
-        };
-        if group.is_some_and(|group| group != own) {
-            panes.push(Entry::separator());
-        }
-        group = Some(own);
-        panes.push(Entry::item(
-            &pane.name,
-            &format!("{PANE_ACTION}{}", pane.id.keyword()),
-        ));
+fn select_pane(view: &mut SettingsView, keyword: &str) {
+    match PaneId::from_keyword(keyword) {
+        Some(pane) => view.select_pane(pane),
+        None => tracing::warn!("no settings pane {keyword:?}"),
     }
-    vec![
-        app_submenu(&L10N.tr("title"), env!("CARGO_PKG_VERSION"), Vec::new()),
-        Entry::submenu(&L10N.tr("menu-view"), panes),
-        window_submenu(Vec::new()),
-    ]
 }
 
 impl Settings {
-    fn menu_action(&mut self, window: &mut Window, action: &str) {
-        let result = match Standard::parse(action) {
-            Some(Standard::Hide | Standard::Minimize) => window.minimize(),
-            Some(Standard::Zoom) => window.toggle_zoom(),
-            Some(Standard::Quit | Standard::CloseWindow) => {
-                window.close();
-                Ok(())
-            }
-            Some(Standard::Settings) | None => {
-                if let Some(pane) = action
-                    .strip_prefix(PANE_ACTION)
-                    .and_then(PaneId::from_keyword)
-                {
-                    self.view.select_pane(pane);
-                }
-                Ok(())
-            }
+    fn send_commands(&mut self, cx: &mut Cx<Self>) {
+        let Some((window, Pane(view))) = cx.window(self.main) else {
+            return;
         };
-        if let Err(error) = result {
-            tracing::warn!("cannot {action}: {error}");
-        }
-    }
-
-    fn send_commands(&mut self, window: &mut Window) {
-        for command in self.view.take_commands() {
+        for command in view.take_commands() {
             match command {
                 Command::Reveal(path) => reveal(window, &path),
                 command => self.services.send(command),
             }
         }
+        window.request_redraw();
     }
 }
 
-impl App for Settings {
-    fn scene(&mut self, window: &mut Window) -> Scene {
-        self.view.set_full_screen(window.header_height() == 0);
-        let (width, height) = window.size();
-        self.view.scene(width, height)
+impl Program for Settings {
+    type View = Pane;
+
+    fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+        let session = zbus::blocking::Connection::session()?;
+        let system = zbus::blocking::Connection::system()
+            .inspect_err(|error| tracing::warn!("no system bus: {error}"))
+            .ok();
+        let (feed, updates) = feed()?;
+        let services = Services::start(&session, system.as_ref(), &updates);
+        services.send(Command::Software(SoftwareCommand::Open));
+        let displays = Displays::connect();
+        let main = cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
+            let mut view = SettingsView::new(appearance.palette(), TextSystem::new());
+            view.set_appearance(appearance);
+            view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
+            if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
+                view.hide_screen_reader();
+            }
+            if let Some(keyword) = arguments.first() {
+                select_pane(&mut view, keyword);
+            }
+            if let Some(displays) = &displays {
+                view.set_displays(displays.list());
+            }
+            Pane(view)
+        })?;
+        Ok(Self {
+            main,
+            feed,
+            displays,
+            services,
+        })
     }
 
-    fn deadline(&self) -> Option<Instant> {
-        self.view.deadline()
-    }
-
-    fn tick(&mut self, window: &mut Window, now: Instant) {
-        self.view.tick(now);
-        self.send_commands(window);
-        window.request_redraw();
-    }
-
-    fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        match event {
-            WindowEvent::Input(input) => {
-                match Standard::for_shortcut(|shortcut| shortcut_pressed(&input, shortcut)) {
-                    Some(standard) => self.menu_action(window, standard.action()),
-                    None => {
-                        self.view.handle(&input);
-                    }
-                }
-                self.after_input(window);
+    fn menus(&self, _cx: &Cx<Self>) -> Menus {
+        let mut panes = Vec::new();
+        let mut group = None;
+        for pane in panes_list() {
+            let Some(own) = pane.id.group() else {
+                continue;
+            };
+            if group.is_some_and(|group| group != own) {
+                panes.push(Entry::separator());
             }
-            WindowEvent::MenuAction(_) | WindowEvent::Pasted(_) | WindowEvent::MenuClosed => {
-                if let Err(error) = window.drive(self.view.ui(), event) {
-                    tracing::warn!("{error}");
-                }
-                self.view.settle();
-            }
-            WindowEvent::Accessibility(request) => {
-                self.view.perform(&request);
-            }
-            WindowEvent::AppearanceChanged(appearance) => {
-                self.view.set_appearance(appearance);
-                window.set_frame_regions(frame_regions(appearance.text_size));
-            }
-            WindowEvent::Focus(focused) => {
-                self.view.set_window_active(focused);
-                if focused && let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
-                    tracing::warn!("{error}");
-                }
-            }
-            _ => return,
+            group = Some(own);
+            panes.push(Entry::item(
+                &pane.name,
+                &format!("{PANE_ACTION}{}", pane.id.keyword()),
+            ));
         }
-        self.send_commands(window);
-        window.request_redraw();
+        Menus {
+            menus: vec![Entry::submenu(&L10N.tr("menu-view"), panes)],
+            window: Vec::new(),
+        }
+    }
+
+    fn command(&mut self, cx: &mut Cx<Self>, _window: WindowId, command: &str) {
+        if let Some(keyword) = command.strip_prefix(PANE_ACTION)
+            && let Some((_, Pane(view))) = cx.window(self.main)
+        {
+            select_pane(view, keyword);
+        }
+        self.send_commands(cx);
+    }
+
+    fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, _directory: &Path) {
+        if let (Some(keyword), Some((_, Pane(view)))) = (arguments.first(), cx.window(self.main)) {
+            select_pane(view, keyword);
+        }
+        self.send_commands(cx);
+    }
+
+    fn changed(&mut self, cx: &mut Cx<Self>, _window: WindowId) {
+        self.send_commands(cx);
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         let mut sources = vec![self.feed.fd()];
         sources.extend(self.displays.as_ref().map(Displays::fd));
-        sources.extend(self.app_menu.as_ref().map(AppMenu::fd));
         sources
     }
 
-    fn source_ready(&mut self, window: &mut Window, index: usize) {
-        let menu = 1 + usize::from(self.displays.is_some());
-        if index == menu {
-            let actions = self
-                .app_menu
-                .as_mut()
-                .map(AppMenu::take_actions)
-                .unwrap_or_default();
-            for action in actions {
-                self.menu_action(window, &action);
+    fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {
+        if let Some((_, Pane(view))) = cx.window(self.main) {
+            if index == FEED {
+                for update in self.feed.drain() {
+                    view.apply(update);
+                }
+            } else if let Some(displays) = self.displays.as_mut().and_then(Displays::dispatch) {
+                view.set_displays(displays);
             }
-        } else if index == FEED {
-            for update in self.feed.drain() {
-                self.view.apply(update);
-            }
-        } else if let Some(displays) = self.displays.as_mut().and_then(Displays::dispatch) {
-            self.view.set_displays(displays);
         }
-        self.send_commands(window);
-        window.request_redraw();
-    }
-
-    fn text_input_area(&self) -> Option<Rect> {
-        self.view.text_input_area()
-    }
-
-    fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
-        Some(self.view.accessibility())
+        self.send_commands(cx);
     }
 }
 
@@ -247,58 +280,27 @@ fn announce_and_open_on_click() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let session = zbus::blocking::Connection::session()?;
-    let system = zbus::blocking::Connection::system()
-        .inspect_err(|error| tracing::warn!("no system bus: {error}"))
-        .ok();
-    let (feed, updates) = feed()?;
-    let services = Services::start(&session, system.as_ref(), &updates);
-    services.send(Command::Software(SoftwareCommand::Open));
-    let mut window = Window::open(Role::toplevel(&L10N.tr("title"), APP_ID), WINDOW_SIZE)?;
-    window.set_frame_regions(frame_regions(window.appearance().text_size));
-    let mut view = SettingsView::new(window.appearance().palette(), TextSystem::new());
-    view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
-    if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
-        view.hide_screen_reader();
-    }
-    let requested = std::env::args().nth(1);
-    match requested.as_deref().map(PaneId::from_keyword) {
-        Some(Some(pane)) => view.select_pane(pane),
-        Some(None) => tracing::warn!("no settings pane {requested:?}"),
-        None => {}
-    }
-    let displays = Displays::connect();
-    if let Some(displays) = &displays {
-        view.set_displays(displays.list());
-    }
-    let app_menu = AppMenu::export_on(session, APP_ID, app_menus())
-        .inspect_err(|error| tracing::warn!("{error}"))
-        .ok();
-    let mut settings = Settings {
-        view,
-        feed,
-        displays,
-        services,
-        app_menu,
-    };
-    bande_toolkit::run(&mut window, &mut settings)?;
-    Ok(())
-}
-
-fn main() -> ExitCode {
-    bande_log::init("bande-settings");
-    let arguments: Vec<String> = std::env::args().skip(1).collect();
-    let outcome = match arguments.iter().map(String::as_str).collect::<Vec<_>>()[..] {
-        [CHECK_UPDATES] => check_updates(),
-        [ANNOUNCE_UPDATES] => announce_and_open_on_click(),
-        _ => run(),
-    };
+fn finish(outcome: Result<(), Box<dyn std::error::Error>>) -> ExitCode {
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!("{error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+fn main() -> ExitCode {
+    let arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
+    match arguments.as_slice() {
+        [flag] if flag == CHECK_UPDATES => {
+            bande_log::init(INFO.package);
+            finish(check_updates())
+        }
+        [flag] if flag == ANNOUNCE_UPDATES => {
+            bande_log::init(INFO.package);
+            finish(announce_and_open_on_click())
+        }
+        _ => bande_app::run::<Settings>(&INFO),
     }
 }

@@ -61,6 +61,35 @@ fn the_wayland_socket_desktop_and_cursor_theme_reach_the_user_services_environme
     );
 }
 
+#[test]
+fn the_shell_starts_in_a_wayland_session_of_the_bande_desktop() {
+    let folder =
+        std::env::temp_dir().join(format!("bande-shell-environment-{}", std::process::id()));
+    std::fs::create_dir_all(&folder).expect("scratch folder");
+    let script = folder.join("shell");
+    let recorded = folder.join("environment");
+    std::fs::write(
+        &script,
+        format!("#!/bin/sh\nenv > \"{}\"\n", recorded.display()),
+    )
+    .expect("write the shell stand-in");
+    std::fs::set_permissions(&script, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+        .expect("make it executable");
+
+    let mut server = crate::support::server();
+    let mut shell = server.spawn_shell_client(&script).expect("start the shell");
+    shell.wait().expect("the shell stand-in ran");
+
+    let environment = std::fs::read_to_string(&recorded).expect("recorded environment");
+    std::fs::remove_dir_all(&folder).expect("remove the scratch folder");
+    for wanted in ["XDG_CURRENT_DESKTOP=Bande", "XDG_SESSION_TYPE=wayland"] {
+        assert!(
+            environment.lines().any(|line| line == wanted),
+            "{wanted} missing from {environment}"
+        );
+    }
+}
+
 fn received(socket: &UnixDatagram) -> String {
     let mut message = [0; 64];
     let length = socket.recv(&mut message).expect("readiness message");

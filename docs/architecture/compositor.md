@@ -98,7 +98,7 @@ when they reach the screen is Bande's own.
   window opens on the display with the pointer, cascading only from its app's windows shown on
   that display, maximising, full screen, tiling and snapping
   use the window's display, and dragging a window until the pointer crosses onto another
-  display moves it there. `Alt+Super+Shift+Left/Right/Up/Down` move the focused window to the
+  display moves it there. `Shift+Super+Left/Right/Up/Down` move the focused window to the
   neighbouring display in that direction keeping its relative place (shrunk only when it does
   not fit), which it reaches with the opening spring; a window with our title bar keeps it
   across displays and the app is sized to what is left below it. When a display's scale or
@@ -166,16 +166,16 @@ when they reach the screen is Bande's own.
   edge previews the half, within 64 pt of a corner the quarter, and against the top of the
   usable area zoom; the translucent rounded preview grows from the pointer (`quick`) only after
   the pointer has rested 150 ms within 2 pt, so a fast drag past an edge never tiles. Releasing
-  over a shown preview springs the window into it. `Super+Left/Right` (or `Ctrl+Super+Left/Right`) tile halves,
+  over a shown preview springs the window into it. `Super+Left/Right` tile halves,
   `Up/Down` on a half give its top or bottom quarter and on a quarter go back to the half,
   `Up` zooms a free window and `Down` returns a zoomed one. Tiles get xdg-shell's tiled states
   (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share
   resizes both; dragging a tiled window away gives back its earlier size under the pointer.
 - **Drag and drop.** The compositor draws the drag icon a client passes to `start_drag` at the
-  pointer, offset by the icon's attach offset, below the pointer. Holding Alt makes a
-  drop a copy and Super a move, when source and destination offer it; otherwise the
+  pointer, offset by the icon's attach offset, below the pointer. Holding Ctrl makes a
+  drop a copy and Shift a move (as in GTK and KDE), when source and destination offer it; otherwise the
   destination's preferred action wins. The choice is made when the destination sets its
-  actions; pressing or releasing Alt or Super mid-drag sends the destination a motion at the
+  actions; pressing or releasing Ctrl or Shift mid-drag sends the destination a motion at the
   same place, so a destination that sets its actions again on motion (ours and GTK do) gets the
   new action without the pointer moving. The icon is drawn on every display it overlaps, and
   the pointer shows what a drop would do: `copy` for a copy, `move` (the arrow in most themes)
@@ -208,8 +208,8 @@ when they reach the screen is Bande's own.
   fingers 1:1 (350 units per workspace, rubber band past either end) and settles like the
   show-desktop pinch, with `momentum` above 2 workspaces/s; a new swipe during the settle
   takes over from where the row is. Keyboard (Super is the system key and Ctrl belongs to
-  apps, so `Ctrl+Left/Right` is not taken): `Alt+Super+Left/Right` switch to the
-  neighbour, `Alt+Super+1`…`9` to a workspace by position, and `Ctrl+Super+Shift+Left/Right`
+  apps, so `Ctrl+Left/Right` alone is not taken): `Ctrl+Super+Left/Right` switch to the
+  neighbour (as in KDE and Windows), `Ctrl+Super+1`…`9` to a workspace by position, and `Ctrl+Shift+Super+Left/Right`
   carry the focused window along (the window stays put on screen while the row slides
   under it; past the last workspace a new one is made). A window being dragged by its title
   bar comes along to whichever workspace the user switches to. A switch started while the
@@ -219,7 +219,7 @@ when they reach the screen is Bande's own.
   window, Super+Tab, an activation token) shows its workspace first. Shell clients learn the
   row through `bande_shell_v1` v9: `workspaces(count, active)`, sent on binding and on
   every change. With Reduce Motion a switch crossfades the two workspaces in place.
-- **Overview.** `Alt+Super+Up`, the Mission Control key (`XF86LaunchA`, F3 on Apple
+- **Overview.** `Super+W` (as in KDE), the Mission Control key (`XF86LaunchA`, F3 on Apple
   keyboards, without Super) or a three-finger swipe up (300 units for the whole way, tracked
   1:1 and released like the other swipes) open it; the same key, `Escape`, a click on empty
   space or a swipe down close it. There is no hot corner: the research makes corners an
@@ -237,7 +237,7 @@ when they reach the screen is Bande's own.
   to a new one, elsewhere it springs back. Typing filters by title or app id (the others dim
   to 25 % and cannot be selected), `Backspace` edits and the first `Escape` clears the
   filter. Keys never reach the app while the overview is open, except Super shortcuts, so
-  `Alt+Super+Left/Right` and a horizontal swipe move between workspaces inside it, each
+  `Ctrl+Super+Left/Right` and a horizontal swipe move between workspaces inside it, each
   workspace with its own layout. Empty workspaces are kept until the overview closes. App
   windows (App Exposé) show only one app's windows from every workspace without the strip:
   `Alt+Super+Down` or a three-finger swipe down for the focused app, and
@@ -297,11 +297,11 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `org_kde_kwin_server_decoration_manager` | Decoration negotiation for GTK 3 and GTK 4 (default server-side, client-side for header-bar windows) | P1 | implemented |
 | `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | implemented (v4; enabled heads only, no custom modes) |
 | `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimised), shm buffers; a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
-| `bande_capture_v1` (own, `bande-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Super+Shift+5 | P1 | implemented, shell clients only |
+| `bande_capture_v1` (own, `bande-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Print | P1 | implemented, shell clients only |
 | `wp_cursor_shape_v1` | Cursor shapes from the theme | P1 | implemented |
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
 | `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, taskbar icon rectangles, apps that stopped responding; for the taskbar (v7): hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the taskbar and menu bar; v9: workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
-| `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on Super+Q instead of closing every window; v2 `place_window` (halves, quarters, restore) for the window menu; v3 `move_to_workspace` (previous, next) for the window menu | P0 | implemented, every client |
+| `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; v2 `place_window` (halves, quarters, restore) for the window menu; v3 `move_to_workspace` (previous, next) for the window menu | P0 | implemented, every client |
 | `ext-background-effect-v1` | Blur behind the launcher's scrim (the overview's scrim and blur are the compositor's own) | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

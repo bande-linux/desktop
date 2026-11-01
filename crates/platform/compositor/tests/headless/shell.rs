@@ -286,9 +286,10 @@ fn a_scale_follows_the_displays_pixel_density() {
 
 const KEY_V: u32 = 47;
 const KEY_N: u32 = 49;
-const KEY_C: u32 = 46;
+const KEY_S: u32 = 31;
+const KEY_DOT: u32 = 52;
+const KEY_SYSRQ: u32 = 99;
 const KEY_3: u32 = 4;
-const KEY_4: u32 = 5;
 const KEY_MUTE: u32 = 113;
 const KEY_VOLUMEUP: u32 = 115;
 const KEY_BRIGHTNESSDOWN: u32 = 224;
@@ -349,33 +350,46 @@ fn a_tap_of_super_alone_asks_for_the_launcher_but_super_with_a_click_does_not() 
 }
 
 #[test]
-fn super_shift_3_asks_the_shell_for_a_screen_capture_and_is_not_delivered_to_the_app() {
+fn super_a_asks_the_shell_for_the_launcher() {
     let mut server = server();
     let mut app = window(&mut server, RED, (32, 32));
     let mut shell = TestClient::connect_as_shell(&mut server);
     shell.join_shell(&mut server);
 
-    chord(&mut server, &[KEY_LEFTMETA, KEY_3]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_A]);
     roundtrip(&mut server, &mut [&mut app, &mut shell]);
-    assert_eq!(shell.screen_capture_requests(), 0);
-    let threes = |app: &TestClient| app.keys().iter().filter(|(key, _)| *key == KEY_3).count();
-    let seen = threes(&app);
+
+    assert_eq!(shell.launcher_requests(), 1);
+    assert!(app.keys().iter().all(|(key, _)| *key != KEY_A));
+}
+
+#[test]
+fn shift_print_asks_the_shell_for_a_screen_capture_and_super_shift_3_reaches_the_app() {
+    let mut server = server();
+    let mut app = window(&mut server, RED, (32, 32));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
 
     chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_3]);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+    assert_eq!(shell.screen_capture_requests(), 0);
+    assert!(app.keys().contains(&(KEY_3, true)));
+
+    chord(&mut server, &[KEY_LEFTSHIFT, KEY_SYSRQ]);
     roundtrip(&mut server, &mut [&mut app, &mut shell]);
 
     assert_eq!(shell.screen_capture_requests(), 1);
     assert_eq!(shell.launcher_requests(), 0);
-    assert_eq!(threes(&app), seen, "the app saw {:?}", app.keys());
+    assert!(app.keys().iter().all(|(key, _)| *key != KEY_SYSRQ));
 }
 
 #[test]
-fn super_shift_4_asks_the_shell_for_an_area_capture() {
+fn super_shift_s_asks_the_shell_for_an_area_capture() {
     let mut server = server();
     let mut shell = TestClient::connect_as_shell(&mut server);
     shell.join_shell(&mut server);
 
-    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_4]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_S]);
     roundtrip(&mut server, &mut [&mut shell]);
 
     assert_eq!(shell.area_capture_requests(), 1);
@@ -787,14 +801,14 @@ fn the_bar_toggles_both_panels_through_the_compositor() {
 }
 
 #[test]
-fn alt_super_n_and_alt_super_c_toggle_the_notification_center_and_control_center() {
+fn super_n_and_super_s_toggle_the_notification_center_and_control_center() {
     let mut server = server();
     let mut app = focused_app(&mut server);
     let mut shell = TestClient::connect_as_shell(&mut server);
     shell.join_shell(&mut server);
 
-    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_N]);
-    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_C]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_N]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_S]);
     roundtrip(&mut server, &mut [&mut app, &mut shell]);
 
     assert_eq!(
@@ -802,17 +816,14 @@ fn alt_super_n_and_alt_super_c_toggle_the_notification_center_and_control_center
         [Panel::NotificationCenter, Panel::ControlCenter]
     );
     assert!(
-        app.keys()
-            .iter()
-            .all(|(key, _)| [KEY_LEFTMETA, KEY_LEFTALT].contains(key)),
+        app.keys().iter().all(|(key, _)| *key == KEY_LEFTMETA),
         "the app saw {:?}",
         app.keys()
     );
 }
 
 #[test]
-fn ctrl_super_space_and_super_shift_v_open_the_launcher_modes_and_say_whether_a_field_is_typed_in()
-{
+fn super_v_and_super_period_open_the_launcher_modes_and_say_whether_a_field_is_typed_in() {
     let mut server = server();
     let mut input_method = TestClient::connect(&mut server);
     input_method.use_seat(&mut server);
@@ -821,10 +832,10 @@ fn ctrl_super_space_and_super_shift_v_open_the_launcher_modes_and_say_whether_a_
     let mut shell = TestClient::connect_as_shell(&mut server);
     shell.join_shell(&mut server);
 
-    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_V]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_V]);
     roundtrip(&mut server, &mut [&mut app, &mut shell]);
     app.enable_text_input(&mut server, (4, 4, 1, 12));
-    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_SPACE]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_DOT]);
     roundtrip(&mut server, &mut [&mut app, &mut shell]);
 
     assert_eq!(
@@ -838,7 +849,7 @@ fn ctrl_super_space_and_super_shift_v_open_the_launcher_modes_and_say_whether_a_
     assert!(
         app.keys()
             .iter()
-            .all(|(key, _)| *key != KEY_SPACE && *key != KEY_V),
+            .all(|(key, _)| *key != KEY_DOT && *key != KEY_V),
         "the app saw {:?}",
         app.keys()
     );

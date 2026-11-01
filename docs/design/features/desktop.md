@@ -2,6 +2,10 @@
 
 Status: proposal, awaiting the owner's review.
 
+Shortcuts below are the proposal's. The shipped chords follow GNOME and KDE (Ctrl in apps, Super
+only for the system, [decision 0005](../../decisions/0005-ctrl-for-app-shortcuts.md)); the
+current set is the keyboard model in [`overview.md`](../../architecture/overview.md#keyboard-model).
+
 ## Purpose
 
 The desktop is the surface behind every window. It shows the wallpaper and the files in the

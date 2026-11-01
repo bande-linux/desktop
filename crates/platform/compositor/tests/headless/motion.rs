@@ -48,8 +48,8 @@ fn reddish(snapshot: &Snapshot) -> Option<Bounds> {
 fn minimize(server: &mut Compositor, client: &mut TestClient) {
     for (key, pressed) in [
         (KEY_LEFTMETA, true),
-        (KEY_M, true),
-        (KEY_M, false),
+        (KEY_H, true),
+        (KEY_H, false),
         (KEY_LEFTMETA, false),
     ] {
         server.key(key, pressed, 0);

@@ -23,7 +23,6 @@ use crate::frame::Target;
 use crate::gesture::Gesture;
 use crate::keyboard_monitor::KeyEvent;
 use crate::motion::TASKBAR_NAMESPACE;
-use crate::shell::toplevel_names;
 use crate::state::{Compositor, MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE, State};
 use crate::tile::Direction;
 
@@ -35,7 +34,6 @@ const SCROLL_PER_DETENT: f64 = 15.0;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Shortcut {
     CloseWindow,
-    QuitApp,
     NextApp { backwards: bool },
     NextWindow { backwards: bool },
     SwitcherKey(u32, bool),
@@ -54,8 +52,6 @@ enum Shortcut {
     Volume(VolumeKey, bool),
     Brightness(BrightnessKey, bool),
     Media(MediaKey),
-    HideApp,
-    HideOthers,
     Workspace(bool),
     WorkspaceAt(usize),
     CarryWindow(bool),
@@ -102,14 +98,16 @@ fn media_key(keysym: u32) -> Option<MediaKey> {
     }
 }
 
-fn without_super(keysym: u32, alt: bool, shift: bool) -> Option<Shortcut> {
+fn without_super(keysym: u32, ctrl: bool, alt: bool, shift: bool) -> Option<Shortcut> {
     match keysym {
-        keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab if alt => {
+        keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab if alt && !ctrl => {
             Some(Shortcut::NextApp { backwards: shift })
         }
         keysyms::KEY_XF86LaunchA => Some(Shortcut::Overview),
+        keysyms::KEY_Print if shift => Some(Shortcut::CaptureScreen),
         keysyms::KEY_Print => Some(Shortcut::CaptureOptions),
         keysyms::KEY_F4 if alt => Some(Shortcut::CloseWindow),
+        keysyms::KEY_Escape if ctrl && alt => Some(Shortcut::ForceQuit),
         _ => None,
     }
 }
@@ -121,73 +119,60 @@ fn shortcut(
     alt: bool,
     shift: bool,
 ) -> Option<Shortcut> {
-    match unshifted.filter(|_| shift) {
-        Some(keysyms::KEY_3) => return Some(Shortcut::CaptureScreen),
-        Some(keysyms::KEY_4) => return Some(Shortcut::CaptureArea),
-        Some(keysyms::KEY_5) => return Some(Shortcut::CaptureOptions),
-        _ => {}
-    }
     match unshifted {
-        Some(keysyms::KEY_0) if alt && !ctrl => return Some(Shortcut::ToggleZoom),
+        Some(keysyms::KEY_8) if alt && !ctrl => return Some(Shortcut::ToggleZoom),
         Some(keysyms::KEY_equal | keysyms::KEY_plus) if alt && !ctrl => {
             return Some(Shortcut::Zoom { closer: true });
         }
         Some(keysyms::KEY_minus) if alt && !ctrl => {
             return Some(Shortcut::Zoom { closer: false });
         }
-        Some(digit @ keysyms::KEY_1..=keysyms::KEY_9) if alt && !ctrl => {
+        Some(keysyms::KEY_s) if alt && !ctrl => return Some(Shortcut::ToggleScreenReader),
+        Some(digit @ keysyms::KEY_1..=keysyms::KEY_9) if ctrl && !alt => {
             return Some(Shortcut::WorkspaceAt((digit - keysyms::KEY_1) as usize));
         }
-        Some(keysyms::KEY_n) if alt && !ctrl => {
-            return Some(Shortcut::TogglePanel(Panel::NotificationCenter));
-        }
-        Some(keysyms::KEY_c) if alt && !ctrl => {
-            return Some(Shortcut::TogglePanel(Panel::ControlCenter));
-        }
-        Some(keysyms::KEY_h) if alt => return Some(Shortcut::HideOthers),
-        Some(keysyms::KEY_h) if !ctrl => return Some(Shortcut::HideApp),
-        Some(keysyms::KEY_grave) if !ctrl && !alt => {
-            return Some(Shortcut::NextWindow { backwards: shift });
-        }
-        Some(keysyms::KEY_v) if shift && !ctrl && !alt => {
-            return Some(Shortcut::OpenLauncher(LauncherMode::Clipboard));
-        }
+        Some(keysyms::KEY_s) if shift && !ctrl && !alt => return Some(Shortcut::CaptureArea),
         Some(keysyms::KEY_slash) if shift && !ctrl && !alt => {
             return Some(Shortcut::FocusShell(MENU_SEARCH_NAMESPACE));
         }
-        Some(keysyms::KEY_f) if ctrl => return Some(Shortcut::ToggleFullScreen),
-        Some(keysyms::KEY_q) if ctrl => return Some(Shortcut::LockScreen),
-        Some(keysyms::KEY_m) => return Some(Shortcut::MinimizeWindow),
-        Some(keysyms::KEY_w) => return Some(Shortcut::CloseWindow),
-        Some(keysyms::KEY_q) => return Some(Shortcut::QuitApp),
+        Some(keysyms::KEY_grave) if !ctrl && !alt => {
+            return Some(Shortcut::NextWindow { backwards: shift });
+        }
+        _ if ctrl || alt || shift => {}
+        Some(keysyms::KEY_a) => return Some(Shortcut::ShowLauncher),
+        Some(keysyms::KEY_d) => return Some(Shortcut::ShowDesktop),
+        Some(keysyms::KEY_h) => return Some(Shortcut::MinimizeWindow),
+        Some(keysyms::KEY_l) => return Some(Shortcut::LockScreen),
+        Some(keysyms::KEY_n) => return Some(Shortcut::TogglePanel(Panel::NotificationCenter)),
+        Some(keysyms::KEY_s) => return Some(Shortcut::TogglePanel(Panel::ControlCenter)),
+        Some(keysyms::KEY_v) => return Some(Shortcut::OpenLauncher(LauncherMode::Clipboard)),
+        Some(keysyms::KEY_w) => return Some(Shortcut::Overview),
+        Some(keysyms::KEY_period) => return Some(Shortcut::OpenLauncher(LauncherMode::Emoji)),
         _ => {}
     }
     match keysym {
-        keysyms::KEY_Escape if alt => Some(Shortcut::ForceQuit),
         keysyms::KEY_F2 => Some(Shortcut::FocusShell(MENU_BAR_NAMESPACE)),
         keysyms::KEY_F3 => Some(Shortcut::FocusShell(TASKBAR_NAMESPACE)),
-        keysyms::KEY_F5 => Some(Shortcut::ToggleScreenReader),
-        keysyms::KEY_F11 | keysyms::KEY_XF86LaunchA => Some(Shortcut::ShowDesktop),
+        keysyms::KEY_F11 => Some(Shortcut::ToggleFullScreen),
+        keysyms::KEY_XF86LaunchA => Some(Shortcut::ShowDesktop),
         keysyms::KEY_Left if ctrl && shift => Some(Shortcut::CarryWindow(false)),
         keysyms::KEY_Right if ctrl && shift => Some(Shortcut::CarryWindow(true)),
-        keysyms::KEY_Left if alt && shift => Some(Shortcut::MoveToDisplay(-1, 0)),
-        keysyms::KEY_Right if alt && shift => Some(Shortcut::MoveToDisplay(1, 0)),
-        keysyms::KEY_Up if alt && shift => Some(Shortcut::MoveToDisplay(0, -1)),
-        keysyms::KEY_Down if alt && shift => Some(Shortcut::MoveToDisplay(0, 1)),
-        keysyms::KEY_Left if alt => Some(Shortcut::Workspace(false)),
-        keysyms::KEY_Right if alt => Some(Shortcut::Workspace(true)),
-        keysyms::KEY_Up if alt => Some(Shortcut::Overview),
+        keysyms::KEY_Left if ctrl && !alt => Some(Shortcut::Workspace(false)),
+        keysyms::KEY_Right if ctrl && !alt => Some(Shortcut::Workspace(true)),
+        keysyms::KEY_Left if shift && !alt => Some(Shortcut::MoveToDisplay(-1, 0)),
+        keysyms::KEY_Right if shift && !alt => Some(Shortcut::MoveToDisplay(1, 0)),
+        keysyms::KEY_Up if shift && !alt => Some(Shortcut::MoveToDisplay(0, -1)),
+        keysyms::KEY_Down if shift && !alt => Some(Shortcut::MoveToDisplay(0, 1)),
         keysyms::KEY_Down if alt => Some(Shortcut::AppWindows),
-        keysyms::KEY_Left if !shift => Some(Shortcut::Place(Direction::Left)),
-        keysyms::KEY_Right if !shift => Some(Shortcut::Place(Direction::Right)),
-        keysyms::KEY_Up if !shift => Some(Shortcut::Place(Direction::Up)),
-        keysyms::KEY_Down if !shift => Some(Shortcut::Place(Direction::Down)),
+        keysyms::KEY_Left if !alt => Some(Shortcut::Place(Direction::Left)),
+        keysyms::KEY_Right if !alt => Some(Shortcut::Place(Direction::Right)),
+        keysyms::KEY_Up if !alt => Some(Shortcut::Place(Direction::Up)),
+        keysyms::KEY_Down if !alt => Some(Shortcut::Place(Direction::Down)),
         keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab if !ctrl && !alt => {
             Some(Shortcut::NextApp { backwards: shift })
         }
         keysyms::KEY_space if alt && !ctrl => Some(Shortcut::InputSource { backwards: shift }),
-        keysyms::KEY_space if ctrl && !alt => Some(Shortcut::OpenLauncher(LauncherMode::Emoji)),
-        keysyms::KEY_space => Some(Shortcut::ShowLauncher),
+        keysyms::KEY_space if !alt => Some(Shortcut::ShowLauncher),
         _ => None,
     }
 }
@@ -351,17 +336,8 @@ impl State {
             .focused()
             .and_then(|focused| self.toplevel_of(&focused))
         else {
-            if shortcut == Shortcut::QuitApp
-                && let Some((app, app_id)) = self.windowless_app.clone()
-            {
-                self.quit_app(Some(app));
-                if !app_id.is_empty() {
-                    self.quit_app_named(&app_id);
-                }
-            }
             return;
         };
-        let owner = focused.client();
         match shortcut {
             Shortcut::CloseWindow => {
                 if let Some(window) = self
@@ -370,29 +346,6 @@ impl State {
                     .find(|window| window.toplevel.wl_surface() == &focused)
                 {
                     window.toplevel.send_close();
-                }
-            }
-            Shortcut::QuitApp => {
-                let app_id = toplevel_names(&focused).1;
-                if app_id.is_empty() {
-                    self.quit_app(owner);
-                } else {
-                    self.quit_app_named(&app_id);
-                }
-            }
-            Shortcut::HideApp => self.hide_app(&toplevel_names(&focused).1),
-            Shortcut::HideOthers => {
-                let keep = toplevel_names(&focused).1;
-                let mut others: Vec<String> = self
-                    .windows
-                    .iter()
-                    .map(|window| toplevel_names(window.surface()).1)
-                    .filter(|app_id| *app_id != keep)
-                    .collect();
-                others.sort_unstable();
-                others.dedup();
-                for app_id in others {
-                    self.hide_app(&app_id);
                 }
             }
             Shortcut::MinimizeWindow => self.minimize(&focused),
@@ -826,8 +779,14 @@ impl State {
                     )));
                 }
                 let inhibited = state.shortcuts_inhibited();
-                if let Some(shortcut) = without_super(sym.raw(), modifiers.alt, modifiers.shift)
-                    .filter(|_| !modifiers.logo && !state.is_locked() && !inhibited)
+                if let Some(shortcut) =
+                    without_super(sym.raw(), modifiers.ctrl, modifiers.alt, modifiers.shift).filter(
+                        |shortcut| {
+                            !modifiers.logo
+                                && !state.is_locked()
+                                && (!inhibited || *shortcut == Shortcut::ForceQuit)
+                        },
+                    )
                 {
                     state.held_shortcut_keys.push(evdev_code);
                     return FilterResult::Intercept(Some(shortcut));
@@ -895,7 +854,7 @@ impl State {
         if after.alt != before.alt && state.has_server_side_frames() {
             state.needs_redraw = true;
         }
-        if (after.alt, after.logo) != (before.alt, before.logo) {
+        if (after.ctrl, after.shift) != (before.ctrl, before.shift) {
             state.renegotiate_drag();
         }
         let held = keyboard.modifier_state();
@@ -921,6 +880,7 @@ mod tests {
             "Space" => keysyms::KEY_space,
             "Tab" => keysyms::KEY_Tab,
             "Escape" => keysyms::KEY_Escape,
+            "." => keysyms::KEY_period,
             "Left" => keysyms::KEY_Left,
             "Right" => keysyms::KEY_Right,
             "Up" => keysyms::KEY_Up,
@@ -928,7 +888,7 @@ mod tests {
             "F2" => keysyms::KEY_F2,
             "F3" => keysyms::KEY_F3,
             "F4" => keysyms::KEY_F4,
-            "F5" => keysyms::KEY_F5,
+            "Print" => keysyms::KEY_Print,
             "F11" => keysyms::KEY_F11,
             "Mission Control" => keysyms::KEY_XF86LaunchA,
             single => single
@@ -947,9 +907,6 @@ mod tests {
             Action::NextApp => Shortcut::NextApp { backwards: false },
             Action::NextWindow => Shortcut::NextWindow { backwards: false },
             Action::PreviousWindow => Shortcut::NextWindow { backwards: true },
-            Action::QuitApp => Shortcut::QuitApp,
-            Action::HideApp => Shortcut::HideApp,
-            Action::HideOthers => Shortcut::HideOthers,
             Action::ForceQuit => Shortcut::ForceQuit,
             Action::PreviousWorkspace => Shortcut::Workspace(false),
             Action::NextWorkspace => Shortcut::Workspace(true),
@@ -990,7 +947,7 @@ mod tests {
             let runs = if held("Super") {
                 shortcut(key, Some(key), held("Ctrl"), held("Alt"), held("Shift"))
             } else {
-                without_super(key, held("Alt"), held("Shift"))
+                without_super(key, held("Ctrl"), held("Alt"), held("Shift"))
             };
             assert_eq!(runs, Some(expected(listed.action)), "{}", listed.keys);
         }

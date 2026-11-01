@@ -58,7 +58,7 @@ fn command(key: char) -> Event {
     Event::Key {
         key: Key::Character(key),
         modifiers: Modifiers {
-            logo: true,
+            control: true,
             ..Modifiers::default()
         },
     }

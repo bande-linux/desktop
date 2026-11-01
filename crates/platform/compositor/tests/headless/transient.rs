@@ -162,7 +162,7 @@ fn minimizing_a_dialog_minimizes_its_parent_and_restoring_the_app_brings_both_ba
 }
 
 #[test]
-fn super_m_on_the_parent_takes_its_dialog_along() {
+fn super_h_on_the_parent_takes_its_dialog_along() {
     let mut server = server();
     let mut editor = app_with_dialog(&mut server);
     let mut other = other_app(&mut server);
@@ -171,8 +171,8 @@ fn super_m_on_the_parent_takes_its_dialog_along() {
     roundtrip(&mut server, &mut [&mut editor, &mut other]);
 
     server.key(KEY_LEFTMETA, true, 0);
-    server.key(KEY_M, true, 0);
-    server.key(KEY_M, false, 0);
+    server.key(KEY_H, true, 0);
+    server.key(KEY_H, false, 0);
     server.key(KEY_LEFTMETA, false, 0);
     roundtrip(&mut server, &mut [&mut editor, &mut other]);
 
@@ -311,10 +311,10 @@ fn the_overview_shows_a_dialog_on_its_parents_thumbnail() {
     roundtrip(&mut server, &mut [&mut editor, &mut other]);
     let end = settle(&mut server, 0);
 
-    for key in [KEY_LEFTALT, KEY_LEFTMETA, KEY_UP] {
+    for key in [KEY_LEFTMETA, KEY_W] {
         server.key(key, true, 0);
     }
-    for key in [KEY_UP, KEY_LEFTMETA, KEY_LEFTALT] {
+    for key in [KEY_W, KEY_LEFTMETA] {
         server.key(key, false, 0);
     }
     settle(&mut server, end);

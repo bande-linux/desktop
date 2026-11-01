@@ -246,21 +246,21 @@ fn activating_an_app_while_the_desktop_shows_brings_the_windows_back() {
 }
 
 #[test]
-fn super_f11_shows_the_desktop_and_brings_the_windows_back() {
-    const KEY_F11: u32 = 87;
+fn super_d_shows_the_desktop_and_brings_the_windows_back() {
+    const KEY_D: u32 = 32;
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
     let mut client = app(&mut server);
     client.exchange(&mut server);
 
-    chord(&mut server, &[KEY_LEFTMETA, KEY_F11]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_D]);
     let end = settle(&mut server, 0);
     let aside = pixel(&mut renderer, &mut server, 110, 80);
     let shown = server.shows_desktop();
     client.exchange(&mut server);
     let typing_while_shown = client.keyboard_focus_on(0);
 
-    chord(&mut server, &[KEY_LEFTMETA, KEY_F11]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_D]);
     settle(&mut server, end);
     client.exchange(&mut server);
 

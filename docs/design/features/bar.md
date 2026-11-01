@@ -6,6 +6,10 @@ Mockups: `../bar/` (SVG + PNG; regenerate with
 `python3 generate.py <outdir>` and any SVG renderer; the PNGs were drawn with resvg 0.49, the
 version the workspace pins).
 
+Shortcuts below are the proposal's. The shipped chords follow GNOME and KDE (Ctrl in apps, Super
+only for the system, [decision 0005](../../decisions/0005-ctrl-for-app-shortcuts.md)); the
+current set is the keyboard model in [`overview.md`](../../architecture/overview.md#keyboard-model).
+
 ## 1. The idea in one paragraph
 
 One bar, on the left edge by default, holds everything that today lives in the Dock and the menu

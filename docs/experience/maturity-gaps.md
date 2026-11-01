@@ -92,11 +92,11 @@ Rows that touch these areas say "(→ that work)" and name only what lies outsid
 | :--- | :--- | :---: | :---: | :--- | :--- |
 | The zoom control has no tiling menu on hover or hold. Tiling is reached only by a shortcut, a drag to the edge or the window menu (nothing in `toolkit/platform/src/chrome.rs` or `decoration.rs`) | When the pointer rests on the green button, macOS 15 shows Move & Resize. When it rests on the maximise button, Windows 11 shows Snap layouts. Tiling is only useful once people can find it | major | S | `toolkit/platform`, `platform/compositor` (server-side frames) | Done (`2efda70`, server-side frames `4197efa`) |
 | Show Desktop has no keyboard path, only the four-finger spread (`platform/compositor/src/gesture.rs`) | DESIGN §2 asks for every action to be reachable from the keyboard. macOS has Fn-F11 and Command-Mission Control, Windows has Win+D, Plasma has Meta+D | major | S | `platform/compositor`, `libs/keyboard` | Done (`2efda70`) |
-| No modifier-drag to move or resize a window from anywhere in it | GNOME has Super-drag, Plasma Meta-drag, macOS 15 Control-Command-drag. It is the rescue when a title bar ends up off screen | minor | S | `platform/compositor` | Done: Control-Super drag moves, Control-Super right drag resizes |
+| No modifier-drag to move or resize a window from anywhere in it | GNOME has Super-drag, Plasma Meta-drag, macOS 15 Control-Command-drag. It is the rescue when a title bar ends up off screen | minor | S | `platform/compositor` | Done: Super drag moves, Super right drag resizes (Control-Super until the 2026-11-01 follow-up) |
 | The overview cannot close a window: no × on hover, no middle click (`overview.rs`) | GNOME, Plasma and Windows Task View all close windows from the overview | minor | S | `platform/compositor` | Done: middle click closes; no × on hover yet (rendering) |
 | No hot corners. The research makes them opt-in, but no setting exists (`compositor.md`) | GNOME's Activities corner and macOS hot corners are muscle memory for many people | minor | S | `platform/compositor` (+ Settings options) | Open (needs a setting) |
 | Tiling stops at halves and quarters | Windows has thirds and Snap groups, and Plasma custom tiles | minor | M | `platform/compositor` | Open |
-| No `keyboard-shortcuts-inhibit` | In a virtual machine (GNOME Boxes, virt-manager) or a remote desktop, `Super+Tab` and `Super+Q` act on the host | minor | S | `platform/compositor` | Done: the focused window may take the shortcuts; Force Quit and Lock stay |
+| No `keyboard-shortcuts-inhibit` | In a virtual machine (GNOME Boxes, virt-manager) or a remote desktop, `Super+Tab` and `Super+L` act on the host | minor | S | `platform/compositor` | Done: the focused window may take the shortcuts; Force Quit and Lock stay |
 | No `pointer-constraints` or `relative-pointer` | Games, Blender and the browser's Pointer Lock API (web games, remote desktops) cannot capture the mouse | major for those users | M | `platform/compositor` | Done: lock, confine and relative motion while the window has focus |
 
 ## 4. Keyboard shortcuts and discoverability
@@ -106,9 +106,9 @@ Rows that touch these areas say "(→ that work)" and name only what lies outsid
 | Super acts as Command only in Bande's own apps. Firefox, GTK, Qt and Electron apps keep `Ctrl+C`, `V`, `Z`, `S`, `F` and `T`, because the compositor translates nothing (`architecture/overview.md`, keyboard model) | The keyboard model promises that `Super+C` copies in every app. In practice copy is `Super+C` in Files and `Ctrl+C` in Firefox, and in a third-party terminal `Ctrl+C` interrupts. On a Mac, Command works everywhere, and Toshy and Kinto exist because Linux breaks this. For Firefox alone, `ui.key.accelKey` can be set to Super instead, but editing keys did not follow it until Firefox 157 (Mozilla bug 2069698) | major | M | `platform/compositor`; owner decision | Done: the other way round. Ctrl is the app key in Bande's own apps too and Super is the system key, as in GNOME and KDE, so nothing is translated ([decision 0005](../decisions/0005-ctrl-for-app-shortcuts.md)) |
 | No custom shortcuts (to launch an app or run a command) and no rebinding. Settings ▸ Keyboard lists the shortcuts read-only, and `services/config` has no shortcut section | All four reference desktops allow both | major | M | `services/config`, `platform/compositor` (+ Settings options) | Open |
 | No shortcut opens Notification Center or Control Center | macOS has Fn-N and Fn-C, Windows Win+N and Win+A, GNOME Super+V and Super+S. Someone who works only with the keyboard cannot read their notifications | major | S | `platform/compositor`, `platform/protocols`, `shell/bar` | Done (`2efda70`) |
-| The shortcut table (`libs/keyboard/src/shortcuts.rs`) leaves out shortcuts that are bound: `Shift+Super+5`, `Alt+Shift+Super+arrows` (move to the next display), ``Shift+Super+` `` and the Mission Control key | The list in Settings is the only cheat sheet, so a missing row hides the feature | minor | S | `libs/keyboard` | Done (`13ae4fe`) |
-| The Print Screen key does nothing | It is the first thing anyone with a PC keyboard presses | minor | S | `platform/compositor` | Done: opens the capture options, like Shift+Super+5 |
-| Tapping Super alone does nothing | Windows, GNOME and Plasma open their launcher on a Super tap; macOS does nothing. The owner decides | minor | S | `platform/compositor` | Owner decision |
+| The shortcut table (`libs/keyboard/src/shortcuts.rs`) leaves out shortcuts that are bound: the capture options, moving the window to the next display, ``Shift+Super+` `` and the Mission Control key | The list in Settings is the only cheat sheet, so a missing row hides the feature | minor | S | `libs/keyboard` | Done (`13ae4fe`) |
+| The Print Screen key does nothing | It is the first thing anyone with a PC keyboard presses | minor | S | `platform/compositor` | Done: opens the capture options; Shift+Print captures the screen |
+| Tapping Super alone does nothing | Windows, GNOME and Plasma open their launcher on a Super tap; macOS does nothing. The owner decides | minor | S | `platform/compositor` | Done (`b36cc67a`): a tap opens the launcher |
 
 ## 5. Text input and fonts
 
@@ -287,7 +287,7 @@ and M as 2. Items with the same score are ordered by impact.
      name in Files.
 6. **Apps are asked to quit before Log Out, Restart and Shut Down** (`platform/compositor`,
    `platform/protocols`, `shell/shell`, `libs/status`; M; blocker).
-   - The confirmation first asks every app to quit, through the `Super+Q` path for each app id.
+   - The confirmation first asks every app to quit, through the bar's Quit path for each app id.
    - It waits up to 10 s for their windows to close.
    - If a window stays (a save sheet), it cancels and says "<App> is keeping your computer
      from restarting", with Cancel and Restart Anyway.
@@ -358,8 +358,8 @@ and M as 2. Items with the same score are ordered by impact.
     - Proof: a portal test that calls it and reads back `org.bande.Config`.
 18. **Shortcuts for Show Desktop, the Notification Center and Control Center**
     (`platform/compositor`, `platform/protocols`, `shell/bar`, `libs/keyboard`; S–M).
-    - Bind keys the owner approves (proposal: `Super+F11` and Super with the Mission Control
-      key for Show Desktop, `Alt+Super+N`, `Alt+Super+C`).
+    - Bind keys the owner approves (since the 2026-11-01 follow-up: `Super+D` and Super with
+      the Mission Control key for Show Desktop, `Super+N`, `Super+S`).
     - Add an `bande_shell_v1` event that toggles a panel.
     - Complete the shortcut table with every bound shortcut (§4).
     - Proof: compositor tests, and the existing table-against-handler test.

@@ -270,7 +270,7 @@ writes a hex value, a corner radius or a font name of its own.
   Modifier-only changes arrive as `Event::ModifiersChanged`. `Ui` sends `PointerEnter` and
   `PointerLeave` to every widget on the hit path, bubbles scrolling from the innermost widget
   outwards, and reports the hovered widget's cursor, which `Window::set_cursor` shows through
-  `wp_cursor_shape_v1`. A close request (close button, Super+W, Alt+F4) asks `App::should_close`, so an
+  `wp_cursor_shape_v1`. A close request (close button, Ctrl+W in the app, Alt+F4) asks `App::should_close`, so an
   app can keep its window open, ask first or close a tab instead; `Window::close` closes it.
 
 Since `wayland-backend` is built with `client_system`, every Wayland client in a workspace

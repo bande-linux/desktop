@@ -173,8 +173,9 @@ Backend choices inside E:
 - Milestone 9 partly done: an installed Debian app has Remove beside Open. Remove first
   simulates the removal and asks inline, naming every other package that would go with it
   ("This also removes gnome-core."), and removes only after a second Remove. The Installed
-  section lists catalogue apps found among the desktop entries. Left of 9: rows for installed
-  desktop entries without a catalogue entry, the Update badge with Update All, Flatpak removal.
+  section lists catalogue apps found among the desktop entries. An installed app with a pending
+  Debian update says so on its page, with Update All… opening Settings at Software Update.
+  Left of 9: rows for installed desktop entries without a catalogue entry, Flatpak removal.
 - Left: 6 (Flatpak backend), the rest of 9, the tile grid and the sidebar of 7, and 10 to 13.
 
 Decided overnight 2026-11-01: build our own store, option E (plan recommendation; owner may

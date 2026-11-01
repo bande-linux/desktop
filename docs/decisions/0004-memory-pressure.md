@@ -121,6 +121,11 @@ created with priority 100, so an existing swap partition stays as overflow. Debi
 `CONFIG_ZRAM_BACKEND_ZSTD=y`. With zram, oomd has time to act, as its manual recommends, and the
 VM compresses before it writes. This is the macOS compressor model.
 
+zram stacked over a disk swap partition is a known bad pairing: Fedora Asahi saw premature OOM
+kills (Firefox) with it and moved swapfile systems to zswap. We add no disk swap. An admin who
+does should prefer zswap (`zswap.enabled=1`) and turn zram off with an empty
+`/etc/systemd/zram-generator.conf` and an empty `/etc/systemd/zram-generator.conf.d/50-bande.conf`.
+
 We keep swappiness, `page-cluster` and the watermarks at the kernel defaults. Fedora ships zram
 with defaults too. A sysctl file would also apply when an admin turns zram off and swaps to disk,
 where `swappiness=180` is wrong.
@@ -145,6 +150,14 @@ where `swappiness=180` is wrong.
   services. If the kernel OOM killer still has to act, it picks a big app and never the
   compositor at 100. Without this, apps would inherit the compositor's 100 and tiny session
   services at 200 would score above multi-GB apps.
+- The few session-critical services Bande does not own get the same floor as the compositor,
+  `OOMScoreAdjust=100`, through vendor drop-ins: `dbus.service` (the session bus),
+  `pipewire.service`, `pipewire-pulse.service`, `wireplumber.service` and
+  `xdg-desktop-portal.service`. On 2026-10-31 a global OOM on the mini killed `dbus.service` six
+  times and PipeWire over and over, 59 kills of processes under 10 MB, while the eight 1.9 GB
+  `rustc` at adj 0 that caused it lived: at 200, a 10 MB service scores about 196k pages
+  against 119k for the build. At 100 it scores about 98k, below any process over about 1.5 GB.
+  Once the session bus is gone, no session service or app reconnects.
 - Swap kill stays off (`ManagedOOMSwap=auto`, Debian's default), for the reason Ubuntu found.
 - No `oomd.conf` drop-in: Debian already sets `DefaultMemoryPressureDurationSec=20s`, and the
   per-unit limit above is the only threshold we change.

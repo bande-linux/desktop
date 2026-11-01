@@ -4,7 +4,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bande_config::{ConfigService, ConfigStore};
-use bande_settings::{Command, Feed, SettingId, Update, Value, feed, follow_config, worker};
+use bande_settings::{
+    Command, Feed, PointingDevices, SettingId, Update, Value, feed, follow_config, follow_pointing,
+    worker,
+};
 use bande_test_bus::SessionBus;
 
 const WAIT: Duration = Duration::from_secs(5);
@@ -66,4 +69,41 @@ fn edits_from_anywhere_arrive_live_and_failed_writes_are_reported() {
     wait_for(&feed, |update| {
         matches!(update, Update::Failed(Some(SettingId::KeyRepeatRate), _))
     });
+}
+
+#[test]
+fn pointing_devices_are_found_in_udev_data_and_followed_when_plugged_in() {
+    let udev = tempfile::tempdir().expect("temp dir");
+    let entry = |name: &str, properties: &str| {
+        std::fs::write(udev.path().join(name), properties).expect("udev entry")
+    };
+    entry(
+        "c13:64",
+        "E:ID_INPUT=1\nE:ID_INPUT_KEY=1\nE:ID_INPUT_KEYBOARD=1\n",
+    );
+    entry("c189:3", "E:ID_INPUT_TOUCHPAD=1\n");
+    assert_eq!(
+        PointingDevices::scan(udev.path()),
+        PointingDevices::default()
+    );
+    entry("c13:65", "E:ID_INPUT=1\nE:ID_INPUT_POINTINGSTICK=1\n");
+    assert_eq!(
+        PointingDevices::scan(udev.path()),
+        PointingDevices {
+            trackpad: false,
+            mouse: true
+        }
+    );
+
+    let (feed, updates) = feed().expect("feed");
+    let _watch = follow_pointing(udev.path().to_path_buf(), updates).expect("watch");
+    entry("c13:66", "E:ID_INPUT=1\nE:ID_INPUT_TOUCHPAD=1\n");
+    let plugged = wait_for(&feed, |update| matches!(update, Update::Pointing(_)));
+    assert_eq!(
+        plugged,
+        Update::Pointing(PointingDevices {
+            trackpad: true,
+            mouse: true
+        })
+    );
 }

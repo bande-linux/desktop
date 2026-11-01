@@ -86,13 +86,29 @@ the commit. Fix the kernel and the image. Ship no disk swap by default.
    (`zswap.enabled=1`, no zram-generator). Add `CONFIG_PSI`/`CONFIG_ZRAM` to whatever kernel
    requirement list `docs/debian-readiness.md` keeps (it says nothing about this today).
 
+## Status (2026-11-01)
+
+1. **linux**: done. Commits "arm64: bande: enable PSI, zram and zswap" and the lockup
+   detectors are on `bande-hw/integration`. Every line survives `defconfig` + fragment, and
+   `Image modules` built with `kbuild`.
+2. **images**: done. `systemd-zram-generator` and `systemd-oomd` (with PackageKit, locales,
+   Noto, BlueZ and the PipeWire Bluetooth plugin) are on the `mmdebstrap --include` list in
+   `build.sh` on `prep/os-installable`, the branch the image is built from (the repo has no
+   `main`). No image was built: that needs CI.
+3. **This mini**: waits on the owner. Install a kernel built from `bande-hw/integration`, then
+   `sudo apt install systemd-oomd` (`systemd-zram-generator` is already installed), upgrade
+   `bande-desktop`, reboot, and run the checks in step 3.
+4. **desktop**: done. The 0004 caveat and the kernel requirement in `debian-readiness.md`.
+
 ## Decisions for the owner
 
 1. **Disk swap at all?** Recommend no. zram + oomd covers 16 GB, there is no hibernation on Apple
    Silicon, and the SSD sees no writes. The alternative is Fedora Asahi's swapfile + zswap (more
    headroom for very large builds, NVMe writes).
+   Decided overnight 2026-11-01: no disk swap (plan recommendation; owner may revisit).
 2. **Turn off `CONFIG_HIBERNATION`** in the headless fragment so nothing ever offers it? Low
    value, since logind already says `na` without swap. Recommend leaving it.
+   Decided overnight 2026-11-01: leave it (plan recommendation; owner may revisit).
 
 Sources: [1] https://www.debian.org/releases/trixie/arm64/apcs03.en.html
 [2] https://discussion.fedoraproject.org/t/psa-transitioning-from-zram-swap-to-zswap/138256

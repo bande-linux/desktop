@@ -8,13 +8,15 @@ use bande_compositor::{
     FrameScheduler, GREETER, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
     SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
     export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
-    follow_session, follow_shutdown, follow_sleep, notify_ready, serve_keyboard_monitor,
+    follow_session, follow_shutdown, follow_sleep, notify_service_manager, serve_keyboard_monitor,
+    watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
 use smithay::backend::udev::{UdevBackend, UdevEvent};
 use smithay::reexports::calloop::channel::{self, Event};
 use smithay::reexports::calloop::generic::Generic;
+use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
 use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAction};
 use smithay::reexports::drm::control::crtc;
 use smithay::utils::{Clock, Monotonic, Size};
@@ -402,8 +404,20 @@ fn listen<O: 'static>(
             tracing::warn!("rejected client: {error}");
         }
     })?;
-    if let Err(error) = notify_ready(std::env::var_os("NOTIFY_SOCKET").as_deref()) {
+    let notify_socket = std::env::var_os("NOTIFY_SOCKET");
+    if let Err(error) = notify_service_manager(notify_socket.as_deref(), "READY=1") {
         tracing::warn!("cannot tell the service manager it is ready: {error}");
+    }
+    if let Some(interval) = watchdog_keepalive_interval(
+        std::env::var_os("WATCHDOG_USEC").as_deref(),
+        std::env::var_os("WATCHDOG_PID").as_deref(),
+    ) {
+        handle.insert_source(Timer::immediate(), move |_, _, _| {
+            if let Err(error) = notify_service_manager(notify_socket.as_deref(), "WATCHDOG=1") {
+                tracing::warn!("cannot reassure the service manager's watchdog: {error}");
+            }
+            TimeoutAction::ToDuration(interval)
+        })?;
     }
     for fd in [app.compositor.poll_fd()?, app.compositor.fence_fd()?] {
         handle.insert_source(
@@ -588,6 +602,9 @@ where
             schedulers,
             ..
         } = &mut app;
+        if compositor.take_outputs_powered_on() {
+            schedulers.iter_mut().for_each(FrameScheduler::resume);
+        }
         let reveal_wait = compositor
             .reveal_wake(now())
             .map(|at| at.saturating_sub(now()));

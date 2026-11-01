@@ -407,11 +407,46 @@ fn settings_are_writable_properties_within_their_limits() {
         ("InputSources", Value::from(Vec::<&str>::new())),
         ("InputSources", Value::from(vec!["us,se"])),
         ("MouseSpeed", Value::from(3.0)),
+        ("MousePrimaryButton", Value::from("middle")),
+        ("TrackpadDragging", Value::from("always")),
+        ("TrackpadScrollMethod", Value::from("corner")),
     ] {
         let rejected = set(&fixture.client, property, value);
         assert!(
             matches!(rejected, Err(zbus::fdo::Error::InvalidArgs(_))),
             "{property}: {rejected:?}"
+        );
+    }
+}
+
+#[test]
+fn every_pointer_option_round_trips_and_is_signalled() {
+    let fixture = start("");
+    let changes = watch_changes(&fixture.client);
+    let options = [
+        ("MousePrimaryButton", Value::from("right")),
+        ("MouseAcceleration", Value::from(false)),
+        ("TrackpadAcceleration", Value::from(false)),
+        ("TrackpadDragging", Value::from("tap-with-lock")),
+        ("TrackpadScrollMethod", Value::from("edge")),
+    ];
+    for (property, value) in &options {
+        set(&fixture.client, property, value.try_clone().expect("clone")).expect(property);
+        assert_eq!(
+            get(&fixture.client, property),
+            OwnedValue::try_from(value.try_clone().expect("clone")).expect("owned"),
+            "{property}"
+        );
+    }
+    let mut changed = Changes::new();
+    while options
+        .iter()
+        .any(|(property, _)| !changed.contains_key(*property))
+    {
+        changed.extend(
+            changes
+                .recv_timeout(SIGNAL_WAIT)
+                .expect("PropertiesChanged"),
         );
     }
 }

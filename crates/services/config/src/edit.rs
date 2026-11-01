@@ -5,9 +5,9 @@ use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
-    ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, InputSource, LidOnPower, MenuBarPlacement,
-    Mouse, NightLight, Placement, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit,
-    WallpaperVariant, accent_keyword, same_displays,
+    ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging, InputSource, LidOnPower,
+    MenuBarPlacement, Mouse, NightLight, Placement, PrimaryButton, ScrollMethod, SecondaryClick,
+    Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant, accent_keyword, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38,8 +38,13 @@ pub enum Setting {
     TrackpadSpeed(f64),
     TrackpadSecondaryClick(SecondaryClick),
     TrackpadDisableWhileTyping(bool),
+    TrackpadAcceleration(bool),
+    TrackpadDragging(Dragging),
+    TrackpadScrollMethod(ScrollMethod),
+    MousePrimaryButton(PrimaryButton),
     MouseNaturalScrolling(bool),
     MouseSpeed(f64),
+    MouseAcceleration(bool),
     SoundEffects(bool),
     VolumeFeedback(bool),
     AlertSound(AlertSound),
@@ -213,6 +218,36 @@ impl Setting {
                 Some("trackpad"),
                 "disable-while-typing",
                 (*on != Trackpad::default().disable_while_typing).then_some(KdlValue::Bool(*on)),
+            ),
+            Self::TrackpadAcceleration(on) => set(
+                &mut document,
+                Some("trackpad"),
+                "acceleration",
+                (*on != Trackpad::default().acceleration).then_some(KdlValue::Bool(*on)),
+            ),
+            Self::TrackpadDragging(dragging) => set(
+                &mut document,
+                Some("trackpad"),
+                "dragging",
+                (*dragging != Dragging::default()).then(|| dragging.keyword().into()),
+            ),
+            Self::TrackpadScrollMethod(method) => set(
+                &mut document,
+                Some("trackpad"),
+                "scroll-method",
+                (*method != ScrollMethod::default()).then(|| method.keyword().into()),
+            ),
+            Self::MousePrimaryButton(button) => set(
+                &mut document,
+                Some("mouse"),
+                "primary-button",
+                (*button != PrimaryButton::default()).then(|| button.keyword().into()),
+            ),
+            Self::MouseAcceleration(on) => set(
+                &mut document,
+                Some("mouse"),
+                "acceleration",
+                (*on != Mouse::default().acceleration).then_some(KdlValue::Bool(*on)),
             ),
             Self::MouseNaturalScrolling(on) => set(
                 &mut document,

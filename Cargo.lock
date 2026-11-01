@@ -4252,6 +4252,7 @@ dependencies = [
  "bande-test-bus",
  "wayland-client",
  "wayland-protocols",
+ "wayland-protocols-wlr",
  "zbus",
 ]
 
@@ -4382,6 +4383,7 @@ dependencies = [
  "bande-test-bus",
  "bande-toolkit",
  "bande-wallpaper",
+ "bande-watch",
  "bande-xdg",
  "wayland-client",
  "wayland-protocols-wlr",

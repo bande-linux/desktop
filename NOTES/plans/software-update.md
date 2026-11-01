@@ -151,6 +151,9 @@ installer and store plans add theirs to the same crate and fake.
 
 ## Implementation plan
 
+**Status (2026-11-01):** milestone 3 (plain states) is on `main`. The shared PackageKit crate and milestones 2 and 4-7 are separate work.
+
+
 Each step is a short branch from `main`, verified on the mini and passing the full local gate.
 
 1. **PackageKit in the image and on the mini.**

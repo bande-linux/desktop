@@ -39,7 +39,7 @@ scrolling direction should have individual settings for trackpad and mouse. Also
 Status: finished ([plans/mouse-and-trackpad.md](plans/mouse-and-trackpad.md)); mouse scroll speed waits on an owner decision
 
 in settings the selected item in the sidebar has blue markers, that looks pretty bad. Its enough to highlight the selection i think
-Status: planned ([plans/sidebar-selection.md](plans/sidebar-selection.md))
+Status: finished ([plans/sidebar-selection.md](plans/sidebar-selection.md)); not yet checked live on the mini
 
 Files has no "settings" (and other inhouse apps who needs it), for example i want to show file extensions
 Status: started ([plans/app-settings.md](plans/app-settings.md))

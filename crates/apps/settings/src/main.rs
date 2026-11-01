@@ -156,8 +156,9 @@ impl App for Settings {
                 self.view.set_appearance(appearance);
                 window.set_frame_regions(frame_regions(appearance.text_size));
             }
-            WindowEvent::Focus(true) => {
-                if let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
+            WindowEvent::Focus(focused) => {
+                self.view.set_window_active(focused);
+                if focused && let Some(Err(error)) = self.app_menu.as_ref().map(AppMenu::claim) {
                     tracing::warn!("{error}");
                 }
             }

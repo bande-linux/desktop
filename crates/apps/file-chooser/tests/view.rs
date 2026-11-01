@@ -5,8 +5,8 @@ use std::time::{Duration, Instant, SystemTime};
 
 use bande_file_chooser::{Chooser, ChooserView, Finished, Icons};
 use bande_files::rows;
-use bande_toolkit::ui::{Event, Key, Modifiers};
-use bande_toolkit::{Appearance, CpuRenderer, TextSystem};
+use bande_toolkit::ui::{Event, Key, Modifiers, Pointer};
+use bande_toolkit::{Appearance, CpuRenderer, Point, TextSystem};
 use bande_xdg::MimeDatabase;
 use xdg_desktop_portal_bande::file_chooser::{Dialog, Filter, Mode, Pattern};
 
@@ -110,6 +110,34 @@ fn the_open_and_save_dialogs_match_their_goldens() {
         },
     );
     bande_golden::assert_golden_rgba!("save", SIZE, render(&mut save));
+}
+
+#[test]
+fn a_focused_sidebar_keeps_its_selection_grey() {
+    let home = home();
+    let mut open = view(
+        &home.home,
+        Mode::Open {
+            multiple: true,
+            directory: false,
+        },
+    );
+    render(&mut open);
+    let place = open
+        .accessibility()
+        .nodes
+        .iter()
+        .filter(|(_, node)| node.is_selected() == Some(true))
+        .filter_map(|(_, node)| node.bounds())
+        .min_by(|a, b| a.x0.total_cmp(&b.x0))
+        .expect("a selected place");
+    let at = Pointer::at(Point::new(
+        ((place.x0 + place.x1) / 2.0) as f32,
+        ((place.y0 + place.y1) / 2.0) as f32,
+    ));
+    open.handle(&Event::PointerDown(at));
+    open.handle(&Event::PointerUp(at));
+    bande_golden::assert_golden_rgba!("open-sidebar-focused", SIZE, render(&mut open));
 }
 
 #[test]

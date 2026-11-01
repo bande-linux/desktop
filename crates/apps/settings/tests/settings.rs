@@ -12,7 +12,7 @@ use bande_settings::{Command, Idle, PaneId, SettingId, SettingsClient, SettingsV
 use bande_settings_panes::panes;
 use bande_test_bus::SessionBus;
 use bande_toolkit::ui::{Event, Key, Modifiers, Pointer};
-use bande_toolkit::{Palette, Point, Scheme, TextSystem};
+use bande_toolkit::{Item, Paint, Palette, Point, Scheme, TextSystem};
 
 const SIZE: (u32, u32) = (900, 720);
 
@@ -214,6 +214,39 @@ fn clicking_a_pane_and_then_a_choice_selects_both() {
         x += 4.0;
     }
     assert_eq!(chosen, ["right", "bottom", "top"].map(keyword));
+}
+
+fn strokes_of(items: &[Item], color: &Paint) -> usize {
+    items
+        .iter()
+        .map(|item| match item {
+            Item::Stroke { paint, .. } => usize::from(paint == color),
+            Item::Clip { items, .. }
+            | Item::Translate { items, .. }
+            | Item::Opacity { items, .. }
+            | Item::Scale { items, .. } => strokes_of(items, color),
+            _ => 0,
+        })
+        .sum()
+}
+
+#[test]
+fn a_clicked_sidebar_row_takes_the_keys_without_a_focus_ring() {
+    let mut view = view();
+    let row = node(&mut view, Role::ListItem, "Bar")
+        .bounds()
+        .expect("bounds");
+    click(
+        &mut view,
+        Point::new(row.x0 as f32 + 10.0, row.y0 as f32 + 10.0),
+    );
+    assert_eq!(focused_label(&view).as_deref(), Some("Bar"));
+
+    let scene = view.scene(SIZE.0, SIZE.1);
+    let focus = Paint::from(Palette::for_scheme(Scheme::Light).focus);
+    assert_eq!(strokes_of(&scene.items, &focus), 0);
+    assert!(press(&mut view, Key::Down));
+    assert_ne!(view.selected_pane(), PaneId::Bar);
 }
 
 #[test]

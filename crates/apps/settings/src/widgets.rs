@@ -737,11 +737,11 @@ impl Widget for SidebarRow {
         if self.selected {
             items.push(Item::Fill {
                 shape,
-                paint: cx.palette.well.into(),
+                paint: cx
+                    .palette
+                    .sidebar_selection(cx.window_active, cx.is_focused(self.id))
+                    .into(),
             });
-        }
-        if cx.is_focused(self.id) {
-            focus_ring(cx, shape, items);
         }
         let middle = self.frame.y + self.frame.height / 2.0;
         if let Some(symbol) = &self.symbol {

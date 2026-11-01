@@ -449,6 +449,10 @@ impl FilesView {
         }
     }
 
+    pub fn set_window_active(&mut self, active: bool) -> bool {
+        self.ui.set_window_active(active)
+    }
+
     pub fn set_appearance(&mut self, appearance: Appearance) {
         self.palette = appearance.palette();
         self.ui.set_appearance(appearance);

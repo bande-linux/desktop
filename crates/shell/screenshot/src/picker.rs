@@ -208,7 +208,7 @@ impl Widget for Grid {
                 items.push(Item::Stroke {
                     shape: Shape::rounded(well.inset(-RING / 2.0), TILE_RADIUS + RING / 2.0),
                     width: RING,
-                    paint: cx.palette.accent.into(),
+                    paint: cx.palette.accent_text.into(),
                 });
             }
             if focused && index == self.current && cx.keyboard_navigation {

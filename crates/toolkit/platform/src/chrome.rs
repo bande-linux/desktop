@@ -1,7 +1,7 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use bande_graphics::{
-    Color, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene, Scheme, Shape,
-    TextAlign, TextStyle, TextSystem, TitleBar, resize_zone, title_style, window_controls_area,
+    Color, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene, Shape, TextAlign,
+    TextStyle, TextSystem, TitleBar, resize_zone, title_style, window_controls_area,
 };
 
 use std::time::Instant;
@@ -317,7 +317,6 @@ impl Chrome {
         frame: &Frame,
         content: Scene,
         palette: &Palette,
-        scheme: Scheme,
         look: Look,
         now: Instant,
     ) -> Scene {
@@ -353,12 +352,8 @@ impl Chrome {
             offset: Point::new(placed.x, placed.y),
             items: drawn,
         });
-        if scheme == Scheme::Dark && frame.inset > 0.0 {
-            items.push(Item::Stroke {
-                shape: Shape::rounded(sheet.inset(0.5), radius - 0.5),
-                width: 1.0,
-                paint: palette.hairline.into(),
-            });
+        if frame.inset > 0.0 {
+            items.extend(Item::rim(Shape::rounded(sheet, radius), palette));
         }
         Scene {
             width: (frame.width + 2.0 * frame.margin) as u32,
@@ -457,7 +452,6 @@ pub fn framed_scene(
         &frame,
         content.clone(),
         palette,
-        palette.scheme,
         Look {
             active: true,
             zoomed: false,

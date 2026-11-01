@@ -905,7 +905,7 @@ impl Editor {
                 CARET_WIDTH,
                 caret.height,
             )),
-            paint: cx.palette.accent.into(),
+            paint: cx.palette.accent_text.into(),
         })
     }
 

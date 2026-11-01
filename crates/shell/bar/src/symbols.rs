@@ -209,7 +209,7 @@ pub fn battery_items(
     let inner = body.inset(2.0);
     let level = (battery.percent / 100.0).clamp(0.0, 1.0) as f32;
     let fill = if battery.low() {
-        palette.danger
+        palette.danger_text
     } else if battery.on_adapter() {
         palette.success
     } else {

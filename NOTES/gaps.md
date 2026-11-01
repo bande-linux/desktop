@@ -27,7 +27,7 @@ grapping a window edge or corner in order to reseize it is a bit difficult, the 
 Status: finished ([plans/window-resize-zones.md](plans/window-resize-zones.md)); not yet checked live on the mini
 
 the themes, especially the dark theme, looks a bit "dated". Review how modern dark themes look in 2026. This is too dark and hard on the eyes with strong contrast. I think MacOS dark theme is nicer on the eyes, a bit more slated. DO not copy that however, rely on the investigation.
-Status: planned ([plans/dark-theme.md](plans/dark-theme.md))
+Status: finished ([plans/dark-theme.md](plans/dark-theme.md)); moving light to the slate family (M6) waits on the owner
 
 the software update doesnt seem to work.
 Status: started ([plans/software-update.md](plans/software-update.md)); M3 plain states done

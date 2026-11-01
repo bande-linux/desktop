@@ -975,14 +975,9 @@ impl Window {
             zoomed: toplevel.maximized || toplevel.fullscreen,
         };
         match &mut self.chrome {
-            Some(chrome) => chrome.frame_scene(
-                frame,
-                scene,
-                &appearance.palette(),
-                appearance.scheme,
-                look,
-                presentation,
-            ),
+            Some(chrome) => {
+                chrome.frame_scene(frame, scene, &appearance.palette(), look, presentation)
+            }
             None => scene,
         }
     }

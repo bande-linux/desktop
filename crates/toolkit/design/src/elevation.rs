@@ -26,7 +26,8 @@ impl Elevation {
         let [key, ambient] = match (self, scheme) {
             (Self::Frame, Scheme::Light) => [shadow(1.0, 1.0, 0.10), shadow(12.0, 16.0, 0.22)],
             (Self::Overlay, Scheme::Light) => [shadow(1.0, 0.75, 0.14), shadow(6.0, 9.0, 0.18)],
-            (_, Scheme::Dark) => [shadow(1.0, 1.0, 0.5), shadow(14.0, 18.0, 0.55)],
+            (Self::Frame, Scheme::Dark) => [shadow(1.0, 1.0, 0.40), shadow(14.0, 18.0, 0.45)],
+            (Self::Overlay, Scheme::Dark) => [shadow(1.0, 0.75, 0.35), shadow(6.0, 9.0, 0.40)],
         };
         let ambient = if active {
             ambient

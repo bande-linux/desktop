@@ -8,7 +8,8 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
-rustix = { workspace = true, features = ["fs", "process"] }
+rustix = { workspace = true, features = ["event", "fs", "process"] }
+bande-inbox.workspace = true
 tracing.workspace = true
 bande-l10n.workspace = true
 bande-notify.workspace = true

@@ -1,17 +1,22 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
+use std::os::fd::OwnedFd;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::slice;
+use std::sync::LazyLock;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_inbox::{Inbox, Outbox};
 use bande_notify::Urgency;
 use bande_notify::client::{Request, notify};
+use rustix::event::{PollFd, PollFlags, poll};
 use rustix::fs::{Mode, OFlags};
-use rustix::process::Signal;
+use rustix::io::Errno;
+use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::{OwnedValue, Value};
 use zbus::{MatchRule, message};
@@ -314,24 +319,163 @@ pub fn spawn_detached(
             Ok(())
         });
     }
-    if app_id.is_empty() {
-        let mut child = process.spawn()?;
-        let pid = child.id();
-        thread::spawn(move || child.wait());
-        return Ok(pid);
-    }
-    let app_id = app_id.to_owned();
-    let started = Instant::now();
-    let child = match process.spawn() {
-        Ok(child) => child,
-        Err(error) => {
-            thread::spawn(move || tell(Connection::session(), &app_id, Failure::NotOpened));
-            return Err(error);
+    let app = (!app_id.is_empty()).then(|| Supervised {
+        app_id: app_id.to_owned(),
+        started: Instant::now(),
+    });
+    match process.spawn() {
+        Ok(child) => {
+            let pid = child.id();
+            watch(Watch::Child(child, app));
+            Ok(pid)
         }
-    };
-    let pid = child.id();
-    thread::spawn(move || supervise(Connection::session, &app_id, child, started));
-    Ok(pid)
+        Err(error) => {
+            if let Some(app) = app {
+                watch(Watch::NotOpened(app.app_id));
+            }
+            Err(error)
+        }
+    }
+}
+
+struct Supervised {
+    app_id: String,
+    started: Instant,
+}
+
+enum Watch {
+    Child(Child, Option<Supervised>),
+    NotOpened(String),
+}
+
+struct Watched {
+    child: Child,
+    exited: OwnedFd,
+    app: Option<Supervised>,
+}
+
+static WATCHER: LazyLock<Option<Outbox<Watch>>> = LazyLock::new(|| {
+    let started = Inbox::new().and_then(|inbox| {
+        let outbox = inbox.outbox();
+        thread::Builder::new()
+            .name("app-watcher".to_owned())
+            .spawn(move || Watcher::new(Connection::session).run(inbox))?;
+        Ok(outbox)
+    });
+    started
+        .inspect_err(|error| tracing::warn!("launched apps are not followed: {error}"))
+        .ok()
+});
+
+fn watch(watch: Watch) {
+    if !WATCHER.as_ref().is_some_and(|watcher| watcher.send(watch)) {
+        tracing::warn!("a launched app is not followed");
+    }
+}
+
+struct Watcher<C> {
+    connect: C,
+    bus: Option<Connection>,
+    watched: Vec<Watched>,
+}
+
+impl<C: Fn() -> zbus::Result<Connection>> Watcher<C> {
+    fn new(connect: C) -> Self {
+        Self {
+            connect,
+            bus: None,
+            watched: Vec::new(),
+        }
+    }
+
+    fn run(mut self, mut inbox: Inbox<Watch>) {
+        loop {
+            match self.wait(&inbox) {
+                Ok(ended) => self.finish(ended),
+                Err(error) => {
+                    return tracing::warn!("launched apps are no longer followed: {error}");
+                }
+            }
+            for watch in inbox.drain() {
+                self.take(watch);
+            }
+        }
+    }
+
+    fn wait(&self, inbox: &Inbox<Watch>) -> rustix::io::Result<Vec<usize>> {
+        let ready = inbox.fd();
+        let mut fds: Vec<PollFd<'_>> = std::iter::once(PollFd::new(&ready, PollFlags::IN))
+            .chain(
+                self.watched
+                    .iter()
+                    .map(|watched| PollFd::new(&watched.exited, PollFlags::IN)),
+            )
+            .collect();
+        match poll(&mut fds, None) {
+            Ok(_) => {}
+            Err(Errno::INTR) => return Ok(Vec::new()),
+            Err(error) => return Err(error),
+        }
+        Ok(fds
+            .iter()
+            .skip(1)
+            .enumerate()
+            .filter(|(_, fd)| !fd.revents().is_empty())
+            .map(|(index, _)| index)
+            .collect())
+    }
+
+    fn bus(&mut self) -> zbus::Result<Connection> {
+        let bus = match self.bus.take() {
+            Some(bus) => bus,
+            None => (self.connect)()?,
+        };
+        Ok(self.bus.insert(bus).clone())
+    }
+
+    fn take(&mut self, watch: Watch) {
+        let (child, app) = match watch {
+            Watch::NotOpened(app_id) => return tell(self.bus(), &app_id, Failure::NotOpened),
+            Watch::Child(child, app) => (child, app),
+        };
+        if let Some(app) = &app {
+            let placed = self
+                .bus()
+                .and_then(|bus| place_in_scope(&bus, &app.app_id, child.id()));
+            if let Err(error) = placed {
+                tracing::debug!("{} runs outside its own scope: {error}", app.app_id);
+            }
+        }
+        match pidfd_open(Pid::from_child(&child), PidfdFlags::empty()) {
+            Ok(exited) => self.watched.push(Watched { child, exited, app }),
+            Err(error) => {
+                tracing::debug!("cannot follow {}: {error}", child.id());
+                let mut child = child;
+                if let Err(error) = thread::Builder::new().spawn(move || child.wait()) {
+                    tracing::warn!("a launched app is not followed: {error}");
+                }
+            }
+        }
+    }
+
+    fn finish(&mut self, ended: Vec<usize>) {
+        for index in ended.into_iter().rev() {
+            let Watched { mut child, app, .. } = self.watched.remove(index);
+            let status = match child.wait() {
+                Ok(status) => status,
+                Err(error) => {
+                    tracing::debug!("cannot follow {}: {error}", child.id());
+                    continue;
+                }
+            };
+            if let Some(app) = app
+                && let Some(failure) = failure(status, app.started.elapsed())
+            {
+                tracing::warn!("{} ended with {status}", app.app_id);
+                tell(self.bus(), &app.app_id, failure);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -388,26 +532,6 @@ fn place_in_scope(bus: &Connection, app_id: &str, pid: u32) -> zbus::Result<()> 
         ),
     )?;
     Ok(())
-}
-
-fn supervise(
-    connect: impl Fn() -> zbus::Result<Connection>,
-    app_id: &str,
-    mut child: Child,
-    started: Instant,
-) {
-    let placed = connect().and_then(|bus| place_in_scope(&bus, app_id, child.id()));
-    if let Err(error) = placed {
-        tracing::debug!("{app_id} runs outside its own scope: {error}");
-    }
-    let status = match child.wait() {
-        Ok(status) => status,
-        Err(error) => return tracing::debug!("cannot follow {app_id}: {error}"),
-    };
-    if let Some(failure) = failure(status, started.elapsed()) {
-        tracing::warn!("{app_id} ended with {status}");
-        tell(connect(), app_id, failure);
-    }
 }
 
 fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure) {
@@ -522,6 +646,7 @@ pub fn follow_oom_kills(bus: Connection) {
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
 
+    use std::cell::Cell;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
@@ -731,14 +856,29 @@ mod tests {
             ..
         } = desktop(&bus);
 
-        let run = |app_id: &str, script: &str| {
+        let connections = Cell::new(0);
+        let mut watcher = Watcher::new(|| {
+            connections.set(connections.get() + 1);
+            bus.connect()
+        });
+        let mut run = |app_id: &str, script: &str| {
             let child = Command::new("sh").args(["-c", script]).spawn().unwrap();
             let pid = child.id();
-            supervise(|| bus.connect(), app_id, child, Instant::now());
+            let app = Supervised {
+                app_id: app_id.to_owned(),
+                started: Instant::now(),
+            };
+            watcher.take(Watch::Child(child, Some(app)));
             pid
         };
         let calm = run("org.example.Calm", "sleep 0.2");
         let crashed = run("org.example.crash-test", "sleep 0.2; kill -SEGV $$");
+        let inbox = Inbox::<Watch>::new().unwrap();
+        while !watcher.watched.is_empty() {
+            let ended = watcher.wait(&inbox).unwrap();
+            watcher.finish(ended);
+        }
+        assert_eq!(connections.get(), 1);
 
         assert_eq!(
             *units.lock().unwrap(),

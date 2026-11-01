@@ -169,7 +169,7 @@ fn every_app_we_ship_or_recommend_has_an_icon_in_the_theme() {
                     .to_owned()
             })
             .collect();
-    assert_eq!(names.len(), 5);
+    assert_eq!(names.len(), 6);
     names.extend(
         [
             "org.gnome.TextEditor",

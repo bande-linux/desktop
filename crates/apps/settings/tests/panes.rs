@@ -12,9 +12,10 @@ use bande_audio::{AppStream, Device, Direction, Level, Snapshot};
 use bande_config::{DisplaySettings, Placement};
 use bande_keyboard::Layouts;
 use bande_settings::{
-    Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, LocaleState, Mode,
-    NetworkCommand, Pair, PaneId, PictureCommand, PointingDevices, SettingId, SettingsView, Update,
-    Value, bundled_pairs, feed, follow_bluetooth, follow_network,
+    Answer, AudioCommand, BluetoothCommand, Command, Display, Feed, LocaleCommand, LocaleState,
+    Mode, NetworkCommand, Pair, PaneId, PictureCommand, PointingDevices, Privilege, SettingId,
+    SettingsView, Update, Value, bundled_pairs, feed, follow_bluetooth, follow_network,
+    login_codes, x11_keyboard,
 };
 use bande_test_bus::SessionBus;
 use bande_test_bus::bluez::{FakeBluez, PHONE};
@@ -805,6 +806,44 @@ fn keyboard_view(codes: &[&str]) -> SettingsView {
     view
 }
 
+fn with_login_layouts(view: &mut SettingsView, login: &[&str]) {
+    view.apply(Update::Locale(Some(LocaleState {
+        available: Vec::new(),
+        language: "en_US.UTF-8".to_owned(),
+        region: None,
+        pending: false,
+        login_sources: login.iter().map(|code| (*code).to_owned()).collect(),
+    })));
+}
+
+#[test]
+fn the_login_screen_can_take_the_users_layouts() {
+    assert_eq!(login_codes("se,us", "mac,"), ["se(mac)", "us"]);
+    assert_eq!(login_codes("", ""), Vec::<String>::new());
+    assert_eq!(
+        x11_keyboard(&["se(mac)".to_owned(), "us".to_owned()]),
+        ("se,us".to_owned(), "mac,".to_owned())
+    );
+
+    let mut view = keyboard_view(&["se(mac)", "us"]);
+    with_login_layouts(&mut view, &["us"]);
+    assert!(has_text(&mut view, "The login screen uses other layouts"));
+    let button = find(&mut view, Role::Button, "Use at Login Screen").expect("button");
+    click(&mut view, button);
+    assert_eq!(
+        view.take_commands(),
+        [Command::Locale(LocaleCommand::LoginKeyboard(vec![
+            "se(mac)".to_owned(),
+            "us".to_owned()
+        ]))]
+    );
+    assert!(has_text(&mut view, "The login screen uses these layouts"));
+
+    with_login_layouts(&mut view, &["us"]);
+    view.apply(Update::Refused(vec![Privilege::Keyboard]));
+    assert!(find(&mut view, Role::Button, "Use at Login Screen").is_none());
+}
+
 fn codes(codes: &[&str]) -> Command {
     Command::Set(
         SettingId::InputSources,
@@ -848,9 +887,11 @@ fn a_layout_is_added_by_searching_its_name_and_pressing_return() {
 fn the_layout_search_suggests_the_region_and_finds_every_word() {
     let mut view = keyboard_view(&["us"]);
     view.apply(Update::Locale(Some(LocaleState {
-        installed: Vec::new(),
+        available: Vec::new(),
         language: "en_US.UTF-8".to_owned(),
         region: Some("sv_SE.UTF-8".to_owned()),
+        pending: false,
+        login_sources: Vec::new(),
     })));
     let add = find(&mut view, Role::Button, "Add Input Source…").expect("add button");
     click(&mut view, add);

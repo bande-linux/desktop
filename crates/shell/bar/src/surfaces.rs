@@ -1,16 +1,15 @@
 use std::path::Path;
-use std::rc::Rc;
 
 use bande_config::Config;
 use bande_toolkit::{App, TextSystem, Window};
 use zbus::blocking::Connection;
 
 use crate::combined_client::{CombinedClient, combined_role};
-use crate::dock::surface_size;
-use crate::dock_client::{Dock, dock_role};
 use crate::menu_bar_client::{MENU_BAR_SIZE, MenuBarClient, menu_bar_role};
 use crate::menu_search_client::{SearchCard, search_role};
 use crate::rail::RailView;
+use crate::taskbar::surface_size;
+use crate::taskbar_client::{Taskbar, taskbar_role};
 
 pub use crate::menu_bar_client::Restart;
 
@@ -20,15 +19,12 @@ pub struct Display {
     pub main: bool,
 }
 
-pub type NotificationCenter = Rc<dyn Fn()>;
-
 pub struct Services<'a> {
     pub text: &'a TextSystem,
     pub session: Option<&'a Connection>,
     pub system: Option<&'a Connection>,
     pub config_home: Option<&'a Path>,
     pub home: Option<&'a Path>,
-    pub notification_center: NotificationCenter,
 }
 
 pub struct Bar {
@@ -45,7 +41,6 @@ pub fn open(
     let text = services.text;
     let homes = (services.config_home, services.home);
     let buses = (services.session, services.system);
-    let place = (display.clone(), services.notification_center.clone());
     let open_window = |role, size| -> Result<Window, Box<dyn std::error::Error>> {
         let mut window = beside.open_beside_on(&display.output, role, size)?;
         window.share_fonts(text);
@@ -59,7 +54,7 @@ pub fn open(
         true => {
             let (role, size) = combined_role(icon_size);
             let window = open_window(role, size)?;
-            let dock = Dock::new(
+            let taskbar = Taskbar::new(
                 &window,
                 &display.output,
                 bar,
@@ -73,23 +68,28 @@ pub fn open(
                 bande_xdg::data_dirs(),
                 icon_size,
             );
-            let status = MenuBarClient::with_view(view, place, buses, layout)?;
+            let status = MenuBarClient::with_view(view, display.clone(), buses, layout)?;
             let shared = (status.handoff(), status.restart());
-            surfaces.push((window, Box::new(CombinedClient::new(dock, status))));
+            surfaces.push((window, Box::new(CombinedClient::new(taskbar, status))));
             shared
         }
         false => {
             let mut window = open_window(menu_bar_role(), MENU_BAR_SIZE)?;
-            let client =
-                MenuBarClient::new(&mut window, text.sharing_fonts(), place, buses, layout)?;
+            let client = MenuBarClient::new(
+                &mut window,
+                text.sharing_fonts(),
+                display.clone(),
+                buses,
+                layout,
+            )?;
             let shared = (client.handoff(), client.restart());
             surfaces.push((window, Box::new(client)));
             if display.main {
                 let window = open_window(
-                    dock_role(bar.edge, icon_size),
+                    taskbar_role(bar.edge, icon_size),
                     surface_size(bar.edge, icon_size, (1, 1)),
                 )?;
-                let dock = Dock::new(
+                let taskbar = Taskbar::new(
                     &window,
                     &display.output,
                     bar,
@@ -97,7 +97,7 @@ pub fn open(
                     services.session,
                     homes,
                 )?;
-                surfaces.push((window, Box::new(dock)));
+                surfaces.push((window, Box::new(taskbar)));
             }
             shared
         }

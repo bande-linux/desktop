@@ -221,10 +221,10 @@ impl SettingsView {
             PaneId::LanguageTime => {
                 let language = self.locale.as_ref().and_then(|locale| {
                     locale
-                        .installed
+                        .available
                         .iter()
-                        .find(|installed| installed.code == locale.language)
-                        .map(|installed| installed.name.clone())
+                        .find(|available| available.code == locale.language)
+                        .map(|available| available.name.clone())
                 });
                 let place = self.time.as_ref().map(|time| zone_place(&time.zone).0);
                 let parts: Vec<String> = language.into_iter().chain(place).collect();

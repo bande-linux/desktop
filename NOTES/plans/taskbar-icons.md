@@ -39,7 +39,7 @@ Make the dock re-read desktop entries when an applications folder changes. Give 
 1. **Dock picks up apps installed while it runs** (about 2h)
    - `crates/shell/bar/src/dock_client.rs`: start a `bande_watch::FolderWatch` (`Changes::Any`) on `<dir>/applications` for each existing `data_dirs()` entry, plus the data-home folder itself so that a new `~/.local/share/applications` is caught. Wake through the dock's existing `Inbox` source. Debounce about 300 ms, since dpkg writes several files. On wake: reload `entries`, clear `icons`, `load_trash_icons()`, `follow_windows(self.windows.clone())`, `sync()`.
    - Test, `crates/shell/bar/tests/live.rs`: open a toplevel with app_id `org.example.Late` and no entry. The dock tile's accessible label is `Late`. Write `org.example.Late.desktop` with `Name=Late Arrival` into the test `apps/applications` folder. The label becomes `Late Arrival` without restarting the shell.
-2. **Our own windows get the right tile** (about 1h, shape set by the owner decision below)
+2. **Our own windows get the right tile** (about 1h, shape set by the owner decision below) Done: the file chooser and the shell dialogs are hidden from the dock, and a window without an entry falls back to an icon named after its app_id (the screenshot markup window gets `org.bande.Screenshot.svg`).
    - Default (show with an icon): in `describe`, when there is no entry, try the app_id itself as the icon name. This is the usual fallback for apps whose hicolor icon is named after the app_id. Add `org.bande.FileChooser.svg` to `data/icons/Bande/scalable/apps/`. Give the shell dialogs an app_id that has an icon (`org.bande.About`), or add `org.bande.MenuBar.svg`.
    - Alternative (hide): skip `org.bande.FileChooser` and `dialogs::DIALOGS` in `follow_windows`, so they never become dock tiles.
    - Test: the hide variant gets a `live.rs` case where a `org.bande.MenuBar` toplevel adds no dock tile. The icon variant is a one-line fallback plus assets. Verify it on the mini by opening the file chooser, About and a screenshot markup window. No unit test, since it would be tautological.
@@ -50,3 +50,5 @@ Make the dock re-read desktop entries when an applications folder changes. Give 
 ## Decisions for the owner
 
 - Should the file chooser and the shell's own dialogs (About, Log Out, low memory, pairing) show up in the dock at all? On macOS, open/save panels belong to their app and system dialogs get no dock tile. Recommended: hide them. Choose "show" if you want to be able to click back to an open file chooser from the dock.
+
+Decided overnight 2026-11-01: hide the file chooser and the shell's own dialogs from the dock (plan recommendation; owner may revisit).

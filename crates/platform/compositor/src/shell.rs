@@ -458,9 +458,9 @@ impl Dispatch<BandeShellV1, ()> for State {
                     state.insert_text(text, client.id());
                 }
             }
-            bande_shell_v1::Request::ToggleControlCenter => {
-                state.toggle_panel(bande_shell_v1::Panel::ControlCenter);
-            }
+            bande_shell_v1::Request::TogglePanel {
+                panel: WEnum::Value(panel),
+            } => state.toggle_panel(panel),
             bande_shell_v1::Request::ShowLauncher => state.show_launcher(),
             bande_shell_v1::Request::SetIconRect {
                 app_id,

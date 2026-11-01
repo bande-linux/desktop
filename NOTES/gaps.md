@@ -3,10 +3,10 @@ Hand written notes by a user when gaps are found. These need to be properly inve
 Status values: open, planning, planned, started, finished, dropped.
 
 swap Super->Ctrl like normal linux distros
-Status: started ([plans/super-ctrl.md](plans/super-ctrl.md)); Ctrl for app shortcuts done (M1-M9), M10 Linux habits on Super open
+Status: finished ([plans/super-ctrl.md](plans/super-ctrl.md))
 
 keep in dock doesnt work for everything, for example launching -code- from terminal should still be able to save to dock. Also dock should be renamed to taskbar
-Status: started ([plans/keep-in-taskbar.md](plans/keep-in-taskbar.md)); keeping apps without an entry and the Taskbar name done, internal code rename (M6) left
+Status: finished ([plans/keep-in-taskbar.md](plans/keep-in-taskbar.md))
 
 its not possible to scroll in the settings app, for example bluetooth and wifi views. Also bluetooth devices have no names, so i have no idea which device is my mouse etc.
 Status: finished ([plans/settings-scroll-and-bluetooth-names.md](plans/settings-scroll-and-bluetooth-names.md))
@@ -18,10 +18,10 @@ GTK apps do not fit with our window bar. Is that possible to solve so that all a
 Status: planned ([plans/third-party-title-bars.md](plans/third-party-title-bars.md))
 
 it seems like some apps are not getting the correct taskbar icon? this could also be that they simply dont have one. So dont dwell too deeply in that.
-Status: started ([plans/taskbar-icons.md](plans/taskbar-icons.md)); M1 and M3 done, M2 waits on an owner decision
+Status: finished ([plans/taskbar-icons.md](plans/taskbar-icons.md)); not yet checked live on the mini
 
 its not possible to install more keyboard layouts or languages in settings *important*
-Status: started ([plans/keyboard-layouts-and-languages.md](plans/keyboard-layouts-and-languages.md)); M4 layout picker done
+Status: started ([plans/keyboard-layouts-and-languages.md](plans/keyboard-layouts-and-languages.md)); desktop side done (M2-M5, package Depends), input methods (M6) later
 
 grapping a window edge or corner in order to reseize it is a bit difficult, the resizer is too unprecise to the actual corner or edge
 Status: finished ([plans/window-resize-zones.md](plans/window-resize-zones.md)); not yet checked live on the mini

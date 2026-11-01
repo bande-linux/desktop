@@ -29,15 +29,15 @@ fn a_hidden_app_fades_out_loses_the_keyboard_and_comes_back_when_activated() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
     let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
-    let mut dock = shell(&mut server);
+    let mut taskbar = shell(&mut server);
     settle(&mut server, 1000);
 
-    dock.hide_app(&mut server, EDITOR);
+    taskbar.hide_app(&mut server, EDITOR);
     settle(&mut server, 1000);
     editor.exchange(&mut server);
     let hidden = pixel(&mut renderer, &mut server, 110, 80);
     let typing_while_hidden = editor.keyboard_focus_on(0);
-    dock.activate_app(&mut server, EDITOR);
+    taskbar.activate_app(&mut server, EDITOR);
     settle(&mut server, 1000);
     editor.exchange(&mut server);
 
@@ -69,12 +69,12 @@ fn super_h_hides_the_focused_app_and_show_app_brings_it_back_without_the_keyboar
 }
 
 #[test]
-fn quitting_an_app_from_the_dock_asks_its_windows_to_close() {
+fn quitting_an_app_from_the_taskbar_asks_its_windows_to_close() {
     let mut server = server();
     let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
-    let mut dock = shell(&mut server);
+    let mut taskbar = shell(&mut server);
 
-    dock.quit_app(&mut server, EDITOR);
+    taskbar.quit_app(&mut server, EDITOR);
     editor.exchange(&mut server);
 
     assert!(editor.close_requested(0));
@@ -117,29 +117,29 @@ fn an_ordinary_app_can_ask_another_app_to_quit_without_seeing_the_shell() {
 }
 
 #[test]
-fn the_dock_learns_which_windows_are_minimised_and_can_bring_one_back() {
+fn the_taskbar_learns_which_windows_are_minimised_and_can_bring_one_back() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
     let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
-    let mut dock = shell(&mut server);
-    roundtrip(&mut server, &mut [&mut editor, &mut dock]);
-    let identifier = dock
+    let mut taskbar = shell(&mut server);
+    roundtrip(&mut server, &mut [&mut editor, &mut taskbar]);
+    let identifier = taskbar
         .window_identifiers(EDITOR)
         .pop()
         .expect("a listed window");
 
     super_key(&mut server, KEY_M);
     settle(&mut server, 1000);
-    dock.exchange(&mut server);
+    taskbar.exchange(&mut server);
     let minimized = pixel(&mut renderer, &mut server, 110, 80);
     let late = shell(&mut server);
-    dock.activate_window(&mut server, &identifier);
+    taskbar.activate_window(&mut server, &identifier);
     settle(&mut server, 1000);
-    roundtrip(&mut server, &mut [&mut editor, &mut dock]);
+    roundtrip(&mut server, &mut [&mut editor, &mut taskbar]);
 
     assert_eq!(minimized, BACKGROUND);
     assert_eq!(
-        dock.minimized_windows(),
+        taskbar.minimized_windows(),
         [(identifier.clone(), true), (identifier.clone(), false)]
     );
     assert_eq!(late.minimized_windows(), [(identifier, true)]);
@@ -152,22 +152,28 @@ fn an_app_that_asks_to_come_forward_without_a_valid_token_asks_for_attention_ins
     let mut server = server();
     let mut background = window_of(&mut server, RED, (WINDOW, WINDOW), "org.example.Mail");
     let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
-    let mut dock = shell(&mut server);
-    roundtrip(&mut server, &mut [&mut background, &mut editor, &mut dock]);
+    let mut taskbar = shell(&mut server);
+    roundtrip(
+        &mut server,
+        &mut [&mut background, &mut editor, &mut taskbar],
+    );
 
     let token = background.activation_token(&mut server);
     background.activate(&mut server, 0, &token);
-    roundtrip(&mut server, &mut [&mut background, &mut editor, &mut dock]);
+    roundtrip(
+        &mut server,
+        &mut [&mut background, &mut editor, &mut taskbar],
+    );
 
-    assert_eq!(dock.attention_requests(), ["org.example.Mail"]);
+    assert_eq!(taskbar.attention_requests(), ["org.example.Mail"]);
     assert!(editor.keyboard_focus_on(0));
 }
 
 #[test]
-fn super_f3_gives_the_dock_the_keyboard_and_super_f2_the_menu_bar() {
+fn super_f3_gives_the_taskbar_the_keyboard_and_super_f2_the_menu_bar() {
     let mut server = server();
     let mut editor = window_of(&mut server, RED, (WINDOW, WINDOW), EDITOR);
-    let mut dock = shell(&mut server);
+    let mut taskbar = shell(&mut server);
     let bar = |anchor, size| LayerRequest {
         layer: Layer::Top,
         anchor,
@@ -176,23 +182,23 @@ fn super_f3_gives_the_dock_the_keyboard_and_super_f2_the_menu_bar() {
         keyboard: KeyboardInteractivity::OnDemand,
         color: [0x80; 4],
     };
-    dock.show_named_layer(&mut server, &bar(Anchor::Bottom, (128, 24)), "dock");
-    dock.show_named_layer(
+    taskbar.show_named_layer(&mut server, &bar(Anchor::Bottom, (128, 24)), "taskbar");
+    taskbar.show_named_layer(
         &mut server,
         &bar(Anchor::Top | Anchor::Left | Anchor::Right, (0, 16)),
         "menubar",
     );
 
     super_key(&mut server, KEY_F3);
-    roundtrip(&mut server, &mut [&mut editor, &mut dock]);
-    let dock_has_keyboard = dock.layer_has_keyboard(0);
+    roundtrip(&mut server, &mut [&mut editor, &mut taskbar]);
+    let taskbar_has_keyboard = taskbar.layer_has_keyboard(0);
     super_key(&mut server, KEY_F2);
-    roundtrip(&mut server, &mut [&mut editor, &mut dock]);
+    roundtrip(&mut server, &mut [&mut editor, &mut taskbar]);
 
-    assert!(dock_has_keyboard);
-    assert!(dock.layer_has_keyboard(1));
+    assert!(taskbar_has_keyboard);
+    assert!(taskbar.layer_has_keyboard(1));
     assert!(!editor.keyboard_focus_on(0));
-    assert_eq!(dock.shell_focus_requests(), ["dock", "menubar"]);
+    assert_eq!(taskbar.shell_focus_requests(), ["taskbar", "menubar"]);
 }
 
 #[test]
@@ -221,7 +227,7 @@ fn the_combined_bar_takes_the_keyboard_for_both_super_f2_and_super_f3() {
 
     assert!(bar_has_keyboard);
     assert!(bar.layer_has_keyboard(0));
-    assert_eq!(bar.shell_focus_requests(), ["dock", "menubar"]);
+    assert_eq!(bar.shell_focus_requests(), ["taskbar", "menubar"]);
 }
 
 #[test]

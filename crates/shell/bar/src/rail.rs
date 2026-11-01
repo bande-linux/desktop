@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use accesskit::{Action, Node as AccessNode, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use bande_datetime::DateFormats;
 use bande_status::status::{Battery, Capture, Sense, Status, speaker_waves};
+use bande_status::unread::ClockMark;
 use bande_toolkit::ui::PointerButton;
 use bande_toolkit::{
     Color, DisplayEdge, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape,
@@ -13,8 +14,8 @@ use bande_xdg::{ICON_THEMES, find_icon};
 use jiff::Zoned;
 
 use crate::L10N;
-use crate::dock::{Rail as AppsRegion, WELL_ALPHA};
 use crate::menu_bar::{Slot, StatusView};
+use crate::taskbar::{Rail as AppsRegion, WELL_ALPHA};
 
 pub const EDGE_PADDING: f32 = 24.0;
 pub const LABEL_ROOM: f32 = 280.0;
@@ -96,7 +97,7 @@ pub struct RailView {
     tray: Vec<(String, Option<Image>)>,
     status: Status,
     clock: Clock,
-    unread: bool,
+    clock_mark: ClockMark,
     battery_percentage: bool,
     workspaces: (usize, usize),
     open: Option<Slot>,
@@ -221,7 +222,7 @@ impl RailView {
                 day: String::new(),
                 long: String::new(),
             },
-            unread: false,
+            clock_mark: ClockMark::Clear,
             battery_percentage: false,
             workspaces: (1, 0),
             open: None,
@@ -235,7 +236,7 @@ impl RailView {
     }
 
     pub fn unread(&self) -> bool {
-        self.unread
+        self.clock_mark == ClockMark::Unread
     }
 
     pub fn set_icon_size(&mut self, icon_size: f32) {
@@ -861,20 +862,17 @@ impl RailView {
         let date = self.paragraph(&long, TextStyle::new(CAPTION_SIZE, palette.ink2));
         let top = rect.y + (rect.height - time.height() - date.height()) / 2.0;
         let x = 2.0 * ROW_INSET + 4.0;
-        if self.unread {
-            items.push(Item::Fill {
-                shape: Shape::rounded(
-                    Rect::new(
-                        rect.x + rect.width - 2.0 * ROW_INSET - UNREAD_DOT,
-                        top + 4.0,
-                        UNREAD_DOT,
-                        UNREAD_DOT,
-                    ),
-                    UNREAD_DOT / 2.0,
-                ),
-                paint: palette.accent.into(),
-            });
-        }
+        clock_mark(
+            self.clock_mark,
+            Rect::new(
+                rect.x + rect.width - 2.0 * ROW_INSET - UNREAD_DOT,
+                top + 4.0,
+                UNREAD_DOT,
+                UNREAD_DOT,
+            ),
+            palette,
+            items,
+        );
         items.push(Item::Text {
             origin: Point::new(x, snap(top + time.height(), scale)),
             paragraph: date,
@@ -1016,20 +1014,17 @@ impl RailView {
         let total = time.height() + day.height();
         let top = rect.y + (rect.height - total) / 2.0;
         let time_x = snap(rect.x + (rect.width - time.width()) / 2.0, scale);
-        if self.unread {
-            items.push(Item::Fill {
-                shape: Shape::rounded(
-                    Rect::new(
-                        (time_x + time.width() + 1.0).min(rect.x + rect.width - UNREAD_DOT - 1.0),
-                        top,
-                        UNREAD_DOT,
-                        UNREAD_DOT,
-                    ),
-                    UNREAD_DOT / 2.0,
-                ),
-                paint: palette.accent.into(),
-            });
-        }
+        clock_mark(
+            self.clock_mark,
+            Rect::new(
+                (time_x + time.width() + 1.0).min(rect.x + rect.width - UNREAD_DOT - 1.0),
+                top,
+                UNREAD_DOT,
+                UNREAD_DOT,
+            ),
+            palette,
+            items,
+        );
         items.push(Item::Text {
             origin: Point::new(
                 snap(rect.x + (rect.width - day.width()) / 2.0, scale),
@@ -1072,10 +1067,10 @@ impl RailView {
             Slot::ControlCenter => control_center_label(&self.status),
             Slot::Clock => {
                 let clock = format!("{} {}", self.clock.time, self.clock.day);
-                if self.unread {
-                    L10N.tr_args("clock-unread", [("time", clock.into())])
-                } else {
-                    clock
+                match self.clock_mark {
+                    ClockMark::Clear => clock,
+                    ClockMark::Unread => L10N.tr_args("clock-unread", [("time", clock.into())]),
+                    ClockMark::Quiet => L10N.tr_args("clock-quiet", [("time", clock.into())]),
                 }
             }
             Slot::Workspace(index) => {
@@ -1207,9 +1202,9 @@ impl StatusView for RailView {
         false
     }
 
-    fn set_unread(&mut self, unread: bool) -> bool {
-        let changed = self.unread != unread;
-        self.unread = unread;
+    fn set_clock_mark(&mut self, mark: ClockMark) -> bool {
+        let changed = self.clock_mark != mark;
+        self.clock_mark = mark;
         changed
     }
 
@@ -1291,6 +1286,22 @@ impl StatusView for RailView {
             tree: Some(TreeInfo::new(root_id)),
             tree_id: TreeId::ROOT,
             focus: root_id,
+        }
+    }
+}
+
+fn clock_mark(mark: ClockMark, dot: Rect, palette: Palette, items: &mut Vec<Item>) {
+    let disc = |rect: Rect, paint: Color| Item::Fill {
+        shape: Shape::rounded(rect, rect.width / 2.0),
+        paint: paint.into(),
+    };
+    match mark {
+        ClockMark::Clear => {}
+        ClockMark::Unread => items.push(disc(dot, palette.accent)),
+        ClockMark::Quiet => {
+            let bite = Rect::new(dot.x + 2.5, dot.y - 1.5, dot.width, dot.height);
+            items.push(disc(dot, palette.ink3));
+            items.push(disc(bite, palette.chassis));
         }
     }
 }

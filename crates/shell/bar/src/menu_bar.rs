@@ -8,6 +8,7 @@ use bande_toolkit::{
 use jiff::Zoned;
 
 use bande_status::status::{Status, speaker_waves};
+use bande_status::unread::ClockMark;
 
 use crate::L10N;
 use crate::rail::{control_center_label, in_use_dot};
@@ -67,7 +68,7 @@ pub trait StatusView {
     fn edge(&self) -> DisplayEdge;
     fn slides_between_menus(&self) -> bool;
     fn set_hovered(&mut self, slot: Option<Slot>) -> bool;
-    fn set_unread(&mut self, unread: bool) -> bool;
+    fn set_clock_mark(&mut self, mark: ClockMark) -> bool;
     fn set_battery_percentage(&mut self, shown: bool) -> bool;
     fn battery_percentage(&self) -> bool;
     fn set_workspaces(&mut self, count: usize, active: usize) -> bool;
@@ -155,7 +156,7 @@ impl StatusView for MenuBar {
         false
     }
 
-    fn set_unread(&mut self, _unread: bool) -> bool {
+    fn set_clock_mark(&mut self, _mark: ClockMark) -> bool {
         false
     }
 

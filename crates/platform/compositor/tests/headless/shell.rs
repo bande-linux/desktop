@@ -81,13 +81,13 @@ fn panels_hear_where_their_bar_item_is_in_the_area_beside_the_bar() {
 }
 
 #[test]
-fn the_menu_bar_spans_the_whole_top_edge_even_when_the_dock_reserved_its_side_first() {
+fn the_menu_bar_spans_the_whole_top_edge_even_when_the_taskbar_reserved_its_side_first() {
     let mut server = server();
     let mut shell = TestClient::connect(&mut server);
     shell.show_named_layer(
         &mut server,
         &panel(Layer::Top, Anchor::Left, (40, 120), 40),
-        "dock",
+        "taskbar",
     );
     let bar = shell.show_named_layer(
         &mut server,
@@ -326,6 +326,26 @@ fn super_space_asks_the_shell_for_the_launcher_and_is_not_delivered_to_the_app()
         "the app saw {:?}",
         app.keys()
     );
+}
+
+#[test]
+fn a_tap_of_super_alone_asks_for_the_launcher_but_super_with_a_click_does_not() {
+    let mut server = server();
+    let mut app = window(&mut server, RED, (32, 32));
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+
+    tap(&mut server, KEY_LEFTMETA);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+    assert_eq!(shell.launcher_requests(), 1);
+
+    server.key(KEY_LEFTMETA, true, 0);
+    server.press_button(BTN_LEFT, true, 0);
+    server.press_button(BTN_LEFT, false, 0);
+    server.key(KEY_LEFTMETA, false, 0);
+    chord(&mut server, &[KEY_LEFTSHIFT, KEY_LEFTMETA]);
+    roundtrip(&mut server, &mut [&mut app, &mut shell]);
+    assert_eq!(shell.launcher_requests(), 1);
 }
 
 #[test]
@@ -749,17 +769,21 @@ fn volume_brightness_and_media_keys_go_to_the_shell_and_option_shift_makes_them_
 }
 
 #[test]
-fn the_menu_bar_toggles_control_center_through_the_compositor() {
+fn the_bar_toggles_both_panels_through_the_compositor() {
     let mut server = server();
-    let mut menu_bar = TestClient::connect_as_shell(&mut server);
-    menu_bar.join_shell(&mut server);
-    let mut control_center = TestClient::connect_as_shell(&mut server);
-    control_center.join_shell(&mut server);
+    let mut bar = TestClient::connect_as_shell(&mut server);
+    bar.join_shell(&mut server);
+    let mut panels = TestClient::connect_as_shell(&mut server);
+    panels.join_shell(&mut server);
 
-    menu_bar.toggle_control_center(&mut server);
-    roundtrip(&mut server, &mut [&mut menu_bar, &mut control_center]);
+    bar.toggle_panel(&mut server, Panel::ControlCenter);
+    bar.toggle_panel(&mut server, Panel::NotificationCenter);
+    roundtrip(&mut server, &mut [&mut bar, &mut panels]);
 
-    assert_eq!(control_center.panel_toggles(), [Panel::ControlCenter]);
+    assert_eq!(
+        panels.panel_toggles(),
+        [Panel::ControlCenter, Panel::NotificationCenter]
+    );
 }
 
 #[test]

@@ -89,7 +89,7 @@ fn settled_window() -> (Compositor, Renderer, TestClient) {
 }
 
 #[test]
-fn minimizing_moves_focus_at_once_and_shrinks_the_window_toward_the_dock_edge() {
+fn minimizing_moves_focus_at_once_and_shrinks_the_window_toward_the_taskbar_edge() {
     let (mut server, mut renderer, mut editor) = settled_window();
     let start = SETTLED + ms(100);
 
@@ -201,11 +201,11 @@ fn zooming_stretches_the_current_frame_toward_the_new_size_before_the_app_redraw
 }
 
 #[test]
-fn a_window_minimizes_into_its_apps_dock_icon() {
+fn a_window_minimizes_into_its_apps_taskbar_icon() {
     let (mut server, mut renderer, mut editor) = settled_window();
-    let mut dock = TestClient::connect_as_shell(&mut server);
-    dock.join_shell(&mut server);
-    dock.show_layer(
+    let mut taskbar = TestClient::connect_as_shell(&mut server);
+    taskbar.join_shell(&mut server);
+    taskbar.show_layer(
         &mut server,
         &LayerRequest {
             layer: Layer::Top,
@@ -217,7 +217,7 @@ fn a_window_minimizes_into_its_apps_dock_icon() {
         },
     );
     editor.set_app_id(&mut server, 0, "org.bande.Editor");
-    dock.set_icon_rect(&mut server, "org.bande.Editor", 0, (8, 140, 32, 32));
+    taskbar.set_icon_rect(&mut server, "org.bande.Editor", 0, (8, 140, 32, 32));
     let start = SETTLED + ms(100);
 
     minimize(&mut server, &mut editor);

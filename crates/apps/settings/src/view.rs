@@ -22,6 +22,7 @@ use crate::defaults::{DefaultApp, DefaultAppCommand};
 use crate::follow::{Command, Update};
 use crate::forget::Forget;
 use crate::idle::Idle;
+use crate::language::{SAME_AS_LANGUAGE, locale_matches};
 use crate::locale::{LocaleCommand, LocaleState};
 use crate::login::{LoginCommand, LoginItems, login_matches};
 use crate::night::clock_text;
@@ -98,6 +99,8 @@ pub(crate) enum Picker {
     Zone,
     LoginApp,
     InputSource,
+    Language,
+    Region,
 }
 
 impl Picker {
@@ -106,6 +109,8 @@ impl Picker {
             Self::Zone => SettingId::TimeZone,
             Self::LoginApp => SettingId::LoginItems,
             Self::InputSource => SettingId::InputSources,
+            Self::Language => SettingId::Language,
+            Self::Region => SettingId::Region,
         }
     }
 }
@@ -661,6 +666,19 @@ impl SettingsView {
             return self.source_matches(&query);
         }
         match (&self.picking, &self.time) {
+            (Some((Picker::Language, query)), _) => self
+                .locale
+                .as_ref()
+                .map(|locale| locale_matches(&locale.available, query))
+                .unwrap_or_default(),
+            (Some((Picker::Region, query)), _) if query.trim().is_empty() => {
+                vec![SAME_AS_LANGUAGE.to_owned()]
+            }
+            (Some((Picker::Region, query)), _) => self
+                .locale
+                .as_ref()
+                .map(|locale| locale_matches(&locale.available, query))
+                .unwrap_or_default(),
             (Some((Picker::Zone, query)), Some(time)) => {
                 zone_matches(&time.zones, query, PICK_RESULTS)
             }
@@ -964,19 +982,7 @@ impl SettingsView {
                     self.commands
                         .push(Command::DefaultApp(DefaultAppCommand::Choose(role, id)));
                 }
-                Intent::Locale(command) => {
-                    self.errors.remove(&SettingId::Language);
-                    self.errors.remove(&SettingId::Region);
-                    if let Some(locale) = &mut self.locale {
-                        match &command {
-                            LocaleCommand::Language(language) => {
-                                language.clone_into(&mut locale.language)
-                            }
-                            LocaleCommand::Region(region) => locale.region.clone_from(region),
-                        }
-                    }
-                    self.commands.push(Command::Locale(command));
-                }
+                Intent::Locale(command) => self.set_locale(command),
                 Intent::ManualIpv4(manual) => {
                     self.manual_ipv4 = manual;
                     if !manual {
@@ -1094,8 +1100,28 @@ impl SettingsView {
         }
     }
 
+    fn set_locale(&mut self, command: LocaleCommand) {
+        self.errors.remove(&SettingId::Language);
+        self.errors.remove(&SettingId::Region);
+        if let Some(locale) = &mut self.locale {
+            match &command {
+                LocaleCommand::Language(language) => {
+                    language.clone_into(&mut locale.language);
+                    locale.pending = true;
+                }
+                LocaleCommand::Region(region) => locale.region.clone_from(region),
+                LocaleCommand::LoginKeyboard(codes) => locale.login_sources.clone_from(codes),
+            }
+        }
+        self.commands.push(Command::Locale(command));
+    }
+
     fn picked(&mut self, picker: Picker, key: String) {
         match picker {
+            Picker::Language => self.set_locale(LocaleCommand::Language(key)),
+            Picker::Region => self.set_locale(LocaleCommand::Region(
+                (key != SAME_AS_LANGUAGE).then_some(key),
+            )),
             Picker::Zone => {
                 if let Some(time) = &mut self.time {
                     time.zone = key.clone();

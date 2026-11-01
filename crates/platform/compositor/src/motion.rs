@@ -185,8 +185,8 @@ pub(crate) struct IconRect {
 
 pub(crate) const OPENING_SCALE: f64 = 0.96;
 const CLOSING_SCALE: f64 = 0.98;
-const DOCK_ICON_SIZE: f64 = 48.0;
-pub(crate) const DOCK_NAMESPACE: &str = "dock";
+const TASKBAR_ICON_SIZE: f64 = 48.0;
+pub(crate) const TASKBAR_NAMESPACE: &str = "taskbar";
 pub(crate) const BAR_NAMESPACE: &str = "bar";
 
 impl State {
@@ -211,7 +211,7 @@ impl State {
             return Some(if self.reduce_motion {
                 Look::hidden(rect)
             } else {
-                Look::shown(self.dock_target(window, rect))
+                Look::shown(self.taskbar_target(window, rect))
             });
         }
         Some(Look::shown(rect))
@@ -244,7 +244,7 @@ impl State {
         Some(Rectangle::new(origin + icon.rect.loc, icon.rect.size).to_f64())
     }
 
-    fn dock_target(
+    fn taskbar_target(
         &self,
         window: &Window,
         rect: Rectangle<f64, Logical>,
@@ -256,14 +256,14 @@ impl State {
             let center = icon.loc + icon.size.downscale(2.0).to_point();
             return Rectangle::new(center - size.downscale(2.0).to_point(), size);
         }
-        let dock = self.screens.iter().find_map(|screen| {
+        let taskbar = self.screens.iter().find_map(|screen| {
             let map = layer_map_for_output(&screen.output);
             map.layers()
-                .find(|layer| [DOCK_NAMESPACE, BAR_NAMESPACE].contains(&layer.namespace()))
+                .find(|layer| [TASKBAR_NAMESPACE, BAR_NAMESPACE].contains(&layer.namespace()))
                 .and_then(|layer| map.layer_geometry(layer))
                 .map(|geometry| (screen.settings.position + geometry.loc, geometry.size))
         });
-        let center: Point<f64, Logical> = match dock {
+        let center: Point<f64, Logical> = match taskbar {
             Some((at, size)) => (at + size.downscale(2).to_point()).to_f64(),
             None => {
                 let output = self.screen_rect(self.screen_of(window));
@@ -275,7 +275,7 @@ impl State {
                     .into()
             }
         };
-        let factor = (DOCK_ICON_SIZE / rect.size.w.max(rect.size.h).max(1.0)).min(1.0);
+        let factor = (TASKBAR_ICON_SIZE / rect.size.w.max(rect.size.h).max(1.0)).min(1.0);
         let size = rect.size.upscale(factor);
         Rectangle::new(center - size.downscale(2.0).to_point(), size)
     }
@@ -321,7 +321,7 @@ impl State {
                 if self.reduce_motion {
                     Look::hidden(rect)
                 } else {
-                    Look::shown(self.dock_target(&self.windows[index], rect))
+                    Look::shown(self.taskbar_target(&self.windows[index], rect))
                 }
             });
         self.animate_window(index, Spring::GENTLE, from);

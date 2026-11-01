@@ -116,7 +116,17 @@ at the mini. Once ten cycles pass, sleep comes back on.
   `zwlr_output_power_manager_v1` (`output_power.rs`) and turns every display back on at the
   first input. `bande-power` turns the displays off at the lock stage, and after 60 s idle on a
   screen that is already locked. Neither is installed on the mini yet.
-- Milestones 3, 5 and 6 need someone at the machine. Milestone 7 is open (see decision 3).
+- Milestones 3, 5 and 6 need someone at the machine.
+- Milestone 7 done without an inhibitor: logind's `handle-power-key` inhibitor also blocks
+  `HandlePowerKeyLongPress` (systemd 257 `logind-button.c` passes `INHIBIT_HANDLE_POWER_KEY` for
+  the long press, and low-level locks are always honoured), so holding it would take away the
+  five-second power-off. The drop-in now says `HandlePowerKey=lock` and
+  `HandlePowerKeyLongPress=poweroff`; the displays go off after 60 s on the locked screen (M2).
+  Milestone 6 sets the press back to `suspend`. Not yet pressed on the mini.
+- Black screen after monitor standby: the kernel marks the connector's `link-status` BAD and
+  sends a hotplug, which the compositor ignored for a connector that stayed. It now sets
+  `link-status` back to GOOD with a modeset and redoes the full commit, on that hotplug and when
+  its own display-off ends. Not yet checked with a monitor going to standby and back.
 
 ## Decisions for the owner
 
@@ -130,5 +140,5 @@ at the mini. Once ten cycles pass, sleep comes back on.
 3. **Power button without sleep**: lock and display off (recommended), or show the Shut Down
    dialog like macOS's power-key dialog.
    Decided overnight 2026-11-01: lock and display off (plan recommendation; owner may revisit).
-   Not built yet: check first whether logind's `handle-power-key` inhibitor also blocks the
-   image's `HandlePowerKeyLongPress=poweroff`, the only way out of a hung session.
+   Built as `HandlePowerKey=lock` without an inhibitor, because the inhibitor also blocks the
+   long-press power-off (see Status).

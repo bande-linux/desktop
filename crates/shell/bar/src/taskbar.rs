@@ -14,8 +14,8 @@ use bande_toolkit::ui::{
 
 use crate::L10N;
 use bande_toolkit::{
-    Appearance, Color, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme, Shape,
-    TextAlign, TextStyle, TextSystem,
+    Appearance, Color, Elevation, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme,
+    Shape, TextAlign, TextStyle, TextSystem,
 };
 
 pub const ICON_SIZE: f32 = DEFAULT_BAR_ICON_SIZE as f32;
@@ -1762,15 +1762,9 @@ impl TaskbarState {
     }
 
     fn paint_panel(&self, cx: &Context, items: &mut Vec<Item>) {
-        let dark = self.scheme == Scheme::Dark;
         let radius = self.panel_radius();
         let shape = Shape::rounded(self.panel, radius);
-        items.push(Item::Shadow {
-            shape,
-            offset: Point::new(0.0, 3.0),
-            blur_radius: 16.0,
-            color: Color::hex(0x000000).with_alpha(if dark { 110 } else { 46 }),
-        });
+        items.extend(Item::shadows(shape, Elevation::Overlay, self.scheme, true));
         items.push(Item::Fill {
             shape,
             paint: cx.palette.chassis.into(),
@@ -2059,17 +2053,13 @@ impl TaskbarState {
         };
         let rect = Rect::new(rect.x.round(), rect.y.round(), rect.width, rect.height);
         let shape = Shape::rounded(rect, height / 2.0);
-        let dark = self.scheme == Scheme::Dark;
         let fill = cx.palette.overlay;
+        let [key, ambient] = Item::shadows(shape, Elevation::Overlay, self.scheme, true);
         items.push(Item::Opacity {
             alpha: opacity,
             items: vec![
-                Item::Shadow {
-                    shape,
-                    offset: Point::new(0.0, 2.0),
-                    blur_radius: 8.0,
-                    color: Color::hex(0x000000).with_alpha(if dark { 100 } else { 40 }),
-                },
+                key,
+                ambient,
                 Item::Fill {
                     shape,
                     paint: fill.into(),

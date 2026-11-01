@@ -255,8 +255,10 @@ Each milestone is one branch from `main` and leaves it green. Files milestones 5
   remove after 30 days) and Search (search in). Ctrl+H flips the remembered setting for every
   window and tab. Changes apply live through the watch. New Window (Ctrl+N) now opens the
   "New windows show" place instead of the current folder, as in the Finder.
-- Left: "Keep folders on top" (needs `folders_first` in `bande_fs::Sort` and the file chooser),
-  "Last Folder" as a new-window choice (Files has no record of the last folder shown; the view
+- "Keep folders on top" done: `bande_fs::Sort::folders_first` (on by default, the file chooser
+  keeps it on), a General switch that resorts open windows and tabs and wins over a folder's
+  remembered sort.
+- Left: "Last Folder" as a new-window choice (Files has no record of the last folder shown; the view
   memory is ordered by view changes), and M8 (Sidebar section and following `files-sidebar`
   with the watch). The default view applies to new windows only; an open window keeps its view.
   The "Search in Home" choice has no test (it would index the real home in the test run).

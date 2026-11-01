@@ -571,6 +571,32 @@ fn folders_come_first_then_names_in_finder_order() {
 }
 
 #[test]
+fn without_folders_on_top_folders_sort_among_the_files_by_name() {
+    let root = TempDir::new().expect("temporary folder");
+    for name in ["apple", "cherry"] {
+        fs::write(root.path().join(name), "").expect("file");
+    }
+    fs::create_dir(root.path().join("Banana")).expect("folder");
+    let sorted = |folders_first| {
+        list(
+            root.path(),
+            false,
+            Sort {
+                folders_first,
+                ..Sort::default()
+            },
+        )
+        .expect("listing")
+        .into_iter()
+        .map(|entry| entry.name)
+        .collect::<Vec<_>>()
+    };
+
+    assert_eq!(sorted(true), ["Banana", "apple", "cherry"]);
+    assert_eq!(sorted(false), ["apple", "Banana", "cherry"]);
+}
+
+#[test]
 fn a_sorted_chunk_merges_into_the_listing_and_reports_where_rows_moved() {
     let root = TempDir::new().expect("temporary folder");
     let entry = |name: &str| {

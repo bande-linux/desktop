@@ -575,7 +575,7 @@ notifications per app.
 | Dim, display off and lock, sleep timers | M W G K | under Lock Screen | now (slice 1) | moved to Power ▸ When inactive |
 | Separate timers on battery and on the adapter | M W G K | one set | later | `services/power`, config |
 | Charge limit | M G K | missing | later | Asahi `charge_control_end_threshold` needs root |
-| Power button action | W G K | — | never | the power key suspends (logind drop-in); no choice needed |
+| Power button action | W G K | — | never | the power key locks while sleep is off and suspends once it works (logind drop-in); a five-second hold powers off; no choice needed |
 | Battery percentage in the bar | M W G K | battery menu | never in Settings | roadmap decision |
 | Camera permission per app | M W G K | missing | now (slice 3) | permission store table `devices`, id `camera` |
 | Screenshot permission per app | M W | missing | now (slice 3) | table `screenshot`, id `screenshot` |

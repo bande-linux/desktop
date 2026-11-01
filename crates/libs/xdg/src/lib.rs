@@ -38,7 +38,8 @@ pub use mimeapps::{
     state_home,
 };
 pub use reopen::{
-    apps_to_reopen, remember_apps, remember_running_apps, reopen_file, take_apps_to_reopen,
+    apps_to_reopen, crashed_apps_file, remember_apps, remember_running_apps, reopen_file,
+    running_apps_file, set_aside_apps_of_unclean_end, take_apps_to_reopen, write_running_apps,
 };
 pub use units::unit_app_ids;
 pub use uri::{file_uri, path_from_file_uri, percent_decode, percent_encode};

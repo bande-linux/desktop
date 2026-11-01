@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 use bande_xdg::{
     DesktopEntry, ExecError, ICON_THEMES, Locale, TERMINAL, UserDir, app_name, applications,
     apps_to_reopen, autostart_dir, find_app, find_app_for_process, find_icon, launch,
-    opens_at_login, remember_apps, running_app, set_open_at_login, take_apps_to_reopen, user_dir,
-    write_launcher,
+    opens_at_login, remember_apps, running_app, set_aside_apps_of_unclean_end, set_open_at_login,
+    take_apps_to_reopen, user_dir, write_launcher, write_running_apps,
 };
 use tempfile::TempDir;
 
@@ -544,4 +544,28 @@ fn running_apps_are_remembered_once_by_desktop_id_and_reopened_only_once() {
     assert_eq!(take_apps_to_reopen(&file), ["firefox", "org.bande.Files"]);
     assert!(!file.exists());
     assert!(take_apps_to_reopen(&file).is_empty());
+}
+
+#[test]
+fn the_running_apps_are_set_aside_only_when_the_session_ended_without_remembering() {
+    let state = TempDir::new().expect("temporary directory");
+    let running = state.path().join("bande/running");
+    let reopen = state.path().join("bande/reopen");
+    let crashed = state.path().join("bande/crashed");
+    let apps = ["firefox".to_owned(), "files".to_owned()];
+
+    write_running_apps(&running, &apps).expect("write");
+    set_aside_apps_of_unclean_end(&running, &reopen, &crashed).expect("set aside");
+    assert!(!running.exists());
+    assert_eq!(take_apps_to_reopen(&crashed), apps);
+
+    write_running_apps(&running, &apps).expect("write");
+    remember_apps(&reopen, &["firefox"]).expect("remember");
+    set_aside_apps_of_unclean_end(&running, &reopen, &crashed).expect("set aside");
+    assert!(!running.exists());
+    assert!(!crashed.exists());
+    assert_eq!(take_apps_to_reopen(&reopen), ["firefox"]);
+
+    set_aside_apps_of_unclean_end(&running, &reopen, &crashed).expect("nothing to set aside");
+    assert!(!crashed.exists());
 }

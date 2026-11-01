@@ -743,6 +743,7 @@ pub struct Config {
     pub accent: Accent,
     pub tinted_frame: bool,
     pub reopen_apps: bool,
+    pub reopen_apps_after_crash: bool,
     pub clock: ClockFormat,
     pub accessibility: Accessibility,
     pub bar: Bar,
@@ -774,6 +775,7 @@ impl Default for Config {
             accent: Accent::default(),
             tinted_frame: false,
             reopen_apps: true,
+            reopen_apps_after_crash: false,
             clock: ClockFormat::Automatic,
             accessibility: Accessibility::default(),
             bar: Bar::default(),
@@ -916,6 +918,9 @@ impl Parser<'_> {
                     .map(|accent| config.accent = accent),
                 "tinted-frame" => self.flag(node).map(|tinted| config.tinted_frame = tinted),
                 "reopen-apps" => self.flag(node).map(|reopen| config.reopen_apps = reopen),
+                "reopen-apps-after-crash" => self
+                    .flag(node)
+                    .map(|reopen| config.reopen_apps_after_crash = reopen),
                 "accessibility" => {
                     config.accessibility = self.accessibility(node);
                     Ok(())

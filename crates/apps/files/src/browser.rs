@@ -628,6 +628,15 @@ impl Browser {
         self.sort
     }
 
+    pub fn set_folders_first(&mut self, on: bool) {
+        if self.sort.folders_first != on {
+            self.set_sort(Sort {
+                folders_first: on,
+                ..self.sort
+            });
+        }
+    }
+
     pub fn set_sort(&mut self, sort: Sort) {
         self.sort = sort;
         for column in &mut self.columns {

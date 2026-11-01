@@ -195,7 +195,7 @@ impl FilesView {
             Location::Folder(folder) => folder.clone(),
             _ => home(),
         };
-        let everywhere = folder == home();
+        let everywhere = self.search_home || folder == home();
         let scope_control = self.insert(self.scope_widget(&folder, everywhere));
         let (kind, date) = self.filter_widgets();
         let (kind_control, date_control) = (self.insert(kind), self.insert(date));

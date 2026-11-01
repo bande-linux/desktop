@@ -14,6 +14,7 @@ mod paint;
 mod prompt;
 mod quick_look;
 mod search;
+mod settings;
 mod sidebar;
 mod tabs;
 mod thumbs;
@@ -31,6 +32,7 @@ pub use open_with::OpenWith;
 pub use paint::permissions;
 pub use quick_look::QuickLook;
 pub use search::SEARCH_HEIGHT;
+pub use settings::{FilesSettings, SETTINGS_SIZE, StartFolder, settings_view};
 pub use sidebar::{
     BookmarkEdit, Place, PlaceKind, Row, SidebarEdit, favourites, hidden_places, layout_text, rows,
     with_bookmarks, with_volumes, without_bookmark,
@@ -64,6 +66,7 @@ mod tests {
             include_str!("paint.rs"),
             include_str!("sidebar.rs"),
             include_str!("view.rs"),
+            include_str!("settings.rs"),
             include_str!("grid.rs"),
             include_str!("inspector.rs"),
             include_str!("batch_rename.rs"),

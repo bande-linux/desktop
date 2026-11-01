@@ -5,6 +5,10 @@ Name: since 2026-11-01 people see this bar as the **Taskbar** (Settings ▸ Task
 The expanded width (248 pt, "Show names", dragging the inner edge) was removed by the owner on 2026-11-01 ([plan](../../../NOTES/plans/taskbar-width-and-options.md)); the bar has one width, set by the Size slider.
 The proposal's mockups were removed on 2026-11-01; the bar's goldens (`crates/shell/bar/tests/golden/`) show what was built.
 
+Shortcuts below are the proposal's. The shipped chords follow GNOME and KDE (Ctrl in apps, Super
+only for the system, [decision 0005](../../decisions/0005-ctrl-for-app-shortcuts.md)); the
+current set is the keyboard model in [`overview.md`](../../architecture/overview.md#keyboard-model).
+
 ## 1. The idea in one paragraph
 
 One bar, on the left edge by default, holds everything that today lives in the Dock and the menu

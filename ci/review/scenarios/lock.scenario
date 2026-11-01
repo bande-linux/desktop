@@ -7,7 +7,7 @@ key enter
 wait-for-window "org.bande.Terminal"
 wait 1s
 note "Lock the screen"
-key super+ctrl+q
+key super+l
 wait 2s
 shot "lock screen"
 note "A key press shows the password field"

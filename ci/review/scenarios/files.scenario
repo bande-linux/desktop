@@ -27,7 +27,7 @@ wait 1200ms
 shot "quick look"
 key escape
 wait 500ms
-note "Super+Up goes to the enclosing folder"
+note "Alt+Up goes to the enclosing folder"
 key alt+up
 wait 800ms
 key left

@@ -149,9 +149,14 @@ own apps and third-party apps use the same keys, so the compositor translates no
 | Modifier | Role | Examples |
 | :--- | :--- | :--- |
 | **`Ctrl`** | Shortcuts inside apps and text fields | `Ctrl+C` (copy), `Ctrl+V` (paste), `Ctrl+X` (cut), `Ctrl+Z` (undo), `Ctrl+W` (close window), `Ctrl+Q` (quit), `Ctrl+F` (find), `Ctrl+click` (toggle an item in a selection) |
-| **`Super`** | The compositor and the shell, in every app | a tap of `Super` or `Super+Space` (launcher), `Super+Tab` or `Alt+Tab` (switcher), `Super+arrows` (tiling), `Super+W` and `Super+Q` (close and quit any app), `Super+H` (hide), `Super+M` (minimize), `Shift+Super+3/4/5` (screenshots), `Ctrl+Super+Q` (lock) |
-| **`Alt`** | Navigation in apps, alternate actions | `Alt+Left/Right` (back and forward), `Alt+Up` (enclosing folder), `Alt+F4` (close window), `Alt+Drag` (copy), `Alt+Click` (toggle disclosure) |
-| **`Shift`** | Reversal, extending a selection, the second set of commands | `Shift+Ctrl+Z` (redo), `Shift+Ctrl+N` (new folder), Terminal's `Shift+Ctrl+C/V` |
+| **`Super`** | The system only, never an app action | a tap of `Super`, `Super+Space` or `Super+A` (launcher), `Super+Tab` (switcher), `Super+arrows` (tiling), `Super+H` (minimize), `Super+L` (lock), `Super+D` (desktop), `Super+W` (overview), `Super+V` (clipboard history), `Super+.` (emoji), `Super+N` and `Super+S` (notifications, Control Center), `Ctrl+Super+Left/Right` (workspaces), Super+drag (move a window) |
+| **`Alt`** | Navigation in apps, alternate actions | `Alt+Left/Right` (back and forward), `Alt+Up` (enclosing folder), `Alt+F4` (close window), `Alt+Tab` (switcher), `Alt+Click` (toggle disclosure) |
+| **`Shift`** | Reversal, extending a selection, the second set of commands | `Shift+Ctrl+Z` (redo), `Shift+Ctrl+N` (new folder), Terminal's `Shift+Ctrl+C/V`, `Shift+Drag` (move) |
+
+- **Screenshots and Force Quit** need no Super: `Print` (options), `Shift+Print` (the screen),
+  `Shift+Super+S` (an area), `Ctrl+Alt+Escape` (Force Quit). Settings ▸ Keyboard ▸ Shortcuts
+  lists the whole system set from the table in `bande-keyboard`.
+- **Drag and drop**: `Ctrl` copies and `Shift` moves, as in GTK and KDE.
 
 - **Text fields**: `Ctrl+Left/Right` move by word, `Home`/`End` to the line ends,
   `Ctrl+Home/End` to the text ends, `Ctrl+Up/Down` by paragraph, and `Ctrl+Backspace/Delete`
@@ -160,7 +165,7 @@ own apps and third-party apps use the same keys, so the compositor translates no
 - **Terminal**: every plain `Ctrl+letter` goes to the shell (`Ctrl+C` interrupts, `Ctrl+D` ends
   input), so the Terminal's own commands are on `Shift+Ctrl`, as in GNOME Terminal and Konsole.
 - **Menus** write shortcuts as words in GNOME order (Shift, Ctrl, Alt, Super): "Shift+Ctrl+N",
-  "Alt+Super+H".
+  "Alt+Super+8".
 
 ## Configuration
 

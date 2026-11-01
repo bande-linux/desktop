@@ -211,8 +211,8 @@ impl DataDeviceHandler for State {
             .get_keyboard()
             .map(|keyboard| keyboard.modifier_state());
         let wanted = match modifiers {
-            Some(modifiers) if modifiers.alt => Some(DndAction::Copy),
-            Some(modifiers) if modifiers.logo => Some(DndAction::Move),
+            Some(modifiers) if modifiers.ctrl => Some(DndAction::Copy),
+            Some(modifiers) if modifiers.shift => Some(DndAction::Move),
             _ => None,
         };
         let chosen = wanted

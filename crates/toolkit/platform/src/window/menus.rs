@@ -30,7 +30,7 @@ impl Window {
             place("place-fill").enabled(!toplevel.maximized),
         ];
         if self.can_place() && self.state.outputs.len() > 1 {
-            items.push(place("place-next-display").shortcut("Alt+Shift+Super+Right"));
+            items.push(place("place-next-display").shortcut("Shift+Super+Right"));
         }
         items.extend([
             MenuItem::separator(),
@@ -64,7 +64,7 @@ impl Window {
         let mut items = vec![
             MenuItem::new(&L10N.tr("minimize"), "minimize")
                 .enabled(!toplevel.fullscreen)
-                .shortcut("Super+M"),
+                .shortcut("Super+H"),
             MenuItem::new(
                 &L10N.tr(if toplevel.maximized { "unzoom" } else { "zoom" }),
                 "zoom",
@@ -78,7 +78,7 @@ impl Window {
                 }),
                 "full-screen",
             )
-            .shortcut("Ctrl+Super+F"),
+            .shortcut("Super+F11"),
             MenuItem::separator(),
         ];
         if self.can_place() {
@@ -101,7 +101,7 @@ impl Window {
             MenuItem::new(&L10N.tr("move"), "move").enabled(!toplevel.fullscreen),
             MenuItem::separator(),
             MenuItem::new(&L10N.tr("close"), "close").shortcut("Alt+F4"),
-            MenuItem::new(&L10N.tr("quit-app"), "quit").shortcut("Super+Q"),
+            MenuItem::new(&L10N.tr("quit-app"), "quit"),
         ]);
         let offset = self.content_offset();
         self.show_menu(

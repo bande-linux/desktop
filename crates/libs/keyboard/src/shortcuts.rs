@@ -44,9 +44,6 @@ pub enum Action {
     NextApp,
     NextWindow,
     PreviousWindow,
-    QuitApp,
-    HideApp,
-    HideOthers,
     ForceQuit,
     PreviousWorkspace,
     NextWorkspace,
@@ -85,13 +82,7 @@ impl Action {
             | Self::ToggleFullScreen
             | Self::TileWindow
             | Self::MoveWindowToDisplay => Area::Windows,
-            Self::NextApp
-            | Self::NextWindow
-            | Self::PreviousWindow
-            | Self::QuitApp
-            | Self::HideApp
-            | Self::HideOthers
-            | Self::ForceQuit => Area::Apps,
+            Self::NextApp | Self::NextWindow | Self::PreviousWindow | Self::ForceQuit => Area::Apps,
             Self::PreviousWorkspace
             | Self::NextWorkspace
             | Self::WorkspaceByNumber
@@ -126,9 +117,6 @@ impl Action {
             Self::NextApp => L10N.tr("next-app"),
             Self::NextWindow => L10N.tr("next-window"),
             Self::PreviousWindow => L10N.tr("previous-window"),
-            Self::QuitApp => L10N.tr("quit-app"),
-            Self::HideApp => L10N.tr("hide-app"),
-            Self::HideOthers => L10N.tr("hide-others"),
             Self::ForceQuit => L10N.tr("force-quit"),
             Self::PreviousWorkspace => L10N.tr("previous-workspace"),
             Self::NextWorkspace => L10N.tr("next-workspace"),
@@ -171,49 +159,46 @@ const fn shortcut(action: Action, keys: &'static str) -> Shortcut {
     Shortcut { action, keys }
 }
 
-pub const SHORTCUTS: [Shortcut; 42] = [
-    shortcut(Action::CloseWindow, "Super+W"),
+pub const SHORTCUTS: [Shortcut; 39] = [
     shortcut(Action::CloseWindow, "Alt+F4"),
-    shortcut(Action::MinimizeWindow, "Super+M"),
-    shortcut(Action::ToggleFullScreen, "Ctrl+Super+F"),
+    shortcut(Action::MinimizeWindow, "Super+H"),
+    shortcut(Action::ToggleFullScreen, "Super+F11"),
     shortcut(Action::TileWindow, "Super+Left"),
-    shortcut(Action::MoveWindowToDisplay, "Alt+Shift+Super+Right"),
+    shortcut(Action::MoveWindowToDisplay, "Shift+Super+Right"),
     shortcut(Action::NextApp, "Super+Tab"),
     shortcut(Action::NextApp, "Alt+Tab"),
     shortcut(Action::NextWindow, "Super+`"),
     shortcut(Action::PreviousWindow, "Shift+Super+`"),
-    shortcut(Action::QuitApp, "Super+Q"),
-    shortcut(Action::HideApp, "Super+H"),
-    shortcut(Action::HideOthers, "Alt+Super+H"),
-    shortcut(Action::ForceQuit, "Alt+Super+Escape"),
-    shortcut(Action::PreviousWorkspace, "Alt+Super+Left"),
-    shortcut(Action::NextWorkspace, "Alt+Super+Right"),
-    shortcut(Action::WorkspaceByNumber, "Alt+Super+1"),
+    shortcut(Action::ForceQuit, "Ctrl+Alt+Escape"),
+    shortcut(Action::PreviousWorkspace, "Ctrl+Super+Left"),
+    shortcut(Action::NextWorkspace, "Ctrl+Super+Right"),
+    shortcut(Action::WorkspaceByNumber, "Ctrl+Super+1"),
     shortcut(Action::CarryWindowLeft, "Ctrl+Shift+Super+Left"),
     shortcut(Action::CarryWindowRight, "Ctrl+Shift+Super+Right"),
-    shortcut(Action::Overview, "Alt+Super+Up"),
+    shortcut(Action::Overview, "Super+W"),
     shortcut(Action::Overview, "Mission Control"),
     shortcut(Action::AppWindows, "Alt+Super+Down"),
-    shortcut(Action::ShowDesktop, "Super+F11"),
+    shortcut(Action::ShowDesktop, "Super+D"),
     shortcut(Action::ShowDesktop, "Super+Mission Control"),
     shortcut(Action::NextInputSource, "Alt+Super+Space"),
     shortcut(Action::PreviousInputSource, "Alt+Shift+Super+Space"),
-    shortcut(Action::CaptureScreen, "Shift+Super+3"),
-    shortcut(Action::CaptureArea, "Shift+Super+4"),
-    shortcut(Action::CaptureOptions, "Shift+Super+5"),
+    shortcut(Action::CaptureScreen, "Shift+Print"),
+    shortcut(Action::CaptureArea, "Shift+Super+S"),
+    shortcut(Action::CaptureOptions, "Print"),
     shortcut(Action::ShowLauncher, "Super+Space"),
-    shortcut(Action::ShowClipboardHistory, "Shift+Super+V"),
-    shortcut(Action::ShowEmojiPicker, "Ctrl+Super+Space"),
+    shortcut(Action::ShowLauncher, "Super+A"),
+    shortcut(Action::ShowClipboardHistory, "Super+V"),
+    shortcut(Action::ShowEmojiPicker, "Super+."),
     shortcut(Action::FocusMenuBar, "Super+F2"),
     shortcut(Action::FocusTaskbar, "Super+F3"),
     shortcut(Action::SearchMenus, "Shift+Super+/"),
-    shortcut(Action::ShowNotificationCenter, "Alt+Super+N"),
-    shortcut(Action::ShowControlCenter, "Alt+Super+C"),
-    shortcut(Action::LockScreen, "Ctrl+Super+Q"),
-    shortcut(Action::ToggleZoom, "Alt+Super+0"),
+    shortcut(Action::ShowNotificationCenter, "Super+N"),
+    shortcut(Action::ShowControlCenter, "Super+S"),
+    shortcut(Action::LockScreen, "Super+L"),
+    shortcut(Action::ToggleZoom, "Alt+Super+8"),
     shortcut(Action::ZoomIn, "Alt+Super+="),
     shortcut(Action::ZoomOut, "Alt+Super+-"),
-    shortcut(Action::ToggleScreenReader, "Super+F5"),
+    shortcut(Action::ToggleScreenReader, "Alt+Super+S"),
 ];
 
 pub fn shortcuts_in(area: Area) -> impl Iterator<Item = &'static Shortcut> {

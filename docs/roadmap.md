@@ -74,7 +74,7 @@ Datum styles the bar from E2 on; E1 changes nothing visible.
 | B2 | Files | Icon view with thumbnails (freedesktop thumbnailer spec, cached), tabs and multiple windows, recursive search over the `bande-search` index with Recents, compress/extract (zip, tar.*), Open in Terminal, drag folders into the sidebar, Quick Look for PDF and video through thumbnailers |
 | B3 | Settings breadth | General (About This Computer, Storage, Software Update via PackageKit, Date & Time, Language & Region, Login Items), Network (wired, VPN import, proxy), Battery (power modes via power-profiles-daemon, lid behaviour), Notifications per app, Displays ▸ Night Light, Sound (per-app volume, input level, alert sound) |
 | B4 | Accessibility | Prove Orca end to end on every surface; zoom (magnifier in the compositor), increase contrast, reduce transparency, larger text, cursor size, sticky and slow keys; serve them through the portal so GTK/Qt apps follow |
-| B5 | Capture | Screenshot window mode (Space toggles), timer, floating thumbnail you can drag into apps or open for markup (crop, arrow, text, highlight); Super+Shift+5 palette with screen recording |
+| B5 | Capture | Screenshot window mode (Space toggles), timer, floating thumbnail you can drag into apps or open for markup (crop, arrow, text, highlight); Print palette with screen recording |
 | B6 | Control Center and sound | Now Playing (MPRIS) with controls, mic level and input choice, keyboard brightness; an original sound theme (alert, volume tick, screenshot, trash, plug in) through one event-sound service |
 
 ## Wave C: look, feel and finish
@@ -82,7 +82,7 @@ Datum styles the bar from E2 on; E1 changes nothing visible.
 | # | Area | What |
 |---|---|---|
 | C1 | Visual coherence | Moved to wave D (Datum D3 and the design review in D4–D5) |
-| C2 | Launcher | Empty query shows recent apps and files and doubles as the all-apps view (no separate Launchpad); clipboard history as a launcher mode (Super+Shift+V); emoji and symbols picker (Ctrl+Super+Space) |
+| C2 | Launcher | Empty query shows recent apps and files and doubles as the all-apps view (no separate Launchpad); clipboard history as a launcher mode (Super+V); emoji and symbols picker (Super+.) |
 | C3 | Terminal | Settings window (font, profiles from a few designed themes), split panes, visual bell and taskbar badge, notify when a long command finishes in a background tab, restore windows and tabs |
 | C4 | Languages | Ship Swedish, German, French and Spanish for every string; date, number and unit formats per locale; RTL mirroring later |
 | C5 | First run | Setup assistant: language, keyboard, Wi-Fi, appearance, account picture; a short welcome showing the taskbar, launcher and gestures |

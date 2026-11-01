@@ -219,7 +219,7 @@ Rust GUI application.
 | Other embedded SVG (`process-stop-symbolic.svg`, app icons in `crates/apps/*/data`) | original | covered by `Files: *` |
 | Fonts | none bundled; Inter, Manrope, JetBrains Mono, DejaVu and Noto come from Debian packages | nothing to do |
 | Test goldens (116 PNG files in `crates/*/tests`) | produced by the tests themselves | covered by `Files: *`. They make the tarball larger; Files-Excluded is not needed |
-| CI and VM files (`ci/vm/kernel.config`, `ci/hil`, the keyring `.pgp`) | not installed | covered by `Files: *`. The archive key needs no stanza, being data |
+| CI and VM files (`ci/hil`, the keyring `.pgp`) | not installed | covered by `Files: *`. The archive key needs no stanza, being data |
 | Dependency licences (408 runtime crates) | MIT and/or Apache-2.0 (most), Unicode-3.0 (ICU4X, 35 crates), BSD-2/3-Clause, Zlib, ISC, Unlicense OR MIT, 0BSD, `bzip2-1.0.6` (libbz2-rs-sys), `Apache-2.0 OR GPL-2.0-only` (self_cell), `Apache-2.0 WITH LLVM-exception` | all DFSG-free. With system crates their copyright is carried by their own packages; Bande's `debian/copyright` lists only what is in its own tarball |
 
 ## 4. Lintian and installed files

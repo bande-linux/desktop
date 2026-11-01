@@ -123,11 +123,8 @@ pub fn app_submenu_quitting_on(app: &str, items: Vec<Entry>, quit: &str) -> Entr
             &L10N.tr_args("hide-app", [("app", app.into())]),
             Standard::Hide.action(),
         )
-        .shortcut("Super+H")
         .shell_action(ShellAction::Hide),
-        Entry::item(&L10N.tr("hide-others"), "")
-            .shortcut("Alt+Super+H")
-            .shell_action(ShellAction::HideOthers),
+        Entry::item(&L10N.tr("hide-others"), "").shell_action(ShellAction::HideOthers),
         Entry::item(&L10N.tr("show-all"), "").shell_action(ShellAction::ShowAll),
         Entry::separator(),
         Entry::item(
@@ -141,7 +138,7 @@ pub fn app_submenu_quitting_on(app: &str, items: Vec<Entry>, quit: &str) -> Entr
 
 pub fn window_submenu(items: Vec<Entry>) -> Entry {
     let mut entries = vec![
-        Entry::item(&L10N.tr("minimize"), Standard::Minimize.action()).shortcut("Super+M"),
+        Entry::item(&L10N.tr("minimize"), Standard::Minimize.action()).shortcut("Super+H"),
         Entry::item(&L10N.tr("zoom"), Standard::Zoom.action()),
     ];
     if !items.is_empty() {

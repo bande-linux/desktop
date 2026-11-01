@@ -8,14 +8,12 @@ are built and tested against the Debian release they ship for, and every job ins
 needs with `ci/apt-install.sh` (the build libraries are listed in `ci/release/build-depends`)
 and the toolchain pinned in `rust-toolchain.toml` with Debian's `rustup`.
 
-The non-gating `extended.yml` keeps the jobs that need a KVM guest or a Docker engine on the
-organization's self-hosted runners, Docker containers on Apple Silicon (setup:
-[`bande-linux/runners`](https://github.com/bande-linux/runners)): `bande-runner-1` and
-`bande-runner-2` carry `self-hosted, Linux, ARM64, bande`, and `bande-runner-kvm`
-carries `bande-kvm` and has `/dev/kvm`.
+There are no self-hosted runners and no other workflow. Everything else (fmt, workspace clippy
+and the workspace tests on a hermetic session bus) runs locally before every merge to `main`,
+through `~/bande-linux/bin/desktop-gate` on the build machine.
 
 The repository is public, so only maintainers start runs: `release.yml` runs on a version
-tag and on dispatch, `extended.yml` on dispatch only, and neither runs on pull requests.
+tag and on dispatch, never on pushes or pull requests.
 
 ## Headless graphics
 
@@ -122,41 +120,23 @@ and saved only from runs on `main`, whose caches every branch and tag can read. 
 the .NET, Android and GHC installations they mount, and `debs` builds two crates at a time so
 the fat-LTO links stay within the runner's memory.
 
-## Extended workflow (`.github/workflows/extended.yml`)
+## Guest tests
 
-Dispatched by hand (`gh workflow run extended.yml --ref <branch>`), on the self-hosted runners;
-it gates nothing:
-
-- `ci/vm` (on an `bande-kvm` runner): builds or reuses a guest kernel with vkms and a
-  Debian 13 root image, and runs the workspace's `guest` test executables in a KVM guest with
-  vkms and virtio-gpu, on real DRM. Guest screendumps are uploaded as artifacts.
-- `ci/polkit`: builds the `bande-polkit` polkitd test, starts a Debian testing container
-  (through the runner's Docker socket) with a system bus, polkitd, a test action and a user
-  with a random password, and runs the test there: `pkcheck` must be authorized after the
-  agent enters the password, after a wrong password and a retry, and must be refused when the
-  dialog is cancelled.
-- `ci/perf`: builds the release binaries with `bande-bench` and `bande-sample`, and
-  measures frame times (also while the overview opens and closes over 20 windows, when nothing
-  but a window title may be uploaded), compositor start time and idle memory on lavapipe, for
-  the compositor and for the toolkit sample; it gates the exact work counts and idle memory and
-  reports the wall-clock numbers against the budgets in
-  [`../decisions/0001-rendering.md`](../decisions/0001-rendering.md); the tables go to the job
-  summary and `perf.json` and `perf-toolkit.json` are uploaded.
-
-Jobs on the self-hosted runners first run `ci/target-dir.sh`, which links the workspace's
-`target` to a directory that persists on the runner, `/cache/target/<runner>/<toolchain>`, and
-compile through `sccache` (`RUSTC_WRAPPER: sccache`, cached in a Docker volume per runner).
+The `guest` test executables (compositor DRM, scanout, input and handover on vkms and
+virtio-gpu, the greeter's login, the screenshot and audio tests against PipeWire) are
+`#[ignore]`d: they need a KVM guest with vkms, and the guest tooling and the self-hosted
+runners that ran it are gone. They run only by hand, with `--ignored`, on a machine that
+provides what each test's ignore reason names.
 
 `ci/hil` holds scripts for hardware-in-the-loop tests that boot a guest test on an Apple Silicon
-Mac over debug USB; they are not part of either workflow.
+Mac over debug USB; they are not part of the release workflow.
 
 ## Planned infrastructure
 
 - **Full login in the VM** (not built): boot the guest into `greetd`, log in through PAM with
   synthetic credentials, check that `pam_systemd` hands the seat over and that
   `bande-compositor` claims `seat0`, and grab the screen over QMP to check that the greeter
-  and the shell render. Today `ci/vm` runs test executables in the guest instead of a full
-  login.
+  and the shell render.
 - **Real hardware**: boot tests on an Apple Silicon Mac running Bande follow once the
   hardware test rig has its own runner.
 
@@ -173,7 +153,7 @@ flowchart TD
     T3["Tier 3: mutation testing (planned)<br/>cargo-mutants, at least 90% of mutants killed"] --> T4
     T4["Tier 4: model checking (planned)<br/>Kani on sync queues and PAM helpers"] --> T5
     T5["Tier 5: visual regression<br/>offscreen Vulkan and Vello renders against expected images"] --> VM
-    VM["System gate<br/>Debian testing install test and KVM guest on vkms"]
+    VM["System gate<br/>Debian testing install test"]
 ```
 
 1. **Tier 0, static checks** (implemented: `lint`): `cargo fmt --check` and
@@ -190,6 +170,6 @@ flowchart TD
    explicit-sync buffer queues and PAM helpers.
 6. **Tier 5, visual regression** (implemented: `test`): offscreen renders compared
    with expected images, SSIM ≥ 0.995 for the compositor, computed coverage for the toolkit.
-7. **System gate** (partly implemented: `install`, `ci/vm`): packages install into a
-   clean Debian testing, and the compositor and shell run on real DRM in a KVM guest. The full
-   `greetd` → PAM → compositor login is planned (see above).
+7. **System gate** (partly implemented: `install`): packages install into a clean Debian
+   testing. Running the compositor and shell on real DRM in a KVM guest and the full
+   `greetd` → PAM → compositor login are planned (see above).

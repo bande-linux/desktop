@@ -236,7 +236,7 @@ impl State {
         if displays > 1 {
             items.push(
                 item(L10N.tr("place-next-display"), "place-next-display")
-                    .shortcut("Alt+Shift+Super+Right"),
+                    .shortcut("Shift+Super+Right"),
             );
         }
         items.extend([
@@ -277,7 +277,7 @@ impl State {
     fn window_menu(&self, index: usize) -> Menu {
         let zoomed = self.windows[index].has_state(xdg_toplevel::State::Maximized);
         Menu::new(vec![
-            item(L10N.tr("minimize"), "minimize").shortcut("Super+M"),
+            item(L10N.tr("minimize"), "minimize").shortcut("Super+H"),
             item(
                 match zoomed {
                     true => L10N.tr("unzoom"),

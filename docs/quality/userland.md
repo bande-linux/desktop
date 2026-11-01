@@ -515,7 +515,7 @@ Do this as two tasks: 6a covers the services and Settings, 6b covers the shell a
   - Settings asks polkit for interaction (`apps/settings/src/privilege.rs`), but no agent runs in
     the session, so privileged actions that need a password fail.
 - **Change:** either wire the agent into the shell with a toolkit sheet, or delete the crate and its
-  CI job (`ci/polkit` in `.github/workflows/extended.yml`) until it is built.
+  polkitd test until it is built.
 - **Risk:** this is a product decision for the owner.
 
 ### 23. Fix the layering

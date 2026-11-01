@@ -25,7 +25,7 @@ bande-test-bus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpers (>= 1.66)"
+depends = "$auto, default-dbus-session-bus | dbus-session-bus, init-system-helpers (>= 1.66)"
 recommends = "xdg-utils"
 extended-description = """\
 Serves ~/.config/bande/config.kdl as org.bande.Config on the session \

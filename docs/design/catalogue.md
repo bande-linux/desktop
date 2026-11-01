@@ -4,7 +4,8 @@ The first curated feature list, drawn from macOS, GNOME, KDE and COSMIC before t
 principles existed. It is kept for reference: the proposals in [`features/`](features/)
 supersede it area by area and are measured against [`DESIGN.md`](DESIGN.md), and where they
 disagree, the proposal and the owner's decision on it win. Section numbers are cited by the
-proposals.
+proposals. Its shortcuts are the macOS-style ones first planned; the shipped chords are in the
+keyboard model of [`overview.md`](../architecture/overview.md#keyboard-model).
 
 ## 1. `bande-files` (Miller Columns File Manager)
 - **Miller Columns**: Multi-pane navigation with arrow keys (`Right` drills into child folder in new column, `Left` retreats, `Up`/`Down` selects).

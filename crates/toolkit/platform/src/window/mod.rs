@@ -1189,6 +1189,7 @@ impl Window {
             Some(Ok(())) => {
                 if self.shm_target.is_holding() {
                     self.shm_target.destroy();
+                    self.cpu = CpuRenderer::new();
                 }
                 FramePath::Gpu
             }

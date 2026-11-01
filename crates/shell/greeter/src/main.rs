@@ -3,13 +3,14 @@ use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use bande_config::LOGIN_PICTURES;
 use bande_datetime::{DateFormats, MinuteTimer};
 use bande_greeter::{
-    L10N, Login, Rejection, Request, Step, last_user_file, login_picture, login_users, opened_path,
+    L10N, Login, Rejection, Request, Step, last_user_file, login_picture, login_users,
     read_message, remember_user, remembered_user, write_message,
 };
 use bande_keyboard::Layouts;
@@ -66,7 +67,7 @@ struct Greeter {
     backdrop: Option<Inbox<(Look, Image)>>,
     backdrop_size: Option<(u32, u32)>,
     sharp: Option<Inbox<(Look, Image)>>,
-    picture: Option<File>,
+    picture: Option<Arc<File>>,
     wallpaper: Option<Image>,
     last_user: Option<PathBuf>,
     layouts: Layouts,
@@ -107,7 +108,8 @@ impl Greeter {
         self.screen.set_caps_lock(self.caps_lock);
         self.screen
             .set_devices(self.corner.0, self.corner.1.as_ref());
-        self.picture = login_picture(Path::new(LOGIN_PICTURES), self.users[self.user].uid);
+        self.picture =
+            login_picture(Path::new(LOGIN_PICTURES), self.users[self.user].uid).map(Arc::new);
         self.backdrop = None;
         self.backdrop_size = None;
         self.sharp = None;
@@ -123,8 +125,8 @@ impl Greeter {
         size: (u32, u32),
         looks: Vec<Look>,
     ) -> Option<Inbox<(Look, Image)>> {
-        let picture = self.picture.as_ref().map(opened_path);
-        load_backdrop(BackdropSource::Picture(picture), Variant::Dark, size, looks)
+        let picture = BackdropSource::Picture(self.picture.clone());
+        load_backdrop(picture, Variant::Dark, size, looks)
             .inspect_err(|error| tracing::warn!("cannot load the wallpaper: {error}"))
             .ok()
     }
@@ -398,7 +400,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         })
         .unwrap_or_default();
     screen.offer_power(&powers);
-    let picture = login_picture(Path::new(LOGIN_PICTURES), chosen.uid);
+    let picture = login_picture(Path::new(LOGIN_PICTURES), chosen.uid).map(Arc::new);
     let mut window = Window::open(
         Role::Layer(LayerOptions {
             layer: LayerKind::Overlay,

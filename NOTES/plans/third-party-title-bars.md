@@ -64,7 +64,10 @@ default SERVER, creates its decoration and requests SERVER before `get_xdg_surfa
 compositor keeps a mode requested before the toplevel exists. `gtk_window_set_titlebar` after
 mapping recreates the surface without a decoration (client-side). Calculator and Text Editor
 (libadwaita 1.7) bind the manager but create no decoration, so they stay client-side as planned.
-The GTK 3 and GTK 4 rules were parsed with libgtk-3 and libgtk-4 without errors but have not been
+VS Code 1.144 on the same probe (default `window.titleBarStyle: custom`) binds both decoration
+managers and asks `xdg-decoration` for client-side (`set_mode(1)`), so it keeps its own bar as
+expected; a `native` run and a framed Claude Desktop window were not probed. Firefox did not
+start a window in the probe and is still unchecked. The GTK 3 and GTK 4 rules were parsed with libgtk-3 and libgtk-4 without errors but have not been
 seen on screen. Still open: the rest of milestone 6 (Firefox, Electron, the review scenario,
 which takes over the screen, and the per-app table) and the three owner decisions below.
 

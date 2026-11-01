@@ -1,6 +1,4 @@
-use bande_app_menu::{
-    Entry, Standard, app_submenu_quitting_on, close_window, settings, window_submenu,
-};
+use bande_app_menu::{Entry, Standard, app_submenu, close_window, settings, window_submenu};
 use bande_toolkit::ui::{Event, shortcut_pressed};
 
 use crate::{Info, Keys, Menus};
@@ -43,17 +41,12 @@ impl Keys {
 pub(crate) fn assemble(info: &Info, menus: Menus) -> Vec<Entry> {
     let name = (info.name)();
     let items = match info.settings {
-        Some(_) => vec![settings().shortcut(info.keys.settings())],
+        Some(_) => vec![settings(info.keys.settings())],
         None => Vec::new(),
     };
-    let mut entries = vec![app_submenu_quitting_on(
-        &name,
-        info.version,
-        items,
-        info.keys.quit(),
-    )];
+    let mut entries = vec![app_submenu(&name, info.version, items, info.keys.quit())];
     entries.extend(menus.menus);
-    let mut window = vec![close_window().shortcut(info.keys.close())];
+    let mut window = vec![close_window(info.keys.close())];
     window.extend(menus.window);
     entries.push(window_submenu(window));
     entries
@@ -61,10 +54,7 @@ pub(crate) fn assemble(info: &Info, menus: Menus) -> Vec<Entry> {
 
 #[cfg(test)]
 mod tests {
-    use bande_app_menu::{
-        Entry, Standard, app_submenu, app_submenu_quitting_on, close_window, settings,
-        window_submenu,
-    };
+    use bande_app_menu::{Entry, Standard, app_submenu, close_window, settings, window_submenu};
     use bande_toolkit::Appearance;
     use bande_toolkit::ui::{Event, Key, Modifiers};
 
@@ -121,9 +111,9 @@ mod tests {
         assert_eq!(
             assemble(&INFO, menus),
             [
-                app_submenu("Example", "1.2.3", Vec::new()),
+                app_submenu("Example", "1.2.3", Vec::new(), "Ctrl+Q"),
                 file,
-                window_submenu(vec![close_window(), tab]),
+                window_submenu(vec![close_window("Ctrl+W"), tab]),
             ]
         );
     }
@@ -133,13 +123,13 @@ mod tests {
         assert_eq!(
             assemble(&with_settings(Keys::Shifted), Menus::default()),
             [
-                app_submenu_quitting_on(
+                app_submenu(
                     "Example",
                     "1.2.3",
-                    vec![settings().shortcut("Shift+Ctrl+,")],
+                    vec![settings("Shift+Ctrl+,")],
                     "Shift+Ctrl+Q"
                 ),
-                window_submenu(vec![close_window().shortcut("Shift+Ctrl+W")]),
+                window_submenu(vec![close_window("Shift+Ctrl+W")]),
             ]
         );
     }
@@ -148,7 +138,7 @@ mod tests {
     fn settings_sit_in_the_app_menu_only_for_an_app_with_settings() {
         assert_eq!(
             assemble(&with_settings(Keys::Standard), Menus::default())[0],
-            app_submenu("Example", "1.2.3", vec![settings()])
+            app_submenu("Example", "1.2.3", vec![settings("Ctrl+,")], "Ctrl+Q")
         );
     }
 

@@ -5,12 +5,11 @@ use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_toolkit::ui::Ui;
-use bande_toolkit::{App, Appearance, Rect, Role, Scene, Window, WindowError, WindowEvent};
+use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 use bande_watch::{Changes, FolderWatch};
 
 pub trait Stored: Clone + PartialEq + Default + 'static {
@@ -199,51 +198,4 @@ impl<S: Stored> View for SettingsWindow<S> {
     fn text_input_area(&self) -> Option<Rect> {
         self.ui.text_input_area()
     }
-}
-
-impl<S: Stored> App for SettingsWindow<S> {
-    fn scene(&mut self, window: &mut Window) -> Scene {
-        View::scene(self, window)
-    }
-
-    fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        View::event(self, window, event);
-    }
-
-    fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        View::sources(self)
-    }
-
-    fn source_ready(&mut self, window: &mut Window, index: usize) {
-        if View::source_ready(self, window, index) {
-            window.request_redraw();
-        }
-    }
-
-    fn deadline(&self) -> Option<Instant> {
-        self.ui.deadline()
-    }
-
-    fn animating(&self) -> bool {
-        View::animating(self)
-    }
-
-    fn text_input_area(&self) -> Option<Rect> {
-        View::text_input_area(self)
-    }
-
-    fn accessibility(&self) -> Option<TreeUpdate> {
-        View::accessibility(self)
-    }
-}
-
-pub fn run<S: Stored>(
-    title: &str,
-    app_id: &str,
-    size: (u32, u32),
-    build: Build<S>,
-) -> Result<(), WindowError> {
-    let mut window = Window::open(Role::toplevel(title, app_id), size)?;
-    let mut settings = SettingsWindow::new(window.appearance(), settings_folder(), build);
-    bande_toolkit::run(&mut window, &mut settings)
 }

@@ -732,6 +732,19 @@ Preconditions: apps-split M6 done (the shared pin, `ci/gate.sh`, `with-desktop.s
   `restore.rs` and its own key handling for the PTY. Delete `app_submenu_quitting_on`'s caller,
   the standard arms and the `--settings` spawn.
 - Done when: compiles; tests pass; then **`ci/gate.sh` on `main`** for the batch.
+- **Status: done 2026-11-01** (apps `4757752`, after the bump `029772d` to desktop 767084f1,
+  which added `Cx::open_settings`). Every Terminal window lives in one process (D3 as changed):
+  New Window (Shift+Ctrl+N, the `.desktop` action `bande-terminal --new-window`, Files' Open in
+  Terminal) opens a window in the running process; at the first launch every window left behind
+  is restored in that one process (window files are `<pid>-<window>.window`; old `<pid>.window`
+  files still restore), so `--restore` and the self-spawn are gone. `Keys::Shifted`;
+  `Info.settings` over its settings window (`--settings` gone; Shift+Ctrl+< from its own key
+  table also opens it, through `Cx::open_settings`, since Shift+, types `<` on most layouts).
+  Close Window (Shift+Ctrl+W) closes the pane or tab through `Program::close_tab`; the close
+  button closes the active tab as before; Quit asks once, for the busy tabs of all windows. The
+  launcher badge is the sum over windows. **`ci/gate.sh` on main passed** (fmt, clippy
+  `-D warnings`, every test and golden of the seven packages; no golden changed: they draw
+  window content, not the bar).
 
 ### M12. Clean-up (desktop and apps, 1 h)
 
@@ -741,6 +754,13 @@ Preconditions: apps-split M6 done (the shared pin, `ci/gate.sh`, `with-desktop.s
   (the boundary, the routing rules, the runtime contracts); `apps/README.md` and `CLAUDE.md` in
   both repos say "every app uses `bande-app`".
 - Done when: both gates pass.
+- **Status: done 2026-11-01** (`appfw/m12-cleanup`, and the apps bump after it).
+  `bande-app-menu` lost `AppMenu::export`/`export_on`/`claim`, `Standard::for_shortcut` and
+  `SETTINGS_SHORTCUT`; `app_submenu`, `settings` and `close_window` take their shortcuts from
+  `bande-app`. `bande_app_settings::run` and the `App` impl of `SettingsWindow` are gone, and
+  the toolkit's `close_requested_by_button`. `ci/check-apps.sh` and the apps' `ci/check-app.sh`
+  fail instead of warn. `docs/architecture/apps.md`; `CLAUDE.md` in both repos says every app
+  uses `bande-app`.
 
 Later, outside this plan: `bande-secrets` for Mail and Calendar; the "Show in Files" helper;
 multicall if the re-measurement clears the bar.

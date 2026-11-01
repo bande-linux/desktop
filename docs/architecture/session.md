@@ -298,9 +298,10 @@ graph LR
     the first top-level submenu is shown under the bold app name and the others become the
     menu titles beside it. The menu bar asks for the menu when the app becomes active, and only
     when the name has an owner, so it never starts an app by D-Bus activation. Toolkit apps
-    export their menus through `crates/libs/app-menu` (`bande-app-menu`), which also builds
-    the standard app and Window menus; the window that gains focus claims the name, so the menu
-    bar talks to the process the user is working in. The menu bar reads the menu again on
+    export their menus through `crates/libs/app-menu` (`bande-app-menu`), driven by
+    `bande-app` ([apps.md](apps.md)), which builds the standard App, Edit and Window menus; an
+    app is one process that owns its name for as long as it runs, so the menu bar always talks
+    to the process the user is working in. The menu bar reads the menu again on
     `LayoutUpdated` and shows each item's `shortcut` right-aligned as words ("Shift+Ctrl+N";
     `bande-app-menu` exports Ctrl as `Control`, as the dbusmenu spec asks). Items of the
     standard app menu carry `x-bande-shell-action`, which the menu bar performs itself

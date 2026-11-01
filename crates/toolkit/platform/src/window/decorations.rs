@@ -239,7 +239,6 @@ impl Window {
         }
         let result = match control {
             Control::Close => {
-                self.closed_by_button = true;
                 passed.push(WindowEvent::CloseRequested);
                 Ok(())
             }

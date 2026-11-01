@@ -269,7 +269,6 @@ pub struct Window {
     ui_deadline: Option<Instant>,
     window_menu: bool,
     keep_on_top: bool,
-    pub(crate) closed_by_button: bool,
     text: Option<TextSystem>,
     shown_frame: Option<Frame>,
     planned: Option<FrameTime>,
@@ -487,7 +486,6 @@ impl Window {
             ui_deadline: None,
             window_menu: false,
             keep_on_top: false,
-            closed_by_button: false,
             text: None,
             shown_frame: None,
             planned: None,
@@ -648,10 +646,6 @@ impl Window {
 
     pub fn toplevel_state(&self) -> ToplevelState {
         self.state.toplevel
-    }
-
-    pub fn close_requested_by_button(&self) -> bool {
-        self.closed_by_button
     }
 
     fn toggle_full_screen(&mut self) -> Result<(), WindowError> {

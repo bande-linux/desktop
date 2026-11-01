@@ -9,7 +9,6 @@ use bande_app_menu::{
 };
 use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
-use zbus::blocking::fdo::DBusProxy;
 use zbus::zvariant::{OwnedValue, Value};
 
 const APP: &str = "org.bande.Example";
@@ -34,6 +33,12 @@ fn menus() -> Vec<Entry> {
             ],
         ),
     ]
+}
+
+fn serve(bus: &SessionBus, menus: Vec<Entry>) -> AppMenu {
+    let connection = bus.connect().expect("app");
+    connection.request_name(APP).expect("own the app id");
+    AppMenu::serve(connection, menus).expect("serve")
 }
 
 fn get_layout(client: &Connection, parent: i32) -> (u32, Layout) {
@@ -90,7 +95,7 @@ fn wait_for_actions(menu: &mut AppMenu) -> Vec<String> {
 #[test]
 fn the_menu_bar_reads_the_menus_and_clicks_come_back_as_actions() {
     let bus = SessionBus::start().expect("bus");
-    let mut menu = AppMenu::export_on(bus.connect().expect("app"), APP, menus()).expect("export");
+    let mut menu = serve(&bus, menus());
     let client = bus.connect().expect("client");
 
     let (revision, (root, _, menus)) = get_layout(&client, 0);
@@ -133,41 +138,12 @@ fn menus_with_copy_enabled() -> Vec<Entry> {
 }
 
 #[test]
-fn the_process_that_claims_last_owns_the_app_menu() {
-    let bus = SessionBus::start().expect("bus");
-    let first = AppMenu::export_on(bus.connect().expect("first"), APP, menus()).expect("first");
-    let second_connection = bus.connect().expect("second");
-    let second_name = second_connection.unique_name().expect("name").to_string();
-    let second = AppMenu::export_on(second_connection, APP, menus()).expect("second");
-    let client = bus.connect().expect("client");
-    let owner = || {
-        DBusProxy::new(&client)
-            .expect("proxy")
-            .get_name_owner(APP.try_into().expect("name"))
-            .expect("owner")
-            .to_string()
-    };
-    assert_eq!(owner(), second_name);
-    first.claim().expect("claim");
-    assert_ne!(owner(), second_name);
-    drop(first);
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while owner() != second_name && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    assert_eq!(owner(), second_name);
-    drop(second);
-}
-
-#[test]
 fn the_standard_app_menu_leaves_about_and_hiding_to_the_menu_bar() {
     let bus = SessionBus::start().expect("bus");
-    let _menu = AppMenu::export_on(
-        bus.connect().expect("app"),
-        APP,
-        vec![app_submenu("Example", "1.2.3", Vec::new())],
-    )
-    .expect("export");
+    let _menu = serve(
+        &bus,
+        vec![app_submenu("Example", "1.2.3", Vec::new(), "Ctrl+Q")],
+    );
     let client = bus.connect().expect("client");
 
     let (_, (_, _, items)) = get_layout(&client, 1);
@@ -210,12 +186,15 @@ fn the_standard_app_menu_leaves_about_and_hiding_to_the_menu_bar() {
 #[test]
 fn the_standard_settings_entry_sits_in_the_app_menu_with_its_shortcut() {
     let bus = SessionBus::start().expect("bus");
-    let mut menu = AppMenu::export_on(
-        bus.connect().expect("app"),
-        APP,
-        vec![app_submenu("Example", "1.2.3", vec![settings()])],
-    )
-    .expect("export");
+    let mut menu = serve(
+        &bus,
+        vec![app_submenu(
+            "Example",
+            "1.2.3",
+            vec![settings("Ctrl+,")],
+            "Ctrl+Q",
+        )],
+    );
     let client = bus.connect().expect("client");
 
     let (_, (_, _, items)) = get_layout(&client, 1);
@@ -247,7 +226,7 @@ fn radio_items_tell_the_menu_bar_which_choice_is_selected() {
             Entry::item("Show CPU Cores", "cores"),
         ],
     )];
-    let _menu = AppMenu::export_on(bus.connect().expect("app"), APP, filters).expect("export");
+    let _menu = serve(&bus, filters);
     let client = bus.connect().expect("client");
 
     let (_, (_, _, items)) = get_layout(&client, 1);

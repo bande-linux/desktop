@@ -6,13 +6,11 @@ use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 use bande_inbox::{Inbox, Outbox};
 use bande_l10n::Localizer;
 use zbus::blocking::Connection;
-use zbus::fdo::RequestNameFlags;
 use zbus::zvariant::{OwnedValue, Structure, Value};
 
 pub const MENU_PATH: &str = "/org/bande/MenuBar";
 pub const SHELL_ACTION_PROPERTY: &str = "x-bande-shell-action";
 pub const VERSION_PROPERTY: &str = "x-bande-version";
-pub const SETTINGS_SHORTCUT: &str = "Ctrl+,";
 pub const KEY_ACTION: &str = "key:";
 const INTERFACE: &str = "com.canonical.dbusmenu";
 const ROOT: i32 = 0;
@@ -29,11 +27,6 @@ pub enum Standard {
     CloseWindow,
     Settings,
 }
-
-const APP_SHORTCUTS: [(Standard, &str); 2] = [
-    (Standard::Quit, "Ctrl+Q"),
-    (Standard::CloseWindow, "Ctrl+W"),
-];
 
 const STANDARD: [(Standard, &str); 6] = [
     (Standard::Hide, "app-menu:hide"),
@@ -57,20 +50,6 @@ impl Standard {
             .iter()
             .find(|(_, known)| *known == action)
             .map(|(standard, _)| *standard)
-    }
-
-    pub fn for_shortcut(pressed: impl Fn(&str) -> bool) -> Option<Self> {
-        APP_SHORTCUTS
-            .iter()
-            .find(|(_, shortcut)| pressed(shortcut))
-            .map(|(standard, _)| *standard)
-    }
-
-    fn shortcut(self) -> &'static str {
-        APP_SHORTCUTS
-            .iter()
-            .find(|(standard, _)| *standard == self)
-            .map_or("", |(_, shortcut)| shortcut)
     }
 }
 
@@ -105,11 +84,7 @@ impl ShellAction {
     }
 }
 
-pub fn app_submenu(app: &str, version: &str, items: Vec<Entry>) -> Entry {
-    app_submenu_quitting_on(app, version, items, Standard::Quit.shortcut())
-}
-
-pub fn app_submenu_quitting_on(app: &str, version: &str, items: Vec<Entry>, quit: &str) -> Entry {
+pub fn app_submenu(app: &str, version: &str, items: Vec<Entry>, quit: &str) -> Entry {
     let about = Entry {
         version: Some(version.to_owned()),
         ..Entry::item(&L10N.tr_args("about-app", [("app", app.into())]), "")
@@ -171,13 +146,12 @@ pub fn edit_submenu(extra: Vec<Entry>) -> Entry {
     Entry::submenu(&L10N.tr("edit"), entries)
 }
 
-pub fn settings() -> Entry {
-    Entry::item(&L10N.tr("settings"), Standard::Settings.action()).shortcut(SETTINGS_SHORTCUT)
+pub fn settings(shortcut: &str) -> Entry {
+    Entry::item(&L10N.tr("settings"), Standard::Settings.action()).shortcut(shortcut)
 }
 
-pub fn close_window() -> Entry {
-    Entry::item(&L10N.tr("close-window"), Standard::CloseWindow.action())
-        .shortcut(Standard::CloseWindow.shortcut())
+pub fn close_window(shortcut: &str) -> Entry {
+    Entry::item(&L10N.tr("close-window"), Standard::CloseWindow.action()).shortcut(shortcut)
 }
 
 pub fn shortcut_action(menus: &[Entry], pressed: &dyn Fn(&str) -> bool) -> Option<String> {
@@ -442,27 +416,12 @@ impl From<io::Error> for Error {
 
 pub struct AppMenu {
     connection: Connection,
-    app_id: String,
     menus: Arc<Mutex<Menus>>,
     actions: Inbox<String>,
 }
 
 impl AppMenu {
-    pub fn export(app_id: &str, menus: Vec<Entry>) -> Result<Self, Error> {
-        Self::export_on(Connection::session()?, app_id, menus)
-    }
-
-    pub fn export_on(
-        connection: Connection,
-        app_id: &str,
-        entries: Vec<Entry>,
-    ) -> Result<Self, Error> {
-        let menu = Self::serve(connection, app_id, entries)?;
-        menu.claim()?;
-        Ok(menu)
-    }
-
-    pub fn serve(connection: Connection, app_id: &str, entries: Vec<Entry>) -> Result<Self, Error> {
+    pub fn serve(connection: Connection, entries: Vec<Entry>) -> Result<Self, Error> {
         let actions = Inbox::new()?;
         let menus = Arc::new(Mutex::new(Menus {
             revision: 1,
@@ -477,18 +436,9 @@ impl AppMenu {
         )?;
         Ok(Self {
             connection,
-            app_id: app_id.to_owned(),
             menus,
             actions,
         })
-    }
-
-    pub fn claim(&self) -> Result<(), Error> {
-        self.connection.request_name_with_flags(
-            self.app_id.as_str(),
-            RequestNameFlags::AllowReplacement | RequestNameFlags::ReplaceExisting,
-        )?;
-        Ok(())
     }
 
     pub fn update(&self, entries: Vec<Entry>) -> Result<(), Error> {
@@ -522,7 +472,7 @@ impl AppMenu {
 
 #[cfg(test)]
 mod tests {
-    use super::{Entry, Standard, shortcut_action};
+    use super::{Entry, shortcut_action};
 
     #[test]
     fn a_pressed_shortcut_finds_the_enabled_entry_in_any_submenu() {
@@ -552,21 +502,6 @@ mod tests {
         assert_eq!(action("Ctrl+P"), None);
         assert_eq!(action("Ctrl+H"), None);
         assert_eq!(action("Ctrl+K"), None);
-    }
-
-    #[test]
-    fn ctrl_w_and_ctrl_q_are_the_app_level_standard_shortcuts() {
-        let pressed = |held: &'static str| move |shortcut: &str| shortcut == held;
-        assert_eq!(
-            Standard::for_shortcut(pressed("Ctrl+W")),
-            Some(Standard::CloseWindow)
-        );
-        assert_eq!(
-            Standard::for_shortcut(pressed("Ctrl+Q")),
-            Some(Standard::Quit)
-        );
-        assert_eq!(Standard::for_shortcut(pressed("Shift+Ctrl+W")), None);
-        assert_eq!(Standard::for_shortcut(pressed("Super+H")), None);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 #!/bin/bash
 # check-apps.sh [app dir...]: static checks that each desktop app is a bande-app app with matching
-# packaging (no build). Warns for now; fails once every app has moved onto bande-app.
+# packaging (no build); fails on any problem.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -41,4 +41,5 @@ apps=("$@")
 for app in "${apps[@]}"; do
     check "$app"
 done
-[ "$problems" -eq 0 ] && echo "check-apps passed" || echo "check-apps: $problems problems (warnings until every app is on bande-app)"
+[ "$problems" -eq 0 ] || { echo "check-apps: $problems problems" >&2; exit 1; }
+echo "check-apps passed"

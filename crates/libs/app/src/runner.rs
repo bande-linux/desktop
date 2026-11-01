@@ -60,7 +60,7 @@ pub(crate) fn run<P: Program>(
         return Ok(());
     }
     let menu = cx.session().cloned().and_then(|session| {
-        AppMenu::serve(session, info.id, assemble(info, program.menus(&cx)))
+        AppMenu::serve(session, assemble(info, program.menus(&cx)))
             .inspect_err(|error| tracing::warn!("{error}"))
             .ok()
     });

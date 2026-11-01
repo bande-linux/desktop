@@ -130,7 +130,6 @@ impl<A: App> Surfaces for Single<'_, A> {
                 if self.app.should_close(self.window) {
                     self.window.close();
                 }
-                self.window.closed_by_button = false;
             }
             WindowEvent::QuitRequested => {
                 if self.app.should_quit(self.window) {

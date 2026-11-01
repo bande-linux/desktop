@@ -183,8 +183,7 @@ mod tests {
         let Claim::First(mut instance) = claim(&first, ID).expect("claim") else {
             panic!("the first launch is not the first instance");
         };
-        let _menu =
-            AppMenu::serve(first.clone(), ID, vec![Entry::item("Example", "")]).expect("menu");
+        let _menu = AppMenu::serve(first.clone(), vec![Entry::item("Example", "")]).expect("menu");
 
         let second = bus.connect().expect("second");
         assert!(matches!(claim(&second, ID).expect("claim"), Claim::Running));

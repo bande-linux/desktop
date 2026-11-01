@@ -9,6 +9,9 @@
 4. **Minimal surface area (YAGNI)**: Zero speculative code, unused builder patterns, or premature indirection. Solve problems with the fewest moving parts. Prefer standard library combinators and idiomatic composition over custom machinery.
 5. **Purge code rot**: Delete unused imports, dead functions, unreferenced types, and stale tests in any file you touch. Leave code cleaner than you found it.
 
+## Apps
+- Every app (`crates/apps/*` except the file chooser portal, and every app in `bande-linux/apps`) is a `bande-app` app: `bande_app::run` in `src/main.rs`, windows through `Cx::open`. Windows, menus, standard keys, appearance, Settings… and single instance come from `bande-app`, never from the app; `ci/check-apps.sh` checks it. See `docs/architecture/apps.md`.
+
 ## Factory Verification
 - **No panics**: No `.unwrap()` or `.expect()` in production code. Use proper error handling.
 - **Build first, test once**: each change only needs to compile (`desktop-check <worktree> -p <crate>`: fmt and `cargo check`). The full gate (fmt, workspace clippy `-D warnings`, workspace tests on the hermetic bus, goldens) runs once on `main` when a batch of work has merged, and `main` fixes whatever it finds then.

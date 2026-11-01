@@ -56,7 +56,7 @@ pub fn svg(symbol: Symbol, color: Color) -> String {
         Symbol::Logo => (
             "0 0 16 16",
             format!(
-                r#"<mask id="u"><rect width="16" height="16" fill="white"/><path d="M5.2 4.6V8.6A2.8 2.8 0 0 0 10.8 8.6V4.6" fill="none" stroke="black" stroke-width="1.9" stroke-linecap="round"/></mask><rect x="1" y="1" width="14" height="14" rx="4.2" fill="{color}" mask="url(#u)"/>"#
+                r#"<mask id="b"><rect width="16" height="16" fill="white"/><path d="M5.33 3.2V12.8M5.33 3.2H7.47A2.13 2.13 0 0 1 7.47 7.47H5.33M5.33 7.47H8A2.67 2.67 0 0 1 8 12.8H5.33" fill="none" stroke="black" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></mask><rect x="1" y="1" width="14" height="14" rx="4.2" fill="{color}" mask="url(#b)"/>"#
             ),
         ),
         Symbol::Wifi { bars } => (

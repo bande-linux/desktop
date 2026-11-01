@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use bande_toolkit::ui::ScrollState;
-use bande_toolkit::{Color, Item, Point, Radius, Rect, Shape, TextAlign, TextStyle};
+use bande_toolkit::{Color, Item, Point, Radius, Rect, Shape, TextStyle};
 
 use crate::L10N;
 use crate::browser::{Browser, Location};
@@ -203,24 +203,31 @@ impl FilesView {
         )
     }
 
-    fn centred(&mut self, text: &str, size: f32, color: Color, strong: bool, area: Rect) -> Item {
+    fn tab_title(&mut self, text: &str, color: Color, strong: bool, tab: Rect) -> Item {
         let weight = match strong {
             true => TextStyle::SEMIBOLD,
             false => TextStyle::REGULAR,
         };
-        let paragraph = self.text().paragraph(
-            text,
-            TextStyle::new(size, color).weight(weight),
-            Some(area.width),
-            TextAlign::Center,
+        let label = Rect::new(
+            tab.x + LABEL_INSET,
+            tab.y,
+            (tab.width - 2.0 * LABEL_INSET).max(0.0),
+            tab.height,
         );
+        let paragraph = self.text().fitted(
+            text,
+            TextStyle::new(LABEL_SIZE, color).weight(weight),
+            label.width,
+        );
+        let x = (tab.x + (tab.width - paragraph.width()) / 2.0)
+            .min(label.x + label.width - paragraph.width())
+            .max(label.x)
+            .round();
+        let y = (label.y + (label.height - paragraph.height()) / 2.0).round();
         Item::Clip {
-            shape: Shape::rect(area),
+            shape: Shape::rect(label),
             items: vec![Item::Text {
-                origin: Point::new(
-                    area.x,
-                    area.y + ((area.height - paragraph.height()) / 2.0).round(),
-                ),
+                origin: Point::new(x, y),
                 paragraph,
             }],
         }
@@ -254,13 +261,7 @@ impl FilesView {
                 true => palette.ink,
                 false => palette.ink2,
             };
-            let label = Rect::new(
-                tab.x + LABEL_INSET,
-                tab.y,
-                (tab.width - 2.0 * LABEL_INSET).max(0.0),
-                TAB_HEIGHT,
-            );
-            items.push(self.centred(&title, LABEL_SIZE, color, active, label));
+            items.push(self.tab_title(&title, color, active, *tab));
             self.hits.push((*tab, Hit::Tab(index)));
             let close = Rect::new(
                 tab.x + CLOSE_INSET,

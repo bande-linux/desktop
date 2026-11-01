@@ -10,8 +10,8 @@ use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
 use crate::rail::surface_size as rail_surface_size;
 use crate::taskbar::{
-    MenuTarget, Rail, Shared, TaskbarAction, TaskbarApp, TaskbarState, exclusive_zone, scene,
-    surface_size, taskbar_ui,
+    MenuTarget, Shared, TaskbarAction, TaskbarApp, TaskbarLayout, TaskbarState, exclusive_zone,
+    scene, surface_size, taskbar_ui,
 };
 use accesskit::TreeUpdate;
 use bande_config::{Bar as BarConfig, BarEdge};
@@ -191,6 +191,15 @@ impl Taskbar {
         }
         self.windows = windows;
         self.running = running;
+    }
+
+    fn show_active(&self, window: &Window) {
+        let shown = self
+            .active
+            .as_deref()
+            .filter(|app_id| !window.is_windowless(app_id))
+            .map(|app_id| self.identity(app_id));
+        self.state.borrow_mut().set_active(shown.as_deref());
     }
 
     fn describe(&mut self, app_id: &str, kept: bool) -> Option<TaskbarApp> {
@@ -825,7 +834,7 @@ impl Taskbar {
 }
 
 impl Taskbar {
-    pub fn set_rail(&mut self, rail: Rail) {
+    pub fn set_rail(&mut self, rail: TaskbarLayout) {
         self.state.borrow_mut().set_rail(rail);
     }
 
@@ -945,6 +954,7 @@ impl App for Taskbar {
                 let running = &self.running;
                 self.unresponsive.retain(|app_id| running.contains(app_id));
                 self.sync();
+                self.show_active(window);
                 window.request_redraw();
             }
             WindowEvent::MenuAction(action) => {
@@ -958,6 +968,7 @@ impl App for Taskbar {
             WindowEvent::ActiveApp(app_id) => {
                 self.state.borrow_mut().activated(&self.identity(&app_id));
                 self.active = (!app_id.is_empty()).then_some(app_id);
+                self.show_active(window);
                 window.request_redraw();
             }
             WindowEvent::AppResponding {

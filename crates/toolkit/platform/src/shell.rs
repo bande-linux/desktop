@@ -242,6 +242,15 @@ impl Window {
         apps
     }
 
+    pub fn is_windowless(&self, app_id: &str) -> bool {
+        let shell = &self.state.shell;
+        shell.windowless.iter().any(|known| known == app_id)
+            && !shell
+                .toplevels
+                .iter()
+                .any(|toplevel| toplevel.app_id == app_id)
+    }
+
     pub fn app_pid(&self, app_id: &str) -> Option<u32> {
         self.state.shell.processes.get(app_id).copied()
     }

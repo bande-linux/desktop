@@ -303,8 +303,8 @@ impl<V: StatusView> MenuBarClient<V> {
                 .filter(|child| child.visible && !child.separator)
         };
         match slot {
-            Slot::App => root.children.first(),
-            Slot::AppMenu(index) => visible().skip(1).nth(index),
+            Slot::AppMenu => root.children.first(),
+            Slot::AppMenuTitle(index) => visible().skip(1).nth(index),
             _ => None,
         }
     }
@@ -370,14 +370,14 @@ impl<V: StatusView> MenuBarClient<V> {
     }
 
     fn open(&mut self, window: &mut Window, slot: Slot) {
-        if slot == Slot::Launcher {
+        if slot == Slot::Search {
             report("open the launcher", window.show_launcher());
             return;
         }
         let Some(anchor) = self.bar.slot_rect(slot) else {
             return;
         };
-        if slot == Slot::App && self.bar.cascades() {
+        if slot == Slot::AppMenu && self.bar.cascades() {
             let menu = self.cascade(window);
             self.bar.set_open(Some(slot));
             report(
@@ -389,7 +389,7 @@ impl<V: StatusView> MenuBarClient<V> {
         }
         let status = self.bar.status().clone();
         let local = match slot {
-            Slot::System => Some(system_menu(&self.user, self.frontmost_name().as_deref())),
+            Slot::BandeMenu => Some(system_menu(&self.user, self.frontmost_name().as_deref())),
             Slot::Battery => status
                 .battery
                 .as_ref()
@@ -404,8 +404,8 @@ impl<V: StatusView> MenuBarClient<V> {
                 .map(|sound| sound_menu(sound, &status.capturing)),
             Slot::Bluetooth => status.bluetooth.as_ref().map(bluetooth_menu),
             Slot::InputSource => Some(input_source_menu(&status.input_sources)),
-            Slot::TrayMore => Some(self.more_menu(&status.input_sources)),
-            Slot::App if self.app_root.is_none() => Some(Menu::new(vec![MenuItem::new(
+            Slot::MoreStatusItems => Some(self.more_menu(&status.input_sources)),
+            Slot::AppMenu if self.app_root.is_none() => Some(Menu::new(vec![MenuItem::new(
                 self.bar.app(),
                 BRING_TO_FRONT,
             )])),
@@ -431,7 +431,7 @@ impl<V: StatusView> MenuBarClient<V> {
                 "open the Notification Center",
                 window.toggle_panel(Panel::NotificationCenter),
             ),
-            Slot::App | Slot::AppMenu(_) => {
+            Slot::AppMenu | Slot::AppMenuTitle(_) => {
                 if let Some(node) = self.app_menu_node(slot) {
                     let menu = format!("{}{APP_MENU_PATH}", self.app_id);
                     let parent = node.id;
@@ -441,7 +441,7 @@ impl<V: StatusView> MenuBarClient<V> {
                     self.status.errand(Errand::ShowMenu { menu, parent });
                 }
             }
-            Slot::Tray(index) => self.open_tray(window, index, anchor, false),
+            Slot::StatusItem(index) => self.open_tray(window, index, anchor, false),
             Slot::Workspace(index) if index == self.workspaces.1 => {
                 report("show the windows", window.show_windows(""));
             }
@@ -456,7 +456,7 @@ impl<V: StatusView> MenuBarClient<V> {
         let mut items = Vec::new();
         for slot in self.bar.hidden_tray() {
             match slot {
-                Slot::Tray(index) => items.extend(
+                Slot::StatusItem(index) => items.extend(
                     self.tray
                         .get(index)
                         .map(|item| MenuItem::new(&item.title, &format!("{TRAY_ITEM}{index}"))),
@@ -485,7 +485,7 @@ impl<V: StatusView> MenuBarClient<V> {
                     menu: menu.clone(),
                     parent: 0,
                 });
-                self.bar.set_open(Some(Slot::Tray(index)));
+                self.bar.set_open(Some(Slot::StatusItem(index)));
                 window.request_redraw();
             }
             _ => {
@@ -533,7 +533,7 @@ impl<V: StatusView> MenuBarClient<V> {
             window.request_redraw();
             return;
         }
-        if let (Slot::Tray(index), PointerButton::Secondary) = (slot, button)
+        if let (Slot::StatusItem(index), PointerButton::Secondary) = (slot, button)
             && let Some(anchor) = self.bar.slot_rect(slot)
         {
             self.open_tray(window, index, anchor, true);
@@ -570,8 +570,8 @@ impl<V: StatusView> App for MenuBarClient<V> {
             }
             WindowEvent::AppsChanged => self.publish_menu(window),
             WindowEvent::FocusShell(namespace) if namespace == MENU_BAR_NAMESPACE => {
-                if self.bar.cascades() && self.bar.open() != Some(Slot::App) {
-                    self.open(window, Slot::App);
+                if self.bar.cascades() && self.bar.open() != Some(Slot::AppMenu) {
+                    self.open(window, Slot::AppMenu);
                 }
             }
             WindowEvent::Input(Event::PointerDown(pointer)) => {
@@ -613,7 +613,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 if let Some(index) = action
                     .strip_prefix(TRAY_ITEM)
                     .and_then(|index| index.parse::<usize>().ok())
-                    && let Some(anchor) = self.bar.slot_rect(Slot::TrayMore)
+                    && let Some(anchor) = self.bar.slot_rect(Slot::MoreStatusItems)
                 {
                     self.open_tray(window, index, anchor, false);
                 } else if action == BRING_TO_FRONT {

@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use crate::L10N;
 use crate::menu_bar::StatusView;
-use crate::rail::{RailView, bar_width, owns_node, surface_size};
+use crate::rail::{TaskbarView, bar_width, owns_node, surface_size};
 use accesskit::{Node, NodeId, Role as AccessRole, TreeInfo, TreeUpdate};
 use bande_toolkit::ui::Event;
 use bande_toolkit::{
@@ -40,7 +40,7 @@ pub fn combined_role(icon_size: f32) -> (Role, (u32, u32)) {
 
 pub struct CombinedClient {
     taskbar: Taskbar,
-    status: MenuBarClient<RailView>,
+    status: MenuBarClient<TaskbarView>,
     status_open: bool,
 }
 
@@ -59,7 +59,7 @@ fn pointer(event: &WindowEvent) -> bool {
 }
 
 impl CombinedClient {
-    pub fn new(taskbar: Taskbar, status: MenuBarClient<RailView>) -> Self {
+    pub fn new(taskbar: Taskbar, status: MenuBarClient<TaskbarView>) -> Self {
         Self {
             taskbar,
             status,
@@ -187,7 +187,7 @@ impl App for CombinedClient {
         let apps = self.taskbar.accessibility()?;
         let status = self.status.accessibility()?;
         let mut root = Node::new(AccessRole::Toolbar);
-        root.set_label(L10N.tr("bar"));
+        root.set_label(L10N.tr("taskbar"));
         root.set_children(
             [&status, &apps]
                 .into_iter()

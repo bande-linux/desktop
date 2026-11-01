@@ -1,8 +1,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::cell::RefCell;
 use std::os::fd::BorrowedFd;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Once;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
@@ -17,6 +19,7 @@ use bande_launcher::LauncherShell;
 use bande_notifications::Notifications;
 use bande_test_wayland::{RED, ShmImage, TestClient};
 use bande_toolkit::{App, Scene, Surfaces, TextSystem, Window, WindowEvent};
+use bande_xdg::{Apps, config_dirs, data_dirs};
 use smithay::utils::{Point, Size};
 use wayland_client::protocol::wl_shm::Format;
 
@@ -215,7 +218,13 @@ fn shell(stream: UnixStream, events: Sender<(Part, WindowEvent)>, targets: Sende
         .open_beside(bande_launcher::role(), (0, 0))
         .expect("launcher");
     launcher.share_fonts(&text);
-    let search = LauncherShell::new(&mut launcher, text.sharing_fonts(), None).expect("launcher");
+    let search = LauncherShell::new(
+        &mut launcher,
+        text.sharing_fonts(),
+        None,
+        Rc::new(RefCell::new(Apps::load(data_dirs(), &config_dirs()))),
+    )
+    .expect("launcher");
     let mut windows = vec![root];
     let mut parts: Vec<(Part, Box<dyn App>)> = vec![(Part::Notifications, Box::new(notifications))];
     for (window, app) in bar.surfaces {

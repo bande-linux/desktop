@@ -1,8 +1,10 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command, Stdio};
+use std::rc::Rc;
 use std::thread;
 use std::time::{Instant, SystemTime};
 
@@ -26,9 +28,9 @@ use bande_wallpaper::{
     Choice, Fit, Picture, RenderError, Variant, choose, follow, render, render_cached,
 };
 use bande_xdg::{
-    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, cache_home, config_dirs,
-    config_home, data_dirs, file_uri, find_icon, launch, launch_with, launch_with_arguments,
-    path_from_file_uri, user_dir,
+    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, cache_home, config_home,
+    data_dirs, file_uri, find_icon, launch, launch_with, launch_with_arguments, path_from_file_uri,
+    user_dir,
 };
 
 const PDF: &str = "application/pdf";
@@ -50,7 +52,7 @@ struct Confirming {
 pub struct DesktopSurface {
     view: DesktopView,
     paste_moves: bool,
-    apps: Apps,
+    apps: Rc<RefCell<Apps>>,
     operations: Operations,
     watch: FolderWatch,
     desktop_dir: PathBuf,
@@ -169,14 +171,15 @@ impl DesktopSurface {
             Kind::Volume => vec!["drive-removable-media".to_owned()],
             Kind::Folder => vec!["folder".to_owned()],
             Kind::File => {
-                let mime = self.apps.mime_for(&item.path);
+                let mime = self.apps.borrow().mime_for(&item.path);
                 let launcher = self
                     .apps
+                    .borrow()
                     .launcher(&item.path, &mime)
                     .and_then(|entry| entry.icon);
                 launcher
                     .into_iter()
-                    .chain(self.apps.icon_names(&mime))
+                    .chain(self.apps.borrow().icon_names(&mime))
                     .collect()
             }
         };
@@ -191,7 +194,7 @@ impl DesktopSurface {
         wanted: &mut Vec<ThumbnailRequest>,
     ) -> Option<Artwork> {
         let mime = match item.kind {
-            Kind::File => self.apps.mime_for(&item.path),
+            Kind::File => self.apps.borrow().mime_for(&item.path),
             _ => String::new(),
         };
         if self.thumbnails.is_some() && (mime.starts_with("image/") || mime == PDF) {
@@ -247,7 +250,7 @@ impl DesktopSurface {
         }
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
         let volumes = mounted_volumes(&mountinfo, &self.media);
-        self.items = list(&mut self.apps, &self.desktop_dir, &volumes);
+        self.items = list(&mut self.apps.borrow_mut(), &self.desktop_dir, &volumes);
         self.show_items();
         self.watch_folders();
         self.save_layouts();
@@ -345,7 +348,7 @@ impl DesktopSurface {
     }
 
     fn files_app(&self) -> Option<DesktopEntry> {
-        self.apps.default_for(DIRECTORY).cloned()
+        self.apps.borrow().default_for(DIRECTORY).cloned()
     }
 
     fn launch_with(&self, window: &mut Window, app: &DesktopEntry, files: &[PathBuf]) {
@@ -360,16 +363,17 @@ impl DesktopSurface {
             let kind = self.view.desktop().item(&path).map(|item| item.kind);
             let mime = match kind {
                 Some(Kind::Folder | Kind::Volume) => DIRECTORY.to_owned(),
-                _ => self.apps.mime_for(&path),
+                _ => self.apps.borrow().mime_for(&path),
             };
-            if let Some(launcher) = self.apps.launcher(&path, &mime) {
+            if let Some(launcher) = self.apps.borrow().launcher(&path, &mime) {
                 let token = window.activation_token(launcher.app_id()).ok();
                 if let Err(error) = launch(&launcher, token.as_deref()) {
                     tracing::warn!("cannot start {}: {error}", launcher.name);
                 }
                 continue;
             }
-            match self.apps.default_for(&mime).cloned() {
+            let app = self.apps.borrow().default_for(&mime).cloned();
+            match app {
                 Some(app) => self.launch_with(window, &app, &[path]),
                 None => self.show_in_files(window, path),
             }
@@ -404,7 +408,7 @@ impl DesktopSurface {
             .map(
                 |path| match self.view.desktop().item(path).map(|item| item.kind) {
                     Some(Kind::Folder | Kind::Volume) => DIRECTORY.to_owned(),
-                    _ => self.apps.mime_for(path),
+                    _ => self.apps.borrow().mime_for(path),
                 },
             )
             .collect();
@@ -427,6 +431,7 @@ impl DesktopSurface {
                 picture: mime.starts_with("image/"),
                 apps: self
                     .apps
+                    .borrow()
                     .apps_for(&mime)
                     .into_iter()
                     .map(|entry| MenuApp {
@@ -522,9 +527,11 @@ impl DesktopSurface {
                 }
                 Request::ContextMenu { at, on_items } => self.context_menu(window, at, on_items),
                 Request::OpenWith { app, paths } => {
+                    let mime = self.common_mime(&paths);
                     let app = self
                         .apps
-                        .apps_for(&self.common_mime(&paths))
+                        .borrow()
+                        .apps_for(&mime)
                         .into_iter()
                         .find(|entry| entry.id == app)
                         .cloned();
@@ -906,6 +913,7 @@ impl DesktopSurface {
         main: bool,
         config: &Config,
         text: TextSystem,
+        apps: Rc<RefCell<Apps>>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let home = std::env::var_os("HOME").map(PathBuf::from);
         let bar_edge = config.bar.edge;
@@ -928,7 +936,7 @@ impl DesktopSurface {
         let mut surface = DesktopSurface {
             view: DesktopView::new(appearance, layouts, text),
             paste_moves: false,
-            apps: Apps::load(data_dirs.clone(), &config_dirs()),
+            apps,
             operations: Operations::new(trash),
             watch: FolderWatch::new()?,
             desktop_dir,

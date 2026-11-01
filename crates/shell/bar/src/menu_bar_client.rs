@@ -44,7 +44,6 @@ use crate::surfaces::Display;
 const TRAY_PIXELS: u32 = 32;
 const SCROLL_STEP: f32 = 1.0 / 16.0;
 const SETTINGS: &str = "org.bande.Settings";
-const MONITOR: &str = "org.bande.ActivityMonitor";
 const BRING_TO_FRONT: &str = "bring-to-front";
 const TRAY_ITEM: &str = "tray-item:";
 const MENU_BAR_NAMESPACE: &str = "menubar";
@@ -159,6 +158,10 @@ impl<V: StatusView> MenuBarClient<V> {
         }
     }
 
+    fn frontmost_name(&self) -> Option<String> {
+        (!self.app_id.is_empty()).then(|| app_name(self.apps.entries(), &self.app_id))
+    }
+
     fn myself(&self) -> String {
         std::env::current_exe()
             .ok()
@@ -174,8 +177,9 @@ impl<V: StatusView> MenuBarClient<V> {
                 Some(pane) => self.launch(window, SETTINGS, &["bande-settings", &pane]),
                 None => self.launch(window, SETTINGS, &["bande-settings"]),
             },
-            Command::ForceQuit => {
-                self.launch(window, MONITOR, &["bande-monitor", "--force-quit"]);
+            Command::ForceQuit => report("open Force Quit", window.show_force_quit()),
+            Command::ForceQuitApp => {
+                report("force quit the app", window.force_quit_app(&self.app_id));
             }
             Command::Restart => confirm_session_end(window, SessionEnd::Restart),
             Command::ShutDown => confirm_session_end(window, SessionEnd::ShutDown),
@@ -364,7 +368,7 @@ impl<V: StatusView> MenuBarClient<V> {
         }
         let status = self.bar.status().clone();
         let local = match slot {
-            Slot::System => Some(system_menu(&self.user)),
+            Slot::System => Some(system_menu(&self.user, self.frontmost_name().as_deref())),
             Slot::Battery => status
                 .battery
                 .as_ref()

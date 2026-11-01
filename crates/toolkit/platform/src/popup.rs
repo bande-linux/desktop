@@ -131,7 +131,7 @@ impl Signals {
 struct Look {
     revision: u32,
     highlighted: Option<usize>,
-    alternates: bool,
+    alternates: usize,
     show_highlight: bool,
     appearance: Appearance,
     scale: f64,
@@ -343,7 +343,7 @@ impl Menus {
             }
             Event::Scroll(scroll) => self.tracker.scroll(level, scroll.delta.y),
             Event::Key { key, modifiers } => self.tracker.key(*key, *modifiers, now),
-            Event::ModifiersChanged(modifiers) => self.tracker.show_alternates(modifiers.alt),
+            Event::ModifiersChanged(modifiers) => self.tracker.show_alternates(*modifiers),
             _ => MenuOutcome::Nothing,
         }
     }

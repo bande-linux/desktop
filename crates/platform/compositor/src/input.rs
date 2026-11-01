@@ -11,7 +11,6 @@ use smithay::backend::input::{
 };
 use smithay::input::keyboard::{FilterResult, Keycode, keysyms};
 use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
-use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
 use smithay::wayland::keyboard_shortcuts_inhibit::{

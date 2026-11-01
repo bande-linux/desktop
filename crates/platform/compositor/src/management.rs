@@ -345,7 +345,9 @@ impl Dispatch<ZwlrOutputConfigurationHeadV1, Shared> for State {
             } => {
                 settings.transform = Transform::from(transform);
             }
-            zwlr_output_configuration_head_v1::Request::SetScale { scale } if scale > 0.0 => {
+            zwlr_output_configuration_head_v1::Request::SetScale { scale }
+                if (bande_config::SCALE_RANGE.0..=bande_config::SCALE_RANGE.1).contains(&scale) =>
+            {
                 settings.scale = scale;
             }
             _ => {}

@@ -7,10 +7,10 @@ packages=(
     bande-compositor bande-notify bande-clipboard bande-config bande-power bande-sound
     xdg-desktop-portal-bande bande-file-chooser bande-tray bande-automount bande-polkit
     bande-shell bande-lock bande-screenshot bande-files
-    bande-settings bande-monitor bande-greeter
+    bande-settings bande-greeter
 )
 screenshot=/usr/bin/bande-screenshot
-apps_repo=(org.bande.Terminal:bande-terminal org.bande.Software:bande-software org.bande.Installer:bande-installer)
+apps_repo=(org.bande.Terminal:bande-terminal org.bande.Software:bande-software org.bande.Installer:bande-installer org.bande.ActivityMonitor:bande-monitor)
 runtime="${XDG_RUNTIME_DIR:?needs a user session}/bande-review"
 build=1
 take_over=0

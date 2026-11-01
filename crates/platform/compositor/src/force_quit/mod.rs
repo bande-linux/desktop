@@ -490,15 +490,14 @@ impl State {
     }
 
     fn force_quit_due(&mut self, now: Instant) -> Option<Instant> {
-        if self.force_quit.open.is_some() && self.is_locked() {
-            self.close_force_quit();
-        }
         let screen = self.force_quit.open.as_ref()?.screen;
-        let screen = screen.min(self.screens.len().saturating_sub(1));
+        if self.is_locked() || screen >= self.screens.len() {
+            self.close_force_quit();
+            return None;
+        }
         let listed = self.force_quit_listed(screen);
         let appearance = self.force_quit_appearance();
         let open = self.force_quit.open.as_mut()?;
-        open.screen = screen;
         open.view.set_appearance(appearance);
         if open.view.set_apps(listed) {
             open.dirty = true;

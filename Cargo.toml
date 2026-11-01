@@ -99,7 +99,6 @@ bande-l10n = { path = "crates/libs/l10n" }
 bande-launcher = { path = "crates/shell/launcher" }
 bande-lock = { path = "crates/shell/lock" }
 bande-log = { path = "crates/libs/log" }
-bande-monitor = { path = "crates/apps/monitor" }
 bande-network = { path = "crates/libs/network" }
 bande-packages = { path = "crates/libs/packages" }
 bande-notifications = { path = "crates/shell/notifications" }

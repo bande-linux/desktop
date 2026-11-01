@@ -182,15 +182,10 @@ fn download(
     }
 }
 
-fn announce(session: &Connection, summary: &str, body: &str) -> zbus::Result<bool> {
-    let rule = MatchRule::builder()
-        .msg_type(message::Type::Signal)
-        .interface("org.freedesktop.Notifications")?
-        .build();
-    let signals = MessageIterator::for_match_rule(rule, session, None)?;
+fn announce(session: &Connection, summary: &str, body: &str) -> zbus::Result<Option<u32>> {
     let show = L10N.tr("show-updates");
     let app_name = L10N.tr("title");
-    let id = notify(
+    notify(
         session,
         &Request {
             app_name: &app_name,
@@ -202,8 +197,16 @@ fn announce(session: &Connection, summary: &str, body: &str) -> zbus::Result<boo
             urgency: Urgency::Normal,
             sound: None,
         },
-    )?;
-    for message in signals.flatten() {
+    )
+    .map(Some)
+}
+
+pub fn clicked(session: &Connection, id: u32) -> zbus::Result<bool> {
+    let rule = MatchRule::builder()
+        .msg_type(message::Type::Signal)
+        .interface("org.freedesktop.Notifications")?
+        .build();
+    for message in MessageIterator::for_match_rule(rule, session, None)?.flatten() {
         let header = message.header();
         match header.member().map(|member| member.as_str()) {
             Some("ActionInvoked") if message.body().deserialize::<(u32, String)>()?.0 == id => {
@@ -218,7 +221,7 @@ fn announce(session: &Connection, summary: &str, body: &str) -> zbus::Result<boo
     Ok(false)
 }
 
-pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Result<bool> {
+pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Result<Option<u32>> {
     let finished = finished_offline(system).unwrap_or_else(|error| {
         tracing::warn!("cannot read the offline update results: {error}");
         None
@@ -234,11 +237,11 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
         _ => {}
     }
     if matches!(waiting_offline(system), Ok(Some(_))) {
-        return Ok(false);
+        return Ok(None);
     }
     let SoftwareState::Available(packages) = check(&Client::background(system), Refresh::Always)
     else {
-        return Ok(false);
+        return Ok(None);
     };
     let body = L10N.tr_args(
         "updates-notification-body",

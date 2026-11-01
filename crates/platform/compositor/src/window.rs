@@ -210,6 +210,7 @@ impl Window {
 
     pub(crate) fn local_geometry(&self) -> Rectangle<i32, Logical> {
         let surface = self.toplevel.wl_surface();
+        let bounds = bbox_from_surface_tree(surface, (0, 0));
         with_states(surface, |states| {
             states
                 .cached_state
@@ -217,7 +218,8 @@ impl Window {
                 .current()
                 .geometry
         })
-        .unwrap_or_else(|| bbox_from_surface_tree(surface, (0, 0)))
+        .and_then(|geometry| geometry.intersection(bounds))
+        .unwrap_or(bounds)
     }
 
     pub(crate) fn size_limits(&self) -> (Size<i32, Logical>, Size<i32, Logical>) {

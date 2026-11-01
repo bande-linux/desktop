@@ -55,6 +55,8 @@ const MENU_OPEN_APP: &str = "open-app:";
 struct TrashWatch {
     trash: Trash,
     watch: FolderWatch,
+    checked: Inbox<bool>,
+    full: bool,
 }
 
 impl TrashWatch {
@@ -63,9 +65,28 @@ impl TrashWatch {
         let watch = FolderWatch::new()
             .inspect_err(|error| tracing::warn!("cannot watch the Trash: {error}"))
             .ok()?;
-        let mut trash_watch = Self { trash, watch };
+        let checked = Inbox::new()
+            .inspect_err(|error| tracing::warn!("cannot watch the Trash: {error}"))
+            .ok()?;
+        let mut trash_watch = Self {
+            trash,
+            watch,
+            checked,
+            full: false,
+        };
         trash_watch.rewatch();
+        trash_watch.check();
         Some(trash_watch)
+    }
+
+    fn check(&self) {
+        let (trash, outbox) = (self.trash.clone(), self.checked.outbox());
+        let checking = thread::Builder::new()
+            .name("trash-check".to_owned())
+            .spawn(move || outbox.send(!trash.is_empty()));
+        if let Err(error) = checking {
+            tracing::warn!("cannot look into the Trash: {error}");
+        }
     }
 
     fn folders(&self) -> Vec<PathBuf> {
@@ -213,7 +234,7 @@ impl Taskbar {
         let mut state = self.state.borrow_mut();
         state.set_trash_icons(empty, full);
         if let Some(trash) = &self.trash {
-            state.set_trash_full(!trash.trash.is_empty());
+            state.set_trash_full(trash.full);
         }
     }
 
@@ -476,9 +497,7 @@ impl Taskbar {
     }
 
     fn trash_full(&self) -> bool {
-        self.trash
-            .as_ref()
-            .is_some_and(|trash| !trash.trash.is_empty())
+        self.trash.as_ref().is_some_and(|trash| trash.full)
     }
 
     fn confirm_empty_trash(&mut self, window: &mut Window, at: Point) {
@@ -976,17 +995,30 @@ impl App for Taskbar {
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         let mut sources = vec![self.bus.fd()];
         sources.extend(self.apps.fd());
-        sources.extend(self.trash.as_ref().map(|trash| trash.watch.fd()));
+        if let Some(trash) = &self.trash {
+            sources.extend([trash.watch.fd(), trash.checked.fd()]);
+        }
         sources
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
+        let watched = 1 + usize::from(self.apps.fd().is_some());
         match index {
             0 => self.receive(window),
-            1 if self.apps.fd().is_some() => self.apps.read(),
-            _ => {
+            1 if watched == 2 => self.apps.read(),
+            index if index == watched => {
                 if let Some(trash) = &mut self.trash {
                     trash.watch.read();
+                }
+            }
+            _ => {
+                let Some(trash) = &mut self.trash else {
+                    return;
+                };
+                if let Some(full) = trash.checked.drain().pop() {
+                    trash.full = full;
+                    self.state.borrow_mut().set_trash_full(full);
+                    window.request_redraw();
                 }
             }
         }
@@ -1018,8 +1050,7 @@ impl App for Taskbar {
             && !trash.watch.take_changed(now).is_empty()
         {
             trash.rewatch();
-            let full = !trash.trash.is_empty();
-            self.state.borrow_mut().set_trash_full(full);
+            trash.check();
         }
         self.run_actions(window);
     }

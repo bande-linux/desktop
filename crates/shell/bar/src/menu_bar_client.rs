@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::LazyLock;
 use std::thread;
 use std::time::Instant;
 
@@ -52,6 +53,8 @@ const CONFIG_INTERFACE: &str = "org.bande.Config";
 
 pub type Restart = Rc<Cell<bool>>;
 
+static LAYOUTS: LazyLock<Layouts> = LazyLock::new(Layouts::load);
+
 pub struct MenuBarClient<V> {
     bar: V,
     display: Display,
@@ -70,7 +73,6 @@ pub struct MenuBarClient<V> {
     app_id: String,
     app_root: Option<Node>,
     user: String,
-    layouts: Layouts,
     dates: DateFormats,
 }
 
@@ -641,8 +643,8 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 let sources = sources
                     .iter()
                     .map(|code| InputSource {
-                        name: self.layouts.name(code),
-                        short: self.layouts.short(code),
+                        name: LAYOUTS.name(code),
+                        short: LAYOUTS.short(code),
                     })
                     .collect();
                 self.bar.status_mut().input_sources = InputSources { sources, active };
@@ -814,7 +816,6 @@ impl<V: StatusView> MenuBarClient<V> {
             app_id: String::new(),
             app_root: None,
             user: full_name(),
-            layouts: Layouts::load(),
             dates,
         })
     }

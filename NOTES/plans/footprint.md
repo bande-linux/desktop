@@ -72,45 +72,74 @@ GPU or not on screen.
    system bus connection. Icon themes and folder listings are cached in `bande-xdg` (ported
    from `wip` f6ce554c; 34 742 → 5 765 system calls for 51 lookups). `bande-idle` minimises
    with Super+H.
-1. **Status hub** (1–2 h): port 8a096894 onto `main`: `bande_status::hub::StatusHub` starts
-   the followers once per process and fans `Update`s out to every bar and Control Center. Win
-   with one display: one PipeWire client and its thread (Control Center's); with N displays,
-   (N−1) × (PipeWire client, device follower, tray host, timers). Risk medium: bar start-up
-   order; `shell/bar/tests/live.rs` covers the fan-out. Do it after the taskbar-width/options
-   work lands, which touches the same files.
-2. **One catalog in the shell** (2 h): the shell context owns an `Rc` of the desktop entries,
-   `Apps` and `MimeDatabase`, reloaded by the existing app-entry watcher; parts stop calling
-   `applications()`. Measure shell start-up and RSS with `bande-footprint` before/after.
-3. **Launch reaper** (1–2 h): port 32a93ba8: one pidfd reaper thread per process and the
-   caller's connection for scope placement.
-4. **Property follower helper** (2 h): port a6769ca2 (one `GetAll`, then the signal's
-   dictionary; read again only when `invalidated` is non-empty).
-5. **Free picture pixels after upload on the GPU path** (2 h, toolkit): keep `Image`'s pixels
-   until the renderer has a texture, then hold only the texture; re-decode from the source on
-   device loss or a CPU fallback. Saves the RGBA size of every wallpaper and backdrop on the
-   GPU path (14.7 MB per 2560×1440 display in the shell's desktop surface). Needs a measured
-   check that the CPU path (lavapipe, VMs) keeps its pixels.
-6. **Greeter and lock: load the sharp wallpaper when sign-in starts** (1 h): it is drawn only
-   while unveiling; start its decode when the password is submitted (PAM takes longer than the
-   decode) and fall back to the blurred backdrop if it is late. Saves 14.7 MB while the greeter
-   or lock screen waits.
-7. **Method timeouts and Control Center off the UI thread** (2 h): give every blocking
-   connection a `method_timeout` (a few seconds) through one `bande_bus` constructor, and move
-   Control Center's panel reads to a worker with an `Inbox`, the way `follow_devices` works.
-   Then the tray and dbusmenu calls.
-8. **Per-change work from the review** (1 h each, independent): the notification presentation
-   without pixels when only the list changed; cache `Trash::is_empty`'s mount list and refresh
-   it on mount changes; `Layouts::load` once per process; the taskbar's trash scan on a
-   worker; `idle_tick` rebuilding only on stack changes.
-9. **Settings' Bluetooth follower** (1 h): it re-reads every adapter and device on any BlueZ
-   signal (5.3 wake-ups/s left in Settings with windows minimised, mostly this); apply
-   `PropertiesChanged` of `org.bluez.Device1` in place for RSSI-like properties, as Wi-Fi now
-   does, and follow BlueZ only while a Bluetooth pane shows (`wip` d497c49b does this for
-   NetworkManager).
-10. **A compact file index** (2 h): store each entry as (parent index, name) in arenas
-   instead of a full `PathBuf` per entry, and the folded names in one string arena; `within`
-   queries walk parent indices. Expect the per-entry cost to fall from about 110 bytes to about
-   40; measure with `bande-idle` and the real home before and after.
+1. **Done 2026-11-01** (`perf/status-hub`, merged in f1c160b7): status hub, ported from
+   8a096894. `bande_status::hub::StatusHub` starts the device, sound, clock, time-zone, tray,
+   unread and errand followers once per shell and fans `Update`s out to every bar; Control
+   Center takes the hub's `Audio`. With one display it saves Control Center's PipeWire
+   client; each further display saves a device follower, a PipeWire client, a tray host and
+   the timers. Under `bande-footprint` (no working PipeWire there) the shell has one thread
+   more (the relay, 32 → 33); the PipeWire saving needs a live session to show.
+2. **Done 2026-11-01, in part** (`perf/catalog`, merged in 3b73a11c): the shell context owns
+   one `Rc<RefCell<Apps>>` (MIME database, associations, handlers) shared by every desktop
+   surface and the launcher; before, each display's desktop surface (also the
+   wallpaper-only ones) and the launcher loaded their own (1.1 MB each). Shell anonymous
+   memory 78.6 → 77.5 MiB with one display under `bande-footprint`. Left: the bar's
+   `InstalledApps` (menu bar and taskbar, per display, each with its own folder watch) and
+   the on-demand `applications()` calls (dialogs, notifications, low memory, screenshot,
+   reopen) still parse the desktop entries themselves (272 KB per copy).
+3. **Done 2026-11-01** (`perf/launch-reaper`, merged in 5d7cf04e): launch reaper, ported from
+   32a93ba8. One `app-watcher` thread per process polls a pidfd per launched app and keeps
+   one session connection for scope placement and failure notices; before, every launch
+   parked a thread in `child.wait()` for the app's life and opened a new session connection.
+4. **Not done**: the property follower helper. Porting a6769ca2 needs a typed dictionary of
+   every `org.bande.Config` property (now about 60) next to the interface, and Settings' and
+   the portal's readers rewritten on it. A config change costs Settings 41 `Get` calls,
+   but config changes are made by the user, so there is no idle cost; left for later.
+5. **Done 2026-11-01** (`perf/pictures`, merged in 3f4e3b55): `Image::redrawable` keeps a way
+   to draw the pixels again; the GPU renderer drops the CPU copy once the texture is
+   uploaded and any later renderer (a new atlas, device loss, the CPU fallback) redraws it.
+   The desktop wallpaper redraws from the wallpaper cache, the lock and greeter backdrops
+   from the picture. A window also drops its CPU renderer once the GPU draws, so the
+   first-frame CPU copy does not stay. `bande-footprint` on lavapipe with
+   `BANDE_RENDERER=gpu` (2928×1818): shell anonymous memory 210.3 → 190.2 MiB (−20.3 MiB,
+   the wallpaper's RGBA); `BANDE_RENDERER=cpu` unchanged (78.2 / 78.7 MiB), the CPU path
+   keeps its pixels. Still to measure on the mini's GPU (AGX): the shell's and greeter's
+   RSS in a live session.
+6. **Done 2026-11-01** (`perf/pictures`): the greeter decodes the sharp wallpaper when the
+   password is submitted, on its own inbox; the unveil falls back to the blurred backdrop if
+   it is late. The lock screen already loaded only the blurred one. Greeter under
+   `bande-footprint`: anonymous 83.4 → 61.7 MiB on the GPU path (with milestone 5), 47.1 →
+   26.3 MiB on the CPU path. Still to check on the mini: that the sharp picture is ready
+   before the unveil after a real PAM sign-in (needs someone signing in).
+7. **Done 2026-11-01, in part** (`perf/bus-timeouts`): `bande_bus::session()`/`system()` set
+   a 25 s `method_timeout` (the D-Bus default reply timeout, long enough for pairing and
+   joins); the shell, lock screen and greeter use them, so a hung service no longer freezes
+   them for good. Control Center reads Wi-Fi, the current network, the sign-in page,
+   Bluetooth and Do Not Disturb on a `control-status` worker (refreshed when the panel opens
+   and after a toggle) instead of about ten calls on the UI thread per rebuild. Left: the
+   toggles, network menu and join still call from the UI thread (now bounded); Settings
+   keeps unbounded connections because Bluetooth pairing waits for the user; the tray's
+   errands already run on the hub's worker.
+8. **Done 2026-11-01, in part** (`perf/per-change`, merged in 9f8aa7cf): `Trash` keeps the
+   mount list and reads `/proc/self/mounts` again only when it signals a change; the
+   taskbar checks whether the Trash is empty on a `trash-check` worker and keeps the
+   answer for its menu; the bar parses `evdev.xml` once per shell, on first need;
+   `idle_tick` skips the stack walk when no pending idle watch obeys inhibitors. Left: the
+   notification presentation without pixels (changes the `org.bande.Notifications` wire
+   format for the shell and the status follower), the cursor cache on scale changes, the
+   staging buffer and `cascade`/`window_index`.
+9. **Done 2026-11-01** (`perf/settings-follow`, merged in a22f171b):
+   `bande_bluetooth::shown_change` drops `PropertiesChanged` signals that change nothing
+   shown (RSSI, ManufacturerData, ServiceData, UUIDs, TxPower, AddressType, Discovering) in
+   Settings and in `bande_status::devices` (bar, lock, greeter); Settings follows every
+   NetworkManager signal only while the Wi-Fi or Network pane shows (ported from d497c49b).
+   During a 60 s discovery near this mini BlueZ sent 115 signals, of which 39 now cause a
+   re-read; with discovery off it sent none in 120 s.
+10. **Done 2026-11-01** (`perf/file-index`, merged in fc76ec2e): the index is a tree of nodes
+   (parent, first child, next sibling, name and folded name as ranges into two string
+   arenas, the folded one only when it differs), compacted when more than half is removed.
+   On this home (`/home/mikael`, mostly `~/bande-linux/repos`), a release build of the
+   index alone: 40.0 → 11.9 MiB, queries 5–11 ms instead of 6–15 ms, same hits.
 11. **Shared code between GUI binaries** (decision, not scheduled): a multicall `bande` binary
    or a shared toolkit `dylib` would let the shell, apps and lock screen share text pages.
    Rust has no stable ABI for a `dylib` across separately built crates, and a multicall binary
@@ -119,7 +148,7 @@ GPU or not on screen.
 
 ## Decisions
 
-- Decided overnight 2026-11-01: milestones 1–4 follow `docs/quality/userland.md`; 5 and 6
-  wait on before/after numbers on the mini's GPU, which this run could not take (the owner's
-  session was at the greeter and nothing visible may be restarted).
+- Decided overnight 2026-11-01: milestones 1–4 follow `docs/quality/userland.md`.
+- 2026-11-01: 5 and 6 landed with headless numbers (lavapipe as a GPU and the CPU path);
+  the live check on the mini's GPU and a real sign-in is still open.
 - Open: milestone 11 needs the owner (packaging shape).

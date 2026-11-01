@@ -54,7 +54,7 @@ stripped). Sizes in MB:
 
 `bande-shell` is 14.6 MB of `.text` and 4.4 MB of `.rodata`. Every GUI binary carries its own
 copy of the toolkit, vello, wgpu, parley and zbus, so their code pages are not shared between
-processes (plan milestone 7).
+processes (plan milestone 11).
 
 ## 2026-11-01: the session under `bande-idle`
 
@@ -145,3 +145,37 @@ release build, warm page cache, `strace -f -c`):
 
 The cache holds the names of the folders it has listed: about 1 500 names for Adwaita, hicolor
 and Bande together.
+
+## 2026-11-01: plan milestones 1–3 and 5–10
+
+Release builds without LTO from the milestone branches against `main` just before each, both
+under `bande-footprint` (headless 2928×1818 at 1.5×, test bus, empty `HOME`), anonymous memory
+from `/proc/<pid>/smaps_rollup` 5 s before the end of a 35 s settle, two runs each (they agreed
+within 0.2 MiB). `BANDE_RENDERER=gpu` draws with lavapipe as a GPU, so textures count as
+process memory; on the mini's GPU they are unified memory too, but this still needs a live
+measurement.
+
+| Process, path | Change | Anonymous MiB before | after |
+| :--- | :--- | ---: | ---: |
+| bande-shell, GPU | wallpaper pixels freed after upload (5) | 210.3 | 190.2 |
+| bande-shell, CPU | same, CPU path keeps its pixels | 78.2 | 78.7 |
+| bande-greeter, GPU | 5 and the sharp wallpaper at sign-in (6) | 83.4 | 61.7 |
+| bande-greeter, CPU | sharp wallpaper at sign-in (6) | 47.1 | 26.3 |
+| bande-shell, CPU | one `Apps` for desktop surfaces and launcher (2) | 78.6 | 77.5 |
+
+- **File index** (10), the index alone over `/home/mikael` in a throwaway release harness:
+  40.0 → 11.9 MiB; queries for `main`, `a`, `cargo toml`, `footprint` took 5–11 ms instead of
+  6–15 ms and returned the same hits.
+- **BlueZ** (9): a 60 s discovery next to the mini brought 115 BlueZ signals; 39 now cause a
+  re-read in Settings and the status follower (the rest only carry RSSI, ManufacturerData,
+  ServiceData, UUIDs and the like). With discovery off BlueZ sent nothing in 120 s, so the
+  5.3 wake-ups/s Settings showed earlier came from a Bluetooth pane left discovering.
+  Settings now follows NetworkManager below its root object only while a network pane shows.
+- **Status hub** (1): with one display the shell under `bande-footprint` has 33 threads
+  instead of 32 (the hub's relay); PipeWire refused that headless client, so the saved
+  PipeWire client (Control Center's, and per extra display the bar's) does not show there.
+- **Launches** (3): no thread per launched app any more, one `app-watcher` thread and one
+  session connection per process.
+
+Still to measure live on the mini: the shell's and greeter's RSS on the AGX GPU, the greeter's
+unveil after a real sign-in, and the shell's PipeWire clients with two displays.

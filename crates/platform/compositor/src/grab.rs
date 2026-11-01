@@ -192,7 +192,7 @@ impl State {
             .seat
             .get_keyboard()
             .map(|keyboard| keyboard.modifier_state())
-            .is_some_and(|held| held.ctrl && held.logo && !held.alt && !held.shift);
+            .is_some_and(|held| held.logo && !held.ctrl && !held.alt && !held.shift);
         if !held {
             return;
         }

@@ -13,7 +13,7 @@ use zbus::blocking::MessageIterator;
 use zbus::{MatchRule, message};
 
 const WINDOW: i32 = 32;
-const KEY_0: u32 = 11;
+const KEY_8: u32 = 9;
 const KEY_MINUS: u32 = 12;
 const KEY_EQUAL: u32 = 13;
 const KEY_INSERT: u32 = 110;
@@ -153,7 +153,7 @@ fn zoom_magnifies_around_the_pointer_and_steps_with_the_keyboard() {
     renderer.render(&mut server).expect("frame");
     let unzoomed = red_pixels(&renderer.snapshot(&server).expect("read back"));
 
-    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_0]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_8]);
     assert_eq!(server.zoom_level(), 2.0);
     assert_eq!(server.render_scale(&server.main_output()), Some(2.0));
     renderer.render(&mut server).expect("frame");
@@ -168,12 +168,12 @@ fn zoom_magnifies_around_the_pointer_and_steps_with_the_keyboard() {
     chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_MINUS]);
     chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_MINUS]);
     assert_eq!(server.zoom_level(), 1.6);
-    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_0]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_8]);
     assert_eq!(server.zoom_level(), 1.0);
-    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_0]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_8]);
     assert_eq!(server.zoom_level(), 1.6);
     roundtrip(&mut server, &mut [&mut app]);
-    assert!(app.keys().iter().all(|(key, _)| *key != KEY_0));
+    assert!(app.keys().iter().all(|(key, _)| *key != KEY_8));
 }
 
 #[test]

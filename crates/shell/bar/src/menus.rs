@@ -50,7 +50,7 @@ pub fn system_menu(user: &str) -> Menu {
         item(&L10N.tr("restart"), &Command::Restart),
         item(&L10N.tr("shut-down"), &Command::ShutDown),
         MenuItem::separator(),
-        item(&L10N.tr("lock-screen"), &Command::LockScreen).shortcut("Ctrl+Super+Q"),
+        item(&L10N.tr("lock-screen"), &Command::LockScreen).shortcut("Super+L"),
         item(
             &L10N.tr_args("log-out", [("user", user.to_owned().into())]),
             &Command::LogOut,
@@ -258,11 +258,11 @@ fn standard_app_menu(name: &str) -> Menu {
     Menu::new(vec![
         MenuItem::new(&L10N.tr_args("app-about", app()), "").enabled(false),
         MenuItem::separator(),
-        item(&L10N.tr_args("app-hide", app()), &Command::HideApp).shortcut("Super+H"),
-        item(&L10N.tr("app-hide-others"), &Command::HideOthers).shortcut("Alt+Super+H"),
+        item(&L10N.tr_args("app-hide", app()), &Command::HideApp),
+        item(&L10N.tr("app-hide-others"), &Command::HideOthers),
         item(&L10N.tr("app-show-all"), &Command::ShowAll),
         MenuItem::separator(),
-        item(&L10N.tr_args("app-quit", app()), &Command::QuitApp).shortcut("Super+Q"),
+        item(&L10N.tr_args("app-quit", app()), &Command::QuitApp).shortcut("Ctrl+Q"),
     ])
 }
 

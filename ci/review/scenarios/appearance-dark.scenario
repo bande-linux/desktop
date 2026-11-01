@@ -47,7 +47,7 @@ key escape
 wait 500ms
 click 1500 900
 wait 300ms
-key super+q
+key alt+f4
 wait 1500ms
 type "cp /tmp/config.kdl.review ~/.config/bande/config.kdl\n"
 wait 2s

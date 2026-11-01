@@ -30,7 +30,7 @@ Checked in `crates/apps/monitor/src` and its goldens.
 | Footer | Up to three rows of label and value per column (CPU: System, User, Idle, Processes, Threads; Memory: Physical, Used, Cached Files, Swap, Compressed (zram), Pressure as a %) and a 240 × 88 pt bar graph of the last 60 samples | `monitor_view.rs` |
 | Actions | Quit (SIGTERM to the group's roots) and Force Quit (SIGKILL to all, Alt) with an alert; several rows at once; other users' processes refused; Quit is Ctrl+E; Inspect (Ctrl+I, double click); Show in Files (Shift+Ctrl+R, starts `bande-files <path>`); Copy Name, Copy PID; Ctrl+F searches names and PIDs | `menu.rs`, `signal.rs`, `view.rs` |
 | Inspector | A window per process: Info (parent, children, state, user, command, executable, running for, CPU, threads, resident, virtual), Threads, Open Files, Memory Map | `inspector.rs`, `inspect.rs` |
-| Force Quit | Alt+Super+Esc window listing your apps, Not Responding in red, Force Quit | `force_quit.rs` |
+| Force Quit | Ctrl+Alt+Esc window listing your apps, Not Responding in red, Force Quit | `force_quit.rs` |
 | Sampling | Every 2 s (first after 0.5 s), PSS and GPU only while a column needs them; every window is asked to redraw on every tick | `main.rs` |
 
 **What reads as crude:** the footer is a small grid of numbers and a 240 pt bar chart without a
@@ -113,7 +113,7 @@ How the graphs and readouts should look, so every slice draws the same way:
 
 | Gap | Why a user notices | Now/later/never | Effort |
 | :--- | :--- | :---: | :---: |
-| Quit sends SIGTERM to an app | An app with unsaved work dies without asking; Super+Q and the bar's Quit ask the app politely through the compositor | now | S |
+| Quit sends SIGTERM to an app | An app with unsaved work dies without asking; the bar's and the taskbar's Quit ask the app politely through the compositor | now | S |
 | The main window never marks an app Not Responding | Only the Force Quit window (started by the compositor as a shell client) sees `app_responding` | now | S |
 | No view filter (All, Mine, Apps) | With 300 system processes, finding your own work means scrolling or searching | now | S |
 | Pause and Resume a process (SIGSTOP, SIGCONT) | Freezes a runaway job without losing it; GNOME has Stop and Continue | later | S |
@@ -156,7 +156,7 @@ How the graphs and readouts should look, so every slice draws the same way:
    `full avg10` ≥ 5 %. The thresholds live in one place and are tested.
 6. **View filter in the View menu:** All Processes (default), My Processes, Apps. Remembered.
 7. **Red never draws a series** (see §3).
-8. **Quit is polite for apps.** An app row asks the app through the compositor, as Super+Q does; a
+8. **Quit is polite for apps.** An app row asks the app through the compositor, as the bar's Quit does; a
    bare process row still gets SIGTERM; Force Quit stays SIGKILL.
 9. **No update-frequency setting.** 2 s while a window is shown; while every window is hidden, only
    the system totals are sampled, so the graphs keep their history at a fraction of the cost.
@@ -244,7 +244,7 @@ the search field when it is not All.
 ### M7. Polite Quit and Not Responding in the main window
 
 Quit on an app row emits a request to quit that app id; `main.rs` sends it through the
-compositor's `quit_app` (the same path as Super+Q); process rows still use SIGTERM. The main window
+compositor's `quit_app` (the same path as the bar's Quit); process rows still use SIGTERM. The main window
 marks apps Not Responding like the Force Quit window. Both need the compositor to offer
 `quit_app` and `app_responding` to Activity Monitor (§8); without that, ship the request plumbing
 behind the existing fallback and report the need.
@@ -372,7 +372,7 @@ or inspect a process, Escape to close the inspector) gets one end-to-end test so
   ordinary apps get no more than they could do to another app of the same user. Shell clients are
   never asked to quit through it. `Window::quit_app` uses it when the window has no
   `bande_shell_v1`, and `Window::watch_apps` binds it on demand, so apps that never ask receive
-  no events. The Monitor's main window watches apps: Quit on an app row is the polite Super+Q path
+  no events. The Monitor's main window watches apps: Quit on an app row is the polite path the bar's Quit takes
   and hung apps are marked Not Responding in the list.
 - **M1, hidden sampling.** The compositor sets xdg_toplevel `suspended` (xdg_wm_base 6) on
   minimised and hidden windows; the toolkit reports it in `ToplevelState::suspended`. While every

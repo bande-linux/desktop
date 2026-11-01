@@ -51,7 +51,7 @@ graph LR
 - Video inhibition: `idle-inhibit-v1` lets media players and browsers hold off idle.
 - Implemented in `crates/shell/lock`: date, time, the user's initial and name and a secure
   field; PAM (`/etc/pam.d/bande-lock`) runs off the UI thread, and a rejected password clears
-  and shakes the field. `Ctrl+Super+Q` and logind's `Lock` signal start it; the compositor sets
+  and shakes the field. `Super+L` and logind's `Lock` signal start it; the compositor sets
   logind's `LockedHint`.
 - Implemented in `crates/services/power` (`bande-power`, a session service): before the
   computer sleeps, the session is locked through logind (`Session.Lock`) while a `delay` sleep
@@ -160,11 +160,11 @@ graph LR
   The picture is saved as a PNG under `$XDG_CACHE_HOME/bande-screenshot` (not the Desktop:
   the app asked for it, the user did not) and returned as a `file://` URI. `PickColor` shows a
   loupe with the colour's hex value under the pointer; a click picks, Escape cancels.
-- **Screenshot tool** (`bande-screenshot`): `Super+Shift+3` saves one picture per display, as
-  macOS does; the overlay lives on the main display, so `Super+Shift+4`
+- **Screenshot tool** (`bande-screenshot`): `Shift+Print` saves one picture per display, as
+  GNOME does; the overlay lives on the main display, so `Shift+Super+S`
   lets the user drag out an area, and Space there switches to choosing a window (the window under
   the pointer is tinted; a click takes it alone with its rounded corners, transparent around it,
-  and a soft shadow drawn by the tool). `Super+Shift+5` (`show_options` on `bande_capture_v1`)
+  and a soft shadow drawn by the tool). `Print` (`show_options` on `bande_capture_v1`)
   opens a palette above a scrim near the bottom of the screen: Entire Screen, Window, Area, Record
   Entire Screen, Record Area, an Options menu (save to Desktop, Pictures or the clipboard; a
   timer of none, 5 or 10 seconds; show the pointer), and Capture or Record. Arrow keys move, Space
@@ -184,7 +184,7 @@ graph LR
   screen and runs `gst-launch-1.0` (`pipewiresrc`, `videocrop` for an area, 30 frames per second)
   into an MP4 (H.264 by `x264enc`, from `gstreamer1.0-plugins-ugly`) or, without it, a WebM (VP8
   by `vp8enc`). A red stop symbol sits in the menu bar while recording; clicking it or pressing
-  `Super+Shift+5` stops the recorder with an end of stream, so the file is finalised, and the
+  `Print` stops the recorder with an end of stream, so the file is finalised, and the
   recording appears as a thumbnail with a play mark. Without GStreamer the palette explains what to
   install instead of failing silently.
 - Qt apps follow dark mode through Qt's own portal platform theme: `bande-session` sets
@@ -305,8 +305,8 @@ graph LR
     `bande-app-menu` exports Ctrl as `Control`, as the dbusmenu spec asks). Items of the
     standard app menu carry `x-bande-shell-action`, which the menu bar performs itself
     through `bande_shell_v1`, since an app cannot hide itself: About (a small window with the
-    app's icon and name from its desktop entry and the version in `x-bande-version`), Hide
-    (`Super+H`), Hide Others (`Alt+Super+H`) and Show All (`show_app` for every running app).
+    app's icon and name from its desktop entry and the version in `x-bande-version`), Hide,
+    Hide Others and Show All (`show_app` for every running app).
 - **Network and Bluetooth**: NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ
   (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Control Center and Settings, through
   `crates/libs/network` and `crates/libs/bluetooth`.
@@ -442,7 +442,7 @@ prompts (they are answered in the secure field), and power and accessibility men
 
 - **Setup assistant** (planned): on first login a short, non-blocking assistant asks for the
   appearance (dark, light or automatic), the taskbar position, the scrolling direction, and shows
-  the essential shortcuts (`Super+Space` launcher, `Super+Shift+4` screenshot, `Super+Escape`
+  the essential shortcuts (`Super+Space` launcher, `Print` screenshot, `Ctrl+Alt+Escape`
   Force Quit).
 - **Updates**: packages come from Bande's signed APT repository (see the top-level
   `README.md` and [packaging](packaging.md)) and arrive with `apt upgrade`. Planned: a timer

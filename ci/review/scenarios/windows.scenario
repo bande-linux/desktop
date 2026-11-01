@@ -14,28 +14,28 @@ key enter
 wait-for-window "org.bande.Files"
 wait 1500ms
 shot "two windows"
-note "Super+Ctrl+Left fills the left half"
-key super+ctrl+left
+note "Super+Left fills the left half"
+key super+left
 wait 1s
 shot "files on the left half"
-note "Super+Tab, then Super+Ctrl+Right"
+note "Super+Tab, then Super+Right"
 key super+tab
 wait 800ms
-key super+ctrl+right
+key super+right
 wait 1s
 shot "side by side"
-note "Super+Ctrl+Up keeps the top of its half"
-key super+ctrl+up
+note "Super+Up keeps the top of its half"
+key super+up
 wait 1s
 shot "terminal in the top right quarter"
-key super+ctrl+down
+key super+down
 wait 1s
 shot "terminal back on the right half"
-note "Super+Ctrl+F fills the screen and toggles back"
-key super+ctrl+f
+note "Super+F11 fills the screen and toggles back"
+key super+f11
 wait 1200ms
 shot "terminal full screen"
-key super+ctrl+f
+key super+f11
 wait 1200ms
 note "Spread four fingers to reveal the desktop"
 pinch out 4

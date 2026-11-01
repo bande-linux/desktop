@@ -14,7 +14,7 @@ use note::note;
 
 const OUTPUT: (i32, i32) = (640, 400);
 const KEY_LEFTMETA: u32 = 125;
-const KEY_M: u32 = 50;
+const KEY_H: u32 = 35;
 
 fn suspended(events: &[WindowEvent]) -> Option<bool> {
     events.iter().rev().find_map(|event| match event {
@@ -30,8 +30,8 @@ fn a_minimised_window_is_told_it_is_suspended() {
     let before = suspended(&client.seen);
 
     desktop.server.key(KEY_LEFTMETA, true, 1);
-    desktop.server.key(KEY_M, true, 2);
-    desktop.server.key(KEY_M, false, 3);
+    desktop.server.key(KEY_H, true, 2);
+    desktop.server.key(KEY_H, false, 3);
     desktop.server.key(KEY_LEFTMETA, false, 4);
     desktop.wait_for(
         &mut [&mut client],

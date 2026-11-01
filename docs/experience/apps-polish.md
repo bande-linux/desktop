@@ -23,7 +23,7 @@ window restore, and Show in Files for the folder the shell is in.
 
 Compared with macOS Screenshot.app and Markup, GNOME Screenshot and KDE Spectacle.
 
-Already there: the capture palette (Super+Shift+5) with screen, window and area capture plus screen and area recording;
+Already there: the capture palette (Print) with screen, window and area capture plus screen and area recording;
 an options menu (save to Desktop, Pictures or the clipboard; a timer of none, 5 or 10 seconds; show pointer); window
 shots with a shadow; a floating thumbnail that opens Markup when clicked and can be dragged into apps; Markup with crop,
 arrow, rectangle, text and highlight.

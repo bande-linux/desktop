@@ -585,6 +585,7 @@ name = "bande-file-chooser"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bande-app-settings",
  "bande-files",
  "bande-fs",
  "bande-l10n",

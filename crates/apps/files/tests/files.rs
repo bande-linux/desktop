@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use bande_files::{Browser, FilesView, Location};
+use bande_files::{Browser, FilesSettings, FilesView, Location, Sheet};
 use bande_fs::Trash;
 use bande_toolkit::ui::{Event, Key, Modifiers};
 use bande_toolkit::{Palette, Scheme, TextSystem};
@@ -13,10 +13,14 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 
 fn view(browser: Browser) -> FilesView {
+    view_with(browser, Apps::load(Vec::new(), &[]))
+}
+
+fn view_with(browser: Browser, apps: Apps) -> FilesView {
     let mut view = FilesView::new(
         browser,
         Vec::new(),
-        Apps::load(Vec::new(), &[]),
+        apps,
         Palette::for_scheme(Scheme::Light),
         TextSystem::new(),
     )
@@ -117,4 +121,43 @@ fn a_file_goes_to_the_trash_and_back_and_a_new_folder_is_named_in_place_and_undo
     key(&mut files, Key::Character('z'), true, false);
     finish(&mut files);
     assert!(!exists("untitled folder"));
+}
+
+fn type_name(view: &mut FilesView, text: &str) {
+    for character in text.chars() {
+        key(view, Key::Character(character), false, false);
+    }
+    key(view, Key::Enter, false, false);
+}
+
+#[test]
+fn renaming_keeps_a_hidden_extension_and_asks_before_changing_a_shown_one() {
+    let root = TempDir::new().expect("temporary folder");
+    let (home, data) = (root.path().join("home"), root.path().join("data"));
+    fs::create_dir_all(data.join("mime")).expect("mime folder");
+    fs::write(data.join("mime/globs2"), "50:text/plain:*.txt\n").expect("globs");
+    fs::create_dir_all(&home).expect("home");
+    fs::write(home.join("notes.txt"), "notes\n").expect("file");
+    let trash = Trash::new(root.path().join("Trash"), 0);
+    let mut files = view_with(
+        Browser::open(Location::Folder(home.clone()), trash),
+        Apps::load(vec![data], &[]),
+    );
+    key(&mut files, Key::Down, false, false);
+    key(&mut files, Key::Function(2), false, false);
+    key(&mut files, Key::Character('a'), true, false);
+    type_name(&mut files, "plans");
+    assert!(home.join("plans.txt").is_file());
+
+    files.apply_settings(&FilesSettings {
+        show_extensions: true,
+        ..FilesSettings::default()
+    });
+    key(&mut files, Key::Function(2), false, false);
+    key(&mut files, Key::Character('a'), true, false);
+    type_name(&mut files, "plans.md");
+    assert!(matches!(files.sheet(), Some(Sheet::ChangeExtension { .. })));
+    assert!(home.join("plans.txt").is_file());
+    key(&mut files, Key::Escape, false, false);
+    assert!(home.join("plans.txt").is_file() && files.sheet().is_none());
 }

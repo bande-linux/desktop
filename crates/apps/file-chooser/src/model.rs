@@ -124,10 +124,11 @@ pub struct Chooser {
     filter: Option<usize>,
     sort: Sort,
     pub name: String,
+    pub show_extensions: bool,
 }
 
 impl Chooser {
-    pub fn new(dialog: Dialog, mime: MimeDatabase, folder: PathBuf) -> Self {
+    pub fn new(dialog: Dialog, mime: MimeDatabase, folder: PathBuf, show_extensions: bool) -> Self {
         let filter = dialog
             .current_filter
             .as_ref()
@@ -141,6 +142,7 @@ impl Chooser {
             entries: Vec::new(),
             filter,
             sort: Sort::default(),
+            show_extensions,
         };
         if chooser.open(&folder).is_err() {
             chooser.folder = folder;
@@ -223,6 +225,14 @@ impl Chooser {
             .iter()
             .filter(|entry| self.shows(entry))
             .collect()
+    }
+
+    pub fn shown_name<'a>(&self, entry: &'a Entry) -> &'a str {
+        let hidden = match self.show_extensions || entry.is_folder() {
+            true => None,
+            false => self.mime.extension(&entry.name),
+        };
+        &entry.name[..entry.name.len() - hidden.map_or(0, str::len)]
     }
 
     pub fn mime(&self) -> &MimeDatabase {

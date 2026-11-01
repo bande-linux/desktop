@@ -72,6 +72,20 @@ impl Table {
         }
     }
 
+    pub fn text_bounds(&self, index: usize, column: usize) -> Option<Rect> {
+        let bounds = self.cell_bounds(index, column)?;
+        let line = self.line(index)?;
+        let indent = if column == 0 { self.indent(line) } else { 0.0 };
+        let icon = match line.cells.get(column) {
+            Some(cell) => self.icon_space(column, cell),
+            None if column == 0 && self.named_icons => ICON_SIZE + ICON_GAP,
+            None => 0.0,
+        };
+        let x = bounds.x + CELL_PADDING + indent + icon;
+        let width = (bounds.x + bounds.width - CELL_PADDING - x).max(0.0);
+        Some(Rect::new(x, bounds.y, width, bounds.height))
+    }
+
     pub(super) fn icon_space(&self, column: usize, cell: &Cell) -> f32 {
         match cell.icon.is_some() || (column == 0 && self.named_icons) {
             true => ICON_SIZE + ICON_GAP,

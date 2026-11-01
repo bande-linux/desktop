@@ -318,7 +318,6 @@ fn changes_are_written_through_org_bande_config() {
         (SettingId::KeyRepeatDelay, Value::Number(300)),
         (SettingId::BarIconSize, Value::Number(52)),
         (SettingId::BarAutoHide, Value::Flag(true)),
-        (SettingId::BarNames, Value::Flag(true)),
         (SettingId::BarMenuBar, keyword("separate")),
         (SettingId::ReduceMotion, Value::Flag(true)),
         (SettingId::Zoom, Value::Flag(true)),
@@ -352,7 +351,6 @@ fn changes_are_written_through_org_bande_config() {
     assert_eq!(written.idle.suspend, Suspend::Never);
     assert_eq!(written.keyboard.repeat_delay, Duration::from_millis(300));
     assert_eq!((written.bar.icon_size, written.bar.auto_hide), (52, true));
-    assert!(written.bar.names);
     assert_eq!(written.bar.menu_bar, MenuBarPlacement::Separate);
     let access = written.accessibility;
     assert!(access.reduce_motion && access.increase_contrast && access.sticky_keys);

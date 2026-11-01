@@ -24,7 +24,6 @@ pub enum Setting {
     BarApps(Vec<String>),
     BarAutoHide(bool),
     BarIconSize(u32),
-    BarNames(bool),
     BarMenuBar(MenuBarPlacement),
     IdleDimAfter(Duration),
     IdleLockAfter(Duration),
@@ -131,12 +130,6 @@ impl Setting {
                 Some("bar"),
                 "size",
                 (*size != DEFAULT_BAR_ICON_SIZE).then_some(KdlValue::Integer((*size).into())),
-            ),
-            Self::BarNames(names) => set(
-                &mut document,
-                Some("bar"),
-                "names",
-                names.then_some(KdlValue::Bool(true)),
             ),
             Self::BarMenuBar(placement) => set(
                 &mut document,

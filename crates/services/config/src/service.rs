@@ -210,9 +210,6 @@ fn publish_changes(
         if before.bar.icon_size != after.bar.icon_size {
             let _ = guard.bar_icon_size_changed(emitter).await;
         }
-        if before.bar.names != after.bar.names {
-            let _ = guard.bar_names_changed(emitter).await;
-        }
         if before.bar.menu_bar != after.bar.menu_bar {
             let _ = guard.bar_menu_bar_changed(emitter).await;
         }
@@ -678,16 +675,6 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_bar_icon_size(&self, size: u32) -> zbus::fdo::Result<()> {
         self.write(&Setting::BarIconSize(size))
-    }
-
-    #[zbus(property)]
-    fn bar_names(&self) -> bool {
-        self.store.current().bar.names
-    }
-
-    #[zbus(property)]
-    fn set_bar_names(&self, names: bool) -> zbus::fdo::Result<()> {
-        self.write(&Setting::BarNames(names))
     }
 
     #[zbus(property)]

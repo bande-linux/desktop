@@ -199,7 +199,6 @@ pub enum SettingId {
     WallpaperFit,
     BarEdge,
     BarIconSize,
-    BarNames,
     BarAutoHide,
     BarMenuBar,
     DisplayUse,
@@ -787,7 +786,6 @@ fn desktop_panes() -> Vec<Pane> {
                             high: L10N.tr("large"),
                         },
                     ),
-                    switch(SettingId::BarNames, "bar-names"),
                     switch(SettingId::BarAutoHide, "bar-auto-hide"),
                     setting(
                         SettingId::BarMenuBar,

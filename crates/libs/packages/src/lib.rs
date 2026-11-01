@@ -255,7 +255,7 @@ pub struct Applied {
 pub fn available(system: &Connection) -> zbus::Result<bool> {
     let bus = DBusProxy::new(system)?;
     let name = BusName::try_from(SERVICE)?;
-    Ok(bus.name_has_owner(name.clone())?
+    Ok(bus.name_has_owner(name)?
         || bus
             .list_activatable_names()?
             .iter()
@@ -345,23 +345,27 @@ impl Client {
 
     pub fn resolve_installed(&self, name: &str) -> Result<Vec<Package>, Error> {
         Ok(self
-            .run("Resolve", &(FILTER_INSTALLED, [name]), &|_| {})?
+            .run(
+                "Resolve",
+                &(FILTER_INSTALLED, std::slice::from_ref(&name)),
+                &|_| {},
+            )?
             .packages)
     }
 
     pub fn details_local(&self, path: &Path) -> Result<Option<Details>, Error> {
-        let file = path.to_string_lossy();
+        let file = path.to_string_lossy().into_owned();
         Ok(self
-            .run("GetDetailsLocal", &([file.as_ref()],), &|_| {})?
+            .run("GetDetailsLocal", &(std::slice::from_ref(&file),), &|_| {})?
             .details
             .into_iter()
             .next())
     }
 
     pub fn files_local(&self, path: &Path) -> Result<Vec<String>, Error> {
-        let file = path.to_string_lossy();
+        let file = path.to_string_lossy().into_owned();
         Ok(self
-            .run("GetFilesLocal", &([file.as_ref()],), &|_| {})?
+            .run("GetFilesLocal", &(std::slice::from_ref(&file),), &|_| {})?
             .files)
     }
 
@@ -371,8 +375,12 @@ impl Client {
         mode: Mode,
         progress: &dyn Fn(Progress),
     ) -> Result<Applied, Error> {
-        let file = path.to_string_lossy();
-        let outcome = self.run("InstallFiles", &(mode.flags(), [file.as_ref()]), progress)?;
+        let file = path.to_string_lossy().into_owned();
+        let outcome = self.run(
+            "InstallFiles",
+            &(mode.flags(), std::slice::from_ref(&file)),
+            progress,
+        )?;
         Ok(Applied {
             packages: outcome.packages,
             restart: outcome.restart,

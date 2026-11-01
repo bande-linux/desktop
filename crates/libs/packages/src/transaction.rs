@@ -231,7 +231,7 @@ where
         for rule in &rules {
             bus.add_match_rule(rule.inner().clone())?;
         }
-        if !bus.name_has_owner(BusName::try_from(SERVICE)?)? {
+        if !bus.name_has_owner(BusName::try_from(SERVICE).map_err(zbus::Error::from)?)? {
             return Err(Error::Vanished);
         }
         let _: () = transaction.call(method, body)?;

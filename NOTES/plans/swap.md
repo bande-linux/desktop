@@ -21,7 +21,9 @@ the commit. Fix the kernel and the image. Ship no disk swap by default.
   defconfig). None of the fragments mention ZRAM or PSI. Without PSI, three layers of decision
   0004 fail at once. systemd-oomd needs `/proc/pressure/*` and refuses to start. The shell's
   low-memory window opens a trigger on `/proc/pressure/memory`. Activity Monitor's pressure graph
-  reads PSI too. Without ZRAM, zram-generator finds no device and creates nothing. Debian's kernel
+  reads PSI too. Without ZRAM, zram-generator 1.2.1 still writes `dev-zram0.swap`
+  into swap.target, so boot waits 90 s for a `/dev/zram0` that never appears (seen on the mini
+  2026-11-01); bande-desktop's `dev-zram0.device.d` drop-in cuts that wait to 10 s. Debian's kernel
   has `PSI=y`, `ZRAM=m`, `ZSMALLOC`, the zstd backend, and `ZSWAP=y` (off by default).
 - **Images** (`images/customize.sh:36-37`): kernel, scripts and desktop .debs are all installed
   with `apt-get install --no-install-recommends`, so no image ever gets zram-generator or oomd.

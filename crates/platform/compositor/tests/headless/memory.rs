@@ -90,3 +90,17 @@ fn a_remembered_frame_off_the_current_displays_is_brought_back_into_view() {
     assert!(frame.loc.x + WINDOW.0 <= OUTPUT.0);
     assert!(frame.loc.y + WINDOW.1 <= OUTPUT.1);
 }
+
+#[test]
+fn a_fixed_size_dialog_is_not_remembered_so_it_cannot_lend_its_frame_to_another_dialog() {
+    let state = tempfile::tempdir().expect("state directory");
+    let mut server = remembering(state.path());
+    let mut dialog = open(&mut server, EDITOR);
+    dialog.set_fixed_size(&mut server, 0, WINDOW.0, WINDOW.1);
+    let opened = frame_of(&server, EDITOR, 0);
+    drag(&mut server, &mut dialog, opened.loc);
+    dialog.close_window(&mut server, 0);
+
+    let memory = std::fs::read_to_string(state.path().join("bande/windows")).unwrap_or_default();
+    assert!(!memory.contains(EDITOR));
+}

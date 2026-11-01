@@ -67,4 +67,4 @@ Method: I read the goldens (light and dark where they exist) against `docs/desig
 
 ## Status
 
-M1 started.
+M1 finished (merged). M2-M6 open.

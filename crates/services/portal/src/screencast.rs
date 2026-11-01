@@ -183,6 +183,7 @@ impl ScreenCast {
         (SUCCESS, Results::new())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn select_sources(
         &self,
         handle: ObjectPath<'_>,

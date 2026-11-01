@@ -77,6 +77,11 @@ impl Place {
             "[Desktop Entry]\nType=Application\nName=Editor\nExec=editor %F\nMimeType=text/plain;\n",
         )
         .expect("entry");
+        fs::write(
+            data.join("applications/org.bande.Terminal.desktop"),
+            "[Desktop Entry]\nType=Application\nName=Terminal\nExec=bande-terminal\n",
+        )
+        .expect("terminal");
         Apps::load(vec![data], &[self.root.path().join("config")])
     }
 

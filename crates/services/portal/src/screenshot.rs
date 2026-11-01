@@ -50,6 +50,7 @@ pub struct Screenshot {
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Screenshot")]
 impl Screenshot {
+    #[allow(clippy::too_many_arguments)]
     async fn screenshot(
         &self,
         handle: ObjectPath<'_>,

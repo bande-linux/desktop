@@ -1,6 +1,6 @@
 # Moving Terminal, Activity Monitor, Software and Package Installer to bande-linux/apps
 
-Approved by the owner on 2026-11-01. Files, Settings and the file chooser stay in desktop: the file chooser depends on bande-files, and Files is the system file manager. Apps consume desktop crates as git dependencies pinned to one desktop rev.
+Approved by the owner on 2026-11-01. **Status: M1, M2, M4-M7 done 2026-11-01; M3 skipped (Activity Monitor and Force Quit stay in desktop); the releases wait for the owner's tags.** Files, Settings and the file chooser stay in desktop: the file chooser depends on bande-files, and Files is the system file manager. Apps consume desktop crates as git dependencies pinned to one desktop rev.
 
 ## Findings
 
@@ -161,9 +161,13 @@ Status: done 2026-11-01 for Terminal, Software, Installer and catalog (Activity 
 - Bump Mail and Calendar from 3ff5f3e7 to the shared pin and fix what Super→Ctrl and the renames broke.
 - ~/bande-linux/bin/rebuild-apps: apps-repo names build there (`cargo build --release`, `cargo deb --no-build`, `dpkg -i`); desktop crates/apps names go to `rebuild-desktop --apps`.
 
+Status: done 2026-11-01. gate.sh and bump-desktop.sh were already on apps `main`; added `ci/with-desktop.sh <desktop> <cargo args>` (patches every desktop crate in each app's lock to the checkout, puts the locks back), the README's app list, and both CLAUDE.md files now say: compile per change, one full gate on `main` per batch. Mail and Calendar moved from a6a68588 to the shared pin 97b1ba89 and compiled unchanged. rebuild-apps builds apps-repo names in ~/bande-linux/repos/apps and sends the rest to `rebuild-desktop --apps`.
+
 ### M7 (apt and images), then the first releases
 - images: the fetch-desktop.sh change above. apt: README table row, the Recommends check in publish.yml verify, a test for an apps package recommended by bande-desktop.
-- Release order: tag terminal-v0.1.0, monitor-v0.1.0, software-v0.1.0, installer-v0.1.0 (and mail, calendar) and wait for them to publish; bump `[workspace.package]` and tag desktop v0.1.0; build an image and check the apps are in it.
+- Release order: tag terminal-v0.1.0, software-v0.1.0, installer-v0.1.0 (and mail, calendar; Activity Monitor stays in desktop, M3) and wait for them to publish; tag desktop v0.1.0; build an image and check the apps are in it.
+
+Status: the code is done 2026-11-01; the releases wait for the owner. images 587b692: fetch-desktop.sh reads bande-desktop's Recommends from the signed index, fetches the `apps`-owned packages it recommends without the version check, and fails on a missing one unless `ALLOW_MISSING_APPS=1` (checked against a fixture archive). apt 8214bc8: the README rows, a `verify` step that warns about any Recommends without a candidate, and rebuild tests for a desktop that recommends an app (tests/run-all.sh green). Until terminal, software and installer are published, an image build from the archive needs `ALLOW_MISSING_APPS=1`.
 
 ### What a toolkit change costs afterwards
 1. Desktop branch, gate, merge.

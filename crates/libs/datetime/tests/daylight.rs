@@ -61,6 +61,23 @@ fn night_falls_at_sunset_and_day_breaks_at_sunrise() {
 }
 
 #[test]
+fn west_and_far_east_of_greenwich_the_sun_sets_on_the_same_day() {
+    let new_york = place(ZONE_TAB, "America/New_York");
+    let (scheme, sunset) = sky(&at("2026-11-01T10:00[America/New_York]"), new_york).expect("day");
+    assert_eq!(scheme, Sky::Day);
+    assert_eq!(day(sunset, "America/New_York")[..2], *"01");
+    assert!(near(&local(sunset, "America/New_York"), "16:52"));
+
+    let auckland = Some(Place {
+        latitude: -36.85,
+        longitude: 174.77,
+    });
+    let (scheme, sunset) = sky(&at("2026-11-01T10:00[Pacific/Auckland]"), auckland).expect("day");
+    assert_eq!(scheme, Sky::Day);
+    assert_eq!(day(sunset, "Pacific/Auckland")[..2], *"01");
+}
+
+#[test]
 fn above_the_arctic_circle_midsummer_stays_light_and_midwinter_dark() {
     let tromso = Some(Place {
         latitude: 69.65,

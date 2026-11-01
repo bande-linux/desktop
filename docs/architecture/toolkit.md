@@ -180,7 +180,7 @@ writes a hex value, a corner radius or a font name of its own.
   | `Toggle` (switch) | 36×20 pill, `edge` off, accent on, white 15 pt knob with a small shadow |
   | `Checkbox` | 16 pt, radius 4, 1.5 pt `ink3` outline; on: accent with a square-capped check |
   | `RadioGroup` | 16 pt circles; on: accent with a 5 pt square centre |
-  | `SegmentedControl` | `well` track radius 8, a raised chip radius 6 (`raised`: `overlay` light, `edge` dark) that glides on `quick`; selected label 600 `ink`; `set_selected(cx, index)` from code; `SegmentedControl::symbols` shows 16 pt symbols (`ink2`, `ink` when selected) in 32 pt segments, each with its accessible name |
+  | `SegmentedControl` | `well` track radius 8, a raised chip radius 6 (`raised`: `overlay` light, `edge` dark) that glides on `quick`; selected label 600 `ink`; `set_selected(cx, index)` from code; `SegmentedControl::symbols` shows 16 pt symbols (`ink2`, `ink` when selected) in 32 pt segments, each with its accessible name; `fill_equally()` splits the placed frame into equal segments (a toolbar slot) |
   | `PopUpButton` | `well` fill, single down chevron, the menu opens with the current choice over the button |
   | `Stepper` | one 96 pt `well` capsule: − value + (tabular figures); `.format(fn)` formats the value |
   | `Slider` | 4 pt `well` track, accent fill, a 7×20 white fader knob with an `edge` outline; `.ticks(n)` adds `ink3` tick marks and detents the knob settles on (`interactive` spring); `set_value(cx, value)` from code |

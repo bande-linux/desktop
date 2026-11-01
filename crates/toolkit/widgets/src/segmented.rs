@@ -31,6 +31,7 @@ pub struct SegmentedControl {
     on_select: Box<dyn FnMut(usize)>,
     pill: Option<(Animated, Animated)>,
     enabled: bool,
+    fill: bool,
     frame: Rect,
 }
 
@@ -58,6 +59,7 @@ impl SegmentedControl {
             on_select: Box::new(on_select),
             pill: None,
             enabled: true,
+            fill: false,
             frame: Rect::default(),
         }
     }
@@ -74,6 +76,11 @@ impl SegmentedControl {
             segment.symbol = Some((Symbol::new(image.clone()), Symbol::new(image)));
         }
         control
+    }
+
+    pub fn fill_equally(mut self) -> Self {
+        self.fill = true;
+        self
     }
 
     pub fn selected(&self) -> Option<usize> {
@@ -229,14 +236,28 @@ impl Widget for SegmentedControl {
             ));
             segment.plain = Some(plain);
         }
-        Size::new(
-            self.segments.iter().map(|segment| segment.width).sum(),
-            cx.control_height(ControlSize::Regular),
-        )
+        let width = match self.fill {
+            true => {
+                self.segments
+                    .iter()
+                    .map(|segment| segment.width)
+                    .fold(0.0, f32::max)
+                    * self.segments.len() as f32
+            }
+            false => self.segments.iter().map(|segment| segment.width).sum(),
+        };
+        Size::new(width, cx.control_height(ControlSize::Regular))
     }
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {
+        if self.fill && !self.segments.is_empty() {
+            let width = frame.width / self.segments.len() as f32;
+            for segment in &mut self.segments {
+                segment.width = width;
+            }
+        }
         let width = self.segments.iter().map(|segment| segment.width).sum();
+        let resized = width != self.frame.width;
         self.frame = Rect::new(
             frame.x,
             frame.y,
@@ -244,7 +265,7 @@ impl Widget for SegmentedControl {
             cx.control_height(ControlSize::Regular),
         );
         if let Some(index) = self.selected
-            && self.pill.is_none()
+            && (self.pill.is_none() || resized)
         {
             let target = self.segment(index);
             self.pill = Some((

@@ -127,6 +127,12 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn request_window_menu(&mut self, server: &mut Compositor, index: usize, x: i32, y: i32) {
+        let (seat, serial) = self.seat_and_serial();
+        self.toplevel(index).show_window_menu(seat, serial, x, y);
+        self.exchange(server);
+    }
+
     pub fn request_resize(&mut self, server: &mut Compositor, index: usize, edges: ResizeEdge) {
         let (seat, serial) = self.seat_and_serial();
         self.toplevel(index).resize(seat, serial, edges);

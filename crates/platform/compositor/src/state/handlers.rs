@@ -165,7 +165,8 @@ impl XdgShellHandler for State {
 
     fn new_toplevel(&mut self, toplevel: ToplevelSurface) {
         let workspace = self.screens[self.pointer_screen()].workspaces.active_id();
-        self.windows.push(Window::new(toplevel, workspace));
+        self.windows.push(Window::new(toplevel.clone(), workspace));
+        self.decorate_as_requested_before(&toplevel);
     }
 
     fn toplevel_destroyed(&mut self, toplevel: ToplevelSurface) {
@@ -238,6 +239,16 @@ impl XdgShellHandler for State {
 
     fn minimize_request(&mut self, surface: ToplevelSurface) {
         self.minimize(surface.wl_surface());
+    }
+
+    fn show_window_menu(
+        &mut self,
+        surface: ToplevelSurface,
+        seat: WlSeat,
+        serial: Serial,
+        location: Point<i32, Logical>,
+    ) {
+        self.show_client_window_menu(surface.wl_surface(), &seat, serial, location);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {

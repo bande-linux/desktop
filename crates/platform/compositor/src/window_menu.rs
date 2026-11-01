@@ -15,8 +15,9 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_positioner::{
     Anchor, ConstraintAdjustment, Gravity,
 };
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Logical, Point, Rectangle, Size};
+use smithay::utils::{Logical, Point, Rectangle, Serial, Size};
 use smithay::wayland::shell::xdg::PositionerState;
 
 use crate::L10N;
@@ -298,12 +299,29 @@ impl State {
         ])
     }
 
-    pub(crate) fn open_window_menu(&mut self, surface: &WlSurface) {
+    pub(crate) fn open_window_menu(&mut self, surface: &WlSurface, at: Point<f64, Logical>) {
         let Some(index) = self.window_index(surface) else {
             return;
         };
         let menu = self.window_menu(index);
-        self.open_menu(index, menu, Anchored::AtPoint(self.pointer_location), false);
+        self.open_menu(index, menu, Anchored::AtPoint(at), false);
+    }
+
+    pub(crate) fn show_client_window_menu(
+        &mut self,
+        surface: &WlSurface,
+        seat: &WlSeat,
+        serial: Serial,
+        location: Point<i32, Logical>,
+    ) {
+        if self.grab_start(seat, serial, surface).is_none() {
+            return;
+        }
+        let Some(index) = self.window_index(surface) else {
+            return;
+        };
+        let at = (self.windows[index].surface_origin() + location).to_f64();
+        self.open_window_menu(surface, at);
     }
 
     fn open_tiling_menu(&mut self, index: usize) {
@@ -550,7 +568,12 @@ impl State {
             (None, false) => MenuOutcome::Nothing,
         };
         self.apply_menu_outcome(outcome, false);
-        true
+        let client_holds_button = !pressed
+            && self
+                .seat
+                .get_pointer()
+                .is_some_and(|pointer| pointer.is_grabbed());
+        !client_holds_button
     }
 
     pub(crate) fn window_menu_key(&mut self, keysym: u32, modifiers: Modifiers) {

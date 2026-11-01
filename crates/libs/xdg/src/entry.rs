@@ -44,7 +44,7 @@ impl Locale {
             .and_then(|value| Self::parse(&value))
     }
 
-    pub(crate) fn keys(&self) -> Vec<String> {
+    pub fn keys(&self) -> Vec<String> {
         let mut keys = Vec::new();
         if let (Some(country), Some(modifier)) = (&self.country, &self.modifier) {
             keys.push(format!("{}_{country}@{modifier}", self.lang));

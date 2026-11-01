@@ -78,6 +78,7 @@ bande-bar = { path = "crates/shell/bar" }
 bande-bench = { path = "crates/testing/bench" }
 bande-bluetooth = { path = "crates/libs/bluetooth" }
 bande-bus = { path = "crates/libs/bus" }
+bande-catalog = { path = "crates/libs/catalog" }
 bande-clipboard = { path = "crates/services/clipboard" }
 bande-compositor = { path = "crates/platform/compositor" }
 bande-config = { path = "crates/services/config" }

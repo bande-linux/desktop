@@ -24,6 +24,7 @@ const SOURCES: [(Source, &str); 3] = [
     (Source::Bluetooth, "org.bluez"),
 ];
 const BUS: &str = "org.freedesktop.DBus";
+const DISPLAY_DEVICE: &str = "/org/freedesktop/UPower/devices/DisplayDevice";
 const UPOWER_CHARGING: u32 = 1;
 const UPOWER_FULL: u32 = 4;
 const UPOWER_BATTERY: u32 = 2;
@@ -284,13 +285,14 @@ pub fn end_session(system: &Connection, ending: Ending) -> zbus::Result<()> {
 
 fn device_rules() -> zbus::Result<Vec<MatchRule<'static>>> {
     let mut rules = Vec::new();
-    for (_, service) in SOURCES {
-        rules.push(
-            MatchRule::builder()
-                .msg_type(message::Type::Signal)
-                .sender(service)?
-                .build(),
-        );
+    for (source, service) in SOURCES {
+        let signals = MatchRule::builder()
+            .msg_type(message::Type::Signal)
+            .sender(service)?;
+        rules.push(match source {
+            Source::Battery => signals.path(DISPLAY_DEVICE)?.build(),
+            Source::Wifi | Source::Bluetooth => signals.build(),
+        });
         rules.push(
             MatchRule::builder()
                 .msg_type(message::Type::Signal)

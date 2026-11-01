@@ -614,3 +614,28 @@ fn the_selection_glides_to_the_next_row_instead_of_jumping() {
     clock.set(clock.get() + Duration::from_secs(1));
     assert!((top(&mut fixture) - (start + ROW_HEIGHT)).abs() < 0.01);
 }
+
+#[test]
+fn a_focused_sidebar_table_marks_its_selection_with_a_grey_tone_instead_of_the_accent() {
+    let palette = Palette::for_scheme(Scheme::Light);
+    for (sidebar, expected) in [
+        (false, palette.accent),
+        (true, palette.sidebar_selection(true, true)),
+    ] {
+        let mut fixture = Fixture::with(&NAMES, |table| match sidebar {
+            true => table.sidebar(),
+            false => table,
+        });
+        fixture.click(1, NONE, 1);
+        let scene = fixture.ui.scene(AREA.width as u32, AREA.height as u32);
+        assert!(
+            selection_top(&scene.items, expected).is_some(),
+            "sidebar {sidebar}"
+        );
+        assert_eq!(
+            selection_top(&scene.items, palette.accent).is_some(),
+            !sidebar,
+            "sidebar {sidebar}"
+        );
+    }
+}

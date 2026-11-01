@@ -251,3 +251,26 @@ fn a_portal_accent_maps_to_the_nearest_datum_accent() {
     assert_eq!(Accent::nearest(Color::hex(0xE01B24)), Accent::Ember);
     assert_eq!(Accent::nearest(Color::hex(0x808080)), Accent::Graphite);
 }
+
+#[test]
+fn sidebar_selection_tones_differ_and_keep_ink_legible_in_every_palette() {
+    for (name, palette) in every_palette() {
+        let tones = [
+            palette.sidebar_selection(true, false),
+            palette.sidebar_selection(true, true),
+            palette.sidebar_selection(false, false),
+        ];
+        for (index, tone) in tones.iter().enumerate() {
+            assert_ne!(
+                *tone, palette.chassis,
+                "{name}: tone {index} is the chassis"
+            );
+            assert!(
+                tones[index + 1..].iter().all(|other| other != tone),
+                "{name}: tone {index} repeats"
+            );
+            let ratio = wcag(palette.ink, *tone);
+            assert!(ratio >= 7.0, "{name}: ink on tone {index} is {ratio:.2}:1");
+        }
+    }
+}

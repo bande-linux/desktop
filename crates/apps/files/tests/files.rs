@@ -1420,6 +1420,8 @@ fn the_icon_view_matches_its_golden_with_thumbnails_and_long_names() {
     view.handle(&press(Key::Right));
     settle_thumbnails(&mut view, GOLDEN_SIZE, 2);
     shoot("icons", &mut view);
+    view.set_window_active(false);
+    shoot("icons-inactive", &mut view);
 }
 
 fn shoot(name: &str, view: &mut FilesView) {

@@ -59,6 +59,7 @@ pub struct Table {
     id: WidgetId,
     columns: Vec<Column>,
     header: bool,
+    sidebar: bool,
     lines: Vec<Line>,
     shown: Vec<usize>,
     expanded: HashSet<String>,
@@ -105,6 +106,7 @@ impl Table {
             id: WidgetId::next(),
             columns,
             header: true,
+            sidebar: false,
             lines: Vec::new(),
             shown: Vec::new(),
             expanded: HashSet::new(),
@@ -141,6 +143,13 @@ impl Table {
     pub fn without_header(self) -> Self {
         Self {
             header: false,
+            ..self
+        }
+    }
+
+    pub fn sidebar(self) -> Self {
+        Self {
+            sidebar: true,
             ..self
         }
     }
@@ -1157,7 +1166,7 @@ impl Widget for Table {
         self.paint_selection(cx, body, offset, focused, &mut rows);
         for index in first..last {
             let y = body.y + index as f32 * self.row_height() - offset;
-            let lit = focused && self.lit(cx, index);
+            let lit = focused && !self.sidebar && self.lit(cx, index);
             let Some(line) = self.line(index) else {
                 continue;
             };

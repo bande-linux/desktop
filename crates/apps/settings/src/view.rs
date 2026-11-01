@@ -308,6 +308,12 @@ impl SettingsView {
         view
     }
 
+    pub fn set_window_active(&mut self, active: bool) {
+        if self.ui.set_window_active(active) {
+            self.invalidate();
+        }
+    }
+
     pub fn set_appearance(&mut self, appearance: Appearance) {
         let cx = self.ui.context();
         let changed = cx.palette != appearance.palette()

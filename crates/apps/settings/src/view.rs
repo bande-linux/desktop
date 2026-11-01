@@ -230,6 +230,7 @@ pub struct SettingsView {
     pub(crate) icon_dirs: Vec<PathBuf>,
     pub(crate) symbols: HashMap<Symbol, Option<Image>>,
     pub(crate) clock: Box<dyn Fn() -> Zoned>,
+    on_screen: bool,
 }
 
 pub(crate) type Symbol = (&'static str, u32, [u8; 4]);
@@ -307,6 +308,7 @@ impl SettingsView {
             icon_dirs: bande_xdg::data_dirs(),
             symbols: HashMap::new(),
             clock: Box::new(bande_datetime::now),
+            on_screen: true,
         };
         view.rebuild();
         view
@@ -1287,24 +1289,9 @@ impl SettingsView {
         if pane == self.pane {
             return;
         }
-        if self.pane == PaneId::Bluetooth {
-            self.commands
-                .push(Command::Bluetooth(BluetoothCommand::Discover(false)));
-        }
-        if self.pane == PaneId::Sound {
-            self.commands
-                .push(Command::Audio(AudioCommand::Listen(false)));
-        }
-        let networking = |pane: PaneId| matches!(pane, PaneId::Wifi | PaneId::Network);
-        if networking(self.pane) != networking(pane) {
-            self.commands
-                .push(Command::Network(NetworkCommand::Watch(networking(pane))));
-        }
+        self.follow_pane(false);
         match pane {
             PaneId::Wifi => self.commands.push(Command::Network(NetworkCommand::Scan)),
-            PaneId::Bluetooth => self
-                .commands
-                .push(Command::Bluetooth(BluetoothCommand::Discover(true))),
             PaneId::Storage => self
                 .commands
                 .push(Command::Storage(StorageCommand::Measure)),
@@ -1319,12 +1306,10 @@ impl SettingsView {
             PaneId::SoftwareUpdate if self.software == SoftwareState::Unknown => {
                 self.commands.push(Command::Software(SoftwareCommand::Open))
             }
-            PaneId::Sound => self
-                .commands
-                .push(Command::Audio(AudioCommand::Listen(true))),
             _ => {}
         }
         self.pane = pane;
+        self.follow_pane(true);
         self.confirming_empty_trash = false;
         self.confirming_clear_clipboard = false;
         self.picking = None;
@@ -1332,6 +1317,33 @@ impl SettingsView {
         self.errors.clear();
         *self.scroll.borrow_mut() = ScrollState::default();
         self.invalidate();
+    }
+
+    pub fn set_on_screen(&mut self, on_screen: bool) -> bool {
+        if self.on_screen == on_screen {
+            return false;
+        }
+        if on_screen {
+            self.on_screen = true;
+            self.follow_pane(true);
+        } else {
+            self.follow_pane(false);
+            self.on_screen = false;
+        }
+        true
+    }
+
+    fn follow_pane(&mut self, on: bool) {
+        if !self.on_screen {
+            return;
+        }
+        let command = match self.pane {
+            PaneId::Bluetooth => Command::Bluetooth(BluetoothCommand::Discover(on)),
+            PaneId::Sound => Command::Audio(AudioCommand::Listen(on)),
+            PaneId::Wifi | PaneId::Network => Command::Network(NetworkCommand::Watch(on)),
+            _ => return,
+        };
+        self.commands.push(command);
     }
 
     fn step_pane(&mut self, step: isize) {

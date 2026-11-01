@@ -3,8 +3,7 @@ use std::io::Read;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::rc::Rc;
 use std::sync::{Mutex, MutexGuard, PoisonError};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use bande_bluetooth::PairingPrompt;
 use bande_toolkit::ui::{Alert, Event, Key, TextField, Ui, Widget};
@@ -14,7 +13,6 @@ use crate::L10N;
 use crate::dialogs::{DIALOGS, alert_scene, fitted};
 
 pub const PAIR_FLAG: &str = "--pair";
-const ANSWER_POLL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Question {
@@ -126,20 +124,19 @@ impl PairingDialogs {
 
     fn answer(&self, question: &Question) -> Option<(ExitStatus, String)> {
         self.open(question)?;
-        loop {
-            {
-                let mut shown = lock(&self.shown);
-                let child = shown.as_mut()?;
-                if let Some(status) = child.try_wait().ok()? {
-                    let mut output = String::new();
-                    if let Some(mut stdout) = shown.take().and_then(|child| child.stdout) {
-                        let _ = stdout.read_to_string(&mut output);
-                    }
-                    return Some((status, output));
-                }
-            }
-            thread::sleep(ANSWER_POLL);
+        let (asking, mut stdout) = {
+            let mut shown = lock(&self.shown);
+            let child = shown.as_mut()?;
+            (child.id(), child.stdout.take()?)
+        };
+        let mut output = String::new();
+        let _ = stdout.read_to_string(&mut output);
+        let mut shown = lock(&self.shown);
+        if shown.as_ref().map(Child::id) != Some(asking) {
+            return None;
         }
+        let status = shown.take()?.wait().ok()?;
+        Some((status, output))
     }
 
     fn accepted(&self, question: &Question) -> Option<String> {

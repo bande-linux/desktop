@@ -32,7 +32,7 @@ pub use icon::{FALLBACK_THEME, ICON_THEMES, find_icon};
 pub use identity::{app_name, find_app, find_app_for_process, running_app, write_launcher};
 pub use launch::{
     ACTIVATION_TOKEN, ExecError, LaunchError, TERMINAL, follow_oom_kills, launch, launch_action,
-    launch_with, launch_with_arguments, spawn_detached,
+    launch_with, launch_with_arguments, spawn_detached, wait_for_exit,
 };
 pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN};
 pub use mimeapps::{

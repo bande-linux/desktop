@@ -13,7 +13,7 @@ use icu_locale_core::preferences::extensions::unicode::keywords::HourCycle;
 use icu_locale_core::{Locale, locale};
 use jiff::Zoned;
 
-pub use minute::MinuteTimer;
+pub use minute::{ClockChanges, MinuteTimer};
 pub use month::{Month, Week};
 pub use zone::{local_zone, now};
 

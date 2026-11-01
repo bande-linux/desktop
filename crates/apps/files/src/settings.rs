@@ -69,6 +69,8 @@ pub struct FilesSettings {
     pub new_window: StartFolder,
     pub default_view: ViewMode,
     pub show_hidden: bool,
+    pub show_extensions: bool,
+    pub warn_extension_change: bool,
     pub folders_first: bool,
     pub warn_empty_trash: bool,
     pub purge_trash: bool,
@@ -81,6 +83,8 @@ impl Default for FilesSettings {
             new_window: StartFolder::default(),
             default_view: ViewMode::default(),
             show_hidden: false,
+            show_extensions: false,
+            warn_extension_change: true,
             folders_first: true,
             warn_empty_trash: true,
             purge_trash: false,
@@ -106,6 +110,13 @@ impl Stored for FilesSettings {
                     settings.default_view = ViewMode::parse(value).unwrap_or(settings.default_view);
                 }
                 "show-hidden" => settings.show_hidden = flag(value).unwrap_or(settings.show_hidden),
+                "show-extensions" => {
+                    settings.show_extensions = flag(value).unwrap_or(settings.show_extensions);
+                }
+                "warn-extension-change" => {
+                    settings.warn_extension_change =
+                        flag(value).unwrap_or(settings.warn_extension_change);
+                }
                 "folders-first" => {
                     settings.folders_first = flag(value).unwrap_or(settings.folders_first);
                 }
@@ -128,10 +139,12 @@ impl Stored for FilesSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "new-window = {}\ndefault-view = {}\nshow-hidden = {}\nfolders-first = {}\nwarn-empty-trash = {}\npurge-trash = {}\nsearch-in = {}\n",
+            "new-window = {}\ndefault-view = {}\nshow-hidden = {}\nshow-extensions = {}\nwarn-extension-change = {}\nfolders-first = {}\nwarn-empty-trash = {}\npurge-trash = {}\nsearch-in = {}\n",
             self.new_window.name(),
             self.default_view.name(),
             self.show_hidden,
+            self.show_extensions,
+            self.warn_extension_change,
             self.folders_first,
             self.warn_empty_trash,
             self.purge_trash,
@@ -236,13 +249,19 @@ fn form(settings: &Shared<FilesSettings>) -> Form {
                 current.show_hidden,
                 |settings, on| settings.show_hidden = on,
             ),
+            heading("settings-advanced"),
             toggle(
                 settings,
-                "settings-folders-first",
-                current.folders_first,
-                |settings, on| settings.folders_first = on,
+                "settings-show-extensions",
+                current.show_extensions,
+                |settings, on| settings.show_extensions = on,
             ),
-            heading("settings-trash"),
+            toggle(
+                settings,
+                "settings-warn-extension-change",
+                current.warn_extension_change,
+                |settings, on| settings.warn_extension_change = on,
+            ),
             toggle(
                 settings,
                 "settings-warn-empty-trash",
@@ -255,7 +274,12 @@ fn form(settings: &Shared<FilesSettings>) -> Form {
                 current.purge_trash,
                 |settings, on| settings.purge_trash = on,
             ),
-            heading("settings-search"),
+            toggle(
+                settings,
+                "settings-folders-first",
+                current.folders_first,
+                |settings, on| settings.folders_first = on,
+            ),
             search_in,
         ],
     )

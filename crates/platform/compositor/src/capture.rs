@@ -100,6 +100,23 @@ impl State {
         (area.size.w > 0 && area.size.h > 0).then_some((area, scale))
     }
 
+    pub(crate) fn stop_captures_of_lost_targets(&mut self) {
+        let (lost, kept): (Vec<PendingCapture>, Vec<PendingCapture>) =
+            std::mem::take(&mut self.pending_captures)
+                .into_iter()
+                .partition(|capture| {
+                    capture
+                        .session
+                        .data::<SessionData>()
+                        .is_some_and(|session| self.capture_size(&session.target).is_none())
+                });
+        self.pending_captures = kept;
+        for capture in lost {
+            capture.frame.failed(FailureReason::Stopped);
+            capture.session.stopped();
+        }
+    }
+
     fn capture_size(&self, target: &Target) -> Option<Size<i32, Physical>> {
         match target {
             Target::Output(name) => self

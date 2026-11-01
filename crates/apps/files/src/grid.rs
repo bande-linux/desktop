@@ -339,7 +339,8 @@ impl FilesView {
             } else {
                 self.palette.ink
             };
-            let paragraph = self.grid_label(&entry.name, label.width, color);
+            let name = self.shown_name(entry).to_owned();
+            let paragraph = self.grid_label(&name, label.width, color);
             let (width, height) = (paragraph.width(), paragraph.height());
             let text_x = label.x + ((label.width - width) / 2.0).round();
             let text_area = Rect::new(text_x - 4.0, label.y - 1.0, width + 8.0, height + 2.0);

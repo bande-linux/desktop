@@ -318,7 +318,7 @@ Notes on each piece:
 | --- | --- |
 | Menu bar | App menu (About, Settings… if `Info.settings`, Hide, Hide Others, Show All, Quit), then `Menus.menus`, then Window (Minimize, Zoom, Close Window, then `Menus.window`). Published after every command and focus change if it changed (`AppMenu::update` already skips equal menus) |
 | Keys | (1) Close Window and Quit (Ctrl+W, Ctrl+Q; Shift+Ctrl with `Keys::Shifted`) and Ctrl+, are taken before the view. (2) The view gets the key. (3) If the view did not handle it, the shortcut of any enabled entry in the current menus runs that entry's command. So a menu shortcut works without a second key table, and a text field still gets Ctrl+C first. `Ui::handle` already returns whether the focused widget took the key (`widgets/src/lib.rs:824-831`); `Window::drive` reports every `Input` as handled today (`platform/src/window/mod.rs:814-834`) and must hand back a key the `Ui` did not take (M2) |
-| Close and quit | Close Window closes the focused window after `should_close`; closing the last window quits. Quit asks `should_close` for each window and stops at the first refusal |
+| Close and quit | Close Window closes the focused window after `should_close`; closing the last window leaves the app running without windows until Quit ([window-close](window-close.md), owner decision 2026-11-01). Quit asks `should_close` for each window and stops at the first refusal |
 | Appearance | `AppearanceChanged` goes to every view and redraws it. The first view is built inside `Cx::open` with the window's real appearance, so nothing starts on `Appearance::default()` |
 | About | shell-drawn, with the app's own version |
 | Activation | `Launch::Single`: one process, second launches forward their arguments and activation token |

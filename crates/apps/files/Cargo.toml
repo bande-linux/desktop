@@ -14,7 +14,9 @@ rustix = { workspace = true, features = ["fs", "process"] }
 tracing.workspace = true
 bande-app-menu.workspace = true
 bande-app-settings.workspace = true
+bande-config.workspace = true
 bande-fs.workspace = true
+bande-inbox.workspace = true
 bande-l10n.workspace = true
 bande-preview.workspace = true
 bande-search.workspace = true

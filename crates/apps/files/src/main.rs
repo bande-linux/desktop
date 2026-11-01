@@ -10,10 +10,12 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_files::{
     BookmarkEdit, Browser, FilesSettings, FilesView, L10N, Location, Request, Row, SETTINGS_SIZE,
-    SIDEBAR_WIDTH, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file, rows,
-    settings_view, sidebar_file, status_bar_file, views_file, with_bookmarks, without_bookmark,
+    SIDEBAR_WIDTH, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, follow_search_excluded, hidden_places,
+    list_columns_file, rows, settings_view, sidebar_file, status_bar_file, views_file,
+    with_bookmarks, without_bookmark,
 };
 use bande_fs::Trash;
+use bande_inbox::Inbox;
 use bande_search::{recently_used_path, usage_path};
 use bande_thumbnails::Thumbnails;
 use bande_toolkit::{
@@ -149,6 +151,8 @@ struct Files {
     home: PathBuf,
     settings: FilesSettings,
     settings_watch: Option<SettingsWatch>,
+    excluded: Option<Inbox<Vec<PathBuf>>>,
+    search_excluded: Vec<PathBuf>,
     trash: Trash,
 }
 
@@ -241,6 +245,20 @@ impl Files {
         }
     }
 
+    fn follow_excluded(&mut self, cx: &mut Cx<Self>) {
+        let Some(latest) = self.excluded.as_mut().and_then(|inbox| inbox.drain().pop()) else {
+            return;
+        };
+        self.search_excluded = latest;
+        for id in cx.windows().collect::<Vec<_>>() {
+            if let Some((window, pane)) = cx.window(id) {
+                pane.view.set_search_excluded(self.search_excluded.clone());
+                window.request_redraw();
+            }
+            self.changed(cx, id);
+        }
+    }
+
     fn load_sidebars(&self, cx: &mut Cx<Self>) {
         let (rows, hidden) = sidebar(&self.home);
         for id in cx.windows().collect::<Vec<_>>() {
@@ -321,6 +339,7 @@ impl Files {
         if let Some(usage) = usage_path(state_home.as_deref(), Some(&self.home)) {
             view.set_recents_sources(recently_used_path(data_home.as_deref(), &self.home), usage);
         }
+        view.set_search_excluded(self.search_excluded.clone());
         if info {
             view.show_inspector();
         }
@@ -417,10 +436,18 @@ impl Program for Files {
             purge_trash_daily(trash.clone(), folder.to_path_buf());
             SettingsWatch::start(folder, FilesSettings::FILE)
         });
+        let excluded = Inbox::new()
+            .inspect_err(|error| tracing::warn!("cannot follow the Search privacy list: {error}"))
+            .ok();
+        if let Some(inbox) = &excluded {
+            follow_search_excluded(home.clone(), inbox.outbox());
+        }
         let files = Self {
             home,
             settings,
             settings_watch,
+            excluded,
+            search_excluded: Vec::new(),
             trash,
         };
         let directory = std::env::current_dir().ok();
@@ -498,11 +525,19 @@ impl Program for Files {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        self.settings_watch.iter().map(SettingsWatch::fd).collect()
+        self.settings_watch
+            .iter()
+            .map(SettingsWatch::fd)
+            .chain(self.excluded.iter().map(Inbox::fd))
+            .collect()
     }
 
-    fn source_ready(&mut self, cx: &mut Cx<Self>, _index: usize) {
-        self.follow_settings(cx);
+    fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {
+        if index < self.settings_watch.iter().count() {
+            self.follow_settings(cx);
+        } else {
+            self.follow_excluded(cx);
+        }
     }
 }
 

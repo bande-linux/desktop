@@ -205,6 +205,7 @@ pub struct FilesView {
     pub(crate) toolbar: Toolbar,
     pub(crate) sheet_inset: f32,
     recents: Option<(PathBuf, PathBuf)>,
+    pub(crate) search_excluded: Vec<PathBuf>,
     pub(crate) menu_place: Option<usize>,
     pub(crate) hidden_places: Vec<Location>,
     media: Vec<PathBuf>,
@@ -333,6 +334,7 @@ impl FilesView {
             toolbar: Toolbar::default(),
             sheet_inset: SHEET_INSET as f32,
             recents: None,
+            search_excluded: Vec::new(),
             menu_place: None,
             hidden_places: Vec::new(),
             media: Vec::new(),
@@ -602,14 +604,30 @@ impl FilesView {
         self.load_recents();
     }
 
+    pub fn set_search_excluded(&mut self, excluded: Vec<PathBuf>) {
+        if excluded == self.search_excluded {
+            return;
+        }
+        self.search_excluded = excluded;
+        if let Some(index) = &self.index {
+            index.index.exclude(self.search_excluded.clone());
+        }
+        self.load_recents();
+        self.query();
+    }
+
     fn load_recents(&mut self) {
         let Some((xbel, usage)) = &self.recents else {
             return;
         };
         let shared = std::fs::read_to_string(xbel).ok();
         let usage = Usage::load(usage.clone());
-        self.browser
-            .set_recents(recent_files(shared.as_deref(), &usage, &[], MAX_RECENTS));
+        self.browser.set_recents(recent_files(
+            shared.as_deref(),
+            &usage,
+            &self.search_excluded,
+            MAX_RECENTS,
+        ));
     }
 
     fn apply_remembered_view(&mut self) {

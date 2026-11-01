@@ -474,7 +474,7 @@ impl Model {
     }
 
     fn is_excluded(&self, path: &Path) -> bool {
-        self.excluded.iter().any(|folder| path.starts_with(folder))
+        bande_search::is_excluded(path, &self.excluded)
     }
 
     pub fn file_boosts(&self) -> HashMap<PathBuf, u32> {

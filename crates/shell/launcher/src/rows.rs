@@ -20,7 +20,6 @@ const CELL_RADIUS: f32 = Radius::L;
 const CELL_ICON: f32 = 48.0;
 const BADGE_ON_SELECTION: f32 = 0.22;
 const COMMAND_GLYPH_INSET: f32 = 0.2;
-const CELL_TITLE_LINES: usize = 2;
 
 pub const OPEN: &str = "open";
 pub const REVEAL: &str = "reveal";
@@ -378,19 +377,8 @@ impl Choice {
         let width = self.rect.width - 10.0;
         let style = TextStyle::role(TextRole::Callout, color);
         let y = icon.y + CELL_ICON + 6.0;
-        let shown = shortened(&hit.title, title_cut(hit), |candidate| {
-            let paragraph = cx
-                .text
-                .paragraph(candidate, style, Some(width), TextAlign::Center);
-            paragraph.line_count() <= CELL_TITLE_LINES && paragraph.width() <= width + 0.5
-        });
-        let wrapped = cx
-            .text
-            .paragraph(&shown, style, Some(width), TextAlign::Center);
-        self.items.push(Item::Text {
-            origin: Point::new((self.rect.x + (self.rect.width - width) / 2.0).round(), y),
-            paragraph: wrapped,
-        });
+        let title = cut_line(cx, &hit.title, title_cut(hit), style, width);
+        self.items.push(centered(&title, self.rect, y));
     }
 }
 

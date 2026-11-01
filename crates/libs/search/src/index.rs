@@ -424,7 +424,7 @@ impl Worker {
     }
 
     fn is_excluded(&self, path: &Path) -> bool {
-        self.excluded.iter().any(|folder| path.starts_with(folder))
+        crate::is_excluded(path, &self.excluded)
     }
 
     fn indexed(&self, path: &Path) -> bool {

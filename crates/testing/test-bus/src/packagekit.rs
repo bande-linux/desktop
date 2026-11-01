@@ -10,6 +10,7 @@ use crate::SessionBus;
 pub const ONLY_TRUSTED: u64 = 1 << 1;
 pub const SIMULATE: u64 = 1 << 2;
 pub const ONLY_DOWNLOAD: u64 = 1 << 3;
+const FILTER_INSTALLED: u64 = 1 << 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FakePackage {
@@ -34,6 +35,7 @@ impl FakePackage {
 pub struct Script {
     pub updates: Vec<FakePackage>,
     pub installed: Vec<FakePackage>,
+    pub available: Vec<FakePackage>,
     pub changes: Vec<FakePackage>,
     pub local: Option<FakePackage>,
     pub files: Vec<String>,
@@ -222,6 +224,12 @@ impl Transaction {
         let found: Vec<FakePackage> = script
             .installed
             .iter()
+            .chain(
+                script
+                    .available
+                    .iter()
+                    .filter(|_| filter & FILTER_INSTALLED == 0),
+            )
             .filter(|package| {
                 names
                     .iter()
@@ -286,6 +294,18 @@ impl Transaction {
             lock(&self.world).script.prepared.clone_from(&ids);
         }
         let _ = self.work(&emitter, &script, "UpdatePackages", &[]).await;
+    }
+
+    async fn install_packages(
+        &mut self,
+        flags: u64,
+        ids: Vec<String>,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) {
+        let script = self.record("InstallPackages", flags, &ids);
+        let _ = self
+            .work(&emitter, &script, "InstallPackages", &script.changes)
+            .await;
     }
 
     async fn install_files(

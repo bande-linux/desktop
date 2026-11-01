@@ -68,9 +68,6 @@ impl CaptureOptions {
     }
 
     pub fn store(&self, path: &Path) -> io::Result<()> {
-        if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir)?;
-        }
-        fs::write(path, self.serialize())
+        bande_xdg::replace_file(path, self.serialize())
     }
 }

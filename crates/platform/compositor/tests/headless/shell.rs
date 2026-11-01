@@ -106,9 +106,33 @@ fn a_panel_opened_before_the_bar_still_lies_in_the_area_beside_it() {
 }
 
 #[test]
+fn an_app_cannot_claim_the_menu_bar_by_naming_its_layer_after_it() {
+    let mut server = server();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.show_named_layer(
+        &mut server,
+        &panel(Layer::Top, Anchor::Left, (40, 120), 40),
+        "taskbar",
+    );
+    let mut app = TestClient::connect(&mut server);
+    let bar = app.show_named_layer(
+        &mut server,
+        &panel(
+            Layer::Top,
+            Anchor::Top | Anchor::Left | Anchor::Right,
+            (0, 24),
+            24,
+        ),
+        "menubar",
+    );
+
+    assert_eq!(bar, (OUTPUT.0 as u32 - 40, 24));
+}
+
+#[test]
 fn the_menu_bar_spans_the_whole_top_edge_even_when_the_taskbar_reserved_its_side_first() {
     let mut server = server();
-    let mut shell = TestClient::connect(&mut server);
+    let mut shell = TestClient::connect_as_shell(&mut server);
     shell.show_named_layer(
         &mut server,
         &panel(Layer::Top, Anchor::Left, (40, 120), 40),

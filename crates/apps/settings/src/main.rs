@@ -96,7 +96,7 @@ impl Settings {
                 window.close();
                 Ok(())
             }
-            None => {
+            Some(Standard::Settings) | None => {
                 if let Some(pane) = action
                     .strip_prefix(PANE_ACTION)
                     .and_then(PaneId::from_keyword)

@@ -41,8 +41,11 @@ struct Fixture {
 
 fn start(warning_level: u32, percentage: f64) -> Fixture {
     let bus = SessionBus::start().expect("dbus-daemon");
-    let notifications = NotificationServer::start(&bus.connect().expect("notify connection"))
-        .expect("notification server");
+    let notifications = NotificationServer::start(
+        &bus.connect().expect("notify connection"),
+        &bus.connect().expect("center connection"),
+    )
+    .expect("notification server");
     let upower = bus.connect().expect("upower connection");
     upower
         .object_server()

@@ -27,8 +27,11 @@ struct Fixture {
 
 fn start(initial: &str) -> Fixture {
     let bus = SessionBus::start().expect("dbus-daemon");
-    let notifications = NotificationServer::start(&bus.connect().expect("notification connection"))
-        .expect("notification server");
+    let notifications = NotificationServer::start(
+        &bus.connect().expect("notification connection"),
+        &bus.connect().expect("center connection"),
+    )
+    .expect("notification server");
     let directory = tempfile::tempdir().expect("temp dir");
     let path = directory.path().join("config.kdl");
     std::fs::write(&path, initial).expect("initial config");

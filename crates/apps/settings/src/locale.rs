@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::process::Command;
 use std::sync::mpsc::{self, Sender};
 
 use zbus::blocking::Connection;
@@ -12,6 +11,7 @@ use bande_settings_panes::SettingId;
 const LOCALE: &str = "org.freedesktop.locale1";
 const LOCALE_PATH: &str = "/org/freedesktop/locale1";
 const LOCALE_SOURCES: &str = "/usr/share/i18n/locales";
+const SUPPORTED: &str = "/usr/share/i18n/SUPPORTED";
 pub const REGION_CATEGORIES: [&str; 5] = [
     "LC_TIME",
     "LC_NUMERIC",
@@ -29,19 +29,35 @@ trait Locale {
     #[zbus(property)]
     fn locale(&self) -> zbus::Result<Vec<String>>;
     fn set_locale(&self, locale: Vec<String>, interactive: bool) -> zbus::Result<()>;
+    #[zbus(property, name = "X11Layout")]
+    fn x11_layout(&self) -> zbus::Result<String>;
+    #[zbus(property, name = "X11Variant")]
+    fn x11_variant(&self) -> zbus::Result<String>;
+    #[zbus(name = "SetX11Keyboard")]
+    fn set_x11_keyboard(
+        &self,
+        layout: &str,
+        model: &str,
+        variant: &str,
+        options: &str,
+        convert: bool,
+        interactive: bool,
+    ) -> zbus::Result<()>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InstalledLocale {
+pub struct AvailableLocale {
     pub code: String,
     pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LocaleState {
-    pub installed: Vec<InstalledLocale>,
+    pub available: Vec<AvailableLocale>,
     pub language: String,
     pub region: Option<String>,
+    pub pending: bool,
+    pub login_sources: Vec<String>,
 }
 
 impl LocaleState {
@@ -55,6 +71,7 @@ impl LocaleState {
 pub enum LocaleCommand {
     Language(String),
     Region(Option<String>),
+    LoginKeyboard(Vec<String>),
 }
 
 pub fn locale_name(code: &str, source: &str) -> String {
@@ -78,24 +95,78 @@ fn base(code: &str) -> &str {
     code.split(['.', '@']).next().unwrap_or(code)
 }
 
-pub fn installed_locales(listing: &str, sources: &Path) -> Vec<InstalledLocale> {
-    let mut installed: Vec<InstalledLocale> = listing
+fn available_locale(entry: &str, sources: &Path) -> AvailableLocale {
+    let (locale, modifier) = entry
+        .split_once('@')
+        .map_or((entry, None), |(locale, modifier)| (locale, Some(modifier)));
+    let territory = base(locale);
+    let source = modifier.map_or_else(
+        || territory.to_owned(),
+        |modifier| format!("{territory}@{modifier}"),
+    );
+    let name = locale_name(
+        &source,
+        &std::fs::read_to_string(sources.join(&source)).unwrap_or_default(),
+    );
+    AvailableLocale {
+        code: modifier.map_or_else(
+            || format!("{territory}.UTF-8"),
+            |modifier| format!("{territory}.UTF-8@{modifier}"),
+        ),
+        name: match modifier {
+            Some(modifier) if name != source => format!("{name}, {modifier}"),
+            _ => name,
+        },
+    }
+}
+
+pub fn supported_locales(supported: &str, sources: &Path) -> Vec<AvailableLocale> {
+    let mut available: Vec<AvailableLocale> = supported
         .lines()
-        .map(str::trim)
-        .filter(|code| {
-            base(code).contains('_') && code.to_lowercase().replace('-', "").contains(".utf8")
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let entry = fields.next()?;
+            (fields.next() == Some("UTF-8") && base(entry).contains('_')).then_some(entry)
         })
-        .map(|code| InstalledLocale {
-            code: format!("{}.UTF-8", base(code)),
-            name: locale_name(
-                base(code),
-                &std::fs::read_to_string(sources.join(base(code))).unwrap_or_default(),
-            ),
-        })
+        .map(|entry| available_locale(entry, sources))
         .collect();
-    installed.sort_by_key(|locale| locale.name.to_lowercase());
-    installed.dedup_by(|a, b| a.code == b.code);
-    installed
+    available.sort_by_key(|locale| locale.name.to_lowercase());
+    available.dedup_by(|a, b| a.code == b.code);
+    available
+}
+
+fn read_supported() -> Vec<AvailableLocale> {
+    supported_locales(
+        &std::fs::read_to_string(SUPPORTED).unwrap_or_default(),
+        Path::new(LOCALE_SOURCES),
+    )
+}
+
+pub fn login_codes(layouts: &str, variants: &str) -> Vec<String> {
+    let mut variants = variants.split(',').map(str::trim);
+    layouts
+        .split(',')
+        .map(str::trim)
+        .map(
+            |layout| match variants.next().filter(|variant| !variant.is_empty()) {
+                Some(variant) => format!("{layout}({variant})"),
+                None => layout.to_owned(),
+            },
+        )
+        .filter(|code| !code.is_empty())
+        .collect()
+}
+
+pub fn x11_keyboard(codes: &[String]) -> (String, String) {
+    let (layouts, variants): (Vec<&str>, Vec<&str>) = codes
+        .iter()
+        .map(|code| {
+            code.strip_suffix(')')
+                .and_then(|code| code.split_once('('))
+                .unwrap_or((code, ""))
+        })
+        .unzip();
+    (layouts.join(","), variants.join(","))
 }
 
 pub fn parse_assignments(assignments: &[String]) -> (String, Option<String>) {
@@ -127,21 +198,18 @@ pub fn assignments(language: &str, region: Option<&str>) -> Vec<String> {
     assignments
 }
 
-fn read(locale: &LocaleProxyBlocking<'_>, installed: &[InstalledLocale]) -> Option<LocaleState> {
+fn read(locale: &LocaleProxyBlocking<'_>, available: &[AvailableLocale]) -> Option<LocaleState> {
     let (language, region) = parse_assignments(&locale.locale().ok()?);
     Some(LocaleState {
-        installed: installed.to_vec(),
+        available: available.to_vec(),
         language,
         region,
+        pending: false,
+        login_sources: login_codes(
+            &locale.x11_layout().unwrap_or_default(),
+            &locale.x11_variant().unwrap_or_default(),
+        ),
     })
-}
-
-fn listing() -> String {
-    Command::new("locale")
-        .arg("-a")
-        .output()
-        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
-        .unwrap_or_default()
 }
 
 pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleCommand> {
@@ -150,7 +218,7 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
     let feed = updates.clone();
     spawn("locale", move || {
         let follow = || -> zbus::Result<()> {
-            let installed = installed_locales(&listing(), Path::new(LOCALE_SOURCES));
+            let available = read_supported();
             let locale = LocaleProxyBlocking::builder(&reader)
                 .cache_properties(zbus::proxy::CacheProperties::No)
                 .build()?;
@@ -159,11 +227,11 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 .path(LOCALE_PATH)?
                 .build()?
                 .receive_properties_changed()?;
-            if !feed.send(Update::Locale(read(&locale, &installed))) {
+            if !feed.send(Update::Locale(read(&locale, &available))) {
                 return Ok(());
             }
             for _ in changes {
-                if !feed.send(Update::Locale(read(&locale, &installed))) {
+                if !feed.send(Update::Locale(read(&locale, &available))) {
                     break;
                 }
             }
@@ -182,6 +250,16 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             return;
         };
         for command in receiver {
+            if let LocaleCommand::LoginKeyboard(codes) = &command {
+                let (layouts, variants) = x11_keyboard(codes);
+                if let Err(error) =
+                    locale.set_x11_keyboard(&layouts, "", &variants, "", false, true)
+                {
+                    updates.send(failed(SettingId::InputSources, &error, "service-locale"));
+                    updates.send(Update::Locale(read(&locale, &read_supported())));
+                }
+                continue;
+            }
             let current = match locale.locale() {
                 Ok(current) => current,
                 Err(error) => {
@@ -198,6 +276,7 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 LocaleCommand::Region(region) => {
                     (SettingId::Region, assignments(&language, region.as_deref()))
                 }
+                LocaleCommand::LoginKeyboard(_) => continue,
             };
             wanted.extend(current.into_iter().filter(|assignment| {
                 let name = assignment.split_once('=').map_or("", |(name, _)| name);
@@ -205,8 +284,7 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             }));
             if let Err(error) = locale.set_locale(wanted, true) {
                 updates.send(failed(setting, &error, "service-locale"));
-                let installed = installed_locales(&listing(), Path::new(LOCALE_SOURCES));
-                updates.send(Update::Locale(read(&locale, &installed)));
+                updates.send(Update::Locale(read(&locale, &read_supported())));
             }
         }
     });

@@ -259,7 +259,7 @@ SVGs are text, and the WAVs need only the provenance note.
 | systemd user units (`/usr/lib/systemd/user`) | `systemd-analyze --user verify` reports nothing for Bande's units; enabled through `deb-systemd-helper --user` blocks copied by hand | correct location; let `dh_installsystemduser` generate the blocks |
 | D-Bus activation files (`/usr/share/dbus-1/services`) | correct location | see the lintian info above |
 | Portal (`/usr/share/xdg-desktop-portal/portals/bande.portal`, `bande-portals.conf`, backend in `/usr/libexec`) | correct locations | fine |
-| polkit (`/usr/share/polkit-1/rules.d/50-bande-settings.rules`) | grants local, active `sudo` members password-free time zone, NTP, time, locale and hostname changes, which is what gnome-control-center does in Debian, **and `org.freedesktop.packagekit.system-update`** | location fine. Expect review of the PackageKit grant: document why, or drop it |
+| polkit (`/usr/share/polkit-1/rules.d/50-bande-settings.rules`) | grants local, active `sudo` members password-free time zone, NTP, time, locale and hostname changes, which is what gnome-control-center does in Debian. Software Update uses offline updates (`trigger-offline-update`, `allow_active=yes` upstream), so there is no PackageKit grant | location fine |
 | PAM (`/etc/pam.d/bande-lock`, `@include common-auth` and `common-account`) | a conffile, correct | fine |
 | logind (`/usr/lib/systemd/logind.conf.d/bande-power.conf`, `HandlePowerKey=suspend`) | **changes the power key system-wide** for every session and every desktop on the machine as soon as `bande-power` is installed | drop the drop-in and take a `handle-power-key` inhibitor lock in `bande-power`, as GNOME does |
 | Memory policy (`/usr/lib/systemd/zram-generator.conf.d/50-bande.conf`, `/usr/lib/systemd/user/app.slice.d/50-bande-oomd.conf`, and `OOMScoreAdjust=100` drop-ins for the user units `dbus`, `pipewire`, `pipewire-pulse`, `wireplumber` and `xdg-desktop-portal`) | vendor drop-ins, the mechanism systemd and zram-generator document for this. No other package's file is changed, and admins override them in `/etc`. Inert without `systemd-zram-generator` and `systemd-oomd` (Recommends) | fine; name each drop-in in `README.Debian`. Needs a kernel with `CONFIG_PSI=y` and `CONFIG_ZRAM` (Debian's has both; the Bande Mac kernel has them from `linux` `bande-hw/integration` on) |
@@ -320,8 +320,8 @@ is governed by NEW-queue review, typically days to weeks per new source package.
    ships.
 4. **Policy fixes in the session** (3 to 4 d): replace the logind drop-in with a power-key
    inhibitor in `bande-power`; make the greeter opt-in rather than taking over
-   `greetd.service` and `display-manager.service`; justify or drop the password-free PackageKit
-   update rule.
+   `greetd.service` and `display-manager.service`. (The password-free PackageKit update rule
+   is gone: Software Update installs offline.)
 5. **Missing runtime Depends** (0.5 d): `libvulkan1, libfontconfig1` on every toolkit app;
    `default-dbus-session-bus | dbus-session-bus` order; drop the Conflicts and Replaces on
    never-shipped packages.

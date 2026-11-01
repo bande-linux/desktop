@@ -79,6 +79,12 @@ Option C, as one rule written into bar.md §3.5:
 Naming: the UI says "taskbar" (per `keep-in-taskbar.md`). Code keeps `bar`, `Panel::NotificationCenter` and `Panel::ControlCenter`.
 
 ## Implementation plan
+Status (2026-11-01): milestones 1-4 done and merged; milestone 5 skipped (optional). Differences
+from the text below: the gap to the bar is 8 pt everywhere (no anchor too), so the top-right
+banners moved 4 pt; Hold on the clock still opens the centre, only a right click opens the clock
+menu (the menu bar client has no hold timer); the moon is drawn from two discs (`ink3` and the
+frame tone) and covered by an accessibility-label test, not a rail golden.
+
 
 Each milestone is one short branch from `main`, gated by fmt, workspace clippy `-D warnings` and workspace tests, then checked live on the mini.
 
@@ -133,6 +139,11 @@ Each milestone is one short branch from `main`, gated by fmt, workspace clippy `
 - **A horizontal combined taskbar is not built.** The bottom rule is only covered by `Screen` tests until bar.md §5.4 step 7 lands.
 
 ## Decisions for the owner
+Decided overnight 2026-11-01: placement model C, everything from the clock corner (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: one panel at a time; the clock closes Control Center and the Control Center button closes the centre and puts banners away (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: a right click on the clock opens the menu with Do Not Disturb, Notifications Settings… and Date & Time Settings… (plan recommendation; owner may revisit).
+Still open: 3 (a clock or Control Center click while the launcher is open), not built; 5 (several displays, milestone 5).
+
 
 1. **Placement model.** Clock corner (C, recommended), banners stay top right (A), or everything top right (B).
 2. **Clicking the clock while Control Center is open.** Recommended: close Control Center and open the centre (one panel at a time), rather than "the newest takes the keyboard".

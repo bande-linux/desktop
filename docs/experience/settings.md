@@ -34,10 +34,10 @@ draws the panes (`pages.rs`, `view.rs`, `widgets.rs`) and talks to the services.
 | Sound | Alert sound, Alert volume, interface sound effects, volume feedback; Output volume, Mute; Play sound through; Input volume, Mute microphone, Input level; Record sound from; Apps playing sound | the config for alerts and effects, played by `services/sound`; PipeWire through `libs/audio` for the rest |
 | General | a hub of rows leading to the six subpages below | — |
 | ↳ About | Name; Model, Chip, Memory, Storage, Bande, System, Serial | hostnamed for the name; `/proc` and the device tree |
-| ↳ Software Update | status with Check Now, Install Now or Restart Now; the package list | PackageKit and logind; `bande-update-check.timer` |
+| ↳ Software Update | status with Check Now, Download Updates or Restart Now; the package list. Updates download in the background and install at the next restart (PackageKit offline updates); the result shows once after the restart | `bande-packages` (PackageKit, offline) and logind; `bande-update-check.timer` |
 | ↳ Storage | usage bar by category; Trash with Empty Trash…; Largest files with Show in Files | statvfs and Settings' own scan (`storage.rs`) |
 | ↳ Date & Time | Set time automatically; manual date and time; Time zone with a Change… picker; 24-hour time | timedated; the config's `clock-format` |
-| ↳ Language & Region | Language; Region with a formats preview | localed and the installed locales |
+| ↳ Language & Region | Language; Region with a formats preview | localed and every UTF-8 locale in `/usr/share/i18n/SUPPORTED` |
 | ↳ Login Items | Open at login: a list with Add… and Remove | XDG autostart files (`login.rs`) |
 | Appearance | Appearance (Light, Dark, Auto); Accent colour; Tint window frames with the wallpaper | the config |
 | Accessibility | Screen reader (only when Orca is installed), Zoom, Increase contrast, Reduce transparency, Reduce motion, Pointer size; Flash the screen; Sticky, Slow and Bounce keys | the config, applied by the compositor and served by the portal |
@@ -395,7 +395,7 @@ anywhere on the row operates the control: it flips a switch, opens a pop-up, foc
   second display.
 - **Loading.**
   - Rows appear at once with muted text ("Looking for networks…", "Calculating…").
-  - Spinners appear only for work the user started: Check Now, Install Now.
+  - Spinners appear only for work the user started: Check Now, Download Updates.
 - **Empty lists** show one muted row in the list saying what would be there: "Apps appear here
   after they send a notification".
 - **Needs an administrator** (slice 2). A system-wide row checks its polkit action in advance:
@@ -594,11 +594,12 @@ notifications per app.
 | Language, formats with preview, 24-hour time | M W G K | have | — | merged into Language & Time |
 | Automatic time, time zone, manual time | M W G K | have | — | merged |
 | Automatic time zone | M W G | missing | later | geoclue |
-| Preferred language order, install a language | M W G K | one language from installed locales | later | locale-gen needs root |
+| Install a language | M W G K | have | — | any supported locale; localed runs locale-gen, "Setting up…" while it works |
+| Preferred language order | M W G K | one language | later | — |
 | Separate overrides for number, date and measurement formats | M W K | the region decides | never | one region choice is enough |
 | Administrators change time, language and name without a prompt | — | fails without an agent | now (slice 2) | polkit rules (maturity gaps #2) |
 | Computer name, About, Storage, Software Update | M W G K | have | — | moved under About |
-| Automatic security updates, offline updates at restart | M W G K | missing | later | `unattended-upgrades`, PackageKit offline (maturity gaps §12) |
+| Automatic security updates, offline updates at restart | M W G K | partly: offline updates at restart are in; no automatic security updates | later | `unattended-upgrades` (maturity gaps §12) |
 | Printers | M W G K | missing | later | roadmap Later |
 | Sharing: files, remote desktop | M W G K | missing | later | RemoteDesktop portal |
 | Secure Shell switch, firewall | M G K | — | never | administrator tools, not desktop settings |
@@ -681,15 +682,15 @@ Owns `apps/settings` (including `data/` and `debian/`) and `ci/vm`.
    `/usr/share/polkit-1/rules.d/`. It returns `YES` to local, active members of `sudo` for:
    - `org.freedesktop.timedate1.set-timezone`, `set-ntp` and `set-time`;
    - `org.freedesktop.locale1.set-locale`;
-   - `org.freedesktop.hostname1.set-static-hostname` and `set-machine-info`;
-   - `org.freedesktop.packagekit.system-update`.
+   - `org.freedesktop.hostname1.set-static-hostname` and `set-machine-info`.
 
-   Every one of these is `auth_admin_keep` on Debian 13. Debian's own PackageKit rule allows only
-   `upgrade-system` and `trigger-offline-update`, while Settings calls `UpdatePackages`.
+   Every one of these is `auth_admin_keep` on Debian 13. Software Update needs no rule: it
+   downloads with `ONLY_DOWNLOAD` (no authorization) and triggers an offline update, which is
+   `allow_active=yes`.
    NetworkManager system connections are already allowed for `sudo` and `netdev`.
 2. **Rows that check in advance.**
    - Before drawing the system-wide rows (time zone, automatic time, manual time, language,
-     region, computer name, Install Now), check each action with polkit's
+     region, computer name), check each action with polkit's
      `CheckAuthorization`, without interaction.
    - A row the user may not change is disabled, with the description "Only an administrator
      can change this."

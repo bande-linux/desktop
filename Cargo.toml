@@ -92,6 +92,7 @@ bande-fs = { path = "crates/libs/fs" }
 bande-golden = { path = "crates/testing/golden" }
 bande-graphics = { path = "crates/toolkit/graphics" }
 bande-greeter = { path = "crates/shell/greeter" }
+bande-installer = { path = "crates/apps/installer" }
 bande-inbox = { path = "crates/libs/inbox" }
 bande-keyboard = { path = "crates/libs/keyboard" }
 bande-l10n = { path = "crates/libs/l10n" }
@@ -100,6 +101,7 @@ bande-lock = { path = "crates/shell/lock" }
 bande-log = { path = "crates/libs/log" }
 bande-monitor = { path = "crates/apps/monitor" }
 bande-network = { path = "crates/libs/network" }
+bande-packages = { path = "crates/libs/packages" }
 bande-notifications = { path = "crates/shell/notifications" }
 bande-notify = { path = "crates/services/notify" }
 bande-polkit = { path = "crates/services/polkit" }

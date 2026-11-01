@@ -3,7 +3,6 @@
 use std::os::fd::BorrowedFd;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Once;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
@@ -187,7 +186,6 @@ fn shell(
     root.share_fonts(&text);
     let notifications =
         Notifications::new(&mut root, text.sharing_fonts(), None).expect("notifications");
-    let toggle = notifications.toggle();
     let mut config = Config::default();
     config.bar.names = names;
     config.bar.apps = [EDITOR.to_owned()]
@@ -200,7 +198,6 @@ fn shell(
         system: None,
         config_home: None,
         home: None,
-        notification_center: Rc::new(toggle),
     };
     let display = Display {
         output: "HEADLESS-1".to_owned(),
@@ -606,7 +603,7 @@ fn shared_cases() -> Vec<Case> {
         case(ControlCenter, Secondary, Outcome::ControlCenter),
         case(ControlCenter, Hold, Outcome::ControlCenter),
         case(Clock, Primary, NotificationCenter),
-        case(Clock, Secondary, NotificationCenter),
+        case(Clock, Secondary, Menu),
         case(Clock, Hold, NotificationCenter),
     ]
 }
@@ -746,6 +743,42 @@ fn the_keyboard_opens_the_app_menus_and_walks_the_apps_and_gives_the_keyboard_ba
     desktop.key(KEY_ESC);
     desktop.settle();
     assert!(desktop.calm());
+}
+
+#[test]
+fn the_clock_over_control_center_closes_it() {
+    let mut desktop = Desktop::new(false);
+    desktop.press(Target::ControlCenter, Press::Primary);
+    desktop.await_outcome(Outcome::ControlCenter);
+    desktop.press(Target::Clock, Press::Primary);
+    assert_eq!(
+        expect(
+            &mut desktop,
+            "the clock while Control Center is open",
+            Outcome::NotificationCenter
+        ),
+        None
+    );
+    desktop.key(KEY_ESC);
+    assert!(desktop.await_calm(), "Control Center closed for the center");
+}
+
+#[test]
+fn control_center_over_the_notification_center_closes_it() {
+    let mut desktop = Desktop::new(false);
+    desktop.press(Target::Clock, Press::Primary);
+    desktop.await_outcome(Outcome::NotificationCenter);
+    desktop.press(Target::ControlCenter, Press::Primary);
+    assert_eq!(
+        expect(
+            &mut desktop,
+            "Control Center while the center is open",
+            Outcome::ControlCenter
+        ),
+        None
+    );
+    desktop.key(KEY_ESC);
+    assert!(desktop.await_calm(), "the center closed for Control Center");
 }
 
 #[test]

@@ -28,7 +28,6 @@ const MAX_CACHED_PICTURES: usize = 64;
 
 enum Message {
     Presentation(Presentation),
-    Toggle,
     Focus { app: String, token: String },
 }
 
@@ -227,7 +226,12 @@ impl App for Notifications {
                 window.request_redraw();
             }
             WindowEvent::TogglePanel(Panel::NotificationCenter) => {
+                self.screen.set_today(bande_datetime::now().date(), now);
                 self.screen.toggle(now);
+                self.carry_out(window);
+            }
+            WindowEvent::TogglePanel(Panel::ControlCenter) => {
+                self.screen.make_way(now);
                 self.carry_out(window);
             }
             WindowEvent::FullScreen {
@@ -247,7 +251,7 @@ impl App for Notifications {
                 rect,
                 ..
             } => {
-                self.screen.set_anchor(edge, rect);
+                self.screen.set_anchor(edge, rect, now);
                 window.request_redraw();
             }
             _ => {}
@@ -263,10 +267,6 @@ impl App for Notifications {
         for message in self.inbox.drain() {
             match message {
                 Message::Presentation(presentation) => self.screen.present(presentation, now),
-                Message::Toggle => {
-                    self.screen.set_today(bande_datetime::now().date(), now);
-                    self.screen.toggle(now);
-                }
                 Message::Focus { app, token } => self.focus(window, &app, &token),
             }
         }
@@ -422,12 +422,5 @@ impl Notifications {
             hide_pending: false,
             next_refresh: None,
         })
-    }
-
-    pub fn toggle(&self) -> impl Fn() + 'static {
-        let outbox = self.inbox.outbox();
-        move || {
-            outbox.send(Message::Toggle);
-        }
     }
 }

@@ -47,8 +47,8 @@ pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};
 pub use idle::Idle;
 pub use locale::{
-    InstalledLocale, LocaleCommand, LocaleState, assignments, installed_locales, locale_name,
-    parse_assignments,
+    AvailableLocale, LocaleCommand, LocaleState, assignments, locale_name, login_codes,
+    parse_assignments, supported_locales, x11_keyboard,
 };
 pub use login::{App, LoginCommand, LoginItems, login_items, login_matches};
 pub use night::{clock_text, night_summary};
@@ -62,7 +62,8 @@ pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };
 pub use software::{
-    Package, SoftwareCommand, SoftwareState, announce_updates, check, follow_software,
+    Package, Refresh, SoftwareCommand, SoftwareState, announce_updates, check, follow_software,
+    open_updates,
 };
 pub use state::{Answer, BluetoothState, Display, Joined, Mode, NetworkState, Question, WifiState};
 pub use storage::{Category, Storage, StorageCommand, Tally, categorize, tally};
@@ -74,7 +75,8 @@ pub use widgets::{bucket_levels, sidebar_width};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-settings.ftl");
 
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub const TRANSLATIONS: [(&str, &str); 1] = [("en-US", ENGLISH)];
+pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&TRANSLATIONS));
 
 #[cfg(test)]
 mod tests {

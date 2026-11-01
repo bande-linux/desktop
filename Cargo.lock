@@ -382,12 +382,943 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
+name = "bande-app-menu"
+version = "0.1.0"
+dependencies = [
+ "bande-inbox",
+ "bande-l10n",
+ "bande-test-bus",
+ "zbus",
+]
+
+[[package]]
+name = "bande-audio"
+version = "0.1.0"
+dependencies = [
+ "bande-test-bus",
+ "pipewire",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "bande-automount"
+version = "0.1.0"
+dependencies = [
+ "bande-bus",
+ "bande-fs",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-test-bus",
+ "bande-xdg",
+ "rustix 1.1.6",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-bar"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-bluetooth",
+ "bande-compositor",
+ "bande-config",
+ "bande-controlcenter",
+ "bande-datetime",
+ "bande-fs",
+ "bande-golden",
+ "bande-inbox",
+ "bande-keyboard",
+ "bande-l10n",
+ "bande-launcher",
+ "bande-notifications",
+ "bande-sound",
+ "bande-status",
+ "bande-taskbar-model",
+ "bande-test-wayland",
+ "bande-toolkit",
+ "bande-xdg",
+ "image",
+ "jiff",
+ "smithay",
+ "tracing",
+ "wayland-client",
+ "zbus",
+]
+
+[[package]]
+name = "bande-bench"
+version = "0.1.0"
+dependencies = [
+ "bande-compositor",
+ "bande-files",
+ "bande-fs",
+ "bande-log",
+ "bande-sample",
+ "bande-test-wayland",
+ "bande-toolkit",
+ "bande-xdg",
+ "rustix 1.1.6",
+ "smithay",
+ "tempfile",
+ "tracing",
+ "wayland-client",
+]
+
+[[package]]
+name = "bande-bluetooth"
+version = "0.1.0"
+dependencies = [
+ "bande-test-bus",
+ "blocking",
+ "zbus",
+]
+
+[[package]]
+name = "bande-bus"
+version = "0.1.0"
+dependencies = [
+ "bande-test-bus",
+ "zbus",
+]
+
+[[package]]
+name = "bande-clipboard"
+version = "0.1.0"
+dependencies = [
+ "bande-compositor",
+ "bande-log",
+ "bande-test-bus",
+ "bande-test-wayland",
+ "bande-xdg",
+ "rustix 1.1.6",
+ "smithay",
+ "tempfile",
+ "tracing",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "zbus",
+]
+
+[[package]]
+name = "bande-compositor"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "accesskit_unix",
+ "bande-bus",
+ "bande-config",
+ "bande-datetime",
+ "bande-edid",
+ "bande-golden",
+ "bande-graphics",
+ "bande-greeter",
+ "bande-keyboard",
+ "bande-l10n",
+ "bande-log",
+ "bande-protocols",
+ "bande-render",
+ "bande-spring",
+ "bande-test-bus",
+ "bande-test-wayland",
+ "bande-widgets",
+ "bande-xdg",
+ "image",
+ "image-compare",
+ "jiff",
+ "rustix 1.1.6",
+ "smithay",
+ "tempfile",
+ "tracing",
+ "wayland-client",
+ "wayland-protocols",
+ "zbus",
+]
+
+[[package]]
+name = "bande-config"
+version = "0.1.0"
+dependencies = [
+ "bande-bus",
+ "bande-design",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-test-bus",
+ "bande-watch",
+ "kdl",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-controlcenter"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-audio",
+ "bande-bluetooth",
+ "bande-golden",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-network",
+ "bande-notify",
+ "bande-power",
+ "bande-sound",
+ "bande-status",
+ "bande-test-bus",
+ "bande-toolkit",
+ "bande-xdg",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-datetime"
+version = "0.1.0"
+dependencies = [
+ "bande-test-bus",
+ "icu_calendar",
+ "icu_datetime",
+ "icu_locale_core",
+ "jiff",
+ "rustix 1.1.6",
+ "tempfile",
+ "zbus",
+]
+
+[[package]]
+name = "bande-design"
+version = "0.1.0"
+
+[[package]]
+name = "bande-desktop-surface"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-bar",
+ "bande-config",
+ "bande-fs",
+ "bande-golden",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-thumbnails",
+ "bande-toolkit",
+ "bande-volumes",
+ "bande-wallpaper",
+ "bande-xdg",
+ "tracing",
+]
+
+[[package]]
+name = "bande-edid"
+version = "0.1.0"
+
+[[package]]
+name = "bande-file-chooser"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-files",
+ "bande-fs",
+ "bande-golden",
+ "bande-l10n",
+ "bande-log",
+ "bande-toolkit",
+ "bande-volumes",
+ "bande-wallpaper",
+ "bande-xdg",
+ "tempfile",
+ "tracing",
+ "xdg-desktop-portal-bande",
+]
+
+[[package]]
+name = "bande-files"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-app-menu",
+ "bande-fs",
+ "bande-golden",
+ "bande-l10n",
+ "bande-log",
+ "bande-preview",
+ "bande-search",
+ "bande-sound",
+ "bande-thumbnails",
+ "bande-toolkit",
+ "bande-volumes",
+ "bande-xdg",
+ "image",
+ "rustix 1.1.6",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-fs"
+version = "0.1.0"
+dependencies = [
+ "bande-datetime",
+ "bande-l10n",
+ "bande-xdg",
+ "bzip2",
+ "flate2",
+ "jiff",
+ "lzma-rust2",
+ "rustix 1.1.6",
+ "ruzstd",
+ "tar",
+ "tempfile",
+ "zip",
+]
+
+[[package]]
+name = "bande-golden"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "image-compare",
+]
+
+[[package]]
+name = "bande-graphics"
+version = "0.1.0"
+dependencies = [
+ "ab_glyph",
+ "bande-design",
+ "fontique",
+ "image",
+ "parley",
+ "pollster",
+ "resvg",
+ "skrifa",
+ "tempfile",
+ "tracing",
+ "vello_cpu",
+ "vello_gpu",
+ "wgpu",
+]
+
+[[package]]
+name = "bande-greeter"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-config",
+ "bande-datetime",
+ "bande-keyboard",
+ "bande-l10n",
+ "bande-lock",
+ "bande-log",
+ "bande-status",
+ "bande-toolkit",
+ "jiff",
+ "libc",
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "zbus",
+ "zeroize",
+]
+
+[[package]]
+name = "bande-inbox"
+version = "0.1.0"
+dependencies = [
+ "rustix 1.1.6",
+]
+
+[[package]]
+name = "bande-installer"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-fs",
+ "bande-golden",
+ "bande-l10n",
+ "bande-log",
+ "bande-packages",
+ "bande-test-bus",
+ "bande-toolkit",
+ "bande-xdg",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-keyboard"
+version = "0.1.0"
+dependencies = [
+ "bande-l10n",
+ "roxmltree",
+]
+
+[[package]]
+name = "bande-l10n"
+version = "0.1.0"
+dependencies = [
+ "fluent-bundle",
+ "tracing",
+ "unic-langid",
+]
+
+[[package]]
+name = "bande-launcher"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-fs",
+ "bande-golden",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-preview",
+ "bande-search",
+ "bande-settings-panes",
+ "bande-status",
+ "bande-thumbnails",
+ "bande-toolkit",
+ "bande-xdg",
+ "image",
+ "rustix 1.1.6",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-lock"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-bar",
+ "bande-datetime",
+ "bande-golden",
+ "bande-inbox",
+ "bande-keyboard",
+ "bande-l10n",
+ "bande-log",
+ "bande-spring",
+ "bande-status",
+ "bande-toolkit",
+ "bande-wallpaper",
+ "bande-xdg",
+ "jiff",
+ "libc",
+ "libloading",
+ "rustix 1.1.6",
+ "tracing",
+ "zbus",
+ "zeroize",
+]
+
+[[package]]
+name = "bande-log"
+version = "0.1.0"
+dependencies = [
+ "rustix 1.1.6",
+ "tracing",
+ "tracing-journald",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "bande-monitor"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-app-menu",
+ "bande-golden",
+ "bande-l10n",
+ "bande-log",
+ "bande-status",
+ "bande-test-bus",
+ "bande-toolkit",
+ "bande-xdg",
+ "rustix 1.1.6",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-network"
+version = "0.1.0"
+dependencies = [
+ "bande-test-bus",
+ "zbus",
+]
+
+[[package]]
+name = "bande-notifications"
+version = "0.1.0"
+dependencies = [
+ "bande-datetime",
+ "bande-golden",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-notify",
+ "bande-spring",
+ "bande-toolkit",
+ "bande-xdg",
+ "jiff",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-notify"
+version = "0.1.0"
+dependencies = [
+ "bande-bus",
+ "bande-log",
+ "bande-sound",
+ "bande-test-bus",
+ "rustix 1.1.6",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-packages"
+version = "0.1.0"
+dependencies = [
+ "bande-test-bus",
+ "serde",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-polkit"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-golden",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-log",
+ "bande-test-bus",
+ "bande-toolkit",
+ "blocking",
+ "rustix 1.1.6",
+ "tempfile",
+ "tracing",
+ "zbus",
+ "zeroize",
+]
+
+[[package]]
+name = "bande-power"
+version = "0.1.0"
+dependencies = [
+ "bande-bus",
+ "bande-compositor",
+ "bande-config",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-sound",
+ "bande-test-bus",
+ "rustix 1.1.6",
+ "smithay",
+ "tempfile",
+ "tracing",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-protocols-wlr",
+ "zbus",
+]
+
+[[package]]
+name = "bande-preview"
+version = "0.1.0"
+dependencies = [
+ "bande-fs",
+ "image",
+ "tempfile",
+]
+
+[[package]]
+name = "bande-protocols"
+version = "0.1.0"
+dependencies = [
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-scanner",
+ "wayland-server",
+]
+
+[[package]]
+name = "bande-render"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "naga",
+ "smithay",
+]
+
+[[package]]
+name = "bande-review"
+version = "0.1.0"
+dependencies = [
+ "bande-log",
+ "image",
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+ "tracing",
+ "wayland-client",
+ "wayland-protocols",
+]
+
+[[package]]
+name = "bande-sample"
+version = "0.1.0"
+dependencies = [
+ "bande-log",
+ "bande-toolkit",
+ "tracing",
+]
+
+[[package]]
+name = "bande-screenshot"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-compositor",
+ "bande-datetime",
+ "bande-fs",
+ "bande-golden",
+ "bande-graphics",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-protocols",
+ "bande-sound",
+ "bande-test-bus",
+ "bande-test-wayland",
+ "bande-toolkit",
+ "bande-xdg",
+ "blocking",
+ "image",
+ "jiff",
+ "pipewire",
+ "rustix 1.1.6",
+ "serde",
+ "smithay",
+ "tempfile",
+ "tracing",
+ "wayland-client",
+ "wayland-protocols",
+ "xdg-desktop-portal-bande",
+ "zbus",
+]
+
+[[package]]
+name = "bande-search"
+version = "0.1.0"
+dependencies = [
+ "bande-inbox",
+ "bande-watch",
+ "bande-xdg",
+ "jiff",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "bande-settings"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-app-menu",
+ "bande-audio",
+ "bande-bluetooth",
+ "bande-compositor",
+ "bande-config",
+ "bande-datetime",
+ "bande-fs",
+ "bande-golden",
+ "bande-keyboard",
+ "bande-l10n",
+ "bande-log",
+ "bande-network",
+ "bande-notify",
+ "bande-packages",
+ "bande-settings-panes",
+ "bande-sound",
+ "bande-status",
+ "bande-test-bus",
+ "bande-toolkit",
+ "bande-wallpaper",
+ "bande-watch",
+ "bande-xdg",
+ "jiff",
+ "rustix 1.1.6",
+ "tempfile",
+ "tracing",
+ "wayland-client",
+ "wayland-protocols-wlr",
+ "zbus",
+]
+
+[[package]]
+name = "bande-settings-panes"
+version = "0.1.0"
+dependencies = [
+ "bande-l10n",
+]
+
+[[package]]
+name = "bande-shell"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-bar",
+ "bande-bluetooth",
+ "bande-compositor",
+ "bande-config",
+ "bande-controlcenter",
+ "bande-desktop-surface",
+ "bande-launcher",
+ "bande-log",
+ "bande-notifications",
+ "bande-status",
+ "bande-toolkit",
+ "bande-xdg",
+ "smithay",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-sound"
+version = "0.1.0"
+dependencies = [
+ "bande-audio",
+ "bande-bus",
+ "bande-config",
+ "bande-log",
+ "bande-test-bus",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-spring"
+version = "0.1.0"
+
+[[package]]
+name = "bande-status"
+version = "0.1.0"
+dependencies = [
+ "bande-app-menu",
+ "bande-audio",
+ "bande-bluetooth",
+ "bande-datetime",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-network",
+ "bande-notify",
+ "bande-power",
+ "bande-test-bus",
+ "bande-xdg",
+ "rustix 1.1.6",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
 name = "bande-taskbar-model"
 version = "0.1.0"
 dependencies = [
- "tracing",
  "bande-config",
  "bande-inbox",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-term"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "alacritty_terminal",
+ "bande-app-menu",
+ "bande-design",
+ "bande-golden",
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-spring",
+ "bande-toolkit",
+ "bande-watch",
+ "bande-xdg",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-test-bus"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "zbus",
+]
+
+[[package]]
+name = "bande-test-wayland"
+version = "0.1.0"
+dependencies = [
+ "bande-compositor",
+ "bande-protocols",
+ "rustix 1.1.6",
+ "tempfile",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-protocols-misc",
+ "wayland-protocols-wlr",
+]
+
+[[package]]
+name = "bande-thumbnails"
+version = "0.1.0"
+dependencies = [
+ "bande-inbox",
+ "bande-xdg",
+ "image",
+ "md-5",
+ "png",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "bande-toolkit"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-compositor",
+ "bande-graphics",
+ "bande-test-bus",
+ "bande-test-wayland",
+ "bande-toolkit-platform",
+ "bande-widgets",
+ "smithay",
+ "wayland-client",
+ "zbus",
+]
+
+[[package]]
+name = "bande-toolkit-platform"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "accesskit_unix",
+ "atspi-common",
+ "bande-bus",
+ "bande-compositor",
+ "bande-golden",
+ "bande-graphics",
+ "bande-l10n",
+ "bande-protocols",
+ "bande-test-bus",
+ "bande-test-wayland",
+ "bande-widgets",
+ "raw-window-handle",
+ "rustix 1.1.6",
+ "serde",
+ "smithay",
+ "tracing",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-protocols-wlr",
+ "wgpu",
+ "xkbcommon",
+ "zbus",
+]
+
+[[package]]
+name = "bande-tray"
+version = "0.1.0"
+dependencies = [
+ "bande-bus",
+ "bande-log",
+ "bande-test-bus",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-volumes"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-wallpaper"
+version = "0.1.0"
+dependencies = [
+ "bande-inbox",
+ "image",
+ "resvg",
+ "tempfile",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
+name = "bande-watch"
+version = "0.1.0"
+dependencies = [
+ "rustix 1.1.6",
+ "tempfile",
+]
+
+[[package]]
+name = "bande-widgets"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bande-golden",
+ "bande-graphics",
+ "bande-l10n",
+ "bande-spring",
+ "parley",
+ "zeroize",
+]
+
+[[package]]
+name = "bande-xdg"
+version = "0.1.0"
+dependencies = [
+ "bande-l10n",
+ "bande-notify",
+ "bande-test-bus",
+ "image",
+ "rustix 1.1.6",
+ "tempfile",
+ "tracing",
  "zbus",
 ]
 
@@ -3725,908 +4656,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bande-app-menu"
-version = "0.1.0"
-dependencies = [
- "bande-inbox",
- "bande-l10n",
- "bande-test-bus",
- "zbus",
-]
-
-[[package]]
-name = "bande-audio"
-version = "0.1.0"
-dependencies = [
- "pipewire",
- "serde_json",
- "tempfile",
- "tracing",
- "bande-test-bus",
-]
-
-[[package]]
-name = "bande-automount"
-version = "0.1.0"
-dependencies = [
- "rustix 1.1.6",
- "tracing",
- "bande-bus",
- "bande-fs",
- "bande-l10n",
- "bande-log",
- "bande-notify",
- "bande-test-bus",
- "bande-xdg",
- "zbus",
-]
-
-[[package]]
-name = "bande-bar"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "image",
- "jiff",
- "smithay",
- "tracing",
- "bande-bluetooth",
- "bande-compositor",
- "bande-config",
- "bande-controlcenter",
- "bande-datetime",
- "bande-taskbar-model",
- "bande-fs",
- "bande-golden",
- "bande-inbox",
- "bande-keyboard",
- "bande-l10n",
- "bande-launcher",
- "bande-notifications",
- "bande-sound",
- "bande-status",
- "bande-test-wayland",
- "bande-toolkit",
- "bande-xdg",
- "wayland-client",
- "zbus",
-]
-
-[[package]]
-name = "bande-bench"
-version = "0.1.0"
-dependencies = [
- "rustix 1.1.6",
- "smithay",
- "tempfile",
- "tracing",
- "bande-compositor",
- "bande-files",
- "bande-fs",
- "bande-log",
- "bande-sample",
- "bande-test-wayland",
- "bande-toolkit",
- "bande-xdg",
- "wayland-client",
-]
-
-[[package]]
-name = "bande-bluetooth"
-version = "0.1.0"
-dependencies = [
- "blocking",
- "bande-test-bus",
- "zbus",
-]
-
-[[package]]
-name = "bande-bus"
-version = "0.1.0"
-dependencies = [
- "bande-test-bus",
- "zbus",
-]
-
-[[package]]
-name = "bande-clipboard"
-version = "0.1.0"
-dependencies = [
- "rustix 1.1.6",
- "smithay",
- "tempfile",
- "tracing",
- "bande-compositor",
- "bande-log",
- "bande-test-bus",
- "bande-test-wayland",
- "bande-xdg",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "zbus",
-]
-
-[[package]]
-name = "bande-compositor"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "accesskit_unix",
- "image",
- "image-compare",
- "jiff",
- "rustix 1.1.6",
- "smithay",
- "tempfile",
- "tracing",
- "bande-bus",
- "bande-config",
- "bande-datetime",
- "bande-edid",
- "bande-golden",
- "bande-graphics",
- "bande-greeter",
- "bande-keyboard",
- "bande-l10n",
- "bande-log",
- "bande-protocols",
- "bande-render",
- "bande-spring",
- "bande-test-bus",
- "bande-test-wayland",
- "bande-widgets",
- "bande-xdg",
- "wayland-client",
- "wayland-protocols",
- "zbus",
-]
-
-[[package]]
-name = "bande-config"
-version = "0.1.0"
-dependencies = [
- "kdl",
- "tempfile",
- "tracing",
- "bande-bus",
- "bande-design",
- "bande-l10n",
- "bande-log",
- "bande-notify",
- "bande-test-bus",
- "bande-watch",
- "zbus",
-]
-
-[[package]]
-name = "bande-controlcenter"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "tracing",
- "bande-audio",
- "bande-bluetooth",
- "bande-golden",
- "bande-inbox",
- "bande-l10n",
- "bande-network",
- "bande-notify",
- "bande-power",
- "bande-sound",
- "bande-status",
- "bande-test-bus",
- "bande-toolkit",
- "bande-xdg",
- "zbus",
-]
-
-[[package]]
-name = "bande-datetime"
-version = "0.1.0"
-dependencies = [
- "icu_calendar",
- "icu_datetime",
- "icu_locale_core",
- "jiff",
- "rustix 1.1.6",
- "tempfile",
- "bande-test-bus",
- "zbus",
-]
-
-[[package]]
-name = "bande-design"
-version = "0.1.0"
-
-[[package]]
-name = "bande-desktop-surface"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "tracing",
- "bande-bar",
- "bande-config",
- "bande-fs",
- "bande-golden",
- "bande-inbox",
- "bande-l10n",
- "bande-thumbnails",
- "bande-toolkit",
- "bande-volumes",
- "bande-wallpaper",
- "bande-xdg",
-]
-
-[[package]]
-name = "bande-edid"
-version = "0.1.0"
-
-[[package]]
-name = "bande-file-chooser"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "tempfile",
- "tracing",
- "bande-files",
- "bande-fs",
- "bande-golden",
- "bande-l10n",
- "bande-log",
- "bande-toolkit",
- "bande-volumes",
- "bande-wallpaper",
- "bande-xdg",
- "xdg-desktop-portal-bande",
-]
-
-[[package]]
-name = "bande-files"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "image",
- "rustix 1.1.6",
- "tempfile",
- "tracing",
- "bande-app-menu",
- "bande-fs",
- "bande-golden",
- "bande-l10n",
- "bande-log",
- "bande-preview",
- "bande-search",
- "bande-sound",
- "bande-thumbnails",
- "bande-toolkit",
- "bande-volumes",
- "bande-xdg",
- "zbus",
-]
-
-[[package]]
-name = "bande-fs"
-version = "0.1.0"
-dependencies = [
- "bzip2",
- "flate2",
- "jiff",
- "lzma-rust2",
- "rustix 1.1.6",
- "ruzstd",
- "tar",
- "tempfile",
- "bande-datetime",
- "bande-l10n",
- "bande-xdg",
- "zip",
-]
-
-[[package]]
-name = "bande-golden"
-version = "0.1.0"
-dependencies = [
- "image",
- "image-compare",
-]
-
-[[package]]
-name = "bande-graphics"
-version = "0.1.0"
-dependencies = [
- "ab_glyph",
- "fontique",
- "image",
- "parley",
- "pollster",
- "resvg",
- "skrifa",
- "tempfile",
- "tracing",
- "bande-design",
- "vello_cpu",
- "vello_gpu",
- "wgpu",
-]
-
-[[package]]
-name = "bande-greeter"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "jiff",
- "libc",
- "rustix 1.1.6",
- "serde",
- "serde_json",
- "tempfile",
- "tracing",
- "bande-config",
- "bande-datetime",
- "bande-keyboard",
- "bande-l10n",
- "bande-lock",
- "bande-log",
- "bande-status",
- "bande-toolkit",
- "zbus",
- "zeroize",
-]
-
-[[package]]
-name = "bande-inbox"
-version = "0.1.0"
-dependencies = [
- "rustix 1.1.6",
-]
-
-[[package]]
-name = "bande-keyboard"
-version = "0.1.0"
-dependencies = [
- "roxmltree",
- "bande-l10n",
-]
-
-[[package]]
-name = "bande-l10n"
-version = "0.1.0"
-dependencies = [
- "fluent-bundle",
- "tracing",
- "unic-langid",
-]
-
-[[package]]
-name = "bande-launcher"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "image",
- "rustix 1.1.6",
- "tempfile",
- "tracing",
- "bande-fs",
- "bande-golden",
- "bande-inbox",
- "bande-l10n",
- "bande-preview",
- "bande-search",
- "bande-settings-panes",
- "bande-status",
- "bande-thumbnails",
- "bande-toolkit",
- "bande-xdg",
- "zbus",
-]
-
-[[package]]
-name = "bande-lock"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "jiff",
- "libc",
- "libloading",
- "rustix 1.1.6",
- "tracing",
- "bande-bar",
- "bande-datetime",
- "bande-golden",
- "bande-inbox",
- "bande-keyboard",
- "bande-l10n",
- "bande-log",
- "bande-spring",
- "bande-status",
- "bande-toolkit",
- "bande-wallpaper",
- "bande-xdg",
- "zbus",
- "zeroize",
-]
-
-[[package]]
-name = "bande-log"
-version = "0.1.0"
-dependencies = [
- "rustix 1.1.6",
- "tracing",
- "tracing-journald",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "bande-monitor"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "rustix 1.1.6",
- "tempfile",
- "tracing",
- "bande-app-menu",
- "bande-golden",
- "bande-l10n",
- "bande-log",
- "bande-status",
- "bande-test-bus",
- "bande-toolkit",
- "bande-xdg",
- "zbus",
-]
-
-[[package]]
-name = "bande-network"
-version = "0.1.0"
-dependencies = [
- "bande-test-bus",
- "zbus",
-]
-
-[[package]]
-name = "bande-notifications"
-version = "0.1.0"
-dependencies = [
- "jiff",
- "tracing",
- "bande-datetime",
- "bande-golden",
- "bande-inbox",
- "bande-l10n",
- "bande-notify",
- "bande-spring",
- "bande-toolkit",
- "bande-xdg",
- "zbus",
-]
-
-[[package]]
-name = "bande-notify"
-version = "0.1.0"
-dependencies = [
- "rustix 1.1.6",
- "tempfile",
- "tracing",
- "bande-bus",
- "bande-log",
- "bande-sound",
- "bande-test-bus",
- "zbus",
-]
-
-[[package]]
-name = "bande-polkit"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "blocking",
- "rustix 1.1.6",
- "tempfile",
- "tracing",
- "bande-golden",
- "bande-inbox",
- "bande-l10n",
- "bande-log",
- "bande-test-bus",
- "bande-toolkit",
- "zbus",
- "zeroize",
-]
-
-[[package]]
-name = "bande-power"
-version = "0.1.0"
-dependencies = [
- "rustix 1.1.6",
- "smithay",
- "tempfile",
- "tracing",
- "bande-bus",
- "bande-compositor",
- "bande-config",
- "bande-l10n",
- "bande-log",
- "bande-notify",
- "bande-sound",
- "bande-test-bus",
- "wayland-client",
- "wayland-protocols",
- "wayland-protocols-wlr",
- "zbus",
-]
-
-[[package]]
-name = "bande-preview"
-version = "0.1.0"
-dependencies = [
- "image",
- "tempfile",
- "bande-fs",
-]
-
-[[package]]
-name = "bande-protocols"
-version = "0.1.0"
-dependencies = [
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-scanner",
- "wayland-server",
-]
-
-[[package]]
-name = "bande-render"
-version = "0.1.0"
-dependencies = [
- "ash",
- "naga",
- "smithay",
-]
-
-[[package]]
-name = "bande-review"
-version = "0.1.0"
-dependencies = [
- "image",
- "rustix 1.1.6",
- "serde",
- "serde_json",
- "tracing",
- "bande-log",
- "wayland-client",
- "wayland-protocols",
-]
-
-[[package]]
-name = "bande-sample"
-version = "0.1.0"
-dependencies = [
- "tracing",
- "bande-log",
- "bande-toolkit",
-]
-
-[[package]]
-name = "bande-screenshot"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "blocking",
- "image",
- "jiff",
- "pipewire",
- "rustix 1.1.6",
- "serde",
- "smithay",
- "tempfile",
- "tracing",
- "bande-compositor",
- "bande-datetime",
- "bande-fs",
- "bande-golden",
- "bande-graphics",
- "bande-inbox",
- "bande-l10n",
- "bande-log",
- "bande-notify",
- "bande-protocols",
- "bande-sound",
- "bande-test-bus",
- "bande-test-wayland",
- "bande-toolkit",
- "bande-xdg",
- "wayland-client",
- "wayland-protocols",
- "xdg-desktop-portal-bande",
- "zbus",
-]
-
-[[package]]
-name = "bande-search"
-version = "0.1.0"
-dependencies = [
- "jiff",
- "tempfile",
- "tracing",
- "bande-inbox",
- "bande-watch",
- "bande-xdg",
-]
-
-[[package]]
-name = "bande-settings"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "jiff",
- "rustix 1.1.6",
- "tempfile",
- "tracing",
- "bande-app-menu",
- "bande-audio",
- "bande-bluetooth",
- "bande-compositor",
- "bande-config",
- "bande-datetime",
- "bande-fs",
- "bande-golden",
- "bande-keyboard",
- "bande-l10n",
- "bande-log",
- "bande-network",
- "bande-notify",
- "bande-settings-panes",
- "bande-sound",
- "bande-status",
- "bande-test-bus",
- "bande-toolkit",
- "bande-wallpaper",
- "bande-watch",
- "bande-xdg",
- "wayland-client",
- "wayland-protocols-wlr",
- "zbus",
-]
-
-[[package]]
-name = "bande-settings-panes"
-version = "0.1.0"
-dependencies = [
- "bande-l10n",
-]
-
-[[package]]
-name = "bande-shell"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "smithay",
- "tempfile",
- "tracing",
- "bande-bar",
- "bande-bluetooth",
- "bande-compositor",
- "bande-config",
- "bande-controlcenter",
- "bande-desktop-surface",
- "bande-launcher",
- "bande-log",
- "bande-notifications",
- "bande-status",
- "bande-toolkit",
- "bande-xdg",
- "zbus",
-]
-
-[[package]]
-name = "bande-sound"
-version = "0.1.0"
-dependencies = [
- "tracing",
- "bande-audio",
- "bande-bus",
- "bande-config",
- "bande-log",
- "bande-test-bus",
- "zbus",
-]
-
-[[package]]
-name = "bande-spring"
-version = "0.1.0"
-
-[[package]]
-name = "bande-status"
-version = "0.1.0"
-dependencies = [
- "rustix 1.1.6",
- "tempfile",
- "tracing",
- "bande-app-menu",
- "bande-audio",
- "bande-bluetooth",
- "bande-datetime",
- "bande-inbox",
- "bande-l10n",
- "bande-network",
- "bande-notify",
- "bande-power",
- "bande-test-bus",
- "bande-xdg",
- "zbus",
-]
-
-[[package]]
-name = "bande-term"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "alacritty_terminal",
- "tempfile",
- "tracing",
- "bande-app-menu",
- "bande-design",
- "bande-golden",
- "bande-l10n",
- "bande-log",
- "bande-notify",
- "bande-spring",
- "bande-toolkit",
- "bande-watch",
- "bande-xdg",
- "zbus",
-]
-
-[[package]]
-name = "bande-test-bus"
-version = "0.1.0"
-dependencies = [
- "tempfile",
- "zbus",
-]
-
-[[package]]
-name = "bande-test-wayland"
-version = "0.1.0"
-dependencies = [
- "rustix 1.1.6",
- "tempfile",
- "bande-compositor",
- "bande-protocols",
- "wayland-client",
- "wayland-protocols",
- "wayland-protocols-misc",
- "wayland-protocols-wlr",
-]
-
-[[package]]
-name = "bande-thumbnails"
-version = "0.1.0"
-dependencies = [
- "image",
- "md-5",
- "png",
- "tempfile",
- "tracing",
- "bande-inbox",
- "bande-xdg",
-]
-
-[[package]]
-name = "bande-toolkit"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "smithay",
- "bande-compositor",
- "bande-graphics",
- "bande-test-bus",
- "bande-test-wayland",
- "bande-toolkit-platform",
- "bande-widgets",
- "wayland-client",
- "zbus",
-]
-
-[[package]]
-name = "bande-toolkit-platform"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "accesskit_unix",
- "atspi-common",
- "raw-window-handle",
- "rustix 1.1.6",
- "serde",
- "smithay",
- "tracing",
- "bande-bus",
- "bande-compositor",
- "bande-golden",
- "bande-graphics",
- "bande-l10n",
- "bande-protocols",
- "bande-test-bus",
- "bande-test-wayland",
- "bande-widgets",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-protocols-wlr",
- "wgpu",
- "xkbcommon",
- "zbus",
-]
-
-[[package]]
-name = "bande-tray"
-version = "0.1.0"
-dependencies = [
- "tracing",
- "bande-bus",
- "bande-log",
- "bande-test-bus",
- "zbus",
-]
-
-[[package]]
-name = "bande-volumes"
-version = "0.1.0"
-dependencies = [
- "tracing",
- "zbus",
-]
-
-[[package]]
-name = "bande-wallpaper"
-version = "0.1.0"
-dependencies = [
- "image",
- "resvg",
- "tempfile",
- "tracing",
- "bande-inbox",
- "zbus",
-]
-
-[[package]]
-name = "bande-watch"
-version = "0.1.0"
-dependencies = [
- "rustix 1.1.6",
- "tempfile",
-]
-
-[[package]]
-name = "bande-widgets"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "parley",
- "bande-golden",
- "bande-graphics",
- "bande-l10n",
- "bande-spring",
- "zeroize",
-]
-
-[[package]]
-name = "bande-xdg"
-version = "0.1.0"
-dependencies = [
- "image",
- "rustix 1.1.6",
- "tempfile",
- "tracing",
- "bande-l10n",
- "bande-notify",
- "bande-test-bus",
- "zbus",
-]
-
-[[package]]
 name = "unic-langid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5497,11 +5526,6 @@ dependencies = [
 name = "xdg-desktop-portal-bande"
 version = "0.1.0"
 dependencies = [
- "blocking",
- "jiff",
- "rustix 1.1.6",
- "tempfile",
- "tracing",
  "bande-bus",
  "bande-config",
  "bande-datetime",
@@ -5510,6 +5534,11 @@ dependencies = [
  "bande-test-bus",
  "bande-wallpaper",
  "bande-xdg",
+ "blocking",
+ "jiff",
+ "rustix 1.1.6",
+ "tempfile",
+ "tracing",
  "zbus",
 ]
 

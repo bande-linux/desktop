@@ -54,7 +54,7 @@ impl SettingsView {
                 }
                 SoftwareState::UpToDate => Some(L10N.tr("up-to-date")),
                 SoftwareState::Unavailable => Some(L10N.tr("updates-unavailable")),
-                SoftwareState::Installed { restart: true } => Some(L10N.tr("restart-to-update")),
+                SoftwareState::Prepared(_) => Some(L10N.tr("restart-to-update")),
                 _ => None,
             },
             PaneId::Storage => self

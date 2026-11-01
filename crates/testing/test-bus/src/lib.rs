@@ -1,5 +1,6 @@
 pub mod bluez;
 pub mod networkmanager;
+pub mod packagekit;
 pub mod permission_store;
 pub mod timedate;
 

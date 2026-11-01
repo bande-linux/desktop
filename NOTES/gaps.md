@@ -18,7 +18,7 @@ GTK apps do not fit with our window bar. Is that possible to solve so that all a
 Status: planned ([plans/third-party-title-bars.md](plans/third-party-title-bars.md))
 
 it seems like some apps are not getting the correct taskbar icon? this could also be that they simply dont have one. So dont dwell too deeply in that.
-Status: started ([plans/taskbar-icons.md](plans/taskbar-icons.md)); M1 and M3 done, M2 waits on an owner decision
+Status: finished ([plans/taskbar-icons.md](plans/taskbar-icons.md)); not yet checked live on the mini
 
 its not possible to install more keyboard layouts or languages in settings *important*
 Status: started ([plans/keyboard-layouts-and-languages.md](plans/keyboard-layouts-and-languages.md)); desktop side done (M2-M5, package Depends), input methods (M6) later

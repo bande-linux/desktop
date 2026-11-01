@@ -638,6 +638,7 @@ dependencies = [
  "bande-volumes",
  "bande-wallpaper",
  "bande-xdg",
+ "tempfile",
  "tracing",
 ]
 

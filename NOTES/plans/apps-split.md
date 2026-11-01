@@ -111,6 +111,8 @@ Settings keyboard, Wi-Fi UI and compositor DRM work don't conflict. Then: freeze
 - Update rebuild-desktop.
 - Done when `dpkg-deb -f bande-desktop Depends Recommends Suggests` is unchanged, and build-all.sh and the gate are green.
 
+Status: done 2026-11-01. `default-apps.sh [file]` takes no version (the default apps are unversioned). The handler test is `crates/shell/desktop/tests/default_apps.rs`: every default in bande-mimeapps.list resolves, through the bande-xdg parser, to a desktop-repo app or a default app; the app-icon test moved there too. rebuild-desktop needed no change (its `pinned` reads only Depends). Depends, Recommends and Suggests of the built bande-desktop are the same set as before.
+
 ### M2 (desktop). Cut the code and test couplings
 - bar tests/low_memory.rs loads icons from `data/icons/Bande/scalable/apps/` (same bytes; goldens unchanged).
 - Compositor guest test, ci/vm/guest-tests.sh and session-bench type into bande-sample (crates/testing, records typed text to a file) instead of bande-term.

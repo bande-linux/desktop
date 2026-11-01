@@ -26,7 +26,8 @@ Depends: bande-compositor (= ${binary:Version}),
          bande-greeter (= ${binary:Version}) | x-display-manager,
          pipewire-audio,
          ${misc:Depends}
-Recommends: bande-greeter (= ${binary:Version}),
+Recommends: ${bande:Recommends},
+            bande-greeter (= ${binary:Version}),
             network-manager,
             bande-apt-source,
             bande-term (= ${binary:Version}),
@@ -46,12 +47,6 @@ Recommends: bande-greeter (= ${binary:Version}),
             gnome-keyring,
             libpam-gnome-keyring,
             qt6-xdgdesktopportal-platformtheme,
-            firefox-esr,
-            gnome-text-editor,
-            loupe,
-            papers,
-            showtime,
-            gnome-calculator,
             fonts-inter,
             fonts-manrope,
             fonts-jetbrains-mono,
@@ -62,7 +57,7 @@ Recommends: bande-greeter (= ${binary:Version}),
             at-spi2-core,
             systemd-oomd,
             systemd-zram-generator
-Suggests: gnome-clocks
+Suggests: ${bande:Suggests}
 Description: Bande desktop environment
  The Bande desktop: a pure Wayland desktop with its own compositor, shell,
  session services, login window and applications, on Debian testing.

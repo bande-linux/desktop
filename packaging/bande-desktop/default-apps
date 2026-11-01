@@ -1,0 +1,19 @@
+# The default apps a standard bande-desktop install gets. All are swappable: bande-desktop
+# recommends (or suggests) them unversioned, so a user can remove or replace any of them.
+# Packages built in the desktop repo are part of the desktop and are not listed here.
+# [apps]    built in bande-linux/apps, released on their own.
+# [debian]  from Debian.
+# Columns: package, the icon the Bande theme draws for it (- for none), recommends|suggests.
+# Read by debian/default-apps.sh, ci/release/build-all.sh, ci/deb/install-test/run.sh and
+# the shell's icon and default-handler tests.
+
+[apps]
+
+[debian]
+firefox-esr          -                          recommends
+gnome-text-editor    org.gnome.TextEditor       recommends
+loupe                org.gnome.Loupe            recommends
+papers               org.gnome.Papers           recommends
+showtime             org.gnome.Showtime         recommends
+gnome-calculator     org.gnome.Calculator       recommends
+gnome-clocks         org.gnome.clocks           suggests

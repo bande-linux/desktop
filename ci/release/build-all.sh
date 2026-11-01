@@ -33,6 +33,12 @@ for recommended in "bande-greeter (= $version)" network-manager bande-apt-source
     relation Recommends "$recommended"
 done
 
+echo "== bande-desktop recommends or suggests each default app unversioned, none built here"
+while read -r package _ wanted; do
+    relation "${wanted^}" "$package" || { echo "bande-desktop does not $wanted $package"; exit 1; }
+    ! grep -qxF "$package" ci/release/packages || { echo "$package is built here, not a default app"; exit 1; }
+done < <(grep -E '^[a-z0-9]' packaging/bande-desktop/default-apps)
+
 echo "== lintian"
 lintian=(lintian --fail-on "error,warning")
 if [ "$(id -u)" = 0 ]; then

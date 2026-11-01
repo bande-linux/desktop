@@ -384,7 +384,7 @@ impl FilesView {
             shown.push(Item::Stroke {
                 shape: Shape::rect(area.inset(0.5)),
                 width: 1.0,
-                paint: self.palette.accent.into(),
+                paint: self.palette.accent_text.into(),
             });
         }
         items.push(Item::Clip {

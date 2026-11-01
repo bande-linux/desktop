@@ -23,19 +23,27 @@ def apca(txt,bg):
     if yb>yt: s=(yb**0.56-yt**0.57)*1.14; return 0 if s<0.1 else (s-0.027)*100
     s=(yb**0.65-yt**0.62)*1.14; return 0 if s>-0.1 else (s+0.027)*100
 H=80
+HD=262
 T={}
 light=dict(chassis=(0.938,0.005),sheet=(0.988,0.0025),overlay=(1.0,0),well=(0.905,0.007),
  ink=(0.235,0.008),ink2=(0.46,0.010),ink3=(0.60,0.010),hairline=(0.86,0.008),edge=(0.78,0.008))
-dark=dict(chassis=(0.185,0.006),sheet=(0.225,0.006),overlay=(0.265,0.006),well=(0.275,0.006),
- ink=(0.955,0.004),ink2=(0.78,0.008),ink3=(0.64,0.008),hairline=(0.31,0.006),edge=(0.38,0.006))
-for name,sch in (('light',light),('dark',dark)):
-    for k,(L,C) in sch.items(): T[name+'.'+k]=oklch(L,C,H)
+dark=dict(chassis=(0.255,0.013),sheet=(0.285,0.012),overlay=(0.335,0.011),well=(0.325,0.012),
+ ink=(0.925,0.006),ink2=(0.80,0.012),ink3=(0.655,0.012),hairline=(0.365,0.012),rim=(0.42,0.012),
+ edge=(0.47,0.012),deep=(0.215,0.015))
+for name,sch,hue in (('light',light,H),('dark',dark,HD)):
+    for k,(L,C) in sch.items(): T[name+'.'+k]=oklch(L,C,hue)
 acc={'ultramarine':(0.53,0.20,272,0.70,0.15),'teal':(0.55,0.10,195,0.74,0.11),'moss':(0.55,0.12,140,0.75,0.13),
  'amber':(0.62,0.14,65,0.80,0.13),'ember':(0.58,0.19,38,0.72,0.16),'rose':(0.56,0.19,5,0.73,0.15),
  'plum':(0.52,0.16,320,0.72,0.13),'graphite':(0.30,0.01,H,0.90,0.01)}
-for k,(L,C,h,L2,C2) in acc.items(): T['accent.light.'+k]=oklch(L,C,h); T['accent.dark.'+k]=oklch(L2,C2,h)
+fill={'ultramarine':(0.568,0.16),'teal':(0.545,0.10),'moss':(0.548,0.12),'amber':(0.74,0.14),
+ 'ember':(0.577,0.17),'rose':(0.580,0.17),'plum':(0.577,0.15),'graphite':(0.86,0.01)}
+for k,(L,C,h,L2,C2) in acc.items():
+    dh=HD if k=='graphite' else h
+    T['accent.light.'+k]=oklch(L,C,h); T['accent.dark.'+k]=oklch(L2,C2,dh)
+    T['fill.dark.'+k]=oklch(*fill[k],dh)
 sem={'danger':(0.57,0.20,25,0.70,0.17),'warning':(0.70,0.15,70,0.80,0.14),'success':(0.56,0.13,150,0.74,0.14)}
 for k,(L,C,h,L2,C2) in sem.items(): T['sem.light.'+k]=oklch(L,C,h); T['sem.dark.'+k]=oklch(L2,C2,h)
+T['fill.dark.danger']=oklch(0.58,0.18,25)
 if __name__=='__main__':
     for k,v in T.items(): print(k,v)
     for s in ('light','dark'):

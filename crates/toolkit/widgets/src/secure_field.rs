@@ -151,7 +151,7 @@ impl Widget for SecureField {
             let height = shown.map_or(self.font_size, Paragraph::height);
             content.push(Item::Fill {
                 shape: Shape::rect(Rect::new(origin.x + advance, origin.y, CARET_WIDTH, height)),
-                paint: cx.palette.accent.into(),
+                paint: cx.palette.accent_text.into(),
             });
         }
         items.push(Item::Clip {

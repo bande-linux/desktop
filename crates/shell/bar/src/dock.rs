@@ -1739,7 +1739,7 @@ impl DockState {
         items.push(Item::Stroke {
             shape: Shape::rounded(ring, ring.width * 0.27),
             width: 3.0,
-            paint: cx.palette.accent.with_alpha(200).into(),
+            paint: cx.palette.accent_text.with_alpha(200).into(),
         });
     }
 

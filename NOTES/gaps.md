@@ -27,7 +27,7 @@ grapping a window edge or corner in order to reseize it is a bit difficult, the 
 Status: planned ([plans/window-resize-zones.md](plans/window-resize-zones.md))
 
 the themes, especially the dark theme, looks a bit "dated". Review how modern dark themes look in 2026. This is too dark and hard on the eyes with strong contrast. I think MacOS dark theme is nicer on the eyes, a bit more slated. DO not copy that however, rely on the investigation.
-Status: planned ([plans/dark-theme.md](plans/dark-theme.md))
+Status: finished ([plans/dark-theme.md](plans/dark-theme.md)); moving light to the slate family (M6) waits on the owner
 
 the software update doesnt seem to work.
 Status: started ([plans/software-update.md](plans/software-update.md)); M3 plain states done
@@ -45,7 +45,7 @@ Files has no "settings" (and other inhouse apps who needs it), for example i wan
 Status: started ([plans/app-settings.md](plans/app-settings.md))
 
 we have no swap (granted this is not an official installation of debian) and it may not be up to bande-desktop, but quickly review how that should work and if we should do anything or if that is soley up to the debian installer
-Status: planned ([plans/swap.md](plans/swap.md))
+Status: started ([plans/swap.md](plans/swap.md)); kernel config and image packages merged, the 0004 caveat written; the owner installs the kernel, enables zram and oomd and reboots
 
 review the CI, its performance and result has been abysmal. Right now it only starts on tags but still has not run successfully. I want tagged releases to build reliably, both arm64 and amd64. These builds are then picked up by the apt repo and published as installable packages correctly for debian users (make sure architecture works correctly)
 Status: finished up to the first tag, which the owner cuts ([plans/ci-releases.md](plans/ci-releases.md), "Cutting the first release")

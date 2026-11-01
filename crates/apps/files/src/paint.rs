@@ -256,7 +256,7 @@ impl FilesView {
                         _ => place.icon,
                     };
                     let tint = match selected {
-                        true => palette.accent,
+                        true => palette.accent_text,
                         false => palette.ink2,
                     };
                     let symbol = format!("{icon}-symbolic");

@@ -110,54 +110,58 @@ The compositor's `CORNER_RADIUS` 12 becomes 14. Maximised and tiled windows squa
 
 ## 5. Colour
 
-Defined in **OKLCH** and generated, Linear-style, from a few inputs: base hue (warm grey, h = 80°), accent, and contrast. The values below are the generated defaults (sRGB hex, as used in the mockups).
+Defined in **OKLCH** and generated, Linear-style, from a few inputs: a neutral hue per scheme (warm grey h = 80° in light, dusk slate h = 262° in dark), accent, and contrast. The values below are the generated defaults (sRGB hex, as used in the mockups).
 
 ### Neutrals
 | Role | Light | Dark | Use |
 |---|---|---|---|
-| `chassis` | `#ECEAE7` (L .938) | `#141210` (L .185) | window frame, sidebar, title bar, combined bar |
-| `sheet` | `#FCFBF9` (L .988) | `#1D1B19` (L .225) | content inside windows, Settings content, document background |
-| `overlay` | `#FFFFFF` | `#272522` (L .265) | menus, popovers, notifications, alert body |
-| `well` | `#E2DFDB` (L .905) | `#292724` (L .275) | control fill (buttons, segmented track, window-control well, search), unfocused selection |
-| `hairline` | `#D4D0CB` | `#32302D` | separators |
-| `edge` | `#BAB7B2` | `#44423F` | window and control outlines; raised chip in dark segmented |
-| `ink` | `#201E1A` | `#F1F0ED` | primary text and glyphs |
-| `ink2` | `#5B5752` | `#BAB7B2` | secondary text, inactive glyphs |
-| `ink3` | `#83807A` | `#8F8C87` | labels, placeholders, disabled, timestamps |
+| `chassis` | `#ECEAE7` (L .938) | `#1F2329` (L .255) | window frame, sidebar, title bar, combined bar |
+| `sheet` | `#FCFBF9` (L .988) | `#272A30` (L .285) | content inside windows, Settings content, document background |
+| `overlay` | `#FFFFFF` | `#34373C` (L .335) | menus, popovers, notifications, alert body |
+| `well` | `#E2DFDB` (L .905) | `#31343A` (L .325) | control fill (buttons, segmented track, window-control well, search), unfocused selection |
+| `hairline` | `#D4D0CB` | `#3B3F45` (L .365) | separators |
+| `rim` | (= hairline) | `#494D54` (L .42) | the 1 pt edge of floating dark surfaces (sheet, menus, notifications, launcher, Control Center, labels); none in light |
+| `edge` | `#BAB7B2` | `#575B62` (L .47) | window and control outlines; raised chip in dark segmented |
+| `ink` | `#201E1A` | `#E4E6EA` (L .925) | primary text and glyphs |
+| `ink2` | `#5B5752` | `#B9BEC6` | secondary text, inactive glyphs |
+| `ink3` | `#83807A` | `#8D9198` | labels, placeholders, disabled, timestamps |
+| `deep` | `#201E1A` | `#161A21` (L .215) | dark text on light fills (Amber, Graphite, warning), the terminal's Midnight background |
 
-The warm hue (paper and stone, not blue-grey) is a deliberate break from macOS's cool neutrals and COSMIC's blue-black. Chroma stays ≤ 0.010, so it reads as "warm neutral", not beige. The light frame is *darker* than the sheet, and the dark frame is *darker* than the sheet. In both schemes the content is the brightest surface: one tonal logic.
+Light keeps the warm hue (paper and stone). Dark moved in 2026 from warm near-black (`#141210`) to a lifted "dusk slate": hue 262, between Breeze/GitHub (248–258) and GNOME (286) and next to the Ultramarine accent, with chroma .011–.013 so the tint shows without reading as blue. The base sits at L .255 like every current dark desktop, not near black. In dark, elevated is lighter: chassis < sheet < well ≤ overlay < hairline < rim < edge. Whether light moves to the same slate family is an open owner decision (plan `NOTES/plans/dark-theme.md`, milestone 6).
 
 ### Measured contrast (WCAG 2 ratio / APCA Lc)
 | Pair | Light | Dark |
 |---|---|---|
-| ink on sheet | 16.1 / 101 | 15.1 / −97 |
-| ink2 on sheet | 6.9 / 83 | 8.6 / −62 |
-| ink3 on sheet | 3.8 / 64 | 5.1 / −39 |
-| ink2 on chassis | 6.0 / 73 | 9.4 / −63 |
-| accent vs sheet | 5.4 | 6.3 |
-| on-accent text on accent | 5.6 (white) | ≈6.5 (chassis ink) |
+| ink on sheet | 16.1 / 101 | 11.5 / −88 |
+| ink on overlay | | 9.6 / −85 |
+| ink2 on sheet | 6.9 / 83 | 7.7 / −63 |
+| ink3 on sheet | 3.8 / 64 | 4.5 / −39 |
+| ink2 on chassis | 6.0 / 73 | 8.4 / −65 |
+| accent fill vs sheet | 5.4 | 3.1 |
+| accent text tone vs overlay | | 4.35 |
+| on-accent text on accent | 5.6 (white) | 4.7 (white) |
 
-Targets: body text Lc ≥ 90 (met); secondary Lc ≥ 60 at 12–13 pt medium (met); `ink3` only for labels ≥ 10.5 pt semibold, placeholders and disabled (Lc ≥ 30 floor; dark `ink3` at Lc 39 is placeholder-only, and labels on dark use `ink2` when ≤ 11 pt in Increase Contrast). Non-text control boundaries: ≥ 1.9:1 default, ≥ 3:1 with Increase Contrast (`edge` darkens to L .62 light / L .52 dark). Add a test that computes these from the tokens and fails CI below target.
+Targets: body text Lc ≥ 90 in light; in dark Lc 75–90, because APCA gives Lc 90 as the advisory maximum in dark mode, where halation, not lack of contrast, is the problem (a test fails if ink is brightened back to near white); secondary Lc ≥ 60 at 12–13 pt medium (met); `ink3` only for labels ≥ 10.5 pt semibold, placeholders and disabled (Lc ≥ 30 floor; dark `ink3` at Lc 39 is placeholder-only, and labels on dark use `ink2` when ≤ 11 pt in Increase Contrast). Non-text control boundaries: ≥ 1.9:1 default, ≥ 3:1 with Increase Contrast (`edge` darkens to L .62 light / lightens to L .58 dark). Add a test that computes these from the tokens and fails CI below target.
 
 ### The signal: accent strategy
 - **Default accent: Ultramarine.** Light `#4859DD` (oklch .53 .20 272), dark `#7E96FB` (oklch .70 .15 272). It is bluer-violet than Apple's azure `#007AFF` and sits with the existing blue-violet wallpapers. It is chosen because selection must read as neutral "this one", and a warm signal would read as a warning.
-- **Dark mode inverts the on-accent text:** selection in dark is a light accent fill with **dark** text (`chassis`). This is one of the most recognisable Datum traits (see `window-dark.png`); macOS keeps white-on-blue.
+- **Dark selections are mid-tone fills with white text.** Each accent has a dark *fill* tone, solved to luminance ≈ 0.175 so white text reaches ≥ 4.5:1 and the fill stays ≥ 3:1 on chassis and sheet; the brighter tone is the dark *text* tone (links, focus rings, carets, chart lines, ANSI colours). This halves the brightest area on a dark screen. Amber and Graphite keep a light fill with `deep` text, since white cannot reach 4.5:1 on them.
 - **User accents** (8), all generated at matched lightness so each passes the same contrast tests:
 
-| Name | Light | Dark |
-|---|---|---|
-| Ultramarine (default) | `#4859DD` | `#7E96FB` |
-| Teal | `#008384` | `#3FC0C0` |
-| Moss | `#48823B` | `#80C271` |
-| Amber | `#BE7100` | `#F7AB5D` |
-| Ember | `#D24100` | `#F77C56` |
-| Rose | `#C83065` | `#F47C9B` |
-| Plum | `#9043A1` | `#C889D7` |
-| Graphite (monochrome) | `#302D28` | `#E1DDD7` |
+| Name | Light | Dark text tone | Dark fill |
+|---|---|---|---|
+| Ultramarine (default) | `#4859DD` | `#7E96FB` | `#576CD4` |
+| Teal | `#008384` | `#3FC0C0` | `#008282` |
+| Moss | `#48823B` | `#80C271` | `#48823B` |
+| Amber | `#BE7100` | `#F7AB5D` | `#E7963D` |
+| Ember | `#D24100` | `#F77C56` | `#C94A1F` |
+| Rose | `#C83065` | `#F47C9B` | `#C7436D` |
+| Plum | `#9043A1` | `#C889D7` | `#9F58B0` |
+| Graphite (monochrome) | `#302D28` | `#DADEE5` | `#CDD1D8` |
 
-  `on_accent` is computed (white or `chassis` ink, whichever has the higher contrast, ≥ 4.5:1). For Amber, light mode this yields ink text. An optional "accent from wallpaper" maps the wallpaper's dominant hue onto the nearest preset, so the theme never ends up with an untested colour.
-- **Derived accent roles:** `accent` (fills), `accent_text` (= accent, for links and quiet buttons), `on_accent`, `accent_soft` (accent mixed 84 % toward sheet, for drag-over and find highlights), `focus` (= accent).
-- **Semantic** (fixed, not affected by accent): danger `#D42F34` / `#F66D67`; warning `#D98B09` / `#F7AC4D`; success `#2D8949` / `#62C37A`. Badges use danger. **Ember** is the only brand hue outside the accent: it is the "signal square" inside app icons and nowhere in the UI chrome.
+  `on_accent` is computed (white or `deep`, whichever has the higher contrast, ≥ 4.5:1). For Amber, light mode this yields ink text. An optional "accent from wallpaper" maps the wallpaper's dominant hue onto the nearest preset, so the theme never ends up with an untested colour.
+- **Derived accent roles:** `accent` (fills; the dark fill tone in dark), `accent_text` (the text tone, for links, quiet buttons, carets, rings and chart lines), `on_accent`, `accent_soft` (the text tone mixed 84 % / 78 % toward sheet, for drag-over and find highlights), `focus` (= `accent_text`).
+- **Semantic** (fixed, not affected by accent): danger `#D42F34` / `#F66D67` (dark text tone `danger_text`, dark fill `#CF4040` for buttons and badges); warning `#D98B09` / `#F7AC4D`; success `#2D8949` / `#62C37A`. Badges use danger. **Ember** is the only brand hue outside the accent: it is the "signal square" inside app icons and nowhere in the UI chrome.
 
 ---
 
@@ -166,9 +170,9 @@ Targets: body text Lc ≥ 90 (met); secondary Lc ≥ 60 at 12–13 pt medium (me
 | Level | Surface | Shadow (light) | Shadow (dark) |
 |---|---|---|---|
 | 0 Desktop | wallpaper | none | none |
-| 1 Frame | `chassis` + 1 pt `edge` at 55 % | key 0/1/2 α .10 + ambient 0/12/32 α .22 (active); ambient halves when inactive | key α .5 + ambient 0/14/36 α .55 |
-| 1 Sheet | `sheet`, inset in the frame | none (tonal step only) | none, plus a `hairline` edge |
-| 2 Overlay | `overlay` (menus, popovers, notifications) | 0/1/1.5 α .14 + 0/6/18 α .18 | 0/1/2 α .5 + 0/14/36 α .55 |
+| 1 Frame | `chassis` + 1 pt `edge` at 55 % | key 0/1/2 α .10 + ambient 0/12/32 α .22 (active); ambient halves when inactive | key α .40 + ambient 0/14/36 α .45 |
+| 1 Sheet | `sheet`, inset in the frame | none (tonal step only) | none, plus a `rim` edge |
+| 2 Overlay | `overlay` (menus, popovers, notifications), lighter than the window in dark | 0/1/1.5 α .14 + 0/6/18 α .18 | 0/1/1.5 α .35 + 0/6/18 α .40, plus a `rim` edge |
 | 3 Modal | alert/sheet card above a **scrim**: parent dims with black at 18 % (light) / 40 % (dark) | as frame | as frame |
 
 **Translucency policy:** none on windows, menus or the bar by default. Blur exists in exactly two places: (a) the scrim behind the launcher, overview and modal alerts gets a 24 pt backdrop blur at 60 % mix, so the eye is pulled forward; (b) Reduce Transparency is irrelevant because we are opaque, but an opt-in "Tinted chassis" mixes 6 % of the wallpaper's average colour into `chassis` (Mica-like, computed once per wallpaper change, no live blur). This also drops the per-frame blur work the Dock and menus do today.

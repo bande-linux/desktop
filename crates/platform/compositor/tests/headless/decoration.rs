@@ -119,7 +119,7 @@ fn the_title_bar_follows_dark_mode() {
 
     assert!(close_to(
         pixel(&mut renderer, &mut server, top_left.0 + 100, top_left.1 + 3),
-        [0x14, 0x12, 0x10]
+        [0x1F, 0x23, 0x29]
     ));
 }
 

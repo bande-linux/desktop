@@ -268,7 +268,7 @@ impl Widget for Authorization {
         let note = self.note.as_ref().map(|note| {
             let (text, color) = match note {
                 Note::Info(text) => (text.as_str(), cx.palette.ink2),
-                Note::Error(text) => (text.as_str(), cx.palette.danger),
+                Note::Error(text) => (text.as_str(), cx.palette.danger_text),
             };
             cx.text.paragraph(
                 text,

@@ -342,7 +342,7 @@ impl Widget for Palette {
                 }
                 Segment::Mode(mode) => {
                     let color = match chosen {
-                        true => cx.palette.accent,
+                        true => cx.palette.accent_text,
                         false => cx.palette.ink,
                     };
                     self.glyph(*mode, center, color, items);

@@ -36,6 +36,7 @@ mod logind;
 mod management;
 mod motion;
 mod night;
+mod output_power;
 mod overview;
 mod pointing;
 mod popup;
@@ -68,7 +69,9 @@ pub use cursor::{
 };
 pub use drm::{DrmBackend, DrmBackendError, DrmNotifiers, HeadChanges};
 pub use element::ScreenElement;
-pub use environment::{export_session_environment, notify_ready};
+pub use environment::{
+    export_session_environment, notify_service_manager, watchdog_keepalive_interval,
+};
 pub use gesture::Gesture;
 pub use input_settings::{InputSettings, follow_input_settings};
 pub use keyboard_monitor::{KEYBOARD_MONITOR_NAME, KeyboardMonitorHandle, serve_keyboard_monitor};

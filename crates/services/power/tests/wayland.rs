@@ -70,15 +70,39 @@ fn compositor_idle_dims_then_locks_and_input_undims() {
     );
     assert_eq!(
         run_until(&mut server, 11 * SECOND, &received),
-        [Command::Lock]
+        [Command::Lock, Command::DisplayOff]
     );
 
     server.key(KEY_A, true, 0);
     server.key(KEY_A, false, 0);
     assert_eq!(
         run_until(&mut server, 12 * SECOND, &received),
-        [Command::Undim]
+        [Command::Undim, Command::DisplayOn]
     );
+}
+
+#[test]
+fn the_lock_stage_turns_the_display_off_and_a_key_turns_it_back_on() {
+    let mut server = Compositor::new(Size::from((64, 64))).expect("compositor");
+    let display = server.main_output();
+    let (_controller, received) = watched(&mut server, policy(5, 10));
+
+    run_until(&mut server, SECOND, &received);
+    run_until(&mut server, 6 * SECOND, &received);
+    assert!(server.output_powered(&display));
+    run_until(&mut server, 11 * SECOND, &received);
+    assert!(!server.output_powered(&display), "the display stayed on");
+    assert!(!server.take_outputs_powered_on());
+
+    server.key(KEY_A, true, 0);
+    server.key(KEY_A, false, 0);
+    assert!(
+        server.output_powered(&display),
+        "a key left the display off"
+    );
+    assert!(server.take_outputs_powered_on());
+    run_until(&mut server, 12 * SECOND, &received);
+    assert!(server.output_powered(&display));
 }
 
 #[test]

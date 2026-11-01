@@ -1394,7 +1394,7 @@ impl DesktopView {
             items.push(SceneItem::Stroke {
                 shape: Shape::rounded(rect(band).inset(0.5), Radius::XS - 0.5),
                 width: 1.0,
-                paint: palette.accent.into(),
+                paint: palette.accent_text.into(),
             });
         }
         self.place_editor();

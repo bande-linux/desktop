@@ -17,6 +17,10 @@ fn every_palette() -> impl Iterator<Item = (String, Palette)> {
         })
 }
 
+fn luminance(color: Color) -> f64 {
+    (wcag(color, Color::BLACK) - 1.0) * 0.05
+}
+
 #[test]
 fn the_generator_reproduces_the_adopted_datum_values() {
     let light = Palette::for_scheme(Scheme::Light);
@@ -34,16 +38,19 @@ fn the_generator_reproduces_the_adopted_datum_values() {
         (light.danger, 0xD42F34),
         (light.warning, 0xD98B09),
         (light.success, 0x2D8949),
-        (dark.chassis, 0x141210),
-        (dark.sheet, 0x1D1B19),
-        (dark.overlay, 0x272522),
-        (dark.well, 0x292724),
-        (dark.hairline, 0x32302D),
-        (dark.edge, 0x4C4A47),
-        (dark.ink, 0xF1F0ED),
-        (dark.ink2, 0xBAB7B2),
-        (dark.ink3, 0x8F8C87),
-        (dark.danger, 0xF66D67),
+        (dark.chassis, 0x1F2329),
+        (dark.sheet, 0x272A30),
+        (dark.overlay, 0x34373C),
+        (dark.well, 0x31343A),
+        (dark.hairline, 0x3B3F45),
+        (dark.rim, 0x494D54),
+        (dark.edge, 0x575B62),
+        (dark.ink, 0xE4E6EA),
+        (dark.ink2, 0xB9BEC6),
+        (dark.ink3, 0x8D9198),
+        (dark.deep, 0x161A21),
+        (dark.danger, 0xCF4040),
+        (dark.danger_text, 0xF66D67),
         (dark.warning, 0xF7AC4D),
         (dark.success, 0x62C37A),
     ];
@@ -51,27 +58,37 @@ fn the_generator_reproduces_the_adopted_datum_values() {
         assert_eq!(generated, Color::hex(hex), "expected #{hex:06X}");
     }
     let accents = [
-        (Accent::Ultramarine, 0x4859DD, 0x7E96FB),
-        (Accent::Teal, 0x008384, 0x3FC0C0),
-        (Accent::Moss, 0x48823B, 0x80C271),
-        (Accent::Amber, 0xC27405, 0xF7AB5D),
-        (Accent::Ember, 0xD24100, 0xF77C56),
-        (Accent::Rose, 0xC83065, 0xF47C9B),
-        (Accent::Plum, 0x9043A1, 0xC889D7),
-        (Accent::Graphite, 0x302D28, 0xE1DDD7),
+        (Accent::Ultramarine, 0x4859DD, 0x7E96FB, 0x576CD4),
+        (Accent::Teal, 0x008384, 0x3FC0C0, 0x008282),
+        (Accent::Moss, 0x48823B, 0x80C271, 0x48823B),
+        (Accent::Amber, 0xC27405, 0xF7AB5D, 0xE7963D),
+        (Accent::Ember, 0xD24100, 0xF77C56, 0xC94A1F),
+        (Accent::Rose, 0xC83065, 0xF47C9B, 0xC7436D),
+        (Accent::Plum, 0x9043A1, 0xC889D7, 0x9F58B0),
+        (Accent::Graphite, 0x302D28, 0xDADEE5, 0xCDD1D8),
     ];
-    for (accent, light, dark) in accents {
+    for (accent, light, dark, dark_fill) in accents {
         assert_eq!(accent.color(Scheme::Light), Color::hex(light), "{accent:?}");
+        assert_eq!(accent.fill(Scheme::Light), Color::hex(light), "{accent:?}");
         assert_eq!(accent.color(Scheme::Dark), Color::hex(dark), "{accent:?}");
+        assert_eq!(
+            accent.fill(Scheme::Dark),
+            Color::hex(dark_fill),
+            "{accent:?}"
+        );
     }
 }
 
 #[test]
 fn text_roles_stay_legible_on_every_surface_in_every_palette() {
     for (name, palette) in every_palette() {
+        let ink_floor = match palette.scheme {
+            Scheme::Light => 90.0,
+            Scheme::Dark => 75.0,
+        };
         for surface in [palette.chassis, palette.sheet, palette.overlay] {
             for (role, text, min_wcag, min_apca) in [
-                ("ink", palette.ink, 7.0, 90.0),
+                ("ink", palette.ink, 7.0, ink_floor),
                 ("ink2", palette.ink2, 4.5, 60.0),
                 ("ink3", palette.ink3, 3.0, 30.0),
             ] {
@@ -82,6 +99,36 @@ fn text_roles_stay_legible_on_every_surface_in_every_palette() {
                     "{name}: {role} on {surface:?} is {ratio:.2}:1, Lc {lc:.0}"
                 );
             }
+        }
+    }
+}
+
+#[test]
+fn dark_standard_ink_stays_under_the_glare_ceiling() {
+    for accent in Accent::ALL {
+        let palette = Palette::generate(Scheme::Dark, accent, Contrast::Standard);
+        for surface in [palette.chassis, palette.sheet, palette.overlay] {
+            let lc = apca(palette.ink, surface).abs();
+            assert!(lc <= 90.0, "{accent:?}: ink on {surface:?} is Lc {lc:.0}");
+        }
+    }
+}
+
+#[test]
+fn dark_surfaces_step_up_in_lightness() {
+    for (name, palette) in every_palette().filter(|(_, palette)| palette.scheme == Scheme::Dark) {
+        let steps = [
+            palette.chassis,
+            palette.sheet,
+            palette.well,
+            palette.overlay,
+            palette.hairline,
+            palette.rim,
+            palette.edge,
+        ]
+        .map(luminance);
+        for (lower, upper) in steps.iter().zip(&steps[1..]) {
+            assert!(lower < upper, "{name}: {steps:?}");
         }
     }
 }
@@ -147,8 +194,21 @@ fn control_boundaries_meet_their_contrast_floor() {
 fn the_signal_reads_on_every_surface_and_carries_legible_text() {
     for (name, palette) in every_palette() {
         for surface in [palette.chassis, palette.sheet, palette.overlay] {
-            for (role, signal) in [("accent", palette.accent), ("danger", palette.danger)] {
+            for (role, signal) in [
+                ("accent text", palette.accent_text),
+                ("focus", palette.focus),
+                ("danger text", palette.danger_text),
+            ] {
                 let ratio = wcag(signal, surface);
+                assert!(
+                    ratio >= 3.0,
+                    "{name}: {role} on {surface:?} is {ratio:.2}:1"
+                );
+            }
+        }
+        for surface in [palette.chassis, palette.sheet] {
+            for (role, fill) in [("accent", palette.accent), ("danger", palette.danger)] {
+                let ratio = wcag(fill, surface);
                 assert!(
                     ratio >= 3.0,
                     "{name}: {role} on {surface:?} is {ratio:.2}:1"
@@ -163,10 +223,18 @@ fn the_signal_reads_on_every_surface_and_carries_legible_text() {
 }
 
 #[test]
-fn dark_selections_carry_dark_text() {
+fn dark_fills_are_dimmer_than_their_text_tone_and_carry_legible_text() {
     for accent in Accent::ALL {
         let palette = Palette::generate(Scheme::Dark, accent, Contrast::Standard);
-        assert_eq!(palette.on_accent, palette.chassis, "{accent:?}");
+        let glare = luminance(palette.accent);
+        assert!(glare < luminance(palette.accent_text), "{accent:?}");
+        match accent {
+            Accent::Amber | Accent::Graphite => assert_eq!(palette.on_accent, palette.deep),
+            _ => {
+                assert!(glare <= 0.2, "{accent:?}: fill luminance {glare:.3}");
+                assert_eq!(palette.on_accent, Color::WHITE, "{accent:?}");
+            }
+        }
     }
 }
 

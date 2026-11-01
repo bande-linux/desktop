@@ -509,7 +509,7 @@ impl MenuPanel {
             from: Point::new(caret, y + 1.0),
             to: Point::new(caret, y + query.height() - 1.0),
             width: 1.5,
-            paint: palette.accent.into(),
+            paint: palette.accent_text.into(),
         });
         items.push(Item::Fill {
             shape: Shape::rect(Rect::new(

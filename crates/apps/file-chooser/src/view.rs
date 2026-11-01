@@ -612,7 +612,7 @@ impl ChooserView {
         Row::new(
             entry.path.to_string_lossy().into_owned(),
             vec![
-                Cell::new(entry.name.as_str()).icon(icon),
+                Cell::new(self.chooser.shown_name(entry)).icon(icon),
                 Cell::new(entry.modified.map(format_date).unwrap_or_default()).muted(),
                 size,
             ],

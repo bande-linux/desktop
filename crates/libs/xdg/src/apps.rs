@@ -44,6 +44,10 @@ impl Apps {
         self.mime.for_name(name).unwrap_or(OCTET_STREAM)
     }
 
+    pub fn extension<'a>(&self, name: &'a str) -> Option<&'a str> {
+        self.mime.extension(name)
+    }
+
     pub fn icon_names(&self, mime: &str) -> Vec<String> {
         self.mime.icon_names(mime)
     }

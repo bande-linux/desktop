@@ -424,7 +424,7 @@ impl FilesView {
         let mut y = shown_area.y + shown_area.height + 16.0;
         let (title, subtitle) = match &shown.entry {
             Some(entry) => (
-                entry.name.clone(),
+                self.shown_name(entry).to_owned(),
                 L10N.tr_args(
                     "kind-and-size",
                     [
@@ -567,7 +567,8 @@ impl FilesView {
                 continue;
             }
             let name_width = row.width - 28.0 - if entry.is_folder() { 22.0 } else { 6.0 };
-            let shown = self.fitted_name(&entry.name, NAME_SIZE, name_width, 1);
+            let name = self.shown_name(entry).to_owned();
+            let shown = self.fitted_name(&name, NAME_SIZE, name_width, 1);
             rows.push(self.line(&shown, NAME_SIZE, color, name_x, y, ROW_HEIGHT));
             if entry.is_folder() {
                 let chevron_color = match marked && active {
@@ -671,13 +672,16 @@ impl FilesView {
                 {
                     continue;
                 }
-                let name = walked.file_name().map_or_else(
+                let folder = walked.is_dir();
+                let mut name = walked.file_name().map_or_else(
                     || "/".to_owned(),
                     |name| name.to_string_lossy().into_owned(),
                 );
+                let hidden = self.hidden_extension(&name, folder).map_or(0, str::len);
+                name.truncate(name.len() - hidden);
                 let icon = if is_start {
                     "user-home"
-                } else if walked.is_dir() {
+                } else if folder {
                     "folder"
                 } else {
                     "text-x-generic"
@@ -944,7 +948,7 @@ impl FilesView {
         }
         y += preview_area.height + 12.0;
         let title = match info.entries.as_slice() {
-            [entry] => entry.name.clone(),
+            [entry] => self.shown_name(entry).to_owned(),
             [] => L10N.tr("no-selection"),
             entries => L10N.tr_args("item-count", [("count", entries.len().into())]),
         };

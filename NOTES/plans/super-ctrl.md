@@ -399,6 +399,8 @@ chord, Minimize `Super+H`), the text field's Emoji item `Super+.`.
 
 ### Milestones
 
+Progress (2026-11-01): 1 and 2 done and merged; 3 is the owner's.
+
 1. Compositor chords, the Settings table, the pointer modifiers and every label above; remove the
    Hide, Hide Others and Quit app shortcuts from the compositor. Tests first: the table test
    (`every_shortcut_listed_in_settings_runs_its_action`), headless tests that `Super+W`,

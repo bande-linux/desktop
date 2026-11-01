@@ -382,6 +382,12 @@ once.
   Agree the order with them so goldens are regenerated once.
 
 ## Decisions for the owner
+Decided overnight 2026-11-01: neutral hue 262 dusk slate (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: mid-tone selection fill with white text in dark (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: Midnight keeps a deliberately deep background, `deep` `#161A21` (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: merged without the before/after preview or a live evening, since the owner was asleep and asked for autonomous work; the regenerated dark goldens in the merge are the preview (owner may revisit).
+Still open: 3 (light to slate, milestone 6) waits on the owner seeing dark first, as recommended; light is unchanged.
+
 1. Neutral hue: dusk slate 262 (recommended), or a more neutral 255, or keep warm 80 and only
    brighten (option A).
 2. Selection in dark: mid-tone fill with white text (recommended), or keep Datum's light

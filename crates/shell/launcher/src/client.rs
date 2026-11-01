@@ -11,6 +11,7 @@ use crate::{
     Request, SettingInfo, SystemCommand, Target,
 };
 use accesskit::TreeUpdate;
+use bande_config::{Config, Search, SearchCategory, config_path};
 use bande_fs::Entry;
 use bande_inbox::Inbox;
 use bande_preview::{Preview, preview};
@@ -190,6 +191,8 @@ pub struct LauncherShell {
     clips: Option<Clips>,
     apps: Rc<RefCell<Apps>>,
     recently_used: PathBuf,
+    config: Option<PathBuf>,
+    home: PathBuf,
     skin_tone: PathBuf,
     scrim: Option<f32>,
 }
@@ -224,6 +227,32 @@ impl LauncherShell {
         self.launcher.clear();
     }
 
+    fn follow_search(&mut self) -> bool {
+        let search: Search = self
+            .config
+            .as_deref()
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .and_then(|source| Config::load(&source).ok())
+            .map(|(config, _)| config.search)
+            .unwrap_or_default();
+        let excluded = search.excluded(Some(&self.home));
+        let recents = search.shows(SearchCategory::RecentDocuments);
+        if !search.shows(SearchCategory::Documents) && !search.shows(SearchCategory::Folders) {
+            self.index = None;
+        } else if let Some(index) = &self.index {
+            index.exclude(excluded.clone());
+        } else {
+            self.index = FileIndex::spawn(self.home.clone(), excluded.clone())
+                .inspect_err(|error| tracing::warn!("cannot index the home folder: {error}"))
+                .ok();
+            if let Some(index) = &self.index {
+                index.set_boosts(self.launcher.file_boosts());
+            }
+        }
+        self.launcher.set_search(search, excluded);
+        recents
+    }
+
     fn ask(&self, request: Request) {
         if let Some(clips) = &self.clips {
             clips.ask(request);
@@ -237,7 +266,10 @@ impl LauncherShell {
         }
         self.launcher.set_now(unix_now());
         if mode == Mode::Search {
-            let xbel = std::fs::read_to_string(&self.recently_used).ok();
+            let xbel = self
+                .follow_search()
+                .then(|| std::fs::read_to_string(&self.recently_used).ok())
+                .flatten();
             self.launcher.set_recently_used(xbel.as_deref());
         }
         self.launcher.open(mode, inserts);
@@ -548,9 +580,6 @@ impl LauncherShell {
             data_dirs: dirs,
             icons: HashMap::new(),
         };
-        let index = FileIndex::spawn(home.clone())
-            .inspect_err(|error| tracing::warn!("cannot index the home folder: {error}"))
-            .ok();
         let previewer = Previewer::spawn()
             .inspect_err(|error| tracing::warn!("cannot preview: {error}"))
             .ok();
@@ -561,30 +590,36 @@ impl LauncherShell {
             apps,
             settings_panes(),
             Box::new(library),
-            home,
+            home.clone(),
             usage,
             window.appearance(),
             text,
         );
-        if let Some(index) = &index {
-            index.set_boosts(launcher.file_boosts());
-        }
         launcher.set_skin_tone(load_skin_tone(&skin_tone));
         let clips = session.and_then(|session| {
             Clips::spawn(session.clone())
                 .inspect_err(|error| tracing::warn!("cannot read the clipboard history: {error}"))
                 .ok()
         });
-        Ok(Self {
+        let mut shell = Self {
             launcher,
             entries,
-            index,
+            index: None,
             previewer,
             clips,
             apps: apps_by_type,
             recently_used,
+            config: config_path(
+                std::env::var_os("XDG_CONFIG_HOME")
+                    .map(PathBuf::from)
+                    .as_deref(),
+                Some(&home),
+            ),
+            home,
             skin_tone,
             scrim: None,
-        })
+        };
+        shell.follow_search();
+        Ok(shell)
     }
 }

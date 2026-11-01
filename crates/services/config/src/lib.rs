@@ -737,6 +737,83 @@ impl Default for NightLight {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SearchCategory {
+    Applications,
+    RecentApps,
+    RecentDocuments,
+    Documents,
+    Folders,
+    Settings,
+    System,
+    Calculator,
+    Conversion,
+}
+
+impl SearchCategory {
+    pub const ALL: [Self; 9] = [
+        Self::Applications,
+        Self::RecentApps,
+        Self::RecentDocuments,
+        Self::Documents,
+        Self::Folders,
+        Self::Settings,
+        Self::System,
+        Self::Calculator,
+        Self::Conversion,
+    ];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Applications => "applications",
+            Self::RecentApps => "recent-apps",
+            Self::RecentDocuments => "recent-documents",
+            Self::Documents => "documents",
+            Self::Folders => "folders",
+            Self::Settings => "system-settings",
+            Self::System => "system-actions",
+            Self::Calculator => "calculator",
+            Self::Conversion => "conversion",
+        }
+    }
+
+    pub fn from_keyword(keyword: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|category| category.keyword() == keyword)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Search {
+    pub hidden: Vec<SearchCategory>,
+    pub exclude: Vec<PathBuf>,
+}
+
+impl Search {
+    pub fn shows(&self, category: SearchCategory) -> bool {
+        !self.hidden.contains(&category)
+    }
+
+    pub fn set_shown(&mut self, category: SearchCategory, shown: bool) {
+        self.hidden.retain(|hidden| *hidden != category);
+        if !shown {
+            self.hidden.push(category);
+            self.hidden.sort();
+        }
+    }
+
+    pub fn excluded(&self, home: Option<&Path>) -> Vec<PathBuf> {
+        self.exclude
+            .iter()
+            .filter_map(|path| match path.strip_prefix("~") {
+                Ok(rest) => home.map(|home| home.join(rest)),
+                Err(_) => Some(path.clone()),
+            })
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub appearance: Appearance,
@@ -755,6 +832,7 @@ pub struct Config {
     pub sound: Sound,
     pub wallpaper: Wallpaper,
     pub night_light: NightLight,
+    pub search: Search,
     pub displays: BTreeMap<String, DisplaySettings>,
     pub arrangements: Vec<Vec<Placement>>,
 }
@@ -796,6 +874,7 @@ impl Default for Config {
             sound: Sound::default(),
             wallpaper: Wallpaper::default(),
             night_light: NightLight::default(),
+            search: Search::default(),
             displays: BTreeMap::new(),
             arrangements: Vec::new(),
         }
@@ -965,6 +1044,10 @@ impl Parser<'_> {
                 }
                 "night-light" => {
                     config.night_light = self.night_light(node);
+                    Ok(())
+                }
+                "search" => {
+                    config.search = self.search(node);
                     Ok(())
                 }
                 "display" => self.display(node, &mut config.displays),
@@ -1216,6 +1299,44 @@ impl Parser<'_> {
             Ok(())
         });
         night
+    }
+
+    fn search(&self, node: &KdlNode) -> Search {
+        let mut search = Search::default();
+        self.section(node, |child| {
+            let name = child.name().value();
+            match SearchCategory::from_keyword(name) {
+                Some(category) => search.set_shown(category, self.flag(child)?),
+                None if name == "exclude" => search.exclude = self.excluded_paths(child)?,
+                None => return Err(self.unknown_child("search", child)),
+            }
+            Ok(())
+        });
+        search
+    }
+
+    fn excluded_paths(&self, node: &KdlNode) -> Result<Vec<PathBuf>, ConfigError> {
+        let mut paths: Vec<PathBuf> = Vec::new();
+        for entry in node.entries() {
+            let path = entry
+                .value()
+                .as_string()
+                .filter(|path| entry.name().is_none() && is_wallpaper_path(path))
+                .map(PathBuf::from)
+                .ok_or_else(|| {
+                    self.at_entry(
+                        entry,
+                        "`search exclude` takes folders with an absolute path or one starting with \"~/\"",
+                    )
+                })?;
+            if paths.contains(&path) {
+                return Err(
+                    self.at_entry(entry, format!("\"{}\" is excluded twice", path.display()))
+                );
+            }
+            paths.push(path);
+        }
+        Ok(paths)
     }
 
     fn clock_time(&self, node: &KdlNode) -> Result<ClockTime, ConfigError> {

@@ -773,6 +773,7 @@ impl SettingsView {
             List::Regions => self.region_rows(),
             List::DefaultApps => self.default_app_rows(),
             List::Clipboard => self.clipboard_rows(),
+            List::SearchExcluded => self.excluded_rows(),
             List::Permissions(permission) => self.permission_rows(permission),
         }
     }
@@ -1312,6 +1313,9 @@ impl SettingsView {
                 )));
             }
             body.push(boxed(Card::new(rows)));
+            if let Some(note) = &section.note {
+                body.push(boxed(Caption::new(Text::new(note, Tone::Muted))));
+            }
             if section
                 .settings
                 .iter()

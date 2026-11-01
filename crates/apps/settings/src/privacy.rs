@@ -1,11 +1,14 @@
+use std::path::Path;
+
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Button, Stack, Widget};
 use zbus::blocking::Connection;
 
 use crate::L10N;
-use crate::pages::{Widgets, boxed};
+use crate::pages::{Widgets, boxed, muted_row};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
+use bande_settings_panes::SettingId;
 
 const CLIPBOARD: &str = "org.bande.Clipboard";
 const CLIPBOARD_PATH: &str = "/org/bande/Clipboard";
@@ -53,6 +56,40 @@ impl SettingsView {
             )
             .detail(Text::new(&L10N.tr("clipboard-history-hint"), Tone::Muted).caption()),
         )]
+    }
+}
+
+impl SettingsView {
+    pub(crate) fn excluded_rows(&mut self) -> Widgets {
+        let excluded = self.excluded_folders();
+        let mut rows: Widgets = Vec::new();
+        if excluded.is_empty() {
+            rows.push(muted_row(&L10N.tr("no-excluded-folders")));
+        }
+        for folder in excluded {
+            let name = Path::new(&folder).file_name().map_or_else(
+                || folder.clone(),
+                |name| name.to_string_lossy().into_owned(),
+            );
+            let mut include = intent(&self.intents, Intent::IncludeFolder);
+            let path = folder.clone();
+            let button = Button::new(&L10N.tr("remove"), move || include(path.clone()))
+                .tooltip(&L10N.tr("include-folder-tooltip"));
+            let row = Row::new(Text::new(&name, Tone::Primary), Some(boxed(button)))
+                .detail(Text::new(&folder, Tone::Muted).caption());
+            rows.push(self.item_row(format!("excluded:{folder}"), row));
+        }
+        let mut add = intent(&self.intents, |()| Intent::ExcludeFolder);
+        let button = Button::new(&L10N.tr("exclude-folder"), move || add(()));
+        self.anchors.push((
+            Anchor::Setting(SettingId::SearchExcluded, None),
+            button.id(),
+        ));
+        rows.push(boxed(Row::new(
+            Text::new(&L10N.tr("exclude-folder-hint"), Tone::Muted).caption(),
+            Some(boxed(button)),
+        )));
+        rows
     }
 }
 

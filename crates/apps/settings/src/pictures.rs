@@ -115,7 +115,7 @@ fn request_path(connection: &Connection, token: &str) -> Option<OwnedObjectPath>
 pub(crate) fn choose_file(
     session: &Connection,
     title: &str,
-    filter: (String, Vec<(u32, String)>),
+    filter: Option<(String, Vec<(u32, String)>)>,
 ) -> zbus::Result<Option<PathBuf>> {
     static REQUESTS: AtomicU32 = AtomicU32::new(0);
     let token = format!(
@@ -127,12 +127,19 @@ pub(crate) fn choose_file(
     let request = Proxy::new(session, PORTAL, path, REQUEST)?;
     let mut responses = request.receive_signal("Response")?;
     let chooser = Proxy::new(session, PORTAL, PORTAL_PATH, FILE_CHOOSER)?;
-    let options: HashMap<&str, Value<'_>> = HashMap::from([
+    let mut options: HashMap<&str, Value<'_>> = HashMap::from([
         ("handle_token", Value::from(token.as_str())),
         ("modal", Value::from(true)),
-        ("filters", Value::from(vec![filter.clone()])),
-        ("current_filter", Value::from(filter)),
     ]);
+    match filter {
+        Some(filter) => {
+            options.insert("filters", Value::from(vec![filter.clone()]));
+            options.insert("current_filter", Value::from(filter));
+        }
+        None => {
+            options.insert("directory", Value::from(true));
+        }
+    }
     let _: OwnedObjectPath = chooser.call("OpenFile", &("", title, options))?;
     let Some(response) = responses.next() else {
         return Ok(None);
@@ -160,7 +167,7 @@ fn choose_picture(session: &Connection) -> zbus::Result<Option<PathBuf>> {
             .map(|mime| (1u32, (*mime).to_owned()))
             .collect::<Vec<_>>(),
     );
-    choose_file(session, &L10N.tr("choose-picture"), filter)
+    choose_file(session, &L10N.tr("choose-picture"), Some(filter))
 }
 
 pub fn follow_pictures(

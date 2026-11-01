@@ -1,8 +1,8 @@
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_toolkit::ui::{Context, Event, Menu, MenuItem, Size, Widget, WidgetId};
 use bande_toolkit::{
-    Color, Image, Item, Palette, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole,
-    TextStyle,
+    Color, Cut, Image, Item, Palette, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole,
+    TextStyle, shortened,
 };
 
 use crate::L10N;
@@ -20,7 +20,6 @@ const CELL_RADIUS: f32 = Radius::L;
 const CELL_ICON: f32 = 48.0;
 const BADGE_ON_SELECTION: f32 = 0.22;
 const COMMAND_GLYPH_INSET: f32 = 0.2;
-const CELL_TITLE_LINES: usize = 2;
 
 pub const OPEN: &str = "open";
 pub const REVEAL: &str = "reveal";
@@ -41,28 +40,24 @@ pub fn clipped(frame: Rect, viewport: Rect) -> Rect {
 }
 
 pub fn fitted(cx: &mut Context, text: &str, style: TextStyle, width: f32) -> Paragraph {
-    let paragraph = cx.text.paragraph(text, style, None, TextAlign::Start);
-    if paragraph.width() <= width {
-        return paragraph;
-    }
-    let characters: Vec<char> = text.chars().collect();
-    let (mut low, mut high) = (0, characters.len());
-    while low < high {
-        let middle = (low + high).div_ceil(2);
-        let candidate: String = characters[..middle].iter().chain(['…'].iter()).collect();
-        if cx
-            .text
-            .paragraph(&candidate, style, None, TextAlign::Start)
+    cut_line(cx, text, Cut::End, style, width)
+}
+
+fn cut_line(cx: &mut Context, text: &str, cut: Cut, style: TextStyle, width: f32) -> Paragraph {
+    let shown = shortened(text, cut, |candidate| {
+        cx.text
+            .paragraph(candidate, style, None, TextAlign::Start)
             .width()
-            <= width
-        {
-            low = middle;
-        } else {
-            high = middle - 1;
-        }
+            <= width + 0.5
+    });
+    cx.text.paragraph(&shown, style, None, TextAlign::Start)
+}
+
+fn title_cut(hit: &Hit) -> Cut {
+    match hit.kind {
+        Kind::Document | Kind::Folder => Cut::Middle,
+        _ => Cut::End,
     }
-    let shortened: String = characters[..low].iter().chain(['…'].iter()).collect();
-    cx.text.paragraph(&shortened, style, None, TextAlign::Start)
 }
 
 fn highlighted(
@@ -359,7 +354,7 @@ impl Choice {
         let width = self.rect.x + self.rect.width - x - 8.0;
         let style = TextStyle::role(TextRole::Body, color);
         let runs = highlighted(cx, &hit.title, &hit.matched, style, width)
-            .unwrap_or_else(|| vec![(0.0, fitted(cx, &hit.title, style, width))]);
+            .unwrap_or_else(|| vec![(0.0, cut_line(cx, &hit.title, title_cut(hit), style, width))]);
         for (offset, paragraph) in runs {
             self.items.push(Item::Text {
                 origin: Point::new(
@@ -382,18 +377,8 @@ impl Choice {
         let width = self.rect.width - 10.0;
         let style = TextStyle::role(TextRole::Callout, color);
         let y = icon.y + CELL_ICON + 6.0;
-        let wrapped = cx
-            .text
-            .paragraph(&hit.title, style, Some(width), TextAlign::Center);
-        if wrapped.line_count() > CELL_TITLE_LINES {
-            let title = fitted(cx, &hit.title, style, width);
-            self.items.push(centered(&title, self.rect, y));
-        } else {
-            self.items.push(Item::Text {
-                origin: Point::new((self.rect.x + (self.rect.width - width) / 2.0).round(), y),
-                paragraph: wrapped,
-            });
-        }
+        let title = cut_line(cx, &hit.title, title_cut(hit), style, width);
+        self.items.push(centered(&title, self.rect, y));
     }
 }
 

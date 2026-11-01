@@ -31,10 +31,10 @@ const BADGE_MARGIN: f32 = 5.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Slot {
-    System,
-    App,
-    AppMenu(usize),
-    Tray(usize),
+    BandeMenu,
+    AppMenu,
+    AppMenuTitle(usize),
+    StatusItem(usize),
     InputSource,
     Bluetooth,
     Sound,
@@ -42,9 +42,9 @@ pub enum Slot {
     Battery,
     ControlCenter,
     Clock,
-    TrayMore,
+    MoreStatusItems,
     Workspace(usize),
-    Launcher,
+    Search,
 }
 
 pub trait StatusView {
@@ -295,10 +295,10 @@ impl MenuBar {
 
     fn describe(&self, slot: Slot) -> String {
         match slot {
-            Slot::System => L10N.tr("system-menu"),
-            Slot::App => self.app.clone(),
-            Slot::AppMenu(index) => self.app_menus.get(index).cloned().unwrap_or_default(),
-            Slot::Tray(index) => self
+            Slot::BandeMenu => L10N.tr("system-menu"),
+            Slot::AppMenu => self.app.clone(),
+            Slot::AppMenuTitle(index) => self.app_menus.get(index).cloned().unwrap_or_default(),
+            Slot::StatusItem(index) => self
                 .tray
                 .get(index)
                 .map(|(title, _)| title.clone())
@@ -320,7 +320,7 @@ impl MenuBar {
             }),
             Slot::ControlCenter => control_center_label(&self.status),
             Slot::Clock => self.clock.clone(),
-            Slot::TrayMore | Slot::Workspace(_) | Slot::Launcher => String::new(),
+            Slot::MoreStatusItems | Slot::Workspace(_) | Slot::Search => String::new(),
         }
     }
 
@@ -382,7 +382,7 @@ impl MenuBar {
 
     fn right_slots(&self, badge_width: Option<f32>, percent_width: f32) -> Vec<(Slot, f32)> {
         let mut slots: Vec<(Slot, f32)> = (0..self.tray.len())
-            .map(|index| (Slot::Tray(index), TRAY_SLOT))
+            .map(|index| (Slot::StatusItem(index), TRAY_SLOT))
             .collect();
         if let Some(width) = badge_width {
             slots.push((Slot::InputSource, width + 2.0 * BADGE_MARGIN));
@@ -405,7 +405,7 @@ impl MenuBar {
 
     fn symbol_of(&self, slot: Slot) -> Option<Symbol> {
         Some(match slot {
-            Slot::System => Symbol::Logo,
+            Slot::BandeMenu => Symbol::Logo,
             Slot::ControlCenter => Symbol::ControlCenter,
             Slot::Bluetooth => match &self.status.bluetooth {
                 Some(bluetooth) if bluetooth.powered => Symbol::Bluetooth,
@@ -474,21 +474,21 @@ impl MenuBar {
         let mut slots = Vec::new();
         let full = |x: f32, width: f32| Rect::new(x, 0.0, width, bar.height);
         let mut x = EDGE;
-        slots.push((Slot::System, full(x, SYMBOL_SLOT)));
+        slots.push((Slot::BandeMenu, full(x, SYMBOL_SLOT)));
         x += SYMBOL_SLOT;
         let mut texts = Vec::new();
         if !self.app.is_empty() {
             let app = self.app.clone();
             let paragraph = self.label(&app, true);
             let width = paragraph.width() + 2.0 * TEXT_PADDING;
-            slots.push((Slot::App, full(x, width)));
+            slots.push((Slot::AppMenu, full(x, width)));
             texts.push((x + TEXT_PADDING, paragraph));
             x += width;
         }
         for (index, title) in self.app_menus.clone().iter().enumerate() {
             let paragraph = self.label(title, false);
             let width = paragraph.width() + 2.0 * TEXT_PADDING;
-            slots.push((Slot::AppMenu(index), full(x, width)));
+            slots.push((Slot::AppMenuTitle(index), full(x, width)));
             texts.push((x + TEXT_PADDING, paragraph));
             x += width;
         }
@@ -567,7 +567,7 @@ impl MenuBar {
                         self.paint_badge(paragraph, width, content, scale, &mut items);
                     }
                 }
-                Slot::Tray(index) => {
+                Slot::StatusItem(index) => {
                     if let Some((_, Some(image))) = self.tray.get(index).cloned() {
                         items.push(Item::Image {
                             rect: Rect::new(

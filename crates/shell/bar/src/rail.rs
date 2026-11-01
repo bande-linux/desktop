@@ -15,7 +15,7 @@ use jiff::Zoned;
 
 use crate::L10N;
 use crate::menu_bar::{Slot, StatusView};
-use crate::taskbar::{Rail as AppsRegion, WELL_ALPHA};
+use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA};
 
 pub const EDGE_PADDING: f32 = 24.0;
 pub const LABEL_ROOM: f32 = 280.0;
@@ -69,7 +69,7 @@ struct Clock {
     day: String,
 }
 
-pub struct RailView {
+pub struct TaskbarView {
     palette: Palette,
     text: TextSystem,
     icon_dirs: Vec<PathBuf>,
@@ -180,7 +180,7 @@ fn bluetooth_glyph(status: &Status) -> Option<String> {
     )
 }
 
-impl RailView {
+impl TaskbarView {
     pub fn new(
         palette: Palette,
         text: TextSystem,
@@ -227,7 +227,7 @@ impl RailView {
     }
 
     fn tray_split(&self) -> (Vec<Slot>, Vec<Slot>) {
-        let mut cells: Vec<Slot> = (0..self.tray.len()).map(Slot::Tray).collect();
+        let mut cells: Vec<Slot> = (0..self.tray.len()).map(Slot::StatusItem).collect();
         if self.status.input_sources.current().is_some() {
             cells.push(Slot::InputSource);
         }
@@ -238,7 +238,7 @@ impl RailView {
     fn tray_cells(&self) -> Vec<Slot> {
         let (mut cells, hidden) = self.tray_split();
         if !hidden.is_empty() {
-            cells.push(Slot::TrayMore);
+            cells.push(Slot::MoreStatusItems);
         }
         cells
     }
@@ -254,10 +254,10 @@ impl RailView {
 
     fn layout(&self, height: f32) -> (Vec<(Slot, Rect)>, AppsRegion, Vec<f32>) {
         let width = self.width;
-        let mut slots = vec![(Slot::System, Rect::new(0.0, 0.0, width, MARK_CELL))];
+        let mut slots = vec![(Slot::BandeMenu, Rect::new(0.0, 0.0, width, MARK_CELL))];
         if !self.app.is_empty() {
             slots.push((
-                Slot::App,
+                Slot::AppMenu,
                 Rect::new(
                     ((width - HEADER_WIDTH) / 2.0).round(),
                     MARK_CELL,
@@ -378,13 +378,13 @@ impl RailView {
             return;
         };
         let inset = match slot {
-            Slot::System | Slot::Clock => Rect::new(
+            Slot::BandeMenu | Slot::Clock => Rect::new(
                 rect.x + 6.0,
                 rect.y + 4.0,
                 rect.width - 12.0,
                 rect.height - 8.0,
             ),
-            Slot::Workspace(_) | Slot::App => return,
+            Slot::Workspace(_) | Slot::AppMenu => return,
             _ => rect,
         };
         items.push(Item::Fill {
@@ -435,7 +435,7 @@ impl RailView {
         let glyphs = self.glyph_slots();
         for (slot, rect) in slots.clone() {
             match slot {
-                Slot::System => {
+                Slot::BandeMenu => {
                     let pixels = MARK_SIZE;
                     let image = {
                         let size = (f64::from(pixels) * scale).round() as u32;
@@ -496,7 +496,7 @@ impl RailView {
                         });
                     }
                 }
-                Slot::Tray(index) => {
+                Slot::StatusItem(index) => {
                     if let Some((_, Some(image))) = self.tray.get(index).cloned() {
                         Self::place_image(rect, image, GLYPH, scale, &mut items);
                     }
@@ -528,7 +528,7 @@ impl RailView {
                         });
                     }
                 }
-                Slot::TrayMore => {
+                Slot::MoreStatusItems => {
                     let text = self.paragraph("•••", TextStyle::new(BADGE_SIZE, ink));
                     items.push(Item::Text {
                         origin: Point::new(
@@ -557,7 +557,7 @@ impl RailView {
                     });
                 }
                 Slot::Clock => self.paint_clock(rect, scale, &mut items),
-                Slot::App => self.paint_header(rect, scale, &mut items),
+                Slot::AppMenu => self.paint_app_menu(rect, scale, &mut items),
                 _ => {}
             }
             if slot == Slot::ControlCenter && !self.status.capturing.is_empty() {
@@ -582,12 +582,12 @@ impl RailView {
         }
     }
 
-    fn paint_header(&mut self, rect: Rect, scale: f64, items: &mut Vec<Item>) {
+    fn paint_app_menu(&mut self, rect: Rect, scale: f64, items: &mut Vec<Item>) {
         let mut header = vec![Item::Fill {
             shape: Shape::rounded(rect, GROUP_RADIUS),
             paint: self.palette.ink.with_alpha(WELL_ALPHA).into(),
         }];
-        if let Some(alpha) = self.slot_alpha(Slot::App) {
+        if let Some(alpha) = self.slot_alpha(Slot::AppMenu) {
             header.push(Item::Fill {
                 shape: Shape::rounded(rect, GROUP_RADIUS),
                 paint: self.palette.ink.with_alpha(alpha).into(),
@@ -674,14 +674,14 @@ impl RailView {
 
     fn describe(&self, slot: Slot) -> String {
         match slot {
-            Slot::System | Slot::Launcher => L10N.tr("launcher"),
-            Slot::App => L10N.tr_args("app-menus", [("app", self.app.clone().into())]),
-            Slot::Tray(index) => self
+            Slot::BandeMenu | Slot::Search => L10N.tr("launcher"),
+            Slot::AppMenu => L10N.tr_args("app-menus", [("app", self.app.clone().into())]),
+            Slot::StatusItem(index) => self
                 .tray
                 .get(index)
                 .map(|(title, _)| title.clone())
                 .unwrap_or_default(),
-            Slot::TrayMore => L10N.tr("more-status-items"),
+            Slot::MoreStatusItems => L10N.tr("more-status-items"),
             Slot::InputSource => self
                 .status
                 .input_sources
@@ -709,12 +709,12 @@ impl RailView {
             Slot::Workspace(index) => {
                 L10N.tr_args("workspace", [("number", (index as i64 + 1).into())])
             }
-            Slot::AppMenu(_) => String::new(),
+            Slot::AppMenuTitle(_) => String::new(),
         }
     }
 }
 
-impl StatusView for RailView {
+impl StatusView for TaskbarView {
     fn set_app(&mut self, name: &str) -> bool {
         let changed = self.app != name;
         name.clone_into(&mut self.app);
@@ -793,7 +793,7 @@ impl StatusView for RailView {
             (PointerButton::Secondary, Some(glyph), _) => Some(glyph),
             (_, Some(_), _) => Some(Slot::ControlCenter),
             (PointerButton::Secondary, None, found) => found.copied(),
-            (_, None, Some(Slot::System)) => Some(Slot::Launcher),
+            (_, None, Some(Slot::BandeMenu)) => Some(Slot::Search),
             (_, None, found) => found.copied(),
         }
     }
@@ -808,7 +808,7 @@ impl StatusView for RailView {
     fn slot_of_node(&self, node: NodeId, action: Action) -> Option<Slot> {
         let index = usize::try_from(node.0.checked_sub(NODE_BASE)?).ok()?;
         self.slots.get(index).map(|(slot, _)| match slot {
-            Slot::System if action == Action::Click => Slot::Launcher,
+            Slot::BandeMenu if action == Action::Click => Slot::Search,
             slot => *slot,
         })
     }
@@ -897,7 +897,7 @@ impl StatusView for RailView {
                 y1: f64::from(rect.y + rect.height),
             });
             node.add_action(Action::Click);
-            if *slot == Slot::System {
+            if *slot == Slot::BandeMenu {
                 node.add_action(Action::ShowContextMenu);
             }
             nodes.push((NodeId(NODE_BASE + index as u64), node));

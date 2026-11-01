@@ -8,7 +8,7 @@ use zbus::blocking::Connection;
 use crate::combined_client::{CombinedClient, combined_role};
 use crate::menu_bar_client::{MENU_BAR_SIZE, MenuBarClient, menu_bar_role};
 use crate::menu_search_client::{SearchCard, search_role};
-use crate::rail::RailView;
+use crate::rail::TaskbarView;
 use crate::taskbar::surface_size;
 use crate::taskbar_client::{Taskbar, taskbar_role};
 
@@ -62,7 +62,7 @@ pub fn open(
                 services.session,
                 homes,
             )?;
-            let view = RailView::new(
+            let view = TaskbarView::new(
                 window.appearance().palette(),
                 text.sharing_fonts(),
                 bande_xdg::data_dirs(),

@@ -10,8 +10,8 @@ use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
 use crate::rail::surface_size as rail_surface_size;
 use crate::taskbar::{
-    MenuTarget, Rail, Shared, TaskbarAction, TaskbarApp, TaskbarState, exclusive_zone, scene,
-    surface_size, taskbar_ui,
+    MenuTarget, Shared, TaskbarAction, TaskbarApp, TaskbarLayout, TaskbarState, exclusive_zone,
+    scene, surface_size, taskbar_ui,
 };
 use accesskit::TreeUpdate;
 use bande_config::{Bar as BarConfig, BarEdge};
@@ -834,7 +834,7 @@ impl Taskbar {
 }
 
 impl Taskbar {
-    pub fn set_rail(&mut self, rail: Rail) {
+    pub fn set_rail(&mut self, rail: TaskbarLayout) {
         self.state.borrow_mut().set_rail(rail);
     }
 

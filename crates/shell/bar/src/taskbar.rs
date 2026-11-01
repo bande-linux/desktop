@@ -52,8 +52,8 @@ const REMOVE_TEXT: f32 = 12.0;
 const RAIL_PADDING: f32 = 4.0;
 const RAIL_SHRINK: f32 = 4.0;
 const RAIL_HAIRLINE: f32 = 32.0;
-const RAIL_RUNNING: f32 = 3.0;
-const RAIL_TICK: (f32, f32) = (3.0, 16.0);
+const RUNNING_DOT: f32 = 3.0;
+const ACTIVE_BAR: (f32, f32) = (3.0, 16.0);
 const MORE_TEXT: f32 = 13.0;
 const RAIL_WELL_RADIUS: f32 = 10.0;
 pub const WELL_ALPHA: u8 = 14;
@@ -75,7 +75,7 @@ pub enum MenuTarget {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Rail {
+pub struct TaskbarLayout {
     pub top: f32,
     pub bottom: f32,
     pub width: f32,
@@ -240,7 +240,7 @@ pub struct TaskbarState {
     pointer_inside: bool,
     menu_open: bool,
     selected: Option<Key>,
-    rail: Option<Rail>,
+    rail: Option<TaskbarLayout>,
     rail_icon: f32,
     active: Option<String>,
     more: Option<More>,
@@ -506,11 +506,11 @@ impl TaskbarState {
         self.attention.insert(app_id.to_owned(), now);
     }
 
-    pub fn set_rail(&mut self, rail: Rail) {
+    pub fn set_rail(&mut self, rail: TaskbarLayout) {
         self.rail = Some(rail);
     }
 
-    pub fn rail(&self) -> Option<Rail> {
+    pub fn rail(&self) -> Option<TaskbarLayout> {
         self.rail
     }
 
@@ -1281,7 +1281,7 @@ impl TaskbarState {
         }
     }
 
-    fn layout_rail(&mut self, rail: Rail, size: Size, now: Instant) {
+    fn layout_rail(&mut self, rail: TaskbarLayout, size: Size, now: Instant) {
         self.surface = size;
         let pinned_to_bottom = |key: &Key| matches!(key, Key::Trash | Key::TrashSeparator);
         let wanted = |icon: f32| -> f32 {
@@ -1876,7 +1876,7 @@ impl TaskbarState {
         }
         let dot = cx.sample(&slot.dot);
         if self.rail.is_some() {
-            self.paint_rail_indicators(cx, base, app_id, dot, items);
+            self.paint_indicators(cx, base, app_id, dot, items);
         } else if dot > 0.0 {
             let center = self.dot_center(cell, base);
             let size = DOT * (0.5 + 0.5 * dot);
@@ -1950,7 +1950,7 @@ impl TaskbarState {
         }
     }
 
-    fn paint_rail_indicators(
+    fn paint_indicators(
         &self,
         cx: &Context,
         icon: Rect,
@@ -1960,7 +1960,7 @@ impl TaskbarState {
     ) {
         let middle = icon.y + icon.height / 2.0;
         if self.active.as_deref() == Some(app_id) && running > 0.0 {
-            let (width, height) = RAIL_TICK;
+            let (width, height) = ACTIVE_BAR;
             items.push(Item::Fill {
                 shape: Shape::rect(Rect::new(
                     0.0,
@@ -1976,9 +1976,9 @@ impl TaskbarState {
                 items: vec![Item::Fill {
                     shape: Shape::rect(Rect::new(
                         1.0,
-                        (middle - RAIL_RUNNING / 2.0).round(),
-                        RAIL_RUNNING,
-                        RAIL_RUNNING,
+                        (middle - RUNNING_DOT / 2.0).round(),
+                        RUNNING_DOT,
+                        RUNNING_DOT,
                     )),
                     paint: cx.palette.ink2.into(),
                 }],

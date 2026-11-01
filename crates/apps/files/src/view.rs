@@ -1151,14 +1151,6 @@ impl FilesView {
             .is_some_and(|(_, state)| state.scroll(cx, scroll))
     }
 
-    pub fn hit_frame(&self, hit: &Hit) -> Option<Rect> {
-        self.hits
-            .iter()
-            .rev()
-            .find(|(_, known)| known == hit)
-            .map(|(rect, _)| *rect)
-    }
-
     pub(crate) fn hit(&self, at: Point) -> Option<Hit> {
         self.hits
             .iter()

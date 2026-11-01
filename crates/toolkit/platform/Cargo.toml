@@ -26,15 +26,5 @@ wgpu.workspace = true
 xkbcommon = { workspace = true, features = ["wayland"] }
 zbus.workspace = true
 
-[dev-dependencies]
-atspi-common.workspace = true
-rustix = { workspace = true, features = ["net"] }
-serde.workspace = true
-smithay.workspace = true
-bande-compositor.workspace = true
-bande-golden.workspace = true
-bande-test-bus.workspace = true
-bande-test-wayland.workspace = true
-
 [lints]
 workspace = true

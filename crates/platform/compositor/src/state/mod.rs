@@ -12,7 +12,7 @@ use smithay::backend::drm::DrmNode;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
 use smithay::backend::renderer::utils::with_renderer_surface_state;
-use smithay::desktop::{PopupGrab, PopupManager, layer_map_for_output};
+use smithay::desktop::{PopupGrab, PopupManager};
 use smithay::input::keyboard::XkbConfig;
 use smithay::input::pointer::{CursorIcon, CursorImageStatus};
 use smithay::render_elements;
@@ -23,7 +23,7 @@ use smithay::reexports::wayland_server::backend::{ClientData, ClientId, Disconne
 use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, Resource};
+use smithay::reexports::wayland_server::{Client, Display, DisplayHandle};
 use smithay::utils::{Logical, Physical, Point, Rectangle, Size, Transform};
 use smithay::wayland::compositor::{
     CompositorClientState, SurfaceAttributes,
@@ -462,10 +462,6 @@ impl Compositor {
         self.state.main_screen().mode_size()
     }
 
-    pub fn logical_output_size(&self) -> Size<i32, Logical> {
-        self.state.main_screen().rect().size
-    }
-
     pub fn set_output_scale(&mut self, scale: f64) {
         let name = self.state.main_screen().name();
         let settings = OutputSettings {
@@ -477,25 +473,6 @@ impl Compositor {
 
     pub fn windows(&self) -> &[Window] {
         &self.state.windows
-    }
-
-    pub fn mapped_layers(&self) -> Vec<(String, u32)> {
-        self.state
-            .screens
-            .iter()
-            .flat_map(|screen| {
-                layer_map_for_output(&screen.output)
-                    .layers()
-                    .filter(|layer| is_mapped(layer.wl_surface()))
-                    .map(|layer| {
-                        (
-                            layer.namespace().to_owned(),
-                            layer.wl_surface().id().protocol_id(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect()
     }
 
     pub fn use_cursor_theme(&mut self, theme: CursorTheme) {

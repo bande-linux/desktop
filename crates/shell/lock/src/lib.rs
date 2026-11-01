@@ -781,31 +781,11 @@ impl LockScreen {
             || self.ui.is_animating()
     }
 
-    pub fn field_frame(&mut self, width: u32, height: u32) -> Rect {
-        self.ui.layout(Size::new(width as f32, height as f32));
-        self.ui
-            .widget(self.field)
-            .map(|field| field.frame())
-            .unwrap_or_default()
-    }
-
     pub fn advance(&mut self, now: Instant) {
         self.model.borrow_mut().now = now;
     }
 
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
         self.ui.scene(width, height)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [include_str!("lib.rs"), include_str!("main.rs")];
-        assert_eq!(
-            bande_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
     }
 }

@@ -72,10 +72,6 @@ impl AccessKeys {
         releases
     }
 
-    pub(crate) fn latched(&self) -> impl Iterator<Item = u32> + '_ {
-        self.latches.iter().map(|(code, _)| *code)
-    }
-
     fn count_shift(&mut self, code: u32, pressed: bool, time: u32) -> bool {
         if !pressed {
             return false;
@@ -353,9 +349,5 @@ impl Compositor {
         for (code, pressed, time) in self.state.access_keys(evdev_code, pressed, time) {
             self.state.deliver_key(code, pressed, time);
         }
-    }
-
-    pub fn latched_modifiers(&self) -> Vec<u32> {
-        self.state.keys.latched().collect()
     }
 }

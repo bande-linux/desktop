@@ -1,5 +1,7 @@
 # Maturity gaps: Bande against a mature desktop
 
+> Since 2026-11-01 the desktop has no golden images (see [`../quality/tests.md`](../quality/tests.md)). Where a slice below names goldens as its proof, check the change by eye in light and dark, and assert behaviour through the accessibility tree if it needs a test.
+
 Audit of 2026-10-30. The question: what would a picky user who has lived with macOS 15,
 Windows 11, GNOME 48 and Plasma 6 expect from Bande that it lacks or does poorly? Nothing was
 built or run. The method:

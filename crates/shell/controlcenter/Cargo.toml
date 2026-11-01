@@ -23,9 +23,5 @@ bande-toolkit.workspace = true
 bande-xdg.workspace = true
 zbus.workspace = true
 
-[dev-dependencies]
-bande-golden.workspace = true
-bande-test-bus.workspace = true
-
 [lints]
 workspace = true

@@ -499,16 +499,8 @@ impl Compositor {
         self.state.screens.iter().map(Screen::name).collect()
     }
 
-    pub fn output_rect(&self, output: &str) -> Option<Rectangle<i32, Logical>> {
-        Some(self.state.screen_rect(self.state.screen_named(output)?))
-    }
-
     pub fn output_settings(&self, output: &str) -> Option<OutputSettings> {
         Some(self.state.screens[self.state.screen_named(output)?].settings)
-    }
-
-    pub fn output_of(&self, window: &crate::Window) -> String {
-        self.state.screens[self.state.screen_of(window)].name()
     }
 
     pub fn add_output(&mut self, config: OutputConfig) {
@@ -540,17 +532,6 @@ impl Compositor {
         self.state.night_light.configure(config.night_light);
         self.state.display_config = config;
         self.state.arrange_screens();
-    }
-
-    pub fn output_identity(&self, output: &str) -> Option<String> {
-        let heads: Vec<OutputConfig> = self
-            .state
-            .screens
-            .iter()
-            .map(|screen| screen.config.clone())
-            .collect();
-        let index = self.state.screen_named(output)?;
-        crate::arrange::identities(&heads).into_iter().nth(index)
     }
 
     pub fn configure_output(&mut self, output: &str, settings: OutputSettings) {

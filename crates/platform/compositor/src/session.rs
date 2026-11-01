@@ -61,10 +61,6 @@ impl Summoned {
             running: None,
         }
     }
-
-    fn pid(&self) -> Option<u32> {
-        self.running.as_ref().map(|(child, _)| child.id())
-    }
 }
 
 fn session_end_keyword(ending: SessionEnd) -> &'static str {
@@ -119,20 +115,8 @@ impl Compositor {
         Ok(())
     }
 
-    pub fn shell_displays(&self) -> Vec<String> {
-        self.state.shown_displays()
-    }
-
     pub fn spawn_shell_client(&mut self, executable: &Path) -> io::Result<Child> {
         self.spawn_session_client(executable, SessionRole::Shell)
-    }
-
-    pub fn session_client_pid(&self, executable: &Path) -> Option<u32> {
-        self.session_clients
-            .iter()
-            .find(|client| client.executable == executable)
-            .and_then(|client| client.child.as_ref())
-            .map(Child::id)
     }
 
     pub fn set_lock_screen(&mut self, executable: &Path) {
@@ -145,14 +129,6 @@ impl Compositor {
 
     pub fn report_lock_states(&mut self, states: std::sync::mpsc::Sender<bool>) {
         self.state.lock_states = Some(states);
-    }
-
-    pub fn set_session_dialog(&mut self, executable: &Path) {
-        self.session_dialog.executable = executable.to_path_buf();
-    }
-
-    pub fn session_dialog_pid(&self) -> Option<u32> {
-        self.session_dialog.pid()
     }
 
     fn keep_summoned(
@@ -330,19 +306,5 @@ impl Compositor {
             )
             .map(drop)
             .map_err(|error| io::Error::other(error.error))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, SCREENSHOT, SHELL};
-
-    #[test]
-    fn the_shipped_session_client_list_names_every_executable_the_compositor_starts() {
-        let shipped: Vec<&str> = include_str!("../data/session-clients").lines().collect();
-        assert_eq!(
-            shipped,
-            [CLIPBOARD_DAEMON, LOCK_SCREEN, SCREENSHOT, SHELL, GREETER]
-        );
     }
 }

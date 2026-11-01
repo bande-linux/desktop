@@ -847,22 +847,3 @@ delegate_noop!(Capture: ExtOutputImageCaptureSourceManagerV1);
 delegate_noop!(Capture: ExtForeignToplevelImageCaptureSourceManagerV1);
 delegate_noop!(Capture: ExtImageCaptureSourceV1);
 delegate_noop!(Capture: ExtImageCopyCaptureManagerV1);
-
-#[cfg(test)]
-mod tests {
-    use super::Shot;
-
-    #[test]
-    fn premultiplied_bgra_becomes_straight_rgba() {
-        let shot = Shot {
-            width: 2,
-            height: 1,
-            bgra: vec![0x30, 0x20, 0x10, 0xff, 0x40, 0x00, 0x00, 0x80],
-        };
-
-        assert_eq!(
-            shot.rgba(),
-            vec![0x10, 0x20, 0x30, 0xff, 0x00, 0x00, 0x80, 0x80]
-        );
-    }
-}

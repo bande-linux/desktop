@@ -1,5 +1,7 @@
 # Files: depth and polish against the Finder
 
+> Since 2026-11-01 the desktop has no golden images (see [`../quality/tests.md`](../quality/tests.md)). Where a slice below names goldens as its proof, check the change by eye in light and dark, and assert behaviour through the accessibility tree if it needs a test.
+
 Status: research and build plan of 2026-10-30, branch `night/files-monitor-spec`. Slices F1–F7
 were built on 2026-10-31 in `night/files-depth-1`, F8–F14 and lazy list rows in
 `day/files-depth-2`; see "Built" under §6. On 2026-11-01 Files moved from Super to Nautilus-style

@@ -278,13 +278,6 @@ impl FilesView {
         )
     }
 
-    pub fn quick_look_scrolled(&mut self) -> f32 {
-        let cx = self.ui.context();
-        self.quick_look
-            .as_ref()
-            .map_or(0.0, |shown| shown.scroll.offset(cx))
-    }
-
     fn header_text(&mut self, text: &str, style: TextStyle, width: Option<f32>) -> Paragraph {
         self.text().paragraph(text, style, width, TextAlign::Start)
     }

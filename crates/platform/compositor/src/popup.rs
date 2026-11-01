@@ -1,4 +1,3 @@
-use smithay::backend::renderer::utils::with_renderer_surface_state;
 use smithay::desktop::{
     PopupKeyboardGrab, PopupKind, PopupPointerGrab, PopupUngrabStrategy, WindowSurfaceType,
     find_popup_root_surface, get_popup_toplevel_coords, layer_map_for_output,
@@ -285,39 +284,4 @@ impl State {
     }
 }
 
-impl Compositor {
-    pub fn popup_rects(&self) -> Vec<Rectangle<i32, Logical>> {
-        (0..self.state.screens.len())
-            .flat_map(|screen| self.state.stack(screen))
-            .filter_map(|(surface, origin)| {
-                let geometry = self.state.popups.find_popup(&surface)?.geometry();
-                let drawn = with_renderer_surface_state(&surface, |state| {
-                    state.buffer().and(state.surface_size())
-                })??;
-                Some(Rectangle {
-                    loc: origin + geometry.loc,
-                    size: match geometry.size.is_empty() {
-                        true => drawn,
-                        false => geometry.size,
-                    },
-                })
-            })
-            .collect()
-    }
-
-    pub fn pointer_grabbed(&self) -> bool {
-        self.state.popup_grab.is_some()
-            || self
-                .state
-                .seat
-                .get_pointer()
-                .is_some_and(|pointer| pointer.is_grabbed())
-    }
-
-    pub fn keyboard_grabbed(&self) -> bool {
-        self.state
-            .seat
-            .get_keyboard()
-            .is_some_and(|keyboard| keyboard.is_grabbed())
-    }
-}
+impl Compositor {}

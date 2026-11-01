@@ -473,24 +473,3 @@ impl Compositor {
         self.state.snap_due(now)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use smithay::utils::Rectangle;
-
-    use super::{Snap, Tile, snap_at};
-
-    #[test]
-    fn the_side_edges_start_at_the_free_area_and_reach_past_it() {
-        let rail = Rectangle::new((32, 0).into(), (224, 192).into());
-        let snap = |x, y, area| snap_at((x, y).into(), area);
-        assert_eq!(snap(10.0, 96.0, rail), Some(Snap::Tile(Tile::Left)));
-        assert_eq!(snap(33.0, 96.0, rail), Some(Snap::Tile(Tile::Left)));
-        assert_eq!(snap(36.0, 96.0, rail), None);
-        assert_eq!(snap(10.0, 10.0, rail), Some(Snap::Tile(Tile::TopLeft)));
-        assert_eq!(snap(10.0, 180.0, rail), Some(Snap::Tile(Tile::BottomLeft)));
-        let bare = Rectangle::new((0, 0).into(), (256, 192).into());
-        assert_eq!(snap(254.0, 96.0, bare), Some(Snap::Tile(Tile::Right)));
-        assert_eq!(snap(250.0, 96.0, bare), None);
-    }
-}

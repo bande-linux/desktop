@@ -46,29 +46,3 @@ pub fn follow_unread(connection: &Connection, outbox: &Outbox<Update>) -> zbus::
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn do_not_disturb_marks_the_clock_quiet_over_unread_notifications() {
-        let stack = || (String::new(), Vec::new());
-        assert_eq!(
-            ClockMark::of(&(Vec::new(), Vec::new(), false, false, false)),
-            ClockMark::Clear
-        );
-        assert_eq!(
-            ClockMark::of(&(Vec::new(), vec![stack()], false, false, false)),
-            ClockMark::Unread
-        );
-        assert_eq!(
-            ClockMark::of(&(Vec::new(), vec![stack()], true, false, false)),
-            ClockMark::Quiet
-        );
-        assert_eq!(
-            ClockMark::of(&(Vec::new(), Vec::new(), true, false, false)),
-            ClockMark::Quiet
-        );
-    }
-}

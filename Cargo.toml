@@ -15,11 +15,9 @@ expect_used = "deny"
 panic = "deny"
 
 [workspace.dependencies]
-ab_glyph = "=0.2.32"
 accesskit = "=0.25.2"
 accesskit_unix = "=0.24.1"
 ash = "=0.38.0"
-atspi-common = "=0.13.0"
 blocking = "=1.6.2"
 bzip2 = "=0.6.1"
 flate2 = "=1.1.10"
@@ -29,7 +27,6 @@ icu_calendar = "=2.4.0"
 icu_datetime = "=2.4.0"
 icu_locale_core = "=2.4.0"
 image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
-image-compare = "=0.5.0"
 jiff = "=0.2.38"
 kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 libc = "=0.2.191"
@@ -90,7 +87,6 @@ bande-taskbar-model = { path = "crates/libs/taskbar-model" }
 bande-edid = { path = "crates/libs/edid" }
 bande-files = { path = "crates/apps/files" }
 bande-fs = { path = "crates/libs/fs" }
-bande-golden = { path = "crates/testing/golden" }
 bande-graphics = { path = "crates/toolkit/graphics" }
 bande-greeter = { path = "crates/shell/greeter" }
 bande-inbox = { path = "crates/libs/inbox" }

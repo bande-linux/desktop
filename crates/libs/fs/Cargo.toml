@@ -21,7 +21,6 @@ bande-xdg.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
-lzma-rust2 = { workspace = true, features = ["encoder"] }
 tempfile.workspace = true
 
 [lints]

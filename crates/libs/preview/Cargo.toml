@@ -11,8 +11,5 @@ repository.workspace = true
 image = { workspace = true, features = ["gif", "jpeg", "webp"] }
 bande-fs.workspace = true
 
-[dev-dependencies]
-tempfile.workspace = true
-
 [lints]
 workspace = true

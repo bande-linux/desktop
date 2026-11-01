@@ -331,12 +331,6 @@ impl SettingsView {
         self.invalidate();
     }
 
-    pub fn set_icon_dirs(&mut self, dirs: Vec<PathBuf>) {
-        self.icon_dirs = dirs;
-        self.symbols.clear();
-        self.invalidate();
-    }
-
     pub fn set_value(&mut self, id: SettingId, value: Value) {
         if self.values.get(&id) != Some(&value) {
             self.values.insert(id, value);
@@ -587,10 +581,6 @@ impl SettingsView {
         &self.query
     }
 
-    pub fn selected_pane(&self) -> PaneId {
-        self.pane
-    }
-
     pub(crate) fn available(&self, pane: PaneId) -> bool {
         match pane {
             PaneId::Wifi => self.wifi.is_some(),
@@ -632,24 +622,10 @@ impl SettingsView {
         }
     }
 
-    pub fn highlighted_settings(&self) -> Vec<SettingId> {
-        self.hit(self.pane)
-            .map(|hit| hit.settings.iter().map(|setting| setting.setting).collect())
-            .unwrap_or_default()
-    }
-
     pub fn focused_setting(&self) -> Option<SettingId> {
         let focus = self.ui.focus()?;
         self.anchors.iter().find_map(|(anchor, id)| match anchor {
             Anchor::Setting(setting, _) if *id == focus => Some(*setting),
-            _ => None,
-        })
-    }
-
-    pub fn focused_item(&self) -> Option<String> {
-        let focus = self.ui.focus()?;
-        self.anchors.iter().find_map(|(anchor, id)| match anchor {
-            Anchor::Item(item) if *id == focus => Some(item.clone()),
             _ => None,
         })
     }

@@ -1,7 +1,7 @@
 # Datum: a design language for Bande
 
 Status: adopted by the owner on 2026-10-30. Implementation order: `docs/roadmap.md`, wave D.
-The exploration mockups were removed on 2026-11-01 once the language was built; the goldens under `crates/**/tests/golden/` are the current renders. `datum/src/colors.py` keeps the OKLCH and contrast maths behind the tables below.
+The exploration mockups (once the language was built) and the golden images were removed on 2026-11-01; the running desktop is the current render. `datum/src/colors.py` keeps the OKLCH and contrast maths behind the tables below.
 
 > **Datum**: a fixed reference point that everything else is measured from.
 > **Quiet surfaces. One signal. Exact edges.**
@@ -12,7 +12,7 @@ Bande should feel like a well-made instrument: a Braun radio or a Teenage Engine
 
 ## 1. Today's look: honest critique
 
-Based on the goldens under `crates/**/tests/golden/`.
+Based on the golden images the tests kept until 2026-11-01.
 
 ### Reads as a macOS copy
 
@@ -234,7 +234,7 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 
 ---
 
-## 9. Controls (golden `crates/toolkit/widgets/tests/golden/controls-*.png`)
+## 9. Controls
 
 | Control | Spec |
 |---|---|
@@ -316,7 +316,7 @@ The combined-bar mockups (not kept) put an edge-anchored bar of 64 pt on the lef
 
 ## 14. Mockups
 
-The mockups this section listed were removed on 2026-11-01: the built desktop has replaced them, and the goldens under `crates/**/tests/golden/` (light and dark) show it. `datum/src/colors.py` holds the OKLCH → hex and contrast maths.
+The mockups this section listed were removed on 2026-11-01: the built desktop has replaced them. `datum/src/colors.py` holds the OKLCH → hex and contrast maths.
 
 ---
 
@@ -332,7 +332,7 @@ Create **`crates/toolkit/design`** (crate `bande-design`, no dependencies beyond
 - `contrast.rs` + tests: WCAG and APCA checks over every generated palette and accent (this is a real domain test that fails when a token change breaks legibility).
 - `docs/design/language.md` in the repo: this document, trimmed to the rules.
 
-### Order of work (each step ships with updated goldens, light and dark, 1× and 1.5×)
+### Order of work (each step is checked by eye in light and dark, at 1× and 1.5×)
 1. **Tokens.** Expand `Palette` and add `Radius`, `TextRole` and `Elevation`. Keep the old field names as the first users migrate, then delete them in the same branch (no dead code).
 2. **Fonts.** Add `fonts-manrope` and `fonts-jetbrains-mono` to `bande-desktop`'s Depends. In `graphics/src/text.rs`: `DISPLAY_FONT_FAMILY = "Manrope"` for TextRole ≥ 15 pt display roles, `MONOSPACE_FONT_FAMILY = "JetBrains Mono"`, and default features `cv05, cv08, ss07, ss08` plus `tnum` on `TextStyle::numeric()`.
 3. **Title bar and window controls.** `graphics/src/title_bar.rs`: height 48 (40 SSD), the control well and glyphs, flush-left title, frame colour; `compositor/src/scene.rs` `CORNER_RADIUS` 14; `compositor/src/frame.rs` and `decoration.rs` use the same items for SSD; `toolkit/platform/src/chrome.rs` gains the frame/sheet split (an app declares a sidebar width; the toolkit paints the sheet).

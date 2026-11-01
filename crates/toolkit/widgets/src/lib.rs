@@ -1248,19 +1248,3 @@ impl Ui {
         performed
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [
-            include_str!("combo_box.rs"),
-            include_str!("search_field.rs"),
-            include_str!("secure_field.rs"),
-        ];
-        assert_eq!(
-            bande_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
-}

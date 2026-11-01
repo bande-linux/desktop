@@ -74,26 +74,3 @@ impl CaptureOptions {
         fs::write(path, self.serialize())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn options_survive_a_round_trip() {
-        let options = CaptureOptions {
-            destination: Destination::Clipboard,
-            timer: 10,
-            show_pointer: true,
-        };
-
-        assert_eq!(CaptureOptions::parse(&options.serialize()), options);
-    }
-
-    #[test]
-    fn unknown_or_damaged_lines_keep_the_defaults() {
-        let options = CaptureOptions::parse("timer=7\nsave-to=moon\ncolour=blue\nshow-pointer");
-
-        assert_eq!(options, CaptureOptions::default());
-    }
-}

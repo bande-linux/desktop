@@ -1,5 +1,7 @@
 # Settings: structure, page pattern and options
 
+> Since 2026-11-01 the desktop has no golden images (see [`../quality/tests.md`](../quality/tests.md)). Where a slice below names goldens as its proof, check the change by eye in light and dark, and assert behaviour through the accessibility tree if it needs a test.
+
 Spec of 2026-10-30, branch `night/settings-spec`. This is research and a spec only. Nothing was
 built or run.
 

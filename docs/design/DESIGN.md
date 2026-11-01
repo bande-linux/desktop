@@ -62,7 +62,7 @@ better.
   the selection are the strongest elements on screen.
 - **Crisp at every scale.** Everything is laid out in points and drawn in pixels at the
   output's scale, fractional scales included.
-- **Light and dark are equals,** both designed, both tested with goldens.
+- **Light and dark are equals,** both designed and both checked by eye before a change lands.
 
 ## 5. Trust
 

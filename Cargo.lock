@@ -3,22 +3,6 @@
 version = 4
 
 [[package]]
-name = "ab_glyph"
-version = "0.2.32"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01c0457472c38ea5bd1c3b5ada5e368271cb550be7a4ca4a0b4634e9913f6cc2"
-dependencies = [
- "ab_glyph_rasterizer",
- "owned_ttf_parser",
-]
-
-[[package]]
-name = "ab_glyph_rasterizer"
-version = "0.1.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "366ffbaa4442f4684d91e2cd7c5ea7c4ed8add41959a31447066e279e432b618"
-
-[[package]]
 name = "accesskit"
 version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -383,7 +367,6 @@ version = "0.1.0"
 dependencies = [
  "bande-inbox",
  "bande-l10n",
- "bande-test-bus",
  "zbus",
 ]
 
@@ -396,7 +379,6 @@ dependencies = [
  "bande-toolkit",
  "bande-watch",
  "bande-xdg",
- "tempfile",
  "tracing",
 ]
 
@@ -404,10 +386,8 @@ dependencies = [
 name = "bande-audio"
 version = "0.1.0"
 dependencies = [
- "bande-test-bus",
  "pipewire",
  "serde_json",
- "tempfile",
  "tracing",
 ]
 
@@ -433,28 +413,19 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "bande-bluetooth",
- "bande-compositor",
  "bande-config",
- "bande-controlcenter",
  "bande-datetime",
  "bande-fs",
- "bande-golden",
  "bande-inbox",
  "bande-keyboard",
  "bande-l10n",
- "bande-launcher",
- "bande-notifications",
  "bande-sound",
  "bande-status",
  "bande-taskbar-model",
- "bande-test-wayland",
  "bande-toolkit",
  "bande-xdg",
- "image",
  "jiff",
- "smithay",
  "tracing",
- "wayland-client",
  "zbus",
 ]
 
@@ -482,7 +453,6 @@ dependencies = [
 name = "bande-bluetooth"
 version = "0.1.0"
 dependencies = [
- "bande-test-bus",
  "blocking",
  "zbus",
 ]
@@ -491,7 +461,6 @@ dependencies = [
 name = "bande-bus"
 version = "0.1.0"
 dependencies = [
- "bande-test-bus",
  "zbus",
 ]
 
@@ -499,14 +468,9 @@ dependencies = [
 name = "bande-clipboard"
 version = "0.1.0"
 dependencies = [
- "bande-compositor",
  "bande-log",
- "bande-test-bus",
- "bande-test-wayland",
  "bande-xdg",
  "rustix 1.1.6",
- "smithay",
- "tempfile",
  "tracing",
  "wayland-client",
  "wayland-protocols",
@@ -523,10 +487,7 @@ dependencies = [
  "bande-config",
  "bande-datetime",
  "bande-edid",
- "bande-golden",
  "bande-graphics",
- "bande-greeter",
- "bande-keyboard",
  "bande-l10n",
  "bande-log",
  "bande-protocols",
@@ -536,16 +497,12 @@ dependencies = [
  "bande-test-wayland",
  "bande-widgets",
  "bande-xdg",
- "image",
- "image-compare",
  "jiff",
  "libc",
  "rustix 1.1.6",
  "smithay",
- "tempfile",
  "tracing",
  "wayland-client",
- "wayland-protocols",
  "zbus",
 ]
 
@@ -558,10 +515,8 @@ dependencies = [
  "bande-l10n",
  "bande-log",
  "bande-notify",
- "bande-test-bus",
  "bande-watch",
  "kdl",
- "tempfile",
  "tracing",
  "zbus",
 ]
@@ -573,7 +528,6 @@ dependencies = [
  "accesskit",
  "bande-audio",
  "bande-bluetooth",
- "bande-golden",
  "bande-inbox",
  "bande-l10n",
  "bande-network",
@@ -581,7 +535,6 @@ dependencies = [
  "bande-power",
  "bande-sound",
  "bande-status",
- "bande-test-bus",
  "bande-toolkit",
  "bande-xdg",
  "tracing",
@@ -592,13 +545,11 @@ dependencies = [
 name = "bande-datetime"
 version = "0.1.0"
 dependencies = [
- "bande-test-bus",
  "icu_calendar",
  "icu_datetime",
  "icu_locale_core",
  "jiff",
  "rustix 1.1.6",
- "tempfile",
  "zbus",
 ]
 
@@ -614,7 +565,6 @@ dependencies = [
  "bande-bar",
  "bande-config",
  "bande-fs",
- "bande-golden",
  "bande-inbox",
  "bande-l10n",
  "bande-thumbnails",
@@ -622,7 +572,6 @@ dependencies = [
  "bande-volumes",
  "bande-wallpaper",
  "bande-xdg",
- "tempfile",
  "tracing",
 ]
 
@@ -637,14 +586,12 @@ dependencies = [
  "accesskit",
  "bande-files",
  "bande-fs",
- "bande-golden",
  "bande-l10n",
  "bande-log",
  "bande-toolkit",
  "bande-volumes",
  "bande-wallpaper",
  "bande-xdg",
- "tempfile",
  "tracing",
  "xdg-desktop-portal-bande",
 ]
@@ -658,7 +605,6 @@ dependencies = [
  "bande-app-menu",
  "bande-app-settings",
  "bande-fs",
- "bande-golden",
  "bande-l10n",
  "bande-preview",
  "bande-search",
@@ -667,7 +613,6 @@ dependencies = [
  "bande-toolkit",
  "bande-volumes",
  "bande-xdg",
- "image",
  "jiff",
  "rustix 1.1.6",
  "tempfile",
@@ -694,18 +639,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "bande-golden"
-version = "0.1.0"
-dependencies = [
- "image",
- "image-compare",
-]
-
-[[package]]
 name = "bande-graphics"
 version = "0.1.0"
 dependencies = [
- "ab_glyph",
  "bande-design",
  "fontique",
  "image",
@@ -714,7 +650,6 @@ dependencies = [
  "pollster",
  "resvg",
  "skrifa",
- "tempfile",
  "tracing",
  "vello_cpu",
  "vello_gpu",
@@ -736,10 +671,8 @@ dependencies = [
  "bande-status",
  "bande-toolkit",
  "libc",
- "rustix 1.1.6",
  "serde",
  "serde_json",
- "tempfile",
  "tracing",
  "zbus",
  "zeroize",
@@ -775,7 +708,6 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "bande-fs",
- "bande-golden",
  "bande-inbox",
  "bande-l10n",
  "bande-preview",
@@ -786,8 +718,6 @@ dependencies = [
  "bande-toolkit",
  "bande-xdg",
  "image",
- "rustix 1.1.6",
- "tempfile",
  "tracing",
  "zbus",
 ]
@@ -800,7 +730,6 @@ dependencies = [
  "bande-bar",
  "bande-bus",
  "bande-datetime",
- "bande-golden",
  "bande-inbox",
  "bande-keyboard",
  "bande-l10n",
@@ -810,12 +739,10 @@ dependencies = [
  "bande-toolkit",
  "bande-wallpaper",
  "bande-xdg",
- "image",
  "jiff",
  "libc",
  "libloading",
  "rustix 1.1.6",
- "tempfile",
  "tracing",
  "zbus",
  "zeroize",
@@ -835,7 +762,6 @@ dependencies = [
 name = "bande-network"
 version = "0.1.0"
 dependencies = [
- "bande-test-bus",
  "zbus",
 ]
 
@@ -844,7 +770,6 @@ name = "bande-notifications"
 version = "0.1.0"
 dependencies = [
  "bande-datetime",
- "bande-golden",
  "bande-inbox",
  "bande-l10n",
  "bande-notify",
@@ -865,7 +790,6 @@ dependencies = [
  "bande-sound",
  "bande-test-bus",
  "rustix 1.1.6",
- "tempfile",
  "tracing",
  "zbus",
 ]
@@ -874,7 +798,6 @@ dependencies = [
 name = "bande-packages"
 version = "0.1.0"
 dependencies = [
- "bande-test-bus",
  "serde",
  "tracing",
  "zbus",
@@ -885,15 +808,12 @@ name = "bande-polkit"
 version = "0.1.0"
 dependencies = [
  "accesskit",
- "bande-golden",
  "bande-inbox",
  "bande-l10n",
  "bande-log",
- "bande-test-bus",
  "bande-toolkit",
  "blocking",
  "rustix 1.1.6",
- "tempfile",
  "tracing",
  "zbus",
  "zeroize",
@@ -904,16 +824,11 @@ name = "bande-power"
 version = "0.1.0"
 dependencies = [
  "bande-bus",
- "bande-compositor",
- "bande-config",
  "bande-l10n",
  "bande-log",
  "bande-notify",
  "bande-sound",
- "bande-test-bus",
  "rustix 1.1.6",
- "smithay",
- "tempfile",
  "tracing",
  "wayland-client",
  "wayland-protocols",
@@ -927,7 +842,6 @@ version = "0.1.0"
 dependencies = [
  "bande-fs",
  "image",
- "tempfile",
 ]
 
 [[package]]
@@ -978,10 +892,8 @@ name = "bande-screenshot"
 version = "0.1.0"
 dependencies = [
  "accesskit",
- "bande-compositor",
  "bande-datetime",
  "bande-fs",
- "bande-golden",
  "bande-graphics",
  "bande-inbox",
  "bande-l10n",
@@ -989,8 +901,6 @@ dependencies = [
  "bande-notify",
  "bande-protocols",
  "bande-sound",
- "bande-test-bus",
- "bande-test-wayland",
  "bande-toolkit",
  "bande-xdg",
  "blocking",
@@ -998,13 +908,9 @@ dependencies = [
  "jiff",
  "pipewire",
  "rustix 1.1.6",
- "serde",
- "smithay",
- "tempfile",
  "tracing",
  "wayland-client",
  "wayland-protocols",
- "xdg-desktop-portal-bande",
  "zbus",
 ]
 
@@ -1016,7 +922,6 @@ dependencies = [
  "bande-watch",
  "bande-xdg",
  "jiff",
- "tempfile",
  "tracing",
 ]
 
@@ -1029,11 +934,9 @@ dependencies = [
  "bande-app-menu",
  "bande-audio",
  "bande-bluetooth",
- "bande-compositor",
  "bande-config",
  "bande-datetime",
  "bande-fs",
- "bande-golden",
  "bande-keyboard",
  "bande-l10n",
  "bande-log",
@@ -1072,7 +975,6 @@ dependencies = [
  "bande-bar",
  "bande-bluetooth",
  "bande-bus",
- "bande-compositor",
  "bande-config",
  "bande-controlcenter",
  "bande-desktop-surface",
@@ -1082,8 +984,6 @@ dependencies = [
  "bande-status",
  "bande-toolkit",
  "bande-xdg",
- "smithay",
- "tempfile",
  "tracing",
  "zbus",
 ]
@@ -1094,9 +994,7 @@ version = "0.1.0"
 dependencies = [
  "bande-audio",
  "bande-bus",
- "bande-config",
  "bande-log",
- "bande-test-bus",
  "tracing",
  "zbus",
 ]
@@ -1118,10 +1016,8 @@ dependencies = [
  "bande-network",
  "bande-notify",
  "bande-power",
- "bande-test-bus",
  "bande-xdg",
  "rustix 1.1.6",
- "tempfile",
  "tracing",
  "zbus",
 ]
@@ -1150,12 +1046,10 @@ version = "0.1.0"
 dependencies = [
  "bande-compositor",
  "bande-protocols",
- "rustix 1.1.6",
  "tempfile",
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-misc",
- "wayland-protocols-wlr",
 ]
 
 [[package]]
@@ -1167,7 +1061,6 @@ dependencies = [
  "image",
  "md-5",
  "png",
- "tempfile",
  "tracing",
 ]
 
@@ -1179,11 +1072,9 @@ dependencies = [
  "bande-compositor",
  "bande-graphics",
  "bande-test-bus",
- "bande-test-wayland",
  "bande-toolkit-platform",
  "bande-widgets",
  "smithay",
- "wayland-client",
  "zbus",
 ]
 
@@ -1193,20 +1084,13 @@ version = "0.1.0"
 dependencies = [
  "accesskit",
  "accesskit_unix",
- "atspi-common",
  "bande-bus",
- "bande-compositor",
- "bande-golden",
  "bande-graphics",
  "bande-l10n",
  "bande-protocols",
- "bande-test-bus",
- "bande-test-wayland",
  "bande-widgets",
  "raw-window-handle",
  "rustix 1.1.6",
- "serde",
- "smithay",
  "tracing",
  "wayland-backend",
  "wayland-client",
@@ -1223,7 +1107,6 @@ version = "0.1.0"
 dependencies = [
  "bande-bus",
  "bande-log",
- "bande-test-bus",
  "tracing",
  "zbus",
 ]
@@ -1243,7 +1126,6 @@ dependencies = [
  "bande-inbox",
  "image",
  "resvg",
- "tempfile",
  "tracing",
  "zbus",
 ]
@@ -1253,7 +1135,6 @@ name = "bande-watch"
 version = "0.1.0"
 dependencies = [
  "rustix 1.1.6",
- "tempfile",
 ]
 
 [[package]]
@@ -1261,7 +1142,6 @@ name = "bande-widgets"
 version = "0.1.0"
 dependencies = [
  "accesskit",
- "bande-golden",
  "bande-graphics",
  "bande-l10n",
  "bande-spring",
@@ -1276,8 +1156,6 @@ dependencies = [
  "bande-inbox",
  "bande-l10n",
  "bande-notify",
- "bande-test-bus",
- "image",
  "rustix 1.1.6",
  "tempfile",
  "tracing",
@@ -1589,25 +1467,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ba106e844045ddc02c20768ac4b0b7cb45f2cc2ecbd833ac9f5dacb183c2055"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "crossbeam-deque"
-version = "0.8.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "622f3fc73690be383c7214310406f28a90e6edeadc3cea882f9d71e495b9711a"
-dependencies = [
- "crossbeam-epoch",
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-epoch"
-version = "0.9.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc74980687109a3b14c72fd458107bf0baa1da1a1a805e178d15501ba9b86d9d"
-dependencies = [
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -2573,18 +2432,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "image-compare"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "176623a137baf75908084aff53578d6336cbd932bffaf12fabe26b343eb13338"
-dependencies = [
- "image",
- "itertools 0.14.0",
- "rayon",
- "thiserror",
-]
-
-[[package]]
 name = "image-webp"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3336,15 +3183,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "owned_ttf_parser"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36820e9051aca1014ddc75770aab4d68bc1e9e632f0f5627c4086bc216fb583b"
-dependencies = [
- "ttf-parser",
-]
-
-[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3771,26 +3609,6 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation",
  "objc2-quartz-core",
-]
-
-[[package]]
-name = "rayon"
-version = "1.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d"
-dependencies = [
- "either",
- "rayon-core",
-]
-
-[[package]]
-name = "rayon-core"
-version = "1.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
-dependencies = [
- "crossbeam-deque",
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -4515,12 +4333,6 @@ dependencies = [
  "tracing-core",
  "tracing-log",
 ]
-
-[[package]]
-name = "ttf-parser"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 
 [[package]]
 name = "twox-hash"
@@ -5441,7 +5253,6 @@ dependencies = [
  "blocking",
  "jiff",
  "rustix 1.1.6",
- "tempfile",
  "tracing",
  "zbus",
 ]

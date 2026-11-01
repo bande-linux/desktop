@@ -671,12 +671,6 @@ impl State {
             )
     }
 
-    fn window_position(&self, window: &Window) -> Option<usize> {
-        self.screens[self.screen_of(window)]
-            .workspaces
-            .index_of(window.workspace)
-    }
-
     pub(crate) fn announce_workspaces(&mut self) {
         let workspaces = &self.screens[self.announced_screen()].workspaces;
         let state = (workspaces.count(), workspaces.active);
@@ -698,26 +692,4 @@ impl State {
     }
 }
 
-impl Compositor {
-    pub fn workspace_count(&self) -> usize {
-        self.state.main_screen().workspaces.count()
-    }
-
-    pub fn active_workspace(&self) -> usize {
-        self.state.main_screen().workspaces.active
-    }
-
-    pub fn workspace_count_on(&self, output: &str) -> Option<usize> {
-        let screen = self.state.screen_named(output)?;
-        Some(self.state.screens[screen].workspaces.count())
-    }
-
-    pub fn active_workspace_on(&self, output: &str) -> Option<usize> {
-        let screen = self.state.screen_named(output)?;
-        Some(self.state.screens[screen].workspaces.active)
-    }
-
-    pub fn workspace_of(&self, window: &Window) -> Option<usize> {
-        self.state.window_position(window)
-    }
-}
+impl Compositor {}

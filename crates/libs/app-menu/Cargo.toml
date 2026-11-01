@@ -12,8 +12,5 @@ bande-inbox.workspace = true
 bande-l10n.workspace = true
 zbus.workspace = true
 
-[dev-dependencies]
-bande-test-bus.workspace = true
-
 [lints]
 workspace = true

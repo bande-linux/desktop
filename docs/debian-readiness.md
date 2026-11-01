@@ -218,8 +218,7 @@ Rust GUI application.
 | Emoji data (`crates/shell/launcher/data/emoji.tsv`, compiled in) | derived from Unicode `emoji-test.txt` and CLDR annotations by the committed `emoji.py` | its own `Files:` stanza under **Unicode-3.0**. Ideally regenerate at build time from Debian's `unicode-data` and `unicode-cldr-core` |
 | Other embedded SVG (`process-stop-symbolic.svg`, app icons in `crates/apps/*/data`) | original | covered by `Files: *` |
 | Fonts | none bundled; Inter, Manrope, JetBrains Mono, DejaVu and Noto come from Debian packages | nothing to do |
-| Test goldens (116 PNG files in `crates/*/tests`) | produced by the tests themselves | covered by `Files: *`. They make the tarball larger; Files-Excluded is not needed |
-| CI and VM files (`ci/hil`, the keyring `.pgp`) | not installed | covered by `Files: *`. The archive key needs no stanza, being data |
+| CI files (the keyring `.pgp`) | not installed | covered by `Files: *`. The archive key needs no stanza, being data |
 | Dependency licences (408 runtime crates) | MIT and/or Apache-2.0 (most), Unicode-3.0 (ICU4X, 35 crates), BSD-2/3-Clause, Zlib, ISC, Unlicense OR MIT, 0BSD, `bzip2-1.0.6` (libbz2-rs-sys), `Apache-2.0 OR GPL-2.0-only` (self_cell), `Apache-2.0 WITH LLVM-exception` | all DFSG-free. With system crates their copyright is carried by their own packages; Bande's `debian/copyright` lists only what is in its own tarball |
 
 ## 4. Lintian and installed files
@@ -275,12 +274,12 @@ SVGs are text, and the WAVs need only the provenance note.
 | :--- | :--- | :--- |
 | Network during build or tests | none: no HTTP client crates, no sockets beyond Unix; URLs in tests are plain strings | nothing |
 | Prebuilt artefacts | none: SPIR-V is compiled from `compose.wgsl` by `build.rs` through naga; no `.so`, `.a` or fonts | nothing |
-| Reproducibility | CI passes `--remap-path-prefix`; `env!("CARGO_MANIFEST_DIR")` only appears in the test crates `bande-test-bus` and `bande-golden`; no timestamps; `CARGO_PKG_VERSION` is the only embedded build value | dh-rust sets the remapping itself. Verify with `reprotest` once a source package exists |
+| Reproducibility | CI passes `--remap-path-prefix`; `env!("CARGO_MANIFEST_DIR")` only appears in the test crate `bande-test-bus`; no timestamps; `CARGO_PKG_VERSION` is the only embedded build value | dh-rust sets the remapping itself. Verify with `reprotest` once a source package exists |
 | Toolchain | `rust-toolchain.toml` pins **1.99.1**; unstable has rustc **1.97.1**, trixie **1.85.1**. The code uses let-chains (92 sites, stable since 1.88), and the highest dependency MSRV is kdl 6.7.1's **1.95** | trixie's rustc cannot build Bande. Declare `rust-version` in `[workspace.package]` and add a CI job that builds and tests with Debian unstable's `rustc` and `cargo` (a `debian:sid` container), so the code never needs a toolchain newer than Debian ships |
 | Exact pins (`=x.y.z` for every external dependency) | a team rule, for reproducible upstream builds | Debian replaces all of them. Switching upstream to caret requirements and keeping `Cargo.lock` for reproducibility removes most `relax-deps.patch` work. This is an owner decision against the current team rule |
 | `blocking = "=1.6.2"` | pinned because 1.7.0's idle pool threads wake twice a second forever (smol-rs/blocking#81 and #83, open; see `docs/architecture/performance.md`). Unstable has 1.7.0 | under Debian the pin is relaxed and the wake-ups come back. Options: get the upstream fix released and packaged; carry the fix as a patch in `rust-blocking` through the Rust team; or stop needing `blocking`, which zbus, the portal, polkit, screenshot and bluetooth pull in |
 | Tests needing a session bus | `bande-test-bus` starts its own `dbus-daemon` with a private config; settings, monitor, compositor and clipboard tests use it | Build-Depends on dbus-daemon; works under sbuild |
-| Tests needing a display or GPU | headless compositor and offscreen Vulkan on lavapipe | Build-Depends on mesa-vulkan-drivers. Goldens compare at SSIM ≥ 0.995, so a Mesa update on the buildds can break the build (FTBFS). They need a switch (an environment variable or feature) that turns them into smoke tests under `dh_auto_test` |
+| Tests needing a display or GPU | headless compositor and offscreen Vulkan on lavapipe | Build-Depends on mesa-vulkan-drivers. The tests assert behaviour, not pixels (no golden images), so a Mesa update on the buildds cannot fail them on rendering differences |
 | Tests needing a system (PipeWire, polkitd, greetd, the VM) | 33 tests are `#[ignore]` with the reason given | fine for buildds. Candidates for autopkgtest with `Restrictions: isolation-machine` |
 | `/tmp` and `$HOME` | tests use `tempfile` and `CARGO_TARGET_TMPDIR`; the literal `/tmp/...` paths are data in assertions or `#[ignore]`d guest tests | fine. The one non-guest test that needs `XDG_RUNTIME_DIR` (`screen_reader.rs`) sets its own. Still confirm under sbuild with `HOME=/nonexistent` and no `XDG_RUNTIME_DIR` |
 | Fonts in tests | need fonts-dejavu-core, fonts-inter and fonts-noto-cjk | Build-Depends |
@@ -327,29 +326,27 @@ is governed by NEW-queue review, typically days to weeks per new source package.
    never-shipped packages.
 6. **Man pages** (1.5 d) for the 17 programs in `/usr/bin`, and **AppStream metainfo**
    (0.5 d) for the four apps.
-7. **Golden switch** (1 d): an environment variable under which golden comparisons become
-   smoke tests, so Mesa updates on buildds cannot make the build fail.
-8. **First tagged release** `v0.1.0` (0.5 d), so there is a tarball to package.
-9. **Owner decisions** (no code): caret requirements instead of `=` pins; the Debian naming
+7. **First tagged release** `v0.1.0` (0.5 d), so there is a tarball to package.
+8. **Owner decisions** (no code): caret requirements instead of `=` pins; the Debian naming
    (§6); the reverse-DNS ID domain.
 
 ### Before the ITP (about 4 to 6 weeks of work, 2 to 4 months elapsed)
 
-10. **Join the Debian Rust team** on salsa, introduce the plan on debian-rust@, and find a
+9. **Join the Debian Rust team** on salsa, introduce the plan on debian-rust@, and find a
     sponsor. The owner is not a Debian Developer; the Rust team or debian-mentors can sponsor.
-11. **Package the five missing stacks** in debcargo-conf (about 25 new source packages: wgpu,
+10. **Package the five missing stacks** in debcargo-conf (about 25 new source packages: wgpu,
     Smithay, Vello with WESL, Parley 0.12 with parley_engine and parley_emoji, AccessKit with
     AT-SPI, and the ICU locale fallback). Each one goes through NEW. Check WNPP and NEW first;
     someone is already packaging the Vello stack, since `rust-glifo` is in NEW.
-12. **Update what is behind** (about 15 packages: accesskit, accesskit_consumer, fontique,
+11. **Update what is behind** (about 15 packages: accesskit, accesskit_consumer, fontique,
     parley, parley_data, kdl 4 → 6, resvg, usvg, svgtypes, roxmltree, ruzstd, lzma-rust2,
     pollster, zbus-lockstep, ICU 2.2 → 2.4). Where a major update would break other Debian
     users, use semver-suffixed packages or patch Bande down instead.
-13. **Align Smithay's pins** (drm 0.14, input 0.9, xkbcommon 0.8, rand 0.9) with Debian's
+12. **Align Smithay's pins** (drm 0.14, input 0.9, xkbcommon 0.8, rand 0.9) with Debian's
     series: patches in `rust-smithay`, or wait for a Smithay release that matches.
-14. **Fix the `blocking` regression** in a way that survives Debian: an upstream release, a
+13. **Fix the `blocking` regression** in a way that survives Debian: an upstream release, a
     Debian patch, or dropping the dependency.
-15. **Write `debian/`** (3 to 5 d), on salsa:
+14. **Write `debian/`** (3 to 5 d), on salsa:
     - a single `3.0 (quilt)` source package with dh-rust and 19 binary packages;
     - `debian/copyright` in DEP-5, with stanzas for `Files: *`, the sounds, `emoji.tsv` and the
       icon generator;
@@ -357,17 +354,17 @@ is governed by NEW-queue review, typically days to weeks per new source package.
     - `Static-Built-Using`;
     - autopkgtests (`desktop-file-validate`, `appstreamcli validate`, an isolation-machine
       session smoke test).
-16. **File the ITP** against wnpp, with the description, licence and URL.
+15. **File the ITP** against wnpp, with the description, licence and URL.
 
 ### Before the upload
 
-17. All Build-Depends in unstable; a clean `sbuild` against unstable with no network,
+16. All Build-Depends in unstable; a clean `sbuild` against unstable with no network,
     `HOME=/nonexistent` and no `XDG_RUNTIME_DIR`; `dh_auto_test` green on amd64 and arm64.
-18. `lintian --pedantic` clean on source and binaries, with any overrides explained;
+17. `lintian --pedantic` clean on source and binaries, with any overrides explained;
     `piuparts` install, upgrade and purge clean; `reprotest` reproducible; autopkgtest green.
-19. Fix the architecture list (start with amd64 and arm64).
-20. Leave `packaging/bande-apt-source` out of the Debian source package; the GitHub APT
+18. Fix the architecture list (start with amd64 and arm64).
+19. Leave `packaging/bande-apt-source` out of the Debian source package; the GitHub APT
     repository keeps using it.
-21. Upload to unstable through the sponsor and answer the NEW review. After migration to forky,
+20. Upload to unstable through the sponsor and answer the NEW review. After migration to forky,
     consider trixie-backports only if the 200-odd crates trixie lacks or has at the wrong
     series get backported too, which is unlikely.

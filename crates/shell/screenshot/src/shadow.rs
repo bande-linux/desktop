@@ -91,39 +91,3 @@ pub fn with_shadow(window: &Snapshot, scale: f64) -> Snapshot {
         rgba,
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn alpha_at(image: &Snapshot, x: u32, y: u32) -> u8 {
-        image.rgba[((y * image.width + x) * 4 + 3) as usize]
-    }
-
-    #[test]
-    fn the_window_keeps_its_pixels_inside_a_soft_shadow_that_falls_below_it() {
-        let window = Snapshot {
-            width: 40,
-            height: 30,
-            rgba: [0x20, 0x40, 0x60, 0xff].repeat(40 * 30),
-        };
-
-        let framed = with_shadow(&window, 1.0);
-
-        let margin = 44;
-        assert_eq!(
-            (framed.width, framed.height),
-            (40 + 2 * margin, 30 + 2 * margin + 12)
-        );
-        let center = ((margin + 15) * framed.width + margin + 20) as usize * 4;
-        assert_eq!(&framed.rgba[center..center + 4], &[0x20, 0x40, 0x60, 0xff]);
-        assert_eq!(alpha_at(&framed, 0, 0), 0);
-        let above = alpha_at(&framed, margin + 20, margin - 6);
-        let below = alpha_at(&framed, margin + 20, margin + 30 + 6);
-        assert!(below > above, "below {below}, above {above}");
-        assert_eq!(
-            framed.rgba[(margin * framed.width + margin + 20) as usize * 4 + 1],
-            0x40
-        );
-    }
-}

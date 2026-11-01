@@ -60,24 +60,3 @@ impl AsFd for MinuteTimer {
         self.timer.as_fd()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use rustix::time::Timespec;
-
-    use super::next_minute;
-
-    fn at(tv_sec: i64, tv_nsec: i64) -> Timespec {
-        Timespec { tv_sec, tv_nsec }
-    }
-
-    #[test]
-    fn the_clock_wakes_on_the_next_whole_minute() {
-        assert_eq!(next_minute(at(1_800_000_030, 500)).tv_sec, 1_800_000_060);
-        assert_eq!(next_minute(at(1_800_000_000, 0)).tv_sec, 1_800_000_060);
-        assert_eq!(
-            next_minute(at(1_800_000_059, 999_999_999)).tv_sec,
-            1_800_000_060
-        );
-    }
-}

@@ -25,16 +25,5 @@ bande-toolkit.workspace = true
 bande-xdg.workspace = true
 zbus.workspace = true
 
-[dev-dependencies]
-image.workspace = true
-smithay.workspace = true
-bande-compositor.workspace = true
-bande-controlcenter.workspace = true
-bande-golden.workspace = true
-bande-launcher.workspace = true
-bande-notifications.workspace = true
-bande-test-wayland.workspace = true
-wayland-client.workspace = true
-
 [lints]
 workspace = true

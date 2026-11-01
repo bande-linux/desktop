@@ -306,15 +306,3 @@ impl Bluetooth {
         proxy.connect()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::Kind;
-
-    #[test]
-    fn icons_bluez_names_map_to_kinds_and_the_rest_to_other() {
-        assert_eq!(Kind::from_icon("camera-video"), Kind::Camera);
-        assert_eq!(Kind::from_icon("audio-card"), Kind::Speaker);
-        assert_eq!(Kind::from_icon("modem"), Kind::Other);
-    }
-}

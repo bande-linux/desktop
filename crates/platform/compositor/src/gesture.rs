@@ -498,10 +498,6 @@ impl Compositor {
         self.state.note_activity();
         self.state.route_gesture(gesture, time);
     }
-
-    pub fn shows_desktop(&self) -> bool {
-        self.state.desktop.target != 0.0
-    }
 }
 
 delegate_pointer_gestures!(State);

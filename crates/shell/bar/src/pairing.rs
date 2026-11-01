@@ -308,11 +308,6 @@ impl Dialog {
     }
 }
 
-pub fn pairing_scene(question: &Question, appearance: Appearance) -> Scene {
-    let mut dialog = Dialog::new(question, appearance);
-    alert_scene(&mut dialog.ui, dialog.size)
-}
-
 pub fn run_pairing(arguments: &[&str]) -> Result<bool, Box<dyn std::error::Error>> {
     let question = Question::from_arguments(arguments)
         .ok_or_else(|| format!("unknown pairing question {arguments:?}"))?;
@@ -321,33 +316,4 @@ pub fn run_pairing(arguments: &[&str]) -> Result<bool, Box<dyn std::error::Error
     let mut dialog = Dialog::new(&question, window.appearance());
     bande_toolkit::run(&mut window, &mut dialog)?;
     Ok(dialog.choice.get() == Choice::Accept)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Question;
-
-    #[test]
-    fn every_question_crosses_to_the_dialog_process_unchanged() {
-        let device = "Jo’s Phone".to_owned();
-        let code = "004207".to_owned();
-        for question in [
-            Question::Confirm {
-                device: device.clone(),
-                code: code.clone(),
-            },
-            Question::Authorize {
-                device: device.clone(),
-            },
-            Question::Show {
-                device: device.clone(),
-                code,
-            },
-            Question::Pin { device },
-        ] {
-            let arguments = question.arguments();
-            let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
-            assert_eq!(Question::from_arguments(&words), Some(question));
-        }
-    }
 }

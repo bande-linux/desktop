@@ -24,9 +24,5 @@ wgpu = { workspace = true, optional = true }
 [features]
 gpu = ["dep:pollster", "dep:vello_gpu", "dep:wgpu"]
 
-[dev-dependencies]
-ab_glyph.workspace = true
-tempfile.workspace = true
-
 [lints]
 workspace = true

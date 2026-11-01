@@ -12,6 +12,3 @@ rustix = { workspace = true, features = ["fs"] }
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-rustix = { workspace = true, features = ["event"] }

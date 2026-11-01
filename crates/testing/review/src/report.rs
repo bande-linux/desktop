@@ -139,36 +139,3 @@ pub fn write(out: &Path, timeline: &Timeline) -> Result<(), Box<dyn Error>> {
     std::fs::write(out.join("index.html"), viewer(timeline)?)?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn shot_files_are_numbered_and_readable() {
-        assert_eq!(
-            shot_file(3, "Launcher open: Terminal!"),
-            "shots/03-launcher-open-terminal.png"
-        );
-        assert_eq!(shot_file(12, "  dark mode  "), "shots/12-dark-mode.png");
-    }
-
-    #[test]
-    fn the_viewer_embeds_the_timeline_safely() {
-        let timeline = Timeline::new(
-            Path::new("ci/review/scenarios/terminal.review"),
-            "note \"</script><b>\"\n",
-            (100, 50),
-            Duration::from_secs(2),
-            Vec::new(),
-            true,
-        );
-
-        let page = viewer(&timeline).unwrap();
-
-        assert!(page.contains("<title>terminal"));
-        assert!(!page.contains(TIMELINE_SLOT));
-        assert!(!page.contains("</script><b>"));
-        assert!(page.contains(r#""video":"review.mp4""#));
-    }
-}

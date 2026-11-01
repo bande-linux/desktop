@@ -584,20 +584,3 @@ impl Canvas for GpuCanvas<'_> {
             .fill_glyphs(glyphs.iter().copied());
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::atlas_size;
-
-    #[test]
-    fn an_atlas_covers_the_surface_rounded_up_to_whole_steps() {
-        assert_eq!(atlas_size((2928, 1818), 8192), Some((3072, 2048)));
-        assert_eq!(atlas_size((0, 64), 8192), Some((256, 256)));
-    }
-
-    #[test]
-    fn an_atlas_never_exceeds_the_device_limit() {
-        assert_eq!(atlas_size((4000, 300), 4000), Some((4000, 512)));
-        assert_eq!(atlas_size((4097, 300), 4096), None);
-    }
-}

@@ -13,9 +13,6 @@ bande-bus.workspace = true
 bande-log.workspace = true
 zbus.workspace = true
 
-[dev-dependencies]
-bande-test-bus.workspace = true
-
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"

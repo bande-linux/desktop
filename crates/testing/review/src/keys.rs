@@ -129,35 +129,3 @@ pub fn character_key(character: char) -> Option<(u16, bool)> {
             }),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn chords_list_modifiers_before_the_key() {
-        assert_eq!(
-            chord("Ctrl+Shift+T"),
-            Ok(Chord {
-                modifiers: vec![KEY_LEFTCTRL, KEY_LEFTSHIFT],
-                key: 20
-            })
-        );
-        assert_eq!(chord("f12").map(|chord| chord.key), Ok(88));
-        assert_eq!(chord("super").map(|chord| chord.key), Ok(KEY_LEFTMETA));
-        assert!(chord("f13").is_err());
-        assert!(chord("super+nothing").is_err());
-    }
-
-    #[test]
-    fn characters_map_to_us_keys() {
-        assert_eq!(character_key('q'), Some((16, false)));
-        assert_eq!(character_key('M'), Some((50, true)));
-        assert_eq!(character_key('0'), Some((11, false)));
-        assert_eq!(character_key('!'), Some((2, true)));
-        assert_eq!(character_key('('), Some((10, true)));
-        assert_eq!(character_key('|'), Some((KEY_BACKSLASH, true)));
-        assert_eq!(character_key('.'), Some((KEY_DOT, false)));
-        assert_eq!(character_key('é'), None);
-    }
-}

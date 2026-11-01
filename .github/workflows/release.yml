@@ -62,21 +62,13 @@ jobs:
       - name: Install the build and test dependencies and the toolchain
         run: |
           xargs ci/apt-install.sh libvulkan1 mesa-vulkan-drivers dbus-daemon at-spi2-core libfontconfig1 \
-            libwayland-client0 procps < ci/release/build-depends
+            libwayland-client0 procps fonts-inter < ci/release/build-depends
           ci/release/toolchain.sh
-      - name: Install Debian 13's fonts, which the goldens are rendered with
-        run: ci/debian-fonts.sh
       - uses: Swatinem/rust-cache@v2
         with:
           key: test
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo test --workspace --locked -- --show-output
-      - uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: rendered-frames
-          path: target/tmp/*.png
-          if-no-files-found: ignore
 
   debs:
     name: debs (${{ matrix.arch }})
@@ -197,4 +189,4 @@ jobs:
           test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
           ci/deb/install-test/run.sh install-debs
       - name: Read the colour scheme through xdg-desktop-portal
-        run: crates/services/portal/tests/frontend/run.sh
+        run: ci/deb/install-test/portal-frontend.sh

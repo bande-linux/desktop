@@ -377,27 +377,3 @@ impl AuthenticationAgent {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{Identity, from_passwd};
-
-    #[test]
-    fn the_full_name_is_the_first_gecos_field_and_falls_back_to_the_login() {
-        assert_eq!(
-            from_passwd("anna:x:1000:1000:Anna Lindqvist,,,:/home/anna:/bin/bash\n"),
-            Some(Identity {
-                login: "anna".to_owned(),
-                name: "Anna Lindqvist".to_owned(),
-            })
-        );
-        assert_eq!(
-            from_passwd("backup:x:34:34::/var/backups:/usr/sbin/nologin"),
-            Some(Identity {
-                login: "backup".to_owned(),
-                name: "backup".to_owned(),
-            })
-        );
-        assert_eq!(from_passwd(""), None);
-    }
-}

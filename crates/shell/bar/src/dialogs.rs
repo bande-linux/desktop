@@ -101,19 +101,6 @@ fn confirmation_size(ending: Ending, appearance: Appearance, now: Instant) -> (u
     fitted(&mut confirmation_ui(&asking, &choice, appearance, now))
 }
 
-pub fn session_ending_scene(
-    session: &SessionEnding,
-    appearance: Appearance,
-    now: Instant,
-) -> Scene {
-    let choice = Rc::new(Cell::new(Choice::Undecided));
-    let size = confirmation_size(session.ending, appearance, now);
-    alert_scene(
-        &mut confirmation_ui(session, &choice, appearance, now),
-        size,
-    )
-}
-
 struct Confirmation {
     session: SessionEnding,
     ui: Ui,

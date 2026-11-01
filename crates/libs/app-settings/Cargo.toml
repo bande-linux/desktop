@@ -15,8 +15,5 @@ bande-toolkit.workspace = true
 bande-watch.workspace = true
 bande-xdg.workspace = true
 
-[dev-dependencies]
-tempfile.workspace = true
-
 [lints]
 workspace = true

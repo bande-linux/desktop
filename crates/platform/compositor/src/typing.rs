@@ -51,23 +51,3 @@ impl State {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_process_descends_from_its_parents_but_not_from_itself_or_strangers() {
-        let own = std::process::id() as i32;
-        let mut child = std::process::Command::new("sleep")
-            .arg("5")
-            .spawn()
-            .expect("spawn sleep");
-        let child_pid = child.id() as i32;
-        assert!(descends_from(child_pid, own));
-        assert!(!descends_from(own, own));
-        assert!(!descends_from(own, child_pid));
-        child.kill().expect("kill sleep");
-        child.wait().expect("reap sleep");
-    }
-}

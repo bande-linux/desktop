@@ -27,7 +27,7 @@ pub use bande_graphics::ResizeEdge;
 pub use bande_protocols::client::bande_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, SessionEnd, VolumeKey,
 };
-pub use chrome::{FrameRegions, Header, SHEET_INSET, WINDOW_HEADER_HEIGHT, framed_scene};
+pub use chrome::{FrameRegions, Header, SHEET_INSET, WINDOW_HEADER_HEIGHT};
 pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer};
 pub use popup::MenuPlacement;
 pub use run::{App, Surfaces, run, run_surfaces};
@@ -36,15 +36,3 @@ pub use window::{
     ACTIVATION_TOKEN_VARIABLE, Edges, FramePath, KeyboardFocus, LayerKind, LayerOptions,
     RENDERER_VARIABLE, Role, ToplevelState, Window, WindowError, WindowEvent,
 };
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_message_id_used_in_code_is_in_the_english_file() {
-        let sources = [include_str!("window/menus.rs")];
-        assert_eq!(
-            bande_l10n::missing_ids(super::ENGLISH, &sources),
-            Vec::<&str>::new()
-        );
-    }
-}

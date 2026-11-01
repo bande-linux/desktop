@@ -47,6 +47,7 @@ pub enum RenderError {
     NoDevice,
     NoMemoryType,
     BufferOutOfBounds,
+    ImageTooLarge,
     UnalignedDmabuf,
     UnsupportedFormat,
     UnsupportedTransform,
@@ -67,6 +68,7 @@ impl fmt::Display for RenderError {
             }
             Self::NoMemoryType => f.write_str("no suitable Vulkan memory type"),
             Self::BufferOutOfBounds => f.write_str("buffer rows lie outside its pool"),
+            Self::ImageTooLarge => f.write_str("the image is larger than the device allows"),
             Self::UnalignedDmabuf => {
                 f.write_str("dma-buf offset or stride is not a multiple of the pixel size")
             }
@@ -108,6 +110,7 @@ pub struct DeviceInfo {
     pub name: String,
     pub driver: String,
     pub software: bool,
+    pub max_image_side: u32,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -365,6 +368,7 @@ fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
                 name: text(properties.device_name_as_c_str()),
                 driver: text(driver.driver_name_as_c_str()),
                 software: properties.device_type == vk::PhysicalDeviceType::CPU,
+                max_image_side: properties.limits.max_image_dimension2_d,
             };
             Some((
                 device_rank(properties.device_type),
@@ -747,6 +751,9 @@ impl VulkanRenderer {
         usage: vk::ImageUsageFlags,
         alpha: vk::ComponentSwizzle,
     ) -> Result<Image, RenderError> {
+        if width.unsigned_abs().max(height.unsigned_abs()) > self.info.max_image_side {
+            return Err(RenderError::ImageTooLarge);
+        }
         let image = unsafe {
             self.device.create_image(
                 &vk::ImageCreateInfo::default()

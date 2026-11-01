@@ -3,7 +3,7 @@
 mod support;
 
 use bande_bar::pairing::{Question, pairing_scene};
-use bande_toolkit::{CpuRenderer, Palette, Scheme};
+use bande_toolkit::{Appearance, CpuRenderer};
 
 use support::check_golden;
 
@@ -24,7 +24,7 @@ fn the_shell_asks_to_confirm_a_code_or_type_a_pin_while_pairing() {
             "pairing-pin-light",
         ),
     ] {
-        let scene = pairing_scene(&question, Palette::for_scheme(Scheme::Light));
+        let scene = pairing_scene(&question, Appearance::default());
         let size = (scene.width, scene.height);
         let mut rgba = vec![0; (size.0 * size.1 * 4) as usize];
         CpuRenderer::new()

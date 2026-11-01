@@ -7,16 +7,14 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use bande_bluetooth::PairingPrompt;
-use bande_toolkit::ui::{Axis, Button, Event, Key, Label, Stack, TextField, Ui, Widget};
-use bande_toolkit::{App, Palette, Rect, Role, Scene, TextSystem, Window, WindowEvent};
+use bande_toolkit::ui::{Alert, Event, Key, TextField, Ui, Widget};
+use bande_toolkit::{App, Appearance, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 
 use crate::L10N;
-use crate::dialogs::DIALOGS;
+use crate::dialogs::{DIALOGS, alert_scene, fitted};
 
 pub const PAIR_FLAG: &str = "--pair";
 const ANSWER_POLL: Duration = Duration::from_millis(100);
-const DIALOG_SIZE: (u32, u32) = (400, 100);
-const PIN_DIALOG_SIZE: (u32, u32) = (400, 140);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Question {
@@ -88,14 +86,6 @@ impl Question {
             Self::Confirm { .. } | Self::Pin { .. } => Some(L10N.tr("pair")),
             Self::Authorize { .. } => Some(L10N.tr("pair-allow")),
             Self::Show { .. } => None,
-        }
-    }
-
-    fn size(&self) -> (u32, u32) {
-        if matches!(self, Self::Pin { .. }) {
-            PIN_DIALOG_SIZE
-        } else {
-            DIALOG_SIZE
         }
     }
 
@@ -205,17 +195,20 @@ enum Choice {
     Accept,
 }
 
+const DECLINE: &str = "decline";
+const ACCEPT: &str = "accept";
+
 struct Dialog {
     ui: Ui,
+    size: (u32, u32),
     choice: Rc<Cell<Choice>>,
     pin: Rc<RefCell<String>>,
     asks_pin: bool,
 }
 
 impl App for Dialog {
-    fn scene(&mut self, window: &mut Window) -> Scene {
-        let (width, height) = window.size();
-        self.ui.scene(width, height)
+    fn scene(&mut self, _window: &mut Window) -> Scene {
+        alert_scene(&mut self.ui, self.size)
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
@@ -238,6 +231,7 @@ impl App for Dialog {
             }
             WindowEvent::AppearanceChanged(appearance) => {
                 self.ui.set_appearance(*appearance);
+                self.size = fitted(&mut self.ui);
                 window.request_redraw();
             }
             _ => {}
@@ -272,15 +266,17 @@ impl App for Dialog {
 }
 
 impl Dialog {
-    fn new(question: &Question, palette: Palette) -> Self {
+    fn new(question: &Question, appearance: Appearance) -> Self {
         let asks_pin = matches!(question, Question::Pin { .. });
         let choice = Rc::new(Cell::new(Choice::Undecided));
         let pin = Rc::new(RefCell::new(String::new()));
-        let button = |title: &str, picked: Choice| {
-            let choice = Rc::clone(&choice);
-            Button::new(title, move || choice.set(picked))
-        };
-        let mut rows: Vec<Box<dyn Widget>> = vec![Box::new(Label::new(&question.text()))];
+        let picked = Rc::clone(&choice);
+        let mut alert = Alert::new(&question.text(), "", move |action| {
+            picked.set(match action {
+                ACCEPT => Choice::Accept,
+                _ => Choice::Decline,
+            })
+        });
         let mut field = None;
         if asks_pin {
             let typed = Rc::clone(&pin);
@@ -288,24 +284,22 @@ impl Dialog {
                 *typed.borrow_mut() = text.to_owned();
             });
             field = Some(input.id());
-            rows.push(Box::new(input));
+            alert = alert.accessory(input);
         }
-        let mut buttons: Vec<Box<dyn Widget>> = vec![Box::new(button(
-            &question.decline_button(),
-            Choice::Decline,
-        ))];
         if let Some(title) = question.answer_button() {
-            buttons.push(Box::new(button(&title, Choice::Accept).primary()));
+            alert = alert.primary(&title, ACCEPT);
         }
-        rows.push(Box::new(Stack::new(Axis::Horizontal, 12.0, 0.0, buttons)));
+        alert = alert.cancel(&question.decline_button(), DECLINE);
         let mut ui = Ui::new(
-            Box::new(Stack::new(Axis::Vertical, 10.0, 20.0, rows)),
-            bande_toolkit::ui::Context::new(TextSystem::new(), palette),
+            Box::new(alert),
+            bande_toolkit::ui::Context::new(TextSystem::new(), appearance.palette()),
         );
+        ui.set_appearance(appearance);
         if let Some(field) = field {
             ui.set_focus(field);
         }
         Self {
+            size: fitted(&mut ui),
             ui,
             choice,
             pin,
@@ -314,19 +308,17 @@ impl Dialog {
     }
 }
 
-pub fn pairing_scene(question: &Question, palette: Palette) -> Scene {
-    let (width, height) = question.size();
-    Dialog::new(question, palette).ui.scene(width, height)
+pub fn pairing_scene(question: &Question, appearance: Appearance) -> Scene {
+    let mut dialog = Dialog::new(question, appearance);
+    alert_scene(&mut dialog.ui, dialog.size)
 }
 
 pub fn run_pairing(arguments: &[&str]) -> Result<bool, Box<dyn std::error::Error>> {
     let question = Question::from_arguments(arguments)
         .ok_or_else(|| format!("unknown pairing question {arguments:?}"))?;
-    let mut window = Window::open(
-        Role::toplevel(&L10N.tr("pairing-request"), DIALOGS),
-        question.size(),
-    )?;
-    let mut dialog = Dialog::new(&question, window.appearance().palette());
+    let size = Dialog::new(&question, Appearance::default()).size;
+    let mut window = Window::open(Role::dialog(&L10N.tr("pairing-request"), DIALOGS), size)?;
+    let mut dialog = Dialog::new(&question, window.appearance());
     bande_toolkit::run(&mut window, &mut dialog)?;
     Ok(dialog.choice.get() == Choice::Accept)
 }

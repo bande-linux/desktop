@@ -6,6 +6,7 @@ mod context_menu;
 mod control;
 mod disclosure;
 mod editor;
+mod form;
 mod free_layout;
 mod label;
 mod menu;
@@ -42,6 +43,7 @@ pub use clock::{FrameTime, frame_time, request_wake, set_frame_time, take_wake};
 pub use combo_box::ComboBox;
 pub use context_menu::ContextMenu;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
+pub use form::{Form, FormLine};
 pub use free_layout::FreeLayout;
 pub use label::Label;
 pub use menu::{

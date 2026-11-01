@@ -42,7 +42,7 @@ in settings the selected item in the sidebar has blue markers, that looks pretty
 Status: finished ([plans/sidebar-selection.md](plans/sidebar-selection.md)); not yet checked live on the mini
 
 Files has no "settings" (and other inhouse apps who needs it), for example i want to show file extensions
-Status: started ([plans/app-settings.md](plans/app-settings.md))
+Status: finished ([plans/app-settings.md](plans/app-settings.md)); Files ▸ Settings… (Ctrl+,) with hidden files, default view, new window place, Trash and search, live in every window; extensions always shown; left: keep folders on top, the Sidebar section (M8), "Last Folder"
 
 we have no swap (granted this is not an official installation of debian) and it may not be up to bande-desktop, but quickly review how that should work and if we should do anything or if that is soley up to the debian installer
 Status: started ([plans/swap.md](plans/swap.md)); kernel config and image packages merged, the 0004 caveat written; the owner installs the kernel, enables zram and oomd and reboots

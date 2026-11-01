@@ -99,6 +99,7 @@ impl FilesView {
         if self.mode != ViewMode::Columns {
             browser.set_single(true);
         }
+        browser.set_show_hidden(self.show_hidden);
         let parked = self.park(browser);
         self.tabs[self.active_tab] = Some(parked);
         self.active_tab += 1;
@@ -122,6 +123,7 @@ impl FilesView {
         self.shown_root = tab.shown_root;
         self.grid_scroll = tab.grid_scroll;
         self.scrolls = tab.scrolls;
+        self.browser.set_show_hidden(self.show_hidden);
         self.browser.reload();
         self.show_tab();
     }

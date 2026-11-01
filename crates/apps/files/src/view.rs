@@ -30,6 +30,7 @@ use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
 use crate::quick_look::QuickLook;
 use crate::search::{Index, SEARCH_HEIGHT, Searching};
+use crate::settings::FilesSettings;
 use crate::sidebar::{Place, PlaceKind, Row, SidebarEdit, with_volumes};
 use crate::tabs::{Tab, location_title};
 use crate::thumbs::Thumbs;
@@ -151,10 +152,11 @@ pub enum Request {
     },
     EditSidebar(SidebarEdit),
     Eject(PathBuf),
-    NewWindow(Location),
+    NewWindow,
     OpenTerminal(PathBuf),
     ShowEmojiPicker,
     PlaySound(&'static str),
+    ShowHidden(bool),
 }
 
 pub struct FilesView {
@@ -212,6 +214,9 @@ pub struct FilesView {
     pub(crate) thumbs: Thumbs,
     pub(crate) mode: ViewMode,
     pub(crate) icon_size: u32,
+    pub(crate) show_hidden: bool,
+    warn_empty_trash: bool,
+    pub(crate) search_home: bool,
     views: ViewMemory,
     pub(crate) shown_root: Option<Location>,
     pub(crate) grid_scroll: (Option<Location>, ScrollState),
@@ -336,6 +341,9 @@ impl FilesView {
             thumbs: Thumbs::default(),
             mode: ViewMode::default(),
             icon_size: DEFAULT_ICON_SIZE,
+            show_hidden: false,
+            warn_empty_trash: true,
+            search_home: false,
             views: ViewMemory::default(),
             shown_root: None,
             grid_scroll: (None, ScrollState::default()),
@@ -1403,10 +1411,7 @@ impl FilesView {
             Sheet::GoTo(typed) if action == "go" => self.go_to(&typed),
             Sheet::OpenWith(open_with) if action == "open" => self.open_with_chosen_app(open_with),
             Sheet::Rename(state) if action == "rename" => self.apply_batch_rename(state),
-            Sheet::EmptyTrash if action == "confirm" => {
-                self.requests.push(Request::PlaySound(TRASH_SOUND));
-                self.start(Task::EmptyTrash, Purpose::Erase);
-            }
+            Sheet::EmptyTrash if action == "confirm" => self.empty_trash(),
             Sheet::DeleteImmediately { paths, items } if action == "confirm" => {
                 if !paths.is_empty() {
                     self.start(Task::Delete { sources: paths }, Purpose::Erase);
@@ -1556,8 +1561,7 @@ impl FilesView {
                 self.open_tab(self.browser.root().clone());
             }
             Key::Character('n' | 'N') if command && !shift => {
-                let location = self.browser.current_location();
-                self.requests.push(Request::NewWindow(location));
+                self.requests.push(Request::NewWindow)
             }
             Key::Delete if command && shift => self.ask_to_empty_trash(),
             Key::Delete if shift || self.selection_is_trashed() => self.confirm_delete(),
@@ -1615,14 +1619,44 @@ impl FilesView {
     }
 
     pub(crate) fn toggle_hidden(&mut self) {
-        self.browser.toggle_hidden();
+        self.show_hidden = !self.show_hidden;
+        self.browser.set_show_hidden(self.show_hidden);
+        self.requests.push(Request::ShowHidden(self.show_hidden));
+        self.selection_changed();
+    }
+
+    pub fn apply_settings(&mut self, settings: &FilesSettings) {
+        self.warn_empty_trash = settings.warn_empty_trash;
+        self.search_home = settings.search_home;
+        if settings.show_hidden != self.show_hidden {
+            self.show_hidden = settings.show_hidden;
+            self.browser.set_show_hidden(self.show_hidden);
+            self.selection_changed();
+        }
+    }
+
+    pub fn set_default_view(&mut self, mode: ViewMode) {
+        self.mode = mode;
+        self.browser.set_single(mode != ViewMode::Columns);
+        self.shown_root = None;
+        self.refresh_size_slider();
+        self.refresh_view_control();
         self.selection_changed();
     }
 
     pub(crate) fn ask_to_empty_trash(&mut self) {
-        if !self.browser.trash().is_empty() {
-            self.present(Sheet::EmptyTrash);
+        if self.browser.trash().is_empty() {
+            return;
         }
+        match self.warn_empty_trash {
+            true => self.present(Sheet::EmptyTrash),
+            false => self.empty_trash(),
+        }
+    }
+
+    fn empty_trash(&mut self) {
+        self.requests.push(Request::PlaySound(TRASH_SOUND));
+        self.start(Task::EmptyTrash, Purpose::Erase);
     }
 
     pub(crate) fn set_mode(&mut self, mode: ViewMode) {

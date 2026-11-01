@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 use accesskit::{Action, ActionRequest, Role, TreeId};
 use bande_packages::Client;
 use bande_settings::{
-    Command, Feed, Package, PaneId, Refresh, SettingsView, SoftwareCommand, SoftwareState, check,
-    feed, follow_software, open_updates,
+    Command, Feed, Package, PaneId, Refresh, SettingsView, SoftwareCommand, SoftwareState,
+    announce_updates, check, clicked, feed, follow_software, open_updates,
 };
 use bande_test_bus::SessionBus;
 use bande_test_bus::packagekit::{
@@ -227,4 +227,38 @@ fn a_failed_check_and_packagekit_stopping_mid_download_read_as_plain_sentences()
     drop(fake);
     settings.row("Could not download updates, The update service stopped. Try again in a moment.");
     assert!(find(&mut settings.view, Role::Button, "Try Again").is_some());
+}
+
+#[test]
+fn the_daily_check_announces_without_waiting_and_a_click_is_heard_separately() {
+    let (bus, _fake, system) = start(updates());
+    let notifications = bus.connect().expect("notifications connection");
+    let server = bande_notify::NotificationServer::start(&notifications).expect("server");
+    let session = bus.connect().expect("session");
+    let started = Instant::now();
+    let id = announce_updates(&session, &system)
+        .expect("announce")
+        .expect("a notification");
+    assert!(started.elapsed() < WAIT);
+    let shown = server.active();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].summary, "Software updates are available");
+
+    let waiter = bus.connect().expect("waiter");
+    let heard = std::thread::spawn(move || clicked(&waiter, id).expect("clicked"));
+    let deadline = Instant::now() + WAIT;
+    while !heard.is_finished() {
+        assert!(Instant::now() < deadline, "the click was never heard");
+        notifications
+            .emit_signal(
+                None::<&str>,
+                "/org/freedesktop/Notifications",
+                "org.freedesktop.Notifications",
+                "ActionInvoked",
+                &(id, "default"),
+            )
+            .expect("click");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(heard.join().expect("join"));
 }

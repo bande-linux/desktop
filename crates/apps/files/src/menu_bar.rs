@@ -1,4 +1,4 @@
-use bande_app_menu::{Entry, app_submenu, close_window, window_submenu};
+use bande_app_menu::{Entry, app_submenu, close_window, settings, window_submenu};
 use bande_files::{FilesView, L10N};
 use bande_toolkit::ui::{Event, parse_shortcut};
 
@@ -24,7 +24,7 @@ fn titled(title: Option<String>, message: &str, keys: &str) -> Entry {
 
 pub fn app_menus(view: &FilesView) -> Vec<Entry> {
     vec![
-        app_submenu(&L10N.tr("app-name"), Vec::new()),
+        app_submenu(&L10N.tr("app-name"), vec![settings()]),
         submenu(
             "menu-file",
             vec![

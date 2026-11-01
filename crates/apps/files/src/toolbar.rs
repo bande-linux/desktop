@@ -18,7 +18,6 @@ const SEARCH_WIDTH: f32 = 240.0;
 const MIN_SEARCH_WIDTH: f32 = 140.0;
 const SYMBOL_PIXELS: u32 = 32;
 const SYMBOL_SEGMENT: f32 = 32.0;
-const MODES: [ViewMode; 3] = [ViewMode::Icons, ViewMode::List, ViewMode::Columns];
 
 pub(crate) struct Toolbar {
     pub(crate) back: WidgetId,
@@ -92,7 +91,7 @@ impl FilesView {
                     .map(|image| (image, L10N.tr(title)))
             })
             .collect::<Option<Vec<_>>>();
-        let selected = MODES.iter().position(|mode| *mode == self.mode);
+        let selected = ViewMode::ALL.iter().position(|mode| *mode == self.mode);
         let label = L10N.tr("view-label");
         let select = move |index| send(Signal::View(index));
         match symbols {
@@ -105,14 +104,14 @@ impl FilesView {
     }
 
     pub(crate) fn view_chosen(&mut self, index: usize) {
-        if let Some(mode) = MODES.get(index).copied() {
+        if let Some(mode) = ViewMode::ALL.get(index).copied() {
             self.set_mode(mode);
         }
     }
 
     pub(crate) fn refresh_view_control(&mut self) {
         let enabled = self.searching.is_none();
-        if let Some(wanted) = MODES.iter().position(|mode| *mode == self.mode) {
+        if let Some(wanted) = ViewMode::ALL.iter().position(|mode| *mode == self.mode) {
             self.ui
                 .update_widget(self.toolbar.view, |control: &mut SegmentedControl, cx| {
                     control.set_selected(cx, wanted);
@@ -149,7 +148,7 @@ impl FilesView {
         let back_x = window_controls_area(TOOLBAR_HEIGHT).width + CONTROLS_GAP;
         let button_y = centred(BUTTON_HEIGHT);
         let right = self.size.0 - TRAILING_INSET;
-        let view_width = MODES.len() as f32 * SYMBOL_SEGMENT;
+        let view_width = ViewMode::ALL.len() as f32 * SYMBOL_SEGMENT;
         let room = right - (back_x + 2.0 * BUTTON_HEIGHT + 120.0 + view_width + ITEM_GAP);
         let search_width = SEARCH_WIDTH.min(room).max(MIN_SEARCH_WIDTH);
         let search_x = right - search_width;

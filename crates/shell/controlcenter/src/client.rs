@@ -329,7 +329,7 @@ impl ControlCenter {
             self.dismiss(window);
             return;
         }
-        report("join the network", network.join(&found, None).map(|_| ()));
+        bande_status::captive::join_network(network, &found);
     }
 
     fn apply(&mut self, window: &mut Window, change: Change) {

@@ -2,9 +2,7 @@
 
 Status: adopted by the owner on 2026-10-30 (app menus: cascade from the app header, option A). Implementation order: `docs/roadmap.md`, wave D.
 Name: since 2026-11-01 people see this bar as the **Taskbar** (Settings ▸ Taskbar, "Keep in Taskbar"), and the side strip in the separate-menu-bar layout is the taskbar too. This page says "bar" for the same thing; "today's Dock" means the separate Dock that came before it. The config key stays `bar { … }` and the D-Bus properties stay `BarApps`, `BarEdge` and so on.
-Mockups: `../bar/` (SVG + PNG; regenerate with
-`python3 generate.py <outdir>` and any SVG renderer; the PNGs were drawn with resvg 0.49, the
-version the workspace pins).
+The proposal's mockups were removed on 2026-11-01; the bar's goldens (`crates/shell/bar/tests/golden/`) show what was built.
 
 Shortcuts below are the proposal's. The shipped chords follow GNOME and KDE (Ctrl in apps, Super
 only for the system, [decision 0005](../../decisions/0005-ctrl-for-app-shortcuts.md)); the
@@ -103,7 +101,7 @@ the design-language draft, is the fallback below 56 pt width). A 12-hour locale 
 | Material | translucent with blur (`ext-background-effect-v1`), today's Dock/menu bar material; shadow on the content side, no border line |
 
 **Attached or floating.** The mockups draw the bar attached to the edge, full height. The
-design-language draft (`../datum/window-light.png`) draws a floating rounded rail with a
+design-language draft drew a floating rounded rail with a
 6 pt gap; both satisfy Fitts's law if, as today's Dock already does, the input region covers the
 gap to the screen edge and the two corner items extend their hit area into the screen corners. The
 floating form fits the draft's language; pick it if the draft is adopted, but keep the corner hit
@@ -111,7 +109,7 @@ areas.
 
 ### 3.3 App menus in the bar (the hard part)
 
-Three approaches were drawn (`03-app-menu-alternatives.png`):
+Three approaches were drawn:
 
 **A. Cascade from the app header (recommended as the primary path).** The header is the active
 app. A click (or `Super+F2`) opens **one** menu beside the bar, top-aligned with the header:
@@ -176,7 +174,7 @@ client-side decorated apps and fights the title bar); **hover-to-reveal menus** 
 discoverability failure).
 
 **Horizontal bar.** At the top or bottom the header becomes today's menu bar: bold app name then
-the menu titles inline (`04-desktop-bottom.png`). When the titles do not fit (narrow screens, many
+the menu titles inline. When the titles do not fit (narrow screens, many
 apps), they collapse into the header button and A's cascade, from the right-most title inward, so
 "Help" and "Window" go first.
 
@@ -191,7 +189,7 @@ Pinned, not hover. Hover-expanding sidebars move targets under the pointer and c
 (the reason the Dock spec rejects magnification). The collapsed bar keeps today's hover labels.
 Expanded is entered by dragging the bar's inner edge outward (snaps between 64 and 248), by the
 bar's background menu ("Show Names"), or in Settings. It reserves its width; windows reflow.
-Recommended on ≥ 2560 pt-wide screens (`07-wide-3440x1440.png`); the first-run assistant can
+Recommended on ≥ 2560 pt-wide screens; the first-run assistant can
 suggest it there, not force it.
 
 ### 3.5 Panels slide out of the bar
@@ -200,10 +198,10 @@ Launcher stays centred (it is a search, not a menu). Everything else opens from 
 owns it, on the content side, with an 8 pt gap, aligned to the item and kept on screen:
 
 - **App menu** — top-aligned with the header.
-- **Control Center** — bottom-aligned with the status button (`06-small-1366x768.png`). Its first
+- **Control Center** — bottom-aligned with the status button. Its first
   row gains the person: avatar and name, Lock, Power (menu: Sleep, Restart…, Shut Down…, Log
   Out…) and Settings, so session actions are reachable without the right-click system menu.
-- **Notification Center** — full-height sheet beside the bar (`08-notification-center.png`),
+- **Notification Center** — full-height sheet beside the bar,
   sliding out of the bar edge with the `standard` spring.
 - **Banners** follow one rule with the panels: everything opens from the clock corner. On a
   side bar they stack up beside the bar from the clock's end, newest nearest the clock, slide out
@@ -375,27 +373,11 @@ bar {
 
 ## 7. Fit with the design-language research
 
-`research/design-language.md` did not exist when this was written; its mockups in
-`../datum/` did. They already draw a **left rail** combining apps, Trash, Wi-Fi, battery
-and a stacked clock (`window-light.png`) — the same direction. Differences to reconcile: the
+`research/design-language.md` did not exist when this was written; its mockups
+did. They already drew a **left rail** combining apps, Trash, Wi-Fi, battery
+and a stacked clock — the same direction. Differences to reconcile: the
 draft's rail is floating with circular icons and no app header or menus; this proposal adds the
 header + cascade and the grouped Control Center button, and recommends keeping the floating
 form only with edge-reaching hit areas (§3.2). The draft's grouped window controls pill at the
 window's top left sits right of the header in the left bar, which keeps menu and window controls
 close together.
-
-## 8. Mockups
-
-All in `../bar/` (SVG source + PNG):
-
-| File | Shows |
-|---|---|
-| `01-desktop-left-collapsed` | 1920×1080, 64 pt bar: mark, Files header, apps with badges, Trash, workspaces, tray, Control Center button, clock with unread dot |
-| `02-desktop-left-expanded` | 1920×1080, 248 pt pinned bar: search field, app menus as rows, apps with names and window rows, desktops, status row, full date |
-| `03-app-menu-alternatives` | A cascade from the header (recommended), B rows in the expanded bar, C menu search `Shift+Super+/` |
-| `04-desktop-bottom` | Horizontal 56 pt bar at the bottom with inline menu titles |
-| `05-status-detail` | The bottom group collapsed (annotated) and expanded |
-| `06-small-1366x768` | Small screen: smaller cells, "+5" overflow, tray "•••", Control Center open from the status button with user/lock/power row |
-| `07-wide-3440x1440` | Ultrawide with the expanded bar and four tiled windows |
-| `08-notification-center` | Notification Center sliding out beside the bar from the clock |
-| `generate.py` | Generator for all of the above |

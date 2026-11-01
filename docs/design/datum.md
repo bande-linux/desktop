@@ -1,7 +1,7 @@
 # Datum: a design language for Bande
 
 Status: adopted by the owner on 2026-10-30. Implementation order: `docs/roadmap.md`, wave D.
-Mockups: `datum/` (SVG and PNG, rendered with resvg 0.49 from the workspace's own dependency). The generator scripts are in `datum/src/`, so every value below is the value used in the pictures.
+The exploration mockups were removed on 2026-11-01 once the language was built; the goldens under `crates/**/tests/golden/` are the current renders. `datum/src/colors.py` keeps the OKLCH and contrast maths behind the tables below.
 
 > **Datum**: a fixed reference point that everything else is measured from.
 > **Quiet surfaces. One signal. Exact edges.**
@@ -234,7 +234,7 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 
 ---
 
-## 9. Controls (see `controls.png`)
+## 9. Controls (golden `crates/toolkit/widgets/tests/golden/controls-*.png`)
 
 | Control | Spec |
 |---|---|
@@ -263,7 +263,7 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 ## 10. Iconography
 
 > **Owner's amendment (2026-10-30):** app icons are **rounded squares**, as in
-> `bar/01-desktop-left-collapsed.png`, not discs, and the bar's tool, status and tray icons follow
+> the bar mockup the owner picked (now implemented by the icon theme in `data/icons/`), not discs, and the bar's tool, status and tray icons follow
 > that mockup's richer, more developed style rather than the minimal outline set below. The
 > "Disc" and "Symbols" paragraphs are superseded where they conflict; the file and folder rules
 > stay. Concretely: app icons are a rounded square on a 48 grid (44 pt body, circular-arc corners
@@ -303,7 +303,7 @@ A dry, short, *wooden-percussive* palette: soft-attack mallet and click tones un
 
 ## 13. The shell: the combined bar
 
-The combined-bar mockups (`research/combined-bar/*.png`) put an edge-anchored bar of 64 pt on the left (expandable to 248 with labels) holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
+The combined-bar mockups (not kept) put an edge-anchored bar of 64 pt on the left (expandable to 248 with labels) holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
 - Bar surface = `chassis` (same tone as window frames, so the bar reads as the desktop's frame), with a 1 pt `edge` on the inner side only, square at the screen edge. It is opaque; "Tinted chassis" applies here too.
 - **Active app = a 3×16 accent tick** on the screen-edge side; **running = a 3×3 `ink2` square** (the square motif; a dot would be macOS). The expanded bar's app rows use the sidebar row spec (28/32 pt, `well` selection radius 6).
 - The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 14 panels).
@@ -312,22 +312,11 @@ The combined-bar mockups (`research/combined-bar/*.png`) put an edge-anchored ba
 - Bar pop-overs (Control Center, calendar, notifications) are `overlay` panels with radius 14 that slide out from the bar along its normal axis (`standard`).
 - Horizontal placement uses the same rules with the tick on the bottom edge.
 
-`window-light.png` and `window-dark.png` show a collapsed bar in this language next to a Files window.
-
 ---
 
 ## 14. Mockups
 
-All in `datum/`:
-
-| File | Shows |
-|---|---|
-| `window-light.svg/.png`, `window-dark.svg/.png` | 1280×800 desktop: collapsed combined bar, Files window with frame + sheet, left window controls, flush-left Manrope title, sidebar symbols, accent selection (inverted text in dark), tracked column labels |
-| `controls.svg/.png` | Window controls (rest / hover / inactive), buttons, fields, switch, checkbox, square-centred radio, segmented, pop-up, stepper, fader sliders, segmented progress, tooltip, badge, status squares, selection states; light and dark |
-| `overlays-light.svg/.png`, `overlays-dark.svg/.png` | Context menu with Super-glyph shortcuts and a submenu, an alert with a footer tray, a notification |
-| `icons.svg/.png` | Six Disc app icons and six Sheet+label file and folder icons, at 72 and 20 pt, on light and dark |
-| `sheet.svg/.png` | Colour and type sheet: neutrals, accents, semantics, type scale, radii, concentric rule, spacing, elevation, motifs |
-| `src/*.py` | Generators (`colors.py` holds the OKLCH → hex and contrast maths) |
+The mockups this section listed were removed on 2026-11-01: the built desktop has replaced them, and the goldens under `crates/**/tests/golden/` (light and dark) show it. `datum/src/colors.py` holds the OKLCH → hex and contrast maths.
 
 ---
 
@@ -341,7 +330,7 @@ Create **`crates/toolkit/design`** (crate `bande-design`, no dependencies beyond
 - `type_scale.rs`: `TextRole::{Display, Title, Heading, WindowTitle, Body, BodyStrong, Callout, Label, Mono}` → family, size, line height, weight, tracking, features.
 - `elevation.rs`: `Elevation::{Frame, Overlay, Modal}` → shadow pair per scheme; scrim.
 - `contrast.rs` + tests: WCAG and APCA checks over every generated palette and accent (this is a real domain test that fails when a token change breaks legibility).
-- `docs/design/language.md` in the repo: this document, trimmed to the rules, with the mockups.
+- `docs/design/language.md` in the repo: this document, trimmed to the rules.
 
 ### Order of work (each step ships with updated goldens, light and dark, 1× and 1.5×)
 1. **Tokens.** Expand `Palette` and add `Radius`, `TextRole` and `Elevation`. Keep the old field names as the first users migrate, then delete them in the same branch (no dead code).

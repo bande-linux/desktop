@@ -20,3 +20,4 @@ sign-in-to = Sign in to { $network }
 sign-in-to-network = Sign in to the network
 sign-in-body = This network asks you to sign in before you can use the internet.
 sign-in = Sign In
+join-failed = Could not join { $network }

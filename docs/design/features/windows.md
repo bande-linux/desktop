@@ -13,7 +13,7 @@ gestures to move, resize, arrange, hide and find it again. Each gesture is anima
 be interrupted. The basics need no explanation and no setting. Power features (tiling,
 workspaces, the overview) are one modifier, one right-click or one shortcut away.
 
-Current state (`docs/parity.md`, `NOTES/backlog.md` M15, M26): the compositor has xdg
+Current state (`docs/parity.md`): the compositor has xdg
 move and resize grabs, zoom into the area outside exclusive zones, full screen
 (`Ctrl+Super+F`), minimize, `Super+W`, `Super+Q` and `Super+Tab` without an overlay. None of
 these is animated. Title bars are client-side for our toolkit and for GTK windows with a

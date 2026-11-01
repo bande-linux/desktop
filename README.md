@@ -21,7 +21,7 @@ Bande is early and not yet a daily driver.
   all exist in a basic form.
 
 [`docs/parity.md`](docs/parity.md) tracks each feature against macOS, and
-[`NOTES/backlog.md`](NOTES/backlog.md) lists the milestones.
+[`NOTES/gaps.md`](NOTES/gaps.md) with [`NOTES/plans/`](NOTES/plans/) holds the open work.
 
 ## Workspace
 

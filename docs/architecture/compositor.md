@@ -68,7 +68,7 @@ when they reach the screen is Bande's own.
   `DrmCompositor` can scan them out. A dma-buf is imported once as a Vulkan buffer and its
   damaged rows are copied into the surface's texture, so any stride works on drivers without
   `VK_EXT_image_drm_format_modifier`. Explicit sync (`linux-drm-syncobj-v1`) is built; its guest
-  tests do not pass yet (`NOTES/backlog.md`).
+  tests do not pass yet.
 - **DRM backend.** `bande-compositor` opens the first card with a connected connector (or
   `--drm-device`) through a libseat session and drives every connected connector on its own
   CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into GBM

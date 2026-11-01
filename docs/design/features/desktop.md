@@ -13,7 +13,7 @@ Desktop folder, and it is the place where screenshots and drops land. In Bande i
 calm, mostly empty place. Files on it behave exactly as they do in Files, and everything
 on it can be reached with a right click or from the keyboard.
 
-Current state (`docs/parity.md`, `NOTES/backlog.md`): the background is a flat colour.
+Current state (`docs/parity.md`): the background is a flat colour.
 There are no desktop icons and no desktop right-click menu. The lock screen and greeter
 have no wallpaper. Screenshots already save to the XDG Desktop folder (M18), so the
 desktop surface is needed before users can see them without opening Files.

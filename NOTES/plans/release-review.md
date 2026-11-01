@@ -1,0 +1,102 @@
+# Pre-release review (v0.1.0), 2026-11-01
+
+A read of the whole workspace before the first release: crash risks reachable from clients or files,
+security boundaries, error swallowing, missing timeouts, dead features and dead code. Each finding was
+traced end to end (caller, input, guards upstream) before it was listed. Fixes landed on
+`review/release`; every fix that could be tested has a test that fails without it.
+
+Severity: **critical** = lock-screen bypass or session-wide compromise; **high** = a client, file
+or volume can hang or crash a session component, run code, or delete data; **medium** = wrong
+behaviour, unbounded growth or a weaker boundary than documented; **low** = edge cases, hygiene.
+
+Counts: 4 critical, 11 high, 27 medium, about 53 low. Fixed: 26 (3 critical, 8 high, 10 medium, 5 low).
+
+## Fixed
+
+| Sev | Where | Finding | Commit |
+| --- | --- | --- | --- |
+| critical | compositor `popup.rs` | Any app could send `xdg_popup.grab` while the session was locked and take the keyboard from the lock surface (the grab path set focus directly, skipping the lock redirect), so the password went to the app. Grabs are refused while locked. | `c468b8a2` |
+| critical | compositor `input.rs` (smithay input-method grab) | Any client could bind `zwp_input_method_v2` and `GrabKeyboard`; smithay's grab forwards every key to it whatever has focus, the lock password included, and the lock surface got nothing. While locked, keyboard grabs are dropped before a key is delivered. | `c468b8a2` |
+| critical | compositor `keyboard_monitor.rs` | `org.freedesktop.a11y.KeyboardMonitor` accepted any session-bus caller: `WatchKeyboard` logged every key including the lock password, `GrabKeyboard` swallowed all keys. Only the owner of `org.gnome.Orca.KeyboardMonitor` is served now, as in Mutter. | `b42459ce` |
+| high | portal `screenshot.rs`, `screencast.rs` | The `impl.portal` backend trusted `permission_store_checked` and forged `restore_data` from any caller, so any unsandboxed client could capture the screen silently through `org.bande.Screenshot`'s portal trust. Both are honoured only from the owner of `org.freedesktop.portal.Desktop`. | `53a3dff6` |
+| high | greeter `accounts.rs` | The pictures folder is `3733`, so any local user could put a FIFO at `<uid>`; the greeter's blocking `open` then hung before the login window appeared. Opened with `O_NONBLOCK`. | `9ce07e85` |
+| high | toolkit `graphics/scene.rs` (`Image::load`) | Notification `app_icon`/`image-path`, MPRIS art and SNI icon paths are client strings; `/dev/zero` read until OOM, a FIFO hung the shell. Images are read only from regular files under 16 MiB, non-blocking. (Decoding still runs on the UI thread, see below.) | `17f58b38` |
+| high | compositor `window.rs` | `set_window_geometry` is unvalidated in smithay; a 2^31 width on a server-decorated window made the title bar rasteriser allocate hundreds of GB and abort the compositor. The geometry is clamped to the surface tree, as xdg-shell specifies. | `22a8c44a` |
+| high | catalog `dep11.rs` | After a YAML syntax error serde_yaml_ng returns the same error document forever, and the `continue` arm spun Software at 100% CPU before its window opened. Parsing stops at a repeated error. | `344b12a0` |
+| high | xdg `mime.rs` | `for_path` opened files to sniff them on the Files UI thread during paint; a FIFO without an extension froze Files. FIFOs, sockets and devices are named by kind (`inode/fifo`, ...) and sniffing opens non-blocking. | `fd357760` |
+| medium | preview `lib.rs` | The same FIFO hung the single preview loader thread, and with it every later preview and folder size. Non-regular files preview as Other; decoding has a 256 MiB allocation limit. | `fd357760` |
+| high | xdg `apps.rs` (`launcher`) | Double-clicking any `.desktop` file in Files or on the desktop ran its `Exec` (a launcher in Downloads, an archive, a USB stick). Only entries in an `applications` data dir, or owned by the user with an executable bit, launch now; others open with the default app. | `2671d5d9` |
+| high | fs `trash.rs` | Volume trash folders were trusted without link or owner checks: a stick with `.Trash-1000/files -> ~` made Empty Trash delete home folders, and Put Back moved real folders. A volume trash is used only when its root, `files` and `info` are real folders the user owns (and `.Trash` is not a link). | `24b4e9e1` |
+| medium | compositor `layer` namespaces (`handlers.rs`) | Any app could name its layer `menubar`/`bar`/`taskbar` and get panel placement, whole-screen popups and the Super+F2/F3 focus. Non-shell layers get an `app/` prefix. | `04274fc5` |
+| medium | polkit `main.rs` → new `bridge.rs` | A request cancelled by polkitd while waiting behind another dialog later took the dialog and then left `active` set forever, so every later authentication hung; identical requests compared equal. Requests carry their cookie, a waiting request is withdrawn on close, and close always runs. Bridge moved to the library with a test. | `e82ecc90` |
+| medium | compositor `displays.rs` | A window menu open on a display that is unplugged kept a stale screen index; the next Right arrow or submenu hover indexed `screens` out of range and crashed the compositor. The menu closes when displays change. | `b583eab2` |
+| medium | toolkit widgets `editor/mod.rs` | A screen reader `SetTextSelection` during IME composition stored a layout offset past the real text; the next edit panicked the app. Refused while composing; run ranges are bounds-checked. | `fe22a994` |
+| medium | notify `center.rs` | `expire_timeout=0` notifications accumulated forever (memory and `PresentationChanged` size). At most 200 are kept; the oldest are closed. | `2a577413` |
+| medium | notifications `client.rs` | The icon cache keyed by client strings was never pruned. Bounded like the picture cache. | `d8707562` |
+| medium | compositor `management.rs` | `wlr-output-management` `SetScale` accepted any positive value (inf, near zero). Limited to the Settings range (`SCALE_RANGE`). | `4a178c8f` |
+| medium | taskbar-model `bus.rs` | A NaN `progress` from any `LauncherEntry` sender kept the taskbar spring animating forever. Non-finite progress is ignored. | `55dbef13` |
+| medium | terminal / toolkit `Window::set_title` | OSC 0/2 titles are unbounded; a title over the Wayland message size would get the terminal disconnected with all its tabs. Titles are capped at 1 KiB on a char boundary. | `2f5dad8b` |
+| low | search `calc.rs` | A long run of `(` or `-` pasted into the launcher recursed until the shell's stack overflowed. Input over 256 tokens is not a calculation. | `cc28a40f` |
+| low | toolkit `presentation.rs` | `now + (at - clock)` and `Duration::new` panicked on a far-future presentation time. Saturating. | `4a8ee9b2` |
+| low | installer `deb.rs`, status `tray.rs` | `Installed-Size * 1024`, tray `width * height * 4` and `(width - 32).abs()` overflowed on crafted values. Saturating/checked. | `4a8ee9b2` |
+| low | greeter `Cargo.toml` | Unused `jiff` and dev `rustix`. Removed. | `102e3c9e` |
+| low | `bande-session`, docs, ci | "an Bande" left from the rename (one shown to users). Fixed. lock `Cargo.toml` said Control-Super-Q; it is Super+L. | `102e3c9e` |
+
+## Not fixed
+
+### Critical / high, need a design decision
+
+- **critical — virtual keyboard and input method are open to every client** (`state/globals.rs:127`, filters `|_| true`). Fixed above for the lock screen's keys, but outside the lock any client (Flatpak included) can bind `zwp_input_method_v2` and read every key, and `zwp_virtual_keyboard_v1` types into the focused surface, including the lock surface (password guessing) and terminals. Fcitx5/IBus need both globals, so a plain shell-only filter would break them. Recommendation: implement `wp_security_context_v1` (smithay has it) and refuse these globals, layer-shell Overlay/Exclusive, output management and output power to sandboxed clients; and drop virtual-keyboard keys while locked (needs a wrapper around smithay's dispatch, which has no hook).
+- **high — Control Center blocks the shell's UI thread on D-Bus** (`controlcenter/src/client.rs:170-400`): about ten synchronous NetworkManager/BlueZ/logind/notify round trips per panel rebuild, no timeouts; a hung NetworkManager freezes bar, launcher, notifications and desktop together. Same class: tray/dbusmenu calls in `status/tray.rs`, `low_memory.rs:451` `force_quit`. No connection in the workspace sets `method_timeout`. Move to worker threads with an inbox (as `follow_devices` does) and set method timeouts. Reported to the performance agent as well.
+- **high — images are still decoded on the shell UI thread** (notifications, MPRIS art, SNI icons): the size cap above bounds it, but a 16 MiB cover still stalls the shell per track change. Decode on a worker.
+- **high — the last display is never removed and a reconnect on the same connector keeps the old config** (`displays.rs:240, 302`): swapping the monitor on one connector keeps the old mode (DRM renders at the old size), and moving the only display to another connector leaves the dead one as the main screen, so the lock screen's password field can land on the invisible output. Needs a placeholder screen and identity-aware replacement; hardware-dependent, test on the mini.
+- **medium — any shell-role client can unlock the session** (`lock.rs:185-237`): a second `ext_session_lock_v1` from any `SessionRole::Shell` client (shell, screenshot, dialogs, review) can send `unlock_and_destroy`; smithay calls `unlock()` without saying which lock. Give bande-lock its own role and filter the lock global to it.
+- **medium — `org.bande.Clipboard` serves seven days of history to any bus caller** (`clipboard/src/bus.rs:35`). Same-user unsandboxed processes can read the on-disk history anyway; Flatpak apps need an explicit talk permission. Restrict to the shell when the shell owns a bus name.
+- **medium — clipboard daemon reads offers one MIME at a time on its only loop** (`clipboard/src/main.rs:248`): no total deadline and no MIME count cap, so a client offering many silent MIME types stalls pastes; `pipe()` EMFILE ends the daemon. Low: an offer whose password-hint MIME timed out is recorded to disk (`main.rs:201`); undecodable and `.partial` history files are never deleted (`history.rs:121`).
+
+### Medium
+
+- compositor: `config.kdl` read/parse errors silently become defaults and are applied mid-session (`main.rs:149`, `input_settings.rs:84`); keep the last good config and alert.
+- compositor: `wlr-output-management` `SetMode` accepts another head's mode and `use_mode` returning `Ok(false)` is silent (`management.rs`, `main.rs:187`). No test client for the protocol yet.
+- render: `vkCreateImage` gets client sizes above `maxImageDimension2D` (`render/src/import.rs:93`, `lib.rs:742`); reject in `create_texture`.
+- toolkit clipboard: paste/drop reads have no size cap, no timeout and readings never expire (`platform/src/clipboard.rs:333, 487`).
+- notify: `rule_for` remembers every new `app_name` forever and rewrites `notification-apps` each time (`lib.rs:574`); cap apps without a user rule.
+- fs: the shared `.Trash/$uid` path is checked now, but `Path=` in a volume `.trashinfo` may be absolute or contain `..`, so Put Back can create files anywhere the user can write (`trash.rs:122`, low).
+- fs `listing.rs:184`: paths are built from the lossy UTF-8 name, so non-UTF-8 names cannot be opened, copied or trashed; use `DirEntry::path`.
+- thumbnails `generate.rs:182`: decoding without `Limits` (512 MiB default each, three at once, `panic = "abort"` in dist).
+- volumes `eject.rs:44`: a busy eject only logs; the user may pull a mounted drive.
+- Settings: the Variable refresh rate switch writes a key nothing reads; the compositor has no VRR. Remove the row or implement VRR (touches files the taskbar-options agent is changing).
+- bar `menu_bar_client.rs:488`: the tray icon cache is keyed by the Debug text of the pixel buffer and never pruned; animated tray icons grow it.
+- desktop `client.rs:306, 898` [taskbar agent's area]: the desktop keeps the bar edge and icon size from when it was created.
+- desktop `client.rs:785` / wallpaper `choice.rs:71`: a configured wallpaper that is missing never falls back to the default, and a failed load is never retried (removing it from `pending` naively would reload in a loop).
+- keyboard `layouts.rs:68, 112`: an XML or read error gives an empty layout list with no log.
+- greeter/config `login_picture.rs:32`: `SetWallpaper*` copies any readable file into the greeter folder (readable by `_greetd`); another local user can squat `<uid>` so the rename always fails (logged at info). Share only files that decode as images; log at warn.
+
+### Low
+
+- compositor: `access_keys.rs:182` leaks a thread per Shift-five-times prompt; `recall.rs:44` takes app_ids with tabs/newlines unescaped and never prunes entries; blocking D-Bus calls without timeouts at startup (`main.rs:405`, `environment.rs:204`); `output_power` open to all and controls not pruned on destroy; `constraint.rs:146` cursor hint unbounded; `bande_app_v1.show_emoji_picker` accepted from any client at any time; `keyboard_shortcuts_inhibit` inhibitors are activated without consent.
+- docs `compositor.md` protocol matrix: pointer constraints, relative pointer and shortcut inhibit are implemented, not "not implemented"; `bande_shell_v1`/`bande_app_v1` versions are 1; input method and virtual keyboard need the trust caveat.
+- toolkit: configure-wait loops ignore `closed` (`layer.rs:118`, `window/mod.rs:419, 1093`); a keymap that fails to compile is ignored silently (`seat.rs:511`); a read error ends a paste as if complete (`clipboard.rs:499`); clipboard `send` threads block on `write_all` without a deadline (`clipboard.rs:884`); preedit cursor offsets vs normalised text (`keys.rs:310`, cosmetic).
+- lock: PAM info/error messages are dropped and an expired account looks like a wrong password (`lock/src/main.rs:47`).
+- polkit: `getent passwd` runs synchronously in the async handler (`agent.rs:166`).
+- notify: `read_apps` treats any read error as an empty file, then overwrites the user's rules; the write is not atomic (`lib.rs:316`).
+- config `service.rs:63`: `replace()` does not fsync, does not keep the old mode and replaces a symlinked `config.kdl` with a file.
+- network: `replace_password` overwrites a saved PSK before it is verified (`lib.rs:333`); `wait_for_activation` has no deadline (`lib.rs:437`).
+- installer: the previewed `.deb` is re-read by PackageKit at install time (TOCTOU by a same-user process; copy into a private folder).
+- tray `lib.rs:122`: register-then-disconnect race leaves an item; sound: unlimited `Play` streams, non-drained streams never removed (`audio/graph.rs:451`); power: no per-client `Inhibit` cap (`screensaver.rs:120`).
+- Software `worker.rs:59`: the removal confirmation omits `Obsoleting` packages.
+- catalog `xml.rs:66`: description XML errors become an empty description; DEP-11 document errors log at debug only.
+- volumes `mounts.rs:31`: lossy mount-point unescape; watch `lib.rs:118`: `IN_Q_OVERFLOW` ignored; status `session.rs:254`: full name read from `/etc/passwd` instead of NSS.
+- fs: trashing a name over 245 bytes always fails (`.trashinfo` exceeds NAME_MAX); `archive.rs:375` skips unsafe zip names without a failure; rename/move check-then-rename can overwrite (`ops.rs:756`, use `RENAME_NOREPLACE`).
+- terminal `session.rs:96`: replies to a program that never reads stdin grow without bound.
+- file-chooser `model.rs:42`: exponential `*` backtracking; reuse `xdg::mime::wildcard_match`. xdg `launch.rs:185`: field codes inside an argument (`--file=%f`) are dropped.
+- screenshot `main.rs:303`: the shutter plays before the shot and failures are silent; desktop rename/new-folder errors only log; Settings shows a change as saved when its worker could not connect (`follow.rs:252`); bar app-menu titles and nodes count differently when the first child is invisible (`menu_bar_client.rs:266`); taskbar `launcher` map grows from spoofed LauncherEntry ids; `Context::config()` drops errors (`shell/shell.rs:51`).
+- Dead code: `packages::details_local`, spacing `XXL`/`XXXL`, the `Command::Reveal(_) => false` arm in Settings `follow.rs:375`; test-only pub fns in Settings; 13 binary crates listed in `[workspace.dependencies]` that nothing depends on; clipboard's direct `wayland-backend` dependency is probably redundant.
+
+## Performance notes (for the performance audit)
+
+Notify sends the whole presentation, pixels included, on every change; Software parses the catalogue on the main thread before its window; the tray refetches every item serially on each signal; `mime_for` reads files on the Files UI thread; `Trash::is_empty()` rereads `/proc/self/mounts` after every operation; `Layouts::load` parses evdev.xml on UI threads; the taskbar scans the trash on the UI thread; `idle_tick` rebuilds stacks every loop while an idle inhibitor exists; the cursor cache reloads on crossing displays of different scale; the largest staging buffer stays allocated for the session; `cascade`/`window_index` are linear per commit.
+
+## Checked and sound
+
+The `is_shell` trust (socket pairs only, `WAYLAND_SOCKET` not inherited); capture, foreign-toplevel, session-lock and data-control globals; move/resize/menu serials; lock-client crash keeps the session locked and blank; greeter starts only `bande-session`; polkit accepts calls only from polkitd and switches only to listed identities; PAM buffers are zeroised; notify `image-data` parsing is bounds-checked; Exec splitting never uses a shell; `remove_all` does not follow links; zip extraction refuses paths through links; Activity Monitor signals by pidfd with a start-time check; no `unwrap`/`expect`/`todo!` in production code; packaging assets and Exec lines all resolve.

@@ -16,5 +16,5 @@ remove the ability to drag out the taskbar into the wide state. That looks bad a
 Status: finished ([plans/taskbar-width-and-options.md](plans/taskbar-width-and-options.md)); the wide taskbar and Show names are removed (old configs still load); the options inventory lists six further removals and merges that wait on the owner
 
 UI polish: the ui needs to be polished and improved in some ways. Like the restart window. Is way to large and looks hacky. Go over the OS and make sure each view/item/panel is professional, clean and modern looking.
-Status: started ([plans/ui-polish.md](plans/ui-polish.md)); audit done, M1 (restart/shut down/log out as a compact alert dialog, dialogs no longer borrow remembered frames) finished; M2-M6 (other prompts, polkit, app alerts, consistency) left
+Status: started ([plans/ui-polish.md](plans/ui-polish.md)); M1-M4 finished (the restart/shut down/log out confirmation, pairing, Low Memory and About as compact fixed dialogs; polkit fitted; Package Installer and Terminal confirmations), M5 consistency partly done, M6 waits for the other agents' surfaces
 

@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
 use bande_notify::{
-    BANNER_DURATION, BANNER_LINGER, Center, HiddenBanner, Invoked, Notification, Stack, Timeout,
-    Urgency,
+    BANNER_DURATION, BANNER_LINGER, Center, HiddenBanner, Invoked, MAX_NOTIFICATIONS, Notification,
+    Stack, Timeout, Urgency,
 };
 
 const MOMENT: Duration = Duration::from_millis(1);
@@ -472,4 +472,17 @@ fn a_full_screen_app_keeps_banners_off_screen_but_lets_critical_ones_through() {
     center.post(from("Chat", "After"), Timeout::ServerDefault, start);
     assert!(!center.presentation().full_screen);
     assert_eq!(center.presentation().banners.len(), 2);
+}
+
+#[test]
+fn the_oldest_notifications_make_room_when_the_center_is_full() {
+    let start = Instant::now();
+    let mut center = Center::default();
+    let first = center.post(from("Spam", "0"), Timeout::Never, start);
+    for index in 1..=MAX_NOTIFICATIONS {
+        center.post(from("Spam", &index.to_string()), Timeout::Never, start);
+    }
+
+    assert_eq!(center.advance(start), [first]);
+    assert_eq!(center.notifications().count(), MAX_NOTIFICATIONS);
 }

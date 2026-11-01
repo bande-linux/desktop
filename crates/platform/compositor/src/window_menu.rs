@@ -423,6 +423,10 @@ impl State {
         self.needs_redraw = true;
     }
 
+    pub(crate) fn drop_window_menu(&mut self) {
+        self.window_menus.open = None;
+    }
+
     pub(crate) fn dismiss_window_menu(&mut self) {
         let Some(open) = self.window_menus.open.as_mut().filter(|open| !open.closing) else {
             return;

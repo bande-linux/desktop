@@ -78,3 +78,29 @@ fn a_symbolic_icon_takes_the_colour_it_is_tinted_with_and_keeps_its_shape() {
         assert_eq!(pixel, expected, "pixel {row}");
     }
 }
+
+#[test]
+fn a_fifo_or_an_oversized_file_gives_no_image_without_blocking() {
+    let dir = TempDir::new().expect("dir");
+    let fifo = dir.path().join("icon.png");
+    let name = std::ffi::CString::new(fifo.to_str().expect("path")).expect("path");
+    assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+    let huge = dir.path().join("huge.png");
+    fs::File::create(&huge)
+        .expect("file")
+        .set_len(1 << 30)
+        .expect("length");
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        sender.send((
+            Image::load(&fifo, 32).is_none(),
+            Image::load_symbolic(&fifo, 32, Color::hex(0x000000)).is_none(),
+            Image::load(&huge, 32).is_none(),
+        ))
+    });
+    assert_eq!(
+        receiver.recv_timeout(std::time::Duration::from_secs(5)),
+        Ok((true, true, true))
+    );
+}

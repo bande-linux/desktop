@@ -256,15 +256,6 @@ impl Widget for Authorization {
                 .measure(cx, Size::new(text_width, available.height))
                 .height
         });
-        let reserved = cx
-            .text
-            .paragraph(
-                " ",
-                TextStyle::role(TextRole::Callout, cx.palette.ink2),
-                Some(text_width),
-                TextAlign::Start,
-            )
-            .height();
         let note = self.note.as_ref().map(|note| {
             let (text, color) = match note {
                 Note::Info(text) => (text.as_str(), cx.palette.ink2),
@@ -277,10 +268,7 @@ impl Widget for Authorization {
                 TextAlign::Start,
             )
         });
-        self.note_height = note
-            .as_ref()
-            .map_or(reserved, Paragraph::height)
-            .max(reserved);
+        self.note_height = note.as_ref().map_or(0.0, |note| NOTE_GAP + note.height());
         self.button_sizes = self
             .children
             .iter_mut()
@@ -297,7 +285,6 @@ impl Widget for Authorization {
             + FIELD_GAP
             + self.picker_height
             + field
-            + NOTE_GAP
             + self.note_height;
         self.title = Some(title);
         self.message = Some(message);

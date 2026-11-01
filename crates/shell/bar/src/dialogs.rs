@@ -4,8 +4,8 @@ use std::time::{Duration, Instant};
 
 use crate::L10N;
 use bande_status::devices::end_session;
-use bande_status::session::{Effect, Ending, SessionEnding, Stage, facts, quitting_apps};
-use bande_toolkit::ui::{Alert, Axis, Event, Key, Label, Size, Stack, Ui, Widget};
+use bande_status::session::{Effect, Ending, Facts, SessionEnding, Stage, facts, quitting_apps};
+use bande_toolkit::ui::{Alert, Event, Form, FormLine, Key, Label, Size, Ui};
 use bande_toolkit::{
     App, Appearance, Image, Item, Palette, Point, Rect, Role, Scene, TextAlign, TextStyle,
     TextSystem, Window, WindowEvent,
@@ -46,15 +46,6 @@ enum Choice {
     Confirm,
 }
 
-fn dialog_ui(lines: Widgets, palette: Palette) -> Ui {
-    Ui::new(
-        Box::new(Stack::new(Axis::Vertical, 10.0, 20.0, lines)),
-        bande_toolkit::ui::Context::new(TextSystem::new(), palette),
-    )
-}
-
-type Widgets = Vec<Box<dyn Widget>>;
-
 const CANCEL: &str = "cancel";
 const CONFIRM: &str = "confirm";
 
@@ -93,18 +84,21 @@ fn confirmation_ui(
     ui
 }
 
-fn alert_scene(ui: &mut Ui, (width, height): (u32, u32)) -> Scene {
+pub(crate) fn alert_scene(ui: &mut Ui, (width, height): (u32, u32)) -> Scene {
     let mut scene = ui.scene(width, height);
     scene.background = ui.context().palette.overlay;
     scene
 }
 
+pub(crate) fn fitted(ui: &mut Ui) -> (u32, u32) {
+    let size = ui.measure(Size::new(f32::INFINITY, f32::INFINITY));
+    (size.width.ceil() as u32, size.height.ceil() as u32)
+}
+
 fn confirmation_size(ending: Ending, appearance: Appearance, now: Instant) -> (u32, u32) {
     let asking = SessionEnding::new(ending, now);
     let choice = Rc::new(Cell::new(Choice::Undecided));
-    let size = confirmation_ui(&asking, &choice, appearance, now)
-        .measure(Size::new(f32::INFINITY, f32::INFINITY));
-    (size.width.ceil() as u32, size.height.ceil() as u32)
+    fitted(&mut confirmation_ui(&asking, &choice, appearance, now))
 }
 
 pub fn session_ending_scene(
@@ -247,14 +241,23 @@ pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
+const ABOUT_WIDTH: f32 = 360.0;
+
 struct About {
     ui: Ui,
+    size: (u32, u32),
+}
+
+impl About {
+    fn refit(&mut self) {
+        let size = self.ui.measure(Size::new(ABOUT_WIDTH, f32::INFINITY));
+        self.size = (ABOUT_WIDTH as u32, size.height.ceil() as u32);
+    }
 }
 
 impl App for About {
-    fn scene(&mut self, window: &mut Window) -> Scene {
-        let (width, height) = window.size();
-        self.ui.scene(width, height)
+    fn scene(&mut self, _window: &mut Window) -> Scene {
+        self.ui.scene(self.size.0, self.size.1)
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
@@ -269,6 +272,7 @@ impl App for About {
             }
             WindowEvent::AppearanceChanged(appearance) => {
                 self.ui.set_appearance(appearance);
+                self.refit();
                 window.request_redraw();
             }
             _ => {}
@@ -278,6 +282,27 @@ impl App for About {
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
         Some(self.ui.accessibility())
     }
+}
+
+fn about_ui(facts: &Facts, appearance: Appearance) -> Ui {
+    let row =
+        |label: &str, value: &str| FormLine::Row(label.to_owned(), Box::new(Label::new(value)));
+    let mut lines = vec![FormLine::Wide(Box::new(Label::heading(&facts.name)))];
+    lines.push(row(&L10N.tr("about-system"), &facts.system));
+    if !facts.chip.is_empty() {
+        lines.push(row(&L10N.tr("about-chip"), &facts.chip));
+    }
+    lines.push(row(&L10N.tr("about-memory"), &facts.memory));
+    lines.push(row(
+        &L10N.tr("about-desktop"),
+        &format!("Bande {}", env!("CARGO_PKG_VERSION")),
+    ));
+    let mut ui = Ui::new(
+        Box::new(Form::new(&L10N.tr("about-title"), lines)),
+        bande_toolkit::ui::Context::new(TextSystem::new(), appearance.palette()),
+    );
+    ui.set_appearance(appearance);
+    ui
 }
 
 pub fn run_about() -> Result<(), Box<dyn std::error::Error>> {
@@ -292,22 +317,15 @@ pub fn run_about() -> Result<(), Box<dyn std::error::Error>> {
         &read("/proc/cpuinfo"),
         &read("/proc/meminfo"),
     );
-    let mut window = Window::open(Role::toplevel(&L10N.tr("about-title"), DIALOGS), (360, 210))?;
-    let row = |label: &str, value: &str| -> Box<dyn Widget> {
-        Box::new(Label::new(&format!("{label}    {value}")))
+    let mut about = About {
+        ui: about_ui(&facts, Appearance::default()),
+        size: (0, 0),
     };
-    let mut lines: Vec<Box<dyn Widget>> = vec![Box::new(Label::heading(&facts.name))];
-    lines.push(row(&L10N.tr("about-system"), &facts.system));
-    if !facts.chip.is_empty() {
-        lines.push(row(&L10N.tr("about-chip"), &facts.chip));
-    }
-    lines.push(row(&L10N.tr("about-memory"), &facts.memory));
-    lines.push(row(
-        &L10N.tr("about-desktop"),
-        &format!("Bande {}", env!("CARGO_PKG_VERSION")),
-    ));
-    let ui = dialog_ui(lines, window.appearance().palette());
-    bande_toolkit::run(&mut window, &mut About { ui })?;
+    about.refit();
+    let mut window = Window::open(Role::utility(&L10N.tr("about-title"), DIALOGS), about.size)?;
+    about.ui = about_ui(&facts, window.appearance());
+    about.refit();
+    bande_toolkit::run(&mut window, &mut about)?;
     Ok(())
 }
 
@@ -395,7 +413,7 @@ pub fn run_about_app(app_id: &str, version: &str) -> Result<(), Box<dyn std::err
         .as_ref()
         .map_or_else(|| app_id.to_owned(), |entry| entry.name.clone());
     let mut window = Window::open(
-        Role::toplevel(
+        Role::utility(
             &L10N.tr_args("about-app-title", [("app", name.clone().into())]),
             DIALOGS,
         ),

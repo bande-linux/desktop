@@ -11,7 +11,7 @@ pub fn login_picture(folder: &Path, uid: u32) -> Option<File> {
     let path = login_picture_file(folder, uid);
     let file = OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_NOFOLLOW)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(&path)
         .inspect_err(|error| tracing::info!("no wallpaper shared by {uid}: {error}"))
         .ok()?;

@@ -30,7 +30,7 @@ const ENGLISH: &str = include_str!("../locales/en-US/bande-config.ftl");
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-const SCALE_RANGE: (f64, f64) = (1.0, 3.0);
+pub const SCALE_RANGE: (f64, f64) = (1.0, 3.0);
 const REFRESH_RATE_RANGE: (f64, f64) = (60.0, 240.0);
 pub const SCREEN_READER: &str = "orca";
 pub const KEY_REPEAT_RATE_RANGE: (u32, u32) = (1, 60);

@@ -5,6 +5,7 @@ use crate::Picture;
 
 pub const BANNER_DURATION: Duration = Duration::from_secs(5);
 pub const BANNER_LINGER: Duration = Duration::from_secs(2);
+pub const MAX_NOTIFICATIONS: usize = 200;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloseReason {
@@ -350,7 +351,7 @@ impl Center {
     }
 
     pub fn advance(&mut self, now: Instant) -> Vec<u32> {
-        let expired: Vec<u32> = self
+        let mut expired: Vec<u32> = self
             .entries
             .values()
             .filter(|entry| !self.paused(entry))
@@ -362,6 +363,18 @@ impl Center {
             .collect();
         for id in &expired {
             self.entries.remove(id);
+        }
+        if self.entries.len() > MAX_NOTIFICATIONS {
+            let mut oldest: Vec<(u64, u32)> = self
+                .entries
+                .values()
+                .map(|entry| (entry.sequence, entry.notification.id))
+                .collect();
+            oldest.sort_unstable();
+            for (_, id) in oldest.iter().take(self.entries.len() - MAX_NOTIFICATIONS) {
+                self.entries.remove(id);
+                expired.push(*id);
+            }
         }
         let held = self.banners_held;
         for entry in self.entries.values_mut() {

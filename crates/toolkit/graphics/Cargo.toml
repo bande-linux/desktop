@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 fontique.workspace = true
 image.workspace = true
+libc.workspace = true
 parley.workspace = true
 pollster = { workspace = true, optional = true }
 resvg.workspace = true

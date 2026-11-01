@@ -187,6 +187,7 @@ impl Frame {
 pub(crate) struct Chrome {
     pub(crate) title: String,
     pub(crate) titled: bool,
+    pub(crate) fixed: bool,
     text: Option<TextSystem>,
     title_paragraph: Option<(String, Color, Paragraph)>,
     hovered: Option<Option<Control>>,
@@ -205,10 +206,11 @@ pub(crate) struct Chrome {
 }
 
 impl Chrome {
-    pub(crate) fn new(title: String, titled: bool) -> Self {
+    pub(crate) fn new(title: String, titled: bool, fixed: bool) -> Self {
         Self {
             title,
             titled,
+            fixed,
             ..Self::default()
         }
     }
@@ -455,7 +457,7 @@ pub fn framed_scene(
         width,
         height,
     };
-    let mut chrome = Chrome::new(title.to_owned(), true);
+    let mut chrome = Chrome::new(title.to_owned(), true, false);
     chrome.regions = regions;
     chrome.header = header;
     chrome.frame_scene(

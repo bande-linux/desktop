@@ -65,3 +65,26 @@ fn image_sizes_come_from_png_and_jpeg_headers() {
     assert_eq!(image_size(&jpeg), Some((30, 48)));
     assert_eq!(image_size(&root.path().join("notes.txt")), None);
 }
+
+#[test]
+fn a_fifo_is_previewed_as_an_other_file_without_waiting_for_a_writer() {
+    let root = TempDir::new().expect("temporary folder");
+    let fifo = root.path().join("pipe");
+    let made = std::process::Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .expect("mkfifo");
+    assert!(made.success());
+    let entries = list(root.path(), false, Sort::default()).expect("listing");
+    let entry = entries.into_iter().next().expect("the fifo");
+
+    let (sender, previewed) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let other = matches!(preview(&entry, dimensions), Preview::Other { .. });
+        sender.send(other)
+    });
+    assert_eq!(
+        previewed.recv_timeout(std::time::Duration::from_secs(5)),
+        Ok(true)
+    );
+}

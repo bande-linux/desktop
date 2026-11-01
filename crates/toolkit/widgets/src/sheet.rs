@@ -18,6 +18,7 @@ const FOOTER_PADDING: f32 = 14.0;
 const FOOTER_INSET: f32 = 16.0;
 const BUTTON_SPACING: f32 = 8.0;
 const BUTTON_MIN_WIDTH: f32 = 96.0;
+const ACCESSORY_GAP: f32 = 12.0;
 
 pub(crate) struct Sheet {
     pub(crate) widget: Box<dyn Widget>,
@@ -90,6 +91,7 @@ pub struct Alert {
     message: String,
     icon: Option<Image>,
     buttons: Vec<Box<dyn Widget>>,
+    accessory: Option<f32>,
     primary_count: usize,
     other_count: usize,
     chosen: Rc<Cell<bool>>,
@@ -110,6 +112,7 @@ impl Alert {
             message: message.to_owned(),
             icon: None,
             buttons: Vec::new(),
+            accessory: None,
             primary_count: 0,
             button_height: BUTTON_HEIGHT,
             other_count: 0,
@@ -130,6 +133,18 @@ impl Alert {
         }
     }
 
+    pub fn accessory(mut self, widget: impl Widget + 'static) -> Self {
+        if self.accessory.is_none() {
+            self.buttons.push(Box::new(widget));
+            self.accessory = Some(0.0);
+        }
+        self
+    }
+
+    fn button_count(&self) -> usize {
+        self.buttons.len() - usize::from(self.accessory.is_some())
+    }
+
     fn make(&self, title: &str, action: &str) -> Button {
         let (chosen, on_choice, action) = (
             self.chosen.clone(),
@@ -145,21 +160,23 @@ impl Alert {
 
     pub fn primary(mut self, title: &str, action: &str) -> Self {
         let button = self.make(title, action).primary();
-        self.buttons.push(Box::new(button));
+        let at = self.button_count();
+        self.buttons.insert(at, Box::new(button));
         self.primary_count += 1;
         self
     }
 
     pub fn destructive(mut self, title: &str, action: &str) -> Self {
         let button = self.make(title, action).destructive();
-        self.buttons.push(Box::new(button));
+        let at = self.button_count();
+        self.buttons.insert(at, Box::new(button));
         self.primary_count += 1;
         self
     }
 
     pub fn cancel(mut self, title: &str, action: &str) -> Self {
         let button = self.make(title, action).cancel();
-        let at = self.buttons.len() - self.primary_count;
+        let at = self.button_count() - self.primary_count;
         self.buttons.insert(at, Box::new(button));
         self
     }
@@ -180,7 +197,7 @@ impl Alert {
 
     fn footer_height(&self) -> f32 {
         let rows = match self.stacked {
-            true => self.buttons.len().max(1),
+            true => self.button_count().max(1),
             false => 1,
         } as f32;
         rows * self.button_height + (rows - 1.0) * BUTTON_SPACING + 2.0 * FOOTER_PADDING
@@ -212,8 +229,8 @@ impl Widget for Alert {
         let other_count = self.other_count;
         self.button_height = cx.control_height(ControlSize::Regular);
         let button_height = self.button_height;
-        self.button_sizes = self
-            .buttons
+        let count = self.button_count();
+        self.button_sizes = self.buttons[..count]
             .iter_mut()
             .enumerate()
             .map(|(index, button)| {
@@ -227,7 +244,21 @@ impl Widget for Alert {
         let message_height = message
             .as_ref()
             .map_or(0.0, |message| TITLE_GAP + message.height());
-        let text_height = title.height() + message_height;
+        let accessory_height = match self.buttons[count..].first_mut() {
+            Some(accessory) => {
+                accessory
+                    .measure(cx, Size::new(text_width, available.height))
+                    .height
+            }
+            None => 0.0,
+        };
+        self.accessory = self.accessory.map(|_| accessory_height);
+        let text_height = title.height()
+            + message_height
+            + match self.accessory {
+                Some(height) => ACCESSORY_GAP + height,
+                None => 0.0,
+            };
         let body = match self.icon {
             Some(_) => text_height.max(ICON_SIZE),
             None => text_height,
@@ -244,10 +275,19 @@ impl Widget for Alert {
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
+        let count = self.button_count();
+        if let Some(height) = self.accessory {
+            let x = frame.x + self.text_x();
+            let y = frame.y + frame.height - self.footer_height() - PADDING - height;
+            let width = frame.width - self.text_x() - PADDING;
+            if let Some(accessory) = self.buttons[count..].first_mut() {
+                accessory.place(cx, Rect::new(x, y, width, height));
+            }
+        }
         if self.stacked {
             let mut y = frame.y + frame.height - FOOTER_PADDING - self.button_height;
             let width = frame.width - 2.0 * FOOTER_INSET;
-            for button in &mut self.buttons {
+            for button in &mut self.buttons[..count] {
                 button.place(
                     cx,
                     Rect::new(frame.x + FOOTER_INSET, y, width, self.button_height),
@@ -260,8 +300,7 @@ impl Widget for Alert {
         let mut right = frame.x + frame.width - FOOTER_INSET;
         let mut left = frame.x + FOOTER_INSET;
         let other_count = self.other_count;
-        for (index, (button, size)) in self
-            .buttons
+        for (index, (button, size)) in self.buttons[..count]
             .iter_mut()
             .zip(&self.button_sizes)
             .enumerate()

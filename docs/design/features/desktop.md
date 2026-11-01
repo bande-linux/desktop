@@ -41,7 +41,7 @@ desktop surface is needed before users can see them without opening Files.
 ### Now (essential)
 
 **Wallpaper** — one image fills every display (scaled to cover, cropped at the centre). The
-default is an Bande image with a light and a dark variant that follows the system
+default is a Bande image with a light and a dark variant that follows the system
 appearance, so light and dark mode both look intended [1]. Settings > Wallpaper offers the
 bundled set, about six solid colours and Add Picture (a file or a whole folder).
 Inputs: right click on the desktop > Change Wallpaper; right click on an image in Files >

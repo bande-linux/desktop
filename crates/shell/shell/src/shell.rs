@@ -138,7 +138,7 @@ impl Context {
             Place::LowMemory => {
                 let title = bande_bar::L10N.tr("low-memory-window");
                 let mut window =
-                    beside.open_beside(Role::toplevel(&title, DIALOGS), LOW_MEMORY_SIZE)?;
+                    beside.open_beside(Role::dialog(&title, DIALOGS), LOW_MEMORY_SIZE)?;
                 window.share_fonts(&self.text);
                 if let Err(error) = window.set_keep_on_top(true) {
                     tracing::warn!("the low memory window may hide behind others: {error}");

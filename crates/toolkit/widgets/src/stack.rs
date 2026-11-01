@@ -14,6 +14,7 @@ pub struct Stack {
     axis: Axis,
     spacing: f32,
     padding: f32,
+    trailing: bool,
     children: Vec<Box<dyn Widget>>,
     sizes: Vec<Size>,
     frame: Rect,
@@ -26,9 +27,17 @@ impl Stack {
             axis,
             spacing,
             padding,
+            trailing: false,
             children,
             sizes: Vec::new(),
             frame: Rect::default(),
+        }
+    }
+
+    pub fn trailing(self) -> Self {
+        Self {
+            trailing: true,
+            ..self
         }
     }
 }
@@ -72,7 +81,20 @@ impl Widget for Stack {
     fn place(&mut self, cx: &mut Context, frame: Rect) {
         self.frame = frame;
         let inner = frame.inset(self.padding);
-        let mut offset = 0.0;
+        let length = |size: &Size| match self.axis {
+            Axis::Horizontal => size.width,
+            Axis::Vertical => size.height,
+        };
+        let content = self.sizes.iter().map(length).sum::<f32>()
+            + self.spacing * self.sizes.len().saturating_sub(1) as f32;
+        let room = match self.axis {
+            Axis::Horizontal => inner.width,
+            Axis::Vertical => inner.height,
+        };
+        let mut offset = match self.trailing {
+            true => (room - content).max(0.0).round(),
+            false => 0.0,
+        };
         for (child, size) in self.children.iter_mut().zip(&self.sizes) {
             let child_frame = match self.axis {
                 Axis::Horizontal => Rect::new(
@@ -84,11 +106,7 @@ impl Widget for Stack {
                 Axis::Vertical => Rect::new(inner.x, inner.y + offset, inner.width, size.height),
             };
             child.place(cx, child_frame);
-            offset += self.spacing
-                + match self.axis {
-                    Axis::Horizontal => size.width,
-                    Axis::Vertical => size.height,
-                };
+            offset += self.spacing + length(size);
         }
     }
 

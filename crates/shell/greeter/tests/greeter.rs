@@ -222,3 +222,21 @@ fn the_login_window_trusts_only_a_picture_its_owner_shared_as_a_plain_file() {
     assert!(login_picture(folder.path(), uid + 1).is_none());
     assert!(login_picture(folder.path(), uid + 2).is_none());
 }
+
+#[test]
+fn a_fifo_planted_as_a_login_picture_does_not_block_the_login_window() {
+    use std::os::unix::fs::MetadataExt;
+
+    let folder = tempfile::tempdir().expect("folder");
+    let uid = folder.path().metadata().expect("folder").uid();
+    let fifo = std::ffi::CString::new(format!("{}/{uid}", folder.path().display())).expect("path");
+    assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let path = folder.path().to_path_buf();
+    std::thread::spawn(move || sender.send(login_picture(&path, uid).is_none()));
+    assert_eq!(
+        receiver.recv_timeout(std::time::Duration::from_secs(5)),
+        Ok(true)
+    );
+}

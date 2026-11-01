@@ -25,6 +25,7 @@ pub struct Identity {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
+    pub cookie: String,
     pub action_id: String,
     pub message: String,
     pub icon_name: String,
@@ -325,6 +326,7 @@ impl AuthenticationAgent {
         let user =
             user.ok_or_else(|| AgentError::Failed("no user to authenticate as".to_owned()))?;
         let request = Request {
+            cookie: cookie.clone(),
             action_id,
             message,
             icon_name,
@@ -340,9 +342,8 @@ impl AuthenticationAgent {
         let running = Arc::clone(&self.running);
         let outcome = blocking::unblock(move || {
             let outcome = converse(conversation.as_ref(), &request, &helper, &cookie, &running);
-            if lock(&running).sessions.remove(&cookie).is_some() {
-                conversation.close(&request);
-            }
+            lock(&running).sessions.remove(&cookie);
+            conversation.close(&request);
             outcome
         })
         .await?;

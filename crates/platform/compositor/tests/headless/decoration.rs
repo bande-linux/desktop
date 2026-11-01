@@ -437,6 +437,18 @@ fn a_client_side_window_with_its_own_margin_gets_the_press_itself() {
 }
 
 #[test]
+fn a_window_geometry_larger_than_the_surface_is_clamped_to_it() {
+    let mut server = server();
+    let mut client = decorated(&mut server, Some(DecorationMode::ServerSide));
+    let mut renderer = Renderer::new().expect("renderer");
+
+    client.set_window_geometry(&mut server, 0, (0, 0, i32::MAX / 2, i32::MAX / 2));
+    renderer.render(&mut server).expect("frame");
+
+    assert_eq!(geometry(&server).size, WINDOW.into());
+}
+
+#[test]
 fn the_kde_decoration_manager_tells_gtk_that_we_draw_title_bars() {
     let mut server = server();
     let mut client = TestClient::connect(&mut server);

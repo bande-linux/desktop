@@ -20,7 +20,6 @@ pub enum BusEvent {
     Edge(BarEdge),
     AutoHide(bool),
     IconSize(u32),
-    Names(bool),
     Launcher(String, LauncherUpdate),
 }
 
@@ -97,9 +96,6 @@ fn bar_settings(config: &Proxy<'_>) -> zbus::Result<Vec<BusEvent>> {
     if let Ok(auto_hide) = config.get_property::<bool>("BarAutoHide") {
         events.push(BusEvent::AutoHide(auto_hide));
     }
-    if let Ok(names) = config.get_property::<bool>("BarNames") {
-        events.push(BusEvent::Names(names));
-    }
     if let Some(edge) = config
         .get_property::<String>("BarEdge")
         .ok()
@@ -174,16 +170,6 @@ pub fn keep_writer(session: Connection) -> Sender<Vec<String>> {
         }
     });
     sender
-}
-
-pub fn write_names(session: Connection, names: bool) {
-    spawn("bar-names", move || {
-        let written = Proxy::new(&session, BUS_NAME, OBJECT_PATH, CONFIG_INTERFACE)
-            .and_then(|config| config.set_property("BarNames", names).map_err(Into::into));
-        if let Err(error) = written {
-            tracing::warn!("cannot save whether the bar shows names: {error}");
-        }
-    });
 }
 
 pub fn follow(session: &Connection, outbox: Outbox<BusEvent>) {

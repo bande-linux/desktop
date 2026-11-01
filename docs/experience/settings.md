@@ -42,7 +42,7 @@ draws the panes (`pages.rs`, `view.rs`, `widgets.rs`) and talks to the services.
 | Appearance | Appearance (Light, Dark, Auto); Accent colour; Tint window frames with the wallpaper | the config |
 | Accessibility | Screen reader (only when Orca is installed), Zoom, Increase contrast, Reduce transparency, Reduce motion, Pointer size; Flash the screen; Sticky, Slow and Bounce keys | the config, applied by the compositor and served by the portal |
 | Wallpaper | picture grid with Add Picture…; Picture size | the config and `libs/wallpaper` |
-| Bar | Position, Size, Show names, Automatically hide, Menu bar | the config |
+| Bar | Position, Size, Automatically hide, Menu bar | the config |
 | Displays | Keep or Revert card; Arrangement; per display: Use as, Resolution, Size of text and controls, Refresh rate, Rotation, Variable refresh rate | the config's displays and arrangements, applied by the compositor; displays listed through wlr-output-management |
 | Lock Screen | Dim the display after; Turn off the display and lock after; Sleep after | the config's `idle`, applied by `services/power` |
 | Battery | level and 24-hour history; Power mode; Use Power Saver on battery; When the lid is closed (on the adapter) | UPower, power-profiles-daemon and the config |
@@ -222,7 +222,7 @@ Inside a group, the panes people open most come first. About comes last, as ever
 | | Bluetooth | `bluetooth-symbolic` | the switch (in the header), pairing, my devices, nearby devices | — | an adapter exists |
 | | Network | `network-wired-symbolic` | Ethernet, VPN | — | NetworkManager runs |
 | Desktop | Appearance | new: `appearance` (a half-filled disc) | mode, accent, wallpaper, text size | — | always |
-| | Bar | `view-sidebar-start-symbolic` | position, size, names, auto-hide, menu bar | — | always |
+| | Bar | `view-sidebar-start-symbolic` | position, size, auto-hide, menu bar | — | always |
 | | Notifications | `preferences-system-notifications-symbolic` | Do Not Disturb, apps | one per app | the notification service runs |
 | | Accessibility | new: `accessibility` | vision, hearing, motor | — | always |
 | Devices | Displays | `video-display-symbolic` | arrangement, brightness, Night Light, each display | Night Light | a display is known |
@@ -444,7 +444,7 @@ anywhere on the row operates the control: it flips a switch, opens a pop-up, foc
 
 - Pane and subpage names are Title Case nouns of one or two words: "Privacy & Security".
 - Section labels are one or two words.
-- Row labels are in sentence case and say what is set, in positive form: "Show names",
+- Row labels are in sentence case and say what is set, in positive form: "Tap to click",
   "Automatically hide the bar". There is no "Enable", no "settings" and no "Configure".
 - Established names stay: Do Not Disturb, Night Light, Natural scrolling.
 - Values follow the locale.
@@ -473,7 +473,7 @@ anywhere on the row operates the control: it flips a switch, opens a pop-up, foc
 | Accessibility ▸ Vision (Screen reader, Zoom, Increase contrast, Reduce transparency, Reduce motion, Pointer size) | Accessibility ▸ Vision | adds a "Text size ›" link row to Appearance (slice 7) |
 | Accessibility ▸ Hearing (Flash the screen) | Accessibility ▸ Hearing | unchanged |
 | Accessibility ▸ Motor (Sticky, Slow, Bounce keys) | Accessibility ▸ Motor | adds row descriptions |
-| Bar ▸ Position, Size, Show names, Automatically hide, Menu bar | Bar | unchanged |
+| Bar ▸ Position, Size, Automatically hide, Menu bar | Bar | unchanged |
 | Displays ▸ Keep card; Arrangement; per display Use as, Resolution, Size of text and controls, Refresh rate, Rotation, VRR | Displays | 5 or more choices become pop-ups (resolutions, refresh rates, scale); Brightness (slice 4) and Night Light › (slice 5) added above the per-display sections |
 | Lock Screen ▸ Dim, Turn off the display and lock, Sleep after | Power ▸ When inactive | pane removed; segmented controls become pop-ups; Privacy & Security ▸ Screen lock links here |
 | Battery ▸ level and history | Power ▸ Battery | shown only with a battery |

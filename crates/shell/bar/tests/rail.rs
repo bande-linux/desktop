@@ -299,12 +299,6 @@ fn the_tray_shows_two_per_row_and_folds_beyond_three_items_into_more() {
     assert!(view.slot_rect(Slot::InputSource).is_none());
     assert!(view.slot_rect(Slot::TrayMore).is_some());
     assert_eq!(view.hidden_tray(), [Slot::Tray(3), Slot::InputSource]);
-    rail.view.set_expanded(true);
-    rail.frame(1.0);
-    let view = &rail.view;
-    assert!(view.hidden_tray().is_empty());
-    assert!(view.slot_rect(Slot::TrayMore).is_none());
-    assert!(view.slot_rect(Slot::InputSource).is_some());
 }
 
 #[test]
@@ -458,59 +452,6 @@ fn an_auto_hidden_bar_reveals_on_an_edge_push_and_waits_longer_over_full_screen(
     assert!(!rail.state.borrow().is_shown());
     rail.advance(Duration::from_millis(200));
     assert!(rail.state.borrow().is_shown());
-}
-
-#[test]
-fn the_expanded_bar_matches_its_golden() {
-    let mut rail = Rail::new(Scheme::Light, HEIGHT, apps(1.0));
-    rail.view.set_expanded(true);
-    rail.view.set_app_menus(
-        ["File", "Edit", "View", "Go", "Window", "Help"]
-            .map(str::to_owned)
-            .to_vec(),
-    );
-    rail.state
-        .borrow_mut()
-        .set_rail(rail.view.apps_region(HEIGHT as f32));
-    rail.state.borrow_mut().update_launcher(
-        "org.bande.Terminal",
-        LauncherUpdate {
-            count: Some(3),
-            count_visible: Some(true),
-            ..LauncherUpdate::default()
-        },
-        rail.clock.get(),
-    );
-    rail.frame(1.0);
-    rail.advance(Duration::from_secs(2));
-    let frame = rail.frame(1.0);
-    check_golden("bar-expanded-light", rail.size(), frame);
-}
-
-#[test]
-fn the_expanded_bar_lists_the_menus_as_rows_that_open_their_menu() {
-    let mut rail = Rail::new(Scheme::Light, HEIGHT, apps(1.0));
-    rail.view.set_expanded(true);
-    rail.view
-        .set_app_menus(["File", "Edit"].map(str::to_owned).to_vec());
-    rail.frame(1.0);
-    let edit = rail.view.slot_rect(Slot::AppMenu(1)).expect("the Edit row");
-    let header = rail.view.slot_rect(Slot::App).expect("the header");
-    assert!(edit.y > header.y + header.height);
-    assert_eq!(
-        rail.view.slot_at(center(edit), PointerButton::Primary),
-        Some(Slot::AppMenu(1))
-    );
-    assert!(rail.view.apps_region(HEIGHT as f32).top > edit.y + edit.height);
-    assert_eq!(rail.view.width(), 248.0);
-    let search = rail
-        .view
-        .slot_rect(Slot::Launcher)
-        .expect("the search field");
-    assert_eq!(
-        rail.view.slot_at(center(search), PointerButton::Primary),
-        Some(Slot::Launcher)
-    );
 }
 
 fn menu_node(id: i32, label: &str, children: Vec<Node>) -> Node {

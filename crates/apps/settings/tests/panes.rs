@@ -760,13 +760,12 @@ fn bundled_wallpapers_are_the_pictures_that_come_as_a_light_and_dark_pair() {
 }
 
 #[test]
-fn the_bar_pane_has_position_size_names_auto_hide_and_the_menu_bar() {
+fn the_bar_pane_has_position_size_auto_hide_and_the_menu_bar() {
     let mut view = view();
     view.apply(Update::Values(vec![
         (SettingId::BarIconSize, Value::Number(40)),
         (SettingId::BarEdge, Value::Keyword("left".to_owned())),
         (SettingId::BarAutoHide, Value::Flag(false)),
-        (SettingId::BarNames, Value::Flag(false)),
         (SettingId::BarMenuBar, Value::Keyword("in-bar".to_owned())),
     ]));
     open(&mut view, "Taskbar");
@@ -782,7 +781,6 @@ fn the_bar_pane_has_position_size_names_auto_hide_and_the_menu_bar() {
         [Command::Set(SettingId::BarIconSize, Value::Number(44))]
     );
     assert!(find(&mut view, Role::Switch, "Automatically hide").is_some());
-    assert!(find(&mut view, Role::Switch, "Show names").is_some());
     assert!(find(&mut view, Role::RadioGroup, "Menu bar").is_some());
 }
 

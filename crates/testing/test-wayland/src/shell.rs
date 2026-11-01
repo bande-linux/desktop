@@ -455,6 +455,18 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn set_window_geometry(
+        &mut self,
+        server: &mut Compositor,
+        index: usize,
+        (x, y, width, height): (i32, i32, i32, i32),
+    ) {
+        let (surface, xdg_surface, _) = &self.windows[index];
+        xdg_surface.set_window_geometry(x, y, width, height);
+        surface.commit();
+        self.exchange(server);
+    }
+
     pub fn activation_token(&mut self, server: &mut Compositor) -> String {
         let activation: XdgActivationV1 = self.bind("xdg_activation_v1", 1);
         let token = activation.get_activation_token(&self.queue.handle(), ());

@@ -20,11 +20,21 @@ fn release(server: &mut Compositor, client: &mut TestClient, time: u32) {
     roundtrip(server, &mut [client]);
 }
 
-fn drop_after(server: &mut Compositor, client: &mut TestClient, to: (i32, i32), rest: u32) {
+fn drop_at(server: &mut Compositor, client: &mut TestClient, to: (i32, i32)) {
     grab(server, client);
     server.move_pointer_to(at(to.0, to.1), 1000);
-    server.snap_tick(Duration::from_millis(u64::from(1000 + rest)));
-    release(server, client, 1000 + rest);
+    release(server, client, 1000);
+}
+
+fn lit(server: &mut Compositor, renderer: &mut Renderer, (x, y): (i32, i32), time: u64) -> bool {
+    server.animate(Duration::from_millis(time));
+    renderer.render(server).expect("frame");
+    let snapshot = renderer.snapshot(server).expect("read back");
+    let at = ((y * snapshot.size.w + x) * 4) as usize;
+    snapshot.rgba[at..at + 3]
+        .iter()
+        .zip(BACKGROUND)
+        .all(|(shown, below)| *shown > below)
 }
 
 fn settle(
@@ -57,28 +67,69 @@ fn chord(server: &mut Compositor, client: &mut TestClient, key: u32) {
 }
 
 #[test]
-fn a_window_swept_past_the_edge_without_resting_is_not_tiled() {
-    let mut server = server();
+fn a_window_dragged_across_to_the_next_display_is_not_tiled() {
+    let mut server = two_displays();
     let mut editor = window(&mut server, RED, WINDOW);
 
-    drop_after(&mut server, &mut editor, (0, 96), 100);
+    grab(&mut server, &mut editor);
+    server.move_pointer_to(at(255, 96), 1000);
+    server.move_pointer_to(at(300, 96), 1100);
+    release(&mut server, &mut editor, 1100);
 
-    let geometry = settle(&mut server, &mut editor, RED);
-    assert_eq!(geometry.size, WINDOW.into());
+    assert_eq!(settle(&mut server, &mut editor, RED).size, WINDOW.into());
+    assert_eq!(server.output_of(&server.windows()[0]), SIDE);
 }
 
 #[test]
-fn a_window_dropped_after_resting_fills_the_half_quarter_or_screen_under_the_pointer() {
-    for (to, rest, expected) in [
-        ((0, 96), 150, rect(0, 0, 128, 192)),
-        ((255, 4), 200, rect(128, 0, 128, 96)),
-        ((0, 190), 200, rect(0, 96, 128, 96)),
-        ((128, 0), 200, rect(0, 0, 256, 192)),
+fn holding_at_a_shared_edge_for_250_ms_tiles_the_window() {
+    let mut server = two_displays();
+    let mut editor = window(&mut server, RED, WINDOW);
+
+    grab(&mut server, &mut editor);
+    server.move_pointer_to(at(255, 96), 1000);
+    server.move_pointer_to(at(254, 99), 1100);
+    server.move_pointer_to(at(255, 92), 1200);
+    assert_eq!(
+        server.snap_tick(Duration::from_millis(1200)),
+        Some(Duration::from_millis(1250))
+    );
+    assert_eq!(server.snap_tick(Duration::from_millis(1250)), None);
+    release(&mut server, &mut editor, 1250);
+
+    assert_eq!(
+        settle(&mut server, &mut editor, RED),
+        rect(128, 0, 128, 192)
+    );
+}
+
+#[test]
+fn the_outer_edge_of_the_side_display_still_previews_at_once() {
+    let mut server = two_displays();
+    let mut editor = window(&mut server, RED, WINDOW);
+
+    grab(&mut server, &mut editor);
+    server.move_pointer_to(at(575, 120), 1000);
+    assert_eq!(server.snap_tick(Duration::from_millis(1000)), None);
+    release(&mut server, &mut editor, 1000);
+
+    assert_eq!(
+        settle(&mut server, &mut editor, RED),
+        rect(256 + 160, 0, 160, 240)
+    );
+}
+
+#[test]
+fn a_window_dropped_at_an_edge_fills_the_half_quarter_or_screen_under_the_pointer() {
+    for (to, expected) in [
+        ((0, 96), rect(0, 0, 128, 192)),
+        ((255, 4), rect(128, 0, 128, 96)),
+        ((0, 190), rect(0, 96, 128, 96)),
+        ((128, 0), rect(0, 0, 256, 192)),
     ] {
         let mut server = server();
         let mut editor = window(&mut server, RED, WINDOW);
 
-        drop_after(&mut server, &mut editor, to, rest);
+        drop_at(&mut server, &mut editor, to);
 
         assert_eq!(settle(&mut server, &mut editor, RED), expected, "{to:?}");
     }
@@ -96,7 +147,7 @@ fn a_window_dropped_over_the_left_rail_fills_the_half_beside_it() {
         let mut editor = window(&mut server, RED, WINDOW);
         roundtrip(&mut server, &mut [&mut shell, &mut editor]);
 
-        drop_after(&mut server, &mut editor, to, 150);
+        drop_at(&mut server, &mut editor, to);
 
         let geometry = settle(&mut server, &mut editor, RED);
         match expected {
@@ -107,43 +158,37 @@ fn a_window_dropped_over_the_left_rail_fills_the_half_beside_it() {
 }
 
 #[test]
-fn the_preview_appears_only_once_the_pointer_rests() {
+fn the_preview_appears_as_soon_as_the_pointer_reaches_an_outer_edge() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
     let mut editor = window(&mut server, RED, WINDOW);
-    let mut background = |server: &mut Compositor, time: u64| {
-        server.animate(Duration::from_millis(time));
-        renderer.render(server).expect("frame");
-        let snapshot = renderer.snapshot(server).expect("read back");
-        let at = ((20 * snapshot.size.w + 60) * 4) as usize;
-        [
-            snapshot.rgba[at],
-            snapshot.rgba[at + 1],
-            snapshot.rgba[at + 2],
-        ]
-    };
     grab(&mut server, &mut editor);
     server.move_pointer_to(at(0, 96), 1000);
 
-    assert_eq!(
-        server.snap_tick(Duration::from_millis(1100)),
-        Some(Duration::from_millis(1150))
-    );
-    assert_eq!(background(&mut server, 1100), BACKGROUND);
-    assert_eq!(server.snap_tick(Duration::from_millis(1150)), None);
-    background(&mut server, 1150);
-    let previewed = background(&mut server, 2000);
-    assert!(
-        previewed
-            .iter()
-            .zip(BACKGROUND)
-            .all(|(shown, below)| *shown > below)
-    );
+    assert_eq!(server.snap_tick(Duration::from_millis(1000)), None);
+    lit(&mut server, &mut renderer, (60, 20), 1000);
+    assert!(lit(&mut server, &mut renderer, (60, 20), 1100));
 
-    release(&mut server, &mut editor, 2000);
+    release(&mut server, &mut editor, 1100);
     editor.fill_configured_size(&mut server, 0, RED);
-    background(&mut server, 2100);
-    assert_eq!(background(&mut server, 4000), [0xff, 0, 0]);
+    lit(&mut server, &mut renderer, (60, 20), 1200);
+    server.animate(Duration::from_millis(4000));
+    renderer.render(&mut server).expect("frame");
+    let snapshot = renderer.snapshot(&server).expect("read back");
+    let at = ((20 * snapshot.size.w + 60) * 4) as usize;
+    assert_eq!(snapshot.rgba[at..at + 3], [0xff, 0, 0]);
+}
+
+#[test]
+fn the_snap_preview_covers_its_tile_within_80_ms() {
+    let mut server = server();
+    let mut renderer = Renderer::new().expect("renderer");
+    let mut editor = window(&mut server, RED, WINDOW);
+    grab(&mut server, &mut editor);
+    server.move_pointer_to(at(0, 96), 1000);
+
+    lit(&mut server, &mut renderer, (100, 10), 1000);
+    assert!(lit(&mut server, &mut renderer, (100, 10), 1080));
 }
 
 #[test]

@@ -246,3 +246,24 @@ fn a_display_sampled_at_an_earlier_vblank_than_another_shows_that_earlier_moment
 
     assert_eq!(sampled.rgba, expected.rgba);
 }
+
+#[test]
+fn a_window_dropped_on_a_tile_is_nearly_in_place_after_120_ms() {
+    let (mut server, mut renderer, mut editor) = settled_window();
+    server.move_pointer_to(at(110, 80), 0);
+    server.press_button(BTN_LEFT, true, 0);
+    roundtrip(&mut server, &mut [&mut editor]);
+    editor.request_move(&mut server, 0);
+    server.move_pointer_to(at(0, 100), 1000);
+    let start = SETTLED + ms(100);
+    frame(&mut renderer, &mut server, start);
+    server.press_button(BTN_LEFT, false, 1000);
+    roundtrip(&mut server, &mut [&mut editor]);
+
+    frame(&mut renderer, &mut server, start + ms(16));
+    let (left, top, right, bottom) =
+        reddish(&frame(&mut renderer, &mut server, start + ms(136))).expect("shown");
+
+    assert!(left <= 8 && top <= 8, "{left} {top}");
+    assert!(right >= 127 - 8 && bottom >= 191 - 8, "{right} {bottom}");
+}

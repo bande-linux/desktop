@@ -24,6 +24,7 @@ fn search_ranks_the_best_match_first_and_marks_the_matched_letters() {
     assert_eq!(found("printer"), []);
     assert_eq!(found("lock")[0], PaneId::Power);
     assert_eq!(found("rep"), [PaneId::Keyboard]);
+    assert_eq!(found("scroll direction"), [PaneId::Mouse, PaneId::Trackpad]);
 
     let hits = search(&panes(), "sleep never");
     assert_eq!(hits.len(), 1);

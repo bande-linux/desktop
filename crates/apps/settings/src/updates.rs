@@ -5,7 +5,7 @@ use bande_toolkit::ui::{Button, Label, ProgressBar, Spinner, Widget};
 use crate::L10N;
 use crate::pages::{Widgets, boxed};
 use crate::privilege::Privilege;
-use crate::software::{Package, SoftwareCommand, SoftwareState};
+use crate::software::{Package, SoftwareCommand, SoftwareState, Stage};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
 
@@ -140,10 +140,19 @@ impl SettingsView {
                     self.software_button(&L10N.tr("check-now"), SoftwareCommand::Check, false);
                 vec![self.status_row(&L10N.tr("updates-installed"), Some(&system), Some(check))]
             }
-            SoftwareState::Failed(error) => {
+            SoftwareState::Unavailable => vec![self.status_row(
+                &L10N.tr("updates-unavailable"),
+                Some(&L10N.tr("updates-unavailable-hint")),
+                None,
+            )],
+            SoftwareState::Failed { during, reason } => {
+                let title = match during {
+                    Stage::Check => L10N.tr("updates-failed"),
+                    Stage::Install => L10N.tr("install-failed"),
+                };
                 let retry =
                     self.software_button(&L10N.tr("try-again"), SoftwareCommand::Check, false);
-                vec![self.status_row(&L10N.tr("updates-failed"), Some(&error), Some(retry))]
+                vec![self.status_row(&title, Some(&reason), Some(retry))]
             }
         }
     }

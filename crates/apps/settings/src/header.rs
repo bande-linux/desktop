@@ -241,7 +241,8 @@ impl SettingsView {
             | PaneId::Bar
             | PaneId::Accessibility
             | PaneId::KeyboardShortcuts
-            | PaneId::TrackpadMouse
+            | PaneId::Mouse
+            | PaneId::Trackpad
             | PaneId::Apps
             | PaneId::PrivacySecurity
             | PaneId::Camera

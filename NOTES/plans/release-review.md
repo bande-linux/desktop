@@ -100,3 +100,67 @@ Notify sends the whole presentation, pixels included, on every change; Software 
 ## Checked and sound
 
 The `is_shell` trust (socket pairs only, `WAYLAND_SOCKET` not inherited); capture, foreign-toplevel, session-lock and data-control globals; move/resize/menu serials; lock-client crash keeps the session locked and blank; greeter starts only `bande-session`; polkit accepts calls only from polkitd and switches only to listed identities; PAM buffers are zeroised; notify `image-data` parsing is bounds-checked; Exec splitting never uses a shell; `remove_all` does not follow links; zip extraction refuses paths through links; Activity Monitor signals by pidfd with a start-time check; no `unwrap`/`expect`/`todo!` in production code; packaging assets and Exec lines all resolve.
+
+## Component review 2026-11-01 evening: apps
+
+Files, Settings and the file chooser here, and every app in bande-linux/apps (Terminal, Activity
+Monitor, Software, Package Installer, Mail, Calendar, the template, `ci/`), after today's move onto
+bande-app. Mail and Calendar only for the move.
+
+### Fixed
+
+| Severity | Where | What | Commit |
+|---|---|---|---|
+| medium | Settings `main.rs` | The bande-app view never reported `animating`, so toggles, sliders, the spinner and progress froze after their first frame until the next input. | `544d965e` |
+| medium | apps: Software, Package Installer `main.rs` | Same: no `animating`, so spinners, progress bars and scroll momentum stopped; Software's search field also gave no text input area. | apps `35c268f` |
+| medium | apps: Calendar `main.rs` | An `.ics` opened from a later launch is now read by the running Calendar on its UI thread: a FIFO hung it and a huge file was read whole. `ical::read_file` opens non-blocking, takes only regular files up to 64 MiB. | apps `0225635` |
+| low | file chooser `main.rs` | No text input area for the name and location fields (input method, on-screen keyboard); its own staging write is now `bande_xdg::replace_file`. | `6abaa123` |
+| low | apps: Monitor, Terminal `Cargo.toml` | Unused `bande-log` (bande-app initialises logging). | apps `56bb215` |
+
+### Not fixed
+
+- Owner decision: closing the main window quits Activity Monitor and Mail (as before the move); on macOS Mail stays running.
+- low, Activity Monitor: the `Screen` trait has no `text_input_area`, so its search field gives the input method no area; needs a trait method in two views (polish agent is in those files).
+- low, Settings `view.rs:1439`: `deadline()` covers only the display countdown, not `Ui::deadline()` (tooltip delays); bande-app's `View for Ui` forwards neither `deadline` nor `tick` either (libs).
+- low, Settings `services.rs`: while a network pane is open both NetworkManager rules match the root path, so its signals are read twice.
+- low, Files `main.rs` `open_window`: every window loads `Apps` (all .desktop files) and the thumbnailer again on the UI thread; one process could share them.
+- low, Terminal: a settings change is loaded once by the app and again by every window (`reload_settings`).
+- low, every bande-app app: `changed` refreshes the menus after each handled event, so the menu model is rebuilt per pointer move (diffed before D-Bus, CPU only).
+- low, file chooser `model.rs:71`: a portal app id with a tab or newline is written unescaped into `file-chooser-folders`.
+
+### Checked and sound
+
+Terminal: one process, per-window restore files `<pid>-<n>`, badges summed per window, quit asks once for every busy tab; Files: `--new-window`, `--info`, relative paths from later launches, tab vs window close; Monitor sampling stops while every window is suspended; Mail keeps drafts on close and quit; Calendar's deadlines always advance; Installer opens a window per package from later launches; `ci/check-app.sh`, `new-app.sh`, `gate.sh`, `build-app.sh` and the template.
+
+## Component review 2026-11-01 evening: compositor
+
+Scope: `crates/platform/compositor`, `crates/platform/render`, `crates/platform/protocols`, with
+today's in-compositor Force Quit, link-status re-modeset and the alert/fixed-size dialog changes
+read line by line. No new panics, unused dependencies or leftover "unbound" names.
+
+Fixed:
+
+| Severity | Where | Defect | Commit |
+| --- | --- | --- | --- |
+| medium | `displays.rs` | Force Quit closed only when its screen index went out of range. Unplugging the display it was on while another display took index 0 left it open at its old place, invisible but taking every key. It now closes on any display change, as the window menu does. | `e39e298d` |
+| low | `lock.rs` | Force Quit and the window menu closed on the next loop tick after a lock, so keys handled in the same dispatch as the lock request went to them instead of the lock surface. Both close when the lock starts. | `19c90f72` |
+| low | `docs/architecture/compositor.md` | Said shell clients get `app_responding` so Force Quit can mark the app; Force Quit is now the compositor's own. | `36ebb784` |
+
+Not fixed:
+
+- medium (hardware) — `drm.rs` `relink` commits `link-status = GOOD` as its own connector-only
+  atomic commit outside smithay's `DrmCompositor`; with a page flip pending it can fail with
+  EBUSY (logged; `reset_state` still forces a full modeset on the next frame). Needs the mini
+  with an external display through standby, not a code guess.
+- low — `force_quit_due` rebuilds the app list (catalog lookups, `/proc/<pid>/comm` for apps
+  without a name) on every loop iteration while Force Quit is open, and a passed toolkit
+  deadline returns a zero timeout until the next frame paints. Only while the window is open;
+  returning no deadline instead would miss the repaint's new one, since the tick runs before
+  the frame schedulers.
+- low — a second button pressed inside Force Quit replaces `held`, so the first button's release
+  goes to the window under the pointer; closing Force Quit by key while a button is held does
+  the same. Clients ignore an unmatched release.
+- note — any AT-SPI client can press Force Quit's buttons while it is open, as with any app's
+  accessibility tree.
+- docs outside this component: `docs/architecture/session.md` (lines 351, 447) still lists Force
+  Quit under a planned `org.bande.Watchdog`.

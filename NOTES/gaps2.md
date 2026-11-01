@@ -6,7 +6,7 @@ The notifications bar open up under the task bar. Given that notifications open 
 Status: finished ([plans/notifications-placement.md](plans/notifications-placement.md)); M5 (several displays) left as optional
 
 power management seems to not work. Screen saver, sleep/wake (wake with keyboard), display sleep, computer sleep
-Status: started ([plans/power-management.md](plans/power-management.md)); display off at the lock stage, after a minute on a locked screen, and wake on input done (M1, M2, M4), sleep waits on the s2idle hardware test with a person at the mini (M3, M5-6)
+Status: started ([plans/power-management.md](plans/power-management.md)); display off at the lock stage, after a minute on a locked screen, and wake on input done (M1, M2, M4), the power button locks with a five-second power-off (M7), a display whose link broke in standby is set again; sleep waits on the s2idle hardware test with a person at the mini (M3, M5-6)
 
 crash management, bande-desktop is quite fragile and when it runs out of ram or crashes for some other reason it is quite common that it brings down the whole computer or just freezes. This never happens in MacOS so there must be better ways to handle such events. Investigate it, this is super important.
 Status: started ([plans/crash-management.md](plans/crash-management.md)); kernel PSI/zram/lockup detectors, image oomd/zram/hardware watchdog, session bus at the OOM floor and the compositor watchdog done (M1-4); the owner installs the kernel and tests (M5), reopen after a crash (M6) and coredumps (M7) left

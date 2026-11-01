@@ -1,5 +1,7 @@
 use std::fmt;
 use std::fs;
+use std::io::Read;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
@@ -177,9 +179,26 @@ impl fmt::Debug for Image {
     }
 }
 
+const IMAGE_FILE_LIMIT: u64 = 16 << 20;
+
+fn read_image_file(path: &path::Path) -> Option<Vec<u8>> {
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(path)
+        .ok()?;
+    let metadata = file.metadata().ok()?;
+    if !metadata.is_file() || metadata.len() > IMAGE_FILE_LIMIT {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    file.take(IMAGE_FILE_LIMIT).read_to_end(&mut bytes).ok()?;
+    Some(bytes)
+}
+
 impl Image {
     pub fn load(path: &path::Path, size: u32) -> Option<Self> {
-        let bytes = fs::read(path).ok()?;
+        let bytes = read_image_file(path)?;
         if path.extension().is_some_and(|extension| extension == "svg") {
             return Self::from_svg(&bytes, size, size);
         }
@@ -203,7 +222,7 @@ impl Image {
     }
 
     pub fn load_symbolic(path: &path::Path, size: u32, color: Color) -> Option<Self> {
-        let source = fs::read_to_string(path).ok()?;
+        let source = String::from_utf8(read_image_file(path)?).ok()?;
         let ink = format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b);
         let recoloured = source
             .replace(SYMBOLIC_INK, &ink)

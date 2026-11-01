@@ -724,6 +724,7 @@ dependencies = [
  "bande-design",
  "fontique",
  "image",
+ "libc",
  "parley",
  "pollster",
  "resvg",

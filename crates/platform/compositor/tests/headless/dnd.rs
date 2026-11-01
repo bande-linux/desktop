@@ -71,11 +71,11 @@ fn the_drag_icon_follows_the_pointer_at_its_hotspot() {
 }
 
 #[test]
-fn holding_option_turns_a_drop_into_a_copy() {
-    let actions = |alt: bool| {
+fn holding_ctrl_turns_a_drop_into_a_copy() {
+    let actions = |ctrl: bool| {
         let (mut server, mut client) = start_drag(true);
-        if alt {
-            server.key(KEY_LEFTALT, true, 5);
+        if ctrl {
+            server.key(KEY_LEFTCTRL, true, 5);
         }
         server.move_pointer_to(at(AWAY), 10);
         server.move_pointer_to(at(START), 20);
@@ -172,22 +172,22 @@ fn escape_cancels_a_drag_slides_the_icon_back_and_nothing_is_dropped() {
 }
 
 #[test]
-fn pressing_option_or_super_mid_drag_changes_the_action_without_moving() {
+fn pressing_ctrl_mid_drag_changes_the_action_without_moving() {
     let (mut server, mut client) = start_drag(true);
     server.move_pointer_to(at(AWAY), 10);
     server.move_pointer_to(at(START), 20);
     client.exchange(&mut server);
     let resting = client.drag_actions().last().copied();
 
-    server.key(KEY_LEFTALT, true, 30);
+    server.key(KEY_LEFTCTRL, true, 30);
     client.exchange(&mut server);
-    let with_option = client.drag_actions().last().copied();
-    server.key(KEY_LEFTALT, false, 31);
+    let with_ctrl = client.drag_actions().last().copied();
+    server.key(KEY_LEFTCTRL, false, 31);
     client.exchange(&mut server);
     let released = client.drag_actions().last().copied();
 
     assert_eq!(resting, Some(DndAction::Move));
-    assert_eq!(with_option, Some(DndAction::Copy));
+    assert_eq!(with_ctrl, Some(DndAction::Copy));
     assert_eq!(released, Some(DndAction::Move));
 }
 

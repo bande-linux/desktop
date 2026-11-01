@@ -12,12 +12,10 @@ fn server() -> Compositor {
 }
 
 fn tile_with_keys(server: &mut Compositor, arrow: u32) {
-    server.key(KEY_LEFTCTRL, true, 0);
     server.key(KEY_LEFTMETA, true, 0);
     server.key(arrow, true, 0);
     server.key(arrow, false, 0);
     server.key(KEY_LEFTMETA, false, 0);
-    server.key(KEY_LEFTCTRL, false, 0);
 }
 
 fn tile_of(server: &Compositor, nth: usize) -> Option<Rectangle<i32, Logical>> {

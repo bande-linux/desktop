@@ -9,12 +9,10 @@ const ADD_WORKSPACE: (f64, f64) = (151.0, 25.0);
 const BELOW_THE_STRIP: usize = 50;
 
 fn open_with_keys(server: &mut Compositor) {
-    server.key(KEY_LEFTALT, true, 0);
     server.key(KEY_LEFTMETA, true, 0);
-    server.key(KEY_UP, true, 0);
-    server.key(KEY_UP, false, 0);
+    server.key(KEY_W, true, 0);
+    server.key(KEY_W, false, 0);
     server.key(KEY_LEFTMETA, false, 0);
-    server.key(KEY_LEFTALT, false, 0);
 }
 
 fn snapshot(renderer: &mut Renderer, server: &mut Compositor) -> Snapshot {

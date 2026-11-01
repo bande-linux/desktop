@@ -188,7 +188,7 @@ fn a_mirror_must_name_another_display_of_its_arrangement() {
 }
 
 #[test]
-fn the_dock_accepts_each_of_the_four_edges() {
+fn the_taskbar_accepts_each_of_the_four_edges() {
     for (name, edge) in [
         ("left", BarEdge::Left),
         ("bottom", BarEdge::Bottom),
@@ -450,13 +450,13 @@ fn the_computer_sleeps_when_the_display_turns_off_unless_told_otherwise() {
 }
 
 #[test]
-fn an_empty_dock_apps_list_empties_the_dock() {
+fn an_empty_taskbar_apps_list_empties_the_taskbar() {
     let config = Config::parse("bar {\n    apps\n}\n").expect("valid config");
     assert!(config.bar.apps.is_empty());
 }
 
 #[test]
-fn the_dock_size_auto_hide_wallpaper_fit_and_reduce_motion_are_read() {
+fn the_taskbar_size_auto_hide_wallpaper_fit_and_reduce_motion_are_read() {
     let config = Config::parse(
         "accessibility {\n    reduce-motion #true\n}\nbar {\n    auto-hide #true\n    size 52\n}\nwallpaper {\n    fit \"fit\"\n}\n",
     )

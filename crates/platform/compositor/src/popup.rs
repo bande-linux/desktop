@@ -14,7 +14,7 @@ use smithay::wayland::compositor::get_parent;
 use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 use smithay::wayland::shell::xdg::{PopupSurface, PositionerState};
 
-use crate::motion::{BAR_NAMESPACE, DOCK_NAMESPACE};
+use crate::motion::{BAR_NAMESPACE, TASKBAR_NAMESPACE};
 
 use crate::state::{Compositor, MENU_BAR_NAMESPACE, State};
 
@@ -204,7 +204,8 @@ impl State {
             layer_map_for_output(&screen.output)
                 .layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)
                 .is_some_and(|layer| {
-                    [MENU_BAR_NAMESPACE, BAR_NAMESPACE, DOCK_NAMESPACE].contains(&layer.namespace())
+                    [MENU_BAR_NAMESPACE, BAR_NAMESPACE, TASKBAR_NAMESPACE]
+                        .contains(&layer.namespace())
                 })
         })
     }

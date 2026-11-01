@@ -40,10 +40,11 @@ Do C on top of the reload from `taskbar-icons.md`. Call the whole bar "Taskbar" 
 
 ## Implementation plan
 
-Progress (2026-11-01): milestones 1-5 and 7 done (the bar keeps an app with no entry by writing a
-launcher; the interface and docs say Taskbar). Milestone 6, the code rename, is left: other
-branches were still editing `crates/shell/bar` and the compositor. The bar-level `keep.rs` test of
-milestone 4 is not written; `bande-xdg` tests the written launcher.
+Progress (2026-11-01): milestones 1-7 done. The bar keeps an app with no entry by writing a
+launcher; the interface, docs and code say taskbar (`bande-taskbar-model`, `taskbar.rs`,
+`taskbar_client.rs`, the layer namespace `taskbar`, `Action::FocusTaskbar`; the compositor's app
+operations live in `apps.rs`). The bar-level `keep.rs` test of milestone 4 is not written;
+`bande-xdg` tests the written launcher.
 
 0. **Dependency: the bar reloads desktop entries** (`taskbar-icons.md` milestone 1, owned there). Land it first. On its own it fixes the owner's VS Code case. When it lands, also reload in `menu_bar_client.rs:759`, so the active app's name is right too. Suggest that plan put the watcher in `bande_xdg` so the bar, menu bar and launcher share it.
 

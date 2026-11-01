@@ -94,8 +94,8 @@ Inputs: drag to the left or right edge of the visible area for halves (a taskbar
 side counts as edge) and to a corner for quarters. A translucent outline previews the
 target as soon as the pointer reaches the edge of the free area. Between two displays the
 pointer must rest 250 ms, so moving a window across does not tile it.
-Keyboard: `Ctrl+Super+Left/Right` for halves. Pressing `Ctrl+Super+Up/Down` on a half then
-gives its top or bottom quarter. `Ctrl+Super+Down` on an untiled or zoomed window returns
+Keyboard: `Super+Left/Right` for halves. Pressing `Super+Up/Down` on a half then
+gives its top or bottom quarter. `Super+Down` on an untiled or zoomed window returns
 it to its previous size. Every tile is also in the window menu.
 Motion: the outline grows from the pointer in about 0.12 s, and the window springs into the
 outline in about 0.18 s when released.

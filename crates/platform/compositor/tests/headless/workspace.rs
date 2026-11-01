@@ -134,14 +134,14 @@ fn a_three_finger_swipe_tracks_the_fingers_and_a_short_one_springs_back() {
 }
 
 #[test]
-fn the_dock_learns_the_workspaces_and_activating_an_app_switches_to_its_workspace() {
+fn the_taskbar_learns_the_workspaces_and_activating_an_app_switches_to_its_workspace() {
     let mut server = server();
     let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);
     let mut viewer = window_of(&mut server, BLUE, WINDOW, VIEWER);
-    let mut dock = TestClient::connect_as_shell(&mut server);
-    dock.join_shell(&mut server);
-    roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut dock]);
-    let at_start = (dock.workspaces(), workspace_of_app(&server, VIEWER));
+    let mut taskbar = TestClient::connect_as_shell(&mut server);
+    taskbar.join_shell(&mut server);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut taskbar]);
+    let at_start = (taskbar.workspaces(), workspace_of_app(&server, VIEWER));
 
     chord(
         &mut server,
@@ -150,15 +150,15 @@ fn the_dock_learns_the_workspaces_and_activating_an_app_switches_to_its_workspac
     let end = settle(&mut server, 0);
     chord(&mut server, &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFT]);
     settle(&mut server, end);
-    roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut dock]);
-    let apart = (dock.workspaces(), workspace_of_app(&server, VIEWER));
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut taskbar]);
+    let apart = (taskbar.workspaces(), workspace_of_app(&server, VIEWER));
 
-    dock.activate_app(&mut server, VIEWER);
-    roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut dock]);
+    taskbar.activate_app(&mut server, VIEWER);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut taskbar]);
 
     assert_eq!(at_start, (Some((1, 0)), Some(0)));
     assert_eq!(apart, (Some((2, 0)), Some(1)));
-    assert_eq!(dock.workspaces(), Some((2, 1)));
+    assert_eq!(taskbar.workspaces(), Some((2, 1)));
     assert!(viewer.keyboard_focus_on(0));
 }
 

@@ -306,14 +306,14 @@ impl DesktopSurface {
     fn area(&self, size: (u32, u32)) -> Bounds {
         let (width, height) = (size.0 as f32, size.1 as f32);
         let top = bande_bar::menu_bar::HEIGHT as f32;
-        let dock = bande_bar::dock::exclusive_zone(bande_bar::dock::ICON_SIZE);
-        let bar = bande_bar::rail::bar_width(bande_bar::dock::ICON_SIZE);
+        let taskbar = bande_bar::taskbar::exclusive_zone(bande_bar::taskbar::ICON_SIZE);
+        let bar = bande_bar::rail::bar_width(bande_bar::taskbar::ICON_SIZE);
         let (left, right, bottom, top) = match (self.bar_edge, self.combined_bar) {
             (_, true) => (bar, 0.0, 0.0, 0.0),
-            (BarEdge::Left, false) => (dock, 0.0, 0.0, top),
-            (BarEdge::Right, false) => (0.0, dock, 0.0, top),
-            (BarEdge::Bottom, false) => (0.0, 0.0, dock, top),
-            (BarEdge::Top, false) => (0.0, 0.0, 0.0, top + dock),
+            (BarEdge::Left, false) => (taskbar, 0.0, 0.0, top),
+            (BarEdge::Right, false) => (0.0, taskbar, 0.0, top),
+            (BarEdge::Bottom, false) => (0.0, 0.0, taskbar, top),
+            (BarEdge::Top, false) => (0.0, 0.0, 0.0, top + taskbar),
         };
         Bounds::new(
             left,

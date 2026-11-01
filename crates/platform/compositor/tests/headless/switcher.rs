@@ -51,6 +51,24 @@ fn a_quick_super_tab_switches_to_the_last_app_without_showing_the_card() {
 }
 
 #[test]
+fn alt_tab_switches_apps_and_releasing_alt_picks_the_selection() {
+    let mut server = server();
+    let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);
+    let mut viewer = window_of(&mut server, BLUE, WINDOW, VIEWER);
+    let end = settle(&mut server, 0);
+
+    server.key(KEY_LEFTALT, true, 0);
+    tap(&mut server, KEY_TAB);
+    server.key(KEY_LEFTALT, false, 0);
+    settle(&mut server, end);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
+
+    assert!(!server.switcher_shown());
+    assert!(editor.keyboard_focus_on(0));
+    assert!(!editor.keys().iter().any(|(key, _)| *key == KEY_TAB));
+}
+
+#[test]
 fn holding_super_shows_the_card_after_a_short_dwell_and_release_picks_the_selection() {
     let mut server = server();
     let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);

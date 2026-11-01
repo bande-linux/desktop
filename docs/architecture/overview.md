@@ -92,7 +92,7 @@ launcher are one process, `bande-shell` (`crates/shell/shell`), with one Wayland
 GPU device, one font database and one connection per D-Bus bus. Each part is a library crate
 (`bande-desktop-surface`, `bande-bar`, `bande-notifications`, `bande-controlcenter`,
 `bande-launcher`) whose surfaces the shell hosts; the taskbar's models live in
-`bande-dock-model` and `bande-status` (`crates/libs`).
+`bande-taskbar-model` and `bande-status` (`crates/libs`).
 
 ## Process model
 
@@ -149,7 +149,7 @@ own apps and third-party apps use the same keys, so the compositor translates no
 | Modifier | Role | Examples |
 | :--- | :--- | :--- |
 | **`Ctrl`** | Shortcuts inside apps and text fields | `Ctrl+C` (copy), `Ctrl+V` (paste), `Ctrl+X` (cut), `Ctrl+Z` (undo), `Ctrl+W` (close window), `Ctrl+Q` (quit), `Ctrl+F` (find), `Ctrl+click` (toggle an item in a selection) |
-| **`Super`** | The compositor and the shell, in every app | `Super+Space` (launcher), `Super+Tab` (switcher), `Super+W` and `Super+Q` (close and quit any app), `Super+H` (hide), `Super+M` (minimize), `Shift+Super+3/4/5` (screenshots), `Ctrl+Super+Q` (lock) |
+| **`Super`** | The compositor and the shell, in every app | a tap of `Super` or `Super+Space` (launcher), `Super+Tab` or `Alt+Tab` (switcher), `Super+arrows` (tiling), `Super+W` and `Super+Q` (close and quit any app), `Super+H` (hide), `Super+M` (minimize), `Shift+Super+3/4/5` (screenshots), `Ctrl+Super+Q` (lock) |
 | **`Alt`** | Navigation in apps, alternate actions | `Alt+Left/Right` (back and forward), `Alt+Up` (enclosing folder), `Alt+F4` (close window), `Alt+Drag` (copy), `Alt+Click` (toggle disclosure) |
 | **`Shift`** | Reversal, extending a selection, the second set of commands | `Shift+Ctrl+Z` (redo), `Shift+Ctrl+N` (new folder), Terminal's `Shift+Ctrl+C/V` |
 

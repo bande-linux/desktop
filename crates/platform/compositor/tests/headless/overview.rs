@@ -171,17 +171,17 @@ fn dragging_a_window_onto_the_plus_moves_it_to_a_new_workspace() {
 }
 
 #[test]
-fn the_dock_can_show_the_windows_of_one_app() {
+fn the_taskbar_can_show_the_windows_of_one_app() {
     let mut server = server();
     let mut renderer = Renderer::new().expect("renderer");
     let mut editor = window_of(&mut server, RED, WINDOW, EDITOR);
     let mut viewer = window_of(&mut server, BLUE, WINDOW, VIEWER);
-    let mut dock = TestClient::connect_as_shell(&mut server);
-    dock.join_shell(&mut server);
+    let mut taskbar = TestClient::connect_as_shell(&mut server);
+    taskbar.join_shell(&mut server);
     let end = settle(&mut server, 0);
 
-    dock.show_windows(&mut server, EDITOR);
-    roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut dock]);
+    taskbar.show_windows(&mut server, EDITOR);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut taskbar]);
     settle(&mut server, end);
     let shown = snapshot(&mut renderer, &mut server);
 

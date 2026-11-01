@@ -11,7 +11,7 @@ use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::state::{Compositor, State};
 
 const MAIN_SCREEN_LAYERS: [&str; 6] = [
-    "dock",
+    "taskbar",
     "menubar",
     "desktop",
     "notifications",

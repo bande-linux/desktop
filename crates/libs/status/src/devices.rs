@@ -325,7 +325,11 @@ fn strength_only(message: &Message) -> Option<Option<u8>> {
         && changed
             .keys()
             .all(|name| name == STRENGTH || name == LAST_SEEN);
-    quiet.then(|| changed.get(STRENGTH).and_then(|value| u8::try_from(value).ok()))
+    quiet.then(|| {
+        changed
+            .get(STRENGTH)
+            .and_then(|value| u8::try_from(value).ok())
+    })
 }
 
 fn change_of(message: &Message, owners: &mut Owners) -> Option<Control> {

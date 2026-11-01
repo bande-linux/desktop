@@ -164,3 +164,56 @@ Not fixed:
   accessibility tree.
 - docs outside this component: `docs/architecture/session.md` (lines 351, 447) still lists Force
   Quit under a planned `org.bande.Watchdog`.
+
+## Component review 2026-11-01 evening: services
+
+Scope: `crates/services/*` (automount, clipboard, config, notify, polkit, portal, power, sound,
+tray), with today's display-off/lock-stage power changes, the polkit bridge and the portal's
+frontend trust read line by line. No panics, `unwrap`/`expect` or leftover "unbound" names in
+production code.
+
+Fixed:
+
+| Severity | Where | Defect | Commit |
+| --- | --- | --- | --- |
+| high | notify `lib.rs`, `client.rs` | `org.bande.NotificationCenter` was served on the `org.freedesktop.Notifications` connection, and Flatpak's proxy grants a name's whole connection. Any app allowed to post notifications (Signal, Discord, Telegram…) could read every other app's notifications (`GetPresentation`, `PresentationChanged`: codes, messages), invoke their actions, clear them and switch Do Not Disturb or app rules. The center now has its own connection and name (`org.bande.NotificationCenter`, D-Bus activatable), requested before the specification name; the specification's signals still come from the specification's connection. | `3c36a36c` |
+| medium | clipboard `main.rs`, `history.rs` | A copy whose `x-kde-passwordManagerHint` (or concealed type) did not answer in time was kept in the on-disk history, so a slow password manager's password was written to disk. Such a copy is now treated as a secret. | `ad638cfc` |
+| low | config `service.rs` | `replace()` turned a linked `config.kdl` (dotfiles) into a plain file, reset its mode and did not sync before the rename. It writes through the link, keeps the mode and syncs. | `0ac0249f` |
+| low | portal `gtk.rs` | The same for the user's own `gtk-3.0`/`gtk-4.0` `gtk.css`, where the portal adds its import: a linked stylesheet was replaced by a copy. | `4ac83ca1` |
+| low | clipboard `Cargo.toml` | Unused direct `wayland-backend` dependency. | `b67dfbeb` |
+
+Not fixed:
+
+- medium (design) — `org.bande.Clipboard` still serves the history to any session-bus caller (as
+  listed above); Flatpak apps need an explicit talk permission. Its callers are the launcher and
+  Settings, so a shell-only check needs a Settings path too.
+- medium (owner decision) — `bande-automount` mounts `HintAuto` volumes while the session is
+  locked or inactive (GNOME refuses then; macOS mounts). Mounting an untrusted filesystem at the
+  lock screen is kernel attack surface. Check `LockedHint`/`Active` before `Mount`, or keep the
+  macOS behaviour.
+- low — any client may `CloseNotification` or pass `replaces_id` for another app's notification
+  (the specification does not tie ids to senders); remembering the sender would stop a
+  sandboxed app replacing another's notification with its own text and actions.
+- low — the `org.freedesktop.impl.portal.*` methods (ScreenCast `Start`, Screenshot, Wallpaper)
+  accept any session caller; only the restore data and stored permission are frontend-checked.
+  An unsandboxed same-user process could call `Start` on a frontend session path first; it can
+  read the screen in other ways anyway.
+- low — notify keeps summary/body unbounded: 200 large notifications can push
+  `PresentationChanged` past the bus's message limit, which then fails until they are cleared.
+- low — power: `bande-power` keeps every `wl_output` it ever saw (no `global_remove`), so each
+  replug adds one; ScreenSaver `Inhibit` calls logind synchronously inside the async handler;
+  commands of two threads (`idle_for` vs `set_inhibited`) run outside the machine lock and can
+  interleave (Dim after Undim).
+- low — clipboard paste threads (`serve`) block on `write_all` without a deadline; a reader that
+  never reads keeps a thread.
+- low — automount's `ActionInvoked` match accepts the signal from any sender (worst case: opens
+  Storage settings).
+- note — `adapter.rs` and `battery.rs` declare the same `UPower` proxy.
+- `ci/release/check-debs.sh` (not this component) could also check
+  `org.bande.NotificationCenter.service`.
+
+What to check on the machine: after the rebuild, the notification banners and center still fill
+and clear, Do Not Disturb toggles from Control Center, Settings > Notifications lists the apps,
+and `busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications
+org.bande.NotificationCenter GetPresentation` fails while the same call on
+`org.bande.NotificationCenter` works.

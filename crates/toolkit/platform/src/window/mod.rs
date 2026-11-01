@@ -71,6 +71,7 @@ pub enum FramePath {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Role {
     Toplevel { title: String, app_id: String },
+    Dialog { title: String, app_id: String },
     Layer(LayerOptions),
     Lock,
 }
@@ -78,6 +79,13 @@ pub enum Role {
 impl Role {
     pub fn toplevel(title: &str, app_id: &str) -> Self {
         Self::Toplevel {
+            title: title.to_owned(),
+            app_id: app_id.to_owned(),
+        }
+    }
+
+    pub fn dialog(title: &str, app_id: &str) -> Self {
+        Self::Dialog {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
         }
@@ -262,6 +270,12 @@ pub struct Window {
     pub(crate) appearance: Rc<RefCell<AppearanceWatch>>,
 }
 
+fn fix_size(toplevel: &XdgToplevel, (width, height): (u32, u32)) {
+    let (width, height) = (width as i32, height as i32);
+    toplevel.set_min_size(width, height);
+    toplevel.set_max_size(width, height);
+}
+
 impl Window {
     pub fn open(role: Role, size: (u32, u32)) -> Result<Self, WindowError> {
         Self::on(
@@ -342,8 +356,9 @@ impl Window {
             queue.roundtrip(&mut state)?;
         }
         let mut chrome = None;
+        let dialog = matches!(role, Role::Dialog { .. });
         let role = match role {
-            Role::Toplevel { title, app_id } => {
+            Role::Toplevel { title, app_id } | Role::Dialog { title, app_id } => {
                 let wm_base = state
                     .wm_base
                     .clone()
@@ -352,7 +367,10 @@ impl Window {
                 let toplevel = xdg_surface.get_toplevel(&handle, ());
                 toplevel.set_title(title.clone());
                 toplevel.set_app_id(app_id);
-                chrome = Some(Chrome::new(title));
+                if dialog {
+                    fix_size(&toplevel, size);
+                }
+                chrome = Some(Chrome::new(title, !dialog));
                 ShellSurface::Toplevel(xdg_surface, toplevel)
             }
             Role::Layer(options) => {
@@ -402,7 +420,7 @@ impl Window {
             queue.blocking_dispatch(&mut state)?;
         }
 
-        let (extra_width, extra_height) = if chrome.is_some() {
+        let (extra_width, extra_height) = if chrome.as_ref().is_some_and(|chrome| chrome.titled) {
             (2 * SHEET_INSET, WINDOW_HEADER_HEIGHT + SHEET_INSET)
         } else {
             (0, 0)
@@ -497,20 +515,34 @@ impl Window {
         Point::new(origin.x - frame.margin, origin.y - frame.margin)
     }
 
+    fn fix_dialog_size(&self, size: (u32, u32)) {
+        if let ShellSurface::Toplevel(_, toplevel) = &self.role
+            && self.chrome.as_ref().is_some_and(|chrome| !chrome.titled)
+        {
+            fix_size(toplevel, size);
+        }
+    }
+
+    fn is_titled(&self) -> bool {
+        self.chrome.as_ref().is_some_and(|chrome| chrome.titled)
+    }
+
     fn geometry(&self) -> (u32, u32) {
         self.state.suggested_size.unwrap_or(self.size)
     }
 
     fn title_height(&self) -> u32 {
         match &self.chrome {
-            Some(_) if !self.state.toplevel.fullscreen => WINDOW_HEADER_HEIGHT,
+            Some(chrome) if chrome.titled && !self.state.toplevel.fullscreen => {
+                WINDOW_HEADER_HEIGHT
+            }
             _ => 0,
         }
     }
 
     fn resize_radius(&self) -> Option<f32> {
         let toplevel = self.state.toplevel;
-        if self.chrome.is_none() || toplevel.maximized || toplevel.fullscreen {
+        if !self.is_titled() || toplevel.maximized || toplevel.fullscreen {
             None
         } else if toplevel.tiled {
             Some(0.0)
@@ -526,7 +558,7 @@ impl Window {
             Gpu::Ready(gpu) => gpu.transparent,
             Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => true,
         };
-        if self.chrome.is_some() && floating && transparent {
+        if self.is_titled() && floating && transparent {
             RESIZE_MARGIN
         } else {
             0
@@ -1088,7 +1120,11 @@ impl Window {
         };
         self.state.suggested_size = None;
         let (extra_width, extra_height) = self.frame().chrome_size();
-        self.size = (scene.width + extra_width, scene.height + extra_height);
+        let size = (scene.width + extra_width, scene.height + extra_height);
+        if size != self.size {
+            self.fix_dialog_size(size);
+        }
+        self.size = size;
         let (scene, opaque) = if self.chrome.is_some() {
             let frame = self.frame();
             let sheet_opaque = scene.background.a == u8::MAX;

@@ -2,15 +2,18 @@
 
 use std::time::{Duration, Instant};
 
-use bande_bar::dialogs::{CONFIRMATION_SIZE, session_ending_scene};
+use bande_bar::dialogs::session_ending_scene;
 use bande_status::session::{Ending, QUIT_PATIENCE, SessionEnding};
-use bande_toolkit::{CpuRenderer, Palette, Scheme};
+use bande_toolkit::{Appearance, CpuRenderer, Scheme};
 
 fn check(session: &SessionEnding, scheme: Scheme, now: Instant, name: &str) {
-    let scene = session_ending_scene(session, Palette::for_scheme(scheme), CONFIRMATION_SIZE, now);
+    let appearance = Appearance {
+        scheme,
+        ..Appearance::default()
+    };
+    let scene = session_ending_scene(session, appearance, now);
     let frame = CpuRenderer::new().render(&scene).expect("frame");
-    let (width, height) = CONFIRMATION_SIZE;
-    bande_golden::assert_golden_rgba!(name, (width, height), frame.rgba);
+    bande_golden::assert_golden_rgba!(name, (scene.width, scene.height), frame.rgba);
 }
 
 #[test]

@@ -100,3 +100,36 @@ Notify sends the whole presentation, pixels included, on every change; Software 
 ## Checked and sound
 
 The `is_shell` trust (socket pairs only, `WAYLAND_SOCKET` not inherited); capture, foreign-toplevel, session-lock and data-control globals; move/resize/menu serials; lock-client crash keeps the session locked and blank; greeter starts only `bande-session`; polkit accepts calls only from polkitd and switches only to listed identities; PAM buffers are zeroised; notify `image-data` parsing is bounds-checked; Exec splitting never uses a shell; `remove_all` does not follow links; zip extraction refuses paths through links; Activity Monitor signals by pidfd with a start-time check; no `unwrap`/`expect`/`todo!` in production code; packaging assets and Exec lines all resolve.
+
+## Component review 2026-11-01 evening: compositor
+
+Scope: `crates/platform/compositor`, `crates/platform/render`, `crates/platform/protocols`, with
+today's in-compositor Force Quit, link-status re-modeset and the alert/fixed-size dialog changes
+read line by line. No new panics, unused dependencies or leftover "unbound" names.
+
+Fixed:
+
+| Severity | Where | Defect | Commit |
+| --- | --- | --- | --- |
+| medium | `displays.rs` | Force Quit closed only when its screen index went out of range. Unplugging the display it was on while another display took index 0 left it open at its old place, invisible but taking every key. It now closes on any display change, as the window menu does. | `e39e298d` |
+| low | `lock.rs` | Force Quit and the window menu closed on the next loop tick after a lock, so keys handled in the same dispatch as the lock request went to them instead of the lock surface. Both close when the lock starts. | `19c90f72` |
+| low | `docs/architecture/compositor.md` | Said shell clients get `app_responding` so Force Quit can mark the app; Force Quit is now the compositor's own. | `36ebb784` |
+
+Not fixed:
+
+- medium (hardware) — `drm.rs` `relink` commits `link-status = GOOD` as its own connector-only
+  atomic commit outside smithay's `DrmCompositor`; with a page flip pending it can fail with
+  EBUSY (logged; `reset_state` still forces a full modeset on the next frame). Needs the mini
+  with an external display through standby, not a code guess.
+- low — `force_quit_due` rebuilds the app list (catalog lookups, `/proc/<pid>/comm` for apps
+  without a name) on every loop iteration while Force Quit is open, and a passed toolkit
+  deadline returns a zero timeout until the next frame paints. Only while the window is open;
+  returning no deadline instead would miss the repaint's new one, since the tick runs before
+  the frame schedulers.
+- low — a second button pressed inside Force Quit replaces `held`, so the first button's release
+  goes to the window under the pointer; closing Force Quit by key while a button is held does
+  the same. Clients ignore an unmatched release.
+- note — any AT-SPI client can press Force Quit's buttons while it is open, as with any app's
+  accessibility tree.
+- docs outside this component: `docs/architecture/session.md` (lines 351, 447) still lists Force
+  Quit under a planned `org.bande.Watchdog`.

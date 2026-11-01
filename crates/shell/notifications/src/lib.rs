@@ -39,6 +39,7 @@ const HEADER_HEIGHT: f32 = 36.0;
 const GROUP_HEIGHT: f32 = 28.0;
 const BUTTON_HEIGHT: f32 = ControlSize::Small.height();
 const BUTTON_INSET: f32 = Spacing::S as f32;
+const TEXT_INSET: f32 = Spacing::XS as f32;
 const DRAG_SLOP: f32 = 4.0;
 const DISMISS_FRACTION: f32 = 0.35;
 const FLICK_SPEED: f32 = 600.0;
@@ -414,7 +415,7 @@ impl Screen {
             );
             let width = (label.width() + 2.0 * BUTTON_INSET).ceil();
             let rect = Rect::new(
-                inner - width + BUTTON_INSET,
+                inner - width + BUTTON_INSET - TEXT_INSET,
                 (HEADER_HEIGHT - BUTTON_HEIGHT) / 2.0,
                 width,
                 BUTTON_HEIGHT,
@@ -1216,7 +1217,7 @@ impl Screen {
                 } => {
                     content.push(Item::Text {
                         origin: Point::new(
-                            4.0,
+                            TEXT_INSET,
                             (origin.y + (HEADER_HEIGHT - title.height()) / 2.0).round(),
                         ),
                         paragraph: title.clone(),
@@ -1234,7 +1235,7 @@ impl Screen {
                     }
                     if let Some(status) = status {
                         content.push(Item::Text {
-                            origin: Point::new(4.0, origin.y + HEADER_HEIGHT),
+                            origin: Point::new(TEXT_INSET, origin.y + HEADER_HEIGHT),
                             paragraph: status.clone(),
                         });
                     }
@@ -1260,7 +1261,7 @@ impl Screen {
                 } => {
                     content.push(Item::Text {
                         origin: Point::new(
-                            4.0,
+                            TEXT_INSET,
                             (origin.y + (GROUP_HEIGHT - name.height()) / 2.0).round(),
                         ),
                         paragraph: name.clone(),

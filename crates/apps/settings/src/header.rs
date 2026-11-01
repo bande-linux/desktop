@@ -59,7 +59,10 @@ impl SettingsView {
     }
 
     fn sidebar_row(&mut self, id: PaneId, label: Text, searching: bool) -> Box<dyn Widget> {
-        let selected = id == self.pane || (!searching && self.pane.parent() == Some(id));
+        let shown_above =
+            !searching && self.pane == PaneId::SoftwareUpdate && self.attention().is_some();
+        let selected =
+            id == self.pane || (!searching && !shown_above && self.pane.parent() == Some(id));
         let palette = self.palette();
         let tint = if selected { palette.ink } else { palette.ink2 };
         let symbol = self.symbol(id.symbol(), SIDEBAR_SYMBOL, tint);

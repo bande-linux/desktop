@@ -36,7 +36,7 @@ changing time zone doesnt apply
 Status: finished ([plans/time-zone.md](plans/time-zone.md)); M5 polkit fix waits on an owner decision
 
 scrolling direction should have individual settings for trackpad and mouse. Also trackpad and mouse probably should have their own setting views with more option. The trackpad has 0 options for example.
-Status: started ([plans/mouse-and-trackpad.md](plans/mouse-and-trackpad.md)); M1-M5 done, gestures (M6-M7) left
+Status: finished ([plans/mouse-and-trackpad.md](plans/mouse-and-trackpad.md)); mouse scroll speed waits on an owner decision
 
 in settings the selected item in the sidebar has blue markers, that looks pretty bad. Its enough to highlight the selection i think
 Status: planned ([plans/sidebar-selection.md](plans/sidebar-selection.md))

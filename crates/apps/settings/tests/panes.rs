@@ -456,6 +456,44 @@ fn the_new_pointer_rows_send_their_settings_and_dragging_follows_tap_to_click() 
     assert!(find(&mut view, Role::ComboBox, "Dragging").is_none());
 }
 
+#[test]
+fn each_gesture_switch_sends_its_setting() {
+    let mut view = view();
+    view.set_pointing_devices(PointingDevices {
+        trackpad: true,
+        mouse: false,
+    });
+    let gestures = [
+        (
+            SettingId::TrackpadWorkspaceSwipe,
+            "Swipe between workspaces",
+        ),
+        (SettingId::TrackpadOverviewSwipe, "Overview"),
+        (SettingId::TrackpadDesktopSpread, "Show desktop"),
+        (SettingId::TrackpadLauncherPinch, "Launcher"),
+    ];
+    view.apply(Update::Values(
+        gestures
+            .iter()
+            .map(|(id, _)| (*id, Value::Flag(true)))
+            .collect(),
+    ));
+
+    open(&mut view, "Trackpad");
+    for (_, name) in gestures {
+        let switch = find(&mut view, Role::Switch, name).expect(name);
+        click(&mut view, switch);
+    }
+
+    assert_eq!(
+        view.take_commands(),
+        gestures
+            .iter()
+            .map(|(id, _)| Command::Set(*id, Value::Flag(false)))
+            .collect::<Vec<_>>()
+    );
+}
+
 fn display(connector: &str, rates: &[i32]) -> Display {
     let modes: Vec<Mode> = rates
         .iter()

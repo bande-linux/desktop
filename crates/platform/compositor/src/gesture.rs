@@ -56,6 +56,7 @@ pub enum Gesture {
 pub(crate) enum Route {
     Client,
     Desktop { was_shown: bool, scale: f64 },
+    Launcher { scale: f64 },
     Undecided { delta: Point<f64, Logical> },
     Workspaces,
     Overview,
@@ -276,7 +277,11 @@ impl State {
         };
         let spring = self.release_spring(velocity);
         self.desktop.settle_to(target, velocity, spring);
-        if !cancelled && !was_shown && scale < PINCH_FOR_LAUNCHER {
+        if !cancelled
+            && !was_shown
+            && scale < PINCH_FOR_LAUNCHER
+            && self.pointing.trackpad().launcher_pinch
+        {
             self.show_launcher();
         }
         if target != before {
@@ -301,18 +306,43 @@ impl State {
         self.focus(None);
     }
 
-    fn decide_swipe(&mut self, delta: Point<f64, Logical>, time: u32) -> Route {
-        if delta.x.hypot(delta.y) < AXIS_LOCK {
-            return Route::Undecided { delta };
+    fn decide_swipe(
+        &mut self,
+        before: Point<f64, Logical>,
+        delta: Point<f64, Logical>,
+        time: u32,
+    ) -> Route {
+        let total = before + delta;
+        if total.x.hypot(total.y) < AXIS_LOCK {
+            return Route::Undecided { delta: total };
+        }
+        let horizontal = total.x.abs() >= total.y.abs();
+        let trackpad = self.pointing.trackpad();
+        let claimed = if horizontal {
+            trackpad.workspace_swipe
+        } else {
+            trackpad.overview_swipe
+        };
+        if !claimed {
+            self.forward(
+                Gesture::SwipeBegin {
+                    fingers: SPACE_FINGERS,
+                },
+                time,
+            );
+            if before != Point::default() {
+                self.forward(Gesture::SwipeUpdate { delta: before }, time);
+            }
+            return Route::Client;
         }
         self.close_menus();
-        if delta.x.abs() >= delta.y.abs() {
+        if horizontal {
             self.begin_workspace_swipe(time);
-            self.track_workspace_swipe(delta.x, time);
+            self.track_workspace_swipe(total.x, time);
             return Route::Workspaces;
         }
-        self.begin_overview_swipe(time, delta.y < 0.0);
-        self.track_overview_swipe(delta.y, time);
+        self.begin_overview_swipe(time, total.y < 0.0);
+        self.track_overview_swipe(total.y, time);
         Route::Overview
     }
 
@@ -391,14 +421,21 @@ impl State {
     }
 
     fn route_gesture(&mut self, gesture: Gesture, time: u32) {
+        let trackpad = self.pointing.trackpad();
         let route = match (gesture, self.gesture_route) {
             (Gesture::PinchBegin { fingers }, _)
                 if fingers == DESKTOP_FINGERS && !self.is_locked() =>
             {
-                Some(self.begin_desktop(time))
+                match (trackpad.desktop_spread, trackpad.launcher_pinch) {
+                    (true, _) => Some(self.begin_desktop(time)),
+                    (false, true) => Some(Route::Launcher { scale: 1.0 }),
+                    (false, false) => Some(Route::Client),
+                }
             }
             (Gesture::SwipeBegin { fingers }, _)
-                if fingers == SPACE_FINGERS && !self.is_locked() =>
+                if fingers == SPACE_FINGERS
+                    && !self.is_locked()
+                    && (trackpad.workspace_swipe || trackpad.overview_swipe) =>
             {
                 Some(Route::Undecided {
                     delta: Point::default(),
@@ -409,7 +446,7 @@ impl State {
                 _,
             ) => Some(Route::Client),
             (Gesture::SwipeUpdate { delta }, Some(Route::Undecided { delta: before })) => {
-                Some(self.decide_swipe(before + delta, time))
+                Some(self.decide_swipe(before, delta, time))
             }
             (Gesture::SwipeUpdate { delta }, Some(Route::Workspaces)) => {
                 self.track_workspace_swipe(delta.x, time);
@@ -433,6 +470,15 @@ impl State {
             }
             (Gesture::PinchEnd { cancelled }, Some(Route::Desktop { was_shown, scale })) => {
                 self.end_desktop(was_shown, scale, cancelled);
+                None
+            }
+            (Gesture::PinchUpdate { scale, .. }, Some(Route::Launcher { .. })) => {
+                Some(Route::Launcher { scale })
+            }
+            (Gesture::PinchEnd { cancelled }, Some(Route::Launcher { scale })) => {
+                if !cancelled && scale < PINCH_FOR_LAUNCHER && self.desktop.target == 0.0 {
+                    self.show_launcher();
+                }
                 None
             }
             (_, route) => route,

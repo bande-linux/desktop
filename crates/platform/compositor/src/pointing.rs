@@ -171,6 +171,12 @@ fn configure(device: &mut Device, settings: &PointerSettings) {
     }
 }
 
+impl Pointing {
+    pub(crate) fn trackpad(&self) -> Trackpad {
+        self.settings.trackpad
+    }
+}
+
 impl Compositor {
     pub fn track_libinput_device(&mut self, event: &InputEvent<LibinputInputBackend>) {
         let pointing = &mut self.state.pointing;

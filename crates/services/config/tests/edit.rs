@@ -389,6 +389,28 @@ fn pointer_settings_equal_to_the_defaults_leave_no_trace() {
             .fold(flat, |text, setting| apply(setting, &text)),
         ""
     );
+    let gestures = [
+        Setting::TrackpadWorkspaceSwipe(false),
+        Setting::TrackpadOverviewSwipe(false),
+        Setting::TrackpadDesktopSpread(false),
+        Setting::TrackpadLauncherPinch(false),
+    ]
+    .into_iter()
+    .fold(String::new(), |text, setting| apply(setting, &text));
+    assert!(gestures.contains("workspace-swipe #false"), "{gestures}");
+    assert!(gestures.contains("launcher-pinch #false"), "{gestures}");
+    let restored = [
+        Setting::TrackpadWorkspaceSwipe(true),
+        Setting::TrackpadOverviewSwipe(true),
+        Setting::TrackpadDesktopSpread(true),
+        Setting::TrackpadLauncherPinch(true),
+    ];
+    assert_eq!(
+        restored
+            .into_iter()
+            .fold(gestures, |text, setting| apply(setting, &text)),
+        ""
+    );
     let reset = apply(
         Setting::TrackpadTapToClick(true),
         &apply(Setting::TrackpadSpeed(0.0), &tapless),

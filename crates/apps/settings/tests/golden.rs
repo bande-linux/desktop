@@ -425,6 +425,10 @@ fn pointing(scheme: Scheme, pane: PaneId) -> SettingsView {
         (SettingId::TrackpadNaturalScrolling, Value::Flag(true)),
         (SettingId::TrackpadSpeed, Value::Number(5)),
         (SettingId::TrackpadDisableWhileTyping, Value::Flag(true)),
+        (SettingId::TrackpadWorkspaceSwipe, Value::Flag(true)),
+        (SettingId::TrackpadOverviewSwipe, Value::Flag(true)),
+        (SettingId::TrackpadDesktopSpread, Value::Flag(true)),
+        (SettingId::TrackpadLauncherPinch, Value::Flag(true)),
         (SettingId::MouseNaturalScrolling, Value::Flag(false)),
         (SettingId::MouseSpeed, Value::Number(5)),
         (

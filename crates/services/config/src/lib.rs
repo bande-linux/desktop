@@ -441,6 +441,10 @@ pub struct Trackpad {
     pub dragging: Dragging,
     pub scroll_method: ScrollMethod,
     pub disable_while_typing: bool,
+    pub workspace_swipe: bool,
+    pub overview_swipe: bool,
+    pub desktop_spread: bool,
+    pub launcher_pinch: bool,
 }
 
 impl Default for Trackpad {
@@ -454,6 +458,10 @@ impl Default for Trackpad {
             dragging: Dragging::Tap,
             scroll_method: ScrollMethod::TwoFingers,
             disable_while_typing: true,
+            workspace_swipe: true,
+            overview_swipe: true,
+            desktop_spread: true,
+            launcher_pinch: true,
         }
     }
 }
@@ -1292,6 +1300,10 @@ impl Parser<'_> {
                     )?
                 }
                 "disable-while-typing" => trackpad.disable_while_typing = self.flag(child)?,
+                "workspace-swipe" => trackpad.workspace_swipe = self.flag(child)?,
+                "overview-swipe" => trackpad.overview_swipe = self.flag(child)?,
+                "desktop-spread" => trackpad.desktop_spread = self.flag(child)?,
+                "launcher-pinch" => trackpad.launcher_pinch = self.flag(child)?,
                 _ => return Err(self.unknown_child("trackpad", child)),
             }
             Ok(())

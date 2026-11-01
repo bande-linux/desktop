@@ -1,5 +1,6 @@
 use crate::support::*;
-use bande_compositor::{BACKGROUND, Compositor, Gesture, Renderer};
+use bande_compositor::{BACKGROUND, Compositor, Gesture, PointerSettings, Renderer};
+use bande_config::Trackpad;
 use bande_test_wayland::{ClientGesture, RED, TestClient, roundtrip};
 use smithay::utils::Point;
 
@@ -134,6 +135,96 @@ fn a_four_finger_pinch_opens_the_launcher() {
 
     assert_eq!(shell.launcher_requests(), 1);
     assert!(!server.shows_desktop());
+}
+
+fn turn_off(server: &mut Compositor, trackpad: Trackpad) {
+    server.apply_pointer_settings(PointerSettings {
+        trackpad,
+        ..PointerSettings::default()
+    });
+}
+
+#[test]
+fn a_three_finger_swipe_whose_gesture_is_off_reaches_the_app_and_keeps_the_workspace() {
+    let mut server = server();
+    let mut client = app(&mut server);
+    turn_off(
+        &mut server,
+        Trackpad {
+            workspace_swipe: false,
+            ..Trackpad::default()
+        },
+    );
+
+    server.gesture(Gesture::SwipeBegin { fingers: 3 }, 1);
+    for (step, delta) in [(10.0, 1.0), (12.0, 0.0), (30.0, 0.0)]
+        .into_iter()
+        .enumerate()
+    {
+        server.gesture(
+            Gesture::SwipeUpdate {
+                delta: delta.into(),
+            },
+            2 + step as u32,
+        );
+    }
+    server.gesture(Gesture::SwipeEnd { cancelled: false }, 10);
+    client.exchange(&mut server);
+
+    assert_eq!(server.active_workspace(), 0);
+    assert_eq!(
+        client.gestures(),
+        [
+            ClientGesture::Swipe { fingers: 3 },
+            ClientGesture::SwipeMoved { dx: 10.0, dy: 1.0 },
+            ClientGesture::SwipeMoved { dx: 12.0, dy: 0.0 },
+            ClientGesture::SwipeMoved { dx: 30.0, dy: 0.0 },
+            ClientGesture::SwipeEnded { cancelled: false },
+        ]
+    );
+}
+
+#[test]
+fn a_four_finger_spread_whose_gestures_are_off_leaves_the_desktop_and_reaches_the_app() {
+    let mut server = server();
+    let mut client = app(&mut server);
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.join_shell(&mut server);
+    turn_off(
+        &mut server,
+        Trackpad {
+            desktop_spread: false,
+            ..Trackpad::default()
+        },
+    );
+
+    let end = pinch(&mut server, 4, &[1.2, 1.5, 1.8], 100);
+    assert!(!server.shows_desktop());
+    pinch(&mut server, 4, &[0.9, 0.7, 0.6], end + 100);
+    roundtrip(&mut server, &mut [&mut client, &mut shell]);
+    assert_eq!(shell.launcher_requests(), 1);
+    assert!(client.gestures().is_empty());
+
+    turn_off(
+        &mut server,
+        Trackpad {
+            desktop_spread: false,
+            launcher_pinch: false,
+            ..Trackpad::default()
+        },
+    );
+    pinch(&mut server, 4, &[1.5], end + 500);
+    client.exchange(&mut server);
+
+    assert!(!server.shows_desktop());
+    assert_eq!(
+        client.gestures(),
+        [
+            ClientGesture::Pinch { fingers: 4 },
+            ClientGesture::PinchMoved { scale: 1.5 },
+            ClientGesture::PinchEnded { cancelled: false },
+        ]
+    );
 }
 
 #[test]

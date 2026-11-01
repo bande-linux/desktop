@@ -205,6 +205,10 @@ control writes to it, and it can be edited by hand while the session runs.
       dragging "tap"            // "off" | "tap" | "tap-with-lock"
       scroll-method "two-fingers" // "two-fingers" | "edge"
       disable-while-typing #true
+      workspace-swipe #true      // three fingers left or right
+      overview-swipe #true       // three fingers up or down
+      desktop-spread #true       // spread four fingers
+      launcher-pinch #true       // pinch four fingers
   }
   mouse {
       primary-button "left"     // "left" | "right"
@@ -245,7 +249,7 @@ control writes to it, and it can be edited by hand while the session runs.
   `IdleSuspendAfter` in seconds, 0 meaning never, `IdleSuspendWithDisplay` true while
   `suspend-after` is unset and sleep follows the display (writing true removes the explicit
   value), `KeyRepeatRate` per second and
-  `KeyRepeatDelay` in milliseconds as `u`, `InputSources` as `as` of layout codes (the system layouts while unset; writing an empty list is rejected), `CapsLock`, `TrackpadTapToClick`, `TrackpadNaturalScrolling`, `TrackpadSpeed` (`d`), `TrackpadAcceleration`, `TrackpadSecondaryClick`, `TrackpadDragging`, `TrackpadScrollMethod`, `TrackpadDisableWhileTyping`, `MousePrimaryButton`, `MouseNaturalScrolling`, `MouseSpeed` (`d`) and `MouseAcceleration`, `WallpaperLight` and `WallpaperDark` as paths, empty
+  `KeyRepeatDelay` in milliseconds as `u`, `InputSources` as `as` of layout codes (the system layouts while unset; writing an empty list is rejected), `CapsLock`, `TrackpadTapToClick`, `TrackpadNaturalScrolling`, `TrackpadSpeed` (`d`), `TrackpadAcceleration`, `TrackpadSecondaryClick`, `TrackpadDragging`, `TrackpadScrollMethod`, `TrackpadDisableWhileTyping`, `TrackpadWorkspaceSwipe`, `TrackpadOverviewSwipe`, `TrackpadDesktopSpread`, `TrackpadLauncherPinch`, `MousePrimaryButton`, `MouseNaturalScrolling`, `MouseSpeed` (`d`) and `MouseAcceleration`, `WallpaperLight` and `WallpaperDark` as paths, empty
   meaning unset, `Displays` as `a{sa{sv}}` and `Arrangements` as `aa(siibs)`: name, x, y, main
   and the mirrored display's name, empty when it mirrors nothing). It watches the
   directory and reloads when the file is closed after writing or renamed into place;

@@ -221,6 +221,10 @@ pub enum SettingId {
     TrackpadSpeed,
     TrackpadSecondaryClick,
     TrackpadDisableWhileTyping,
+    TrackpadWorkspaceSwipe,
+    TrackpadOverviewSwipe,
+    TrackpadDesktopSpread,
+    TrackpadLauncherPinch,
     TrackpadAcceleration,
     TrackpadDragging,
     TrackpadScrollMethod,
@@ -1208,8 +1212,21 @@ fn trackpad_pane() -> Pane {
                     ),
                 ],
             ),
+            section(
+                Some(L10N.tr("trackpad-gestures")),
+                vec![
+                    gesture(SettingId::TrackpadWorkspaceSwipe, "workspace-swipe"),
+                    gesture(SettingId::TrackpadOverviewSwipe, "overview-swipe"),
+                    gesture(SettingId::TrackpadDesktopSpread, "desktop-spread"),
+                    gesture(SettingId::TrackpadLauncherPinch, "launcher-pinch"),
+                ],
+            ),
         ],
     )
+}
+
+fn gesture(id: SettingId, name: &str) -> Setting {
+    switch(id, name).described(&format!("{name}-description"))
 }
 
 fn system_panes() -> Vec<Pane> {

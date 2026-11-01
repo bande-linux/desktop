@@ -311,7 +311,7 @@ Every pane and subpage is built from the same parts, in this order.
 | Sound | MacBook Pro Speakers · 60 % |
 | Keyboard | English (US) · 2 input sources |
 | Mouse | Buttons, scrolling and tracking speed |
-| Trackpad | Tapping, clicking, scrolling and tracking speed |
+| Trackpad | Tapping, clicking, scrolling, tracking speed and gestures |
 | Power | 82 % · 4 h 10 min left · On power adapter |
 | Privacy & Security | Which apps may use the camera, take screenshots or share the screen |
 | Apps | Which apps open your files and links, and which open at login |
@@ -565,7 +565,7 @@ notifications per app.
 | Pointer acceleration off (flat) | M W G K | have | slice 6 | libinput accel profile; S |
 | Scroll speed | M W K | missing | later | the compositor must scale it; S–M |
 | Three-finger drag | M | missing | later | roadmap |
-| Gesture choices | M W K | one fixed set | never | one way per task |
+| Gesture switches (workspaces, overview, show desktop, launcher) | M W K | have | slice 6 | one fixed set, each can be turned off and then reaches the app |
 
 **System**
 
@@ -804,7 +804,10 @@ Owns `services/config`, `platform/compositor` and `apps/settings`.
    description "Faster movements move the pointer farther". Trackpad groups its rows into Click
    (Tap to click; Dragging, shown while tapping is on; Secondary click), Scroll (Natural
    scrolling; Scroll with two fingers or along the edge) and Pointer (Tracking speed, Pointer
-   acceleration, Ignore the trackpad while typing).
+   acceleration, Ignore the trackpad while typing), then Gestures: Swipe between workspaces,
+   Overview, Show desktop and Launcher, each a switch. `trackpad { workspace-swipe;
+   overview-swipe; desktop-spread; launcher-pinch }` hold them; a gesture that is off goes to
+   the app under the pointer.
 4. **Proof.**
    - A config round-trip test.
    - A headless compositor test where the device reports the configured options.

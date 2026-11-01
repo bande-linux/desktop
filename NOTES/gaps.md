@@ -15,7 +15,7 @@ its not possible to install .deb files from Files, this needs an install tool li
 Status: started ([plans/deb-installer.md](plans/deb-installer.md)); M1-M6 and the wiring done, live check on the mini left (asks for a password)
 
 GTK apps do not fit with our window bar. Is that possible to solve so that all apps looks the same and adhere to bande window bar theme, for example also claude desktop and vscode also do not use the bande window bar
-Status: started ([plans/third-party-title-bars.md](plans/third-party-title-bars.md)); M1-M4 done (GTK windows without a header bar get our bar, our window menu on client headers, GTK 4 headers styled like ours), M5-M6 and three owner decisions open
+Status: started ([plans/third-party-title-bars.md](plans/third-party-title-bars.md)); M1-M5 done (GTK windows without a header bar get our bar, our window menu on client headers, GTK 4 headers and GTK 3 themes styled like ours), M6 (live review, Electron) and three owner decisions open
 
 it seems like some apps are not getting the correct taskbar icon? this could also be that they simply dont have one. So dont dwell too deeply in that.
 Status: finished ([plans/taskbar-icons.md](plans/taskbar-icons.md)); not yet checked live on the mini

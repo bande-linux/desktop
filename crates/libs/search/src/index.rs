@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap};
 use std::fs;
 use std::io;
 use std::os::fd::BorrowedFd;
@@ -17,6 +17,7 @@ const MAX_ENTRIES: usize = 400_000;
 const FOLDERS_PER_BATCH: usize = 64;
 const SKIPPED_FOLDERS: &[&str] = &["node_modules", "__pycache__", "snap"];
 const CACHE_TAG: &str = "CACHEDIR.TAG";
+const COMPACT_AFTER: usize = 4096;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileHit {
@@ -66,7 +67,7 @@ impl FileIndex {
             .spawn(move || {
                 let mut worker = Worker {
                     root,
-                    entries: BTreeMap::new(),
+                    tree: Tree::rooted(),
                     watcher,
                     boosts: HashMap::new(),
                     commands: received,
@@ -110,14 +111,227 @@ impl FileIndex {
     }
 }
 
-struct Entry {
-    folded: Box<str>,
+const NONE: u32 = u32::MAX;
+const ROOT: u32 = 0;
+
+#[derive(Clone, Copy, Default)]
+struct Text {
+    start: u32,
+    length: u32,
+}
+
+struct Node {
+    parent: u32,
+    first_child: u32,
+    next_sibling: u32,
+    name: Text,
+    folded: Text,
     folder: bool,
+    removed: bool,
+}
+
+#[derive(Default)]
+struct Tree {
+    nodes: Vec<Node>,
+    names: String,
+    folded: String,
+    removed: usize,
+}
+
+fn stored(arena: &mut String, text: &str) -> Option<Text> {
+    let start = u32::try_from(arena.len()).ok()?;
+    let length = u32::try_from(text.len()).ok()?;
+    arena.push_str(text);
+    Some(Text { start, length })
+}
+
+fn text(arena: &str, text: Text) -> &str {
+    let start = text.start as usize;
+    arena
+        .get(start..start + text.length as usize)
+        .unwrap_or_default()
+}
+
+impl Tree {
+    fn rooted() -> Self {
+        let mut tree = Self::default();
+        tree.nodes.push(Node {
+            parent: NONE,
+            first_child: NONE,
+            next_sibling: NONE,
+            name: Text::default(),
+            folded: Text::default(),
+            folder: true,
+            removed: false,
+        });
+        tree
+    }
+
+    fn live(&self) -> usize {
+        self.nodes.len() - 1 - self.removed
+    }
+
+    fn node(&self, id: u32) -> Option<&Node> {
+        self.nodes.get(id as usize)
+    }
+
+    fn name(&self, id: u32) -> &str {
+        self.node(id)
+            .map_or("", |node| text(&self.names, node.name))
+    }
+
+    fn folded(&self, id: u32) -> &str {
+        match self.node(id).map(|node| node.folded) {
+            Some(folded) if folded.length > 0 => text(&self.folded, folded),
+            _ => self.name(id),
+        }
+    }
+
+    fn children(&self, id: u32) -> impl Iterator<Item = u32> + '_ {
+        let first = self.node(id).map_or(NONE, |node| node.first_child);
+        std::iter::successors(Some(first).filter(|&child| child != NONE), |&child| {
+            self.node(child)
+                .map(|node| node.next_sibling)
+                .filter(|&next| next != NONE)
+        })
+    }
+
+    fn child(&self, id: u32, name: &str) -> Option<u32> {
+        self.children(id).find(|&child| self.name(child) == name)
+    }
+
+    fn descendants(&self, id: u32) -> impl Iterator<Item = u32> + '_ {
+        let mut stack: Vec<u32> = self.children(id).collect();
+        std::iter::from_fn(move || {
+            let next = stack.pop()?;
+            stack.extend(self.children(next));
+            Some(next)
+        })
+    }
+
+    fn depth(&self, id: u32) -> usize {
+        std::iter::successors(Some(id), |&at| {
+            self.node(at)
+                .map(|node| node.parent)
+                .filter(|&parent| parent != NONE)
+        })
+        .count()
+    }
+
+    fn insert(&mut self, parent: u32, name: &str, folder: bool) -> Option<u32> {
+        match self.child(parent, name) {
+            Some(known) => {
+                if let Some(node) = self.nodes.get_mut(known as usize) {
+                    node.folder = folder;
+                }
+                Some(known)
+            }
+            None => self.add(parent, name, folder),
+        }
+    }
+
+    fn add(&mut self, parent: u32, name: &str, folder: bool) -> Option<u32> {
+        if self.live() >= MAX_ENTRIES {
+            return None;
+        }
+        let id = u32::try_from(self.nodes.len())
+            .ok()
+            .filter(|&id| id != NONE)?;
+        let lowered = fold(name);
+        let folded = match lowered == name {
+            true => Text::default(),
+            false => stored(&mut self.folded, &lowered)?,
+        };
+        let name = stored(&mut self.names, name)?;
+        let sibling = self.nodes.get_mut(parent as usize)?;
+        let next_sibling = std::mem::replace(&mut sibling.first_child, id);
+        self.nodes.push(Node {
+            parent,
+            first_child: NONE,
+            next_sibling,
+            name,
+            folded,
+            folder,
+            removed: false,
+        });
+        Some(id)
+    }
+
+    fn remove(&mut self, id: u32) {
+        let Some(parent) = self.node(id).filter(|_| id != ROOT).map(|node| node.parent) else {
+            return;
+        };
+        let next = self.node(id).map_or(NONE, |node| node.next_sibling);
+        let previous = self
+            .children(parent)
+            .find(|&child| self.node(child).is_some_and(|node| node.next_sibling == id));
+        let link = match previous {
+            Some(previous) => self
+                .nodes
+                .get_mut(previous as usize)
+                .map(|node| &mut node.next_sibling),
+            None => self
+                .nodes
+                .get_mut(parent as usize)
+                .map(|node| &mut node.first_child),
+        };
+        if let Some(link) = link {
+            *link = next;
+        }
+        let gone: Vec<u32> = std::iter::once(id).chain(self.descendants(id)).collect();
+        for at in gone {
+            if let Some(node) = self.nodes.get_mut(at as usize) {
+                node.removed = true;
+                self.removed += 1;
+            }
+        }
+        if self.removed > COMPACT_AFTER && self.removed > self.live() {
+            self.compact();
+        }
+    }
+
+    fn compact(&mut self) {
+        let mut compact = Self::rooted();
+        let mut stack = vec![(ROOT, ROOT)];
+        while let Some((old, new)) = stack.pop() {
+            let children: Vec<u32> = self.children(old).collect();
+            for child in children.into_iter().rev() {
+                let folder = self.node(child).is_some_and(|node| node.folder);
+                if let Some(copied) = compact.add(new, self.name(child), folder) {
+                    stack.push((child, copied));
+                }
+            }
+        }
+        *self = compact;
+    }
+
+    fn path(&self, root: &Path, id: u32) -> PathBuf {
+        let mut names: Vec<&str> = std::iter::successors(Some(id), |&at| {
+            self.node(at)
+                .map(|node| node.parent)
+                .filter(|&parent| parent != NONE)
+        })
+        .map(|at| self.name(at))
+        .collect();
+        names.reverse();
+        let mut path = root.to_path_buf();
+        path.extend(names.into_iter().filter(|name| !name.is_empty()));
+        path
+    }
+
+    fn find(&self, root: &Path, path: &Path) -> Option<u32> {
+        path.strip_prefix(root)
+            .ok()?
+            .components()
+            .try_fold(ROOT, |at, component| {
+                self.child(at, component.as_os_str().to_str()?)
+            })
+    }
 }
 
 struct Worker {
     root: PathBuf,
-    entries: BTreeMap<PathBuf, Entry>,
+    tree: Tree,
     watcher: Option<FolderWatch>,
     boosts: HashMap<PathBuf, u32>,
     commands: Receiver<Command>,
@@ -136,11 +350,11 @@ fn file_name(path: &Path) -> Option<&str> {
 
 impl Worker {
     fn run(&mut self) {
-        let mut folders = vec![self.root.clone()];
+        let mut folders = vec![(ROOT, self.root.clone())];
         self.watch(&self.root.clone());
         let mut read = 0usize;
-        while let Some(folder) = folders.pop() {
-            self.read_folder(&folder, &mut folders);
+        while let Some((id, folder)) = folders.pop() {
+            self.read_folder(id, &folder, &mut folders);
             read += 1;
             if read.is_multiple_of(FOLDERS_PER_BATCH) && !self.drain() {
                 return;
@@ -208,17 +422,26 @@ impl Worker {
             self.remove(parent);
             return;
         }
+        let (Some(parent), Some(name)) = (
+            path.parent()
+                .and_then(|parent| self.tree.find(&self.root, parent)),
+            file_name(path),
+        ) else {
+            return;
+        };
         match fs::symlink_metadata(path) {
             Ok(metadata) if metadata.is_dir() => {
-                if !self.entries.contains_key(path) && self.insert(path, true) {
-                    let mut folders = vec![path.to_path_buf()];
-                    while let Some(folder) = folders.pop() {
-                        self.read_folder(&folder, &mut folders);
+                if self.tree.child(parent, name).is_none()
+                    && let Some(id) = self.tree.add(parent, name, true)
+                {
+                    let mut folders = vec![(id, path.to_path_buf())];
+                    while let Some((id, folder)) = folders.pop() {
+                        self.read_folder(id, &folder, &mut folders);
                     }
                 }
             }
             Ok(metadata) if metadata.is_file() => {
-                self.insert(path, false);
+                self.tree.insert(parent, name, false);
             }
             Ok(_) => {}
             Err(_) => self.remove(path),
@@ -226,33 +449,9 @@ impl Worker {
     }
 
     fn remove(&mut self, path: &Path) {
-        let removed: Vec<PathBuf> = self
-            .entries
-            .range(path.to_path_buf()..)
-            .map(|(key, _)| key)
-            .take_while(|key| key.starts_with(path))
-            .cloned()
-            .collect();
-        for key in removed {
-            self.entries.remove(&key);
+        if let Some(id) = self.tree.find(&self.root, path) {
+            self.tree.remove(id);
         }
-    }
-
-    fn insert(&mut self, path: &Path, folder: bool) -> bool {
-        if self.entries.len() >= MAX_ENTRIES {
-            return false;
-        }
-        let Some(name) = file_name(path) else {
-            return false;
-        };
-        self.entries.insert(
-            path.to_path_buf(),
-            Entry {
-                folded: fold(name).into_boxed_str(),
-                folder,
-            },
-        );
-        true
     }
 
     fn watch(&mut self, folder: &Path) {
@@ -264,7 +463,7 @@ impl Worker {
         }
     }
 
-    fn read_folder(&mut self, folder: &Path, folders: &mut Vec<PathBuf>) {
+    fn read_folder(&mut self, id: u32, folder: &Path, folders: &mut Vec<(u32, PathBuf)>) {
         let Ok(children) = fs::read_dir(folder) else {
             return;
         };
@@ -282,16 +481,16 @@ impl Worker {
             if skipped(name) {
                 continue;
             }
-            let path = child.path();
             if kind.is_dir() {
+                let path = child.path();
                 if path.join(CACHE_TAG).exists() {
                     continue;
                 }
-                if self.insert(&path, true) {
-                    folders.push(path);
+                if let Some(added) = self.tree.add(id, name, true) {
+                    folders.push((added, path));
                 }
             } else if kind.is_file() {
-                self.insert(&path, false);
+                self.tree.add(id, name, false);
             }
         }
     }
@@ -300,46 +499,65 @@ impl Worker {
         let Some(query) = Query::new(&asked.text) else {
             return Vec::new();
         };
-        let mut best = BinaryHeap::with_capacity(asked.limit + 1);
-        let entries: Box<dyn Iterator<Item = (&PathBuf, &Entry)>> = match &asked.within {
-            Some(within) => Box::new(
-                self.entries
-                    .range(within.clone()..)
-                    .take_while(move |(path, _)| path.starts_with(within))
-                    .filter(move |(path, _)| *path != within),
+        let tree = &self.tree;
+        let boosts: HashMap<u32, u32> = self
+            .boosts
+            .iter()
+            .filter_map(|(path, boost)| Some((tree.find(&self.root, path)?, *boost)))
+            .collect();
+        let candidates: Box<dyn Iterator<Item = u32>> = match &asked.within {
+            Some(within) => match tree.find(&self.root, within) {
+                Some(id) => Box::new(tree.descendants(id)),
+                None => Box::new(std::iter::empty()),
+            },
+            None => Box::new(
+                (1..u32::try_from(tree.nodes.len()).unwrap_or(NONE))
+                    .filter(|&id| tree.node(id).is_some_and(|node| !node.removed)),
             ),
-            None => Box::new(self.entries.iter()),
         };
-        for (path, entry) in entries {
-            let Some(score) = query.score(&entry.folded) else {
+        let mut best = BinaryHeap::with_capacity(asked.limit + 1);
+        for id in candidates {
+            let Some(score) = query.score(tree.folded(id)) else {
                 continue;
             };
-            let score = score + self.boosts.get(path).copied().unwrap_or(0);
-            let depth = path.components().count();
-            best.push(Reverse((score, Reverse(depth), Reverse(path))));
+            let score = score + boosts.get(&id).copied().unwrap_or(0);
+            let depth = tree.depth(id);
+            if best.len() >= asked.limit
+                && best
+                    .peek()
+                    .is_some_and(|Reverse((lowest, Reverse(deepest), _, _))| {
+                        (score, Reverse(depth)) < (*lowest, Reverse(*deepest))
+                    })
+            {
+                continue;
+            }
+            best.push(Reverse((
+                score,
+                Reverse(depth),
+                Reverse(tree.path(&self.root, id)),
+                id,
+            )));
             if best.len() > asked.limit {
                 best.pop();
             }
         }
-        let mut hits: Vec<FileHit> = best
+        let mut hits: Vec<(usize, FileHit)> = best
             .into_iter()
-            .map(|Reverse((score, _, Reverse(path)))| FileHit {
-                path: path.clone(),
-                folder: self.entries.get(path).is_some_and(|entry| entry.folder),
-                score,
+            .map(|Reverse((score, Reverse(depth), Reverse(path), id))| {
+                let hit = FileHit {
+                    path,
+                    folder: tree.node(id).is_some_and(|node| node.folder),
+                    score,
+                };
+                (depth, hit)
             })
             .collect();
-        hits.sort_by(|a, b| {
+        hits.sort_by(|(a_depth, a), (b_depth, b)| {
             b.score
                 .cmp(&a.score)
-                .then_with(|| {
-                    a.path
-                        .components()
-                        .count()
-                        .cmp(&b.path.components().count())
-                })
+                .then_with(|| a_depth.cmp(b_depth))
                 .then_with(|| a.path.cmp(&b.path))
         });
-        hits
+        hits.into_iter().map(|(_, hit)| hit).collect()
     }
 }

@@ -273,8 +273,9 @@ when they reach the screen is Bande's own.
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second).
   An app that has not answered after 3 s is not responding: its windows are veiled in a soft
   grey (24 %), the pointer over them is the theme's `wait` cursor, and shell clients get
-  `bande_shell_v1.app_responding(pid, app_id, 0)` so Force Quit can mark it. The answer, or
-  the app's exit, lifts the veil and sends `responding 1`.
+  `bande_shell_v1.app_responding(pid, app_id, 0)` so the taskbar can mark it; the compositor's
+  own Force Quit window (`force_quit/`) marks it in its list. The answer, or the app's exit,
+  lifts the veil and sends `responding 1`.
 - **Springs.** `crates/libs/spring` is the closed-form solution for under-, critically and
   overdamped springs, parameterised by angular frequency $\omega$ and damping ratio $\zeta$. A
   trajectory depends only on elapsed time, never on frame rate, and retargeting keeps position

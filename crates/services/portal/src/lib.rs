@@ -20,7 +20,7 @@ pub async fn from_frontend(
         return false;
     };
     let Ok(owner) = bus
-        .get_name_owner(zbus::names::BusName::from_static_str_unchecked(FRONTEND))
+        .get_name_owner(zbus::names::WellKnownName::from_static_str_unchecked(FRONTEND).into())
         .await
     else {
         return false;

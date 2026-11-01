@@ -5,7 +5,7 @@ use std::thread;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::message::Header;
-use zbus::names::{BusName, OwnedUniqueName, UniqueName};
+use zbus::names::{OwnedUniqueName, UniqueName, WellKnownName};
 
 use crate::state::{Compositor, State};
 
@@ -105,7 +105,7 @@ async fn screen_reader(
     let sender = header.sender().ok_or_else(denied)?;
     let owner = zbus::fdo::DBusProxy::new(connection)
         .await?
-        .get_name_owner(BusName::from_static_str_unchecked(SCREEN_READER_NAME))
+        .get_name_owner(WellKnownName::from_static_str_unchecked(SCREEN_READER_NAME).into())
         .await
         .map_err(|_| denied())?;
     match owner.as_str() == sender.as_str() {

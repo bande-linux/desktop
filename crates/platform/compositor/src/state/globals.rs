@@ -22,6 +22,8 @@ use smithay::wayland::selection::primary_selection::PrimarySelectionState;
 use smithay::wayland::session_lock::SessionLockManagerState;
 use smithay::wayland::shell::wlr_layer::WlrLayerShellState;
 use smithay::wayland::shell::xdg::XdgShellState;
+use smithay::reexports::wayland_protocols_misc::server_decoration::server::org_kde_kwin_server_decoration_manager::Mode as KdeDefaultMode;
+use smithay::wayland::shell::kde::decoration::KdeDecorationState;
 use smithay::wayland::shell::xdg::decoration::XdgDecorationState;
 use smithay::wayland::shell::xdg::dialog::XdgDialogState;
 use smithay::wayland::shm::ShmState;
@@ -55,6 +57,7 @@ pub(crate) struct Globals {
     _viewporter_state: ViewporterState,
     _fractional_scale_state: FractionalScaleManagerState,
     _decoration_state: XdgDecorationState,
+    pub(crate) kde_decoration_state: KdeDecorationState,
     _dialog_state: XdgDialogState,
     _cursor_shape_state: CursorShapeManagerState,
     _pointer_gestures_state: PointerGesturesState,
@@ -116,6 +119,7 @@ impl Globals {
             _viewporter_state: ViewporterState::new::<State>(handle),
             _fractional_scale_state: FractionalScaleManagerState::new::<State>(handle),
             _decoration_state: XdgDecorationState::new::<State>(handle),
+            kde_decoration_state: KdeDecorationState::new::<State>(handle, KdeDefaultMode::Server),
             _dialog_state: XdgDialogState::new::<State>(handle),
             _cursor_shape_state: CursorShapeManagerState::new::<State>(handle),
             _pointer_gestures_state: PointerGesturesState::new::<State>(handle),

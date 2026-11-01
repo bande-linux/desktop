@@ -15,7 +15,7 @@ use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Resource};
-use smithay::utils::Serial;
+use smithay::utils::{Logical, Point, Serial};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
     CompositorClientState, CompositorHandler, CompositorState, with_states,

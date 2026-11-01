@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use bande_config::{Search, SearchCategory};
 use bande_search::{FileHit, FileResults, Query, Usage, calculate, fold, recent_files};
 use bande_xdg::path_from_file_uri;
 
@@ -377,6 +378,8 @@ pub struct Model {
     pub generation: u64,
     files: Vec<FileHit>,
     recent_documents: Vec<PathBuf>,
+    search: Search,
+    excluded: Vec<PathBuf>,
     pub clips: Vec<Clip>,
     pub files_complete: bool,
     pub hits: Vec<Hit>,
@@ -421,6 +424,8 @@ impl Model {
             generation: 0,
             files: Vec::new(),
             recent_documents: Vec::new(),
+            search: Search::default(),
+            excluded: Vec::new(),
             clips: Vec::new(),
             files_complete: false,
             hits: Vec::new(),
@@ -439,13 +444,37 @@ impl Model {
     }
 
     pub fn set_recently_used(&mut self, xbel: Option<&str>) {
-        let documents = recent_files(xbel, &self.usage, GRID_COLUMNS);
+        let documents = match self.shows(SearchCategory::RecentDocuments) {
+            true => recent_files(xbel, &self.usage, &self.excluded, GRID_COLUMNS),
+            false => Vec::new(),
+        };
         if documents != self.recent_documents {
             self.recent_documents = documents;
             if Query::new(&self.query).is_none() {
                 self.rebuild(None);
             }
         }
+    }
+
+    pub fn set_search(&mut self, search: Search, excluded: Vec<PathBuf>) {
+        if search != self.search || excluded != self.excluded {
+            self.search = search;
+            self.excluded = excluded;
+            self.files_complete |= !self.searches_files();
+            self.rebuild(None);
+        }
+    }
+
+    fn shows(&self, category: SearchCategory) -> bool {
+        self.search.shows(category)
+    }
+
+    fn searches_files(&self) -> bool {
+        self.shows(SearchCategory::Documents) || self.shows(SearchCategory::Folders)
+    }
+
+    fn is_excluded(&self, path: &Path) -> bool {
+        self.excluded.iter().any(|folder| path.starts_with(folder))
     }
 
     pub fn file_boosts(&self) -> HashMap<PathBuf, u32> {
@@ -492,7 +521,7 @@ impl Model {
         }
         self.query = query.to_owned();
         self.generation += 1;
-        self.files_complete = Query::new(query).is_none();
+        self.files_complete = Query::new(query).is_none() || !self.searches_files();
         self.selected = 0;
         self.rebuild(None);
     }
@@ -517,6 +546,13 @@ impl Model {
     }
 
     fn file_hit(&self, file: &FileHit, query: &Query) -> Option<Hit> {
+        let category = match file.folder {
+            true => SearchCategory::Folders,
+            false => SearchCategory::Documents,
+        };
+        if !self.shows(category) || self.is_excluded(&file.path) {
+            return None;
+        }
         let name = file.path.file_name()?.to_string_lossy().into_owned();
         let score = if self.files_complete {
             file.score
@@ -561,17 +597,25 @@ impl Model {
             return;
         };
         self.columns = 0;
-        let calculation = calculate(&self.query).map(|value| Hit {
-            kind: Kind::Calculation,
-            title: value.clone(),
-            detail: Some(self.query.trim().to_owned()),
-            target: Target::Value(value),
-            matched: Vec::new(),
-            score: CALCULATION_SCORE,
-        });
+        let calculation = calculate(&self.query)
+            .filter(|calculation| {
+                self.shows(match calculation.conversion {
+                    true => SearchCategory::Conversion,
+                    false => SearchCategory::Calculator,
+                })
+            })
+            .map(|calculation| Hit {
+                kind: Kind::Calculation,
+                title: calculation.value.clone(),
+                detail: Some(self.query.trim().to_owned()),
+                target: Target::Value(calculation.value),
+                matched: Vec::new(),
+                score: CALCULATION_SCORE,
+            });
         let mut apps: Vec<Hit> = self
             .apps
             .iter()
+            .filter(|_| self.shows(SearchCategory::Applications))
             .filter_map(|app| {
                 let target = Target::App(app.info.app_id.clone());
                 let boost = target
@@ -601,6 +645,7 @@ impl Model {
         let mut settings: Vec<Hit> = self
             .panes
             .iter()
+            .filter(|_| self.shows(SearchCategory::Settings))
             .filter_map(|pane| {
                 let (score, setting) = pane.score(&query)?;
                 let target = Target::Settings(pane.info.keyword.clone());
@@ -618,7 +663,8 @@ impl Model {
             })
             .collect();
         settings.sort_by(by_score);
-        let typed_enough = self.query.trim().chars().count() >= MIN_COMMAND_QUERY;
+        let typed_enough = self.query.trim().chars().count() >= MIN_COMMAND_QUERY
+            && self.shows(SearchCategory::System);
         let mut commands: Vec<Hit> = self
             .commands
             .iter()
@@ -700,6 +746,7 @@ impl Model {
         used.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         let recent_apps: Vec<Hit> = used
             .iter()
+            .filter(|_| self.shows(SearchCategory::RecentApps))
             .filter_map(|(app_id, _)| {
                 self.apps
                     .iter()
@@ -711,6 +758,7 @@ impl Model {
         let recent_documents: Vec<Hit> = self
             .recent_documents
             .iter()
+            .filter(|_| self.shows(SearchCategory::RecentDocuments))
             .filter_map(|path| {
                 Some(Hit {
                     kind: Kind::Document,

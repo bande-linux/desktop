@@ -11,6 +11,7 @@ repository.workspace = true
 accesskit.workspace = true
 image.workspace = true
 tracing.workspace = true
+bande-config.workspace = true
 bande-fs.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true

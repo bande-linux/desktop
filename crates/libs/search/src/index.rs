@@ -44,6 +44,7 @@ enum Command {
     Query(Asked),
     Boosts(HashMap<PathBuf, u32>),
     Changed(Vec<PathBuf>),
+    Exclude(Vec<PathBuf>),
 }
 
 pub struct FileIndex {
@@ -52,7 +53,7 @@ pub struct FileIndex {
 }
 
 impl FileIndex {
-    pub fn spawn(root: PathBuf) -> io::Result<Self> {
+    pub fn spawn(root: PathBuf, excluded: Vec<PathBuf>) -> io::Result<Self> {
         let (commands, received) = channel();
         let results = Inbox::new()?;
         let sender = results.outbox();
@@ -67,6 +68,7 @@ impl FileIndex {
             .spawn(move || {
                 let mut worker = Worker {
                     root,
+                    excluded,
                     tree: Tree::rooted(),
                     watcher,
                     boosts: HashMap::new(),
@@ -96,6 +98,10 @@ impl FileIndex {
             within: Some(within.to_path_buf()),
             limit,
         }));
+    }
+
+    pub fn exclude(&self, excluded: Vec<PathBuf>) {
+        let _ = self.commands.send(Command::Exclude(excluded));
     }
 
     pub fn set_boosts(&self, boosts: HashMap<PathBuf, u32>) {
@@ -331,6 +337,7 @@ impl Tree {
 
 struct Worker {
     root: PathBuf,
+    excluded: Vec<PathBuf>,
     tree: Tree,
     watcher: Option<FolderWatch>,
     boosts: HashMap<PathBuf, u32>,
@@ -400,16 +407,34 @@ impl Worker {
                     self.changed(&path);
                 }
             }
+            Command::Exclude(excluded) => {
+                let previous = std::mem::replace(&mut self.excluded, excluded);
+                for folder in self.excluded.clone() {
+                    if !previous.contains(&folder) {
+                        self.remove(&folder);
+                    }
+                }
+                for folder in previous {
+                    if !self.excluded.contains(&folder) {
+                        self.changed(&folder);
+                    }
+                }
+            }
         }
+    }
+
+    fn is_excluded(&self, path: &Path) -> bool {
+        self.excluded.iter().any(|folder| path.starts_with(folder))
     }
 
     fn indexed(&self, path: &Path) -> bool {
         let Ok(relative) = path.strip_prefix(&self.root) else {
             return false;
         };
-        relative
-            .components()
-            .all(|component| !component.as_os_str().to_str().is_none_or(skipped))
+        !self.is_excluded(path)
+            && relative
+                .components()
+                .all(|component| !component.as_os_str().to_str().is_none_or(skipped))
     }
 
     fn changed(&mut self, path: &Path) {
@@ -464,6 +489,9 @@ impl Worker {
     }
 
     fn read_folder(&mut self, id: u32, folder: &Path, folders: &mut Vec<(u32, PathBuf)>) {
+        if self.is_excluded(folder) {
+            return;
+        }
         let Ok(children) = fs::read_dir(folder) else {
             return;
         };
@@ -483,7 +511,7 @@ impl Worker {
             }
             if kind.is_dir() {
                 let path = child.path();
-                if path.join(CACHE_TAG).exists() {
+                if self.is_excluded(&path) || path.join(CACHE_TAG).exists() {
                     continue;
                 }
                 if let Some(added) = self.tree.add(id, name, true) {

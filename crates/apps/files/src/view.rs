@@ -609,7 +609,7 @@ impl FilesView {
         let shared = std::fs::read_to_string(xbel).ok();
         let usage = Usage::load(usage.clone());
         self.browser
-            .set_recents(recent_files(shared.as_deref(), &usage, MAX_RECENTS));
+            .set_recents(recent_files(shared.as_deref(), &usage, &[], MAX_RECENTS));
     }
 
     fn apply_remembered_view(&mut self) {

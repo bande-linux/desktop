@@ -27,6 +27,7 @@ pub enum PaneId {
     Appearance,
     Bar,
     Notifications,
+    Search,
     Accessibility,
     Displays,
     NightLight,
@@ -50,13 +51,14 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 26] = [
+    const KEYWORDS: [(Self, &'static str); 27] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
         (Self::Appearance, "appearance"),
         (Self::Bar, "bar"),
         (Self::Notifications, "notifications"),
+        (Self::Search, "search"),
         (Self::Accessibility, "accessibility"),
         (Self::Displays, "displays"),
         (Self::NightLight, "night-light"),
@@ -82,9 +84,11 @@ impl PaneId {
     pub fn group(self) -> Option<Group> {
         match self {
             Self::Wifi | Self::Bluetooth | Self::Network => Some(Group::Connections),
-            Self::Appearance | Self::Bar | Self::Notifications | Self::Accessibility => {
-                Some(Group::Desktop)
-            }
+            Self::Appearance
+            | Self::Bar
+            | Self::Notifications
+            | Self::Search
+            | Self::Accessibility => Some(Group::Desktop),
             Self::Displays | Self::Sound | Self::Keyboard | Self::Mouse | Self::Trackpad => {
                 Some(Group::Devices)
             }
@@ -111,6 +115,7 @@ impl PaneId {
             Self::Appearance => "weather-clear-night-symbolic",
             Self::Bar => "view-sidebar-start-symbolic",
             Self::Notifications => "preferences-system-notifications-symbolic",
+            Self::Search => "system-search-symbolic",
             Self::Accessibility => "avatar-default-symbolic",
             Self::Displays => "video-display-symbolic",
             Self::NightLight => "night-light-symbolic",
@@ -274,6 +279,16 @@ pub enum SettingId {
     ScreenSharingPage,
     LocationPage,
     AppPermissions,
+    SearchApplications,
+    SearchRecentApps,
+    SearchRecentDocuments,
+    SearchDocuments,
+    SearchFolders,
+    SearchSettings,
+    SearchSystem,
+    SearchCalculator,
+    SearchConversion,
+    SearchExcluded,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -314,6 +329,7 @@ pub enum List {
     Regions,
     DefaultApps,
     Clipboard,
+    SearchExcluded,
     Permissions(Permission),
 }
 
@@ -441,6 +457,14 @@ impl Setting {
 pub struct Section {
     pub title: Option<String>,
     pub settings: Vec<Setting>,
+    pub note: Option<String>,
+}
+
+impl Section {
+    fn noted(mut self, note: &str) -> Self {
+        self.note = Some(L10N.tr(note));
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -484,7 +508,11 @@ fn setting(id: SettingId, label: String, keywords: String, kind: Kind) -> Settin
 }
 
 fn section(title: Option<String>, settings: Vec<Setting>) -> Section {
-    Section { title, settings }
+    Section {
+        title,
+        settings,
+        note: None,
+    }
 }
 
 fn pane(id: PaneId, sections: Vec<Section>) -> Pane {
@@ -819,8 +847,40 @@ fn desktop_panes() -> Vec<Pane> {
                 ),
             ],
         ),
+        search_pane(),
         accessibility_pane(),
     ]
+}
+
+fn search_pane() -> Pane {
+    pane(
+        PaneId::Search,
+        vec![
+            section(
+                Some(L10N.tr("search-results")),
+                vec![
+                    switch(SettingId::SearchApplications, "search-applications"),
+                    switch(SettingId::SearchRecentApps, "search-recent-apps"),
+                    switch(SettingId::SearchRecentDocuments, "search-recent-documents"),
+                    switch(SettingId::SearchDocuments, "search-documents"),
+                    switch(SettingId::SearchFolders, "search-folders"),
+                    switch(SettingId::SearchSettings, "search-system-settings"),
+                    switch(SettingId::SearchSystem, "search-system-actions"),
+                    switch(SettingId::SearchCalculator, "search-calculator"),
+                    switch(SettingId::SearchConversion, "search-conversion"),
+                ],
+            )
+            .noted("search-results-note"),
+            section(
+                Some(L10N.tr("search-privacy")),
+                vec![list(
+                    SettingId::SearchExcluded,
+                    "search-privacy",
+                    List::SearchExcluded,
+                )],
+            ),
+        ],
+    )
 }
 
 fn accessibility_pane() -> Pane {

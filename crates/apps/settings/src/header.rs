@@ -238,6 +238,7 @@ impl SettingsView {
             PaneId::NightLight => self.night_light_summary(),
             PaneId::Appearance
             | PaneId::Bar
+            | PaneId::Search
             | PaneId::Accessibility
             | PaneId::KeyboardShortcuts
             | PaneId::Mouse

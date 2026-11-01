@@ -249,7 +249,7 @@ impl FilesView {
             .as_ref()
             .is_some_and(|index| covered(&index.root, &scope))
         {
-            match FileIndex::spawn(root.clone()) {
+            match FileIndex::spawn(root.clone(), Vec::new()) {
                 Ok(index) => {
                     self.index = Some(Index {
                         root,

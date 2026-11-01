@@ -6,6 +6,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, Role};
+use bande_config::Search;
 use bande_fs::Entry;
 use bande_preview::Preview;
 use bande_search::{FileResults, Usage};
@@ -888,6 +889,10 @@ impl Launcher {
 
     pub fn set_recently_used(&mut self, xbel: Option<&str>) {
         self.state.borrow_mut().model.set_recently_used(xbel);
+    }
+
+    pub fn set_search(&mut self, search: Search, excluded: Vec<PathBuf>) {
+        self.state.borrow_mut().model.set_search(search, excluded);
     }
 
     pub fn appear(&mut self, now: Instant) {

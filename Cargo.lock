@@ -708,6 +708,7 @@ name = "bande-launcher"
 version = "0.1.0"
 dependencies = [
  "accesskit",
+ "bande-config",
  "bande-fs",
  "bande-inbox",
  "bande-l10n",

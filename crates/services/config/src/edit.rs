@@ -6,8 +6,9 @@ use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 use crate::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
     ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging, InputSource, LidOnPower,
-    MenuBarPlacement, Mouse, NightLight, Placement, PrimaryButton, ScrollMethod, SecondaryClick,
-    Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant, accent_keyword, same_displays,
+    MenuBarPlacement, Mouse, NightLight, Placement, PrimaryButton, ScrollMethod, Search,
+    SearchCategory, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
+    accent_keyword, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -55,6 +56,7 @@ pub enum Setting {
     Wallpaper(WallpaperVariant, Option<PathBuf>),
     WallpaperFit(WallpaperFit),
     NightLight(NightLight),
+    Search(Search),
     Display(String, DisplaySettings),
     Arrangement(Vec<Placement>),
 }
@@ -320,6 +322,7 @@ impl Setting {
                 (*fit != WallpaperFit::Fill).then(|| fit.keyword().into()),
             ),
             Self::NightLight(night) => set_night_light(&mut document, night),
+            Self::Search(search) => set_search(&mut document, search),
             Self::Display(identity, display) => set_display(&mut document, identity, display),
             Self::Arrangement(placements) => set_arrangement(&mut document, &config, placements),
         }
@@ -443,6 +446,29 @@ fn set_night_light(document: &mut KdlDocument, night: &NightLight) {
         section,
         "warmth",
         (night.warmth != standard.warmth).then_some(KdlValue::Integer(night.warmth.into())),
+    );
+}
+
+fn set_search(document: &mut KdlDocument, search: &Search) {
+    for category in SearchCategory::ALL {
+        set(
+            document,
+            Some("search"),
+            category.keyword(),
+            (!search.shows(category)).then_some(KdlValue::Bool(false)),
+        );
+    }
+    set_values(
+        document,
+        Some("search"),
+        "exclude",
+        (!search.exclude.is_empty()).then(|| {
+            search
+                .exclude
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned().into())
+                .collect()
+        }),
     );
 }
 

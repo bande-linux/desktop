@@ -89,6 +89,8 @@ pub(crate) enum Intent {
     Network(NetworkCommand),
     ManualIpv4(bool),
     ImportVpn,
+    ExcludeFolder,
+    IncludeFolder(String),
     Locale(LocaleCommand),
     DefaultApp(&'static str, String),
     Grant(Permission, String, bool),
@@ -385,6 +387,13 @@ impl SettingsView {
         }
     }
 
+    pub(crate) fn excluded_folders(&self) -> Vec<String> {
+        match self.values.get(&SettingId::SearchExcluded) {
+            Some(Value::Codes(folders)) => folders.clone(),
+            _ => Vec::new(),
+        }
+    }
+
     pub(crate) fn layouts(&mut self) -> &Layouts {
         self.layouts.get_or_insert_with(Layouts::load)
     }
@@ -593,6 +602,7 @@ impl SettingsView {
             PaneId::Appearance
             | PaneId::Accessibility
             | PaneId::Bar
+            | PaneId::Search
             | PaneId::Keyboard
             | PaneId::KeyboardShortcuts
             | PaneId::Power
@@ -945,6 +955,13 @@ impl SettingsView {
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
                 Intent::Network(command) => self.commands.push(Command::Network(command)),
                 Intent::ImportVpn => self.commands.push(Command::ImportVpn),
+                Intent::ExcludeFolder => self.commands.push(Command::ExcludeFolder),
+                Intent::IncludeFolder(folder) => {
+                    self.focus_next = Some(Anchor::Setting(SettingId::SearchExcluded, None));
+                    let mut excluded = self.excluded_folders();
+                    excluded.retain(|known| *known != folder);
+                    self.change(SettingId::SearchExcluded, Value::Codes(excluded));
+                }
                 Intent::DefaultApp(role, id) => {
                     if let Some(known) = self
                         .default_apps

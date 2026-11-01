@@ -483,7 +483,13 @@ pub fn format_number(amount: f64) -> String {
     }
 }
 
-pub fn calculate(text: &str) -> Option<String> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Calculation {
+    pub value: String,
+    pub conversion: bool,
+}
+
+pub fn calculate(text: &str) -> Option<Calculation> {
     let (expression, target) = match split_conversion(text) {
         Some((expression, target)) => (expression, Some(target)),
         None => (text, None),
@@ -505,9 +511,12 @@ pub fn calculate(text: &str) -> Option<String> {
         return None;
     }
     let number = format_number(value.amount);
-    Some(match value.unit {
-        Some(unit) if unit.names[0].starts_with('°') => format!("{number}{}", unit.names[0]),
-        Some(unit) => format!("{number} {}", unit.names[0]),
-        None => number,
+    Some(Calculation {
+        conversion: target.is_some() || value.unit.is_some(),
+        value: match value.unit {
+            Some(unit) if unit.names[0].starts_with('°') => format!("{number}{}", unit.names[0]),
+            Some(unit) => format!("{number} {}", unit.names[0]),
+            None => number,
+        },
     })
 }

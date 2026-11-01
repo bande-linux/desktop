@@ -45,14 +45,14 @@ places:
 Dry review of tag -> build -> publish, overnight, without CI: `version-test.sh`;
 `check-debs.sh` and `smoke.sh` against the mini's 19 arm64 debs (fixed: `check-debs.sh` read
 the control archive through a pipe that `grep -q` broke, exit 141); `build-all.sh` with
-lintian at 0.1.0; every arch package is reachable from `bande-desktop` or `bande-os`;
+lintian at 0.1.0; every arch package is reachable from `bande-desktop` (`bande-os` was folded into it later, see single-metapackage.md);
 shellcheck of every workflow `run:` block; the action versions, cargo-deb 3.8.0 and actionlint
 1.7.12 exist; fetch-run's per-architecture completeness and version checks; `all` packages in
 both indices. actionlint itself is not packaged for Debian, so only the `lint` job runs it.
 
 Still open:
 - **Image suite (owner).** The image is Debian 13 (`trixie`), the archive's packages are built
-  for Debian testing (`bande-os` says "Debian testing installation"). dpkg-shlibdeps minimum
+  for Debian testing (`bande-desktop` says "on Debian testing"). dpkg-shlibdeps minimum
   versions usually still fit trixie, but a library only testing has makes the image build fail
   at `apt-get install`, and installed images follow `rolling` for updates. Move the image to
   testing, or build a trixie set as well?

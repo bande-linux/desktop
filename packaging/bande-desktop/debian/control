@@ -23,8 +23,13 @@ Depends: bande-compositor (= ${binary:Version}),
          libpam-systemd,
          fonts-noto-core,
          fonts-noto-cjk,
+         bande-greeter (= ${binary:Version}) | x-display-manager,
+         pipewire-audio,
          ${misc:Depends}
-Recommends: bande-term (= ${binary:Version}),
+Recommends: bande-greeter (= ${binary:Version}),
+            network-manager,
+            bande-apt-source,
+            bande-term (= ${binary:Version}),
             bande-screenshot (= ${binary:Version}),
             bande-files (= ${binary:Version}),
             bande-settings (= ${binary:Version}),
@@ -60,13 +65,18 @@ Recommends: bande-term (= ${binary:Version}),
 Suggests: gnome-clocks
 Description: Bande desktop environment
  The Bande desktop: a pure Wayland desktop with its own compositor, shell,
- session services and applications. Installing this package adds "Bande"
- to the sessions a display manager such as GDM, SDDM or greetd offers.
+ session services, login window and applications, on Debian testing.
  .
- It recommends a browser, text editor, image viewer, PDF viewer, calculator
- and video player, and opens files in them by default, an unlocked keyring
- for the passwords browsers and editors keep, fallback fonts for every
- script and the print service.
+ It brings a way to log in: the Bande login window under greetd, or the
+ display manager the system already has. With recommends, the login
+ window comes along anyway, and debconf asks which display manager to
+ start; "dpkg-reconfigure greetd" asks again later. Sound runs on PipeWire.
+ .
+ It recommends NetworkManager, the Bande APT repository, through which
+ the system follows every Bande release, a browser, text editor, image
+ viewer, PDF viewer, calculator and video player, and opens files in them
+ by default, an unlocked keyring for the passwords browsers and editors
+ keep, fallback fonts for every script and the print service.
  .
  So that running out of memory never freezes the computer, it recommends
  compressed swap in memory (zram, sized like Fedora's and compressed with

@@ -21,10 +21,16 @@ profiles. Sizes are tracked in [performance.md](performance.md).
   shell binary that hosts the desktop, the bar, the notifications, Control Center and the
   launcher, together with the Bande wallpapers and icon theme; the crates of those parts are
   libraries and build no package of their own.
-- **`bande-desktop`** (`packaging/bande-desktop`, architecture `all`): the meta-package.
+- **`bande-desktop`** (`packaging/bande-desktop`, architecture `all`, section
+  `metapackages`): the one package that installs a complete Bande system, the way `gnome-core`
+  or `kde-plasma-desktop` do ([plan](../../NOTES/plans/single-metapackage.md)).
   It depends on the compositor, the core session services, the shell, the lock
   screen and the portal backend at the same version, and on `xdg-desktop-portal`,
-  `dbus-user-session`, logind and `libpam-systemd`; it recommends the terminal, screenshot
+  `dbus-user-session`, logind and `libpam-systemd`, on `pipewire-audio`, and on
+  `bande-greeter | x-display-manager`, so there is always a way to log in: the Bande login
+  window under greetd, or the display manager the system already has. It recommends
+  `bande-greeter` anyway (greetd then asks which display manager to start), `network-manager`,
+  `bande-apt-source`, the terminal, screenshot
   tool, Files, Settings, Activity Monitor, the Package Installer (which opens `.deb` files and
   depends on `packagekit`), tray and automount services, `gnome-keyring` with
   `libpam-gnome-keyring`, Qt's portal platform theme (so Qt apps follow dark mode), the everyday apps a fresh install needs (`firefox-esr`,
@@ -35,15 +41,11 @@ profiles. Sizes are tracked in [performance.md](performance.md).
   in Papers and videos in Showtime; a person's own choice in `~/.config/mimeapps.list` still
   wins. The `install` jobs install without the third-party recommends and check that each of
   them has an installation candidate in Debian testing. Installing it adds "Bande" to the sessions a
-  display manager such as GDM, SDDM or greetd offers.
+  display manager such as GDM, SDDM or greetd offers. With `--no-install-recommends` it brings
+  the desktop, a login and sound and nothing else; the images install it that way.
 - The old `bande-bar`, `bande-desktop-surface`, `bande-launcher`, `bande-notifications`
   and `bande-controlcenter` packages have no successors of their own: `bande-shell`
   conflicts with and replaces them, so an upgrade removes them.
-- **`bande-os`** (`packaging/bande-os`, architecture `all`): the meta-package of the
-  operating system. It depends on `bande-desktop` and `bande-greeter` at the same version,
-  `greetd`, `network-manager`, `pipewire`, `wireplumber` and `systemd-zram-generator`, and
-  recommends `bande-apt-source`. `bande-desktop` never depends on it, so the desktop installs on
-  any Debian testing system on its own.
 - **`bande-archive-keyring`, `bande-apt-source`** are built and published by the APT
   repository itself (`bande-linux/apt`), not here. Installation is described in the
   top-level `README.md`.
@@ -59,7 +61,7 @@ The packages pull in the runtime stack the architecture relies on:
 - `bande-shell` recommends PipeWire, WirePlumber, NetworkManager with Debian's
   connectivity check, BlueZ and the Adwaita icon theme, and `bande-settings` adds
   PackageKit and power-profiles-daemon;
-- `bande-polkit` depends on `polkitd`, and `bande-greeter` on `greetd`;
+- `bande-polkit` depends on `polkitd`, and `bande-greeter` on `greetd (>= 0.10.3-6)`;
 - `mesa-vulkan-drivers` and `libvulkan1` come with `bande-compositor`.
 
 No package depends on an X server, XWayland or an X session; the `install` jobs check that none

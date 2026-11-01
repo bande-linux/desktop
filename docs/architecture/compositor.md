@@ -42,10 +42,15 @@ when they reach the screen is Bande's own.
   corner now lets what lies below show through by design.
 - **Title bars for other toolkits.** A window that binds `xdg-decoration` gets a server-side
   title bar unless it asks for client-side (Qt, foot, SDL and Electron ask for or accept server
-  side; GTK and our toolkit draw their own and never bind it). The bar is the toolkit's: the
-  same 28 pt height, traffic lights, centred semibold title, colours of the light or dark
-  palette (followed from the portal's `color-scheme`) and active, inactive and hover states,
-  drawn by `bande_graphics::TitleBar`, which `bande-toolkit-platform` draws its own with.
+  side; our toolkit draws its own and never binds it). GTK 3 and GTK 4 speak only KDE's
+  `org_kde_kwin_server_decoration`, whose manager announces server-side as the default: GTK
+  windows without a header bar ask for server-side and get our bar, windows with a header bar
+  (libadwaita, `gtk_window_set_titlebar`) ask for client-side and keep their own, and a later
+  switch is honoured. A mode requested before the surface becomes a toplevel is kept and
+  applied when it does. The bar is `bande_graphics::TitleBar`, which `bande-toolkit-platform`
+  draws its own with: 40 pt high, a pill on the left with close, minimise and zoom, a flush-left
+  Manrope title, colours of the light or dark palette (followed from the portal's
+  `color-scheme`) and active, inactive and hover states.
   It is rasterised on the CPU at its display's scale whenever its look changes (and stretched
   to fit while it is drawn on another display mid-drag or in a mirror) and becomes part
   of the window: inside its rounded clip and shadow, in the opening, closing and overview
@@ -289,6 +294,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `ext-foreign-toplevel-list-v1` | Window list for the taskbar | P0 | implemented, shell clients only |
 | `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented |
 | `zxdg_decoration_manager_v1` | Decoration negotiation (server-side unless the client asks for client-side) | P1 | implemented |
+| `org_kde_kwin_server_decoration_manager` | Decoration negotiation for GTK 3 and GTK 4 (default server-side, client-side for header-bar windows) | P1 | implemented |
 | `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | implemented (v4; enabled heads only, no custom modes) |
 | `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimised), shm buffers; a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
 | `bande_capture_v1` (own, `bande-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Super+Shift+5 | P1 | implemented, shell clients only |

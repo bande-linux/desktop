@@ -30,6 +30,8 @@ pub const APPEARANCE: &str = "org.freedesktop.appearance";
 pub const BANDE_APPEARANCE: &str = "org.bande.appearance";
 pub const GNOME_INTERFACE: &str = "org.gnome.desktop.interface";
 pub const GNOME_SOUND: &str = "org.gnome.desktop.sound";
+pub const GNOME_WM_PREFERENCES: &str = "org.gnome.desktop.wm.preferences";
+pub const BUTTON_LAYOUT: &str = "close,minimize,maximize:";
 pub const SOUND_THEME: &str = "Bande";
 pub const ICON_THEME: &str = "Bande";
 pub const VERSION: u32 = 2;
@@ -347,6 +349,10 @@ fn namespaces(look: Look, cursor: &CursorSettings) -> Namespaces {
                 ("theme-name", Value::from(SOUND_THEME)),
                 ("event-sounds", Value::from(look.effects)),
             ]),
+        ),
+        (
+            GNOME_WM_PREFERENCES,
+            owned(vec![("button-layout", Value::from(BUTTON_LAYOUT))]),
         ),
     ]
 }

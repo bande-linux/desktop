@@ -7,7 +7,7 @@ pub use bande_protocols::client::bande_shell_v1::{
 };
 pub use capture::{CaptureConstraints, CaptureOutcome};
 pub use cursor::CursorShape;
-pub use decoration::DecorationMode;
+pub use decoration::{DecorationMode, KdeDefaultMode, KdeMode};
 pub use fence::SwSyncTimeline;
 pub use gesture::ClientGesture;
 pub use idle::IdleEvent;
@@ -131,6 +131,7 @@ struct Globals {
     idle: idle::Idle,
     constraint: constraint::Constraint,
     decoration_modes: Vec<decoration::DecorationMode>,
+    kde_decoration: decoration::KdeDecoration,
     text_input: ime::TextInput,
     input_method: ime::InputMethod,
     gestures: Vec<gesture::ClientGesture>,
@@ -228,10 +229,22 @@ impl TestClient {
         memory: Memory,
         before_buffer: impl FnOnce(&Self, &WlSurface, &XdgToplevel),
     ) {
+        self.map_window_after(server, image, memory, |_, _| {}, before_buffer);
+    }
+
+    pub(crate) fn map_window_after(
+        &mut self,
+        server: &mut Compositor,
+        image: &ShmImage,
+        memory: Memory,
+        before_role: impl FnOnce(&mut Self, &WlSurface),
+        before_buffer: impl FnOnce(&Self, &WlSurface, &XdgToplevel),
+    ) {
         let qh = self.queue.handle();
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
-        let wm_base = self.globals.wm_base.as_ref().expect("xdg_wm_base");
         let surface = compositor.create_surface(&qh, ());
+        before_role(self, &surface);
+        let wm_base = self.globals.wm_base.as_ref().expect("xdg_wm_base");
         let xdg_surface = wm_base.get_xdg_surface(&surface, &qh, ());
         let toplevel = xdg_surface.get_toplevel(&qh, ());
         self.globals.configured = false;

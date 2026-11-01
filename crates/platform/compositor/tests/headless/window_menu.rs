@@ -268,3 +268,44 @@ fn the_window_menu_follows_the_text_size_and_matches_its_golden() {
         snapshot.rgba
     );
 }
+
+fn client_side(server: &mut Compositor) -> TestClient {
+    let mut client = window(server, BLUE, WINDOW);
+    client.exchange(server);
+    client
+}
+
+fn menu_from_header(asked: (i32, i32)) -> (Point<f64, Logical>, Vec<(u32, bool)>) {
+    let mut server = server();
+    let mut client = client_side(&mut server);
+    server.move_pointer_to(on_window(&server, (100, 60)), 10);
+    server.press_button(BTN_RIGHT, true, 10);
+    client.exchange(&mut server);
+    client.request_window_menu(&mut server, 0, asked.0, asked.1);
+    server.press_button(BTN_RIGHT, false, 11);
+    client.exchange(&mut server);
+    let item = server.window_menu_item("Minimize").expect("a menu item");
+    (item, client.buttons().to_vec())
+}
+
+#[test]
+fn a_right_click_in_a_client_drawn_header_opens_our_window_menu_where_the_app_asks() {
+    let (at_pointer, _) = menu_from_header((100, 60));
+    let (asked, buttons) = menu_from_header((20, 10));
+
+    assert_eq!(asked - at_pointer, Point::from((-80.0, -50.0)));
+    assert_eq!(buttons, vec![(BTN_RIGHT, true), (BTN_RIGHT, false)]);
+}
+
+#[test]
+fn a_window_menu_request_after_the_button_is_released_opens_nothing() {
+    let mut server = server();
+    let mut client = client_side(&mut server);
+
+    let inside = on_window(&server, (180, 100));
+    press(&mut server, BTN_RIGHT, inside);
+    client.exchange(&mut server);
+    client.request_window_menu(&mut server, 0, 20, 10);
+
+    assert!(server.window_menu().is_empty());
+}

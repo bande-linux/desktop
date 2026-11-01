@@ -113,9 +113,14 @@ graph LR
   the wallpaper's average colour (as `ad`, empty when "Tinted frame" is off) for the toolkit to
   mix into `chassis`. `org.gnome.desktop.interface` adds `icon-theme` (`Bande`, or
   `Bande-<Accent>` for the accent's folder tabs) and `org.gnome.desktop.sound` turns
-  `event-sounds` off with the Sound effects switch. libadwaita snaps `accent-color` to its nine
+  `event-sounds` off with the Sound effects switch. `org.gnome.desktop.wm.preferences`
+  serves `button-layout` `close,minimize,maximize:`, so GTK and libadwaita put their window
+  controls on the left in our order. libadwaita snaps `accent-color` to its nine
   presets, so the portal also writes `~/.config/gtk-4.0/bande.css` (the accent, `on_accent`,
-  frame, sheet, overlay and semantic colours as libadwaita's CSS variables) and keeps
+  frame, sheet, overlay and semantic colours as libadwaita's CSS variables, plus rules that
+  draw client-side header bars like our title bar: the `windowcontrols` pill in `well` with
+  `hairline` when inactive, glyphs in `ink2`/`ink3`, a `danger` disc under close on hover,
+  no shade line and the Manrope window title) and keeps
   `@import url("bande.css");` at the top of the user's own `gtk.css`, leaving the rest of that
   file alone. GTK 4.18 has no `prefers-color-scheme` media query, so the file's unconditional
   block is the current scheme (rewritten when it changes; running GTK apps pick it up at their

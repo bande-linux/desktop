@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::io;
 use std::path::Path;
 
-use bande_design::{Accent, Color, Contrast, Palette, Scheme};
+use bande_design::{Accent, Color, Contrast, Palette, Scheme, TextRole};
 
 pub const STYLESHEET: &str = "bande.css";
 pub const IMPORT: &str = "@import url(\"bande.css\");";
@@ -11,7 +11,7 @@ fn hex(color: Color) -> String {
     format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b)
 }
 
-fn variables(scheme: Scheme, accent: Accent) -> [(&'static str, Color); 28] {
+fn variables(scheme: Scheme, accent: Accent) -> [(&'static str, Color); 34] {
     let palette = Palette::generate(scheme, accent, Contrast::Standard);
     [
         ("accent-color", palette.accent_text),
@@ -42,7 +42,83 @@ fn variables(scheme: Scheme, accent: Accent) -> [(&'static str, Color); 28] {
         ("error-bg-color", palette.danger),
         ("success-bg-color", palette.success),
         ("warning-bg-color", palette.warning),
+        ("bande-well", palette.well),
+        ("bande-hairline", palette.hairline),
+        ("bande-ink", palette.ink),
+        ("bande-ink2", palette.ink2),
+        ("bande-ink3", palette.ink3),
+        ("bande-danger", palette.danger),
     ]
+}
+
+const WINDOW_CONTROLS: &str = "
+headerbar {
+  box-shadow: none;
+}
+
+headerbar windowcontrols.start {
+  margin-left: 6px;
+}
+
+windowcontrols {
+  min-height: 24px;
+  padding: 0 1.5px;
+  border-radius: 12px;
+  border-spacing: 0;
+  background-color: var(--bande-well);
+}
+
+windowcontrols:backdrop {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--bande-hairline);
+}
+
+windowcontrols > button {
+  min-width: 21px;
+  min-height: 24px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--bande-ink2);
+}
+
+windowcontrols:backdrop > button {
+  color: var(--bande-ink3);
+}
+
+windowcontrols > button:hover {
+  color: var(--bande-ink);
+}
+
+windowcontrols > button > image {
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+  border-radius: 8px;
+  background: none;
+  box-shadow: none;
+}
+
+windowcontrols > button.close:hover > image {
+  background-color: var(--bande-danger);
+  color: white;
+}
+
+windowcontrols > button:active > image {
+  background-color: color-mix(in srgb, var(--bande-ink) 12%, transparent);
+}
+";
+
+fn window_title(css: &mut String) {
+    let spec = TextRole::WindowTitle.spec();
+    let _ = write!(
+        css,
+        "\nheaderbar .title,\nwindowtitle .title {{\n  font-family: \"{}\";\n  font-size: {}px;\n  font-weight: {};\n}}\n",
+        spec.typeface.family(),
+        spec.size,
+        spec.weight
+    );
 }
 
 fn block(css: &mut String, indent: &str, scheme: Scheme, accent: Accent) {
@@ -61,6 +137,8 @@ pub fn stylesheet(accent: Accent, current: Scheme) -> String {
         block(&mut css, "  ", scheme, accent);
         css.push_str("}\n");
     }
+    css.push_str(WINDOW_CONTROLS);
+    window_title(&mut css);
     css
 }
 

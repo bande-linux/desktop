@@ -91,7 +91,7 @@ impl WindowGrab {
 }
 
 impl State {
-    fn grab_start(
+    pub(crate) fn grab_start(
         &mut self,
         seat: &WlSeat,
         serial: Serial,

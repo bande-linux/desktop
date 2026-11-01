@@ -1,6 +1,8 @@
 use crate::support::*;
 use bande_compositor::{Compositor, Renderer};
-use bande_test_wayland::{DecorationMode, RED, TestClient, ToplevelState, roundtrip};
+use bande_test_wayland::{
+    DecorationMode, KdeDefaultMode, KdeMode, RED, TestClient, ToplevelState, roundtrip,
+};
 use smithay::utils::Size;
 
 const WINDOW: (i32, i32) = (120, 40);
@@ -24,6 +26,18 @@ fn decorated_sized(
     client.show_decorated_window(server, &image, requested);
     client.exchange(server);
     client.commit_buffer(0, &image, (0, 0, size.0, size.1));
+    client.exchange(server);
+    assert_eq!(client.protocol_error(), None);
+    client
+}
+
+fn kde_decorated(server: &mut Compositor, requested: Option<KdeMode>) -> TestClient {
+    let mut client = TestClient::connect(server);
+    let pixels = solid(RED, WINDOW);
+    let image = xrgb(&pixels, WINDOW);
+    client.show_kde_decorated_window(server, &image, requested);
+    client.exchange(server);
+    client.commit_buffer(0, &image, (0, 0, WINDOW.0, WINDOW.1));
     client.exchange(server);
     assert_eq!(client.protocol_error(), None);
     client
@@ -420,4 +434,63 @@ fn a_client_side_window_with_its_own_margin_gets_the_press_itself() {
 
     assert!(!client.buttons().is_empty());
     assert_ne!(configured_size(&client), Some((WINDOW.0 + 30, WINDOW.1)));
+}
+
+#[test]
+fn the_kde_decoration_manager_tells_gtk_that_we_draw_title_bars() {
+    let mut server = server();
+    let mut client = TestClient::connect(&mut server);
+
+    assert_eq!(
+        client.kde_default_mode(&mut server),
+        Some(KdeDefaultMode::Server)
+    );
+}
+
+#[test]
+fn a_gtk_window_that_asks_for_server_side_decorations_gets_our_title_bar() {
+    let mut server = server();
+    let mut renderer = Renderer::new().expect("renderer");
+    let client = kde_decorated(&mut server, Some(KdeMode::Server));
+    let top_left = origin(&server);
+
+    assert_eq!(client.kde_modes().last(), Some(&KdeMode::Server));
+    assert_eq!(geometry(&server).size, (WINDOW.0, WINDOW.1 + BAR).into());
+    assert!(close_to(
+        pixel(&mut renderer, &mut server, top_left.0 + 100, top_left.1 + 3),
+        [0xEC, 0xEA, 0xE7]
+    ));
+    assert!(close_to(
+        pixel(
+            &mut renderer,
+            &mut server,
+            top_left.0 + 60,
+            top_left.1 + BAR + 10
+        ),
+        [0xFF, 0x00, 0x00]
+    ));
+}
+
+#[test]
+fn a_gtk_window_with_its_own_header_bar_keeps_its_full_size_without_our_bar() {
+    let mut server = server();
+    let client = kde_decorated(&mut server, Some(KdeMode::Client));
+
+    assert_eq!(client.kde_modes().last(), Some(&KdeMode::Client));
+    assert_eq!(geometry(&server).size, WINDOW.into());
+}
+
+#[test]
+fn a_gtk_window_that_switches_to_its_own_header_bar_loses_our_bar() {
+    let mut server = server();
+    let mut client = kde_decorated(&mut server, Some(KdeMode::Server));
+    let pixels = solid(RED, WINDOW);
+    let image = xrgb(&pixels, WINDOW);
+
+    client.request_kde_mode(&mut server, 0, KdeMode::Client);
+    client.commit_buffer(0, &image, (0, 0, WINDOW.0, WINDOW.1));
+    client.exchange(&mut server);
+
+    assert_eq!(client.kde_modes().last(), Some(&KdeMode::Client));
+    assert_eq!(geometry(&server).size, WINDOW.into());
 }

@@ -9,7 +9,7 @@ Severity: **critical** = lock-screen bypass or session-wide compromise; **high**
 or volume can hang or crash a session component, run code, or delete data; **medium** = wrong
 behaviour, unbounded growth or a weaker boundary than documented; **low** = edge cases, hygiene.
 
-Counts: 4 critical, 11 high, 27 medium, about 53 low. Fixed: 27 (3 critical, 8 high, 11 medium, 5 low).
+Counts: 4 critical, 11 high, 27 medium, about 53 low. Fixed: 28 (3 critical, 8 high, 12 medium, 5 low).
 
 ## Fixed
 
@@ -38,6 +38,7 @@ Counts: 4 critical, 11 high, 27 medium, about 53 low. Fixed: 27 (3 critical, 8 h
 | medium | terminal / toolkit `Window::set_title` | OSC 0/2 titles are unbounded; a title over the Wayland message size would get the terminal disconnected with all its tabs. Titles are capped at 1 KiB on a char boundary. | `2f5dad8b` |
 | low | search `calc.rs` | A long run of `(` or `-` pasted into the launcher recursed until the shell's stack overflowed. Input over 256 tokens is not a calculation. | `cc28a40f` |
 | medium | render `lib.rs` | Client shm/dma-buf sizes above `maxImageDimension2D` reached `vkCreateImage` (undefined behaviour). Refused with `ImageTooLarge`. | `2517170b` |
+| medium | compositor `main.rs`, `input_settings.rs` | A `config.kdl` read or parse error silently became defaults and was applied mid-session (layouts, sticky keys, display scales reset). The current settings are kept and the error is logged. | `720496b8` |
 | low | toolkit `presentation.rs` | `now + (at - clock)` and `Duration::new` panicked on a far-future presentation time. Saturating. | `4a8ee9b2` |
 | low | installer `deb.rs`, status `tray.rs` | `Installed-Size * 1024`, tray `width * height * 4` and `(width - 32).abs()` overflowed on crafted values. Saturating/checked. | `4a8ee9b2` |
 | low | greeter `Cargo.toml` | Unused `jiff` and dev `rustix`. Removed. | `102e3c9e` |
@@ -57,7 +58,6 @@ Counts: 4 critical, 11 high, 27 medium, about 53 low. Fixed: 27 (3 critical, 8 h
 
 ### Medium
 
-- compositor: `config.kdl` read/parse errors silently become defaults and are applied mid-session (`main.rs:149`, `input_settings.rs:84`); keep the last good config and alert.
 - compositor: `wlr-output-management` `SetMode` accepts another head's mode and `use_mode` returning `Ok(false)` is silent (`management.rs`, `main.rs:187`). No test client for the protocol yet.
 - toolkit clipboard: paste/drop reads have no size cap, no timeout and readings never expire (`platform/src/clipboard.rs:333, 487`).
 - notify: `rule_for` remembers every new `app_name` forever and rewrites `notification-apps` each time (`lib.rs:574`); cap apps without a user rule.

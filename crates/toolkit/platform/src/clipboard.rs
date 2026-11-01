@@ -236,6 +236,26 @@ pub(crate) struct Clipboard {
     pub(crate) primary: Primary,
 }
 
+impl Clipboard {
+    pub(crate) fn release(&mut self) {
+        let incoming = [self.incoming.take(), self.pending_drop.take()];
+        for offer in self.selection.take().into_iter().chain(
+            incoming
+                .into_iter()
+                .flatten()
+                .map(|incoming| incoming.offer),
+        ) {
+            offer.destroy();
+        }
+        if let Some(device) = self.device.take()
+            && device.version() >= 2
+        {
+            device.release();
+        }
+        self.primary.release();
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct OfferState {
     types: Mutex<Vec<String>>,

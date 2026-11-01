@@ -28,7 +28,7 @@ use wayland_client::protocol::wl_data_device_manager::WlDataDeviceManager;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, EventQueue};
+use wayland_client::{Connection, EventQueue, Proxy};
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
@@ -1254,6 +1254,14 @@ impl Drop for Window {
             ShellSurface::Lock(_) => {}
         }
         self.surface.destroy();
+        self.state.input.release();
+        self.state.clipboard.release();
+        self.state.text_input.release();
+        if let Some(seat) = self.state.seat.take()
+            && seat.version() >= 5
+        {
+            seat.release();
+        }
         let _ = self.connection.flush();
     }
 }

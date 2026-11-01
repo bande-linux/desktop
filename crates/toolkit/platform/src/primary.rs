@@ -23,6 +23,17 @@ pub(crate) struct Primary {
     selected: Option<(ZwpPrimarySelectionSourceV1, String)>,
 }
 
+impl Primary {
+    pub(crate) fn release(&mut self) {
+        if let Some(offer) = self.selection.take() {
+            offer.destroy();
+        }
+        if let Some(device) = self.device.take() {
+            device.destroy();
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct PrimaryOffer {
     types: Mutex<Vec<String>>,

@@ -34,7 +34,7 @@ places:
 | Milestone | State |
 |---|---|
 | D1-D3, D5 | done on `main` (release.yml, `ci/release/*.sh`, extended.yml, ci.yml gone, polkit exempt and in Recommends) |
-| D1 peak RSS | not measured: needs a dist cargo build and the disk is tight; the tag run's `debs` job prints disk and memory |
+| D1 peak RSS | measured 2026-11-01 on the mini (arm64, release dry run): the dist build peaks at 4.6 GB with one job; two jobs were OOM-killed at the 6 GB `gentle` cap, so CI's `CARGO_BUILD_JOBS=2` needs about 9-10 GB of the runner's 16 GB |
 | D4 | done as "apt pulls" above. The `dch` changelog stanza is not done. Decided overnight 2026-11-01: keep `DEB_VERSION_OVERRIDE` with `dh_gencontrol -v`; lintian is clean at 0.1.0 and nothing reads the changelog version (plan recommendation was dch; owner may revisit) |
 | A1, A2 | done on apt `main`; `tests/run-all.sh` green on the mini (240 checks) |
 | A3 | done, apt `5fc022d`: `verify` waits until the site serves the desktop version the build just put in, installs `bande-desktop` on amd64 and arm64, checks every installed `bande-*` package is that architecture or `all` at that version, starts the compositor headless. Checked against a fixture archive; it runs in CI with the first desktop publish |
@@ -88,6 +88,51 @@ Still open:
    `bande-apt-source` as the site describes, `apt update`, `apt policy bande-desktop`.
    Local builds after the tag are `0.1.0+git...`, which sorts above `0.1.0`, so
    `rebuild-desktop` builds still win over the archive until the next tag.
+
+## Launch checklist
+
+Dry run on the mini, 2026-11-01 (desktop `main` at the time, arm64, version 0.1.0 as a tag
+run would derive it): `build-debs.sh` (dist, 21 packages), `check-debs.sh`, `smoke.sh`,
+`build-all.sh` with lintian, and `ci/deb/install-test/run.sh` plus the portal frontend test in
+an mmdebstrap `minbase` chroot of Debian testing (what `debian:testing` is) all pass. amd64
+was reviewed on paper only: same scripts and container, `ubuntu-24.04` runner. The `test` and
+`lint` jobs were not run in CI; the local gate stands in for them.
+
+Order (apps before the desktop, apps-split.md D9; package names are locked to the first repo
+that publishes them):
+
+1. **Before any tag.** apps-split M1-M6 have landed (the moved apps are gone from desktop's
+   `ci/release/packages`, the metapackage recommends them unversioned, the install test skips
+   them); desktop `main` and apps `main` pass their local gates; the apps pin the desktop rev
+   they will ship with. Check the org's artifact storage: release runs on 2026-10-31 failed
+   with "Artifact storage quota has been hit" (the images' ISO artifacts, ~3.7 GB, were the
+   bulk); delete stale ISO artifacts first. Check `state/owners` still lists only apt and kernel.
+2. **Apps, one tag each**, from apps `main`, each `apps/<app>/Cargo.toml` at 0.1.0:
+   `git tag <app>-v0.1.0 origin/main && git push origin <app>-v0.1.0` for terminal, monitor,
+   software, installer, mail, calendar (directory name = tag prefix, package `bande-<app>`).
+   After each: `gh run list -R bande-linux/apps -w build.yml -e push` green (both
+   architectures, and `debs` uploaded `bande-debs-arm64`/`-amd64`); then apt's `publish`
+   (cron or `gh workflow run publish.yml -R bande-linux/apt -f repo=apps -f run_id=<id>`):
+   `build` lists the app and no `report` job fails; `curl -s
+   https://bande-linux.github.io/apt/state/owners | grep bande-<app>` names apps;
+   `Packages` for amd64 and arm64 lists `bande-<app>` at 0.1.0. A refused run is recorded in
+   `state/processed` and never retried: fix, bump to 0.1.1, tag again.
+3. **Desktop.** `[workspace.package] version = "0.1.0"` on `main` (it is), then step 3-7 of
+   "Cutting the first release" above: `git tag v0.1.0 origin/main && git push origin v0.1.0`;
+   all seven `release.yml` jobs green; apt's `publish` takes it; both `verify` jobs install
+   `bande-desktop` 0.1.0 on amd64 and arm64; `state/owners` lists the desktop's packages under
+   desktop and the moved apps still under apps.
+4. **After.** `apt policy bande-desktop` on the mini; an image build from the archive
+   (images' `fetch-desktop.sh`) contains the apps; switch the apps' pin to `v0.1.0` (D8).
+
+Rollback: a published version is never moved or deleted (apt keeps the pool and clients may
+have installed it). A bad release is fixed forward: fix on `main`, bump (desktop
+`[workspace.package]` or the app's Cargo version) to the next patch, tag again; apt takes the
+higher version. A tag whose run failed before apt took it can be deleted and re-pushed only if
+it never published (`gh run list` shows no green run for it and the archive does not serve the
+version); otherwise use the next patch. If a publish deployed a broken site (not a broken package),
+fix apt on its `main` and dispatch `publish.yml`: it rebuilds the site from the live archive
+and the pool cache, so rerunning an older publish run does not roll back.
 
 ## What the owner sees
 

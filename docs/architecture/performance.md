@@ -2,7 +2,7 @@
 
 Measured costs of the session, how to measure them, and what changed them. The budgets for
 frame times are in [`../decisions/0001-rendering.md`](../decisions/0001-rendering.md) and are
-checked by `ci/perf`; this page tracks memory, CPU per interaction and size.
+measured with `bande-bench` (run by hand, no longer in CI); this page tracks memory, CPU per interaction and size.
 
 ## How to measure
 

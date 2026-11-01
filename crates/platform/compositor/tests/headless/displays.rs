@@ -121,20 +121,14 @@ fn a_shortcut_moves_the_focused_window_to_the_neighbouring_display_keeping_its_p
     let mut app = window(&mut server, RED, WINDOW);
     assert_eq!(geometry(&server), rect(96, 72, 64, 48));
 
-    chord(
-        &mut server,
-        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT],
-    );
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT]);
     roundtrip(&mut server, &mut [&mut app]);
 
     assert_eq!(server.output_of(&server.windows()[0]), SIDE);
     assert_eq!(geometry(&server), rect(256 + 128, 96, 64, 48));
     assert!(app.keyboard_focus_on(0));
 
-    chord(
-        &mut server,
-        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_LEFT],
-    );
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_LEFT]);
 
     assert_eq!(server.output_of(&server.windows()[0]), MAIN);
     assert_eq!(geometry(&server), rect(96, 72, 64, 48));
@@ -226,10 +220,7 @@ fn a_window_is_told_the_scale_of_the_display_it_is_on() {
     let mut app = window(&mut server, RED, WINDOW);
     assert_eq!(app.preferred_scale(&mut server, 0), Some(120));
 
-    chord(
-        &mut server,
-        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT],
-    );
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT]);
 
     assert_eq!(app.preferred_scale(&mut server, 0), Some(240));
 }
@@ -527,10 +518,7 @@ fn a_window_with_our_title_bar_moves_to_a_display_of_another_scale_with_its_bar(
     let decorated = (DECORATED.0, DECORATED.1 + BAR);
     assert_eq!(geometry(&server), rect(68, 76, decorated.0, decorated.1));
 
-    chord(
-        &mut server,
-        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT],
-    );
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT]);
     roundtrip(&mut server, &mut [&mut app]);
 
     assert_eq!(server.output_of(&server.windows()[0]), SIDE);
@@ -550,10 +538,7 @@ fn a_window_with_our_title_bar_moves_to_a_display_of_another_scale_with_its_bar(
     assert_eq!(pixel(100, 3), [0xEC, 0xEA, 0xE7]);
     assert_eq!(pixel(60, BAR + 3), [0xff, 0, 0]);
 
-    chord(
-        &mut server,
-        &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_LEFT],
-    );
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_LEFT]);
     roundtrip(&mut server, &mut [&mut app]);
 
     assert_eq!(server.output_of(&server.windows()[0]), MAIN);

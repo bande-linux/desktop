@@ -16,8 +16,8 @@ use zbus::object_server::SignalEmitter;
 
 use crate::card::{Scanout, card_with_driver};
 use crate::uinput::{
-    BTN_LEFT, EV_KEY, EV_REL, KEY_3, KEY_4, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_F, KEY_F10,
-    KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_M, KEY_Q, KEY_RIGHT, KEY_SPACE, REL_X, REL_Y,
+    BTN_LEFT, EV_KEY, EV_REL, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_F10, KEY_F11, KEY_H, KEY_L,
+    KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT, KEY_S, KEY_SPACE, KEY_SYSRQ, REL_X, REL_Y,
     VirtualDevice,
 };
 
@@ -247,21 +247,21 @@ fn the_launcher_opens_a_terminal_that_takes_typing() {
         ]
     };
     let background = corners(&desktop);
-    keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_F);
+    keyboard.chord(&[KEY_LEFTMETA], KEY_F11);
     wait_for("the terminal to fill the screen", STARTUP, || {
         corners(&scanout()) == [terminal_color; 2]
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m15-terminal-full-screen");
 
-    keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_F);
+    keyboard.chord(&[KEY_LEFTMETA], KEY_F11);
     wait_for("the terminal to return to its window", STARTUP, || {
         corners(&scanout()) == background
     });
     thread::sleep(Duration::from_secs(1));
     scanout().save("m15-terminal-windowed");
 
-    keyboard.chord(&[KEY_LEFTMETA], KEY_M);
+    keyboard.chord(&[KEY_LEFTMETA], KEY_H);
     wait_for("the terminal to minimize", STARTUP, || {
         let now = scanout();
         pixel(&now, now.width / 2, now.height / 2) == pixel(&desktop, center_x, desktop.height / 2)
@@ -337,7 +337,7 @@ fn firefox_runs_on_wayland_and_opens_a_context_menu() {
         page_pixels(&scanout()) == page_pixels(&page)
     });
 
-    keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_F);
+    keyboard.chord(&[KEY_LEFTMETA], KEY_F11);
     wait_for("Firefox to go full screen", FIREFOX_STARTUP, || {
         page_pixels(&scanout()) > page_pixels(&page)
     });
@@ -439,7 +439,7 @@ fn ctrl_super_q_locks_and_the_password_unlocks() {
     let _desktop = start_desktop_with(&[("DBUS_SYSTEM_BUS_ADDRESS", bus.address())]);
     wait_for_shell();
 
-    keyboard.chord(&[KEY_LEFTCTRL, KEY_LEFTMETA], KEY_Q);
+    keyboard.chord(&[KEY_LEFTMETA], KEY_L);
     wait_for("the session to lock", STARTUP, || {
         locked_hint.get() == Some(true) && running("bande-lock")
     });
@@ -570,7 +570,7 @@ fn super_shift_3_saves_the_screen_to_the_desktop() {
     });
     let screen = wait_for_shell();
 
-    keyboard.chord(&[KEY_LEFTMETA, KEY_LEFTSHIFT], KEY_3);
+    keyboard.chord(&[KEY_LEFTSHIFT], KEY_SYSRQ);
     wait_for("a saved screenshot", STARTUP, || {
         saved_screenshots(desktop_folder).len() == 1
     });
@@ -645,7 +645,7 @@ fn super_shift_4_saves_a_dragged_out_area_to_the_desktop() {
     }
     let before = wait_for_settled("the pointer to rest in the corner", |_| true);
 
-    mouse.chord(&[KEY_LEFTMETA, KEY_LEFTSHIFT], KEY_4);
+    mouse.chord(&[KEY_LEFTMETA, KEY_LEFTSHIFT], KEY_S);
     let cursor = (bande_compositor::ARROW_WIDTH * bande_compositor::ARROW_HEIGHT) as usize;
     wait_for("the crosshair of the area overlay", STARTUP, || {
         mouse.frame(&[(EV_REL, REL_X, 1), (EV_REL, REL_Y, 1)]);

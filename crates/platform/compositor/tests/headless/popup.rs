@@ -181,7 +181,7 @@ fn opening_the_overview_closes_the_menu() {
     let mut desk = Desk::new();
     let popup = desk.open_menu();
 
-    chord(&mut desk.server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_UP]);
+    chord(&mut desk.server, &[KEY_LEFTMETA, KEY_W]);
     desk.exchange();
 
     assert!(desk.editor.popup_dismissed(popup));

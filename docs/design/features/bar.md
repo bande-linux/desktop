@@ -4,6 +4,10 @@ Status: adopted by the owner on 2026-10-30 (app menus: cascade from the app head
 Name: since 2026-11-01 people see this bar as the **Taskbar** (Settings ▸ Taskbar, "Keep in Taskbar"), and the side strip in the separate-menu-bar layout is the taskbar too. This page says "bar" for the same thing; "today's Dock" means the separate Dock that came before it. The config key stays `bar { … }` and the D-Bus properties stay `BarApps`, `BarEdge` and so on.
 The proposal's mockups were removed on 2026-11-01; the bar's goldens (`crates/shell/bar/tests/golden/`) show what was built.
 
+Shortcuts below are the proposal's. The shipped chords follow GNOME and KDE (Ctrl in apps, Super
+only for the system, [decision 0005](../../decisions/0005-ctrl-for-app-shortcuts.md)); the
+current set is the keyboard model in [`overview.md`](../../architecture/overview.md#keyboard-model).
+
 ## 1. The idea in one paragraph
 
 One bar, on the left edge by default, holds everything that today lives in the Dock and the menu

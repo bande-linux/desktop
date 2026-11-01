@@ -19,7 +19,7 @@ bande-test-bus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, dbus-session-bus | default-dbus-session-bus, init-system-helpers (>= 1.66)"
+depends = "$auto, default-dbus-session-bus | dbus-session-bus, init-system-helpers (>= 1.66)"
 extended-description = """\
 Serves org.kde.StatusNotifierWatcher, the registry through which \
 applications such as Steam and Nextcloud publish tray icons and the \

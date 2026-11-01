@@ -288,7 +288,7 @@ fn the_pointer_shows_what_a_drop_would_do() {
             ("no-drop", &[image(refused)]),
         ],
     );
-    let shown = |accepts: bool, option: bool| {
+    let shown = |accepts: bool, ctrl: bool| {
         let mut server = Compositor::new(Size::from((256, 192))).expect("headless compositor");
         server.use_cursor_theme(CursorTheme {
             search_path: vec![root.path().to_path_buf()],
@@ -324,8 +324,8 @@ fn the_pointer_shows_what_a_drop_would_do() {
         client.start_drag(&mut server, &icon, (-8, -8));
         server.move_pointer_to(pointer, 3);
         client.exchange(&mut server);
-        if option {
-            server.key(KEY_LEFTALT, true, 4);
+        if ctrl {
+            server.key(KEY_LEFTCTRL, true, 4);
             client.exchange(&mut server);
         }
         let mut renderer = Renderer::new().expect("Vulkan renderer");

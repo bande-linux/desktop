@@ -10,7 +10,6 @@ const INSIDE_WINDOW: (i32, i32) = (100, 80);
 const CORNER: (i32, i32) = (2, 2);
 const BUFFER_CONSTRAINTS: u32 = 1;
 const STOPPED: u32 = 2;
-const KEY_5: u32 = 6;
 const KEY_SYSRQ: u32 = 99;
 
 fn red_window(server: &mut Compositor) -> TestClient {
@@ -230,11 +229,11 @@ fn the_shell_learns_where_the_windows_are_frontmost_first() {
 }
 
 #[test]
-fn super_shift_5_asks_the_shell_for_the_capture_options() {
+fn print_asks_the_shell_for_the_capture_options() {
     let mut server = server();
     let mut shell = TestClient::connect_as_shell(&mut server);
     shell.join_capture(&mut server);
-    let keys = [KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_5];
+    let keys = [KEY_SYSRQ];
 
     for key in keys {
         server.key(key, true, 0);

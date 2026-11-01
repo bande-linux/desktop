@@ -56,7 +56,7 @@ fn ctrl_super_shift_right_carries_the_window_to_a_new_workspace_and_alt_super_le
         viewer.keyboard_focus_on(0),
     );
 
-    chord(&mut server, &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFT]);
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFT]);
     settle(&mut server, end);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
 
@@ -78,7 +78,7 @@ fn a_workspace_left_empty_goes_away_once_the_switch_settles() {
     );
     let end = settle(&mut server, 0);
 
-    chord(&mut server, &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFT]);
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFT]);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
     chord(
         &mut server,
@@ -148,7 +148,7 @@ fn the_taskbar_learns_the_workspaces_and_activating_an_app_switches_to_its_works
         &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT],
     );
     let end = settle(&mut server, 0);
-    chord(&mut server, &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFT]);
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFT]);
     settle(&mut server, end);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer, &mut taskbar]);
     let apart = (taskbar.workspaces(), workspace_of_app(&server, VIEWER));
@@ -170,7 +170,7 @@ fn a_full_screen_window_gets_a_workspace_of_its_own_until_it_leaves_full_screen(
     let mut viewer = window_of(&mut server, BLUE, WINDOW, VIEWER);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
 
-    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_F]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_F11]);
     viewer.exchange(&mut server);
     viewer.fill_configured_size(&mut server, 0, BLUE);
     let end = settle(&mut server, 0);
@@ -180,7 +180,7 @@ fn a_full_screen_window_gets_a_workspace_of_its_own_until_it_leaves_full_screen(
         workspace_of(&server, 1),
     );
 
-    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_F]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_F11]);
     viewer.exchange(&mut server);
     viewer.fill_configured_size(&mut server, 0, BLUE);
     settle(&mut server, end);
@@ -231,7 +231,7 @@ fn with_reduce_motion_a_switch_crossfades_in_place() {
         &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT],
     );
     let end = settle(&mut server, 0);
-    chord(&mut server, &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFT]);
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFT]);
     server.animate(Duration::from_millis(end + 16));
     server.animate(Duration::from_millis(end + 40));
     let [red, green, blue] = pixel(&mut renderer, &mut server, 128, 96);
@@ -252,7 +252,7 @@ fn a_window_being_dragged_comes_along_and_the_workspace_it_left_empty_goes_away(
         &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT],
     );
     let end = settle(&mut server, 0);
-    chord(&mut server, &[KEY_LEFTALT, KEY_LEFTMETA, KEY_LEFT]);
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_LEFT]);
     let end = settle(&mut server, end);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
 
@@ -261,7 +261,7 @@ fn a_window_being_dragged_comes_along_and_the_workspace_it_left_empty_goes_away(
     roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
     editor.request_move(&mut server, 0);
     server.move_pointer_to((140.0, 90.0).into(), 3);
-    chord(&mut server, &[KEY_LEFTALT, KEY_LEFTMETA, KEY_RIGHT]);
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTMETA, KEY_RIGHT]);
     settle(&mut server, end);
     server.press_button(BTN_LEFT, false, 4);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer]);

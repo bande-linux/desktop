@@ -106,12 +106,12 @@ fn super_shortcuts_do_nothing_while_locked() {
     lock.show_lock_surface(&mut server, BLUE);
 
     server.key(KEY_LEFTMETA, true, 1);
-    server.key(KEY_Q, true, 2);
-    server.key(KEY_Q, false, 3);
+    server.key(KEY_H, true, 2);
+    server.key(KEY_H, false, 3);
     server.key(KEY_LEFTMETA, false, 4);
     roundtrip(&mut server, &mut [&mut lock, &mut editor]);
 
-    assert!(!editor.close_requested(0));
+    assert!(server.windows().iter().all(|window| !window.is_minimized()));
 }
 
 #[test]
@@ -198,14 +198,15 @@ fn a_new_locker_takes_over_after_the_first_one_dies() {
 }
 
 #[test]
-fn ctrl_super_q_starts_the_lock_screen_without_quitting_the_app() {
+fn super_l_starts_the_lock_screen_and_super_q_no_longer_quits_the_app() {
     let (mut server, mut editor) = focused_app();
     server.set_lock_screen(std::path::Path::new("/bin/true"));
 
-    for key in [KEY_LEFTCTRL, KEY_LEFTMETA, KEY_Q] {
+    const KEY_L: u32 = 38;
+    for key in [KEY_LEFTMETA, KEY_Q, KEY_L] {
         server.key(key, true, 1);
     }
-    for key in [KEY_Q, KEY_LEFTMETA, KEY_LEFTCTRL] {
+    for key in [KEY_L, KEY_Q, KEY_LEFTMETA] {
         server.key(key, false, 2);
     }
     roundtrip(&mut server, &mut [&mut editor]);
@@ -214,7 +215,7 @@ fn ctrl_super_q_starts_the_lock_screen_without_quitting_the_app() {
     assert!(upkeep.failures.is_empty());
     assert!(server.lock_screen_pid().is_some());
     assert!(!editor.close_requested(0));
-    assert!(!editor.keys().iter().any(|(key, _)| *key == KEY_Q));
+    assert!(editor.keys().contains(&(KEY_Q, true)));
 }
 
 #[test]

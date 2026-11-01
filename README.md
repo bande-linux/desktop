@@ -36,7 +36,7 @@ them into role directories; the grouping below is that target.
 | Apps | `bande-files`, `bande-settings`, `bande-term` |
 | Services | `bande-config`, `bande-notify`, `bande-power`, `bande-clipboard`, `bande-tray`, `bande-automount`, `xdg-desktop-portal-bande`, `bande-polkit` |
 | Libraries | `bande-spring` (damped springs), `bande-xdg` (desktop entries, icons, launching), `bande-audio` (PipeWire), `bande-network` (NetworkManager), `bande-bluetooth` (BlueZ) |
-| Testing | `bande-test-bus` (private D-Bus session buses), `bande-test-wayland` (Wayland test clients), `bande-bench` (performance measurements), `bande-sample` (toolkit sample for `ci/perf`) |
+| Testing | `bande-test-bus` (private D-Bus session buses), `bande-test-wayland` (Wayland test clients), `bande-bench` (performance measurements), `bande-sample` (toolkit sample that `bande-bench` measures) |
 
 Other directories: `packaging/` holds the `bande-desktop` meta-package, `ci/` the scripts CI
 runs (release packages, install test, guest VM, hardware-in-the-loop), and `docs/` the

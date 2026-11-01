@@ -1,4 +1,4 @@
-use roxmltree::{Document, Node};
+use roxmltree::{Document, Node, ParsingOptions};
 
 pub const EVDEV_RULES: &str = "/usr/share/X11/xkb/rules/evdev.xml";
 const CUSTOM: &str = "custom";
@@ -67,7 +67,11 @@ impl Layout {
 
 impl Layouts {
     pub fn parse(xml: &str) -> Self {
-        let Ok(document) = Document::parse(xml) else {
+        let options = ParsingOptions {
+            allow_dtd: true,
+            ..ParsingOptions::default()
+        };
+        let Ok(document) = Document::parse_with_options(xml, options) else {
             return Self::default();
         };
         let mut layouts = Vec::new();

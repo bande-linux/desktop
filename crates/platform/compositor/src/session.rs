@@ -15,7 +15,7 @@ use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{Interest, Mode, PostAction};
 use smithay::reexports::wayland_server::Client;
 
-use crate::environment::cursor_environment;
+use crate::environment::{cursor_environment, desktop_environment};
 use crate::state::{ClientState, Compositor};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -313,6 +313,7 @@ impl Compositor {
         let client_end = OwnedFd::from(client_end);
         let inherited = client_end.as_raw_fd();
         command.env("WAYLAND_SOCKET", inherited.to_string());
+        command.envs(desktop_environment());
         command.envs(cursor_environment(self.cursor_theme()));
         match (&self.socket_name, role) {
             (Some(name), SessionRole::Shell) => command.env("WAYLAND_DISPLAY", name),

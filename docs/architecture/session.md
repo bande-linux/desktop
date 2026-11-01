@@ -362,7 +362,9 @@ further prompt. A refused password shakes the field (the `shake` spring) and say
 failures show PAM's or greetd's reason. The field shows a Caps Lock sign while Caps Lock is on
 (`WindowEvent::CapsLock` from the toolkit), and the active keyboard layout under the field when
 the system has several. The greeter compositor applies the system's input settings, so the
-layouts are those of `/etc/default/keyboard`. After authentication the greeter asks greetd to
+layouts are those localed keeps in `/etc/vconsole.conf` (`XKBLAYOUT`, `XKBVARIANT`), or of
+`/etc/default/keyboard` when that has none; Settings > Keyboard offers "Use at Login Screen",
+which hands the user's layouts to localed `SetX11Keyboard`. After authentication the greeter asks greetd to
 start `bande-session` (the wrapper the `bande.desktop` session entry runs, which starts
 `bande-compositor.service` in the user's manager) with `XDG_SESSION_TYPE=wayland`,
 `XDG_CURRENT_DESKTOP=Bande` and `XDG_SESSION_DESKTOP=bande`, so `pam_systemd` registers a

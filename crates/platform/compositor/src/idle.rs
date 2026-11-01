@@ -67,6 +67,10 @@ impl State {
 }
 
 impl Compositor {
+    pub fn time_changed(&mut self) {
+        self.state.night_light.recheck();
+    }
+
     pub fn woke(&mut self) {
         self.state.night_light.recheck();
         self.state.note_activity();

@@ -179,6 +179,7 @@ impl Job {
 
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::Relaxed);
+        let _ = (&self.wake).write(&[1]);
         self.answer(Answer {
             resolution: Resolution::Stop,
             apply_to_all: true,

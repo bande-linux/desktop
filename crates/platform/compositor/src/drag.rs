@@ -109,6 +109,10 @@ impl State {
         }
     }
 
+    pub(crate) fn drag_icon(&self) -> Option<WlSurface> {
+        self.drag.as_ref().and_then(|drag| drag.icon.clone())
+    }
+
     pub(crate) fn commit_drag_icon(&mut self, surface: &WlSurface) -> bool {
         let Some(drag) = self
             .drag

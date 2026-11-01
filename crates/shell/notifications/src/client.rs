@@ -3,7 +3,7 @@ use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use bande_datetime::DateFormats;
 
@@ -23,7 +23,6 @@ use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
 
 const ICON_PIXELS: u32 = 64;
-const AGE_REFRESH: Duration = Duration::from_secs(30);
 const MAX_CACHED_PICTURES: usize = 64;
 
 enum Message {
@@ -165,7 +164,11 @@ impl Notifications {
             report("change keyboard focus", window.set_keyboard_focus(focus));
             self.keyboard = Some(keyboard);
         }
-        self.next_refresh = self.screen.is_open().then(|| now + AGE_REFRESH);
+        self.next_refresh = self
+            .screen
+            .is_open()
+            .then(|| self.screen.next_age_change(now))
+            .flatten();
         window.request_redraw();
     }
 

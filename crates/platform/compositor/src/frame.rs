@@ -250,6 +250,7 @@ impl State {
     pub(crate) fn show_cursor(&mut self, icon: CursorIcon) {
         self.load_named_cursor(icon);
         self.cursor_status = CursorImageStatus::Named(icon);
+        self.cursor_owner = None;
         self.needs_redraw = true;
     }
 

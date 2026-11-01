@@ -94,6 +94,15 @@ impl State {
             .next()
     }
 
+    pub(crate) fn focus_behind_layer(&mut self) {
+        let next = self
+            .key_behind_layer
+            .clone()
+            .filter(|key| self.window_index(key).is_some())
+            .or_else(|| self.frontmost(None));
+        self.focus(next);
+    }
+
     pub(crate) fn refocus_after_losing(&mut self, lost: &WlSurface) {
         let Some(focused) = self.focused() else {
             return;

@@ -10,7 +10,8 @@ use smithay::backend::input::{
     KeyState, KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
 };
 use smithay::input::keyboard::{FilterResult, Keycode, keysyms};
-use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent};
+use smithay::input::pointer::{AxisFrame, ButtonEvent, CursorIcon, MotionEvent};
+use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, SERIAL_COUNTER};
 use smithay::wayland::keyboard_shortcuts_inhibit::{
@@ -561,6 +562,13 @@ impl Compositor {
         if !pointer.is_grabbed() {
             let pointed = target.as_ref().and_then(Target::frame);
             state.point_at_frame(location, pointed, under.is_some());
+            let under_client = under
+                .as_ref()
+                .and_then(|(surface, _)| surface.client())
+                .map(|client| client.id());
+            if state.cursor_owner.is_some() && state.cursor_owner != under_client {
+                state.show_cursor(CursorIcon::Default);
+            }
         }
         state.drag_over(under.as_ref().map(|(surface, _)| surface));
         pointer.motion(
@@ -598,10 +606,12 @@ impl Compositor {
             .then(|| state.pointer_target(state.pointer_location))
             .flatten();
         let under = target.as_ref().and_then(Target::surface);
-        if overview_button
-            && !under
-                .as_ref()
-                .is_some_and(|(surface, _)| state.is_above_windows(surface))
+        let overview_release = !pressed && state.overview.is_pressed();
+        if overview_release
+            || overview_button
+                && !under
+                    .as_ref()
+                    .is_some_and(|(surface, _)| state.is_above_windows(surface))
         {
             state.overview_button(button, pressed);
             return;

@@ -1,14 +1,14 @@
 use std::cell::Cell;
 use std::fs::{self, File};
 use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::os::fd::AsFd;
 use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::rc::Rc;
-use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
-use bande_xdg::find_executable;
+use bande_xdg::{find_executable, wait_for_exit};
 use bzip2::read::MultiBzDecoder;
 use flate2::read::MultiGzDecoder;
 use lzma_rust2::XzReader;
@@ -23,7 +23,6 @@ use crate::naming::keep_both_name;
 use crate::trash::remove_all;
 
 const BUFFER: usize = 256 * 1024;
-const TOOL_POLL: Duration = Duration::from_millis(50);
 const ZIP_LIMIT: u64 = 0xFFFF_FFFF;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -421,22 +420,18 @@ impl Worker {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()?;
-        loop {
-            if let Some(status) = child.try_wait()? {
-                return match status.success() {
-                    true => Ok(()),
-                    false => Err(Stop::Io(io::Error::other(format!(
-                        "{} could not open the archive",
-                        command[0]
-                    )))),
-                };
-            }
-            if let Err(halt) = self.check() {
+        match wait_for_exit(&mut child, None, Some(self.signal.as_fd())) {
+            Ok(Some(status)) if status.success() => Ok(()),
+            Ok(Some(_)) => Err(Stop::Io(io::Error::other(format!(
+                "{} could not open the archive",
+                command[0]
+            )))),
+            stopped => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(Stop::Halt(halt));
+                stopped?;
+                Err(Stop::Halt(Halt::Cancelled))
             }
-            thread::sleep(TOOL_POLL);
         }
     }
 }

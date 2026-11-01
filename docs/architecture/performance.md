@@ -13,8 +13,8 @@ on the mini are read from `/proc` only; nothing restarts the owner's session. Th
 reach a running session.
 
 - **The whole session at idle:** `bande-idle --binaries <dir>` runs the compositor, the shell,
-  the services and the apps found in `<dir>` and reports RSS and wake-ups per process with
-  windows open, minimised and locked.
+  the services and the apps found in `<dir>` with a private home folder and reports RSS and
+  wake-ups per process with windows open, minimised and locked.
 - **One client's memory and CPU:** `bande-footprint` starts a client as a shell client on a
   2928×1818 output at 1.5×, lets it settle (`--settle <seconds>`), optionally moves the pointer
   over it, and prints RSS + swap, Vulkan device memory, threads and CPU per pointer move. For an
@@ -51,6 +51,27 @@ Under `bande-footprint` on the CPU path the shell holds about 78 MiB anonymous m
 greeter about 26 MiB. Hidden windows drop their renderer after 30 s, decoded wallpapers are freed
 once uploaded, and animations, sampling and timers run only while something on screen needs
 them, so an idle process should not wake at all.
+
+## What wakes when idle
+
+Everything else waits on an event: Wayland, D-Bus signals with match rules narrowed to what is
+shown (UPower only for its display device), inotify, pidfds for child processes, PipeWire and
+eventfds. These are the only timers left; each runs only while its condition holds.
+
+| What | When | Why |
+| :--- | :--- | :--- |
+| Compositor | every 10 s | systemd watchdog (`WatchdogSec=20s`) |
+| Night light | at the next scheduled change | real-time deadline; clock and time zone changes are events |
+| Bar clock; Calendar's today while on screen | at each minute boundary | the display unit |
+| Countdowns (log out, screenshot timer), Now Playing | at each second boundary while shown | the display unit |
+| Notification Center | when an age label next changes, while open | the display unit (minutes, hours, midnight) |
+| Banners, alarms, calendar alerts | at their deadline | real deadlines |
+| Activity Monitor, the low memory window | every 2 s while a window is on screen | `/proc` has no change events |
+| Settings' Sound pane | 20 times a second while on screen | the input level meter |
+| Disk space (automount) | every 10 min | free space has no kernel event |
+| Files | once a day | emptying old Trash items |
+| Mail | IDLE renewed every 25 min; full sync every 15 min; polling every 5 min only without IDLE | servers drop IDLE after 30 min and IDLE watches only the inbox |
+| Calendar | CalDAV every 5 min, subscriptions hourly | CalDAV has no push |
 
 Installed dist binaries are 14–21 MB for each GUI program (`bande-shell` 21, Settings 19, Files
 17, the compositor 14) and about 2–3 MB for each service. Every GUI binary carries its own copy of

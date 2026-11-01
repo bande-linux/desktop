@@ -84,19 +84,23 @@ Jobs:
   portal backend's registration and the login session; `ci/release/smoke.sh` starts the
   packaged settings service on a private bus to read a property and the packaged compositor
   headless. The job uploads `bande-debs-<arch>`.
-- `deb-all`: `ci/release/build-all.sh` builds the architecture-independent meta-packages
-  `bande-desktop` and `bande-os`, checks that they pin their packages at the build's version,
-  that `bande-os` brings the system around the desktop and recommends `bande-apt-source`,
-  that `bande-desktop` never depends on `bande-os`, and lints them with `lintian`. It uploads
+- `deb-all`: `ci/release/build-all.sh` builds the architecture-independent meta-package
+  `bande-desktop`, checks that it pins its packages at the build's version, that it depends on
+  `bande-greeter | x-display-manager` and `pipewire-audio` and recommends `bande-greeter`,
+  `network-manager`, `bande-apt-source` and `systemd-zram-generator`, and lints it with
+  `lintian`. It uploads
   `bande-debs-all`. The APT source and keyring packages are built by the APT repository
   itself.
 - `install (arm64)`, `install (amd64)`: in a clean `debian:testing` on the native runner,
   `ci/deb/install-test/run.sh` installs `bande-desktop` from that architecture's packages and
-  the `all` packages alone, checks that every package has the same version, that every app it
-  recommends has an installation candidate, that no X server, XWayland or X session came
-  along, the greetd setup and the greeter's wallpaper permissions, that the installed
-  compositor serves Wayland clients, then installs `bande-os` and checks the system packages it
-  brings.
+  the `all` packages alone without recommends and checks that it brings the login window,
+  greetd and PipeWire, then installs every package and checks that they have the same version,
+  that every package it recommends has an installation candidate (`bande-apt-source` comes from
+  the APT repository), that no X server, XWayland or X session came along, that greetd is the
+  display manager with the Bande login window, the greeter's wallpaper permissions, and that the
+  installed compositor serves Wayland clients. Last, next to LightDM: installing the greeter keeps
+  LightDM the default and offers greetd, `dpkg-reconfigure greetd` switches to it, removing
+  greetd hands the display back to LightDM.
   `crates/services/portal/tests/frontend/run.sh` then reads the colour scheme through Debian's
   `xdg-desktop-portal` and checks it follows `config.kdl`.
 The APT repository publishes on its own: every 30 minutes it looks for new green `release.yml`

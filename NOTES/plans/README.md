@@ -38,6 +38,7 @@ Plans share work. Land the shared pieces first:
 | [window-snapping](window-snapping.md) | Left/right trigger at the screen edge behind the taskbar; 150 ms dwell reset by 2 px drift | 3 |
 | [notifications-placement](notifications-placement.md) | Banners hard-wired top right while the centre opens beside a left taskbar | 4 (+1 optional) |
 | [power-management](power-management.md) | Nothing turns the display off; sleep is off at the system level after an s2idle abort | 7 |
+| [taskbar-width-and-options](taskbar-width-and-options.md) | The wide taskbar was a second layout with its own key, property, switch and drag; options inventory against macOS | 6 (1 done, 5 wait on the owner) |
 | [crash-management](crash-management.md) | Kernel OOM killed the session bus 6 times while the build lived (adj 200 vs 0); no PSI, no watchdogs | 7 |
 
 ## Decisions for the owner
@@ -52,3 +53,4 @@ Each plan's last section lists its decisions with a recommendation. The ones tha
 - **Swap:** no disk swap (zram plus oomd) or swapfile plus zswap.
 - **Power:** re-enable sleep after ten clean s2idle cycles; what the power button does while sleep is unavailable.
 - **Crashes:** systemd-coredump in the image; whether losing the session bus should end the session.
+- **Taskbar options:** drop Top from Position, Menu bar row only on the left, trackpad trims, VRR into Refresh rate, one display-off timer, where `reopen-apps` lives ([taskbar-width-and-options](taskbar-width-and-options.md)).

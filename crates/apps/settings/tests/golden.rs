@@ -379,7 +379,6 @@ fn bar(scheme: Scheme) -> SettingsView {
     view.apply(Update::Values(vec![
         (SettingId::BarEdge, Value::Keyword("left".to_owned())),
         (SettingId::BarIconSize, Value::Number(44)),
-        (SettingId::BarNames, Value::Flag(false)),
         (SettingId::BarAutoHide, Value::Flag(false)),
         (SettingId::BarMenuBar, Value::Keyword("in-bar".to_owned())),
     ]));

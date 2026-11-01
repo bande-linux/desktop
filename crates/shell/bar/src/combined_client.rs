@@ -3,9 +3,9 @@ use std::time::Instant;
 
 use crate::L10N;
 use crate::menu_bar::StatusView;
-use crate::rail::{EXPANDED_WIDTH, RailView, bar_width, owns_node, surface_size};
+use crate::rail::{RailView, bar_width, owns_node, surface_size};
 use accesskit::{Node, NodeId, Role as AccessRole, TreeInfo, TreeUpdate};
-use bande_toolkit::ui::{Cursor, Event};
+use bande_toolkit::ui::Event;
 use bande_toolkit::{
     App, Edges, Item, KeyboardFocus, LayerKind, LayerOptions, Point, Rect, Role, Scene, Shape,
     Window, WindowEvent,
@@ -18,7 +18,6 @@ const BAR_NAMESPACE: &str = "bar";
 const MENU_BAR_NAMESPACE: &str = "menubar";
 const ROOT: NodeId = NodeId(1 << 41);
 const HIDDEN_SHADOW: f32 = 8.0;
-const EDGE_GRAB: f32 = 4.0;
 const UNREAD_SLIVER: (f32, f32) = (2.0, 24.0);
 
 pub fn combined_role(icon_size: f32) -> (Role, (u32, u32)) {
@@ -43,7 +42,6 @@ pub struct CombinedClient {
     taskbar: Taskbar,
     status: MenuBarClient<RailView>,
     status_open: bool,
-    resizing: Option<f32>,
 }
 
 fn pointer(event: &WindowEvent) -> bool {
@@ -66,38 +64,7 @@ impl CombinedClient {
             taskbar,
             status,
             status_open: false,
-            resizing: None,
         }
-    }
-
-    fn on_inner_edge(&mut self, x: f32) -> bool {
-        let width = self.status.view_mut().width();
-        (width - EDGE_GRAB..width).contains(&x)
-    }
-
-    fn resize(&mut self, window: &mut Window, event: &WindowEvent) -> bool {
-        match (event, self.resizing) {
-            (WindowEvent::Input(Event::PointerDown(pointer)), None)
-                if pointer.is_primary() && self.on_inner_edge(pointer.position.x) =>
-            {
-                self.resizing = Some(pointer.position.x);
-            }
-            (WindowEvent::Input(Event::PointerMove(pointer)), Some(_)) => {
-                self.resizing = Some(pointer.position.x);
-            }
-            (WindowEvent::Input(Event::PointerUp(pointer)), Some(_)) => {
-                self.resizing = None;
-                let collapsed = bar_width(self.taskbar.icon_size());
-                let names = pointer.position.x > (collapsed + EXPANDED_WIDTH) / 2.0;
-                if names != self.taskbar.names() {
-                    self.taskbar.set_names(names);
-                    window.request_redraw();
-                }
-            }
-            _ => return false,
-        }
-        window.set_cursor(Cursor::ColumnResize);
-        true
     }
 
     fn route(&mut self, window: &mut Window, event: WindowEvent) {
@@ -135,7 +102,6 @@ impl App for CombinedClient {
         let (width, height) = window.size();
         let view = self.status.view_mut();
         view.set_icon_size(self.taskbar.icon_size());
-        view.set_expanded(self.taskbar.names());
         self.taskbar.set_rail(view.apps_region(height as f32));
         let mut scene = self.status.scene(window);
         let apps = self.taskbar.scene(window);
@@ -166,17 +132,7 @@ impl App for CombinedClient {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        if self.resize(window, &event) {
-            return;
-        }
-        let hovered = match &event {
-            WindowEvent::Input(Event::PointerMove(pointer)) => Some(pointer.position.x),
-            _ => None,
-        };
         self.route(window, event);
-        if hovered.is_some_and(|x| self.on_inner_edge(x)) {
-            window.set_cursor(Cursor::ColumnResize);
-        }
         let open = self.status.view_mut().open().is_some();
         if open != self.status_open {
             self.status_open = open;

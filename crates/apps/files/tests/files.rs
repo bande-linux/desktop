@@ -1425,6 +1425,7 @@ fn the_icon_view_matches_its_golden_with_thumbnails_and_long_names() {
 }
 
 fn shoot(name: &str, view: &mut FilesView) {
+    settle(view);
     for (scheme, suffix) in [(Scheme::Light, ""), (Scheme::Dark, "-dark")] {
         let palette = Palette::for_scheme(scheme);
         view.set_palette(palette);

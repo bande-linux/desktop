@@ -1,6 +1,6 @@
 # Moving Terminal, Activity Monitor, Software and Package Installer to bande-linux/apps
 
-Approved by the owner on 2026-11-01. **Status: M1, M2, M4-M7 done 2026-11-01; M3 skipped (Activity Monitor and Force Quit stay in desktop); the releases wait for the owner's tags.** Files, Settings and the file chooser stay in desktop: the file chooser depends on bande-files, and Files is the system file manager. Apps consume desktop crates as git dependencies pinned to one desktop rev.
+Approved by the owner on 2026-11-01. **Status: M1, M2, M4-M7 done 2026-11-01; M3 skipped (Activity Monitor and Force Quit stay in desktop); the releases wait for the owner's tags. Final gates 2026-11-01: desktop-gate green on `main` plus split/finish (which fixed Files' Terminal check in tests, sunrise and sunset west of Greenwich in bande-datetime, the clamped-geometry test, portal clippy and the polkit goldens); apps ci/gate.sh green on all five apps at e9e10c5 (Installer and Terminal goldens regenerated).** Files, Settings and the file chooser stay in desktop: the file chooser depends on bande-files, and Files is the system file manager. Apps consume desktop crates as git dependencies pinned to one desktop rev.
 
 ## Findings
 

@@ -21,8 +21,8 @@ How it grows to AppKit depth is decided in
 - `bande-toolkit` (`crates/toolkit/toolkit`): the facade apps depend on; `ui` is
   `bande-widgets`.
 
-CI fails when a service depends on the widgets, platform or facade, or when graphics or widgets
-depend on Wayland.
+`ci/release/lint.sh` fails when a service other than the polkit agent depends on the widgets,
+platform or facade, or when graphics or widgets depend on Wayland.
 
 ## Appearance
 
@@ -38,7 +38,8 @@ Every colour, radius, size and type style comes from `bande-design`; no app or s
 writes a hex value, a corner radius or a font name of its own.
 
 - **Colours.** `Appearance::palette()` (or `Palette::generate(scheme, accent, contrast)`)
-  returns the roles, generated from OKLCH with Datum's warm neutral hue (80°):
+  returns the roles, generated from OKLCH with Datum's neutral hue (warm 80° in light, dusk
+  slate 262° in dark):
 
   | Role | Use |
   |---|---|
@@ -54,10 +55,9 @@ writes a hex value, a corner radius or a font name of its own.
   | `scrim` | the dimming behind modal moments |
 
   `Accent` has eight presets (Ultramarine by default, Teal, Moss, Amber, Ember, Rose, Plum,
-  Graphite); `Contrast::Increased` darkens `edge`. The tests in `crates/toolkit/design/tests`
-  check every scheme × accent × contrast: text roles against WCAG and APCA, control boundaries,
-  the accent and danger on every surface and text on the accent. A token change that breaks
-  legibility fails CI.
+  Graphite); `Contrast::Increased` darkens `edge`. Every scheme × accent × contrast was solved
+  for WCAG and APCA contrast ([Datum §5](../design/datum.md#5-colour)); a token change keeps
+  those targets.
 - **Radii.** `Radius::{XS, S, M, L, XL}` = 4, 6, 8, 10, 14 pt; a child inside a rounded parent
   takes `Radius::concentric(outer, inset)` (= outer − inset, at least 4): the 14 pt window with
   its sheet inset 6 gives the sheet 8.
@@ -77,15 +77,6 @@ writes a hex value, a corner radius or a font name of its own.
   `Item::shadows(shape, elevation, scheme, active)` turns the pair into the two shadow items
   under a shape, and `ui::focus_ring_for(palette, shape, items)` draws the focus ring around a
   custom control.
-
-## Goals
-
-- **Semantic colour tokens**: the Datum roles above for light and dark, switched live when the
-  appearance changes.
-- **Accessibility built in**: every widget produces and maintains an AccessKit node, published
-  on AT-SPI, so screen readers work by construction.
-- **Standard controls**: scroll views with spring physics, text fields, sliders, switches and
-  tab views with the same keyboard and pointer behaviour in every app.
 
 ## Implemented (`crates/toolkit/toolkit`)
 
@@ -256,9 +247,8 @@ writes a hex value, a corner radius or a font name of its own.
   toggled state or numeric range, and its actions. `Ui::accessibility` returns the `TreeUpdate`
   with the focus, and `Ui::perform` carries out Focus, Click, SetValue, Increment, Decrement,
   ReplaceSelectedText and SetTextSelection requests. The tree is published on AT-SPI through `accesskit_unix`;
-  table cells carry their text as their name, so a screen reader reads them. `platform/tests/screen_reader.rs`
-  starts at-spi2-core on a private bus and checks through AT-SPI the roles, names, actions and text of a
-  window with a button, field, pop-up button, table and menu, and clicks, types and chooses through it.
+  table cells carry their text as their name, so a screen reader reads them. `toolkit/tests/accessibility.rs`
+  finds and presses a button over AT-SPI in a window on the headless compositor.
 - **Input.** `wl_seat` up to version 9. Pointer events carry the button (primary, secondary,
   middle, back, forward), the click count (a press within 500 ms and 4 pt of the previous press
   of the same button counts up) and the modifiers; Ctrl+primary stays a primary click with Ctrl

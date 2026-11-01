@@ -1,85 +1,36 @@
 # macOS parity
 
-How close Bande is to modern macOS, feature by feature. Each row names the milestone that
-brought or brings it to parity; the status is updated when work lands and is checked live on
-the Mac mini, not only in tests. Open work is in `NOTES/gaps.md` and `NOTES/plans/`.
+How close Bande is to macOS, area by area. **Parity** behaves like macOS 15 (or a deliberate
+Linux equivalent), **basic** works but is thinner, **none** is missing. Open work is in
+[`../NOTES/open.md`](../NOTES/open.md); how each feature behaves is in
+[`architecture/behaviour.md`](architecture/behaviour.md).
 
-Status: **none** (missing), **basic** (works, far from macOS), **parity** (behaves like macOS 15).
+Bande's own apps are Files, Settings, the launcher (Spotlight) and, in bande-linux/apps,
+Terminal, Activity Monitor, Software, the Package Installer, Mail and Calendar. Firefox, Text
+Editor, Loupe, Papers, Calculator and Showtime come preinstalled from Debian. The Taskbar sits on
+the left and holds the menu bar; a setting moves the menu bar to the top.
 
-Default apps follow a hybrid plan: Finder, System Settings, Terminal, Activity Monitor and
-Spotlight are ours; Firefox, GNOME Text Editor, Loupe, Papers, Calculator, Showtime and Clocks are
-preinstalled. The taskbar sits on the left by default and holds the menu bar too; a setting moves the
-menu bar back to the top.
-
-## Foundations
-
-| Feature | Status | Milestone |
-|---|---|---|
-| HiDPI and fractional scaling | basic (compositor and toolkit scale to output) | M1 |
-| Menus and context menus in the toolkit | none | M1 |
-| Scroll views, lists, tables, icon grids | none | M1 |
-| Window title bar with traffic lights, move and resize | none (no chrome) | M1 |
-| Drag and drop | none | M1 |
-| Icons from the icon theme in the toolkit | basic (panel, launcher) | M1 |
-
-## Desktop
-
-| Feature | Status | Milestone |
-|---|---|---|
-| Wallpaper, choosable in Settings | none (flat colour) | M2 |
-| Desktop icons (files, volumes), selection, double-click to open | none | M2 |
-| Desktop right-click menu (New Folder, Get Info, Change Wallpaper) | none | M2 |
-| Lock screen and greeter wallpaper | none | M2 |
-
-## Discovery and launching
-
-| Feature | Status | Milestone |
-|---|---|---|
-| Launchpad (all apps grid) | none | M3 |
-| Spotlight (apps, files, settings, calculator) | basic (app names only) | M3 |
-| Dock: pinned and running apps, Applications stack, Trash, icon menus, reordering | basic | M3 |
-| Apple menu (About, Settings, Force Quit, Sleep, Restart, Shut Down, Lock, Log Out) | none | M3 |
-
-## Apps
-
-| Feature | Status | Milestone |
-|---|---|---|
-| Browser, text editor, image and PDF viewer, calculator, video, clocks preinstalled | none | M4 |
-| GTK apps follow accent colour and dark mode | basic (libadwaita and GTK 4 colours, GTK 3 Bande themes with the accent and our title bar) | M4 |
-| Default app per file type (Open With) | none | M4 |
-| App menus in the menu bar | none (app name only) | M4 |
-| Finder: sidebar, icon/list/column/gallery views, Get Info, Trash, Quick Look | basic (columns, PNG and text Quick Look) | M7 |
-| System Settings: all panes with search | basic (3 panes) | M7 |
-| Terminal with tabs | basic | M7 |
-| Activity Monitor | none | M7 |
-
-## Windows
-
-| Feature | Status | Milestone |
-|---|---|---|
-| App switcher overlay (Super+Tab) and same-app windows (Super+`) | done (card after 150 ms, Q/H, window thumbnails, hover and click) | M5 |
-| Mission Control and Exposé | done (overview with workspace strip, titles, filter, drag between workspaces; App Exposé) | M5 |
-| Spaces (workspaces, full-screen spaces, three-finger swipes) | done (one output) | M5 |
-| Minimize to Dock, zoom, spring animations | basic (minimize, no animation) | M5 |
-| Snapping and tiling to halves and quarters | none | M5 |
-
-## Status and notifications
-
-| Feature | Status | Milestone |
-|---|---|---|
-| Notification banners | none (model only) | M6 |
-| Notification Center | none | M6 |
-| Menu bar status items (Wi-Fi, battery, sound, Bluetooth, tray) | none | M6 |
-| Control Center (Wi-Fi, Bluetooth, Do Not Disturb, sound) | basic | M6 |
-| Volume and brightness HUD | basic (volume) | M6 |
-
-## Polish
-
-| Feature | Status | Milestone |
-|---|---|---|
-| Animations for open, close, menus | none | M8 |
-| Coherent icon set for our apps | basic | M8 |
-| First-run setup assistant | none | M8 |
-| Screen reader access in every app | basic (shell only) | M8 |
-| Input methods (CJK) | done (compositor; in-place composition and candidates in toolkit text) | done |
-| Lock screen, greeter, screenshots | basic | done |
+| Area | Status | Notes |
+| :--- | :--- | :--- |
+| Displays: HiDPI, fractional scale, arrangement, mirroring, rotation | parity | Night Light; no colour management, HDR or custom modes |
+| Toolkit: controls, menus, tables, scroll views, sheets, alerts, drag and drop | parity | no spell checking |
+| Window chrome, move, resize, zoom, full screen | parity | our bar also on GTK and other server-side apps; libadwaita and Electron keep their own |
+| Snapping and tiling | parity | halves and quarters, fill the other half, the zoom-button menu |
+| App switcher, same-app windows, overview, App Exposé, workspaces | parity | workspaces per display, three-finger swipes; no hot corners |
+| Taskbar: kept and running apps, Trash, icon menus, badges, drops | parity | the Dock and the menu bar in one bar |
+| Menu bar app menus and menu search | parity | from every `bande-app` app and dbusmenu exporters |
+| Launcher: apps, settings, files, calculator, recents, clipboard history, emoji | parity | file names only, not contents |
+| Notifications: banners, Notification Center, Do Not Disturb | parity | no schedules, no inline reply, nothing on the lock screen |
+| Control Center, status items, volume and brightness HUD, Now Playing | parity | |
+| Desktop: wallpaper, icons, menus | parity | |
+| Lock screen, login window | basic | no user picker, accessibility or power menus at login |
+| Files | basic | icons, list and columns, Quick Look, Get Info, tabs, batch rename, settings; no network locations or tags |
+| Settings | basic | grouped panes with search; no Users pane, printers or custom shortcuts |
+| Terminal, Activity Monitor | basic | apps repo; Terminal has tabs, splits and profiles |
+| Software, Package Installer, offline updates | basic | Debian packages only; no Flatpak yet |
+| Screenshots, recording, Markup | parity | |
+| Force Quit, Not Responding, low-memory window | parity | in the compositor, works when the shell hangs |
+| Sleep and wake | basic | display sleep works; system sleep is off on the M2 mini until s2idle is reliable |
+| Accessibility: screen reader, zoom, contrast, motion, text size, sticky/slow/bounce keys | basic | no colour filters or on-screen keyboard |
+| Input methods (CJK) | basic | work in apps; not offered as input sources in Settings |
+| First-run setup | none | |

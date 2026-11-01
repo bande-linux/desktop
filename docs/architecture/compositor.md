@@ -10,8 +10,8 @@ when they reach the screen is Bande's own.
   devices, dma-buf import and export, and dispatch of the standard Wayland protocols.
 - **Renderer**: Bande's own Vulkan renderer on `ash` (`crates/platform/render`). The choice over
   `wgpu` and Smithay's GLES renderer, and the performance targets, are recorded in
-  [`../decisions/0001-rendering.md`](../decisions/0001-rendering.md). Planned on top of it:
-  dual-pass Kawase blur, rounded-corner clipping and transforms. When the Vulkan device is a
+  [`../decisions/0001-rendering.md`](../decisions/0001-rendering.md). It draws rounded-corner
+  clips, analytic shadows, rotation and a dual-filter Kawase blur. When the Vulkan device is a
   CPU (lavapipe in VMs and on machines without a usable GPU) the renderer reduces effects: a
   blur region becomes a flat scrim of the sheet colour at 72 % that does not depend on what
   lies beneath it, so moving something under the bar no longer redraws the bar.
@@ -29,7 +29,7 @@ when they reach the screen is Bande's own.
   damaged regions and skips what an opaque window covers. The output is laid out in points and
   drawn in pixels at its scale.
 - **Window shape and depth.** Every window that is not full screen is clipped to its
-  `xdg_surface` window geometry with 12 pt rounded corners (antialiased in the fragment shader)
+  `xdg_surface` window geometry with 14 pt rounded corners (antialiased in the fragment shader)
   and casts a soft shadow drawn analytically (a Gaussian-blurred rounded box): the key window's
   is larger and darker (blur 14 pt, 10 pt down, 42 %) than other windows' (7 pt, 4 pt, 22 %).
   The shadow is cut out under the window, so translucent windows do not show it through. All
@@ -81,8 +81,8 @@ when they reach the screen is Bande's own.
   of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that
   `DrmCompositor` can scan them out. A dma-buf is imported once as a Vulkan buffer and its
   damaged rows are copied into the surface's texture, so any stride works on drivers without
-  `VK_EXT_image_drm_format_modifier`. Explicit sync (`linux-drm-syncobj-v1`) is built; its guest
-  tests do not pass yet.
+  `VK_EXT_image_drm_format_modifier`. Explicit sync (`linux-drm-syncobj-v1`) is built but not
+  yet verified on Apple hardware.
 - **DRM backend.** `bande-compositor` opens the first card with a connected connector (or
   `--drm-device`) through a libseat session and drives every connected connector on its own
   CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into GBM
@@ -92,8 +92,7 @@ when they reach the screen is Bande's own.
   the session. A display is named by its EDID (maker from the PNP id, model and serial from the
   descriptors, falling back to the product code and serial number; two displays with the same
   name are told apart by their connector). A fullscreen opaque dma-buf window is put on the
-  primary plane without composition. Tested on vkms in a KVM guest (an ignored guest test) by reading the CRTC's
-  framebuffer back.
+  primary plane without composition.
 - **Displays.** Every output lives in one logical coordinate space in points. Its mode, scale
   (fractional too), rotation and place come from `display` and `arrangement` in `config.kdl`
   (followed live through `org.bande.Config`): the arrangement remembered for exactly the
@@ -127,7 +126,7 @@ when they reach the screen is Bande's own.
   out upright in points and the renderer turns every quad, clip and shadow into the framebuffer.
   The desktop surface and the menu bar are drawn on every
   display: the compositor tells the shell the displays that show their own picture, the main one
-  first (`bande_shell_v1.displays`, since 15, on binding and whenever a display comes, goes,
+  first (`bande_shell_v1.displays`, on binding and whenever a display comes, goes,
   starts or stops mirroring or the main display changes), and the shell opens a desktop and a taskbar
   on each of them in its one process; on every display but the main one the desktop shows only
   the wallpaper and no icons, and the separate layout's apps strip, the menu search and the notifications stay on the main
@@ -176,11 +175,12 @@ when they reach the screen is Bande's own.
   is drawn at its destination. Reduce Motion follows the Settings portal's
   `org.freedesktop.appearance` `reduced-motion` key (read once at session start, then on
   `SettingChanged`): windows and the snap preview keep their rectangles and fade with `fade`.
-- **Snapping and tiling.** Dragging a window until the pointer touches the left or right screen
-  edge previews the half, within 64 pt of a corner the quarter, and against the top of the
-  usable area zoom; the translucent rounded preview grows from the pointer (`quick`) only after
-  the pointer has rested 150 ms within 2 pt, so a fast drag past an edge never tiles. Releasing
-  over a shown preview springs the window into it. `Super+Left/Right` tile halves,
+- **Snapping and tiling.** The edges are those of the usable area, the display minus the
+  taskbar, so a drag against the taskbar snaps. Dragging a window until the pointer touches the
+  left or right edge previews the half, within 64 pt of a corner the quarter, and against the top
+  zoom; the translucent rounded preview grows from the pointer at once, except at an edge shared
+  with another display, where the pointer must rest 250 ms so a window can still be dragged
+  across. Releasing over a shown preview springs the window into it. `Super+Left/Right` tile halves,
   `Up/Down` on a half give its top or bottom quarter and on a quarter go back to the half,
   `Up` zooms a free window and `Down` returns a zoomed one. Tiles get xdg-shell's tiled states
   (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share
@@ -228,10 +228,10 @@ when they reach the screen is Bande's own.
   under it; past the last workspace a new one is made). A window being dragged by its title
   bar comes along to whichever workspace the user switches to. A switch started while the
   row is still moving keeps its velocity. `bande_app_v1.move_to_workspace`
-  (v3) moves a window from its menu without following it: it slides off the screen and the
+  moves a window from its menu without following it: it slides off the screen and the
   keyboard goes to the next window. Focusing a window anywhere (the taskbar's activate app or
   window, Super+Tab, an activation token) shows its workspace first. Shell clients learn the
-  row through `bande_shell_v1` v9: `workspaces(count, active)`, sent on binding and on
+  row through `bande_shell_v1`: `workspaces(count, active)`, sent on binding and on
   every change. With Reduce Motion a switch crossfades the two workspaces in place.
 - **Overview.** `Super+W` (as in KDE), the Mission Control key (`XF86LaunchA`, F3 on Apple
   keyboards, without Super) or a three-finger swipe up (300 units for the whole way, tracked
@@ -255,7 +255,7 @@ when they reach the screen is Bande's own.
   workspace with its own layout. Empty workspaces are kept until the overview closes. App
   windows (App Exposé) show only one app's windows from every workspace without the strip:
   `Alt+Super+Down` or a three-finger swipe down for the focused app, and
-  `bande_shell_v1.show_windows(app_id)` (v9; an empty app id opens the plain overview) for
+  `bande_shell_v1.show_windows(app_id)` (an empty app id opens the plain overview) for
   the taskbar. With Reduce Motion the windows stay where they are and fade out while the
   overview fades in.
 - **Switcher, window memory and the other half.** `switcher.rs` holds the Super+Tab and
@@ -269,6 +269,9 @@ when they reach the screen is Bande's own.
   window holding a list box whose selected option has the focus) only while it shows.
   `recall.rs` keeps the window memory file, `assist.rs` the free-half panel, which reuses the
   overview's `arrange` and the switcher's thumbnails.
+- **Force Quit** (`force_quit/`): the compositor's own window, so it opens when the shell or
+  the focused app hangs; [behaviour](behaviour.md) has the rules. Apps are killed through a
+  pidfd taken at connection, and through `cgroup.kill` when they run in their own scope.
 - **Not responding.** Whenever the user interacts with a window, and for every app when Force
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second).
   An app that has not answered after 3 s is not responding: its windows are veiled in a soft
@@ -295,7 +298,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wl_shm` | Shared-memory buffers | P0 | implemented |
 | `wl_seat` (`pointer`, `keyboard`, `touch`) | Input | P0 | pointer and keyboard implemented, touch not |
 | `linux-dmabuf-v1` | Zero-copy GPU buffer import | P0 | implemented (see above) |
-| `linux-drm-syncobj-v1` | Explicit sync | P0 | built, guest tests failing |
+| `linux-drm-syncobj-v1` | Explicit sync | P0 | built, unverified on hardware |
 | `xdg_wm_base` | Application windows and popups | P0 | implemented |
 | `wlr-layer-shell-unstable-v1` | Taskbar, menu bar, notifications, overlays | P0 | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | P0 | implemented |
@@ -307,16 +310,17 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `ext-idle-notify-v1` / `idle-inhibit-v1` | Idle transitions, video playback | P0 | implemented |
 | `xdg_activation_v1` | Focus-stealing prevention | P0 | implemented |
 | `ext-foreign-toplevel-list-v1` | Window list for the taskbar | P0 | implemented, shell clients only |
-| `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented |
+| `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented, open to every client outside the lock screen |
 | `zxdg_decoration_manager_v1` | Decoration negotiation (server-side unless the client asks for client-side) | P1 | implemented |
 | `org_kde_kwin_server_decoration_manager` | Decoration negotiation for GTK 3 and GTK 4 (default server-side, client-side for header-bar windows) | P1 | implemented |
 | `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | implemented (v4; enabled heads only, no custom modes) |
 | `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimised), shm buffers; a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
 | `bande_capture_v1` (own, `bande-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Print | P1 | implemented, shell clients only |
 | `wp_cursor_shape_v1` | Cursor shapes from the theme | P1 | implemented |
-| `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | not implemented |
+| `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
-| `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | not implemented |
-| `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, taskbar icon rectangles, apps that stopped responding; for the taskbar (v7): hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the taskbar and menu bar; v9: workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
-| `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; v2 `place_window` (halves, quarters, restore) for the window menu; v3 `move_to_workspace` (previous, next) for the window menu | P0 | implemented, every client |
+| `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | implemented |
+| `zwlr_output_power_management_v1` | Display power for idle and lock | P1 | implemented |
+| `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 and Super+F2 keyboard focus for the taskbar and menu bar; workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
+| `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `keep_running` (version 2) so an app outlives its last window | P0 | implemented, every client |
 | `ext-background-effect-v1` | Blur behind the launcher's scrim (the overview's scrim and blur are the compositor's own) | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

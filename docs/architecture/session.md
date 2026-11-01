@@ -1,15 +1,15 @@
 # Session services
 
 A desktop needs a good deal of invisible infrastructure: clipboard, locking, notifications,
-portals, power, authentication, audio, input methods. This document lists what Bande provides,
-in two tiers, and records what is implemented. Behaviour decisions taken with macOS as the
+portals, power, authentication, audio, input methods. This document describes what Bande
+provides and how. Behaviour decisions taken with macOS as the
 reference are in [behaviour.md](behaviour.md).
 
-## Tier 1: needed for a daily-driver desktop
+## Core services
 
 ```mermaid
 graph LR
-    subgraph "Tier 1 session subsystems"
+    subgraph "Session subsystems"
         T1_CLIP[Clipboard and selection<br/>wl_data_device, zwp_primary_selection, ext-data-control-v1]
         T1_LOCK[Screen lock and idle<br/>ext-session-lock-v1, ext-idle-notify-v1, idle-inhibit-v1]
         T1_NOTIF[Notification daemon<br/>org.freedesktop.Notifications with actions]
@@ -210,9 +210,7 @@ graph LR
   `Default` theme, so plain GTK 4 apps that read the same name look as before. Qt apps run natively on Wayland through
   `qt6-wayland`, which Qt's own packages recommend. The backend lives in
   `/usr/libexec` and is started by D-Bus activation through its user unit, as Debian's portal
-  backends are. The `install` jobs install the packages into Debian testing with its `xdg-desktop-portal`
-  and reads `color-scheme` through `org.freedesktop.portal.Settings` before and after switching
-  the appearance.
+  backends are.
 
 ### Audio
 
@@ -236,9 +234,7 @@ graph LR
   has `pam_gnome_keyring` in its `auth` and `session` stacks (as optional), so signing in
   through `bande-greeter` unlocks the login keyring with the password just typed, and
   `gnome-keyring-daemon.socket` starts the daemon (secrets and PKCS#11 components) in the user
-  manager. Verified on the development VM: after a greetd login the `login` collection is
-  unlocked and `secret-tool store --collection=login` then `secret-tool lookup` round-trips
-  without a prompt.
+  manager.
 
 ### Session startup
 
@@ -252,7 +248,7 @@ graph LR
   Electron apps that do not yet default to Wayland run natively instead of failing for want of
   an X server, and `QT_QPA_PLATFORMTHEME` as described under the portal.
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
-  `bande-config`, `bande-power`, `bande-tray`, `bande-automount`,
+  `bande-config`, `bande-power`, `bande-sound`, `bande-tray`, `bande-automount`,
   `bande-polkit-agent`. `bande-notify` and
   the portal backend are started by D-Bus activation, and `bande-clipboard` and the shell
   clients by the compositor ([behaviour](behaviour.md)): `bande-shell`, one process for the
@@ -282,7 +278,7 @@ graph LR
   leaves rows changeable when polkit answers with a challenge, so changing them brings up the
   dialog. Its polkitd test (ignored; it needs polkitd on the system bus) runs the agent against the real polkitd and PAM.
 
-## Tier 2: full desktop polish
+## Desktop integration
 
 - **System tray**: `org.kde.StatusNotifierWatcher` and `org.kde.StatusNotifierItem` for
   third-party background apps (Steam, Nextcloud, Slack).
@@ -322,7 +318,6 @@ graph LR
     does. Encrypted volumes and the eject control wait for the UI.
 - **Theme propagation**: GTK 3 and 4 (the Settings portal, with `GTK_USE_PORTAL=1` for GTK 3), Qt (`QT_QPA_PLATFORMTHEME`) and
   cursor themes (`XCURSOR_THEME`, `XCURSOR_SIZE`) follow the desktop's appearance.
-- **Emulated input**: `libei` for remote desktop and virtual input devices.
 
 ## D-Bus integration
 
@@ -349,8 +344,9 @@ graph TD
         subgraph "Project-owned interfaces (org.bande.*)"
             OWN1["org.bande.Config (bande-config)"]
             OWN2["org.bande.NotificationCenter (bande-notify)"]
-            OWN3["org.bande.Compositor (planned: window layout, workspaces)"]
-            OWN4["org.bande.Watchdog (planned: unresponsive apps, Force Quit)"]
+            OWN3["org.bande.Clipboard (bande-clipboard)"]
+            OWN4["org.bande.Screenshot (bande-screenshot)"]
+            OWN5["org.bande.Sound (bande-sound)"]
         end
     end
 ```
@@ -426,29 +422,29 @@ for now), choosing among several sessions, a visible (non-secret) field for PAM'
 prompts (they are answered in the secure field), and power and accessibility menus.
 
 
-## Crash reporting and supervision
+## Crash handling and supervision
 
-- **Supervision** (implemented): the compositor restarts the shell clients and the clipboard
-  daemon it started when they exit, at most once every 10 seconds, and keeps the session locked
-  if the lock screen dies. Apps and their windows live in other processes, so a crash of the
-  one shell process takes the bar, the desktop, the notifications, Control Center and the
-  launcher away for a moment but never the session; the notifications themselves live in
-  `bande-notify` and reappear with the shell. Inside the shell, a surface the compositor closes
-  (for instance with its display) is dropped and reopened, so one closed surface never takes the
-  others with it. Session services run under systemd user units, which restart them
-  when they fail (`Restart=on-failure`).
-- **Crash reports** (planned): structured minidumps and stack traces with symbolicated Rust
-  frames when a component panics, kept only on the machine in
-  `~/.local/share/bande/crashes/`.
+- **Supervision**: the compositor restarts the shell clients and the clipboard daemon it started
+  when they exit, at most once every 10 seconds, and keeps the session locked if the lock screen
+  dies. A crash of the shell takes the bar, the desktop, the notifications, Control Center and
+  the launcher away for a moment but never the session or its apps; the notifications live in
+  `bande-notify` and reappear with the shell. Session services run under systemd user units with
+  `Restart=on-failure`.
+- **Watchdog**: `bande-compositor.service` has `WatchdogSec=20s` and the compositor's event loop
+  pings it, so a hung compositor is killed and the session ends instead of freezing the screen.
+- **Memory**: the compositor and the session bus, PipeWire, WirePlumber and the portal sit at the
+  OOM floor while apps run in their own scopes where systemd-oomd picks them first
+  ([decision 0004](../decisions/0004-memory-pressure.md)).
+- **After a crash**: the compositor keeps the open apps in `$XDG_STATE_HOME/bande/running`; a
+  session that ended without a clean log out leaves it, and the next session reopens those apps
+  only with `reopen-apps-after-crash #true`. An app that crashes posts "<App> quit unexpectedly"
+  ([behaviour](behaviour.md)). Core dumps go to `systemd-coredump` where it is installed.
 
-## First-run setup and updates
+## Updates
 
-- **Setup assistant** (planned): on first login a short, non-blocking assistant asks for the
-  appearance (dark, light or automatic), the taskbar position, the scrolling direction, and shows
-  the essential shortcuts (`Super+Space` launcher, `Print` screenshot, `Ctrl+Alt+Escape`
-  Force Quit).
-- **Updates**: packages come from Bande's signed APT repository (see the top-level
-  `README.md` and [packaging](packaging.md)) and arrive with `apt upgrade`. Planned: a timer
-  that checks for updates and posts a notification with the release notes and one "Update Now"
-  action, and restarting updated services and apps individually without ending the
-  compositor session.
+Packages come from Bande's signed APT repository ([packaging](packaging.md)). Settings ▸
+Software Update checks through PackageKit (`bande-packages`), downloads trusted updates and
+installs them offline at the next restart, without a password; the results are read once after
+the restart; Settings refreshes the cache when it is older than an hour. A daily user timer
+(also 3 minutes after login) checks and posts a notification when updates are waiting. There is no first-run
+assistant yet.

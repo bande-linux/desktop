@@ -8,13 +8,13 @@ something is its own binary package, built with `cargo deb` from the crate's
 
 Packages are built with the `dist` profile (`cargo deb --profile dist`): fat LTO, one codegen
 unit, `panic = "abort"` and stripped symbols. Development and test builds keep the default
-profiles. Sizes are tracked in [performance.md](performance.md).
+profiles. Sizes are in [performance.md](performance.md).
 
 ## Packages
 
 - **Per crate** (`cargo deb`, one build per architecture; the list is `ci/release/packages`): `bande-compositor`, the session services
-  (`bande-config`, `bande-notify`, `bande-power`, `bande-clipboard`, `bande-tray`,
-  `bande-automount`, `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
+  (`bande-config`, `bande-notify`, `bande-power`, `bande-sound`, `bande-clipboard`, `bande-tray`,
+  `bande-automount`, `bande-polkit`, `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
   `bande-settings`, `bande-file-chooser`). Package names stay `bande-*` whatever directory the crate lives in
   ([decision 0003](../decisions/0003-repository-layout.md)). `bande-shell` installs the one
@@ -23,7 +23,7 @@ profiles. Sizes are tracked in [performance.md](performance.md).
   libraries and build no package of their own.
 - **`bande-desktop`** (`packaging/bande-desktop`, architecture `all`, section
   `metapackages`): the one package that installs a complete Bande system, the way `gnome-core`
-  or `kde-plasma-desktop` do ([plan](../../NOTES/plans/single-metapackage.md)).
+  or `kde-plasma-desktop` do.
   It depends on the compositor, the core session services, the shell, the lock
   screen and the portal backend at the same version, and on `xdg-desktop-portal`,
   `dbus-user-session`, logind and `libpam-systemd`, on `pipewire-audio`, and on

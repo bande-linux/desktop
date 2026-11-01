@@ -1,9 +1,10 @@
 # Apps
 
 Every Bande app is built on `bande-app` (`crates/libs/app`): Files and Settings in this repo, and
-every app in [`bande-linux/apps`](https://github.com/bande-linux/apps), which pins the desktop
-crates at one revision. The plan and its decisions are in
-[`NOTES/plans/app-framework.md`](../../NOTES/plans/app-framework.md).
+every app in [`bande-linux/apps`](https://github.com/bande-linux/apps) (Terminal, Activity
+Monitor, Software, the Package Installer, Mail, Calendar and the app template), which is one
+Cargo workspace pinning the desktop crates at one revision. `ci/check-apps.sh` checks that every
+app here is built this way.
 
 ## The boundary
 
@@ -25,7 +26,7 @@ crates at one revision. The plan and its decisions are in
 | Keys | 1. Close Window, Quit and Settings… (`Ctrl+W`, `Ctrl+Q`, `Ctrl+,`; with `Shift` for Terminal) before the view. 2. The focused view. 3. A key the view did not take runs the enabled menu entry with that shortcut, so the menus are the one shortcut table |
 | Edit menu | `edit_submenu` items are `key:<shortcut>` actions: the focused view gets that key press, so Copy works in any text field |
 | Close | Close Window closes the active tab first where the app has tabs (`Program::close_tab`), else asks `should_close`; the close button closes the window; closing the last window leaves the app running, as on macOS, until Quit; Quit asks every window and stops at the first refusal |
-| Without windows | the app stays in the Taskbar and, when it was active, in the menu bar, whose key equivalents still reach it; a Taskbar click, the switcher or a second launch calls `Program::reopen`; `Program::window_closed` hands back a closed window's view so the app can keep it; program sources and deadlines keep running, window resources are released ([window-close](../../NOTES/plans/window-close.md)) |
+| Without windows | the app stays in the Taskbar and, when it was active, in the menu bar, whose key equivalents still reach it; a Taskbar click, the switcher or a second launch calls `Program::reopen`; `Program::window_closed` hands back a closed window's view so the app can keep it; program sources and deadlines keep running, window resources are released |
 | Appearance | every view gets each change; a view is built with the window's real appearance |
 
 ## Runtime contracts

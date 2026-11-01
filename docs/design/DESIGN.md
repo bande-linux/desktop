@@ -76,18 +76,20 @@ better.
 
 ## 6. Where Bande deliberately differs from macOS
 
-- One combined bar ([bar](features/bar.md)) on the left edge by default holds the launcher mark,
-  the active app's menus, the apps, status and the clock; a separate top menu bar is an option.
+- One combined bar, the Taskbar ([behaviour](../architecture/behaviour.md)), on the left edge by
+  default holds the launcher mark, the active app's menus, the apps, status and the clock; a
+  separate top menu bar is an option.
 - Window controls sit on the left as one neutral pill, not traffic lights.
 - Ctrl runs app shortcuts and Super the system, as on GNOME and KDE, not Command as on macOS.
 - Pure Wayland; no X11 compatibility layer.
 - Configuration is a human-readable file (`config.kdl`); every Settings control writes to it.
+- Not planned, by design: Taskbar magnification, a separate Launchpad grid (the launcher's empty
+  query is the app grid), widgets or a Today view, Focus modes beyond Do Not Disturb, a hot
+  corner by default.
 
 ## How this document is used
 
-1. Feature research per area (`docs/design/features/<area>.md`) proposes a feature set measured
-   against these principles; the owner marks each feature now, later or never.
-2. Agreed features get an experience spec (`docs/design/experience/<surface>.md`) with an interaction
-   table covering every input in section 2 and the motion of section 3.
-3. A milestone is done when CI is green and the owner has signed off a recording of the spec's
-   acceptance checklist on a live session.
+Where a spec or the code is silent, these principles decide; decisions taken that way are
+recorded in [`../architecture/behaviour.md`](../architecture/behaviour.md). The look is
+[Datum](datum.md). A change to what people see is checked by eye in light and dark and on the
+mini before it is called done.

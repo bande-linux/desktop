@@ -5,17 +5,11 @@ toolkit and apps draw, and which performance numbers every change is held to.
 
 ## Context
 
-- Bande targets Apple Silicon. The Asahi GPU stack ships Honeykrisp, a Vulkan 1.4
-  conformant Mesa driver [5]. Until the agx kernel driver is usable in our images,
-  everything renders on lavapipe (Mesa's CPU Vulkan) on the CI runners and in VMs.
-- The runners (Ubuntu 24.04, Mesa 25.2.8, probed on 2026-10-28) expose lavapipe with
-  Vulkan 1.4, `VK_EXT_external_memory_dma_buf`, `VK_KHR_external_memory_fd`, timeline
-  semaphores, `synchronization2`, dynamic rendering and `VK_EXT_host_image_copy`. They
-  have no `VK_EXT_image_drm_format_modifier`, no `VK_KHR_external_semaphore_fd`, no
-  `/dev/dri` and no `/dev/udmabuf`, but they do have `/dev/kvm`.
+- Bande targets Apple Silicon, whose Asahi GPU stack ships Honeykrisp, a Vulkan 1.4 conformant
+  Mesa driver [5]. Without a usable GPU, everything renders on lavapipe (Mesa's CPU Vulkan).
 - `linux-drm-syncobj-v1` (explicit sync) is P0. Its acquire and release points are DRM
-  timeline syncobjs, the kernel object that Vulkan timeline semaphores are modelled on
-  and that converts to and from `sync_file` fds [3][4].
+  timeline syncobjs, which Vulkan timeline semaphores are modelled on and which convert to and
+  from `sync_file` fds [3][4].
 
 ## Decision 1: the compositor renders with its own Vulkan renderer on `ash`
 
@@ -51,11 +45,8 @@ Design rules for `bande-render`:
    plane assignment, direct scanout and overlay planes; elements that fail the atomic
    test are composed by us on the primary plane [2].
 
-Validation that needs hardware is designed in, not assumed: plane assignment and
-direct scanout are tested on VKMS (which has overlay planes) in a KVM guest; whether
-Apple's display controller exposes usable overlay planes, and the semaphore `sync_file`
-path, are validated on Honeykrisp when the rig exists. The CPU release path covers the
-case where they are not.
+Plane assignment, direct scanout on Apple's display controller and the semaphore `sync_file`
+path still need checking on the hardware; the CPU release path covers drivers without them.
 
 ## Decision 2: the toolkit draws with Vello and lays out text with Parley
 
@@ -74,12 +65,10 @@ How it is used:
 1. An app's **first frame is drawn with `vello_cpu` into a `wl_shm` buffer**, so it does
    not wait for Vulkan device creation. Later frames move to `vello_gpu` once its device
    is ready; small damage may stay on the CPU path.
-2. Golden images in CI are rendered with `vello_cpu`, which is deterministic on lavapipe
-   runners; `vello_gpu` is checked against the same goldens within the SSIM bound.
-3. The toolkit's public scene API (`Scene`, `Item`) stays ours, so the backend can change
+2. The toolkit's public scene API (`Scene`, `Item`) stays ours, so the backend can change
    without touching apps.
 
-## Decision 3: performance targets, and how CI holds every change to them
+## Decision 3: performance targets
 
 Targets on hardware (Apple Silicon, 120 Hz ProMotion panel, refresh interval 8.33 ms):
 
@@ -92,62 +81,15 @@ Targets on hardware (Apple Silicon, 120 Hz ProMotion panel, refresh interval 8.3
 | App start, toolkit app, warm caches | exec to first committed frame ≤ 100 ms |
 | Memory | compositor ≤ 64 MB RSS with 8 windows; toolkit app ≤ 30 MB RSS |
 
-CI cannot measure photons or a real GPU, so `ci/perf` measures on lavapipe with
-`bande-bench` on every push to `main` (and on a branch commit whose message contains
-`[perf]`) and splits metrics into two kinds:
-
-- **Exact metrics**, independent of machine load, compared exactly: pixels repainted per
-  frame equal the damaged area; bytes uploaded per frame equal the damaged rows; frames
-  between a commit before the deadline and its presentation equal 1 on a virtual 120 Hz
-  clock. The frame scheduler reads time through an injected clock, so the scheduling
-  tests run on virtual time that does not move while a frame renders and are
-  independent of the runners' load.
-- **Real-clock presentation metrics**, reported against the targets but not gated:
-  commit-to-present latency p50/p99 (target ≤ 2 refresh intervals) and the number of
-  frames presented after the vblank their deadline promised, for commits at 100 phases
-  of a real 120 Hz clock. On a host shared by five runners, a sleeping thread's wake-up
-  is late by more than the 1 ms margin often enough that a gate would only measure the
-  neighbours.
-- **Timed metrics**, reported against budgets but not gated: typical frame at 1920×1080
-  p99 ≤ 8.33 ms (lavapipe must keep 120 Hz when damage is small), full repaint of 8 windows
-  p99 ≤ 16.7 ms, median of five compositor starts to listening socket ≤ 500 ms. The runners
-  share one 8-core host with other repositories' kernel builds and hardware jobs, and under
-  that load the unchanged renderer's typical-frame p50 moved from 0.28 ms to 3 ms; a wall-clock gate
-  would measure the neighbours, not the change. The summary prints the host's load average
-  next to them. They become gates again when they run on a runner reserved for measurement.
-- **Gated metrics**: every exact metric above, and compositor idle RSS ≤ 128 MB (lavapipe's
-  LLVM JIT included). Each run writes `perf.json` as an artifact and a table to the job
-  summary so trends are visible per commit. The exact metrics also count pixels shaded,
-  which an opaque window above a damaged area keeps to that area.
-- **Toolkit sample** (`crates/testing/sample`, measured by `bande-toolkit-bench` in the
-  same job): exec to first committed frame, median of five starts against the 100 ms target
-  (reported); resident memory when the first frame is mapped and after the GPU path is up,
-  against the 30 MB target (reported, since lavapipe's LLVM alone adds about 100 MiB); the
-  same app kept on the CPU path with `BANDE_RENDERER=cpu`, which is the toolkit's own
-  memory (gated at 30 MiB); and the sample scene's frame time on `vello_cpu` and on
-  `vello_gpu` including readback (reported).
-- **Idle wakeups** (`bande-idle`, same job, gated): a whole session runs headless on a
-  private session bus (the compositor in-process, the shell, the clipboard and screenshot
-  daemons, every session service, and Files, Settings, Terminal and Activity Monitor) and
-  sits untouched for 60 s three times: windows open, windows minimised, screen locked. Each
-  process's context switches, summed over its threads, count as its wakeups (lavapipe's
-  `llvmpipe-*` rasteriser threads, which a GPU does not have, are listed but not counted);
-  every process must stay at or under 1 per second, so a timer, a poll or a run loop that
-  spins while nothing happens fails the gate. The one exception is live data on screen:
-  with the windows open, Activity Monitor redraws its sample every 2 s and the compositor
-  shows those frames, so they may wake 5 and 10 times a second. The clocks' minute ticks
-  and Activity Monitor's sampling while hidden fit inside the budget.
-
-Measuring true input-to-photon needs a camera or photodiode on a real Mac; that is a
-hardware-rig task. Until then the exact frame-latency metric is the gate.
+These are measured by hand with the tools in [performance.md](../architecture/performance.md)
+(`bande-session-bench`, `bande-toolkit-bench`, `bande-idle`); CI does not gate on them. The frame
+scheduler reads time through an injected clock, so its latency rules hold on virtual time. True
+input-to-photon latency needs a camera on a real Mac.
 
 ## Consequences
 
-- The compositor stops depending on `wgpu`; the toolkit depends on Vello (which uses
-  `wgpu` for `vello_gpu`). The two processes no longer share a GPU abstraction, which they
-  never needed: they share dmabufs and syncobjs through the protocol.
-- A KVM guest with VKMS becomes the test bed for the DRM backend, plane assignment and
-  explicit sync, since the runners have `/dev/kvm` but no DRM device.
+- The compositor does not depend on `wgpu`; the toolkit depends on Vello (which uses `wgpu` for
+  `vello_gpu`). The two share dma-bufs and syncobjs through the protocol, not a GPU abstraction.
 
 ## Sources
 

@@ -8,6 +8,7 @@
 3. **Reuse code first**: Search the workspace before writing any helper, type, or utility. Never duplicate existing abstractions.
 4. **Minimal surface area (YAGNI)**: Zero speculative code, unused builder patterns, or premature indirection. Solve problems with the fewest moving parts. Prefer standard library combinators and idiomatic composition over custom machinery.
 5. **Purge code rot**: Delete unused imports, dead functions, unreferenced types, and stale tests in any file you touch. Leave code cleaner than you found it.
+6. **Small, current docs and notes**: Update the docs in the same change as the code they describe. Delete a gap, plan or review finding once it is finished (git keeps the history). No dated logs, diaries or measurement histories in the repo; trimming matters as much as writing.
 
 ## Apps
 - Every app (`crates/apps/*` except the file chooser portal, and every app in `bande-linux/apps`) is a `bande-app` app: `bande_app::run` in `src/main.rs`, windows through `Cx::open`. Windows, menus, standard keys, appearance, Settings… and single instance come from `bande-app`, never from the app; `ci/check-apps.sh` checks it. See `docs/architecture/apps.md`.

@@ -484,6 +484,16 @@ fn ethernet_switches_to_a_manual_address_and_vpns_connect_from_their_row() {
     let mut view = general_view();
     view.apply(Update::Network(network_state()));
     view.select_pane(PaneId::Network);
+    assert_eq!(
+        view.take_commands(),
+        [Command::Network(NetworkCommand::Watch(true))]
+    );
+    view.select_pane(PaneId::Wifi);
+    view.select_pane(PaneId::Network);
+    assert_eq!(
+        view.take_commands(),
+        [Command::Network(NetworkCommand::Scan)]
+    );
     assert!(has_text(
         &mut view,
         "Connected as 192.168.1.20/24, Router 192.168.1.1 · DNS 192.168.1.1"

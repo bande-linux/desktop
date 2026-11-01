@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use bande_audio::{Audio, Level, Snapshot};
-use bande_bluetooth::Bluetooth as BlueZ;
+use bande_bluetooth::{Bluetooth as BlueZ, shown_change};
 use bande_inbox::Outbox;
 use bande_network::{NetworkManager, set_strength, strength_signal};
 use zbus::blocking::fdo::DBusProxy;
@@ -325,6 +325,9 @@ fn change_of(message: &Message, owners: &mut Owners) -> Option<Control> {
         {
             let access_point = header.path()?.to_string();
             return strength.map(|strength| Control::Strength(access_point, strength));
+        }
+        if source == Source::Bluetooth && !shown_change(message) {
+            return None;
         }
         return Some(Control::Refresh(source));
     }

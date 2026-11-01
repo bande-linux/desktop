@@ -84,7 +84,7 @@ impl Table {
         let mut old = std::mem::take(&mut *self.texts.borrow_mut());
         let mut texts = HashMap::with_capacity(old.len());
         for index in first..last {
-            let lit = focused && self.lit(cx, index);
+            let lit = focused && !self.sidebar && self.lit(cx, index);
             let Some(line) = self.line(index) else {
                 continue;
             };
@@ -246,9 +246,10 @@ impl Table {
         focused: bool,
         items: &mut Vec<Item>,
     ) {
-        let color = match focused {
-            true => cx.palette.accent,
-            false => cx.palette.well,
+        let color = match (self.sidebar, focused) {
+            (true, _) => cx.palette.sidebar_selection(cx.window_active, focused),
+            (false, true) => cx.palette.accent,
+            (false, false) => cx.palette.well,
         };
         let spans: Vec<(f32, f32)> = match &self.glide {
             Some(glide) => vec![(cx.sample(&glide.top), cx.sample(&glide.bottom))],

@@ -551,6 +551,7 @@ impl ChooserView {
             .collect();
         let mut table = Table::new(vec![Column::new("", SIDEBAR_WIDTH).flexible()])
             .without_header()
+            .sidebar()
             .on_selection(move |keys| {
                 if let Some(path) = keys.first().and_then(|key| key.strip_prefix(PLACE_PREFIX)) {
                     push(&intents, Intent::Go(PathBuf::from(path)));
@@ -1066,6 +1067,10 @@ impl ChooserView {
         let performed = self.ui.perform(request);
         self.drain();
         performed
+    }
+
+    pub fn set_window_active(&mut self, active: bool) -> bool {
+        self.ui.set_window_active(active)
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {

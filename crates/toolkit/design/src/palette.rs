@@ -282,6 +282,14 @@ impl Palette {
             scrim: Color::BLACK.with_opacity(scrim),
         }
     }
+
+    pub fn sidebar_selection(&self, window_active: bool, focused: bool) -> Color {
+        match (window_active, focused) {
+            (false, _) => self.well.mix(self.chassis, 0.5),
+            (true, true) => self.hairline,
+            (true, false) => self.well,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

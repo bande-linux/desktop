@@ -344,6 +344,12 @@ fn about(scheme: Scheme) -> SettingsView {
     view
 }
 
+fn about_inactive(scheme: Scheme) -> SettingsView {
+    let mut view = about(scheme);
+    view.set_window_active(false);
+    view
+}
+
 fn wifi_off(scheme: Scheme) -> SettingsView {
     let mut view = new_view(scheme);
     view.apply(Update::Wifi(Some(WifiState {
@@ -659,7 +665,7 @@ fn network(scheme: Scheme) -> SettingsView {
 
 #[test]
 fn the_panes_match_their_goldens() {
-    let panes: [(&str, Scheme, Build, f64); 30] = [
+    let panes: [(&str, Scheme, Build, f64); 31] = [
         ("appearance-light", Scheme::Light, appearance, 1.0),
         ("appearance-dark", Scheme::Dark, appearance, 1.0),
         ("appearance-light@1.5x", Scheme::Light, appearance, 1.5),
@@ -693,6 +699,7 @@ fn the_panes_match_their_goldens() {
         ("language-time-light", Scheme::Light, language_time, 1.0),
         ("about-light", Scheme::Light, about, 1.0),
         ("about-dark", Scheme::Dark, about, 1.0),
+        ("about-inactive-light", Scheme::Light, about_inactive, 1.0),
         ("storage-light", Scheme::Light, storage, 1.0),
         ("software-update-light", Scheme::Light, software_update, 1.0),
     ];

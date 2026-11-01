@@ -59,7 +59,7 @@ has the keys" and not as a marker. Content selection on the sheet stays accent (
 `Palette::sidebar_selection(window_active, focused) -> Color`, used by all three sidebars.
 
 ## Implementation plan
-1. **Add the sidebar selection role and window-active state.**
+1. **Add the sidebar selection role and window-active state.** Done.
    `crates/toolkit/design/src/palette.rs`: `Palette::sidebar_selection(window_active: bool,
    focused: bool) -> Color` (table above). `crates/toolkit/widgets/src/lib.rs`: `pub
    window_active: bool` on `Context`, default `true`. Test in
@@ -67,7 +67,7 @@ has the keys" and not as a marker. Content selection on the sheet stays accent (
    selection tones are distinct from each other and from `chassis`, and `ink` stays legible
    on each (reuse the existing contrast helpers). Update `docs/design/datum.md:121,223,227`:
    sidebar selection is tone-only, no accent symbol, no ring on sidebar rows.
-2. **Settings: drop the markers.** `crates/apps/settings/src/widgets.rs` `SidebarRow::paint`:
+2. **Settings: drop the markers.** Done. `crates/apps/settings/src/widgets.rs` `SidebarRow::paint`:
    fill from `sidebar_selection(cx.window_active, cx.is_focused(self.id))`, remove the
    `focus_ring` call. `crates/apps/settings/src/header.rs` `sidebar_row`: selected symbol
    `ink`, others `ink2`; delete the accent branch. `crates/apps/settings/src/main.rs`: handle
@@ -76,12 +76,12 @@ has the keys" and not as a marker. Content selection on the sheet stays accent (
    focuses it (Up/Down still steps panes) and the rendered scene has no stroke inside the
    sidebar. New golden `about-inactive-light.png`. Regenerate every Settings golden
    (`crates/apps/settings/tests/golden/*.png`: all show a selected row).
-3. **Files: same treatment.** `crates/apps/files/src/paint.rs:224-236`: fill from
+3. **Files: same treatment.** Done. `crates/apps/files/src/paint.rs:224-236`: fill from
    `sidebar_selection(self.window_active, false)`, selected symbol `ink`. Add `window_active`
    to the view, set from `WindowEvent::Focus` in `crates/apps/files/src/main.rs`. New golden
    `icons-inactive.png`. Regenerate the Files goldens that show the sidebar
    (`crates/apps/files/tests/golden/*.png`; quick-look ones only if the sidebar is visible).
-4. **File chooser: no accent fill in the sidebar.** `crates/toolkit/widgets/src/table.rs`: a
+4. **File chooser: no accent fill in the sidebar.** Done. `crates/toolkit/widgets/src/table.rs`: a
    `Table::sidebar()` style that paints selection with `sidebar_selection(cx.window_active,
    focused)` and keeps `ink` text (`table.rs:1232`, `1418`). Use it in
    `crates/apps/file-chooser/src/view.rs:533`; pass `WindowEvent::Focus` through in
@@ -96,3 +96,6 @@ Each step is its own branch from `main`, verified on the mini before merging.
   from plain selection at all?
 - The Settings "updates waiting" attention row keeps its accent symbol as a status cue
   (recommended), or goes grey like the rest?
+
+Decided overnight 2026-11-01: keyboard focus in a sidebar shows the darker `hairline` step, no ring; a click also gives the sidebar the keys, so it shows the darker step too (plan recommendation; owner may revisit).
+Decided overnight 2026-11-01: the Settings "updates waiting" row keeps its accent symbol as a status cue (plan recommendation; owner may revisit).

@@ -135,8 +135,11 @@ fn usb() -> Hints {
 
 fn start(already_plugged: bool) -> Fixture {
     let bus = SessionBus::start().expect("dbus-daemon");
-    let notifications = NotificationServer::start(&bus.connect().expect("notify connection"))
-        .expect("notification server");
+    let notifications = NotificationServer::start(
+        &bus.connect().expect("notify connection"),
+        &bus.connect().expect("center connection"),
+    )
+    .expect("notification server");
     let udisks = bus.connect().expect("udisks connection");
     udisks
         .object_server()

@@ -39,7 +39,11 @@ fn notices(center: &NotificationCenter<'_>) -> Vec<(u32, String, String)> {
 #[test]
 fn a_full_disk_warns_once_until_space_recovers_and_manage_storage_opens_settings() {
     let bus = SessionBus::start().expect("dbus-daemon");
-    let _server = NotificationServer::start(&bus.connect().expect("server")).expect("server");
+    let _server = NotificationServer::start(
+        &bus.connect().expect("server"),
+        &bus.connect().expect("center connection"),
+    )
+    .expect("server");
     let center_bus = bus.connect().expect("center");
     let center = NotificationCenter::new(&center_bus).expect("center");
     let available = Arc::new(AtomicU64::new(50 * GB));

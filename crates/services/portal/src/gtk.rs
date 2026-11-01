@@ -326,9 +326,10 @@ fn replace(path: &Path, contents: &str) -> io::Result<()> {
     if std::fs::read_to_string(path).is_ok_and(|current| current == contents) {
         return Ok(());
     }
-    let staging = path.with_extension("new");
+    let target = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let staging = target.with_extension("new");
     std::fs::write(&staging, contents)?;
-    std::fs::rename(staging, path)
+    std::fs::rename(staging, target)
 }
 
 pub fn install(homes: &GtkHomes, accent: Accent, scheme: Scheme) -> io::Result<()> {

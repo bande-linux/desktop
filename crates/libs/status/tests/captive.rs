@@ -42,7 +42,11 @@ fn until<T>(mut found: impl FnMut() -> Option<T>) -> T {
 fn a_captive_portal_posts_one_sign_in_notice_that_opens_the_page_and_goes_away_once_online() {
     let bus = SessionBus::start().expect("dbus-daemon");
     let network = FakeNetworkManager::start(&bus).expect("fake NetworkManager");
-    let _server = NotificationServer::start(&bus.connect().expect("server")).expect("server");
+    let _server = NotificationServer::start(
+        &bus.connect().expect("server"),
+        &bus.connect().expect("center connection"),
+    )
+    .expect("server");
     let client = bus.connect().expect("client");
     let center = NotificationCenter::new(&client).expect("center");
     let (opened, pages) = mpsc::channel();

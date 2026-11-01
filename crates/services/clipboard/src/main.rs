@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use bande_clipboard::{
     BUS_NAME, ClipboardHistory, Contents, History, MAX_BYTES, OBJECT_PATH, Shared, is_sensitive,
-    lock, now,
+    lock, now, privacy_hint_unread,
 };
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
@@ -202,12 +202,13 @@ fn run() -> Result<(), Box<dyn Error>> {
             let Some(offer) = daemon.pending[selection.index()].take() else {
                 continue;
             };
-            let (contents, complete) = read_offer(&connection, &offer)?;
+            let (offered, contents, complete) = read_offer(&connection, &offer)?;
             offer.destroy();
             queue.roundtrip(&mut daemon)?;
             if daemon.pending[selection.index()].is_some()
                 || contents.is_empty()
                 || is_sensitive(&contents)
+                || privacy_hint_unread(&offered, &contents)
             {
                 continue;
             }
@@ -230,7 +231,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 fn read_offer(
     connection: &Connection,
     offer: &ExtDataControlOfferV1,
-) -> Result<(Contents, bool), Box<dyn Error>> {
+) -> Result<(Vec<String>, Contents, bool), Box<dyn Error>> {
     let mimes = offer
         .data::<Mimes>()
         .and_then(|mimes| mimes.lock().ok().map(|mimes| mimes.clone()))
@@ -238,7 +239,7 @@ fn read_offer(
     let mut contents = Vec::with_capacity(mimes.len());
     let mut complete = true;
     let mut room = MAX_BYTES;
-    for mime in mimes {
+    for mime in mimes.iter().cloned() {
         let (reader, writer) = std::io::pipe()?;
         offer.receive(mime.clone(), writer.as_fd());
         connection.flush()?;
@@ -251,7 +252,7 @@ fn read_offer(
             None => complete = false,
         }
     }
-    Ok((contents, complete))
+    Ok((mimes, contents, complete))
 }
 
 fn read_until_closed(mut reader: PipeReader, limit: usize) -> std::io::Result<Option<Vec<u8>>> {

@@ -2,7 +2,9 @@
 
 use std::os::unix::fs::PermissionsExt;
 
-use bande_clipboard::{Contents, History, KEPT_ITEMS, KEPT_SECONDS, MAX_ITEM_BYTES, summary};
+use bande_clipboard::{
+    Contents, History, KEPT_ITEMS, KEPT_SECONDS, MAX_ITEM_BYTES, privacy_hint_unread, summary,
+};
 
 const NOW: u64 = 1_800_000_000;
 const TEXT: &str = "text/plain;charset=utf-8";
@@ -121,4 +123,15 @@ fn promoting_removing_and_clearing_change_what_is_kept() {
     );
     history.clear();
     assert!(History::load(dir, NOW + 5).entries().is_empty());
+}
+
+#[test]
+fn a_copy_whose_password_hint_could_not_be_read_counts_as_a_secret() {
+    let hint = "x-kde-passwordManagerHint".to_owned();
+    let offered = [TEXT.to_owned(), hint.clone()];
+    assert!(privacy_hint_unread(&offered, &text("hunter2")));
+    let mut read = text("hunter2");
+    read.push((hint, b"secret".to_vec()));
+    assert!(!privacy_hint_unread(&offered, &read));
+    assert!(!privacy_hint_unread(&[TEXT.to_owned()], &text("hello")));
 }

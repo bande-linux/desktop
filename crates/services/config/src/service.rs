@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fmt;
-use std::io::{self, ErrorKind};
+use std::fs::File;
+use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
@@ -61,9 +62,15 @@ impl From<io::Error> for ServiceError {
 }
 
 fn replace(path: &Path, contents: &str) -> io::Result<()> {
-    let staging = path.with_file_name(STAGING_NAME);
-    std::fs::write(&staging, contents)?;
-    std::fs::rename(&staging, path)
+    let target = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let staging = target.with_file_name(STAGING_NAME);
+    let mut file = File::create(&staging)?;
+    if let Ok(existing) = std::fs::metadata(&target) {
+        file.set_permissions(existing.permissions())?;
+    }
+    file.write_all(contents.as_bytes())?;
+    file.sync_all()?;
+    std::fs::rename(&staging, &target)
 }
 
 pub struct ConfigService {

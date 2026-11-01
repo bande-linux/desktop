@@ -33,7 +33,11 @@ struct Fixture {
 
 fn start() -> Fixture {
     let bus = SessionBus::start().expect("dbus-daemon");
-    let server = NotificationServer::start(&bus.connect().expect("server")).expect("server");
+    let server = NotificationServer::start(
+        &bus.connect().expect("server"),
+        &bus.connect().expect("center connection"),
+    )
+    .expect("server");
     let (sender, played) = mpsc::channel();
     let sounds = zbus::blocking::connection::Builder::address(bus.address())
         .expect("address")

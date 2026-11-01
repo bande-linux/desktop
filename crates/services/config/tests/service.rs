@@ -230,6 +230,41 @@ fn setting_a_property_rewrites_the_file_and_signals_the_change_once() {
 }
 
 #[test]
+fn a_setting_writes_through_a_linked_file_and_keeps_its_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = start("");
+    let dotfiles = fixture.path.with_file_name("dotfiles");
+    std::fs::create_dir(&dotfiles).expect("dotfiles");
+    let kept = dotfiles.join("config.kdl");
+    std::fs::write(&kept, "appearance \"dark\"\n").expect("kept config");
+    std::fs::set_permissions(&kept, std::fs::Permissions::from_mode(0o600)).expect("chmod");
+    std::fs::remove_file(&fixture.path).expect("remove");
+    std::os::unix::fs::symlink(&kept, &fixture.path).expect("link");
+
+    set(&fixture.client, "Appearance", Value::from("light")).expect("Set");
+
+    assert!(
+        std::fs::symlink_metadata(&fixture.path)
+            .expect("link metadata")
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(
+        std::fs::read_to_string(&kept).expect("read"),
+        "appearance \"light\"\n"
+    );
+    assert_eq!(
+        std::fs::metadata(&kept)
+            .expect("metadata")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600
+    );
+}
+
+#[test]
 fn a_value_the_schema_rejects_leaves_the_file_alone() {
     let initial = "appearance \"dark\"\n";
     let fixture = start(initial);

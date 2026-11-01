@@ -497,6 +497,10 @@ impl Ui {
         }
     }
 
+    pub fn measure(&mut self, available: Size) -> Size {
+        self.root.measure(&mut self.cx, available)
+    }
+
     pub fn context(&mut self) -> &mut Context {
         &mut self.cx
     }

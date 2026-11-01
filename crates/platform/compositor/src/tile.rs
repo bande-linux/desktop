@@ -11,8 +11,7 @@ use crate::motion::{Look, Motion, Tick};
 use crate::scene::Casting;
 use crate::state::{Compositor, State};
 
-pub(crate) const REST: Duration = Duration::from_millis(150);
-const REST_DISTANCE: f64 = 2.0;
+const SHARED_EDGE_HOLD: Duration = Duration::from_millis(250);
 const EDGE_REACH: f64 = 1.0;
 const CORNER_REACH: i32 = 64;
 const TILED_STATES_SINCE: u32 = 2;
@@ -148,12 +147,15 @@ pub(crate) fn snap_at(pointer: Point<f64, Logical>, area: Rectangle<i32, Logical
     (pointer.y <= f64::from(area.loc.y) + EDGE_REACH).then_some(Snap::Zoom)
 }
 
+type Target = (usize, Snap);
+
 pub(crate) struct SnapDrag {
     surface: WlSurface,
-    candidate: Option<Snap>,
-    rest_at: Point<f64, Logical>,
+    candidate: Option<Target>,
+    pointer: Point<f64, Logical>,
     since: Duration,
-    shown: Option<Snap>,
+    hold: Duration,
+    shown: Option<Target>,
 }
 
 impl SnapDrag {
@@ -171,15 +173,15 @@ pub(crate) struct Preview {
 }
 
 impl State {
-    fn snap_rect(&self, snap: Snap) -> Rectangle<i32, Logical> {
-        let area = self.usable_area(self.pointer_screen());
+    fn snap_rect(&self, (screen, snap): Target) -> Rectangle<i32, Logical> {
+        let area = self.usable_area(screen);
         match snap {
             Snap::Tile(tile) => tile.rect(area),
             Snap::Zoom => area,
         }
     }
 
-    pub(crate) fn tile_window(&mut self, index: usize, tile: Tile) {
+    pub(crate) fn tile_window(&mut self, index: usize, tile: Tile, spring: Spring) {
         let target = tile.rect(self.usable_area(self.screen_of(&self.windows[index])));
         let window = &mut self.windows[index];
         if window.restore.is_none()
@@ -204,7 +206,7 @@ impl State {
         if let Some(serial) = window.configure() {
             window.pending_location = Some((serial, target.loc));
         }
-        self.animate_window(index, Spring::STANDARD, None);
+        self.animate_window(index, spring, None);
     }
 
     pub(crate) fn untile(&mut self, index: usize) -> Option<Rectangle<i32, Logical>> {
@@ -264,7 +266,7 @@ impl State {
                 return;
             }
         };
-        self.tile_window(index, tile);
+        self.tile_window(index, tile, Spring::STANDARD);
         self.offer_other_half(index);
     }
 
@@ -280,7 +282,7 @@ impl State {
         let zoomed = window.has_state(xdg_toplevel::State::Maximized);
         match placing(tile, zoomed, direction) {
             Some(Placing::Tile(tile)) => {
-                self.tile_window(index, tile);
+                self.tile_window(index, tile, Spring::STANDARD);
                 self.offer_other_half(index);
             }
             Some(Placing::Zoom) => self.maximize(surface),
@@ -337,6 +339,16 @@ impl State {
         }
     }
 
+    fn borders_another_screen(&self, (screen, snap): Target, pointer: Point<f64, Logical>) -> bool {
+        let output = self.screen_rect(screen).to_f64();
+        let beyond: Point<f64, Logical> = match snap {
+            Snap::Zoom => (pointer.x, output.loc.y - 1.0).into(),
+            Snap::Tile(tile) if tile.on_left() => (output.loc.x - 1.0, pointer.y).into(),
+            Snap::Tile(_) => (output.loc.x + output.size.w, pointer.y).into(),
+        };
+        self.screen_at(beyond).is_some()
+    }
+
     pub(crate) fn track_snap(
         &mut self,
         surface: &WlSurface,
@@ -345,19 +357,24 @@ impl State {
     ) {
         let now = Duration::from_millis(u64::from(time));
         let screen = self.pointer_screen();
-        let candidate = snap_at(pointer, self.usable_area(screen));
+        let candidate = snap_at(pointer, self.usable_area(screen)).map(|snap| (screen, snap));
+        let hold = match candidate {
+            Some(target) if self.borders_another_screen(target, pointer) => SHARED_EDGE_HOLD,
+            _ => Duration::ZERO,
+        };
         let drag = self.snap.get_or_insert_with(|| SnapDrag {
             surface: surface.clone(),
             candidate: None,
-            rest_at: pointer,
+            pointer,
             since: now,
+            hold,
             shown: None,
         });
-        let moved = (pointer.x - drag.rest_at.x).hypot(pointer.y - drag.rest_at.y) > REST_DISTANCE;
-        if candidate != drag.candidate || moved {
+        drag.pointer = pointer;
+        if candidate != drag.candidate {
             drag.candidate = candidate;
-            drag.rest_at = pointer;
             drag.since = now;
+            drag.hold = hold;
         }
         if drag.shown.is_some() && drag.shown != candidate {
             drag.shown = None;
@@ -372,12 +389,12 @@ impl State {
         if drag.shown == Some(candidate) {
             return None;
         }
-        let due = drag.since + REST;
+        let due = drag.since + drag.hold;
         if now < due {
             return Some(due);
         }
         drag.shown = Some(candidate);
-        let (owner, at) = (drag.surface.clone(), drag.rest_at);
+        let (owner, at) = (drag.surface.clone(), drag.pointer);
         let target = self.snap_rect(candidate);
         let target = Look::shown(target.to_f64());
         let (from, spring) = if self.reduce_motion {
@@ -385,7 +402,7 @@ impl State {
         } else {
             (
                 Look::hidden(Rectangle::new(at, (1.0, 1.0).into())),
-                Spring::QUICK,
+                Spring::FADE,
             )
         };
         let mut motion = match self.preview.take() {
@@ -429,11 +446,11 @@ impl State {
             return;
         };
         match shown {
-            Some(Snap::Tile(tile)) => {
-                self.tile_window(index, tile);
+            Some((_, Snap::Tile(tile))) => {
+                self.tile_window(index, tile, Spring::QUICK);
                 self.offer_other_half(index);
             }
-            Some(Snap::Zoom) => self.maximize(surface),
+            Some((_, Snap::Zoom)) => self.maximize(surface),
             None => {}
         }
     }

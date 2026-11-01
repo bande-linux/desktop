@@ -24,7 +24,7 @@ its not possible to install more keyboard layouts or languages in settings *impo
 Status: started ([plans/keyboard-layouts-and-languages.md](plans/keyboard-layouts-and-languages.md)); M4 layout picker done
 
 grapping a window edge or corner in order to reseize it is a bit difficult, the resizer is too unprecise to the actual corner or edge
-Status: planned ([plans/window-resize-zones.md](plans/window-resize-zones.md))
+Status: finished ([plans/window-resize-zones.md](plans/window-resize-zones.md)); not yet checked live on the mini
 
 the themes, especially the dark theme, looks a bit "dated". Review how modern dark themes look in 2026. This is too dark and hard on the eyes with strong contrast. I think MacOS dark theme is nicer on the eyes, a bit more slated. DO not copy that however, rely on the investigation.
 Status: finished ([plans/dark-theme.md](plans/dark-theme.md)); moving light to the slate family (M6) waits on the owner
@@ -54,4 +54,4 @@ we have no app store, should we build one?
 Status: planned ([plans/app-store.md](plans/app-store.md))
 
 snapping windows to the sides is a bit slow and also to the left requires you do drag to the screen edge but dragging to the taskbar should be enough since thats the real edge of the window. So the screen estate is the whole screen minus the taskbar, not the whole screen like now.
-Status: started ([plans/window-snapping.md](plans/window-snapping.md))
+Status: finished ([plans/window-snapping.md](plans/window-snapping.md)); not yet checked live on the mini

@@ -1,11 +1,12 @@
-use bande_design::{Color, Palette, Radius, TextRole};
+use bande_design::{Color, Palette, TextRole};
 
 use crate::{Item, Paragraph, Path, Point, Rect, Shape, TextStyle};
 
 pub const WINDOW_HEADER_HEIGHT: u32 = 48;
 pub const FRAME_HEADER_HEIGHT: u32 = 40;
-pub const RESIZE_MARGIN: u32 = 6;
-pub const RESIZE_CORNER: f32 = Radius::XL;
+pub const RESIZE_MARGIN: u32 = 8;
+pub const RESIZE_INSIDE: f32 = 3.0;
+const RESIZE_CORNER_REACH: f32 = 24.0;
 const WELL_X: f32 = 12.0;
 const WELL_WIDTH: f32 = 66.0;
 const WELL_HEIGHT: f32 = 24.0;
@@ -85,10 +86,15 @@ pub enum ResizeEdge {
     BottomRight,
 }
 
-pub fn resize_edge(window: Rect, point: Point) -> ResizeEdge {
+pub fn resize_zone(window: Rect, radius: f32, outside: f32, point: Point) -> Option<ResizeEdge> {
+    if !window.inset(-outside).contains(point)
+        || Shape::rounded(window, radius).distance(point) < -RESIZE_INSIDE
+    {
+        return None;
+    }
     let horizontal = side(point.x, window.x, window.width);
     let vertical = side(point.y, window.y, window.height);
-    match (vertical, horizontal) {
+    Some(match (vertical, horizontal) {
         (-1, -1) => ResizeEdge::TopLeft,
         (-1, 1) => ResizeEdge::TopRight,
         (1, -1) => ResizeEdge::BottomLeft,
@@ -97,13 +103,13 @@ pub fn resize_edge(window: Rect, point: Point) -> ResizeEdge {
         (1, _) => ResizeEdge::Bottom,
         (_, -1) => ResizeEdge::Left,
         _ => ResizeEdge::Right,
-    }
+    })
 }
 
 fn side(at: f32, start: f32, length: f32) -> i8 {
-    if at < start + RESIZE_CORNER {
+    if at < start + RESIZE_CORNER_REACH {
         -1
-    } else if at >= start + length - RESIZE_CORNER {
+    } else if at >= start + length - RESIZE_CORNER_REACH {
         1
     } else {
         0

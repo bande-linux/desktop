@@ -1,3 +1,4 @@
+use bande_graphics::{Point, Rect, Shape};
 use bande_notify::client::NotificationCenter;
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedObjectPath;
@@ -118,9 +119,8 @@ fn coverage(distance: f32) -> f32 {
 }
 
 fn rounded_box(x: f32, y: f32, half: (f32, f32), radius: f32) -> f32 {
-    let qx = x.abs() - half.0 + radius;
-    let qy = y.abs() - half.1 + radius;
-    qx.max(0.0).hypot(qy.max(0.0)) + qx.max(qy).min(0.0) - radius
+    let rect = Rect::new(-half.0, -half.1, 2.0 * half.0, 2.0 * half.1);
+    Shape::rounded(rect, radius).distance(Point::new(x, y))
 }
 
 pub fn icon(activity: Activity) -> Vec<u8> {

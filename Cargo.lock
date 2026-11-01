@@ -506,7 +506,6 @@ dependencies = [
  "smithay",
  "tempfile",
  "tracing",
- "wayland-backend",
  "wayland-client",
  "wayland-protocols",
  "zbus",

@@ -10,14 +10,15 @@ fn main() -> ExitCode {
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let remembered = do_not_disturb_path(state_home.as_deref(), home.as_deref());
     let server = Connection::session().and_then(|connection| {
+        let center = Connection::session()?;
         let server = match remembered {
-            Some(file) => NotificationServer::start_remembering(&connection, file),
-            None => NotificationServer::start(&connection),
+            Some(file) => NotificationServer::start_remembering(&connection, &center, file),
+            None => NotificationServer::start(&connection, &center),
         }?;
-        Ok((connection, server))
+        Ok((connection, center, server))
     });
     match server {
-        Ok((connection, _server)) => {
+        Ok((connection, _center, _server)) => {
             bande_bus::serve_until_closed(&connection);
             ExitCode::SUCCESS
         }

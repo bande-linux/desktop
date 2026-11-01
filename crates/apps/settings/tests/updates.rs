@@ -245,7 +245,9 @@ fn click(notifications: &zbus::blocking::Connection, id: u32) {
 fn a_click_right_after_the_daily_announcement_is_heard() {
     let (bus, _fake, system) = start(updates());
     let notifications = bus.connect().expect("notifications connection");
-    let server = bande_notify::NotificationServer::start(&notifications).expect("server");
+    let server =
+        bande_notify::NotificationServer::start(&notifications, &bus.connect().expect("center"))
+            .expect("server");
     let session = bus.connect().expect("session");
     let notice = UpdateNotice::listen(&session).expect("listen");
     let started = Instant::now();
@@ -265,7 +267,9 @@ fn a_click_right_after_the_daily_announcement_is_heard() {
 fn a_newer_announcement_retires_the_older_notice_and_its_waiter() {
     let (bus, _fake, system) = start(updates());
     let notifications = bus.connect().expect("notifications connection");
-    let server = bande_notify::NotificationServer::start(&notifications).expect("server");
+    let server =
+        bande_notify::NotificationServer::start(&notifications, &bus.connect().expect("center"))
+            .expect("server");
     let yesterday = bus.connect().expect("yesterday");
     let older = UpdateNotice::listen(&yesterday).expect("listen");
     let old_id = announce_updates(&yesterday, &system)

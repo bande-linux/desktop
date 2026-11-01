@@ -47,7 +47,8 @@ fn pump(
 fn each_app_that_notified_gets_its_own_rules() {
     let bus = SessionBus::start().expect("dbus-daemon");
     let connection = bus.connect().expect("connection");
-    let server = NotificationServer::start(&connection).expect("notification server");
+    let server = NotificationServer::start(&connection, &bus.connect().expect("center"))
+        .expect("notification server");
     let client = bus.connect().expect("client");
     notify(
         &client,

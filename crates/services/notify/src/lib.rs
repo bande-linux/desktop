@@ -26,6 +26,7 @@ pub use picture::{MAX_PICTURE, Picture};
 pub use wire::{WireNotification, WirePresentation, WireStack};
 
 pub const BUS_NAME: &str = "org.freedesktop.Notifications";
+pub const CENTER_BUS_NAME: &str = "org.bande.NotificationCenter";
 pub const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
 pub const SPEC_VERSION: &str = "1.2";
 const APPS_FILE: &str = "notification-apps";
@@ -252,18 +253,23 @@ pub struct NotificationServer {
 }
 
 impl NotificationServer {
-    pub fn start(connection: &Connection) -> zbus::Result<Self> {
-        Self::launch(connection, None)
+    pub fn start(connection: &Connection, center: &Connection) -> zbus::Result<Self> {
+        Self::launch(connection, center, None)
     }
 
     pub fn start_remembering(
         connection: &Connection,
+        center: &Connection,
         do_not_disturb_file: PathBuf,
     ) -> zbus::Result<Self> {
-        Self::launch(connection, Some(do_not_disturb_file))
+        Self::launch(connection, center, Some(do_not_disturb_file))
     }
 
-    fn launch(connection: &Connection, do_not_disturb_file: Option<PathBuf>) -> zbus::Result<Self> {
+    fn launch(
+        connection: &Connection,
+        center_connection: &Connection,
+        do_not_disturb_file: Option<PathBuf>,
+    ) -> zbus::Result<Self> {
         let mut center = Center::default();
         center.set_do_not_disturb(do_not_disturb_file.as_deref().is_some_and(Path::exists));
         let apps_file = do_not_disturb_file
@@ -295,17 +301,19 @@ impl NotificationServer {
                 sounds: Mutex::new(sounds(connection)),
             },
         )?;
-        connection.object_server().at(
+        center_connection.object_server().at(
             OBJECT_PATH,
             NotificationCenter {
                 shared: Arc::clone(&shared),
+                notifications: connection.inner().clone(),
             },
         )?;
+        center_connection.request_name(CENTER_BUS_NAME)?;
         connection.request_name(BUS_NAME)?;
         let timer = Arc::clone(&shared);
         let timer_connection = connection.clone();
         thread::spawn(move || expire(&timer, &timer_connection));
-        let publisher = connection.clone();
+        let publisher = center_connection.clone();
         thread::spawn(move || publish(&presented, &publisher));
         let watched = Arc::clone(&shared);
         let watcher = connection.clone();
@@ -542,6 +550,13 @@ impl Notifications {
 
 struct NotificationCenter {
     shared: Arc<Shared>,
+    notifications: zbus::Connection,
+}
+
+impl NotificationCenter {
+    fn notifications(&self) -> zbus::Result<SignalEmitter<'static>> {
+        SignalEmitter::new(&self.notifications, OBJECT_PATH)
+    }
 }
 
 #[zbus::interface(name = "org.bande.NotificationCenter")]
@@ -592,34 +607,42 @@ impl NotificationCenter {
         id: u32,
         action_key: String,
         activation_token: String,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> bool {
+    ) -> zbus::fdo::Result<bool> {
+        let emitter = self.notifications()?;
         let outcome = self.shared.activate(id, &action_key);
-        announce(&emitter, id, &action_key, &activation_token, &outcome).await
+        Ok(announce(&emitter, id, &action_key, &activation_token, &outcome).await)
     }
 
-    async fn dismiss(&self, id: u32, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
+    async fn dismiss(&self, id: u32) -> zbus::fdo::Result<()> {
+        let emitter = self.notifications()?;
         if self.shared.update(|center| center.close(id)) {
             emit_closed(&emitter, &[id], CloseReason::Dismissed).await;
         }
+        Ok(())
     }
 
-    async fn hide_banner(&self, id: u32, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
+    async fn hide_banner(&self, id: u32) -> zbus::fdo::Result<()> {
+        let emitter = self.notifications()?;
         if let Some(HiddenBanner { closed: true }) =
             self.shared.update(|center| center.hide_banner(id))
         {
             emit_closed(&emitter, &[id], CloseReason::Dismissed).await;
         }
+        Ok(())
     }
 
-    async fn clear(&self, group: String, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
+    async fn clear(&self, group: String) -> zbus::fdo::Result<()> {
+        let emitter = self.notifications()?;
         let cleared = self.shared.update(|center| center.clear(&group));
         emit_closed(&emitter, &cleared, CloseReason::Dismissed).await;
+        Ok(())
     }
 
-    async fn clear_all(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
+    async fn clear_all(&self) -> zbus::fdo::Result<()> {
+        let emitter = self.notifications()?;
         let cleared = self.shared.update(Center::clear_all);
         emit_closed(&emitter, &cleared, CloseReason::Dismissed).await;
+        Ok(())
     }
 
     async fn quiet_while_connected(

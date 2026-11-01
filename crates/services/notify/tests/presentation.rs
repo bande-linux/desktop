@@ -47,8 +47,11 @@ struct Fixture {
 
 fn start() -> Fixture {
     let bus = SessionBus::start().expect("dbus-daemon");
-    let server = NotificationServer::start(&bus.connect().expect("server connection"))
-        .expect("notification server");
+    let server = NotificationServer::start(
+        &bus.connect().expect("server connection"),
+        &bus.connect().expect("center connection"),
+    )
+    .expect("notification server");
     let connection = bus.connect().expect("client connection");
     let client = NotificationsProxyBlocking::new(&connection).expect("proxy");
     let center = NotificationCenter::new(&connection).expect("center proxy");
@@ -119,6 +122,35 @@ fn a_transient_notification_is_kept_out_of_the_center() {
 }
 
 #[test]
+fn the_center_is_not_reachable_through_the_notification_name() {
+    let fixture = start();
+    fixture.notify("Your code is 123456", HashMap::new());
+    fixture.next();
+
+    let through_notifications = fixture.connection.call_method(
+        Some(bande_notify::BUS_NAME),
+        bande_notify::OBJECT_PATH,
+        Some(CENTER),
+        "GetPresentation",
+        &(),
+    );
+    assert!(through_notifications.is_err());
+    let wrong_name = PropertiesProxy::builder(&fixture.connection)
+        .destination(bande_notify::BUS_NAME)
+        .expect("destination")
+        .path(bande_notify::OBJECT_PATH)
+        .expect("path")
+        .build()
+        .expect("properties proxy")
+        .set(
+            InterfaceName::from_static_str_unchecked(CENTER),
+            "DoNotDisturb",
+            Value::from(true),
+        );
+    assert!(wrong_name.is_err());
+}
+
+#[test]
 fn do_not_disturb_is_a_writable_property() {
     let fixture = start();
     let properties = fixture.center_properties();
@@ -182,7 +214,7 @@ fn clicking_a_notification_without_a_default_action_removes_it() {
 
 fn center_properties_on(connection: &Connection) -> PropertiesProxy<'static> {
     PropertiesProxy::builder(connection)
-        .destination(bande_notify::BUS_NAME)
+        .destination(bande_notify::CENTER_BUS_NAME)
         .expect("destination")
         .path(bande_notify::OBJECT_PATH)
         .expect("path")
@@ -199,6 +231,7 @@ fn do_not_disturb_is_remembered_across_restarts() {
     let first_session = SessionBus::start().expect("dbus-daemon");
     let _first = NotificationServer::start_remembering(
         &first_session.connect().expect("server connection"),
+        &first_session.connect().expect("center connection"),
         file.clone(),
     )
     .expect("notification server");
@@ -210,6 +243,7 @@ fn do_not_disturb_is_remembered_across_restarts() {
     let second_session = SessionBus::start().expect("dbus-daemon");
     let _second = NotificationServer::start_remembering(
         &second_session.connect().expect("server connection"),
+        &second_session.connect().expect("center connection"),
         file.clone(),
     )
     .expect("restarted notification server");

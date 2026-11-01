@@ -61,8 +61,11 @@ struct Fixture {
 
 fn start() -> Fixture {
     let bus = SessionBus::start().expect("dbus-daemon");
-    let server = NotificationServer::start(&bus.connect().expect("server connection"))
-        .expect("notification server");
+    let server = NotificationServer::start(
+        &bus.connect().expect("server connection"),
+        &bus.connect().expect("center connection"),
+    )
+    .expect("notification server");
     let connection: Connection = bus.connect().expect("client connection");
     let client = NotificationsProxyBlocking::new(&connection).expect("proxy");
 

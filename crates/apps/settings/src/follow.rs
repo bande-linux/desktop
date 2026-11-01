@@ -312,7 +312,7 @@ impl Services {
             login: follow_login_items(updates.clone()),
             battery: system.map(|system| follow_battery(system, updates.clone())),
             notifications: follow_app_notifications(session, updates.clone()),
-            software: system.map(|system| follow_software(system, updates.clone())),
+            software: system.map(|system| follow_software(session, system, updates.clone())),
             locale: system.map(|system| follow_locale(system, updates.clone())),
             default_apps: follow_default_apps(updates.clone()),
             permissions: follow_permissions(session, updates.clone()),

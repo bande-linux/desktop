@@ -12,7 +12,7 @@ its not possible to install more keyboard layouts or languages in settings *impo
 Status: started. Layouts and languages work in Settings. Left: input methods (fcitx5) in Settings, deferred by decision; the owner picks a language and checks `locale -a`, and checks "Use at Login Screen" at the greeter (needs a logout).
 
 the software update doesnt seem to work.
-Status: started. Offline updates through PackageKit are built. Left: the owner runs one update end to end on the mini (download, Restart, `journalctl -b -u packagekit-offline-update`).
+Status: started. Live updates with offline install only for reboot-class packages are built. Left: the owner runs one update on the mini with no reboot-class package (installs with no restart, only "Quit and reopen …"; `sudo needrestart -b` lists no stale services; `journalctl -u packagekit` shows needrestart's hook ran without prompting), and one offline update end to end (Restart, `journalctl -b -u packagekit-offline-update`).
 
 Files has no "settings" (and other inhouse apps who needs it), for example i want to show file extensions
 Status: started. Files ▸ Settings… is built. Left: a Sidebar section, and "Last Folder" as a new-window choice (Files keeps no record of the last folder shown).

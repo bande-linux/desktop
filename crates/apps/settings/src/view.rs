@@ -33,7 +33,7 @@ use crate::pointing::PointingDevices;
 use crate::privacy::focus_after_asking;
 use crate::privilege::Privilege;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
-use crate::software::{SoftwareCommand, SoftwareState};
+use crate::software::{Need, SoftwareCommand, SoftwareState};
 use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
@@ -86,6 +86,7 @@ pub(crate) enum Intent {
     OpenApp(String),
     SetAppRule(AppNotifications),
     Software(SoftwareCommand),
+    Later(Need),
     Network(NetworkCommand),
     ManualIpv4(bool),
     ImportVpn,
@@ -942,6 +943,12 @@ impl SettingsView {
                     *self.scroll.borrow_mut() = ScrollState::default();
                 }
                 Intent::Software(command) => self.commands.push(Command::Software(command)),
+                Intent::Later(need) => {
+                    if self.software.later(need) {
+                        self.commands
+                            .push(Command::Software(SoftwareCommand::Check));
+                    }
+                }
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
                 Intent::Network(command) => self.commands.push(Command::Network(command)),
                 Intent::ImportVpn => self.commands.push(Command::ImportVpn),

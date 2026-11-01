@@ -55,9 +55,11 @@ follows changes made elsewhere while it is open. Desktop settings go \
 through org.bande.Config, which writes config.kdl. A polkit rule lets \
 administrators (members of sudo) change the time, language, login screen \
 keyboard layouts and computer name without a password prompt. Any \
-supported language can be chosen; localed generates it. Updates download \
-in the background and install at the next restart through PackageKit's \
-offline updates."""
+supported language can be chosen; localed generates it. Updates install \
+through PackageKit while the computer runs; only those that need a \
+restart install at the next restart, through PackageKit's offline \
+updates. Settings asks to log out or reopen apps that still run the old \
+version, and never restarts or logs out by itself."""
 recommends = "bande-polkit, network-manager, bluez, pipewire, wireplumber, bande-notify, packagekit, power-profiles-daemon, upower"
 maintainer-scripts = "debian/"
 assets = [

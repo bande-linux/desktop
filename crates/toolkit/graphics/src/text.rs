@@ -243,6 +243,19 @@ impl TextSystem {
         self.emphasized(text, style, &[], max_width, align)
     }
 
+    pub fn fitted(&mut self, text: &str, style: TextStyle, max_width: f32) -> Paragraph {
+        let paragraph = self.paragraph(text, style, None, TextAlign::Start);
+        if paragraph.width() <= max_width {
+            return paragraph;
+        }
+        let shown = shortened(text, Cut::End, |candidate| {
+            self.paragraph(candidate, style, None, TextAlign::Start)
+                .width()
+                <= max_width
+        });
+        self.paragraph(&shown, style, None, TextAlign::Start)
+    }
+
     pub fn emphasized(
         &mut self,
         text: &str,

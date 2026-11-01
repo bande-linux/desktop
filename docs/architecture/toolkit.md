@@ -69,6 +69,8 @@ writes a hex value, a corner radius or a font name of its own.
   `Label` 10.5/14 semibold tracked capitals in Inter; `Mono` 13/18 in JetBrains Mono.
   `TextStyle::new(size, colour)` remains for free sizes: Inter below 20 pt, Manrope from 20 pt.
   `.tabular()` adds `tnum` for numbers in columns.
+  `TextSystem::fitted(text, style, width)` lays text out on one line, cut at the end with
+  "…" when wider (`shortened` with `Cut::Middle` keeps the tail).
 - **Symbolic icons.** The theme's symbolic icons are a single fill of light `ink`;
   `Image::tinted(colour)` keeps an image's shape and gives it one colour, so a symbol follows
   `ink2`, the accent when selected, or `on_accent` on a selection.

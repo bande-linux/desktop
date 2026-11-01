@@ -67,8 +67,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 
 ## Remaining work
 
-- Files: undo across windows, `org.freedesktop.FileManager1`; slices F15–F23 sit unmerged on
-  `origin/wip/files-depth-3`.
+- Files: ranked in [plans/files-depth.md](plans/files-depth.md).
 - Unmerged branches: `wip/l10n-ready` (strings into Fluent, an en-XA pseudo-locale),
   `wip/terminal-scopes` (a systemd scope per Terminal tab; apps repo now),
   `wip/userland-efficiency` (conflicts with `main`).

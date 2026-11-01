@@ -993,6 +993,9 @@ impl FilesView {
                 } else {
                     format_size(entry.size)
                 };
+                if self.shown_name(entry) != entry.name {
+                    facts.push((L10N.tr("info-name"), entry.name.clone()));
+                }
                 facts.push((L10N.tr("info-size"), size));
                 if let Some((width, height)) = info.pixels {
                     facts.push((

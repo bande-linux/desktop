@@ -31,7 +31,7 @@ use crate::loader::{Loaded, Loader};
 use crate::quick_look::QuickLook;
 use crate::search::{Index, SEARCH_HEIGHT, Searching};
 use crate::settings::FilesSettings;
-use crate::sidebar::{Place, PlaceKind, Row, SidebarEdit, with_volumes};
+use crate::sidebar::{Row, SidebarEdit, with_volumes};
 use crate::tabs::{Tab, location_title};
 use crate::thumbs::Thumbs;
 use crate::toolbar::{TOOLBAR_HEIGHT, Toolbar};
@@ -217,6 +217,8 @@ pub struct FilesView {
     pub(crate) search_excluded: Vec<PathBuf>,
     pub(crate) menu_place: Option<usize>,
     pub(crate) hidden_places: Vec<Location>,
+    volumes_shown: bool,
+    mounted: Vec<PathBuf>,
     media: Vec<PathBuf>,
     pub(crate) favourites: Vec<Row>,
     watch: FolderWatch,
@@ -348,6 +350,8 @@ impl FilesView {
             search_excluded: Vec::new(),
             menu_place: None,
             hidden_places: Vec::new(),
+            volumes_shown: true,
+            mounted: Vec::new(),
             media: Vec::new(),
             favourites: Vec::new(),
             watch: FolderWatch::new()?,
@@ -385,14 +389,15 @@ impl FilesView {
         Ok(view)
     }
 
-    pub fn set_hidden_places(&mut self, hidden: Vec<Location>) {
+    pub fn set_hidden_places(&mut self, hidden: Vec<Location>, volumes_shown: bool) {
         self.hidden_places = hidden;
+        self.volumes_shown = volumes_shown;
         let favourites = std::mem::take(&mut self.favourites);
         self.set_sidebar(favourites);
     }
 
     pub fn set_sidebar(&mut self, sidebar: Vec<Row>) {
-        self.sidebar = self.with_volumes(&sidebar, &self.volumes());
+        self.sidebar = self.with_volumes(&sidebar, &self.mounted);
         self.favourites = sidebar;
         self.menu_place = None;
     }
@@ -407,36 +412,23 @@ impl FilesView {
         let shown = volumes
             .iter()
             .filter(|volume| {
-                !self
-                    .hidden_places
-                    .contains(&Location::Folder((*volume).clone()))
+                self.volumes_shown
+                    && !self
+                        .hidden_places
+                        .contains(&Location::Folder((*volume).clone()))
             })
             .cloned()
             .collect::<Vec<_>>();
         with_volumes(sidebar, &shown)
     }
 
-    fn volumes(&self) -> Vec<PathBuf> {
-        self.sidebar
-            .iter()
-            .filter_map(|row| match row {
-                Row::Place(Place {
-                    kind: PlaceKind::Volume,
-                    location: Location::Folder(path),
-                    ..
-                }) => Some(path.clone()),
-                _ => None,
-            })
-            .collect()
-    }
-
     fn refresh_volumes(&mut self) {
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
         let volumes = mounted_volumes(&mountinfo, &self.media);
-        let previous = self.volumes();
-        if volumes == previous {
+        if volumes == self.mounted {
             return;
         }
+        let previous = std::mem::replace(&mut self.mounted, volumes.clone());
         self.sidebar = self.with_volumes(&self.favourites, &volumes);
         self.menu_place = None;
         let gone = previous.iter().any(|volume| {
@@ -466,11 +458,11 @@ impl FilesView {
             return;
         };
         if let Some(volume) = self
-            .volumes()
-            .into_iter()
+            .mounted
+            .iter()
             .find(|volume| folder.starts_with(volume))
         {
-            self.requests.push(Request::Eject(volume));
+            self.requests.push(Request::Eject(volume.clone()));
         }
     }
 

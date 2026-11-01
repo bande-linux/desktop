@@ -10,9 +10,10 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_files::{
     BookmarkEdit, Browser, FilesSettings, FilesView, L10N, Location, Request, Row, SETTINGS_SIZE,
-    SIDEBAR_WIDTH, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, follow_search_excluded, hidden_places,
-    list_columns_file, rows, settings_view, sidebar_file, status_bar_file, views_file,
-    with_bookmarks, without_bookmark,
+    SIDEBAR_FILE, SIDEBAR_WIDTH, Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory,
+    follow_search_excluded, hidden_places, last_folder_file as last_folder_file_in,
+    list_columns_file, rows, serve_file_manager, settings_view, sidebar_file, status_bar_file,
+    views_file, volumes_hidden, with_bookmarks, with_place_shown, without_bookmark,
 };
 use bande_fs::Trash;
 use bande_inbox::Inbox;
@@ -27,6 +28,7 @@ use bande_xdg::{
     Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
     path_from_file_uri, replace_file, spawn_detached, state_home, user_dir,
 };
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 const APP_ID: &str = "org.bande.Files";
 const WINDOW_SIZE: (u32, u32) = (1040, 620);
@@ -151,8 +153,11 @@ struct Files {
     home: PathBuf,
     settings: FilesSettings,
     settings_watch: Option<SettingsWatch>,
+    sidebar_watch: Option<SettingsWatch>,
     excluded: Option<Inbox<Vec<PathBuf>>>,
     search_excluded: Vec<PathBuf>,
+    shows: Option<Inbox<ShowRequest>>,
+    last_folder: Option<PathBuf>,
     trash: Trash,
 }
 
@@ -168,7 +173,17 @@ fn layout_file(home: &Path) -> PathBuf {
     sidebar_file(state_home().as_deref(), home)
 }
 
-fn sidebar(home: &Path) -> (Vec<Row>, Vec<Location>) {
+struct Sidebar {
+    rows: Vec<Row>,
+    hidden: Vec<Location>,
+    volumes_shown: bool,
+}
+
+fn last_folder_file(home: &Path) -> PathBuf {
+    last_folder_file_in(state_home().as_deref(), home)
+}
+
+fn sidebar(home: &Path) -> Sidebar {
     let layout = read(Some(layout_file(home)));
     let rows = rows(
         home,
@@ -176,7 +191,11 @@ fn sidebar(home: &Path) -> (Vec<Row>, Vec<Location>) {
         read(bookmarks_file()).as_deref(),
         layout.as_deref(),
     );
-    (rows, hidden_places(layout.as_deref()))
+    Sidebar {
+        rows,
+        hidden: hidden_places(layout.as_deref()),
+        volumes_shown: !volumes_hidden(layout.as_deref()),
+    }
 }
 
 fn edit_bookmarks(edit: &BookmarkEdit) -> std::io::Result<()> {
@@ -202,7 +221,10 @@ fn edit_sidebar(home: &Path, edit: &SidebarEdit) -> std::io::Result<()> {
     }
     let file = layout_file(home);
     match &edit.layout {
-        Some(layout) => replace_file(&file, layout),
+        Some(layout) => {
+            let volumes_shown = !volumes_hidden(read(Some(file.clone())).as_deref());
+            replace_file(&file, &with_place_shown(layout, None, volumes_shown))
+        }
         None => match std::fs::remove_file(&file) {
             Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
             _ => Ok(()),
@@ -259,12 +281,57 @@ impl Files {
         }
     }
 
-    fn load_sidebars(&self, cx: &mut Cx<Self>) {
-        let (rows, hidden) = sidebar(&self.home);
+    fn wait_for_show(&mut self, cx: &mut Cx<Self>) {
+        let Some(inbox) = &self.shows else {
+            return;
+        };
+        let fd = inbox.fd();
+        let mut fds = [PollFd::new(&fd, PollFlags::IN)];
+        let timeout = Timespec {
+            tv_sec: SERVICE_WAIT.as_secs() as i64,
+            tv_nsec: 0,
+        };
+        if poll(&mut fds, Some(&timeout)).is_ok_and(|ready| ready > 0) {
+            self.follow_shows(cx);
+        }
+    }
+
+    fn remember_last_folder(&self) {
+        let Some(folder) = &self.last_folder else {
+            return;
+        };
+        let text = format!("{}\n", folder.display());
+        if let Err(error) = replace_file(&last_folder_file(&self.home), &text) {
+            tracing::warn!("cannot remember the last folder: {error}");
+        }
+    }
+
+    fn follow_shows(&mut self, cx: &mut Cx<Self>) {
+        let requests = self.shows.as_mut().map(Inbox::drain).unwrap_or_default();
+        for request in requests {
+            let mut opened = None;
+            for arguments in show_arguments(&request) {
+                match self.open_window(cx, &arguments, None) {
+                    Ok(window) => opened = Some(window),
+                    Err(error) => tracing::warn!("cannot open a window: {error}"),
+                }
+            }
+            if let Some(window) = opened {
+                cx.raise(window, request.token);
+            }
+        }
+    }
+
+    fn load_sidebars(&mut self, cx: &mut Cx<Self>) {
+        if let Some(watch) = &mut self.sidebar_watch {
+            watch.drain();
+        }
+        let sidebar = sidebar(&self.home);
         for id in cx.windows().collect::<Vec<_>>() {
             if let Some((window, pane)) = cx.window(id) {
-                pane.view.set_sidebar(rows.clone());
-                pane.view.set_hidden_places(hidden.clone());
+                pane.view.set_sidebar(sidebar.rows.clone());
+                pane.view
+                    .set_hidden_places(sidebar.hidden.clone(), sidebar.volumes_shown);
                 window.request_redraw();
             }
         }
@@ -277,25 +344,38 @@ impl Files {
         directory: Option<&Path>,
     ) -> Result<WindowId, bande_app::Error> {
         let info = arguments.first().is_some_and(|flag| flag == INFO_FLAG);
+        let select = info || arguments.first().is_some_and(|flag| flag == SELECT_FLAG);
         let user_dirs = config_home()
             .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
+        let mut targets = arguments
+            .iter()
+            .skip(usize::from(select))
+            .filter(|argument| *argument != NEW_WINDOW_FLAG)
+            .map(String::as_str);
         let location = start_location(
-            arguments
-                .iter()
-                .skip(usize::from(info))
-                .find(|argument| *argument != NEW_WINDOW_FLAG)
-                .map(String::as_str),
-            self.settings
-                .new_window
-                .location(&self.home, user_dirs.as_deref()),
+            targets.next(),
+            self.settings.new_window.location(
+                &self.home,
+                user_dirs.as_deref(),
+                self.last_folder.as_deref(),
+            ),
             directory,
         );
         let reveal = match &location {
-            Location::Folder(path) if info || !path.is_dir() => Some(path.clone()),
+            Location::Folder(path) if select || !path.is_dir() => {
+                let mut paths = vec![path.clone()];
+                paths.extend(targets.filter_map(|target| {
+                    match start_location(Some(target), Location::Recents, directory) {
+                        Location::Folder(other) if other.parent() == path.parent() => Some(other),
+                        _ => None,
+                    }
+                }));
+                Some(paths)
+            }
             _ => None,
         };
         let mut browser = Browser::open(
-            match &reveal {
+            match reveal.as_ref().and_then(|paths| paths.first()) {
                 Some(path) => Location::Folder(
                     path.parent()
                         .map_or_else(|| self.home.clone(), PathBuf::from),
@@ -304,20 +384,20 @@ impl Files {
             },
             self.trash.clone(),
         );
-        if let Some(path) = reveal {
-            browser.reveal(&path);
+        if let Some(paths) = reveal {
+            browser.reveal_all(&paths);
         }
-        let (sidebar, hidden) = sidebar(&self.home);
+        let sidebar = sidebar(&self.home);
         let apps = Apps::load(data_dirs(), &config_dirs());
         let thumbnails = Thumbnails::for_user(apps.data_dirs());
         let mut view = FilesView::new(
             browser,
-            sidebar,
+            sidebar.rows,
             apps,
             Appearance::default().palette(),
             TextSystem::new(),
         )?;
-        view.set_hidden_places(hidden);
+        view.set_hidden_places(sidebar.hidden, sidebar.volumes_shown);
         view.set_default_view(self.settings.default_view);
         view.apply_settings(&self.settings);
         if let Some(thumbnails) = thumbnails {
@@ -442,16 +522,37 @@ impl Program for Files {
         if let Some(inbox) = &excluded {
             follow_search_excluded(home.clone(), inbox.outbox());
         }
-        let files = Self {
+        let sidebar_watch = layout_file(&home)
+            .parent()
+            .and_then(|folder| SettingsWatch::start(folder, SIDEBAR_FILE));
+        let shows = Inbox::new()
+            .inspect_err(|error| tracing::warn!("cannot show folders for other apps: {error}"))
+            .ok();
+        if let Some((session, inbox)) = cx.session().zip(shows.as_ref())
+            && let Err(error) = serve_file_manager(session, inbox.outbox())
+        {
+            tracing::warn!("cannot serve org.freedesktop.FileManager1: {error}");
+        }
+        let last_folder =
+            read(Some(last_folder_file(&home))).map(|text| PathBuf::from(text.trim_end()));
+        let mut files = Self {
             home,
             settings,
             settings_watch,
+            sidebar_watch,
             excluded,
             search_excluded: Vec::new(),
+            shows,
+            last_folder,
             trash,
         };
-        let directory = std::env::current_dir().ok();
-        files.open_window(cx, &arguments, directory.as_deref())?;
+        match arguments.iter().any(|argument| argument == SERVICE_FLAG) {
+            true => files.wait_for_show(cx),
+            false => {
+                let directory = std::env::current_dir().ok();
+                files.open_window(cx, &arguments, directory.as_deref())?;
+            }
+        }
         Ok(files)
     }
 
@@ -483,6 +584,9 @@ impl Program for Files {
     }
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
+        if arguments.iter().any(|argument| argument == SERVICE_FLAG) {
+            return;
+        }
         if let Err(error) = self.open_window(cx, &arguments, Some(directory)) {
             tracing::warn!("cannot open a window: {error}");
         }
@@ -507,11 +611,23 @@ impl Program for Files {
             if title != pane.title {
                 shown.set_title(&title);
                 pane.title = title;
+                if let Some(folder) = pane.view.browser().current_folder() {
+                    self.last_folder = Some(folder);
+                }
             }
             shown.set_cursor(pane.view.cursor());
             shown.request_redraw();
         }
         cx.refresh_menus();
+    }
+
+    fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, _view: Pane) {
+        self.remember_last_folder();
+    }
+
+    fn should_close(&mut self, _cx: &mut Cx<Self>, _window: WindowId) -> bool {
+        self.remember_last_folder();
+        true
     }
 
     fn close_tab(&mut self, cx: &mut Cx<Self>, window: WindowId) -> bool {
@@ -528,21 +644,33 @@ impl Program for Files {
         self.settings_watch
             .iter()
             .map(SettingsWatch::fd)
+            .chain(self.sidebar_watch.iter().map(SettingsWatch::fd))
             .chain(self.excluded.iter().map(Inbox::fd))
+            .chain(self.shows.iter().map(Inbox::fd))
             .collect()
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {
-        if index < self.settings_watch.iter().count() {
+        let settings = self.settings_watch.iter().count();
+        let sidebar = settings + self.sidebar_watch.iter().count();
+        let excluded = sidebar + self.excluded.iter().count();
+        if index < settings {
             self.follow_settings(cx);
-        } else {
+        } else if index < sidebar {
+            self.load_sidebars(cx);
+        } else if index < excluded {
             self.follow_excluded(cx);
+        } else {
+            self.follow_shows(cx);
         }
     }
 }
 
 const INFO_FLAG: &str = "--info";
 const NEW_WINDOW_FLAG: &str = "--new-window";
+const SELECT_FLAG: &str = "--select";
+const SERVICE_FLAG: &str = "--gapplication-service";
+const SERVICE_WAIT: Duration = Duration::from_secs(5);
 const PURGE_AFTER_DAYS: i64 = 30;
 const PURGE_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 const TERMINAL_APP_ID: &str = "org.bande.Terminal";
@@ -616,6 +744,29 @@ fn purge_trash_daily(trash: Trash, folder: PathBuf) {
         });
     if let Err(error) = spawned {
         tracing::warn!("cannot empty old items from the Trash: {error}");
+    }
+}
+
+fn show_arguments(request: &ShowRequest) -> Vec<Vec<String>> {
+    match request.show {
+        Show::Folders => request.uris.iter().map(|uri| vec![uri.clone()]).collect(),
+        Show::Properties => request
+            .uris
+            .iter()
+            .map(|uri| vec![INFO_FLAG.to_owned(), uri.clone()])
+            .collect(),
+        Show::Items => {
+            let mut groups: Vec<(Option<PathBuf>, Vec<String>)> = Vec::new();
+            for uri in &request.uris {
+                let parent =
+                    path_from_file_uri(uri).and_then(|path| path.parent().map(PathBuf::from));
+                match groups.iter_mut().find(|(known, _)| *known == parent) {
+                    Some((_, group)) => group.push(uri.clone()),
+                    None => groups.push((parent, vec![SELECT_FLAG.to_owned(), uri.clone()])),
+                }
+            }
+            groups.into_iter().map(|(_, group)| group).collect()
+        }
     }
 }
 

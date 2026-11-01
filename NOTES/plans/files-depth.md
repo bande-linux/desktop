@@ -30,26 +30,22 @@ Open With and default app; tabs; batch rename; Undo/Redo across the session's op
 spring-loaded folders; Ctrl/Shift drag modifiers; Recents and search with scopes; per-folder
 view memory; status bar and path bar; hidden files; Trash with Put Back, Empty, 30-day purge
 and per-volume `.Trash-uid`; volumes with Eject; Compress and Extract; Open in Terminal; New
-Document templates; Settings (General, Advanced).
+Document templates; Settings (General, Show in Sidebar, Advanced) with hidden extensions and
+Last Folder for new windows; `org.freedesktop.FileManager1` ("Show in Folder" from other apps,
+D-Bus activated with `--gapplication-service`); `bande-files --select <paths>`.
 
 ## Open, ranked
 
 1. Failure and empty-state slices F15–F23 (per-item failure alert with Skip/Try Again/Skip All,
-   no-space check before a copy, permission-denied and empty-folder messages): on
-   `origin/wip/files-depth-3`, written against the old `unbound_*` crate names; port onto
-   `main` rather than merge.
-2. `org.freedesktop.FileManager1` (ShowFolders, ShowItems, ShowItemProperties) so "Show in
-   Folder" from Firefox, Chromium and editors opens Files with the item selected.
-3. Settings ▸ Sidebar: which places show (Recents, Desktop, Documents, Downloads, Home, Trash,
-   external disks); today only drag-out and "Restore Default Sidebar".
-4. New windows show: Last Folder and Other… (any folder).
-5. Get Info: an editable Name & Extension field with a per-file "Hide extension", and
-   permissions editing (owner, group, others).
-6. View ▸ Use Groups (Kind, Date Last Opened, Size) and View ▸ Sort By in the menu bar.
-7. Undo across windows (one operation history for the process).
-8. Gallery view.
-9. In-place rename field text sits 5 px right of the label (the toolkit's in-place field keeps
+   no-space check before a copy, permission-denied and empty-folder messages): being ported
+   from `origin/wip/files-depth-3` on `files-depth/failures`.
+2. Get Info: an editable Name & Extension field with a per-file "Hide extension".
+3. View ▸ Use Groups (Kind, Date Last Opened, Size) and View ▸ Sort By in the menu bar.
+4. Undo across windows (one operation history for the process).
+5. New windows show: Other… (any folder).
+6. Gallery view.
+7. In-place rename field text sits 5 px right of the label (the toolkit's in-place field keeps
    the 8 px text field padding).
-10. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
-    (GVfs-free SMB/SFTP mounts).
-11. Content search (file contents, not only names).
+8. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
+   (GVfs-free SMB/SFTP mounts).
+9. Content search (file contents, not only names).

@@ -246,6 +246,6 @@ The combined bar (the Taskbar) is an edge-anchored bar, 64 pt at the default ico
 - **Active app = a 3×16 accent tick** on the screen-edge side; **running = a 3×3 `ink2` square** (the square motif; a dot would be macOS).
 - The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 14 panels).
 - The clock is Inter 15/600 tnum stacked "14 / 32".
-- The mark is a "U" of seven 4.5 pt squares in `ink`.
+- The mark is a "B" knocked out of a rounded square in `ink`, stroked at the weight of the bar glyphs.
 - Bar pop-overs (Control Center, calendar, notifications) are `overlay` panels with radius 14 that slide out from the bar along its normal axis (`standard`).
 - Horizontal placement uses the same rules with the tick on the bottom edge.

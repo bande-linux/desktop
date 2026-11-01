@@ -117,7 +117,7 @@ impl State {
                 rect.to_physical(scale),
                 (CORNER_RADIUS * shrink + RING) * scale,
             ),
-            premultiplied(self.palette().accent, alpha),
+            premultiplied(self.palette().accent_text, alpha),
         )))
     }
 
@@ -315,7 +315,7 @@ impl State {
             let ring = if target == Some(&Hit::Space(screen, index)) {
                 Some(premultiplied(palette.accent, TARGET_FILL * alpha))
             } else if index == workspaces.active() {
-                Some(premultiplied(palette.accent, alpha))
+                Some(premultiplied(palette.accent_text, alpha))
             } else {
                 None
             };

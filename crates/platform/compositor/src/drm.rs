@@ -47,6 +47,7 @@ struct Head {
     modes: Vec<Mode>,
     compositor: OutputCompositor,
     scanned_out: bool,
+    dark: bool,
     colour: Colour,
     warmth: Option<f64>,
 }
@@ -373,6 +374,7 @@ impl DrmBackend {
             modes,
             compositor,
             scanned_out: false,
+            dark: false,
             colour: Colour::Unknown,
             warmth: None,
         }))
@@ -554,6 +556,7 @@ impl DrmBackend {
                 tracing::warn!("cannot reset {}: {error}", head.config.name);
             }
             head.warmth = None;
+            head.dark = false;
         }
         if let Some(libinput) = self.libinput.as_mut() {
             libinput
@@ -662,6 +665,14 @@ impl FrameOutput for DrmBackend {
             return Ok(Submission::AtVblank);
         };
         let head = &mut self.heads[index];
+        if !compositor.output_powered(output) {
+            if !head.dark {
+                head.compositor.clear()?;
+                head.dark = true;
+            }
+            return Ok(Submission::Paused);
+        }
+        head.dark = false;
         head.compositor
             .set_output_mode_source(OutputModeSource::Static {
                 size: settings.mode.size,

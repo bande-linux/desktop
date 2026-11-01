@@ -55,8 +55,9 @@ better.
   value comes from the design tokens (colour roles, radii, spacing, type roles, elevation), never
   per-app values.
 - **Depth through tone, not glass or lines.** Surfaces are opaque; elevation is a tone step plus
-  one shadow pair. Blur only behind the launcher, the overview and modal alerts. Hairlines are
-  rare and named.
+  one shadow pair. In dark, elevated is lighter (menus and cards above the window), and floating
+  surfaces carry one named 1 pt `rim`. Blur only behind the launcher, the overview and modal
+  alerts. Hairlines are rare and named.
 - **Content first.** Chrome is quiet and recedes in inactive windows; the active window and
   the selection are the strongest elements on screen.
 - **Crisp at every scale.** Everything is laid out in points and drawn in pixels at the

@@ -17,6 +17,7 @@ bande-notify.workspace = true
 bande-sound.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
+wayland-protocols-wlr.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]

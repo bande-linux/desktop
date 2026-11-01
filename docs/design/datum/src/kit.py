@@ -1,5 +1,3 @@
-import sys
-sys.path.insert(0, '/tmp/claude-1000/-home-mikael-bande-linux/c03b543e-455e-464d-abfa-484ad0a962a0/scratchpad/dl')
 from colors import T
 
 UI = "Inter"
@@ -9,14 +7,15 @@ MONO = "JetBrains Mono"
 
 def scheme(name, accent='ultramarine'):
     p = {k.split('.', 1)[1]: v for k, v in T.items() if k.startswith(name + '.')}
-    p['accent'] = T[f'accent.{name}.{accent}']
-    p['on_accent'] = '#FFFFFF' if name == 'light' else T['dark.chassis']
-    p['danger'] = T[f'sem.{name}.danger']
+    p['accent_text'] = T[f'accent.{name}.{accent}']
+    p['accent'] = T.get(f'fill.{name}.{accent}', p['accent_text'])
+    p['on_accent'] = T['dark.deep'] if name == 'dark' and accent in ('amber', 'graphite') else '#FFFFFF'
+    p['danger'] = T.get(f'fill.{name}.danger', T[f'sem.{name}.danger'])
     p['warning'] = T[f'sem.{name}.warning']
     p['success'] = T[f'sem.{name}.success']
     p['name'] = name
-    p['shadow'] = 0.16 if name == 'light' else 0.5
-    p['select_soft'] = mix(p['accent'], p['sheet'], 0.84 if name == 'light' else 0.78)
+    p['shadow'] = 0.16 if name == 'light' else 0.4
+    p['select_soft'] = mix(p['accent_text'], p['sheet'], 0.84 if name == 'light' else 0.78)
     return p
 
 

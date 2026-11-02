@@ -228,6 +228,7 @@ banners-off = None
 banners-and-center = { $banners } banners, Notification Center
 allow-notifications = Allow notifications
 banner-style = Banner style
+play-sound = Play sound for notifications
 show-in-center = Show in Notification Center
 no-notification-apps = Apps appear here after they send a notification
 banners-only = { $banners } banners

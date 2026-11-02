@@ -66,7 +66,7 @@ pub fn do_not_disturb_path(xdg_state_home: Option<&Path>, home: Option<&Path>) -
     Some(base.join("bande").join("do-not-disturb"))
 }
 
-pub type WireApp = (String, String, bool, String, bool);
+pub type WireApp = (String, String, bool, String, bool, bool);
 
 fn wire_app(app: &App) -> WireApp {
     (
@@ -75,6 +75,7 @@ fn wire_app(app: &App) -> WireApp {
         app.rule.allow,
         app.rule.banners.keyword().to_owned(),
         app.rule.in_center,
+        app.rule.sound,
     )
 }
 
@@ -83,8 +84,8 @@ pub fn write_apps<'a>(apps: impl IntoIterator<Item = &'a App>) -> String {
     apps.into_iter()
         .filter(|app| storable(&app.group) && storable(&app.name))
         .map(|app| {
-            let (group, name, allow, banners, center) = wire_app(app);
-            format!("{group}\t{name}\t{allow}\t{banners}\t{center}\n")
+            let (group, name, allow, banners, center, sound) = wire_app(app);
+            format!("{group}\t{name}\t{allow}\t{banners}\t{center}\t{sound}\n")
         })
         .collect()
 }
@@ -98,6 +99,10 @@ pub fn read_apps(text: &str) -> Vec<App> {
             let allow = fields.next()?.parse().ok()?;
             let banners = Banners::parse(fields.next()?)?;
             let in_center = fields.next()?.parse().ok()?;
+            let sound = fields
+                .next()
+                .and_then(|sound| sound.parse().ok())
+                .unwrap_or(true);
             Some(App {
                 group,
                 name,
@@ -105,6 +110,7 @@ pub fn read_apps(text: &str) -> Vec<App> {
                     allow,
                     banners,
                     in_center,
+                    sound,
                 },
             })
         })
@@ -507,7 +513,7 @@ impl Notifications {
                 Timeout::from_milliseconds(expire_timeout),
                 alarm::now(),
             );
-            let delivered = center.get(id).is_some();
+            let delivered = center.plays_sound(id);
             (
                 id,
                 fresh && shown && !silent && delivered,
@@ -603,6 +609,7 @@ impl NotificationCenter {
         allow: bool,
         banners: String,
         in_center: bool,
+        sound: bool,
     ) -> zbus::fdo::Result<()> {
         let banners = Banners::parse(&banners).ok_or_else(|| {
             zbus::fdo::Error::InvalidArgs(format!("unknown banner style {banners:?}"))
@@ -611,6 +618,7 @@ impl NotificationCenter {
             allow,
             banners,
             in_center,
+            sound,
         };
         let known = self.shared.update(|center| center.set_rule(&group, rule));
         if !known {

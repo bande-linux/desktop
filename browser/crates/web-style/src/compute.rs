@@ -801,6 +801,35 @@ impl Computer<'_> {
             (Id::GridColumnStart, V::GridLine(value)) => self.placement()[1] = grid_line(value),
             (Id::GridRowEnd, V::GridLine(value)) => self.placement()[2] = grid_line(value),
             (Id::GridColumnEnd, V::GridLine(value)) => self.placement()[3] = grid_line(value),
+            (Id::BackgroundRepeat, V::BackgroundRepeatList(list)) => {
+                if let Some(first) = list.0.first() {
+                    let repeats = |style: &specified::RepeatStyle| {
+                        !matches!(style, specified::RepeatStyle::NoRepeat)
+                    };
+                    self.reset.background.repeat = (repeats(&first.0), repeats(&first.1));
+                }
+            }
+            (Id::BackgroundPositionX, V::HorizontalPositionList(list)) => {
+                if let Some(first) = list.0.first() {
+                    self.reset.background.position.0 = self.position(first);
+                }
+            }
+            (Id::BackgroundPositionY, V::VerticalPositionList(list)) => {
+                if let Some(first) = list.0.first() {
+                    self.reset.background.position.1 = self.position(first);
+                }
+            }
+            (Id::BackgroundSize, V::BackgroundSizeList(list)) => {
+                if let Some(first) = list.0.first() {
+                    self.reset.background.size = match first {
+                        specified::BackgroundSize::Cover => crate::BackgroundSize::Cover,
+                        specified::BackgroundSize::Contain => crate::BackgroundSize::Contain,
+                        specified::BackgroundSize::Explicit(width, height) => {
+                            crate::BackgroundSize::Explicit(self.auto(width), self.auto(height))
+                        }
+                    };
+                }
+            }
             (Id::ObjectFit, V::ObjectFit(value)) => {
                 use keywords::ObjectFit as O;
                 self.reset.object_fit = match value {
@@ -812,6 +841,28 @@ impl Computer<'_> {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn position(&self, component: &specified::PositionComponent) -> LengthPercentage {
+        match component {
+            specified::PositionComponent::Length(value) => self.length_percentage(value),
+            specified::PositionComponent::Side(side, offset) => {
+                let offset = offset.as_ref().map_or(LengthPercentage::ZERO, |offset| {
+                    self.length_percentage(offset)
+                });
+                match side {
+                    specified::Side::Start => offset,
+                    specified::Side::Center => LengthPercentage {
+                        px: offset.px,
+                        percent: 50.0 + offset.percent,
+                    },
+                    specified::Side::End => LengthPercentage {
+                        px: -offset.px,
+                        percent: 100.0 - offset.percent,
+                    },
+                }
+            }
         }
     }
 
@@ -1032,6 +1083,14 @@ impl Computer<'_> {
             Id::ColumnGap => reset.column_gap = from_reset.column_gap,
             Id::BackgroundImage => reset.background_image = from_reset.background_image.clone(),
             Id::ObjectFit => reset.object_fit = from_reset.object_fit,
+            Id::BackgroundRepeat => reset.background.repeat = from_reset.background.repeat,
+            Id::BackgroundPositionX => {
+                reset.background.position.0 = from_reset.background.position.0
+            }
+            Id::BackgroundPositionY => {
+                reset.background.position.1 = from_reset.background.position.1
+            }
+            Id::BackgroundSize => reset.background.size = from_reset.background.size,
             Id::Content => reset.content = from_reset.content.clone(),
             Id::GridTemplateColumns
             | Id::GridTemplateRows

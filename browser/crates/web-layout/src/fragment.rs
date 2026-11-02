@@ -30,6 +30,7 @@ pub struct Extra {
     pub layer: Layer,
     pub image: Option<Arc<str>>,
     pub background_image: Option<Arc<str>>,
+    pub background: web_style::BackgroundLayout,
 }
 
 impl BoxFragment {
@@ -48,6 +49,13 @@ impl BoxFragment {
         self.extra
             .as_ref()
             .map_or_else(Sides::default, |extra| extra.padding)
+    }
+
+    pub fn background(&self) -> web_style::BackgroundLayout {
+        self.extra
+            .as_ref()
+            .map(|extra| extra.background)
+            .unwrap_or_default()
     }
 
     pub fn image(&self) -> Option<&Arc<str>> {

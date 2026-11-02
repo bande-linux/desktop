@@ -253,6 +253,7 @@ fn extra(
             border,
             border_color,
             padding: Sides::default(),
+            background: web_style::BackgroundLayout::default(),
             layer,
             image,
             background_image,
@@ -724,6 +725,7 @@ impl<'a, 'b> Flow<'a, 'b> {
                 )
                 .map(|mut extra| {
                     extra.padding = padding;
+                    extra.background = reset.background;
                     extra
                 }),
                 children,

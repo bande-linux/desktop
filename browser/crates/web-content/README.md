@@ -33,9 +33,13 @@ The entry points below are stable; the app and `tools/conformance` drive them.
   - `title()` and `memory()` (heap bytes per stage) report on the page.
 - `DisplayList` is in document coordinates (CSS px, y down). `items` paint in order:
   - `Item::Rect { rect, color }` fills.
-  - `Item::Glyphs { rect, node, font, size, color, glyphs }` draws `glyphs` (absolute
-    positions, baseline origin) with `fonts[font]`, a `FontData` that vello and the toolkit draw
-    directly. `hit_test(x, y)` returns the text node under a point.
+  - `Item::Glyphs { rect, baseline, node, font, size, color, glyphs }` draws `glyphs` (x
+    absolute, y relative to `baseline`) with `fonts[font]`, a `FontData` that vello and the
+    toolkit draw directly. `hit_test(x, y)` returns the text node under a point.
+  - `Item::Image { rect, clip, image }` draws `images[image]` (premultiplied RGBA) scaled to
+    `rect` and clipped to `clip`; `Item::Tiles { tile, clip, image }` repeats it from `tile`
+    across `clip`.
+  - `PushClip { rect }`, `PushOpacity { alpha }` and `Pop` nest layers.
 - With the `raster` feature:
   - `render_file(path, width, height) -> io::Result<Pixels>` renders a file headless into RGBA8
     pixels. Calls are independent and may run on several threads; each thread keeps its own

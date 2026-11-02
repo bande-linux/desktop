@@ -40,8 +40,14 @@ pub(crate) fn rasterize(list: &DisplayList, scroll_y: f32, width: u16, height: u
             }
             Item::PushOpacity { alpha } => context.push_opacity_layer(*alpha),
             Item::Pop => context.pop_layer(),
-            Item::Image { rect, clip, image } => {
-                if rect.y > visible.1 || rect.y + rect.height < visible.0 {
+            Item::Image { rect, clip, image }
+            | Item::Tiles {
+                tile: rect,
+                clip,
+                image,
+            } => {
+                let repeat = matches!(item, Item::Tiles { .. });
+                if clip.y > visible.1 || clip.y + clip.height < visible.0 {
                     continue;
                 }
                 let Some(data) = list.images.get(*image as usize) else {
@@ -60,9 +66,14 @@ pub(crate) fn rasterize(list: &DisplayList, scroll_y: f32, width: u16, height: u
                         id
                     }
                 };
+                let extend = if repeat {
+                    vello_cpu::peniko::Extend::Repeat
+                } else {
+                    vello_cpu::peniko::Extend::Pad
+                };
                 context.set_paint(PaintType::Image(Image {
                     image: ImageSource::opaque_id(id),
-                    sampler: ImageSampler::default(),
+                    sampler: ImageSampler::default().with_extend(extend),
                 }));
                 context.set_paint_transform(
                     Affine::translate((f64::from(rect.x), f64::from(rect.y)))
@@ -71,7 +82,11 @@ pub(crate) fn rasterize(list: &DisplayList, scroll_y: f32, width: u16, height: u
                             f64::from(rect.height) / f64::from(data.height.max(1)),
                         ),
                 );
-                context.fill_rect(&shape(clip).intersect(shape(rect)));
+                if repeat {
+                    context.fill_rect(&shape(clip));
+                } else {
+                    context.fill_rect(&shape(clip).intersect(shape(rect)));
+                }
                 context.reset_paint_transform();
             }
             Item::Rect { rect, color: fill } => {

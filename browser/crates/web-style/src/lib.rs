@@ -315,10 +315,35 @@ pub struct ResetStyle {
     pub row_gap: LengthPercentage,
     pub column_gap: LengthPercentage,
     pub background_image: Option<Arc<str>>,
+    pub background: BackgroundLayout,
     pub object_fit: ObjectFit,
     pub content: Option<Arc<str>>,
     pub grid: Option<Arc<GridStyle>>,
     pub placement: Option<Arc<[GridLine; 4]>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum BackgroundSize {
+    Cover,
+    Contain,
+    Explicit(Option<LengthPercentage>, Option<LengthPercentage>),
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct BackgroundLayout {
+    pub repeat: (bool, bool),
+    pub position: (LengthPercentage, LengthPercentage),
+    pub size: BackgroundSize,
+}
+
+impl Default for BackgroundLayout {
+    fn default() -> Self {
+        BackgroundLayout {
+            repeat: (true, true),
+            position: (LengthPercentage::ZERO, LengthPercentage::ZERO),
+            size: BackgroundSize::Explicit(None, None),
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -447,6 +472,7 @@ impl ResetStyle {
             row_gap: LengthPercentage::ZERO,
             column_gap: LengthPercentage::ZERO,
             background_image: None,
+            background: BackgroundLayout::default(),
             object_fit: ObjectFit::Fill,
             content: None,
             grid: None,

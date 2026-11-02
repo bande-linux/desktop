@@ -110,9 +110,9 @@ elements, with its own stylesheets) and "Cat" (13.4k, without), at 1000 px:
 |---|---|---|
 | Node core (`web-dom`) | ≤ 64 B | 40 B |
 | DOM with attributes, text and the document's atoms | ≤ 420 B | 293–400 B |
-| Computed styles (shared, 4 B index per node) | ≤ 40 B | 13–16 B |
-| Box tree with shaped text | ≤ 450 B | 374–448 B |
-| Fragment tree | ≤ 300 B | 220–262 B |
+| Computed styles (shared, 4 B index per node) | ≤ 40 B | 14–18 B |
+| Box tree with shaped text | ≤ 450 B | 380–449 B |
+| Fragment tree | ≤ 300 B | 223–256 B |
 | Display list | ≤ 280 B | 185–264 B |
 
 Shaped glyphs are 20 B and laid-out glyphs 8 B (a `u16` id, the y offset in 1/16 px, x); line

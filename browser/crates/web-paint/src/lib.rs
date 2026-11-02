@@ -33,6 +33,11 @@ pub enum Item {
         clip: Rect,
         image: u32,
     },
+    Tiles {
+        tile: Rect,
+        clip: Rect,
+        image: u32,
+    },
     PushClip {
         rect: Rect,
     },
@@ -197,15 +202,71 @@ impl Builder<'_> {
             && let Some(image) = self.image(source)
             && let Some(data) = self.image_list.get(image as usize)
         {
-            self.items.push(Item::Image {
-                rect: Rect {
-                    width: data.width as f32,
-                    height: data.height as f32,
-                    ..rect
-                },
-                clip: rect,
-                image,
+            let (border, _) = fragment.border();
+            let area = Rect {
+                x: rect.x + border.left,
+                y: rect.y + border.top,
+                width: (rect.width - border.left - border.right).max(0.0),
+                height: (rect.height - border.top - border.bottom).max(0.0),
+            };
+            let layout = fragment.background();
+            let natural = (data.natural.0.max(1) as f32, data.natural.1.max(1) as f32);
+            let (width, height) = match layout.size {
+                web_style::BackgroundSize::Cover | web_style::BackgroundSize::Contain => {
+                    let scale_x = area.width / natural.0;
+                    let scale_y = area.height / natural.1;
+                    let scale = if layout.size == web_style::BackgroundSize::Cover {
+                        scale_x.max(scale_y)
+                    } else {
+                        scale_x.min(scale_y)
+                    };
+                    (natural.0 * scale, natural.1 * scale)
+                }
+                web_style::BackgroundSize::Explicit(width, height) => {
+                    match (
+                        width.map(|width| width.resolve(area.width)),
+                        height.map(|height| height.resolve(area.height)),
+                    ) {
+                        (Some(width), Some(height)) => (width, height),
+                        (Some(width), None) => (width, width * natural.1 / natural.0),
+                        (None, Some(height)) => (height * natural.0 / natural.1, height),
+                        (None, None) => natural,
+                    }
+                }
+            };
+            let tile = snap(Rect {
+                x: area.x + layout.position.0.resolve(area.width - width),
+                y: area.y + layout.position.1.resolve(area.height - height),
+                width,
+                height,
             });
+            if tile.width > 0.0 && tile.height > 0.0 {
+                let clip = snap(rect);
+                match layout.repeat {
+                    (false, false) => self.items.push(Item::Image {
+                        rect: tile,
+                        clip: intersect(tile, clip),
+                        image,
+                    }),
+                    (horizontal, vertical) => {
+                        let clip = Rect {
+                            x: if horizontal {
+                                clip.x
+                            } else {
+                                tile.x.max(clip.x)
+                            },
+                            y: if vertical { clip.y } else { tile.y.max(clip.y) },
+                            width: if horizontal { clip.width } else { tile.width },
+                            height: if vertical { clip.height } else { tile.height },
+                        };
+                        self.items.push(Item::Tiles {
+                            tile,
+                            clip: intersect(clip, snap(rect)),
+                            image,
+                        });
+                    }
+                }
+            }
         }
         let (border, colors) = fragment.border();
         let sides = [
@@ -379,5 +440,16 @@ fn snap(rect: Rect) -> Rect {
         y: top,
         width: right - left,
         height: bottom - top,
+    }
+}
+
+fn intersect(a: Rect, b: Rect) -> Rect {
+    let x = a.x.max(b.x);
+    let y = a.y.max(b.y);
+    Rect {
+        x,
+        y,
+        width: ((a.x + a.width).min(b.x + b.width) - x).max(0.0),
+        height: ((a.y + a.height).min(b.y + b.height) - y).max(0.0),
     }
 }

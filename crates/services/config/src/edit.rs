@@ -30,8 +30,9 @@ pub enum Setting {
     BarApps(Vec<String>),
     BarAutoHide(bool),
     BarIconSize(u32),
-    IdleDimAfter(Duration),
-    IdleLockAfter(Duration),
+    IdleScreenSaverAfter(Option<Duration>),
+    IdleDisplayOffAfter(Option<Duration>),
+    IdleRequirePasswordAfter(Duration),
     IdleSuspend(Suspend),
     KeyRepeatRate(u32),
     KeyRepeatDelay(Duration),
@@ -178,17 +179,27 @@ impl Setting {
                 "size",
                 (*size != DEFAULT_BAR_ICON_SIZE).then_some(KdlValue::Integer((*size).into())),
             ),
-            Self::IdleDimAfter(after) => set(
+            Self::IdleScreenSaverAfter(after) => set(
                 &mut document,
                 Some("idle"),
-                "dim-after",
-                Some(duration(*after).into()),
+                "screen-saver-after",
+                Some(after.map_or_else(|| "never".into(), |after| duration(after).into())),
             ),
-            Self::IdleLockAfter(after) => set(
+            Self::IdleDisplayOffAfter(after) => set(
                 &mut document,
                 Some("idle"),
-                "lock-after",
-                Some(duration(*after).into()),
+                "display-off-after",
+                Some(after.map_or_else(|| "never".into(), |after| duration(after).into())),
+            ),
+            Self::IdleRequirePasswordAfter(after) => set(
+                &mut document,
+                Some("idle"),
+                "require-password-after",
+                Some(if after.is_zero() {
+                    "immediately".into()
+                } else {
+                    duration(*after).into()
+                }),
             ),
             Self::IdleSuspend(suspend) => set(
                 &mut document,

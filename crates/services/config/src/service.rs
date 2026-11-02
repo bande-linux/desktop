@@ -242,11 +242,14 @@ fn publish_changes(
         if before.bar.layout != after.bar.layout {
             let _ = guard.bar_layout_changed(emitter).await;
         }
-        if before.idle.dim_after != after.idle.dim_after {
-            let _ = guard.idle_dim_after_changed(emitter).await;
+        if before.idle.screen_saver_after != after.idle.screen_saver_after {
+            let _ = guard.idle_screen_saver_after_changed(emitter).await;
         }
-        if before.idle.lock_after != after.idle.lock_after {
-            let _ = guard.idle_lock_after_changed(emitter).await;
+        if before.idle.display_off_after != after.idle.display_off_after {
+            let _ = guard.idle_display_off_after_changed(emitter).await;
+        }
+        if before.idle.require_password_after != after.idle.require_password_after {
+            let _ = guard.idle_require_password_after_changed(emitter).await;
         }
         if before.idle.suspend_after() != after.idle.suspend_after() {
             let _ = guard.idle_suspend_after_changed(emitter).await;
@@ -798,32 +801,44 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
-    fn idle_dim_after(&self) -> u64 {
-        self.store.current().idle.dim_after.as_secs()
+    fn idle_screen_saver_after(&self) -> u64 {
+        seconds_or_never(self.store.current().idle.screen_saver_after)
     }
 
     #[zbus(property)]
-    fn set_idle_dim_after(&self, seconds: u64) -> zbus::fdo::Result<()> {
-        self.write(&Setting::IdleDimAfter(Duration::from_secs(seconds)))
+    fn set_idle_screen_saver_after(&self, seconds: u64) -> zbus::fdo::Result<()> {
+        self.write(&Setting::IdleScreenSaverAfter(never_or_seconds(seconds)))
     }
 
     #[zbus(property)]
-    fn idle_lock_after(&self) -> u64 {
-        self.store.current().idle.lock_after.as_secs()
+    fn idle_display_off_after(&self) -> u64 {
+        seconds_or_never(self.store.current().idle.display_off_after)
     }
 
     #[zbus(property)]
-    async fn set_idle_lock_after(
+    async fn set_idle_display_off_after(
         &self,
         seconds: u64,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
         let before = self.store.current().idle.suspend_after();
-        self.write(&Setting::IdleLockAfter(Duration::from_secs(seconds)))?;
+        self.write(&Setting::IdleDisplayOffAfter(never_or_seconds(seconds)))?;
         if before != self.store.current().idle.suspend_after() {
             self.idle_suspend_after_changed(&emitter).await?;
         }
         Ok(())
+    }
+
+    #[zbus(property)]
+    fn idle_require_password_after(&self) -> u64 {
+        self.store.current().idle.require_password_after.as_secs()
+    }
+
+    #[zbus(property)]
+    fn set_idle_require_password_after(&self, seconds: u64) -> zbus::fdo::Result<()> {
+        self.write(&Setting::IdleRequirePasswordAfter(Duration::from_secs(
+            seconds,
+        )))
     }
 
     #[zbus(property)]
@@ -867,7 +882,9 @@ impl ConfigInterface {
         let idle = self.store.current().idle;
         let suspend = match (with_display, idle.suspend) {
             (true, _) => Suspend::WithDisplayOff,
-            (false, Suspend::WithDisplayOff) => Suspend::After(idle.lock_after),
+            (false, Suspend::WithDisplayOff) => idle
+                .display_off_after
+                .map_or(Suspend::Never, Suspend::After),
             (false, explicit) => explicit,
         };
         self.write(&Setting::IdleSuspend(suspend))?;
@@ -1379,4 +1396,12 @@ impl ConfigInterface {
         }
         Ok(())
     }
+}
+
+fn seconds_or_never(after: Option<Duration>) -> u64 {
+    after.map_or(0, |after| after.as_secs())
+}
+
+fn never_or_seconds(seconds: u64) -> Option<Duration> {
+    (seconds > 0).then(|| Duration::from_secs(seconds))
 }

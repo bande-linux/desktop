@@ -188,7 +188,7 @@ small `key = value` file each next to it (`files.conf`, `terminal.conf`).
   ```kdl
   appearance "automatic"        // "dark" | "light" | "automatic"
   bar { edge "left"; size 40; auto-hide #false; layout "combined" }   // or "separate"
-  idle { dim-after "5m"; lock-after "10m" }   // suspend-after follows lock-after unless set
+  idle { screen-saver-after "5m"; display-off-after "10m"; require-password-after "immediately" }   // or "never"; suspend-after follows the display unless set
   keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape" }
   trackpad { tap-to-click #true; natural-scrolling #true }
   search { recent-documents #false; exclude "~/Private" }   // every category is shown unless #false

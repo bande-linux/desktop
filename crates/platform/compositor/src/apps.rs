@@ -52,6 +52,7 @@ impl State {
             .as_ref()
             .is_some_and(|(_, windowless)| windowless == app_id)
         {
+            self.windowless_app = None;
             let next = self.frontmost(None);
             self.focus(next);
         }

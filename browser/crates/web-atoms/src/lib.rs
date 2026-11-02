@@ -296,3 +296,38 @@ fn dynamic_name<'a>(text: &'a str, spans: &[(u32, u32)], slot: u32) -> &'a str {
         .and_then(|&(start, len)| text.get(start as usize..(start + len) as usize))
         .unwrap_or_default()
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+#[repr(u8)]
+pub enum Namespace {
+    #[default]
+    Html,
+    Svg,
+    MathMl,
+    None,
+    XLink,
+    Xml,
+    Xmlns,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct QualName {
+    pub ns: Namespace,
+    pub local: Atom,
+}
+
+impl QualName {
+    pub const fn html(local: Atom) -> Self {
+        QualName {
+            ns: Namespace::Html,
+            local,
+        }
+    }
+
+    pub const fn attribute(local: Atom) -> Self {
+        QualName {
+            ns: Namespace::None,
+            local,
+        }
+    }
+}

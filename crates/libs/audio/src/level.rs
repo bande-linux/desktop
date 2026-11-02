@@ -37,8 +37,42 @@ impl Level {
     }
 }
 
-pub(crate) fn from_channel(channel: f32) -> f32 {
+use pipewire::spa::sys::{SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR};
+
+use crate::graph::Volumes;
+
+fn from_channel(channel: f32) -> f32 {
     channel.max(0.0).cbrt().min(1.0)
+}
+
+pub(crate) fn loudest(channels: &[f32]) -> f32 {
+    from_channel(channels.iter().copied().fold(0.0, f32::max))
+}
+
+pub(crate) fn balance(volumes: &Volumes) -> Option<f32> {
+    let ([left, right], [SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR]) = (
+        <[f32; 2]>::try_from(volumes.channels.as_slice()).ok()?,
+        <[u32; 2]>::try_from(volumes.positions.as_slice()).ok()?,
+    ) else {
+        return None;
+    };
+    let (left, right) = (from_channel(left), from_channel(right));
+    let loudest = left.max(right);
+    Some(if loudest > 0.0 {
+        (right - left) / loudest
+    } else {
+        0.0
+    })
+}
+
+pub(crate) fn balanced(volumes: &Volumes, balance: f32) -> Option<Vec<f32>> {
+    self::balance(volumes)?;
+    let volume = loudest(&volumes.channels);
+    let balance = balance.clamp(-1.0, 1.0);
+    Some(vec![
+        to_channel(volume * (1.0 - balance.max(0.0))),
+        to_channel(volume * (1.0 + balance.min(0.0))),
+    ])
 }
 
 pub(crate) fn to_channel(volume: f32) -> f32 {

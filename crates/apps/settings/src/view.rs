@@ -538,6 +538,7 @@ impl SettingsView {
                 Some(PaneId::Sound),
                 &[
                     SettingId::OutputDevice,
+                    SettingId::OutputBalance,
                     SettingId::OutputVolume,
                     SettingId::OutputMuted,
                     SettingId::InputDevice,
@@ -775,6 +776,17 @@ impl SettingsView {
                         self.values.remove(&volume);
                         self.values.remove(&muted);
                     }
+                }
+            }
+            match snapshot.default_output().and_then(|output| output.balance) {
+                Some(balance) => {
+                    self.values.insert(
+                        SettingId::OutputBalance,
+                        Value::Number(((balance + 1.0) * 50.0).round() as u32),
+                    );
+                }
+                None => {
+                    self.values.remove(&SettingId::OutputBalance);
                 }
             }
         }
@@ -1644,6 +1656,9 @@ impl SettingsView {
             }
             (SettingId::InputVolume, Value::Fraction(volume)) => {
                 Command::Audio(AudioCommand::Volume(Direction::Input, volume))
+            }
+            (SettingId::OutputBalance, Value::Number(position)) => {
+                Command::Audio(AudioCommand::Balance(position as f32 / 50.0 - 1.0))
             }
             (SettingId::OutputMuted, Value::Flag(muted)) => {
                 Command::Audio(AudioCommand::Mute(Direction::Output, muted))

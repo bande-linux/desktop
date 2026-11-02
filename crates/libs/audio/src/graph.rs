@@ -1,6 +1,6 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::io::Cursor;
+use std::io::{Cursor, ErrorKind};
 use std::rc::Rc;
 use std::sync::atomic::AtomicU32;
 use std::sync::mpsc;
@@ -30,6 +30,12 @@ const CONFIGURED_INPUT: &str = "default.configured.audio.source";
 
 pub(crate) type Reply = mpsc::Sender<Result<(), Error>>;
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Change {
+    Volume(Option<f32>, Option<bool>),
+    Balance(f32),
+}
+
 pub(crate) enum Command {
     SetDefault {
         direction: Direction,
@@ -38,8 +44,7 @@ pub(crate) enum Command {
     },
     SetLevel {
         id: u32,
-        volume: Option<f32>,
-        muted: Option<bool>,
+        change: Change,
         done: Reply,
     },
     Play {
@@ -53,8 +58,38 @@ pub(crate) enum Command {
         peak: Arc<AtomicU32>,
         done: Reply,
     },
+    Plugged {
+        device: u32,
+        profile_device: i32,
+    },
+    FollowJacks,
     Stop(u64),
     Quit,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct Volumes {
+    pub channels: Vec<f32>,
+    pub positions: Vec<u32>,
+    pub muted: bool,
+}
+
+struct Props {
+    channels: Vec<f32>,
+    positions: Option<Vec<u32>>,
+    muted: Option<bool>,
+}
+
+impl Volumes {
+    fn apply(&mut self, props: Props) {
+        self.channels = props.channels;
+        if let Some(positions) = props.positions {
+            self.positions = positions;
+        }
+        if let Some(muted) = props.muted {
+            self.muted = muted;
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -62,8 +97,7 @@ pub(crate) struct NodeState {
     pub name: String,
     pub description: String,
     pub direction: Option<Direction>,
-    pub channels: Vec<f32>,
-    pub muted: bool,
+    pub volumes: Volumes,
     pub app: Option<App>,
     pub sense: Option<Sense>,
     pub camera: bool,
@@ -82,19 +116,23 @@ pub(crate) struct State {
     pub connected: bool,
     pub nodes: HashMap<u32, NodeState>,
     pub links: HashMap<u32, (u32, u32)>,
-    routes: HashMap<(u32, i32), (Vec<f32>, bool)>,
+    routes: HashMap<(u32, i32), Volumes>,
+    ports: HashMap<(u32, i32), bool>,
     pub default_output: Option<String>,
     pub default_input: Option<String>,
 }
 
 impl State {
-    pub(crate) fn levels<'a>(&'a self, node: &'a NodeState) -> (&'a [f32], bool) {
+    pub(crate) fn levels<'a>(&'a self, node: &'a NodeState) -> &'a Volumes {
         node.device
             .and_then(|device| self.routes.get(&device))
-            .map_or(
-                (node.channels.as_slice(), node.muted),
-                |(channels, muted)| (channels.as_slice(), *muted),
-            )
+            .unwrap_or(&node.volumes)
+    }
+
+    pub(crate) fn available(&self, node: &NodeState) -> bool {
+        node.device
+            .and_then(|device| self.ports.get(&device))
+            .is_none_or(|available| *available)
     }
 }
 
@@ -120,10 +158,48 @@ impl Shared {
     }
 }
 
+struct Route {
+    index: i32,
+    device: Option<i32>,
+    devices: Vec<i32>,
+    available: bool,
+}
+
+#[derive(Default)]
+struct Routes {
+    active: Vec<Route>,
+    enumerated: HashMap<i32, Route>,
+}
+
+impl Routes {
+    fn availability(&self) -> HashMap<i32, bool> {
+        let mut ports: HashMap<i32, bool> = HashMap::new();
+        for route in self.enumerated.values() {
+            for device in &route.devices {
+                let available = ports.entry(*device).or_insert(false);
+                *available |= route.available;
+            }
+        }
+        for route in &self.active {
+            if let Some(device) = route.device {
+                ports.insert(device, route.available);
+            }
+        }
+        ports
+    }
+
+    fn active_index(&self, profile_device: i32) -> Option<i32> {
+        self.active
+            .iter()
+            .find(|route| route.device == Some(profile_device))
+            .map(|route| route.index)
+    }
+}
+
 struct BoundDevice {
     proxy: Device,
     _listener: DeviceListener,
-    routes: Rc<RefCell<Vec<(i32, i32)>>>,
+    routes: Rc<RefCell<Routes>>,
 }
 
 #[derive(Default)]
@@ -160,22 +236,30 @@ fn object(pod: &Pod) -> Option<Object> {
     }
 }
 
-fn levels(object: &Object) -> Option<(Vec<f32>, Option<bool>)> {
+fn levels(object: &Object) -> Option<Props> {
     let mut channels = None;
+    let mut positions = None;
     let mut muted = None;
     for property in &object.properties {
         match (property.key, &property.value) {
             (sys::SPA_PROP_channelVolumes, Value::ValueArray(ValueArray::Float(volumes))) => {
                 channels = Some(volumes.clone());
             }
+            (sys::SPA_PROP_channelMap, Value::ValueArray(ValueArray::Id(map))) => {
+                positions = Some(map.iter().map(|position| position.0).collect());
+            }
             (sys::SPA_PROP_mute, Value::Bool(value)) => muted = Some(*value),
             _ => {}
         }
     }
-    channels.map(|channels| (channels, muted))
+    channels.map(|channels| Props {
+        channels,
+        positions,
+        muted,
+    })
 }
 
-fn route_levels(object: &Object) -> Option<(Vec<f32>, Option<bool>)> {
+fn route_levels(object: &Object) -> Option<Props> {
     object
         .properties
         .iter()
@@ -186,21 +270,30 @@ fn route_levels(object: &Object) -> Option<(Vec<f32>, Option<bool>)> {
         })
 }
 
-fn route(object: &Object) -> Option<(i32, i32)> {
-    let int = |key| {
-        object
-            .properties
-            .iter()
-            .find(|property| property.key == key)
-            .and_then(|property| match property.value {
-                Value::Int(value) => Some(value),
-                _ => None,
-            })
-    };
-    Some((
-        int(sys::SPA_PARAM_ROUTE_index)?,
-        int(sys::SPA_PARAM_ROUTE_device)?,
-    ))
+fn route(object: &Object) -> Option<Route> {
+    let mut index = None;
+    let mut device = None;
+    let mut devices = Vec::new();
+    let mut available = true;
+    for property in &object.properties {
+        match (property.key, &property.value) {
+            (sys::SPA_PARAM_ROUTE_index, Value::Int(value)) => index = Some(*value),
+            (sys::SPA_PARAM_ROUTE_device, Value::Int(value)) => device = Some(*value),
+            (sys::SPA_PARAM_ROUTE_devices, Value::ValueArray(ValueArray::Int(listed))) => {
+                devices.clone_from(listed);
+            }
+            (sys::SPA_PARAM_ROUTE_available, Value::Id(id)) => {
+                available = id.0 != sys::SPA_PARAM_AVAILABILITY_no;
+            }
+            _ => {}
+        }
+    }
+    Some(Route {
+        index: index?,
+        device,
+        devices,
+        available,
+    })
 }
 
 fn default_name(value: Option<&str>) -> Option<String> {
@@ -220,7 +313,8 @@ struct Graph {
     bound: RefCell<Bound>,
     core: pw::core::CoreRc,
     running: RefCell<HashMap<u64, Running>>,
-    next_effect: std::cell::Cell<u64>,
+    next_effect: Cell<u64>,
+    follow_jacks: Cell<bool>,
     commands: pw::channel::Sender<Command>,
 }
 
@@ -299,7 +393,9 @@ impl Graph {
                 let camera = kind == Kind::Camera
                     && (props.get("media.role") == Some("Camera")
                         || matches!(props.get("device.api"), Some("v4l2" | "libcamera")));
-                let app = matches!(kind, Kind::AppStream | Kind::Capture(_)).then(|| App {
+                let listed = matches!(kind, Kind::AppStream | Kind::Capture(_))
+                    && props.get("node.link-group").is_none();
+                let app = listed.then(|| App {
                     name: props
                         .get("application.name")
                         .or_else(|| props.get("application.process.binary"))
@@ -332,15 +428,11 @@ impl Graph {
                 if kind != ParamType::Props {
                     return;
                 }
-                let Some((channels, muted)) = pod.and_then(object).as_ref().and_then(levels) else {
+                let Some(props) = pod.and_then(object).as_ref().and_then(levels) else {
                     return;
                 };
                 param_shared.update(|state| {
-                    let node = state.nodes.entry(id).or_default();
-                    node.channels = channels;
-                    if let Some(muted) = muted {
-                        node.muted = muted;
-                    }
+                    state.nodes.entry(id).or_default().volumes.apply(props);
                 });
             })
             .register();
@@ -352,18 +444,16 @@ impl Graph {
     fn add_device(&self, global: &GlobalObject<&DictRef>) -> Result<(), pw::Error> {
         let id = global.id;
         let proxy: Device = self.registry.bind(global)?;
-        let routes = Rc::new(RefCell::new(Vec::new()));
+        let routes = Rc::new(RefCell::new(Routes::default()));
         let seen = Rc::clone(&routes);
         let shared = Arc::clone(&self.shared);
+        let commands = self.commands.clone();
         let listener = proxy
             .add_listener_local()
             .param(move |_, kind, index, _, pod| {
-                if kind != ParamType::Route {
-                    return;
-                }
                 let mut routes = seen.borrow_mut();
-                if index == 0 {
-                    routes.clear();
+                if kind == ParamType::Route && index == 0 {
+                    routes.active.clear();
                 }
                 let Some(object) = pod.and_then(object) else {
                     return;
@@ -371,19 +461,41 @@ impl Graph {
                 let Some(route) = route(&object) else {
                     return;
                 };
-                routes.push(route);
-                if let Some((channels, muted)) = route_levels(&object) {
-                    let key = (id, route.1);
-                    shared.update(|state| {
-                        let muted = muted
-                            .or_else(|| state.routes.get(&key).map(|(_, muted)| *muted))
-                            .unwrap_or(false);
-                        state.routes.insert(key, (channels, muted));
+                let props = route_levels(&object);
+                let profile_device = route.device;
+                match kind {
+                    ParamType::Route => routes.active.push(route),
+                    ParamType::EnumRoute => {
+                        routes.enumerated.insert(route.index, route);
+                    }
+                    _ => return,
+                }
+                let ports = routes.availability();
+                let mut plugged = Vec::new();
+                shared.update(|state| {
+                    for (profile_device, available) in ports {
+                        let was = state.ports.insert((id, profile_device), available);
+                        if available && was == Some(false) {
+                            plugged.push(profile_device);
+                        }
+                    }
+                    if let (Some(props), Some(profile_device)) = (props, profile_device) {
+                        state
+                            .routes
+                            .entry((id, profile_device))
+                            .or_default()
+                            .apply(props);
+                    }
+                });
+                for profile_device in plugged {
+                    let _ = commands.send(Command::Plugged {
+                        device: id,
+                        profile_device,
                     });
                 }
             })
             .register();
-        proxy.subscribe_params(&[ParamType::Route]);
+        proxy.subscribe_params(&[ParamType::EnumRoute, ParamType::Route]);
         self.bound.borrow_mut().devices.insert(
             global.id,
             BoundDevice {
@@ -422,8 +534,10 @@ impl Graph {
     fn remove(&self, id: u32) {
         let mut bound = self.bound.borrow_mut();
         if bound.devices.remove(&id).is_some() {
-            self.shared
-                .update(|state| state.routes.retain(|(device, _), _| *device != id));
+            self.shared.update(|state| {
+                state.routes.retain(|(device, _), _| *device != id);
+                state.ports.retain(|(device, _), _| *device != id);
+            });
         }
         if bound
             .metadata
@@ -477,17 +591,41 @@ impl Graph {
         Ok(())
     }
 
-    fn set_level(&self, id: u32, volume: Option<f32>, muted: Option<bool>) -> Result<(), Error> {
-        let (node, current, current_muted) = {
+    fn plugged(&self, device: u32, profile_device: i32) -> Result<(), Error> {
+        if !self.follow_jacks.get() {
+            return Ok(());
+        }
+        let jack = {
+            let state = self.shared.lock();
+            state
+                .nodes
+                .values()
+                .find(|node| node.device == Some((device, profile_device)))
+                .and_then(|node| Some((node.direction?, node.name.clone())))
+        };
+        match jack {
+            Some((direction, name)) => self.set_default(direction, &name),
+            None => Ok(()),
+        }
+    }
+
+    fn set_level(&self, id: u32, change: Change) -> Result<(), Error> {
+        let (node, current) = {
             let state = self.shared.lock();
             let node = state.nodes.get(&id).cloned().ok_or(Error::NoSuchDevice)?;
-            let (channels, muted) = state.levels(&node);
-            let current = channels.to_vec();
-            (node, current, muted)
+            let current = state.levels(&node).clone();
+            (node, current)
         };
-        let channels = match volume {
-            Some(volume) => level::scaled(&current, volume),
-            None => current,
+        let channels = match change {
+            Change::Volume(Some(volume), _) => level::scaled(&current.channels, volume),
+            Change::Volume(None, _) => current.channels,
+            Change::Balance(balance) => {
+                level::balanced(&current, balance).ok_or(Error::NoSuchDevice)?
+            }
+        };
+        let muted = match change {
+            Change::Volume(_, Some(muted)) => muted,
+            Change::Volume(_, None) | Change::Balance(_) => current.muted,
         };
         let props = Object {
             type_: sys::SPA_TYPE_OBJECT_Props,
@@ -497,21 +635,13 @@ impl Graph {
                     sys::SPA_PROP_channelVolumes,
                     Value::ValueArray(ValueArray::Float(channels)),
                 ),
-                Property::new(
-                    sys::SPA_PROP_mute,
-                    Value::Bool(muted.unwrap_or(current_muted)),
-                ),
+                Property::new(sys::SPA_PROP_mute, Value::Bool(muted)),
             ],
         };
         let bound = self.bound.borrow();
         let route = node.device.and_then(|(device, profile_device)| {
             let device = bound.devices.get(&device)?;
-            let index = device
-                .routes
-                .borrow()
-                .iter()
-                .find(|(_, route_device)| *route_device == profile_device)
-                .map(|(index, _)| *index)?;
+            let index = device.routes.borrow().active_index(profile_device)?;
             Some((device, index, profile_device))
         });
         match route {
@@ -571,7 +701,8 @@ fn serve(
         bound: RefCell::default(),
         core: core.clone(),
         running: RefCell::default(),
-        next_effect: std::cell::Cell::new(1 << 32),
+        next_effect: Cell::new(1 << 32),
+        follow_jacks: Cell::new(false),
         commands: sender,
     });
 
@@ -616,9 +747,12 @@ fn serve(
             }
         })
         .error(move |id, _, result, message| {
-            if id == pw::core::PW_ID_CORE {
-                tracing::warn!("PipeWire connection lost ({result}): {message}");
+            let lost = std::io::Error::from_raw_os_error(-result).kind() == ErrorKind::BrokenPipe;
+            if id == pw::core::PW_ID_CORE && lost {
+                tracing::warn!("PipeWire connection lost: {message}");
                 lost_loop.quit();
+            } else {
+                tracing::debug!("PipeWire error on {id} ({result}): {message}");
             }
         })
         .register();
@@ -637,12 +771,7 @@ fn serve(
                 name,
                 done,
             } => (command_graph.set_default(direction, &name), done),
-            Command::SetLevel {
-                id,
-                volume,
-                muted,
-                done,
-            } => (command_graph.set_level(id, volume, muted), done),
+            Command::SetLevel { id, change, done } => (command_graph.set_level(id, change), done),
             Command::Play {
                 samples,
                 gain,
@@ -654,6 +783,19 @@ fn serve(
                 peak,
                 done,
             } => (command_graph.meter(id, &device, peak), done),
+            Command::Plugged {
+                device,
+                profile_device,
+            } => {
+                if let Err(error) = command_graph.plugged(device, profile_device) {
+                    tracing::warn!("cannot switch to the plugged-in device: {error}");
+                }
+                return;
+            }
+            Command::FollowJacks => {
+                command_graph.follow_jacks.set(true);
+                return;
+            }
             Command::Stop(id) => {
                 command_graph.running.borrow_mut().remove(&id);
                 return;

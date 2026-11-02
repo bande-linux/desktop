@@ -28,6 +28,7 @@ const BLUEZ: &str = "org.bluez";
 #[derive(Debug, Clone, PartialEq)]
 pub enum AudioCommand {
     Volume(Direction, f32),
+    Balance(f32),
     Mute(Direction, bool),
     Default(Direction, String),
     App(String, f32),
@@ -70,6 +71,7 @@ fn same_kind(a: &AudioCommand, b: &AudioCommand) -> bool {
     match (a, b) {
         (AudioCommand::Volume(a, _), AudioCommand::Volume(b, _)) => a == b,
         (AudioCommand::App(a, _), AudioCommand::App(b, _)) => a == b,
+        (AudioCommand::Balance(_), AudioCommand::Balance(_)) => true,
         _ => false,
     }
 }
@@ -92,6 +94,7 @@ fn run_audio(audio: &Audio, command: AudioCommand) -> Result<(), bande_audio::Er
                 muted: false,
             },
         ),
+        AudioCommand::Balance(balance) => audio.set_balance(&device(Direction::Output)?, balance),
         AudioCommand::Mute(direction, muted) => audio.set_muted(&device(direction)?, muted),
         AudioCommand::Default(_, name) => {
             let snapshot = audio.snapshot();

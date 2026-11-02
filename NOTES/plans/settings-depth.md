@@ -35,13 +35,9 @@ Missing: days of the week, "for an hour / until tomorrow", allowed apps.
 
 **Screen Time.** Out of scope.
 
-**Sound.** Has: output and input device choice, volumes and mute, input level meter, per-app
-volume, alert sound and volume, sound effects, volume feedback. Missing: balance (needs
-per-channel volume in `bande-audio`), "play sound on startup", and hiding unplugged jacks: on
-the mini WirePlumber offers "Built-in Audio Headphones" and "Built-in Audio Headset
-Microphone" while its EnumRoute says Headphones and Headset are `available: no`, so both are
-listed with nothing plugged in (and the raw headphone sink sits beside the filtered "Mac mini
-speaker"; owner to decide what the jack path should look like).
+**Sound.** Has: output and input device choice (unplugged jacks hidden, plug-in switches to
+them), balance, volumes and mute, input level meter, per-app volume, alert sound and volume,
+sound effects, volume feedback. Missing: "play sound on startup".
 
 **General.** About: computer name, chip, memory, version, serial; storage page with categories,
 large files and Empty Trash; Software Update with offline updates. Date & Time: automatic
@@ -118,11 +114,10 @@ Ranked by how often a user needs them and how badly they are stuck without them.
    supply levels and scanners (eSCL / SANE).
 2. Users & Groups: picture, full name, add and remove users, through AccountsService once it is
    in the image (owner decision).
-3. Sound: hide unplugged jacks (EnumRoute availability), balance.
-4. Notifications: badges per app.
-5. Sharing: Remote Login (ssh.service through systemd's D-Bus API with polkit) and the
+3. Notifications: badges per app.
+4. Sharing: Remote Login (ssh.service through systemd's D-Bus API with polkit) and the
    `.local` name.
-6. Personal Hotspot, after `dnsmasq-base` is installed and AP mode is tried on the chip.
-7. Keyboard: editable shortcuts.
-8. Show scroll bars, double-click speed, Wake for network access, Bluetooth rename.
-9. Focus: days of the week and "for an hour"; Wallpaper: solid colours.
+5. Personal Hotspot, after `dnsmasq-base` is installed and AP mode is tried on the chip.
+6. Keyboard: editable shortcuts.
+7. Show scroll bars, double-click speed, Wake for network access, Bluetooth rename.
+8. Focus: days of the week and "for an hour"; Wallpaper: solid colours.

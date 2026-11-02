@@ -268,7 +268,7 @@ impl Chrome {
                 if dx.hypot(dy) <= CLICK_SLOP {
                     return false;
                 }
-                if dx.abs() > dy.abs() {
+                if self.detachable_tabs || dx.abs() > dy.abs() {
                     self.tab_drag = Some(TabDrag::Reordering);
                     return false;
                 }

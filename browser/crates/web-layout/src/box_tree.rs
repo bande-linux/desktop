@@ -45,9 +45,9 @@ struct Pending {
 }
 
 impl Pending {
-    fn new() -> Self {
+    fn new(rtl: bool) -> Self {
         Self {
-            paragraph: Paragraph::new(),
+            paragraph: Paragraph::new(rtl),
             items: Vec::new(),
         }
     }
@@ -96,6 +96,10 @@ fn inline_bytes(inline: &InlineContent) -> usize {
         + inline.items.capacity() * size_of::<InlineItem>()
 }
 
+pub(crate) fn is_rtl(style: &ComputedStyle) -> bool {
+    style.inherited.direction == web_style::Direction::Rtl
+}
+
 fn own_shift(style: &ComputedStyle) -> f32 {
     let size = style.inherited.font_size;
     match style.reset.vertical_align {
@@ -129,7 +133,7 @@ pub(crate) fn run_style(style: &ComputedStyle, tag: u32, baseline_shift: f32) ->
 impl Builder<'_> {
     fn block(&mut self, node: NodeId, style: ComputedStyle, ordinal: Option<i32>) -> BlockBox {
         let mut blocks = Vec::new();
-        let mut pending = Pending::new();
+        let mut pending = Pending::new(is_rtl(&style));
         self.children(node, &mut blocks, &mut pending, 0.0);
         let contents = if blocks.is_empty() {
             Contents::Inline(Box::new(self.finish(pending)))
@@ -191,7 +195,10 @@ impl Builder<'_> {
                     display => {
                         let parent_style = self.styles.get(node).cloned();
                         if let Some(parent_style) = parent_style {
-                            let taken = std::mem::replace(pending, Pending::new());
+                            let taken = std::mem::replace(
+                                pending,
+                                Pending::new(pending.paragraph.is_rtl()),
+                            );
                             self.flush(blocks, taken, &parent_style);
                         }
                         let item_ordinal = (display == Display::ListItem).then_some(ordinal);
@@ -238,7 +245,7 @@ impl Builder<'_> {
             ListStyleType::Square => "▪".to_owned(),
             ListStyleType::Decimal => format!("{ordinal}."),
         };
-        let mut paragraph = Paragraph::new();
+        let mut paragraph = Paragraph::new(is_rtl(style));
         let mut run = run_style(style, 0, 0.0);
         run.white_space = web_style::WhiteSpace::Pre;
         paragraph.push_text(&text, run);

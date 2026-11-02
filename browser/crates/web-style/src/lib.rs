@@ -40,6 +40,12 @@ pub enum Display {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Direction {
+    Ltr,
+    Rtl,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum FontFamily {
     Serif,
     SansSerif,
@@ -124,6 +130,7 @@ pub struct InheritedStyle {
     pub italic: bool,
     pub line_height: LineHeight,
     pub white_space: WhiteSpace,
+    pub direction: Direction,
     pub text_align: TextAlign,
     pub list_style_type: ListStyleType,
     pub decorations: TextDecorations,
@@ -157,6 +164,7 @@ impl ComputedStyle {
                 italic: false,
                 line_height: LineHeight::Normal,
                 white_space: WhiteSpace::Normal,
+                direction: Direction::Ltr,
                 text_align: TextAlign::Start,
                 list_style_type: ListStyleType::Disc,
                 decorations: TextDecorations::default(),
@@ -181,7 +189,11 @@ impl ComputedStyle {
         }
     }
 
-    fn derived(&self, declarations: &[Declaration], initial_reset: &Arc<ResetStyle>) -> Self {
+    fn derived<'a>(
+        &self,
+        declarations: impl IntoIterator<Item = &'a Declaration>,
+        initial_reset: &Arc<ResetStyle>,
+    ) -> Self {
         let mut inherited = (*self.inherited).clone();
         let mut reset = INITIAL_RESET;
         for declaration in declarations {
@@ -246,7 +258,7 @@ impl Styles {
             pool: vec![root],
             initial_reset: initial_reset.clone(),
         };
-        let mut sharing: HashMap<(u32, defaults::RuleKey), u32> = HashMap::new();
+        let mut sharing: HashMap<(u32, defaults::RuleKey, Option<Direction>), u32> = HashMap::new();
         let mut stack: Vec<(NodeId, u32)> = document
             .children(NodeId::DOCUMENT)
             .map(|child| (child, 0))
@@ -256,22 +268,26 @@ impl Styles {
             let style = match document.kind(node) {
                 Some(NodeKind::Element) => {
                     let key = defaults::rule_key(document, node);
+                    let direction = defaults::direction_hint(document, node);
                     let pool = &mut styles.pool;
-                    match sharing.get(&(parent, key)) {
+                    match sharing.get(&(parent, key, direction)) {
                         Some(&shared) => shared,
                         None => {
                             let Some(parent_style) = pool.get(parent as usize) else {
                                 continue;
                             };
-                            let style =
-                                parent_style.derived(defaults::declarations(key), &initial_reset);
+                            let hint = direction.map(Declaration::Direction);
+                            let style = parent_style.derived(
+                                hint.iter().chain(defaults::declarations(key)),
+                                &initial_reset,
+                            );
                             let index = if style.same_as(parent_style) {
                                 parent
                             } else {
                                 pool.push(style);
                                 (pool.len() - 1) as u32
                             };
-                            sharing.insert((parent, key), index);
+                            sharing.insert((parent, key, direction), index);
                             index
                         }
                     }

@@ -3,6 +3,7 @@ use std::ops::Range;
 use harfrust::{BufferClusterLevel, Direction, ShapeOptions, UnicodeBuffer};
 use icu_segmenter::LineSegmenter;
 use icu_segmenter::options::LineBreakOptions;
+use unicode_bidi::{BidiInfo, Level};
 use web_style::WhiteSpace;
 
 use crate::fonts::{FontId, FontKey, Fonts, is_inherited};
@@ -64,6 +65,7 @@ impl Lines {
 
 #[derive(Default)]
 pub struct Paragraph {
+    rtl: bool,
     text: String,
     runs: Vec<(u32, RunStyle)>,
     column: u32,
@@ -72,8 +74,15 @@ pub struct Paragraph {
 const TAB_COLUMNS: u32 = 8;
 
 impl Paragraph {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(rtl: bool) -> Self {
+        Self {
+            rtl,
+            ..Self::default()
+        }
+    }
+
+    pub fn is_rtl(&self) -> bool {
+        self.rtl
     }
 
     pub fn is_blank(&self) -> bool {
@@ -136,14 +145,32 @@ impl Paragraph {
         })
     }
 
+    fn levels(&self) -> Vec<Level> {
+        if !self.rtl && self.text.chars().all(|ch| ch < '\u{590}') {
+            return Vec::new();
+        }
+        let base = if self.rtl { Level::rtl() } else { Level::ltr() };
+        BidiInfo::new(&self.text, Some(base)).levels
+    }
+
     pub fn shape(&self, fonts: &mut Fonts) -> ShapedParagraph {
-        let mut glyphs = Vec::new();
+        let levels = self.levels();
+        let base = if self.rtl { 1 } else { 0 };
+        let level_at = |position: usize| {
+            levels
+                .get(position)
+                .map_or(base, |level: &Level| level.number())
+        };
+        let mut shaped = ShapedParagraph {
+            glyphs: Vec::new(),
+            spans: Vec::new(),
+        };
         let mut buffer = UnicodeBuffer::new();
         for (run_index, (range, style)) in self.run_ranges().enumerate() {
             let Some(run_text) = self.text.get(range.clone()) else {
                 continue;
             };
-            let mut group: Option<(FontId, usize)> = None;
+            let mut group: Option<(Span, usize)> = None;
             let mut previous_font = None;
             for (offset, ch) in run_text.char_indices() {
                 let position = range.start + offset;
@@ -155,48 +182,50 @@ impl Paragraph {
                     fonts.for_char(style.font, ch)
                 };
                 previous_font = font.or(previous_font);
-                if group.map(|(group_font, _)| Some(group_font)) != Some(font) {
-                    if let Some((group_font, start)) = group.take() {
+                let span = font.map(|font| Span {
+                    font,
+                    run: run_index as u32,
+                    level: level_at(position),
+                });
+                if group.map(|(group_span, _)| group_span) != span {
+                    if let Some((group_span, start)) = group.take() {
                         buffer = self.shape_group(
                             fonts,
-                            group_font,
+                            group_span,
                             start..position,
                             style.size,
-                            run_index as u32,
                             buffer,
-                            &mut glyphs,
+                            &mut shaped,
                         );
                     }
-                    group = font.map(|font| (font, position));
+                    group = span.map(|span| (span, position));
                 }
             }
-            if let Some((group_font, start)) = group {
+            if let Some((group_span, start)) = group {
                 buffer = self.shape_group(
                     fonts,
-                    group_font,
+                    group_span,
                     start..range.end,
                     style.size,
-                    run_index as u32,
                     buffer,
-                    &mut glyphs,
+                    &mut shaped,
                 );
             }
         }
-        ShapedParagraph { glyphs }
+        shaped
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn shape_group(
         &self,
         fonts: &Fonts,
-        font: FontId,
+        span: Span,
         range: Range<usize>,
         size: f32,
-        run: u32,
         mut buffer: UnicodeBuffer,
-        glyphs: &mut Vec<ShapedGlyph>,
+        shaped: &mut ShapedParagraph,
     ) -> UnicodeBuffer {
-        let (Some(loaded), Some(text)) = (fonts.loaded(font), self.text.get(range.clone())) else {
+        let (Some(loaded), Some(text)) = (fonts.loaded(span.font), self.text.get(range.clone()))
+        else {
             return buffer;
         };
         let Ok(font_ref) =
@@ -211,27 +240,44 @@ impl Paragraph {
         buffer.set_pre_context(self.text.get(..range.start).unwrap_or_default());
         buffer.set_post_context(self.text.get(range.end..).unwrap_or_default());
         buffer.guess_segment_properties();
-        buffer.set_direction(Direction::LeftToRight);
+        let rtl = span.level % 2 == 1;
+        buffer.set_direction(if rtl {
+            Direction::RightToLeft
+        } else {
+            Direction::LeftToRight
+        });
         buffer.set_cluster_level(BufferClusterLevel::MonotoneCharacters);
-        let shaped = shaper.shape(buffer, ShapeOptions::new().point_size(Some(size)));
+        let output = shaper.shape(buffer, ShapeOptions::new().point_size(Some(size)));
         let scale = size / loaded.metrics.units_per_em;
-        glyphs.extend(
-            shaped
+        let span_index = shaped.spans.len() as u32;
+        shaped.spans.push(span);
+        let first = shaped.glyphs.len();
+        shaped.glyphs.extend(
+            output
                 .glyph_infos()
                 .iter()
-                .zip(shaped.glyph_positions())
+                .zip(output.glyph_positions())
                 .map(|(info, position)| ShapedGlyph {
                     id: info.glyph_id,
                     cluster: info.cluster,
                     advance: position.x_advance as f32 * scale,
                     x_offset: position.x_offset as f32 * scale,
                     y_offset: position.y_offset as f32 * scale,
-                    font,
-                    run,
+                    span: span_index,
                 }),
         );
-        shaped.clear()
+        if rtl && let Some(glyphs) = shaped.glyphs.get_mut(first..) {
+            glyphs.reverse();
+        }
+        output.clear()
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct Span {
+    font: FontId,
+    run: u32,
+    level: u8,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -241,12 +287,12 @@ struct ShapedGlyph {
     advance: f32,
     x_offset: f32,
     y_offset: f32,
-    font: FontId,
-    run: u32,
+    span: u32,
 }
 
 pub struct ShapedParagraph {
     glyphs: Vec<ShapedGlyph>,
+    spans: Vec<Span>,
 }
 
 struct Segment {
@@ -259,6 +305,7 @@ struct Segment {
 impl ShapedParagraph {
     pub fn heap_bytes(&self) -> usize {
         self.glyphs.capacity() * size_of::<ShapedGlyph>()
+            + self.spans.capacity() * size_of::<Span>()
     }
 
     pub fn lines(
@@ -267,7 +314,9 @@ impl ShapedParagraph {
         fonts: &mut Fonts,
         width: f32,
         strut: RunStyle,
+        justify: bool,
     ) -> Lines {
+        let justify_to = justify.then_some(width);
         let styles: Vec<RunStyle> = paragraph.runs.iter().map(|&(_, style)| style).collect();
         let text = paragraph.text.as_bytes();
         let segments = self.segments(paragraph);
@@ -284,6 +333,7 @@ impl ShapedParagraph {
                     text,
                     start..segment.glyphs.start,
                     strut,
+                    justify_to,
                 );
                 start = segment.glyphs.start;
                 line_width = 0.0;
@@ -298,6 +348,7 @@ impl ShapedParagraph {
                     text,
                     start..segment.glyphs.end,
                     strut,
+                    None,
                 );
                 start = segment.glyphs.end;
                 line_width = 0.0;
@@ -312,6 +363,7 @@ impl ShapedParagraph {
                 text,
                 start..self.glyphs.len(),
                 strut,
+                None,
             );
         }
         lines
@@ -362,6 +414,7 @@ impl ShapedParagraph {
         segments
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_line(
         &self,
         lines: &mut Lines,
@@ -370,28 +423,50 @@ impl ShapedParagraph {
         text: &[u8],
         range: Range<usize>,
         strut: RunStyle,
+        justify_to: Option<f32>,
     ) {
         let (mut above, mut below) = vertical_extent(fonts, None, strut);
         let first_item = lines.items.len();
-        let mut pen = 0.0;
         let shaped = self.glyphs.get(range).unwrap_or_default();
+        let is_space =
+            |glyph: &ShapedGlyph| matches!(text.get(glyph.cluster as usize), Some(b' ' | b'\n'));
         let hanging = shaped
             .iter()
             .rev()
-            .take_while(|glyph| matches!(text.get(glyph.cluster as usize), Some(b' ' | b'\n')))
+            .take_while(|glyph| is_space(glyph))
             .count();
         let shaped = shaped.get(..shaped.len() - hanging).unwrap_or_default();
-        for group in shaped.chunk_by(|a, b| a.run == b.run && a.font == b.font) {
-            let Some((first, style)) = group
-                .first()
-                .and_then(|first| Some((first, *styles.get(first.run as usize)?)))
-            else {
+        let level = |glyph: &ShapedGlyph| {
+            self.spans
+                .get(glyph.span as usize)
+                .map_or(0, |span| span.level)
+        };
+        let order = visual_order(shaped, level);
+        let natural: f32 = shaped.iter().map(|glyph| glyph.advance).sum();
+        let spaces = shaped
+            .iter()
+            .filter(|glyph| text.get(glyph.cluster as usize) == Some(&b' '))
+            .count();
+        let expansion = match justify_to {
+            Some(width) if spaces > 0 && width > natural => (width - natural) / spaces as f32,
+            _ => 0.0,
+        };
+        let mut pen = 0.0;
+        let visual: Vec<&ShapedGlyph> = order
+            .iter()
+            .filter_map(|&index| shaped.get(index))
+            .collect();
+        for group in visual.chunk_by(|a, b| a.span == b.span) {
+            let Some((span, style)) = group.first().and_then(|first| {
+                let span = *self.spans.get(first.span as usize)?;
+                Some((span, *styles.get(span.run as usize)?))
+            }) else {
                 continue;
             };
-            let (item_above, item_below) = vertical_extent(fonts, Some(first.font), style);
+            let (item_above, item_below) = vertical_extent(fonts, Some(span.font), style);
             above = f32::max(above, item_above);
             below = f32::max(below, item_below);
-            let metrics = fonts.metrics(first.font);
+            let metrics = fonts.metrics(span.font);
             let scale = style.size / metrics.units_per_em;
             let start = pen;
             let glyph_start = lines.glyphs.len();
@@ -402,10 +477,13 @@ impl ShapedParagraph {
                     y: -glyph.y_offset,
                 });
                 pen += glyph.advance;
+                if text.get(glyph.cluster as usize) == Some(&b' ') {
+                    pen += expansion;
+                }
             }
             lines.items.push(LineItem {
                 tag: style.tag,
-                font: first.font,
+                font: span.font,
                 size: style.size,
                 x: start,
                 width: pen - start,
@@ -425,6 +503,40 @@ impl ShapedParagraph {
         });
         lines.height = top + above + below;
     }
+}
+
+fn visual_order(glyphs: &[ShapedGlyph], level: impl Fn(&ShapedGlyph) -> u8) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..glyphs.len()).collect();
+    let levels: Vec<u8> = glyphs.iter().map(&level).collect();
+    let highest = levels.iter().copied().max().unwrap_or(0);
+    let Some(lowest_odd) = levels.iter().copied().filter(|level| level % 2 == 1).min() else {
+        return order;
+    };
+    for threshold in (lowest_odd..=highest).rev() {
+        let mut index = 0;
+        while index < order.len() {
+            let at = |index: usize| {
+                order
+                    .get(index)
+                    .and_then(|&glyph| levels.get(glyph))
+                    .copied()
+                    .unwrap_or(0)
+            };
+            if at(index) >= threshold {
+                let mut end = index;
+                while end < order.len() && at(end) >= threshold {
+                    end += 1;
+                }
+                if let Some(run) = order.get_mut(index..end) {
+                    run.reverse();
+                }
+                index = end;
+            } else {
+                index += 1;
+            }
+        }
+    }
+    order
 }
 
 fn vertical_extent(fonts: &mut Fonts, font: Option<FontId>, style: RunStyle) -> (f32, f32) {

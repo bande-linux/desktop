@@ -2,19 +2,20 @@ use web_atoms::Atom;
 use web_dom::{Document, Namespace, NodeId};
 
 use crate::{
-    Color, Display, FontFamily, InheritedStyle, ListStyleType, ResetStyle, TextAlign,
+    Color, Direction, Display, FontFamily, InheritedStyle, ListStyleType, ResetStyle, TextAlign,
     VerticalAlign, WhiteSpace, is_html,
 };
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Declaration {
     Display(Display),
+    Direction(Direction),
     FontSizeScale(f32),
     MarginBlockEm(f32),
     MarginInlinePx(f32),
-    MarginLeftPx(f32),
+    MarginInlineStartPx(f32),
     MarginPx(f32),
-    PaddingLeftPx(f32),
+    PaddingInlineStartPx(f32),
     BorderBlockPx(f32, Color),
     Bold,
     Bolder,
@@ -42,6 +43,7 @@ impl Declaration {
         let em = inherited.font_size;
         match self {
             Self::Display(display) => reset.display = display,
+            Self::Direction(direction) => inherited.direction = direction,
             Self::FontSizeScale(scale) => inherited.font_size = parent.font_size * scale,
             Self::MarginBlockEm(value) => {
                 reset.margin.top = value * em;
@@ -51,14 +53,20 @@ impl Declaration {
                 reset.margin.left = value;
                 reset.margin.right = value;
             }
-            Self::MarginLeftPx(value) => reset.margin.left = value,
+            Self::MarginInlineStartPx(value) => match inherited.direction {
+                Direction::Ltr => reset.margin.left = value,
+                Direction::Rtl => reset.margin.right = value,
+            },
             Self::MarginPx(value) => {
                 reset.margin.top = value;
                 reset.margin.right = value;
                 reset.margin.bottom = value;
                 reset.margin.left = value;
             }
-            Self::PaddingLeftPx(value) => reset.padding.left = value,
+            Self::PaddingInlineStartPx(value) => match inherited.direction {
+                Direction::Ltr => reset.padding.left = value,
+                Direction::Rtl => reset.padding.right = value,
+            },
             Self::BorderBlockPx(width, color) => {
                 reset.border.top = width;
                 reset.border.bottom = width;
@@ -97,6 +105,17 @@ pub(crate) enum RuleKey {
     Html(Atom),
     Link,
     List(Atom, u8),
+}
+
+pub(crate) fn direction_hint(document: &Document, node: NodeId) -> Option<Direction> {
+    let value = document.attribute(node, Atom::DIR)?;
+    if value.eq_ignore_ascii_case("rtl") {
+        Some(Direction::Rtl)
+    } else if value.eq_ignore_ascii_case("ltr") {
+        Some(Direction::Ltr)
+    } else {
+        None
+    }
 }
 
 pub(crate) fn rule_key(document: &Document, node: NodeId) -> RuleKey {
@@ -172,28 +191,28 @@ pub(crate) fn declarations(key: RuleKey) -> &'static [Declaration] {
         RuleKey::List(Atom::OL, 0) => &[
             Display(Display::Block),
             MarginBlockEm(1.0),
-            PaddingLeftPx(40.0),
+            PaddingInlineStartPx(40.0),
             ListStyle(ListStyleType::Decimal),
         ],
         RuleKey::List(Atom::OL, _) => &[
             Display(Display::Block),
-            PaddingLeftPx(40.0),
+            PaddingInlineStartPx(40.0),
             ListStyle(ListStyleType::Decimal),
         ],
         RuleKey::List(_, 0) => &[
             Display(Display::Block),
             MarginBlockEm(1.0),
-            PaddingLeftPx(40.0),
+            PaddingInlineStartPx(40.0),
             ListStyle(ListStyleType::Disc),
         ],
         RuleKey::List(_, 1) => &[
             Display(Display::Block),
-            PaddingLeftPx(40.0),
+            PaddingInlineStartPx(40.0),
             ListStyle(ListStyleType::Circle),
         ],
         RuleKey::List(..) => &[
             Display(Display::Block),
-            PaddingLeftPx(40.0),
+            PaddingInlineStartPx(40.0),
             ListStyle(ListStyleType::Square),
         ],
         RuleKey::Html(name) => element(name),
@@ -256,7 +275,7 @@ fn element(name: Atom) -> &'static [Declaration] {
         Atom::BODY => &[Display(Display::Block), MarginPx(8.0)],
         Atom::P | Atom::DL => PARAGRAPH,
         Atom::BLOCKQUOTE | Atom::FIGURE => INDENTED,
-        Atom::DD => &[Display(Display::Block), MarginLeftPx(40.0)],
+        Atom::DD => &[Display(Display::Block), MarginInlineStartPx(40.0)],
         Atom::PRE | Atom::LISTING | Atom::XMP | Atom::PLAINTEXT => PREFORMATTED,
         Atom::LI => &[Display(Display::ListItem)],
         Atom::CENTER => &[Display(Display::Block), TextAlign(TextAlign::Center)],

@@ -14,6 +14,7 @@ icu_properties.workspace = true
 icu_segmenter.workspace = true
 linebender_resource_handle.workspace = true
 skrifa.workspace = true
+unicode-bidi.workspace = true
 web-style.workspace = true
 
 [lints]

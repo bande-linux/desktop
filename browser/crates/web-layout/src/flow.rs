@@ -4,7 +4,7 @@ use web_dom::NodeId;
 use web_style::{Color, ComputedStyle, Sides, TextAlign, TextDecorations};
 use web_text::{FontId, Fonts, Glyph, Lines};
 
-use crate::box_tree::{BlockBox, BoxTree, Contents, InlineContent, run_style};
+use crate::box_tree::{BlockBox, BoxTree, Contents, InlineContent, is_rtl, run_style};
 
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct Rect {
@@ -193,10 +193,16 @@ impl Flow<'_> {
                     self.fonts,
                     content_width,
                     run_style(&block.style, u32::MAX, 0.0),
+                    block.style.inherited.text_align == TextAlign::Justify,
                 );
                 if !lines.lines.is_empty() {
                     through = false;
-                    let align = block.style.inherited.text_align;
+                    let align = match block.style.inherited.text_align {
+                        TextAlign::Start | TextAlign::Justify if is_rtl(&block.style) => {
+                            TextAlign::Right
+                        }
+                        align => align,
+                    };
                     self.inline(
                         inline,
                         &lines,
@@ -223,7 +229,7 @@ impl Flow<'_> {
             Margins::of(margin.bottom)
         };
         if let Some(marker) = &block.marker {
-            self.marker(block, marker, &mut children);
+            self.marker(block, marker, (content_x, content_width), &mut children);
         }
         Laid {
             fragment: BoxFragment {
@@ -323,12 +329,19 @@ impl Flow<'_> {
         }
     }
 
-    fn marker(&mut self, block: &BlockBox, marker: &InlineContent, children: &mut Vec<Fragment>) {
+    fn marker(
+        &mut self,
+        block: &BlockBox,
+        marker: &InlineContent,
+        content: (f32, f32),
+        children: &mut Vec<Fragment>,
+    ) {
         let lines = marker.shaped.lines(
             &marker.paragraph,
             self.fonts,
             f32::INFINITY,
             run_style(&block.style, 0, 0.0),
+            false,
         );
         let Some(line) = lines.lines.first() else {
             return;
@@ -340,7 +353,11 @@ impl Flow<'_> {
             let glyphs = lines.glyphs.get(item.glyphs.clone()).unwrap_or_default();
             let start = self.glyphs.len() as u32;
             self.glyphs.extend_from_slice(glyphs);
-            let x = item.x - line.width - gap;
+            let x = if is_rtl(style) {
+                content.0 + content.1 + gap + item.x
+            } else {
+                content.0 + item.x - line.width - gap
+            };
             let fragment = self.text(
                 block.node,
                 style,

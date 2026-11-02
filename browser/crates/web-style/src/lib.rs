@@ -415,7 +415,7 @@ impl ResetStyle {
             display: Display::Inline,
             margin: Sides::all(Some(LengthPercentage::ZERO)),
             padding: Sides::all(LengthPercentage::ZERO),
-            border: Sides::all(3.0),
+            border: Sides::all(0.0),
             border_color: Sides::all(Color::BLACK),
             background_color: Color::TRANSPARENT,
             vertical_align: VerticalAlign::Baseline,

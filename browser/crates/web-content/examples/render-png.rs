@@ -10,14 +10,15 @@ const MAX_HEIGHT: u16 = 16384;
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let [input, output, rest @ ..] = arguments.as_slice() else {
-        eprintln!("usage: render-png INPUT.html OUTPUT.png [WIDTH]");
+        eprintln!("usage: render-png INPUT.html OUTPUT.png [WIDTH] [FONT...]");
         return ExitCode::FAILURE;
     };
     let width = rest
         .first()
         .and_then(|width| width.parse().ok())
         .unwrap_or(WIDTH);
-    match render(input, output, width) {
+    let extra: Vec<&String> = rest.iter().skip(1).collect();
+    match render(input, output, width, &extra) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("render-png: {error}");
@@ -26,8 +27,16 @@ fn main() -> ExitCode {
     }
 }
 
-fn render(input: &str, output: &str, width: u16) -> Result<(), Box<dyn std::error::Error>> {
+fn render(
+    input: &str,
+    output: &str,
+    width: u16,
+    extra: &[&String],
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut fonts = Fonts::new();
+    for font in extra {
+        fonts.register(std::fs::read(font)?);
+    }
     let started = std::time::Instant::now();
     let document = parse_file(std::path::Path::new(input))?;
     let parsed = started.elapsed();

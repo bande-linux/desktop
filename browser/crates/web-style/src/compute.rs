@@ -36,7 +36,10 @@ struct Computer<'a> {
     decoration_color: Option<Color>,
     border_styles: [bool; 4],
     border_colors: [bool; 4],
+    border_widths: [bool; 4],
 }
+
+const MEDIUM_BORDER: f32 = 3.0;
 
 fn priority(id: LonghandId) -> u8 {
     match id {
@@ -66,6 +69,7 @@ pub(crate) fn compute(
         decoration_color: None,
         border_styles: [false; 4],
         border_colors: [false; 4],
+        border_widths: [false; 4],
     };
     for (id, value) in &winners {
         match value {
@@ -540,16 +544,20 @@ impl Computer<'_> {
                 self.reset.padding.left = self.length_percentage(&value.0)
             }
             (Id::BorderTopWidth, V::BorderWidth(value)) => {
-                self.reset.border.top = self.length_percentage(&value.0).px
+                self.reset.border.top = self.length_percentage(&value.0).px;
+                self.border_widths[0] = true;
             }
             (Id::BorderRightWidth, V::BorderWidth(value)) => {
-                self.reset.border.right = self.length_percentage(&value.0).px
+                self.reset.border.right = self.length_percentage(&value.0).px;
+                self.border_widths[1] = true;
             }
             (Id::BorderBottomWidth, V::BorderWidth(value)) => {
-                self.reset.border.bottom = self.length_percentage(&value.0).px
+                self.reset.border.bottom = self.length_percentage(&value.0).px;
+                self.border_widths[2] = true;
             }
             (Id::BorderLeftWidth, V::BorderWidth(value)) => {
-                self.reset.border.left = self.length_percentage(&value.0).px
+                self.reset.border.left = self.length_percentage(&value.0).px;
+                self.border_widths[3] = true;
             }
             (Id::BorderTopStyle, V::LineStyle(style)) => self.border_style(0, *style),
             (Id::BorderRightStyle, V::LineStyle(style)) => self.border_style(1, *style),
@@ -916,6 +924,16 @@ impl Computer<'_> {
     }
 
     fn keyword(&mut self, id: LonghandId, keyword: CssWideKeyword) {
+        let width_side = match id {
+            LonghandId::BorderTopWidth => Some(0),
+            LonghandId::BorderRightWidth => Some(1),
+            LonghandId::BorderBottomWidth => Some(2),
+            LonghandId::BorderLeftWidth => Some(3),
+            _ => None,
+        };
+        if let Some(slot) = width_side.and_then(|side| self.border_widths.get_mut(side)) {
+            *slot = matches!(keyword, CssWideKeyword::Inherit);
+        }
         let side = match id {
             LonghandId::BorderTopColor => Some(0),
             LonghandId::BorderRightColor => Some(1),
@@ -1062,6 +1080,19 @@ impl Computer<'_> {
         ] {
             if !declared {
                 *color = current;
+            }
+        }
+        for (index, width) in [
+            &mut self.reset.border.top,
+            &mut self.reset.border.right,
+            &mut self.reset.border.bottom,
+            &mut self.reset.border.left,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            if self.border_styles[index] && !self.border_widths[index] {
+                *width = MEDIUM_BORDER;
             }
         }
         for (width, visible) in [

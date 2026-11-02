@@ -2,6 +2,7 @@ pub mod accounts;
 pub mod backlight;
 pub mod captive;
 pub mod clock;
+pub mod clock_app;
 pub mod dbusmenu;
 pub mod devices;
 pub mod gtkmenu;
@@ -50,5 +51,6 @@ pub enum Update {
     Minute,
     BatteryPercentage(bool),
     ClockMark(unread::ClockMark),
+    ClockApp(clock_app::ClockApp),
     BarEdge(String),
 }

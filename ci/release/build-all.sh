@@ -22,7 +22,7 @@ echo "== bande-desktop pins its packages at $version"
 field bande-desktop Depends | grep -qF "bande-compositor (= $version)"
 field bande-desktop Recommends | grep -qF "bande-files (= $version)"
 dpkg-deb --extract "$(deb bande-desktop "$version")" "$scratch/desktop"
-grep -qx 'application/pdf=org.gnome.Papers.desktop;' "$scratch/desktop/usr/share/applications/bande-mimeapps.list"
+grep -qx 'inode/directory=org.bande.Files.desktop;' "$scratch/desktop/usr/share/applications/bande-mimeapps.list"
 
 echo "== bande-desktop brings a login, sound and the system around the desktop"
 relation() { field bande-desktop "$1" | tr ',' '\n' | sed 's/^ *//' | grep -qxF "$2"; }
@@ -32,9 +32,9 @@ for recommended in "bande-greeter (= $version)" network-manager bande-apt-source
     relation Recommends "$recommended"
 done
 
-echo "== bande-desktop recommends or suggests each default app unversioned, none built here"
-while read -r package _ wanted; do
-    relation "${wanted^}" "$package" || { echo "bande-desktop does not $wanted $package"; exit 1; }
+echo "== bande-desktop recommends each default app unversioned, none built here"
+while read -r package; do
+    relation Recommends "$package" || { echo "bande-desktop does not recommend $package"; exit 1; }
     ! grep -qxF "$package" ci/release/packages || { echo "$package is built here, not a default app"; exit 1; }
 done < <(grep -E '^[a-z0-9]' packaging/bande-desktop/default-apps)
 

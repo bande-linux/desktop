@@ -661,12 +661,14 @@ impl Parse for TextDecorationLine {
             return Ok(TextDecorationLine(0));
         }
         let mut bits = 0;
-        while let Ok(ident) = input.try_parse(|p| p.expect_ident()) {
-            let bit = Self::NAMES
+        while let Ok(bit) = input.try_parse(|p| {
+            let ident = p.expect_ident()?;
+            Self::NAMES
                 .iter()
                 .find(|(name, _)| ident.eq_ignore_ascii_case(name))
                 .map(|(_, bit)| *bit)
-                .ok_or(ParseError::Invalid)?;
+                .ok_or(ParseError::Invalid)
+        }) {
             if bits & bit != 0 {
                 return Err(ParseError::Invalid);
             }

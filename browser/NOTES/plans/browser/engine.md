@@ -120,6 +120,23 @@ breaks and spaces are flags on the shaped glyphs, so no paragraph text is kept a
 plans and shaped words are cached per font, size and direction. `tools/bench` measures the same
 stages on its generated article.
 
+## `web-css` for the cascade
+
+- **Entry points:** `parse_stylesheet(css, atoms)` gives a `Stylesheet` of `CssRule`s (style rules
+  with nested rules, `@media`, `@supports` evaluated at parse time, `@container`, `@layer`,
+  `@import`, `@font-face` descriptors as text, `@keyframes`); `@namespace` fills `namespaces`.
+  `parse_style_attribute` gives a `DeclarationBlock`; `decode_stylesheet` turns bytes into text
+  by BOM, protocol label, `@charset` and environment encoding.
+- **Properties:** `properties.rs` (crate root) is the table; `build.rs` generates `LonghandId`
+  (dense `u16`), `ShorthandId`, `PropertyId::from_name` (with aliases), a keyword enum per keyword
+  type, `PropertyValue` (one variant per value type) and the parse and serialisation dispatch.
+  A block holds `Declaration { id, value, important }` with `DeclaredValue::{Value, CssWide,
+  Unparsed}`; shorthands expand to longhands (unset parts as `CssWide(Initial)`), values with
+  `var()` stay `Unparsed` for `parse_value_str` after substitution, and custom properties sit in
+  `custom` as raw text. Lengths keep their unit; `calc()` simplifies at parse time and
+  `LengthPercentage::resolve` finishes it; `Color::resolve` gives `Rgba`.
+- **Media:** `MediaList::matches(&MediaEnvironment::screen(width, height))`.
+
 ## `web-css` selectors for the matcher
 
 `SelectorParser::parse_list` turns a prelude into a `SelectorList` of `Selector`s. Each selector's
@@ -129,9 +146,10 @@ compound to its left, and so on. Inside a compound every component must match.
   its ASCII lowercase (HTML elements in HTML documents compare `lower`); attributes likewise.
 - `Namespace(Any)` alone stands for `*`. `Namespace(Url)` or `Namespace(None)` precede the local
   name when a namespace applies.
-- `Is`, `Where`, `Not` hold lists; `&` in nested rules is already replaced by `Is(parent list)`
-  (or `:scope` at the top level). `Has` holds relative selectors whose last components are
-  `Combinator(c), RelativeAnchor`; the anchor matches only the `:has` element.
+- `Is`, `Where`, `Not` hold lists (`Arc`-shared); `&` in nested rules is already replaced by
+  `Is(parent list)` (or `:scope` at the top level), and a nested rule without `&` gets
+  `Is(parent) <descendant>` prepended, so nested rules flatten as they are.
+- `Has` holds relative selectors whose last components are `Combinator(c), RelativeAnchor`; the anchor matches only the `:has` element.
 - `Nth` has `a`, `b` and an optional `of` list; `NthSelector::matches_index` takes the 1-based index.
 - `specificity` is packed `a << 20 | b << 10 | c`; `pseudo_element` is the trailing pseudo-element
   (`WebkitUnknown` never matches); `ancestor_atoms` are up to four ids, classes and lowercase

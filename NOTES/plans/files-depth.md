@@ -29,7 +29,7 @@ Icons, list (with disclosure) and columns; Quick Look with full screen; Get Info
 Open With and default app; tabs; batch rename; Make Alias (a symlink, Kind “Alias”); Undo/Redo shared by all windows; View ▸ Sort By; Go ▸ Recent Folders;
 spring-loaded folders; Ctrl/Shift drag modifiers; Recents and search with scopes; per-folder
 view memory; status bar and path bar; hidden files; Trash with Put Back, Empty, 30-day purge
-and per-volume `.Trash-uid`; volumes with Eject and an alert (Force Eject) when a disk is busy; Compress and Extract; Open in Terminal; New
+and per-volume `.Trash-uid`; volumes with Eject and an alert (Force Eject) when a disk is busy, on the desktop too; Compress and Extract; Open in Terminal; New
 Document templates; failure alerts per item (Skip, Try Again, Skip All, Stop); a no-space
 check before copying; empty-folder and no-permission messages; Settings (General with external
 disks on the desktop, Show in Sidebar, Advanced) with hidden extensions and Last Folder for new windows;
@@ -45,4 +45,3 @@ disks on the desktop, Show in Sidebar, Advanced) with hidden extensions and Last
 5. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
    (GVfs-free SMB/SFTP mounts).
 6. Content search (file contents, not only names).
-7. The desktop's Eject still fails silently; show the same busy alert there.

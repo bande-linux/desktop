@@ -8,10 +8,11 @@ use std::rc::Rc;
 use std::thread;
 use std::time::{Instant, SystemTime};
 
+use crate::confirm::{FORCE_EJECT, eject_failed};
 use crate::{
-    Artwork, Bounds, CONFIRM_DELETE_FLAG, DesktopView, Item, Kind, Layer, Layouts, Luma, MenuApp,
-    Request, Selection, WallpaperKey, command, confirm_delete, desktop_menu, items_menu,
-    layouts_path, list, parse_layouts, save_layouts,
+    Artwork, Bounds, CONFIRM_DELETE_FLAG, DesktopView, EJECT_FAILED_FLAG, Item, Kind, Layer,
+    Layouts, Luma, MenuApp, Request, Selection, WallpaperKey, command, confirm_delete,
+    desktop_menu, items_menu, layouts_path, list, parse_layouts, save_layouts,
 };
 use accesskit::TreeUpdate;
 use bande_config::{BarEdge, Config, Wallpaper, WallpaperFit};
@@ -23,7 +24,7 @@ use bande_toolkit::{
     App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
-use bande_volumes::{eject, media_roots, mounted_volumes};
+use bande_volumes::{EjectFailure, eject, media_roots, mounted_volumes};
 use bande_wallpaper::{
     Choice, Fit, Picture, RenderError, Variant, choose, follow, render, render_cached,
 };
@@ -37,6 +38,7 @@ const SETTINGS_FOLDER: &str = "bande";
 const FILES_SETTINGS: &str = "files.conf";
 const SHOW_EXTENSIONS: &str = "show-extensions";
 const SHOW_DISKS: &str = "desktop-disks";
+const BUSY: &str = "busy";
 const PDF: &str = "application/pdf";
 const WALLPAPER_CACHE: &str = "bande/wallpapers";
 const SETTINGS_APP: &str = "org.bande.Settings";
@@ -595,7 +597,7 @@ impl DesktopSurface {
                         tracing::warn!("cannot use the clipboard: {error}");
                     }
                 }
-                Request::Eject(paths) => eject(paths, false, |_| {}),
+                Request::Eject(paths) => eject(paths, false, ask_to_force_eject),
                 Request::SetWallpaper(path) => choose(path),
                 Request::ChangeWallpaper => self.change_wallpaper(window),
                 Request::Undo => {
@@ -1034,6 +1036,39 @@ impl DesktopSurface {
         surface.view.set_folder(folder);
         Ok(surface)
     }
+}
+
+fn ask_to_force_eject(failure: EjectFailure) {
+    let name = failure.mount_point.file_name().map_or_else(
+        || failure.mount_point.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    let asked = std::env::current_exe().and_then(|program| {
+        Command::new(program)
+            .arg(EJECT_FAILED_FLAG)
+            .arg(&name)
+            .arg(if failure.busy { BUSY } else { "" })
+            .arg(&failure.message)
+            .output()
+    });
+    match asked {
+        Ok(output) if String::from_utf8_lossy(&output.stdout).trim() == FORCE_EJECT => {
+            eject(vec![failure.mount_point], true, |_| {});
+        }
+        Ok(_) => {}
+        Err(error) => tracing::warn!("cannot report that {name} was not ejected: {error}"),
+    }
+}
+
+pub fn report_eject_failure(
+    name: &str,
+    busy: &str,
+    message: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if eject_failed(name, busy == BUSY, message)? {
+        println!("{FORCE_EJECT}");
+    }
+    Ok(())
 }
 
 pub fn confirm(count: &str) -> Result<(), Box<dyn std::error::Error>> {

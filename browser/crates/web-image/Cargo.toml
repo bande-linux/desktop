@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 gif.workspace = true
 image-webp.workspace = true
+jxl-oxide.workspace = true
 png.workspace = true
 zune-core.workspace = true
 zune-jpeg.workspace = true

@@ -61,6 +61,7 @@ pub fn decode(bytes: &[u8]) -> Option<Image> {
             ..,
         ] => decode_webp(bytes),
         [b'G', b'I', b'F', b'8', ..] => decode_gif(bytes),
+        [0xFF, 0x0A, ..] | [0, 0, 0, 0x0C, b'J', b'X', b'L', b' ', ..] => decode_jxl(bytes),
         _ => None,
     }?;
     allowed(image.width, image.height).then_some(image)
@@ -137,6 +138,35 @@ fn decode_webp(bytes: &[u8]) -> Option<Image> {
             .flat_map(|&[r, g, b]| [r, g, b, 255])
             .collect()
     };
+    Some(Image::new(width, height, rgba))
+}
+
+fn decode_jxl(bytes: &[u8]) -> Option<Image> {
+    let image = jxl_oxide::JxlImage::builder().read(bytes).ok()?;
+    if !allowed(image.width(), image.height()) {
+        return None;
+    }
+    let render = image.render_frame(0).ok()?;
+    let mut stream = render.stream();
+    let (width, height, channels) = (stream.width(), stream.height(), stream.channels());
+    if !allowed(width, height) || channels == 0 {
+        return None;
+    }
+    let size = (width as usize)
+        .checked_mul(height as usize)?
+        .checked_mul(channels as usize)?;
+    let mut samples = vec![0u8; size];
+    stream.write_to_buffer(&mut samples);
+    let rgba = samples
+        .chunks_exact(channels as usize)
+        .flat_map(|pixel| match *pixel {
+            [gray] => [gray, gray, gray, u8::MAX],
+            [gray, alpha] => [gray, gray, gray, alpha],
+            [red, green, blue] => [red, green, blue, u8::MAX],
+            [red, green, blue, alpha, ..] => [red, green, blue, alpha],
+            [] => [0; 4],
+        })
+        .collect();
     Some(Image::new(width, height, rgba))
 }
 

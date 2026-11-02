@@ -2,7 +2,9 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
 use std::net::Ipv4Addr;
 
-use crate::connections::{IPV4, configured_ipv4, dns_servers, dns_value, ipv4_settings, text};
+use crate::connections::{
+    IGNORE_AUTO_DNS, IPV4, configured_ipv4, dns_override, dns_value, ipv4_settings, text,
+};
 use crate::proxy::SettingsProxyBlocking;
 use crate::{
     Addressing, CONNECTION, ConnectionSettings, ManualIpv4, NetworkManager, Result, WIRELESS,
@@ -14,7 +16,6 @@ const METERED_YES: i32 = 1;
 const METERED_UNKNOWN: i32 = 0;
 const ASSIGNED_MAC: &str = "assigned-mac-address";
 const CLONED_MAC: &str = "cloned-mac-address";
-const IGNORE_AUTO_DNS: &str = "ignore-auto-dns";
 const DNS: &str = "dns";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,15 +80,7 @@ impl KnownNetwork {
             low_data: metered == Some(METERED_YES),
             private_address: PrivateAddress::of(text(wireless, ASSIGNED_MAC).as_deref()),
             manual: configured_ipv4(settings),
-            dns: settings
-                .get(IPV4)
-                .filter(|ipv4| {
-                    ipv4.get(IGNORE_AUTO_DNS)
-                        .and_then(|value| bool::try_from(value).ok())
-                        .unwrap_or(false)
-                })
-                .map(dns_servers)
-                .unwrap_or_default(),
+            dns: dns_override(settings),
         })
     }
 }
@@ -99,7 +92,7 @@ pub struct WifiLink {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum WifiChange {
+pub enum ConnectionChange {
     AutoJoin(bool),
     LowData(bool),
     PrivateAddress(PrivateAddress),
@@ -107,7 +100,7 @@ pub enum WifiChange {
     Dns(Vec<Ipv4Addr>),
 }
 
-impl WifiChange {
+impl ConnectionChange {
     fn needs_reconnect(&self) -> bool {
         matches!(self, Self::PrivateAddress(_) | Self::Ipv4(_) | Self::Dns(_))
     }
@@ -177,16 +170,17 @@ impl NetworkManager {
         })
     }
 
-    pub fn change_wifi(&self, path: &str, change: &WifiChange) -> Result<()> {
+    pub fn change_connection(&self, path: &str, change: &ConnectionChange) -> Result<()> {
         let connection = OwnedObjectPath::try_from(path.to_owned())?;
         self.edit_connection(&connection, |settings| change.apply(settings))?;
         if !change.needs_reconnect() {
             return Ok(());
         }
-        let device_path = self.wifi_device()?;
-        let device = self.device(&device_path)?;
-        if self.active_connection_of(&device)?.as_ref() == Some(&connection) {
-            self.reactivate(&connection, &device_path)?;
+        for device_path in self.manager()?.get_devices()? {
+            let device = self.device(&device_path)?;
+            if self.active_connection_of(&device)?.as_ref() == Some(&connection) {
+                return self.reactivate(&connection, &device_path);
+            }
         }
         Ok(())
     }

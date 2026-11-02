@@ -8,7 +8,7 @@ pub use connections::{
 };
 use std::collections::HashMap;
 use std::fmt;
-pub use wifi::{KnownNetwork, PrivateAddress, WifiChange, WifiLink};
+pub use wifi::{ConnectionChange, KnownNetwork, PrivateAddress, WifiLink};
 
 use proxy::{
     AccessPointProxyBlocking, ActiveConnectionProxyBlocking, DeviceProxyBlocking,

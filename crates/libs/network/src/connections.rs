@@ -14,6 +14,7 @@ use crate::{
     NetworkManager, Result,
 };
 
+pub(crate) const IGNORE_AUTO_DNS: &str = "ignore-auto-dns";
 pub(crate) const IPV4: &str = "ipv4";
 const DEVICE_STATE_UNMANAGED: u32 = 10;
 const ACTIVE_STATE_ACTIVATING: u32 = 1;
@@ -27,6 +28,8 @@ pub struct Ethernet {
     pub connected: bool,
     pub addressing: Addressing,
     pub manual: bool,
+    pub connection: Option<String>,
+    pub dns: Vec<Ipv4Addr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -82,6 +85,18 @@ pub fn parse_dns(dns: &str) -> Option<Vec<Ipv4Addr>> {
         .map(str::parse)
         .collect::<std::result::Result<_, _>>()
         .ok()
+}
+
+pub(crate) fn dns_override(settings: &ConnectionSettings) -> Vec<Ipv4Addr> {
+    settings
+        .get(IPV4)
+        .filter(|ipv4| {
+            ipv4.get(IGNORE_AUTO_DNS)
+                .and_then(|value| bool::try_from(value).ok())
+                .unwrap_or(false)
+        })
+        .map(dns_servers)
+        .unwrap_or_default()
 }
 
 pub(crate) fn dns_servers(ipv4: &HashMap<String, OwnedValue>) -> Vec<Ipv4Addr> {
@@ -212,6 +227,8 @@ impl NetworkManager {
             connected: state == DEVICE_STATE_ACTIVATED,
             addressing: Addressing::default(),
             manual: false,
+            connection: None,
+            dns: Vec::new(),
         };
         if ethernet.connected {
             ethernet.addressing = self.addressing(&device)?;
@@ -220,6 +237,8 @@ impl NetworkManager {
             let settings: ConnectionSettings =
                 self.settings_connection(&connection)?.get_settings()?;
             ethernet.manual = configured_ipv4(&settings).is_some();
+            ethernet.dns = dns_override(&settings);
+            ethernet.connection = Some(connection.to_string());
         }
         Ok(Some(ethernet))
     }

@@ -649,7 +649,16 @@ impl SettingsView {
                         ),
                         (
                             SettingId::EthernetDns,
-                            Some(ethernet.addressing.dns.join(", ")),
+                            Some(if self.manual_ipv4 {
+                                ethernet.addressing.dns.join(", ")
+                            } else {
+                                ethernet
+                                    .dns
+                                    .iter()
+                                    .map(ToString::to_string)
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            }),
                         ),
                     ] {
                         if !self.manual_ipv4 || !self.values.contains_key(&id) {
@@ -1265,6 +1274,14 @@ impl SettingsView {
                 }
                 Intent::ManualIpv4(manual) => {
                     self.manual_ipv4 = manual;
+                    let dns = self
+                        .network
+                        .as_ref()
+                        .and_then(|network| network.ethernet.as_ref())
+                        .filter(|_| manual)
+                        .map(|ethernet| ethernet.addressing.dns.join(", "))
+                        .unwrap_or_default();
+                    self.values.insert(SettingId::EthernetDns, Value::Text(dns));
                     if !manual {
                         self.commands
                             .push(Command::Network(NetworkCommand::ConfigureEthernet(None)));
@@ -1659,6 +1676,30 @@ impl SettingsView {
             SettingId::EthernetAddress | SettingId::EthernetRouter | SettingId::EthernetDns
         ) {
             self.values.insert(id, value);
+            if !self.manual_ipv4 {
+                let path = self
+                    .network
+                    .as_ref()
+                    .and_then(|network| network.ethernet.as_ref())
+                    .and_then(|ethernet| ethernet.connection.clone());
+                let servers = match self.values.get(&SettingId::EthernetDns) {
+                    Some(Value::Text(text)) => bande_network::parse_dns(text),
+                    _ => Some(Vec::new()),
+                };
+                self.message = match (path, servers) {
+                    (Some(path), Some(servers)) if id == SettingId::EthernetDns => {
+                        self.commands
+                            .push(Command::Network(NetworkCommand::ChangeConnection(
+                                path,
+                                bande_network::ConnectionChange::Dns(servers),
+                            )));
+                        None
+                    }
+                    (_, None) => Some(L10N.tr("dns-invalid")),
+                    _ => None,
+                };
+                return;
+            }
             let text = |id| match self.values.get(&id) {
                 Some(Value::Text(text)) => text.clone(),
                 _ => String::new(),

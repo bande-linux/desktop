@@ -8,7 +8,7 @@ use std::sync::mpsc::RecvTimeoutError;
 use bande_audio::{Audio, Direction, Level, Meter};
 use bande_bluetooth::{Bluetooth, PairingPrompt, register_agent, shown_change};
 use bande_network::{
-    JoinOutcome, ManualIpv4, NetworkManager, Security, WifiChange, WifiLink, set_strength,
+    ConnectionChange, JoinOutcome, ManualIpv4, NetworkManager, Security, WifiLink, set_strength,
     strength_signal,
 };
 use zbus::blocking::{Connection, MessageIterator};
@@ -41,7 +41,7 @@ pub enum NetworkCommand {
     Join(bande_network::Network, Option<String>),
     JoinHidden(Vec<u8>, Security, Option<String>),
     Forget(Vec<u8>),
-    ChangeWifi(String, WifiChange),
+    ChangeConnection(String, ConnectionChange),
     SignIn,
     ConfigureEthernet(Option<ManualIpv4>),
     ConnectVpn(String),
@@ -394,8 +394,8 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                     Ok(None) => {}
                     Err(error) => tracing::warn!("cannot find the sign-in page: {error}"),
                 },
-                NetworkCommand::ChangeWifi(path, change) => {
-                    report(&updates, network.change_wifi(&path, &change));
+                NetworkCommand::ChangeConnection(path, change) => {
+                    report(&updates, network.change_connection(&path, &change));
                 }
                 NetworkCommand::Scan => {
                     if let Err(error) = network.scan() {

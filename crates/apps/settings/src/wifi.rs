@@ -1,4 +1,4 @@
-use bande_network::{KnownNetwork, Network, PrivateAddress, Security, WifiChange};
+use bande_network::{ConnectionChange, KnownNetwork, Network, PrivateAddress, Security};
 use bande_settings_panes::{PaneId, SettingId, Value};
 use bande_toolkit::ui::{
     Axis, Button, SecureField, SegmentedControl, Stack, TextField, Toggle, Widget,
@@ -289,11 +289,11 @@ impl SettingsView {
         label: &str,
         on: bool,
         path: &str,
-        change: fn(bool) -> WifiChange,
+        change: fn(bool) -> ConnectionChange,
     ) -> Box<dyn Widget> {
         let path = path.to_owned();
         let set = intent(&self.intents, move |on: bool| {
-            Intent::Network(NetworkCommand::ChangeWifi(path.clone(), change(on)))
+            Intent::Network(NetworkCommand::ChangeConnection(path.clone(), change(on)))
         });
         let toggle = Toggle::new(&L10N.tr(label), on, set);
         self.anchors
@@ -330,13 +330,13 @@ impl SettingsView {
                 "auto-join",
                 known.auto_join,
                 &known.path,
-                WifiChange::AutoJoin,
+                ConnectionChange::AutoJoin,
             ),
             self.wifi_switch(
                 "low-data-mode",
                 known.low_data,
                 &known.path,
-                WifiChange::LowData,
+                ConnectionChange::LowData,
             ),
         ];
         let labels: Vec<String> = PRIVATE_ADDRESS
@@ -351,9 +351,9 @@ impl SettingsView {
             let choice = PRIVATE_ADDRESS
                 .get(index)
                 .map_or(PrivateAddress::Off, |(choice, _)| *choice);
-            Intent::Network(NetworkCommand::ChangeWifi(
+            Intent::Network(NetworkCommand::ChangeConnection(
                 path.clone(),
-                WifiChange::PrivateAddress(choice),
+                ConnectionChange::PrivateAddress(choice),
             ))
         });
         let segmented =
@@ -508,18 +508,17 @@ impl SettingsView {
                 &text(SettingId::WifiRouter),
                 &text(SettingId::WifiDns),
             )
-            .map(|manual| WifiChange::Ipv4(Some(manual)))
+            .map(|manual| ConnectionChange::Ipv4(Some(manual)))
         } else if id == SettingId::WifiDns {
-            bande_network::parse_dns(&text(SettingId::WifiDns)).map(WifiChange::Dns)
+            bande_network::parse_dns(&text(SettingId::WifiDns)).map(ConnectionChange::Dns)
         } else {
             return;
         };
         self.message = match change {
             Some(change) => {
-                self.commands
-                    .push(crate::follow::Command::Network(NetworkCommand::ChangeWifi(
-                        path, change,
-                    )));
+                self.commands.push(crate::follow::Command::Network(
+                    NetworkCommand::ChangeConnection(path, change),
+                ));
                 None
             }
             None => Some(L10N.tr(if self.wifi_manual {
@@ -551,11 +550,9 @@ impl SettingsView {
             .and_then(|wifi| wifi.known.iter().find(|known| known.ssid == *ssid))
             .filter(|known| known.manual.is_some())
         {
-            self.commands
-                .push(crate::follow::Command::Network(NetworkCommand::ChangeWifi(
-                    known.path.clone(),
-                    WifiChange::Ipv4(None),
-                )));
+            self.commands.push(crate::follow::Command::Network(
+                NetworkCommand::ChangeConnection(known.path.clone(), ConnectionChange::Ipv4(None)),
+            ));
         }
     }
 

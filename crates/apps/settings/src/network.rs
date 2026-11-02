@@ -101,6 +101,12 @@ impl SettingsView {
             for (id, label, placeholder) in MANUAL_FIELDS {
                 rows.push(self.manual_field(id, label, placeholder));
             }
+        } else if ethernet.connection.is_some() {
+            rows.push(self.manual_field(
+                SettingId::EthernetDns,
+                "dns-servers",
+                "dns-automatic-placeholder",
+            ));
         }
         rows
     }

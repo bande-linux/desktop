@@ -158,7 +158,13 @@ writes a hex value, a corner radius or a font name of its own.
     opens the window menu. The header and its buttons are published to screen readers above the app's tree. Server-side frames
     for third-party apps (`compositor/src/frame.rs`) draw the same header and pill from
     `title_bar.rs`, 40 pt high, and redraw when Alt is pressed or released so the zoom glyph
-    follows it. When the only Vulkan device renders on the CPU (lavapipe or
+    follows it.
+  - **Resizing from the app.** As `NSWindow setFrame:display:animate:`,
+    `Window::resize_content(size, Sizing)` gives a toplevel a new content size and makes it
+    `Sizing::Fixed` (minimum and maximum size equal, no resize band or zoom) or
+    `Sizing::Resizable`. A floating window takes the size in its next frame; a zoomed, tiled or
+    full-screen one keeps the size it was given (a fixed one is then released to floating by the
+    compositor). A fixed floating window ignores configure sizes, so its own size wins. When the only Vulkan device renders on the CPU (lavapipe or
   llvmpipe, as in VMs) every window stays on `CpuRenderer` and presents `wl_shm` buffers with
   only the changed regions damaged; `BANDE_RENDERER=gpu` or `=cpu` overrides the choice. A
   window whose background is opaque declares its window rectangle as its opaque region, so
@@ -222,7 +228,11 @@ writes a hex value, a corner radius or a font name of its own.
   glides to its new rows on `quick`. `Table::set_headings` adds group headings (semibold
   `ink` over a `hairline`, one row tall) above the rows that start each group, as Files' Use
   Groups does, and level 2 heading nodes before those rows so screen readers announce each
-  group; a selection run never spans a heading. Scroll bars are a 6 pt `ink3` knob that fades.
+  group; a selection run never spans a heading. Scroll bars are macOS overlay scrollers
+  (`Scrollbar`, also usable on its own by views that scroll themselves, such as Terminal): a
+  6 pt `ink3` knob shown while scrolling or when the pointer is in the right 14 pt, widening to
+  10 pt over a faint lane on hover; drag the knob, click the lane to page; it fades 0.9 s
+  after the last scroll on one deadline, with no wake-ups once gone.
 - **Graphs**. `Graph::new(label, kind, span)` plots the last `span` samples of each `Series`
   (values 0–1, `None` for a gap; the newest at the right) in a `well` mixed toward the sheet,
   radius 6, with three `hairline` grid lines. `GraphKind::Line` strokes each series 1.5 pt,
@@ -261,7 +271,9 @@ writes a hex value, a corner radius or a font name of its own.
   under it, and a click while composing keeps the text and resets the input method. Text is
   published to screen readers as text runs with the caret and selection, which they can also
   set. `TextView` wraps, scrolls with a `ScrollState`, keeps the caret in view and can be
-  read-only. `TextView::document` is the editor of a document app: no change callback (the app
+  read-only; revealing the caret lays out the paragraphs it scrolls to and follows again, so a
+  far jump in a long wrapped document lands on the caret even though their heights were
+  estimates. `TextView::document` is the editor of a document app: no change callback (the app
   compares `revision`), a font (`set_font`: monospace or proportional, any size), a page width
   that wraps to a centred column instead of the view (`set_page_width`), and `insert` and
   `select` that scroll to the result. A tab is laid out as a space widened to the next stop every

@@ -21,6 +21,7 @@ pub struct Window {
     pub(crate) toplevel: ToplevelSurface,
     pub(crate) location: Point<i32, Logical>,
     pub(crate) size: Option<Size<i32, Logical>>,
+    committed_size: Option<Size<i32, Logical>>,
     pub(crate) foreign: Option<ForeignToplevelHandle>,
     pub(crate) restore: Option<Rectangle<i32, Logical>>,
     pub(crate) pending_location: Option<(Serial, Point<i32, Logical>)>,
@@ -100,6 +101,7 @@ impl Window {
             toplevel,
             location: Point::default(),
             size: None,
+            committed_size: None,
             foreign: None,
             restore: None,
             pending_location: None,
@@ -137,6 +139,11 @@ impl Window {
             self.location,
             (geometry.size.w, geometry.size.h + self.title_bar_height()).into(),
         ))
+    }
+
+    pub(crate) fn committed_frame(&self) -> Option<Rectangle<i32, Logical>> {
+        self.committed_size
+            .map(|size| Rectangle::new(self.location, size))
     }
 
     pub fn is_minimized(&self) -> bool {
@@ -242,6 +249,21 @@ impl Window {
         min.w > 0 && min.h > 0 && min == max
     }
 
+    pub(crate) fn chose_own_size(&self) -> bool {
+        let floating = self.tile.is_none()
+            && self.resize.is_none()
+            && !self.has_state(xdg_toplevel::State::Maximized)
+            && !self.has_state(xdg_toplevel::State::Fullscreen);
+        floating
+            && match self.toplevel.with_pending_state(|pending| pending.size) {
+                None => true,
+                Some(requested) => {
+                    self.toplevel.current_state().size == Some(requested)
+                        && self.local_geometry().size != requested
+                }
+            }
+    }
+
     pub(crate) fn clamp_size(&self, outer: Size<i32, Logical>) -> Size<i32, Logical> {
         let (min, max) = self.size_limits();
         let bar = self.title_bar_height();
@@ -303,6 +325,9 @@ impl State {
         }
         let mapped = self.windows[index].size.is_some();
         self.windows[index].size = size;
+        let before = self.windows[index].committed_frame();
+        self.windows[index].committed_size =
+            self.windows[index].geometry().map(|geometry| geometry.size);
         let over_parent = if mapped {
             None
         } else {
@@ -337,6 +362,14 @@ impl State {
                 }
             }
         }
+        if size.is_some() {
+            if self.windows[index].chose_own_size() {
+                self.follow_own_size(index, before);
+            }
+            if self.windows[index].fixed_size() {
+                self.release_placement(index);
+            }
+        }
         if !mapped && size.is_some() {
             self.assign_new_window(index);
             self.open_window(index);
@@ -348,6 +381,39 @@ impl State {
             self.withdraw_toplevel(&surface);
         }
         self.after_window_commit(&surface, mapped, size.is_some());
+    }
+
+    fn follow_own_size(&mut self, index: usize, before: Option<Rectangle<i32, Logical>>) {
+        self.windows[index].request_size(None);
+        let (Some(before), Some(after)) = (before, self.windows[index].geometry()) else {
+            return;
+        };
+        if before.size == after.size {
+            return;
+        }
+        let area = self.usable_area(self.screen_of(&self.windows[index]));
+        if area.contains_rect(before) {
+            self.windows[index].location = crate::recall::clamp_into(after, area).loc;
+        }
+        self.animate_window(index, Spring::STANDARD, Some(Look::shown(before.to_f64())));
+    }
+
+    fn release_placement(&mut self, index: usize) {
+        let window = &self.windows[index];
+        let surface = window.surface().clone();
+        let (maximized, fullscreen) = window.toplevel.with_pending_state(|pending| {
+            (
+                pending.states.contains(xdg_toplevel::State::Maximized),
+                pending.states.contains(xdg_toplevel::State::Fullscreen),
+            )
+        });
+        if fullscreen {
+            self.unfullscreen(&surface);
+        } else if maximized {
+            self.unmaximize(&surface);
+        } else {
+            self.untile(index);
+        }
     }
 
     pub(crate) fn sync_activated(&mut self) {

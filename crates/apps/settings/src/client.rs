@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use bande_config::{
-    ArrangedDisplay, DisplaySettings, FocusScheduleValue, NightLightValue, Placement, Rotation,
-    SearchCategory,
+    ArrangedDisplay, DisplaySettings, FocusScheduleValue, HotCornersValue, NightLightValue,
+    Placement, Rotation, SearchCategory,
 };
 use bande_datetime::DateFormats;
 use bande_notify::client::NotificationCenter;
@@ -30,6 +30,10 @@ pub trait Config {
     fn tinted_frame(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_tinted_frame(&self, tinted: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn lock_message(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_lock_message(&self, message: &str) -> zbus::Result<()>;
     #[zbus(property)]
     fn reopen_apps(&self) -> zbus::Result<bool>;
     #[zbus(property)]
@@ -74,6 +78,10 @@ pub trait Config {
     fn text_size(&self) -> zbus::Result<u32>;
     #[zbus(property)]
     fn set_text_size(&self, percent: u32) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn hot_corners(&self) -> zbus::Result<HotCornersValue>;
+    #[zbus(property)]
+    fn set_hot_corners(&self, value: HotCornersValue) -> zbus::Result<()>;
     #[zbus(property)]
     fn focus_schedule(&self) -> zbus::Result<FocusScheduleValue>;
     #[zbus(property)]
@@ -285,7 +293,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 70] = [
+pub const CONFIG_SETTINGS: [SettingId; 75] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -300,6 +308,10 @@ pub const CONFIG_SETTINGS: [SettingId; 70] = [
     SettingId::NightLight,
     SettingId::NightSchedule,
     SettingId::FocusScheduled,
+    SettingId::HotCornerTopLeft,
+    SettingId::HotCornerTopRight,
+    SettingId::HotCornerBottomLeft,
+    SettingId::HotCornerBottomRight,
     SettingId::FocusFrom,
     SettingId::FocusTo,
     SettingId::NightFrom,
@@ -312,6 +324,7 @@ pub const CONFIG_SETTINGS: [SettingId; 70] = [
     SettingId::Accent,
     SettingId::TintedFrame,
     SettingId::ReopenApps,
+    SettingId::LockMessage,
     SettingId::ReopenAfterCrash,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
@@ -468,6 +481,12 @@ impl SettingsClient {
         )
     }
 
+    fn change_hot_corners(&self, change: impl FnOnce(&mut HotCornersValue)) -> zbus::Result<()> {
+        let mut corners = self.config.hot_corners()?;
+        change(&mut corners);
+        self.config.set_hot_corners(corners)
+    }
+
     fn change_focus_schedule(
         &self,
         change: impl FnOnce(&mut FocusScheduleValue),
@@ -496,6 +515,10 @@ impl SettingsClient {
             SettingId::NightSchedule => Value::Keyword(self.config.night_light()?.1),
             SettingId::NightFrom => Value::Text(self.config.night_light()?.2),
             SettingId::FocusScheduled => Value::Flag(self.config.focus_schedule()?.0),
+            SettingId::HotCornerTopLeft => Value::Keyword(self.config.hot_corners()?.0),
+            SettingId::HotCornerTopRight => Value::Keyword(self.config.hot_corners()?.1),
+            SettingId::HotCornerBottomLeft => Value::Keyword(self.config.hot_corners()?.2),
+            SettingId::HotCornerBottomRight => Value::Keyword(self.config.hot_corners()?.3),
             SettingId::FocusFrom => Value::Text(self.config.focus_schedule()?.1),
             SettingId::FocusTo => Value::Text(self.config.focus_schedule()?.2),
             SettingId::NightTo => Value::Text(self.config.night_light()?.3),
@@ -516,6 +539,7 @@ impl SettingsClient {
             SettingId::Accent => Value::Keyword(self.config.accent()?),
             SettingId::TintedFrame => Value::Flag(self.config.tinted_frame()?),
             SettingId::ReopenApps => Value::Flag(self.config.reopen_apps()?),
+            SettingId::LockMessage => Value::Text(self.config.lock_message()?),
             SettingId::ReopenAfterCrash => Value::Flag(self.config.reopen_apps_after_crash()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
@@ -604,6 +628,7 @@ impl SettingsClient {
             (SettingId::Accent, Value::Keyword(keyword)) => self.config.set_accent(keyword),
             (SettingId::TintedFrame, Value::Flag(tinted)) => self.config.set_tinted_frame(*tinted),
             (SettingId::ReopenApps, Value::Flag(on)) => self.config.set_reopen_apps(*on),
+            (SettingId::LockMessage, Value::Text(message)) => self.config.set_lock_message(message),
             (SettingId::ReopenAfterCrash, Value::Flag(on)) => {
                 self.config.set_reopen_apps_after_crash(*on)
             }
@@ -643,6 +668,18 @@ impl SettingsClient {
             }
             (SettingId::NightSchedule, Value::Keyword(schedule)) => {
                 self.change_night_light(|night| schedule.clone_into(&mut night.1))
+            }
+            (SettingId::HotCornerTopLeft, Value::Keyword(action)) => {
+                self.change_hot_corners(|corners| action.clone_into(&mut corners.0))
+            }
+            (SettingId::HotCornerTopRight, Value::Keyword(action)) => {
+                self.change_hot_corners(|corners| action.clone_into(&mut corners.1))
+            }
+            (SettingId::HotCornerBottomLeft, Value::Keyword(action)) => {
+                self.change_hot_corners(|corners| action.clone_into(&mut corners.2))
+            }
+            (SettingId::HotCornerBottomRight, Value::Keyword(action)) => {
+                self.change_hot_corners(|corners| action.clone_into(&mut corners.3))
             }
             (SettingId::FocusScheduled, Value::Flag(on)) => {
                 self.change_focus_schedule(|schedule| schedule.0 = *on)

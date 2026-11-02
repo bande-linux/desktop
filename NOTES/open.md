@@ -94,6 +94,14 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   returns (`fit_to_usable_areas` refits on every layer commit and destroy, so the cause is
   elsewhere; reproduce first).
 - Notifications on several displays (banners follow the decision above).
+- Idle wake-ups left (`bande-idle`, 2026-11-02): Activity Monitor 6–8/s also while minimised and
+  locked (apps repo; its 2 s sampling should stop off screen); Settings 1.3/s with its window open.
+- Blocking work on shell UI threads: the desktop's `relist` (`read_dir` of Desktop on every
+  watched change), the screenshot engine's `recv()` without timeout, Control Center artwork
+  decoding and app-icon lookup on player updates, the launcher's `recently-used.xbel` read on
+  each open.
+- Look (for the owner): the en-US taskbar day line reads "PM · 25 Wed" (ICU's short day order;
+  macOS shows "Wed 25"); decide the day format for the two-line clock.
 - Frame clock: predict with a high percentile instead of the maximum of the last 16 frames.
 - `bande-render`: `VK_EXT_host_image_copy` to copy shm buffers without staging.
 - PipeWire 1.4.2 ignores a Props change on a suspended null sink (report upstream); per-device

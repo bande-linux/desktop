@@ -471,14 +471,30 @@ impl SettingsView {
         }
         let before = self.outline();
         let mut shown = false;
+        let mut answered = false;
         for update in changes {
             shown |= self.shows(&update);
+            answered |= matches!(update, Update::Joined(..) | Update::Password(_));
             self.take(update);
         }
         self.refresh_hits();
-        if shown || self.outline() != before {
+        if answered || ((shown || self.outline() != before) && !self.typing_secret()) {
             self.invalidate();
         }
+    }
+
+    fn typing_secret(&self) -> bool {
+        let Some(focus) = self.ui.focus() else {
+            return false;
+        };
+        self.anchors.iter().any(|(anchor, id)| {
+            *id == focus
+                && match anchor {
+                    Anchor::Password => true,
+                    Anchor::Item(item) => item.starts_with("password-"),
+                    _ => false,
+                }
+        })
     }
 
     fn outline(&self) -> (PaneId, Vec<PaneId>, Vec<bool>, Option<String>) {
@@ -546,6 +562,13 @@ impl SettingsView {
             ),
             Update::Software(_) => (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates]),
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
+            Update::Printers(_) | Update::NearbyPrinters(_) | Update::PrinterAdded(..) => (
+                Some(PaneId::Printers),
+                &[SettingId::Printers, SettingId::NearbyPrinters],
+            ),
+            Update::Accounts(_) | Update::Password(_) => {
+                (Some(PaneId::Users), &[SettingId::Accounts])
+            }
             _ => return true,
         };
         let feeds = |setting: &Setting| {
@@ -801,6 +824,7 @@ impl SettingsView {
             PaneId::Appearance
             | PaneId::Accessibility
             | PaneId::Bar
+            | PaneId::HotCorners
             | PaneId::Search
             | PaneId::Keyboard
             | PaneId::KeyboardShortcuts
@@ -1654,6 +1678,7 @@ impl SettingsView {
                     | SettingId::EthernetDns
                     | SettingId::WifiRouter
                     | SettingId::WifiDns
+                    | SettingId::LockMessage
             );
             if clearable || !text.is_empty() {
                 self.change(id, Value::Text(text));

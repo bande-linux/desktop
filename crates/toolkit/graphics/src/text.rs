@@ -463,7 +463,11 @@ impl PartialEq for GlyphRun {
 
 impl PartialEq for Paragraph {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.layout, &other.layout) || self.glyph_runs() == other.glyph_runs()
+        Arc::ptr_eq(&self.layout, &other.layout)
+            || (self.width() == other.width()
+                && self.height() == other.height()
+                && self.line_count() == other.line_count()
+                && self.glyph_runs() == other.glyph_runs())
     }
 }
 

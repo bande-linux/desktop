@@ -18,6 +18,7 @@ use xdg_desktop_portal_bande::inhibit::Inhibit;
 use xdg_desktop_portal_bande::notification::Notification;
 use xdg_desktop_portal_bande::screencast::{ScreenCast, close_sessions_streaming};
 use xdg_desktop_portal_bande::screenshot::Screenshot;
+use xdg_desktop_portal_bande::secret::Secret;
 use xdg_desktop_portal_bande::settings::{CursorSettings, Settings};
 use xdg_desktop_portal_bande::wallpaper::{BACKGROUNDS, Wallpaper};
 use xdg_desktop_portal_bande::{BUS_NAME, OBJECT_PATH};
@@ -78,6 +79,12 @@ fn serve() -> zbus::Result<Connection> {
         )?;
         server.at(OBJECT_PATH, AppChooser::new(dialogs.clone()))?;
         server.at(OBJECT_PATH, Email)?;
+        server.at(
+            OBJECT_PATH,
+            Secret {
+                session: Connection::session()?,
+            },
+        )?;
         server.at(
             OBJECT_PATH,
             Account {

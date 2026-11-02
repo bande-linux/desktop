@@ -5934,8 +5934,10 @@ dependencies = [
  "blocking",
  "jiff",
  "rustix 1.1.6",
+ "serde",
  "tracing",
  "zbus",
+ "zeroize",
 ]
 
 [[package]]

@@ -13,6 +13,7 @@ pub mod notification;
 pub mod request;
 pub mod screencast;
 pub mod screenshot;
+pub mod secret;
 pub mod settings;
 pub mod wallpaper;
 

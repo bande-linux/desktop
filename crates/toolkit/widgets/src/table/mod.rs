@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role, SortDirection};
-use bande_graphics::{Cut, Item, Paragraph, Point, Rect, Shape, TextRole, TextStyle};
+use bande_graphics::{Color, Cut, Item, Paragraph, Point, Rect, Shape, TextRole, TextStyle};
 
 pub use self::model::{Cell, Column, Row, Sort};
 use self::model::{Line, flatten};
@@ -94,6 +94,7 @@ pub struct Table {
     glide: Option<Glide>,
     headings: Vec<(usize, String)>,
     heading_texts: Vec<Paragraph>,
+    heading_style: Option<(Color, u32)>,
 }
 
 struct Glide {
@@ -144,6 +145,7 @@ impl Table {
             glide: None,
             headings: Vec::new(),
             heading_texts: Vec::new(),
+            heading_style: None,
         }
     }
 
@@ -1184,9 +1186,11 @@ impl Widget for Table {
             .retain(|_, turn| (cx.sample(turn) - turn.target()).abs() > f32::EPSILON);
         let (first, last) = self.visible_rows(cx);
         self.prepare_texts(cx, first, last);
-        if self.heading_texts.len() != self.headings.len() {
+        let width = (self.frame.width - 2.0 * CELL_PADDING).max(0.0);
+        let heading_style = Some((cx.palette.ink, width.to_bits()));
+        if self.heading_texts.len() != self.headings.len() || self.heading_style != heading_style {
+            self.heading_style = heading_style;
             let style = TextStyle::new(13.0, cx.palette.ink).weight(TextStyle::SEMIBOLD);
-            let width = (self.frame.width - 2.0 * CELL_PADDING).max(0.0);
             self.heading_texts = self
                 .headings
                 .iter()

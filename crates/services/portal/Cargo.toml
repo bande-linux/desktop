@@ -37,8 +37,9 @@ config.kdl, so GTK, libadwaita and Qt apps follow them), the Bande Open \
 and Save dialogs, Open With for links and files, permission questions, \
 screenshots and screen sharing, the desktop picture, notifications \
 through the Bande notification center, keeping the screen or the \
-computer awake, and writing email in the default mail app. No GTK or \
-GNOME backend is needed."""
+computer awake, writing email in the default mail app, running in the \
+background, adding web apps to Applications and sharing the account's \
+name and picture. No GTK or GNOME backend is needed."""
 assets = [
     ["target/release/xdg-desktop-portal-bande", "usr/libexec/", "755"],
     ["data/xdg-desktop-portal-bande.service", "usr/lib/systemd/user/", "644"],

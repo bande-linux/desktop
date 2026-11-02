@@ -1,6 +1,6 @@
 [package]
 name = "bande-file-chooser"
-description = "Bande Open and Save dialogs for the xdg-desktop-portal FileChooser"
+description = "Bande dialogs for xdg-desktop-portal-bande: Open and Save, Open With, permissions"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -26,11 +26,12 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, fonts-inter"
 extended-description = """\
-The Open and Save dialogs of the Bande desktop, shown by \
-xdg-desktop-portal-bande for every app that asks the FileChooser portal: \
-favourite places and volumes in a sidebar, a path bar, a sortable list \
+The dialogs of xdg-desktop-portal-bande: the Bande Open and Save dialogs \
+(favourite places and volumes in a sidebar, a path bar, a sortable list \
 with type-to-jump, file type filters, New Folder when saving, and the last \
-folder remembered for each app."""
+folder remembered for each app), Open With for links and files, permission \
+questions, adding an app or web app to Applications, sharing the account's \
+name and picture, and setting the desktop picture."""
 assets = [
     ["target/release/bande-file-chooser", "usr/libexec/", "755"],
 ]

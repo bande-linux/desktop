@@ -17,18 +17,19 @@ Depends: bande-compositor (= ${binary:Version}),
          bande-shell (= ${binary:Version}),
          bande-lock (= ${binary:Version}),
          xdg-desktop-portal-bande (= ${binary:Version}),
-         xdg-desktop-portal,
          dbus-user-session,
          default-logind | logind,
          libpam-systemd,
          fonts-noto-core,
          fonts-noto-cjk,
          bande-greeter (= ${binary:Version}) | x-display-manager,
-         pipewire-audio,
+         pipewire,
+         wireplumber,
+         pipewire-pulse,
+         libspa-0.2-bluetooth,
          ${misc:Depends}
 Recommends: ${bande:Recommends},
             bande-greeter (= ${binary:Version}),
-            network-manager,
             bande-apt-source,
             bande-screenshot (= ${binary:Version}),
             bande-files (= ${binary:Version}),
@@ -37,21 +38,9 @@ Recommends: ${bande:Recommends},
             bande-automount (= ${binary:Version}),
             bande-file-chooser (= ${binary:Version}),
             bande-polkit (= ${binary:Version}),
-            packagekit,
-            needrestart,
-            appstream,
             apt-config-icons-hidpi,
             gnome-keyring,
             libpam-gnome-keyring,
-            qt6-xdgdesktopportal-platformtheme,
-            fonts-inter,
-            fonts-manrope,
-            fonts-jetbrains-mono,
-            cups,
-            xdg-user-dirs,
-            upower,
-            udisks2,
-            at-spi2-core,
             systemd-oomd,
             systemd-zram-generator
 Description: Bande desktop environment
@@ -63,11 +52,10 @@ Description: Bande desktop environment
  window comes along anyway, and debconf asks which display manager to
  start; "dpkg-reconfigure greetd" asks again later. Sound runs on PipeWire.
  .
- It recommends NetworkManager, the Bande APT repository, through which
- the system follows every Bande release, the Bande apps Terminal, Software,
- Package Installer and Activity Monitor, an unlocked keyring for the
- passwords apps keep, fallback fonts for every script and the print
- service. Other apps, such as a browser, come from Software.
+ It recommends the Bande APT repository, through which the system follows
+ every Bande release, every Bande app, and an unlocked keyring for the
+ passwords apps keep. Other apps, such as a browser, and printing come
+ from Software and Settings.
  .
  So that running out of memory never freezes the computer, it recommends
  compressed swap in memory (zram, sized like Fedora's and compressed with
@@ -79,7 +67,7 @@ Description: Bande desktop environment
  screen stays responsive while apps thrash, and caps all apps together at
  a quarter of the system's task limit.
  .
- Updates install while the computer runs. needrestart, which it
- recommends, restarts the system services an update replaced, except the
- login manager, the buses, logind, polkit and PackageKit, without asking;
- Software Update in Settings handles the session and the apps.
+ Updates install while the computer runs. After each dpkg run, it restarts
+ the system services that still run replaced code, except the login
+ manager, the buses, logind, polkit, PackageKit and networking; Software
+ Update in Settings handles the session and the apps.

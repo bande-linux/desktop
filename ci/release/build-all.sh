@@ -27,8 +27,10 @@ grep -qx 'inode/directory=org.bande.Files.desktop;' "$scratch/desktop/usr/share/
 echo "== bande-desktop brings a login, sound and the system around the desktop"
 relation() { field bande-desktop "$1" | tr ',' '\n' | sed 's/^ *//' | grep -qxF "$2"; }
 relation Depends "bande-greeter (= $version) | x-display-manager"
-relation Depends pipewire-audio
-for recommended in "bande-greeter (= $version)" network-manager bande-apt-source systemd-zram-generator; do
+for depended in pipewire wireplumber pipewire-pulse; do
+    relation Depends "$depended"
+done
+for recommended in "bande-greeter (= $version)" bande-apt-source systemd-zram-generator; do
     relation Recommends "$recommended"
 done
 

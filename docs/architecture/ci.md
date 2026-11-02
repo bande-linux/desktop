@@ -56,8 +56,8 @@ ci/release/build-all.sh
   headless. The job uploads `bande-debs-<arch>`.
 - `deb-all`: `ci/release/build-all.sh` builds the architecture-independent meta-package
   `bande-desktop`, checks that it pins its packages at the build's version, that it depends on
-  `bande-greeter | x-display-manager` and `pipewire-audio` and recommends `bande-greeter`,
-  `network-manager`, `bande-apt-source` and `systemd-zram-generator`, and lints it with
+  `bande-greeter | x-display-manager`, `pipewire`, `wireplumber` and `pipewire-pulse` and recommends
+  `bande-greeter`, `bande-apt-source` and `systemd-zram-generator`, and lints it with
   `lintian`. It uploads
   `bande-debs-all`. The APT source and keyring packages are built by the APT repository
   itself.

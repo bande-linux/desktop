@@ -11,7 +11,7 @@ apt-get update -qq
 
 echo "== bande-desktop alone brings a login window and sound"
 apt-get install -y -q --no-install-recommends bande-desktop < /dev/null
-for package in bande-greeter greetd pipewire-audio wireplumber; do
+for package in bande-greeter greetd pipewire wireplumber pipewire-pulse; do
     [ "$(dpkg-query -W -f '${db:Status-Status}' "$package")" = installed ] || { echo "$package is missing"; exit 1; }
 done
 

@@ -1,0 +1,19 @@
+#!/bin/sh
+set -u
+[ -d /run/systemd/system ] || exit 0
+! systemd-detect-virt --quiet --chroot || exit 0
+for process in /proc/[0-9]*; do
+    grep -qE '^[^ ]+ ..x. [^ ]+ [^ ]+ [^ ]+ +/(usr|opt)/.* \(deleted\)$' "$process/maps" 2>/dev/null || continue
+    sed -n 's|^0::/system\.slice/\(.*/\)\{0,1\}\([^/]*\.service\)$|\2|p' "$process/cgroup" 2>/dev/null
+done | sort -u | while read -r unit; do
+    case $unit in
+    dbus*.service | greetd.service | display-manager.service | gdm*.service | sddm.service | lightdm.service | \
+        systemd-logind.service | elogind.service | user@*.service | getty@*.service | serial-getty@*.service | \
+        polkit.service | packagekit*.service | apt-daily*.service | unattended-upgrades.service | \
+        NetworkManager*.service | ModemManager.service | wpa_supplicant*.service | iwd.service | \
+        bluetooth.service | emergency.service | rescue.service | docker.service | containerd.service | \
+        libvirt*.service | lxc*.service) ;;
+    *) systemctl try-restart --no-block "$unit" ;;
+    esac
+done
+exit 0

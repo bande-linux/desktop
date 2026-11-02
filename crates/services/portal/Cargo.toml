@@ -29,6 +29,7 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, xdg-desktop-portal (>= 1.18), default-dbus-session-bus | dbus-session-bus"
 recommends = "bande-config, bande-file-chooser, bande-screenshot, xdg-desktop-portal-gtk"
+provides = "xdg-desktop-portal-backend"
 extended-description = """\
 Implements xdg-desktop-portal's Settings, FileChooser, Screenshot and \
 ScreenCast backends for the Bande desktop: the colour scheme, accent \

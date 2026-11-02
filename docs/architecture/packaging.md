@@ -25,19 +25,17 @@ profiles. Sizes are in [performance.md](performance.md).
   `metapackages`): the one package that installs a complete Bande system, the way `gnome-core`
   or `kde-plasma-desktop` do.
   It depends on the compositor, the core session services, the shell, the lock
-  screen and the portal backend at the same version, and on `xdg-desktop-portal`,
-  `dbus-user-session`, logind and `libpam-systemd`, on `pipewire-audio`, and on
-  `bande-greeter | x-display-manager`, so there is always a way to log in: the Bande login
-  window under greetd, or the display manager the system already has. It recommends
-  `bande-greeter` anyway (greetd then asks which display manager to start), `network-manager`,
-  `bande-apt-source`, the screenshot
-  tool, Files, Settings, tray and automount services, `gnome-keyring` with
-  `libpam-gnome-keyring`, Qt's portal platform theme (so Qt apps follow dark mode), `fonts-inter`,
-  `xdg-user-dirs`, `upower` and `udisks2`, all of them built here at the same version. It also
-  recommends, unversioned, the default apps listed in `packaging/bande-desktop/default-apps`:
-  Terminal, Activity Monitor, Software, the Package Installer and Archive Utility from
-  [bande-linux/apps](https://github.com/bande-linux/apps), which are released on their own.
-  It recommends no apps from Debian; a browser, viewers and editors come from Software.
+  screen and the portal backend at the same version, on `dbus-user-session`, logind and
+  `libpam-systemd`, on PipeWire, and on `bande-greeter | x-display-manager`, so there is always
+  a way to log in: the Bande login window under greetd, or the display manager the system
+  already has. It recommends `bande-greeter` anyway (greetd then asks which display manager to
+  start), `bande-apt-source`, the screenshot tool, Files, Settings, the tray, automount, file
+  chooser and polkit agent, all built here at the same version, and the few Debian packages in
+  [Runtime stack](#runtime-stack). It also recommends, unversioned, every Bande app, listed in
+  `packaging/bande-desktop/default-apps`: an app built in
+  [bande-linux/apps](https://github.com/bande-linux/apps) is added there when it gets its first
+  APT release. It recommends no apps from Debian; a browser comes from Software, and printing
+  from Settings ▸ Printers.
   `debian/default-apps.sh` turns that file into the `${bande:Recommends}` substitution variable
   at build time, so any default app can be removed or replaced. It installs
   `/usr/share/applications/bande-mimeapps.list`, read only in a Bande session, which opens
@@ -63,16 +61,49 @@ profiles. Sizes are in [performance.md](performance.md).
 
 The packages pull in the runtime stack the architecture relies on:
 
-- `bande-desktop` depends on `fonts-noto-core` and `fonts-noto-cjk`, the fallback faces
-  for scripts Inter does not cover (so an image built without recommends still has them),
-  and recommends `cups` for printing and `needrestart`, which restarts replaced system services
-  after a live update (`/etc/needrestart/conf.d/bande.conf`); `bande-settings` depends on `locales`, so localed can
+Each Debian package is declared by the Bande package that uses it, and only when a Bande
+component uses it at runtime; nothing a Bande component replaces comes along, directly or through
+another package's recommends. `bande-desktop` itself keeps:
+
+- `dbus-user-session`: the session bus every Bande service is activated on, under the user manager;
+- `default-logind | logind`, `libpam-systemd`: the compositor's seat and session;
+- `fonts-noto-core`, `fonts-noto-cjk`: the fallback faces for scripts Inter does not cover;
+- `pipewire`, `wireplumber`: the sound service, screen capture and recording;
+- `pipewire-pulse`: apps that play through PulseAudio (the session drop-ins start it);
+- `libspa-0.2-bluetooth`: Bluetooth headphones, which the shell's Bluetooth menu connects;
+- `apt-config-icons-hidpi`: the AppStream icons Software shows, at 2×;
+- `gnome-keyring`, `libpam-gnome-keyring`: the Secret Service Mail, Calendar and browsers keep
+  passwords in, unlocked at login (see [Keyring](session.md#keyring));
+- `systemd-oomd`, `systemd-zram-generator`: run the memory policy it ships.
+
+It no longer pulls in `pipewire-alsa`, `needrestart` (replaced by
+`/usr/libexec/bande-desktop/restart-services`, below), `cups` (Settings ▸ Printers installs it on
+demand), `xdg-utils` (Bande opens files and links with `bande_xdg::open`, so neither its X11 tools
+nor a fallback terminal come along), Qt's portal platform theme, `at-spi2-core` (a screen reader
+depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManager and
+`xdg-user-dirs`, which the Bande packages that use them declare:
+
+- `bande-shell` recommends NetworkManager (network menu) with Debian's connectivity check
+  (captive portals), UPower (battery), BlueZ (Bluetooth), PipeWire and WirePlumber (volume),
+  `xdg-user-dirs` (the Desktop and the folders Files shows) and the Adwaita icon theme (the icon
+  fallback after Bande's own theme); `bande-settings` adds AccountsService (Users), PackageKit
+  (Software Update), power-profiles-daemon (Power) and depends on `locales`, so localed can
   generate any language picked in Settings;
-- `bande-shell` recommends PipeWire, WirePlumber, NetworkManager with Debian's
-  connectivity check, BlueZ and the Adwaita icon theme, and `bande-settings` adds
-  PackageKit and power-profiles-daemon;
-- `bande-polkit` depends on `polkitd`, and `bande-greeter` on `greetd (>= 0.10.3-6)`;
+- `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc` and the H.264 and VP8 encoders
+  for screen recording;
+- `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
+  `greetd (>= 0.10.3-6)`;
+- `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides
+  `xdg-desktop-portal-backend` and recommends `xdg-desktop-portal-gtk` for the interfaces it does
+  not implement yet (AppChooser and so OpenURI, Access, Inhibit, Print, Email, Account);
 - `mesa-vulkan-drivers` and `libvulkan1` come with `bande-compositor`.
+
+After each dpkg run, `restart-services` (`DPkg::Post-Invoke` in
+`/etc/apt/apt.conf.d/50bande-restart-services`) try-restarts every `system.slice` service whose
+processes map a replaced `/usr` or `/opt` executable or library, as needrestart did, except the
+login managers, the buses, logind, getty, `user@`, polkit, PackageKit, networking, Bluetooth and
+container managers; it does nothing in a chroot or without systemd. Settings handles the
+session's own processes ([Software Update](session.md)).
 
 No package depends on an X server, XWayland or an X session; the `install` jobs check that none
 comes along.

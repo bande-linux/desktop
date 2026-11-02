@@ -1,0 +1,1 @@
+DPkg::Post-Invoke { "test -x /usr/libexec/bande-desktop/restart-services && /usr/libexec/bande-desktop/restart-services || true"; };

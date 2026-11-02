@@ -1,8 +1,9 @@
-# The default apps a standard bande-desktop install gets: the Bande apps built in
-# bande-linux/apps and released on their own. bande-desktop recommends them unversioned, so a
-# user can remove or replace any of them. Packages built in the desktop repo are part of the
-# desktop and are not listed here. One package per line.
-# Read by debian/default-apps.sh, ci/release/build-all.sh and ci/deb/install-test/run.sh.
+# The default apps a standard bande-desktop install gets: every Bande app built in
+# bande-linux/apps, released on its own. An app is added here when it gets its first APT release.
+# bande-desktop recommends them unversioned, so a user can remove or replace any of them.
+# Packages built in the desktop repo are part of the desktop and are not listed here.
+# One package per line. Read by debian/default-apps.sh, ci/release/build-all.sh and
+# ci/deb/install-test/run.sh.
 
 bande-terminal
 bande-software
@@ -11,3 +12,8 @@ bande-archive
 bande-monitor
 bande-calculator
 bande-preview
+bande-clock
+bande-disks
+bande-textedit
+bande-mail
+bande-calendar

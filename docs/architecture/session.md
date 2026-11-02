@@ -215,9 +215,10 @@ graph LR
   recording appears as a thumbnail with a play mark. Without GStreamer the palette explains what to
   install instead of failing silently.
 - Qt apps follow dark mode through Qt's own portal platform theme: `bande-session` sets
-  `QT_QPA_PLATFORMTHEME=xdgdesktopportal` (unless already set) and `bande-desktop`
-  recommends `qt6-xdgdesktopportal-platformtheme`, a 66 kB plugin from Qt itself rather than a
-  theming engine. Without it Qt 6.8 reads `color-scheme` but keeps a light palette (checked
+  `QT_QPA_PLATFORMTHEME=xdgdesktopportal` (unless already set), which takes effect once
+  `qt6-xdgdesktopportal-platformtheme`, a 66 kB plugin from Qt itself rather than a theming
+  engine, is installed; `bande-desktop` does not pull it in, since it brings Qt Quick and GTK 3
+  to a system with no Qt app. Without it Qt 6.8 reads `color-scheme` but keeps a light palette (checked
   with FeatherPad: light without the plugin, dark with it). The same plugin sends Qt's Open
   and Save dialogs through the portal. libadwaita and GTK 4 apps read `color-scheme` and
   `accent-color` from the Settings portal themselves. GTK 3 reads its settings from GSettings
@@ -265,8 +266,10 @@ graph LR
 
 ### Keyring
 
-- Browsers, editors and GTK apps keep passwords through the Secret Service. `bande-desktop`
-  recommends `gnome-keyring` and `libpam-gnome-keyring`: Debian's `/etc/pam.d/greetd` already
+- Mail, Calendar (through `bande-keyring`, a Secret Service client), browsers and GTK apps keep
+  passwords through the Secret Service. Bande has no Secret Service of its own, so
+  `bande-desktop` recommends `gnome-keyring` and `libpam-gnome-keyring` (they bring GTK 3 and
+  4 through `gcr` and GnuPG through `pinentry-gnome3`): Debian's `/etc/pam.d/greetd` already
   has `pam_gnome_keyring` in its `auth` and `session` stacks (as optional), so signing in
   through `bande-greeter` unlocks the login keyring with the password just typed, and
   `gnome-keyring-daemon.socket` starts the daemon (secrets and PKCS#11 components) in the user
@@ -538,9 +541,9 @@ set; if apt would pull in an offline package, everything goes offline: download,
 "Restart to install n updates". Otherwise the live set installs now with `UpdatePackages`, which
 asks for a password through the polkit agent unless polkit grants `system-update` (PackageKit grants
 it to active sudo members), then the offline set is downloaded and triggered.
-needrestart (recommended by `bande-desktop`, `/etc/needrestart/conf.d/bande.conf`) restarts the
-system services an update replaced from apt's hook, never greetd, the buses, logind, getty,
-`user@`, polkit or PackageKit. Settings then looks at the user's own processes that map a deleted
+`bande-desktop`'s apt hook (`/usr/libexec/bande-desktop/restart-services`) restarts the
+system services an update replaced, never the login manager, the buses, logind, getty,
+`user@`, polkit, PackageKit or networking ([packaging](packaging.md#runtime-stack)). Settings then looks at the user's own processes that map a deleted
 `/usr` or `/opt` executable or library and groups them by cgroup: services in `session.slice`
 restart through the user manager's `TryRestartUnit`; the compositor's service, the session bus or the
 login scope ask "Log out to finish updating the desktop" (Log Out / Later); apps in `app.slice`

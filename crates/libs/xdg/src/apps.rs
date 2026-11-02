@@ -3,6 +3,7 @@ use std::fs;
 use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::entry::{DesktopEntry, Locale, current_desktops, handlers};
 use crate::mime::{DIRECTORY, MimeDatabase, OCTET_STREAM};
@@ -10,53 +11,20 @@ use crate::mimeapps::{MimeApps, mimeapps_paths, set_default_app};
 
 const DESKTOP_ENTRY: &str = "application/x-desktop";
 
-pub struct Apps {
-    mime: MimeDatabase,
-    associations: MimeApps,
-    handlers: Vec<DesktopEntry>,
+#[derive(Clone)]
+pub struct FileTypes {
+    mime: Arc<MimeDatabase>,
     locale: Option<Locale>,
-    lists: Vec<PathBuf>,
-    data_dirs: Vec<PathBuf>,
     kinds: HashMap<String, String>,
 }
 
-impl Apps {
-    pub fn load(data_dirs: Vec<PathBuf>, config_dirs: &[PathBuf]) -> Self {
-        let locale = Locale::from_env();
-        let desktops = current_desktops();
-        let lists = mimeapps_paths(config_dirs, &data_dirs, &desktops);
-        Self {
-            mime: MimeDatabase::load(&data_dirs),
-            associations: MimeApps::load(&lists),
-            handlers: handlers(&data_dirs, locale.as_ref(), &desktops),
-            locale,
-            lists,
-            data_dirs,
-            kinds: HashMap::new(),
-        }
-    }
-
+impl FileTypes {
     pub fn mime_for(&self, path: &Path) -> String {
         self.mime.for_path(path)
     }
 
-    pub fn mime_for_name(&self, name: &str) -> &str {
-        self.mime.for_name(name).unwrap_or(OCTET_STREAM)
-    }
-
     pub fn extension<'a>(&self, name: &'a str) -> Option<&'a str> {
         self.mime.extension(name)
-    }
-
-    pub fn icon_names(&self, mime: &str) -> Vec<String> {
-        self.mime.icon_names(mime)
-    }
-
-    pub fn icon_names_for_name(&self, name: &str) -> Vec<String> {
-        self.mime
-            .for_name(name)
-            .map(|mime| self.mime.icon_names(mime))
-            .unwrap_or_else(|| vec!["application-x-generic".to_owned()])
     }
 
     pub fn kind(&mut self, mime: &str) -> String {
@@ -70,6 +38,65 @@ impl Apps {
         self.kinds.insert(mime.to_owned(), kind.clone());
         kind
     }
+}
+
+pub struct Apps {
+    types: FileTypes,
+    associations: MimeApps,
+    handlers: Vec<DesktopEntry>,
+    lists: Vec<PathBuf>,
+    data_dirs: Vec<PathBuf>,
+}
+
+impl Apps {
+    pub fn load(data_dirs: Vec<PathBuf>, config_dirs: &[PathBuf]) -> Self {
+        let locale = Locale::from_env();
+        let desktops = current_desktops();
+        let lists = mimeapps_paths(config_dirs, &data_dirs, &desktops);
+        Self {
+            associations: MimeApps::load(&lists),
+            handlers: handlers(&data_dirs, locale.as_ref(), &desktops),
+            types: FileTypes {
+                mime: Arc::new(MimeDatabase::load(&data_dirs)),
+                locale,
+                kinds: HashMap::new(),
+            },
+            lists,
+            data_dirs,
+        }
+    }
+
+    pub fn file_types(&self) -> FileTypes {
+        self.types.clone()
+    }
+
+    pub fn mime_for(&self, path: &Path) -> String {
+        self.types.mime_for(path)
+    }
+
+    pub fn mime_for_name(&self, name: &str) -> &str {
+        self.types.mime.for_name(name).unwrap_or(OCTET_STREAM)
+    }
+
+    pub fn extension<'a>(&self, name: &'a str) -> Option<&'a str> {
+        self.types.extension(name)
+    }
+
+    pub fn icon_names(&self, mime: &str) -> Vec<String> {
+        self.types.mime.icon_names(mime)
+    }
+
+    pub fn icon_names_for_name(&self, name: &str) -> Vec<String> {
+        self.types
+            .mime
+            .for_name(name)
+            .map(|mime| self.types.mime.icon_names(mime))
+            .unwrap_or_else(|| vec!["application-x-generic".to_owned()])
+    }
+
+    pub fn kind(&mut self, mime: &str) -> String {
+        self.types.kind(mime)
+    }
 
     pub fn kind_for_name(&mut self, name: &str, is_folder: bool) -> String {
         let mime = if is_folder {
@@ -82,12 +109,12 @@ impl Apps {
 
     pub fn default_for(&self, mime: &str) -> Option<&DesktopEntry> {
         self.associations
-            .default_for(&self.mime.ancestors(mime), &self.handlers)
+            .default_for(&self.types.mime.ancestors(mime), &self.handlers)
     }
 
     pub fn apps_for(&self, mime: &str) -> Vec<&DesktopEntry> {
         self.associations
-            .apps_for(&self.mime.ancestors(mime), &self.handlers)
+            .apps_for(&self.types.mime.ancestors(mime), &self.handlers)
     }
 
     pub fn find(&self, id: &str) -> Option<&DesktopEntry> {
@@ -127,7 +154,13 @@ impl Apps {
         }
         let text = fs::read_to_string(path).ok()?;
         let id = path.file_name()?.to_string_lossy().into_owned();
-        DesktopEntry::parse_handler(&id, path, &text, self.locale.as_ref(), &current_desktops())
+        DesktopEntry::parse_handler(
+            &id,
+            path,
+            &text,
+            self.types.locale.as_ref(),
+            &current_desktops(),
+        )
     }
 
     fn trusts_launcher(&self, path: &Path) -> bool {

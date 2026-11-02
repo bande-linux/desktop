@@ -20,7 +20,7 @@ const ENGLISH: &str = include_str!("../locales/en-US/bande-xdg.ftl");
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-pub use apps::Apps;
+pub use apps::{Apps, FileTypes};
 pub use autostart::{autostart_dir, opens_at_login, set_open_at_login};
 pub use dirs::{UserDir, user_dir};
 pub use entry::{

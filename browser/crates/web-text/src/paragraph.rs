@@ -87,6 +87,7 @@ impl Lines {
 #[derive(Default)]
 pub struct Paragraph {
     rtl: bool,
+    nowrap: bool,
     atomics: u16,
     text: String,
     runs: Vec<(u32, RunStyle, Piece)>,
@@ -101,6 +102,10 @@ impl Paragraph {
             rtl,
             ..Self::default()
         }
+    }
+
+    pub fn set_nowrap(&mut self, nowrap: bool) {
+        self.nowrap = nowrap;
     }
 
     pub fn is_rtl(&self) -> bool {
@@ -296,6 +301,26 @@ impl Paragraph {
     }
 
     fn mark_breaks(&self, glyphs: &mut [ShapedGlyph], clusters: &[u32]) {
+        self.mark_text_breaks(glyphs, clusters);
+        for index in 0..glyphs.len() {
+            let atomic = glyphs
+                .get(index)
+                .is_some_and(|glyph| glyph.flags & ATOMIC != 0);
+            if atomic {
+                if let Some(glyph) = glyphs.get_mut(index) {
+                    glyph.flags |= BREAK;
+                }
+                if let Some(previous) = index
+                    .checked_sub(1)
+                    .and_then(|before| glyphs.get_mut(before))
+                {
+                    previous.flags |= BREAK;
+                }
+            }
+        }
+    }
+
+    fn mark_text_breaks(&self, glyphs: &mut [ShapedGlyph], clusters: &[u32]) {
         let text = self.text.as_str();
         let bytes = text.as_bytes();
         for (glyph, &cluster) in glyphs.iter_mut().zip(clusters) {
@@ -304,9 +329,17 @@ impl Paragraph {
             }
         }
         let wraps_before = |position: usize| {
-            self.runs
+            let run = self
+                .runs
                 .iter()
-                .find(|&&(end, _, piece)| end as usize >= position && piece == Piece::Text)
+                .position(|&(end, _, piece)| end as usize >= position && piece == Piece::Text);
+            let boundary = run
+                .and_then(|run| self.runs.get(run))
+                .is_some_and(|&(end, _, _)| end as usize == position);
+            if boundary {
+                return !self.nowrap;
+            }
+            run.and_then(|run| self.runs.get(run))
                 .is_none_or(|(_, style, _)| style.white_space.wraps())
         };
         let mut glyph = 0;

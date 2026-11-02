@@ -23,7 +23,14 @@ pub struct Restyle {
     pub layout: bool,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Pseudo {
+    Before,
+    After,
+}
+
 pub struct Styles {
+    pseudos: HashMap<(NodeId, Pseudo), u32>,
     by_value: HashMap<u64, Vec<u32>>,
     rule_sets: HashMap<(u32, Box<[u32]>), u32>,
     per_node: Vec<u32>,
@@ -73,6 +80,7 @@ impl Styles {
         };
         let initial_reset = root.reset.clone();
         let mut styles = Styles {
+            pseudos: HashMap::new(),
             by_value: HashMap::new(),
             rule_sets: HashMap::new(),
             per_node: vec![UNSTYLED; document.len()],
@@ -136,6 +144,9 @@ impl Styles {
                             index
                         }
                     };
+                    if stylist.pseudos {
+                        styles.style_pseudos(&traversal, node, index);
+                    }
                     if document.parent(node) == Some(NodeId::DOCUMENT)
                         && let Some(style) = styles.pool.get(index as usize)
                     {
@@ -179,6 +190,31 @@ impl Styles {
     pub fn get(&self, node: NodeId) -> Option<&ComputedStyle> {
         let index = *self.per_node.get(node.index())?;
         self.pool.get(index as usize)
+    }
+
+    pub fn pseudo(&self, node: NodeId, pseudo: Pseudo) -> Option<&ComputedStyle> {
+        let index = *self.pseudos.get(&(node, pseudo))?;
+        self.pool.get(index as usize)
+    }
+
+    fn style_pseudos(&mut self, traversal: &Traversal<'_>, element: NodeId, index: u32) {
+        let Some(parent) = self.pool.get(index as usize).cloned() else {
+            return;
+        };
+        for (pseudo, selector) in [
+            (Pseudo::Before, web_css::selectors::PseudoElement::Before),
+            (Pseudo::After, web_css::selectors::PseudoElement::After),
+        ] {
+            let matched = traversal.matched_pseudo(element, selector);
+            if matched.is_empty() {
+                continue;
+            }
+            let style = traversal.style(element, &matched, &[], &parent, &self.initial_reset);
+            if style.reset.content.is_some() && style.display() != Display::None {
+                let pseudo_index = self.intern(style, index, &parent);
+                self.pseudos.insert((element, pseudo), pseudo_index);
+            }
+        }
     }
 
     pub fn anonymous(&self, parent: &ComputedStyle) -> ComputedStyle {
@@ -329,13 +365,15 @@ impl Styles {
             return 0;
         };
         let matched = traversal.matched(element);
-        let cacheable = traversal.document.attribute(element, Atom::STYLE).is_none()
+        let hints = crate::hints::hints(traversal.document, element);
+        let cacheable = hints.is_empty()
+            && traversal.document.attribute(element, Atom::STYLE).is_none()
             && traversal.document.parent(element) != Some(NodeId::DOCUMENT);
         let key = (parent, matched.into_boxed_slice());
         if cacheable && let Some(&index) = self.rule_sets.get(&key) {
             return index;
         }
-        let style = traversal.style(element, &key.1, &parent_style, &self.initial_reset);
+        let style = traversal.style(element, &key.1, &hints, &parent_style, &self.initial_reset);
         let index = self.intern(style, parent, &parent_style);
         if cacheable {
             self.rule_sets.insert(key, index);
@@ -416,6 +454,29 @@ impl Traversal<'_> {
         )
     }
 
+    fn matched_pseudo(
+        &self,
+        element: NodeId,
+        pseudo: web_css::selectors::PseudoElement,
+    ) -> Vec<u32> {
+        let context = self.context();
+        let mut matched: Vec<u32> = self
+            .candidates(element)
+            .filter(|&entry| {
+                self.stylist
+                    .entries
+                    .get(entry as usize)
+                    .and_then(|entry| entry.selector())
+                    .is_some_and(|selector| {
+                        matching::matches_pseudo_element(&context, selector, element, pseudo)
+                    })
+            })
+            .collect();
+        matched.sort_unstable();
+        matched.dedup();
+        matched
+    }
+
     fn context(&self) -> matching::Context<'_> {
         matching::Context {
             document: self.document,
@@ -427,7 +488,8 @@ impl Traversal<'_> {
     fn can_share(&self, element: NodeId, sibling: NodeId) -> bool {
         let document = self.document;
         let plain = |node: NodeId| {
-            document.element_id(node).is_none()
+            crate::hints::hints(document, node).is_empty()
+                && document.element_id(node).is_none()
                 && document.attribute(node, Atom::STYLE).is_none()
                 && !document.is_hovered(node)
         };
@@ -475,6 +537,7 @@ impl Traversal<'_> {
         &self,
         element: NodeId,
         matched: &[u32],
+        hints: &[(LonghandId, DeclaredValue)],
         parent: &ComputedStyle,
         initial_reset: &Arc<ResetStyle>,
     ) -> ComputedStyle {
@@ -484,7 +547,17 @@ impl Traversal<'_> {
             .attribute(element, Atom::STYLE)
             .map(|css| parse_style_attribute(css, &mut atoms));
         let names = self.document.atoms();
-        let mut candidates: Vec<Candidate<'_>> = Vec::new();
+        let mut candidates: Vec<Candidate<'_>> = hints
+            .iter()
+            .enumerate()
+            .map(|(order, (id, value))| Candidate {
+                id: *id,
+                declared: *id,
+                key: (rank(Origin::Author, false, 0), 0, 0, order as u32),
+                origin: Origin::Author,
+                value,
+            })
+            .collect();
         let mut customs: Vec<(&str, (u32, u32, u32), &CustomValue)> = Vec::new();
         for &index in matched {
             let Some(entry) = self.stylist.entries.get(index as usize) else {
@@ -570,10 +643,18 @@ impl Traversal<'_> {
                 }
             })
             .collect();
+        let document = self.document;
+        let attribute = |name: &str| {
+            document
+                .attributes(element)
+                .find(|(qualified, _)| document.atoms().name(qualified.local) == name)
+                .map(|(_, value)| value.to_owned())
+        };
         let context = Context {
             root_font_size: self.root_font_size,
             viewport: self.stylist.viewport,
             root: self.document.parent(element) == Some(NodeId::DOCUMENT),
+            attribute: &attribute,
         };
         compute(parent, initial_reset, values, custom, &context)
     }

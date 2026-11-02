@@ -231,6 +231,10 @@ pub(crate) fn establishes_bfc(style: &ComputedStyle) -> bool {
             web_style::Display::InlineBlock
                 | web_style::Display::Flex
                 | web_style::Display::InlineFlex
+                | web_style::Display::Table
+                | web_style::Display::InlineTable
+                | web_style::Display::TableCell
+                | web_style::Display::TableCaption
         )
 }
 
@@ -394,7 +398,7 @@ impl<'a, 'b> Flow<'a, 'b> {
             (Some(width), _, _) => (width - frame).max(0.0),
             (None, Some((width, _)), _) => width,
             (None, None, Some(width)) => width,
-            (None, None, None) if sizing.shrink => {
+            (None, None, None) if sizing.shrink || matches!(block.contents, Contents::Table(_)) => {
                 let (min, max) = self.intrinsic(block, cb);
                 max.min(available).max(min)
             }
@@ -593,6 +597,17 @@ impl<'a, 'b> Flow<'a, 'b> {
             }
             Contents::Replaced(_) => {
                 y = replaced_size.map_or(0.0, |(_, height)| height);
+                through = false;
+            }
+            Contents::Table(table) => {
+                y = self.table(
+                    block,
+                    table,
+                    content_width,
+                    content_origin,
+                    (content_x, content_y),
+                    &mut children,
+                );
                 through = false;
             }
         }

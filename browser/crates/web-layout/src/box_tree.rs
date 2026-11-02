@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use web_atoms::Atom;
 use web_dom::{Document, NodeId, NodeKind};
-use web_style::{ComputedStyle, Display, LineHeight, ListStyleType, Styles, VerticalAlign};
+use web_style::{ComputedStyle, Display, LineHeight, ListStyleType, Pseudo, Styles, VerticalAlign};
 use web_text::{FontKey, Fonts, Paragraph, RunStyle, ShapedParagraph};
 
 pub(crate) struct BlockBox {
@@ -17,6 +17,24 @@ pub(crate) enum Contents {
     Inline(Box<InlineContent>),
     Replaced(Option<Arc<str>>),
     Flex(Vec<BlockBox>),
+    Table(Box<Table>),
+}
+
+pub(crate) struct Table {
+    pub(crate) captions: Vec<BlockBox>,
+    pub(crate) rows: Vec<TableRow>,
+}
+
+pub(crate) struct TableRow {
+    pub(crate) node: Option<NodeId>,
+    pub(crate) style: ComputedStyle,
+    pub(crate) cells: Vec<TableCell>,
+}
+
+pub(crate) struct TableCell {
+    pub(crate) block: BlockBox,
+    pub(crate) columns: u16,
+    pub(crate) rows: u16,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -193,6 +211,19 @@ fn refresh(block: &mut BlockBox, styles: &Styles, parent: Option<&ComputedStyle>
             }
         }
         Contents::Replaced(_) => {}
+        Contents::Table(table) => {
+            for row in &mut table.rows {
+                if let Some(row_style) = row.node.and_then(|node| styles.get(node)) {
+                    row.style = row_style.clone();
+                }
+                for cell in &mut row.cells {
+                    refresh(&mut cell.block, styles, Some(&style));
+                }
+            }
+            for caption in &mut table.captions {
+                refresh(caption, styles, Some(&style));
+            }
+        }
     }
 }
 
@@ -208,6 +239,21 @@ fn block_bytes(block: &BlockBox) -> usize {
             }
             Contents::Inline(inline) => size_of::<InlineContent>() + inline_bytes(inline),
             Contents::Replaced(_) => 0,
+            Contents::Table(table) => {
+                size_of::<Table>()
+                    + table.rows.capacity() * size_of::<TableRow>()
+                    + table
+                        .rows
+                        .iter()
+                        .flat_map(|row| &row.cells)
+                        .map(|cell| size_of::<TableCell>() + block_bytes(&cell.block))
+                        .sum::<usize>()
+                    + table
+                        .captions
+                        .iter()
+                        .map(|caption| size_of::<BlockBox>() + block_bytes(caption))
+                        .sum::<usize>()
+            }
         }
 }
 
@@ -268,8 +314,20 @@ impl Builder<'_> {
                 marker: None,
             };
         }
+        if matches!(style.display(), Display::Table | Display::InlineTable) {
+            let table = self.table(node, &style);
+            return BlockBox {
+                node: Some(node),
+                style,
+                contents: Contents::Table(Box::new(table)),
+                marker: None,
+            };
+        }
         let mut blocks = Vec::new();
         let mut pending = Pending::new(is_rtl(&style));
+        pending
+            .paragraph
+            .set_nowrap(!style.inherited.white_space.wraps());
         self.children(node, &mut blocks, &mut pending, 0.0);
         let flex = matches!(style.display(), Display::Flex | Display::InlineFlex);
         let contents = if flex {
@@ -299,6 +357,7 @@ impl Builder<'_> {
     ) {
         let mut ordinal = list_start(self.document, node);
         let reversed = self.document.attribute(node, Atom::REVERSED).is_some();
+        self.generated(node, Pseudo::Before, pending, shift);
         for child in self.document.children(node) {
             let Some(style) = self.styles.get(child) else {
                 continue;
@@ -391,6 +450,126 @@ impl Builder<'_> {
                 },
                 _ => {}
             }
+        }
+        self.generated(node, Pseudo::After, pending, shift);
+    }
+
+    fn generated(&mut self, node: NodeId, pseudo: Pseudo, pending: &mut Pending, shift: f32) {
+        let Some(style) = self.styles.pseudo(node, pseudo).cloned() else {
+            return;
+        };
+        let Some(text) = style.reset.content.clone() else {
+            return;
+        };
+        let tag = pending.push(node, &style, ItemKind::Text);
+        pending
+            .paragraph
+            .push_text(&text, run_style(&style, tag, shift + own_shift(&style)));
+    }
+
+    fn table(&mut self, node: NodeId, style: &ComputedStyle) -> Table {
+        let mut table = Table {
+            captions: Vec::new(),
+            rows: Vec::new(),
+        };
+        let mut headers = Vec::new();
+        let mut footers = Vec::new();
+        self.depth += 1;
+        for child in self.document.children(node).collect::<Vec<_>>() {
+            let Some(child_style) = self.styles.get(child).cloned() else {
+                continue;
+            };
+            if self.document.kind(child) != Some(NodeKind::Element) {
+                continue;
+            }
+            match child_style.display() {
+                Display::TableCaption => {
+                    table.captions.push(self.block(child, child_style, None));
+                }
+                Display::TableHeaderGroup => self.row_group(child, &mut headers),
+                Display::TableFooterGroup => self.row_group(child, &mut footers),
+                Display::TableRowGroup => self.row_group(child, &mut table.rows),
+                Display::TableRow => table.rows.push(self.row(child, child_style)),
+                Display::None => {}
+                _ => {
+                    let cell = self.cell(child, child_style);
+                    match table.rows.last_mut().filter(|row| row.node.is_none()) {
+                        Some(row) => row.cells.push(cell),
+                        None => table.rows.push(TableRow {
+                            node: None,
+                            style: self.styles.anonymous(style),
+                            cells: vec![cell],
+                        }),
+                    }
+                }
+            }
+        }
+        self.depth -= 1;
+        headers.append(&mut table.rows);
+        headers.append(&mut footers);
+        table.rows = headers;
+        table
+    }
+
+    fn row_group(&mut self, group: NodeId, rows: &mut Vec<TableRow>) {
+        for child in self.document.children(group).collect::<Vec<_>>() {
+            if self.document.kind(child) != Some(NodeKind::Element) {
+                continue;
+            }
+            let Some(style) = self.styles.get(child).cloned() else {
+                continue;
+            };
+            match style.display() {
+                Display::TableRow => rows.push(self.row(child, style)),
+                Display::None => {}
+                _ => {
+                    let cell = self.cell(child, style.clone());
+                    rows.push(TableRow {
+                        node: None,
+                        style: self.styles.anonymous(&style),
+                        cells: vec![cell],
+                    });
+                }
+            }
+        }
+    }
+
+    fn row(&mut self, row: NodeId, style: ComputedStyle) -> TableRow {
+        let mut cells = Vec::new();
+        for child in self.document.children(row).collect::<Vec<_>>() {
+            if self.document.kind(child) != Some(NodeKind::Element) {
+                continue;
+            }
+            let Some(child_style) = self.styles.get(child).cloned() else {
+                continue;
+            };
+            if child_style.display() != Display::None {
+                cells.push(self.cell(child, child_style));
+            }
+        }
+        TableRow {
+            node: Some(row),
+            style,
+            cells,
+        }
+    }
+
+    fn cell(&mut self, cell: NodeId, style: ComputedStyle) -> TableCell {
+        let span = |name: Atom, default: u32, max: u32| {
+            self.document
+                .attribute(cell, name)
+                .and_then(|value| value.trim().parse::<u32>().ok())
+                .map_or(default, |value| value.clamp(1, max)) as u16
+        };
+        let columns = span(Atom::COLSPAN, 1, 1000);
+        let rows = span(Atom::ROWSPAN, 1, 65534);
+        self.depth += 1;
+        let block = self.block(cell, style, None);
+        self.depth -= 1;
+        TableCell {
+            block,
+            columns,
+            rows,
         }
     }
 

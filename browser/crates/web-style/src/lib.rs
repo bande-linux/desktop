@@ -1,11 +1,12 @@
 mod cascade;
 mod compute;
+mod hints;
 mod matching;
 mod stylist;
 
 use std::sync::Arc;
 
-pub use cascade::{Restyle, Styles};
+pub use cascade::{Pseudo, Restyle, Styles};
 pub use stylist::{Stylist, Viewport};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
@@ -41,13 +42,21 @@ pub enum Display {
     ListItem,
     Flex,
     InlineFlex,
+    Table,
+    InlineTable,
+    TableRowGroup,
+    TableHeaderGroup,
+    TableFooterGroup,
+    TableRow,
+    TableCell,
+    TableCaption,
 }
 
 impl Display {
     pub fn is_inline_level(self) -> bool {
         matches!(
             self,
-            Display::Inline | Display::InlineBlock | Display::InlineFlex
+            Display::Inline | Display::InlineBlock | Display::InlineFlex | Display::InlineTable
         )
     }
 }
@@ -255,6 +264,8 @@ pub struct InheritedStyle {
     pub direction: Direction,
     pub text_align: TextAlign,
     pub list_style_type: ListStyleType,
+    pub border_spacing: (f32, f32),
+    pub border_collapse: bool,
     pub decorations: TextDecorations,
     pub visible: bool,
     pub custom: Arc<[(Arc<str>, Arc<str>)]>,
@@ -298,6 +309,7 @@ pub struct ResetStyle {
     pub column_gap: LengthPercentage,
     pub background_image: Option<Arc<str>>,
     pub object_fit: ObjectFit,
+    pub content: Option<Arc<str>>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -322,6 +334,8 @@ impl InheritedStyle {
             direction: Direction::Ltr,
             text_align: TextAlign::Start,
             list_style_type: ListStyleType::Disc,
+            border_spacing: (0.0, 0.0),
+            border_collapse: false,
             decorations: TextDecorations::default(),
             visible: true,
             custom: Arc::new([]),
@@ -368,6 +382,7 @@ impl ResetStyle {
             column_gap: LengthPercentage::ZERO,
             background_image: None,
             object_fit: ObjectFit::Fill,
+            content: None,
         }
     }
 }

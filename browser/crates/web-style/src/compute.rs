@@ -21,17 +21,18 @@ pub(crate) enum Value<'a> {
     Keyword(CssWideKeyword),
 }
 
-pub(crate) struct Context {
+pub(crate) struct Context<'a> {
     pub(crate) root_font_size: f32,
     pub(crate) viewport: Viewport,
     pub(crate) root: bool,
+    pub(crate) attribute: &'a dyn Fn(&str) -> Option<String>,
 }
 
 struct Computer<'a> {
     parent: &'a ComputedStyle,
     inherited: InheritedStyle,
     reset: ResetStyle,
-    context: &'a Context,
+    context: &'a Context<'a>,
     decoration_color: Option<Color>,
     border_styles: [bool; 4],
     border_colors: [bool; 4],
@@ -52,7 +53,7 @@ pub(crate) fn compute(
     initial_reset: &Arc<ResetStyle>,
     mut winners: Vec<(LonghandId, Value<'_>)>,
     custom: Arc<[(Arc<str>, Arc<str>)]>,
-    context: &Context,
+    context: &Context<'_>,
 ) -> ComputedStyle {
     winners.sort_by_key(|(id, _)| priority(*id));
     let mut inherited = (*parent.inherited).clone();
@@ -378,7 +379,15 @@ impl Computer<'_> {
                     D::None | D::TableColumn | D::TableColumnGroup => Display::None,
                     D::Contents => Display::Contents,
                     D::Inline | D::InlineListItem | D::Ruby | D::RubyText => Display::Inline,
-                    D::InlineBlock | D::InlineGrid | D::InlineTable => Display::InlineBlock,
+                    D::InlineBlock | D::InlineGrid => Display::InlineBlock,
+                    D::InlineTable => Display::InlineTable,
+                    D::Table => Display::Table,
+                    D::TableRowGroup => Display::TableRowGroup,
+                    D::TableHeaderGroup => Display::TableHeaderGroup,
+                    D::TableFooterGroup => Display::TableFooterGroup,
+                    D::TableRow => Display::TableRow,
+                    D::TableCell => Display::TableCell,
+                    D::TableCaption => Display::TableCaption,
                     D::ListItem => Display::ListItem,
                     D::Flex => Display::Flex,
                     D::InlineFlex => Display::InlineFlex,
@@ -630,6 +639,15 @@ impl Computer<'_> {
                     self.reset.clips = true;
                 }
             }
+            (Id::BorderSpacing, V::BorderSpacing(value)) => {
+                self.inherited.border_spacing = (
+                    self.length_percentage(&value.0).px.max(0.0),
+                    self.length_percentage(&value.1).px.max(0.0),
+                )
+            }
+            (Id::BorderCollapse, V::BorderCollapse(value)) => {
+                self.inherited.border_collapse = matches!(value, keywords::BorderCollapse::Collapse)
+            }
             (Id::Opacity, V::Opacity(value)) => self.reset.opacity = value.0.clamp(0.0, 1.0),
             (Id::FlexDirection, V::FlexDirection(value)) => {
                 use keywords::FlexDirection as F;
@@ -690,6 +708,25 @@ impl Computer<'_> {
                     specified::Image::Url(url) => Some(Arc::from(&**url)),
                     _ => None,
                 })
+            }
+            (Id::Content, V::Content(value)) => {
+                self.reset.content = match value {
+                    specified::Content::Items(items, _) => {
+                        let mut text = String::new();
+                        for item in items.iter() {
+                            match item {
+                                specified::ContentItem::String(string) => text.push_str(string),
+                                specified::ContentItem::Attr(name) => text
+                                    .push_str(&(self.context.attribute)(name).unwrap_or_default()),
+                                specified::ContentItem::OpenQuote => text.push('\u{201C}'),
+                                specified::ContentItem::CloseQuote => text.push('\u{201D}'),
+                                _ => {}
+                            }
+                        }
+                        Some(Arc::from(text))
+                    }
+                    _ => None,
+                }
             }
             (Id::ObjectFit, V::ObjectFit(value)) => {
                 use keywords::ObjectFit as O;
@@ -796,6 +833,8 @@ impl Computer<'_> {
             Id::ZIndex => reset.z_index = from_reset.z_index,
             Id::OverflowX | Id::OverflowY => reset.clips = from_reset.clips,
             Id::Opacity => reset.opacity = from_reset.opacity,
+            Id::BorderSpacing => inherited.border_spacing = from_inherited.border_spacing,
+            Id::BorderCollapse => inherited.border_collapse = from_inherited.border_collapse,
             Id::FlexDirection => reset.flex_direction = from_reset.flex_direction,
             Id::FlexWrap => reset.flex_wrap = from_reset.flex_wrap,
             Id::FlexGrow => reset.flex_grow = from_reset.flex_grow,
@@ -810,6 +849,7 @@ impl Computer<'_> {
             Id::ColumnGap => reset.column_gap = from_reset.column_gap,
             Id::BackgroundImage => reset.background_image = from_reset.background_image.clone(),
             Id::ObjectFit => reset.object_fit = from_reset.object_fit,
+            Id::Content => reset.content = from_reset.content.clone(),
             _ => {}
         }
     }
@@ -832,6 +872,7 @@ impl Computer<'_> {
         if blockify {
             self.reset.display = match self.reset.display {
                 Display::InlineFlex => Display::Flex,
+                Display::InlineTable => Display::Table,
                 Display::Inline | Display::InlineBlock => Display::Block,
                 Display::Contents if self.context.root => Display::Block,
                 display => display,

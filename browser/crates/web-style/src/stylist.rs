@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use web_atoms::{Atom, AtomTable, Namespace};
 use web_css::media::{MediaEnvironment, MediaList};
 use web_css::properties::DeclarationBlock;
-use web_css::selectors::{Combinator, Component, PseudoClass, Selector, SelectorList};
+use web_css::selectors::{
+    Combinator, Component, PseudoClass, PseudoElement, Selector, SelectorList,
+};
 use web_css::stylesheet::{CssRule, LayerName, Stylesheet, parse_stylesheet};
 
 const UA_SHEET: &str = include_str!("ua.css");
@@ -62,6 +64,7 @@ pub struct Stylist {
     pub(crate) hover_subjects: Vec<Key>,
     pub(crate) hover_ancestors: Vec<Key>,
     pub(crate) viewport: Viewport,
+    pub(crate) pseudos: bool,
     layers: Vec<Box<[Atom]>>,
 }
 
@@ -94,6 +97,7 @@ impl Stylist {
             hover_subjects: Vec::new(),
             hover_ancestors: Vec::new(),
             viewport,
+            pseudos: false,
             layers: Vec::new(),
         };
         let user_agent = parse_stylesheet(UA_SHEET, atoms);
@@ -323,6 +327,12 @@ impl Builder<'_> {
             if !keys.contains(&hover_key) {
                 keys.push(hover_key);
             }
+        }
+        if matches!(
+            selector.pseudo_element,
+            Some(PseudoElement::Before | PseudoElement::After)
+        ) {
+            self.stylist.pseudos = true;
         }
         self.stylist.entries.push(Entry {
             sensitive: is_sensitive(&selector.components),

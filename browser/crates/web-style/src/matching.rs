@@ -15,6 +15,16 @@ pub(crate) fn matches(context: &Context<'_>, selector: &Selector, element: NodeI
     selector.pseudo_element.is_none() && matches_components(context, &selector.components, element)
 }
 
+pub(crate) fn matches_pseudo_element(
+    context: &Context<'_>,
+    selector: &Selector,
+    element: NodeId,
+    pseudo: web_css::selectors::PseudoElement,
+) -> bool {
+    selector.pseudo_element == Some(pseudo)
+        && matches_components(context, &selector.components, element)
+}
+
 pub(crate) fn matches_list(context: &Context<'_>, list: &SelectorList, element: NodeId) -> bool {
     list.0
         .iter()

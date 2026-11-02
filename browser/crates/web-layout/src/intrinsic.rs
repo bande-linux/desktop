@@ -4,8 +4,8 @@ use web_text::AtomicSize;
 use crate::box_tree::{BlockBox, Contents};
 use crate::flow::{Flow, frame, resolve_margins};
 
-impl Flow<'_, '_> {
-    pub(crate) fn intrinsic(&mut self, block: &BlockBox, cb: (f32, Option<f32>)) -> (f32, f32) {
+impl<'a, 'b> Flow<'a, 'b> {
+    pub(crate) fn intrinsic(&mut self, block: &'b BlockBox, cb: (f32, Option<f32>)) -> (f32, f32) {
         let reset = &block.style.reset;
         if let Some(width) = reset.width.filter(|width| width.percent == 0.0) {
             let width = if reset.border_box {
@@ -20,17 +20,25 @@ impl Flow<'_, '_> {
                 let width = self.replaced_size(block, cb).0;
                 (width, width)
             }
+            Contents::Table(table) => self.table_intrinsic(block, table, cb.0),
             Contents::Inline(inline) => {
-                let sizes: Vec<AtomicSize> = inline
+                let outer: Vec<(f32, f32)> = inline
                     .atomics
                     .iter()
-                    .map(|atomic| AtomicSize {
-                        width: self.outer_intrinsic(atomic, cb).1,
-                        ascent: 0.0,
-                        descent: 0.0,
-                    })
+                    .map(|atomic| self.outer_intrinsic(atomic, cb))
                     .collect();
-                let (min, max) = inline.shaped.intrinsic(&sizes);
+                let sizes = |pick: fn(&(f32, f32)) -> f32| -> Vec<AtomicSize> {
+                    outer
+                        .iter()
+                        .map(|size| AtomicSize {
+                            width: pick(size),
+                            ascent: 0.0,
+                            descent: 0.0,
+                        })
+                        .collect()
+                };
+                let min = inline.shaped.intrinsic(&sizes(|size| size.0)).0;
+                let max = inline.shaped.intrinsic(&sizes(|size| size.1)).1;
                 let floats = inline
                     .out_of_flow
                     .iter()
@@ -73,7 +81,7 @@ impl Flow<'_, '_> {
 
     pub(crate) fn outer_intrinsic(
         &mut self,
-        block: &BlockBox,
+        block: &'b BlockBox,
         cb: (f32, Option<f32>),
     ) -> (f32, f32) {
         let (min, max) = self.intrinsic(block, cb);

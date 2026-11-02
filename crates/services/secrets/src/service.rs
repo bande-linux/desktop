@@ -138,13 +138,14 @@ struct Peer {
 
 enum Job {
     Unlock(Vec<OwnedObjectPath>),
+    Reveal,
     Create { label: String, alias: String },
 }
 
 impl Job {
     fn refusal(&self) -> OwnedValue {
         let value = match self {
-            Self::Unlock(_) => Value::from(Vec::<OwnedObjectPath>::new()),
+            Self::Unlock(_) | Self::Reveal => Value::from(Vec::<OwnedObjectPath>::new()),
             Self::Create { .. } => Value::from(no_prompt()),
         };
         value
@@ -768,7 +769,7 @@ impl Daemon {
         true
     }
 
-    async fn ask_allow(&self, caller: &Caller, items: Vec<(String, u64)>) -> bool {
+    async fn ask_allow(&self, caller: &Caller, items: Vec<(String, u64)>, kind: Kind) -> bool {
         let Some((name, _)) = items.first().cloned() else {
             return true;
         };
@@ -786,7 +787,7 @@ impl Daemon {
             (label, labels)
         };
         let request = Request {
-            kind: Kind::Allow,
+            kind,
             app: caller.identity.clone(),
             keychain: label,
             items: labels,
@@ -798,7 +799,9 @@ impl Daemon {
             let (password, always) = match dialog.reply().await {
                 Reply::Cancel | Reply::CreateNew => return false,
                 Reply::Allow(password) => (password, false),
-                Reply::Always(password) => (password, caller.identity.is_some()),
+                Reply::Always(password) => {
+                    (password, kind == Kind::Allow && caller.identity.is_some())
+                }
             };
             let verified = self.keychain.lock().await.verify(&name, &password).await;
             match verified {
@@ -1022,10 +1025,37 @@ impl Daemon {
                         })
                         .collect::<Vec<_>>()
                 };
-                if !refused.is_empty() && !self.ask_allow(&caller, refused).await {
+                if !refused.is_empty() && !self.ask_allow(&caller, refused, Kind::Allow).await {
                     return None;
                 }
                 Value::from(objects).try_into_owned().ok()
+            }
+            Job::Reveal => {
+                let default = self.keychain.lock().await.default_collection().to_owned();
+                if !self.ask_unlock(&default, caller.identity.clone()).await {
+                    return None;
+                }
+                let items = {
+                    let keychain = self.keychain.lock().await;
+                    keychain
+                        .collections()
+                        .iter()
+                        .flat_map(|collection| {
+                            collection
+                                .entries()
+                                .map(|entry| (collection.name.clone(), entry.id))
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>()
+                };
+                let paths = items
+                    .iter()
+                    .map(|(name, id)| item_path(name, *id))
+                    .collect::<Vec<_>>();
+                if !items.is_empty() && !self.ask_allow(&caller, items, Kind::Reveal).await {
+                    return None;
+                }
+                Value::from(paths).try_into_owned().ok()
             }
             Job::Create { label, alias } => {
                 let name = self.ask_create(&caller, &label).await?;
@@ -1338,6 +1368,18 @@ impl ServiceObject {
         emitter: &SignalEmitter<'_>,
         collection: ObjectPath<'_>,
     ) -> zbus::Result<()>;
+}
+
+pub struct ExtensionObject {
+    daemon: Arc<Daemon>,
+}
+
+#[interface(name = "org.bande.Secrets")]
+impl ExtensionObject {
+    async fn reveal(&self, #[zbus(header)] header: Header<'_>) -> Result<OwnedObjectPath> {
+        let caller = self.daemon.caller(&header).await;
+        self.daemon.new_prompt(&caller.sender, Job::Reveal).await
+    }
 }
 
 pub struct CollectionObject {

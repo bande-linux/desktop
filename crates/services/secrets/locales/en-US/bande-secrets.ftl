@@ -27,3 +27,4 @@ login-message = Enter the keychain’s old password to update it to your login p
 wrong-password = The password you entered is incorrect.
 network-title = The network “{ $network }” requires a password.
 network-message = Enter the password to join it.
+reveal-title = “{ $app }” wants to show your saved passwords.

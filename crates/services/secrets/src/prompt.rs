@@ -32,6 +32,7 @@ enum Mode {
     Create,
     UpdateLogin,
     Network,
+    Reveal,
 }
 
 struct Request {
@@ -67,6 +68,7 @@ fn request() -> Option<Request> {
         "--create" => Mode::Create,
         "--update-login" => Mode::UpdateLogin,
         "--network" => Mode::Network,
+        "--reveal" => Mode::Reveal,
         _ => return None,
     };
     let mut keychain = String::new();
@@ -151,6 +153,10 @@ impl Prompt {
                 L10N.tr("verify-message"),
             ),
             (Mode::UpdateLogin, _) => (L10N.tr("login-title"), L10N.tr("login-message")),
+            (Mode::Reveal, _) => (
+                L10N.tr_args("reveal-title", [("app", app())]),
+                L10N.tr_args("allow-message", [("keychain", keychain())]),
+            ),
             (Mode::Network, _) => (
                 L10N.tr_args("network-title", [("network", keychain())]),
                 L10N.tr("network-message"),
@@ -191,6 +197,9 @@ impl Prompt {
             Mode::Create => alert
                 .cancel(&L10N.tr("cancel"), "cancel")
                 .primary(&L10N.tr("create"), "allow"),
+            Mode::Reveal => alert
+                .cancel(&L10N.tr("cancel"), "cancel")
+                .primary(&L10N.tr("allow"), "allow"),
             Mode::Network => alert
                 .cancel(&L10N.tr("cancel"), "cancel")
                 .primary(&L10N.tr("join"), "allow"),

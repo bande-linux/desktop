@@ -21,6 +21,7 @@ pub enum Kind {
     Create,
     UpdateLogin,
     Network,
+    Reveal,
 }
 
 impl Kind {
@@ -31,6 +32,7 @@ impl Kind {
             Self::Create => "--create",
             Self::UpdateLogin => "--update-login",
             Self::Network => "--network",
+            Self::Reveal => "--reveal",
         }
     }
 }

@@ -1,7 +1,12 @@
+pub mod access;
+pub mod app_chooser;
 pub mod capture;
 pub mod dialog_process;
+pub mod email;
 pub mod file_chooser;
 pub mod gtk;
+pub mod inhibit;
+pub mod notification;
 pub mod request;
 pub mod screencast;
 pub mod screenshot;

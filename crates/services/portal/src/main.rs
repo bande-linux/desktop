@@ -4,10 +4,15 @@ use std::sync::Arc;
 use std::thread;
 
 use bande_xdg::{config_home, data_home};
+use xdg_desktop_portal_bande::access::Access;
+use xdg_desktop_portal_bande::app_chooser::AppChooser;
 use xdg_desktop_portal_bande::capture::{ScreenshotService, ScreenshotTool};
 use xdg_desktop_portal_bande::dialog_process::{DIALOG_PROGRAM, DialogProcess};
+use xdg_desktop_portal_bande::email::Email;
 use xdg_desktop_portal_bande::file_chooser::FileChooser;
 use xdg_desktop_portal_bande::gtk::GtkHomes;
+use xdg_desktop_portal_bande::inhibit::Inhibit;
+use xdg_desktop_portal_bande::notification::Notification;
 use xdg_desktop_portal_bande::screencast::{ScreenCast, close_sessions_streaming};
 use xdg_desktop_portal_bande::screenshot::Screenshot;
 use xdg_desktop_portal_bande::settings::{CursorSettings, Settings};
@@ -49,28 +54,40 @@ fn serve() -> zbus::Result<Connection> {
             .zip(data_home())
             .map(|(config, data)| GtkHomes { config, data }),
     )?;
-    connection
-        .object_server()
-        .at(OBJECT_PATH, ScreenCast::new(tool.clone()))?;
-    connection
-        .object_server()
-        .at(OBJECT_PATH, Screenshot { ui: tool })?;
     let dialogs = Arc::new(DialogProcess {
         program: PathBuf::from(DIALOG_PROGRAM),
     });
-    connection
-        .object_server()
-        .at(OBJECT_PATH, FileChooser::new(dialogs.clone()))?;
-    if let Some(data_home) = data_home() {
-        connection.object_server().at(
+    {
+        let server = connection.object_server();
+        server.at(OBJECT_PATH, ScreenCast::new(tool.clone()))?;
+        server.at(OBJECT_PATH, Screenshot { ui: tool })?;
+        server.at(
             OBJECT_PATH,
-            Wallpaper {
-                ui: dialogs,
-                folder: data_home.join(BACKGROUNDS),
-                session: connection.clone(),
+            FileChooser {
+                ui: dialogs.clone(),
             },
         )?;
+        server.at(
+            OBJECT_PATH,
+            Access {
+                ui: dialogs.clone(),
+            },
+        )?;
+        server.at(OBJECT_PATH, AppChooser::new(dialogs.clone()))?;
+        server.at(OBJECT_PATH, Email)?;
+        if let Some(data_home) = data_home() {
+            server.at(
+                OBJECT_PATH,
+                Wallpaper {
+                    ui: dialogs,
+                    folder: data_home.join(BACKGROUNDS),
+                    session: connection.clone(),
+                },
+            )?;
+        }
     }
+    Inhibit::serve(&connection, system.as_ref())?;
+    Notification::serve(&connection)?;
     close_sessions_when_sharing_ends(&connection, &tool_connection)?;
     connection.request_name(BUS_NAME)?;
     Ok(connection)

@@ -1,3 +1,4 @@
+mod bounded;
 mod button;
 mod checkbox;
 mod clock;
@@ -39,6 +40,7 @@ use std::time::Instant;
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 
 pub use bande_spring::Spring;
+pub use bounded::Bounded;
 pub use button::{BUTTON_HEIGHT, Button};
 pub use checkbox::{CHECKBOX_SIZE, CheckState, Checkbox};
 pub use clock::{FrameTime, frame_time, request_wake, set_frame_time, take_wake};

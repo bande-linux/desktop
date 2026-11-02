@@ -8,7 +8,6 @@ use bande_xdg::file_uri;
 use zbus::Connection;
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
-use crate::OBJECT_PATH;
 use crate::request::{self, CANCELLED, Cancellation, OTHER, SUCCESS};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,10 +78,6 @@ pub trait FileChooserUi: Send + Sync {
     fn choose(&self, dialog: &Dialog, cancellation: &Cancellation) -> Outcome;
 }
 
-pub const GTK_BACKEND: &str = "org.freedesktop.impl.portal.desktop.gtk";
-const INTERFACE: &str = "org.freedesktop.impl.portal.FileChooser";
-const REQUEST: &str = "org.freedesktop.impl.portal.Request";
-
 type RawFilter = (String, Vec<(u32, String)>);
 type RawChoice = (String, String, Vec<(String, String)>, String);
 type Options = HashMap<String, OwnedValue>;
@@ -128,11 +123,24 @@ fn is_plain_name(name: &Path) -> bool {
     ) && !name.as_os_str().as_bytes().contains(&b'/')
 }
 
-fn option<T: TryFrom<OwnedValue>>(options: &Options, key: &str) -> Option<T> {
+pub(crate) fn option<T: TryFrom<OwnedValue>>(options: &Options, key: &str) -> Option<T> {
     options
         .get(key)
         .and_then(|value| value.try_clone().ok())
         .and_then(|value| T::try_from(value).ok())
+}
+
+pub(crate) fn choices(options: &Options) -> Vec<Choice> {
+    option::<Vec<RawChoice>>(options, "choices")
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(id, label, options, initial)| Choice {
+            id,
+            label,
+            options,
+            initial,
+        })
+        .collect()
 }
 
 fn dialog(
@@ -155,16 +163,7 @@ fn dialog(
             .map(filter)
             .collect(),
         current_filter: option::<RawFilter>(options, "current_filter").map(filter),
-        choices: option::<Vec<RawChoice>>(options, "choices")
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(id, label, options, initial)| Choice {
-                id,
-                label,
-                options,
-                initial,
-            })
-            .collect(),
+        choices: choices(options),
         folder: option::<Vec<u8>>(options, "current_folder").map(path),
     }
 }
@@ -212,7 +211,6 @@ fn results(dialog: &Dialog, selection: Selection) -> Results {
 }
 
 struct Call {
-    method: &'static str,
     app_id: String,
     parent_window: String,
     title: String,
@@ -221,17 +219,9 @@ struct Call {
 
 pub struct FileChooser {
     pub ui: Arc<dyn FileChooserUi>,
-    pub fallback: String,
 }
 
 impl FileChooser {
-    pub fn new(ui: Arc<dyn FileChooserUi>) -> Self {
-        Self {
-            ui,
-            fallback: GTK_BACKEND.to_owned(),
-        }
-    }
-
     async fn show(
         &self,
         connection: &Connection,
@@ -240,9 +230,9 @@ impl FileChooser {
         call: Call,
     ) -> (u32, Results) {
         let dialog = dialog(
-            call.app_id.clone(),
-            call.parent_window.clone(),
-            call.title.clone(),
+            call.app_id,
+            call.parent_window,
+            call.title,
             &call.options,
             mode,
         );
@@ -254,65 +244,9 @@ impl FileChooser {
         .await;
         match outcome {
             Ok(Some(Outcome::Chosen(selection))) => (SUCCESS, results(&dialog, selection)),
-            Ok(Some(Outcome::Unavailable)) => self.forward(connection, handle, call).await,
             Ok(Some(Outcome::Cancelled) | None) => (CANCELLED, Results::new()),
-            Err(_) => (OTHER, Results::new()),
-        }
-    }
-
-    async fn forward(
-        &self,
-        connection: &Connection,
-        handle: ObjectPath<'_>,
-        call: Call,
-    ) -> (u32, Results) {
-        tracing::warn!(
-            "the Bande file dialog cannot start, so {} shows it",
-            self.fallback
-        );
-        let server = connection.object_server();
-        let connection = zbus::blocking::Connection::from(connection.clone());
-        let fallback = self.fallback.clone();
-        let target = handle.to_owned();
-        let answer = request::run(server, &handle, move |cancellation| {
-            let closer = (connection.clone(), fallback.clone(), target.clone());
-            cancellation.on_cancel(move || {
-                std::thread::spawn(move || {
-                    let (connection, fallback, target) = closer;
-                    let _ = connection.call_method(
-                        Some(fallback.as_str()),
-                        &target,
-                        Some(REQUEST),
-                        "Close",
-                        &(),
-                    );
-                });
-            });
-            connection
-                .call_method(
-                    Some(fallback.as_str()),
-                    OBJECT_PATH,
-                    Some(INTERFACE),
-                    call.method,
-                    &(
-                        target,
-                        call.app_id,
-                        call.parent_window,
-                        call.title,
-                        call.options,
-                    ),
-                )
-                .and_then(|reply| reply.body().deserialize::<(u32, Results)>())
-        })
-        .await;
-        match answer {
-            Ok(Some(Ok(answer))) => answer,
-            Ok(None) => (CANCELLED, Results::new()),
-            Ok(Some(Err(error))) => {
-                tracing::warn!(
-                    "{} cannot show the file dialog either: {error}",
-                    self.fallback
-                );
+            Ok(Some(Outcome::Unavailable)) => {
+                tracing::warn!("the Bande file dialog cannot start");
                 (OTHER, Results::new())
             }
             Err(_) => (OTHER, Results::new()),
@@ -336,7 +270,6 @@ impl FileChooser {
             directory: option(&options, "directory").unwrap_or(false),
         };
         let call = Call {
-            method: "OpenFile",
             app_id,
             parent_window,
             title,
@@ -359,7 +292,6 @@ impl FileChooser {
             file: option::<Vec<u8>>(&options, "current_file").map(path),
         };
         let call = Call {
-            method: "SaveFile",
             app_id,
             parent_window,
             title,
@@ -388,7 +320,6 @@ impl FileChooser {
         }
         let mode = Mode::SaveMany { names };
         let call = Call {
-            method: "SaveFiles",
             app_id,
             parent_window,
             title,

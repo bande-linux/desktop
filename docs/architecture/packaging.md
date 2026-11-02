@@ -94,8 +94,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`;
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides
-  `xdg-desktop-portal-backend` and recommends `xdg-desktop-portal-gtk` for the interfaces it does
-  not implement yet (AppChooser and so OpenURI, Access, Inhibit, Print, Email, Account);
+  `xdg-desktop-portal-backend` and serves every interface itself (no `xdg-desktop-portal-gtk`);
 - `mesa-vulkan-drivers` and `libvulkan1` come with `bande-compositor`.
 
 After each dpkg run, `restart-services` (`DPkg::Post-Invoke` in

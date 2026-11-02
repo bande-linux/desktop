@@ -28,17 +28,17 @@ bande-test-bus.workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, xdg-desktop-portal (>= 1.18), default-dbus-session-bus | dbus-session-bus"
-recommends = "bande-config, bande-file-chooser, bande-screenshot, xdg-desktop-portal-gtk"
+recommends = "bande-config, bande-file-chooser, bande-notify, bande-power, bande-screenshot"
 provides = "xdg-desktop-portal-backend"
 extended-description = """\
-Implements xdg-desktop-portal's Settings, FileChooser, Screenshot and \
-ScreenCast backends for the Bande desktop: the colour scheme, accent \
-colour, folder icons and Reduce Motion follow config.kdl, so GTK, \
-libadwaita and Qt apps follow them; Open and Save dialogs are the Bande \
-file dialogs, with the GTK backend as fallback; and browsers and video \
-call apps can share the screen or a window through the Bande screenshot \
-tool. The other interfaces come from the GTK backend, and secrets from \
-GNOME Keyring."""
+Implements xdg-desktop-portal's backends for the Bande desktop: Settings \
+(colour scheme, accent colour, folder icons and Reduce Motion from \
+config.kdl, so GTK, libadwaita and Qt apps follow them), the Bande Open \
+and Save dialogs, Open With for links and files, permission questions, \
+screenshots and screen sharing, the desktop picture, notifications \
+through the Bande notification center, keeping the screen or the \
+computer awake, and writing email in the default mail app. No GTK or \
+GNOME backend is needed."""
 assets = [
     ["target/release/xdg-desktop-portal-bande", "usr/libexec/", "755"],
     ["data/xdg-desktop-portal-bande.service", "usr/lib/systemd/user/", "644"],

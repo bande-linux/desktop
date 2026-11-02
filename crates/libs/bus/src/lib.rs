@@ -1,3 +1,4 @@
+pub mod logind;
 pub mod portal_settings;
 
 use std::time::Duration;

@@ -143,6 +143,7 @@ pub enum Hit {
     QuickLook,
     QuickLookOpen,
     QuickLookFullScreen,
+    GroupToggle(usize),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -244,7 +245,7 @@ pub struct FilesView {
     pub(crate) search_home: bool,
     views: ViewMemory,
     pub(crate) shown_root: Option<Location>,
-    pub(crate) grid_scroll: (Option<Location>, ScrollState),
+    pub(crate) grid_scroll: crate::grid::GridScroll,
     pub(crate) band: Option<Band>,
     pub(crate) labels: HashMap<(String, u32, usize), String>,
     pub(crate) grid_wanted: Vec<Entry>,
@@ -382,7 +383,7 @@ impl FilesView {
             search_home: false,
             views: ViewMemory::default(),
             shown_root: None,
-            grid_scroll: (None, ScrollState::default()),
+            grid_scroll: crate::grid::GridScroll::default(),
             band: None,
             labels: HashMap::new(),
             grid_wanted: Vec::new(),
@@ -1336,6 +1337,7 @@ impl FilesView {
             Hit::NewTab => self.open_tab(self.browser.root().clone()),
             Hit::QuickLookOpen => self.open_quick_look_item(),
             Hit::QuickLookFullScreen => self.toggle_quick_look_full_screen(),
+            Hit::GroupToggle(section) => self.toggle_group(section),
             Hit::QuickLook => {}
         }
         true
@@ -1414,6 +1416,7 @@ impl FilesView {
                     | Hit::NewTab
                     | Hit::QuickLookOpen
                     | Hit::QuickLookFullScreen
+                    | Hit::GroupToggle(_)
             )
         });
         let changed = hover != self.hover;

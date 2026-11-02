@@ -1,12 +1,14 @@
-use std::ops::Range;
+use std::collections::{HashMap, HashSet};
 
 use bande_fs::Entry;
 use bande_thumbnails::ThumbnailSize;
-use bande_toolkit::ui::{Key, Modifiers, Pointer, Scroll, ScrollState};
+use bande_toolkit::ui::{Key, Modifiers, Pointer, Scroll, ScrollPhase, ScrollSource, ScrollState};
 use bande_toolkit::{
     Color, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
 
+use crate::L10N;
+use crate::browser::Location;
 use crate::controls::Press;
 use crate::view::{FilesView, Hit};
 
@@ -19,80 +21,169 @@ const LABEL_INSET: f32 = 4.0;
 const SELECTION_RADIUS: f32 = Radius::S;
 const GROUP_HEADING: f32 = 34.0;
 
+#[derive(Debug, Default)]
+pub(crate) struct GridScroll {
+    location: Option<Location>,
+    vertical: ScrollState,
+    rows: HashMap<String, ScrollState>,
+    expanded: HashSet<String>,
+    gesture: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct GroupLayout {
+    pub start: usize,
+    pub expanded: bool,
+    pub shift: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Section {
+    start: usize,
+    len: usize,
+    top: f32,
+    row: bool,
+    shift: f32,
+}
+
+impl Section {
+    fn rows(&self, columns: usize) -> usize {
+        match self.row {
+            true => 1,
+            false => self.len.div_ceil(columns),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Grid {
     pub columns: usize,
     pub cell_width: f32,
     pub cell_height: f32,
     pub icon: f32,
+    usable: f32,
     count: usize,
-    sections: Vec<(usize, f32)>,
+    grouped: bool,
+    sections: Vec<Section>,
 }
 
 impl Grid {
-    pub(crate) fn new(width: f32, icon: f32, count: usize, starts: &[usize]) -> Self {
+    pub(crate) fn new(width: f32, icon: f32, count: usize, groups: &[GroupLayout]) -> Self {
         let minimum = (icon + 36.0).max(96.0);
         let usable = (width - 2.0 * PADDING).max(minimum);
         let columns = ((usable / minimum).floor() as usize).max(1);
         let cell_height = (2.0 * ICON_PAD + icon + LABEL_GAP + 2.0 * LABEL_LINE + 6.0).ceil();
-        let mut sections = Vec::with_capacity(starts.len().max(1));
+        let mut sections = Vec::with_capacity(groups.len().max(1));
         let mut top = PADDING;
-        for (index, start) in starts.iter().enumerate() {
-            let end = starts.get(index + 1).copied().unwrap_or(count);
-            sections.push((*start, top + GROUP_HEADING));
-            top += GROUP_HEADING + (end - start).div_ceil(columns) as f32 * cell_height;
+        for (index, group) in groups.iter().enumerate() {
+            let end = groups.get(index + 1).map_or(count, |next| next.start);
+            let len = end.saturating_sub(group.start);
+            let section = Section {
+                start: group.start,
+                len,
+                top: top + GROUP_HEADING,
+                row: !group.expanded && len > columns,
+                shift: group.shift,
+            };
+            top = section.top + section.rows(columns) as f32 * cell_height;
+            sections.push(section);
         }
-        if sections.is_empty() {
-            sections.push((0, PADDING));
+        let grouped = !sections.is_empty();
+        if !grouped {
+            sections.push(Section {
+                start: 0,
+                len: count,
+                top: PADDING,
+                row: false,
+                shift: 0.0,
+            });
         }
         Self {
             columns,
             cell_width: (usable / columns as f32).floor(),
             cell_height,
             icon,
+            usable,
             count,
+            grouped,
             sections,
         }
     }
 
     fn section(&self, index: usize) -> usize {
         self.sections
-            .partition_point(|(start, _)| *start <= index)
+            .partition_point(|section| section.start <= index)
             .saturating_sub(1)
     }
 
-    fn section_len(&self, section: usize) -> usize {
-        let end = self
-            .sections
-            .get(section + 1)
-            .map_or(self.count, |(start, _)| *start);
-        end.saturating_sub(self.sections[section].0)
+    pub(crate) fn row_width(&self, section: usize) -> f32 {
+        self.sections
+            .get(section)
+            .map_or(0.0, |section| section.len as f32 * self.cell_width)
+    }
+
+    pub(crate) fn viewport_width(&self) -> f32 {
+        self.columns as f32 * self.cell_width
+    }
+
+    pub(crate) fn overflows(&self, section: usize) -> bool {
+        self.grouped
+            && self
+                .sections
+                .get(section)
+                .is_some_and(|section| section.len > self.columns)
     }
 
     pub(crate) fn headings(&self) -> impl Iterator<Item = (usize, f32)> + '_ {
         self.sections
             .iter()
             .enumerate()
-            .filter(|_| self.sections.len() > 1 || self.sections[0].1 > PADDING)
-            .map(|(index, (_, top))| (index, top - GROUP_HEADING))
+            .filter(|_| self.grouped)
+            .map(|(index, section)| (index, section.top - GROUP_HEADING))
+    }
+
+    pub(crate) fn row_section(&self, y: f32) -> Option<usize> {
+        self.sections.iter().position(|section| {
+            section.row && (section.top..section.top + self.cell_height).contains(&y)
+        })
     }
 
     pub(crate) fn content_height(&self) -> f32 {
-        let last = self.sections.len() - 1;
-        let (_, top) = self.sections[last];
-        top + self.section_len(last).div_ceil(self.columns) as f32 * self.cell_height + PADDING
+        self.sections.last().map_or(2.0 * PADDING, |section| {
+            section.top + section.rows(self.columns) as f32 * self.cell_height + PADDING
+        })
     }
 
     pub(crate) fn cell(&self, index: usize) -> Rect {
-        let (start, top) = self.sections[self.section(index)];
-        let local = index - start;
-        let (row, column) = (local / self.columns, local % self.columns);
+        let section = self.sections[self.section(index)];
+        let local = index - section.start;
+        let (row, column, shift) = match section.row {
+            true => (0, local, section.shift),
+            false => (local / self.columns, local % self.columns, 0.0),
+        };
         Rect::new(
-            PADDING + column as f32 * self.cell_width,
-            top + row as f32 * self.cell_height,
+            PADDING + column as f32 * self.cell_width - shift,
+            section.top + row as f32 * self.cell_height,
             self.cell_width,
             self.cell_height,
         )
+    }
+
+    pub(crate) fn row_span(&self, index: usize) -> (f32, f32) {
+        let section = self.sections[self.section(index)];
+        let left = (index - section.start) as f32 * self.cell_width;
+        (left, left + self.cell_width)
+    }
+
+    pub(crate) fn is_row(&self, section: usize) -> bool {
+        self.sections
+            .get(section)
+            .is_some_and(|section| section.row)
+    }
+
+    pub(crate) fn in_row(&self, index: usize) -> Option<usize> {
+        let section = self.section(index);
+        self.is_row(section).then_some(section)
     }
 
     pub(crate) fn icon_rect(&self, index: usize) -> Rect {
@@ -115,22 +206,73 @@ impl Grid {
         )
     }
 
-    fn first_where(&self, below: impl Fn(Rect) -> bool) -> usize {
-        let (mut low, mut high) = (0, self.count);
-        while low < high {
-            let middle = (low + high) / 2;
-            match below(self.cell(middle)) {
-                true => low = middle + 1,
-                false => high = middle,
+    pub(crate) fn visible(&self, top: f32, height: f32) -> Vec<usize> {
+        let mut shown = Vec::new();
+        for section in &self.sections {
+            let rows = section.rows(self.columns);
+            let bottom = section.top + rows as f32 * self.cell_height;
+            if bottom <= top || section.top >= top + height {
+                continue;
             }
+            let range = match section.row {
+                true => {
+                    let first = (section.shift / self.cell_width).floor().max(0.0) as usize;
+                    let last = ((section.shift + self.usable) / self.cell_width).ceil() as usize;
+                    first.min(section.len)..last.min(section.len)
+                }
+                false => {
+                    let first = ((top - section.top) / self.cell_height).floor().max(0.0) as usize;
+                    let last = ((top + height - section.top) / self.cell_height)
+                        .ceil()
+                        .max(0.0) as usize;
+                    (first * self.columns).min(section.len)..(last * self.columns).min(section.len)
+                }
+            };
+            shown.extend(range.map(|local| section.start + local));
         }
-        low
+        shown
     }
 
-    pub(crate) fn visible(&self, top: f32, height: f32) -> Range<usize> {
-        let first = self.first_where(|cell| cell.y + cell.height <= top);
-        let last = self.first_where(|cell| cell.y < top + height);
-        first..last.max(first)
+    fn row_of(&self, index: usize) -> (usize, usize) {
+        let section = self.section(index);
+        let local = index - self.sections[section].start;
+        match self.sections[section].row {
+            true => (section, 0),
+            false => (section, local / self.columns),
+        }
+    }
+
+    fn nearest(&self, section: usize, row: usize, x: f32) -> usize {
+        let section = self.sections[section];
+        let (first, last) = match section.row {
+            true => (0, section.len.saturating_sub(1)),
+            false => (
+                row * self.columns,
+                ((row + 1) * self.columns)
+                    .min(section.len)
+                    .saturating_sub(1),
+            ),
+        };
+        let start = self.cell(section.start + first).x;
+        let offset = ((x - start) / self.cell_width).round().max(0.0) as usize;
+        section.start + (first + offset).min(last)
+    }
+
+    fn vertical(&self, from: usize, down: bool) -> usize {
+        let (section, row) = self.row_of(from);
+        let x = self.cell(from).x;
+        let target = match down {
+            true if row + 1 < self.sections[section].rows(self.columns) => Some((section, row + 1)),
+            true => (section + 1..self.sections.len())
+                .find(|next| self.sections[*next].len > 0)
+                .map(|next| (next, 0)),
+            false if row > 0 => Some((section, row - 1)),
+            false => (0..section)
+                .rev()
+                .find(|previous| self.sections[*previous].len > 0)
+                .map(|previous| (previous, self.sections[previous].rows(self.columns) - 1)),
+        };
+        target.map_or(from, |(section, row)| self.nearest(section, row, x))
     }
 
     pub(crate) fn step(&self, from: Option<usize>, key: Key) -> Option<usize> {
@@ -141,30 +283,11 @@ impl Grid {
                 _ => 0,
             });
         };
-        let section = self.section(from);
-        let (start, _) = self.sections[section];
-        let (local, length) = (from - start, self.section_len(section));
-        let column = local % self.columns;
         Some(match key {
             Key::Left => from.saturating_sub(1),
             Key::Right => (from + 1).min(last),
-            Key::Up if local >= self.columns => from - self.columns,
-            Key::Up if section > 0 => {
-                let (above, _) = self.sections[section - 1];
-                let length = self.section_len(section - 1);
-                let row = length.saturating_sub(1) / self.columns;
-                above + (row * self.columns + column).min(length.saturating_sub(1))
-            }
-            Key::Up => from,
-            Key::Down if local + self.columns < length => from + self.columns,
-            Key::Down if local / self.columns < length.saturating_sub(1) / self.columns => {
-                start + length - 1
-            }
-            Key::Down if section + 1 < self.sections.len() => {
-                let (below, _) = self.sections[section + 1];
-                below + column.min(self.section_len(section + 1).saturating_sub(1))
-            }
-            Key::Down => from,
+            Key::Up => self.vertical(from, false),
+            Key::Down => self.vertical(from, true),
             Key::Home => 0,
             Key::End => last,
             _ => return None,
@@ -193,24 +316,53 @@ fn intersects(a: Rect, b: Rect) -> bool {
     a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 }
 
+fn clipped(rect: Rect, to: Rect) -> Rect {
+    let (left, top) = (rect.x.max(to.x), rect.y.max(to.y));
+    let right = (rect.x + rect.width).min(to.x + to.width);
+    let bottom = (rect.y + rect.height).min(to.y + to.height);
+    Rect::new(left, top, (right - left).max(0.0), (bottom - top).max(0.0))
+}
+
 fn offset(rect: Rect, by: Point) -> Rect {
     Rect::new(rect.x + by.x, rect.y + by.y, rect.width, rect.height)
 }
 
 impl FilesView {
     pub(crate) fn grid(&mut self) -> Grid {
-        let starts = self
-            .groups()
-            .iter()
-            .map(|(start, _)| *start)
-            .collect::<Vec<_>>();
+        self.sync_grid_location();
+        let groups = self.groups();
         let count = self.browser.columns()[0].entries.len();
-        Grid::new(
-            self.content_frame().width,
-            self.icon_size as f32,
-            count,
-            &starts,
-        )
+        let (width, icon) = (self.content_frame().width, self.icon_size as f32);
+        let mut layouts = groups
+            .iter()
+            .map(|(start, title)| GroupLayout {
+                start: *start,
+                expanded: self.grid_scroll.expanded.contains(title),
+                shift: 0.0,
+            })
+            .collect::<Vec<_>>();
+        let grid = Grid::new(width, icon, count, &layouts);
+        let viewport = grid.viewport_width();
+        let cx = self.ui.context();
+        for (section, (layout, (_, title))) in layouts.iter_mut().zip(groups.iter()).enumerate() {
+            if !grid.is_row(section) {
+                continue;
+            }
+            let state = self.grid_scroll.rows.entry(title.clone()).or_default();
+            state.set_extent(grid.row_width(section), viewport);
+            layout.shift = state.offset(cx);
+        }
+        Grid::new(width, icon, count, &layouts)
+    }
+
+    fn sync_grid_location(&mut self) {
+        let location = self.browser.root().clone();
+        if self.grid_scroll.location.as_ref() != Some(&location) {
+            self.grid_scroll = GridScroll {
+                location: Some(location),
+                ..GridScroll::default()
+            };
+        }
     }
 
     pub(crate) fn thumbnail_size(&self) -> ThumbnailSize {
@@ -218,19 +370,15 @@ impl FilesView {
     }
 
     fn fit_grid_scroll(&mut self) {
-        let location = self.browser.root().clone();
-        if self.grid_scroll.0.as_ref() != Some(&location) {
-            self.grid_scroll = (Some(location), ScrollState::default());
-        }
         let content = self.grid().content_height();
         let viewport = self.content_frame().height;
-        self.grid_scroll.1.set_extent(content, viewport);
+        self.grid_scroll.vertical.set_extent(content, viewport);
     }
 
     pub(crate) fn grid_offset(&mut self) -> f32 {
         self.fit_grid_scroll();
         let cx = self.ui.context();
-        self.grid_scroll.1.offset(cx)
+        self.grid_scroll.vertical.offset(cx)
     }
 
     pub(crate) fn grid_origin(&mut self) -> Point {
@@ -240,21 +388,68 @@ impl FilesView {
     }
 
     pub(crate) fn reveal_in_grid(&mut self) {
-        let Some(row) = self.browser.columns()[0].selected else {
+        let Some(index) = self.browser.columns()[0].selected else {
             return;
         };
         self.fit_grid_scroll();
-        let cell = self.grid().cell(row);
+        let grid = self.grid();
+        let groups = self.groups();
         let cx = self.ui.context();
+        if let Some((_, title)) = grid.in_row(index).and_then(|section| groups.get(section)) {
+            let (left, right) = grid.row_span(index);
+            if let Some(state) = self.grid_scroll.rows.get_mut(title) {
+                state.reveal(cx, left, right);
+            }
+        }
+        let cell = grid.cell(index);
         self.grid_scroll
-            .1
+            .vertical
             .reveal(cx, cell.y - PADDING, cell.y + cell.height + PADDING);
+    }
+
+    fn row_under(&mut self, scroll: &Scroll) -> Option<String> {
+        let sideways = scroll.delta.x.abs() > scroll.delta.y.abs();
+        let origin = self.grid_origin();
+        let section = self.grid().row_section(scroll.position.y - origin.y)?;
+        let groups = self.groups();
+        sideways.then(|| groups.get(section).map(|(_, title)| title.clone()))?
     }
 
     pub(crate) fn grid_scrolled(&mut self, scroll: &Scroll) -> bool {
         self.fit_grid_scroll();
+        let row = match (scroll.source, scroll.phase) {
+            (ScrollSource::Wheel, _) => self.row_under(scroll),
+            (_, ScrollPhase::Began) => {
+                self.grid_scroll.gesture = self.row_under(scroll);
+                self.grid_scroll.gesture.clone()
+            }
+            (_, ScrollPhase::Ended) => self.grid_scroll.gesture.take(),
+            (_, ScrollPhase::Changed) => self.grid_scroll.gesture.clone(),
+        };
         let cx = self.ui.context();
-        self.grid_scroll.1.scroll(cx, scroll)
+        match row.and_then(|title| self.grid_scroll.rows.get_mut(&title)) {
+            Some(state) => state.scroll(
+                cx,
+                &Scroll {
+                    delta: Point::new(0.0, scroll.delta.x),
+                    ..*scroll
+                },
+            ),
+            None => self.grid_scroll.vertical.scroll(cx, scroll),
+        }
+    }
+
+    pub(crate) fn toggle_group(&mut self, section: usize) {
+        self.sync_grid_location();
+        let groups = self.groups();
+        let Some((_, title)) = groups.get(section) else {
+            return;
+        };
+        if !self.grid_scroll.expanded.remove(title) {
+            self.grid_scroll.expanded.insert(title.clone());
+        }
+        self.grid_scroll.rows.remove(title);
+        self.fit_grid_scroll();
     }
 
     pub(crate) fn grid_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
@@ -310,7 +505,7 @@ impl FilesView {
         if below > 0.0 || above > 0.0 {
             let target = self.grid_offset() + below.max(0.0) - above.max(0.0);
             let cx = self.ui.context();
-            self.grid_scroll.1.scroll_to(cx, target);
+            self.grid_scroll.vertical.scroll_to(cx, target);
         }
         let origin = self.grid_origin();
         let grid = self.grid();
@@ -321,6 +516,7 @@ impl FilesView {
         let area = normalised(band.origin, band.current);
         let touched = grid
             .visible(area.y, area.height)
+            .into_iter()
             .filter(|index| {
                 intersects(grid.icon_rect(*index), area)
                     || intersects(grid.label_area(*index), area)
@@ -408,10 +604,13 @@ impl FilesView {
                 )),
                 paint: self.palette.hairline.into(),
             });
+            if grid.overflows(index) {
+                self.paint_group_toggle(index, grid.is_row(index), content, baseline, &mut shown);
+            }
         }
         let size = self.thumbnail_size();
         let renaming = self.rename.as_ref().map(|rename| rename.path.clone());
-        for index in visible.clone() {
+        for index in visible.iter().copied() {
             let entry = &column.entries[index];
             let marked = column.is_marked(index);
             let icon = offset(grid.icon_rect(index), origin);
@@ -438,7 +637,7 @@ impl FilesView {
                 }
             }
             self.hits.push((
-                icon.inset(-ICON_PAD),
+                clipped(icon.inset(-ICON_PAD), content),
                 Hit::Row {
                     column: 0,
                     row: index,
@@ -468,7 +667,7 @@ impl FilesView {
                 paragraph,
             });
             self.hits.push((
-                text_area,
+                clipped(text_area, content),
                 Hit::Row {
                     column: 0,
                     row: index,
@@ -495,12 +694,55 @@ impl FilesView {
             items: shown,
         });
         let cx = self.ui.context();
-        self.grid_scroll.1.paint_scrollbar(cx, content, items);
-        let ahead = visible.end..(visible.end + visible.len()).min(count);
-        self.grid_wanted = column.entries[visible]
+        self.grid_scroll
+            .vertical
+            .paint_scrollbar(cx, content, items);
+        let end = visible.last().map_or(0, |last| last + 1);
+        let ahead = end..(end + visible.len()).min(count);
+        self.grid_wanted = visible
             .iter()
+            .filter_map(|index| column.entries.get(*index))
             .chain(&column.entries[ahead])
             .cloned()
             .collect();
+    }
+
+    fn paint_group_toggle(
+        &mut self,
+        section: usize,
+        collapsed: bool,
+        content: Rect,
+        baseline: f32,
+        items: &mut Vec<Item>,
+    ) {
+        let hovered = self.hover == Some(Hit::GroupToggle(section));
+        let color = match hovered {
+            true => self.palette.ink,
+            false => self.palette.ink2,
+        };
+        let title = L10N.tr(match collapsed {
+            true => "group-show-all",
+            false => "group-show-less",
+        });
+        let paragraph = self.text().paragraph(
+            &title,
+            TextStyle::new(LABEL_SIZE, color).weight(TextStyle::MEDIUM),
+            None,
+            TextAlign::Start,
+        );
+        let right = content.x + content.width - PADDING - LABEL_INSET;
+        let origin = Point::new(
+            (right - paragraph.width()).round(),
+            baseline - paragraph.height(),
+        );
+        let area = Rect::new(
+            origin.x - LABEL_INSET,
+            origin.y - 2.0,
+            paragraph.width() + 2.0 * LABEL_INSET,
+            paragraph.height() + 4.0,
+        );
+        items.push(Item::Text { origin, paragraph });
+        self.hits
+            .push((clipped(area, content), Hit::GroupToggle(section)));
     }
 }

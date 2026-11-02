@@ -9,6 +9,8 @@ bande-file-chooser
 bande-tray
 bande-automount
 bande-polkit
+bande-secrets
+libpam-bande-secrets
 bande-shell
 bande-lock
 bande-screenshot

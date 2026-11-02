@@ -1,0 +1,44 @@
+[package]
+name = "libpam-bande-secrets"
+description = "PAM module that unlocks the Bande keychain at login"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lib]
+name = "pam_bande_secrets"
+crate-type = ["cdylib"]
+
+[dependencies]
+libc.workspace = true
+zeroize.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "admin"
+depends = "$auto, libpam-runtime (>= 1.0.1-6), bande-secrets"
+extended-description = """\
+Unlocks the Bande login keychain with the password you log in with, and \
+re-encrypts it when you change your password, the way pam_gnome_keyring \
+does for GNOME Keyring. The lock screen and sudo pass through it without \
+unlocking anything. Enabled through pam-auth-update."""
+maintainer-scripts = "debian/"
+
+[package.metadata.deb.variants.arm64]
+name = "libpam-bande-secrets"
+assets = [
+    ["target/release/libpam_bande_secrets.so", "usr/lib/aarch64-linux-gnu/security/pam_bande_secrets.so", "644"],
+    ["data/bande-secrets", "usr/share/pam-configs/", "644"],
+]
+
+[package.metadata.deb.variants.amd64]
+name = "libpam-bande-secrets"
+assets = [
+    ["target/release/libpam_bande_secrets.so", "usr/lib/x86_64-linux-gnu/security/pam_bande_secrets.so", "644"],
+    ["data/bande-secrets", "usr/share/pam-configs/", "644"],
+]
+
+[lints]
+workspace = true

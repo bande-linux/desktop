@@ -10,7 +10,12 @@ export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$PWD=/build --remap-path-pr
 echo "Building ${#packages[@]} packages $version for $(dpkg --print-architecture)"
 rm -rf "$target/debian"
 cargo build --profile dist --locked "${packages[@]/#/--package=}"
+architecture=$(dpkg --print-architecture)
 for package in "${packages[@]}"; do
-    cargo deb --profile dist --no-build --locked --package "$package" --deb-version "$version"
+    variant=()
+    if grep -qx "$package" ci/release/arch-variants; then
+        variant=(--variant "$architecture")
+    fi
+    cargo deb --profile dist --no-build --locked --package "$package" "${variant[@]}" --deb-version "$version"
 done
 ls -l "$target/debian"

@@ -81,6 +81,23 @@ for entry in bande-config:org.bande.Config:org.bande.Config \
     test -x "$root/DEBIAN/postinst"
 done
 
+echo "== the keychain and its PAM module"
+root=$(extract bande-secrets)
+service="$root/usr/share/dbus-1/services/org.bande.Secrets.service"
+grep -qx 'Name=org.freedesktop.secrets' "$service"
+grep -qx 'SystemdService=bande-secrets.service' "$service"
+test -x "$root$(sed -n 's/^Exec=//p' "$service")"
+grep -qx 'ListenStream=%t/bande-secrets/pam' "$root/usr/lib/systemd/user/bande-secrets.socket"
+grep -qx 'BusName=org.freedesktop.secrets' "$root/usr/lib/systemd/user/bande-secrets.service"
+field bande-secrets Provides | grep -qw org.freedesktop.secrets
+field bande-secrets Conflicts | grep -qw gnome-keyring
+root=$(extract libpam-bande-secrets)
+test -s "$root/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/security/pam_bande_secrets.so"
+grep -qP '^\toptional\tpam_bande_secrets.so$' "$root/usr/share/pam-configs/bande-secrets"
+field libpam-bande-secrets Depends | grep -qw libpam0g
+dpkg-deb --control "$debs/libpam-bande-secrets_${version}_$architecture.deb" "$root/DEBIAN"
+grep -q 'pam-auth-update --package --remove bande-secrets' "$root/DEBIAN/prerm"
+
 echo "== the automount service's user unit"
 root=$(extract bande-automount)
 unit="$root/usr/lib/systemd/user/bande-automount.service"
@@ -91,7 +108,7 @@ field bande-automount Depends | grep -q udisks2
 echo "== the login session"
 root="$scratch/session"
 mkdir -p "$root"
-for package in bande-compositor bande-config bande-power bande-tray bande-automount; do
+for package in bande-compositor bande-config bande-power bande-tray bande-automount bande-secrets; do
     dpkg-deb --extract "$debs/${package}_${version}_$architecture.deb" "$root"
 done
 session="$root/usr/share/wayland-sessions/bande.desktop"

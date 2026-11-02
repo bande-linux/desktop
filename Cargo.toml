@@ -18,11 +18,16 @@ panic = "deny"
 accesskit = "=0.25.2"
 accesskit_unix = "=0.24.1"
 ash = "=0.38.0"
+async-executor = "=1.14.0"
+async-io = "=2.6.0"
+async-lock = "=3.4.2"
+async-process = "=2.5.0"
 blocking = "=1.6.2"
 bzip2 = "=0.6.1"
 flate2 = "=1.1.10"
 fluent-bundle = "=0.16.0"
 fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
+futures-lite = "=2.6.1"
 hayro = "=0.8.0"
 icu_calendar = "=2.4.0"
 icu_datetime = "=2.4.0"
@@ -36,6 +41,7 @@ libloading = "=0.8.9"
 lzma-rust2 = { version = "=0.23.0", default-features = false, features = ["std", "xz", "encoder"] }
 md-5 = "=0.10.6"
 naga = { version = "=30.0.1", features = ["wgsl-in", "spv-out"] }
+oo7 = { version = "=0.7.0-beta", default-features = false, features = ["async-std", "native_crypto", "unstable"] }
 parley = { version = "=0.12.0", features = ["complex-scripts"] }
 pipewire = "=0.10.1"
 png = "=0.18.1"
@@ -113,6 +119,7 @@ bande-render = { path = "crates/platform/render" }
 bande-review = { path = "crates/testing/review" }
 bande-sample = { path = "crates/testing/sample" }
 bande-screenshot = { path = "crates/shell/screenshot" }
+bande-secrets = { path = "crates/services/secrets" }
 bande-search = { path = "crates/libs/search" }
 bande-settings = { path = "crates/apps/settings" }
 bande-settings-panes = { path = "crates/libs/settings-panes" }

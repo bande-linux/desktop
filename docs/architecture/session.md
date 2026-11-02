@@ -264,16 +264,28 @@ graph LR
 - Every toolkit widget produces an AccessKit node, published on AT-SPI2 for screen readers
   ([toolkit](toolkit.md)).
 
-### Keyring
+### Keyring (`bande-secrets`)
 
-- Mail, Calendar (through `bande-keyring`, a Secret Service client), browsers and GTK apps keep
-  passwords through the Secret Service. Bande has no Secret Service of its own, so
-  `bande-desktop` recommends `gnome-keyring` and `libpam-gnome-keyring` (they bring GTK 3 and
-  4 through `gcr` and GnuPG through `pinentry-gnome3`): Debian's `/etc/pam.d/greetd` already
-  has `pam_gnome_keyring` in its `auth` and `session` stacks (as optional), so signing in
-  through `bande-greeter` unlocks the login keyring with the password just typed, and
-  `gnome-keyring-daemon.socket` starts the daemon (secrets and PKCS#11 components) in the user
-  manager.
+- `crates/services/secrets`, packaged as `bande-secrets`: the session's
+  `org.freedesktop.secrets` (Secret Service: Service, Collection, Item, Session and Prompt
+  objects; `plain` and `dh-ietf1024-sha256-aes128-cbc-pkcs7` sessions). It is D-Bus activated
+  and socket-activated through `bande-secrets.socket`, and idles blocked in epoll.
+- Keychains are oo7's v1 files in `~/.local/share/keyrings/v1/<name>.keyring` (PBKDF2-SHA256,
+  AES-128-CBC with HMAC-SHA256, written 0600 through a temporary file): `login` (alias
+  `default`), the in-memory `session`, and any an app creates. The first unlock of `login`
+  imports GNOME Keyring's `~/.local/share/keyrings/login.keyring` and leaves it in place.
+- `libpam-bande-secrets` (`crates/services/secrets-pam`) adds `pam_bande_secrets.so` through
+  the pam-auth-update profile `bande-secrets`: `auth` keeps the typed password in PAM data,
+  `session` hands it to the daemon over `/run/user/<uid>/bande-secrets/pam` (peer uid checked
+  on both ends) and waits for the answer, and `password` passes the old and new passwords so
+  `passwd` and Users & Groups re-encrypt the login keychain. The lock screen runs `auth` only,
+  so it unlocks nothing; as on macOS the login keychain stays unlocked while the screen is
+  locked. When the login password does not open the keychain, the next unlock offers to update
+  its password or start a new one (the old file is kept).
+- Items record the app that saved them (`bande:creator`: the Flatpak id or the executable of
+  the D-Bus peer). Another app sees such an item as locked and gets it after confirming with
+  the keychain password (`bande:allowed` remembers "Always Allow"). Prompts are
+  `bande-secrets-prompt` processes; the daemon is not dumpable and has no core limit.
 
 ### Session startup
 

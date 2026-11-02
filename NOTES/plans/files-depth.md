@@ -25,16 +25,22 @@ Delete each line when it ships; delete the file when the list is empty.
 
 ## Already in Files
 
-Icons, list (with disclosure) and columns; Quick Look with full screen; Get Info inspector with
-Open With and default app; tabs; batch rename; Make Alias (a symlink, Kind “Alias”); Undo/Redo shared by all windows; View ▸ Sort By; Go ▸ Recent Folders;
-spring-loaded folders; Ctrl/Shift drag modifiers; Recents and search with scopes; per-folder
-view memory; status bar and path bar; hidden files; Trash with Put Back, Empty, 30-day purge
-and per-volume `.Trash-uid`; volumes with Eject and an alert (Force Eject) when a disk is busy, on the desktop too; Compress and Extract; Open in Terminal; New
-Document templates; failure alerts per item (Skip, Try Again, Skip All, Stop); a no-space
-check before copying; empty-folder and no-permission messages; Settings (General with external
-disks on the desktop, Show in Sidebar, Advanced) with hidden extensions and Last Folder for new windows;
-`org.freedesktop.FileManager1` ("Show in Folder" from other apps, D-Bus activated with
-`--gapplication-service`); `bande-files --select <paths>`.
+- Views: icons, list (with disclosure), columns; View ▸ Sort By; per-folder view memory;
+  status bar and path bar; hidden files; Quick Look with full screen.
+- Names: known extensions hidden unless Settings ▸ Advanced shows them (Files, desktop, file
+  chooser), kept on rename, a warning before changing one; batch rename.
+- Get Info inspector with Open With, default app and permissions.
+- Getting around: tabs; sidebar with Settings ▸ Show in Sidebar; Recents; search with scopes;
+  Go ▸ Recent Folders; new windows on a chosen or the last folder; `org.freedesktop.FileManager1`
+  (D-Bus activated with `--gapplication-service`) and `bande-files --select <paths>`.
+- Changes: Undo/Redo shared by all windows; Make Alias (a symlink, Kind “Alias”);
+  spring-loaded folders; Ctrl/Shift drag modifiers; Compress and Extract; New Document
+  templates; Open in Terminal.
+- Trouble: per-item failure alerts (Skip, Try Again, Skip All, Stop); a no-space check before
+  copying; empty-folder and no-permission messages; an eject alert with Force Eject (Files
+  and desktop).
+- Trash with Put Back, Empty, 30-day purge and per-volume `.Trash-uid`; external disks in the
+  sidebar and, by a setting, on the desktop.
 
 ## Open, ranked
 

@@ -192,7 +192,7 @@ fn place_toggle(file: &Path, label: String, place: Option<Location>, shown: bool
     let file = file.to_path_buf();
     let control = Toggle::new(&label, shown, move |on| {
         let layout = fs::read_to_string(&file).unwrap_or_default();
-        if let Err(error) = replace_file(&file, &with_place_shown(&layout, place.as_ref(), on)) {
+        if let Err(error) = replace_file(&file, with_place_shown(&layout, place.as_ref(), on)) {
             tracing::warn!("cannot change the sidebar: {error}");
         }
     });

@@ -522,6 +522,7 @@ pub enum Namespace {
     XLink,
     Xml,
     Xmlns,
+    Other,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

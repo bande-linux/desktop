@@ -7,7 +7,7 @@ One Cargo workspace with one lock. Dependencies run only downward in this list.
 | Crate | Owns |
 |---|---|
 | `web-atoms` | interned strings: static atoms generated at build time, per-document dynamic tables, no global mutex |
-| `web-html` | tokenizer, tree builder, serialiser, preload scanner |
+| `web-html` | tokenizer, tree builder, XML parser for XHTML, serialiser, preload scanner |
 | `web-css` | syntax, property table and generated value types, stylesheets, media queries |
 | `web-dom` | arena, node kinds, mutation journal, events, ranges, selection |
 | `web-style` | selector matching, invalidation sets, cascade, computed style, style sharing |

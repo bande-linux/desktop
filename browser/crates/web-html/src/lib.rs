@@ -7,11 +7,13 @@ mod open_elements;
 mod sink;
 mod tokenizer;
 mod tree_builder;
+mod xml;
 
 use encoding_rs::{Decoder, Encoding, UTF_8, UTF_16BE, UTF_16LE, WINDOWS_1252};
 
 pub use sink::{Attributes, QuirksMode, TreeSink};
 pub use web_atoms::{Atom, AtomTable, Namespace, QualName};
+pub use xml::parse_xml;
 
 use input::Input;
 use tokenizer::{State, Tag, Tokenizer};

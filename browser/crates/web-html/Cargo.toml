@@ -1,6 +1,6 @@
 [package]
 name = "web-html"
-description = "The HTML tokenizer and tree builder, streaming into a tree sink"
+description = "The HTML tokenizer and tree builder and the XML parser, streaming into a tree sink"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

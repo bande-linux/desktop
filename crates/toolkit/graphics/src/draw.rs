@@ -160,6 +160,42 @@ fn snapped(base: Affine, offset: crate::scene::Point) -> Affine {
     Affine::translate((device(x, offset.x), device(y, offset.y))) * Affine::scale(scale)
 }
 
+fn fill_run(
+    canvas: &mut impl Canvas,
+    outlines: &mut GlyphOutlines,
+    run: &GlyphRun,
+    origin: crate::scene::Point,
+    base: Affine,
+) {
+    canvas.set_paint(color(run.color).into());
+    if outlines.is_color_font(run) {
+        let glyphs: Vec<Glyph> = run
+            .glyphs
+            .iter()
+            .map(|glyph| Glyph {
+                id: glyph.id,
+                x: origin.x + glyph.x,
+                y: origin.y + glyph.y,
+            })
+            .collect();
+        canvas.fill_glyphs(run, &glyphs);
+        return;
+    }
+    for glyph in &run.glyphs {
+        let Some(outline) = outlines.outline(run, glyph.id) else {
+            continue;
+        };
+        canvas.set_transform(
+            base * Affine::translate((
+                f64::from(origin.x + glyph.x),
+                f64::from(origin.y + glyph.y),
+            )),
+        );
+        canvas.fill_path(&outline);
+    }
+    canvas.set_transform(base);
+}
+
 fn encode_at(
     canvas: &mut impl Canvas,
     outlines: &mut GlyphOutlines,
@@ -198,34 +234,11 @@ fn encode_at(
             }
             Item::Text { origin, paragraph } => {
                 for run in paragraph.glyph_runs() {
-                    canvas.set_paint(color(run.color).into());
-                    if outlines.is_color_font(&run) {
-                        let glyphs: Vec<Glyph> = run
-                            .glyphs
-                            .iter()
-                            .map(|glyph| Glyph {
-                                id: glyph.id,
-                                x: origin.x + glyph.x,
-                                y: origin.y + glyph.y,
-                            })
-                            .collect();
-                        canvas.fill_glyphs(&run, &glyphs);
-                        continue;
-                    }
-                    for glyph in &run.glyphs {
-                        let Some(outline) = outlines.outline(&run, glyph.id) else {
-                            continue;
-                        };
-                        canvas.set_transform(
-                            base * Affine::translate((
-                                f64::from(origin.x + glyph.x),
-                                f64::from(origin.y + glyph.y),
-                            )),
-                        );
-                        canvas.fill_path(&outline);
-                    }
-                    canvas.set_transform(base);
+                    fill_run(canvas, outlines, &run, *origin, base);
                 }
+            }
+            Item::Glyphs(run) => {
+                fill_run(canvas, outlines, run, crate::scene::Point::default(), base);
             }
             Item::Clip { shape, items } => {
                 canvas.push_clip_layer(&path(shape));

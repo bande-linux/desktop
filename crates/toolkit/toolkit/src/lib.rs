@@ -2,10 +2,10 @@ mod alert;
 
 pub use alert::ask;
 pub use bande_graphics::{
-    Appearance, Color, ControlSize, CpuRenderer, Cut, DrawError, Elevation, GlyphRun, GpuRenderer,
-    Image, Item, Paint, Palette, Paragraph, Path, Point, PositionedGlyph, Radius, Rect, Scene,
-    Scheme, Shape, Snapshot, Spacing, Stop, TextAlign, TextRole, TextSize, TextStyle, TextSystem,
-    grown_line, shortened, window_controls_end,
+    Appearance, Color, ControlSize, CpuRenderer, Cut, DrawError, Elevation, FontData, GlyphRun,
+    GpuRenderer, Image, Item, Paint, Palette, Paragraph, Path, Point, PositionedGlyph, Radius,
+    Rect, Scene, Scheme, Shape, Snapshot, Spacing, Stop, TextAlign, TextRole, TextSize, TextStyle,
+    TextSystem, grown_line, shortened, window_controls_end,
 };
 pub use bande_toolkit_platform::{
     ACTIVATION_TOKEN_VARIABLE, App, AppConnection, AppRequest, AppWindow, BrightnessKey,

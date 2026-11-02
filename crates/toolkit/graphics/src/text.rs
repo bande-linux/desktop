@@ -449,6 +449,16 @@ pub struct GlyphRun {
     pub glyphs: Vec<PositionedGlyph>,
 }
 
+impl fmt::Debug for GlyphRun {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GlyphRun")
+            .field("size", &self.size)
+            .field("color", &self.color)
+            .field("glyphs", &self.glyphs.len())
+            .finish_non_exhaustive()
+    }
+}
+
 impl PartialEq for GlyphRun {
     fn eq(&self, other: &Self) -> bool {
         self.font_blob_id() == other.font_blob_id()
@@ -472,6 +482,17 @@ impl PartialEq for Paragraph {
 }
 
 impl GlyphRun {
+    pub fn new(font: FontData, size: f32, color: Color, glyphs: Vec<PositionedGlyph>) -> Self {
+        Self {
+            font,
+            size,
+            color,
+            skew_degrees: None,
+            coords: Vec::new(),
+            glyphs,
+        }
+    }
+
     pub fn font_bytes(&self) -> &[u8] {
         self.font.data.data()
     }

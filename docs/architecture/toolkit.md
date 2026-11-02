@@ -83,8 +83,8 @@ writes a hex value, a corner radius or a font name of its own.
 ## Implemented (`crates/toolkit/toolkit`)
 
 - **Tokens.** See [Design tokens](#design-tokens).
-- **Scene.** A `Scene` of fills, strokes, linear gradients, rounded rectangles, clips, shadows
-  and text that `CpuRenderer` (`vello_cpu`) and `GpuRenderer` (`vello_gpu` on Vulkan) draw from
+- **Scene.** A `Scene` of fills, strokes, linear gradients, rounded rectangles, clips, shadows,
+  text, and glyph runs laid out elsewhere (`Item::Glyphs`, e.g. a web page's) that `CpuRenderer` (`vello_cpu`) and `GpuRenderer` (`vello_gpu` on Vulkan) draw from
   one encoder.
   - Curves are flattened by the toolkit at 0.004 px instead of Vello's 0.25 px, so edges are
     within 1/255 of their exact area coverage. Glyph outlines come from `skrifa`, unhinted and in

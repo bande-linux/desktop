@@ -282,6 +282,10 @@ fn bounds(item: &Item) -> Option<Rect> {
                 size * GLYPH_OVERHANG,
             ))
         }
+        Item::Glyphs(run) => Some(outset(
+            through(run.glyphs.iter().map(|glyph| Point::new(glyph.x, glyph.y)))?,
+            run.size,
+        )),
         Item::Clip { shape, items } => intersect(children(items)?, shape.rect),
         Item::Translate { offset, items } => Some(translated(children(items)?, *offset)),
         Item::Opacity { items, .. } => children(items),

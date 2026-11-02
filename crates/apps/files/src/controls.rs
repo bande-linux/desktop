@@ -17,6 +17,7 @@ use bande_toolkit::{Image, Point, Rect};
 use crate::L10N;
 use crate::browser::{Location, RowEdit};
 use crate::prompt::{Kind, Prompt};
+use crate::tabs::location_title;
 use crate::view::{
     COLUMN_WIDTH, FilesView, PATH_BAR_HEIGHT, ROW_HEIGHT, Rename, Request, SLOW_CLICK_RENAME, Sheet,
 };
@@ -1109,6 +1110,28 @@ impl FilesView {
                 Alert::new(&title, &L10N.tr("extension-detail"), choose)
                     .cancel(&keep, "cancel")
                     .primary(&change, "confirm")
+            }
+            Sheet::EjectFailed {
+                volume,
+                busy,
+                message,
+            } => {
+                let name = location_title(&Location::Folder(volume.clone()));
+                match busy {
+                    true => Alert::new(
+                        &L10N.tr_args("eject-busy", [("name", name.into())]),
+                        &L10N.tr("eject-busy-detail"),
+                        choose,
+                    )
+                    .other(&L10N.tr("force-eject"), "force")
+                    .primary(&L10N.tr("ok"), "ok"),
+                    false => Alert::new(
+                        &L10N.tr_args("eject-failed", [("name", name.into())]),
+                        message,
+                        choose,
+                    )
+                    .primary(&L10N.tr("ok"), "ok"),
+                }
             }
             Sheet::Conflict { .. }
             | Sheet::Failure

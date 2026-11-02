@@ -573,7 +573,7 @@ impl DesktopSurface {
                         tracing::warn!("cannot use the clipboard: {error}");
                     }
                 }
-                Request::Eject(paths) => eject(paths),
+                Request::Eject(paths) => eject(paths, false, |_| {}),
                 Request::SetWallpaper(path) => choose(path),
                 Request::ChangeWallpaper => self.change_wallpaper(window),
                 Request::Undo => {

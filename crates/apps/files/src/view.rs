@@ -19,7 +19,7 @@ use bande_toolkit::ui::{
     PointerButton, Scroll, ScrollState, Slider, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem};
-use bande_volumes::mounted_volumes;
+use bande_volumes::{EjectFailure, mounted_volumes};
 use bande_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
 use crate::L10N;
@@ -107,6 +107,11 @@ pub enum Sheet {
         paths: Vec<PathBuf>,
         items: Vec<TrashItem>,
     },
+    EjectFailed {
+        volume: PathBuf,
+        busy: bool,
+        message: String,
+    },
     ChangeExtension {
         path: PathBuf,
         name: String,
@@ -163,6 +168,7 @@ pub enum Request {
     },
     EditSidebar(SidebarEdit),
     Eject(PathBuf),
+    ForceEject(PathBuf),
     NewWindow,
     OpenTerminal(PathBuf),
     ShowEmojiPicker,
@@ -1449,6 +1455,9 @@ impl FilesView {
             Sheet::OpenWith(open_with) if action == "open" => self.open_with_chosen_app(open_with),
             Sheet::Rename(state) if action == "rename" => self.apply_batch_rename(state),
             Sheet::EmptyTrash if action == "confirm" => self.empty_trash(),
+            Sheet::EjectFailed { volume, .. } if action == "force" => {
+                self.requests.push(Request::ForceEject(volume));
+            }
             Sheet::ChangeExtension {
                 path, name, kept, ..
             } => self.rename_to(&path, if action == "confirm" { &name } else { &kept }),
@@ -1880,6 +1889,14 @@ impl FilesView {
                 L10N.tr_args("error-default-app", [("error", error.to_string().into())]),
             ),
         }
+    }
+
+    pub fn present_eject_failure(&mut self, failure: EjectFailure) {
+        self.present(Sheet::EjectFailed {
+            volume: failure.mount_point,
+            busy: failure.busy,
+            message: failure.message,
+        });
     }
 
     pub(crate) fn hidden_extension<'a>(&self, name: &'a str, folder: bool) -> Option<&'a str> {

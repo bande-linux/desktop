@@ -215,6 +215,10 @@ menu-hide-hidden-files = Hide Hidden Files
 menu-empty-trash = Empty Trash…
 menu-remove-from-sidebar = Remove from Sidebar
 menu-eject = Eject
+eject-busy = The disk “{ $name }” wasn’t ejected because one or more programs may be using it.
+eject-busy-detail = To eject the disk immediately, click Force Eject. Programs using it may lose unsaved changes.
+eject-failed = The disk “{ $name }” couldn’t be ejected.
+force-eject = Force Eject
 
 app-name = Files
 menu-file = File

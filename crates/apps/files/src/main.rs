@@ -25,7 +25,7 @@ use bande_toolkit::{
     Appearance, DragAction, DragEvent, FrameRegions, MenuPlacement, Rect, Scene, TextSystem,
     Transfer, Window, WindowEvent,
 };
-use bande_volumes::{eject, media_roots};
+use bande_volumes::{EjectFailure, eject, media_roots};
 use bande_xdg::{
     Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
     path_from_file_uri, replace_file, spawn_detached, state_home, user_dir,
@@ -159,6 +159,7 @@ struct Files {
     excluded: Option<Inbox<Vec<PathBuf>>>,
     search_excluded: Vec<PathBuf>,
     shows: Option<Inbox<ShowRequest>>,
+    ejects: Option<Inbox<EjectFailure>>,
     last_folder: Option<PathBuf>,
     history: Rc<RefCell<History>>,
     trash: Trash,
@@ -306,6 +307,26 @@ impl Files {
         let text = format!("{}\n", folder.display());
         if let Err(error) = replace_file(&last_folder_file(&self.home), &text) {
             tracing::warn!("cannot remember the last folder: {error}");
+        }
+    }
+
+    fn eject(&self, volume: PathBuf, force: bool) {
+        let failures = self.ejects.as_ref().map(Inbox::outbox);
+        eject(vec![volume], force, move |failure| {
+            if let Some(failures) = &failures {
+                failures.send(failure);
+            }
+        });
+    }
+
+    fn follow_ejects(&mut self, cx: &mut Cx<Self>) {
+        let failures = self.ejects.as_mut().map(Inbox::drain).unwrap_or_default();
+        let shown = cx.focused().or_else(|| cx.windows().next());
+        for failure in failures {
+            if let Some((window, pane)) = shown.and_then(|id| cx.window(id)) {
+                pane.view.present_eject_failure(failure);
+                window.request_redraw();
+            }
         }
     }
 
@@ -482,7 +503,8 @@ impl Files {
                     tracing::warn!("cannot show the menu: {error}");
                 }
             }
-            Request::Eject(volume) => eject(vec![volume]),
+            Request::Eject(volume) => self.eject(volume, false),
+            Request::ForceEject(volume) => self.eject(volume, true),
             Request::NewWindow => {}
             Request::OpenTerminal(folder) => open_terminal(window, &folder),
             Request::EditSidebar(edit) => {
@@ -547,6 +569,9 @@ impl Program for Files {
             excluded,
             search_excluded: Vec::new(),
             shows,
+            ejects: Inbox::new()
+                .inspect_err(|error| tracing::warn!("cannot report eject failures: {error}"))
+                .ok(),
             last_folder,
             history: Rc::default(),
             trash,
@@ -652,6 +677,7 @@ impl Program for Files {
             .chain(self.sidebar_watch.iter().map(SettingsWatch::fd))
             .chain(self.excluded.iter().map(Inbox::fd))
             .chain(self.shows.iter().map(Inbox::fd))
+            .chain(self.ejects.iter().map(Inbox::fd))
             .collect()
     }
 
@@ -659,14 +685,17 @@ impl Program for Files {
         let settings = self.settings_watch.iter().count();
         let sidebar = settings + self.sidebar_watch.iter().count();
         let excluded = sidebar + self.excluded.iter().count();
+        let shows = excluded + self.shows.iter().count();
         if index < settings {
             self.follow_settings(cx);
         } else if index < sidebar {
             self.load_sidebars(cx);
         } else if index < excluded {
             self.follow_excluded(cx);
-        } else {
+        } else if index < shows {
             self.follow_shows(cx);
+        } else {
+            self.follow_ejects(cx);
         }
     }
 }

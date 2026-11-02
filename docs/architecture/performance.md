@@ -97,5 +97,5 @@ does for BlueZ.
 Installed dist binaries are 14–21 MB for each GUI program (`bande-shell` 21, Settings 19, Files
 17, the compositor 14) and about 2–3 MB for each service. Every GUI binary carries its own copy of
 the toolkit, Vello, wgpu, Parley and zbus, including about 2.9 MB of ICU segmentation data for
-Thai, Lao, Khmer, Burmese and CJK text. They stay separate: a multicall binary or packed
-relative relocations cost start-up time ([decision 0006](../decisions/0006-separate-gui-binaries.md)).
+Thai, Lao, Khmer, Burmese and CJK text. They stay separate binaries, linked with packed relative
+relocations ([decision 0006](../decisions/0006-separate-gui-binaries.md)).

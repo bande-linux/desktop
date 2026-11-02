@@ -7,7 +7,8 @@ something is its own binary package, built with `cargo deb` from the crate's
 `ci/deb/version.sh`. How CI builds, checks and publishes them is in [ci.md](ci.md).
 
 Packages are built with the `dist` profile (`cargo deb --profile dist`): fat LTO, one codegen
-unit, `panic = "abort"` and stripped symbols. Development and test builds keep the default
+unit, `panic = "abort"` and stripped symbols. Every build links with packed relative relocations
+(`.cargo/config.toml`, [decision 0006](../decisions/0006-separate-gui-binaries.md)). Development and test builds keep the default
 profiles. Sizes are in [performance.md](performance.md).
 
 ## Packages

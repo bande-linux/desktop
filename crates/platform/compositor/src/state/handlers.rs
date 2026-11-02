@@ -6,7 +6,7 @@ use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Modifier};
 use smithay::backend::renderer::utils::on_commit_buffer_handler;
 use smithay::desktop::{LayerSurface as MappedLayer, WindowSurfaceType, layer_map_for_output};
-use smithay::input::pointer::CursorImageStatus;
+use smithay::input::pointer::{CursorIcon, CursorImageStatus};
 
 use smithay::input::{Seat, SeatHandler, SeatState};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
@@ -308,13 +308,17 @@ impl SeatHandler for State {
         if let CursorImageStatus::Named(icon) = image {
             self.load_named_cursor(icon);
         }
+        self.cursor_owner = match &image {
+            CursorImageStatus::Surface(surface) => surface.client(),
+            CursorImageStatus::Named(CursorIcon::Default) => None,
+            _ => self
+                .seat
+                .get_pointer()
+                .and_then(|pointer| pointer.current_focus())
+                .and_then(|surface| surface.client()),
+        }
+        .map(|client| client.id());
         self.cursor_status = image;
-        self.cursor_owner = self
-            .seat
-            .get_pointer()
-            .and_then(|pointer| pointer.current_focus())
-            .and_then(|surface| surface.client())
-            .map(|client| client.id());
         self.needs_redraw = true;
     }
 

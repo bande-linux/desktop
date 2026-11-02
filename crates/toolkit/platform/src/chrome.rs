@@ -10,6 +10,7 @@ use std::time::Instant;
 use bande_widgets::{Animated, Spring};
 
 use crate::L10N;
+use crate::seat::CLICK_SLOP;
 
 pub(crate) use bande_graphics::RESIZE_MARGIN;
 pub use bande_graphics::WINDOW_HEADER_HEIGHT;
@@ -58,6 +59,12 @@ pub(crate) enum Zone {
     Control(Control),
     TitleBar,
     Content,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum TabDrag {
+    Pressed(Point),
+    Reordering,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -212,7 +219,8 @@ pub(crate) struct Chrome {
     pub(crate) pressed_inside: bool,
     pub(crate) pointer_in_content: bool,
     pub(crate) content_buttons: usize,
-    pub(crate) tab_press: Option<Point>,
+    pub(crate) tab_drag: Option<TabDrag>,
+    pub(crate) detachable_tabs: bool,
     pub(crate) zoom_rest: Option<Instant>,
 }
 
@@ -251,6 +259,26 @@ impl Chrome {
                 .header
                 .as_ref()
                 .is_some_and(|header| header.tabs.iter().any(|tab| tab.contains(local)))
+    }
+
+    pub(crate) fn tab_drag_moves_window(&mut self, frame: &Frame, point: Point) -> bool {
+        match self.tab_drag {
+            Some(TabDrag::Pressed(start)) => {
+                let (dx, dy) = (point.x - start.x, point.y - start.y);
+                if dx.hypot(dy) <= CLICK_SLOP {
+                    return false;
+                }
+                if dx.abs() > dy.abs() {
+                    self.tab_drag = Some(TabDrag::Reordering);
+                    return false;
+                }
+                true
+            }
+            Some(TabDrag::Reordering) => {
+                !self.detachable_tabs && !(0.0..frame.title).contains(&(point.y - frame.margin))
+            }
+            None => false,
+        }
     }
 
     pub(crate) fn wrap_tree(&self, frame: &Frame, mut tree: TreeUpdate) -> TreeUpdate {

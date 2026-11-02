@@ -12,6 +12,7 @@ pub use bande_toolkit_platform::{
     DisplayEdge, DragAction, DragEvent, DragIcon, Edges, FramePath, FrameRegions, Header,
     KeyboardFocus, LauncherMode, LayerKind, LayerOptions, MediaKey, MenuPlacement, Panel,
     RENDERER_VARIABLE, ResizeEdge, Role, SHEET_INSET, SessionEnd, Surfaces, ToplevelState,
-    Transfer, VolumeKey, WINDOW_HEADER_HEIGHT, Window, WindowError, WindowEvent, run, run_surfaces,
+    Transfer, VolumeKey, WINDOW_HEADER_HEIGHT, Window, WindowDrag, WindowError, WindowEvent, run,
+    run_surfaces,
 };
 pub use bande_widgets as ui;

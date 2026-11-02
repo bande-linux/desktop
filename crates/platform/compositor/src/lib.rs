@@ -55,6 +55,7 @@ mod state;
 mod switcher;
 mod sync;
 mod tile;
+mod toplevel_drag;
 mod typing;
 mod watchdog;
 mod window;

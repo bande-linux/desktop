@@ -563,6 +563,7 @@ impl Compositor {
             }
             return;
         }
+        state.follow_drag_with_window();
         let target = state.pointer_target(location);
         let under = target
             .as_ref()
@@ -679,6 +680,9 @@ impl Compositor {
         let Some(pointer) = state.seat.get_pointer() else {
             return;
         };
+        if !pressed {
+            state.drop_window_drag_on_nothing();
+        }
         pointer.button(
             state,
             &ButtonEvent {

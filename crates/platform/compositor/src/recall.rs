@@ -2,9 +2,10 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::{self, XdgToplevel};
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle};
+use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagHandler;
 
 use crate::shell::toplevel_names;
 use crate::state::{Compositor, State};
@@ -14,6 +15,7 @@ use crate::window::Window;
 struct Remembered {
     displays: String,
     app_id: String,
+    tag: String,
     frame: Rectangle<i32, Logical>,
 }
 
@@ -29,13 +31,23 @@ fn parse(text: &str) -> Vec<Remembered> {
             let mut fields = line.split('\t');
             let displays = fields.next()?.to_owned();
             let app_id = fields.next()?.to_owned();
-            let numbers: Vec<i32> = fields.map(str::parse).collect::<Result<_, _>>().ok()?;
+            let mut rest: Vec<&str> = fields.collect();
+            let tag = match rest.len() {
+                5 => rest.remove(0).to_owned(),
+                _ => String::new(),
+            };
+            let numbers: Vec<i32> = rest
+                .into_iter()
+                .map(str::parse)
+                .collect::<Result<_, _>>()
+                .ok()?;
             let [x, y, w, h] = numbers.as_slice() else {
                 return None;
             };
             (*w > 0 && *h > 0 && !displays.is_empty() && !app_id.is_empty()).then(|| Remembered {
                 displays,
                 app_id,
+                tag,
                 frame: Rectangle::new((*x, *y).into(), (*w, *h).into()),
             })
         })
@@ -48,9 +60,10 @@ fn format(frames: &[Remembered]) -> String {
         .map(|remembered| {
             let frame = remembered.frame;
             format!(
-                "{}\t{}\t{}\t{}\t{}\t{}\n",
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
                 remembered.displays,
                 remembered.app_id,
+                remembered.tag,
                 frame.loc.x,
                 frame.loc.y,
                 frame.size.w,
@@ -104,22 +117,20 @@ impl State {
         identities.join(" + ")
     }
 
-    fn recallable(&self, index: usize) -> Option<String> {
+    fn recallable(&self, index: usize) -> Option<(String, String)> {
         let main_window =
             |window: &Window| window.toplevel.parent().is_none() && !window.fixed_size();
+        let key = |window: &Window| (toplevel_names(window.surface()).1, window.tag.clone());
         let window = &self.windows[index];
-        let app_id = toplevel_names(window.surface()).1;
+        let own = key(window);
         let alone = !self.windows.iter().enumerate().any(|(other, sibling)| {
-            other != index
-                && sibling.size.is_some()
-                && main_window(sibling)
-                && toplevel_names(sibling.surface()).1 == app_id
+            other != index && sibling.size.is_some() && main_window(sibling) && key(sibling) == own
         });
-        (!app_id.is_empty() && main_window(window) && alone).then_some(app_id)
+        (!own.0.is_empty() && main_window(window) && alone).then_some(own)
     }
 
     pub(crate) fn recall_frame(&mut self, index: usize) {
-        let Some(app_id) = self.recallable(index) else {
+        let Some((app_id, tag)) = self.recallable(index) else {
             return;
         };
         let displays = self.display_set();
@@ -127,7 +138,11 @@ impl State {
             .recall
             .frames
             .iter()
-            .find(|remembered| remembered.displays == displays && remembered.app_id == app_id)
+            .find(|remembered| {
+                remembered.displays == displays
+                    && remembered.app_id == app_id
+                    && remembered.tag == tag
+            })
             .map(|remembered| remembered.frame)
         else {
             return;
@@ -164,7 +179,7 @@ impl State {
         if self.recall.path.is_none() {
             return;
         }
-        let Some(app_id) = self.recallable(index) else {
+        let Some((app_id, tag)) = self.recallable(index) else {
             return;
         };
         let window = &self.windows[index];
@@ -176,16 +191,17 @@ impl State {
         } else {
             window.geometry()
         };
-        let Some(frame) = frame else {
+        let Some(frame) = frame.filter(|frame| frame.size.w > 0 && frame.size.h > 0) else {
             return;
         };
         let displays = self.display_set();
-        self.recall
-            .frames
-            .retain(|remembered| remembered.displays != displays || remembered.app_id != app_id);
+        self.recall.frames.retain(|remembered| {
+            remembered.displays != displays || remembered.app_id != app_id || remembered.tag != tag
+        });
         self.recall.frames.push(Remembered {
             displays,
             app_id,
+            tag,
             frame,
         });
         if let Err(error) = self.recall.save() {
@@ -193,6 +209,27 @@ impl State {
         }
     }
 }
+
+impl XdgToplevelTagHandler for State {
+    fn set_tag(&mut self, toplevel: XdgToplevel, tag: String) {
+        let Some(window) = self
+            .windows
+            .iter_mut()
+            .find(|window| window.toplevel.xdg_toplevel() == &toplevel)
+        else {
+            return;
+        };
+        window.tag = if tag.chars().any(char::is_control) {
+            String::new()
+        } else {
+            tag
+        };
+        let surface = window.surface().clone();
+        self.recall_late(&surface);
+    }
+}
+
+smithay::delegate_xdg_toplevel_tag!(State);
 
 impl Compositor {
     pub fn remember_windows_in(&mut self, path: PathBuf) {

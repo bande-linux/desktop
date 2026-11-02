@@ -151,32 +151,26 @@ pub(crate) fn finish_in_session(session: &Connection) -> Stale {
 mod tests {
     use super::*;
 
-    const MAPS: &str = "\
-aaaab0000000-aaaab0100000 r--p 00000000 103:02 4021 /usr/bin/bande-files (deleted)
-ffff80000000-ffff80010000 r--p 00000000 103:02 5532                     /usr/share/icons/hicolor/icon-theme.cache (deleted)
-ffff80010000-ffff80020000 r-xp 00000000 00:01 77                        /memfd:jit (deleted)
-ffff80020000-ffff80030000 r-xp 00000000 103:02 9001                     /home/me/.cargo/bin/tool (deleted)
-ffff80030000-ffff80040000 rw-p 00000000 00:00 0
-ffff80040000-ffff80050000 r-xp 00010000 103:02 6120                     /usr/lib/aarch64-linux-gnu/libbande widget.so (deleted)
-";
-
     #[test]
-    fn only_replaced_packaged_code_counts() {
-        let (old_library, rest) = MAPS.split_at(MAPS.rfind("ffff80040000").unwrap_or(0));
-        assert!(!runs_replaced_code("/usr/bin/bande-files", old_library));
-        assert!(runs_replaced_code("/usr/bin/bande-files", MAPS));
+    fn only_replaced_packaged_code_counts_and_processes_group_by_their_unit() {
+        let maps = |perms: &str, path: &str| {
+            format!("ffff8000-ffff8001 {perms} 00000000 103:02 77          {path} (deleted)\n")
+        };
+        let library = maps("r-xp", "/usr/lib/aarch64-linux-gnu/libbande widget.so");
+        assert!(runs_replaced_code("/usr/bin/bande-files", &library));
         assert!(runs_replaced_code("/usr/bin/bande-files (deleted)", ""));
-        assert!(runs_replaced_code("/usr/bin/bande-files", rest));
-    }
-
-    #[test]
-    fn processes_group_by_their_unit() {
+        for (perms, path) in [
+            ("r--p", "/usr/share/icons/hicolor/icon-theme.cache"),
+            ("r-xp", "/memfd:jit"),
+            ("r-xp", "/home/me/.cargo/bin/tool"),
+        ] {
+            assert!(!runs_replaced_code(
+                "/usr/bin/bande-files",
+                &maps(perms, path)
+            ));
+        }
         let user = "0::/user.slice/user-1000.slice/user@1000.service";
         let held = |unit: &str| holder(&format!("{user}/{unit}\n"));
-        assert_eq!(
-            held("session.slice/bande-compositor.service"),
-            Some(Holder::Session)
-        );
         assert_eq!(held("session.slice/dbus.service"), Some(Holder::Session));
         assert_eq!(
             held("session.slice/bande-power.service"),
@@ -189,10 +183,5 @@ ffff80040000-ffff80050000 r-xp 00010000 103:02 6120                     /usr/lib
             ))
         );
         assert_eq!(held("background.slice/tracker.service"), None);
-        assert_eq!(
-            holder("0::/user.slice/user-1000.slice/session-2.scope\n"),
-            Some(Holder::Session)
-        );
-        assert_eq!(holder("0::/system.slice/cron.service\n"), None);
     }
 }

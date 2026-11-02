@@ -80,10 +80,11 @@ impl<P: Program> Cx<P> {
         content: impl FnOnce(Appearance) -> Content<P::View>,
     ) -> Result<WindowId, WindowError> {
         let role = match kind {
-            Kind::Main => Role::toplevel(title, self.info.id),
-            Kind::Dialog => Role::dialog(title, self.info.id),
-            Kind::Utility => Role::utility(title, self.info.id),
-        };
+            Kind::Main | Kind::Secondary(_) => Role::toplevel(title, self.info.id),
+            Kind::Dialog(_) => Role::dialog(title, self.info.id),
+            Kind::Utility(_) => Role::utility(title, self.info.id),
+        }
+        .tagged(kind.tag());
         let mut window = match self.windows.first() {
             Some(beside) => beside.open_beside(role, size)?,
             None => self.link.open(role, size)?,
@@ -123,7 +124,7 @@ impl<P: Program> Cx<P> {
         }
         let view = settings.view;
         if let Err(error) = self.open_content(
-            Kind::Utility,
+            Kind::Utility("settings"),
             &(settings.title)(),
             settings.size,
             |appearance| Content::Settings(view(appearance)),

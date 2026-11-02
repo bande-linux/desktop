@@ -1,10 +1,11 @@
 use bande_fs::Entry;
 use bande_quick_look::{QuickLookLink, Subject};
 use bande_thumbnails::ThumbnailSize;
+use bande_toolkit::Rect;
 use bande_toolkit::ui::{Key, Modifiers};
 
 use crate::L10N;
-use crate::view::{FilesView, Request};
+use crate::view::{FilesView, Hit, Request};
 
 const ICON_PIXELS: u32 = 256;
 const FOLDER_MIME: &str = "inode/directory";
@@ -20,6 +21,20 @@ impl FilesView {
             .is_some_and(|link| link.borrow().is_shown())
     }
 
+    fn origin_of(&self, entry: &Entry) -> Option<Rect> {
+        let active = self.browser.active();
+        let row = self
+            .browser
+            .active_column()
+            .entries
+            .iter()
+            .position(|shown| shown.path == entry.path)?;
+        self.hits.iter().find_map(|(rect, hit)| match hit {
+            Hit::Row { column, row: at } if *column == active && *at == row => Some(*rect),
+            _ => None,
+        })
+    }
+
     fn subject(&mut self, entry: Entry) -> Subject {
         let (mime, kind) = match entry.is_folder() {
             true => (FOLDER_MIME.to_owned(), L10N.tr("folder")),
@@ -33,6 +48,7 @@ impl FilesView {
             true => None,
             false => self.apps.default_for_path(&entry.path).cloned(),
         };
+        let origin = self.origin_of(&entry);
         let icon = self
             .thumbs
             .get(&entry, ThumbnailSize::XLarge)
@@ -43,7 +59,7 @@ impl FilesView {
             kind,
             app,
             icon,
-            origin: None,
+            origin,
         }
     }
 

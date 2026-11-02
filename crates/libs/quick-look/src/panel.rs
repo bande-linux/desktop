@@ -30,6 +30,8 @@ pub struct Link {
     multiple: bool,
     typing: bool,
     path: Option<PathBuf>,
+    origin: Option<Rect>,
+    copied: Option<PathBuf>,
 }
 
 pub type QuickLookLink = Rc<RefCell<Link>>;
@@ -50,6 +52,7 @@ impl Link {
     pub fn open(&mut self, subjects: Vec<Subject>, at: usize, full_screen: bool) {
         self.multiple = subjects.len() > 1;
         self.path = subjects.get(at).map(|subject| subject.entry.path.clone());
+        self.origin = subjects.get(at).and_then(|subject| subject.origin);
         self.open = true;
         self.shown = true;
         self.posted.get_or_insert_with(Instant::now);
@@ -62,6 +65,7 @@ impl Link {
 
     pub fn follow(&mut self, subject: Subject) {
         self.path = Some(subject.entry.path.clone());
+        self.origin = subject.origin;
         self.posted.get_or_insert_with(Instant::now);
         self.messages.push(Message::Follow(Box::new(subject)));
     }
@@ -70,6 +74,18 @@ impl Link {
         self.shown = false;
         self.posted.get_or_insert_with(Instant::now);
         self.messages.push(Message::Close);
+    }
+
+    pub fn copy(&mut self, path: PathBuf) {
+        self.copied = Some(path);
+    }
+
+    pub fn take_copied(&mut self) -> Option<PathBuf> {
+        self.copied.take()
+    }
+
+    pub fn take_origin(&mut self) -> Option<Rect> {
+        self.origin.take()
     }
 
     pub fn takes_key(&self, key: Key, modifiers: Modifiers) -> bool {
@@ -144,6 +160,10 @@ impl Panel {
         };
         panel.apply(Instant::now());
         panel
+    }
+
+    pub fn link(&self) -> &QuickLookLink {
+        &self.link
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {

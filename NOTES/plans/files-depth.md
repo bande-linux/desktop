@@ -34,8 +34,8 @@ Delete each line when it ships; delete the file when the list is empty.
   Go ▸ Recent Folders; new windows on a chosen or the last folder; `org.freedesktop.FileManager1`
   (D-Bus activated with `--gapplication-service`) and `bande-files --select <paths>`.
 - Changes: Undo/Redo shared by all windows; Make Alias (a symlink, Kind “Alias”);
-  spring-loaded folders (a setting with its delay); Ctrl/Shift drag modifiers; Compress and Extract; New Document
-  templates; Open in Terminal.
+  spring-loaded folders (a setting with its delay); Ctrl/Shift drag modifiers; Compress and
+  Extract; New Document templates; Open in Terminal.
 - Trouble: per-item failure alerts (Skip, Try Again, Skip All, Stop); a no-space check before
   copying; empty-folder and no-permission messages; an eject alert with Force Eject (Files
   and desktop).

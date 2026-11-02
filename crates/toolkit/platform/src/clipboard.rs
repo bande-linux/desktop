@@ -20,6 +20,8 @@ use wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_v1::Xdg
 use crate::primary::Primary;
 use crate::window::{ShmTarget, State, Target, Window, WindowError, WindowEvent};
 
+const PASSWORD_HINT: &str = "x-kde-passwordManagerHint";
+const SECRET: &str = "secret";
 pub(crate) const TEXT_TYPES: [&str; 3] = ["text/plain;charset=utf-8", "UTF8_STRING", "text/plain"];
 const URI_LIST: &str = "text/uri-list";
 const GNOME_FILES: &str = "x-special/gnome-copied-files";
@@ -36,6 +38,7 @@ pub struct Transfer {
     pub uris: Vec<String>,
     pub cut: bool,
     pub png: Vec<u8>,
+    pub concealed: bool,
 }
 
 impl Transfer {
@@ -45,6 +48,7 @@ impl Transfer {
             uris: Vec::new(),
             cut: false,
             png: Vec::new(),
+            concealed: false,
         }
     }
 
@@ -54,6 +58,14 @@ impl Transfer {
             uris,
             cut: false,
             png: Vec::new(),
+            concealed: false,
+        }
+    }
+
+    pub fn concealed(self) -> Self {
+        Self {
+            concealed: true,
+            ..self
         }
     }
 
@@ -76,6 +88,9 @@ impl Transfer {
         for mime in TEXT_TYPES {
             source.offer(mime.to_owned());
         }
+        if self.concealed {
+            source.offer(PASSWORD_HINT.to_owned());
+        }
         source.offer(own_type());
     }
 
@@ -96,6 +111,7 @@ impl Transfer {
                 .collect::<String>()
                 .into_bytes(),
             PNG => self.png.clone(),
+            PASSWORD_HINT => SECRET.as_bytes().to_vec(),
             _ => self.text.clone().into_bytes(),
         }
     }
@@ -317,6 +333,9 @@ impl Window {
     pub fn serve_clipboard(&mut self, request: ClipboardRequest) -> Result<(), WindowError> {
         match request {
             ClipboardRequest::Copy(text) => self.copy(&text),
+            ClipboardRequest::CopySecret(text) => {
+                self.copy_transfer(Transfer::text(&text).concealed())
+            }
             ClipboardRequest::Paste => return self.paste(),
             ClipboardRequest::SelectPrimary(text) => self.select_primary(&text),
             ClipboardRequest::PastePrimary => return self.paste_primary(),

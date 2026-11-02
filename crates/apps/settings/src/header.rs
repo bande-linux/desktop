@@ -257,6 +257,7 @@ impl SettingsView {
             | PaneId::Trackpad
             | PaneId::Apps
             | PaneId::PrivacySecurity
+            | PaneId::Passwords
             | PaneId::Camera
             | PaneId::Microphone
             | PaneId::Screenshots

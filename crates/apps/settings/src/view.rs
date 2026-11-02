@@ -26,6 +26,7 @@ use crate::locale::{LocaleCommand, LocaleState};
 use crate::login::{LoginCommand, LoginItems, login_matches};
 use crate::night::clock_text;
 use crate::notifications::{AppNotifications, NotificationCommand};
+use crate::passwords::{Keychain, PasswordCommand};
 use crate::permissions::Grants;
 use crate::pictures::{Pair, PictureCommand};
 use crate::pointing::PointingDevices;
@@ -128,6 +129,9 @@ pub(crate) enum Intent {
     Locale(LocaleCommand),
     DefaultApp(&'static str, String),
     Grant(Permission, String, bool),
+    Passwords(PasswordCommand),
+    PasswordQuery(String),
+    ChangePassword(Option<String>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -270,6 +274,7 @@ pub struct SettingsView {
     pub(crate) refused: Vec<Privilege>,
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
     pub(crate) permissions: Grants,
+    pub(crate) keychain: Keychain,
     stale: bool,
     rebuilt: bool,
     pub(crate) focus_next: Option<Anchor>,
@@ -362,6 +367,7 @@ impl SettingsView {
             refused: Vec::new(),
             default_apps: None,
             permissions: Vec::new(),
+            keychain: Keychain::default(),
             stale: true,
             rebuilt: false,
             focus_next: None,
@@ -600,6 +606,9 @@ impl SettingsView {
             | Update::Password(_)
             | Update::PictureChosen(..)
             | Update::AccountCreated(_) => (Some(PaneId::Users), &[SettingId::Accounts]),
+            Update::Passwords(..) | Update::RevealedPassword(..) => {
+                (Some(PaneId::Passwords), &[SettingId::SavedPasswords])
+            }
             _ => return true,
         };
         let feeds = |setting: &Setting| {
@@ -769,6 +778,9 @@ impl SettingsView {
             Update::Accounts(accounts, managed) => self.take_accounts(accounts, managed),
             Update::PictureChosen(login, image) => self.picture_chosen(login, image),
             Update::AccountCreated(error) => self.account_created(error),
+            Update::Passwords(unlocked, items) => self.take_passwords(unlocked, items),
+            Update::RevealedPassword(path, secret) => self.keychain.revealed = Some((path, secret)),
+            Update::CopiedPassword(secret) => self.commands.push(Command::CopySecret(secret)),
             Update::Password(outcome) => self.password_changed(outcome),
             Update::PrinterAdded(uri, added) => {
                 if self.adding.as_ref() == Some(&uri) {
@@ -880,6 +892,7 @@ impl SettingsView {
             | PaneId::Apps
             | PaneId::Printers
             | PaneId::Users
+            | PaneId::Passwords
             | PaneId::Storage
             | PaneId::SoftwareUpdate => true,
             PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
@@ -1298,6 +1311,18 @@ impl SettingsView {
                     }
                 }
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
+                Intent::Passwords(command) => self.password_command(command),
+                Intent::PasswordQuery(query) => {
+                    self.keychain.query = query;
+                    self.focus_next = Some(Anchor::Picker);
+                }
+                Intent::ChangePassword(path) => {
+                    self.focus_next = Some(match &path {
+                        Some(_) => Anchor::Password,
+                        None => Anchor::Setting(SettingId::SavedPasswords, None),
+                    });
+                    self.keychain.changing = path;
+                }
                 Intent::Network(command) => self.commands.push(Command::Network(command)),
                 Intent::ImportVpn => self.commands.push(Command::ImportVpn),
                 Intent::ExcludeFolder => self.commands.push(Command::ExcludeFolder),
@@ -1616,6 +1641,9 @@ impl SettingsView {
             return;
         }
         self.follow_pane(false);
+        if self.pane == PaneId::Passwords {
+            self.password_command(PasswordCommand::Lock);
+        }
         match pane {
             PaneId::Wifi => self.commands.push(Command::Network(NetworkCommand::Scan)),
             PaneId::Storage => self

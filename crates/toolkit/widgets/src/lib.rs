@@ -189,6 +189,7 @@ pub enum CaptureRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClipboardRequest {
     Copy(String),
+    CopySecret(String),
     Paste,
     SelectPrimary(String),
     PastePrimary,

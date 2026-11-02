@@ -421,6 +421,10 @@ def lock(unlocked=False):
     return layers(shape)
 
 
+def key():
+    return layers(S().ring(5, 8, 3.2, W).line(8.2, 8, 14.4, 8, W).line(12, 8, 12, 11, W).line(14.4, 8, 14.4, 10.4, W))
+
+
 def power():
     return layers(S().arc(8, 8.6, 5.6, -55, 235, W).line(8, 1.6, 8, 7.6, W))
 
@@ -694,6 +698,7 @@ STATUS = {
     'dialog-error-symbolic': error,
     'system-lock-screen-symbolic': lock,
     'changes-prevent-symbolic': lock,
+    'dialog-password-symbolic': key,
     'changes-allow-symbolic': lambda: lock(unlocked=True),
     'system-shutdown-symbolic': power,
     'system-reboot-symbolic': lambda: circular_arrow(True),

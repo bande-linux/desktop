@@ -19,6 +19,7 @@ mod network;
 mod night;
 mod notifications;
 mod pages;
+mod passwords;
 mod permissions;
 mod pictures;
 mod pointing;
@@ -55,6 +56,7 @@ pub use locale::{
 pub use login::{App, LoginCommand, LoginItems, login_items, login_matches};
 pub use night::{clock_text, night_summary};
 pub use notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
+pub use passwords::{Concealed, PasswordCommand, Saved, follow_passwords};
 pub use permissions::{Grant, Grants, PermissionCommand, follow_permissions};
 pub use pictures::{Pair, PictureCommand, bundled_pairs, thumbnail};
 pub use pointing::{PointingDevices, UDEV_DATA, follow_pointing};

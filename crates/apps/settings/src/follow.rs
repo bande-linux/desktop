@@ -24,6 +24,7 @@ use crate::failure::{sentence, unexpected};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
 use crate::notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
+use crate::passwords::{Concealed, PasswordCommand, Saved, follow_passwords};
 use crate::permissions::{Grants, PermissionCommand, follow_permissions};
 use crate::pictures::{Pair, PictureCommand, follow_pictures};
 use crate::pointing::{PointingDevices, UDEV_DATA, follow_pointing};
@@ -81,6 +82,9 @@ pub enum Update {
     Password(PasswordOutcome),
     PictureChosen(String, bande_toolkit::Image),
     AccountCreated(Option<String>),
+    Passwords(bool, Vec<Saved>),
+    RevealedPassword(String, Concealed),
+    CopiedPassword(Concealed),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -111,6 +115,8 @@ pub enum Command {
     ImportVpn,
     ExcludeFolder,
     ClearClipboard,
+    Passwords(PasswordCommand),
+    CopySecret(Concealed),
 }
 
 pub struct Feed {
@@ -333,6 +339,7 @@ pub struct Services {
     locale: Option<Sender<LocaleCommand>>,
     default_apps: Sender<DefaultAppCommand>,
     permissions: Sender<PermissionCommand>,
+    passwords: Sender<PasswordCommand>,
     brightness: Option<Sender<f32>>,
     printers: Option<Sender<PrinterCommand>>,
     users: Sender<UsersCommand>,
@@ -368,6 +375,7 @@ impl Services {
             locale: system.map(|system| follow_locale(system, updates.clone())),
             default_apps: follow_default_apps(updates.clone()),
             permissions: follow_permissions(session, updates.clone()),
+            passwords: follow_passwords(session, system, updates.clone()),
             brightness: system.and_then(|system| follow_brightness(system, updates.clone())),
             printers: system.map(|system| follow_printers(system, updates.clone())),
             users: follow_users(session, system, updates.clone()),
@@ -409,6 +417,7 @@ impl Services {
             Command::Login(command) => self.login.send(command).is_ok(),
             Command::DefaultApp(command) => self.default_apps.send(command).is_ok(),
             Command::Permission(command) => self.permissions.send(command).is_ok(),
+            Command::Passwords(command) => self.passwords.send(command).is_ok(),
             Command::Users(command) => self.users.send(command).is_ok(),
             Command::Printers(command) => self
                 .printers
@@ -431,7 +440,7 @@ impl Services {
                 .battery
                 .as_ref()
                 .is_some_and(|battery| battery.send(command).is_ok()),
-            Command::Reveal(_) | Command::EndSession(_) => false,
+            Command::Reveal(_) | Command::EndSession(_) | Command::CopySecret(_) => false,
             Command::ClearClipboard => {
                 let (session, updates) = (self.connection.clone(), self.updates.clone());
                 spawn("clear-clipboard", move || {

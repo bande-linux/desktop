@@ -39,6 +39,7 @@ pub enum PaneId {
     Printers,
     Power,
     Users,
+    Passwords,
     PrivacySecurity,
     Camera,
     Microphone,
@@ -53,7 +54,7 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 29] = [
+    const KEYWORDS: [(Self, &'static str); 30] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -72,6 +73,7 @@ impl PaneId {
         (Self::Printers, "printers"),
         (Self::Power, "power"),
         (Self::Users, "users"),
+        (Self::Passwords, "passwords"),
         (Self::PrivacySecurity, "privacy-security"),
         (Self::Camera, "camera"),
         (Self::Microphone, "microphone"),
@@ -101,6 +103,7 @@ impl PaneId {
             | Self::Printers => Some(Group::Devices),
             Self::Power
             | Self::Users
+            | Self::Passwords
             | Self::PrivacySecurity
             | Self::Apps
             | Self::LanguageTime
@@ -136,6 +139,7 @@ impl PaneId {
             Self::Printers => "printer-symbolic",
             Self::Power => "system-shutdown-symbolic",
             Self::Users => "system-users-symbolic",
+            Self::Passwords => "dialog-password-symbolic",
             Self::PrivacySecurity => "changes-prevent-symbolic",
             Self::Camera => "camera-photo-symbolic",
             Self::Microphone => "audio-input-microphone-symbolic",
@@ -319,6 +323,7 @@ pub enum SettingId {
     FullName,
     LockMessage,
     ShowPreviews,
+    SavedPasswords,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -365,6 +370,7 @@ pub enum List {
     Clipboard,
     SearchExcluded,
     Permissions(Permission),
+    Passwords,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1386,6 +1392,17 @@ fn system_panes() -> Vec<Pane> {
             vec![section(
                 None,
                 vec![list(SettingId::Accounts, "accounts", List::Accounts)],
+            )],
+        ),
+        pane(
+            PaneId::Passwords,
+            vec![section(
+                None,
+                vec![list(
+                    SettingId::SavedPasswords,
+                    "saved-passwords",
+                    List::Passwords,
+                )],
             )],
         ),
         pane(

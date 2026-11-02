@@ -185,6 +185,13 @@ impl Settings {
         for command in view.take_commands() {
             match command {
                 Command::Reveal(path) => reveal(window, &path),
+                Command::CopySecret(secret) => {
+                    let copied =
+                        bande_toolkit::ui::ClipboardRequest::CopySecret(secret.0.to_string());
+                    if let Err(error) = window.serve_clipboard(copied) {
+                        tracing::warn!("cannot copy the password: {error}");
+                    }
+                }
                 Command::EndSession(ending) => {
                     if let Err(error) = window.ask_to_end_session(ending) {
                         tracing::warn!("cannot ask to end the session: {error}");
@@ -282,7 +289,7 @@ impl Program for Settings {
             self.main = None;
             view.0.set_on_screen(false);
             for command in view.0.take_commands() {
-                if !matches!(command, Command::Reveal(_)) {
+                if !matches!(command, Command::Reveal(_) | Command::CopySecret(_)) {
                     self.services.send(command);
                 }
             }

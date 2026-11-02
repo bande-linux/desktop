@@ -5,6 +5,7 @@ use bande_toolkit::ui::{Axis, Button, Stack, Widget};
 use crate::L10N;
 use crate::follow::Command;
 use crate::pages::boxed;
+use crate::passwords::PasswordCommand;
 use crate::permissions::PermissionCommand;
 use crate::printers::PrinterCommand;
 use crate::services::{BluetoothCommand, NetworkCommand};
@@ -20,6 +21,7 @@ pub(crate) enum Forget {
     Share(String),
     Printer(String),
     Vpn(String),
+    Password(String),
 }
 
 impl SettingsView {
@@ -72,6 +74,7 @@ impl SettingsView {
             Some(Forget::Share(app)) => format!("grant:{app}"),
             Some(Forget::Printer(name)) => format!("printer:{name}"),
             Some(Forget::Vpn(path)) => format!("vpn:{path}"),
+            Some(Forget::Password(path)) => format!("password:{path}"),
             None => return,
         };
         self.focus_next = Some(Anchor::Item(if target.is_some() {
@@ -105,6 +108,10 @@ impl SettingsView {
             Some(Forget::Vpn(path)) => {
                 self.focus_next = Some(Anchor::Setting(SettingId::Vpns, None));
                 Some(Command::Network(NetworkCommand::RemoveVpn(path)))
+            }
+            Some(Forget::Password(path)) => {
+                self.focus_next = Some(Anchor::Setting(SettingId::SavedPasswords, None));
+                Some(Command::Passwords(PasswordCommand::Delete(path)))
             }
             Some(Forget::Printer(name)) => {
                 self.detail = None;

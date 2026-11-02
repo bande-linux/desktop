@@ -135,3 +135,77 @@ fn an_app_keeps_a_secret_over_an_encrypted_session_and_cannot_forge_its_owner() 
     });
     drop(daemon);
 }
+
+#[test]
+fn another_apps_item_opens_only_with_the_keychain_password() {
+    let bus = SessionBus::start().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let prompter = home.path().join("prompter");
+    std::fs::write(
+        &prompter,
+        "#!/bin/sh\nwhile read -r line && [ -n \"$line\" ]; do :; done\nprintf 'allow\\twrong\\n'\nread -r verdict\n[ \"$verdict\" = wrong ] && printf 'allow\\tcorrect horse\\n'\nread -r verdict\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(
+        &prompter,
+        std::os::unix::fs::PermissionsExt::from_mode(0o755),
+    )
+    .unwrap();
+    let (_daemon, _connection) = async_io::block_on(async {
+        let daemon = Daemon::new(Keychain::load(home.path().to_path_buf()).await, prompter);
+        let connection = zbus::connection::Builder::address(bus.address())
+            .unwrap()
+            .build()
+            .await
+            .unwrap();
+        daemon.serve(&connection).await.unwrap();
+        assert!(daemon.login(Secret::text("correct horse")).await);
+        daemon
+            .store_internal(
+                "Home Wi-Fi",
+                HashMap::from([("network".to_owned(), "home".to_owned())]),
+                Secret::text("wifi-secret"),
+            )
+            .await;
+        (daemon, connection)
+    });
+    let client = bus.connect().unwrap();
+    let (unlocked, locked): (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) = call(
+        &client,
+        SERVICE_PATH,
+        SERVICE,
+        "SearchItems",
+        &(HashMap::from([("network", "home")]),),
+    );
+    assert!(unlocked.is_empty(), "another app's item starts locked");
+    let (opened, prompt): (Vec<OwnedObjectPath>, OwnedObjectPath) =
+        call(&client, SERVICE_PATH, SERVICE, "Unlock", &(&locked,));
+    assert!(opened.is_empty());
+    let proxy = zbus::blocking::Proxy::new(
+        &client,
+        "org.freedesktop.secrets",
+        prompt,
+        "org.freedesktop.Secret.Prompt",
+    )
+    .unwrap();
+    let mut completed = proxy.receive_signal("Completed").unwrap();
+    proxy.call_method("Prompt", &("")).unwrap();
+    let (dismissed, _): (bool, OwnedValue) =
+        completed.next().unwrap().body().deserialize().unwrap();
+    assert!(!dismissed, "the right password after a wrong one allows it");
+    let (_, session): (OwnedValue, OwnedObjectPath) = call(
+        &client,
+        SERVICE_PATH,
+        SERVICE,
+        "OpenSession",
+        &("plain", Value::from("")),
+    );
+    let (_, _, value, _): WireSecret = call(
+        &client,
+        locked[0].as_str(),
+        "org.freedesktop.Secret.Item",
+        "GetSecret",
+        &(&session,),
+    );
+    assert_eq!(value, b"wifi-secret");
+}

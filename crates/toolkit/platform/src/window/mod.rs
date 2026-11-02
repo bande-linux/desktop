@@ -59,7 +59,7 @@ use crate::popup::{Fading, MenuPlacement, Menus};
 use crate::presentation::Presentation;
 use crate::scale::{Scaling, SurfaceScale};
 use crate::seat::Input;
-use crate::shell::Shell;
+use crate::shell::{PANEL_SINCE, Shell};
 use crate::text_input::TextInput;
 
 pub const ACTIVATION_TOKEN_VARIABLE: &str = "XDG_ACTIVATION_TOKEN";
@@ -87,6 +87,11 @@ pub enum Role {
         tag: String,
     },
     Utility {
+        title: String,
+        app_id: String,
+        tag: String,
+    },
+    Panel {
         title: String,
         app_id: String,
         tag: String,
@@ -120,9 +125,19 @@ impl Role {
         }
     }
 
+    pub fn panel(title: &str, app_id: &str) -> Self {
+        Self::Panel {
+            title: title.to_owned(),
+            app_id: app_id.to_owned(),
+            tag: String::new(),
+        }
+    }
+
     pub fn tagged(mut self, window_tag: &str) -> Self {
-        if let Self::Toplevel { tag, .. } | Self::Dialog { tag, .. } | Self::Utility { tag, .. } =
-            &mut self
+        if let Self::Toplevel { tag, .. }
+        | Self::Dialog { tag, .. }
+        | Self::Utility { tag, .. }
+        | Self::Panel { tag, .. } = &mut self
         {
             *tag = window_tag.to_owned();
         }
@@ -460,15 +475,18 @@ impl Window {
             queue.roundtrip(&mut state)?;
         }
         let mut chrome = None;
+        let panel = matches!(role, Role::Panel { .. });
         let (titled, fixed) = match &role {
             Role::Dialog { .. } => (false, true),
             Role::Utility { .. } => (true, true),
+            Role::Panel { .. } => (false, false),
             Role::Toplevel { .. } | Role::Layer(_) | Role::Lock => (true, false),
         };
         let role = match role {
             Role::Toplevel { title, app_id, tag }
             | Role::Dialog { title, app_id, tag }
-            | Role::Utility { title, app_id, tag } => {
+            | Role::Utility { title, app_id, tag }
+            | Role::Panel { title, app_id, tag } => {
                 let wm_base = state
                     .wm_base
                     .clone()
@@ -478,6 +496,14 @@ impl Window {
                 let title = &title[..title.floor_char_boundary(TITLE_BYTES_LIMIT)];
                 toplevel.set_title(title.to_owned());
                 toplevel.set_app_id(app_id);
+                if let Some(app) = state
+                    .shell
+                    .app
+                    .as_ref()
+                    .filter(|app| panel && app.version() >= PANEL_SINCE)
+                {
+                    app.set_panel(&toplevel);
+                }
                 if let Some(manager) = state.toplevel_tag.take() {
                     if !tag.is_empty() {
                         manager.set_toplevel_tag(&toplevel, tag);
@@ -673,9 +699,7 @@ impl Window {
     }
 
     pub fn is_resizable(&self) -> bool {
-        self.chrome
-            .as_ref()
-            .is_some_and(|chrome| chrome.titled && !chrome.fixed)
+        self.chrome.as_ref().is_some_and(|chrome| !chrome.fixed)
     }
 
     fn geometry(&self) -> (u32, u32) {
@@ -804,7 +828,7 @@ impl Window {
         self.state.toplevel
     }
 
-    fn toggle_full_screen(&mut self) -> Result<(), WindowError> {
+    pub fn toggle_full_screen(&mut self) -> Result<(), WindowError> {
         let toplevel = self.toplevel()?;
         if self.state.toplevel.fullscreen {
             toplevel.unset_fullscreen();
@@ -835,13 +859,13 @@ impl Window {
         Ok((seat, serial))
     }
 
-    fn start_move(&mut self) -> Result<(), WindowError> {
+    pub fn start_move(&mut self) -> Result<(), WindowError> {
         let (seat, serial) = self.grab()?;
         self.toplevel()?._move(seat, serial);
         self.flush()
     }
 
-    fn start_resize(&mut self, edge: ResizeEdge) -> Result<(), WindowError> {
+    pub fn start_resize(&mut self, edge: ResizeEdge) -> Result<(), WindowError> {
         let (seat, serial) = self.grab()?;
         self.toplevel()?.resize(seat, serial, resize_protocol(edge));
         self.flush()

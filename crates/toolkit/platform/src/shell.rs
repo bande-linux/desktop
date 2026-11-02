@@ -23,6 +23,7 @@ use crate::window::{State, Window, WindowError, WindowEvent};
 pub(crate) const END_SESSION_SINCE: u32 = 3;
 pub(crate) const ACTIVE_MENUS_SINCE: u32 = 4;
 pub(crate) const MENU_BUTTON_SINCE: u32 = 4;
+pub(crate) const PANEL_SINCE: u32 = 5;
 
 struct Toplevel {
     handle: ExtForeignToplevelHandleV1,

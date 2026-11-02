@@ -95,6 +95,14 @@ impl State {
         self.follow_panel_zones();
         self.fit_to_usable_areas();
         self.follow_exclusive_layer(surface, exclusive);
+        let keyless = layer.cached_state().keyboard_interactivity == KeyboardInteractivity::None;
+        if keyless
+            && self
+                .focused()
+                .is_some_and(|focused| self.root_of(&focused).as_ref() == Some(surface))
+        {
+            self.focus_behind_layer();
+        }
         let configured = with_states(surface, |states| {
             states
                 .data_map

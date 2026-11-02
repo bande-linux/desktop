@@ -1,6 +1,7 @@
 mod cx;
 mod instance;
 mod menus;
+mod portal;
 mod runner;
 
 use std::ffi::OsString;
@@ -16,6 +17,7 @@ use bande_toolkit::ui::Ui;
 use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 
 pub use cx::{Cx, WindowId};
+pub use portal::{Filter, choose_file};
 
 pub type Error = Box<dyn std::error::Error>;
 

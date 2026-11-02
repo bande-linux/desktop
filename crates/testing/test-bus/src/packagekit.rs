@@ -97,6 +97,14 @@ impl Offline {
     fn trigger(&self, action: String) {
         record(&self.0, "Trigger", 0, vec![action]);
     }
+
+    #[zbus(property)]
+    fn update_triggered(&self) -> bool {
+        lock(&self.0)
+            .calls
+            .iter()
+            .any(|call| call.method == "Trigger")
+    }
 }
 
 struct Transaction(Shared);
@@ -104,6 +112,14 @@ struct Transaction(Shared);
 #[zbus::interface(name = "org.freedesktop.PackageKit.Transaction")]
 impl Transaction {
     fn set_hints(&self, _hints: Vec<String>) {}
+
+    async fn refresh_cache(
+        &self,
+        _force: bool,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) {
+        let _ = Self::finished(&emitter, EXIT_SUCCESS, 1).await;
+    }
 
     async fn get_updates(&self, _filter: u64, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
         let updates = lock(&self.0).updates.clone();

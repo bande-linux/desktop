@@ -12,6 +12,7 @@ use bande_toolkit::{
 
 use crate::L10N;
 use crate::browser::Location;
+use crate::gallery::strip_size;
 use crate::sidebar::{PlaceKind, Row};
 use crate::toolbar::TOOLBAR_HEIGHT;
 use crate::view::{
@@ -57,7 +58,7 @@ pub fn permissions(mode: u32) -> String {
         .collect()
 }
 
-fn centred(area: Rect, width: f32, height: f32) -> Rect {
+pub(crate) fn centred(area: Rect, width: f32, height: f32) -> Rect {
     Rect::new(
         area.x + ((area.width - width) / 2.0).round(),
         area.y + ((area.height - height) / 2.0).round(),
@@ -211,9 +212,18 @@ impl FilesView {
         {
             wanted.push((entry, ThumbnailSize::Large));
         }
-        if self.mode == ViewMode::Icons {
-            let size = self.thumbnail_size();
-            wanted.extend(self.grid_wanted.iter().map(|entry| (entry, size)));
+        match self.mode {
+            ViewMode::Icons => {
+                let size = self.thumbnail_size();
+                wanted.extend(self.grid_wanted.iter().map(|entry| (entry, size)));
+            }
+            ViewMode::Gallery => {
+                let column = &self.browser.columns()[0];
+                let selected = column.selected.and_then(|row| column.entries.get(row));
+                wanted.extend(self.grid_wanted.iter().map(|entry| (entry, strip_size())));
+                wanted.extend(selected.map(|entry| (entry, ThumbnailSize::XLarge)));
+            }
+            ViewMode::List | ViewMode::Columns => {}
         }
         let apps = &self.apps;
         self.thumbs.want(wanted, |entry| apps.mime_for(&entry.path));
@@ -328,6 +338,7 @@ impl FilesView {
         let content = self.content_frame();
         match self.mode {
             ViewMode::Icons => return self.paint_grid(items),
+            ViewMode::Gallery => return self.paint_gallery(items),
             ViewMode::List => return,
             ViewMode::Columns => {}
         }

@@ -233,6 +233,7 @@ impl FilesView {
             Command::Icons => self.set_mode(ViewMode::Icons),
             Command::Columns => self.set_mode(ViewMode::Columns),
             Command::List => self.set_mode(ViewMode::List),
+            Command::Gallery => self.set_mode(ViewMode::Gallery),
             Command::ToggleHidden => self.toggle_hidden(),
             Command::EmptyTrash => self.ask_to_empty_trash(),
             Command::RestoreSidebar => self.requests.push(Request::EditSidebar(SidebarEdit {

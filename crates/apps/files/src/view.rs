@@ -1183,6 +1183,7 @@ impl FilesView {
         }
         match self.mode {
             ViewMode::Icons => return self.grid_scrolled(scroll),
+            ViewMode::Gallery => return false,
             ViewMode::List => return false,
             ViewMode::Columns => {}
         }
@@ -1583,6 +1584,11 @@ impl FilesView {
             {
                 return self.grid_key(key, modifiers);
             }
+            Key::Up | Key::Down | Key::Left | Key::Right | Key::Home | Key::End
+                if self.mode == ViewMode::Gallery && !alt =>
+            {
+                return self.gallery_key(key, modifiers);
+            }
             Key::Down if shift => {
                 self.browser.extend(true);
                 self.selection_changed();
@@ -1642,6 +1648,7 @@ impl FilesView {
             Key::Character('1') if command => self.set_mode(ViewMode::Icons),
             Key::Character('2') if command => self.set_mode(ViewMode::List),
             Key::Character('3') if command => self.set_mode(ViewMode::Columns),
+            Key::Character('4') if command => self.set_mode(ViewMode::Gallery),
             Key::Character('=' | '+') if command => self.grow_icons(true),
             Key::Character('-') if command => self.grow_icons(false),
             Key::Character('i' | 'I') if command => {

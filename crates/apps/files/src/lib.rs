@@ -5,6 +5,7 @@ mod controls;
 mod drag;
 mod empty;
 mod file_manager;
+mod gallery;
 mod grid;
 mod icons;
 mod inspector;

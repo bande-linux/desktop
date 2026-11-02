@@ -24,7 +24,7 @@ the left and holds the menu bar; a setting moves the menu bar to the top.
 | Control Center, status items, volume and brightness HUD, Now Playing | parity | |
 | Desktop: wallpaper, icons, menus | parity | |
 | Lock screen, login window | basic | no user picker, accessibility or power menus at login |
-| Files | basic | icons, list and columns, Quick Look, Get Info, tabs, batch rename, settings; no network locations or tags |
+| Files | basic | icons, list, columns and gallery, Quick Look, Get Info, tabs, batch rename, settings, failure alerts, Show in Folder for other apps; no network locations or tags |
 | Settings | basic | grouped panes with search; no Users pane, printers or custom shortcuts |
 | Terminal, Activity Monitor | basic | apps repo; Terminal has tabs, splits and profiles |
 | Software, Package Installer, software updates | basic | live updates, offline only for reboot-class packages; Debian packages only; no Flatpak yet |

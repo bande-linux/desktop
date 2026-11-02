@@ -122,8 +122,8 @@ graph LR
   runs `/usr/libexec/bande-file-chooser` (`crates/apps/file-chooser`) per request with the
   dialog as arguments; it answers on standard output with the chosen paths and filter and
   exits 0 when chosen and 1 when cancelled, and closing the request terminates it. If it cannot
-  start (not installed, no display, any other exit) the portal forwards the same call to
-  `xdg-desktop-portal-gtk`, forwarding a later Close too. The dialog: favourite places,
+  start (not installed, no display, any other exit) the request fails with response 2. The
+  dialog: favourite places,
   bookmarks and volumes in a sidebar (from Files), a path bar from the home folder, a sortable
   Name, Date Modified and Size list with type-to-jump, folder icons from the accent icon
   theme, the app's filters as a pop-up, Save As with the name selected up to its extension,
@@ -131,6 +131,39 @@ graph LR
   `Alt+Down` to move up and into folders, and the last folder remembered per app in
   `$XDG_STATE_HOME/bande/file-chooser-folders`. Choices are answered with their initial
   values, and the dialog is not yet parented to the app window (xdg-foreign).
+- `org.freedesktop.impl.portal.Access`: the permission questions behind the Screenshot,
+  Wallpaper, Camera, Location and Background portals (the frontend exports none of these
+  without it). `bande-file-chooser --access` shows an alert with the frontend's title, subtitle
+  and body, the given icon or else the app's, Don’t Allow and Allow (or the given labels), and
+  each choice as a checkbox, or a labelled pop-up when it has options; the answers come back as
+  `choices`. Allow is response 0, anything else 1.
+- `org.freedesktop.impl.portal.AppChooser`: Open With for OpenURI, which the frontend exports
+  only with an AppChooser backend. The frontend opens the default app itself unless the app
+  asks or there is a real choice; then `bande-file-chooser --choose-app` asks "Choose an app to
+  open “name”:" with a search field and the frontend's candidates (the last choice selected),
+  Cancel and Open, a double click or Return opening at once. The chosen app id and an
+  xdg-activation token for it go back as `choice` and `activation_token`; the frontend
+  launches it. `UpdateChoices` reaches the open dialog on its standard input, one line of
+  NUL-separated ids per update. With no candidate the alert says no app can open it.
+- `org.freedesktop.impl.portal.Email`: builds a `mailto:` URI (to, cc, bcc, subject, body and
+  `attachment=` paths from the document portal, as the GTK backend does) and opens it with the
+  default `x-scheme-handler/mailto` app with the app's activation token.
+- `org.freedesktop.impl.portal.Inhibit`: the idle flag takes an `org.freedesktop.ScreenSaver`
+  inhibitor from `bande-power` (so the idle chain and its logind idle lock see it), named
+  after the app and its reason; the suspend flag takes a logind `sleep` block inhibitor;
+  closing the request releases both. Logout and user switch are not inhibited (Bande's
+  Log Out asks running apps to quit instead). Monitors report `screensaver-active` from the
+  session's `LockedHint` as it changes and `session-state` running; there is no query-end.
+- `org.freedesktop.impl.portal.Notification` (version 2): posts to
+  `org.freedesktop.Notifications` with the app's name, `desktop-entry` set to the app id,
+  `urgency` from the priority (low 0, urgent 2, else 1), `transient`/`resident` from the
+  display hints, `suppress-sound` for a silent sound, markup reduced to text, a themed icon as
+  the app icon and a picture (sealed file descriptor) kept in
+  `$XDG_RUNTIME_DIR/xdg-desktop-portal-bande/pictures` as `image-path` while a notification
+  uses it. The default action and buttons become actions; when one is invoked an `app.`
+  action goes to the app's `org.freedesktop.Application.ActivateAction` (D-Bus activating it)
+  with the activation token, any other one is signalled as `ActionInvoked` with its target and
+  the token. Re-adding an id replaces the notification; removing it closes it.
 - Implemented in `crates/services/portal`: `Settings` (version 2) publishes
   `org.freedesktop.appearance` from `org.bande.Config`, with `color-scheme` 1 for dark (the
   default, and what every client assumes until the portal answers) and 2 for light (Automatic is resolved by the portal: dark from sunset to sunrise at the main city
@@ -159,8 +192,10 @@ graph LR
   validation, PipeWire streams, `persist_mode` with restore data that skips the picker, closing
   stops the streams) are implemented over `FileChooserUi`, `ScreenshotUi` and
   `ScreenCastBackend` traits. `bande-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Bande`)
-  sends Open and Save dialogs to Bande (GTK second), secrets to GNOME Keyring, Screenshot and
-  ScreenCast to Bande, and everything else to GTK.
+  sends every interface to Bande and secrets to GNOME Keyring; no GTK or GNOME backend is
+  used. Not implemented: Print (Bande has no print dialog), Account, Background, DynamicLauncher,
+  GlobalShortcuts, InputCapture, RemoteDesktop, Clipboard and Usb; Lockdown is the frontend's
+  own default (nothing locked down).
 - **Capture lives in the screenshot tool.** The portal process has no Wayland connection: its
   `ScreenshotUi` and `ScreenCastBackend` forward to `org.bande.Screenshot`, served by
   `bande-screenshot`, which the compositor starts as a shell client and so already holds the

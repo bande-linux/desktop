@@ -1,3 +1,6 @@
+mod access;
+mod app_chooser;
+
 use std::cell::Cell;
 use std::ffi::OsString;
 use std::io::Write;
@@ -20,7 +23,10 @@ use bande_xdg::{
     Locale, MimeDatabase, UserDir, app_name, applications, config_home, current_desktops,
     data_dirs, replace_file, state_home, user_dir,
 };
-use xdg_desktop_portal_bande::dialog_process::{CANCELLED, CHOSEN, SET_WALLPAPER, encode, parse};
+use xdg_desktop_portal_bande::dialog_process::{
+    ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, SET_WALLPAPER, encode, parse, parse_access,
+    parse_app_chooser,
+};
 use xdg_desktop_portal_bande::file_chooser::{Dialog, Mode, Selection};
 
 const APP_ID: &str = "org.bande.FileChooser";
@@ -261,6 +267,25 @@ fn main() -> ExitCode {
         && app_flag == "--app-id"
     {
         return confirm_wallpaper(Path::new(picture), &app_id.to_string_lossy());
+    }
+    let mode = arguments.first().cloned().unwrap_or_default();
+    if mode == ACCESS {
+        return match parse_access(arguments) {
+            Ok(question) => access::ask(&question),
+            Err(error) => {
+                tracing::error!("{}", error.0);
+                ExitCode::from(UNAVAILABLE)
+            }
+        };
+    }
+    if mode == CHOOSE_APP {
+        return match parse_app_chooser(arguments) {
+            Ok(offer) => app_chooser::choose(&offer),
+            Err(error) => {
+                tracing::error!("{}", error.0);
+                ExitCode::from(UNAVAILABLE)
+            }
+        };
     }
     match parse(arguments) {
         Ok(dialog) => run(dialog),

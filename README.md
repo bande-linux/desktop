@@ -54,9 +54,9 @@ screenshot tests; [`docs/quality/tests.md`](docs/quality/tests.md) lists them an
 
 ## Releases
 
-GitHub CI runs only on version tags (and on manual dispatch for a test build or a dry run). A
-release is: bump `[workspace.package] version` in `Cargo.toml`, merge to `main`, dry-run it with
-`ci/release/dry-run.sh`, and tag `vX.Y.Z` once that is green. The tag's
+GitHub CI runs only on version tags (and on manual dispatch for an unpublished build). A release
+is: bump `[workspace.package] version` in `Cargo.toml`, merge to `main` through the train, whose
+gate runs the same checks, and tag `vX.Y.Z`. The tag's
 `release.yml` lints, tests, builds the packages for arm64 and amd64 and install-tests them in a
 clean Debian testing; the APT repository ([bande-linux/apt](https://github.com/bande-linux/apt))
 publishes a fully green tag run on its own. Details: [`docs/architecture/ci.md`](docs/architecture/ci.md).

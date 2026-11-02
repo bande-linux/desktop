@@ -19,6 +19,6 @@
 
 ## Workflow
 - Trunk-based: `main` always builds. Each milestone is a short branch from `main`.
-- A finished branch has `origin/main` merged in, compiles, and is pushed and queued with `desktop-enqueue <branch>`; the merge train gates the batch and pushes `main`. Never force-push. GitHub CI (`release.yml`) runs on version tags (`vX.Y.Z`) and on dispatch; a green run for a tag on `main` publishes to the APT repository. A release is: bump `[workspace.package] version`, merge to `main`, `ci/release/dry-run.sh` green, then tag.
+- A finished branch has `origin/main` merged in, compiles, and is pushed and queued with `desktop-enqueue <branch>`; the merge train gates the batch and pushes `main`. Never force-push. GitHub CI (`release.yml`) runs on version tags (`vX.Y.Z`) and on dispatch; a green run for a tag on `main` publishes to the APT repository. A release is: bump `[workspace.package] version`, merge to `main` through the train, tag.
 - Then merge `main` into the next branch and push only that branch; never push several stacked branches at once.
 - Commit messages: one brief line saying what the commit does. No body, no trailers (no `Co-Authored-By`, no session links), nothing special.

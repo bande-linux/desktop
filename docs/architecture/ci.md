@@ -28,8 +28,7 @@ Only these run in CI alone:
 - The amd64 debs: the build machine is arm64; both architectures build from the same scripts.
 - Fat LTO: the build machine's release-batch gate builds the `dist` debs one crate at a time
   with thin LTO (`CARGO_PROFILE_DIST_LTO=thin`), since a fat-LTO link of the shell needs more
-  memory than the build machine spares next to the session, and systemd-oomd stops it; the dry
-  run builds them with fat LTO.
+  memory than the build machine spares next to the session, and systemd-oomd stops it.
 
 ## The local gate
 
@@ -54,12 +53,10 @@ a display; the compositor tests run it headless.
 
 ### Jobs
 
-`release.yml` runs when a version is tagged and when dispatched by hand: with a `tag` input it
-is the dry run of that release (`ci/release/dry-run.sh`), built exactly as the tag will be, at
-the tag's version; without one, a test build of the ref at a `+git` version. Dispatch runs are
-never published. A newer run on the same ref cancels the older one, and `deb-all` fails a
-release whose commit is not on `main`. Each job installs with `verify.sh --setup` and runs one
-stage:
+`release.yml` runs when a version is tagged and when dispatched by hand for an unpublished build
+(`gh workflow run release.yml --ref <branch>`, never published). A newer run on the same ref
+cancels the older one, and `deb-all` fails a tag whose commit is not on `main`. Each job installs
+with `verify.sh --setup` and runs one stage:
 
 - `lint` (arm64): `verify.sh lint`.
 - `test` (arm64): `verify.sh test`.
@@ -100,10 +97,10 @@ it installs `bande-desktop` from the live site on amd64 and on arm64 and checks 
 package is that architecture's build (or `all`) at the published version
 ([`bande-linux/apt`](https://github.com/bande-linux/apt)).
 
-Versions come from `ci/deb/version.sh`. A release (`RELEASE_TAG`: the pushed tag, or the dry
-run's `tag` input) `vX.Y.Z` builds version `X.Y.Z` and must equal the `[workspace.package]
-version` in `Cargo.toml`. Test builds and local builds get `X.Y.Z+gitDATE.COUNT.sha`, counted
-from the last tag, which sorts above that tag and below the next.
+Versions come from `ci/deb/version.sh`. A tag `vX.Y.Z` builds version `X.Y.Z` and must equal
+the `[workspace.package] version` in `Cargo.toml`. Unpublished and local builds get
+`X.Y.Z+gitDATE.COUNT.sha`, counted from the last tag, which sorts above that tag and below the
+next.
 
 Hosted runners start from a clean machine, so `Swatinem/rust-cache` restores the cargo
 registry, the installed `cargo-deb` and the target directory, keyed per job and architecture
@@ -114,25 +111,20 @@ profile two crates at a time (`DIST_BUILD_JOBS`), so the fat-LTO links stay with
 ## Releasing
 
 1. Bump `[workspace.package] version` in `Cargo.toml` in a commit "Release X.Y.Z" and queue it
-   with `desktop-enqueue`; the train runs the gate with the `dist` debs for it and pushes `main`.
-2. Dry run: `ci/release/dry-run.sh` dispatches `release.yml` on `main` with `tag=vX.Y.Z` for
-   the release commit (it must be `main`'s head) and waits for every job; it prints the run's URL.
-3. Only when the dry run is green: `git tag vX.Y.Z <commit> && git push origin vX.Y.Z`.
-4. Watch the tag run: `gh run list -R bande-linux/desktop -w release.yml -e push`, then
+   with `desktop-enqueue`; the train runs the gate, with the `dist` debs for a version change,
+   and pushes `main`.
+2. Tag the release commit: `git tag vX.Y.Z <commit> && git push origin vX.Y.Z`. The tag run
+   builds and publishes, once.
+3. Watch it: `gh run list -R bande-linux/desktop -w release.yml -e push`, then
    `gh run watch -R bande-linux/desktop <id>`. All seven jobs must be green; apt takes only a
    fully green tag run. A flake: `gh run rerun <id> --failed` (same run id). Exit 137 in `debs`
    means the fat-LTO link ran out of memory: set `lto = "thin"` in the `dist` profile and
    release the next patch.
-5. Within 30 minutes apt's `look.yml` finds it (or at once from its Run workflow button) and
+4. Within 30 minutes apt's `look.yml` finds it (or at once from its Run workflow button) and
    starts `publish.yml`, which deploys the site and installs `bande-desktop` from it on both
    architectures.
-6. Check: `curl -s https://bande-linux.github.io/apt/dists/rolling/main/binary-amd64/Packages`
+5. Check: `curl -s https://bande-linux.github.io/apt/dists/rolling/main/binary-amd64/Packages`
    lists `bande-compositor` at the new version for `amd64`, and the same for `arm64`.
-
-The tag run rebuilds rather than promoting the dry run's packages: apt verifies that a run is
-the push of the tag and takes that run's own artifacts, and a promotion path would be the one
-part of the pipeline the dry run cannot exercise. The two runs build the same commit, version,
-lockfile and scripts in the same image.
 
 A published version is never moved or deleted. A bad release is fixed forward with the next
 patch version; a tag whose run failed before apt published it may be deleted and pushed again.

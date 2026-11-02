@@ -97,6 +97,7 @@ struct Quad {
     clip: RoundedRect,
     caster: RoundedRect,
     orientation: f32,
+    flipped: bool,
 }
 
 pub struct VulkanFrame<'frame, 'buffer> {
@@ -382,9 +383,15 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 quad.destination.width as f32,
                 quad.destination.height as f32,
                 quad.source.loc.x as f32,
-                quad.source.loc.y as f32,
+                match quad.flipped {
+                    true => (quad.source.loc.y + quad.source.size.h) as f32,
+                    false => quad.source.loc.y as f32,
+                },
                 quad.source.size.w as f32,
-                quad.source.size.h as f32,
+                match quad.flipped {
+                    true => -quad.source.size.h as f32,
+                    false => quad.source.size.h as f32,
+                },
                 quad.alpha,
                 quad.blur,
             ])
@@ -615,9 +622,11 @@ impl Frame for VulkanFrame<'_, '_> {
         src_transform: Transform,
         alpha: f32,
     ) -> Result<(), RenderError> {
-        if src_transform != Transform::Normal {
-            return Err(RenderError::UnsupportedTransform);
-        }
+        let flipped = match src_transform {
+            Transform::Normal => false,
+            Transform::Flipped180 => true,
+            _ => return Err(RenderError::UnsupportedTransform),
+        };
         if texture.renderer != self.renderer.id {
             return Err(RenderError::ForeignResource);
         }
@@ -643,6 +652,7 @@ impl Frame for VulkanFrame<'_, '_> {
                 alpha,
                 clip: self.clip.unwrap_or_default(),
                 orientation: self.orientation(),
+                flipped,
                 ..Quad::default()
             },
             &rects,

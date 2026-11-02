@@ -158,7 +158,13 @@ writes a hex value, a corner radius or a font name of its own.
     opens the window menu. The header and its buttons are published to screen readers above the app's tree. Server-side frames
     for third-party apps (`compositor/src/frame.rs`) draw the same header and pill from
     `title_bar.rs`, 40 pt high, and redraw when Alt is pressed or released so the zoom glyph
-    follows it. When the only Vulkan device renders on the CPU (lavapipe or
+    follows it.
+  - **Resizing from the app.** As `NSWindow setFrame:display:animate:`,
+    `Window::resize_content(size, Sizing)` gives a toplevel a new content size and makes it
+    `Sizing::Fixed` (minimum and maximum size equal, no resize band or zoom) or
+    `Sizing::Resizable`. A floating window takes the size in its next frame; a zoomed, tiled or
+    full-screen one keeps the size it was given (a fixed one is then released to floating by the
+    compositor). A fixed floating window ignores configure sizes, so its own size wins. When the only Vulkan device renders on the CPU (lavapipe or
   llvmpipe, as in VMs) every window stays on `CpuRenderer` and presents `wl_shm` buffers with
   only the changed regions damaged; `BANDE_RENDERER=gpu` or `=cpu` overrides the choice. A
   window whose background is opaque declares its window rectangle as its opaque region, so

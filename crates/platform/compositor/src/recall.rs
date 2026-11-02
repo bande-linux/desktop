@@ -191,7 +191,7 @@ impl State {
         let frame = if placed {
             window.restore
         } else {
-            window.geometry()
+            window.committed_frame()
         };
         let Some(frame) = frame.filter(|frame| frame.size.w > 0 && frame.size.h > 0) else {
             return;

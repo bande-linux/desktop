@@ -613,17 +613,17 @@ impl Taskbar {
                 if !actions.is_empty() {
                     items.push(MenuItem::separator());
                 }
-                items.push(
+                let options = Menu::new(vec![
                     MenuItem::new(&L10N.tr("menu-keep"), MENU_KEEP)
                         .checked(self.kept.contains(app_id))
                         .enabled(self.can_keep(window, app_id)),
-                );
-                items.push(
                     MenuItem::new(&L10N.tr("menu-login"), MENU_LOGIN)
                         .checked(self.opens_at_login(app_id))
                         .enabled(installed && self.autostart.is_some()),
-                );
-                items.push(MenuItem::new(&L10N.tr("menu-show"), MENU_SHOW).enabled(installed));
+                    MenuItem::separator(),
+                    MenuItem::new(&L10N.tr("menu-show"), MENU_SHOW).enabled(installed),
+                ]);
+                items.push(MenuItem::submenu(&L10N.tr("menu-options"), options));
                 if running {
                     items.push(MenuItem::separator());
                     items.push(MenuItem::new(&L10N.tr("menu-hide"), MENU_HIDE));

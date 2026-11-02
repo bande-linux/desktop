@@ -47,6 +47,14 @@ impl State {
 
     pub(crate) fn hide_app(&mut self, app_id: &str) {
         self.hide_windows(self.app_surfaces(app_id));
+        if self
+            .windowless_app
+            .as_ref()
+            .is_some_and(|(_, windowless)| windowless == app_id)
+        {
+            let next = self.frontmost(None);
+            self.focus(next);
+        }
     }
 
     pub(crate) fn hide_windows(&mut self, surfaces: Vec<WlSurface>) {

@@ -1,11 +1,14 @@
 mod connections;
 mod proxy;
+mod wifi;
 
 pub use connections::{
-    Ethernet, ManualIpv4, Vpn, VpnState, import_vpn, ipv4_settings, parse_manual, vpn_type_of,
+    Addressing, Ethernet, ManualIpv4, Vpn, VpnState, import_vpn, ipv4_settings, parse_dns,
+    parse_manual, vpn_type_of,
 };
 use std::collections::HashMap;
 use std::fmt;
+pub use wifi::{KnownNetwork, PrivateAddress, WifiChange, WifiLink};
 
 use proxy::{
     AccessPointProxyBlocking, ActiveConnectionProxyBlocking, DeviceProxyBlocking,
@@ -13,7 +16,7 @@ use proxy::{
     WiredProxyBlocking, WirelessProxyBlocking,
 };
 use zbus::blocking::Connection;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
 
 const DEVICE_TYPE_ETHERNET: u32 = 1;
 const DEVICE_TYPE_WIFI: u32 = 2;
@@ -227,6 +230,40 @@ impl fmt::Display for JoinOutcome {
     }
 }
 
+type NewConnection = HashMap<&'static str, HashMap<&'static str, Value<'static>>>;
+
+fn key_management(security: Security) -> Result<Option<&'static str>> {
+    match security {
+        Security::Open => Ok(None),
+        Security::Personal { sae_only: false } => Ok(Some("wpa-psk")),
+        Security::Personal { sae_only: true } => Ok(Some("sae")),
+        other => Err(Error::Unsupported(other)),
+    }
+}
+
+fn wireless_settings(
+    ssid: &[u8],
+    key_management: Option<&'static str>,
+    password: Option<&str>,
+    hidden: bool,
+) -> NewConnection {
+    let mut wireless = HashMap::from([("ssid", Value::from(ssid.to_vec()))]);
+    if hidden {
+        wireless.insert("hidden", Value::from(true));
+    }
+    let mut settings = HashMap::from([(WIRELESS, wireless)]);
+    if let (Some(key_management), Some(psk)) = (key_management, password) {
+        settings.insert(
+            WIRELESS_SECURITY,
+            HashMap::from([
+                ("key-mgmt", Value::from(key_management)),
+                ("psk", Value::from(psk.to_owned())),
+            ]),
+        );
+    }
+    settings
+}
+
 pub struct NetworkManager {
     bus: Connection,
 }
@@ -382,12 +419,7 @@ impl NetworkManager {
     }
 
     pub fn join(&self, network: &Network, password: Option<&str>) -> Result<JoinOutcome> {
-        let key_management = match network.security {
-            Security::Open => None,
-            Security::Personal { sae_only: false } => Some("wpa-psk"),
-            Security::Personal { sae_only: true } => Some("sae"),
-            other => return Err(Error::Unsupported(other)),
-        };
+        let key_management = key_management(network.security)?;
         let device = self.wifi_device()?;
         let manager = self.manager()?;
         let saved = self
@@ -395,7 +427,7 @@ impl NetworkManager {
             .into_iter()
             .find(|(ssid, _)| *ssid == network.ssid)
             .map(|(_, path)| path);
-        let (added, active) = match (saved, password) {
+        let connection = match (saved, password) {
             (Some(connection), password) => {
                 if let Some(psk) = password {
                     self.replace_password(&connection, psk)?;
@@ -412,41 +444,53 @@ impl NetworkManager {
                     },
                     Ok(active) => active,
                 };
-                (None, active)
+                return self.wait_for_activation(&active);
             }
             (None, None) if key_management.is_some() => return Err(Error::PasswordRequired),
-            (None, password) => {
-                let mut settings = HashMap::from([(
-                    WIRELESS,
-                    HashMap::from([("ssid", Value::from(network.ssid.clone()))]),
-                )]);
-                if let (Some(key_management), Some(psk)) = (key_management, password) {
-                    settings.insert(
-                        WIRELESS_SECURITY,
-                        HashMap::from([
-                            ("key-mgmt", Value::from(key_management)),
-                            ("psk", Value::from(psk)),
-                        ]),
-                    );
-                }
-                let (connection, active) = manager
-                    .add_and_activate_connection(settings, &device, &network.access_point)
-                    .map_err(refused)?;
-                (Some(connection), active)
-            }
+            (None, password) => wireless_settings(&network.ssid, key_management, password, false),
         };
+        self.add_and_join(connection, &device, &network.access_point)
+    }
+
+    pub fn join_hidden(
+        &self,
+        ssid: &[u8],
+        security: Security,
+        password: Option<&str>,
+    ) -> Result<JoinOutcome> {
+        let key_management = key_management(security)?;
+        if key_management.is_some() && password.is_none_or(str::is_empty) {
+            return Err(Error::PasswordRequired);
+        }
+        let device = self.wifi_device()?;
+        let settings = wireless_settings(ssid, key_management, password, true);
+        self.add_and_join(
+            settings,
+            &device,
+            &ObjectPath::from_static_str_unchecked("/"),
+        )
+    }
+
+    fn add_and_join(
+        &self,
+        settings: NewConnection,
+        device: &ObjectPath<'_>,
+        specific_object: &ObjectPath<'_>,
+    ) -> Result<JoinOutcome> {
+        let (connection, active) = self
+            .manager()?
+            .add_and_activate_connection(settings, device, specific_object)
+            .map_err(refused)?;
         let outcome = self.wait_for_activation(&active)?;
-        if let Some(connection) = added
-            && outcome != JoinOutcome::Joined
-        {
+        if outcome != JoinOutcome::Joined {
             self.settings_connection(&connection)?.delete()?;
         }
         Ok(outcome)
     }
 
-    pub fn forget(&self, network: &Network) -> Result<()> {
-        for (ssid, connection) in self.saved_wifi()? {
-            if ssid == network.ssid {
+    pub fn forget(&self, ssid: &[u8]) -> Result<()> {
+        for (saved, connection) in self.saved_wifi()? {
+            if saved == ssid {
                 self.settings_connection(&connection)?.delete()?;
             }
         }

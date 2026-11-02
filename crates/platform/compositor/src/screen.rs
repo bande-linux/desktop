@@ -118,6 +118,7 @@ pub(crate) struct Screen {
     pub(crate) workspaces: Workspaces,
     pub(crate) redraw: bool,
     pub(crate) mirror: Option<String>,
+    pub(crate) fitted_to: Rectangle<i32, Logical>,
     pub(crate) latched_feedback: Vec<PresentationFeedbackCallback>,
     pub(crate) latched_frame_callbacks: Vec<WlCallback>,
 }
@@ -152,6 +153,7 @@ impl Screen {
             workspaces: Workspaces::default(),
             redraw: true,
             mirror: None,
+            fitted_to: Rectangle::default(),
             latched_feedback: Vec::new(),
             latched_frame_callbacks: Vec::new(),
         };

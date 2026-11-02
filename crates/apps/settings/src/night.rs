@@ -57,6 +57,28 @@ impl SettingsView {
         }
     }
 
+    pub(crate) fn do_not_disturb_summary(&self) -> Option<String> {
+        let on = self.values.get(&SettingId::DoNotDisturb) == Some(&Value::Flag(true));
+        let scheduled = (self.values.get(&SettingId::FocusScheduled) == Some(&Value::Flag(true)))
+            .then(|| {
+                let from = self.text_value(SettingId::FocusFrom)?;
+                let to = self.text_value(SettingId::FocusTo)?;
+                within_daily(&(self.clock)(), time(from)?, time(to)?)
+                    .map(|(inside, _)| (inside, from, to))
+            })
+            .flatten();
+        match (on, scheduled) {
+            (true, Some((true, _, to))) => {
+                Some(L10N.tr_args("do-not-disturb-until", [("time", to.to_owned().into())]))
+            }
+            (true, _) => Some(L10N.tr("do-not-disturb-on")),
+            (false, Some((false, from, _))) => {
+                Some(L10N.tr_args("do-not-disturb-at", [("time", from.to_owned().into())]))
+            }
+            (false, _) => None,
+        }
+    }
+
     pub(crate) fn night_custom(&self) -> bool {
         self.values.get(&SettingId::NightSchedule) == Some(&Value::Keyword(CUSTOM.to_owned()))
     }

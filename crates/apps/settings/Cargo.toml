@@ -46,7 +46,8 @@ section = "misc"
 depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, bande-config, locales"
 extended-description = """\
 System Settings of the Bande desktop in four groups: Connections \
-(Wi-Fi, Bluetooth, network), Desktop (appearance and wallpaper, the bar, \
+(Wi-Fi with known networks, per-network details and hidden networks, \
+Bluetooth, network), Desktop (appearance and wallpaper, the bar, \
 notifications per app, accessibility), Devices (displays, sound, keyboard, \
 trackpad and mouse) and System (power, apps that open at login, language \
 and time, about this computer with storage and software update), with a \

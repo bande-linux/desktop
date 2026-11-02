@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use bande_config::{
-    ArrangedDisplay, DisplaySettings, NightLightValue, Placement, Rotation, SearchCategory,
+    ArrangedDisplay, DisplaySettings, FocusScheduleValue, NightLightValue, Placement, Rotation,
+    SearchCategory,
 };
 use bande_datetime::DateFormats;
 use bande_notify::client::NotificationCenter;
@@ -29,6 +30,14 @@ pub trait Config {
     fn tinted_frame(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_tinted_frame(&self, tinted: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn reopen_apps(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_reopen_apps(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn reopen_apps_after_crash(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_reopen_apps_after_crash(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
     fn clock_format(&self) -> zbus::Result<String>;
     #[zbus(property)]
@@ -65,6 +74,10 @@ pub trait Config {
     fn text_size(&self) -> zbus::Result<u32>;
     #[zbus(property)]
     fn set_text_size(&self, percent: u32) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn focus_schedule(&self) -> zbus::Result<FocusScheduleValue>;
+    #[zbus(property)]
+    fn set_focus_schedule(&self, value: FocusScheduleValue) -> zbus::Result<()>;
     #[zbus(property)]
     fn night_light(&self) -> zbus::Result<NightLightValue>;
     #[zbus(property)]
@@ -114,9 +127,9 @@ pub trait Config {
     #[zbus(property)]
     fn set_bar_edge(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
-    fn bar_menu_bar(&self) -> zbus::Result<String>;
+    fn bar_layout(&self) -> zbus::Result<String>;
     #[zbus(property)]
-    fn set_bar_menu_bar(&self, value: &str) -> zbus::Result<()>;
+    fn set_bar_layout(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
     fn idle_dim_after(&self) -> zbus::Result<u64>;
     #[zbus(property)]
@@ -272,7 +285,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 65] = [
+pub const CONFIG_SETTINGS: [SettingId; 70] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -286,6 +299,9 @@ pub const CONFIG_SETTINGS: [SettingId; 65] = [
     SettingId::TextSize,
     SettingId::NightLight,
     SettingId::NightSchedule,
+    SettingId::FocusScheduled,
+    SettingId::FocusFrom,
+    SettingId::FocusTo,
     SettingId::NightFrom,
     SettingId::NightTo,
     SettingId::NightWarmth,
@@ -295,12 +311,14 @@ pub const CONFIG_SETTINGS: [SettingId; 65] = [
     SettingId::BounceKeys,
     SettingId::Accent,
     SettingId::TintedFrame,
+    SettingId::ReopenApps,
+    SettingId::ReopenAfterCrash,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
     SettingId::BarIconSize,
     SettingId::BarAutoHide,
     SettingId::BarEdge,
-    SettingId::BarMenuBar,
+    SettingId::BarLayout,
     SettingId::DimAfter,
     SettingId::LockAfter,
     SettingId::SleepAfter,
@@ -450,6 +468,15 @@ impl SettingsClient {
         )
     }
 
+    fn change_focus_schedule(
+        &self,
+        change: impl FnOnce(&mut FocusScheduleValue),
+    ) -> zbus::Result<()> {
+        let mut schedule = self.config.focus_schedule()?;
+        change(&mut schedule);
+        self.config.set_focus_schedule(schedule)
+    }
+
     fn change_night_light(&self, change: impl FnOnce(&mut NightLightValue)) -> zbus::Result<()> {
         let mut night = self.config.night_light()?;
         change(&mut night);
@@ -468,6 +495,9 @@ impl SettingsClient {
             SettingId::NightLight => Value::Flag(self.config.night_light()?.0),
             SettingId::NightSchedule => Value::Keyword(self.config.night_light()?.1),
             SettingId::NightFrom => Value::Text(self.config.night_light()?.2),
+            SettingId::FocusScheduled => Value::Flag(self.config.focus_schedule()?.0),
+            SettingId::FocusFrom => Value::Text(self.config.focus_schedule()?.1),
+            SettingId::FocusTo => Value::Text(self.config.focus_schedule()?.2),
             SettingId::NightTo => Value::Text(self.config.night_light()?.3),
             SettingId::NightWarmth => Value::Number(self.config.night_light()?.4),
             SettingId::TextSize => Value::Number(self.config.text_size()?),
@@ -485,6 +515,8 @@ impl SettingsClient {
             SettingId::BounceKeys => Value::Flag(self.config.bounce_keys()?),
             SettingId::Accent => Value::Keyword(self.config.accent()?),
             SettingId::TintedFrame => Value::Flag(self.config.tinted_frame()?),
+            SettingId::ReopenApps => Value::Flag(self.config.reopen_apps()?),
+            SettingId::ReopenAfterCrash => Value::Flag(self.config.reopen_apps_after_crash()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
             SettingId::Clock24Hour => Value::Flag(match self.config.clock_format()?.as_str() {
@@ -500,7 +532,7 @@ impl SettingsClient {
             SettingId::BarIconSize => Value::Number(self.config.bar_icon_size()?),
             SettingId::BarAutoHide => Value::Flag(self.config.bar_auto_hide()?),
             SettingId::BarEdge => Value::Keyword(self.config.bar_edge()?),
-            SettingId::BarMenuBar => Value::Keyword(self.config.bar_menu_bar()?),
+            SettingId::BarLayout => Value::Keyword(self.config.bar_layout()?),
             SettingId::DimAfter => Value::Seconds(self.config.idle_dim_after()?),
             SettingId::LockAfter => Value::Seconds(self.config.idle_lock_after()?),
             SettingId::SleepAfter if self.config.idle_suspend_with_display()? => {
@@ -571,10 +603,12 @@ impl SettingsClient {
             (SettingId::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
             (SettingId::Accent, Value::Keyword(keyword)) => self.config.set_accent(keyword),
             (SettingId::TintedFrame, Value::Flag(tinted)) => self.config.set_tinted_frame(*tinted),
-            (SettingId::BarEdge, Value::Keyword(keyword)) => self.config.set_bar_edge(keyword),
-            (SettingId::BarMenuBar, Value::Keyword(keyword)) => {
-                self.config.set_bar_menu_bar(keyword)
+            (SettingId::ReopenApps, Value::Flag(on)) => self.config.set_reopen_apps(*on),
+            (SettingId::ReopenAfterCrash, Value::Flag(on)) => {
+                self.config.set_reopen_apps_after_crash(*on)
             }
+            (SettingId::BarEdge, Value::Keyword(keyword)) => self.config.set_bar_edge(keyword),
+            (SettingId::BarLayout, Value::Keyword(keyword)) => self.config.set_bar_layout(keyword),
             (SettingId::Clock24Hour, Value::Flag(twenty_four_hour)) => {
                 self.config.set_clock_format(if *twenty_four_hour {
                     "24-hour"
@@ -609,6 +643,15 @@ impl SettingsClient {
             }
             (SettingId::NightSchedule, Value::Keyword(schedule)) => {
                 self.change_night_light(|night| schedule.clone_into(&mut night.1))
+            }
+            (SettingId::FocusScheduled, Value::Flag(on)) => {
+                self.change_focus_schedule(|schedule| schedule.0 = *on)
+            }
+            (SettingId::FocusFrom, Value::Text(from)) => {
+                self.change_focus_schedule(|schedule| from.clone_into(&mut schedule.1))
+            }
+            (SettingId::FocusTo, Value::Text(to)) => {
+                self.change_focus_schedule(|schedule| to.clone_into(&mut schedule.2))
             }
             (SettingId::NightFrom, Value::Text(from)) => {
                 self.change_night_light(|night| from.clone_into(&mut night.2))

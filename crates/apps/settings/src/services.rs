@@ -7,7 +7,10 @@ use std::sync::mpsc::RecvTimeoutError;
 
 use bande_audio::{Audio, Direction, Level, Meter};
 use bande_bluetooth::{Bluetooth, PairingPrompt, register_agent, shown_change};
-use bande_network::{JoinOutcome, ManualIpv4, NetworkManager, set_strength, strength_signal};
+use bande_network::{
+    JoinOutcome, ManualIpv4, NetworkManager, Security, WifiChange, WifiLink, set_strength,
+    strength_signal,
+};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, Message, message};
 
@@ -36,7 +39,10 @@ pub enum NetworkCommand {
     Power(bool),
     Scan,
     Join(bande_network::Network, Option<String>),
-    Forget(bande_network::Network),
+    JoinHidden(Vec<u8>, Security, Option<String>),
+    Forget(Vec<u8>),
+    ChangeWifi(String, WifiChange),
+    SignIn,
     ConfigureEthernet(Option<ManualIpv4>),
     ConnectVpn(String),
     DisconnectVpn(String),
@@ -252,12 +258,21 @@ fn read_wifi(network: &NetworkManager) -> Option<WifiState> {
         return None;
     }
     let enabled = network.wifi_enabled().ok()?;
-    let networks = if enabled {
-        network.networks().unwrap_or_default()
+    let (networks, link) = if enabled {
+        (
+            network.networks().unwrap_or_default(),
+            network.wifi_link().unwrap_or_default(),
+        )
     } else {
-        Vec::new()
+        (Vec::new(), WifiLink::default())
     };
-    Some(WifiState { enabled, networks })
+    Some(WifiState {
+        enabled,
+        networks,
+        known: network.known_networks().unwrap_or_default(),
+        link,
+        sign_in: enabled && matches!(network.sign_in_page(), Ok(Some(_))),
+    })
 }
 
 enum NetworkChange {
@@ -373,28 +388,43 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                 NetworkCommand::DisconnectVpn(path) => {
                     report(&updates, network.disconnect_vpn(&path));
                 }
-                NetworkCommand::Forget(target) => report(&updates, network.forget(&target)),
+                NetworkCommand::Forget(ssid) => report(&updates, network.forget(&ssid)),
+                NetworkCommand::SignIn => match network.sign_in_page() {
+                    Ok(Some(page)) => bande_status::captive::open_page(&page),
+                    Ok(None) => {}
+                    Err(error) => tracing::warn!("cannot find the sign-in page: {error}"),
+                },
+                NetworkCommand::ChangeWifi(path, change) => {
+                    report(&updates, network.change_wifi(&path, &change));
+                }
                 NetworkCommand::Scan => {
                     if let Err(error) = network.scan() {
                         tracing::debug!("scan not started: {error}");
                     }
                 }
                 NetworkCommand::Join(target, password) => {
-                    let outcome = match network.join(&target, password.as_deref()) {
-                        Ok(JoinOutcome::Joined) => Joined::Joined,
-                        Ok(JoinOutcome::WrongPassword) => Joined::WrongPassword,
-                        Ok(failed @ JoinOutcome::Failed { .. }) => {
-                            Joined::Failed(failed.to_string())
-                        }
-                        Err(bande_network::Error::PasswordRequired) => Joined::WrongPassword,
-                        Err(error) => Joined::Failed(error.to_string()),
-                    };
+                    let outcome = joined(network.join(&target, password.as_deref()));
                     updates.send(Update::Joined(target.ssid.clone(), outcome));
+                }
+                NetworkCommand::JoinHidden(ssid, security, password) => {
+                    let outcome = joined(network.join_hidden(&ssid, security, password.as_deref()));
+                    updates.send(Update::Joined(ssid, outcome));
                 }
             }
         }
     });
     sender
+}
+
+fn joined(result: bande_network::Result<JoinOutcome>) -> Joined {
+    match result {
+        Ok(JoinOutcome::Joined) => Joined::Joined,
+        Ok(JoinOutcome::WrongPassword) | Err(bande_network::Error::PasswordRequired) => {
+            Joined::WrongPassword
+        }
+        Ok(failed @ JoinOutcome::Failed { .. }) => Joined::Failed(failed.to_string()),
+        Err(error) => Joined::Failed(error.to_string()),
+    }
 }
 
 fn read_bluetooth(bluetooth: &Bluetooth) -> Option<BluetoothState> {

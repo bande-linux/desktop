@@ -11,7 +11,9 @@ repository.workspace = true
 rustix = { workspace = true, features = ["event", "time"] }
 tracing.workspace = true
 bande-bus.workspace = true
+bande-datetime.workspace = true
 bande-log.workspace = true
+jiff.workspace = true
 bande-sound.workspace = true
 zbus.workspace = true
 

@@ -3,12 +3,14 @@ use std::time::Instant;
 
 use crate::L10N;
 use crate::menu_bar::StatusView;
-use crate::rail::{TaskbarView, bar_width, owns_node, surface_size};
+use crate::rail::{TaskbarView, bar_width, edge_band, owns_node, surface_size};
+use crate::taskbar_client::anchor;
 use accesskit::{Node, NodeId, Role as AccessRole, TreeInfo, TreeUpdate};
+use bande_config::BarEdge;
 use bande_toolkit::ui::Event;
 use bande_toolkit::{
-    App, Edges, Item, KeyboardFocus, LayerKind, LayerOptions, Point, Rect, Role, Scene, Shape,
-    Window, WindowEvent,
+    App, Item, KeyboardFocus, LayerKind, LayerOptions, Point, Rect, Role, Scene, Shape, Window,
+    WindowEvent,
 };
 
 use crate::menu_bar_client::MenuBarClient;
@@ -19,21 +21,16 @@ const ROOT: NodeId = NodeId(1 << 41);
 const HIDDEN_SHADOW: f32 = 8.0;
 const UNREAD_SLIVER: (f32, f32) = (2.0, 24.0);
 
-pub fn combined_role(icon_size: f32) -> (Role, (u32, u32)) {
+pub fn combined_role(edge: BarEdge, icon_size: f32) -> (Role, (u32, u32)) {
     (
         Role::Layer(LayerOptions {
             layer: LayerKind::Top,
-            anchor: Edges {
-                left: true,
-                top: true,
-                bottom: true,
-                right: false,
-            },
+            anchor: anchor(edge),
             exclusive_zone: bar_width(icon_size).round() as i32,
             keyboard: KeyboardFocus::OnDemand,
             namespace: BAR_NAMESPACE.to_owned(),
         }),
-        surface_size(icon_size),
+        surface_size(edge, icon_size),
     )
 }
 
@@ -98,7 +95,8 @@ impl App for CombinedClient {
         let (width, height) = window.size();
         let view = self.status.view_mut();
         view.set_icon_size(self.taskbar.icon_size());
-        self.taskbar.set_rail(view.apps_region(height as f32));
+        self.taskbar
+            .set_rail(view.apps_region((width as f32, height as f32)));
         let mut scene = self.status.scene(window);
         let apps = self.taskbar.scene(window);
         scene.width = width;
@@ -106,19 +104,28 @@ impl App for CombinedClient {
         let revealed = self.taskbar.revealed(Instant::now());
         if revealed < 1.0 {
             let view = self.status.view_mut();
-            let hidden = -(view.width() + HIDDEN_SHADOW) * (1.0 - revealed);
+            let edge = view.edge();
+            let hidden = ((view.width() + HIDDEN_SHADOW) * (1.0 - revealed)).round();
+            let offset = match edge {
+                BarEdge::Left => Point::new(-hidden, 0.0),
+                BarEdge::Right => Point::new(hidden, 0.0),
+                BarEdge::Top => Point::new(0.0, -hidden),
+                BarEdge::Bottom => Point::new(0.0, hidden),
+            };
             let mut items = vec![Item::Translate {
-                offset: Point::new(hidden.round(), 0.0),
+                offset,
                 items: std::mem::take(&mut scene.items),
             }];
             if view.unread() && revealed <= 0.0 {
+                let (width, height) = (width as f32, height as f32);
+                let (thin, long) = UNREAD_SLIVER;
+                let strip = edge_band(edge, (width, height), thin);
+                let sliver = match edge {
+                    BarEdge::Left | BarEdge::Right => Rect::new(strip.x, height - long, thin, long),
+                    BarEdge::Top | BarEdge::Bottom => Rect::new(width - long, strip.y, long, thin),
+                };
                 items.push(Item::Fill {
-                    shape: Shape::rect(Rect::new(
-                        0.0,
-                        height as f32 - UNREAD_SLIVER.1,
-                        UNREAD_SLIVER.0,
-                        UNREAD_SLIVER.1,
-                    )),
+                    shape: Shape::rect(sliver),
                     paint: window.appearance().palette().accent.into(),
                 });
             }

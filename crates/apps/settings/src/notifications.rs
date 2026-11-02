@@ -191,7 +191,9 @@ impl SettingsView {
     }
 
     pub(crate) fn app_page(&mut self) -> Option<Widgets> {
-        let group = self.app_page.clone()?;
+        let Some(crate::view::Detail::App(group)) = self.detail.clone() else {
+            return None;
+        };
         let app = self
             .notification_apps
             .as_ref()?

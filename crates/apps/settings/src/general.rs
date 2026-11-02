@@ -12,7 +12,7 @@ use crate::storage::Category;
 use crate::view::{Anchor, Intent, Picker, SettingsView, intent};
 use crate::widgets::{Row, Segment, Text, Tone, UsageBar};
 
-fn info_row(label: &str, value: &str) -> Box<dyn Widget> {
+pub(crate) fn info_row(label: &str, value: &str) -> Box<dyn Widget> {
     boxed(Row::new(
         Text::new(label, Tone::Primary),
         Some(boxed(Label::new(value))),

@@ -176,6 +176,7 @@ pub struct Details {
     pub description: String,
     pub url: String,
     pub size: u64,
+    pub download: u64,
 }
 
 impl Details {
@@ -197,6 +198,10 @@ impl Details {
             description: text("description"),
             url: text("url"),
             size,
+            download: details
+                .get("download-size")
+                .and_then(|value| u64::try_from(value).ok())
+                .unwrap_or(0),
         }
     }
 }
@@ -479,9 +484,18 @@ impl Client {
             .packages)
     }
 
-    pub fn install(&self, ids: &[String], progress: &dyn Fn(Progress)) -> Result<Applied, Error> {
+    pub fn install(
+        &self,
+        ids: &[String],
+        mode: Mode,
+        progress: &dyn Fn(Progress),
+    ) -> Result<Applied, Error> {
         Ok(self
-            .run("InstallPackages", &(ONLY_TRUSTED, ids), progress)?
+            .run(
+                "InstallPackages",
+                &(ONLY_TRUSTED | mode.flags(), ids),
+                progress,
+            )?
             .applied())
     }
 

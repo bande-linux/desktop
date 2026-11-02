@@ -2,6 +2,7 @@ mod alarm;
 mod center;
 pub mod client;
 mod picture;
+mod schedule;
 mod wire;
 
 use std::collections::{BTreeSet, HashMap};
@@ -334,6 +335,27 @@ impl NotificationServer {
 
     pub fn active(&self) -> Vec<Notification> {
         self.shared.lock().center.notifications().cloned().collect()
+    }
+
+    pub fn follow_focus_schedule(&self, center: &Connection) -> io::Result<()> {
+        let shared = Arc::clone(&self.shared);
+        let center = center.clone();
+        schedule::follow_schedule(&self.connection, move |on| {
+            shared.set_do_not_disturb(on);
+            let announced = center
+                .object_server()
+                .interface::<_, NotificationCenter>(OBJECT_PATH)
+                .and_then(|interface| {
+                    zbus::block_on(
+                        interface
+                            .get()
+                            .do_not_disturb_changed(interface.signal_emitter()),
+                    )
+                });
+            if let Err(error) = announced {
+                tracing::warn!("cannot announce Do Not Disturb: {error}");
+            }
+        })
     }
 
     pub fn dismiss(&self, id: u32) -> zbus::Result<bool> {

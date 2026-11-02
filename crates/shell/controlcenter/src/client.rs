@@ -36,6 +36,7 @@ use zbus::blocking::Connection;
 const JOIN: &str = "join:";
 const SESSION: &str = "session:";
 const ARTWORK_PIXELS: u32 = 128;
+const ARTWORKS_KEPT: usize = 16;
 const METER_INTERVAL: Duration = Duration::from_millis(50);
 const SLIDE: f32 = 8.0;
 
@@ -66,6 +67,8 @@ pub struct ControlCenter {
     player_updates: Inbox<Vec<Player>>,
     player_commands: Option<Sender<(String, Command)>>,
     artwork: Option<(String, Option<Image>)>,
+    artwork_requests: Option<Sender<(String, Player)>>,
+    artworks: Inbox<(String, Option<Image>)>,
     meter: Option<Meter>,
     input_level: Rc<Cell<f32>>,
     connected: Connected,
@@ -194,6 +197,36 @@ fn artwork(player: &Player) -> Option<Image> {
         .and_then(path_from_file_uri)
         .and_then(|path| Image::load(&path, ARTWORK_PIXELS))
         .or_else(|| app_icon(player.desktop_entry.as_deref()?))
+}
+
+fn load_artworks(outbox: Outbox<(String, Option<Image>)>) -> Option<Sender<(String, Player)>> {
+    let (requests, asked) = mpsc::channel::<(String, Player)>();
+    let started = std::thread::Builder::new()
+        .name("artwork".to_owned())
+        .spawn(move || {
+            let mut kept: Vec<(String, Option<Image>)> = Vec::new();
+            while let Ok(first) = asked.recv() {
+                let (key, player) = asked.try_iter().last().unwrap_or(first);
+                let image = match kept.iter().position(|(known, _)| *known == key) {
+                    Some(index) => kept.remove(index).1,
+                    None => artwork(&player),
+                };
+                kept.push((key.clone(), image.clone()));
+                if kept.len() > ARTWORKS_KEPT {
+                    kept.remove(0);
+                }
+                if !outbox.send((key, image)) {
+                    break;
+                }
+            }
+        });
+    match started {
+        Ok(_) => Some(requests),
+        Err(error) => {
+            tracing::warn!("Control Center shows no artwork: {error}");
+            None
+        }
+    }
 }
 
 fn artwork_key(player: &Player) -> String {
@@ -542,9 +575,30 @@ impl ControlCenter {
             return;
         };
         let key = artwork_key(player);
-        if self.artwork.as_ref().is_none_or(|(known, _)| *known != key) {
-            self.artwork = Some((key, artwork(player)));
+        if self
+            .artwork
+            .as_ref()
+            .is_some_and(|(known, _)| *known == key)
+        {
+            return;
         }
+        if let Some(requests) = &self.artwork_requests {
+            let _ = requests.send((key, player.clone()));
+        }
+    }
+
+    fn artwork_loaded(&mut self) -> bool {
+        let current = self.players.current().map(artwork_key);
+        let loaded = self
+            .artworks
+            .drain()
+            .into_iter()
+            .rfind(|(key, _)| Some(key) == current.as_ref());
+        let changed = loaded.is_some();
+        if changed {
+            self.artwork = loaded;
+        }
+        changed
     }
 
     fn playing(&self) -> Option<&Player> {
@@ -889,11 +943,19 @@ impl App for ControlCenter {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.player_updates.fd(), self.connected_updates.fd()]
+        vec![
+            self.player_updates.fd(),
+            self.connected_updates.fd(),
+            self.artworks.fd(),
+        ]
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        if index == 1 {
+        if index == 2 {
+            if !self.artwork_loaded() {
+                return;
+            }
+        } else if index == 1 {
             let Some(connected) = self.connected_updates.drain().pop() else {
                 return;
             };
@@ -957,6 +1019,8 @@ impl ControlCenter {
     ) -> std::io::Result<Self> {
         let player_updates = Inbox::new()?;
         let connected_updates = Inbox::new()?;
+        let artworks = Inbox::new()?;
+        let artwork_requests = load_artworks(artworks.outbox());
         let refresh = follow_connected(session, system, connected_updates.outbox());
         let player_commands = session.map(|connection| {
             let (commands, received) = mpsc::channel();
@@ -994,6 +1058,8 @@ impl ControlCenter {
             player_updates,
             player_commands,
             artwork: None,
+            artwork_requests,
+            artworks,
             meter: None,
             input_level: Rc::default(),
             connected: Connected::default(),

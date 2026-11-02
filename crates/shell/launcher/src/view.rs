@@ -891,6 +891,10 @@ impl Launcher {
         self.state.borrow_mut().model.set_recently_used(recents);
     }
 
+    pub fn set_apps(&mut self, apps: Vec<AppInfo>) {
+        self.state.borrow_mut().model.set_apps(apps);
+    }
+
     pub fn set_search(&mut self, search: Search, excluded: Vec<PathBuf>) {
         self.state.borrow_mut().model.set_search(search, excluded);
     }

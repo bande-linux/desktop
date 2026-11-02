@@ -35,11 +35,24 @@ const SETTINGS_APP: &str = "org.bande.Settings";
 struct Library {
     apps: Rc<RefCell<Apps>>,
     data_dirs: Vec<PathBuf>,
+    app_icon_names: Rc<RefCell<HashMap<String, String>>>,
     app_icons: HashMap<String, Option<Image>>,
     icons: HashMap<String, Option<Image>>,
 }
 
 impl Library {
+    fn app_icon(&mut self, app_id: &str) -> Option<Image> {
+        let name = self.app_icon_names.borrow().get(app_id).cloned()?;
+        let data_dirs = &self.data_dirs;
+        self.app_icons
+            .entry(name)
+            .or_insert_with_key(|name| {
+                find_icon(name, ICON_SIZE, &[], data_dirs)
+                    .and_then(|path| Image::load(&path, ICON_SIZE))
+            })
+            .clone()
+    }
+
     fn named_icon(&mut self, names: &[String]) -> Option<Image> {
         let data_dirs = &self.data_dirs;
         names.iter().find_map(|name| {
@@ -103,8 +116,8 @@ fn carry_out(window: &mut Window, command: SystemCommand) -> std::io::Result<()>
 impl Catalog for Library {
     fn icon(&mut self, hit: &Hit) -> Option<Image> {
         match (&hit.target, hit.kind) {
-            (Target::App(app_id), _) => self.app_icons.get(app_id).cloned().flatten(),
-            (Target::Settings(_), _) => self.app_icons.get(SETTINGS_APP).cloned().flatten(),
+            (Target::App(app_id), _) => self.app_icon(app_id),
+            (Target::Settings(_), _) => self.app_icon(SETTINGS_APP),
             (Target::Path(_), Kind::Folder) => {
                 let names = self.apps.borrow().icon_names(DIRECTORY);
                 self.named_icon(&names)
@@ -186,6 +199,8 @@ impl Previewer {
 pub struct LauncherShell {
     launcher: Launcher,
     entries: Vec<DesktopEntry>,
+    stamps: Vec<Option<SystemTime>>,
+    icon_names: Rc<RefCell<HashMap<String, String>>>,
     index: Option<FileIndex>,
     previewer: Option<Previewer>,
     clips: Option<Clips>,
@@ -263,6 +278,8 @@ impl LauncherShell {
         }
         self.launcher.set_now(unix_now());
         if mode == Mode::Search {
+            self.follow_apps();
+
             let recents = match (self.follow_search(), &self.recently_used) {
                 (true, Some(recently_used)) => recently_used.recents(),
                 _ => &[],
@@ -280,6 +297,18 @@ impl LauncherShell {
             self.launcher.appear(frame_time().on_screen());
         }
         window.request_redraw();
+    }
+
+    fn follow_apps(&mut self) {
+        let dirs = data_dirs();
+        let stamps = folder_stamps(&dirs);
+        if stamps == self.stamps {
+            return;
+        }
+        self.stamps = stamps;
+        self.entries = applications(&dirs, Locale::from_env().as_ref(), &current_desktops());
+        *self.icon_names.borrow_mut() = app_icon_names(&self.entries);
+        self.launcher.set_apps(app_infos(&self.entries));
     }
 
     fn show(&mut self, window: &mut Window) -> Result<(), WindowError> {
@@ -495,21 +524,33 @@ impl App for LauncherShell {
     }
 }
 
-fn app_icons(entries: &[DesktopEntry], data_dirs: &[PathBuf]) -> HashMap<String, Option<Image>> {
-    let mut by_name: HashMap<&str, Option<Image>> = HashMap::new();
+fn app_icon_names(entries: &[DesktopEntry]) -> HashMap<String, String> {
     entries
         .iter()
-        .map(|entry| {
-            let icon = entry.icon.as_deref().and_then(|name| {
-                by_name
-                    .entry(name)
-                    .or_insert_with(|| {
-                        find_icon(name, ICON_SIZE, &[], data_dirs)
-                            .and_then(|path| Image::load(&path, ICON_SIZE))
-                    })
-                    .clone()
-            });
-            (entry.app_id().to_owned(), icon)
+        .filter_map(|entry| Some((entry.app_id().to_owned(), entry.icon.clone()?)))
+        .collect()
+}
+
+fn app_infos(entries: &[DesktopEntry]) -> Vec<AppInfo> {
+    entries
+        .iter()
+        .map(|entry| AppInfo {
+            app_id: entry.app_id().to_owned(),
+            name: entry.name.clone(),
+            generic_name: entry.generic_name.clone(),
+            comment: entry.comment.clone(),
+            keywords: entry.keywords.clone(),
+        })
+        .collect()
+}
+
+fn folder_stamps(data_dirs: &[PathBuf]) -> Vec<Option<SystemTime>> {
+    data_dirs
+        .iter()
+        .map(|dir| {
+            std::fs::metadata(dir.join("applications"))
+                .and_then(|metadata| metadata.modified())
+                .ok()
         })
         .collect()
 }
@@ -550,17 +591,10 @@ impl LauncherShell {
         apps_by_type: Rc<RefCell<Apps>>,
     ) -> std::io::Result<Self> {
         let dirs = data_dirs();
+        let stamps = folder_stamps(&dirs);
         let entries = applications(&dirs, Locale::from_env().as_ref(), &current_desktops());
-        let apps = entries
-            .iter()
-            .map(|entry| AppInfo {
-                app_id: entry.app_id().to_owned(),
-                name: entry.name.clone(),
-                generic_name: entry.generic_name.clone(),
-                comment: entry.comment.clone(),
-                keywords: entry.keywords.clone(),
-            })
-            .collect();
+        let apps = app_infos(&entries);
+        let icon_names = Rc::new(RefCell::new(app_icon_names(&entries)));
         let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
         let recently_used = RecentlyUsed::follow(recently_used_path(
             std::env::var_os("XDG_DATA_HOME")
@@ -579,7 +613,8 @@ impl LauncherShell {
         let usage = usage_file.map(Usage::load).unwrap_or_default();
         let library = Library {
             apps: apps_by_type.clone(),
-            app_icons: app_icons(&entries, &dirs),
+            app_icon_names: Rc::clone(&icon_names),
+            app_icons: HashMap::new(),
             data_dirs: dirs,
             icons: HashMap::new(),
         };
@@ -607,6 +642,8 @@ impl LauncherShell {
         let mut shell = Self {
             launcher,
             entries,
+            stamps,
+            icon_names,
             index: None,
             previewer,
             clips,

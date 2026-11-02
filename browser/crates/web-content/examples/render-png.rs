@@ -32,7 +32,10 @@ fn render(input: &str, output: &str, width: u16) -> Result<(), Box<dyn std::erro
     let started = std::time::Instant::now();
     let document = parse(&bytes);
     let parsed = started.elapsed();
-    let page = Page::new(document, f32::from(width), &mut fonts);
+    let mut page = Page::new(document, f32::from(width), &mut fonts);
+    if let Some(directory) = std::path::Path::new(input).parent() {
+        page.load_stylesheets_from(directory, &mut fonts);
+    }
     let rendered = started.elapsed();
     let memory = page.memory();
     let per_element = |bytes: usize| bytes as f64 / memory.elements.max(1) as f64;

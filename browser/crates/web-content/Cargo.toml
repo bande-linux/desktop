@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 encoding_rs.workspace = true
 web-atoms.workspace = true
+web-css.workspace = true
 web-dom.workspace = true
 web-html.workspace = true
 web-layout.workspace = true

@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 web-atoms.workspace = true
 web-dom.workspace = true
+web-css.workspace = true
 
 [lints]
 workspace = true

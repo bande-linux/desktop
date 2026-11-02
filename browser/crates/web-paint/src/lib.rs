@@ -112,37 +112,42 @@ impl Builder<'_> {
         };
         self.fill(rect, fragment.background);
         let border = fragment.border;
-        let color = fragment.border_color;
-        self.fill(
-            Rect {
-                height: border.top,
-                ..rect
-            },
-            color,
-        );
-        self.fill(
-            Rect {
-                y: rect.y + rect.height - border.bottom,
-                height: border.bottom,
-                ..rect
-            },
-            color,
-        );
-        self.fill(
-            Rect {
-                width: border.left,
-                ..rect
-            },
-            color,
-        );
-        self.fill(
-            Rect {
-                x: rect.x + rect.width - border.right,
-                width: border.right,
-                ..rect
-            },
-            color,
-        );
+        let colors = fragment.border_color;
+        let sides = [
+            (
+                Rect {
+                    height: border.top,
+                    ..rect
+                },
+                colors.top,
+            ),
+            (
+                Rect {
+                    y: rect.y + rect.height - border.bottom,
+                    height: border.bottom,
+                    ..rect
+                },
+                colors.bottom,
+            ),
+            (
+                Rect {
+                    width: border.left,
+                    ..rect
+                },
+                colors.left,
+            ),
+            (
+                Rect {
+                    x: rect.x + rect.width - border.right,
+                    width: border.right,
+                    ..rect
+                },
+                colors.right,
+            ),
+        ];
+        for (side, color) in sides {
+            self.fill(side, color);
+        }
         for child in &fragment.children {
             match child {
                 Fragment::Box(child) => self.box_fragment(child, rect.x, rect.y),

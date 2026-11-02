@@ -20,7 +20,7 @@ pub struct BoxFragment {
     pub rect: Rect,
     pub background: Color,
     pub border: Sides,
-    pub border_color: Color,
+    pub border_color: Sides<Color>,
     pub children: Vec<Fragment>,
 }
 
@@ -129,7 +129,7 @@ impl BoxTree {
                 rect: Rect::default(),
                 background: Color::TRANSPARENT,
                 border: Sides::default(),
-                border_color: Color::TRANSPARENT,
+                border_color: Sides::all(Color::TRANSPARENT),
                 children: Vec::new(),
             },
         };
@@ -143,10 +143,46 @@ impl BoxTree {
 impl Flow<'_> {
     fn block(&mut self, block: &BlockBox, containing_width: f32, root: bool) -> Laid {
         let reset = &block.style.reset;
-        let (margin, padding, border) = (reset.margin, reset.padding, reset.border);
-        let width = (containing_width - margin.left - margin.right).max(0.0);
-        let content_width =
-            (width - border.left - border.right - padding.left - padding.right).max(0.0);
+        let border = reset.border;
+        let padding = reset
+            .padding
+            .map(|side| side.resolve(containing_width).max(0.0));
+        let resolve = |side: Option<web_style::LengthPercentage>| {
+            side.map(|side| side.resolve(containing_width))
+        };
+        let (mut margin_left, mut margin_right) =
+            (resolve(reset.margin.left), resolve(reset.margin.right));
+        let frame = border.left + border.right + padding.left + padding.right;
+        let specified = reset.width.map(|width| width.resolve(containing_width));
+        let maximum = reset.max_width.map(|width| width.resolve(containing_width));
+        let minimum = reset.min_width.resolve(containing_width);
+        let auto_width =
+            (containing_width - margin_left.unwrap_or(0.0) - margin_right.unwrap_or(0.0) - frame)
+                .max(0.0);
+        let mut content_width = specified.unwrap_or(auto_width);
+        if let Some(maximum) = maximum {
+            content_width = content_width.min(maximum);
+        }
+        content_width = content_width.max(minimum).max(0.0);
+        if specified.is_some() || maximum.is_some_and(|maximum| maximum < auto_width) {
+            let rest = containing_width - content_width - frame;
+            match (margin_left, margin_right) {
+                (None, None) => {
+                    margin_left = Some((rest / 2.0).max(0.0));
+                    margin_right = Some(rest - (rest / 2.0).max(0.0));
+                }
+                (None, Some(right)) => margin_left = Some(rest - right),
+                (Some(left), None) => margin_right = Some(rest - left),
+                (Some(_), Some(_)) => {}
+            }
+        }
+        let margin = web_style::Sides {
+            top: resolve(reset.margin.top).unwrap_or(0.0),
+            right: margin_right.unwrap_or(0.0),
+            bottom: resolve(reset.margin.bottom).unwrap_or(0.0),
+            left: margin_left.unwrap_or(0.0),
+        };
+        let width = content_width + frame;
         let content_x = border.left + padding.left;
         let content_y = border.top + padding.top;
         let top_adjoins = !root && border.top == 0.0 && padding.top == 0.0;
@@ -194,10 +230,11 @@ impl Flow<'_> {
                 );
                 if !lines.lines.is_empty() {
                     through = false;
+                    let rtl = is_rtl(&block.style);
                     let align = match block.style.inherited.text_align {
-                        TextAlign::Start | TextAlign::Justify if is_rtl(&block.style) => {
-                            TextAlign::Right
-                        }
+                        TextAlign::Start | TextAlign::Justify if rtl => TextAlign::Right,
+                        TextAlign::End if !rtl => TextAlign::Right,
+                        TextAlign::End => TextAlign::Left,
                         align => align,
                     };
                     self.inline(
@@ -211,6 +248,10 @@ impl Flow<'_> {
                     y = lines.height;
                 }
             }
+        }
+        if let Some(height) = reset.height.filter(|height| height.percent == 0.0) {
+            y = height.px.max(0.0);
+            through = through && y == 0.0;
         }
         let bottom = if through {
             let mut all = top;
@@ -261,14 +302,14 @@ impl Flow<'_> {
             let offset = match align {
                 TextAlign::Right => (width - line.width).max(0.0),
                 TextAlign::Center => ((width - line.width) / 2.0).max(0.0),
-                TextAlign::Start | TextAlign::Left | TextAlign::Justify => 0.0,
+                TextAlign::Start | TextAlign::End | TextAlign::Left | TextAlign::Justify => 0.0,
             };
             for item in lines.items.get(line.items.clone()).unwrap_or_default() {
                 let Some(source) = inline.items.get(item.tag as usize) else {
                     continue;
                 };
                 let glyphs = lines.glyphs.get(item.glyphs.clone()).unwrap_or_default();
-                if glyphs.is_empty() {
+                if glyphs.is_empty() || !source.style.inherited.visible {
                     continue;
                 }
                 let start = self.glyphs.len() as u32;

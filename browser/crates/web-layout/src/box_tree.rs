@@ -73,6 +73,35 @@ impl BoxTree {
     pub fn heap_bytes(&self) -> usize {
         self.root.as_ref().map_or(0, block_bytes)
     }
+
+    pub fn refresh_styles(&mut self, styles: &Styles) {
+        if let Some(root) = &mut self.root {
+            refresh(root, styles, None);
+        }
+    }
+}
+
+fn refresh(block: &mut BlockBox, styles: &Styles, parent: Option<&ComputedStyle>) {
+    match (block.node.and_then(|node| styles.get(node)), parent) {
+        (Some(style), _) => block.style = style.clone(),
+        (None, Some(parent)) => block.style = styles.anonymous(parent),
+        (None, None) => {}
+    }
+    let style = block.style.clone();
+    match &mut block.contents {
+        Contents::Blocks(children) => {
+            for child in children {
+                refresh(child, styles, Some(&style));
+            }
+        }
+        Contents::Inline(inline) => {
+            for item in &mut inline.items {
+                if let Some(style) = styles.get(item.node) {
+                    item.style = style.clone();
+                }
+            }
+        }
+    }
 }
 
 fn block_bytes(block: &BlockBox) -> usize {
@@ -100,9 +129,10 @@ pub(crate) fn is_rtl(style: &ComputedStyle) -> bool {
 fn own_shift(style: &ComputedStyle) -> f32 {
     let size = style.inherited.font_size;
     match style.reset.vertical_align {
-        VerticalAlign::Baseline => 0.0,
         VerticalAlign::Sub => -0.25 * size,
         VerticalAlign::Super => 0.5 * size,
+        VerticalAlign::Length(length) => length.resolve(style.inherited.font_size * 1.2),
+        _ => 0.0,
     }
 }
 
@@ -175,7 +205,7 @@ impl Builder<'_> {
                 Some(NodeKind::Element) if self.depth >= MAX_DEPTH => {}
                 Some(NodeKind::Element) => match style.display() {
                     Display::None => {}
-                    Display::Inline => {
+                    Display::Inline | Display::Contents => {
                         if self.document.html_element_name(child) == Some(Atom::BR) {
                             let tag = pending.items.len() as u32;
                             pending.paragraph.push_break(run_style(style, tag, shift));
@@ -239,6 +269,10 @@ impl Builder<'_> {
             ListStyleType::Circle => "◦".to_owned(),
             ListStyleType::Square => "▪".to_owned(),
             ListStyleType::Decimal => format!("{ordinal}."),
+            ListStyleType::LowerAlpha => format!("{}.", alphabetic(ordinal, b'a')),
+            ListStyleType::UpperAlpha => format!("{}.", alphabetic(ordinal, b'A')),
+            ListStyleType::LowerRoman => format!("{}.", roman(ordinal).to_ascii_lowercase()),
+            ListStyleType::UpperRoman => format!("{}.", roman(ordinal)),
         };
         let mut paragraph = Paragraph::new(is_rtl(style));
         let mut run = run_style(style, 0, 0.0);
@@ -256,4 +290,48 @@ fn list_start(document: &Document, node: NodeId) -> i32 {
         .attribute(node, Atom::START)
         .and_then(|start| start.trim().parse().ok())
         .unwrap_or(1)
+}
+
+fn alphabetic(ordinal: i32, first: u8) -> String {
+    if ordinal < 1 {
+        return ordinal.to_string();
+    }
+    let mut value = ordinal as u32;
+    let mut letters = Vec::new();
+    while value > 0 {
+        value -= 1;
+        letters.push(char::from(first + (value % 26) as u8));
+        value /= 26;
+    }
+    letters.iter().rev().collect()
+}
+
+fn roman(ordinal: i32) -> String {
+    if !(1..4000).contains(&ordinal) {
+        return ordinal.to_string();
+    }
+    const NUMERALS: [(i32, &str); 13] = [
+        (1000, "M"),
+        (900, "CM"),
+        (500, "D"),
+        (400, "CD"),
+        (100, "C"),
+        (90, "XC"),
+        (50, "L"),
+        (40, "XL"),
+        (10, "X"),
+        (9, "IX"),
+        (5, "V"),
+        (4, "IV"),
+        (1, "I"),
+    ];
+    let mut value = ordinal;
+    let mut text = String::new();
+    for (amount, numeral) in NUMERALS {
+        while value >= amount {
+            text.push_str(numeral);
+            value -= amount;
+        }
+    }
+    text
 }

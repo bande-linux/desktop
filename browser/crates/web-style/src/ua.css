@@ -1,0 +1,103 @@
+@namespace "http://www.w3.org/1999/xhtml";
+
+[hidden], area, base, basefont, datalist, head, link, meta, noembed,
+noframes, param, rp, script, style, template, title, input[type=hidden i],
+iframe, video, audio, canvas, embed, track, source, select, dialog:not([open]) {
+  display: none;
+}
+
+html, address, blockquote, body, center, dialog, div, figure, figcaption, footer, form,
+header, hr, legend, listing, main, p, plaintext, pre, search, xmp, details, summary,
+article, aside, h1, h2, h3, h4, h5, h6, hgroup, nav, section, dir, dd, dl, dt, menu, ol, ul,
+fieldset, optgroup, frameset, frame {
+  display: block;
+}
+
+li { display: list-item; }
+
+table { display: table; }
+caption { display: table-caption; }
+colgroup { display: table-column-group; }
+col { display: table-column; }
+thead { display: table-header-group; }
+tbody { display: table-row-group; }
+tfoot { display: table-footer-group; }
+tr { display: table-row; }
+td, th { display: table-cell; }
+ruby { display: ruby; }
+rt { display: ruby-text; }
+
+html, body { display: block; }
+body { margin: 8px; }
+
+blockquote, figure, listing, p, plaintext, pre, xmp { margin-top: 1em; margin-bottom: 1em; }
+blockquote, figure { margin-left: 40px; margin-right: 40px; }
+address { font-style: italic; }
+center { text-align: center; }
+hr {
+  color: gray;
+  border-style: inset;
+  border-width: 1px;
+  margin: 0.5em auto;
+  overflow: hidden;
+}
+fieldset { margin-left: 2px; margin-right: 2px; border: 2px groove; padding: 0.35em 0.75em 0.625em; }
+legend { padding-left: 2px; padding-right: 2px; }
+
+dir, dd, dl, dt, menu, ol, ul { display: block; }
+li { text-align: match-parent; }
+dir, dl, menu, ol, ul { margin-top: 1em; margin-bottom: 1em; }
+:is(dir, dl, menu, ol, ul) :is(dir, dl, menu, ol, ul) { margin-top: 0; margin-bottom: 0; }
+dd { margin-left: 40px; }
+[dir=rtl i] dd, dd[dir=rtl i] { margin-left: 0; margin-right: 40px; }
+dir, menu, ol, ul { padding-left: 40px; }
+:is([dir=rtl i] :is(dir, menu, ol, ul), :is(dir, menu, ol, ul)[dir=rtl i]) { padding-left: 0; padding-right: 40px; }
+ol { list-style-type: decimal; }
+dir, menu, ul { list-style-type: disc; }
+:is(dir, menu, ol, ul) :is(dir, menu, ul) { list-style-type: circle; }
+:is(dir, menu, ol, ul) :is(dir, menu, ol, ul) :is(dir, menu, ul) { list-style-type: square; }
+
+table { box-sizing: border-box; border-spacing: 2px; border-collapse: separate; text-indent: initial; }
+td, th { padding: 1px; }
+th { font-weight: bold; text-align: center; }
+caption { text-align: center; }
+thead, tbody, tfoot, table > tr { vertical-align: middle; }
+tr, td, th { vertical-align: inherit; }
+
+h1 { margin-top: 0.67em; margin-bottom: 0.67em; font-size: 2em; }
+h2 { margin-top: 0.83em; margin-bottom: 0.83em; font-size: 1.5em; }
+h3 { margin-top: 1em; margin-bottom: 1em; font-size: 1.17em; }
+h4 { margin-top: 1.33em; margin-bottom: 1.33em; font-size: 1em; }
+h5 { margin-top: 1.67em; margin-bottom: 1.67em; font-size: 0.83em; }
+h6 { margin-top: 2.33em; margin-bottom: 2.33em; font-size: 0.67em; }
+h1, h2, h3, h4, h5, h6 { font-weight: bold; }
+
+pre, listing, xmp, plaintext { font-family: monospace; white-space: pre; }
+textarea { white-space: pre-wrap; }
+nobr { white-space: nowrap; }
+code, kbd, samp, tt { font-family: monospace; }
+
+b, strong { font-weight: bolder; }
+i, cite, em, var, dfn { font-style: italic; }
+big { font-size: larger; }
+small { font-size: smaller; }
+sub { vertical-align: sub; font-size: smaller; }
+sup { vertical-align: super; font-size: smaller; }
+sub, sup { line-height: normal; }
+u, ins { text-decoration: underline; }
+s, strike, del { text-decoration: line-through; }
+mark { background-color: yellow; color: black; }
+abbr[title], acronym[title] { text-decoration: dotted underline; }
+
+:link { color: #0000EE; }
+:visited { color: #551A8B; }
+:link, :visited { text-decoration: underline; cursor: pointer; }
+
+[dir=ltr i] { direction: ltr; }
+[dir=rtl i] { direction: rtl; }
+bdi, output { unicode-bidi: isolate; }
+bdo, bdo[dir] { unicode-bidi: isolate-override; }
+
+img { display: inline-block; }
+summary { display: list-item; list-style: disclosure-closed inside; }
+details[open] > summary { list-style-type: disclosure-open; }

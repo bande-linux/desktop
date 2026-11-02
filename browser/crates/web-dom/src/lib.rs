@@ -53,6 +53,15 @@ struct Node {
     namespace: Namespace,
     name: Atom,
     data: Span,
+    ident: u32,
+}
+
+const NO_IDENT: u32 = u32::MAX;
+
+#[derive(Clone, Copy)]
+struct Ident {
+    id: Option<Atom>,
+    classes: Span,
 }
 
 #[derive(Clone, Copy)]
@@ -70,6 +79,9 @@ pub struct Document {
     templates: Vec<(NodeId, NodeId)>,
     doctype_ids: (String, String),
     quirks_mode: QuirksMode,
+    idents: Vec<Ident>,
+    class_atoms: Vec<Atom>,
+    hover_chain: Vec<NodeId>,
 }
 
 impl Default for Document {
@@ -91,6 +103,9 @@ impl Document {
             templates: Vec::new(),
             doctype_ids: (String::new(), String::new()),
             quirks_mode: QuirksMode::NoQuirks,
+            idents: Vec::new(),
+            class_atoms: Vec::new(),
+            hover_chain: Vec::new(),
         };
         document.push(NodeKind::Document, Namespace::Html, Atom::HTML, EMPTY);
         document
@@ -108,6 +123,7 @@ impl Document {
             namespace,
             name,
             data,
+            ident: NO_IDENT,
         });
         id
     }
@@ -122,6 +138,78 @@ impl Document {
 
     pub fn atoms(&self) -> &AtomTable {
         &self.atoms
+    }
+
+    pub fn atoms_mut(&mut self) -> &mut AtomTable {
+        &mut self.atoms
+    }
+
+    fn ident(&self, element: NodeId) -> Option<&Ident> {
+        self.idents.get(self.node(element)?.ident as usize)
+    }
+
+    pub fn element_id(&self, element: NodeId) -> Option<Atom> {
+        self.ident(element)?.id
+    }
+
+    pub fn classes(&self, element: NodeId) -> &[Atom] {
+        self.ident(element)
+            .and_then(|ident| {
+                self.class_atoms.get(
+                    ident.classes.start as usize
+                        ..(ident.classes.start + ident.classes.len) as usize,
+                )
+            })
+            .unwrap_or_default()
+    }
+
+    fn update_ident(&mut self, element: NodeId) {
+        let id = self
+            .attribute(element, Atom::ID)
+            .filter(|id| !id.is_empty())
+            .map(str::to_owned);
+        let class = self.attribute(element, Atom::CLASS).map(str::to_owned);
+        if id.is_none() && class.is_none() {
+            return;
+        }
+        let id = id.map(|id| self.atoms.intern(&id));
+        let start = self.class_atoms.len() as u32;
+        for name in class
+            .iter()
+            .flat_map(|class| class.split_ascii_whitespace())
+        {
+            let atom = self.atoms.intern(name);
+            self.class_atoms.push(atom);
+        }
+        let classes = Span {
+            start,
+            len: self.class_atoms.len() as u32 - start,
+        };
+        let index = self.idents.len() as u32;
+        self.idents.push(Ident { id, classes });
+        if let Some(node) = self.node_mut(element) {
+            node.ident = index;
+        }
+    }
+
+    pub fn is_hovered(&self, element: NodeId) -> bool {
+        self.hover_chain.contains(&element)
+    }
+
+    pub fn set_hovered(&mut self, target: Option<NodeId>) -> Vec<NodeId> {
+        let chain: Vec<NodeId> = target
+            .into_iter()
+            .flat_map(|target| self.ancestors(target))
+            .filter(|&node| self.kind(node) == Some(NodeKind::Element))
+            .collect();
+        let changed = chain
+            .iter()
+            .filter(|node| !self.hover_chain.contains(node))
+            .chain(self.hover_chain.iter().filter(|node| !chain.contains(node)))
+            .copied()
+            .collect();
+        self.hover_chain = chain;
+        changed
     }
 
     pub fn intern(&mut self, name: &str) -> Atom {
@@ -261,7 +349,9 @@ impl Document {
             });
         }
         let len = self.attributes.len() as u32 - start;
-        self.push(NodeKind::Element, name.ns, name.local, Span { start, len })
+        let element = self.push(NodeKind::Element, name.ns, name.local, Span { start, len });
+        self.update_ident(element);
+        element
     }
 
     fn template_fragment(&mut self, template: NodeId) -> NodeId {
@@ -299,6 +389,9 @@ impl Document {
                     start: new_start,
                     len: len as u32 + 1,
                 };
+            }
+            if name == QualName::attribute(Atom::ID) || name == QualName::attribute(Atom::CLASS) {
+                self.update_ident(element);
             }
         }
     }
@@ -466,6 +559,8 @@ impl Document {
             + self.attribute_text.capacity()
             + self.text.capacity()
             + self.templates.capacity() * size_of::<(NodeId, NodeId)>()
+            + self.idents.capacity() * size_of::<Ident>()
+            + self.class_atoms.capacity() * size_of::<Atom>()
             + self.doctype_ids.0.capacity()
             + self.doctype_ids.1.capacity()
             + self.atoms.heap_bytes()

@@ -59,7 +59,7 @@ fn items_in(task: &Task) -> usize {
         | Task::Trash { sources }
         | Task::Delete { sources }
         | Task::Compress { sources, .. } => sources.len(),
-        Task::Extract { archives } => archives.len(),
+        Task::Extract { archives, .. } => archives.len(),
         Task::Restore { items } | Task::Erase { items } => items.len(),
         Task::Revert { changes } => changes.len(),
         Task::EmptyTrash => 0,

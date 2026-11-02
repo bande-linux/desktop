@@ -22,6 +22,7 @@ pub struct PopupRequest {
 pub(crate) struct Toplevels {
     popups: Vec<(XdgPopup, bool)>,
     suspended: Vec<XdgToplevel>,
+    sizes: Vec<(XdgToplevel, (i32, i32))>,
 }
 
 impl TestClient {
@@ -73,6 +74,30 @@ impl TestClient {
         self.globals.toplevels.popups[index].1
     }
 
+    pub fn configured_size(&self, index: usize) -> Option<(i32, i32)> {
+        let toplevel = &self.windows[index].2;
+        let sizes = &self.globals.toplevels.sizes;
+        sizes
+            .iter()
+            .find_map(|(known, size)| (known == toplevel).then_some(*size))
+    }
+
+    pub fn unmap_window(&mut self, server: &mut Compositor, index: usize) {
+        self.windows[index].0.attach(None, 0, 0);
+        self.windows[index].0.commit();
+        self.exchange(server);
+    }
+
+    pub fn remap_window(&mut self, server: &mut Compositor, index: usize, image: &ShmImage) {
+        let surface = self.windows[index].0.clone();
+        self.globals.configured = false;
+        surface.commit();
+        self.exchange(server);
+        assert!(self.globals.configured, "initial configure");
+        self.attach(&surface, image, (0, 0, image.width, image.height));
+        self.exchange(server);
+    }
+
     pub fn is_suspended(&self, index: usize) -> bool {
         self.globals
             .toplevels
@@ -90,7 +115,15 @@ impl Dispatch<XdgToplevel, ()> for Globals {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let xdg_toplevel::Event::Configure { states, .. } = event {
+        if let xdg_toplevel::Event::Configure {
+            width,
+            height,
+            states,
+        } = event
+        {
+            let sizes = &mut globals.toplevels.sizes;
+            sizes.retain(|(known, _)| known != toplevel);
+            sizes.push((toplevel.clone(), (width, height)));
             let suspended = states
                 .as_chunks::<4>()
                 .0

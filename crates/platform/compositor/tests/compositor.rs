@@ -239,3 +239,39 @@ fn windows_with_turned_or_flipped_buffers_do_not_stop_the_screen_from_updating()
             .unwrap_or_else(|error| panic!("{transform:?} stopped the screen: {error}"));
     }
 }
+
+#[test]
+fn a_window_that_resizes_itself_keeps_its_top_left_and_is_remembered_at_its_new_size() {
+    let memory = std::env::temp_dir().join(format!("bande-windows-{}", std::process::id()));
+    let mut server = headless(560, 520);
+    server.remember_windows_in(memory.clone());
+    let pixels = RED.repeat(120 * 80);
+    let image = |width: i32, height: i32| ShmImage {
+        width,
+        height,
+        stride: width * 4,
+        format: Format::Xrgb8888,
+        bytes: &pixels[..(width * height * 4) as usize],
+    };
+    let mut app = TestClient::window(&mut server, "org.example.Sizer");
+    app.unmap_window(&mut server, 0);
+    app.remap_window(&mut server, 0, &image(64, 64));
+    assert_eq!(app.configured_size(0), Some((64, 64)));
+    let top_left = server.windows()[0].geometry().unwrap().loc;
+
+    app.commit_buffer(0, &image(120, 80), (0, 0, 120, 80));
+    let mut other = TestClient::window(&mut server, "org.example.Other");
+    roundtrip(&mut server, &mut [&mut app, &mut other]);
+    let resized = server.windows()[0].geometry().unwrap();
+    assert_eq!(
+        (resized.loc, (resized.size.w, resized.size.h)),
+        (top_left, (120, 80))
+    );
+    assert_eq!(app.configured_size(0), Some((0, 0)));
+
+    app.unmap_window(&mut server, 0);
+    app.remap_window(&mut server, 0, &image(120, 80));
+    std::fs::remove_file(memory).ok();
+    assert_eq!(app.configured_size(0), Some((120, 80)));
+    assert_eq!(server.windows()[0].geometry().unwrap().loc, top_left);
+}

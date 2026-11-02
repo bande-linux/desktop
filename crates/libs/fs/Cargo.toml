@@ -14,6 +14,7 @@ jiff.workspace = true
 lzma-rust2.workspace = true
 rustix = { workspace = true, features = ["event", "fs", "process"] }
 ruzstd.workspace = true
+sevenz-rust2.workspace = true
 tar.workspace = true
 bande-datetime.workspace = true
 bande-l10n.workspace = true

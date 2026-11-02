@@ -220,6 +220,18 @@ pub struct ToplevelState {
     pub suspended: bool,
 }
 
+impl ToplevelState {
+    fn floating(self) -> bool {
+        !(self.maximized || self.fullscreen || self.tiled)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sizing {
+    Resizable,
+    Fixed,
+}
+
 fn resize_protocol(edge: ResizeEdge) -> xdg_toplevel::ResizeEdge {
     match edge {
         ResizeEdge::Top => xdg_toplevel::ResizeEdge::Top,
@@ -652,7 +664,7 @@ impl Window {
         Point::new(origin.x - frame.margin, origin.y - frame.margin)
     }
 
-    fn fix_dialog_size(&self, size: (u32, u32)) {
+    fn keep_fixed_size(&self, size: (u32, u32)) {
         if let ShellSurface::Toplevel(_, toplevel) = &self.role
             && self.chrome.as_ref().is_some_and(|chrome| chrome.fixed)
         {
@@ -667,7 +679,33 @@ impl Window {
     }
 
     fn geometry(&self) -> (u32, u32) {
-        self.state.suggested_size.unwrap_or(self.size)
+        let keeps_own_size = self.chrome.as_ref().is_some_and(|chrome| chrome.fixed)
+            && self.state.toplevel.floating();
+        match self.state.suggested_size {
+            Some(suggested) if !keeps_own_size => suggested,
+            _ => self.size,
+        }
+    }
+
+    pub fn resize_content(&mut self, size: (u32, u32), sizing: Sizing) {
+        let (ShellSurface::Toplevel(_, toplevel), Some(chrome)) = (&self.role, &mut self.chrome)
+        else {
+            return;
+        };
+        chrome.fixed = sizing == Sizing::Fixed;
+        self.needs_redraw = true;
+        if sizing == Sizing::Resizable {
+            toplevel.set_min_size(0, 0);
+            toplevel.set_max_size(0, 0);
+            if !self.state.toplevel.floating() {
+                return;
+            }
+        }
+        let (extra_width, extra_height) = self.frame().chrome_size();
+        let frame = (size.0 + extra_width, size.1 + extra_height);
+        self.state.suggested_size = None;
+        self.size = frame;
+        self.keep_fixed_size(frame);
     }
 
     fn title_height(&self) -> u32 {
@@ -1314,7 +1352,7 @@ impl Window {
         let (extra_width, extra_height) = self.frame().chrome_size();
         let size = (scene.width + extra_width, scene.height + extra_height);
         if size != self.size {
-            self.fix_dialog_size(size);
+            self.keep_fixed_size(size);
         }
         self.size = size;
         let surface_state = (self.shown_frame, self.shown_opaque.clone());

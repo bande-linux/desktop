@@ -18,7 +18,7 @@ feature still render alike, so reftest rates overstate conformance:
 | css-parsing syntax | 176 | 177 | 99.4% |
 | css-parsing colors | 8060 | 8061 | 100.0% |
 | css-parsing An+B | 128 | 128 | 100.0% |
-| wpt reftests css/CSS2 | 3610 | 6238 | 57.9% (12 of the passes render blank) |
+| wpt reftests css/CSS2 | 4009 | 6238 | 64.3% (12 of the passes render blank) |
 | wpt reftests css/css-cascade | 18 | 50 | 36.0% (2 of the passes render blank) |
 | wpt reftests css/css-syntax | 1 | 1 | 100.0% |
 | wpt reftests css/selectors | 114 | 227 | 50.2% (7 of the passes render blank) |

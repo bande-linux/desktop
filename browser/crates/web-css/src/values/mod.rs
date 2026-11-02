@@ -298,14 +298,7 @@ impl LengthPercentage {
                     Some(CalcLeaf::Percentage(p)) => {
                         LengthPercentage::Percentage(clamp_range(p, range))
                     }
-                    _ => {
-                        let node = if range == Range::NonNegative {
-                            CalcNode::Max(Box::new([node, CalcNode::Leaf(CalcLeaf::Number(0.0))]))
-                        } else {
-                            node
-                        };
-                        LengthPercentage::Calc(Box::new(node))
-                    }
+                    _ => LengthPercentage::Calc(Box::new(node)),
                 })
             }
             _ => Err(ParseError::Invalid),

@@ -11,4 +11,8 @@ pub mod encoding;
 pub mod media;
 pub mod nth;
 pub mod selectors;
+pub mod stylesheet;
 pub use encoding::{Encoding, decode_stylesheet};
+pub use stylesheet::{
+    CssRule, StyleRule, Stylesheet, parse_selector_list, parse_style_attribute, parse_stylesheet,
+};

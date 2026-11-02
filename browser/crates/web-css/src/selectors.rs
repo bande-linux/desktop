@@ -204,7 +204,7 @@ impl PseudoElement {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Namespaces {
     pub default: Option<Atom>,
     pub prefixes: Vec<(Atom, Atom)>,

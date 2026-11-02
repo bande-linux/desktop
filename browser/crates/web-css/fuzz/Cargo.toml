@@ -27,3 +27,10 @@ path = "fuzz_targets/selectors.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "properties"
+path = "fuzz_targets/properties.rs"
+test = false
+doc = false
+bench = false

@@ -163,6 +163,25 @@ pub struct MediaEnvironment {
     pub wide_gamut: bool,
 }
 
+impl MediaEnvironment {
+    pub fn screen(width: f32, height: f32) -> MediaEnvironment {
+        MediaEnvironment {
+            print: false,
+            width,
+            height,
+            device_width: width,
+            device_height: height,
+            resolution: 1.0,
+            font_size: 16.0,
+            dark: false,
+            reduced_motion: false,
+            hover: true,
+            fine_pointer: true,
+            wide_gamut: false,
+        }
+    }
+}
+
 const NOT_ALL: MediaQuery = MediaQuery {
     negated: true,
     media_type: MediaType::All,

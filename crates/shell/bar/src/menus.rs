@@ -1,7 +1,10 @@
+use bande_datetime::DateFormats;
 use bande_keyboard::{Action, SHORTCUTS};
 use bande_toolkit::ui::{Menu, MenuItem};
+use jiff::{Timestamp, Zoned};
 
 use bande_status::Command;
+use bande_status::clock_app::ClockApp;
 use bande_status::dbusmenu::{Node, command};
 use bande_status::status::{
     Battery, Bluetooth, Capture, InputSources, Power, Sound, Wifi, hours_and_minutes,
@@ -32,8 +35,58 @@ fn settings(pane: &str) -> MenuItem {
     )
 }
 
-pub fn clock_menu(quiet: bool) -> Menu {
-    Menu::new(vec![
+fn clock_time(dates: &DateFormats, at: &Zoned) -> String {
+    let (time, period) = dates.time(at);
+    period.map_or(time.clone(), |period| format!("{time} {period}"))
+}
+
+fn clock_items(clock: &ClockApp, dates: &DateFormats, has_clock: bool) -> Vec<MenuItem> {
+    let now = bande_datetime::now();
+    let local = |seconds: i64| {
+        Timestamp::from_second(seconds)
+            .ok()
+            .map(|at| at.to_zoned(now.time_zone().clone()))
+    };
+    let mut items: Vec<MenuItem> = clock
+        .timers
+        .iter()
+        .filter_map(|(name, ends)| {
+            let ends = local(*ends)?;
+            let time = clock_time(dates, &ends);
+            Some(note(&L10N.tr_args(
+                "clock-timer",
+                [("name", name.clone().into()), ("time", time.into())],
+            )))
+        })
+        .collect();
+    if let Some((name, at)) = &clock.next_alarm
+        && let Some(at) = local(*at)
+    {
+        let time = match at.date() == now.date() {
+            true => clock_time(dates, &at),
+            false => format!(
+                "{} {}",
+                dates.short_weekday(at.date()),
+                clock_time(dates, &at)
+            ),
+        };
+        items.push(note(&L10N.tr_args(
+            "clock-alarm",
+            [("name", name.clone().into()), ("time", time.into())],
+        )));
+    }
+    if has_clock {
+        items.push(item(&L10N.tr("open-clock"), &Command::OpenClock));
+    }
+    if !items.is_empty() {
+        items.push(MenuItem::separator());
+    }
+    items
+}
+
+pub fn clock_menu(quiet: bool, clock: &ClockApp, dates: &DateFormats, has_clock: bool) -> Menu {
+    let mut items = clock_items(clock, dates, has_clock);
+    items.extend([
         item(
             &L10N.tr("do-not-disturb"),
             &Command::SetDoNotDisturb(!quiet),
@@ -42,7 +95,8 @@ pub fn clock_menu(quiet: bool) -> Menu {
         MenuItem::separator(),
         settings("notifications"),
         settings("language-time"),
-    ])
+    ]);
+    Menu::new(items)
 }
 
 pub fn system_menu(user: &str, frontmost: Option<&str>) -> Menu {

@@ -18,6 +18,7 @@ use bande_config::{BUS_NAME, BarEdge, OBJECT_PATH};
 use bande_datetime::DateFormats;
 use bande_inbox::{Inbox, Outbox};
 use bande_keyboard::Layouts;
+use bande_status::clock_app::{CLOCK_APP, ClockApp};
 use bande_status::dbusmenu::{APP_MENU_PATH, Node};
 use bande_status::devices::{Control, SoundControl};
 use bande_status::gtkmenu;
@@ -58,6 +59,7 @@ pub struct StatusClient {
     restart: Restart,
     workspaces: (usize, usize),
     clock_mark: ClockMark,
+    clock_app: ClockApp,
     anchors: Vec<(Panel, Rect)>,
     apps: InstalledApps,
     inbox: Inbox<Update>,
@@ -197,6 +199,7 @@ impl StatusClient {
                 Some(pane) => self.launch(window, SETTINGS, &["bande-settings", &pane]),
                 None => self.launch(window, SETTINGS, &["bande-settings"]),
             },
+            Command::OpenClock => self.launch(window, CLOCK_APP, &["bande-clock"]),
             Command::ForceQuit => report("open Force Quit", window.show_force_quit()),
             Command::ForceQuitApp => {
                 report("force quit the app", window.force_quit_app(&self.app_id));
@@ -482,7 +485,12 @@ impl StatusClient {
             report(
                 "open the clock menu",
                 window.show_menu(
-                    clock_menu(self.clock_mark == ClockMark::Quiet),
+                    clock_menu(
+                        self.clock_mark == ClockMark::Quiet,
+                        &self.clock_app,
+                        &self.dates,
+                        find_app(self.apps.entries(), CLOCK_APP).is_some(),
+                    ),
                     self.bar.menu_placement(anchor),
                 ),
             );
@@ -660,6 +668,7 @@ impl App for StatusClient {
                     self.clock_mark = mark;
                     self.bar.set_clock_mark(mark);
                 }
+                Update::ClockApp(clock) => self.clock_app = clock,
                 Update::BatteryPercentage(shown) => {
                     self.bar.set_battery_percentage(shown);
                 }
@@ -738,6 +747,7 @@ impl StatusClient {
             restart: Restart::default(),
             workspaces: (1, 0),
             clock_mark: ClockMark::Clear,
+            clock_app: ClockApp::default(),
             anchors: Vec::new(),
             apps: InstalledApps::load(),
             inbox,

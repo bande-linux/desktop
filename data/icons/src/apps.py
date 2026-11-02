@@ -198,15 +198,17 @@ ICONS = {
     'org.bande.Installer': installer,
     'org.bande.Velox': velox,
     'org.bande.DiskUtility': disk_utility,
+    'org.bande.Calculator': calculator,
     'org.bande.Launcher': launcher,
     'org.bande.About': about,
     'org.bande.Screenshot': screenshot,
+    'org.bande.TextEdit': text_editor,
     'org.gnome.TextEditor': text_editor,
     'org.gnome.Loupe': image_viewer,
     'org.gnome.Papers': document_viewer,
     'org.gnome.Showtime': video_player,
     'org.gnome.Calculator': calculator,
-    'org.gnome.clocks': clocks,
+    'org.bande.Clock': clocks,
 }
 
 HICOLOR = {

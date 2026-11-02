@@ -1,4 +1,4 @@
-use bande_settings_panes::Permission;
+use bande_settings_panes::{Permission, SettingId};
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Button, Stack, Widget};
 
@@ -7,7 +7,7 @@ use crate::follow::Command;
 use crate::pages::boxed;
 use crate::permissions::PermissionCommand;
 use crate::services::{BluetoothCommand, NetworkCommand};
-use crate::view::{Anchor, Intent, SettingsView, intent};
+use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
 
 const CONFIRM: &str = "forget-confirm";
@@ -72,12 +72,13 @@ impl SettingsView {
 
     pub(crate) fn forget(&mut self) {
         let command = match self.forgetting.take() {
-            Some(Forget::Network(ssid)) => self
-                .wifi
-                .as_ref()
-                .and_then(|wifi| wifi.networks.iter().find(|network| network.ssid == ssid))
-                .cloned()
-                .map(|network| Command::Network(NetworkCommand::Forget(network))),
+            Some(Forget::Network(ssid)) => {
+                if self.detail == Some(Detail::Network(ssid.clone())) {
+                    self.detail = None;
+                    self.focus_next = Some(Anchor::Setting(SettingId::KnownNetworks, None));
+                }
+                Some(Command::Network(NetworkCommand::Forget(ssid)))
+            }
             Some(Forget::Device(address)) => self
                 .bluetooth
                 .as_ref()

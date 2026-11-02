@@ -57,6 +57,9 @@ pub trait Device {
     fn interface(&self) -> zbus::Result<String>;
 
     #[zbus(property)]
+    fn hw_address(&self) -> zbus::Result<String>;
+
+    #[zbus(property)]
     fn ip4_config(&self) -> zbus::Result<OwnedObjectPath>;
 
     #[zbus(property)]

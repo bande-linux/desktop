@@ -32,9 +32,10 @@ reach a running session.
   repainted. `bande-toolkit-bench` measures the toolkit sample (`crates/testing/sample`).
 - **Files at 100 000 items:** `bande-files-bench` drives `FilesView` in-process over a folder of
   100 000 files and prints UI-thread time per step.
-- **Wake-ups by hand:** sum `voluntary_ctxt_switches` and `nonvoluntary_ctxt_switches` over
-  `/proc/<pid>/task/*/status` twice and divide by the interval; the threads' `comm` shows which
-  one wakes.
+- **Wake-ups by hand:** sum `voluntary_ctxt_switches` over `/proc/<pid>/task/*/status` twice
+  and divide by the interval; the threads' `comm` shows which one wakes. `bande-idle` counts the
+  same. Leave out `nonvoluntary_ctxt_switches`: they are preemptions of a running thread, and
+  they grow with whatever else loads the machine.
 - **Size:** `cargo build --profile dist -p <package>` (the packages' profile: fat LTO, one
   codegen unit, `panic = "abort"`, stripped); crate counts with
   `cargo tree -e normal -p <package> --prefix none | sort -u | wc -l`.

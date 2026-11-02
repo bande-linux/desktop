@@ -321,14 +321,17 @@ impl Session {
     }
 
     fn minimize_apps(&mut self) -> Result<(), Box<dyn Error>> {
-        for (_, app_id) in APPS {
-            let geometry = self
+        for _ in APPS {
+            let Some(geometry) = self
                 .server
                 .windows()
                 .iter()
-                .find(|window| window.app_id() == app_id)
+                .rev()
+                .find(|window| !window.is_minimized())
                 .and_then(|window| window.geometry())
-                .ok_or_else(|| format!("{app_id} has no window"))?;
+            else {
+                break;
+            };
             let title = Point::from((
                 f64::from(geometry.loc.x + geometry.size.w / 2),
                 f64::from(geometry.loc.y + 12),
@@ -457,7 +460,7 @@ fn thread_sample(pid: u32, tid: u32) -> Option<ThreadSample> {
             .find_map(|line| line.strip_prefix(name))
             .and_then(|value| value.trim().parse().ok())
     };
-    let switches = field("voluntary_ctxt_switches:")? + field("nonvoluntary_ctxt_switches:")?;
+    let switches = field("voluntary_ctxt_switches:")?;
     let stat = fs::read_to_string(format!("/proc/{pid}/task/{tid}/stat")).ok()?;
     let fields: Vec<&str> = stat.rsplit_once(')')?.1.split_whitespace().collect();
     let ticks = fields.get(11)?.parse::<u64>().ok()? + fields.get(12)?.parse::<u64>().ok()?;

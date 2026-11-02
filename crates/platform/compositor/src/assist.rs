@@ -88,6 +88,7 @@ impl State {
                     && self.present(window)
                     && self.screen_of(window) == screen
                     && real_rect(window).is_some()
+                    && !window.fixed_size()
             })
             .map(|(_, window)| window.surface().clone())
             .collect();

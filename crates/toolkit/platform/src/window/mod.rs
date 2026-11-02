@@ -742,7 +742,7 @@ impl Window {
         let toplevel = self.toplevel()?;
         if self.state.toplevel.fullscreen {
             toplevel.unset_fullscreen();
-        } else {
+        } else if self.is_resizable() {
             toplevel.set_fullscreen(None);
         }
         self.flush()

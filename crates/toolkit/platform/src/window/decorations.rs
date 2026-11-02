@@ -243,9 +243,7 @@ impl Window {
                 Ok(())
             }
             Control::Minimize => self.minimize(),
-            Control::Zoom if pointer.modifiers.alt && self.is_resizable() => {
-                self.toggle_full_screen()
-            }
+            Control::Zoom if pointer.modifiers.alt => self.toggle_full_screen(),
             Control::Zoom => self.toggle_zoom(),
             Control::Menu => Ok(()),
         };

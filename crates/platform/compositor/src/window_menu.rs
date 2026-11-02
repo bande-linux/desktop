@@ -221,16 +221,18 @@ impl State {
     fn tiling_items(&self, index: usize) -> Vec<MenuItem> {
         let window = &self.windows[index];
         let zoomed = window.has_state(xdg_toplevel::State::Maximized);
+        let resizable = !window.fixed_size();
+        let tile = |key: &str| item(L10N.tr(key), key).enabled(resizable);
         let mut items = vec![
-            item(L10N.tr("place-left"), "place-left").shortcut("Super+Left"),
-            item(L10N.tr("place-right"), "place-right").shortcut("Super+Right"),
+            tile("place-left").shortcut("Super+Left"),
+            tile("place-right").shortcut("Super+Right"),
             MenuItem::separator(),
-            item(L10N.tr("place-top-left"), "place-top-left"),
-            item(L10N.tr("place-top-right"), "place-top-right"),
-            item(L10N.tr("place-bottom-left"), "place-bottom-left"),
-            item(L10N.tr("place-bottom-right"), "place-bottom-right"),
+            tile("place-top-left"),
+            tile("place-top-right"),
+            tile("place-bottom-left"),
+            tile("place-bottom-right"),
             MenuItem::separator(),
-            item(L10N.tr("place-fill"), "place-fill").enabled(!zoomed && !window.fixed_size()),
+            item(L10N.tr("place-fill"), "place-fill").enabled(!zoomed && resizable),
         ];
         let displays = self
             .screens

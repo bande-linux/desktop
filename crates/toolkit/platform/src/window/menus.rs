@@ -17,17 +17,19 @@ fn menu_text(text: &mut Option<TextSystem>, appearance: Appearance) -> &mut Text
 impl Window {
     fn move_and_resize_items(&self) -> Vec<MenuItem> {
         let toplevel = self.state.toplevel;
+        let resizable = self.is_resizable();
         let place = |key: &str| MenuItem::new(&L10N.tr(key), key);
+        let tile = |key: &str| place(key).enabled(resizable);
         let mut items = vec![
-            place("place-left").shortcut("Super+Left"),
-            place("place-right").shortcut("Super+Right"),
+            tile("place-left").shortcut("Super+Left"),
+            tile("place-right").shortcut("Super+Right"),
             MenuItem::separator(),
-            place("place-top-left"),
-            place("place-top-right"),
-            place("place-bottom-left"),
-            place("place-bottom-right"),
+            tile("place-top-left"),
+            tile("place-top-right"),
+            tile("place-bottom-left"),
+            tile("place-bottom-right"),
             MenuItem::separator(),
-            place("place-fill").enabled(!toplevel.maximized && self.is_resizable()),
+            place("place-fill").enabled(!toplevel.maximized && resizable),
         ];
         if self.can_place() && self.state.outputs.len() > 1 {
             items.push(place("place-next-display").shortcut("Shift+Super+Right"));
@@ -78,6 +80,7 @@ impl Window {
                 }),
                 "full-screen",
             )
+            .enabled(toplevel.fullscreen || self.is_resizable())
             .shortcut("Super+F11"),
             MenuItem::separator(),
         ];

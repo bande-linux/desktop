@@ -26,6 +26,7 @@ pub struct BoxFragment {
 pub struct Extra {
     pub border: Sides,
     pub border_color: Sides<Color>,
+    pub padding: Sides,
     pub layer: Layer,
     pub image: Option<Arc<str>>,
     pub background_image: Option<Arc<str>>,
@@ -41,6 +42,12 @@ impl BoxFragment {
             || (Sides::default(), Sides::default()),
             |extra| (extra.border, extra.border_color),
         )
+    }
+
+    pub fn padding(&self) -> Sides {
+        self.extra
+            .as_ref()
+            .map_or_else(Sides::default, |extra| extra.padding)
     }
 
     pub fn image(&self) -> Option<&Arc<str>> {

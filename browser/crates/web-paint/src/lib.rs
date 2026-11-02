@@ -246,11 +246,14 @@ impl Builder<'_> {
         if let Some(source) = fragment.image()
             && let Some(image) = self.image(source)
         {
+            let padding = fragment.padding();
             let inner = Rect {
-                x: rect.x + border.left,
-                y: rect.y + border.top,
-                width: (rect.width - border.left - border.right).max(0.0),
-                height: (rect.height - border.top - border.bottom).max(0.0),
+                x: rect.x + border.left + padding.left,
+                y: rect.y + border.top + padding.top,
+                width: (rect.width - border.left - border.right - padding.left - padding.right)
+                    .max(0.0),
+                height: (rect.height - border.top - border.bottom - padding.top - padding.bottom)
+                    .max(0.0),
             };
             let inner = snap(inner);
             self.items.push(Item::Image {

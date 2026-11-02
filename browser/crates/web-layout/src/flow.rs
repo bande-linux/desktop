@@ -252,6 +252,7 @@ fn extra(
         Box::new(Extra {
             border,
             border_color,
+            padding: Sides::default(),
             layer,
             image,
             background_image,
@@ -720,7 +721,11 @@ impl<'a, 'b> Flow<'a, 'b> {
                         _ => None,
                     },
                     reset.background_image.clone(),
-                ),
+                )
+                .map(|mut extra| {
+                    extra.padding = padding;
+                    extra
+                }),
                 children,
             },
             top,
@@ -805,9 +810,49 @@ impl<'a, 'b> Flow<'a, 'b> {
             (None, Some(bottom)) => cb.1 + cb_height - bottom - outer_height,
             (None, None) => absolute.y,
         };
+        let auto = style.reset.margin;
+        let solve = |start: Option<f32>,
+                     end: Option<f32>,
+                     size: f32,
+                     extent: f32,
+                     margins: (
+            Option<web_style::LengthPercentage>,
+            Option<web_style::LengthPercentage>,
+        ),
+                     resolved: (f32, f32)| {
+            match (start, end) {
+                (Some(start), Some(end)) => {
+                    let free = extent - start - end - size;
+                    match margins {
+                        (None, None) => Some(free / 2.0),
+                        (None, Some(_)) => Some(free - resolved.1),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            }
+        };
+        let margin_left = solve(
+            left,
+            right,
+            laid.fragment.rect.width,
+            cb_width,
+            (auto.left, auto.right),
+            (laid.margin.left, laid.margin.right),
+        )
+        .unwrap_or(laid.margin.left);
+        let margin_top = solve(
+            top,
+            bottom,
+            laid.fragment.rect.height,
+            cb_height,
+            (auto.top, auto.bottom),
+            (laid.margin.top, laid.margin.bottom),
+        )
+        .unwrap_or(laid.margin.top);
         let mut fragment = laid.fragment;
-        fragment.rect.x = x + laid.margin.left;
-        fragment.rect.y = y + laid.margin.top;
+        fragment.rect.x = x + margin_left;
+        fragment.rect.y = y + margin_top;
         fragment
     }
 

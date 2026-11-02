@@ -83,7 +83,9 @@ impl FakeLogind {
     }
 }
 
-struct Block;
+struct Block {
+    drive: OwnedObjectPath,
+}
 
 #[zbus::interface(name = "org.freedesktop.UDisks2.Block")]
 impl Block {
@@ -111,10 +113,24 @@ impl Block {
     fn hint_name(&self) -> String {
         String::new()
     }
+
+    #[zbus(property)]
+    fn drive(&self) -> OwnedObjectPath {
+        self.drive.clone()
+    }
 }
 
 struct Filesystem {
-    mounts: Mutex<Sender<String>>,
+    calls: Mutex<Sender<String>>,
+    mount_points: Vec<Vec<u8>>,
+}
+
+impl Filesystem {
+    fn record(&self, call: String) {
+        if let Ok(calls) = self.calls.lock() {
+            let _ = calls.send(call);
+        }
+    }
 }
 
 #[zbus::interface(name = "org.freedesktop.UDisks2.Filesystem")]
@@ -124,15 +140,52 @@ impl Filesystem {
         _options: HashMap<String, OwnedValue>,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> String {
-        if let Ok(mounts) = self.mounts.lock() {
-            let _ = mounts.send(emitter.path().to_string());
-        }
+        self.record(emitter.path().to_string());
         "/media/anna/USB".to_owned()
+    }
+
+    fn unmount(
+        &self,
+        _options: HashMap<String, OwnedValue>,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) {
+        self.record(format!("Unmount {}", emitter.path()));
     }
 
     #[zbus(property)]
     fn mount_points(&self) -> Vec<Vec<u8>> {
-        Vec::new()
+        self.mount_points.clone()
+    }
+}
+
+struct Drive {
+    calls: Mutex<Sender<String>>,
+    ejectable: bool,
+    can_power_off: bool,
+}
+
+#[zbus::interface(name = "org.freedesktop.UDisks2.Drive")]
+impl Drive {
+    fn eject(&self, _options: HashMap<String, OwnedValue>) {
+        if let Ok(calls) = self.calls.lock() {
+            let _ = calls.send("Eject".to_owned());
+        }
+    }
+
+    fn power_off(&self, _options: HashMap<String, OwnedValue>) {
+        if let Ok(calls) = self.calls.lock() {
+            let _ = calls.send("PowerOff".to_owned());
+        }
+    }
+
+    #[zbus(property)]
+    fn ejectable(&self) -> bool {
+        self.ejectable
+    }
+
+    #[zbus(property)]
+    fn can_power_off(&self) -> bool {
+        self.can_power_off
     }
 }
 
@@ -150,15 +203,38 @@ impl FakeUdisks {
     }
 
     pub fn plug_in(&self, block: &str) -> zbus::Result<Receiver<String>> {
-        let (sender, mounts) = mpsc::channel();
+        self.plug_in_drive("/", false, &[(block, "")])
+    }
+
+    pub fn plug_in_drive(
+        &self,
+        drive: &str,
+        ejectable: bool,
+        volumes: &[(&str, &str)],
+    ) -> zbus::Result<Receiver<String>> {
+        let (sender, calls) = mpsc::channel();
         let server = self.daemon.object_server();
-        server.at(block, Block)?;
-        server.at(
-            block,
-            Filesystem {
-                mounts: Mutex::new(sender),
-            },
-        )?;
-        Ok(mounts)
+        if drive != "/" {
+            let drive_object = Drive {
+                calls: Mutex::new(sender.clone()),
+                ejectable,
+                can_power_off: true,
+            };
+            server.at(drive, drive_object)?;
+        }
+        for (block, mount_point) in volumes {
+            let drive = OwnedObjectPath::try_from(drive)?;
+            server.at(*block, Block { drive })?;
+            let mount_points = match mount_point.is_empty() {
+                true => Vec::new(),
+                false => vec![format!("{mount_point}\0").into_bytes()],
+            };
+            let filesystem = Filesystem {
+                calls: Mutex::new(sender.clone()),
+                mount_points,
+            };
+            server.at(*block, filesystem)?;
+        }
+        Ok(calls)
     }
 }

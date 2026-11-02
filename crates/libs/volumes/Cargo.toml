@@ -1,6 +1,6 @@
 [package]
 name = "bande-volumes"
-description = "Removable volumes for Bande: which are mounted, and ejecting them through UDisks"
+description = "Volumes for Bande: the UDisks2 objects followed live, which are mounted, and ejecting them"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +10,9 @@ repository.workspace = true
 [dependencies]
 tracing.workspace = true
 zbus.workspace = true
+
+[dev-dependencies]
+bande-test-bus.workspace = true
 
 [lints]
 workspace = true

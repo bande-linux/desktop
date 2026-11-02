@@ -357,7 +357,14 @@ graph LR
     active and unlocked (`Active`, not `LockedHint`), as GNOME does; drives that appear while it
     is locked or inactive are mounted when it is unlocked again, unless removed meanwhile, and
     manual mounts from Files are unaffected; a drive removed while still mounted posts "Disk Not Ejected Properly", as macOS
-    does. Encrypted volumes and the eject control wait for the UI.
+    does. Encrypted volumes wait for the UI.
+  - `bande-volumes` holds the one UDisks2 client (`udisks::Udisks`: the managed objects, kept
+    current from the daemon's signals) that automount, Files, the desktop and Disk Utility share.
+    Eject (Files, the desktop, Disk Utility) unmounts every filesystem of the volume's drive and
+    locks its unlocked encrypted volumes, then calls `Drive.Eject` when the drive is `Ejectable`
+    (optical and removable media, a VM's USB ISO: the device stays), else `PowerOff` when it
+    `CanPowerOff` (USB disks), else nothing more; a disk image's loop device is deleted when this
+    user set it up. A failure is reported to the caller, not only logged.
 - **Theme propagation**: GTK 3 and 4 (the Settings portal, with `GTK_USE_PORTAL=1` for GTK 3), Qt (`QT_QPA_PLATFORMTHEME`) and
   cursor themes (`XCURSOR_THEME`, `XCURSOR_SIZE`) follow the desktop's appearance.
 

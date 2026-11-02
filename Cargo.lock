@@ -402,6 +402,7 @@ dependencies = [
  "bande-log",
  "bande-notify",
  "bande-test-bus",
+ "bande-volumes",
  "bande-xdg",
  "rustix 1.1.6",
  "tracing",
@@ -1139,6 +1140,7 @@ dependencies = [
 name = "bande-volumes"
 version = "0.1.2"
 dependencies = [
+ "bande-test-bus",
  "tracing",
  "zbus",
 ]

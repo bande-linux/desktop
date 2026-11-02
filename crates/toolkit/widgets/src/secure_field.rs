@@ -46,6 +46,10 @@ impl SecureField {
         placeholder.clone_into(&mut self.placeholder);
     }
 
+    pub fn secret(&self) -> &str {
+        &self.secret
+    }
+
     fn height(&self) -> f32 {
         (self.font_size * self.scale * 1.6 + PADDING)
             .ceil()

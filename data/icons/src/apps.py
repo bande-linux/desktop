@@ -88,6 +88,20 @@ def velox():
     return tile(top, bottom, body)
 
 
+def disk_utility():
+    top, bottom = hue_field(80, 0.40, 0.012)
+    tube = tone(80, 0.88, 0.006)
+    body = (rect(8, 25, 32, 13, 3, PAPER)
+            + rect(8, 25, 32, 3.2, 1.6, mix(PAPER, top, 0.25))
+            + rect(12, 31.4, 12, 2, 1, top, 'opacity="0.3"')
+            + circle(34.5, 32.4, 1.6, EMBER)
+            + stroke('M14 8.5v5a6 6 0 0 0 12 0v-5', tube, 2)
+            + stroke('M20 19.5v1.5a7 7 0 0 0 14 0v-1', tube, 2)
+            + circle(34, 17.5, 3.4, tube) + circle(34, 17.5, 1.5, top)
+            + circle(14, 8.5, 1.4, tube) + circle(26, 8.5, 1.4, tube))
+    return tile(top, bottom, body, ('#FFFFFF', 0.12))
+
+
 def mark_shape(color, dot, width=3.6):
     return (stroke('M16.5 13.5v10a7.5 7.5 0 0 0 15 0v-10', color, width)
             + circle(24, 24, 2.7, dot))
@@ -183,6 +197,7 @@ ICONS = {
     'org.bande.ActivityMonitor': monitor,
     'org.bande.Installer': installer,
     'org.bande.Velox': velox,
+    'org.bande.DiskUtility': disk_utility,
     'org.bande.Calculator': calculator,
     'org.bande.Launcher': launcher,
     'org.bande.About': about,

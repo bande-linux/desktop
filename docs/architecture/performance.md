@@ -76,6 +76,16 @@ eventfds. These are the only timers left; each runs only while its condition hol
 | Mail | IDLE renewed every 25 min; full sync every 15 min; polling every 5 min only without IDLE | servers drop IDLE after 30 min and IDLE watches only the inbox |
 | Calendar | CalDAV every 5 min, subscriptions hourly | CalDAV has no push |
 
+Two system bus signals still wake an idle session. NetworkManager updates the joined access
+point's `Strength` a few times a minute; the status hub redraws only when the shown bars change,
+but each signal wakes four threads of the shell (zbus's `async-io` reactor and connection
+executor, the device watcher and the device reader), about 0.3/s in all with the bar clock.
+Settings reads `hostnamed`, `timedated` and `localed` when it starts; they exit 30 s later and
+their `NameOwnerChanged` wakes Settings once (about 20 wake-ups). zbus cannot match a
+well-known sender locally, so a `MessageIterator` whose rule names only a sender also receives
+every other signal of its connection: give such a rule a path or an interface too, as Settings
+does for BlueZ.
+
 Installed dist binaries are 14–21 MB for each GUI program (`bande-shell` 21, Settings 19, Files
 17, the compositor 14) and about 2–3 MB for each service. Every GUI binary carries its own copy of
 the toolkit, Vello, wgpu, Parley and zbus, including about 2.9 MB of ICU segmentation data for

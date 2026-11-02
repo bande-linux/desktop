@@ -253,16 +253,5 @@ pub fn facts(
 
 pub fn full_name() -> String {
     let login = std::env::var("USER").unwrap_or_default();
-    std::fs::read_to_string("/etc/passwd")
-        .ok()
-        .and_then(|passwd| {
-            passwd.lines().find_map(|line| {
-                let fields: Vec<&str> = line.split(':').collect();
-                (fields.first() == Some(&login.as_str()))
-                    .then(|| fields.get(4)?.split(',').next().map(str::to_owned))
-                    .flatten()
-                    .filter(|name| !name.is_empty())
-            })
-        })
-        .unwrap_or(login)
+    bande_bus::accounts::passwd_name(&login).unwrap_or(login)
 }

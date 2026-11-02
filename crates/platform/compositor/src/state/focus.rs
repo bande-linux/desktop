@@ -17,6 +17,13 @@ impl State {
     }
 
     pub(crate) fn focus(&mut self, surface: Option<WlSurface>) {
+        if surface
+            .as_ref()
+            .and_then(|surface| self.window_index(surface))
+            .is_some_and(|index| self.windows[index].panel)
+        {
+            return;
+        }
         if self.redirect_focus_while_locked(&surface) {
             return;
         }
@@ -75,7 +82,7 @@ impl State {
         self.windows
             .iter()
             .rev()
-            .filter(|window| self.present(window))
+            .filter(|window| self.present(window) && !window.panel)
             .map(|window| window.toplevel.wl_surface())
             .find(|surface| {
                 surface
@@ -89,7 +96,9 @@ impl State {
         self.windows
             .iter()
             .rev()
-            .filter(|window| self.present(window) && self.screen_of(window) == screen)
+            .filter(|window| {
+                self.present(window) && !window.panel && self.screen_of(window) == screen
+            })
             .map(|window| window.toplevel.wl_surface().clone())
             .next()
     }

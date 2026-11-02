@@ -1,10 +1,8 @@
-use std::time::Instant;
-
 use bande_fs::Entry;
-use bande_quick_look::{Action, QuickLook, Subject};
+use bande_quick_look::{QuickLookLink, Subject};
 use bande_thumbnails::ThumbnailSize;
-use bande_toolkit::ui::{Event, Key, Modifiers};
-use bande_toolkit::{Item, Rect};
+use bande_toolkit::Rect;
+use bande_toolkit::ui::{Key, Modifiers};
 
 use crate::L10N;
 use crate::view::{FilesView, Hit, Request};
@@ -13,6 +11,16 @@ const ICON_PIXELS: u32 = 256;
 const FOLDER_MIME: &str = "inode/directory";
 
 impl FilesView {
+    pub fn set_quick_look(&mut self, link: QuickLookLink) {
+        self.quick_look = Some(link);
+    }
+
+    pub(crate) fn quick_look_shown(&self) -> bool {
+        self.quick_look
+            .as_ref()
+            .is_some_and(|link| link.borrow().is_shown())
+    }
+
     fn origin_of(&self, entry: &Entry) -> Option<Rect> {
         let active = self.browser.active();
         let row = self
@@ -40,11 +48,11 @@ impl FilesView {
             true => None,
             false => self.apps.default_for_path(&entry.path).cloned(),
         };
+        let origin = self.origin_of(&entry);
         let icon = self
             .thumbs
             .get(&entry, ThumbnailSize::XLarge)
             .or_else(|| self.entry_icon(&entry, ICON_PIXELS));
-        let origin = self.origin_of(&entry);
         Subject {
             entry,
             mime,
@@ -55,19 +63,23 @@ impl FilesView {
         }
     }
 
-    fn now(&mut self) -> Instant {
-        self.ui.context().now()
+    pub(crate) fn close_quick_look(&mut self) {
+        if let Some(link) = self.quick_look.as_ref().filter(|_| self.quick_look_shown()) {
+            link.borrow_mut().close();
+        }
     }
 
     pub(crate) fn toggle_quick_look(&mut self) {
-        let now = self.now();
-        match &mut self.quick_look {
-            Some(shown) if !shown.is_closing() => shown.close(now),
-            _ => self.open_quick_look(false),
+        match self.quick_look_shown() {
+            true => self.close_quick_look(),
+            false => self.open_quick_look(false),
         }
     }
 
     pub(crate) fn open_quick_look(&mut self, full_screen: bool) {
+        let Some(link) = self.quick_look.clone() else {
+            return;
+        };
         let selection = self
             .browser
             .selection()
@@ -94,102 +106,44 @@ impl FilesView {
             .into_iter()
             .map(|entry| self.subject(entry))
             .collect();
-        let now = self.now();
-        let reduce_motion = self.ui.context().reduce_motion;
-        match QuickLook::open(subjects, at, full_screen, reduce_motion, now) {
-            Ok(shown) => self.quick_look = Some(shown),
-            Err(error) => tracing::warn!("cannot start Quick Look: {error}"),
-        }
+        link.borrow_mut().open(subjects, at, full_screen);
+        self.requests.push(Request::ShowQuickLook);
     }
 
     pub(crate) fn follow_selection_in_quick_look(&mut self, selected: Option<&Entry>) {
-        let Some(shown) = &self.quick_look else {
+        let Some(link) = self.quick_look.clone() else {
             return;
         };
-        if !shown.follows_selection() || selected.map(|entry| &entry.path) == shown.path() {
+        let Some(shown) = link.borrow().follows().cloned() else {
             return;
-        }
+        };
         match selected {
+            Some(entry) if entry.path == shown => {}
             Some(entry) => {
                 let subject = self.subject(entry.clone());
-                if let Some(shown) = &mut self.quick_look {
-                    shown.follow(subject);
-                }
+                link.borrow_mut().follow(subject);
             }
-            None => {
-                let now = self.now();
-                if let Some(shown) = &mut self.quick_look {
-                    shown.close(now);
-                }
-            }
+            None => link.borrow_mut().close(),
         }
     }
 
     pub(crate) fn toggle_quick_look_full_screen(&mut self) {
-        match &mut self.quick_look {
-            Some(shown) if !shown.is_closing() => shown.toggle_full_screen(),
+        match (&self.quick_look, self.quick_look_shown()) {
+            (Some(link), true) => link
+                .borrow_mut()
+                .key(Key::Function(11), Modifiers::default()),
             _ => self.open_quick_look(true),
         }
     }
 
     pub(crate) fn quick_look_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
-        let now = self.now();
-        self.quick_look
-            .as_mut()
-            .is_some_and(|shown| !shown.is_closing() && shown.key(key, modifiers, now))
-    }
-
-    pub(crate) fn quick_look_event(&mut self, event: &Event) -> bool {
-        let now = self.now();
-        let Some(shown) = &mut self.quick_look else {
+        let Some(link) = &self.quick_look else {
             return false;
         };
-        let position = match event {
-            Event::PointerDown(pointer) => Some(pointer.position),
-            Event::Scroll(scroll) => Some(scroll.position),
-            _ => None,
-        };
-        if position.is_some_and(|at| !shown.contains(at)) {
-            return false;
+        let taken = link.borrow().takes_key(key, modifiers);
+        if taken {
+            link.borrow_mut().key(key, modifiers);
         }
-        let (handled, action) = shown.handle(event, now);
-        match action {
-            Some(Action::Open { app, path }) => self.requests.push(Request::Open {
-                app,
-                files: vec![path],
-            }),
-            Some(Action::Copy(path)) => self.requests.push(Request::CopyFiles {
-                paths: vec![path],
-                cut: false,
-            }),
-            Some(Action::Close) | None => {}
-        }
-        handled || position.is_some()
-    }
-
-    pub(crate) fn quick_look_bounds(&self) -> Rect {
-        match self
-            .quick_look
-            .as_ref()
-            .is_some_and(QuickLook::is_full_screen)
-        {
-            true => Rect::new(0.0, 0.0, self.size.0, self.size.1),
-            false => self.sheet_frame(),
-        }
-    }
-
-    pub(crate) fn paint_quick_look(&mut self, items: &mut Vec<Item>) {
-        let bounds = self.quick_look_bounds();
-        let cx = self.ui.context();
-        let now = cx.now();
-        let Some(shown) = &mut self.quick_look else {
-            return;
-        };
-        if shown.is_closed(now) {
-            self.quick_look = None;
-            return;
-        }
-        let scale = cx.display_scale as f32;
-        items.extend(shown.paint(&mut cx.text, cx.palette, bounds, scale, now));
+        taken
     }
 }

@@ -514,6 +514,7 @@ dependencies = [
 name = "bande-bus"
 version = "0.1.2"
 dependencies = [
+ "tracing",
  "zbus",
 ]
 
@@ -1100,12 +1101,12 @@ dependencies = [
  "bande-bluetooth",
  "bande-bus",
  "bande-config",
- "bande-content",
  "bande-controlcenter",
  "bande-desktop-surface",
  "bande-launcher",
  "bande-log",
  "bande-notifications",
+ "bande-quick-look",
  "bande-status",
  "bande-toolkit",
  "bande-xdg",
@@ -1135,6 +1136,7 @@ dependencies = [
  "bande-app-menu",
  "bande-audio",
  "bande-bluetooth",
+ "bande-bus",
  "bande-datetime",
  "bande-inbox",
  "bande-l10n",

@@ -10,8 +10,6 @@ use std::time::{Duration, Instant};
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
-use bande_content::pdf::protocol::WORKER_FLAG;
-use bande_content::pdf::worker::run as run_pdf_worker;
 use bande_files::{
     BookmarkEdit, Browser, FilesSettings, FilesView, L10N, Location, Request, Row, SETTINGS_SIZE,
     SIDEBAR_FILE, SIDEBAR_WIDTH, Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory,
@@ -22,10 +20,12 @@ use bande_files::{
 };
 use bande_fs::{History, Trash};
 use bande_inbox::Inbox;
+use bande_quick_look::{Action, Panel, QuickLookLink, remembered_size, serve_worker};
 use bande_search::{recently_used_path, usage_path};
 use bande_thumbnails::Thumbnails;
+use bande_toolkit::ui::{Event, frame_time};
 use bande_toolkit::{
-    Appearance, DragAction, DragEvent, FrameRegions, MenuPlacement, Rect, Scene, TextSystem,
+    Appearance, Color, DragAction, DragEvent, FrameRegions, MenuPlacement, Rect, Scene, TextSystem,
     Transfer, Window, WindowEvent,
 };
 use bande_volumes::{EjectFailure, eject, media_roots};
@@ -37,6 +37,7 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 const APP_ID: &str = "org.bande.Files";
 const WINDOW_SIZE: (u32, u32) = (1040, 620);
+const QUICK_LOOK: &str = "quick-look";
 
 static INFO: Info = Info {
     id: APP_ID,
@@ -59,12 +60,194 @@ fn settings_window(appearance: Appearance) -> Box<dyn View> {
     ))
 }
 
-struct Pane {
+struct BrowserPane {
     view: FilesView,
     title: String,
 }
 
+enum Pane {
+    Browser(Box<BrowserPane>),
+    QuickLook(Box<QuickLookPane>),
+}
+
+impl Pane {
+    fn browser(&self) -> Option<&BrowserPane> {
+        match self {
+            Self::Browser(pane) => Some(pane),
+            Self::QuickLook(_) => None,
+        }
+    }
+
+    fn inner(&mut self) -> &mut dyn View {
+        match self {
+            Self::Browser(pane) => pane.as_mut(),
+            Self::QuickLook(pane) => pane.as_mut(),
+        }
+    }
+
+    fn shared(&self) -> &dyn View {
+        match self {
+            Self::Browser(pane) => pane.as_ref(),
+            Self::QuickLook(pane) => pane.as_ref(),
+        }
+    }
+}
+
+fn browser(cx: &mut Cx<Files>, id: WindowId) -> Option<(&mut Window, &mut BrowserPane)> {
+    match cx.window(id)? {
+        (window, Pane::Browser(pane)) => Some((window, pane)),
+        (_, Pane::QuickLook(_)) => None,
+    }
+}
+
 impl View for Pane {
+    fn scene(&mut self, window: &mut Window) -> Scene {
+        self.inner().scene(window)
+    }
+
+    fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        self.inner().event(window, event)
+    }
+
+    fn set_appearance(&mut self, appearance: Appearance) {
+        self.inner().set_appearance(appearance);
+    }
+
+    fn set_active(&mut self, active: bool) {
+        self.inner().set_active(active);
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        self.shared().sources()
+    }
+
+    fn source_ready(&mut self, window: &mut Window, index: usize) -> bool {
+        self.inner().source_ready(window, index)
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.shared().deadline()
+    }
+
+    fn tick(&mut self, window: &mut Window, now: Instant) -> bool {
+        self.inner().tick(window, now)
+    }
+
+    fn animating(&self) -> bool {
+        self.shared().animating()
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        self.shared().accessibility()
+    }
+
+    fn text_input_area(&self) -> Option<Rect> {
+        self.shared().text_input_area()
+    }
+}
+
+struct QuickLookPane {
+    panel: Panel,
+}
+
+impl QuickLookPane {
+    fn act(&mut self, window: &mut Window) {
+        for action in self.panel.take_actions() {
+            let done = match action {
+                Action::Open { app, path } => {
+                    let token = window.activation_token(app.app_id()).ok();
+                    launch_with(&app, &[path], token.as_deref()).map_err(|error| error.to_string())
+                }
+                Action::Copy(path) => {
+                    self.panel.link().borrow_mut().copy(path);
+                    Ok(())
+                }
+                Action::Move => window.start_move().map_err(|error| error.to_string()),
+                Action::Resize(edge) => {
+                    window.start_resize(edge).map_err(|error| error.to_string())
+                }
+                Action::FullScreen(on) if window.toplevel_state().fullscreen != on => window
+                    .toggle_full_screen()
+                    .map_err(|error| error.to_string()),
+                Action::FullScreen(_) => Ok(()),
+            };
+            if let Err(error) = done {
+                tracing::warn!("Quick Look cannot do that: {error}");
+            }
+        }
+    }
+}
+
+impl View for QuickLookPane {
+    fn scene(&mut self, window: &mut Window) -> Scene {
+        let now = frame_time().presentation;
+        let (width, height) = window.size();
+        let bounds = Rect::new(0.0, 0.0, width as f32, height as f32);
+        let items = match self.panel.paint(bounds, window.scale() as f32, now) {
+            Some(items) => items,
+            None => {
+                window.request_close();
+                Vec::new()
+            }
+        };
+        Scene {
+            width,
+            height,
+            background: Color::TRANSPARENT,
+            items,
+        }
+    }
+
+    fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        let now = frame_time().on_screen();
+        let handled = match event {
+            WindowEvent::Input(input) => {
+                if let Event::PointerMove(pointer) | Event::PointerEnter(pointer) = &input
+                    && let Some(cursor) = self.panel.cursor(pointer.position)
+                {
+                    window.set_cursor(cursor);
+                }
+                self.panel.handle(&input, now)
+            }
+            WindowEvent::Accessibility(request) => self.panel.perform(&request, now),
+            _ => false,
+        };
+        self.act(window);
+        handled
+    }
+
+    fn set_appearance(&mut self, appearance: Appearance) {
+        self.panel.set_appearance(appearance);
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        self.panel.sources()
+    }
+
+    fn source_ready(&mut self, _window: &mut Window, index: usize) -> bool {
+        self.panel.source_ready(index)
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.panel.deadline()
+    }
+
+    fn tick(&mut self, window: &mut Window, now: Instant) -> bool {
+        let ticked = self.panel.tick(now);
+        self.act(window);
+        ticked
+    }
+
+    fn animating(&self) -> bool {
+        self.panel.animating(frame_time().presentation)
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        self.panel.accessibility()
+    }
+}
+
+impl View for BrowserPane {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let full_screen = window.header_height() == 0;
         window.set_frame_regions(frame_regions(full_screen));
@@ -166,6 +349,8 @@ struct Files {
     recent_folders: Vec<PathBuf>,
     history: Rc<RefCell<History>>,
     trash: Trash,
+    quick_look: QuickLookLink,
+    panel: Option<WindowId>,
 }
 
 fn bookmarks_file() -> Option<PathBuf> {
@@ -265,7 +450,7 @@ impl Files {
         }
         self.settings = settings;
         for id in cx.windows().collect::<Vec<_>>() {
-            if let Some((window, pane)) = cx.window(id) {
+            if let Some((window, pane)) = browser(cx, id) {
                 pane.view.apply_settings(&self.settings);
                 window.request_redraw();
             }
@@ -279,7 +464,7 @@ impl Files {
         };
         self.search_excluded = latest;
         for id in cx.windows().collect::<Vec<_>>() {
-            if let Some((window, pane)) = cx.window(id) {
+            if let Some((window, pane)) = browser(cx, id) {
                 pane.view.set_search_excluded(self.search_excluded.clone());
                 window.request_redraw();
             }
@@ -335,7 +520,7 @@ impl Files {
         let failures = self.ejects.as_mut().map(Inbox::drain).unwrap_or_default();
         let shown = cx.focused().or_else(|| cx.windows().next());
         for failure in failures {
-            if let Some((window, pane)) = shown.and_then(|id| cx.window(id)) {
+            if let Some((window, pane)) = shown.and_then(|id| browser(cx, id)) {
                 pane.view.present_eject_failure(failure);
                 window.request_redraw();
             }
@@ -364,7 +549,7 @@ impl Files {
         }
         let sidebar = sidebar(&self.home);
         for id in cx.windows().collect::<Vec<_>>() {
-            if let Some((window, pane)) = cx.window(id) {
+            if let Some((window, pane)) = browser(cx, id) {
                 pane.view.set_sidebar(sidebar.rows.clone());
                 pane.view
                     .set_hidden_places(sidebar.hidden.clone(), sidebar.volumes_shown);
@@ -463,21 +648,76 @@ impl Files {
         }
         view.set_media(media_roots(&std::env::var("USER").unwrap_or_default()));
         let title = view.title();
+        view.set_quick_look(Rc::clone(&self.quick_look));
         let window = cx.open(Kind::Main, &title.clone(), WINDOW_SIZE, |appearance| {
             view.set_appearance(appearance);
-            Pane { view, title }
+            Pane::Browser(Box::new(BrowserPane { view, title }))
         })?;
         Ok(window)
     }
 
+    fn show_quick_look(&mut self, cx: &mut Cx<Self>) {
+        if self.panel.is_some_and(|panel| cx.view(panel).is_some()) {
+            return;
+        }
+        let link = Rc::clone(&self.quick_look);
+        let (width, height) = remembered_size();
+        let size = (width.round() as u32, height.round() as u32);
+        match cx.open(
+            Kind::Panel(QUICK_LOOK),
+            &L10N.tr("menu-quick-look"),
+            size,
+            |appearance| {
+                Pane::QuickLook(Box::new(QuickLookPane {
+                    panel: Panel::new(link, TextSystem::new(), appearance, true),
+                }))
+            },
+        ) {
+            Ok(panel) => self.panel = Some(panel),
+            Err(error) => tracing::warn!("cannot show Quick Look: {error}"),
+        }
+    }
+
+    fn copy_from_quick_look(&mut self, cx: &mut Cx<Self>) {
+        let Some(path) = self.quick_look.borrow_mut().take_copied() else {
+            return;
+        };
+        let key = cx.focused().filter(|id| browser(cx, *id).is_some());
+        if let Some((window, _)) = key.and_then(|id| browser(cx, id)) {
+            window.copy_transfer(Transfer::uris(vec![file_uri(&path)]));
+        }
+    }
+
+    fn place_quick_look(&mut self, cx: &mut Cx<Self>, owner: WindowId) {
+        let Some(panel) = self.panel.filter(|_| browser(cx, owner).is_some()) else {
+            return;
+        };
+        let Some(rect) = self.quick_look.borrow_mut().take_origin() else {
+            return;
+        };
+        let Some(anchor) = browser(cx, owner).and_then(|(window, _)| window.anchor(rect)) else {
+            return;
+        };
+        if let Some((window, _)) = cx.window(panel)
+            && let Err(error) = window.set_panel_origin(&anchor)
+        {
+            tracing::warn!("Quick Look cannot zoom from the item: {error}");
+        }
+    }
+
     fn serve(&mut self, cx: &mut Cx<Self>, id: WindowId, request: Request) {
+        if let Request::ShowQuickLook = request {
+            self.show_quick_look(cx);
+            self.place_quick_look(cx, id);
+            return;
+        }
         if let Request::NewWindow = request {
             if let Err(error) = self.open_window(cx, &[], None) {
                 tracing::warn!("cannot open a window: {error}");
             }
             return;
         }
-        let Some((window, pane)) = cx.window(id) else {
+        let Some((window, pane)) = browser(cx, id) else {
             return;
         };
         match request {
@@ -527,7 +767,7 @@ impl Files {
             }
             Request::Eject(volume) => self.eject(volume, false),
             Request::ForceEject(volume) => self.eject(volume, true),
-            Request::NewWindow => {}
+            Request::NewWindow | Request::ShowQuickLook => {}
             Request::OpenTerminal(folder) => open_terminal(window, &folder),
             Request::EditSidebar(edit) => {
                 if let Err(error) = edit_sidebar(&self.home, &edit) {
@@ -601,6 +841,8 @@ impl Program for Files {
             recent_folders,
             history: Rc::default(),
             trash,
+            quick_look: QuickLookLink::default(),
+            panel: None,
         };
         match arguments.iter().any(|argument| argument == SERVICE_FLAG) {
             true => files.wait_for_show(cx),
@@ -615,7 +857,12 @@ impl Program for Files {
     fn menus(&self, cx: &Cx<Self>) -> Menus {
         cx.focused()
             .and_then(|id| cx.view(id))
-            .or_else(|| cx.windows().last().and_then(|id| cx.view(id)))
+            .and_then(Pane::browser)
+            .or_else(|| {
+                cx.windows()
+                    .filter_map(|id| cx.view(id).and_then(Pane::browser))
+                    .last()
+            })
             .map_or_else(menu_bar::windowless_menus, |pane| {
                 menu_bar::app_menus(&pane.view, &self.recent_folders)
             })
@@ -628,7 +875,9 @@ impl Program for Files {
             cx.refresh_menus();
             return;
         }
-        let Some(window) = window.filter(|window| cx.view(*window).is_some()) else {
+        let Some(window) =
+            window.filter(|window| cx.view(*window).and_then(Pane::browser).is_some())
+        else {
             if command == menu_bar::NEW_WINDOW {
                 self.reopen(cx);
             }
@@ -638,7 +887,7 @@ impl Program for Files {
             .strip_prefix(menu_bar::RECENT_FOLDER)
             .and_then(|index| index.parse::<usize>().ok())
             .and_then(|index| self.recent_folders.get(index).cloned());
-        let Some((shown, pane)) = cx.window(window) else {
+        let Some((shown, pane)) = browser(cx, window) else {
             return;
         };
         if let Some(folder) = recent {
@@ -671,14 +920,14 @@ impl Program for Files {
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
-        let requests = cx
-            .window(window)
+        self.copy_from_quick_look(cx);
+        let requests = browser(cx, window)
             .map(|(_, pane)| pane.view.take_requests())
             .unwrap_or_default();
         for request in requests {
             self.serve(cx, window, request);
         }
-        if let Some((shown, pane)) = cx.window(window) {
+        if let Some((shown, pane)) = browser(cx, window) {
             let title = pane.view.title();
             if title != pane.title {
                 shown.set_title(&title);
@@ -690,10 +939,17 @@ impl Program for Files {
             shown.set_cursor(pane.view.cursor());
             shown.request_redraw();
         }
+        self.place_quick_look(cx, window);
         cx.refresh_menus();
     }
 
-    fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, _view: Pane) {
+    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, _view: Pane) {
+        if self.panel == Some(window) {
+            self.panel = None;
+            if self.quick_look.borrow().is_open() {
+                self.show_quick_look(cx);
+            }
+        }
         self.remember_recent_folders();
     }
 
@@ -703,8 +959,7 @@ impl Program for Files {
     }
 
     fn close_tab(&mut self, cx: &mut Cx<Self>, window: WindowId) -> bool {
-        let closed = cx
-            .window(window)
+        let closed = browser(cx, window)
             .is_some_and(|(_, pane)| pane.view.close_tab(pane.view.active_tab()));
         if closed {
             self.changed(cx, window);
@@ -868,10 +1123,8 @@ fn start_location(
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    if let [flag, path] = arguments.as_slice()
-        && flag == WORKER_FLAG
-    {
-        return run_pdf_worker(Path::new(path));
+    if let Some(code) = serve_worker(&arguments) {
+        return code;
     }
     bande_app::run::<Files>(&INFO)
 }

@@ -1,10 +1,12 @@
 mod ipp;
+mod mechanism;
 mod nearby;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub use ipp::{Error, Result};
+pub use mechanism::{Mechanism, mechanism_available};
 pub use nearby::{NearbyPrinter, browse};
 
 use ipp::{Group, KEYWORD, PRINTER, Request, URI};

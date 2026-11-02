@@ -68,14 +68,11 @@ pub(crate) enum Signal {
     HideExtension(bool),
 }
 
-const QUICK_LOOK_PART: u64 = u32::MAX as u64 - 1;
-
 pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Press {
     Ui,
-    QuickLook,
     Table {
         rename: Option<PathBuf>,
     },
@@ -342,33 +339,22 @@ impl FilesView {
         }
         match event {
             Event::Key { key, modifiers } => self.route_key(*key, *modifiers),
-            Event::PointerDown(_) if self.quick_look_event(event) => {
-                self.press = Some(Press::QuickLook);
-                true
-            }
             Event::PointerDown(pointer) => self.pointer_down(event, pointer),
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => match self.press {
-                Some(Press::QuickLook) => self.quick_look_event(event),
                 Some(Press::Ui | Press::Table { .. }) => self.ui.handle(event),
                 Some(Press::Item { at, .. }) => self.maybe_drag(at, pointer),
                 Some(Press::Band) => self.band_moved(pointer),
                 Some(Press::Place { index, at }) => self.reorder_moved(index, at, pointer),
                 Some(_) => false,
-                None => {
-                    self.quick_look_event(event) | self.ui.handle(event) | self.files_hover(pointer)
-                }
+                None => self.ui.handle(event) | self.files_hover(pointer),
             },
-            Event::PointerUp(_) if self.press == Some(Press::QuickLook) => {
-                self.press = None;
-                self.quick_look_event(event)
-            }
             Event::PointerUp(_) => self.pointer_up(event),
             Event::PointerLeave => {
                 self.press = None;
                 self.ui.handle(event) | self.leave()
             }
             Event::Scroll(scroll) => {
-                self.quick_look_event(event)
+                self.ui.handle(event)
                     || self.ui.handle(event)
                     || (!self.over_control(scroll.position) && self.files_scroll(scroll))
             }
@@ -386,7 +372,7 @@ impl FilesView {
         if self.search_focused() {
             return self.search_key(key, modifiers);
         }
-        if self.quick_look.is_some() && self.quick_look_key(key, modifiers) {
+        if self.quick_look_key(key, modifiers) {
             return true;
         }
         if self.mode == ViewMode::List
@@ -546,13 +532,6 @@ impl FilesView {
         let mut tree = self.ui.accessibility();
         if self.mode != ViewMode::List {
             self.describe_items(&mut tree);
-        }
-        if let Some(shown) = &self.quick_look {
-            let id = self.table.part(QUICK_LOOK_PART);
-            if let Some((_, root)) = tree.nodes.first_mut() {
-                root.push_child(id);
-            }
-            tree.nodes.push((id, shown.access()));
         }
         tree
     }
@@ -1207,7 +1186,7 @@ impl FilesView {
         cancel: Option<WidgetId>,
     ) {
         self.finish_rename(false);
-        self.quick_look = None;
+        self.close_quick_look();
         self.ui.present_sheet(widget);
         self.ui
             .layout(Size::new(self.size.0.max(1.0), self.size.1.max(1.0)));

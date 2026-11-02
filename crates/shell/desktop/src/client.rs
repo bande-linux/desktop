@@ -11,8 +11,6 @@ use std::time::{Instant, SystemTime};
 
 use crate::confirm::{CONFIRM_EXTENSION_FLAG, FORCE_EJECT, confirm_extension_change, eject_failed};
 use crate::places::{Listing, SETTINGS_FOLDER, Shown, start_lister};
-use crate::quick_look::QuickLookLink;
-use crate::view::QuickLookState;
 use crate::{
     Artwork, Bounds, CONFIRM_DELETE_FLAG, DesktopView, EJECT_FAILED_FLAG, Item, Kind, Layer,
     Layouts, Luma, MenuApp, Request, Selection, WallpaperKey, command, confirm_delete,
@@ -25,7 +23,7 @@ use bande_fs::{
     Task, Trash,
 };
 use bande_inbox::{Inbox, Outbox};
-use bande_quick_look::Subject;
+use bande_quick_look::{QuickLookLink, Subject};
 use bande_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
 use bande_toolkit::ui::frame_time;
 use bande_toolkit::{
@@ -611,12 +609,6 @@ impl DesktopSurface {
         let Some(link) = self.quick_look.clone() else {
             return;
         };
-        let state = match (link.borrow().is_shown(), link.borrow().is_multiple()) {
-            (false, _) => QuickLookState::Closed,
-            (true, false) => QuickLookState::Single,
-            (true, true) => QuickLookState::Multiple,
-        };
-        self.view.set_quick_look(state);
         let Some(shown) = link.borrow().follows().cloned() else {
             return;
         };
@@ -629,9 +621,6 @@ impl DesktopSurface {
             }
             [] => link.borrow_mut().close(),
             _ => {}
-        }
-        if !link.borrow().is_shown() {
-            self.view.set_quick_look(QuickLookState::Closed);
         }
     }
 
@@ -1252,8 +1241,9 @@ impl DesktopSurface {
             scheme: appearance.scheme,
             viewport: None,
             confirming: None,
-            quick_look,
+            quick_look: quick_look.clone(),
         };
+        surface.view.set_quick_look(quick_look);
         let folder = surface.desktop_dir.clone();
         surface.view.set_folder(folder);
         Ok(surface)

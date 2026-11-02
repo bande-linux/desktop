@@ -305,11 +305,11 @@ impl State {
         };
         let real = rect.to_f64();
         self.windows[index].motion = None;
-        self.animate_window(
-            index,
-            Spring::STANDARD,
-            Some(Look::hidden(real).scaled(OPENING_SCALE)),
-        );
+        let from = match self.windows[index].origin {
+            Some(origin) => Look::hidden(origin),
+            None => Look::hidden(real).scaled(OPENING_SCALE),
+        };
+        self.animate_window(index, Spring::STANDARD, Some(from));
     }
 
     pub(crate) fn restore_window(&mut self, index: usize) {
@@ -334,10 +334,10 @@ impl State {
             return;
         };
         let from = drawn.look;
-        let (to, spring) = if self.reduce_motion {
-            (Look::hidden(from.rect), Spring::FADE)
-        } else {
-            (Look::hidden(from.rect).scaled(CLOSING_SCALE), Spring::QUICK)
+        let (to, spring) = match (self.reduce_motion, window.origin) {
+            (true, _) => (Look::hidden(from.rect), Spring::FADE),
+            (false, Some(origin)) => (Look::hidden(origin), Spring::QUICK),
+            (false, None) => (Look::hidden(from.rect).scaled(CLOSING_SCALE), Spring::QUICK),
         };
         self.closing
             .push(Closing::new(drawn, Motion::new(spring, from, to), output));

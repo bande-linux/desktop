@@ -398,11 +398,7 @@ impl Icons {
     }
 
     fn set_appearance(&mut self, appearance: Appearance) {
-        let themes = vec![
-            icon_theme(appearance.accent),
-            "Bande".to_owned(),
-            "Adwaita".to_owned(),
-        ];
+        let themes = vec![icon_theme(appearance.accent), "Bande".to_owned()];
         if themes != self.themes {
             self.themes = themes;
             self.loaded.clear();

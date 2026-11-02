@@ -21,6 +21,7 @@ pub enum Block {
     Bullet(String),
     Quote(String),
     Code(String),
+    Plain(String),
     Rule,
 }
 

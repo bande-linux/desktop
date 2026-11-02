@@ -1,4 +1,3 @@
-pub mod accounts;
 pub mod backlight;
 pub mod captive;
 pub mod clock;
@@ -17,6 +16,8 @@ pub mod tray;
 pub mod unread;
 
 mod command;
+
+pub use bande_bus::accounts;
 
 use std::sync::LazyLock;
 

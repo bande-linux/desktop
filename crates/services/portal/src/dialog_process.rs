@@ -1,18 +1,30 @@
 use std::ffi::{OsStr, OsString};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{ChildStdin, Command, Stdio};
+use std::sync::mpsc::Receiver;
+use std::thread;
 
 use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open, pidfd_send_signal};
 
-use crate::file_chooser::{Dialog, FileChooserUi, Filter, Mode, Outcome, Pattern, Selection};
+use crate::access::{AccessUi, Answer, Question};
+use crate::account::{AccountUi, Details, Shared};
+use crate::app_chooser::{AppChooserUi, Offer, Picked};
+use crate::dynamic_launcher::{Confirmed, Launcher, LauncherUi};
+use crate::file_chooser::{
+    Choice, Dialog, FileChooserUi, Filter, Mode, Outcome, Pattern, Selection,
+};
 use crate::request::Cancellation;
 use crate::wallpaper::WallpaperUi;
 
 pub const DIALOG_PROGRAM: &str = "/usr/libexec/bande-file-chooser";
 pub const CHOSEN: u8 = 0;
 pub const CANCELLED: u8 = 1;
+pub const ACCESS: &str = "--access";
+pub const CHOOSE_APP: &str = "--choose-app";
+pub const CREATE_LAUNCHER: &str = "--create-launcher";
+pub const SHARE_ACCOUNT: &str = "--share-account";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArgumentError(pub String);
@@ -223,15 +235,29 @@ pub struct DialogProcess {
     pub program: PathBuf,
 }
 
+type Feed = Box<dyn FnOnce(ChildStdin) + Send>;
+
 impl DialogProcess {
     fn show(
         &self,
         arguments: Vec<OsString>,
         cancellation: &Cancellation,
     ) -> Option<(Option<i32>, Vec<u8>)> {
+        self.show_fed(arguments, None, cancellation)
+    }
+
+    fn show_fed(
+        &self,
+        arguments: Vec<OsString>,
+        feed: Option<Feed>,
+        cancellation: &Cancellation,
+    ) -> Option<(Option<i32>, Vec<u8>)> {
         let child = Command::new(&self.program)
             .args(arguments)
-            .stdin(Stdio::null())
+            .stdin(match feed {
+                Some(_) => Stdio::piped(),
+                None => Stdio::null(),
+            })
             .stdout(Stdio::piped())
             .spawn();
         let mut child = match child {
@@ -241,6 +267,9 @@ impl DialogProcess {
                 return None;
             }
         };
+        if let (Some(feed), Some(stdin)) = (feed, child.stdin.take()) {
+            thread::spawn(move || feed(stdin));
+        }
         match pidfd_open(Pid::from_child(&child), PidfdFlags::empty()) {
             Ok(process) => cancellation.on_cancel(move || {
                 let _ = pidfd_send_signal(&process, Signal::TERM);
@@ -284,5 +313,337 @@ impl WallpaperUi for DialogProcess {
             self.show(arguments, cancellation),
             Some((Some(code), _)) if code == i32::from(CHOSEN)
         )
+    }
+}
+
+fn text(value: OsString) -> String {
+    value.to_string_lossy().into_owned()
+}
+
+pub fn encode_pairs(pairs: &[(String, String)]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    for (key, value) in pairs {
+        for part in [key, value] {
+            bytes.extend_from_slice(part.as_bytes());
+            bytes.push(0);
+        }
+    }
+    bytes
+}
+
+pub fn decode_pairs(bytes: &[u8]) -> Vec<(String, String)> {
+    let parts: Vec<String> = bytes
+        .split(|byte| *byte == 0)
+        .map(|part| String::from_utf8_lossy(part).into_owned())
+        .collect();
+    parts
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|[key, value]| (key.clone(), value.clone()))
+        .collect()
+}
+
+pub fn access_arguments(question: &Question) -> Vec<OsString> {
+    let mut arguments = vec![
+        os(ACCESS),
+        os("--app-id"),
+        os(&question.app_id),
+        os("--title"),
+        os(&question.title),
+        os("--subtitle"),
+        os(&question.subtitle),
+        os("--body"),
+        os(&question.body),
+    ];
+    for (flag, value) in [
+        ("--deny-label", &question.deny_label),
+        ("--grant-label", &question.grant_label),
+        ("--icon", &question.icon),
+    ] {
+        if let Some(value) = value {
+            arguments.extend([os(flag), os(value)]);
+        }
+    }
+    for choice in &question.choices {
+        arguments.extend([
+            os("--choice"),
+            os(&choice.id),
+            os(&choice.label),
+            os(&choice.initial),
+        ]);
+        for (id, label) in &choice.options {
+            arguments.extend([os("--option"), os(id), os(label)]);
+        }
+    }
+    arguments
+}
+
+pub fn parse_access(
+    arguments: impl IntoIterator<Item = OsString>,
+) -> Result<Question, ArgumentError> {
+    let mut question = Question::default();
+    let mut arguments = arguments.into_iter();
+    while let Some(argument) = arguments.next() {
+        let flag = text(argument);
+        let mut value = || {
+            arguments
+                .next()
+                .map(text)
+                .ok_or_else(|| ArgumentError(format!("{flag} needs a value")))
+        };
+        match flag.as_str() {
+            ACCESS => {}
+            "--app-id" => question.app_id = value()?,
+            "--title" => question.title = value()?,
+            "--subtitle" => question.subtitle = value()?,
+            "--body" => question.body = value()?,
+            "--deny-label" => question.deny_label = Some(value()?),
+            "--grant-label" => question.grant_label = Some(value()?),
+            "--icon" => question.icon = Some(value()?),
+            "--choice" => question.choices.push(Choice {
+                id: value()?,
+                label: value()?,
+                options: Vec::new(),
+                initial: value()?,
+            }),
+            "--option" => {
+                let option = (value()?, value()?);
+                question
+                    .choices
+                    .last_mut()
+                    .ok_or_else(|| ArgumentError("--option comes before --choice".to_owned()))?
+                    .options
+                    .push(option);
+            }
+            _ => return Err(ArgumentError(format!("unknown argument {flag}"))),
+        }
+    }
+    Ok(question)
+}
+
+pub fn app_chooser_arguments(offer: &Offer) -> Vec<OsString> {
+    let mut arguments = vec![os(CHOOSE_APP), os("--app-id"), os(&offer.app_id)];
+    for (flag, value) in [
+        ("--last-choice", &offer.last_choice),
+        ("--content-type", &offer.content_type),
+        ("--location", &offer.location),
+    ] {
+        if let Some(value) = value {
+            arguments.extend([os(flag), os(value)]);
+        }
+    }
+    for choice in &offer.choices {
+        arguments.extend([os("--app"), os(choice)]);
+    }
+    arguments
+}
+
+pub fn parse_app_chooser(
+    arguments: impl IntoIterator<Item = OsString>,
+) -> Result<Offer, ArgumentError> {
+    let mut offer = Offer::default();
+    let mut arguments = arguments.into_iter();
+    while let Some(argument) = arguments.next() {
+        let flag = text(argument);
+        let mut value = || {
+            arguments
+                .next()
+                .map(text)
+                .ok_or_else(|| ArgumentError(format!("{flag} needs a value")))
+        };
+        match flag.as_str() {
+            CHOOSE_APP => {}
+            "--app-id" => offer.app_id = value()?,
+            "--last-choice" => offer.last_choice = Some(value()?),
+            "--content-type" => offer.content_type = Some(value()?),
+            "--location" => offer.location = Some(value()?),
+            "--app" => offer.choices.push(value()?),
+            _ => return Err(ArgumentError(format!("unknown argument {flag}"))),
+        }
+    }
+    Ok(offer)
+}
+
+pub fn encode_choices(choices: &[String]) -> Vec<u8> {
+    let mut line = choices.join("\0").into_bytes();
+    line.push(b'\n');
+    line
+}
+
+pub fn decode_choices(line: &[u8]) -> Vec<String> {
+    line.split(|byte| *byte == 0)
+        .filter(|choice| !choice.is_empty())
+        .map(|choice| String::from_utf8_lossy(choice).into_owned())
+        .collect()
+}
+
+impl AccessUi for DialogProcess {
+    fn ask(&self, question: &Question, cancellation: &Cancellation) -> Answer {
+        match self.show(access_arguments(question), cancellation) {
+            Some((Some(code), output)) if code == i32::from(CHOSEN) => {
+                Answer::Granted(decode_pairs(&output))
+            }
+            Some((Some(code), _)) if code == i32::from(CANCELLED) => Answer::Denied,
+            Some(_) if cancellation.is_cancelled() => Answer::Denied,
+            _ => Answer::Unavailable,
+        }
+    }
+}
+
+impl AppChooserUi for DialogProcess {
+    fn choose(
+        &self,
+        offer: &Offer,
+        updates: Receiver<Vec<String>>,
+        cancellation: &Cancellation,
+    ) -> Picked {
+        let feed: Feed = Box::new(move |mut stdin| {
+            for choices in updates {
+                if stdin
+                    .write_all(&encode_choices(&choices))
+                    .and_then(|()| stdin.flush())
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+        match self.show_fed(app_chooser_arguments(offer), Some(feed), cancellation) {
+            Some((Some(code), output)) if code == i32::from(CHOSEN) => {
+                let mut pairs = decode_pairs(&output).into_iter();
+                match pairs.next() {
+                    Some((id, token)) if !id.is_empty() => Picked::App {
+                        id,
+                        activation_token: (!token.is_empty()).then_some(token),
+                    },
+                    _ => Picked::Unavailable,
+                }
+            }
+            Some((Some(code), _)) if code == i32::from(CANCELLED) => Picked::Cancelled,
+            Some(_) if cancellation.is_cancelled() => Picked::Cancelled,
+            _ => Picked::Unavailable,
+        }
+    }
+}
+
+pub fn launcher_arguments(launcher: &Launcher) -> Vec<OsString> {
+    let mut arguments = vec![
+        os(CREATE_LAUNCHER),
+        os("--app-id"),
+        os(&launcher.app_id),
+        os("--name"),
+        os(&launcher.name),
+    ];
+    if let Some(target) = &launcher.target {
+        arguments.extend([os("--target"), os(target)]);
+    }
+    if launcher.webapp {
+        arguments.push(os("--webapp"));
+    }
+    if !launcher.editable_name {
+        arguments.push(os("--fixed-name"));
+    }
+    arguments
+}
+
+pub fn parse_launcher(
+    arguments: impl IntoIterator<Item = OsString>,
+) -> Result<Launcher, ArgumentError> {
+    let mut launcher = Launcher {
+        editable_name: true,
+        ..Launcher::default()
+    };
+    let mut arguments = arguments.into_iter();
+    while let Some(argument) = arguments.next() {
+        let flag = text(argument);
+        let mut value = || {
+            arguments
+                .next()
+                .map(text)
+                .ok_or_else(|| ArgumentError(format!("{flag} needs a value")))
+        };
+        match flag.as_str() {
+            CREATE_LAUNCHER => {}
+            "--app-id" => launcher.app_id = value()?,
+            "--name" => launcher.name = value()?,
+            "--target" => launcher.target = Some(value()?),
+            "--webapp" => launcher.webapp = true,
+            "--fixed-name" => launcher.editable_name = false,
+            _ => return Err(ArgumentError(format!("unknown argument {flag}"))),
+        }
+    }
+    Ok(launcher)
+}
+
+impl LauncherUi for DialogProcess {
+    fn confirm(&self, launcher: &Launcher, cancellation: &Cancellation) -> Confirmed {
+        let icon = launcher.icon.clone();
+        let feed: Feed = Box::new(move |mut stdin| {
+            let _ = stdin.write_all(&icon);
+        });
+        match self.show_fed(launcher_arguments(launcher), Some(feed), cancellation) {
+            Some((Some(code), output)) if code == i32::from(CHOSEN) => {
+                Confirmed::Named(String::from_utf8_lossy(&output).into_owned())
+            }
+            Some((Some(code), _)) if code == i32::from(CANCELLED) => Confirmed::Cancelled,
+            Some(_) if cancellation.is_cancelled() => Confirmed::Cancelled,
+            _ => Confirmed::Unavailable,
+        }
+    }
+}
+
+pub fn account_arguments(details: &Details) -> Vec<OsString> {
+    let mut arguments = vec![
+        os(SHARE_ACCOUNT),
+        os("--app-id"),
+        os(&details.app_id),
+        os("--login"),
+        os(&details.login),
+        os("--name"),
+        os(&details.name),
+    ];
+    if let Some(reason) = &details.reason {
+        arguments.extend([os("--reason"), os(reason)]);
+    }
+    if let Some(picture) = &details.picture {
+        arguments.extend([os("--picture"), picture.clone().into_os_string()]);
+    }
+    arguments
+}
+
+pub fn parse_account(
+    arguments: impl IntoIterator<Item = OsString>,
+) -> Result<Details, ArgumentError> {
+    let mut details = Details::default();
+    let mut arguments = arguments.into_iter();
+    while let Some(argument) = arguments.next() {
+        let flag = text(argument);
+        let mut value = || {
+            arguments
+                .next()
+                .ok_or_else(|| ArgumentError(format!("{flag} needs a value")))
+        };
+        match flag.as_str() {
+            SHARE_ACCOUNT => {}
+            "--app-id" => details.app_id = text(value()?),
+            "--login" => details.login = text(value()?),
+            "--name" => details.name = text(value()?),
+            "--reason" => details.reason = Some(text(value()?)),
+            "--picture" => details.picture = Some(PathBuf::from(value()?)),
+            _ => return Err(ArgumentError(format!("unknown argument {flag}"))),
+        }
+    }
+    Ok(details)
+}
+
+impl AccountUi for DialogProcess {
+    fn share(&self, details: &Details, cancellation: &Cancellation) -> Shared {
+        match self.show(account_arguments(details), cancellation) {
+            Some((Some(code), _)) if code == i32::from(CHOSEN) => Shared::Yes,
+            Some((Some(code), _)) if code == i32::from(CANCELLED) => Shared::No,
+            Some(_) if cancellation.is_cancelled() => Shared::No,
+            _ => Shared::Unavailable,
+        }
     }
 }

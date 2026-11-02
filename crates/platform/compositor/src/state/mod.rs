@@ -150,6 +150,7 @@ pub struct State {
     pub(crate) assistive: crate::assistive::Assistive,
     pub(crate) keys: crate::access_keys::AccessKeys,
     pub(crate) keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor,
+    pub(crate) app_states: crate::app_states::AppStates,
     pub(crate) needs_redraw: bool,
     pub(crate) reveal: crate::reveal::Reveal,
     pub(crate) pointer_location: Point<f64, Logical>,
@@ -216,7 +217,7 @@ impl Compositor {
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, BandeShellV1, ()>(crate::menu_button::ACTIVE_MENUS_SINCE, ());
-        handle.create_global::<State, BandeAppV1, ()>(4, ());
+        handle.create_global::<State, BandeAppV1, ()>(6, ());
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
@@ -295,6 +296,7 @@ impl Compositor {
             assistive: crate::assistive::Assistive::default(),
             keys: crate::access_keys::AccessKeys::default(),
             keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor::default(),
+            app_states: crate::app_states::AppStates::default(),
             needs_redraw: false,
             reveal: crate::reveal::Reveal::default(),
             pointer_location: (center.w, center.h).into(),
@@ -371,6 +373,7 @@ impl Compositor {
         self.state.announce_windowless_apps();
         self.state.announce_apps_running();
         self.state.note_running_apps();
+        self.state.note_app_states();
         self.state.popups.cleanup();
         self.state.end_orphaned_drag();
         self.state.keep_families_together();

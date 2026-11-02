@@ -87,8 +87,10 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 
 - `bande-shell` recommends NetworkManager (network menu) with Debian's connectivity check
   (captive portals), UPower (battery), BlueZ (Bluetooth), PipeWire and WirePlumber (volume),
-  `xdg-user-dirs` (the Desktop and the folders Files shows) and the Adwaita icon theme (the icon
-  fallback after Bande's own theme); `bande-settings` adds AccountsService (Users), PackageKit
+  `xdg-user-dirs` (the Desktop and the folders Files shows); Bande's own icon theme falls back
+  only to `hicolor`, so no GNOME icon theme comes along; `bande-compositor` recommends
+  `dmz-cursor-theme`, whose `DMZ-Black` is the default pointer (`XCURSOR_THEME` unset), with the
+  system's `default` cursor theme as the fallback; `bande-settings` adds AccountsService (Users), PackageKit
   (Software Update), power-profiles-daemon (Power) and depends on `locales`, so localed can
   generate any language picked in Settings;
 - `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc` and the H.264 and VP8 encoders
@@ -96,8 +98,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`;
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides
-  `xdg-desktop-portal-backend` and recommends `xdg-desktop-portal-gtk` for the interfaces it does
-  not implement yet (AppChooser and so OpenURI, Access, Inhibit, Print, Email, Account);
+  `xdg-desktop-portal-backend` and serves every interface itself (no `xdg-desktop-portal-gtk`);
 - `mesa-vulkan-drivers` and `libvulkan1` come with `bande-compositor`.
 
 After each dpkg run, `restart-services` (`DPkg::Post-Invoke` in

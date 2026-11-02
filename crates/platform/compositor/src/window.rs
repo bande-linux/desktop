@@ -39,6 +39,8 @@ pub struct Window {
     pub(crate) tag: String,
     pub(crate) parent_anchor: Option<Point<i32, Logical>>,
     pub(crate) keep_on_top: bool,
+    pub(crate) panel: bool,
+    pub(crate) origin: Option<Rectangle<f64, Logical>>,
     pub(crate) frame: Frame,
     pub(crate) menu_button: Option<Rectangle<i32, Logical>>,
 }
@@ -119,6 +121,8 @@ impl Window {
             tag: String::new(),
             parent_anchor: None,
             keep_on_top: false,
+            panel: false,
+            origin: None,
             frame: Frame::default(),
             menu_button: None,
         }
@@ -346,6 +350,11 @@ impl State {
                     at
                 } else if let Some(at) = window.recalled.take() {
                     crate::recall::clamp_into(Rectangle::new(at, geometry.size), area).loc
+                } else if window.panel {
+                    Point::from((
+                        area.loc.x + (area.size.w - geometry.size.w).max(0) / 2,
+                        area.loc.y + (area.size.h - geometry.size.h).max(0) / 2,
+                    ))
                 } else {
                     crate::cascade::cascaded(area, geometry.size, &siblings)
                 };
@@ -597,7 +606,7 @@ impl State {
                 });
                 self.windows[index].configure();
             }
-            if self.windows[index].size.is_some() {
+            if self.windows[index].size.is_some() && !self.windows[index].panel {
                 self.enter_full_screen_space(index);
             }
         }

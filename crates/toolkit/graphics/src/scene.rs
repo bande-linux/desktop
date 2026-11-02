@@ -224,7 +224,11 @@ impl Image {
         if path.extension().is_some_and(|extension| extension == "svg") {
             return Self::from_svg(&bytes, size, size);
         }
-        let decoded = image::load_from_memory(&bytes).ok()?.to_rgba8();
+        Self::decode(&bytes, size)
+    }
+
+    pub fn decode(bytes: &[u8], size: u32) -> Option<Self> {
+        let decoded = image::load_from_memory(bytes).ok()?.to_rgba8();
         let (width, height) = decoded.dimensions();
         let shorter = width.min(height);
         let decoded = if shorter > size {

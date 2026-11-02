@@ -3,7 +3,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 
 use bande_packages::{Client, Info, Mode};
-use bande_printers::{Cups, Job, JobState, NearbyPrinter, Printer, PrinterState, SPOOLER, browse};
+use bande_printers::{
+    Cups, Job, JobState, Mechanism, NearbyPrinter, Printer, PrinterState, SPOOLER, browse,
+    mechanism_available,
+};
 use bande_settings_panes::PaneId;
 use bande_toolkit::Spacing;
 use bande_toolkit::TextRole;
@@ -24,7 +27,7 @@ use crate::widgets::{Caption, Card, HEADER_SYMBOL, Header, Row, Text, Tone};
 pub(crate) const PRINTER_SYMBOL: &str = "printer-symbolic";
 const FORBIDDEN: &str = "Forbidden";
 const PRINTER_ADMINS: &str = "lpadmin";
-const PRINTING_PACKAGE: &str = "cups";
+const PRINTING_PACKAGES: [&str; 2] = ["cups", "cups-pk-helper"];
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct PrintersState {
@@ -45,14 +48,14 @@ pub enum PrinterCommand {
     InstallPrinting,
 }
 
-fn read(cups: &Cups) -> Option<PrintersState> {
+fn read(cups: &Cups, system: &Connection) -> Option<PrintersState> {
     if !cups.installed() {
         return Some(PrintersState::default());
     }
     match (cups.printers(), cups.jobs()) {
         (Ok(printers), Ok(jobs)) => Some(PrintersState {
             installed: true,
-            may_change: may_change(),
+            may_change: administers_printers() || mechanism_available(system),
             printers,
             jobs,
         }),
@@ -65,12 +68,15 @@ fn read(cups: &Cups) -> Option<PrintersState> {
 
 fn install_printing(system: &Connection) -> Result<(), bande_packages::Error> {
     let client = Client::new(system);
-    let ids: Vec<String> = client
-        .resolve(&[PRINTING_PACKAGE.to_owned()])?
+    let available: Vec<_> = client
+        .resolve(&PRINTING_PACKAGES.map(str::to_owned))?
         .into_iter()
         .filter(|package| package.info == Info::Available)
-        .map(|package| package.id)
-        .take(1)
+        .collect();
+    let ids: Vec<String> = PRINTING_PACKAGES
+        .iter()
+        .filter_map(|name| available.iter().find(|package| package.name == *name))
+        .map(|package| package.id.clone())
         .collect();
     if ids.is_empty() {
         return Ok(());
@@ -78,13 +84,26 @@ fn install_printing(system: &Connection) -> Result<(), bande_packages::Error> {
     client.install(&ids, Mode::Apply, &|_| {}).map(drop)
 }
 
-fn may_change() -> bool {
+fn administers_printers() -> bool {
     let members = members_of(&[PRINTER_ADMINS]);
     rustix::process::getuid().is_root()
         || accounts()
             .into_iter()
             .find(|account| account.you)
             .is_some_and(|you| members.contains(&you.login))
+}
+
+fn administer<T>(
+    system: &Connection,
+    direct: impl FnOnce() -> bande_printers::Result<T>,
+    authorized: impl FnOnce(&Mechanism) -> bande_printers::Result<T>,
+) -> bande_printers::Result<T> {
+    match direct() {
+        Err(bande_printers::Error::NotAllowed) if !administers_printers() => {
+            Mechanism::new(system).and_then(|mechanism| authorized(&mechanism))
+        }
+        other => other,
+    }
 }
 
 fn sentence(error: &bande_printers::Error) -> String {
@@ -100,11 +119,12 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
     let (sender, receiver) = mpsc::channel();
     let (changed, changes) = mpsc::channel::<()>();
     let reader = updates.clone();
+    let reading = system.clone();
     spawn("printers", move || {
         while changes.recv().is_ok() {
             std::thread::sleep(SETTLE);
             changes.try_iter().count();
-            if let Some(state) = read(&Cups::new())
+            if let Some(state) = read(&Cups::new(), &reading)
                 && !reader.send(Update::Printers(state))
             {
                 break;
@@ -153,16 +173,28 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
                     }
                     Ok(())
                 }
-                PrinterCommand::SetDefault(name) => {
-                    cups.set_default(&name).map_err(|error| sentence(&error))
+                PrinterCommand::SetDefault(name) => administer(
+                    &bus,
+                    || cups.set_default(&name),
+                    |mechanism| mechanism.set_default(&name),
+                )
+                .map_err(|error| sentence(&error)),
+                PrinterCommand::Remove(name) => administer(
+                    &bus,
+                    || cups.remove(&name),
+                    |mechanism| mechanism.remove(&name),
+                )
+                .map_err(|error| sentence(&error)),
+                PrinterCommand::Pause(name, paused) => administer(
+                    &bus,
+                    || cups.pause(&name, paused),
+                    |mechanism| mechanism.pause(&name, paused),
+                )
+                .map_err(|error| sentence(&error)),
+                PrinterCommand::Cancel(job) => {
+                    administer(&bus, || cups.cancel(job), |mechanism| mechanism.cancel(job))
+                        .map_err(|error| sentence(&error))
                 }
-                PrinterCommand::Remove(name) => {
-                    cups.remove(&name).map_err(|error| sentence(&error))
-                }
-                PrinterCommand::Pause(name, paused) => {
-                    cups.pause(&name, paused).map_err(|error| sentence(&error))
-                }
-                PrinterCommand::Cancel(job) => cups.cancel(job).map_err(|error| sentence(&error)),
                 PrinterCommand::InstallPrinting => {
                     let installed = install_printing(&bus);
                     updates.send(Update::PrintingInstalled);
@@ -172,14 +204,26 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
                     })
                 }
                 PrinterCommand::Add(printer) => {
-                    let added = cups.add(&printer);
+                    let added = administer(
+                        &bus,
+                        || {
+                            cups.add(&printer).map_err(|error| {
+                                match error.to_string().contains(FORBIDDEN) {
+                                    true => bande_printers::Error::NotAllowed,
+                                    false => bande_printers::Error::Io(error),
+                                }
+                            })
+                        },
+                        |mechanism| mechanism.add(&printer),
+                    );
                     updates.send(Update::PrinterAdded(printer.uri.clone(), added.is_ok()));
                     added.map(drop).map_err(|error| {
                         tracing::warn!("cannot add {}: {error}", printer.uri);
-                        if error.to_string().contains(FORBIDDEN) {
-                            L10N.tr("printer-forbidden")
-                        } else {
-                            L10N.tr_args("printer-add-failed", [("name", printer.name.into())])
+                        match error {
+                            bande_printers::Error::NotAllowed => L10N.tr("printer-forbidden"),
+                            _ => {
+                                L10N.tr_args("printer-add-failed", [("name", printer.name.into())])
+                            }
                         }
                     })
                 }

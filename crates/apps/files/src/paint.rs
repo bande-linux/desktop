@@ -187,7 +187,6 @@ impl FilesView {
             items: overlays,
         });
         self.paint_notice(&mut items);
-        self.paint_quick_look(&mut items);
         items.extend(sheet);
         self.want_thumbnails();
         Scene {

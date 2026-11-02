@@ -59,7 +59,7 @@ def main():
         write('Bande', directory, icons)
         directories.append((directory, context, 16))
     with open(os.path.join(ICONS, 'Bande', 'index.theme'), 'w') as out:
-        out.write(index('Bande', 'The Bande desktop icons in the Datum language', 'Adwaita,hicolor', directories))
+        out.write(index('Bande', 'The Bande desktop icons in the Datum language', 'hicolor', directories))
     for accent, icons in places.ACCENT_VARIANTS.items():
         theme = f'Bande-{accent.capitalize()}'
         write(theme, 'scalable/places', icons)

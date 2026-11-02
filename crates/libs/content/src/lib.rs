@@ -5,10 +5,10 @@ mod text;
 
 use std::fs::{self, File};
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub use bande_fs::Contents;
-use bande_fs::{Entry, archive_contents, can_extract, is_hidden};
+use bande_fs::{Entry, can_extract, is_hidden};
 
 pub use decode::{
     Decoded, Failure, Frame, Kind, Level, MAX_FILE_BYTES, MAX_PIXELS, Pixels, decode, decode_file,
@@ -32,17 +32,19 @@ pub enum Preview<I> {
 pub const TEXT_BYTES: u64 = 1 << 20;
 const DOCUMENT_BYTES: usize = 256 << 10;
 const LONGEST_LINE: usize = 4096;
-const FONT_BYTES: u64 = 64 << 20;
-const ARCHIVE_ENTRIES: u64 = 100_000;
+const WRAPPED_BYTES: usize = 64 << 10;
+const ADDRESS_SPACE: u64 = 6 << 30;
+const WORKER_VARIABLE: &str = "BANDE_PREVIEW_WORKER";
+const OWN_PROGRAM: &str = "/proc/self/exe";
 
 pub enum Content {
     Picture(Decoded),
     Pdf(std::path::PathBuf),
     Code(Code),
     Document(Vec<Block>),
-    Font(Vec<u8>),
+    Font,
     Folder { items: u64, bytes: Option<u64> },
-    Archive(Contents),
+    Archive,
     Media,
     Other,
 }
@@ -216,22 +218,13 @@ pub fn content(path: &Path, mime: &str, current: &dyn Fn() -> bool) -> Content {
         return Content::Picture(decoded);
     }
     if is_font(mime) {
-        return File::open(path)
-            .ok()
-            .and_then(|file| {
-                let mut bytes = Vec::new();
-                file.take(FONT_BYTES).read_to_end(&mut bytes).ok()?;
-                Some(Content::Font(bytes))
-            })
-            .unwrap_or(Content::Other);
+        return Content::Font;
     }
     if mime.starts_with("audio/") || mime.starts_with("video/") {
         return Content::Media;
     }
-    if can_extract(path)
-        && let Some(contents) = archive_contents(path, ARCHIVE_ENTRIES)
-    {
-        return Content::Archive(contents);
+    if can_extract(path) {
+        return Content::Archive;
     }
     let textual = is_text(mime) || is_code(&extension) || mime == "application/octet-stream";
     let Some(text) = textual.then(|| text_up_to(path, TEXT_BYTES)).flatten() else {
@@ -242,6 +235,9 @@ pub fn content(path: &Path, mime: &str, current: &dyn Fn() -> bool) -> Content {
         "text/markdown" | "text/x-markdown" => Content::Document(markdown(document)),
         "text/rtf" | "application/rtf" => Content::Document(rtf(document)),
         "text/html" | "application/xhtml+xml" => Content::Document(html(document)),
+        "text/plain" if !is_code(&extension) && text.len() <= WRAPPED_BYTES => {
+            Content::Document(vec![Block::Plain(text)])
+        }
         _ => Content::Code(highlight(broken_lines(text), &extension)),
     }
 }
@@ -263,4 +259,25 @@ fn broken_lines(text: String) -> String {
         broken.push_str(rest);
     }
     broken
+}
+
+pub fn worker_program() -> PathBuf {
+    std::env::var_os(WORKER_VARIABLE)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(OWN_PROGRAM))
+}
+
+pub fn confine() {
+    let limit = rustix::process::Rlimit {
+        current: Some(ADDRESS_SPACE),
+        maximum: Some(ADDRESS_SPACE),
+    };
+    if let Err(error) = rustix::process::setrlimit(rustix::process::Resource::As, limit) {
+        tracing::warn!("cannot limit a file reader's memory: {error}");
+    }
+    if let Err(error) =
+        rustix::process::set_parent_process_death_signal(Some(rustix::process::Signal::KILL))
+    {
+        tracing::warn!("cannot tie a file reader to its viewer: {error}");
+    }
 }

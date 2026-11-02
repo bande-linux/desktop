@@ -110,7 +110,7 @@ impl CursorSettings {
     pub fn from_environment() -> Self {
         let var = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
         Self {
-            theme: var("XCURSOR_THEME").unwrap_or_else(|| "default".to_owned()),
+            theme: var("XCURSOR_THEME").unwrap_or_else(|| "DMZ-Black".to_owned()),
         }
     }
 }

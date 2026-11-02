@@ -57,6 +57,14 @@ impl PdfView {
         self.session.phase()
     }
 
+    pub fn is_locked(&self) -> bool {
+        matches!(self.session.phase(), Phase::Locked { .. })
+    }
+
+    pub fn unlock(&mut self, password: &str) {
+        self.session.unlock(password);
+    }
+
     pub fn take(&mut self) -> bool {
         let mut changed = false;
         for change in self.session.take() {

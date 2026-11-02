@@ -13,7 +13,7 @@ use bande_fs::{
     can_extract,
 };
 use bande_preview::Preview;
-use bande_search::{Usage, recent_files};
+use bande_search::{Usage, recent_files, recently_used};
 use bande_thumbnails::Thumbnails;
 use bande_toolkit::ui::{
     ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, Modifiers, Pointer,
@@ -639,10 +639,10 @@ impl FilesView {
         let Some((xbel, usage)) = &self.recents else {
             return;
         };
-        let shared = std::fs::read_to_string(xbel).ok();
+        let shared = std::fs::read_to_string(xbel).unwrap_or_default();
         let usage = Usage::load(usage.clone());
         self.browser.set_recents(recent_files(
-            shared.as_deref(),
+            &recently_used(&shared),
             &usage,
             &self.search_excluded,
             MAX_RECENTS,

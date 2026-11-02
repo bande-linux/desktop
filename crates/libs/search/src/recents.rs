@@ -1,6 +1,11 @@
 use std::collections::HashMap;
+use std::io;
+use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
+use std::thread;
 
+use bande_inbox::{Inbox, Outbox};
+use bande_watch::{Changes, FolderWatch};
 use bande_xdg::path_from_file_uri;
 
 use crate::usage::Usage;
@@ -49,20 +54,73 @@ pub fn recently_used(xbel: &str) -> Vec<(PathBuf, u64)> {
         .collect()
 }
 
+pub type Recents = Vec<(PathBuf, u64)>;
+
+pub struct RecentlyUsed {
+    _watch: FolderWatch,
+    read: Inbox<Recents>,
+    recents: Recents,
+}
+
+fn read_recents(path: &Path, outbox: &Outbox<Recents>) {
+    let xbel = std::fs::read_to_string(path).unwrap_or_default();
+    outbox.send(recently_used(&xbel));
+}
+
+impl RecentlyUsed {
+    pub fn follow(path: PathBuf) -> io::Result<Self> {
+        let read = Inbox::new()?;
+        let (outbox, first) = (read.outbox(), read.outbox());
+        let watched = path.clone();
+        let watch = FolderWatch::spawn(Changes::Saved, move |changed| {
+            if changed.contains(&watched) {
+                read_recents(&watched, &outbox);
+            }
+        })?;
+        if let Some(folder) = path.parent() {
+            watch.watch(folder)?;
+        }
+        thread::Builder::new()
+            .name("recently-used".to_owned())
+            .spawn(move || read_recents(&path, &first))?;
+        Ok(Self {
+            _watch: watch,
+            read,
+            recents: Vec::new(),
+        })
+    }
+
+    pub fn fd(&self) -> BorrowedFd<'_> {
+        self.read.fd()
+    }
+
+    pub fn take(&mut self) -> bool {
+        match self.read.drain().pop() {
+            Some(recents) => {
+                self.recents = recents;
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn recents(&self) -> &[(PathBuf, u64)] {
+        &self.recents
+    }
+}
+
 pub fn is_excluded(path: &Path, excluded: &[PathBuf]) -> bool {
     excluded.iter().any(|folder| path.starts_with(folder))
 }
 
 pub fn recent_files(
-    xbel: Option<&str>,
+    recents: &[(PathBuf, u64)],
     usage: &Usage,
     excluded: &[PathBuf],
     limit: usize,
 ) -> Vec<PathBuf> {
     let mut latest: HashMap<PathBuf, u64> = HashMap::new();
-    let used = usage
-        .last_used(FILE_KEY)
-        .chain(xbel.map(recently_used).unwrap_or_default());
+    let used = usage.last_used(FILE_KEY).chain(recents.iter().cloned());
     for (path, at) in used {
         let known = latest.entry(path).or_insert(at);
         *known = (*known).max(at);

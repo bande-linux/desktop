@@ -43,6 +43,17 @@ pub fn duplicate_name(folder: &Path, name: &str, is_dir: bool) -> PathBuf {
     )
 }
 
+pub fn alias_name(folder: &Path, name: &str) -> PathBuf {
+    let first = L10N.tr_args("alias-name", [("name", name.into())]);
+    let later = (2u64..).map(|number| {
+        L10N.tr_args(
+            "alias-name-numbered",
+            [("name", name.into()), ("number", number.to_string().into())],
+        )
+    });
+    free(folder, std::iter::once(first).chain(later))
+}
+
 pub fn keep_both_name(folder: &Path, name: &str, is_dir: bool) -> PathBuf {
     let (stem, extension) = split_extension(name, is_dir);
     let (base, number) = numbered(stem);

@@ -17,7 +17,7 @@ mod archive;
 pub use archive::{archive_path, can_extract};
 
 use crate::listing::same_volume;
-use crate::naming::{duplicate_name, keep_both_name, untitled_folder};
+use crate::naming::{alias_name, duplicate_name, keep_both_name, untitled_folder};
 
 use crate::trash::{Trash, TrashItem, erase, forget, remove_all, restore_to};
 
@@ -928,6 +928,14 @@ pub fn rename(path: &Path, new_name: &str) -> Result<Option<Change>, RenameError
         from: path.to_path_buf(),
         to: target,
     }))
+}
+
+pub fn make_alias(path: &Path) -> io::Result<Change> {
+    let folder = path.parent().ok_or(io::ErrorKind::InvalidInput)?;
+    let name = name_of(path)?.to_string_lossy().into_owned();
+    let alias = alias_name(folder, &name);
+    std::os::unix::fs::symlink(path, &alias)?;
+    Ok(Change::Created(alias))
 }
 
 pub fn new_document(parent: &Path, template: &Path) -> io::Result<Change> {

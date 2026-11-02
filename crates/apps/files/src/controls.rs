@@ -31,6 +31,7 @@ pub(crate) struct Formats {
     sizes: HashMap<u64, Rc<str>>,
     dates: HashMap<u64, Rc<str>>,
     dash: Option<Rc<str>>,
+    alias: Option<Rc<str>>,
 }
 
 const NAME_SIZE: f32 = 13.0;
@@ -666,8 +667,15 @@ impl FilesView {
         let folder = entry.is_folder();
         let type_key = type_key(&entry.name, folder);
         let (icon, kind) = match formats.types.get(type_key.as_ref()) {
-            Some(known) => known.clone(),
-            None => {
+            Some(known) if !entry.link => known.clone(),
+            _ if entry.link => (
+                self.entry_icon(entry, 32),
+                formats
+                    .alias
+                    .get_or_insert_with(|| Rc::from(L10N.tr("kind-alias")))
+                    .clone(),
+            ),
+            _ => {
                 let known = (
                     self.entry_icon(entry, 32),
                     Rc::from(self.apps.kind_for_name(&entry.name, folder)),

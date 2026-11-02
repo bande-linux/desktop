@@ -159,7 +159,9 @@ impl Builder<'_> {
                 Some(NodeKind::Text) => {
                     let text = self.document.text(child).unwrap_or_default();
                     let tag = pending.items.len() as u32;
-                    pending.paragraph.push_text(text, run_style(style, tag, shift));
+                    pending
+                        .paragraph
+                        .push_text(text, run_style(style, tag, shift));
                     pending.items.push(InlineItem {
                         node: child,
                         style: style.clone(),

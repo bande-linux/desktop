@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::future::{Future, poll_fn};
 use std::io::{self, Write};
 use std::pin::{Pin, pin};
@@ -8,16 +9,21 @@ use brotli_decompressor::DecompressorWriter;
 use flate2::write::{GzDecoder, ZlibDecoder};
 use hyper::body::{Body, Incoming};
 use hyper::header::{
-    ACCEPT, ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_TYPE, HOST, HeaderMap, LOCATION, USER_AGENT,
+    ACCEPT, ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_TYPE, COOKIE, HOST, HeaderMap, HeaderName,
+    IF_MODIFIED_SINCE, IF_NONE_MATCH, LOCATION, SET_COOKIE, STRICT_TRANSPORT_SECURITY, USER_AGENT,
 };
 use hyper::{StatusCode, Uri};
 use rustls::ClientConfig;
 use rustls::pki_types::ServerName;
 use url::{Host, Position, Url};
 
+use crate::cache::Lookup;
+use crate::cookies;
 use crate::reactor::Reactor;
+use crate::site::Site;
+use crate::storage::{self, State};
 use crate::stream::{Stream, dial};
-use crate::{ContentType, FetchError, Response};
+use crate::{ContentType, FetchError, Request, Response};
 
 pub const MAX_BODY: usize = 64 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 20;
@@ -33,24 +39,138 @@ const ENCODINGS: &str = "gzip, deflate, br";
 pub(crate) struct Network {
     pub(crate) reactor: Rc<Reactor>,
     pub(crate) tls: Arc<ClientConfig>,
+    pub(crate) state: RefCell<State>,
 }
 
-enum Outcome {
-    Done(Response),
-    Redirect(Url),
+struct Head {
+    status: StatusCode,
+    headers: HeaderMap,
+    body: Option<Vec<u8>>,
 }
 
-pub(crate) async fn fetch(network: Rc<Network>, mut url: Url) -> Result<Response, FetchError> {
+fn same_site(a: &Url, b: &Url) -> bool {
+    Site::of(a).is_some() && Site::of(a) == Site::of(b)
+}
+
+pub(crate) async fn fetch(network: Rc<Network>, request: Request) -> Result<Response, FetchError> {
+    let result = fetch_following(&network, request).await;
+    network.state.borrow_mut().persist();
+    result
+}
+
+async fn fetch_following(network: &Network, request: Request) -> Result<Response, FetchError> {
+    let Request {
+        mut url,
+        top_level,
+        initiator,
+    } = request;
     for _ in 0..=MAX_REDIRECTS {
-        match exchange(&network, url).await? {
-            Outcome::Done(response) => return Ok(response),
-            Outcome::Redirect(next) => url = next,
+        let now = storage::now();
+        network.state.borrow_mut().hsts.upgrade(&mut url, now);
+        let navigation = top_level.is_none();
+        let top = top_level.clone().unwrap_or_else(|| url.clone());
+        let site = Site::of(&top).ok_or(FetchError::InvalidUrl)?;
+        let partition = site.as_str();
+        let first_party = same_site(&url, &top);
+        let context = cookies::Context {
+            top_level: &site,
+            first_party,
+            same_site: first_party
+                && initiator
+                    .as_ref()
+                    .is_none_or(|initiator| same_site(initiator, &url)),
+            navigation,
+        };
+        let mut extra = Vec::new();
+        let stale = {
+            let mut state = network.state.borrow_mut();
+            match state.cache.lookup(&partition, &url, now) {
+                Lookup::Fresh(response) => return Ok(response),
+                Lookup::Stale {
+                    etag,
+                    last_modified,
+                } => {
+                    extra.extend(etag.map(|etag| (IF_NONE_MATCH, etag)));
+                    extra.extend(last_modified.map(|date| (IF_MODIFIED_SINCE, date)));
+                    true
+                }
+                Lookup::Miss => false,
+            }
+        };
+        let cookie = network
+            .state
+            .borrow_mut()
+            .cookies
+            .header(&url, context, now);
+        let cookie_sent = cookie.is_some();
+        extra.extend(cookie.map(|cookie| (COOKIE, cookie)));
+        let head = exchange(network, &url, extra, |status, _| {
+            !(redirect_status(status) || (stale && status == StatusCode::NOT_MODIFIED))
+        })
+        .await?;
+        let now = storage::now();
+        {
+            let mut state = network.state.borrow_mut();
+            for value in head.headers.get_all(SET_COOKIE) {
+                if let Ok(value) = value.to_str() {
+                    state.cookies.store(&url, value, context, now);
+                }
+            }
+            if let Some(policy) = head
+                .headers
+                .get(STRICT_TRANSPORT_SECURITY)
+                .and_then(|value| value.to_str().ok())
+            {
+                state.hsts.observe(&url, policy, now);
+            }
         }
+        if stale && head.status == StatusCode::NOT_MODIFIED {
+            let revalidated =
+                network
+                    .state
+                    .borrow_mut()
+                    .cache
+                    .revalidated(&partition, &url, &head.headers, now);
+            match revalidated {
+                Some(response) => return Ok(response),
+                None => continue,
+            }
+        }
+        if let Some(target) = redirect(&url, head.status, &head.headers)? {
+            url = target;
+            continue;
+        }
+        let response = Response {
+            content_type: head
+                .headers
+                .get(CONTENT_TYPE)
+                .and_then(|value| ContentType::parse(value.as_bytes())),
+            body: head.body.unwrap_or_default(),
+            status: head.status.as_u16(),
+            url,
+        };
+        network.state.borrow_mut().cache.store(
+            &partition,
+            &response,
+            &head.headers,
+            cookie_sent,
+            now,
+        );
+        return Ok(response);
     }
     Err(FetchError::TooManyRedirects)
 }
 
-async fn exchange(network: &Network, url: Url) -> Result<Outcome, FetchError> {
+fn redirect_status(status: StatusCode) -> bool {
+    matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308)
+}
+
+async fn exchange(
+    network: &Network,
+    url: &Url,
+    extra: Vec<(HeaderName, String)>,
+    wants_body: impl FnOnce(StatusCode, &HeaderMap) -> bool,
+) -> Result<Head, FetchError> {
     let secure = match url.scheme() {
         "https" => true,
         "http" => false,
@@ -58,7 +178,7 @@ async fn exchange(network: &Network, url: Url) -> Result<Outcome, FetchError> {
     };
     let host = url.host().ok_or(FetchError::InvalidUrl)?.to_owned();
     let port = url.port_or_known_default().ok_or(FetchError::InvalidUrl)?;
-    let request = hyper::Request::get(
+    let mut builder = hyper::Request::get(
         url[Position::BeforePath..Position::AfterQuery]
             .parse::<Uri>()
             .map_err(|_| FetchError::InvalidUrl)?,
@@ -66,9 +186,13 @@ async fn exchange(network: &Network, url: Url) -> Result<Outcome, FetchError> {
     .header(HOST, &url[Position::BeforeHost..Position::AfterPort])
     .header(USER_AGENT, AGENT)
     .header(ACCEPT, ACCEPTED)
-    .header(ACCEPT_ENCODING, ENCODINGS)
-    .body(String::new())
-    .map_err(|_| FetchError::InvalidUrl)?;
+    .header(ACCEPT_ENCODING, ENCODINGS);
+    for (name, value) in extra {
+        builder = builder.header(name, value);
+    }
+    let request = builder
+        .body(String::new())
+        .map_err(|_| FetchError::InvalidUrl)?;
     let server_name = server_name(&host)?;
     let tcp = dial(host, port).await.map_err(FetchError::Connect)?;
     let stream = if secure {
@@ -88,21 +212,21 @@ async fn exchange(network: &Network, url: Url) -> Result<Outcome, FetchError> {
             .await
             .map_err(FetchError::Http)?;
         let status = response.status();
-        if let Some(target) = redirect(&url, status, response.headers())? {
-            return Ok(Outcome::Redirect(target));
+        let headers = response.headers().clone();
+        if !wants_body(status, &headers) {
+            return Ok(Head {
+                status,
+                headers,
+                body: None,
+            });
         }
-        let content_type = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|value| ContentType::parse(value.as_bytes()));
-        let decoder = Decoder::for_headers(response.headers())?;
+        let decoder = Decoder::for_headers(&headers)?;
         let body = read_body(response.into_body(), decoder).await?;
-        Ok(Outcome::Done(Response {
-            url,
-            status: status.as_u16(),
-            content_type,
-            body,
-        }))
+        Ok(Head {
+            status,
+            headers,
+            body: Some(body),
+        })
     };
     let mut connection = pin!(connection);
     let mut response = pin!(response);
@@ -127,7 +251,7 @@ fn server_name(host: &Host<String>) -> Result<ServerName<'static>, FetchError> {
 }
 
 fn redirect(url: &Url, status: StatusCode, headers: &HeaderMap) -> Result<Option<Url>, FetchError> {
-    if !matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308) {
+    if !redirect_status(status) {
         return Ok(None);
     }
     let Some(location) = headers.get(LOCATION) else {

@@ -49,7 +49,7 @@ feature still render alike, so reftest rates overstate conformance:
 - **D2** Terminal's tab bar moves into the toolkit as a widget.
 - **A1** Tabs, windows, private windows, session restore, Default Apps entry.
 - **D3** The toolkit grafts an external AccessKit subtree under a node.
-- **W5** Tables, lists and counters, web fonts, `@media`, the HTTP cache, cookies and HSTS.
+- **W5** Tables, lists and counters, web fonts, `@media`. Done in web-net: the HTTP cache (RFC 9111, partitioned by top-level site, 256 MB on disk, 32 MB in memory), cookies (RFC 6265bis, SameSite, third-party blocked, `Partitioned` kept per top-level site) and HSTS, on disk for the default session and in memory for private windows; left: the HSTS preload list (Chromium's is about 4 MB of data, not cheap).
 - **A2** Smart search field, history, bookmarks, Reader, Find, zoom, downloads, Open in System
   Browser.
 - **A3** Accessibility of pages, the e2e test, packaging, the `browser-v0.1.0` release.

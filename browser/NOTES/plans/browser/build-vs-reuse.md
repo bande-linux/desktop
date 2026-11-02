@@ -34,6 +34,7 @@ are our estimates for a first complete version, in lines of Rust.
 | skrifa, read-fonts, harfrust, fontique | font parsing and shaping are spec-locked (OpenType) and shared with Bande's toolkit; web fonts are parsed only in sandboxed renderers |
 | ICU4X (segmenter, normalizer, collator, plural rules, data), unicode-bidi, encoding_rs | Unicode and WHATWG Encoding data and algorithms; ICU4X also serves JS `Intl` |
 | url | the WHATWG URL parser, small and conformant; replace only if WPT `url` shows gaps |
+| Debian's `publicsuffix` (data, not a crate) | the Public Suffix List, updated by Debian between our releases; `web_net::Site` reads it once and is the one definition of a site for cookies, the partitioned cache and site isolation; without it a site is the whole origin, the strictest choice |
 | wgpu, naga, vello (through `bande-toolkit`) | Bande's own render stack; WebGPU maps onto wgpu as Firefox does; vello also draws canvas 2D |
 | accesskit | shared with the toolkit, so page accessibility joins the window's tree |
 | rustix, landlock, seccompiler | thin system-call layers; the policy is ours. Landlock and seccomp-bpf are what Chromium, Firefox and bubblewrap build on, and both crates are maintained by those kernel features' own communities (landlock by its kernel maintainers, seccompiler by Firecracker), so we own the rules but not the BPF assembler or the ABI compatibility code |

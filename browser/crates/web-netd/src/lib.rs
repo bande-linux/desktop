@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
@@ -9,9 +10,11 @@ use rustix::time::{
     timerfd_settime,
 };
 use web_ipc::{Channel, Destination, FromNetwork, NetworkControl, ToNetwork, Url, Verdict, sealed};
-use web_net::{FetchError, FetchId, Fetcher, Response};
+use web_net::{FetchError, FetchId, Fetcher, Response, Storage};
 
 pub const HOST: u32 = 0;
+pub const STORAGE_FLAG: &str = "--storage";
+const DEFAULT_SESSION: u32 = 0;
 const PAUSE_DEADLINE: Duration = Duration::from_secs(10);
 const MAX_CLIENTS: usize = 1024;
 
@@ -23,6 +26,16 @@ pub fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn profile() -> Option<PathBuf> {
+    let mut arguments = std::env::args_os().skip(1);
+    while let Some(argument) = arguments.next() {
+        if argument == STORAGE_FLAG {
+            return arguments.next().map(PathBuf::from);
+        }
+    }
+    None
 }
 
 fn run() -> io::Result<()> {
@@ -40,6 +53,7 @@ fn run() -> io::Result<()> {
         intercept: false,
         paused: HashMap::new(),
         next_request: 0,
+        profile: profile(),
     }
     .run()
 }
@@ -47,6 +61,7 @@ fn run() -> io::Result<()> {
 struct Client {
     channel: Channel,
     session: u32,
+    site: Option<Url>,
 }
 
 struct Request {
@@ -55,6 +70,7 @@ struct Request {
     session: u32,
     url: Url,
     destination: Destination,
+    top_level: Option<Url>,
 }
 
 struct Paused {
@@ -71,6 +87,7 @@ struct Network {
     intercept: bool,
     paused: HashMap<u64, Paused>,
     next_request: u64,
+    profile: Option<PathBuf>,
 }
 
 enum Source {
@@ -161,14 +178,25 @@ impl Network {
                     session,
                     url,
                     destination,
+                    top_level: None,
                 })?,
                 NetworkControl::Cancel { id } => self.cancel(HOST, id),
                 NetworkControl::Connect {
-                    client, session, ..
+                    client,
+                    session,
+                    site,
                 } => {
                     let channel = Channel::new(message.fd()?)?;
                     if client != HOST && self.clients.len() < MAX_CLIENTS {
-                        self.clients.insert(client, Client { channel, session });
+                        let site = Url::parse(&site).ok();
+                        self.clients.insert(
+                            client,
+                            Client {
+                                channel,
+                                session,
+                                site,
+                            },
+                        );
                     }
                 }
                 NetworkControl::EndSession { session } => {
@@ -211,10 +239,10 @@ impl Network {
             let Some(message) = channel.receive()? else {
                 return Ok(());
             };
-            let session = self
+            let (session, top_level) = self
                 .clients
                 .get(&client)
-                .map(|client| client.session)
+                .map(|client| (client.session, client.site.clone()))
                 .unwrap_or_default();
             match message.decode::<ToNetwork>()? {
                 ToNetwork::Fetch {
@@ -241,6 +269,7 @@ impl Network {
                     session,
                     url,
                     destination,
+                    top_level,
                 })?,
                 ToNetwork::Cancel { id } => self.cancel(client, id),
             }
@@ -352,11 +381,20 @@ impl Network {
     }
 
     fn start(&mut self, request: Request) -> io::Result<()> {
+        let storage = match (request.session, &self.profile) {
+            (DEFAULT_SESSION, Some(profile)) => Storage::Disk(profile.clone()),
+            _ => Storage::Memory,
+        };
         let fetcher = match self.sessions.entry(request.session) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
-            std::collections::hash_map::Entry::Vacant(entry) => entry.insert(Fetcher::new()?),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(Fetcher::with_storage(storage)?)
+            }
         };
-        let fetch = fetcher.fetch(request.url);
+        let fetch = fetcher.request(match &request.top_level {
+            Some(top_level) => web_net::Request::subresource(request.url, top_level),
+            None => web_net::Request::navigation(request.url, None),
+        });
         self.running
             .insert((request.session, fetch), (request.client, request.id));
         Ok(())

@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
 use std::io;
@@ -12,17 +13,17 @@ use std::time::{Duration, Instant};
 
 use rustls::ClientConfig;
 use rustls_platform_verifier::BuilderVerifierExt;
-use url::Url;
 
 use crate::fetch::{Network, fetch};
 use crate::reactor::Reactor;
-use crate::{Completion, FetchError, FetchId, Response};
+use crate::storage::{State, Storage};
+use crate::{Completion, FetchError, FetchId, Request, Response};
 
 const FETCH_TIMEOUT: Duration = Duration::from_secs(120);
 const ALPN_HTTP1: &[u8] = b"http/1.1";
 
 pub(crate) enum Command {
-    Fetch(FetchId, Url),
+    Fetch(FetchId, Box<Request>),
     Cancel(FetchId),
     Quit,
 }
@@ -80,6 +81,7 @@ pub(crate) fn spawn(
     completed: Sender<Completion>,
     ready: Arc<OwnedFd>,
     tls: Arc<ClientConfig>,
+    storage: Storage,
 ) -> io::Result<JoinHandle<()>> {
     std::thread::Builder::new()
         .name("web-net".into())
@@ -94,7 +96,7 @@ pub(crate) fn spawn(
                     signal,
                 }),
             };
-            if let Err(error) = executor.run(tls) {
+            if let Err(error) = executor.run(tls, &storage) {
                 executor.fail_all(&error);
             }
         })
@@ -109,9 +111,14 @@ struct Executor {
 }
 
 impl Executor {
-    fn run(&mut self, tls: Arc<ClientConfig>) -> io::Result<()> {
+    fn run(&mut self, tls: Arc<ClientConfig>, storage: &Storage) -> io::Result<()> {
         let reactor = Reactor::new(self.woken.signal.as_fd())?;
-        let network = Rc::new(Network { reactor, tls });
+        let state = RefCell::new(State::open(storage));
+        let network = Rc::new(Network {
+            reactor,
+            tls,
+            state,
+        });
         loop {
             clear(&self.woken.signal);
             if !self.take_commands(&network) {
@@ -141,8 +148,8 @@ impl Executor {
     fn take_commands(&mut self, network: &Rc<Network>) -> bool {
         loop {
             match self.commands.try_recv() {
-                Ok(Command::Fetch(id, url)) => {
-                    let task: Task = Box::pin(fetch(Rc::clone(network), url));
+                Ok(Command::Fetch(id, request)) => {
+                    let task: Task = Box::pin(fetch(Rc::clone(network), *request));
                     self.tasks
                         .insert(id, (task, Instant::now() + FETCH_TIMEOUT));
                     self.lock_woken().push(id);

@@ -1,7 +1,13 @@
+mod cache;
+mod cookies;
+mod date;
 mod executor;
 mod fetch;
+mod hsts;
 mod mime;
 mod reactor;
+mod site;
+mod storage;
 mod stream;
 
 use std::fmt;
@@ -17,11 +23,38 @@ pub use url::Url;
 
 pub use fetch::MAX_BODY;
 pub use mime::ContentType;
+pub use site::Site;
+pub use storage::Storage;
 
 use executor::Command;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FetchId(u64);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Request {
+    pub url: Url,
+    pub top_level: Option<Url>,
+    pub initiator: Option<Url>,
+}
+
+impl Request {
+    pub fn navigation(url: Url, initiator: Option<Url>) -> Self {
+        Self {
+            url,
+            top_level: None,
+            initiator,
+        }
+    }
+
+    pub fn subresource(url: Url, document: &Url) -> Self {
+        Self {
+            url,
+            top_level: Some(document.clone()),
+            initiator: Some(document.clone()),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Response {
@@ -91,6 +124,10 @@ pub struct Fetcher {
 
 impl Fetcher {
     pub fn new() -> io::Result<Self> {
+        Self::with_storage(Storage::Memory)
+    }
+
+    pub fn with_storage(storage: Storage) -> io::Result<Self> {
         let flags = EventfdFlags::CLOEXEC | EventfdFlags::NONBLOCK;
         let signal = Arc::new(eventfd(0, flags)?);
         let ready = Arc::new(eventfd(0, flags)?);
@@ -103,6 +140,7 @@ impl Fetcher {
             completed,
             Arc::clone(&ready),
             tls,
+            storage,
         )?;
         Ok(Self {
             commands,
@@ -115,9 +153,13 @@ impl Fetcher {
     }
 
     pub fn fetch(&mut self, url: Url) -> FetchId {
+        self.request(Request::navigation(url, None))
+    }
+
+    pub fn request(&mut self, request: Request) -> FetchId {
         let id = FetchId(self.next_id);
         self.next_id += 1;
-        self.send(Command::Fetch(id, url));
+        self.send(Command::Fetch(id, Box::new(request)));
         id
     }
 

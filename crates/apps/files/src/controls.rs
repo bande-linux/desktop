@@ -525,13 +525,19 @@ impl FilesView {
     }
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
-        let performed = self.ui.perform(request);
+        let performed = self
+            .perform_on_items(request)
+            .unwrap_or_else(|| self.ui.perform(request));
         self.after_ui();
         performed
     }
 
     pub fn accessibility(&self) -> accesskit::TreeUpdate {
-        self.ui.accessibility()
+        let mut tree = self.ui.accessibility();
+        if self.mode != ViewMode::List {
+            self.describe_items(&mut tree);
+        }
+        tree
     }
 
     pub fn text_input_area(&self) -> Option<Rect> {
@@ -678,10 +684,14 @@ impl FilesView {
         self.sync_table();
     }
 
-    fn table_row(&mut self, entry: &Entry, scope: Option<&Path>, formats: &mut Formats) -> Row {
+    pub(crate) fn entry_kind(
+        &mut self,
+        entry: &Entry,
+        formats: &mut Formats,
+    ) -> (Option<Image>, Rc<str>) {
         let folder = entry.is_folder();
         let type_key = type_key(&entry.name, folder);
-        let (icon, kind) = match formats.types.get(type_key.as_ref()) {
+        match formats.types.get(type_key.as_ref()) {
             Some(known) if !entry.link => known.clone(),
             _ if entry.link => (
                 self.entry_icon(entry, 32),
@@ -698,7 +708,23 @@ impl FilesView {
                 formats.types.insert(type_key.into_owned(), known.clone());
                 known
             }
-        };
+        }
+    }
+
+    pub(crate) fn known_kind(&self, entry: &Entry) -> Option<Rc<str>> {
+        match entry.link {
+            true => self.table_formats.alias.clone(),
+            false => self
+                .table_formats
+                .types
+                .get(type_key(&entry.name, entry.is_folder()).as_ref())
+                .map(|(_, kind)| kind.clone()),
+        }
+    }
+
+    fn table_row(&mut self, entry: &Entry, scope: Option<&Path>, formats: &mut Formats) -> Row {
+        let folder = entry.is_folder();
+        let (icon, kind) = self.entry_kind(entry, formats);
         let size = match folder {
             true => formats
                 .dash

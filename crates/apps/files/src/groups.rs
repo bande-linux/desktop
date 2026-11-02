@@ -12,6 +12,12 @@ pub(crate) struct GroupCache {
     groups: Option<Groups>,
 }
 
+impl GroupCache {
+    pub(crate) fn cached(&self) -> &[(usize, String)] {
+        self.groups.as_deref().unwrap_or_default()
+    }
+}
+
 impl FilesView {
     pub(crate) fn groups(&mut self) -> Groups {
         let Some(by) = self.browser.groups() else {

@@ -31,6 +31,11 @@ Delete each line when it ships; delete the file when the list is empty.
   file into a folder sets); in icon view each group is one sideways-scrolling row with Show All /
   Show Less, and arrow keys move between rows by position;
   status bar and path bar; hidden files; Quick Look with full screen.
+- Screen readers: every view is in the accessibility tree. List view is a table; icon,
+  column (one list per column) and gallery views are lists of items with name, kind
+  (description), selected state and position, group headings as level 2 headings and Show All /
+  Show Less as buttons. The focused item follows the selection; AT-SPI select (or focus) selects
+  an item and activate opens the selected one.
 - Names: known extensions hidden unless Settings ▸ Advanced shows them (Files, desktop, file
   chooser), kept on rename, a warning before changing one; batch rename.
 - Get Info inspector with Name & Extension (rename, extension warning) and a per-file Hide
@@ -52,9 +57,7 @@ Delete each line when it ships; delete the file when the list is empty.
 
 ## Open, ranked
 
-1. Icon, column and gallery views are not in the accessibility tree (only list view is), so
-   their items and the group Show All / Show Less are invisible to screen readers.
-2. Gallery: Finder's preview pane metadata beside it (today the inspector shows it).
-3. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
+1. Gallery: Finder's preview pane metadata beside it (today the inspector shows it).
+2. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
    (GVfs-free SMB/SFTP mounts).
-4. Content search (file contents, not only names).
+3. Content search (file contents, not only names).

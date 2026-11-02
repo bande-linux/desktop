@@ -894,6 +894,7 @@ pub struct Config {
     pub reopen_apps: bool,
     pub reopen_apps_after_crash: bool,
     pub lock_message: String,
+    pub show_previews: bool,
     pub clock: ClockFormat,
     pub accessibility: Accessibility,
     pub bar: Bar,
@@ -930,6 +931,7 @@ impl Default for Config {
             reopen_apps: true,
             reopen_apps_after_crash: false,
             lock_message: String::new(),
+            show_previews: true,
             clock: ClockFormat::Automatic,
             accessibility: Accessibility::default(),
             bar: Bar::default(),
@@ -1077,6 +1079,7 @@ impl Parser<'_> {
                 "lock-message" => self
                     .string(node)
                     .map(|message| config.lock_message = message),
+                "show-previews" => self.flag(node).map(|shown| config.show_previews = shown),
                 "reopen-apps" => self.flag(node).map(|reopen| config.reopen_apps = reopen),
                 "reopen-apps-after-crash" => self
                     .flag(node)

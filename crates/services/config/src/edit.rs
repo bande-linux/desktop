@@ -19,6 +19,7 @@ pub enum Setting {
     ReopenApps(bool),
     ReopenAppsAfterCrash(bool),
     LockMessage(String),
+    ShowPreviews(bool),
     Clock(ClockFormat),
     ShowBatteryPercentage(bool),
     LowPowerOnBattery(bool),
@@ -93,6 +94,12 @@ impl Setting {
                 None,
                 "reopen-apps",
                 (!on).then_some(KdlValue::Bool(false)),
+            ),
+            Self::ShowPreviews(shown) => set(
+                &mut document,
+                None,
+                "show-previews",
+                (!shown).then_some(KdlValue::Bool(false)),
             ),
             Self::LockMessage(message) => set(
                 &mut document,

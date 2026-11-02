@@ -31,6 +31,10 @@ pub trait Config {
     #[zbus(property)]
     fn set_tinted_frame(&self, tinted: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn show_previews(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_show_previews(&self, shown: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn lock_message(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_lock_message(&self, message: &str) -> zbus::Result<()>;
@@ -293,7 +297,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 75] = [
+pub const CONFIG_SETTINGS: [SettingId; 76] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -325,6 +329,7 @@ pub const CONFIG_SETTINGS: [SettingId; 75] = [
     SettingId::TintedFrame,
     SettingId::ReopenApps,
     SettingId::LockMessage,
+    SettingId::ShowPreviews,
     SettingId::ReopenAfterCrash,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
@@ -540,6 +545,7 @@ impl SettingsClient {
             SettingId::TintedFrame => Value::Flag(self.config.tinted_frame()?),
             SettingId::ReopenApps => Value::Flag(self.config.reopen_apps()?),
             SettingId::LockMessage => Value::Text(self.config.lock_message()?),
+            SettingId::ShowPreviews => Value::Flag(self.config.show_previews()?),
             SettingId::ReopenAfterCrash => Value::Flag(self.config.reopen_apps_after_crash()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
@@ -629,6 +635,7 @@ impl SettingsClient {
             (SettingId::TintedFrame, Value::Flag(tinted)) => self.config.set_tinted_frame(*tinted),
             (SettingId::ReopenApps, Value::Flag(on)) => self.config.set_reopen_apps(*on),
             (SettingId::LockMessage, Value::Text(message)) => self.config.set_lock_message(message),
+            (SettingId::ShowPreviews, Value::Flag(shown)) => self.config.set_show_previews(*shown),
             (SettingId::ReopenAfterCrash, Value::Flag(on)) => {
                 self.config.set_reopen_apps_after_crash(*on)
             }

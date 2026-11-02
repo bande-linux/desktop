@@ -21,6 +21,9 @@ type Window = Option<(Time, Time)>;
 trait Config {
     #[zbus(property)]
     fn focus_schedule(&self) -> zbus::Result<(bool, String, String)>;
+
+    #[zbus(property)]
+    fn show_previews(&self) -> zbus::Result<bool>;
 }
 
 fn time(text: &str) -> Option<Time> {
@@ -91,6 +94,22 @@ pub(crate) fn follow_schedule(
             let _ = clock.take();
             let mut count = [0; 8];
             let _ = read(&*nudges, &mut count);
+        }
+    });
+    Ok(())
+}
+
+pub(crate) fn follow_previews(
+    session: &Connection,
+    apply: impl Fn(bool) + Send + 'static,
+) -> zbus::Result<()> {
+    let config = ConfigProxy::new(session)?;
+    thread::spawn(move || {
+        apply(config.show_previews().unwrap_or(true));
+        for change in config.receive_show_previews_changed() {
+            if let Ok(shown) = change.get() {
+                apply(shown);
+            }
         }
     });
     Ok(())

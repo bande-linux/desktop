@@ -181,7 +181,7 @@ to it, and it can be edited by hand while the session runs. Apps keep their own 
 small `key = value` file each next to it (`files.conf`, `terminal.conf`).
 
 - **Schema** (`crates/services/config`, KDL 2.0): top-level `appearance`, `accent`,
-  `tinted-frame`, `clock`, `reopen-apps`, `reopen-apps-after-crash`, `lock-message`, and the sections
+  `tinted-frame`, `clock`, `reopen-apps`, `reopen-apps-after-crash`, `lock-message`, `show-previews`, and the sections
   `accessibility`, `bar`, `idle`, `keyboard`, `trackpad`, `mouse`, `power`, `sound`, `wallpaper`,
   `night-light`, `do-not-disturb`, `hot-corners`, `search`, `display "<name>"` (one per display, named by EDID maker, model and serial) and
   `arrangement` (one per set of displays). Every setting is optional and has a default.

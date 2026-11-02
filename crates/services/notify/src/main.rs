@@ -22,6 +22,9 @@ fn main() -> ExitCode {
             if let Err(error) = server.follow_focus_schedule(&center) {
                 tracing::warn!("cannot follow the Do Not Disturb schedule: {error}");
             }
+            if let Err(error) = server.follow_previews() {
+                tracing::warn!("cannot follow whether notifications show previews: {error}");
+            }
             bande_bus::serve_until_closed(&connection);
             ExitCode::SUCCESS
         }

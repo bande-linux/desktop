@@ -438,3 +438,6 @@ corner-lock-screen = Lock Screen
 lock-message = Message on the lock screen
 lock-message-keywords = lock screen, message, contact, if found, note, text
 lock-message-description = Shown above the buttons while the screen is locked, such as how to return a lost computer
+show-previews = Show previews
+show-previews-keywords = preview, body, text, content, privacy, hide
+show-previews-description = Off shows each notification's title without its text or picture

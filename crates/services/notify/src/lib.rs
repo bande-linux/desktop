@@ -364,6 +364,13 @@ impl NotificationServer {
         })
     }
 
+    pub fn follow_previews(&self) -> zbus::Result<()> {
+        let shared = Arc::clone(&self.shared);
+        schedule::follow_previews(&self.connection, move |shown| {
+            shared.update(|center| center.set_hide_previews(!shown));
+        })
+    }
+
     pub fn dismiss(&self, id: u32) -> zbus::Result<bool> {
         let closed = self.shared.update(|center| center.close(id));
         if closed {

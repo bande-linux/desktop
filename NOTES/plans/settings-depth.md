@@ -27,7 +27,7 @@ proxies (NetworkManager's per-connection proxy only reaches apps through the por
 ProxyResolver, so this needs a session-wide proxy first), IPv6, service order, firewall.
 
 **Notifications.** Has: Do Not Disturb, per-app allow, banner style, show in center, play sound.
-Missing: per-app badges, "show previews" (always / when unlocked / never), notifications
+Show previews (on / off). Missing: per-app badges, notifications
 while the display is mirrored or sleeping.
 
 **Focus.** Has: Do Not Disturb on/off and a daily schedule (from–to, owned by `bande-notify`).
@@ -119,7 +119,7 @@ Ranked by how often a user needs them and how badly they are stuck without them.
 2. Users & Groups: picture, full name, add and remove users, through AccountsService once it is
    in the image (owner decision).
 3. Sound: hide unplugged jacks (EnumRoute availability), balance.
-4. Notifications: show previews (always / never), badges per app.
+4. Notifications: badges per app.
 5. Sharing: Remote Login (ssh.service through systemd's D-Bus API with polkit) and the
    `.local` name.
 6. Personal Hotspot, after `dnsmasq-base` is installed and AP mode is tried on the chip.

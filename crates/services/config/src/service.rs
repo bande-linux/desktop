@@ -15,16 +15,20 @@ use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
     ACCENTS, Accessibility, AlertSound, Appearance, BarEdge, BarLayout, CURSOR_SIZE_RANGE,
-    CapsLock, ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, Dragging,
-    FocusSchedule, InputSource, LidOnPower, Loaded, NIGHT_LIGHT_WARMTH_RANGE, NightLight,
-    NightSchedule, Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory,
-    SecondaryClick, Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE,
-    accent_keyword, bar_placement, is_wallpaper_path, read_system_input_sources,
+    CapsLock, ClockFormat, ClockTime, Config, ConfigStore, CornerAction, DisplaySettings, Dragging,
+    FocusSchedule, HotCorners, InputSource, LidOnPower, Loaded, NIGHT_LIGHT_WARMTH_RANGE,
+    NightLight, NightSchedule, Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod,
+    SearchCategory, SecondaryClick, Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit,
+    WallpaperVariant, ZOOM_RANGE, accent_keyword, bar_placement, is_wallpaper_path,
+    read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
 pub type NightLightValue = (bool, String, String, String, u32);
 pub type FocusScheduleValue = (bool, String, String);
+const LOCK_MESSAGE_LIMIT: usize = 200;
+
+pub type HotCornersValue = (String, String, String, String);
 
 fn clock_time(text: &str) -> zbus::fdo::Result<ClockTime> {
     ClockTime::parse(text)
@@ -164,6 +168,9 @@ fn publish_changes(
         }
         if before.tinted_frame != after.tinted_frame {
             let _ = guard.tinted_frame_changed(emitter).await;
+        }
+        if before.lock_message != after.lock_message {
+            let _ = guard.lock_message_changed(emitter).await;
         }
         if before.reopen_apps != after.reopen_apps {
             let _ = guard.reopen_apps_changed(emitter).await;
@@ -326,6 +333,9 @@ fn publish_changes(
         }
         if before.wallpaper.fit != after.wallpaper.fit {
             let _ = guard.wallpaper_fit_changed(emitter).await;
+        }
+        if before.hot_corners != after.hot_corners {
+            let _ = guard.hot_corners_changed(emitter).await;
         }
         if before.focus_schedule != after.focus_schedule {
             let _ = guard.focus_schedule_changed(emitter).await;
@@ -518,6 +528,22 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_tinted_frame(&self, tinted: bool) -> zbus::fdo::Result<()> {
         self.write(&Setting::TintedFrame(tinted))
+    }
+
+    #[zbus(property)]
+    fn lock_message(&self) -> String {
+        self.store.current().lock_message.clone()
+    }
+
+    #[zbus(property)]
+    fn set_lock_message(&self, message: String) -> zbus::fdo::Result<()> {
+        let message = message.trim().to_owned();
+        if message.chars().count() > LOCK_MESSAGE_LIMIT {
+            return Err(InvalidArgs(format!(
+                "the lock screen message takes at most {LOCK_MESSAGE_LIMIT} characters"
+            )));
+        }
+        self.write(&Setting::LockMessage(message))
     }
 
     #[zbus(property)]
@@ -1149,6 +1175,31 @@ impl ConfigInterface {
             &value,
         )?;
         self.write(&Setting::WallpaperFit(fit))
+    }
+
+    #[zbus(property)]
+    fn hot_corners(&self) -> HotCornersValue {
+        let [top_left, top_right, bottom_left, bottom_right] = self
+            .store
+            .current()
+            .hot_corners
+            .actions
+            .map(|action| action.keyword().to_owned());
+        (top_left, top_right, bottom_left, bottom_right)
+    }
+
+    #[zbus(property)]
+    fn set_hot_corners(&self, value: HotCornersValue) -> zbus::fdo::Result<()> {
+        let action = |name: &str| keyword(&CornerAction::ALL, CornerAction::keyword, name);
+        let corners = HotCorners {
+            actions: [
+                action(&value.0)?,
+                action(&value.1)?,
+                action(&value.2)?,
+                action(&value.3)?,
+            ],
+        };
+        self.write(&Setting::HotCorners(corners))
     }
 
     #[zbus(property)]

@@ -1,4 +1,5 @@
 mod batch;
+mod extension;
 mod listing;
 mod naming;
 mod operations;
@@ -15,6 +16,7 @@ use bande_l10n::Localizer;
 pub use batch::{
     BatchItem, BatchProblem, Numbering, RenameRule, new_name, plan_renames, rename_all,
 };
+pub use extension::{extension_hidden, hidden_extension, set_extension_hidden};
 pub use listing::{
     Entry, Kind, Listing, Recency, Sort, SortBy, compare, finder_order, format_date,
     format_list_date, format_size, is_hidden, list, list_date, list_trash, merge, same_volume,

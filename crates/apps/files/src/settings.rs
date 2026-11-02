@@ -1,7 +1,9 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::thread;
 
-use bande_app_settings::{Shared, Stored, flag, pairs};
+use bande_app::choose_file;
+use bande_app_settings::{Shared, Stored, flag, pairs, settings_folder};
 use bande_toolkit::ui::{
     Context, Form, FormLine, PopUpButton, ScrollView, SegmentedControl, Slider, Toggle, Ui, Widget,
 };
@@ -27,6 +29,7 @@ pub enum StartFolder {
     Downloads,
     Recents,
     Last,
+    Other,
 }
 
 impl StartFolder {
@@ -47,6 +50,7 @@ impl StartFolder {
             Self::Downloads => "downloads",
             Self::Recents => "recents",
             Self::Last => "last",
+            Self::Other => "other",
         }
     }
 
@@ -58,29 +62,42 @@ impl StartFolder {
             Self::Downloads => "menu-downloads",
             Self::Recents => "recents",
             Self::Last => "settings-last-folder",
+            Self::Other => "settings-other-folder",
         }
     }
 
-    pub fn location(self, home: &Path, user_dirs: Option<&str>, last: Option<&Path>) -> Location {
+    pub fn location(
+        self,
+        home: &Path,
+        user_dirs: Option<&str>,
+        last: Option<&Path>,
+        other: Option<&Path>,
+    ) -> Location {
         let folder = |dir| Location::Folder(user_dir(home, user_dirs, dir));
+        let existing = |folder: Option<&Path>| {
+            Location::Folder(
+                folder
+                    .filter(|folder| folder.is_dir())
+                    .unwrap_or(home)
+                    .to_path_buf(),
+            )
+        };
         match self {
             Self::Home => Location::Folder(home.to_path_buf()),
             Self::Desktop => folder(UserDir::Desktop),
             Self::Documents => folder(UserDir::Documents),
             Self::Downloads => folder(UserDir::Downloads),
             Self::Recents => Location::Recents,
-            Self::Last => Location::Folder(
-                last.filter(|folder| folder.is_dir())
-                    .unwrap_or(home)
-                    .to_path_buf(),
-            ),
+            Self::Last => existing(last),
+            Self::Other => existing(other),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FilesSettings {
     pub new_window: StartFolder,
+    pub new_window_folder: Option<PathBuf>,
     pub default_view: ViewMode,
     pub show_hidden: bool,
     pub show_extensions: bool,
@@ -98,6 +115,7 @@ impl Default for FilesSettings {
     fn default() -> Self {
         Self {
             new_window: StartFolder::default(),
+            new_window_folder: None,
             default_view: ViewMode::default(),
             show_hidden: false,
             show_extensions: false,
@@ -123,8 +141,13 @@ impl Stored for FilesSettings {
                 "new-window" => {
                     settings.new_window = StartFolder::ALL
                         .into_iter()
+                        .chain([StartFolder::Other])
                         .find(|folder| folder.name() == value)
                         .unwrap_or(settings.new_window);
+                }
+                "new-window-folder" => {
+                    settings.new_window_folder =
+                        Some(PathBuf::from(value)).filter(|folder| folder.is_absolute());
                 }
                 "default-view" => {
                     settings.default_view = ViewMode::parse(value).unwrap_or(settings.default_view);
@@ -170,21 +193,27 @@ impl Stored for FilesSettings {
     }
 
     fn to_text(&self) -> String {
-        format!(
-            "new-window = {}\ndefault-view = {}\nshow-hidden = {}\nshow-extensions = {}\ndesktop-disks = {}\nspring-loading = {}\nspring-delay = {}\nwarn-extension-change = {}\nfolders-first = {}\nwarn-empty-trash = {}\npurge-trash = {}\nsearch-in = {}\n",
-            self.new_window.name(),
-            self.default_view.name(),
-            self.show_hidden,
-            self.show_extensions,
-            self.desktop_disks,
-            self.spring_loading,
-            self.spring_delay,
-            self.warn_extension_change,
-            self.folders_first,
-            self.warn_empty_trash,
-            self.purge_trash,
-            if self.search_home { "home" } else { "folder" },
-        )
+        let folder = self
+            .new_window_folder
+            .as_ref()
+            .map(|folder| format!("new-window-folder = {}\n", folder.display()))
+            .unwrap_or_default();
+        folder
+            + &format!(
+                "new-window = {}\ndefault-view = {}\nshow-hidden = {}\nshow-extensions = {}\ndesktop-disks = {}\nspring-loading = {}\nspring-delay = {}\nwarn-extension-change = {}\nfolders-first = {}\nwarn-empty-trash = {}\npurge-trash = {}\nsearch-in = {}\n",
+                self.new_window.name(),
+                self.default_view.name(),
+                self.show_hidden,
+                self.show_extensions,
+                self.desktop_disks,
+                self.spring_loading,
+                self.spring_delay,
+                self.warn_extension_change,
+                self.folders_first,
+                self.warn_empty_trash,
+                self.purge_trash,
+                if self.search_home { "home" } else { "folder" },
+            )
     }
 }
 
@@ -243,27 +272,82 @@ fn sidebar_lines() -> Vec<FormLine> {
     lines
 }
 
-fn form(settings: &Shared<FilesSettings>) -> Form {
-    let current = *settings.borrow();
-    let folders: Vec<String> = StartFolder::ALL
+fn choose_new_window_folder(previous: FilesSettings) {
+    let Some(folder) = settings_folder() else {
+        return;
+    };
+    let title = L10N.tr("settings-choose-new-window-folder");
+    let spawned = thread::Builder::new()
+        .name("new window folder".to_owned())
+        .spawn(move || {
+            let chosen = zbus::blocking::Connection::session()
+                .and_then(|session| choose_file(&session, &title, None))
+                .inspect_err(|error| tracing::warn!("cannot choose a folder: {error}"));
+            let mut stored = FilesSettings::load(&folder);
+            match chosen {
+                Ok(Some(chosen)) => stored.new_window_folder = Some(chosen),
+                _ => {
+                    stored.new_window = previous.new_window;
+                    stored.new_window_folder = previous.new_window_folder;
+                }
+            }
+            if let Err(error) = stored.save(&folder) {
+                tracing::warn!("cannot save the Files settings: {error}");
+            }
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot choose a folder: {error}");
+    }
+}
+
+fn new_window_line(settings: &Shared<FilesSettings>) -> FormLine {
+    let current = settings.borrow().clone();
+    let standard = StartFolder::ALL.len();
+    let mut folders: Vec<String> = StartFolder::ALL
         .iter()
         .map(|folder| L10N.tr(folder.message()))
         .collect();
+    let chosen = current.new_window_folder.as_ref().map(|folder| {
+        folder.file_name().map_or_else(
+            || folder.display().to_string(),
+            |name| name.to_string_lossy().into_owned(),
+        )
+    });
+    let other = standard + usize::from(chosen.is_some());
+    folders.extend(chosen);
+    folders.push(L10N.tr(StartFolder::Other.message()));
+    let selected = match current.new_window {
+        StartFolder::Other => standard,
+        shown => StartFolder::ALL
+            .iter()
+            .position(|folder| *folder == shown)
+            .unwrap_or_default(),
+    };
     let shared = settings.clone();
-    let new_window = choice(
+    choice(
         "settings-new-window",
         &folders,
-        StartFolder::ALL
-            .iter()
-            .position(|folder| *folder == current.new_window)
-            .unwrap_or_default(),
+        selected,
         |label, choices, selected| {
             Box::new(PopUpButton::new(label, choices, selected, move |index| {
-                shared.borrow_mut().new_window =
-                    StartFolder::ALL.get(index).copied().unwrap_or_default();
+                let previous = shared.borrow().clone();
+                let mut settings = shared.borrow_mut();
+                settings.new_window = match StartFolder::ALL.get(index) {
+                    Some(folder) => *folder,
+                    None => StartFolder::Other,
+                };
+                if index == other {
+                    settings.new_window_folder = None;
+                    choose_new_window_folder(previous);
+                }
             }))
         },
-    );
+    )
+}
+
+fn form(settings: &Shared<FilesSettings>) -> Form {
+    let current = settings.borrow().clone();
+    let new_window = new_window_line(settings);
     let views: Vec<String> = ViewMode::ALL
         .iter()
         .map(|mode| L10N.tr(mode.message()))

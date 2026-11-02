@@ -4,7 +4,9 @@ use std::time::Instant;
 use bande_fs::{Entry, Purpose, format_date, format_size};
 use bande_preview::Preview;
 use bande_thumbnails::ThumbnailSize;
-use bande_toolkit::ui::{BUTTON_HEIGHT as CONTROL_HEIGHT, SWITCH_SIZE, Size};
+use bande_toolkit::ui::{
+    BUTTON_HEIGHT as CONTROL_HEIGHT, CHECKBOX_SIZE, SWITCH_SIZE, Size, TEXT_FIELD_HEIGHT, WidgetId,
+};
 use bande_toolkit::{
     Color, Cut, Elevation, Image, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign,
     TextRole, TextStyle, shortened,
@@ -42,6 +44,7 @@ const TOP_GAP: f32 = 8.0;
 const FACT_LABEL: f32 = 96.0;
 const PAGE_PADDING: f32 = 10.0;
 const FACT_COLUMN: f32 = 90.0;
+const FACT_GAP: f32 = 8.0;
 const NAMES_KEPT: usize = 4000;
 
 pub fn permissions(mode: u32) -> String {
@@ -689,7 +692,13 @@ impl FilesView {
                     || "/".to_owned(),
                     |name| name.to_string_lossy().into_owned(),
                 );
-                let hidden = self.hidden_extension(&name, folder).map_or(0, str::len);
+                let preference = match folder {
+                    true => None,
+                    false => bande_fs::extension_hidden(&walked),
+                };
+                let hidden = self
+                    .hidden_extension(&name, folder, preference)
+                    .map_or(0, str::len);
                 name.truncate(name.len() - hidden);
                 let icon = if is_start {
                     "user-home"
@@ -1005,7 +1014,7 @@ impl FilesView {
                 } else {
                     format_size(entry.size)
                 };
-                if self.shown_name(entry) != entry.name {
+                if self.shown_name(entry) != entry.name && entry.trashed.is_some() {
                     facts.push((L10N.tr("info-name"), entry.name.clone()));
                 }
                 facts.push((L10N.tr("info-size"), size));
@@ -1050,7 +1059,11 @@ impl FilesView {
                         deleted.strftime("%-d %b %Y, %H:%M").to_string(),
                     ));
                 }
-                if let Some(mode) = info.mode.filter(|_| self.inspector_controls.is_none()) {
+                let editable = self
+                    .inspector_controls
+                    .as_ref()
+                    .is_some_and(|controls| !controls.access.is_empty());
+                if let Some(mode) = info.mode.filter(|_| !editable) {
                     facts.push((L10N.tr("info-permissions"), permissions(mode)));
                 }
                 if entry.link
@@ -1070,7 +1083,12 @@ impl FilesView {
             _ => {}
         }
         for (label, value) in facts {
-            let label = self.label(&label, SMALL_SIZE, muted);
+            let label = self.text().paragraph(
+                &label,
+                TextStyle::new(SMALL_SIZE, muted).weight(TextStyle::REGULAR),
+                Some(FACT_COLUMN - FACT_GAP),
+                TextAlign::Start,
+            );
             let value_paragraph = self.text().paragraph(
                 &value,
                 TextStyle::new(SMALL_SIZE, primary),
@@ -1088,6 +1106,7 @@ impl FilesView {
             });
             y += height + 6.0;
         }
+        y = self.paint_name_controls(area, inner, y, &mut content);
         y = self.paint_permissions(area, inner, y, &mut content);
         if !info.apps.is_empty() {
             y += 10.0;
@@ -1158,6 +1177,58 @@ impl FilesView {
         self.info = Some(info);
     }
 
+    fn inspector_heading(&mut self, message: &str, inner: Rect, y: f32, items: &mut Vec<Item>) {
+        let ink = self.palette.ink3;
+        let heading = self.text().paragraph(
+            &L10N.tr(message),
+            TextStyle::role(TextRole::Label, ink),
+            None,
+            TextAlign::Start,
+        );
+        items.push(Item::Text {
+            origin: Point::new(inner.x, y),
+            paragraph: heading,
+        });
+    }
+
+    fn place_inspector_controls(&mut self, area: Rect, frames: Vec<(WidgetId, Rect)>) {
+        if let Some(host) = self.host_mut() {
+            for (id, frame) in frames {
+                let shown = frame.y >= area.y && frame.y + frame.height <= area.y + area.height;
+                host.set_frame(id, if shown { frame } else { Rect::default() });
+            }
+        }
+    }
+
+    fn paint_name_controls(
+        &mut self,
+        area: Rect,
+        inner: Rect,
+        mut y: f32,
+        items: &mut Vec<Item>,
+    ) -> f32 {
+        let Some((field, hide)) = self
+            .inspector_controls
+            .as_ref()
+            .and_then(|controls| controls.name.as_ref())
+            .map(|name| (name.field, name.hide))
+        else {
+            return y;
+        };
+        y += 10.0;
+        self.inspector_heading("name-and-extension", inner, y, items);
+        y += 22.0;
+        let mut frames = vec![(field, Rect::new(inner.x, y, inner.width, TEXT_FIELD_HEIGHT))];
+        y += TEXT_FIELD_HEIGHT + 8.0;
+        if let Some((id, _)) = hide {
+            let height = CHECKBOX_SIZE + 4.0;
+            frames.push((id, Rect::new(inner.x, y, inner.width, height)));
+            y += height + 6.0;
+        }
+        self.place_inspector_controls(area, frames);
+        y
+    }
+
     fn paint_permissions(
         &mut self,
         area: Rect,
@@ -1169,19 +1240,12 @@ impl FilesView {
             return y;
         };
         let (runnable, access) = (controls.runnable, controls.access.clone());
+        if access.is_empty() {
+            return y;
+        }
         let (primary, muted) = (self.palette.ink, self.palette.ink2);
         y += 10.0;
-        let ink = self.palette.ink3;
-        let heading = self.text().paragraph(
-            &L10N.tr("sharing-permissions"),
-            TextStyle::role(TextRole::Label, ink),
-            None,
-            TextAlign::Start,
-        );
-        items.push(Item::Text {
-            origin: Point::new(inner.x, y),
-            paragraph: heading,
-        });
+        self.inspector_heading("sharing-permissions", inner, y, items);
         y += 22.0;
         let mut frames = Vec::new();
         if let Some((id, _)) = runnable {
@@ -1227,12 +1291,7 @@ impl FilesView {
             ));
             y += CONTROL_HEIGHT + 6.0;
         }
-        if let Some(host) = self.host_mut() {
-            for (id, frame) in frames {
-                let shown = frame.y >= area.y && frame.y + frame.height <= area.y + area.height;
-                host.set_frame(id, if shown { frame } else { Rect::default() });
-            }
-        }
+        self.place_inspector_controls(area, frames);
         y
     }
 

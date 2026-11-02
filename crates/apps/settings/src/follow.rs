@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
+use bande_app::choose_file;
 use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
 use bande_keyboard::Layouts;
 use bande_toolkit::SessionEnd;
@@ -24,7 +25,7 @@ use crate::locale::{LocaleCommand, LocaleState, follow_locale};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
 use crate::notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
 use crate::permissions::{Grants, PermissionCommand, follow_permissions};
-use crate::pictures::{Pair, PictureCommand, choose_file, follow_pictures};
+use crate::pictures::{Pair, PictureCommand, follow_pictures};
 use crate::pointing::{PointingDevices, UDEV_DATA, follow_pointing};
 use crate::printers::{PrinterCommand, PrintersState, follow_printers};
 use crate::privacy::clear_clipboard;

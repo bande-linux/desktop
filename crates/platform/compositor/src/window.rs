@@ -665,6 +665,14 @@ impl State {
         self.keep_families_together();
     }
 
+    pub(crate) fn holds_place(&self, surface: &WlSurface) -> Option<bool> {
+        let window = &self.windows[self.window_index(surface)?];
+        if window.has_state(xdg_toplevel::State::Fullscreen) {
+            return None;
+        }
+        Some(window.tile.is_some() || window.has_state(xdg_toplevel::State::Maximized))
+    }
+
     pub(crate) fn begin_move(
         &mut self,
         surface: &WlSurface,

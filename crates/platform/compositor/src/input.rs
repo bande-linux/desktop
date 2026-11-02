@@ -572,6 +572,7 @@ impl Compositor {
             return;
         };
         if !pointer.is_grabbed() {
+            state.hot_corner(location);
             let pointed = target.as_ref().and_then(Target::frame);
             state.point_at_frame(location, pointed, under.is_some());
             let under_client = under

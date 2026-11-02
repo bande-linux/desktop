@@ -26,6 +26,7 @@ pub enum PaneId {
     Network,
     Appearance,
     Bar,
+    HotCorners,
     Notifications,
     Search,
     Accessibility,
@@ -53,12 +54,13 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 29] = [
+    const KEYWORDS: [(Self, &'static str); 30] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
         (Self::Appearance, "appearance"),
         (Self::Bar, "bar"),
+        (Self::HotCorners, "hot-corners"),
         (Self::Notifications, "notifications"),
         (Self::Search, "search"),
         (Self::Accessibility, "accessibility"),
@@ -106,6 +108,7 @@ impl PaneId {
             | Self::LanguageTime
             | Self::About => Some(Group::System),
             Self::KeyboardShortcuts
+            | Self::HotCorners
             | Self::NightLight
             | Self::Camera
             | Self::Microphone
@@ -124,6 +127,7 @@ impl PaneId {
             Self::Network => "network-wired-symbolic",
             Self::Appearance => "weather-clear-night-symbolic",
             Self::Bar => "view-sidebar-start-symbolic",
+            Self::HotCorners => "view-fullscreen-symbolic",
             Self::Notifications => "preferences-system-notifications-symbolic",
             Self::Search => "system-search-symbolic",
             Self::Accessibility => "avatar-default-symbolic",
@@ -168,6 +172,7 @@ impl PaneId {
         match self {
             Self::Storage | Self::SoftwareUpdate => Some(Self::About),
             Self::KeyboardShortcuts => Some(Self::Keyboard),
+            Self::HotCorners => Some(Self::Bar),
             Self::NightLight => Some(Self::Displays),
             Self::Camera
             | Self::Microphone
@@ -314,6 +319,12 @@ pub enum SettingId {
     Printers,
     NearbyPrinters,
     Accounts,
+    HotCornersPage,
+    LockMessage,
+    HotCornerTopLeft,
+    HotCornerTopRight,
+    HotCornerBottomLeft,
+    HotCornerBottomRight,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -826,44 +837,51 @@ fn desktop_panes() -> Vec<Pane> {
         ),
         pane(
             PaneId::Bar,
-            vec![section(
-                None,
-                vec![
-                    setting(
-                        SettingId::BarLayout,
-                        L10N.tr("bar-layout"),
-                        L10N.tr("bar-layout-keywords"),
-                        Kind::Choices(keyword_choices(vec![
-                            (L10N.tr("bar-layout-combined"), "combined"),
-                            (L10N.tr("bar-layout-separate"), "separate"),
-                        ])),
-                    ),
-                    setting(
-                        SettingId::BarEdge,
-                        L10N.tr("bar-position"),
-                        L10N.tr("bar-position-keywords"),
-                        Kind::Choices(keyword_choices(vec![
-                            (L10N.tr("edge-left"), "left"),
-                            (L10N.tr("edge-bottom"), "bottom"),
-                            (L10N.tr("edge-right"), "right"),
-                            (L10N.tr("edge-top"), "top"),
-                        ])),
-                    ),
-                    setting(
-                        SettingId::BarIconSize,
-                        L10N.tr("bar-size"),
-                        L10N.tr("bar-size-keywords"),
-                        Kind::Range {
-                            range: BAR_SIZES,
-                            step: 4,
-                            low: L10N.tr("small"),
-                            high: L10N.tr("large"),
-                        },
-                    ),
-                    switch(SettingId::BarAutoHide, "bar-auto-hide"),
-                ],
-            )],
+            vec![
+                section(
+                    None,
+                    vec![
+                        setting(
+                            SettingId::BarLayout,
+                            L10N.tr("bar-layout"),
+                            L10N.tr("bar-layout-keywords"),
+                            Kind::Choices(keyword_choices(vec![
+                                (L10N.tr("bar-layout-combined"), "combined"),
+                                (L10N.tr("bar-layout-separate"), "separate"),
+                            ])),
+                        ),
+                        setting(
+                            SettingId::BarEdge,
+                            L10N.tr("bar-position"),
+                            L10N.tr("bar-position-keywords"),
+                            Kind::Choices(keyword_choices(vec![
+                                (L10N.tr("edge-left"), "left"),
+                                (L10N.tr("edge-bottom"), "bottom"),
+                                (L10N.tr("edge-right"), "right"),
+                                (L10N.tr("edge-top"), "top"),
+                            ])),
+                        ),
+                        setting(
+                            SettingId::BarIconSize,
+                            L10N.tr("bar-size"),
+                            L10N.tr("bar-size-keywords"),
+                            Kind::Range {
+                                range: BAR_SIZES,
+                                step: 4,
+                                low: L10N.tr("small"),
+                                high: L10N.tr("large"),
+                            },
+                        ),
+                        switch(SettingId::BarAutoHide, "bar-auto-hide"),
+                    ],
+                ),
+                section(
+                    None,
+                    vec![page(SettingId::HotCornersPage, PaneId::HotCorners)],
+                ),
+            ],
         ),
+        hot_corners_pane(),
         pane(
             PaneId::Notifications,
             vec![
@@ -901,6 +919,40 @@ fn desktop_panes() -> Vec<Pane> {
         search_pane(),
         accessibility_pane(),
     ]
+}
+
+fn hot_corners_pane() -> Pane {
+    let corner = |id: SettingId, name: &str| {
+        setting(
+            id,
+            L10N.tr(name),
+            L10N.tr("hot-corners-keywords"),
+            Kind::Choices(keyword_choices(vec![
+                (L10N.tr("corner-none"), "none"),
+                (L10N.tr("corner-mission-control"), "mission-control"),
+                (L10N.tr("corner-app-windows"), "app-windows"),
+                (L10N.tr("corner-desktop"), "desktop"),
+                (L10N.tr("corner-notification-center"), "notification-center"),
+                (L10N.tr("corner-search"), "search"),
+                (L10N.tr("corner-lock-screen"), "lock-screen"),
+            ])),
+        )
+    };
+    pane(
+        PaneId::HotCorners,
+        vec![
+            section(
+                None,
+                vec![
+                    corner(SettingId::HotCornerTopLeft, "corner-top-left"),
+                    corner(SettingId::HotCornerTopRight, "corner-top-right"),
+                    corner(SettingId::HotCornerBottomLeft, "corner-bottom-left"),
+                    corner(SettingId::HotCornerBottomRight, "corner-bottom-right"),
+                ],
+            )
+            .noted("hot-corners-note"),
+        ],
+    )
 }
 
 fn search_pane() -> Pane {
@@ -1530,6 +1582,13 @@ fn power_pane() -> Pane {
                         L10N.tr("sleep-after-keywords"),
                         choice(sleep_choices()),
                     ),
+                    setting(
+                        SettingId::LockMessage,
+                        L10N.tr("lock-message"),
+                        L10N.tr("lock-message-keywords"),
+                        Kind::Text,
+                    )
+                    .described("lock-message-description"),
                 ],
             ),
             section(

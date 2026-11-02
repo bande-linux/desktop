@@ -47,7 +47,7 @@ pub enum PasswordOutcome {
     Failed(String),
 }
 
-fn admins() -> Vec<String> {
+pub(crate) fn members_of(groups: &[&str]) -> Vec<String> {
     std::fs::read_to_string("/etc/group")
         .unwrap_or_default()
         .lines()
@@ -55,7 +55,7 @@ fn admins() -> Vec<String> {
             let mut fields = line.split(':');
             let group = fields.next()?;
             let members = fields.nth(2)?;
-            ADMIN_GROUPS
+            groups
                 .contains(&group)
                 .then(|| members.split(',').map(str::to_owned).collect::<Vec<_>>())
         })
@@ -65,7 +65,7 @@ fn admins() -> Vec<String> {
 
 pub fn accounts() -> Vec<Account> {
     let uid = rustix::process::getuid().as_raw();
-    let admins = admins();
+    let admins = members_of(&ADMIN_GROUPS);
     let mut accounts: Vec<Account> = std::fs::read_to_string("/etc/passwd")
         .unwrap_or_default()
         .lines()

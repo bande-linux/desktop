@@ -27,25 +27,30 @@ pub struct Entry {
     pub created: Option<SystemTime>,
     pub link: bool,
     pub trashed: Option<TrashItem>,
+    pub extension_hidden: Option<bool>,
 }
 
 impl Entry {
     pub fn read(path: PathBuf, name: String) -> Self {
         let link = fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink());
         let metadata = fs::metadata(&path).ok();
+        let kind = match metadata.as_ref().is_some_and(fs::Metadata::is_dir) {
+            true => Kind::Folder,
+            false => Kind::File,
+        };
         Self {
             name,
-            kind: if metadata.as_ref().is_some_and(fs::Metadata::is_dir) {
-                Kind::Folder
-            } else {
-                Kind::File
-            },
+            kind,
             size: metadata.as_ref().map_or(0, fs::Metadata::len),
             modified: metadata
                 .as_ref()
                 .and_then(|metadata| metadata.modified().ok()),
             created: metadata.and_then(|metadata| metadata.created().ok()),
             link,
+            extension_hidden: match link || kind == Kind::Folder {
+                true => None,
+                false => crate::extension_hidden(&path),
+            },
             path,
             trashed: None,
         }

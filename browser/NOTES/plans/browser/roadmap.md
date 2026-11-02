@@ -8,8 +8,8 @@ the desktop repo.
 scorer exists (W1).
 
 **Conformance today**, written by `conformance --summary` (README, Tools); `--baseline` fails a
-run that passes fewer cases than recorded here. Until author styles apply (W2), unstyled tests
-and references often render alike, so reftest rates overstate conformance:
+run that passes fewer cases than recorded here. A test and its reference that miss the same
+feature still render alike, so reftest rates overstate conformance:
 
 | Suite | Passed | Total | Rate |
 |---|---|---|---|
@@ -18,10 +18,10 @@ and references often render alike, so reftest rates overstate conformance:
 | css-parsing syntax | 148 | 177 | 83.6% |
 | css-parsing colors | 0 | 8061 | 0.0% |
 | css-parsing An+B | 128 | 128 | 100.0% |
-| wpt reftests css/CSS2 | 4437 | 6238 | 71.1% (117 of the passes render blank) |
-| wpt reftests css/css-cascade | 41 | 50 | 82.0% (7 of the passes render blank) |
+| wpt reftests css/CSS2 | 1890 | 6238 | 30.3% (8 of the passes render blank) |
+| wpt reftests css/css-cascade | 15 | 50 | 30.0% (2 of the passes render blank) |
 | wpt reftests css/css-syntax | 1 | 1 | 100.0% |
-| wpt reftests css/selectors | 192 | 227 | 84.6% (24 of the passes render blank) |
+| wpt reftests css/selectors | 104 | 227 | 45.8% (15 of the passes render blank) |
 
 ## Phase 1: document browser (3–4 engineer-years)
 

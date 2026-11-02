@@ -11,7 +11,7 @@ Builds on the mini go through `flock ~/bande-linux/kbuild.lock ~/bande-linux/bin
 - **Conformance:** `cargo run --release -p web-conformance -- [SUITE...]` runs html5lib-tests
   (`html5lib-tokenizer`, and `html5lib-tree` over WPT's `html/syntax/parsing` `.dat` files),
   css-parsing-tests (`css-parsing`) and the WPT reftest subset (`wpt-reftests`, two renders
-  compared at run time). Suites are fetched at the commits pinned in
+  compared at run time; `.xht` and `.xhtml` files parse as XML). Suites are fetched at the commits pinned in
   `tools/conformance/src/source.rs` into `~/.cache/bande-web/suites` (or `$WEB_SUITES`), never
   into the repo. It prints a pass rate per suite; `--failures` lists failing cases,
   `--summary NOTES/plans/browser/roadmap.md` rewrites the progress table there, and

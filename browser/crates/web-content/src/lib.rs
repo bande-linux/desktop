@@ -66,7 +66,13 @@ pub fn render_file(path: &std::path::Path, width: u16, height: u16) -> std::io::
         static FONTS: std::cell::RefCell<Fonts> = std::cell::RefCell::new(Fonts::new());
     }
     let bytes = std::fs::read(path)?;
-    let document = parse(&bytes);
+    let xml = path
+        .extension()
+        .is_some_and(|extension| extension == "xht" || extension == "xhtml");
+    let document = match xml {
+        true => web_html::parse_xml(Document::new(), &bytes, None),
+        false => parse(&bytes),
+    };
     let directory = path.parent().unwrap_or(std::path::Path::new("."));
     let viewport = Viewport {
         width: f32::from(width),

@@ -352,11 +352,11 @@ dependencies = [
  "bande-inbox",
  "bande-log",
  "bande-test-bus",
+ "bande-test-wayland",
  "bande-toolkit",
  "bande-xdg",
  "libc",
  "rustix 1.1.6",
- "smithay",
  "tracing",
  "zbus",
 ]
@@ -1065,6 +1065,7 @@ version = "0.1.0"
 dependencies = [
  "bande-compositor",
  "bande-protocols",
+ "smithay",
  "tempfile",
  "wayland-client",
  "wayland-protocols",
@@ -1088,12 +1089,11 @@ name = "bande-toolkit"
 version = "0.1.0"
 dependencies = [
  "accesskit",
- "bande-compositor",
  "bande-graphics",
  "bande-test-bus",
+ "bande-test-wayland",
  "bande-toolkit-platform",
  "bande-widgets",
- "smithay",
  "zbus",
 ]
 

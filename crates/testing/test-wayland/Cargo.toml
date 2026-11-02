@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 tempfile.workspace = true
 bande-compositor.workspace = true
+smithay.workspace = true
 bande-protocols = { workspace = true, features = ["client"] }
 wayland-client.workspace = true
 wayland-protocols.workspace = true

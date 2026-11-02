@@ -287,18 +287,16 @@ impl Editor {
             runs: Vec::new(),
             paragraphs: Vec::with_capacity(self.blocks.len()),
         };
-        let mut at = 0;
+        let mut start = 0;
         for block in &self.blocks {
+            let mut at = start;
             for (length, attributes) in &block.runs {
                 if *attributes != TextAttributes::default() {
                     rich.runs.push((at..at + length, attributes.clone()));
                 }
                 at += length;
             }
-            if block.runs.is_empty() {
-                at += block.text.len();
-            }
-            at += 1;
+            start += block.text.len() + 1;
             rich.paragraphs.push(block.paragraph);
         }
         rich

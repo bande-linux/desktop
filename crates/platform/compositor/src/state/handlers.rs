@@ -309,6 +309,12 @@ impl SeatHandler for State {
             self.load_named_cursor(icon);
         }
         self.cursor_status = image;
+        self.cursor_owner = self
+            .seat
+            .get_pointer()
+            .and_then(|pointer| pointer.current_focus())
+            .and_then(|surface| surface.client())
+            .map(|client| client.id());
         self.needs_redraw = true;
     }
 
@@ -426,6 +432,12 @@ impl WlrLayerShellHandler for State {
         self.needs_redraw = true;
         self.follow_panel_zones();
         self.follow_exclusive_layer(surface.wl_surface(), None);
+        let lost = surface.wl_surface();
+        if self.focused().is_some_and(|focused| {
+            &focused == lost || !focused.is_alive() || self.root_of(&focused).as_ref() == Some(lost)
+        }) {
+            self.focus_behind_layer();
+        }
     }
 }
 

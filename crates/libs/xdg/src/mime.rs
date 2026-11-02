@@ -443,6 +443,19 @@ impl MimeDatabase {
             .map(|glob| self.unalias(&glob.mime))
     }
 
+    pub fn extension<'a>(&self, name: &'a str) -> Option<&'a str> {
+        let known = |key: &str, folded: bool| {
+            self.suffixes
+                .get(key)
+                .is_some_and(|globs| globs.iter().any(|glob| glob.case_sensitive != folded))
+        };
+        name.match_indices('.')
+            .filter(|(index, _)| *index > 0)
+            .map(|(index, _)| &name[index..])
+            .filter(|suffix| !suffix[1..].bytes().all(|byte| byte.is_ascii_digit()))
+            .find(|suffix| known(suffix, false) || known(&suffix.to_lowercase(), true))
+    }
+
     pub fn for_data(&self, data: &[u8]) -> Option<&str> {
         self.magic
             .iter()

@@ -12,6 +12,8 @@ use bande_compositor::{
     user_config, watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, OBJECT_PATH};
+use bande_datetime::ClockChanges;
+use bande_datetime::timedate::zone_changes;
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
 use smithay::backend::udev::{UdevBackend, UdevEvent};
 use smithay::reexports::calloop::channel::{self, Event};
@@ -424,6 +426,38 @@ fn listen<O: 'static>(
             }
             TimeoutAction::ToDuration(interval)
         })?;
+    }
+    match ClockChanges::new() {
+        Ok(changes) => {
+            handle.insert_source(
+                Generic::new(changes, Interest::READ, Mode::Level),
+                |_, changes, app| {
+                    if changes.take()? {
+                        app.compositor.time_changed();
+                    }
+                    Ok(PostAction::Continue)
+                },
+            )?;
+        }
+        Err(error) => tracing::warn!("night light does not follow changes of the clock: {error}"),
+    }
+    if let Some(system) = app.buses.system.clone() {
+        follow(
+            handle,
+            "time zone changes",
+            |sender| {
+                let zones = zone_changes(&system)?;
+                std::thread::spawn(move || {
+                    for _ in zones {
+                        if sender.send(()).is_err() {
+                            return;
+                        }
+                    }
+                });
+                Ok(())
+            },
+            |app, ()| app.compositor.time_changed(),
+        )?;
     }
     for fd in [app.compositor.poll_fd()?, app.compositor.fence_fd()?] {
         handle.insert_source(

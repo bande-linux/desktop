@@ -60,3 +60,55 @@ impl AsFd for MinuteTimer {
         self.timer.as_fd()
     }
 }
+
+const FAR_FUTURE: Timespec = Timespec {
+    tv_sec: 4_294_967_295,
+    tv_nsec: 0,
+};
+
+pub struct ClockChanges {
+    timer: OwnedFd,
+}
+
+impl ClockChanges {
+    pub fn new() -> rustix::io::Result<Self> {
+        let changes = Self {
+            timer: timerfd_create(
+                TimerfdClockId::Realtime,
+                TimerfdFlags::CLOEXEC | TimerfdFlags::NONBLOCK,
+            )?,
+        };
+        changes.arm()?;
+        Ok(changes)
+    }
+
+    fn arm(&self) -> rustix::io::Result<()> {
+        timerfd_settime(
+            &self.timer,
+            TimerfdTimerFlags::ABSTIME | TimerfdTimerFlags::CANCEL_ON_SET,
+            &Itimerspec {
+                it_interval: ONCE,
+                it_value: FAR_FUTURE,
+            },
+        )
+        .map(drop)
+    }
+
+    pub fn take(&self) -> rustix::io::Result<bool> {
+        let mut expirations = [0; 8];
+        loop {
+            match read(&self.timer, &mut expirations) {
+                Ok(_) | Err(Errno::CANCELED) => return self.arm().map(|()| true),
+                Err(Errno::AGAIN) => return Ok(false),
+                Err(Errno::INTR) => continue,
+                Err(error) => return Err(error),
+            }
+        }
+    }
+}
+
+impl AsFd for ClockChanges {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.timer.as_fd()
+    }
+}

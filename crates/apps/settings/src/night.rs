@@ -74,9 +74,7 @@ impl SettingsView {
                 ))
             })
             .flatten();
-        let place = self
-            .place
-            .get_or_init(bande_datetime::daylight::system_place);
-        Some(night_summary(*on, custom, &(self.clock)(), *place))
+        let place = self.time.as_ref().and_then(|time| time.place);
+        Some(night_summary(*on, custom, &(self.clock)(), place))
     }
 }

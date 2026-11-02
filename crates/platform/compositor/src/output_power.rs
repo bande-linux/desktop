@@ -43,7 +43,10 @@ impl State {
             return;
         }
         match mode {
-            Mode::Off => self.output_power.off.push(output.to_owned()),
+            Mode::Off => {
+                self.output_power.off.push(output.to_owned());
+                self.settle_lock();
+            }
             _ => {
                 self.output_power.off.retain(|name| name != output);
                 self.output_power.turned_on = true;
@@ -63,6 +66,10 @@ impl State {
         }
     }
 
+    pub(crate) fn powered(&self, output: &str) -> bool {
+        self.power_mode(output) == Mode::On
+    }
+
     pub(crate) fn power_on_every_output(&mut self) {
         for output in self.output_power.off.clone() {
             self.set_output_power(&output, Mode::On);
@@ -72,7 +79,7 @@ impl State {
 
 impl Compositor {
     pub fn output_powered(&self, output: &str) -> bool {
-        self.state.power_mode(output) == Mode::On
+        self.state.powered(output)
     }
 
     pub fn take_outputs_powered_on(&mut self) -> bool {

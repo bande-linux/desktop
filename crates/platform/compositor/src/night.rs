@@ -15,7 +15,6 @@ const SWITCHED_FADE: Duration = Duration::from_millis(1500);
 const FADE_STEP: Duration = Duration::from_millis(50);
 const PREVIEW_FADE: Duration = Duration::from_millis(250);
 const PREVIEW_HOLD: Duration = Duration::from_secs(3);
-const RECHECK: Duration = Duration::from_secs(15 * 60);
 
 fn temperature(warmth: u32) -> f64 {
     LEAST_WARM + (MOST_WARM - LEAST_WARM) * f64::from(warmth.min(100)) / 100.0
@@ -153,14 +152,9 @@ impl NightLight {
             .on
             .then(|| scheduled_night(&self.settings, wall, place))
             .flatten();
-        self.check_at = self.settings.on.then(|| {
-            let until = scheduled
-                .and_then(|(_, next)| {
-                    Duration::try_from(next.duration_since(wall.timestamp())).ok()
-                })
-                .unwrap_or(RECHECK);
-            now + until.clamp(Duration::from_secs(1), RECHECK)
-        });
+        self.check_at = scheduled
+            .and_then(|(_, next)| Duration::try_from(next.duration_since(wall.timestamp())).ok())
+            .map(|until| now + until.max(Duration::from_secs(1)));
         let night = scheduled.is_some_and(|(night, _)| night);
         let target = if night { 1.0 } else { 0.0 };
         if target != self.target {

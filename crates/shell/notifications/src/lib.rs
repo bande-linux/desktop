@@ -22,6 +22,17 @@ use card::CLOSE_REACH;
 pub use card::{Card, DEFAULT_ACTION, Part, Sender, age_label};
 pub use client::{Notifications, role};
 
+fn until_midnight() -> Option<Duration> {
+    let wall = bande_datetime::now();
+    let midnight = wall
+        .date()
+        .tomorrow()
+        .ok()?
+        .to_zoned(wall.time_zone().clone())
+        .ok()?;
+    Duration::try_from(wall.duration_until(&midnight)).ok()
+}
+
 const ENGLISH: &str = include_str!("../locales/en-US/bande-notifications.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
@@ -44,6 +55,8 @@ const DRAG_SLOP: f32 = 4.0;
 const DISMISS_FRACTION: f32 = 0.35;
 const FLICK_SPEED: f32 = 600.0;
 const FLICK_WINDOW: Duration = Duration::from_millis(100);
+const MINUTE: u64 = 60;
+const HOUR: u64 = 60 * MINUTE;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Request {
@@ -254,6 +267,15 @@ impl Screen {
 
     pub fn is_open(&self) -> bool {
         self.open
+    }
+
+    pub fn next_age_change(&self, now: Instant) -> Option<Instant> {
+        let ages = self.first_seen.values().map(|seen| {
+            let age = now.saturating_duration_since(*seen).as_secs();
+            let step = if age < HOUR { MINUTE } else { HOUR };
+            *seen + Duration::from_secs((age / step + 1).saturating_mul(step))
+        });
+        ages.chain(until_midnight().map(|left| now + left)).min()
     }
 
     pub fn present(&mut self, presentation: Presentation, now: Instant) {
@@ -955,7 +977,13 @@ impl Screen {
             }
             Event::PointerLeave => {
                 self.pointer = None;
-                if !self.open && self.drag.is_none() {
+                self.pressed = None;
+                if let Some(drag) = self.drag.take()
+                    && drag.moved
+                {
+                    self.release(&drag, now);
+                }
+                if !self.open {
                     self.follow_hover(now);
                 }
                 true

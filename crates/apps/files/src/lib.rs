@@ -3,6 +3,7 @@ mod browser;
 mod context;
 mod controls;
 mod drag;
+mod file_manager;
 mod grid;
 mod icons;
 mod inspector;
@@ -29,6 +30,7 @@ use bande_l10n::Localizer;
 
 pub use batch_rename::{BatchRename, RuleKind};
 pub use browser::{Browser, Column, Location, RowEdit};
+pub use file_manager::{Show, ShowRequest, serve_file_manager};
 pub use open_with::OpenWith;
 pub use paint::permissions;
 pub use privacy::follow_search_excluded;
@@ -37,7 +39,8 @@ pub use search::SEARCH_HEIGHT;
 pub use settings::{FilesSettings, SETTINGS_SIZE, StartFolder, settings_view};
 pub use sidebar::{
     BookmarkEdit, Place, PlaceKind, Row, SidebarEdit, favourites, hidden_places, layout_text, rows,
-    with_bookmarks, with_volumes, without_bookmark,
+    standard_places, volumes_hidden, with_bookmarks, with_place_shown, with_volumes,
+    without_bookmark,
 };
 pub use tabs::TAB_BAR_HEIGHT;
 pub use toolbar::TOOLBAR_HEIGHT;
@@ -46,8 +49,8 @@ pub use view::{
     Rename, Request, SIDEBAR_WIDTH, Sheet,
 };
 pub use views::{
-    FolderView, ListColumn, ViewMemory, ViewMode, list_columns_file, sidebar_file, status_bar_file,
-    views_file,
+    FolderView, ListColumn, SIDEBAR_FILE, ViewMemory, ViewMode, last_folder_file,
+    list_columns_file, sidebar_file, status_bar_file, views_file,
 };
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-files.ftl");

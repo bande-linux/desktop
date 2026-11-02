@@ -8,7 +8,7 @@ use zbus::{MatchRule, message};
 use crate::failure::unexpected;
 use crate::follow::{Update, Updates, spawn};
 
-const UPOWER_PATH: &str = "/org/freedesktop/UPower";
+const DISPLAY_DEVICE: &str = "/org/freedesktop/UPower/devices/DisplayDevice";
 const CHARGING: u32 = 1;
 const FULL: u32 = 4;
 const PENDING_CHARGE: u32 = 5;
@@ -137,7 +137,7 @@ pub fn follow_battery(system: &Connection, updates: Updates) -> Sender<BatteryCo
                 .msg_type(message::Type::Signal)
                 .interface("org.freedesktop.DBus.Properties")?
                 .member("PropertiesChanged")?
-                .path_namespace(UPOWER_PATH)?
+                .path(DISPLAY_DEVICE)?
                 .build();
             let changes = MessageIterator::for_match_rule(rule, &reader, None)?;
             if !feed.send(Update::Battery(read(&reader))) {

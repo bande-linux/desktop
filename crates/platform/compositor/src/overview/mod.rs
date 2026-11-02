@@ -90,6 +90,10 @@ impl Overview {
         self.slots.iter().find(|slot| &slot.surface == surface)
     }
 
+    pub(crate) fn is_pressed(&self) -> bool {
+        self.press.is_some()
+    }
+
     fn dragged(&self) -> Option<&WlSurface> {
         match &self.press {
             Some(Press {

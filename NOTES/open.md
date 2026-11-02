@@ -74,8 +74,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 
 ## Remaining work
 
-- Files: undo across windows, `org.freedesktop.FileManager1`; slices F15–F23 sit unmerged on
-  `origin/wip/files-depth-3`.
+- Files: ranked in [plans/files-depth.md](plans/files-depth.md).
 - Unmerged branches: `wip/l10n-ready` (strings into Fluent, an en-XA pseudo-locale),
   `wip/terminal-scopes` (a systemd scope per Terminal tab; apps repo now),
   `wip/userland-efficiency` (conflicts with `main`).
@@ -87,6 +86,9 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   and timeouts for the remaining blocking D-Bus calls (Control Center setters, tray).
 - Text size: menus at 200 % and long labels; Activity Monitor's CPU-core strip (apps repo).
 - A `Super+Space` pressed before the shell connects is lost.
+- Stuck state still open: an on-demand layer that drops keyboard interactivity
+  keeps focus; windows maximized while the bar was gone stay under it when it returns; the
+  window switcher keeps its key intercept through a lock until the modifier is released.
 - Notifications on several displays (banners follow the decision above).
 - Frame clock: predict with a high percentile instead of the maximum of the last 16 frames.
 - `bande-render`: `VK_EXT_host_image_copy` to copy shm buffers without staging.

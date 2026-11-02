@@ -5,13 +5,12 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use bande_xdg::find_executable;
+use bande_xdg::{find_executable, wait_for_exit};
 use image::DynamicImage;
 
 use crate::cache::{Cache, Picture, ThumbnailSize, modified, uri};
 
 const THUMBNAILER_TIME: Duration = Duration::from_secs(15);
-const WAIT_STEP: Duration = Duration::from_millis(20);
 const ENTRY_GROUP: &str = "[Thumbnailer Entry]";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,19 +97,14 @@ impl Thumbnailer {
                 return false;
             }
         };
-        let deadline = Instant::now() + THUMBNAILER_TIME;
-        loop {
-            match child.try_wait() {
-                Ok(Some(status)) => return status.success(),
-                Ok(None) if Instant::now() < deadline => thread::sleep(WAIT_STEP),
-                _ => {
-                    tracing::warn!("the thumbnailer {program} took too long");
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return false;
-                }
-            }
+        match wait_for_exit(&mut child, Some(Instant::now() + THUMBNAILER_TIME), None) {
+            Ok(Some(status)) => return status.success(),
+            Ok(None) => tracing::warn!("the thumbnailer {program} took too long"),
+            Err(error) => tracing::warn!("cannot wait for the thumbnailer {program}: {error}"),
         }
+        let _ = child.kill();
+        let _ = child.wait();
+        false
     }
 }
 

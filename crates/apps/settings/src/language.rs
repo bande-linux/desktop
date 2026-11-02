@@ -23,21 +23,41 @@ fn sample() -> Option<jiff::Zoned> {
         .ok()
 }
 
-pub fn locale_matches(available: &[AvailableLocale], query: &str) -> Vec<String> {
+pub fn locale_matches(available: &[AvailableLocale], query: &str, limit: usize) -> Vec<String> {
     let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
-    if words.is_empty() {
+    let Some(first) = words.first() else {
         return Vec::new();
-    }
-    available
+    };
+    let query = words.join(" ");
+    let mut ranked: Vec<(u8, &AvailableLocale)> = available
         .iter()
-        .filter(|locale| {
+        .filter_map(|locale| {
             let name = locale.name.to_lowercase();
             let code = locale.code.to_lowercase();
-            words
+            if !words
                 .iter()
                 .all(|word| name.contains(word.as_str()) || code.starts_with(word.as_str()))
+            {
+                return None;
+            }
+            let rank = if name.starts_with(&query) || code.starts_with(&query) {
+                0
+            } else if name
+                .split(|character: char| !character.is_alphanumeric())
+                .any(|word| word.starts_with(first.as_str()))
+            {
+                1
+            } else {
+                2
+            };
+            Some((rank, locale))
         })
-        .map(|locale| locale.code.clone())
+        .collect();
+    ranked.sort_by_key(|(rank, _)| *rank);
+    ranked
+        .into_iter()
+        .take(limit)
+        .map(|(_, locale)| locale.code.clone())
         .collect()
 }
 

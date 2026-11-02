@@ -311,6 +311,7 @@ impl FilesView {
             Some(self.toolbar.view),
             Some(self.toolbar.search),
             self.size_slider,
+            self.search_home_button,
         ]
         .into_iter()
         .flatten()
@@ -943,10 +944,16 @@ impl FilesView {
                 ),
             )
         });
+        let search_home = self.search_home_frame(self.empty_area());
         let table_id = self.table;
         if let Some(host) = self.host_mut() {
             host.set_frame(table_id, table);
-            for (id, frame) in search.into_iter().chain(rename).chain(slider) {
+            for (id, frame) in search
+                .into_iter()
+                .chain(rename)
+                .chain(slider)
+                .chain(search_home)
+            {
                 host.set_frame(id, frame);
             }
         }
@@ -1101,7 +1108,12 @@ impl FilesView {
                     .cancel(&keep, "cancel")
                     .primary(&change, "confirm")
             }
-            Sheet::Conflict { .. } | Sheet::GoTo(_) | Sheet::OpenWith(_) | Sheet::Rename(_) => {
+            Sheet::Conflict { .. }
+            | Sheet::Failure
+            | Sheet::NoSpace
+            | Sheet::GoTo(_)
+            | Sheet::OpenWith(_)
+            | Sheet::Rename(_) => {
                 return;
             }
         };

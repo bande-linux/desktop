@@ -81,6 +81,24 @@ pub struct SidebarEdit {
     pub bookmarks: Option<BookmarkEdit>,
 }
 
+const MACHINE_INFO: &str = "/etc/machine-info";
+
+pub(crate) fn pretty_hostname(machine_info: &str) -> Option<String> {
+    machine_info
+        .lines()
+        .find_map(|line| line.strip_prefix("PRETTY_HOSTNAME="))
+        .map(|value| value.trim().trim_matches(['"', '\'']).to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+pub(crate) fn system_disk_name() -> String {
+    std::fs::read_to_string(MACHINE_INFO)
+        .ok()
+        .as_deref()
+        .and_then(pretty_hostname)
+        .unwrap_or_else(|| L10N.tr("internal-disk"))
+}
+
 fn recents() -> Place {
     Place {
         name: L10N.tr("recents"),

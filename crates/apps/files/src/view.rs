@@ -101,6 +101,8 @@ pub enum Sheet {
         apply_to_all: bool,
     },
     EmptyTrash,
+    Failure,
+    NoSpace,
     DeleteImmediately {
         paths: Vec<PathBuf>,
         items: Vec<TrashItem>,
@@ -211,6 +213,7 @@ pub struct FilesView {
     pub(crate) hover: Option<Hit>,
     pub(crate) searching: Option<Searching>,
     pub(crate) index: Option<Index>,
+    pub(crate) search_home_button: Option<WidgetId>,
     pub(crate) toolbar: Toolbar,
     pub(crate) sheet_inset: f32,
     recents: Option<(PathBuf, PathBuf)>,
@@ -294,7 +297,7 @@ impl FilesView {
         text: TextSystem,
     ) -> io::Result<Self> {
         let icons = Icons::new(apps.data_dirs().to_vec());
-        let operations = Operations::new(browser.trash().clone());
+        let operations = Operations::asking(browser.trash().clone());
         let signals: Signals = Rc::new(RefCell::new(Vec::new()));
         let mut host = FreeLayout::new();
         let table = crate::controls::table(&signals);
@@ -344,6 +347,7 @@ impl FilesView {
             hover: None,
             searching: None,
             index: None,
+            search_home_button: None,
             toolbar: Toolbar::default(),
             sheet_inset: SHEET_INSET as f32,
             recents: None,
@@ -720,8 +724,12 @@ impl FilesView {
                     true
                 }
                 None => {
-                    if self.operations.conflict().is_some() && self.sheet.is_none() {
-                        self.present_conflict();
+                    if self.sheet.is_none() {
+                        if self.operations.conflict().is_some() {
+                            self.present_conflict();
+                        } else if self.operations.failure().is_some() {
+                            self.present_failure();
+                        }
                     }
                     true
                 }
@@ -898,6 +906,7 @@ impl FilesView {
             }
         }
         self.keep_selection_visible();
+        self.sync_search_home();
         self.sync_table();
     }
 
@@ -1428,6 +1437,12 @@ impl FilesView {
                 }
                 if self.operations.conflict().is_some() {
                     self.present_conflict();
+                }
+            }
+            Sheet::Failure => {
+                self.answer_failure(action);
+                if self.operations.failure().is_some() {
+                    self.present_failure();
                 }
             }
             Sheet::GoTo(typed) if action == "go" => self.go_to(&typed),
@@ -2214,11 +2229,18 @@ impl FilesView {
                 ],
             ));
         }
-        if matches!(self.sheet, Some(Sheet::Conflict { .. }))
+        if matches!(self.sheet, Some(Sheet::Conflict { .. } | Sheet::Failure))
             && self.operations.conflict().is_none()
+            && self.operations.failure().is_none()
         {
             self.dismiss_sheet();
         }
+        if let Some(shortfall) = &outcome.shortfall
+            && self.sheet.is_none()
+        {
+            self.present_shortfall(finished.purpose, shortfall);
+        }
+
         let shown = outcome
             .changes
             .iter()

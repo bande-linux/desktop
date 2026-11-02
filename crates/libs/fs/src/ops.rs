@@ -10,11 +10,15 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use rustix::io::Errno;
+
 mod archive;
 
 pub use archive::{archive_path, can_extract};
 
+use crate::listing::same_volume;
 use crate::naming::{duplicate_name, keep_both_name, untitled_folder};
+
 use crate::trash::{Trash, TrashItem, erase, forget, remove_all, restore_to};
 
 const CHUNK: u64 = 8 * 1024 * 1024;
@@ -70,6 +74,7 @@ pub enum Resolution {
     KeepBoth,
     Replace,
     Skip,
+    Retry,
     Stop,
 }
 
@@ -100,10 +105,54 @@ pub struct Failure {
     pub error: io::Error,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Problem {
+    Permission,
+    ReadOnly,
+    NoSpace,
+    NameTooLong,
+    DeviceGone,
+    Other,
+}
+
+impl Failure {
+    pub fn problem(&self) -> Problem {
+        let errno = |code: Errno| self.error.raw_os_error() == Some(code.raw_os_error());
+        if errno(Errno::ACCESS) || errno(Errno::PERM) {
+            Problem::Permission
+        } else if errno(Errno::ROFS) {
+            Problem::ReadOnly
+        } else if errno(Errno::NOSPC) || errno(Errno::DQUOT) {
+            Problem::NoSpace
+        } else if errno(Errno::NAMETOOLONG) {
+            Problem::NameTooLong
+        } else if errno(Errno::NODEV) || errno(Errno::NXIO) || errno(Errno::NOTCONN) {
+            Problem::DeviceGone
+        } else {
+            Problem::Other
+        }
+    }
+
+    pub fn retryable(&self) -> bool {
+        !matches!(
+            self.error.kind(),
+            io::ErrorKind::InvalidInput | io::ErrorKind::AlreadyExists | io::ErrorKind::Unsupported
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Shortfall {
+    pub needed: u64,
+    pub destination: PathBuf,
+    pub sources: Vec<PathBuf>,
+}
+
 #[derive(Debug, Default)]
 pub struct Outcome {
     pub changes: Vec<Change>,
     pub failures: Vec<Failure>,
+    pub shortfall: Option<Shortfall>,
     pub cancelled: bool,
 }
 
@@ -111,6 +160,7 @@ pub struct Outcome {
 pub enum Report {
     Progress(Progress),
     Conflict(Conflict),
+    Failure(Failure),
     Finished(Outcome),
 }
 
@@ -123,7 +173,7 @@ pub struct Job {
 }
 
 impl Job {
-    pub fn start(task: Task, trash: Trash) -> io::Result<Self> {
+    pub fn start(task: Task, trash: Trash, asks: bool) -> io::Result<Self> {
         let (wake, signal) = UnixStream::pair()?;
         wake.set_nonblocking(true)?;
         signal.set_nonblocking(true)?;
@@ -141,6 +191,9 @@ impl Job {
             remembered: None,
             outcome: Outcome::default(),
             made: None,
+            asks,
+            skip_failures: false,
+            troubles: 0,
         };
         thread::Builder::new()
             .name("file operation".to_owned())
@@ -203,6 +256,9 @@ struct Worker {
     remembered: Option<Resolution>,
     outcome: Outcome,
     made: Option<PathBuf>,
+    asks: bool,
+    skip_failures: bool,
+    troubles: usize,
 }
 
 fn name_of(path: &Path) -> io::Result<&std::ffi::OsStr> {
@@ -225,6 +281,12 @@ fn tree_size(path: &Path) -> (u64, u64) {
         .fold((1, 0), |(items, bytes), (more_items, more_bytes)| {
             (items + more_items, bytes + more_bytes)
         })
+}
+
+fn free_space(folder: &Path) -> Option<u64> {
+    rustix::fs::statvfs(folder)
+        .ok()
+        .map(|stats| stats.f_bavail * stats.f_frsize)
 }
 
 fn keep_metadata(file: &File, metadata: &Metadata) -> io::Result<()> {
@@ -267,10 +329,72 @@ impl Worker {
     }
 
     fn fail(&mut self, path: &Path, error: io::Error) {
+        self.troubles += 1;
         self.outcome.failures.push(Failure {
             path: path.to_path_buf(),
             error,
         });
+    }
+
+    fn trouble(&mut self, path: &Path, error: io::Error) -> Result<bool, Halt> {
+        if !self.asks {
+            self.fail(path, error);
+            return Ok(false);
+        }
+        self.troubles += 1;
+        if self.skip_failures {
+            return Ok(false);
+        }
+        self.send(Report::Failure(Failure {
+            path: path.to_path_buf(),
+            error,
+        }));
+        let answer = self.answers.recv().map_err(|_| Halt::Cancelled)?;
+        self.check()?;
+        match answer.resolution {
+            Resolution::Retry => Ok(true),
+            Resolution::Stop => Err(Halt::Stopped),
+            _ => {
+                self.skip_failures = answer.apply_to_all;
+                Ok(false)
+            }
+        }
+    }
+
+    fn attempt<T>(
+        &mut self,
+        path: &Path,
+        mut action: impl FnMut(&mut Self) -> io::Result<T>,
+    ) -> Result<Option<T>, Halt> {
+        loop {
+            match action(self) {
+                Ok(value) => return Ok(Some(value)),
+                Err(error) => {
+                    if !self.trouble(path, error)? {
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+    }
+
+    fn ensure_space(
+        &mut self,
+        destination: &Path,
+        bytes: u64,
+        sources: &[PathBuf],
+    ) -> Result<(), Halt> {
+        match free_space(destination) {
+            Some(free) if bytes > free => {
+                self.outcome.shortfall = Some(Shortfall {
+                    needed: bytes - free,
+                    destination: destination.to_path_buf(),
+                    sources: sources.to_vec(),
+                });
+                Err(Halt::Stopped)
+            }
+            _ => Ok(()),
+        }
     }
 
     fn ask(&mut self, conflict: Conflict) -> Result<Resolution, Halt> {
@@ -310,6 +434,7 @@ impl Worker {
                 destination,
             } => {
                 self.count(&sources);
+                self.ensure_space(&destination, self.progress.bytes_total, &sources)?;
                 for source in &sources {
                     self.copy_into(source, &destination)?;
                 }
@@ -319,12 +444,21 @@ impl Worker {
                 destination,
             } => {
                 self.progress.items_total = sources.len() as u64;
+                let crossing = sources
+                    .iter()
+                    .filter(|source| !same_volume(source, &destination))
+                    .map(|source| tree_size(source).1)
+                    .sum();
+                self.ensure_space(&destination, crossing, &sources)?;
                 for source in &sources {
                     self.move_into(source, &destination)?;
                 }
             }
             Task::Duplicate { sources } => {
                 self.count(&sources);
+                if let Some(folder) = sources.first().and_then(|source| source.parent()) {
+                    self.ensure_space(folder, self.progress.bytes_total, &sources)?;
+                }
                 for source in &sources {
                     self.duplicate(source)?;
                 }
@@ -333,7 +467,7 @@ impl Worker {
                 self.progress.items_total = sources.len() as u64;
                 for source in &sources {
                     self.check()?;
-                    self.put_in_trash(source);
+                    self.put_in_trash(source)?;
                     self.step(source);
                 }
             }
@@ -341,9 +475,7 @@ impl Worker {
                 self.progress.items_total = sources.len() as u64;
                 for source in &sources {
                     self.check()?;
-                    if let Err(error) = remove_all(source) {
-                        self.fail(source, error);
-                    }
+                    self.attempt(source, |_| remove_all(source))?;
                     self.step(source);
                 }
             }
@@ -387,25 +519,18 @@ impl Worker {
         self.progress.items_total = items.len() as u64;
         for item in items {
             self.check()?;
-            if let Err(error) = erase(item) {
-                self.fail(&item.original, error);
-            }
+            self.attempt(&item.original, |_| erase(item))?;
             self.step(&item.original);
         }
         Ok(())
     }
 
-    fn put_in_trash(&mut self, path: &Path) -> Option<TrashItem> {
-        match self.trash.put(path) {
-            Ok(item) => {
-                self.outcome.changes.push(Change::Trashed(item.clone()));
-                Some(item)
-            }
-            Err(error) => {
-                self.fail(path, error);
-                None
-            }
+    fn put_in_trash(&mut self, path: &Path) -> Result<Option<TrashItem>, Halt> {
+        let item = self.attempt(path, |worker| worker.trash.put(path))?;
+        if let Some(item) = &item {
+            self.outcome.changes.push(Change::Trashed(item.clone()));
         }
+        Ok(item)
     }
 
     fn resolve(&mut self, source: &Path, target: PathBuf) -> Result<Option<PathBuf>, Halt> {
@@ -427,18 +552,19 @@ impl Worker {
             }
             Resolution::Replace => {
                 if source.starts_with(&target) {
-                    self.fail(
+                    self.trouble(
                         source,
                         io::Error::new(
                             io::ErrorKind::InvalidInput,
                             "an item can't replace the folder that contains it",
                         ),
-                    );
+                    )?;
                     return Ok(None);
                 }
-                Ok(self.put_in_trash(&target).map(|_| target))
+                Ok(self.put_in_trash(&target)?.map(|_| target))
             }
-            Resolution::Skip => Ok(None),
+            Resolution::Skip | Resolution::Retry => Ok(None),
+
             Resolution::Stop => Err(Halt::Stopped),
         }
     }
@@ -448,18 +574,18 @@ impl Worker {
         let name = match name_of(source) {
             Ok(name) => name.to_owned(),
             Err(error) => {
-                self.fail(source, error);
+                self.trouble(source, error)?;
                 return Ok(());
             }
         };
         if destination.starts_with(source) {
-            self.fail(
+            self.trouble(
                 source,
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "a folder can't be copied into itself",
                 ),
-            );
+            )?;
             return Ok(());
         }
         let target = destination.join(&name);
@@ -509,10 +635,10 @@ impl Worker {
     fn duplicate(&mut self, source: &Path) -> Result<(), Halt> {
         self.check()?;
         let (Some(folder), Ok(name)) = (source.parent(), name_of(source)) else {
-            self.fail(
+            self.trouble(
                 source,
                 io::Error::new(io::ErrorKind::InvalidInput, "the item has no folder"),
-            );
+            )?;
             return Ok(());
         };
         let target = duplicate_name(folder, &name.to_string_lossy(), source.is_dir());
@@ -522,15 +648,31 @@ impl Worker {
     fn copy_tree(&mut self, source: &Path, target: &Path) -> Result<(), Halt> {
         self.check()?;
         self.progress.current = Some(source.to_path_buf());
+        let fresh = target.symlink_metadata().is_err();
+        loop {
+            let Err(error) = self.copy_entry(source, target)? else {
+                break;
+            };
+            let retry = self.trouble(source, error)?;
+            if fresh && target.symlink_metadata().is_ok() {
+                let _ = remove_all(target);
+            }
+            if !retry {
+                break;
+            }
+        }
+        self.progress.items_done += 1;
+        self.report_progress(false);
+        Ok(())
+    }
+
+    fn copy_entry(&mut self, source: &Path, target: &Path) -> Result<io::Result<()>, Halt> {
         let metadata = match fs::symlink_metadata(source) {
             Ok(metadata) => metadata,
-            Err(error) => {
-                self.fail(source, error);
-                return Ok(());
-            }
+            Err(error) => return Ok(Err(error)),
         };
         let file_type = metadata.file_type();
-        let copied = if file_type.is_symlink() {
+        Ok(if file_type.is_symlink() {
             let linked = fs::read_link(source).and_then(|link| symlink(link, target));
             if linked.is_ok() {
                 self.mark_made(target);
@@ -545,13 +687,7 @@ impl Worker {
                 io::ErrorKind::Unsupported,
                 "special files can't be copied",
             ))
-        };
-        if let Err(error) = copied {
-            self.fail(source, error);
-        }
-        self.progress.items_done += 1;
-        self.report_progress(false);
-        Ok(())
+        })
     }
 
     fn copy_folder(
@@ -575,7 +711,8 @@ impl Worker {
         for child in children {
             self.copy_tree(&source.join(&child), &target.join(&child))?;
         }
-        Ok(File::open(target).and_then(|folder| keep_metadata(&folder, metadata)))
+        let _ = File::open(target).and_then(|folder| keep_metadata(&folder, metadata));
+        Ok(Ok(()))
     }
 
     fn copy_file(
@@ -616,35 +753,39 @@ impl Worker {
                 }
             }
         }
-        Ok(keep_metadata(&output, metadata))
+        let _ = keep_metadata(&output, metadata);
+        Ok(Ok(()))
     }
 
     fn relocate(&mut self, from: &Path, to: &Path) -> Result<bool, Halt> {
-        match fs::rename(from, to) {
-            Ok(()) => Ok(true),
-            Err(error) if crosses_devices(&error) => {
-                let (items, bytes) = tree_size(from);
-                self.progress.items_total += items;
-                self.progress.bytes_total += bytes;
-                let failures = self.outcome.failures.len();
-                if let Err(halt) = self.copy_made(from, to) {
-                    self.discard_made(to);
-                    return Err(halt);
+        loop {
+            match fs::rename(from, to) {
+                Ok(()) => return Ok(true),
+                Err(error) if crosses_devices(&error) => return self.copy_across(from, to),
+                Err(error) => {
+                    if !self.trouble(from, error)? {
+                        return Ok(false);
+                    }
                 }
-                if self.outcome.failures.len() > failures {
-                    self.discard_made(to);
-                    return Ok(false);
-                }
-                if let Err(error) = remove_all(from) {
-                    self.fail(from, error);
-                }
-                Ok(true)
-            }
-            Err(error) => {
-                self.fail(from, error);
-                Ok(false)
             }
         }
+    }
+
+    fn copy_across(&mut self, from: &Path, to: &Path) -> Result<bool, Halt> {
+        let (items, bytes) = tree_size(from);
+        self.progress.items_total += items;
+        self.progress.bytes_total += bytes;
+        let troubles = self.troubles;
+        if let Err(halt) = self.copy_made(from, to) {
+            self.discard_made(to);
+            return Err(halt);
+        }
+        if self.troubles > troubles {
+            self.discard_made(to);
+            return Ok(false);
+        }
+        self.attempt(from, |_| remove_all(from))?;
+        Ok(true)
     }
 
     fn move_into(&mut self, source: &Path, destination: &Path) -> Result<(), Halt> {
@@ -652,7 +793,7 @@ impl Worker {
         let name = match name_of(source) {
             Ok(name) => name.to_owned(),
             Err(error) => {
-                self.fail(source, error);
+                self.trouble(source, error)?;
                 return Ok(());
             }
         };
@@ -662,13 +803,13 @@ impl Worker {
             return Ok(());
         }
         if destination.starts_with(source) {
-            self.fail(
+            self.trouble(
                 source,
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "a folder can't be moved into itself",
                 ),
-            );
+            )?;
             return Ok(());
         }
         if let Some(target) = self.resolve(source, target)?
@@ -692,19 +833,23 @@ impl Worker {
     }
 
     fn put_back(&mut self, item: &TrashItem, target: &Path) -> Result<(), Halt> {
-        match restore_to(item, target) {
-            Ok(()) => {}
-            Err(error) if crosses_devices(&error) => {
-                if !self.relocate(&item.path(), target)? {
-                    return Ok(());
+        loop {
+            match restore_to(item, target) {
+                Ok(()) => break,
+                Err(error) if crosses_devices(&error) => {
+                    if !self.relocate(&item.path(), target)? {
+                        return Ok(());
+                    }
+                    if let Err(error) = forget(item) {
+                        self.fail(target, error);
+                    }
+                    break;
                 }
-                if let Err(error) = forget(item) {
-                    self.fail(target, error);
+                Err(error) => {
+                    if !self.trouble(target, error)? {
+                        return Ok(());
+                    }
                 }
-            }
-            Err(error) => {
-                self.fail(target, error);
-                return Ok(());
             }
         }
         self.outcome
@@ -716,18 +861,18 @@ impl Worker {
     fn revert(&mut self, change: &Change) -> Result<(), Halt> {
         match change {
             Change::Created(path) => {
-                self.put_in_trash(path);
+                self.put_in_trash(path)?;
                 self.step(path);
             }
             Change::Moved { from, to } => {
                 if from.symlink_metadata().is_ok() {
-                    self.fail(
+                    self.trouble(
                         from,
                         io::Error::new(
                             io::ErrorKind::AlreadyExists,
                             "an item with that name already exists",
                         ),
-                    );
+                    )?;
                 } else if self.relocate(to, from)? {
                     self.outcome.changes.push(Change::Moved {
                         from: to.clone(),

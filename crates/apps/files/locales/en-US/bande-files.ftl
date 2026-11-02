@@ -2,7 +2,12 @@ folder = Folder
 trash = Trash
 sidebar-favourites = Favourites
 sidebar-locations = Locations
-empty-folder = Empty folder
+empty-folder = Empty Folder
+trash-empty = The Trash is empty
+recents-empty = Files you open appear here
+no-results = No results for “{ $text }” in { $folder }
+search-home = Search Home
+no-permission = You don’t have permission to see the contents of “{ $folder }”.
 no-selection = No selection
 column-name = Name
 search-placeholder = Search
@@ -69,6 +74,37 @@ stop = Stop
 skip = Skip
 replace = Replace
 keep-both = Keep Both
+skip-all = Skip All
+try-again = Try Again
+ok = OK
+internal-disk = Internal
+failure-title = “{ $name }” couldn’t be { $action ->
+    [copy] copied
+    [move] moved
+    [duplicate] duplicated
+    [trash] moved to the Trash
+    [put-back] put back
+    [delete] deleted
+   *[other] changed
+}.
+failure-permission = You don’t have permission.
+failure-read-only = The volume is read-only.
+failure-no-space = The disk is full.
+failure-name-too-long = The name is too long.
+failure-device-gone = The disk was disconnected.
+failure-other = { $error }
+no-space-item = “{ $name }” can’t be { $action ->
+    [move] moved
+    [duplicate] duplicated
+   *[other] copied
+} because “{ $volume }” needs { $size } more space.
+no-space-items = The items can’t be { $action ->
+    [move] moved
+    [duplicate] duplicated
+   *[other] copied
+} because “{ $volume }” needs { $size } more space.
+no-space-detail = Nothing was written. Make room on the disk and try again.
+
 cancel = Cancel
 empty-trash = Empty Trash
 empty-trash-title = Are you sure you want to permanently erase the items in the Trash?

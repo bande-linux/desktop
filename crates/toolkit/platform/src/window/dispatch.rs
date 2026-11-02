@@ -22,7 +22,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 };
 
 use super::{State, ToplevelState, WindowEvent};
-use crate::shell::{MENU_BUTTON_SINCE, SHOW_APP_MENU_SINCE};
+use crate::shell::{ACTIVE_MENUS_SINCE, MENU_BUTTON_SINCE};
 
 impl Dispatch<WlRegistry, ()> for State {
     fn event(
@@ -85,7 +85,7 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "bande_shell_v1" => {
                     state.shell.protocol =
-                        Some(registry.bind(name, version.min(SHOW_APP_MENU_SINCE), handle, ()));
+                        Some(registry.bind(name, version.min(ACTIVE_MENUS_SINCE), handle, ()));
                 }
                 "bande_app_v1" => {
                     state.shell.app =

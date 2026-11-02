@@ -122,6 +122,7 @@ pub enum WindowEvent {
     CaptureScreen,
     CaptureArea,
     ActiveApp(String),
+    ActiveMenus(String),
     ActiveOutput(String),
     AppsChanged,
     VolumeKey {

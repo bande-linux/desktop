@@ -293,7 +293,11 @@ graph LR
     owns its app id as bus name and exports `com.canonical.dbusmenu` at `/org/bande/MenuBar`;
     the first top-level submenu is shown under the bold app name and the others become the
     menu titles beside it; the App menu of a window's menu button shows the same tree (a
-    third-party window's at the address it gave with `org_kde_kwin_appmenu`). The menu bar asks
+    third-party window's at the address it gave with `org_kde_kwin_appmenu`, or a GTK window's
+    `org.gtk.Menus` menu bar given on `gtk_shell1`, which `bande_status::gtkmenu` imports with
+    `Start` (kept subscribed while followed), enables and ticks from `org.gtk.Actions`
+    `DescribeAll`, refreshes on either `Changed` signal from that bus name and runs with
+    `Activate`). The menu bar asks
     for the menu when the app becomes active, and only when the name has an owner, so it never starts an app by D-Bus activation. Toolkit apps
     export their menus through `crates/libs/app-menu` (`bande-app-menu`), driven by
     `bande-app` ([apps.md](apps.md)), which builds the standard App, Edit and Window menus; an

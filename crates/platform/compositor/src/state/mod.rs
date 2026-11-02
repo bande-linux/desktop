@@ -126,6 +126,7 @@ pub struct State {
     pub(crate) apps_changed: bool,
     pub(crate) gesture_route: Option<crate::gesture::Route>,
     pub(crate) active_app: String,
+    pub(crate) active_menus: String,
     pub(crate) active_output: String,
     pub(crate) idle: crate::idle::Idle,
     pub(crate) output_power: crate::output_power::OutputPower,
@@ -209,11 +210,10 @@ impl Compositor {
         seat.add_pointer();
         crate::idle::create_global(&handle);
         crate::output_power::create_global(&handle);
-        crate::menu_button::create_global(&handle);
+        crate::menu_button::create_globals(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle
-            .create_global::<State, BandeShellV1, ()>(crate::menu_button::SHOW_APP_MENU_SINCE, ());
+        handle.create_global::<State, BandeShellV1, ()>(crate::menu_button::ACTIVE_MENUS_SINCE, ());
         handle.create_global::<State, BandeAppV1, ()>(4, ());
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
@@ -268,6 +268,7 @@ impl Compositor {
             apps_changed: false,
             gesture_route: None,
             active_app: String::new(),
+            active_menus: String::new(),
             active_output: String::new(),
             idle: crate::idle::Idle::default(),
             output_power: crate::output_power::OutputPower::default(),

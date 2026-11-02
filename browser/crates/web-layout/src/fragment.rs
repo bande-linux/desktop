@@ -13,7 +13,7 @@ pub struct Rect {
     pub height: f32,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct BoxFragment {
     pub node: Option<NodeId>,
     pub rect: Rect,
@@ -32,6 +32,12 @@ pub struct Layer {
     pub stacking: bool,
     pub clips: bool,
     pub opacity: f32,
+}
+
+impl Default for Layer {
+    fn default() -> Self {
+        Layer::FLOW
+    }
 }
 
 impl Layer {
@@ -61,7 +67,7 @@ pub enum Fragment {
     Text(TextFragment),
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct FragmentTree {
     pub root: BoxFragment,
     pub glyphs: Vec<Glyph>,

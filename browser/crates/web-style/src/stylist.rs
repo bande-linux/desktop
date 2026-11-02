@@ -166,7 +166,13 @@ impl Stylist {
     }
 
     pub fn heap_bytes(&self) -> usize {
-        self.rules.capacity() * size_of::<RuleData>()
+        let declarations: usize = self
+            .rules
+            .iter()
+            .map(|rule| rule.block.declarations.capacity() * 64 + rule.block.custom.capacity() * 48)
+            .sum();
+        declarations
+            + self.rules.capacity() * size_of::<RuleData>()
             + self.entries.capacity() * size_of::<Entry>()
             + self.bucketed.capacity() * size_of::<u32>()
             + self.buckets.capacity() * size_of::<(Key, (u32, u32))>()

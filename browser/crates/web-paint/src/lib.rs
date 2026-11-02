@@ -44,7 +44,7 @@ pub enum Item {
 
 pub type ImageSource<'a> = &'a dyn Fn(&str) -> Option<Arc<Image>>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct DisplayList {
     pub width: f32,
     pub height: f32,

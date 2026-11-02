@@ -36,6 +36,8 @@ pub struct Memory {
     pub boxes: usize,
     pub fragments: usize,
     pub display_list: usize,
+    pub stylist: usize,
+    pub images: usize,
 }
 
 pub fn parse(bytes: &[u8]) -> Document {
@@ -283,6 +285,9 @@ impl Page {
     }
 
     fn restyle(&mut self, fonts: &mut Fonts) {
+        self.display_list = Arc::default();
+        self.fragments = FragmentTree::default();
+        self.boxes = BoxTree::default();
         self.stylist.set_viewport(self.viewport);
         self.styles = Styles::compute(&self.document, &self.stylist);
         self.boxes = BoxTree::build(&self.document, &self.styles, fonts);
@@ -395,6 +400,8 @@ impl Page {
             boxes: self.boxes.heap_bytes(),
             fragments: self.fragments.heap_bytes(),
             display_list: self.display_list.heap_bytes(),
+            stylist: self.stylist.heap_bytes(),
+            images: self.images.bytes(),
         }
     }
 }

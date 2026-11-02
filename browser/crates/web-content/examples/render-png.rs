@@ -41,13 +41,15 @@ fn render(input: &str, output: &str, width: u16) -> Result<(), Box<dyn std::erro
     let memory = page.memory();
     let per_element = |bytes: usize| bytes as f64 / memory.elements.max(1) as f64;
     eprintln!(
-        "{} elements, parse {parsed:?}, total {rendered:?}, bytes per element: dom {:.0}, styles {:.0}, boxes {:.0}, fragments {:.0}, display list {:.0}",
+        "{} elements, parse {parsed:?}, total {rendered:?}, bytes per element: dom {:.0}, styles {:.0}, boxes {:.0}, fragments {:.0}, display list {:.0}, stylist {} KB, images {} KB",
         memory.elements,
         per_element(memory.dom),
         per_element(memory.styles),
         per_element(memory.boxes),
         per_element(memory.fragments),
         per_element(memory.display_list),
+        memory.stylist / 1024,
+        memory.images / 1024,
     );
     let height = (page.display_list.height.ceil() as u16).clamp(1, MAX_HEIGHT);
     let rgba = page.display_list.rasterize(0.0, width, height);

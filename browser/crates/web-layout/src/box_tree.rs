@@ -90,6 +90,7 @@ pub(crate) struct InlineContent {
     pub(crate) out_of_flow: Vec<BlockBox>,
 }
 
+#[derive(Default)]
 pub struct BoxTree {
     pub(crate) root: Option<BlockBox>,
 }

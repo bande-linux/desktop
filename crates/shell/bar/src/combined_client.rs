@@ -15,7 +15,6 @@ use crate::menu_bar_client::MenuBarClient;
 use crate::taskbar_client::Taskbar;
 
 const BAR_NAMESPACE: &str = "bar";
-const MENU_BAR_NAMESPACE: &str = "menubar";
 const ROOT: NodeId = NodeId(1 << 41);
 const HIDDEN_SHADOW: f32 = 8.0;
 const UNREAD_SLIVER: (f32, f32) = (2.0, 24.0);
@@ -71,9 +70,6 @@ impl CombinedClient {
         match &event {
             _ if pointer(&event) => {
                 self.taskbar.event(window, event.clone());
-                self.status.event(window, event);
-            }
-            WindowEvent::FocusShell(namespace) if namespace == MENU_BAR_NAMESPACE => {
                 self.status.event(window, event);
             }
             WindowEvent::Input(_) | WindowEvent::Drag(_) | WindowEvent::FocusShell(_) => {

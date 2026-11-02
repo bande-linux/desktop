@@ -1,7 +1,7 @@
 use accesskit::ActionRequest;
 use bande_graphics::{Cursor, Event, Modifiers, Point, Pointer, PointerButton, ResizeEdge, Scroll};
 
-use super::{Window, WindowEvent};
+use super::{Window, WindowError, WindowEvent};
 use crate::chrome::{Control, Frame, Zone, control_for_node};
 use crate::clipboard::DragEvent;
 use crate::seat::CLICK_SLOP;
@@ -200,7 +200,10 @@ impl Window {
                 chrome.pressed_inside = true;
                 chrome.zoom_rest = (control == Control::Zoom).then_some(now);
                 self.needs_redraw = true;
-                Ok(())
+                match control {
+                    Control::Menu => self.show_menus(),
+                    _ => Ok(()),
+                }
             }
             Zone::TitleBar if pointer.count.is_multiple_of(2) => self.toggle_zoom(),
             Zone::TitleBar => self.start_move(),
@@ -245,6 +248,7 @@ impl Window {
             Control::Minimize => self.minimize(),
             Control::Zoom if pointer.modifiers.alt => self.toggle_full_screen(),
             Control::Zoom => self.toggle_zoom(),
+            Control::Menu => Ok(()),
         };
         if result.is_err() {
             self.needs_redraw = true;
@@ -291,7 +295,37 @@ impl Window {
             }
             Control::Minimize => self.minimize(),
             Control::Zoom => self.toggle_zoom(),
+            Control::Menu => self.show_menus(),
         };
         result.is_ok()
+    }
+
+    pub(crate) fn announce_menu_button(&mut self) {
+        let frame = self.frame();
+        let Some(chrome) = &mut self.chrome else {
+            return;
+        };
+        let button = frame.menu_button();
+        if chrome.announced_menu == Some(button) {
+            return;
+        }
+        chrome.announced_menu = Some(button);
+        let (Ok(app), Ok(toplevel)) = (self.menu_app(), self.toplevel()) else {
+            return;
+        };
+        let rect = button.unwrap_or_default();
+        app.set_menu_button(
+            toplevel,
+            rect.x.round() as i32,
+            rect.y.round() as i32,
+            rect.width.round() as i32,
+            rect.height.round() as i32,
+        );
+    }
+
+    pub(crate) fn show_menus(&mut self) -> Result<(), WindowError> {
+        let (seat, serial) = self.grab()?;
+        self.menu_app()?.show_menus(self.toplevel()?, seat, serial);
+        self.flush()
     }
 }

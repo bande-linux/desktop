@@ -332,18 +332,20 @@ fn run_errand(connection: &Connection, errand: Errand, outbox: &Outbox<Update>) 
         Errand::Activate { item, x, y } => {
             item_proxy(connection, &item).and_then(|proxy| proxy.activate(x, y))
         }
-        Errand::AppMenu(app) => {
-            let key = format!("{app}{APP_MENU_PATH}");
-            let running = BusName::try_from(app.as_str()).is_ok_and(|name| {
+        Errand::AppMenu(menu) => {
+            let (service, _) = split(&menu);
+            let running = BusName::try_from(service).is_ok_and(|name| {
                 DBusProxy::new(connection)
                     .and_then(|bus| Ok(bus.name_has_owner(name)?))
                     .unwrap_or(false)
             });
             let root = running
-                .then(|| dbus_menu(connection, &key).and_then(|proxy| proxy.get_layout(0, -1, &[])))
+                .then(|| {
+                    dbus_menu(connection, &menu).and_then(|proxy| proxy.get_layout(0, -1, &[]))
+                })
                 .and_then(Result::ok)
                 .map(|(_, root)| tree(root));
-            outbox.send(Update::AppMenu { app, root });
+            outbox.send(Update::AppMenu { menu, root });
             Ok(())
         }
     };

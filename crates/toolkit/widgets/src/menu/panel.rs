@@ -22,7 +22,6 @@ const CHEVRON_SPACE: f32 = 18.0;
 const MINIMUM_WIDTH: f32 = 140.0;
 const FONT_SIZE: f32 = 13.0;
 const MARK_STROKE: f32 = 1.6;
-const FOOTER_FONT_SIZE: f32 = 12.0;
 const SEARCH_WIDTH: f32 = 220.0;
 const MAGNIFIER_RADIUS: f32 = 4.0;
 const MAGNIFIER_CENTRE: f32 = 14.0;
@@ -92,7 +91,7 @@ impl MenuPanel {
         let has_submenu = menu.items.iter().any(|item| item.submenu.is_some());
         let search = menu.search.as_ref().map(|search| {
             if search.query.is_empty() {
-                let style = TextStyle::new(FOOTER_FONT_SIZE, palette.ink3);
+                let style = TextStyle::new(FONT_SIZE, palette.ink3);
                 SearchLook::Hint(
                     text.paragraph(&search.hint, style, None, TextAlign::Start),
                     ShortcutText::new(text, &search.shortcut, style),
@@ -106,15 +105,14 @@ impl MenuPanel {
                 ))
             }
         });
-        let (header, footer, minimum_width) = match &search {
+        let (header, minimum_width) = match &search {
             Some(SearchLook::Hint(hint, shortcut)) => (
-                0.0,
-                row_height,
+                row_height + SEPARATOR_HEIGHT,
                 (TEXT_START + hint.width() + SHORTCUT_GAP + shortcut.width() + TRAILING_PADDING)
                     .max(widen(SEARCH_WIDTH)),
             ),
-            Some(SearchLook::Query(_)) => (row_height + SEPARATOR_HEIGHT, 0.0, widen(SEARCH_WIDTH)),
-            None => (0.0, 0.0, widen(MINIMUM_WIDTH)),
+            Some(SearchLook::Query(_)) => (row_height + SEPARATOR_HEIGHT, widen(SEARCH_WIDTH)),
+            None => (0.0, widen(MINIMUM_WIDTH)),
         };
         let rows = [&menu, &alternate, &shifted].map(|menu| {
             let mut top = VERTICAL_PADDING + header;
@@ -166,7 +164,7 @@ impl MenuPanel {
         let width = (TEXT_START + widest_label + shortcut_space + chevron_space + TRAILING_PADDING)
             .max(minimum_width)
             .ceil();
-        let height = top + VERTICAL_PADDING + footer;
+        let height = top + VERTICAL_PADDING;
         Self {
             menus: [menu, alternate, shifted],
             rows,
@@ -189,8 +187,7 @@ impl MenuPanel {
     }
 
     pub(super) fn fit_height(&mut self, height: f32) {
-        let (header, footer) = self.header_and_footer();
-        let fewest = 2.0 * VERTICAL_PADDING + header + footer + 2.0 * SCROLL_ZONE;
+        let fewest = 2.0 * VERTICAL_PADDING + self.header() + 2.0 * SCROLL_ZONE;
         let fewest = fewest + FEWEST_ROWS * self.row_height;
         self.size.height = height
             .max(fewest.min(self.content_height))
@@ -213,19 +210,17 @@ impl MenuPanel {
         (self.content_height - self.size.height).max(0.0)
     }
 
-    fn header_and_footer(&self) -> (f32, f32) {
+    fn header(&self) -> f32 {
         match &self.search {
-            Some(SearchLook::Query(_)) => (self.row_height + SEPARATOR_HEIGHT, 0.0),
-            Some(SearchLook::Hint(..)) => (0.0, self.row_height),
-            None => (0.0, 0.0),
+            Some(_) => self.row_height + SEPARATOR_HEIGHT,
+            None => 0.0,
         }
     }
 
     fn rows_area(&self) -> (f32, f32) {
-        let (header, footer) = self.header_and_footer();
         (
-            VERTICAL_PADDING + header,
-            self.size.height - VERTICAL_PADDING - footer,
+            VERTICAL_PADDING + self.header(),
+            self.size.height - VERTICAL_PADDING,
         )
     }
 
@@ -368,7 +363,7 @@ impl MenuPanel {
         match &self.search {
             Some(SearchLook::Query(query)) => self.paint_query(query, palette, &mut items),
             Some(SearchLook::Hint(hint, shortcut)) => {
-                self.paint_hint(hint, shortcut, outline, palette, &mut items);
+                self.paint_hint(hint, shortcut, palette, &mut items);
             }
             None => {}
         }
@@ -496,7 +491,7 @@ impl MenuPanel {
     }
 
     fn paint_query(&self, query: &Paragraph, palette: &Palette, items: &mut Vec<Item>) {
-        let centre = VERTICAL_PADDING + self.row_height / 2.0;
+        let centre = self.search_centre();
         magnifier(Point::new(MAGNIFIER_CENTRE, centre), palette.ink2, items);
         let y = (centre - query.height() / 2.0).round();
         items.push(Item::Text {
@@ -510,6 +505,37 @@ impl MenuPanel {
             width: 1.5,
             paint: palette.accent_text.into(),
         });
+        self.paint_search_rule(palette, items);
+    }
+
+    fn paint_hint(
+        &self,
+        hint: &Paragraph,
+        shortcut: &ShortcutText,
+        palette: &Palette,
+        items: &mut Vec<Item>,
+    ) {
+        let centre = self.search_centre();
+        magnifier(Point::new(MAGNIFIER_CENTRE, centre), palette.ink3, items);
+        items.push(Item::Text {
+            origin: Point::new(TEXT_START, (centre - hint.height() / 2.0).round()),
+            paragraph: hint.clone(),
+        });
+        shortcut.paint(
+            Point::new(
+                (self.size.width - TRAILING_PADDING - shortcut.width()).round(),
+                (centre - shortcut.height() / 2.0).round(),
+            ),
+            items,
+        );
+        self.paint_search_rule(palette, items);
+    }
+
+    fn search_centre(&self) -> f32 {
+        VERTICAL_PADDING + self.row_height / 2.0
+    }
+
+    fn paint_search_rule(&self, palette: &Palette, items: &mut Vec<Item>) {
         items.push(Item::Fill {
             shape: Shape::rect(Rect::new(
                 0.0,
@@ -518,53 +544,6 @@ impl MenuPanel {
                 1.0,
             )),
             paint: palette.hairline.into(),
-        });
-    }
-
-    fn paint_hint(
-        &self,
-        hint: &Paragraph,
-        shortcut: &ShortcutText,
-        outline: Shape,
-        palette: &Palette,
-        items: &mut Vec<Item>,
-    ) {
-        let tray = Rect::new(
-            0.0,
-            self.size.height - self.row_height,
-            self.size.width,
-            self.row_height,
-        );
-        let centre = tray.y + tray.height / 2.0;
-        let mut footer = vec![
-            Item::Fill {
-                shape: Shape::rect(tray),
-                paint: palette.chassis.into(),
-            },
-            Item::Fill {
-                shape: Shape::rect(Rect::new(0.0, tray.y, tray.width, 1.0)),
-                paint: palette.hairline.into(),
-            },
-        ];
-        magnifier(
-            Point::new(MAGNIFIER_CENTRE, centre),
-            palette.ink3,
-            &mut footer,
-        );
-        footer.push(Item::Text {
-            origin: Point::new(TEXT_START, (centre - hint.height() / 2.0).round()),
-            paragraph: hint.clone(),
-        });
-        shortcut.paint(
-            Point::new(
-                (tray.width - TRAILING_PADDING - shortcut.width()).round(),
-                (centre - shortcut.height() / 2.0).round(),
-            ),
-            &mut footer,
-        );
-        items.push(Item::Clip {
-            shape: outline,
-            items: footer,
         });
     }
 

@@ -20,11 +20,6 @@ use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA};
 pub const EDGE_PADDING: f32 = 24.0;
 pub const LABEL_ROOM: f32 = 280.0;
 const MARK_CELL: f32 = 52.0;
-const HEADER_CELL: f32 = 58.0;
-const HEADER_WIDTH: f32 = 52.0;
-const HEADER_ICON: f32 = 24.0;
-const CAPTION_SIZE: f32 = 11.0;
-const DIMMED: f32 = 0.45;
 const MARK_SIZE: f32 = 22.0;
 const CLOCK_CELL: f32 = 52.0;
 const STATUS_WIDTH: f32 = 52.0;
@@ -77,8 +72,6 @@ pub struct TaskbarView {
     width: f32,
     icon_size: f32,
     app: String,
-    app_icon: Option<Image>,
-    key_display: bool,
     tray: Vec<(String, Option<Image>)>,
     status: Status,
     clock: Clock,
@@ -195,8 +188,6 @@ impl TaskbarView {
             width: bar_width(icon_size),
             icon_size,
             app: String::new(),
-            app_icon: None,
-            key_display: true,
             tray: Vec::new(),
             status: Status::default(),
             clock: Clock {
@@ -255,17 +246,6 @@ impl TaskbarView {
     fn layout(&self, height: f32) -> (Vec<(Slot, Rect)>, AppsRegion, Vec<f32>) {
         let width = self.width;
         let mut slots = vec![(Slot::BandeMenu, Rect::new(0.0, 0.0, width, MARK_CELL))];
-        if !self.app.is_empty() {
-            slots.push((
-                Slot::AppMenu,
-                Rect::new(
-                    ((width - HEADER_WIDTH) / 2.0).round(),
-                    MARK_CELL,
-                    HEADER_WIDTH,
-                    HEADER_CELL,
-                ),
-            ));
-        }
         let mut hairlines = Vec::new();
         let mut bottom = height - CLOCK_CELL;
         slots.push((Slot::Clock, Rect::new(0.0, bottom, width, CLOCK_CELL)));
@@ -321,8 +301,8 @@ impl TaskbarView {
         }
         bottom -= HAIRLINE_CELL;
         hairlines.push(bottom + HAIRLINE_CELL / 2.0);
-        let top = MARK_CELL + HEADER_CELL + HAIRLINE_CELL;
-        hairlines.push(MARK_CELL + HEADER_CELL + HAIRLINE_CELL / 2.0);
+        let top = MARK_CELL + HAIRLINE_CELL;
+        hairlines.push(MARK_CELL + HAIRLINE_CELL / 2.0);
         let region = AppsRegion {
             top,
             bottom: bottom.max(top),
@@ -384,7 +364,7 @@ impl TaskbarView {
                 rect.width - 12.0,
                 rect.height - 8.0,
             ),
-            Slot::Workspace(_) | Slot::AppMenu => return,
+            Slot::Workspace(_) => return,
             _ => rect,
         };
         items.push(Item::Fill {
@@ -557,7 +537,6 @@ impl TaskbarView {
                     });
                 }
                 Slot::Clock => self.paint_clock(rect, scale, &mut items),
-                Slot::AppMenu => self.paint_app_menu(rect, scale, &mut items),
                 _ => {}
             }
             if slot == Slot::ControlCenter && !self.status.capturing.is_empty() {
@@ -566,69 +545,6 @@ impl TaskbarView {
         }
         self.slots = slots;
         items
-    }
-
-    fn caption(&mut self, width: f32) -> Paragraph {
-        let style = TextStyle::new(CAPTION_SIZE, self.palette.ink).weight(TextStyle::SEMIBOLD);
-        let mut name: Vec<char> = self.app.chars().collect();
-        let mut caption = self.app.clone();
-        loop {
-            let paragraph = self.paragraph(&caption, style);
-            if paragraph.width() <= width || name.len() <= 1 {
-                return paragraph;
-            }
-            name.pop();
-            caption = format!("{}…", name.iter().collect::<String>().trim_end());
-        }
-    }
-
-    fn paint_app_menu(&mut self, rect: Rect, scale: f64, items: &mut Vec<Item>) {
-        let mut header = vec![Item::Fill {
-            shape: Shape::rounded(rect, GROUP_RADIUS),
-            paint: self.palette.ink.with_alpha(WELL_ALPHA).into(),
-        }];
-        if let Some(alpha) = self.slot_alpha(Slot::AppMenu) {
-            header.push(Item::Fill {
-                shape: Shape::rounded(rect, GROUP_RADIUS),
-                paint: self.palette.ink.with_alpha(alpha).into(),
-            });
-        }
-        let icon_top = rect.y + 8.0;
-        if let Some(icon) = self.app_icon.clone() {
-            header.push(Item::Image {
-                rect: Rect::new(
-                    snap(rect.x + (rect.width - HEADER_ICON) / 2.0, scale),
-                    snap(icon_top, scale),
-                    HEADER_ICON,
-                    HEADER_ICON,
-                ),
-                image: icon,
-            });
-        }
-        let chevron = self.paragraph(
-            "›",
-            TextStyle::new(CAPTION_SIZE, self.palette.ink2).weight(TextStyle::SEMIBOLD),
-        );
-        let caption = self.caption(rect.width - 8.0 - chevron.width() - 2.0);
-        let total = caption.width() + 2.0 + chevron.width();
-        let x = snap(rect.x + (rect.width - total) / 2.0, scale);
-        let y = snap(icon_top + HEADER_ICON + 3.0, scale);
-        header.push(Item::Text {
-            origin: Point::new(snap(x + caption.width() + 2.0, scale), y),
-            paragraph: chevron,
-        });
-        header.push(Item::Text {
-            origin: Point::new(x, y),
-            paragraph: caption,
-        });
-        if self.key_display {
-            items.extend(header);
-        } else {
-            items.push(Item::Opacity {
-                alpha: DIMMED,
-                items: header,
-            });
-        }
     }
 
     fn paint_clock(&mut self, rect: Rect, scale: f64, items: &mut Vec<Item>) {
@@ -675,7 +591,6 @@ impl TaskbarView {
     fn describe(&self, slot: Slot) -> String {
         match slot {
             Slot::BandeMenu | Slot::Search => L10N.tr("launcher"),
-            Slot::AppMenu => L10N.tr_args("app-menus", [("app", self.app.clone().into())]),
             Slot::StatusItem(index) => self
                 .tray
                 .get(index)
@@ -709,7 +624,7 @@ impl TaskbarView {
             Slot::Workspace(index) => {
                 L10N.tr_args("workspace", [("number", (index as i64 + 1).into())])
             }
-            Slot::AppMenuTitle(_) => String::new(),
+            Slot::AppMenu | Slot::AppMenuTitle(_) => String::new(),
         }
     }
 }
@@ -726,20 +641,6 @@ impl StatusView for TaskbarView {
     }
 
     fn set_app_menus(&mut self, _titles: Vec<String>) {}
-
-    fn set_app_icon(&mut self, icon: Option<Image>) {
-        self.app_icon = icon;
-    }
-
-    fn set_key_display(&mut self, key: bool) -> bool {
-        let changed = self.key_display != key;
-        self.key_display = key;
-        changed
-    }
-
-    fn cascades(&self) -> bool {
-        true
-    }
 
     fn set_tray(&mut self, items: Vec<(String, Option<Image>)>) {
         self.tray = items;

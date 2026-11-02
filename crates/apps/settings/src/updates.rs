@@ -176,9 +176,7 @@ impl SettingsView {
             SoftwareState::Available(packages) => {
                 let total: u64 = packages.iter().map(|package| package.size).sum();
                 let size = [("size", format_size(total).into())];
-                let restarts = packages
-                    .iter()
-                    .any(|package| matches!(package.class, Class::Boot | Class::Offline));
+                let restarts = packages.iter().any(Package::needs_restart);
                 let detail = match (total > 0, restarts) {
                     (true, true) => L10N.tr_args("download-size-restart", size),
                     (true, false) => L10N.tr_args("download-size", size),

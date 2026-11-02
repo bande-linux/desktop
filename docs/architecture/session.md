@@ -46,8 +46,15 @@ graph LR
 - Locking is built on `ext-session-lock-v1`.
 - **Crash resilience**: if the lock screen crashes, the session stays locked; the compositor
   draws a blank frame and a new locker may take over the lock.
-- Idle pipeline: `ext-idle-notify-v1` dims the display, then locks, then suspends through
-  logind, at the times set in [`config.kdl`](overview.md#configuration).
+- Idle, as in macOS's Lock Screen settings ([`config.kdl`](overview.md#configuration) `idle`,
+  Settings ▸ Power ▸ Lock Screen): the backlight dims 10 s before the screen saver or the
+  display turning off, whichever comes first (default 5 and 10 min). The screen saver is the lock
+  screen itself, its clock and date over the blurred desktop picture, covering the desktop
+  through `ext-session-lock`, as macOS hands its saver over to the lock screen. "Require
+  password after screen saver begins or display is turned off" (default immediately) is a grace
+  period: until it passes, any key, click or movement dismisses the saver without a password.
+  Locks from `Super+L`, logind, sleep and the power button always ask for it. The computer
+  sleeps with the display unless `suspend-after` is later or `"never"`.
 - Keeping awake: a playing video holds off dimming, the display turning off and the lock, as
   macOS's display-sleep assertion does, through whichever path the player uses:
 
@@ -78,14 +85,19 @@ graph LR
   in `systemd-inhibit --list` as macOS lists power assertions. Battery alerts follow UPower's
   `WarningLevel` of the display device: a "Low Battery" notification at `Low`, replaced by a
   critical one that stays on screen at `Critical` or `Action`, closed when the level clears.
-  The idle state machine (`bande_power::idle`) maps idle time to dim, lock and suspend, skips
-  locking an already locked session, undims on activity without unlocking, and restarts the
+  The idle state machine (`bande_power::idle`) maps idle time to dim, saver (lock), password
+  required, display off and suspend, skips locking an already locked session, turns the display
+  off after 60 s on a lock it did not start, undims on activity without unlocking, and restarts the
   idle timers when an inhibitor ends; `IdleController` runs it in the service with the policy of
   `org.bande.Config` (followed as it changes), the session's `LockedHint`, and logind's
   `Session.Lock` and `Suspend` as actions; suspend is skipped when `CanSuspend` is not `yes`.
+  The grace period is `org.bande.Power`'s `PasswordRequired` property (true outside an idle lock
+  still in its grace), which the lock screen reads on input; any process of the user could
+  lengthen it through `config.kdl` anyway, so it adds no new trust.
   Idle time comes from the compositor's `ext-idle-notify-v1`, one notification per policy
   threshold, sent as soon as it is due. The compositor follows `Lock` on the session's own
-  logind object path (from `GetSession("auto")`; logind never signals on `session/auto`). Dimming sets the preferred backlight (`firmware`, then `platform`, then `raw`) to
+  logind object path (from `GetSession("auto")`; logind never signals on `session/auto`).
+  Dimming sets the preferred backlight (`firmware`, then `platform`, then `raw`) to
   a quarter of its level through logind's `Session.SetBrightness` and restores it on activity;
   displays without a backlight do not dim.
 
@@ -515,10 +527,10 @@ and by PackageKit's `GetUpdateDetail` restart answer. **Offline** (installed at 
 updates to `greetd` or `libpam*`, and anything else PackageKit says needs a system restart.
 **Boot** (installed now, "Restart to finish updating"): other kernels, `firmware-*`,
 `initramfs-tools` and bootloaders. Everything else is **live**. Update Now first simulates the live
-set; if apt would pull in an offline package, or the user may not update without a password
-(polkit `system-update`, which PackageKit grants active sudo members), everything goes offline:
-download, `Offline.Trigger`, "Restart to install n updates", with no password. Otherwise the live
-set installs now with `UpdatePackages`, then the offline set is downloaded and triggered.
+set; if apt would pull in an offline package, everything goes offline: download, `Offline.Trigger`,
+"Restart to install n updates". Otherwise the live set installs now with `UpdatePackages`, which
+asks for a password through the polkit agent unless polkit grants `system-update` (PackageKit grants
+it to active sudo members), then the offline set is downloaded and triggered.
 needrestart (recommended by `bande-desktop`, `/etc/needrestart/conf.d/bande.conf`) restarts the
 system services an update replaced from apt's hook, never greetd, the buses, logind, getty,
 `user@`, polkit or PackageKit. Settings then looks at the user's own processes that map a deleted
@@ -552,5 +564,6 @@ up to date"): the daily timer's run downloads every update in the background (Pa
 `ONLY_DOWNLOAD`, `flatpak update --no-deploy`), waits for the user to be idle for five minutes
 (`ext-idle-notify-v1`, which honours idle inhibitors; no polling), checks again and installs the
 live and Flatpak updates when polkit lets the user update without a password; if those would pull
-in an offline package they wait as well. Boot and offline updates are never installed by
-themselves: a notification says they are ready and opens Software Update.
+in an offline package they wait as well. Boot and offline updates, and live ones that need a
+password, are never installed by themselves: a notification says how many are ready to install and
+how many of them need a restart, and opens Software Update.

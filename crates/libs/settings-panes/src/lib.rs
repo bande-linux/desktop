@@ -6,9 +6,8 @@ use std::sync::LazyLock;
 use bande_l10n::Localizer;
 
 pub use registry::{
-    AUTOMATIC, Choice, DIM_CHOICES, Group, Kind, LOCK_CHOICES, List, MAX_SEGMENTS, POINTER_SPEEDS,
-    Pane, PaneId, Permission, Section, Setting, SettingId, TEXT_SIZES, Value, WITH_DISPLAY,
-    duration_label, panes,
+    AUTOMATIC, Choice, Group, Kind, List, MAX_SEGMENTS, POINTER_SPEEDS, Pane, PaneId, Permission,
+    Section, Setting, SettingId, TEXT_SIZES, Value, WITH_DISPLAY, duration_label, panes,
 };
 pub use search::{PaneHit, SettingHit, search};
 

@@ -7,7 +7,7 @@ use bande_config::{Appearance, BarEdge, BarLayout, Config, ConfigError, Setting}
 #[test]
 fn kdl_problems_are_reported_where_they_are_while_every_valid_setting_applies() {
     let (config, problems) = Config::load(
-        "appearance \"dark\"\ntheme \"graphite\"\nbar {\n    edge \"middle\"\n    size 52\n    sparkle #true\n}\nidle {\n    dim-after \"10m\"\n    lock-after \"5m\"\n}\n",
+        "appearance \"dark\"\ntheme \"graphite\"\nbar {\n    edge \"middle\"\n    size 52\n    sparkle #true\n}\nidle {\n    display-off-after \"10m\"\n    lock-after \"5m\"\n}\n",
     )
     .expect("well-formed KDL");
     assert_eq!(
@@ -20,7 +20,10 @@ fn kdl_problems_are_reported_where_they_are_while_every_valid_setting_applies() 
     assert_eq!(config.appearance, Appearance::Dark);
     assert_eq!(config.bar.edge, BarEdge::Left);
     assert_eq!(config.bar.icon_size, 52);
-    assert_eq!(config.idle.lock_after, Duration::from_secs(10 * 60));
+    assert_eq!(
+        config.idle.display_off_after,
+        Some(Duration::from_secs(10 * 60))
+    );
 
     let Err(ConfigError { line, column, .. }) = Config::load("bar {\n    edge \"left\n}\n") else {
         panic!("an unterminated string is a syntax error");

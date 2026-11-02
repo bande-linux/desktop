@@ -6,7 +6,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
 pub const FALLBACK_THEME: &str = "hicolor";
-pub const ICON_THEMES: [&str; 2] = ["Bande", "Adwaita"];
+pub const ICON_THEMES: [&str; 1] = ["Bande"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {

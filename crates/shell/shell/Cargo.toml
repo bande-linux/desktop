@@ -31,7 +31,7 @@ section = "misc"
 depends = "$auto, fonts-inter, fonts-noto-color-emoji, bande-notify"
 conflicts = "bande-bar, bande-desktop-surface, bande-launcher, bande-notifications, bande-controlcenter"
 replaces = "bande-bar, bande-desktop-surface, bande-launcher, bande-notifications, bande-controlcenter"
-recommends = "upower, network-manager, network-manager-config-connectivity-debian, bluez, pipewire, wireplumber, bande-tray, xdg-user-dirs, adwaita-icon-theme"
+recommends = "upower, network-manager, network-manager-config-connectivity-debian, bluez, pipewire, wireplumber, bande-tray, xdg-user-dirs"
 assets = [
     ["target/release/bande-shell", "usr/bin/", "755"],
     ["../../../data/wallpapers/*.svg", "usr/share/bande/wallpapers/", "644"],

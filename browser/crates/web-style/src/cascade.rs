@@ -373,8 +373,10 @@ impl Traversal<'_> {
                 return true;
             };
             !entry.sensitive
-                || matching::matches(&context, &entry.selector, element)
-                    == matching::matches(&context, &entry.selector, sibling)
+                || entry.selector().is_none_or(|selector| {
+                    matching::matches(&context, selector, element)
+                        == matching::matches(&context, selector, sibling)
+                })
         })
     }
 
@@ -391,9 +393,10 @@ impl Traversal<'_> {
                 self.stylist
                     .entries
                     .get(entry as usize)
-                    .is_some_and(|entry| {
-                        self.bloom.may_match(&entry.selector)
-                            && matching::matches(&context, &entry.selector, element)
+                    .and_then(|entry| entry.selector())
+                    .is_some_and(|selector| {
+                        self.bloom.may_match(selector)
+                            && matching::matches(&context, selector, element)
                     })
             })
             .collect();
@@ -414,7 +417,7 @@ impl Traversal<'_> {
             let Some(rule) = self.stylist.rules.get(entry.rule as usize) else {
                 continue;
             };
-            let specificity = entry.selector.specificity;
+            let specificity = entry.selector().map_or(0, |selector| selector.specificity);
             for declaration in &rule.block.declarations {
                 let key = (
                     rank(rule.origin, declaration.important, rule.layer),

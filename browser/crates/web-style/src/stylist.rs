@@ -29,9 +29,16 @@ pub(crate) struct RuleData {
 }
 
 pub(crate) struct Entry {
-    pub(crate) selector: Selector,
+    list: SelectorList,
+    index: u32,
     pub(crate) rule: u32,
     pub(crate) sensitive: bool,
+}
+
+impl Entry {
+    pub(crate) fn selector(&self) -> Option<&Selector> {
+        self.list.0.get(self.index as usize)
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -173,8 +180,8 @@ impl Builder<'_> {
                         origin,
                         layer,
                     });
-                    for selector in style.selectors.0.into_vec() {
-                        self.add_selector(selector, index);
+                    for selector in 0..style.selectors.0.len() {
+                        self.add_selector(&style.selectors, selector as u32, index);
                     }
                     self.add_rules(style.rules, origin, layer, None);
                 }
@@ -202,7 +209,10 @@ impl Builder<'_> {
         }
     }
 
-    fn add_selector(&mut self, selector: Selector, rule: u32) {
+    fn add_selector(&mut self, list: &SelectorList, index: u32, rule: u32) {
+        let Some(selector) = list.0.get(index as usize) else {
+            return;
+        };
         let key = subject_key(&selector.components);
         for (subject, hover_key) in hover_keys(&selector.components) {
             let keys = if subject {
@@ -214,13 +224,14 @@ impl Builder<'_> {
                 keys.push(hover_key);
             }
         }
-        let index = self.stylist.entries.len() as u32;
+        let entry = self.stylist.entries.len() as u32;
         self.stylist.entries.push(Entry {
             sensitive: is_sensitive(&selector.components),
-            selector,
+            list: list.clone(),
+            index,
             rule,
         });
-        self.stylist.buckets.entry(key).or_default().push(index);
+        self.stylist.buckets.entry(key).or_default().push(entry);
     }
 }
 

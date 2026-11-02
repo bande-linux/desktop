@@ -1,5 +1,5 @@
-# The desktop right after login, then the menus of the desktop, the taskbar and the menu bar.
-note "A fresh session: wallpaper, menu bar, taskbar"
+# The desktop right after login, then the menus of the desktop, the taskbar and the Bande logo.
+note "A fresh session: wallpaper and the dark taskbar on the left"
 wait 2s
 shot "desktop after login"
 note "Right-click the empty desktop"
@@ -14,14 +14,14 @@ wait 1s
 shot "taskbar menu"
 key escape
 wait 500ms
-note "The system menu at the far left of the menu bar"
-click 45 22
+note "Right-click the Bande logo at the top of the taskbar: the Bande menu"
+click right 64 52
 wait 1s
 shot "system menu"
 key escape
 wait 500ms
-note "The clock opens the Notification Center"
-click 2800 22
+note "Super+N opens the Notification Center"
+key super+n
 wait 1200ms
 shot "notification center"
 key escape

@@ -1,4 +1,4 @@
-# Open System Settings from the launcher and switch to dark mode, then back to Auto.
+# Open System Settings from the launcher and switch to dark mode, then back.
 note "Open System Settings from the launcher"
 key super+space
 wait 600ms
@@ -22,9 +22,9 @@ note "Right arrow picks Dark"
 key right
 wait 2s
 shot "dark mode"
-note "Everything open should follow: the menu bar, the taskbar and the window"
+note "Everything open should follow: the taskbar and the window"
 wait 1500ms
-note "Back to Auto, the default"
+note "Automatic"
 key right
 wait 2s
 shot "auto again"

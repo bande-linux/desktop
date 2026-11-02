@@ -17,7 +17,7 @@ use crate::{
     desktop_menu, items_menu, layouts_path, parse_layouts, save_layouts,
 };
 use accesskit::TreeUpdate;
-use bande_config::{BUS_NAME, BarEdge, BarLayout, Config, OBJECT_PATH, Wallpaper, WallpaperFit};
+use bande_config::{BUS_NAME, BarEdge, Config, OBJECT_PATH, Wallpaper, WallpaperFit};
 use bande_fs::{
     Action, Answer, Change, ExtensionChange, FolderWatch, Operations, Purpose, Resolution, Task,
     Trash,
@@ -351,20 +351,13 @@ impl DesktopSurface {
 
     fn area(&self, size: (u32, u32)) -> Bounds {
         let (width, height) = (size.0 as f32, size.1 as f32);
-        let (bar_edge, layout, icon_size) = self.bar;
-        let icon_size = icon_size as f32;
-        let (edge, top) = match layout {
-            BarLayout::Combined => (bande_bar::rail::bar_width(icon_size), 0.0),
-            BarLayout::Separate => (
-                bande_bar::taskbar::exclusive_zone(icon_size),
-                bande_bar::menu_bar::HEIGHT as f32,
-            ),
-        };
+        let (bar_edge, icon_size) = self.bar;
+        let edge = bande_bar::rail::bar_width(icon_size as f32);
         let (left, right, bottom, top) = match bar_edge {
-            BarEdge::Left => (edge, 0.0, 0.0, top),
-            BarEdge::Right => (0.0, edge, 0.0, top),
-            BarEdge::Bottom => (0.0, 0.0, edge, top),
-            BarEdge::Top => (0.0, 0.0, 0.0, top + edge),
+            BarEdge::Left => (edge, 0.0, 0.0, 0.0),
+            BarEdge::Right => (0.0, edge, 0.0, 0.0),
+            BarEdge::Bottom => (0.0, 0.0, edge, 0.0),
+            BarEdge::Top => (0.0, 0.0, 0.0, edge),
         };
         Bounds::new(
             left,
@@ -1024,7 +1017,7 @@ fn desktop_folder(home: &Path) -> PathBuf {
     folder
 }
 
-type BarPlacement = (BarEdge, BarLayout, u32);
+type BarPlacement = (BarEdge, u32);
 
 fn follow_bar_placement(placements: Outbox<BarPlacement>) {
     let work = move || {
@@ -1043,11 +1036,8 @@ fn follow_bar_placement(placements: Outbox<BarPlacement>) {
                 .receive_properties_changed()?;
             let read = || -> zbus::Result<Option<BarPlacement>> {
                 let edge = config.get_property::<String>("BarEdge")?;
-                let layout = config.get_property::<String>("BarLayout")?;
                 let size = config.get_property::<u32>("BarIconSize")?;
-                Ok(BarEdge::from_keyword(&edge)
-                    .zip(BarLayout::from_keyword(&layout))
-                    .map(|(edge, layout)| (edge, layout, size)))
+                Ok(BarEdge::from_keyword(&edge).map(|edge| (edge, size)))
             };
             let mut last = None;
             for _ in std::iter::once(()).chain(changes.map(drop)) {
@@ -1142,7 +1132,7 @@ impl DesktopSurface {
             shown: Shown::default(),
             pictures: HashMap::new(),
             layouts_file,
-            bar: (config.bar.edge, config.bar.layout, config.bar.icon_size),
+            bar: (config.bar.edge, config.bar.icon_size),
             bar_changes,
             choice: Some(configured_choice(&config.wallpaper)),
             choices,

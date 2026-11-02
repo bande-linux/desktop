@@ -15,12 +15,11 @@ use bande_xdg::{ICON_THEMES, find_icon};
 use jiff::Zoned;
 
 use crate::L10N;
-use crate::menu_bar::{Slot, StatusView};
 use crate::symbols::{Symbol, Symbols, snap};
 use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA, vertical};
 
-pub const EDGE_PADDING: f32 = 24.0;
-pub const LABEL_ROOM: f32 = 280.0;
+const EDGE_PADDING: f32 = 24.0;
+const LABEL_ROOM: f32 = 280.0;
 const MARK_CELL: f32 = 52.0;
 const MARK_SIZE: f32 = 22.0;
 const CLOCK_CELL: f32 = 52.0;
@@ -47,6 +46,22 @@ const HOVER_ALPHA: u8 = 18;
 const OPEN_ALPHA: u8 = 30;
 const NODE_BASE: u64 = 1 << 40;
 const CONTROL_CENTER_GLYPH: &str = "bande-control-center-symbolic";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Slot {
+    BandeMenu,
+    StatusItem(usize),
+    InputSource,
+    Bluetooth,
+    Sound,
+    Wifi,
+    Battery,
+    ControlCenter,
+    Clock,
+    MoreStatusItems,
+    Workspace(usize),
+    Search,
+}
 
 pub fn bar_width(icon_size: f32) -> f32 {
     icon_size + EDGE_PADDING
@@ -133,13 +148,13 @@ pub fn in_use(capturing: &[Capture]) -> Vec<String> {
         .collect()
 }
 
-pub fn control_center_label(status: &Status) -> String {
+fn control_center_label(status: &Status) -> String {
     let mut parts = vec![L10N.tr("control-center")];
     parts.extend(in_use(&status.capturing));
     parts.join(", ")
 }
 
-pub fn in_use_dot(rect: Rect, palette: &Palette) -> Item {
+fn in_use_dot(rect: Rect, palette: &Palette) -> Item {
     Item::Fill {
         shape: Shape::rounded(
             Rect::new(
@@ -730,41 +745,36 @@ impl TaskbarView {
             Slot::Workspace(index) => {
                 L10N.tr_args("workspace", [("number", (index as i64 + 1).into())])
             }
-            Slot::AppMenu | Slot::AppMenuTitle(_) => String::new(),
         }
     }
-}
 
-impl StatusView for TaskbarView {
-    fn set_app(&mut self, name: &str) -> bool {
+    pub fn set_app(&mut self, name: &str) -> bool {
         let changed = self.app != name;
         name.clone_into(&mut self.app);
         changed
     }
 
-    fn app(&self) -> &str {
+    pub fn app(&self) -> &str {
         &self.app
     }
 
-    fn set_app_menus(&mut self, _titles: Vec<String>) {}
-
-    fn set_tray(&mut self, items: Vec<(String, Option<Image>)>) {
+    pub fn set_tray(&mut self, items: Vec<(String, Option<Image>)>) {
         self.tray = items;
     }
 
-    fn status(&self) -> &Status {
+    pub fn status(&self) -> &Status {
         &self.status
     }
 
-    fn status_mut(&mut self) -> &mut Status {
+    pub fn status_mut(&mut self) -> &mut Status {
         &mut self.status
     }
 
-    fn set_palette(&mut self, palette: Palette) {
+    pub fn set_palette(&mut self, palette: Palette) {
         self.palette = palette;
     }
 
-    fn set_time(&mut self, at: &Zoned, dates: &DateFormats) -> bool {
+    pub fn set_time(&mut self, at: &Zoned, dates: &DateFormats) -> bool {
         let (time, period) = dates.time(at);
         let day = dates.short_day(at);
         let fit = self.clock_fit;
@@ -777,17 +787,17 @@ impl StatusView for TaskbarView {
         changed
     }
 
-    fn set_open(&mut self, slot: Option<Slot>) -> bool {
+    pub fn set_open(&mut self, slot: Option<Slot>) -> bool {
         let changed = self.open != slot;
         self.open = slot;
         changed
     }
 
-    fn open(&self) -> Option<Slot> {
+    pub fn open(&self) -> Option<Slot> {
         self.open
     }
 
-    fn slot_at(&self, point: Point, button: PointerButton) -> Option<Slot> {
+    pub fn slot_at(&self, point: Point, button: PointerButton) -> Option<Slot> {
         let found = self
             .slots
             .iter()
@@ -809,14 +819,14 @@ impl StatusView for TaskbarView {
         }
     }
 
-    fn slot_rect(&self, slot: Slot) -> Option<Rect> {
+    pub fn slot_rect(&self, slot: Slot) -> Option<Rect> {
         self.slots
             .iter()
             .find(|(found, _)| *found == slot)
             .map(|(_, rect)| *rect)
     }
 
-    fn slot_of_node(&self, node: NodeId, action: Action) -> Option<Slot> {
+    pub fn slot_of_node(&self, node: NodeId, action: Action) -> Option<Slot> {
         let index = usize::try_from(node.0.checked_sub(NODE_BASE)?).ok()?;
         self.slots.get(index).map(|(slot, _)| match slot {
             Slot::BandeMenu if action == Action::Click => Slot::Search,
@@ -824,11 +834,7 @@ impl StatusView for TaskbarView {
         })
     }
 
-    fn edge(&self) -> DisplayEdge {
-        display_edge(self.edge)
-    }
-
-    fn menu_placement(&self, anchor: Rect) -> MenuPlacement {
+    pub fn menu_placement(&self, anchor: Rect) -> MenuPlacement {
         let bar = self.bar;
         MenuPlacement::AtPoint(match self.edge {
             BarEdge::Left => Point::new(bar.x + bar.width + GROUP_GAP, anchor.y),
@@ -838,43 +844,39 @@ impl StatusView for TaskbarView {
         })
     }
 
-    fn slides_between_menus(&self) -> bool {
-        false
-    }
-
-    fn set_clock_mark(&mut self, mark: ClockMark) -> bool {
+    pub fn set_clock_mark(&mut self, mark: ClockMark) -> bool {
         let changed = self.clock_mark != mark;
         self.clock_mark = mark;
         changed
     }
 
-    fn set_battery_percentage(&mut self, shown: bool) -> bool {
+    pub fn set_battery_percentage(&mut self, shown: bool) -> bool {
         let changed = self.battery_percentage != shown;
         self.battery_percentage = shown;
         changed
     }
 
-    fn battery_percentage(&self) -> bool {
+    pub fn battery_percentage(&self) -> bool {
         self.battery_percentage
     }
 
-    fn set_workspaces(&mut self, count: usize, active: usize) -> bool {
+    pub fn set_workspaces(&mut self, count: usize, active: usize) -> bool {
         let changed = self.workspaces != (count, active);
         self.workspaces = (count, active);
         changed
     }
 
-    fn hidden_tray(&self) -> Vec<Slot> {
+    pub fn hidden_tray(&self) -> Vec<Slot> {
         self.tray_split().1
     }
 
-    fn set_hovered(&mut self, slot: Option<Slot>) -> bool {
+    pub fn set_hovered(&mut self, slot: Option<Slot>) -> bool {
         let changed = self.hovered != slot;
         self.hovered = slot;
         changed
     }
 
-    fn scene(&mut self, width: u32, height: u32, scale: f64) -> Scene {
+    pub fn scene(&mut self, width: u32, height: u32, scale: f64) -> Scene {
         let items = self.paint((width as f32, height as f32), scale);
         Scene {
             width,
@@ -884,7 +886,7 @@ impl StatusView for TaskbarView {
         }
     }
 
-    fn accessibility(&self) -> TreeUpdate {
+    pub fn accessibility(&self) -> TreeUpdate {
         let root_id = NodeId(NODE_BASE - 1);
         let mut root = AccessNode::new(Role::Group);
         root.set_label(L10N.tr("status-area"));

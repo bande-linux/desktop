@@ -117,42 +117,6 @@ impl BarEdge {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum BarLayout {
-    #[default]
-    Combined,
-    Separate,
-}
-
-impl BarLayout {
-    pub const ALL: [Self; 2] = [Self::Combined, Self::Separate];
-
-    pub fn keyword(self) -> &'static str {
-        match self {
-            Self::Combined => "combined",
-            Self::Separate => "separate",
-        }
-    }
-
-    pub fn from_keyword(keyword: &str) -> Option<Self> {
-        Self::ALL
-            .into_iter()
-            .find(|layout| layout.keyword() == keyword)
-    }
-
-    pub fn fits(self, edge: BarEdge) -> bool {
-        self == Self::Combined || edge != BarEdge::Top
-    }
-}
-
-pub fn bar_placement(edge: BarEdge, layout: BarLayout, keep_layout: bool) -> (BarEdge, BarLayout) {
-    match (layout.fits(edge), keep_layout) {
-        (true, _) => (edge, layout),
-        (false, true) => (BarEdge::Bottom, layout),
-        (false, false) => (edge, BarLayout::Combined),
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Suspend {
     WithDisplayOff,
@@ -635,7 +599,6 @@ pub struct Bar {
     pub apps: Vec<String>,
     pub auto_hide: bool,
     pub icon_size: u32,
-    pub layout: BarLayout,
 }
 
 impl Default for Bar {
@@ -645,7 +608,6 @@ impl Default for Bar {
             apps: DEFAULT_BAR_APPS.map(str::to_owned).to_vec(),
             auto_hide: false,
             icon_size: DEFAULT_BAR_ICON_SIZE,
-            layout: BarLayout::Combined,
         }
     }
 }
@@ -883,7 +845,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            appearance: Appearance::Automatic,
+            appearance: Appearance::Dark,
             accent: Accent::default(),
             tinted_frame: false,
             reopen_apps: true,
@@ -1244,8 +1206,6 @@ impl Parser<'_> {
     }
 
     fn bar(&self, node: &KdlNode, bar: &mut Bar) {
-        let mut layout = None;
-        let mut legacy_separate = None;
         self.section(node, |child| {
             match child.name().value() {
                 "edge" => {
@@ -1254,29 +1214,12 @@ impl Parser<'_> {
                 }
                 "apps" => bar.apps = self.app_ids(child)?,
                 "auto-hide" => bar.auto_hide = self.flag(child)?,
-                "names" => {}
+                "names" | "layout" | "menu-bar" => {}
                 "size" => bar.icon_size = self.integer_in(child, BAR_ICON_SIZE_RANGE)?,
-                "layout" => {
-                    layout = Some(self.keyword(
-                        child,
-                        &BarLayout::ALL.map(|layout| (layout.keyword(), layout)),
-                    )?)
-                }
-                "menu-bar" => {
-                    legacy_separate =
-                        Some(self.keyword(child, &[("in-bar", false), ("separate", true)])?)
-                }
                 _ => return Err(self.unknown_child("bar", child)),
             }
             Ok(())
         });
-        let implied = match (legacy_separate, bar.edge) {
-            (Some(true), _) | (None | Some(false), BarEdge::Bottom | BarEdge::Right) => {
-                BarLayout::Separate
-            }
-            _ => BarLayout::Combined,
-        };
-        (bar.edge, bar.layout) = bar_placement(bar.edge, layout.unwrap_or(implied), false);
     }
 
     fn app_ids(&self, node: &KdlNode) -> Result<Vec<String>, ConfigError> {

@@ -8,10 +8,9 @@ use std::time::{Duration, Instant};
 use crate::L10N;
 use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
-use crate::rail::surface_size as rail_surface_size;
+use crate::rail::{bar_width, surface_size};
 use crate::taskbar::{
-    MenuTarget, Shared, TaskbarAction, TaskbarApp, TaskbarLayout, TaskbarState, exclusive_zone,
-    scene, surface_size, taskbar_ui,
+    MenuTarget, Shared, TaskbarAction, TaskbarApp, TaskbarLayout, TaskbarState, scene, taskbar_ui,
 };
 use accesskit::TreeUpdate;
 use bande_config::{Bar as BarConfig, BarEdge};
@@ -21,8 +20,8 @@ use bande_taskbar_model::arrange;
 use bande_taskbar_model::bus::{self, BusEvent};
 use bande_toolkit::ui::{Event, Menu, MenuItem, Ui};
 use bande_toolkit::{
-    App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
-    MenuPlacement, Point, Rect, Role, Scene, TextSystem, Window, WindowEvent,
+    App, DragAction, DragEvent, Edges, Image, LayerKind, MenuPlacement, Point, Rect, Scene,
+    TextSystem, Window, WindowEvent,
 };
 use bande_xdg::{
     DesktopEntry, ICON_THEMES, app_name, autostart_dir, data_dirs, data_home, find_app,
@@ -42,7 +41,7 @@ const MENU_SHOW: &str = "show";
 const MENU_EMPTY_TRASH: &str = "empty-trash";
 const MENU_CONFIRM_EMPTY: &str = "confirm-empty-trash";
 const MENU_CANCEL: &str = "cancel";
-const TASKBAR_NAMESPACE: &str = "taskbar";
+const TASKBAR_FOCUS: &str = "taskbar";
 const KEYBOARD_GRACE: Duration = Duration::from_millis(60);
 
 const MENU_HIDE: &str = "hide";
@@ -770,22 +769,6 @@ impl Taskbar {
         }
     }
 
-    fn move_to(&mut self, window: &mut Window, edge: BarEdge, now: Instant) {
-        let state = self.state.borrow();
-        if state.edge() == edge || state.rail().is_some() {
-            return;
-        }
-        drop(state);
-        self.state.borrow_mut().set_edge(edge, now);
-        self.reported.clear();
-        self.input = None;
-        window.set_layer_anchor(anchor(edge));
-        let icon_size = self.state.borrow().icon_size();
-        if let Err(error) = window.set_layer_size(surface_size(edge, icon_size, (0, 0))) {
-            tracing::warn!("cannot move the Taskbar: {error}");
-        }
-    }
-
     fn resize(&mut self, window: &mut Window, size: f32) {
         if !self.state.borrow_mut().set_icon_size(size) {
             return;
@@ -797,12 +780,7 @@ impl Taskbar {
         self.icons.clear();
         self.load_trash_icons();
         self.sync();
-        let size = if self.state.borrow().rail().is_some() {
-            rail_surface_size(edge, icon_size)
-        } else {
-            surface_size(edge, icon_size, (0, 0))
-        };
-        if let Err(error) = window.set_layer_size(size) {
+        if let Err(error) = window.set_layer_size(surface_size(edge, icon_size)) {
             tracing::warn!("cannot resize the Taskbar: {error}");
         }
     }
@@ -821,7 +799,6 @@ impl Taskbar {
                         self.sync();
                     }
                 }
-                BusEvent::Edge(edge) => self.move_to(window, edge, now),
                 BusEvent::Launcher(app_id, update) => {
                     self.state
                         .borrow_mut()
@@ -905,7 +882,7 @@ impl App for Taskbar {
                     .navigate(key, modifiers, Instant::now());
                 self.run_actions(window);
             }
-            WindowEvent::FocusShell(namespace) if namespace == TASKBAR_NAMESPACE => {
+            WindowEvent::FocusShell(target) if target == TASKBAR_FOCUS => {
                 self.release_at = None;
                 let active = self.active.clone();
                 self.state
@@ -1090,16 +1067,6 @@ pub fn anchor(edge: BarEdge) -> Edges {
     }
 }
 
-pub fn taskbar_role(edge: BarEdge, icon_size: f32) -> Role {
-    Role::Layer(LayerOptions {
-        layer: LayerKind::Top,
-        anchor: anchor(edge),
-        exclusive_zone: exclusive_zone(icon_size).round() as i32,
-        keyboard: KeyboardFocus::OnDemand,
-        namespace: TASKBAR_NAMESPACE.to_owned(),
-    })
-}
-
 impl Taskbar {
     pub fn new(
         window: &Window,
@@ -1135,7 +1102,7 @@ impl Taskbar {
             icon_scale: window.scale(),
             reported: HashMap::new(),
             input: None,
-            zone: exclusive_zone(icon_size).round() as i32,
+            zone: bar_width(icon_size).round() as i32,
             menu: None,
             confirming: false,
             swallow_release: false,

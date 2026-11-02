@@ -139,10 +139,6 @@ pub trait Config {
     #[zbus(property)]
     fn set_bar_edge(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
-    fn bar_layout(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_bar_layout(&self, value: &str) -> zbus::Result<()>;
-    #[zbus(property)]
     fn idle_screen_saver_after(&self) -> zbus::Result<u64>;
     #[zbus(property)]
     fn set_idle_screen_saver_after(&self, seconds: u64) -> zbus::Result<()>;
@@ -301,7 +297,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 74] = [
+pub const CONFIG_SETTINGS: [SettingId; 73] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -337,7 +333,6 @@ pub const CONFIG_SETTINGS: [SettingId; 74] = [
     SettingId::BarIconSize,
     SettingId::BarAutoHide,
     SettingId::BarEdge,
-    SettingId::BarLayout,
     SettingId::ScreenSaverAfter,
     SettingId::DisplayOffAfter,
     SettingId::RequirePasswordAfter,
@@ -555,7 +550,6 @@ impl SettingsClient {
             SettingId::BarIconSize => Value::Number(self.config.bar_icon_size()?),
             SettingId::BarAutoHide => Value::Flag(self.config.bar_auto_hide()?),
             SettingId::BarEdge => Value::Keyword(self.config.bar_edge()?),
-            SettingId::BarLayout => Value::Keyword(self.config.bar_layout()?),
             SettingId::ScreenSaverAfter => Value::Seconds(self.config.idle_screen_saver_after()?),
             SettingId::DisplayOffAfter => Value::Seconds(self.config.idle_display_off_after()?),
             SettingId::RequirePasswordAfter => {
@@ -639,7 +633,6 @@ impl SettingsClient {
                 self.config.set_automatic_updates(*on)
             }
             (SettingId::BarEdge, Value::Keyword(keyword)) => self.config.set_bar_edge(keyword),
-            (SettingId::BarLayout, Value::Keyword(keyword)) => self.config.set_bar_layout(keyword),
             (SettingId::Clock24Hour, Value::Flag(twenty_four_hour)) => {
                 self.config.set_clock_format(if *twenty_four_hour {
                     "24-hour"

@@ -20,7 +20,7 @@ depends = "$auto, default-dbus-session-bus | dbus-session-bus, init-system-helpe
 extended-description = """\
 Serves org.kde.StatusNotifierWatcher, the registry through which \
 applications such as Steam and Nextcloud publish tray icons and the \
-Bande menu bar finds them. Started with the graphical session."""
+Bande Taskbar finds them. Started with the graphical session."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/bande-tray", "usr/bin/", "755"],

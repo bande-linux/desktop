@@ -5,7 +5,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Duration;
 
-use bande_bus::portal_settings::{self, APPEARANCE, BANDE_APPEARANCE, PREFER_DARK};
+use bande_bus::portal_settings::{self, APPEARANCE, BANDE_APPEARANCE, PREFER_LIGHT};
 use bande_graphics::{Accent, Appearance, Color, Contrast, Scheme, TextSize};
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedValue;
@@ -74,8 +74,8 @@ fn apply(appearance: &mut Appearance, namespace: &str, key: &str, value: OwnedVa
     match (namespace, key) {
         (APPEARANCE, "color-scheme") => {
             appearance.scheme = match u32::try_from(&value) {
-                Ok(PREFER_DARK) => Scheme::Dark,
-                _ => Scheme::Light,
+                Ok(PREFER_LIGHT) => Scheme::Light,
+                _ => Scheme::Dark,
             };
         }
         (APPEARANCE, "accent-color") => {

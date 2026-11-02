@@ -8,7 +8,7 @@ use smithay::wayland::compositor::{RectangleKind, SurfaceAttributes, with_states
 use smithay::wayland::shell::wlr_layer::Layer;
 
 use crate::motion::{BAR_NAMESPACE, SETTLED_ALPHA};
-use crate::state::{Compositor, MENU_BAR_NAMESPACE, State, is_mapped};
+use crate::state::{Compositor, State, is_mapped};
 
 #[derive(Default)]
 pub(crate) enum Reveal {
@@ -55,8 +55,7 @@ impl State {
                         && opaque_over(layer.wl_surface(), size)
                 });
                 let bar = map.layers().any(|layer| {
-                    [BAR_NAMESPACE, MENU_BAR_NAMESPACE].contains(&layer.namespace())
-                        && is_mapped(layer.wl_surface())
+                    layer.namespace() == BAR_NAMESPACE && is_mapped(layer.wl_surface())
                 });
                 wallpaper && bar
             })

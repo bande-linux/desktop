@@ -272,7 +272,7 @@ pub struct AppMenus<'a> {
     pub windows: &'a [(String, String)],
 }
 
-pub fn standard_app_menu(name: &str) -> Menu {
+fn standard_app_menu(name: &str) -> Menu {
     let app = || [("app", name.to_owned().into())];
     Menu::new(vec![
         MenuItem::new(&L10N.tr_args("app-about", app()), "").enabled(false),

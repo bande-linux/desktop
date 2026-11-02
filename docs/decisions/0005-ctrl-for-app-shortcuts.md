@@ -40,7 +40,7 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
   `bande-keyboard`:
   - launcher: a tap of Super, `Super+Space` (kept by the owner) and `Super+A`; clipboard history
     `Super+V`; emoji `Super+.`; Notification Center `Super+N`; Control Center `Super+S`;
-    lock `Super+L`; menu bar and taskbar `Super+F2`/`Super+F3`; menu search `Shift+Super+/`;
+    lock `Super+L`; app menus and taskbar `Super+F2`/`Super+F3`; menu search `Shift+Super+/`;
   - windows: `Alt+F4` close, `Super+H` minimize, `Super+Left/Right/Up/Down` tile, maximize and
     restore, `Super+F11` full screen, `Shift+Super+arrows` to the display beside, Super+drag
     moves and Super+right drag resizes;

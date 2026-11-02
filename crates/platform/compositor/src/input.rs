@@ -22,8 +22,7 @@ use smithay::wayland::keyboard_shortcuts_inhibit::{
 use crate::frame::Target;
 use crate::gesture::Gesture;
 use crate::keyboard_monitor::KeyEvent;
-use crate::motion::TASKBAR_NAMESPACE;
-use crate::state::{Compositor, MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE, State};
+use crate::state::{Compositor, MENU_SEARCH_NAMESPACE, State, TASKBAR_FOCUS};
 use crate::tile::Direction;
 
 const EVDEV_OFFSET: u32 = 8;
@@ -45,6 +44,7 @@ enum Shortcut {
     ForceQuit,
     VirtualTerminal(i32),
     FocusShell(&'static str),
+    ShowMenus,
     ToggleFullScreen,
     Place(Direction),
     CaptureScreen,
@@ -160,8 +160,8 @@ fn shortcut(
         _ => {}
     }
     match keysym {
-        keysyms::KEY_F2 => Some(Shortcut::FocusShell(MENU_BAR_NAMESPACE)),
-        keysyms::KEY_F3 => Some(Shortcut::FocusShell(TASKBAR_NAMESPACE)),
+        keysyms::KEY_F2 => Some(Shortcut::ShowMenus),
+        keysyms::KEY_F3 => Some(Shortcut::FocusShell(TASKBAR_FOCUS)),
         keysyms::KEY_F11 => Some(Shortcut::ToggleFullScreen),
         keysyms::KEY_XF86LaunchA => Some(Shortcut::ShowDesktop),
         keysyms::KEY_Left if ctrl && shift => Some(Shortcut::CarryWindow(false)),
@@ -302,6 +302,10 @@ impl State {
             self.lock_screen_requested = !self.is_locked();
             return;
         }
+        if shortcut == Shortcut::ShowMenus {
+            self.show_menus();
+            return;
+        }
         if let Shortcut::FocusShell(namespace) = shortcut {
             self.focus_shell(namespace);
             return;
@@ -379,6 +383,7 @@ impl State {
             | Shortcut::ForceQuit
             | Shortcut::VirtualTerminal(_)
             | Shortcut::FocusShell(_)
+            | Shortcut::ShowMenus
             | Shortcut::CaptureScreen
             | Shortcut::CaptureArea
             | Shortcut::CaptureOptions

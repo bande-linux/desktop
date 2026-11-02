@@ -186,7 +186,6 @@ pub(crate) struct IconRect {
 pub(crate) const OPENING_SCALE: f64 = 0.96;
 const CLOSING_SCALE: f64 = 0.98;
 const TASKBAR_ICON_SIZE: f64 = 48.0;
-pub(crate) const TASKBAR_NAMESPACE: &str = "taskbar";
 pub(crate) const BAR_NAMESPACE: &str = "bar";
 
 impl State {
@@ -259,7 +258,7 @@ impl State {
         let taskbar = self.screens.iter().find_map(|screen| {
             let map = layer_map_for_output(&screen.output);
             map.layers()
-                .find(|layer| [TASKBAR_NAMESPACE, BAR_NAMESPACE].contains(&layer.namespace()))
+                .find(|layer| layer.namespace() == BAR_NAMESPACE)
                 .and_then(|layer| map.layer_geometry(layer))
                 .map(|geometry| (screen.settings.position + geometry.loc, geometry.size))
         });

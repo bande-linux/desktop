@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 use resvg::{tiny_skia, usvg};
+pub use vello_cpu::peniko::Mix as Blend;
 use vello_cpu::{PixelMetadata, Pixmap};
 
 use crate::surface::{SurfaceId, SurfaceScaling};
@@ -150,6 +151,17 @@ pub enum Paint {
         end: Point,
         stops: Vec<Stop>,
     },
+    RadialGradient {
+        center: Point,
+        radius: f32,
+        stops: Vec<Stop>,
+    },
+    ConicGradient {
+        center: Point,
+        start_angle: f32,
+        end_angle: f32,
+        stops: Vec<Stop>,
+    },
 }
 
 impl From<Color> for Paint {
@@ -263,6 +275,11 @@ impl Image {
         Self::with_pixels(width, height, rgba, None)
     }
 
+    pub fn from_premultiplied(width: u32, height: u32, rgba: Vec<u8>) -> Option<Self> {
+        let (width, height) = (u16::try_from(width).ok()?, u16::try_from(height).ok()?);
+        Self::with_pixmap(width, height, pixmap(width, height, rgba)?, None)
+    }
+
     pub fn redrawable(
         width: u32,
         height: u32,
@@ -274,10 +291,18 @@ impl Image {
 
     fn with_pixels(width: u32, height: u32, rgba: Vec<u8>, redraw: Option<Redraw>) -> Option<Self> {
         let (width, height) = (u16::try_from(width).ok()?, u16::try_from(height).ok()?);
+        Self::with_pixmap(width, height, premultiplied(width, height, rgba)?, redraw)
+    }
+
+    fn with_pixmap(
+        width: u16,
+        height: u16,
+        pixmap: Pixmap,
+        redraw: Option<Redraw>,
+    ) -> Option<Self> {
         if width == 0 || height == 0 {
             return None;
         }
-        let pixmap = premultiplied(width, height, rgba)?;
         static NEXT: AtomicU64 = AtomicU64::new(1);
         Some(Self {
             id: NEXT.fetch_add(1, Ordering::Relaxed),
@@ -361,12 +386,113 @@ fn premultiplied(width: u16, height: u16, mut rgba: Vec<u8>) -> Option<Pixmap> {
             *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
         }
     }
-    Some(Pixmap::from_parts(
-        rgba,
-        width,
-        height,
-        PixelMetadata::default(),
-    ))
+    pixmap(width, height, rgba)
+}
+
+fn pixmap(width: u16, height: u16, rgba: Vec<u8>) -> Option<Pixmap> {
+    (rgba.len() == usize::from(width) * usize::from(height) * 4)
+        .then(|| Pixmap::from_parts(rgba, width, height, PixelMetadata::default()))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Transform {
+    pub matrix: [f32; 6],
+}
+
+impl Transform {
+    pub const IDENTITY: Self = Self {
+        matrix: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+    };
+
+    pub const fn translate(x: f32, y: f32) -> Self {
+        Self {
+            matrix: [1.0, 0.0, 0.0, 1.0, x, y],
+        }
+    }
+
+    pub const fn scale(x: f32, y: f32) -> Self {
+        Self {
+            matrix: [x, 0.0, 0.0, y, 0.0, 0.0],
+        }
+    }
+
+    pub fn rotate(radians: f32) -> Self {
+        let (sin, cos) = radians.sin_cos();
+        Self {
+            matrix: [cos, sin, -sin, cos, 0.0, 0.0],
+        }
+    }
+
+    pub fn then(self, next: Self) -> Self {
+        let [a, b, c, d, e, f] = next.matrix;
+        let [g, h, i, j, k, l] = self.matrix;
+        Self {
+            matrix: [
+                a * g + c * h,
+                b * g + d * h,
+                a * i + c * j,
+                b * i + d * j,
+                a * k + c * l + e,
+                b * k + d * l + f,
+            ],
+        }
+    }
+
+    pub fn apply(self, point: Point) -> Point {
+        let [a, b, c, d, e, f] = self.matrix;
+        Point::new(a * point.x + c * point.y + e, b * point.x + d * point.y + f)
+    }
+}
+
+pub(crate) struct Recorded {
+    id: u64,
+    items: Vec<Item>,
+    bounds: Option<Rect>,
+}
+
+#[derive(Clone)]
+pub struct Picture(Arc<Recorded>);
+
+impl Picture {
+    pub fn new(items: Vec<Item>) -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        Self(Arc::new(Recorded {
+            id: NEXT.fetch_add(1, Ordering::Relaxed),
+            bounds: crate::damage::children(&items),
+            items,
+        }))
+    }
+
+    pub fn items(&self) -> &[Item] {
+        &self.0.items
+    }
+
+    pub fn bounds(&self) -> Option<Rect> {
+        self.0.bounds
+    }
+
+    pub(crate) fn id(&self) -> u64 {
+        self.0.id
+    }
+
+    pub(crate) fn liveness(&self) -> Weak<Recorded> {
+        Arc::downgrade(&self.0)
+    }
+}
+
+impl PartialEq for Picture {
+    fn eq(&self, other: &Self) -> bool {
+        self.id() == other.id()
+    }
+}
+
+impl fmt::Debug for Picture {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Picture")
+            .field("items", &self.items().len())
+            .field("bounds", &self.bounds())
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -403,6 +529,14 @@ pub enum Item {
         alpha: f32,
         items: Vec<Item>,
     },
+    Blend {
+        mode: Blend,
+        items: Vec<Item>,
+    },
+    Transform {
+        transform: Transform,
+        items: Vec<Item>,
+    },
     Line {
         from: Point,
         to: Point,
@@ -427,6 +561,12 @@ pub enum Item {
         rect: Rect,
         image: Image,
     },
+    Tiles {
+        rect: Rect,
+        tile: Rect,
+        image: Image,
+    },
+    Picture(Picture),
     Surface {
         id: SurfaceId,
         frame: Rect,

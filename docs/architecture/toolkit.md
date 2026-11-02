@@ -214,6 +214,19 @@ writes a hex value, a corner radius or a font name of its own.
   `ink` over a `hairline`, one row tall) above the rows that start each group, as Files' Use
   Groups does, and level 2 heading nodes before those rows so screen readers announce each
   group; a selection run never spans a heading. Scroll bars are a 6 pt `ink3` knob that fades.
+- **Graphs**. `Graph::new(label, kind, span)` plots the last `span` samples of each `Series`
+  (values 0–1, `None` for a gap; the newest at the right) in a `well` mixed toward the sheet,
+  radius 6, with three `hairline` grid lines. `GraphKind::Line` strokes each series 1.5 pt,
+  `Area` also fills under it at 30 %, `Stacked` adds the series up and draws the totals as
+  areas, the top first. Colours are `SeriesColor` roles taken from the palette: `Primary`
+  (blue) and `Secondary` (red) in OKLCH, and `success`, `warning`, `danger_text`;
+  `SeriesColor::color` gives the same colour to the readout beside a graph.
+  `.caption(title, span)` adds a 20 pt `Label` caption above the well (title centred, span at
+  the right) and a `hairline` outline around it; without one the graph is a bare sparkline.
+  `set_note` puts a tabular label in its top-left corner (a scale or a name), `set_bands` 3 pt
+  status strips along the bottom (Activity Monitor's charging spans). It never animates or
+  wakes: it draws again only when the app sets new data. Activity Monitor draws its graphs
+  with it.
 - **Tooltips.** A widget that returns `Widget::tooltip` (buttons and pop-up buttons through
   `.tooltip(...)`) shows it after the pointer rests on it for `TOOLTIP_DELAY`, or after Tab
   moves focus to it. It fades in under the pointer inside the window, a click or key hides it

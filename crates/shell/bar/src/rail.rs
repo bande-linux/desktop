@@ -16,6 +16,7 @@ use jiff::Zoned;
 
 use crate::L10N;
 use crate::menu_bar::{Slot, StatusView};
+use crate::symbols::snap;
 use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA, vertical};
 
 pub const EDGE_PADDING: f32 = 24.0;
@@ -164,10 +165,6 @@ fn time_style(palette: Palette) -> TextStyle {
     TextStyle::new(TIME_SIZE, palette.ink)
         .weight(TextStyle::SEMIBOLD)
         .tabular()
-}
-
-fn snap(value: f32, scale: f64) -> f32 {
-    ((f64::from(value) * scale).round() / scale) as f32
 }
 
 fn battery_glyph(battery: Battery) -> String {

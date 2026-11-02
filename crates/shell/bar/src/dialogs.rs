@@ -1,8 +1,10 @@
 use std::cell::Cell;
 use std::rc::Rc;
+use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::L10N;
+use crate::menu_bar_client::report;
 use bande_status::devices::end_session;
 use bande_status::session::{Effect, Ending, Facts, SessionEnding, Stage, facts, quitting_apps};
 use bande_toolkit::ui::{Alert, Event, Form, FormLine, Key, Label, Size, Ui};
@@ -23,12 +25,6 @@ const ABOUT_PADDING: f32 = 28.0;
 const ABOUT_GAP: f32 = 14.0;
 const ABOUT_NAME_SIZE: f32 = 15.0;
 const ABOUT_VERSION_SIZE: f32 = 11.0;
-
-fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
-    if let Err(error) = result {
-        tracing::warn!("cannot {what}: {error}");
-    }
-}
 
 fn app_name(app_id: &str) -> String {
     let entries = applications(
@@ -131,8 +127,11 @@ impl Confirmation {
             }
             Some(Effect::End) => {
                 let ending = self.session.ending;
-                let result = Connection::system().and_then(|system| end_session(&system, ending));
-                report("end the session", result);
+                thread::spawn(move || {
+                    let result =
+                        Connection::system().and_then(|system| end_session(&system, ending));
+                    report("end the session", result);
+                });
                 window.close();
                 return;
             }

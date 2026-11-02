@@ -76,7 +76,7 @@ pub struct MenuBarClient<V> {
     dates: DateFormats,
 }
 
-fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
+pub(crate) fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
     if let Err(error) = result {
         tracing::warn!("cannot {what}: {error}");
     }

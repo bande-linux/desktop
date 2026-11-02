@@ -649,7 +649,12 @@
         bar when it was active, Force Quit and the app switcher list it,
         quit_app and quit_all_apps ask it to quit and the apps to reopen at
         the next login include it. Quit requests for the client are then sent
-        only to this object. Asking again changes the app id.
+        only to this object. Asking again changes the app id. A client that
+        has not asked is not a running app while it has no window: an app
+        that runs in the background, as a Mac's agents do, asks only when it
+        opens its first window, and destroys this object to go back to the
+        background, which also makes the next app active if it was the
+        active app.
       </description>
       <arg name="app_id" type="string"/>
     </request>

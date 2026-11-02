@@ -34,11 +34,19 @@ struct Runner<P: Program> {
     sources: RefCell<Vec<Source>>,
 }
 
+const BACKGROUND_FLAG: &str = "--background";
+
 pub(crate) fn run<P: Program>(
     info: &'static Info,
-    arguments: Vec<String>,
+    mut arguments: Vec<String>,
     display: Option<UnixStream>,
 ) -> Result<(), Error> {
+    let given = arguments.len();
+    arguments.retain(|argument| argument != BACKGROUND_FLAG);
+    let background = arguments.len() < given;
+    if background && !P::runs_in_background() {
+        return Ok(());
+    }
     let session = bande_bus::session()
         .inspect_err(|error| {
             tracing::warn!("no session bus, so no menu bar and no single instance: {error}");
@@ -52,6 +60,7 @@ pub(crate) fn run<P: Program>(
         .ok()
         .flatten();
     let instance = match (claimed, &session) {
+        (Some(Claim::Running), _) if background => return Ok(()),
         (Some(Claim::Running), Some(session)) => {
             return instance::forward(session, info.id, Request::from_launch(arguments)?);
         }
@@ -62,9 +71,9 @@ pub(crate) fn run<P: Program>(
         Some(display) => AppConnection::connect_on(display, info.id)?,
         None => AppConnection::connect(info.id)?,
     };
-    let mut cx = Cx::new(info, link, session);
+    let mut cx = Cx::new(info, link, session, background);
     let program = P::start(&mut cx, arguments)?;
-    if cx.windows().next().is_none() {
+    if cx.windows().next().is_none() && !background {
         return Ok(());
     }
     let menu = cx.session().cloned().and_then(|session| {
@@ -103,6 +112,9 @@ impl<P: Program> Runner<P> {
             if !self.cx.windows.is_empty() {
                 bande_toolkit::run_surfaces(self)?;
             }
+            if self.cx.quitting && P::runs_in_background() {
+                self.run_in_background();
+            }
             if self.cx.quitting || !self.cx.link.keeps_running() {
                 return Ok(());
             }
@@ -113,6 +125,18 @@ impl<P: Program> Runner<P> {
                 self.wait_without_windows()?;
             }
         }
+    }
+
+    fn run_in_background(&mut self) {
+        let shown: Vec<WindowId> = self.cx.views.iter().map(|(window, _)| *window).collect();
+        for window in shown {
+            self.cx.close(window);
+        }
+        for (window, view) in self.cx.remove_closed() {
+            self.program.window_closed(&mut self.cx, window, view);
+        }
+        self.cx.link.run_in_background();
+        self.cx.quitting = false;
     }
 
     fn wait_without_windows(&mut self) -> Result<(), WindowError> {

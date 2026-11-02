@@ -18,6 +18,15 @@ const KEY_Q: u32 = 16;
 const KEY_W: u32 = 17;
 
 static RECORD: Mutex<Option<Sender<Seen>>> = Mutex::new(None);
+static ONE_BUS_AT_A_TIME: Mutex<()> = Mutex::new(());
+
+fn private_bus() -> SessionBus {
+    let bus = SessionBus::start().expect("private session bus");
+    unsafe {
+        std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
+    }
+    bus
+}
 
 #[derive(Debug, Clone, PartialEq)]
 enum Seen {
@@ -98,22 +107,105 @@ static INFO: Info = Info {
     settings: None,
 };
 
-fn launch(arguments: &[&str], display: UnixStream) -> JoinHandle<Result<(), String>> {
+fn launch_as<P: Program>(
+    info: &'static Info,
+    arguments: &[&str],
+    display: UnixStream,
+) -> JoinHandle<Result<(), String>> {
     let arguments = arguments
         .iter()
         .map(|argument| argument.to_string())
         .collect();
     thread::spawn(move || {
-        bande_app::run_on::<Example>(&INFO, arguments, display).map_err(|error| error.to_string())
+        bande_app::run_on::<P>(info, arguments, display).map_err(|error| error.to_string())
     })
+}
+
+fn launch(arguments: &[&str], display: UnixStream) -> JoinHandle<Result<(), String>> {
+    launch_as::<Example>(&INFO, arguments, display)
+}
+
+struct Agent;
+
+impl Program for Agent {
+    type View = Pane;
+
+    fn start(cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, Error> {
+        if !cx.launched_in_background() {
+            Agent.reopen(cx);
+        }
+        Ok(Self)
+    }
+
+    fn reopen(&mut self, cx: &mut Cx<Self>) {
+        cx.open(Kind::Main, "Agent", (200, 120), |_| Pane(None))
+            .expect("window");
+    }
+
+    fn open(&mut self, cx: &mut Cx<Self>, _arguments: Vec<String>, _directory: &Path) {
+        cx.quit();
+    }
+
+    fn runs_in_background() -> bool {
+        true
+    }
+}
+
+static AGENT: Info = Info {
+    id: "org.bande.Agent",
+    package: "bande-agent",
+    version: "1.0.0",
+    name: || "Agent".to_owned(),
+    keys: Keys::Standard,
+    settings: None,
+};
+
+#[test]
+fn an_app_started_in_the_background_runs_unlisted_until_its_window_opens_and_quits_back_there() {
+    let _serial = ONE_BUS_AT_A_TIME
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let _bus = private_bus();
+    let mut server = headless(640, 480);
+    let running = std::env::temp_dir().join(format!("bande-app-running-{}", std::process::id()));
+    let _ = std::fs::remove_file(&running);
+    server.note_running_apps_in(running.clone());
+    let listed = || {
+        std::fs::read_to_string(&running)
+            .unwrap_or_default()
+            .lines()
+            .any(|app| app == AGENT.id)
+    };
+    let (client_end, server_end) = UnixStream::pair().expect("socket pair");
+    server.insert_client(server_end).expect("insert client");
+    let app = launch_as::<Agent>(&AGENT, &["--background"], client_end);
+    let mut frames = Frames::start();
+    let settled = Instant::now() + Duration::from_millis(1500);
+    frames.run_until(&mut server, || Instant::now() > settled);
+    assert!(!app.is_finished());
+    assert!(!listed());
+    let (unused, _) = UnixStream::pair().expect("socket pair");
+    let opened = launch_as::<Agent>(&AGENT, &[], unused);
+    frames.run_until(&mut server, listed);
+    assert_eq!(opened.join().expect("launch"), Ok(()));
+    let (unused, _) = UnixStream::pair().expect("socket pair");
+    let again = launch_as::<Agent>(&AGENT, &["--background"], unused);
+    assert_eq!(again.join().expect("background launch"), Ok(()));
+
+    let (unused, _) = UnixStream::pair().expect("socket pair");
+    let quit = launch_as::<Agent>(&AGENT, &["quit"], unused);
+    frames.run_until(&mut server, || !listed());
+    assert_eq!(quit.join().expect("quit"), Ok(()));
+    assert!(!app.is_finished());
+    let _ = std::fs::remove_file(&running);
 }
 
 #[test]
 fn a_second_launch_reaches_the_running_app_which_keeps_running_without_windows_until_quit() {
-    let bus = SessionBus::start().expect("private session bus");
-    unsafe {
-        std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
-    }
+    let _serial = ONE_BUS_AT_A_TIME
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let _bus = private_bus();
     let (sender, records) = mpsc::channel();
     *RECORD.lock().unwrap_or_else(PoisonError::into_inner) = Some(sender);
     let mut server = headless(640, 480);

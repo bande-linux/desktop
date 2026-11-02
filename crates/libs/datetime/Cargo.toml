@@ -13,6 +13,7 @@ icu_datetime.workspace = true
 icu_locale_core.workspace = true
 jiff.workspace = true
 rustix = { workspace = true, features = ["time"] }
+writeable.workspace = true
 zbus.workspace = true
 
 [lints]

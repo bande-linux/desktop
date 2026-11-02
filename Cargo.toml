@@ -63,6 +63,7 @@ wayland-protocols-wlr = { version = "=0.3.12", features = ["client"] }
 wayland-scanner = "=0.31.11"
 wayland-server = "=0.31.14"
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }
+writeable = "=0.6.4"
 xkbcommon = "=0.8.0"
 zbus = "=5.19.0"
 zeroize = { version = "=1.8.1", features = ["serde"] }

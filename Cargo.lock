@@ -551,6 +551,7 @@ dependencies = [
  "icu_locale_core",
  "jiff",
  "rustix 1.1.6",
+ "writeable",
  "zbus",
 ]
 

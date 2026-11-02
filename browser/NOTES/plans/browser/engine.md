@@ -52,6 +52,13 @@ One Cargo workspace with one lock. Dependencies run only downward in this list.
   at once, or at the next command if the last start was under 5 s ago, so a crash loop never spins.
   It then hands every live renderer a new network socket; the renderers keep their pages and treat
   their in-flight fetches as failed.
+- **Hung renderers.** A renderer answers every batch of commands with `Done { commands }`, the
+  number it has handled so far. The host arms a deadline only while some commands are unanswered,
+  on one timerfd for all renderers, which is disarmed when nothing is outstanding. When the deadline
+  passes (`Helpers::unresponsive_after`, 15 s in the app), the view gets `Outcome::Unresponsive`.
+  `Command::Wait` re-arms the deadline, `Command::Kill` kills the renderer (`Outcome::Crashed`
+  follows), and progress after a report sends `Outcome::Responsive`. Script (phase 2) runs as
+  tasks in the renderer's poll loop and has to keep acknowledging between tasks.
 - **Site data** goes through the host as well. `Command::ClearData { session, clear }` runs
   web-net's `Fetcher::clear` (cookies and cache by time and site) in that session.
   `Command::SiteData { view, session }` is answered to that view with `Outcome::SiteData`; the list

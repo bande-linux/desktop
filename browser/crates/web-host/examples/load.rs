@@ -92,6 +92,7 @@ fn run(url: Url, output: Option<PathBuf>) -> std::io::Result<()> {
     let helpers = Helpers {
         renderer: helper("web-renderer")?,
         network: helper("web-netd")?,
+        unresponsive_after: Duration::from_secs(15),
     };
     let started = Instant::now();
     let host = Host::new(helpers, Box::new(|pid| eprintln!("renderer {pid}")))?;
@@ -138,6 +139,8 @@ fn run(url: Url, output: Option<PathBuf>) -> std::io::Result<()> {
                         );
                     }
                 }
+                Outcome::Unresponsive => println!("{elapsed} ms: unresponsive"),
+                Outcome::Responsive => println!("{elapsed} ms: responsive again"),
                 Outcome::Scroll(_) | Outcome::Paused(_) => {}
             }
         }

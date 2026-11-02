@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 linebender_resource_handle.workspace = true
-rustix = { workspace = true, features = ["event"] }
+rustix = { workspace = true, features = ["event", "time"] }
 web-ipc.workspace = true
 web-net.workspace = true
 web-paint.workspace = true

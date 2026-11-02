@@ -40,6 +40,7 @@ wire_enum! {
         Frame { load: u64, title: Option<String>, fragment: Option<f32> } = 2,
         Relaid { load: u64 } = 3,
         Scroll { load: u64, y: f32 } = 4,
+        Done { commands: u64 } = 5,
     }
 }
 

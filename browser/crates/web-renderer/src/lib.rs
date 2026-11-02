@@ -122,6 +122,8 @@ fn readable(channel: &Channel) -> PollFlags {
 
 impl Renderer {
     fn run(&mut self, fonts: &mut Fonts) -> io::Result<()> {
+        let mut commands = 0u64;
+        let mut acknowledged = 0u64;
         loop {
             let mut sources = vec![PollFd::new(&self.control, readable(&self.control))];
             sources.extend(
@@ -136,6 +138,7 @@ impl Renderer {
             drop(sources);
             self.control.flush()?;
             while let Some(mut message) = self.control.receive()? {
+                commands += 1;
                 let command = message.decode::<ToRenderer>()?;
                 let fd = match command {
                     ToRenderer::Commit { .. } | ToRenderer::Network => Some(message.fd()?),
@@ -150,6 +153,11 @@ impl Renderer {
             self.add_images(fonts)?;
             self.add_fonts(fonts)?;
             self.relayout(fonts)?;
+            if commands > acknowledged {
+                acknowledged = commands;
+                self.control
+                    .send(&FromRenderer::Done { commands }, Vec::new())?;
+            }
         }
     }
 

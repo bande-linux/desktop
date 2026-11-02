@@ -22,7 +22,7 @@ fn main() -> ExitCode {
     }
     match scenario() {
         Ok(()) => {
-            println!("processes: hook, crash, reload and a network restart work");
+            println!("processes: hook, hang, crash, reload and a network restart work");
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -93,6 +93,7 @@ fn scenario() -> Result<(), String> {
     let helpers = Helpers {
         renderer: program("renderer")?,
         network: program("network")?,
+        unresponsive_after: Duration::from_secs(1),
     };
     let host = Host::new(
         helpers,
@@ -146,6 +147,21 @@ fn scenario() -> Result<(), String> {
     let pid = launched
         .recv_timeout(Duration::from_secs(5))
         .map_err(|error| error.to_string())?;
+    signal(pid, "-STOP")?;
+    link.send(Command::Resize {
+        view,
+        viewport: Viewport {
+            width: 700.0,
+            height: 600.0,
+        },
+    });
+    expect(&host, &mut pending, |outcome| {
+        matches!(outcome, Outcome::Unresponsive)
+    })?;
+    signal(pid, "-CONT")?;
+    expect(&host, &mut pending, |outcome| {
+        matches!(outcome, Outcome::Responsive)
+    })?;
     Process::new("kill")
         .args(["-KILL", &pid.to_string()])
         .status()
@@ -173,6 +189,26 @@ fn scenario() -> Result<(), String> {
     }
     link.send(load(4));
     framed(&host, &mut pending, LoadId(4))
+}
+
+fn signal(pid: u32, signal: &str) -> Result<(), String> {
+    Process::new("kill")
+        .args([signal, &pid.to_string()])
+        .status()
+        .map(drop)
+        .map_err(|error| error.to_string())
+}
+
+fn expect(
+    host: &Host,
+    pending: &mut Vec<Update>,
+    wanted: impl Fn(&Outcome) -> bool,
+) -> Result<(), String> {
+    loop {
+        if wanted(&next(host, pending)?.outcome) {
+            return Ok(());
+        }
+    }
 }
 
 fn framed(host: &Host, pending: &mut Vec<Update>, load: LoadId) -> Result<(), String> {

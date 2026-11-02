@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use linebender_resource_handle::{Blob, FontData};
 use rustix::event::{PollFd, PollFlags, poll};
+use rustix::time::{Itimerspec, TimerfdTimerFlags, Timespec, timerfd_settime};
 use web_ipc::{
     Channel, Destination, FromNetwork, FromRenderer, MAX_LIST, Mapping, Message, NetworkControl,
     Patch, Reader, Size, ToRenderer, Url, Verdict,
@@ -51,6 +52,11 @@ struct Renderer {
     images: Vec<Arc<Image>>,
     image_bytes: usize,
     shown: Option<(Arc<DisplayList>, Arc<Links>)>,
+    commands: u64,
+    done: u64,
+    deadline: Option<Instant>,
+    reported: bool,
+    hang: Duration,
 }
 
 impl Drop for Renderer {
@@ -76,6 +82,7 @@ struct Navigation {
 
 enum Source {
     Commands,
+    Timer,
     Network,
     Renderer(ViewId),
 }
@@ -87,6 +94,7 @@ pub(crate) struct Broker {
     ready: Arc<OwnedFd>,
     helpers: Helpers,
     placement: Placement,
+    timer: OwnedFd,
     network: Option<Network>,
     network_started: Option<Instant>,
     intercept: bool,
@@ -129,6 +137,7 @@ impl Broker {
         ready: Arc<OwnedFd>,
         helpers: Helpers,
         placement: Placement,
+        timer: OwnedFd,
     ) -> Self {
         Self {
             commands,
@@ -137,6 +146,7 @@ impl Broker {
             ready,
             helpers,
             placement,
+            timer,
             network: None,
             network_started: None,
             intercept: false,
@@ -150,7 +160,7 @@ impl Broker {
 
     pub(crate) fn run(&mut self) -> io::Result<()> {
         loop {
-            let mut sources = vec![Source::Commands];
+            let mut sources = vec![Source::Commands, Source::Timer];
             if self.network.is_some() {
                 sources.push(Source::Network);
             }
@@ -164,6 +174,7 @@ impl Broker {
                 .iter()
                 .filter_map(|source| match source {
                     Source::Commands => Some(PollFd::new(&*self.signal, PollFlags::IN)),
+                    Source::Timer => Some(PollFd::new(&self.timer, PollFlags::IN)),
                     Source::Network => self
                         .network
                         .as_ref()
@@ -194,6 +205,7 @@ impl Broker {
                             return Ok(());
                         }
                     }
+                    Source::Timer => self.expire()?,
                     Source::Network => {
                         if let Err(error) = self.read_network() {
                             eprintln!("web-host: the network process failed: {error}");
@@ -298,10 +310,66 @@ impl Broker {
             .views
             .get_mut(&view)
             .and_then(|view| view.renderer.as_mut())
-            .map(|renderer| renderer.channel.send(&command, fds));
-        if let Some(Err(_)) = sent {
-            self.crash(view);
+            .map(|renderer| {
+                renderer.channel.send(&command, fds)?;
+                renderer.commands += 1;
+                if renderer.deadline.is_none() && !renderer.reported {
+                    renderer.deadline = Some(Instant::now() + renderer.hang);
+                }
+                Ok::<(), io::Error>(())
+            });
+        match sent {
+            Some(Err(_)) => self.crash(view),
+            Some(Ok(())) => self.arm(),
+            None => {}
         }
+    }
+
+    fn arm(&mut self) {
+        let next = self
+            .views
+            .values()
+            .filter_map(|view| view.renderer.as_ref()?.deadline)
+            .min();
+        let wait = next.map(|deadline| {
+            deadline
+                .saturating_duration_since(Instant::now())
+                .max(Duration::from_millis(1))
+        });
+        let spec = Itimerspec {
+            it_interval: Timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            it_value: Timespec {
+                tv_sec: wait.map_or(0, |wait| wait.as_secs() as i64),
+                tv_nsec: wait.map_or(0, |wait| i64::from(wait.subsec_nanos())),
+            },
+        };
+        if let Err(error) = timerfd_settime(&self.timer, TimerfdTimerFlags::empty(), &spec) {
+            eprintln!("web-host: cannot arm the hang deadline: {error}");
+        }
+    }
+
+    fn expire(&mut self) -> io::Result<()> {
+        crate::clear(&self.timer);
+        let now = Instant::now();
+        let mut hung = Vec::new();
+        for (id, view) in &mut self.views {
+            let Some(renderer) = view.renderer.as_mut() else {
+                continue;
+            };
+            if renderer.deadline.is_some_and(|deadline| deadline <= now) {
+                renderer.deadline = None;
+                renderer.reported = true;
+                hung.push((*id, renderer.load));
+            }
+        }
+        for (view, load) in hung {
+            self.send(view, load, Outcome::Unresponsive);
+        }
+        self.arm();
+        Ok(())
     }
 
     fn lose_network(&mut self) {
@@ -465,6 +533,18 @@ impl Broker {
                 let session = session_code(session);
                 self.tell_network(NetworkControl::SiteData { request, session }, Vec::new());
             }
+            Command::Wait { view } => {
+                if let Some(renderer) = self
+                    .views
+                    .get_mut(&view)
+                    .and_then(|view| view.renderer.as_mut())
+                    .filter(|renderer| renderer.done < renderer.commands)
+                {
+                    renderer.deadline = Some(Instant::now() + renderer.hang);
+                }
+                self.arm();
+            }
+            Command::Kill { view } => self.crash(view),
             Command::Resume { request, verdict } => {
                 self.tell_network(NetworkControl::Resume { request, verdict }, Vec::new());
             }
@@ -636,6 +716,11 @@ impl Broker {
                 images: Vec::new(),
                 image_bytes: 0,
                 shown: None,
+                commands: 0,
+                done: 0,
+                deadline: None,
+                reported: false,
+                hang: self.helpers.unresponsive_after,
             });
         }
         Ok(())
@@ -652,6 +737,7 @@ impl Broker {
             };
             renderer.channel.flush()?;
             let Some(message) = renderer.channel.receive()? else {
+                self.arm();
                 return Ok(());
             };
             if let Some((load, outcome)) = renderer.message(message)? {
@@ -734,6 +820,20 @@ impl Renderer {
                 }
                 let (list, links, damage) = self.patched(&fd, false)?;
                 Ok(Some((current, Outcome::Relaid(list, links, damage))))
+            }
+            FromRenderer::Done { commands } => {
+                if commands > self.commands || commands < self.done {
+                    return Err(invalid());
+                }
+                let progressed = commands > self.done;
+                self.done = commands;
+                let recovered = progressed && std::mem::take(&mut self.reported);
+                self.deadline = match (self.done < self.commands, progressed) {
+                    (false, _) => None,
+                    (true, true) => Some(Instant::now() + self.hang),
+                    (true, false) => self.deadline,
+                };
+                Ok(recovered.then_some((current, Outcome::Responsive)))
             }
             FromRenderer::Scroll { load, y } => {
                 Ok((load == current.0).then_some((current, Outcome::Scroll(y))))

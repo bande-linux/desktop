@@ -5,8 +5,10 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use rustix::event::{EventfdFlags, eventfd};
+use rustix::time::{TimerfdClockId, TimerfdFlags, timerfd_create};
 pub use web_ipc::{Destination, Program, Size as Viewport, Url, Verdict};
 pub use web_net::{Clear, SiteData};
 use web_paint::{DisplayList, Rect};
@@ -58,6 +60,12 @@ pub enum Command {
         request: u64,
         verdict: Verdict,
     },
+    Wait {
+        view: ViewId,
+    },
+    Kill {
+        view: ViewId,
+    },
     ClearData {
         session: Session,
         clear: Clear,
@@ -107,6 +115,8 @@ pub enum Outcome {
     Failed { url: Url, message: String },
     Unsupported { url: Url, kind: String },
     Crashed { url: Url },
+    Unresponsive,
+    Responsive,
     Paused(PausedRequest),
     SiteData(Vec<SiteData>),
 }
@@ -120,6 +130,7 @@ pub struct Update {
 pub struct Helpers {
     pub renderer: Program,
     pub network: Program,
+    pub unresponsive_after: Duration,
 }
 
 pub type Placement = Box<dyn FnMut(u32) + Send>;
@@ -159,6 +170,10 @@ impl Host {
             Arc::clone(&ready),
             helpers,
             placement,
+            timerfd_create(
+                TimerfdClockId::Monotonic,
+                TimerfdFlags::CLOEXEC | TimerfdFlags::NONBLOCK,
+            )?,
         );
         let thread = std::thread::Builder::new()
             .name("web-host".into())

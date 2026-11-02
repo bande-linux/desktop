@@ -5,8 +5,9 @@ use web_dom::{Document, NodeId};
 use web_html::{Options, Parser};
 use web_layout::{BoxFragment, BoxTree, Fragment, FragmentTree};
 use web_paint::DisplayList;
-use web_style::{Styles, Stylist, Viewport};
+use web_style::{Styles, Stylist};
 
+pub use web_style::Viewport;
 pub use web_text::Fonts;
 
 pub struct Page {

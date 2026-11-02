@@ -1,9 +1,17 @@
 pub mod calc;
 pub mod color;
+pub mod specified;
+
+use std::fmt::{self, Write};
 
 use crate::parser::{ParseError, ParseResult, Parser};
 use crate::tokenizer::Token;
 use calc::{CalcLeaf, CalcNode, CalcParser, Category, is_math_function};
+use color::write_number;
+
+pub trait Parse: Sized {
+    fn parse(input: &mut Parser<'_, '_>) -> ParseResult<Self>;
+}
 
 macro_rules! units {
     ($name:ident { $($variant:ident = $text:literal,)* }) => {
@@ -332,4 +340,39 @@ fn clamp_range(value: f32, range: Range) -> f32 {
 
 pub fn parse_length(input: &mut Parser<'_, '_>, range: Range) -> ParseResult<LengthPercentage> {
     LengthPercentage::parse_length(input, range)
+}
+
+impl fmt::Display for Length {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write_number(f, self.value)?;
+        f.write_str(self.unit.name())
+    }
+}
+
+impl fmt::Display for LengthPercentage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LengthPercentage::Length(length) => length.fmt(f),
+            LengthPercentage::Percentage(p) => {
+                write_number(f, *p)?;
+                f.write_char('%')
+            }
+            LengthPercentage::Calc(node) => {
+                if matches!(
+                    **node,
+                    CalcNode::Sum(_)
+                        | CalcNode::Product(_)
+                        | CalcNode::Negate(_)
+                        | CalcNode::Invert(_)
+                        | CalcNode::Leaf(_)
+                ) {
+                    f.write_str("calc(")?;
+                    node.fmt(f)?;
+                    f.write_char(')')
+                } else {
+                    node.fmt(f)
+                }
+            }
+        }
+    }
 }

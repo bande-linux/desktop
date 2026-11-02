@@ -1,5 +1,8 @@
+use std::fmt::{self, Display as _, Write};
+
 use crate::parser::{ParseError, ParseResult, Parser};
 use crate::tokenizer::Token;
+use crate::values::color::write_number;
 use crate::values::{Length, LengthUnit, angle_to_degrees, resolution_to_dppx, time_to_seconds};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -623,4 +626,80 @@ pub fn dimension_leaf(value: f32, unit: &str) -> ParseResult<CalcLeaf> {
         return Ok(CalcLeaf::Resolution(dppx));
     }
     Err(ParseError::Invalid)
+}
+
+impl fmt::Display for CalcLeaf {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (value, unit) = match *self {
+            CalcLeaf::Number(v) => (v, ""),
+            CalcLeaf::Percentage(v) => (v, "%"),
+            CalcLeaf::Length(length) => return length.fmt(f),
+            CalcLeaf::Angle(v) => (v, "deg"),
+            CalcLeaf::Time(v) => (v, "s"),
+            CalcLeaf::Resolution(v) => (v, "dppx"),
+        };
+        write_number(f, value)?;
+        f.write_str(unit)
+    }
+}
+
+fn write_args(f: &mut fmt::Formatter<'_>, name: &str, nodes: &[CalcNode]) -> fmt::Result {
+    write!(f, "{name}(")?;
+    for (i, node) in nodes.iter().enumerate() {
+        if i > 0 {
+            f.write_str(", ")?;
+        }
+        node.fmt(f)?;
+    }
+    f.write_char(')')
+}
+
+impl fmt::Display for CalcNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CalcNode::Leaf(leaf) => leaf.fmt(f),
+            CalcNode::Sum(nodes) => {
+                for (i, node) in nodes.iter().enumerate() {
+                    match (i, node) {
+                        (0, node) => node.fmt(f)?,
+                        (_, CalcNode::Negate(inner)) => write!(f, " - {inner}")?,
+                        (_, node) => write!(f, " + {node}")?,
+                    }
+                }
+                Ok(())
+            }
+            CalcNode::Product(nodes) => {
+                for (i, node) in nodes.iter().enumerate() {
+                    match (i, node) {
+                        (0, node) => node.fmt(f)?,
+                        (_, CalcNode::Invert(inner)) => write!(f, " / {inner}")?,
+                        (_, node) => write!(f, " * {node}")?,
+                    }
+                }
+                Ok(())
+            }
+            CalcNode::Negate(node) => write!(f, "-1 * ({node})"),
+            CalcNode::Invert(node) => write!(f, "1 / ({node})"),
+            CalcNode::Min(nodes) => write_args(f, "min", nodes),
+            CalcNode::Max(nodes) => write_args(f, "max", nodes),
+            CalcNode::Clamp(nodes) => write_args(f, "clamp", &nodes[..]),
+            CalcNode::Round(strategy, nodes) => {
+                let name = match strategy {
+                    RoundingStrategy::Nearest => "round",
+                    RoundingStrategy::Up => "round(up, ",
+                    RoundingStrategy::Down => "round(down, ",
+                    RoundingStrategy::ToZero => "round(to-zero, ",
+                };
+                match name.strip_suffix(", ") {
+                    Some(prefix) => write!(f, "{prefix}, {}, {})", nodes[0], nodes[1]),
+                    None => write_args(f, name, &nodes[..]),
+                }
+            }
+            CalcNode::Mod(nodes) => write_args(f, "mod", &nodes[..]),
+            CalcNode::Rem(nodes) => write_args(f, "rem", &nodes[..]),
+            CalcNode::Hypot(nodes) => write_args(f, "hypot", nodes),
+            CalcNode::Abs(node) => write!(f, "abs({node})"),
+            CalcNode::Sign(node) => write!(f, "sign({node})"),
+        }
+    }
 }

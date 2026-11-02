@@ -8,16 +8,19 @@ use std::rc::Rc;
 use std::thread;
 use std::time::{Instant, SystemTime};
 
-use crate::confirm::{FORCE_EJECT, eject_failed};
+use crate::confirm::{CONFIRM_EXTENSION_FLAG, FORCE_EJECT, confirm_extension_change, eject_failed};
 use crate::{
     Artwork, Bounds, CONFIRM_DELETE_FLAG, DesktopView, EJECT_FAILED_FLAG, Item, Kind, Layer,
     Layouts, Luma, MenuApp, Request, Selection, WallpaperKey, command, confirm_delete,
     desktop_menu, items_menu, layouts_path, list, parse_layouts, save_layouts,
 };
 use accesskit::TreeUpdate;
-use bande_config::{BarEdge, Config, Wallpaper, WallpaperFit};
-use bande_fs::{Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash};
-use bande_inbox::Inbox;
+use bande_config::{BUS_NAME, BarEdge, BarLayout, Config, OBJECT_PATH, Wallpaper, WallpaperFit};
+use bande_fs::{
+    Action, Answer, Change, ExtensionChange, FolderWatch, Operations, Purpose, Resolution, Task,
+    Trash,
+};
+use bande_inbox::{Inbox, Outbox};
 use bande_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
 use bande_toolkit::ui::frame_time;
 use bande_toolkit::{
@@ -33,11 +36,14 @@ use bande_xdg::{
     data_dirs, file_uri, find_icon, launch, launch_with, launch_with_arguments, path_from_file_uri,
     user_dir,
 };
+use zbus::blocking::Connection;
+use zbus::blocking::fdo::PropertiesProxy;
 
 const SETTINGS_FOLDER: &str = "bande";
 const FILES_SETTINGS: &str = "files.conf";
 const SHOW_EXTENSIONS: &str = "show-extensions";
 const SHOW_DISKS: &str = "desktop-disks";
+const WARN_EXTENSION_CHANGE: &str = "warn-extension-change";
 const BUSY: &str = "busy";
 const PDF: &str = "application/pdf";
 const WALLPAPER_CACHE: &str = "bande/wallpapers";
@@ -48,11 +54,21 @@ const FILES_INFO_FLAG: &str = "--info";
 type Loaded = (WallpaperKey, Option<(Picture, Luma)>);
 
 const CONFIRMED: &str = "delete";
+const CHANGE_EXTENSION: &str = "change";
+
+enum Confirmed {
+    Delete(Vec<PathBuf>),
+    Rename {
+        path: PathBuf,
+        name: String,
+        kept: String,
+    },
+}
 
 struct Confirming {
     child: Child,
     answer: ChildStdout,
-    paths: Vec<PathBuf>,
+    then: Confirmed,
 }
 
 pub struct DesktopSurface {
@@ -72,8 +88,8 @@ pub struct DesktopSurface {
     shown: Shown,
     pictures: HashMap<PathBuf, (Option<SystemTime>, Option<Option<Image>>)>,
     layouts_file: Option<PathBuf>,
-    bar_edge: BarEdge,
-    combined_bar: bool,
+    bar: BarPlacement,
+    bar_changes: Inbox<BarPlacement>,
     choice: Option<Choice>,
     choices: Inbox<Choice>,
     loaded: Inbox<Loaded>,
@@ -339,15 +355,20 @@ impl DesktopSurface {
 
     fn area(&self, size: (u32, u32)) -> Bounds {
         let (width, height) = (size.0 as f32, size.1 as f32);
-        let top = bande_bar::menu_bar::HEIGHT as f32;
-        let taskbar = bande_bar::taskbar::exclusive_zone(bande_bar::taskbar::ICON_SIZE);
-        let bar = bande_bar::rail::bar_width(bande_bar::taskbar::ICON_SIZE);
-        let (left, right, bottom, top) = match (self.bar_edge, self.combined_bar) {
-            (_, true) => (bar, 0.0, 0.0, 0.0),
-            (BarEdge::Left, false) => (taskbar, 0.0, 0.0, top),
-            (BarEdge::Right, false) => (0.0, taskbar, 0.0, top),
-            (BarEdge::Bottom, false) => (0.0, 0.0, taskbar, top),
-            (BarEdge::Top, false) => (0.0, 0.0, 0.0, top + taskbar),
+        let (bar_edge, layout, icon_size) = self.bar;
+        let icon_size = icon_size as f32;
+        let (edge, top) = match layout {
+            BarLayout::Combined => (bande_bar::rail::bar_width(icon_size), 0.0),
+            BarLayout::Separate => (
+                bande_bar::taskbar::exclusive_zone(icon_size),
+                bande_bar::menu_bar::HEIGHT as f32,
+            ),
+        };
+        let (left, right, bottom, top) = match bar_edge {
+            BarEdge::Left => (edge, 0.0, 0.0, top),
+            BarEdge::Right => (0.0, edge, 0.0, top),
+            BarEdge::Bottom => (0.0, 0.0, edge, top),
+            BarEdge::Top => (0.0, 0.0, 0.0, top + edge),
         };
         Bounds::new(
             left,
@@ -355,6 +376,25 @@ impl DesktopSurface {
             (width - left - right).max(1.0),
             (height - top - bottom).max(1.0),
         )
+    }
+
+    fn follow_bar(&mut self) {
+        let Some(bar) = self.bar_changes.drain().pop() else {
+            return;
+        };
+        if bar == self.bar {
+            return;
+        }
+        self.bar = bar;
+        if let Some((size, scale)) = self.viewport {
+            self.view.set_viewport(
+                (size.0 as f32, size.1 as f32),
+                scale as f32,
+                self.area(size),
+                frame_time().on_screen(),
+            );
+            self.save_layouts();
+        }
     }
 
     fn follow_viewport(&mut self, window: &mut Window) {
@@ -538,11 +578,8 @@ impl DesktopSurface {
                     Action::Move,
                 ),
                 Request::Rename { path, name } => {
-                    match bande_fs::rename(&path, &self.full_name(&path, name)) {
-                        Ok(Some(change)) => self.operations.record(Action::Rename, vec![change]),
-                        Ok(None) => {}
-                        Err(error) => tracing::warn!("cannot rename {}: {error:?}", path.display()),
-                    }
+                    let name = self.full_name(&path, name);
+                    self.rename_checked(path, name);
                 }
                 Request::NewFolder => match bande_fs::new_folder(&self.desktop_dir) {
                     Ok(change) => {
@@ -616,14 +653,50 @@ impl DesktopSurface {
         window.request_redraw();
     }
 
+    fn rename(&mut self, path: &Path, name: &str) {
+        match bande_fs::rename(path, name) {
+            Ok(Some(change)) => self.operations.record(Action::Rename, vec![change]),
+            Ok(None) => {}
+            Err(error) => tracing::warn!("cannot rename {}: {error:?}", path.display()),
+        }
+    }
+
+    fn rename_checked(&mut self, path: PathBuf, name: String) {
+        let change = ExtensionChange::of(&path, &name)
+            .filter(|_| self.shown.warn_extension_change && !path.is_dir());
+        let Some(change) = change else {
+            self.rename(&path, &name);
+            return;
+        };
+        if self.confirming.is_some() {
+            self.rename(&path, &change.kept);
+            return;
+        }
+        let arguments = [
+            CONFIRM_EXTENSION_FLAG.to_owned(),
+            change.from.unwrap_or_default(),
+            change.to.unwrap_or_default(),
+        ];
+        let then = Confirmed::Rename {
+            path,
+            name,
+            kept: change.kept,
+        };
+        self.ask(&arguments, then);
+    }
+
     fn confirm_delete(&mut self, paths: Vec<PathBuf>) {
         if self.confirming.is_some() {
             return;
         }
+        let arguments = [CONFIRM_DELETE_FLAG.to_owned(), paths.len().to_string()];
+        self.ask(&arguments, Confirmed::Delete(paths));
+    }
+
+    fn ask(&mut self, arguments: &[String], then: Confirmed) {
         let spawned = std::env::current_exe().and_then(|program| {
             Command::new(program)
-                .arg(CONFIRM_DELETE_FLAG)
-                .arg(paths.len().to_string())
+                .args(arguments)
                 .stdout(Stdio::piped())
                 .spawn()
         });
@@ -633,12 +706,12 @@ impl DesktopSurface {
                     self.confirming = Some(Confirming {
                         child,
                         answer,
-                        paths,
+                        then,
                     })
                 }
-                None => tracing::warn!("cannot hear the delete confirmation"),
+                None => tracing::warn!("cannot hear the confirmation"),
             },
-            Err(error) => tracing::warn!("cannot ask to delete: {error}"),
+            Err(error) => tracing::warn!("cannot ask for a confirmation: {error}"),
         }
     }
 
@@ -653,12 +726,20 @@ impl DesktopSurface {
         if let Err(error) = confirming.child.wait() {
             tracing::warn!("cannot finish the delete confirmation: {error}");
         }
-        if answer.trim() == CONFIRMED {
-            let task = Task::Delete {
-                sources: confirming.paths,
-            };
-            if let Err(error) = self.operations.start(task, Purpose::Erase) {
-                tracing::warn!("cannot delete: {error}");
+        match confirming.then {
+            Confirmed::Delete(sources) if answer.trim() == CONFIRMED => {
+                let task = Task::Delete { sources };
+                if let Err(error) = self.operations.start(task, Purpose::Erase) {
+                    tracing::warn!("cannot delete: {error}");
+                }
+            }
+            Confirmed::Delete(_) => {}
+            Confirmed::Rename { path, name, kept } => {
+                let chosen = match answer.trim() == CHANGE_EXTENSION {
+                    true => name,
+                    false => kept,
+                };
+                self.rename(&path, &chosen);
             }
         }
     }
@@ -800,7 +881,12 @@ impl App for DesktopSurface {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = vec![self.watch.fd(), self.choices.fd(), self.loaded.fd()];
+        let mut sources = vec![
+            self.watch.fd(),
+            self.choices.fd(),
+            self.loaded.fd(),
+            self.bar_changes.fd(),
+        ];
         sources.extend(self.thumbnails.as_ref().map(Thumbnails::fd));
         sources.extend(self.operations.fds());
         sources.extend(
@@ -846,12 +932,16 @@ impl App for DesktopSurface {
                     window.request_redraw();
                 }
             }
-            3 if self.thumbnails.is_some() => {
+            3 => {
+                self.follow_bar();
+                window.request_redraw();
+            }
+            4 if self.thumbnails.is_some() => {
                 self.thumbnails_ready();
                 window.request_redraw();
             }
             index => {
-                let first = 3 + usize::from(self.thumbnails.is_some());
+                let first = 4 + usize::from(self.thumbnails.is_some());
                 if index - first == self.operations.fds().len() {
                     self.confirmed();
                 } else {
@@ -902,6 +992,7 @@ impl App for DesktopSurface {
 struct Shown {
     extensions: bool,
     disks: bool,
+    warn_extension_change: bool,
 }
 
 impl Shown {
@@ -920,6 +1011,7 @@ impl Shown {
         Self {
             extensions: flag(SHOW_EXTENSIONS).unwrap_or(false),
             disks: flag(SHOW_DISKS).unwrap_or(true),
+            warn_extension_change: flag(WARN_EXTENSION_CHANGE).unwrap_or(true),
         }
     }
 }
@@ -965,6 +1057,58 @@ fn desktop_folder(home: &Path) -> PathBuf {
     folder
 }
 
+type BarPlacement = (BarEdge, BarLayout, u32);
+
+fn follow_bar_placement(placements: Outbox<BarPlacement>) {
+    let work = move || {
+        let follow = || -> zbus::Result<()> {
+            let session = Connection::session()?;
+            let config = zbus::blocking::proxy::Builder::<zbus::blocking::Proxy>::new(&session)
+                .destination(BUS_NAME)?
+                .path(OBJECT_PATH)?
+                .interface(BUS_NAME)?
+                .cache_properties(zbus::proxy::CacheProperties::No)
+                .build()?;
+            let changes = PropertiesProxy::builder(&session)
+                .destination(BUS_NAME)?
+                .path(OBJECT_PATH)?
+                .build()?
+                .receive_properties_changed()?;
+            let read = || -> zbus::Result<Option<BarPlacement>> {
+                let edge = config.get_property::<String>("BarEdge")?;
+                let layout = config.get_property::<String>("BarLayout")?;
+                let size = config.get_property::<u32>("BarIconSize")?;
+                Ok(BarEdge::from_keyword(&edge)
+                    .zip(BarLayout::from_keyword(&layout))
+                    .map(|(edge, layout)| (edge, layout, size)))
+            };
+            let mut last = None;
+            for _ in std::iter::once(()).chain(changes.map(drop)) {
+                let placement = read()?;
+                if placement == last {
+                    continue;
+                }
+                last = placement;
+                if let Some(placement) = placement
+                    && !placements.send(placement)
+                {
+                    break;
+                }
+            }
+            Ok(())
+        };
+        if let Err(error) = follow() {
+            tracing::warn!("the desktop does not follow the taskbar's place: {error}");
+        }
+    };
+    if let Err(error) = thread::Builder::new()
+        .name("bar placement".to_owned())
+        .spawn(work)
+    {
+        tracing::warn!("cannot follow the taskbar's place: {error}");
+    }
+}
+
 pub fn role() -> Role {
     Role::Layer(LayerOptions {
         layer: LayerKind::Background,
@@ -984,8 +1128,8 @@ impl DesktopSurface {
         apps: Rc<RefCell<Apps>>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let home = std::env::var_os("HOME").map(PathBuf::from);
-        let bar_edge = config.bar.edge;
-        let combined_bar = config.bar.menu_bar.combines(config.bar.edge);
+        let bar_changes = Inbox::new()?;
+        follow_bar_placement(bar_changes.outbox());
         let desktop_dir = desktop_folder(home.as_deref().unwrap_or(Path::new("/")));
         let user = std::env::var("USER").unwrap_or_default();
         let trash = Trash::for_user().ok_or("no home folder for the Trash")?;
@@ -1018,11 +1162,12 @@ impl DesktopSurface {
             shown: Shown {
                 extensions: false,
                 disks: true,
+                warn_extension_change: true,
             },
             pictures: HashMap::new(),
             layouts_file,
-            bar_edge,
-            combined_bar,
+            bar: (config.bar.edge, config.bar.layout, config.bar.icon_size),
+            bar_changes,
             choice: Some(configured_choice(&config.wallpaper)),
             choices,
             loaded,
@@ -1067,6 +1212,19 @@ pub fn report_eject_failure(
 ) -> Result<(), Box<dyn std::error::Error>> {
     if eject_failed(name, busy == BUSY, message)? {
         println!("{FORCE_EJECT}");
+    }
+    Ok(())
+}
+
+pub fn confirm_extension(from: &str, to: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let known = |extension: &str| Some(extension.to_owned()).filter(|known| !known.is_empty());
+    let change = ExtensionChange {
+        from: known(from),
+        to: known(to),
+        kept: String::new(),
+    };
+    if confirm_extension_change(&change)? {
+        println!("{CHANGE_EXTENSION}");
     }
     Ok(())
 }

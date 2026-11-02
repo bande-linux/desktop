@@ -128,6 +128,12 @@ impl SettingsView {
                 .battery
                 .as_ref()
                 .map(|battery| battery.profiles.clone()),
+            SettingId::BarEdge => match self.values.get(&SettingId::BarLayout) {
+                Some(Value::Keyword(layout)) if layout == "separate" => {
+                    Some(["left", "bottom", "right"].map(str::to_owned).to_vec())
+                }
+                _ => None,
+            },
             _ => None,
         }
     }

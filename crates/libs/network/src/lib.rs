@@ -3,8 +3,8 @@ mod proxy;
 mod wifi;
 
 pub use connections::{
-    Addressing, Ethernet, ManualIpv4, Vpn, VpnState, import_vpn, ipv4_settings, parse_manual,
-    vpn_type_of,
+    Addressing, Ethernet, ManualIpv4, Vpn, VpnState, import_vpn, ipv4_settings, parse_dns,
+    parse_manual, vpn_type_of,
 };
 use std::collections::HashMap;
 use std::fmt;

@@ -450,6 +450,44 @@ impl State {
         }
     }
 
+    pub(crate) fn fit_to_usable_areas(&mut self) {
+        for screen in 0..self.screens.len() {
+            let area = self.usable_area(screen);
+            let workspaces = &self.screens[screen].workspaces;
+            let full_screen = workspaces
+                .id_at(workspaces.active())
+                .is_some_and(|id| workspaces.is_full_screen(id));
+            if full_screen || self.screens[screen].fitted_to == area {
+                continue;
+            }
+            self.screens[screen].fitted_to = area;
+            for index in 0..self.windows.len() {
+                let window = &self.windows[index];
+                if self.screen_of(window) != screen
+                    || self.on_full_screen_space(window)
+                    || window.has_state(xdg_toplevel::State::Fullscreen)
+                {
+                    continue;
+                }
+                let (fitted, target) = match window.tile {
+                    Some((tile, rect)) => (rect == tile.rect(area), Some(tile)),
+                    None if window.has_state(xdg_toplevel::State::Maximized) => {
+                        (window.geometry() == Some(area), None)
+                    }
+                    None => continue,
+                };
+                match (fitted, target) {
+                    (true, _) => {}
+                    (false, Some(tile)) => self.tile_window(index, tile, Spring::STANDARD),
+                    (false, None) => {
+                        let surface = window.surface().clone();
+                        self.maximize(&surface);
+                    }
+                }
+            }
+        }
+    }
+
     pub(crate) fn unmaximize(&mut self, surface: &WlSurface) {
         let Some(index) = self.window_index(surface) else {
             return;

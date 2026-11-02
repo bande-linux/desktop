@@ -798,7 +798,7 @@ impl Taskbar {
         self.load_trash_icons();
         self.sync();
         let size = if self.state.borrow().rail().is_some() {
-            rail_surface_size(icon_size)
+            rail_surface_size(edge, icon_size)
         } else {
             surface_size(edge, icon_size, (0, 0))
         };
@@ -1054,7 +1054,8 @@ impl App for Taskbar {
     fn tick(&mut self, window: &mut Window, now: Instant) {
         if self.release_at.is_some_and(|at| now >= at) {
             self.release_at = None;
-            if !self.menu_shown() && !self.state.borrow().is_navigating() {
+            if !self.menu_shown() && !window.is_menu_open() && !self.state.borrow().is_navigating()
+            {
                 self.release_keyboard(window);
             }
         }

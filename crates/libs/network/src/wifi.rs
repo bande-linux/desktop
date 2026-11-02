@@ -1,6 +1,8 @@
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
-use crate::connections::{IPV4, configured_ipv4, ipv4_settings, text};
+use std::net::Ipv4Addr;
+
+use crate::connections::{IPV4, configured_ipv4, dns_servers, dns_value, ipv4_settings, text};
 use crate::proxy::SettingsProxyBlocking;
 use crate::{
     Addressing, CONNECTION, ConnectionSettings, ManualIpv4, NetworkManager, Result, WIRELESS,
@@ -12,6 +14,8 @@ const METERED_YES: i32 = 1;
 const METERED_UNKNOWN: i32 = 0;
 const ASSIGNED_MAC: &str = "assigned-mac-address";
 const CLONED_MAC: &str = "cloned-mac-address";
+const IGNORE_AUTO_DNS: &str = "ignore-auto-dns";
+const DNS: &str = "dns";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrivateAddress {
@@ -48,6 +52,7 @@ pub struct KnownNetwork {
     pub low_data: bool,
     pub private_address: PrivateAddress,
     pub manual: Option<ManualIpv4>,
+    pub dns: Vec<Ipv4Addr>,
 }
 
 impl KnownNetwork {
@@ -74,6 +79,15 @@ impl KnownNetwork {
             low_data: metered == Some(METERED_YES),
             private_address: PrivateAddress::of(text(wireless, ASSIGNED_MAC).as_deref()),
             manual: configured_ipv4(settings),
+            dns: settings
+                .get(IPV4)
+                .filter(|ipv4| {
+                    ipv4.get(IGNORE_AUTO_DNS)
+                        .and_then(|value| bool::try_from(value).ok())
+                        .unwrap_or(false)
+                })
+                .map(dns_servers)
+                .unwrap_or_default(),
         })
     }
 }
@@ -90,11 +104,12 @@ pub enum WifiChange {
     LowData(bool),
     PrivateAddress(PrivateAddress),
     Ipv4(Option<ManualIpv4>),
+    Dns(Vec<Ipv4Addr>),
 }
 
 impl WifiChange {
     fn needs_reconnect(&self) -> bool {
-        matches!(self, Self::PrivateAddress(_) | Self::Ipv4(_))
+        matches!(self, Self::PrivateAddress(_) | Self::Ipv4(_) | Self::Dns(_))
     }
 
     fn apply(&self, settings: &mut ConnectionSettings) {
@@ -122,6 +137,17 @@ impl WifiChange {
             }
             Self::Ipv4(manual) => {
                 settings.insert(IPV4.to_owned(), ipv4_settings(manual.as_ref()));
+            }
+            Self::Dns(servers) => {
+                let ipv4 = settings.entry(IPV4.to_owned()).or_default();
+                ipv4.remove(DNS);
+                ipv4.extend(
+                    owned(Value::from(!servers.is_empty()))
+                        .map(|ignore| (IGNORE_AUTO_DNS.to_owned(), ignore)),
+                );
+                if !servers.is_empty() {
+                    ipv4.extend(dns_value(servers).map(|dns| (DNS.to_owned(), dns)));
+                }
             }
         }
     }

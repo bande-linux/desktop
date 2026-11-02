@@ -3,6 +3,7 @@ pub mod captive;
 pub mod clock;
 pub mod dbusmenu;
 pub mod devices;
+pub mod gtkmenu;
 pub mod history;
 pub mod hub;
 pub mod memory;
@@ -34,9 +35,10 @@ pub enum Update {
     Menu { menu: String, root: Node },
     AppMenu { menu: String, root: Option<Node> },
     AppMenuChanged,
+    GtkMenuChanged(String),
     ClockFormat(String),
     Minute,
     BatteryPercentage(bool),
     ClockMark(unread::ClockMark),
-    BarLayout { menu_bar: String, edge: String },
+    BarLayout { layout: String, edge: String },
 }

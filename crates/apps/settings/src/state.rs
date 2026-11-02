@@ -7,6 +7,7 @@ pub struct WifiState {
     pub networks: Vec<Network>,
     pub known: Vec<KnownNetwork>,
     pub link: WifiLink,
+    pub sign_in: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

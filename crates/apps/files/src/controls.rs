@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::time::{Instant, SystemTime};
 
 use accesskit::{Action, ActionRequest, TreeId};
-use bande_fs::{Entry, Sort, SortBy, format_date, format_list_date, format_size};
+use bande_fs::{Entry, ExtensionChange, Sort, SortBy, format_date, format_list_date, format_size};
 use bande_toolkit::ui::{
     Alert, Cell, Column, Event, FreeLayout, Key, Menu, MenuItem, Modifiers, Pointer, PointerButton,
     Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField, Toggle, Widget,
@@ -1099,34 +1099,10 @@ impl FilesView {
             )
             .cancel(&L10N.tr("cancel"), "cancel")
             .primary(&L10N.tr("delete"), "confirm"),
-            Sheet::ChangeExtension { from, to, .. } => {
-                let quoted = |extension: &Option<String>| extension.clone().unwrap_or_default();
-                let (title, keep, change) = match (from, to) {
-                    (Some(_), Some(_)) => (
-                        L10N.tr_args(
-                            "extension-change-title",
-                            [("from", quoted(from).into()), ("to", quoted(to).into())],
-                        ),
-                        L10N.tr_args("extension-keep", [("extension", quoted(from).into())]),
-                        L10N.tr_args("extension-use", [("extension", quoted(to).into())]),
-                    ),
-                    (None, _) => (
-                        L10N.tr_args("extension-add-title", [("extension", quoted(to).into())]),
-                        L10N.tr("extension-dont-add"),
-                        L10N.tr("extension-add"),
-                    ),
-                    (Some(_), None) => (
-                        L10N.tr_args(
-                            "extension-remove-title",
-                            [("extension", quoted(from).into())],
-                        ),
-                        L10N.tr("extension-dont-remove"),
-                        L10N.tr("extension-remove"),
-                    ),
-                };
-                Alert::new(&title, &L10N.tr("extension-detail"), choose)
-                    .cancel(&keep, "cancel")
-                    .primary(&change, "confirm")
+            Sheet::ChangeExtension { change, .. } => {
+                Alert::new(&change.title(), &ExtensionChange::detail(), choose)
+                    .cancel(&change.keep(), "cancel")
+                    .primary(&change.change(), "confirm")
             }
             Sheet::EjectFailed {
                 volume,

@@ -127,9 +127,9 @@ pub trait Config {
     #[zbus(property)]
     fn set_bar_edge(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
-    fn bar_menu_bar(&self) -> zbus::Result<String>;
+    fn bar_layout(&self) -> zbus::Result<String>;
     #[zbus(property)]
-    fn set_bar_menu_bar(&self, value: &str) -> zbus::Result<()>;
+    fn set_bar_layout(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
     fn idle_dim_after(&self) -> zbus::Result<u64>;
     #[zbus(property)]
@@ -318,7 +318,7 @@ pub const CONFIG_SETTINGS: [SettingId; 70] = [
     SettingId::BarIconSize,
     SettingId::BarAutoHide,
     SettingId::BarEdge,
-    SettingId::BarMenuBar,
+    SettingId::BarLayout,
     SettingId::DimAfter,
     SettingId::LockAfter,
     SettingId::SleepAfter,
@@ -532,7 +532,7 @@ impl SettingsClient {
             SettingId::BarIconSize => Value::Number(self.config.bar_icon_size()?),
             SettingId::BarAutoHide => Value::Flag(self.config.bar_auto_hide()?),
             SettingId::BarEdge => Value::Keyword(self.config.bar_edge()?),
-            SettingId::BarMenuBar => Value::Keyword(self.config.bar_menu_bar()?),
+            SettingId::BarLayout => Value::Keyword(self.config.bar_layout()?),
             SettingId::DimAfter => Value::Seconds(self.config.idle_dim_after()?),
             SettingId::LockAfter => Value::Seconds(self.config.idle_lock_after()?),
             SettingId::SleepAfter if self.config.idle_suspend_with_display()? => {
@@ -608,9 +608,7 @@ impl SettingsClient {
                 self.config.set_reopen_apps_after_crash(*on)
             }
             (SettingId::BarEdge, Value::Keyword(keyword)) => self.config.set_bar_edge(keyword),
-            (SettingId::BarMenuBar, Value::Keyword(keyword)) => {
-                self.config.set_bar_menu_bar(keyword)
-            }
+            (SettingId::BarLayout, Value::Keyword(keyword)) => self.config.set_bar_layout(keyword),
             (SettingId::Clock24Hour, Value::Flag(twenty_four_hour)) => {
                 self.config.set_clock_format(if *twenty_four_hour {
                     "24-hour"

@@ -72,13 +72,33 @@ pub fn parse_manual(address: &str, router: &str, dns: &str) -> Option<ManualIpv4
         } else {
             Some(router.parse().ok()?)
         },
-        dns: dns
-            .split([',', ' '])
-            .filter(|server| !server.is_empty())
-            .map(str::parse)
-            .collect::<std::result::Result<_, _>>()
-            .ok()?,
+        dns: parse_dns(dns)?,
     })
+}
+
+pub fn parse_dns(dns: &str) -> Option<Vec<Ipv4Addr>> {
+    dns.split([',', ' '])
+        .filter(|server| !server.is_empty())
+        .map(str::parse)
+        .collect::<std::result::Result<_, _>>()
+        .ok()
+}
+
+pub(crate) fn dns_servers(ipv4: &HashMap<String, OwnedValue>) -> Vec<Ipv4Addr> {
+    ipv4.get("dns")
+        .and_then(|dns| Vec::<u32>::try_from(dns.try_clone().ok()?).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|server| Ipv4Addr::from(server.to_le_bytes()))
+        .collect()
+}
+
+pub(crate) fn dns_value(servers: &[Ipv4Addr]) -> Option<OwnedValue> {
+    let servers: Vec<u32> = servers
+        .iter()
+        .map(|server| u32::from_le_bytes(server.octets()))
+        .collect();
+    owned(Value::from(servers))
 }
 
 fn owned(value: Value<'_>) -> Option<OwnedValue> {
@@ -98,11 +118,6 @@ pub fn ipv4_settings(manual: Option<&ManualIpv4>) -> HashMap<String, OwnedValue>
         ),
         ("prefix".to_owned(), Value::from(manual.prefix)),
     ]);
-    let dns: Vec<u32> = manual
-        .dns
-        .iter()
-        .map(|server| u32::from_le_bytes(server.octets()))
-        .collect();
     let entries = [
         ("method", owned(Value::from("manual"))),
         ("address-data", owned(Value::from(vec![address]))),
@@ -112,7 +127,7 @@ pub fn ipv4_settings(manual: Option<&ManualIpv4>) -> HashMap<String, OwnedValue>
                 .router
                 .and_then(|router| owned(Value::from(router.to_string()))),
         ),
-        ("dns", owned(Value::from(dns))),
+        ("dns", dns_value(&manual.dns)),
     ];
     ipv4.extend(
         entries
@@ -132,18 +147,11 @@ pub(crate) fn configured_ipv4(settings: &ConnectionSettings) -> Option<ManualIpv
             .ok()?
             .into_iter()
             .next()?;
-    let dns = ipv4
-        .get("dns")
-        .and_then(|dns| Vec::<u32>::try_from(dns.try_clone().ok()?).ok())
-        .unwrap_or_default();
     Some(ManualIpv4 {
         address: text(&first, "address")?.parse().ok()?,
         prefix: u32::try_from(first.get("prefix")?).ok()?,
         router: text(ipv4, "gateway").and_then(|router| router.parse().ok()),
-        dns: dns
-            .into_iter()
-            .map(|server| Ipv4Addr::from(server.to_le_bytes()))
-            .collect(),
+        dns: dns_servers(ipv4),
     })
 }
 

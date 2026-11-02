@@ -8,8 +8,9 @@ use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
 
 use bande_fs::{
-    Action, Answer, Change, Entry, Finished, FolderChanges, FolderWatch, History, Operations,
-    Purpose, RenameError, Resolution, Sort, Step, Task, TrashItem, archive_path, can_extract,
+    Action, Answer, Change, Entry, ExtensionChange, Finished, FolderChanges, FolderWatch, History,
+    Operations, Purpose, RenameError, Resolution, Sort, Step, Task, TrashItem, archive_path,
+    can_extract,
 };
 use bande_preview::Preview;
 use bande_search::{Usage, recent_files};
@@ -115,9 +116,7 @@ pub enum Sheet {
     ChangeExtension {
         path: PathBuf,
         name: String,
-        kept: String,
-        from: Option<String>,
-        to: Option<String>,
+        change: ExtensionChange,
     },
     GoTo(String),
     OpenWith(crate::open_with::OpenWith),
@@ -1467,9 +1466,14 @@ impl FilesView {
             Sheet::EjectFailed { volume, .. } if action == "force" => {
                 self.requests.push(Request::ForceEject(volume));
             }
-            Sheet::ChangeExtension {
-                path, name, kept, ..
-            } => self.rename_to(&path, if action == "confirm" { &name } else { &kept }),
+            Sheet::ChangeExtension { path, name, change } => self.rename_to(
+                &path,
+                if action == "confirm" {
+                    &name
+                } else {
+                    &change.kept
+                },
+            ),
             Sheet::DeleteImmediately { paths, items } if action == "confirm" => {
                 if !paths.is_empty() {
                     self.start(Task::Delete { sources: paths }, Purpose::Erase);
@@ -1936,33 +1940,17 @@ impl FilesView {
             }
             _ => typed,
         };
-        let extension = |name: &str| {
-            Path::new(name)
-                .extension()
-                .map(|extension| format!(".{}", extension.to_string_lossy()))
-        };
-        let old = rename
-            .path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let (from, to) = (extension(&old), extension(&name));
-        if !ask || rename.folder || !self.warn_extension_change || from == to {
-            self.rename_to(&rename.path, &name);
-            return;
+        let change = ExtensionChange::of(&rename.path, &name)
+            .filter(|_| !rename.folder && self.warn_extension_change);
+        match change {
+            None => self.rename_to(&rename.path, &name),
+            Some(change) if !ask => self.rename_to(&rename.path, &change.kept),
+            Some(change) => self.present(Sheet::ChangeExtension {
+                path: rename.path,
+                name,
+                change,
+            }),
         }
-        let stem = Path::new(&name)
-            .file_stem()
-            .map(|stem| stem.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let kept = format!("{stem}{}", from.as_deref().unwrap_or_default());
-        self.present(Sheet::ChangeExtension {
-            path: rename.path,
-            name,
-            kept,
-            from,
-            to,
-        });
     }
 
     pub(crate) fn rename_to(&mut self, path: &Path, name: &str) {

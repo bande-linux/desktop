@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use bande_config::Config;
+use bande_config::{BarLayout, Config};
 use bande_status::hub::StatusHub;
 use bande_toolkit::{App, TextSystem, Window};
 use zbus::blocking::Connection;
@@ -47,12 +47,12 @@ pub fn open(
         Ok(window)
     };
     let bar = &config.bar;
-    let layout = (bar.menu_bar, bar.edge);
+    let layout = (bar.layout, bar.edge);
     let icon_size = bar.icon_size as f32;
     let mut surfaces: Vec<(Window, Box<dyn App>)> = Vec::new();
-    let (handoff, restart) = match bar.menu_bar.combines(bar.edge) {
-        true => {
-            let (role, size) = combined_role(icon_size);
+    let (handoff, restart) = match bar.layout {
+        BarLayout::Combined => {
+            let (role, size) = combined_role(bar.edge, icon_size);
             let window = open_window(role, size)?;
             let taskbar = Taskbar::new(
                 &window,
@@ -65,6 +65,7 @@ pub fn open(
             let view = TaskbarView::new(
                 window.appearance().palette(),
                 text.sharing_fonts(),
+                bar.edge,
                 bande_xdg::data_dirs(),
                 icon_size,
             );
@@ -73,7 +74,7 @@ pub fn open(
             surfaces.push((window, Box::new(CombinedClient::new(taskbar, status))));
             shared
         }
-        false => {
+        BarLayout::Separate => {
             let mut window = open_window(menu_bar_role(), MENU_BAR_SIZE)?;
             let client = MenuBarClient::new(
                 &mut window,

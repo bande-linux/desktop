@@ -99,7 +99,8 @@ writes a hex value, a corner radius or a font name of its own.
   with dictionaries for Thai, Lao, Khmer and Burmese, and fallback through fontconfig (loaded at
   run time). Interface text is Inter with Datum's alternates on (`cv05` l with a tail, `cv08` I
   with serifs, `ss07`/`ss08` square punctuation and quotes); display text (window titles,
-  headings, 20 pt and up) is Manrope; monospace is JetBrains Mono with a slashed zero. A missing
+  headings, 20 pt and up) is Manrope; monospace is JetBrains Mono with a slashed zero, or the
+  family a `TextSystem` was given with `set_monospace_family` (Terminal's font). A missing
   face falls back (Manrope to Inter, JetBrains Mono to DejaVu Sans Mono, then fontconfig's
   generic family), so nothing breaks without the fonts; `bande-desktop` depends on
   `fonts-inter`, `fonts-manrope` and `fonts-jetbrains-mono`. Baselines sit on whole pixels, as
@@ -205,7 +206,7 @@ writes a hex value, a corner radius or a font name of its own.
   the far left. When they do not fit side by side they stack, default on top. The parent dims
   with `scrim` (18 % light, 40 % dark); `Ui::present_sheet` drops the card from under the header (`Ui::set_sheet_top` for an app whose content covers the header),
   `Ui::present_dialog` centres it.
-- **Tables**. Rows 32, header 28 with `Label`-style
+- **Tables**. Rows 32 (24 with `Table::compact` for dense lists such as Activity Monitor), header 28 with `Label`-style
   tracked capitals in `ink3` (`ink2` for the sorted column) over a `hairline` underline, no
   stripes and no column separators. Contiguous selected rows form one block of radius 6 inset
   4 × 1: accent with `on_accent` text while focused, `well` otherwise. A single selected run

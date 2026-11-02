@@ -88,11 +88,13 @@ fn region(rect: Rect, scale: f64, size: (u32, u32)) -> Option<Region> {
     let top = (f64::from(rect.y) * scale).floor().max(0.0) as u32;
     let right = ((f64::from(rect.x + rect.width) * scale).ceil().max(0.0) as u32).min(size.0);
     let bottom = ((f64::from(rect.y + rect.height) * scale).ceil().max(0.0) as u32).min(size.1);
-    (right > left && bottom > top).then_some(Region {
+    let width = right.checked_sub(left).filter(|width| *width > 0)?;
+    let height = bottom.checked_sub(top).filter(|height| *height > 0)?;
+    Some(Region {
         x: left,
         y: top,
-        width: right - left,
-        height: bottom - top,
+        width,
+        height,
     })
 }
 

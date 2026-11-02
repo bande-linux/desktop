@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="bande_shell_v1">
-  <interface name="bande_shell_v1" version="3">
+  <interface name="bande_shell_v1" version="4">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the shell and the screenshot tool), never on the listening socket.
@@ -530,8 +530,12 @@
         popup of its surface on the window's display, below the button, which
         is at this rectangle relative to that surface, and grabs it with this
         serial, which the compositor lets take over the pointer and keyboard.
-        Menu is the com.canonical.dbusmenu service and object path as
-        "service/path", or empty for the app's own menu at its app id.
+        Menu is where the window's menus are: the com.canonical.dbusmenu
+        service and object path as "service/path"; for a GTK window that gave
+        its menu bar on gtk_surface1, "gtk", its unique bus name, the
+        org.gtk.Menus menu bar path and the org.gtk.Actions application and
+        window object paths (empty when not given), separated by spaces; or
+        empty for the app's own menu at its app id.
       </description>
       <arg name="surface" type="object" interface="wl_surface"/>
       <arg name="app_id" type="string"/>
@@ -541,6 +545,15 @@
       <arg name="width" type="int"/>
       <arg name="height" type="int"/>
       <arg name="serial" type="uint"/>
+    </event>
+
+    <event name="active_menus" since="4">
+      <description summary="where the key window's menus are">
+        Sent on binding, after every active_app and whenever the key window
+        or the place it gives for its menus changes, so the menu bar and Menu
+        Search show that window's menus. Menu is as in show_app_menu.
+      </description>
+      <arg name="menu" type="string"/>
     </event>
   </interface>
 

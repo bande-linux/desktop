@@ -46,7 +46,11 @@ impl Relay {
 fn remembered(update: &Update) -> bool {
     !matches!(
         update,
-        Update::Menu { .. } | Update::AppMenu { .. } | Update::AppMenuChanged | Update::Minute
+        Update::Menu { .. }
+            | Update::AppMenu { .. }
+            | Update::AppMenuChanged
+            | Update::GtkMenuChanged(_)
+            | Update::Minute
     )
 }
 

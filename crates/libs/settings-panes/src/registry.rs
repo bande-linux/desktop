@@ -219,7 +219,7 @@ pub enum SettingId {
     BarEdge,
     BarIconSize,
     BarAutoHide,
-    BarMenuBar,
+    BarLayout,
     DisplayUse,
     DisplayResolution,
     DisplayScale,
@@ -822,13 +822,22 @@ fn desktop_panes() -> Vec<Pane> {
                 None,
                 vec![
                     setting(
+                        SettingId::BarLayout,
+                        L10N.tr("bar-layout"),
+                        L10N.tr("bar-layout-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("bar-layout-combined"), "combined"),
+                            (L10N.tr("bar-layout-separate"), "separate"),
+                        ])),
+                    ),
+                    setting(
                         SettingId::BarEdge,
                         L10N.tr("bar-position"),
                         L10N.tr("bar-position-keywords"),
                         Kind::Choices(keyword_choices(vec![
                             (L10N.tr("edge-left"), "left"),
-                            (L10N.tr("edge-right"), "right"),
                             (L10N.tr("edge-bottom"), "bottom"),
+                            (L10N.tr("edge-right"), "right"),
                             (L10N.tr("edge-top"), "top"),
                         ])),
                     ),
@@ -844,15 +853,6 @@ fn desktop_panes() -> Vec<Pane> {
                         },
                     ),
                     switch(SettingId::BarAutoHide, "bar-auto-hide"),
-                    setting(
-                        SettingId::BarMenuBar,
-                        L10N.tr("bar-menu-bar"),
-                        L10N.tr("bar-menu-bar-keywords"),
-                        Kind::Choices(keyword_choices(vec![
-                            (L10N.tr("bar-menu-bar-in-bar"), "in-bar"),
-                            (L10N.tr("bar-menu-bar-separate"), "separate"),
-                        ])),
-                    ),
                 ],
             )],
         ),

@@ -16,6 +16,7 @@ use smithay::wayland::foreign_toplevel_list::{
 use smithay::wayland::shell::xdg::XdgToplevelSurfaceData;
 use smithay::wayland::text_input::TextInputSeat;
 
+use crate::menu_button::{ACTIVE_MENUS_SINCE, menu_address};
 use crate::session::SessionRole;
 use crate::state::{ClientState, State};
 
@@ -263,11 +264,20 @@ impl State {
             self.each_shell(|shell| shell.active_output(output.clone()));
             self.active_output = output;
         }
-        if app_id == self.active_app {
-            return;
+        let menus = key.and_then(menu_address).unwrap_or_default();
+        let app_changed = app_id != self.active_app;
+        if app_changed {
+            self.each_shell(|shell| shell.active_app(app_id.clone()));
+            self.active_app = app_id;
         }
-        self.each_shell(|shell| shell.active_app(app_id.clone()));
-        self.active_app = app_id;
+        if app_changed || menus != self.active_menus {
+            self.each_shell(|shell| {
+                if shell.version() >= ACTIVE_MENUS_SINCE {
+                    shell.active_menus(menus.clone());
+                }
+            });
+            self.active_menus = menus;
+        }
     }
 
     pub(crate) fn focus_client(&mut self, client: ClientId) {
@@ -425,6 +435,9 @@ impl GlobalDispatch<BandeShellV1, ()> for State {
     ) {
         let shell = data_init.init(resource, ());
         shell.active_app(state.active_app.clone());
+        if shell.version() >= ACTIVE_MENUS_SINCE {
+            shell.active_menus(state.active_menus.clone());
+        }
         shell.active_output(state.active_output.clone());
         state.announce_unresponsive(Some(&shell), None);
         state.announce_minimized_windows(&shell);

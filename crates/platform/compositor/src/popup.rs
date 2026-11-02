@@ -182,23 +182,24 @@ impl State {
             return;
         };
         let fallback = grab.previous_serial().unwrap_or(serial);
-        if let Some(keyboard) = seat.get_keyboard() {
-            if keyboard.is_grabbed() && !(keyboard.has_grab(serial) || keyboard.has_grab(fallback))
-            {
-                grab.ungrab(PopupUngrabStrategy::All);
-                return;
-            }
-            self.key_behind_layer = self.key_window();
-            keyboard.set_focus(self, grab.current_grab(), serial);
-            keyboard.set_grab(self, PopupKeyboardGrab::new(&grab), serial);
+        let keyboard = seat.get_keyboard();
+        if keyboard.as_ref().is_some_and(|keyboard| {
+            keyboard.is_grabbed() && !(keyboard.has_grab(serial) || keyboard.has_grab(fallback))
+        }) {
+            grab.ungrab(PopupUngrabStrategy::All);
+            return;
         }
         if let Some(pointer) = seat.get_pointer() {
-            let fallback = grab.previous_serial().unwrap_or_else(|| grab.serial());
             if pointer.is_grabbed() && !(pointer.has_grab(serial) || pointer.has_grab(fallback)) {
                 grab.ungrab(PopupUngrabStrategy::All);
                 return;
             }
             pointer.set_grab(self, PopupPointerGrab::new(&grab), serial, Focus::Keep);
+        }
+        if let Some(keyboard) = keyboard {
+            self.key_behind_layer = self.key_window();
+            keyboard.set_focus(self, grab.current_grab(), serial);
+            keyboard.set_grab(self, PopupKeyboardGrab::new(&grab), serial);
         }
         self.popup_grab = Some(grab);
         if relayed {

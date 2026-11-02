@@ -20,6 +20,7 @@ bande-toolkit.workspace = true
 bande-volumes.workspace = true
 bande-wallpaper.workspace = true
 bande-xdg.workspace = true
+zbus.workspace = true
 
 [lints]
 workspace = true

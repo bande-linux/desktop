@@ -20,7 +20,9 @@ pub use listing::{
     format_list_date, format_size, is_hidden, list, list_date, list_trash, merge, same_volume,
     sort,
 };
-pub use naming::{duplicate_name, keep_both_name, typed_location, untitled_folder};
+pub use naming::{
+    ExtensionChange, duplicate_name, keep_both_name, typed_location, untitled_folder,
+};
 pub use operations::{Finished, Operations, Purpose, Running};
 pub use ops::{
     Answer, Change, Conflict, Failure, Job, Outcome, Problem, Progress, RenameError, Report,

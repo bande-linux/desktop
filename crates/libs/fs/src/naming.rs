@@ -43,6 +43,73 @@ pub fn duplicate_name(folder: &Path, name: &str, is_dir: bool) -> PathBuf {
     )
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtensionChange {
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub kept: String,
+}
+
+impl ExtensionChange {
+    pub fn of(path: &Path, name: &str) -> Option<Self> {
+        let extension = |path: &Path| {
+            path.extension()
+                .map(|extension| format!(".{}", extension.to_string_lossy()))
+        };
+        let (from, to) = (extension(path), extension(Path::new(name)));
+        if from == to {
+            return None;
+        }
+        let stem = Path::new(name)
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let kept = format!("{stem}{}", from.as_deref().unwrap_or_default());
+        Some(Self { from, to, kept })
+    }
+
+    pub fn title(&self) -> String {
+        let (from, to) = (self.from.clone(), self.to.clone());
+        match (from, to) {
+            (Some(from), Some(to)) => L10N.tr_args(
+                "extension-change-title",
+                [("from", from.into()), ("to", to.into())],
+            ),
+            (None, to) => L10N.tr_args(
+                "extension-add-title",
+                [("extension", to.unwrap_or_default().into())],
+            ),
+            (Some(from), None) => {
+                L10N.tr_args("extension-remove-title", [("extension", from.into())])
+            }
+        }
+    }
+
+    pub fn detail() -> String {
+        L10N.tr("extension-detail")
+    }
+
+    pub fn keep(&self) -> String {
+        match (&self.from, &self.to) {
+            (Some(from), Some(_)) => {
+                L10N.tr_args("extension-keep", [("extension", from.clone().into())])
+            }
+            (None, _) => L10N.tr("extension-dont-add"),
+            (Some(_), None) => L10N.tr("extension-dont-remove"),
+        }
+    }
+
+    pub fn change(&self) -> String {
+        match (&self.from, &self.to) {
+            (Some(_), Some(to)) => {
+                L10N.tr_args("extension-use", [("extension", to.clone().into())])
+            }
+            (None, _) => L10N.tr("extension-add"),
+            (Some(_), None) => L10N.tr("extension-remove"),
+        }
+    }
+}
+
 pub fn alias_name(folder: &Path, name: &str) -> PathBuf {
     let first = L10N.tr_args("alias-name", [("name", name.into())]);
     let later = (2u64..).map(|number| {

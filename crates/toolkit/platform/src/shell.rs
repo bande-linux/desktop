@@ -21,7 +21,7 @@ use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use crate::window::{State, Window, WindowError, WindowEvent};
 
 pub(crate) const END_SESSION_SINCE: u32 = 3;
-pub(crate) const SHOW_APP_MENU_SINCE: u32 = 3;
+pub(crate) const ACTIVE_MENUS_SINCE: u32 = 4;
 pub(crate) const MENU_BUTTON_SINCE: u32 = 4;
 
 struct Toplevel {
@@ -432,6 +432,9 @@ impl Dispatch<BandeShellV1, ()> for State {
             bande_shell_v1::Event::CaptureArea => state.events.push(WindowEvent::CaptureArea),
             bande_shell_v1::Event::ActiveApp { app_id } => {
                 state.events.push(WindowEvent::ActiveApp(app_id));
+            }
+            bande_shell_v1::Event::ActiveMenus { menu } => {
+                state.events.push(WindowEvent::ActiveMenus(menu));
             }
             bande_shell_v1::Event::VolumeKey {
                 key: WEnum::Value(key),

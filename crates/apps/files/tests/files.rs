@@ -83,7 +83,7 @@ fn a_file_goes_to_the_trash_and_back_and_a_new_folder_is_named_in_place_and_undo
     let home = root.path().join("home");
     fs::create_dir_all(home.join("Documents")).expect("folders");
     fs::write(home.join("notes.txt"), "notes\n").expect("file");
-    let trash = Trash::new(
+    let trash = Trash::isolated(
         root.path().join("Trash"),
         rustix::process::getuid().as_raw(),
     );
@@ -134,7 +134,7 @@ fn a_duplicate_that_cannot_be_written_asks_and_stops_without_leaving_a_copy() {
     fs::create_dir(&locked).expect("folder");
     fs::write(locked.join("notes.txt"), "notes\n").expect("file");
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).expect("lock");
-    let trash = Trash::new(root.path().join("Trash"), 0);
+    let trash = Trash::isolated(root.path().join("Trash"), 0);
     let mut files = view(Browser::open(Location::Folder(locked.clone()), trash));
     key(&mut files, Key::Down, false, false);
     assert!(files.menu_action("duplicate"));

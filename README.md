@@ -36,27 +36,27 @@ xargs ci/apt-install.sh libvulkan1 mesa-vulkan-drivers dbus-daemon at-spi2-core 
 ci/release/toolchain.sh
 ```
 
-The gate is fmt, clippy and the tests on a private D-Bus bus; tests need no GPU or display
-(lavapipe renders, the compositor runs headless):
+The gate is the release checks: fmt, clippy, the layering rules, the tests on a private D-Bus bus
+and the packages with their checks; tests need no GPU or display (lavapipe renders, the
+compositor runs headless):
 
 ```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- cargo test --workspace --locked
+VERIFY_PROFILE=dev ci/release/verify.sh gate
 ```
 
 `cargo run -p bande-compositor -- --headless` starts the compositor without a display.
 
 On the build machine, `desktop-check <worktree> -p <crate>` (fmt and `cargo check`) is all a
-change needs; branches are queued with `desktop-enqueue <branch>` and `desktop-gate <worktree>`
-runs the full gate once on `main` after a batch merges. These scripts live in `~/bande-linux/bin`,
+change needs; branches are queued with `desktop-enqueue <branch>` and the merge train runs the full gate,
+`ci/release/verify.sh gate` (the release checks CI runs), on each batch. These scripts live in `~/bande-linux/bin`,
 outside this repository. The desktop keeps only a few end-to-end and regression tests and no
 screenshot tests; [`docs/quality/tests.md`](docs/quality/tests.md) lists them and the rules.
 
 ## Releases
 
-GitHub CI runs only on version tags (and on manual dispatch for a test build). A release is: bump
-`[workspace.package] version` in `Cargo.toml`, merge to `main`, tag `vX.Y.Z`. The tag's
+GitHub CI runs only on version tags (and on manual dispatch for a test build or a dry run). A
+release is: bump `[workspace.package] version` in `Cargo.toml`, merge to `main`, dry-run it with
+`ci/release/dry-run.sh`, and tag `vX.Y.Z` once that is green. The tag's
 `release.yml` lints, tests, builds the packages for arm64 and amd64 and install-tests them in a
 clean Debian testing; the APT repository ([bande-linux/apt](https://github.com/bande-linux/apt))
 publishes a fully green tag run on its own. Details: [`docs/architecture/ci.md`](docs/architecture/ci.md).

@@ -1,10 +1,14 @@
 name: release
-run-name: "${{ github.ref_type == 'tag' && format('Release desktop {0}', github.ref_name) || format('Test release build of {0}', github.ref_name) }}"
+run-name: "${{ github.ref_type == 'tag' && format('Release desktop {0}', github.ref_name) || inputs.tag != '' && format('Dry run of desktop {0} on {1}', inputs.tag, github.ref_name) || format('Test release build of {0}', github.ref_name) }}"
 
 on:
   push:
     tags: ['v[0-9]+.[0-9]+.[0-9]+']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Dry-run the release of this vX.Y.Z tag (builds as the tag would; dispatch runs are never published)
+        default: ''
 
 concurrency:
   group: release-${{ github.ref }}
@@ -20,7 +24,7 @@ defaults:
 env:
   CARGO_INCREMENTAL: '0'
   CARGO_TERM_COLOR: always
-  CARGO_DEB_VERSION: 3.8.0
+  RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
 
 jobs:
   lint:
@@ -31,19 +35,12 @@ jobs:
       - name: Install git
         run: apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates
       - uses: actions/checkout@v7
-      - name: Lint the workflows
-        run: |
-          ci/apt-install.sh golang-go shellcheck
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-      - name: Install the build dependencies and the toolchain
-        run: |
-          xargs ci/apt-install.sh < ci/release/build-depends
-          ci/release/toolchain.sh
+      - run: ci/release/verify.sh --setup lint
       - uses: Swatinem/rust-cache@v2
         with:
           key: lint
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: ci/release/lint.sh
+      - run: ci/release/verify.sh lint
 
   test:
     runs-on: ubuntu-24.04-arm
@@ -60,16 +57,12 @@ jobs:
       - name: Install git
         run: apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates
       - uses: actions/checkout@v7
-      - name: Install the build and test dependencies and the toolchain
-        run: |
-          xargs ci/apt-install.sh libvulkan1 mesa-vulkan-drivers dbus-daemon at-spi2-core libfontconfig1 \
-            libwayland-client0 procps fonts-inter < ci/release/build-depends
-          ci/release/toolchain.sh
+      - run: ci/release/verify.sh --setup test
       - uses: Swatinem/rust-cache@v2
         with:
           key: test
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo test --workspace --locked -- --show-output
+      - run: ci/release/verify.sh test
 
   debs:
     name: debs (${{ matrix.arch }})
@@ -101,32 +94,13 @@ jobs:
           fetch-depth: 0
       - name: Trust the checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Install the build and smoke-test dependencies and the toolchain
-        run: |
-          xargs ci/apt-install.sh dpkg-dev libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin systemd \
-            dbus-user-session < ci/release/build-depends
-          ci/release/toolchain.sh
+      - run: test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
+      - run: ci/release/verify.sh --setup debs
       - uses: Swatinem/rust-cache@v2
         with:
           key: debs-${{ matrix.arch }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Install cargo-deb
-        run: |
-          cargo deb --version 2>/dev/null | grep -qw "$CARGO_DEB_VERSION" ||
-            cargo install cargo-deb --version "$CARGO_DEB_VERSION" --locked
-          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> "$GITHUB_PATH"
-      - name: Derive the package version from git
-        run: |
-          ci/deb/version-test.sh
-          version=$(ci/deb/version.sh)
-          echo "Package version $version"
-          echo "DEB_VERSION=$version" >> "$GITHUB_ENV"
-      - name: Build the packages
-        run: |
-          test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
-          ci/release/build-debs.sh
-      - run: ci/release/check-debs.sh
-      - run: ci/release/smoke.sh
+      - run: ci/release/verify.sh debs
       - name: Disk and memory after the build
         if: always()
         run: df -h / && grep -E "MemTotal|MemAvailable" /proc/meminfo
@@ -141,24 +115,22 @@ jobs:
     container: debian:testing
     timeout-minutes: 15
     steps:
-      - name: Install git and the packaging tools
-        run: |
-          apt-get update -qq
-          apt-get install -y -qq --no-install-recommends git ca-certificates build-essential debhelper dpkg-dev \
-            lintian gnupg
+      - name: Install git
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Trust the checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Check that the tagged commit is on main
-        if: github.ref_type == 'tag'
+      - name: Check that the released commit is on main
+        if: env.RELEASE_TAG != ''
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-      - run: ci/release/build-all.sh debs
+      - run: ci/release/verify.sh --setup all
+      - run: ci/release/verify.sh all
       - uses: actions/upload-artifact@v7
         with:
           name: bande-debs-all
-          path: debs/*.deb
+          path: target/debian-all/*.deb
           if-no-files-found: error
 
   install:

@@ -15,10 +15,10 @@
 
 ## Factory Verification
 - **No panics**: No `.unwrap()` or `.expect()` in production code. Use proper error handling.
-- **Build first, test once**: each change only needs to compile (`desktop-check <worktree> -p <crate>`: fmt and `cargo check`). The full gate (fmt, workspace clippy `-D warnings`, workspace tests on the hermetic bus) runs once on `main` when a batch of work has merged, and `main` fixes whatever it finds then.
+- **Build first, test once**: each change only needs to compile (`desktop-check <worktree> -p <crate>`: fmt and `cargo check`). The full gate (`ci/release/verify.sh gate`, the same release checks `release.yml` runs: fmt, clippy `-D warnings`, the layering rules, the tests on the hermetic bus, the debs with check-debs, smoke and lintian) runs once per merge-train batch; see `docs/architecture/ci.md`.
 
 ## Workflow
 - Trunk-based: `main` always builds. Each milestone is a short branch from `main`.
-- A finished branch has `origin/main` merged in, compiles, and is pushed and queued with `desktop-enqueue <branch>`; the merge train compile-checks the batch and pushes `main`. Never force-push. GitHub CI (`release.yml`) runs on version tags (`vX.Y.Z`) and on dispatch; a green run for a tag on `main` publishes to the APT repository. A release is: bump `[workspace.package] version`, merge to `main`, tag.
+- A finished branch has `origin/main` merged in, compiles, and is pushed and queued with `desktop-enqueue <branch>`; the merge train gates the batch and pushes `main`. Never force-push. GitHub CI (`release.yml`) runs on version tags (`vX.Y.Z`) and on dispatch; a green run for a tag on `main` publishes to the APT repository. A release is: bump `[workspace.package] version`, merge to `main`, `ci/release/dry-run.sh` green, then tag.
 - Then merge `main` into the next branch and push only that branch; never push several stacked branches at once.
 - Commit messages: one brief line saying what the commit does. No body, no trailers (no `Co-Authored-By`, no session links), nothing special.

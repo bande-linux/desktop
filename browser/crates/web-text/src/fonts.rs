@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use fontique::{
     Attributes, Collection, CollectionOptions, FallbackKey, FontStyle, FontWeight, FontWidth,
@@ -18,6 +19,7 @@ pub struct FontId(pub u32);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct FontKey {
     pub family: FontFamily,
+    pub names: u16,
     pub weight: u16,
     pub italic: bool,
 }
@@ -47,6 +49,7 @@ pub struct Fonts {
     by_source: HashMap<(u64, u32), FontId>,
     primary: HashMap<FontKey, Option<FontId>>,
     chosen: HashMap<(FontKey, char), Option<FontId>>,
+    names: Vec<Arc<[Arc<str>]>>,
     plans: HashMap<(FontId, harfrust::Script, bool), harfrust::ShapePlan>,
     words: HashMap<(FontId, u32, bool), WordCache>,
     cached_words: usize,
@@ -84,6 +87,7 @@ impl Fonts {
             by_source: HashMap::new(),
             primary: HashMap::new(),
             chosen: HashMap::new(),
+            names: Vec::new(),
             plans: HashMap::new(),
             words: HashMap::new(),
             cached_words: 0,
@@ -181,12 +185,43 @@ impl Fonts {
         Some(glyphs)
     }
 
+    pub fn family_names(&mut self, names: &Arc<[Arc<str>]>) -> u16 {
+        if names.is_empty() {
+            return 0;
+        }
+        match self.names.iter().position(|known| known == names) {
+            Some(index) => (index + 1) as u16,
+            None if self.names.len() < usize::from(u16::MAX) - 1 => {
+                self.names.push(names.clone());
+                self.names.len() as u16
+            }
+            None => 0,
+        }
+    }
+
+    pub fn register(&mut self, bytes: Vec<u8>) {
+        self.collection
+            .register_fonts(fontique::Blob::new(Arc::new(bytes)), None);
+        self.primary.clear();
+        self.chosen.clear();
+    }
+
     pub fn primary(&mut self, key: FontKey) -> Option<FontId> {
         if let Some(&font) = self.primary.get(&key) {
             return font;
         }
+        let names: Vec<Arc<str>> = usize::from(key.names)
+            .checked_sub(1)
+            .and_then(|index| self.names.get(index))
+            .map(|names| names.to_vec())
+            .unwrap_or_default();
         let mut query = self.collection.query(&mut self.source_cache);
-        query.set_families([QueryFamily::Generic(generic(key.family))]);
+        query.set_families(
+            names
+                .iter()
+                .map(|name| QueryFamily::Named(name))
+                .chain([QueryFamily::Generic(generic(key.family))]),
+        );
         query.set_attributes(attributes(key));
         let found = query.first_available_font();
         drop(query);
@@ -208,11 +243,16 @@ impl Fonts {
         }
         let script = script_of(ch);
         let mut found = None;
+        let names: Vec<Arc<str>> = usize::from(key.names)
+            .checked_sub(1)
+            .and_then(|index| self.names.get(index))
+            .map(|names| names.to_vec())
+            .unwrap_or_default();
         let mut query = self.collection.query(&mut self.source_cache);
-        query.set_families([
+        query.set_families(names.iter().map(|name| QueryFamily::Named(name)).chain([
             QueryFamily::Generic(generic(key.family)),
             QueryFamily::Generic(GenericFamily::Emoji),
-        ]);
+        ]));
         query.set_attributes(attributes(key));
         if let Some(script) = script {
             query.set_fallbacks(FallbackKey::new(script, None));

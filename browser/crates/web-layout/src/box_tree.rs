@@ -283,12 +283,19 @@ fn own_shift(style: &ComputedStyle) -> f32 {
     }
 }
 
-pub(crate) fn run_style(style: &ComputedStyle, tag: u32, baseline_shift: f32) -> RunStyle {
+pub(crate) fn run_style(
+    fonts: &mut Fonts,
+    style: &ComputedStyle,
+    tag: u32,
+    baseline_shift: f32,
+) -> RunStyle {
     let inherited = &style.inherited;
+    let names = fonts.family_names(&inherited.font_names);
     let size = inherited.font_size;
     RunStyle {
         font: FontKey {
             family: inherited.font_family,
+            names,
             weight: inherited.font_weight,
             italic: inherited.italic,
         },
@@ -373,7 +380,7 @@ impl Builder<'_> {
                     let tag = pending.push(child, style, ItemKind::Text);
                     pending
                         .paragraph
-                        .push_text(text, run_style(style, tag, shift));
+                        .push_text(text, run_style(self.fonts, style, tag, shift));
                 }
                 Some(NodeKind::Element) if self.depth >= MAX_DEPTH => {}
                 Some(NodeKind::Element) if style.display() == Display::None => {}
@@ -397,9 +404,10 @@ impl Builder<'_> {
                     if index < u16::MAX {
                         pending.atomics.push(block);
                         let tag = pending.push(child, style, ItemKind::Atomic(index));
-                        pending
-                            .paragraph
-                            .push_atomic(index, run_style(style, tag, shift + own_shift(style)));
+                        pending.paragraph.push_atomic(
+                            index,
+                            run_style(self.fonts, style, tag, shift + own_shift(style)),
+                        );
                     }
                 }
                 Some(NodeKind::Element) => match style.display() {
@@ -408,13 +416,16 @@ impl Builder<'_> {
                         let inner = shift + own_shift(style);
                         if self.document.html_element_name(child) == Some(Atom::BR) {
                             let tag = pending.push(child, style, ItemKind::Text);
-                            pending.paragraph.push_break(run_style(style, tag, shift));
+                            pending
+                                .paragraph
+                                .push_break(run_style(self.fonts, style, tag, shift));
                         } else if style.display() == Display::Inline && decorated(style) {
                             let frame = InlineFrame::of(style);
                             let start = pending.push(child, style, ItemKind::Start);
-                            pending
-                                .paragraph
-                                .push_spacer(frame.start(), run_style(style, start, inner));
+                            pending.paragraph.push_spacer(
+                                frame.start(),
+                                run_style(self.fonts, style, start, inner),
+                            );
                             pending.open.push(start);
                             self.depth += 1;
                             self.children(child, blocks, pending, inner);
@@ -425,9 +436,10 @@ impl Builder<'_> {
                             if same {
                                 pending.open.pop();
                                 let end = pending.push(child, style, ItemKind::End(start));
-                                pending
-                                    .paragraph
-                                    .push_spacer(frame.end(), run_style(style, end, inner));
+                                pending.paragraph.push_spacer(
+                                    frame.end(),
+                                    run_style(self.fonts, style, end, inner),
+                                );
                             }
                         } else {
                             self.depth += 1;
@@ -467,9 +479,10 @@ impl Builder<'_> {
             return;
         };
         let tag = pending.push(node, &style, ItemKind::Text);
-        pending
-            .paragraph
-            .push_text(&text, run_style(&style, tag, shift + own_shift(&style)));
+        pending.paragraph.push_text(
+            &text,
+            run_style(self.fonts, &style, tag, shift + own_shift(&style)),
+        );
     }
 
     fn table(&mut self, node: NodeId, style: &ComputedStyle) -> Table {
@@ -614,7 +627,7 @@ impl Builder<'_> {
             ListStyleType::UpperRoman => format!("{}.", roman(ordinal)),
         };
         let mut paragraph = Paragraph::new(is_rtl(style));
-        let mut run = run_style(style, 0, 0.0);
+        let mut run = run_style(self.fonts, style, 0, 0.0);
         run.white_space = web_style::WhiteSpace::Pre;
         paragraph.push_text(&text, run);
         Some(Box::new(InlineContent {

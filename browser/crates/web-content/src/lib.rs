@@ -79,9 +79,28 @@ pub struct Pixels {
 }
 
 #[cfg(feature = "raster")]
+static FONT_FILES: std::sync::OnceLock<Vec<Vec<u8>>> = std::sync::OnceLock::new();
+
+#[cfg(feature = "raster")]
+pub fn set_font_files(paths: &[std::path::PathBuf]) -> std::io::Result<()> {
+    let fonts = paths
+        .iter()
+        .map(std::fs::read)
+        .collect::<std::io::Result<Vec<_>>>()?;
+    let _ = FONT_FILES.set(fonts);
+    Ok(())
+}
+
+#[cfg(feature = "raster")]
 pub fn render_file(path: &std::path::Path, width: u16, height: u16) -> std::io::Result<Pixels> {
     thread_local! {
-        static FONTS: std::cell::RefCell<Fonts> = std::cell::RefCell::new(Fonts::new());
+        static FONTS: std::cell::RefCell<Fonts> = std::cell::RefCell::new({
+            let mut fonts = Fonts::new();
+            for font in FONT_FILES.get().into_iter().flatten() {
+                fonts.register(font.clone());
+            }
+            fonts
+        });
     }
     let document = parse_file(path)?;
     let directory = path.parent().unwrap_or(std::path::Path::new("."));

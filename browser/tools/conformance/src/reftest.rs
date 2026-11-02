@@ -37,6 +37,8 @@ const EXACT: Fuzzy = Fuzzy {
 };
 
 pub fn run(wpt: &Path) -> Result<Vec<Tally>, String> {
+    web_content::set_font_files(&[wpt.join("fonts/Ahem.ttf")])
+        .map_err(|error| error.to_string())?;
     let mut tests = Vec::new();
     for (group, dir) in GROUPS.iter().enumerate() {
         for path in crate::files(&wpt.join(dir), "")? {

@@ -261,6 +261,7 @@ impl<T: Copy> Sides<T> {
 pub struct InheritedStyle {
     pub color: Color,
     pub font_family: FontFamily,
+    pub font_names: Arc<[Arc<str>]>,
     pub font_size: f32,
     pub font_size_keyword: Option<f32>,
     pub font_weight: u16,
@@ -389,6 +390,7 @@ impl InheritedStyle {
         InheritedStyle {
             color: Color::BLACK,
             font_family: FontFamily::Serif,
+            font_names: Arc::new([]),
             font_size: MEDIUM,
             font_size_keyword: Some(1.0),
             font_weight: 400,

@@ -867,7 +867,7 @@ impl<'a, 'b> Flow<'a, 'b> {
             atomics.push((laid, size));
         }
         let sizes: Vec<AtomicSize> = atomics.iter().map(|(_, size)| *size).collect();
-        let strut = run_style(&block.style, u32::MAX, 0.0);
+        let strut = run_style(self.fonts, &block.style, u32::MAX, 0.0);
         let line_estimate = strut.line_height.unwrap_or(strut.size * 1.2);
         let lines = inline.shaped.lines(
             self.fonts,
@@ -1015,9 +1015,10 @@ impl<'a, 'b> Flow<'a, 'b> {
         let frame = InlineFrame::of(style);
         let left = extent.left + if extent.start { frame.margin.0 } else { 0.0 };
         let right = extent.right - if extent.end { frame.margin.1 } else { 0.0 };
+        let key = run_style(self.fonts, style, 0, 0.0).font;
         let (ascent, descent) = self
             .fonts
-            .primary(run_style(style, 0, 0.0).font)
+            .primary(key)
             .map(|font| {
                 let metrics = self.fonts.metrics(font);
                 let scale = style.inherited.font_size / metrics.units_per_em;
@@ -1028,7 +1029,7 @@ impl<'a, 'b> Flow<'a, 'b> {
                 style.inherited.font_size * 0.2,
             ));
         let reset = &style.reset;
-        let shift = run_style(style, 0, 0.0).baseline_shift;
+        let shift = run_style(self.fonts, style, 0, 0.0).baseline_shift;
         let top = baseline - shift - ascent - reset.padding.top.px - reset.border.top;
         let bottom = baseline - shift + descent + reset.padding.bottom.px + reset.border.bottom;
         let (start_border, end_border) = frame.border;
@@ -1092,13 +1093,11 @@ impl<'a, 'b> Flow<'a, 'b> {
         content: (f32, f32),
         children: &mut Vec<Fragment>,
     ) {
-        let lines = marker.shaped.lines(
-            self.fonts,
-            &mut |_| (0.0, f32::INFINITY),
-            run_style(&block.style, 0, 0.0),
-            false,
-            &[],
-        );
+        let strut = run_style(self.fonts, &block.style, 0, 0.0);
+        let lines =
+            marker
+                .shaped
+                .lines(self.fonts, &mut |_| (0.0, f32::INFINITY), strut, false, &[]);
         let Some(line) = lines.lines.first() else {
             return;
         };

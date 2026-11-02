@@ -312,12 +312,23 @@ impl Computer<'_> {
                 None
             }
         };
-        if let Some(family) = families.0.iter().find_map(|family| match family {
+        let explicit = families.0.iter().find_map(|family| match family {
             FamilyName::Generic(family) => Some(generic(family.clone())),
+            FamilyName::Named(_) => None,
+        });
+        let guessed = families.0.iter().find_map(|family| match family {
             FamilyName::Named(name) => named(name),
-        }) {
-            self.inherited.font_family = family;
-        }
+            FamilyName::Generic(_) => None,
+        });
+        self.inherited.font_family = explicit.or(guessed).unwrap_or(FontFamily::Serif);
+        self.inherited.font_names = families
+            .0
+            .iter()
+            .filter_map(|family| match family {
+                FamilyName::Named(name) => Some(Arc::from(&**name)),
+                FamilyName::Generic(_) => None,
+            })
+            .collect();
     }
 
     fn white_space(&mut self, collapse: Option<keywords::WhiteSpaceCollapse>, wrap: Option<bool>) {
@@ -938,7 +949,10 @@ impl Computer<'_> {
                 inherited.font_size = from_inherited.font_size;
                 inherited.font_size_keyword = from_inherited.font_size_keyword;
             }
-            Id::FontFamily => inherited.font_family = from_inherited.font_family,
+            Id::FontFamily => {
+                inherited.font_family = from_inherited.font_family;
+                inherited.font_names = from_inherited.font_names.clone();
+            }
             Id::FontWeight => inherited.font_weight = from_inherited.font_weight,
             Id::FontStyle => inherited.italic = from_inherited.italic,
             Id::LineHeight => inherited.line_height = from_inherited.line_height,

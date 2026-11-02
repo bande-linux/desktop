@@ -4,7 +4,10 @@ use web_dom::NodeId;
 use web_style::{Color, ComputedStyle, Sides, TextAlign, TextDecorations};
 use web_text::{FontId, Fonts, Glyph, Lines};
 
-use crate::box_tree::{BlockBox, BoxTree, Contents, InlineContent, is_rtl, run_style};
+use crate::box_tree::{
+    BlockBox, BoxTree, Contents, InlineContent, InlineFrame, InlineItem, ItemKind, is_rtl,
+    run_style,
+};
 
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct Rect {
@@ -32,7 +35,6 @@ pub struct TextFragment {
     pub font: FontId,
     pub size: f32,
     pub color: Color,
-    pub background: Color,
     pub decorations: TextDecorations,
     pub glyphs: Range<u32>,
 }
@@ -69,6 +71,15 @@ fn box_bytes(fragment: &BoxFragment) -> usize {
                 Fragment::Text(_) => 0,
             })
             .sum::<usize>()
+}
+
+struct Extent {
+    tag: u32,
+    left: f32,
+    right: f32,
+    start: bool,
+    end: bool,
+    depth: usize,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -266,7 +277,11 @@ impl Flow<'_> {
             y += pending.resolve();
             Margins::of(margin.bottom)
         };
-        if let Some(marker) = &block.marker {
+        if let Some(marker) = block
+            .marker
+            .as_ref()
+            .filter(|_| block.style.inherited.visible)
+        {
             self.marker(block, marker, (content_x, content_width), &mut children);
         }
         Laid {
@@ -304,7 +319,62 @@ impl Flow<'_> {
                 TextAlign::Center => ((width - line.width) / 2.0).max(0.0),
                 TextAlign::Start | TextAlign::End | TextAlign::Left | TextAlign::Justify => 0.0,
             };
-            for item in lines.items.get(line.items.clone()).unwrap_or_default() {
+            let items = lines.items.get(line.items.clone()).unwrap_or_default();
+            let mut extents: Vec<Extent> = Vec::new();
+            for item in items {
+                let Some(source) = inline.items.get(item.tag as usize) else {
+                    continue;
+                };
+                let x = origin.0 + offset + item.x;
+                let (mut current, edge) = match source.kind {
+                    ItemKind::Text => (source.parent, None),
+                    ItemKind::Start => (Some(item.tag), Some((item.tag, true))),
+                    ItemKind::End(start) => (Some(start), Some((start, false))),
+                };
+                while let Some(tag) = current {
+                    let extent = match extents.iter().position(|extent| extent.tag == tag) {
+                        Some(index) => index,
+                        None => {
+                            extents.push(Extent {
+                                tag,
+                                left: x,
+                                right: x + item.width,
+                                start: false,
+                                end: false,
+                                depth: 0,
+                            });
+                            extents.len() - 1
+                        }
+                    };
+                    if let Some(extent) = extents.get_mut(extent) {
+                        extent.left = extent.left.min(x);
+                        extent.right = extent.right.max(x + item.width);
+                        match edge {
+                            Some((edge, true)) if edge == tag => extent.start = true,
+                            Some((edge, false)) if edge == tag => extent.end = true,
+                            _ => {}
+                        }
+                    }
+                    current = inline.items.get(tag as usize).and_then(|item| item.parent);
+                }
+            }
+            for extent in &mut extents {
+                extent.depth = std::iter::successors(Some(extent.tag), |&tag| {
+                    inline.items.get(tag as usize).and_then(|item| item.parent)
+                })
+                .count();
+            }
+            extents.sort_by_key(|extent| extent.depth);
+            for extent in &extents {
+                if let Some(source) = inline.items.get(extent.tag as usize) {
+                    children.push(Fragment::Box(self.inline_box(
+                        source,
+                        extent,
+                        origin.1 + line.baseline,
+                    )));
+                }
+            }
+            for item in items {
                 let Some(source) = inline.items.get(item.tag as usize) else {
                     continue;
                 };
@@ -333,6 +403,53 @@ impl Flow<'_> {
         }
     }
 
+    fn inline_box(&mut self, source: &InlineItem, extent: &Extent, baseline: f32) -> BoxFragment {
+        let style = &source.style;
+        let frame = InlineFrame::of(style);
+        let left = extent.left + if extent.start { frame.margin.0 } else { 0.0 };
+        let right = extent.right - if extent.end { frame.margin.1 } else { 0.0 };
+        let (ascent, descent) = self
+            .fonts
+            .primary(run_style(style, 0, 0.0).font)
+            .map(|font| {
+                let metrics = self.fonts.metrics(font);
+                let scale = style.inherited.font_size / metrics.units_per_em;
+                (metrics.ascent * scale, metrics.descent * scale)
+            })
+            .unwrap_or((
+                style.inherited.font_size * 0.8,
+                style.inherited.font_size * 0.2,
+            ));
+        let reset = &style.reset;
+        let shift = run_style(style, 0, 0.0).baseline_shift;
+        let top = baseline - shift - ascent - reset.padding.top.px - reset.border.top;
+        let bottom = baseline - shift + descent + reset.padding.bottom.px + reset.border.bottom;
+        let (start_border, end_border) = frame.border;
+        let (left_border, right_border) = if style.is_rtl() {
+            (end_border, start_border)
+        } else {
+            (start_border, end_border)
+        };
+        BoxFragment {
+            node: Some(source.node),
+            rect: Rect {
+                x: left,
+                y: top,
+                width: (right - left).max(0.0),
+                height: (bottom - top).max(0.0),
+            },
+            background: reset.background_color,
+            border: Sides {
+                top: reset.border.top,
+                right: if extent.end { right_border } else { 0.0 },
+                bottom: reset.border.bottom,
+                left: if extent.start { left_border } else { 0.0 },
+            },
+            border_color: reset.border_color,
+            children: Vec::new(),
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn text(
         &self,
@@ -351,7 +468,6 @@ impl Flow<'_> {
             font,
             size,
             color: style.inherited.color,
-            background: style.reset.background_color,
             decorations: style.inherited.decorations,
             glyphs,
         }
@@ -401,7 +517,6 @@ impl Flow<'_> {
             );
             children.push(Fragment::Text(TextFragment {
                 decorations: TextDecorations::default(),
-                background: Color::TRANSPARENT,
                 ..fragment
             }));
         }

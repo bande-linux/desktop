@@ -168,7 +168,6 @@ impl Builder<'_> {
             y: y + text.rect.y,
             ..text.rect
         };
-        self.fill(rect, text.background);
         let Some(font) = self.font(text.font) else {
             return;
         };

@@ -86,7 +86,7 @@ impl Lines {
 pub struct Paragraph {
     rtl: bool,
     text: String,
-    runs: Vec<(u32, RunStyle)>,
+    runs: Vec<(u32, RunStyle, f32)>,
     column: u32,
 }
 
@@ -145,18 +145,24 @@ impl Paragraph {
     fn end_run(&mut self, style: RunStyle) {
         let end = self.text.len() as u32;
         match self.runs.last_mut() {
-            Some((last_end, last)) if *last == style => *last_end = end,
-            Some((last_end, _)) if *last_end == end => {}
-            _ => self.runs.push((end, style)),
+            Some((last_end, last, 0.0)) if *last == style => *last_end = end,
+            Some((last_end, _, 0.0)) if *last_end == end => {}
+            _ => self.runs.push((end, style, 0.0)),
         }
     }
 
-    fn run_ranges(&self) -> impl Iterator<Item = (Range<usize>, RunStyle)> + '_ {
+    pub fn push_spacer(&mut self, width: f32, style: RunStyle) {
+        if width > 0.0 {
+            self.runs.push((self.text.len() as u32, style, width));
+        }
+    }
+
+    fn run_ranges(&self) -> impl Iterator<Item = (Range<usize>, RunStyle, f32)> + '_ {
         let mut start = 0;
-        self.runs.iter().map(move |&(end, style)| {
+        self.runs.iter().map(move |&(end, style, spacer)| {
             let range = start..end as usize;
             start = end as usize;
-            (range, style)
+            (range, style, spacer)
         })
     }
 
@@ -179,10 +185,29 @@ impl Paragraph {
         let mut shaped = ShapedParagraph {
             glyphs: Vec::new(),
             spans: Vec::new(),
-            styles: self.runs.iter().map(|&(_, style)| style).collect(),
+            styles: self.runs.iter().map(|&(_, style, _)| style).collect(),
         };
         let mut clusters = Vec::new();
-        for (run_index, (range, style)) in self.run_ranges().enumerate() {
+        for (run_index, (range, style, spacer)) in self.run_ranges().enumerate() {
+            if spacer > 0.0 {
+                if let Some(font) = fonts.primary(style.font) {
+                    shaped.spans.push(Span {
+                        font,
+                        run: run_index as u32,
+                        level: level_at(range.start.saturating_sub(1)),
+                    });
+                    shaped.glyphs.push(ShapedGlyph {
+                        id: 0,
+                        flags: SPACER,
+                        span: (shaped.spans.len() - 1) as u32,
+                        advance: spacer,
+                        x_offset: 0.0,
+                        y_offset: 0.0,
+                    });
+                    clusters.push(range.start as u32);
+                }
+                continue;
+            }
             let Some(run_text) = self.text.get(range.clone()) else {
                 continue;
             };
@@ -255,15 +280,15 @@ impl Paragraph {
         let text = self.text.as_str();
         let bytes = text.as_bytes();
         for (glyph, &cluster) in glyphs.iter_mut().zip(clusters) {
-            if bytes.get(cluster as usize) == Some(&b' ') {
+            if glyph.flags & SPACER == 0 && bytes.get(cluster as usize) == Some(&b' ') {
                 glyph.flags |= SPACE;
             }
         }
         let wraps_before = |position: usize| {
             self.runs
                 .iter()
-                .find(|&&(end, _)| end as usize >= position)
-                .is_none_or(|(_, style)| style.white_space.wraps())
+                .find(|&&(end, _, _)| end as usize >= position)
+                .is_none_or(|(_, style, _)| style.white_space.wraps())
         };
         let mut glyph = 0;
         let breaks = LineSegmenter::new_auto(LineBreakOptions::default()).segment_str(text);
@@ -327,6 +352,7 @@ const SPACE: u8 = 1;
 const BREAK: u8 = 2;
 const MANDATORY: u8 = 4;
 const NEWLINE: u8 = 8;
+const SPACER: u8 = 16;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 struct Span {
@@ -488,11 +514,13 @@ impl ShapedParagraph {
             let start = pen;
             let glyph_start = lines.glyphs.len();
             for glyph in group {
-                lines.glyphs.push(Glyph::new(
-                    glyph.id,
-                    pen - start + glyph.x_offset,
-                    -glyph.y_offset,
-                ));
+                if glyph.flags & SPACER == 0 {
+                    lines.glyphs.push(Glyph::new(
+                        glyph.id,
+                        pen - start + glyph.x_offset,
+                        -glyph.y_offset,
+                    ));
+                }
                 pen += glyph.advance;
                 if glyph.flags & SPACE != 0 {
                     pen += expansion;

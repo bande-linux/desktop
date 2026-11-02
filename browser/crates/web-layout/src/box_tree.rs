@@ -15,9 +15,67 @@ pub(crate) enum Contents {
     Inline(Box<InlineContent>),
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum ItemKind {
+    Text,
+    Start,
+    End(u32),
+}
+
 pub(crate) struct InlineItem {
     pub(crate) node: NodeId,
     pub(crate) style: ComputedStyle,
+    pub(crate) parent: Option<u32>,
+    pub(crate) kind: ItemKind,
+}
+
+pub(crate) struct InlineFrame {
+    pub(crate) margin: (f32, f32),
+    pub(crate) border: (f32, f32),
+    pub(crate) padding: (f32, f32),
+}
+
+impl InlineFrame {
+    pub(crate) fn of(style: &ComputedStyle) -> Self {
+        let reset = &style.reset;
+        let px = |side: Option<web_style::LengthPercentage>| side.map_or(0.0, |side| side.px);
+        let (margin, border, padding) = (
+            (px(reset.margin.left), px(reset.margin.right)),
+            (reset.border.left, reset.border.right),
+            (reset.padding.left.px, reset.padding.right.px),
+        );
+        if style.is_rtl() {
+            InlineFrame {
+                margin: (margin.1, margin.0),
+                border: (border.1, border.0),
+                padding: (padding.1, padding.0),
+            }
+        } else {
+            InlineFrame {
+                margin,
+                border,
+                padding,
+            }
+        }
+    }
+
+    pub(crate) fn start(&self) -> f32 {
+        self.margin.0 + self.border.0 + self.padding.0
+    }
+
+    pub(crate) fn end(&self) -> f32 {
+        self.margin.1 + self.border.1 + self.padding.1
+    }
+}
+
+fn decorated(style: &ComputedStyle) -> bool {
+    let reset = &style.reset;
+    let frame = InlineFrame::of(style);
+    reset.background_color.a != 0
+        || frame.start() != 0.0
+        || frame.end() != 0.0
+        || reset.border.top != 0.0
+        || reset.border.bottom != 0.0
 }
 
 pub(crate) struct InlineContent {
@@ -41,6 +99,7 @@ struct Builder<'a> {
 struct Pending {
     paragraph: Paragraph,
     items: Vec<InlineItem>,
+    open: Vec<u32>,
 }
 
 impl Pending {
@@ -48,7 +107,19 @@ impl Pending {
         Self {
             paragraph: Paragraph::new(rtl),
             items: Vec::new(),
+            open: Vec::new(),
         }
+    }
+
+    fn push(&mut self, node: NodeId, style: &ComputedStyle, kind: ItemKind) -> u32 {
+        let tag = self.items.len() as u32;
+        self.items.push(InlineItem {
+            node,
+            style: style.clone(),
+            parent: self.open.last().copied(),
+            kind,
+        });
+        tag
     }
 }
 
@@ -193,29 +264,42 @@ impl Builder<'_> {
             match self.document.kind(child) {
                 Some(NodeKind::Text) => {
                     let text = self.document.text(child).unwrap_or_default();
-                    let tag = pending.items.len() as u32;
+                    let tag = pending.push(child, style, ItemKind::Text);
                     pending
                         .paragraph
                         .push_text(text, run_style(style, tag, shift));
-                    pending.items.push(InlineItem {
-                        node: child,
-                        style: style.clone(),
-                    });
                 }
                 Some(NodeKind::Element) if self.depth >= MAX_DEPTH => {}
                 Some(NodeKind::Element) => match style.display() {
                     Display::None => {}
                     Display::Inline | Display::Contents => {
+                        let inner = shift + own_shift(style);
                         if self.document.html_element_name(child) == Some(Atom::BR) {
-                            let tag = pending.items.len() as u32;
+                            let tag = pending.push(child, style, ItemKind::Text);
                             pending.paragraph.push_break(run_style(style, tag, shift));
-                            pending.items.push(InlineItem {
-                                node: child,
-                                style: style.clone(),
+                        } else if style.display() == Display::Inline && decorated(style) {
+                            let frame = InlineFrame::of(style);
+                            let start = pending.push(child, style, ItemKind::Start);
+                            pending
+                                .paragraph
+                                .push_spacer(frame.start(), run_style(style, start, inner));
+                            pending.open.push(start);
+                            self.depth += 1;
+                            self.children(child, blocks, pending, inner);
+                            self.depth -= 1;
+                            let same = pending.items.get(start as usize).is_some_and(|item| {
+                                item.node == child && item.kind == ItemKind::Start
                             });
+                            if same {
+                                pending.open.pop();
+                                let end = pending.push(child, style, ItemKind::End(start));
+                                pending
+                                    .paragraph
+                                    .push_spacer(frame.end(), run_style(style, end, inner));
+                            }
                         } else {
                             self.depth += 1;
-                            self.children(child, blocks, pending, shift + own_shift(style));
+                            self.children(child, blocks, pending, inner);
                             self.depth -= 1;
                         }
                     }

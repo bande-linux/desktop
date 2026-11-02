@@ -125,9 +125,16 @@ impl SettingsView {
             .map(|package| {
                 let size =
                     (package.size > 0).then(|| boxed(Label::new(&format_size(package.size))));
+                let version = match package.class {
+                    Class::Flatpak => L10N.tr_args(
+                        "flatpak-version",
+                        [("version", package.version.clone().into())],
+                    ),
+                    _ => package.version.clone(),
+                };
                 boxed(
                     Row::new(Text::new(&package.name, Tone::Primary), size)
-                        .detail(Text::new(&package.version, Tone::Muted).caption()),
+                        .detail(Text::new(&version, Tone::Muted).caption()),
                 )
             })
             .collect();

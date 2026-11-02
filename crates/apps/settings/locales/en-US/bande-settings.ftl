@@ -293,6 +293,7 @@ updates-ready-restart = { $count ->
 }
 updates-ready-restart-hint = They need a restart. Open Software Update to install them when it suits you.
 show-updates = Show Updates
+flatpak-version = { $version } · Flatpak
 manual-address-invalid = Type an address such as 192.168.1.20/24, and the router and DNS servers as addresses such as 192.168.1.1.
 ip-address = IP address
 ip-address-placeholder = 192.168.1.20/24

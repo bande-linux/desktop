@@ -19,7 +19,7 @@ use crate::follow::Update;
 use crate::follow::{Updates, spawn};
 use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiState};
 
-const SETTLE: Duration = Duration::from_millis(200);
+pub(crate) const SETTLE: Duration = Duration::from_millis(200);
 const METER_INTERVAL: Duration = Duration::from_millis(50);
 const ANSWER_WAIT: Duration = Duration::from_secs(60);
 const NETWORK_MANAGER: &str = "/org/freedesktop/NetworkManager";
@@ -202,7 +202,7 @@ pub fn follow_audio(updates: Updates) -> Sender<AudioCommand> {
     sender
 }
 
-fn signals<T: Send + 'static>(
+pub(crate) fn signals<T: Send + 'static>(
     bus: &Connection,
     rule: MatchRule<'static>,
     changed: Sender<T>,

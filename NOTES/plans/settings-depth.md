@@ -7,21 +7,21 @@ the list is empty.
 
 ## Pane by pane
 
-**Wi-Fi.** Has: power, nearby networks with signal and lock, join with password (wrong password
-asked again), Forget, captive portal sign-in. macOS also has: Known Networks (saved, in range or
-not) with Auto-Join, a Details sheet per network (Auto-Join, Low Data Mode, Private Wi-Fi
-Address, IP address, router, DNS, hardware address, TCP/IP manual, Forget), Other… for hidden
-networks, Personal Hotspot (on Linux: share the connection as a hotspot, NetworkManager mode
-`ap`), Ask to Join. Enterprise (802.1X) and WEP networks cannot be joined.
+**Wi-Fi.** Has: power, Known Networks (saved, in range or not, with status) and Other Networks
+with signal and lock, join with password (wrong password asked again), Other… for hidden
+networks, Sign In for a captive portal, and a Details page per known network: Auto-Join, Low
+Data Mode (metered), Private Wi-Fi Address (off / fixed / rotating), IP address, router, DNS,
+hardware address, IPv4 automatic or manual, DNS servers while automatic, Forget. Missing:
+Personal Hotspot (NetworkManager mode `ap`, method `shared`), Ask to Join, enterprise (802.1X)
+and WEP networks, copying a saved password.
 
-**Bluetooth.** Has: power, my devices with connect/disconnect/forget, nearby devices, pairing
-with codes, PINs and authorization. Missing: battery level of headsets and mice (BlueZ
-`Battery1`), rename a device, the computer's Bluetooth name, "connected" vs "not connected"
-detail for audio profiles.
+**Bluetooth.** Has: power, my devices with connect/disconnect/forget and battery level, nearby
+devices, pairing with codes, PINs and authorization. Missing: rename a device, the computer's
+Bluetooth name.
 
 **Network.** Has: Ethernet status with IPv4 automatic/manual, router and DNS; VPN connect,
-disconnect, import of WireGuard and OpenVPN files. Missing: a DNS override while the address
-stays automatic (`ipv4.ignore-auto-dns`), VPN details and removal, adding a VPN by hand,
+disconnect, import of WireGuard and OpenVPN files. Missing: a DNS override for Ethernet while the
+address stays automatic (Wi-Fi has it), VPN details and removal, adding a VPN by hand,
 proxies (NetworkManager's per-connection proxy only reaches apps through the portal's
 ProxyResolver, so this needs a session-wide proxy first), IPv6, service order, firewall.
 
@@ -96,22 +96,24 @@ mini), input methods (fcitx5, deferred by decision), dictation (out of scope).
 **Mouse / Trackpad.** Has: speed, acceleration, natural scrolling, primary button; trackpad tap,
 dragging, secondary click, scroll method, gestures. Missing: double-click speed, scroll speed.
 
-**Printers & Scanners.** Missing entirely: list printers with status and queue, add a network
-printer (driverless IPP Everywhere found over DNS-SD), set the default, remove, pause, cancel
-jobs. CUPS speaks IPP on `/run/cups/cups.sock` and pushes changes through its D-Bus notifier
-(`notify-recipient-uri dbus://`), so no polling is needed. CUPS is not in the image.
+**Printers & Scanners.** Has (`bande-printers`: IPP on CUPS's socket with PeerCred, Avahi for
+nearby printers, `com.redhat.PrinterSpooler` signals for changes): printers with state and
+queued documents, the default printer, nearby IPP printers to add (driverless, `lpadmin -m
+everywhere`), add by address, and a page per printer with kind, location, address, its queue
+with Cancel, Pause/Resume, Make Default and Remove. Missing: scanners (SANE / eSCL), printer
+options (paper size, duplex, colour defaults), supply levels, sharing a printer. CUPS is not in
+the image yet, so the pane says printing isn't set up.
 
 ## Ranked gaps
 
 Ranked by how often a user needs them and how badly they are stuck without them.
 
-1. Printers & Scanners on CUPS (IPP over the socket, D-Bus notifier for changes). Blocked: owner
-   decision to add `cups` and `cups-browsed` to the image.
+1. Printers: put `cups` (and `cups-client` for lpadmin) in the image and the user in `lpadmin`
+   (owner decision); then printer options, supply levels and scanners.
 2. Users & Groups: change password, picture, full name; add a user. Blocked: owner decision
    to add `accountsservice` to the image.
 4. Sound: balance and the built-in speaker and headphone names.
 5. Network: DNS override with an automatic address, for Ethernet as for Wi-Fi.
-6. Bluetooth device battery levels.
 7. Hot corners (compositor).
 8. Sharing: Remote Login (ssh.service through systemd's D-Bus API) and the `.local` name.
 9. Notifications: previews, sounds and badges per app.

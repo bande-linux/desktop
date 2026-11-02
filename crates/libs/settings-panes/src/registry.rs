@@ -36,6 +36,7 @@ pub enum PaneId {
     KeyboardShortcuts,
     Mouse,
     Trackpad,
+    Printers,
     Power,
     PrivacySecurity,
     Camera,
@@ -51,7 +52,7 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 27] = [
+    const KEYWORDS: [(Self, &'static str); 28] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -67,6 +68,7 @@ impl PaneId {
         (Self::KeyboardShortcuts, "keyboard-shortcuts"),
         (Self::Mouse, "mouse"),
         (Self::Trackpad, "trackpad"),
+        (Self::Printers, "printers"),
         (Self::Power, "power"),
         (Self::PrivacySecurity, "privacy-security"),
         (Self::Camera, "camera"),
@@ -89,9 +91,12 @@ impl PaneId {
             | Self::Notifications
             | Self::Search
             | Self::Accessibility => Some(Group::Desktop),
-            Self::Displays | Self::Sound | Self::Keyboard | Self::Mouse | Self::Trackpad => {
-                Some(Group::Devices)
-            }
+            Self::Displays
+            | Self::Sound
+            | Self::Keyboard
+            | Self::Mouse
+            | Self::Trackpad
+            | Self::Printers => Some(Group::Devices),
             Self::Power | Self::PrivacySecurity | Self::Apps | Self::LanguageTime | Self::About => {
                 Some(Group::System)
             }
@@ -123,6 +128,7 @@ impl PaneId {
             Self::Keyboard | Self::KeyboardShortcuts => "input-keyboard-symbolic",
             Self::Mouse => "input-mouse-symbolic",
             Self::Trackpad => "input-touchpad-symbolic",
+            Self::Printers => "printer-symbolic",
             Self::Power => "system-shutdown-symbolic",
             Self::PrivacySecurity => "changes-prevent-symbolic",
             Self::Camera => "camera-photo-symbolic",
@@ -299,6 +305,8 @@ pub enum SettingId {
     SearchCalculator,
     SearchConversion,
     SearchExcluded,
+    Printers,
+    NearbyPrinters,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -315,6 +323,8 @@ pub enum Value {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum List {
+    Printers,
+    NearbyPrinters,
     KnownNetworks,
     Networks,
     PairedDevices,
@@ -979,6 +989,23 @@ fn device_panes() -> Vec<Pane> {
         ),
         mouse_pane(),
         trackpad_pane(),
+        pane(
+            PaneId::Printers,
+            vec![
+                section(
+                    Some(L10N.tr("printers-list")),
+                    vec![list(SettingId::Printers, "printers-list", List::Printers)],
+                ),
+                section(
+                    Some(L10N.tr("add-printer")),
+                    vec![list(
+                        SettingId::NearbyPrinters,
+                        "add-printer",
+                        List::NearbyPrinters,
+                    )],
+                ),
+            ],
+        ),
     ]
 }
 

@@ -6,6 +6,7 @@ use crate::L10N;
 use crate::follow::Command;
 use crate::pages::boxed;
 use crate::permissions::PermissionCommand;
+use crate::printers::PrinterCommand;
 use crate::services::{BluetoothCommand, NetworkCommand};
 use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
@@ -17,6 +18,7 @@ pub(crate) enum Forget {
     Network(Vec<u8>),
     Device(String),
     Share(String),
+    Printer(String),
 }
 
 impl SettingsView {
@@ -28,9 +30,22 @@ impl SettingsView {
     }
 
     pub(crate) fn forget_row(&mut self, name: &str, warning: &str) -> Box<dyn Widget> {
+        self.confirm_row(
+            &L10N.tr_args("forget-question", [("name", name.to_owned().into())]),
+            warning,
+            &L10N.tr("forget"),
+        )
+    }
+
+    pub(crate) fn confirm_row(
+        &mut self,
+        question: &str,
+        warning: &str,
+        action: &str,
+    ) -> Box<dyn Widget> {
         let mut cancel = intent(&self.intents, |()| Intent::AskForget(None));
         let mut forget = intent(&self.intents, |()| Intent::Forget);
-        let confirm = Button::new(&L10N.tr("forget"), move || forget(()));
+        let confirm = Button::new(action, move || forget(()));
         self.anchors
             .push((Anchor::Item(CONFIRM.to_owned()), confirm.id()));
         let buttons = Stack::new(
@@ -43,15 +58,9 @@ impl SettingsView {
             ],
         );
         boxed(
-            Row::new(
-                Text::new(
-                    &L10N.tr_args("forget-question", [("name", name.to_owned().into())]),
-                    Tone::Primary,
-                ),
-                Some(boxed(buttons)),
-            )
-            .detail(Text::new(warning, Tone::Muted).caption())
-            .highlighted(true),
+            Row::new(Text::new(question, Tone::Primary), Some(boxed(buttons)))
+                .detail(Text::new(warning, Tone::Muted).caption())
+                .highlighted(true),
         )
     }
 
@@ -60,6 +69,7 @@ impl SettingsView {
             Some(Forget::Network(ssid)) => String::from_utf8_lossy(ssid).into_owned(),
             Some(Forget::Device(address)) => address.clone(),
             Some(Forget::Share(app)) => format!("grant:{app}"),
+            Some(Forget::Printer(name)) => format!("printer:{name}"),
             None => return,
         };
         self.focus_next = Some(Anchor::Item(if target.is_some() {
@@ -90,6 +100,11 @@ impl SettingsView {
                 })
                 .cloned()
                 .map(|device| Command::Bluetooth(BluetoothCommand::Forget(device))),
+            Some(Forget::Printer(name)) => {
+                self.detail = None;
+                self.focus_next = Some(Anchor::Setting(SettingId::Printers, None));
+                Some(Command::Printers(PrinterCommand::Remove(name)))
+            }
             Some(Forget::Share(app)) => {
                 if let Some((_, grants)) = self
                     .permissions

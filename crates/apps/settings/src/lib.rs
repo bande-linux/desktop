@@ -23,6 +23,7 @@ mod permissions;
 mod pictures;
 mod pointing;
 mod power;
+mod printers;
 mod privacy;
 mod privilege;
 mod services;

@@ -30,6 +30,20 @@ pub(crate) struct TableRow {
     pub(crate) node: Option<NodeId>,
     pub(crate) style: ComputedStyle,
     pub(crate) cells: Vec<TableCell>,
+    pub(crate) edges: [(f32, web_style::Color); 2],
+}
+
+fn edge(style: &ComputedStyle, top: bool) -> (f32, web_style::Color) {
+    let reset = &style.reset;
+    if top {
+        (reset.border.top, reset.border_color.top)
+    } else {
+        (reset.border.bottom, reset.border_color.bottom)
+    }
+}
+
+fn stronger(a: (f32, web_style::Color), b: (f32, web_style::Color)) -> (f32, web_style::Color) {
+    if b.0 > a.0 { b } else { a }
 }
 
 pub(crate) struct TableCell {
@@ -517,6 +531,7 @@ impl Builder<'_> {
                             node: None,
                             style: self.styles.anonymous(style),
                             cells: vec![cell],
+                            edges: [(0.0, web_style::Color::TRANSPARENT); 2],
                         }),
                     }
                 }
@@ -530,6 +545,7 @@ impl Builder<'_> {
     }
 
     fn row_group(&mut self, group: NodeId, rows: &mut Vec<TableRow>) {
+        let start = rows.len();
         for child in self.document.children(group).collect::<Vec<_>>() {
             if self.document.kind(child) != Some(NodeKind::Element) {
                 continue;
@@ -546,8 +562,19 @@ impl Builder<'_> {
                         node: None,
                         style: self.styles.anonymous(&style),
                         cells: vec![cell],
+                        edges: [(0.0, web_style::Color::TRANSPARENT); 2],
                     });
                 }
+            }
+        }
+        if let Some(group_style) = self.styles.get(group).cloned() {
+            if let Some(first) = rows.get_mut(start) {
+                first.edges[0] = stronger(first.edges[0], edge(&group_style, true));
+            }
+            if rows.len() > start
+                && let Some(last) = rows.last_mut()
+            {
+                last.edges[1] = stronger(last.edges[1], edge(&group_style, false));
             }
         }
     }
@@ -565,10 +592,12 @@ impl Builder<'_> {
                 cells.push(self.cell(child, child_style));
             }
         }
+        let edges = [edge(&style, true), edge(&style, false)];
         TableRow {
             node: Some(row),
             style,
             cells,
+            edges,
         }
     }
 

@@ -262,13 +262,46 @@ impl<'a, 'b> Flow<'a, 'b> {
                 }
             }
         }
+        let collapse = block.style.inherited.border_collapse;
         let mut tops = Vec::with_capacity(heights.len());
+        let mut rules = Vec::new();
         let mut top = vertical;
-        for height in &heights {
+        let mut previous = (0.0f32, Color::TRANSPARENT);
+        for (row, height) in table.rows.iter().zip(&heights) {
+            if collapse {
+                let edge = if row.edges[0].0 >= previous.0 {
+                    row.edges[0]
+                } else {
+                    previous
+                };
+                if edge.0 > 0.0 {
+                    rules.push((top, edge));
+                    top += edge.0;
+                }
+                previous = row.edges[1];
+            }
             tops.push(top);
             top += height + vertical;
         }
+        if collapse && previous.0 > 0.0 {
+            rules.push((top, previous));
+            top += previous.0;
+        }
         let grid_height = if heights.is_empty() { 0.0 } else { top };
+        for (rule_top, (width, color)) in rules {
+            children.push(Fragment::Box(BoxFragment {
+                node: None,
+                rect: Rect {
+                    x: offset.0,
+                    y: offset.1 + y + rule_top,
+                    width: x.max(0.0),
+                    height: width,
+                },
+                background: color,
+                extra: None,
+                children: Vec::new(),
+            }));
+        }
         for (row, (&row_top, &row_height)) in table.rows.iter().zip(tops.iter().zip(&heights)) {
             let background = row.style.reset.background_color;
             if background != Color::TRANSPARENT && row.node.is_some() {

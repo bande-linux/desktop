@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use web_atoms::{Atom, AtomTable};
 use web_css::properties::{
-    CssWideKeyword, CustomValue, DeclaredValue, LonghandId, PropertyId, UnparsedValue,
-    parse_value_str,
+    CssWideKeyword, CustomValue, DeclaredValue, LonghandId, PropertyId, PropertyValue,
+    UnparsedValue, parse_value_str,
 };
 use web_css::stylesheet::parse_style_attribute;
 use web_dom::{Document, NodeId, NodeKind};
@@ -43,7 +43,15 @@ struct Traversal<'a> {
     root_font_size: f32,
 }
 
-type Candidate<'a> = (LonghandId, (u32, u32, u32), Origin, &'a DeclaredValue);
+type Key4 = (u32, u32, u32, u32);
+
+struct Candidate<'a> {
+    id: LonghandId,
+    declared: LonghandId,
+    key: Key4,
+    origin: Origin,
+    value: &'a DeclaredValue,
+}
 
 fn rank(origin: Origin, important: bool, layer: u16) -> u32 {
     let layer = u32::from(layer);
@@ -447,13 +455,20 @@ impl Traversal<'_> {
                 continue;
             };
             let specificity = entry.selector().map_or(0, |selector| selector.specificity);
-            for declaration in &rule.block.declarations {
+            for (order, declaration) in rule.block.declarations.iter().enumerate() {
                 let key = (
                     rank(rule.origin, declaration.important, rule.layer),
                     specificity,
                     entry.rule,
+                    order as u32,
                 );
-                candidates.push((declaration.id, key, rule.origin, &declaration.value));
+                candidates.push(Candidate {
+                    id: declaration.id,
+                    declared: declaration.id,
+                    key,
+                    origin: rule.origin,
+                    value: &declaration.value,
+                });
             }
             for custom in &rule.block.custom {
                 let key = (
@@ -465,13 +480,20 @@ impl Traversal<'_> {
             }
         }
         if let Some(block) = &style_attribute {
-            for declaration in &block.declarations {
+            for (order, declaration) in block.declarations.iter().enumerate() {
                 let key = (
                     rank(Origin::Author, declaration.important, UNLAYERED),
                     u32::MAX,
                     u32::MAX,
+                    order as u32,
                 );
-                candidates.push((declaration.id, key, Origin::Author, &declaration.value));
+                candidates.push(Candidate {
+                    id: declaration.id,
+                    declared: declaration.id,
+                    key,
+                    origin: Origin::Author,
+                    value: &declaration.value,
+                });
             }
             for custom in &block.custom {
                 let key = (
@@ -483,12 +505,16 @@ impl Traversal<'_> {
             }
         }
         let custom = cascade_custom(parent, customs);
+        let rtl = is_rtl(&candidates, parent);
+        for candidate in &mut candidates {
+            candidate.id = physical(candidate.id, rtl);
+        }
         let winners = select_winners(candidates);
         let substituted: Vec<Option<DeclaredValue>> = winners
             .iter()
-            .map(|(id, value)| match value {
+            .map(|(_, declared, value)| match value {
                 DeclaredValue::Unparsed(unparsed) => Some(
-                    substitute_unparsed(*id, unparsed, &custom)
+                    substitute_unparsed(*declared, unparsed, &custom)
                         .unwrap_or(DeclaredValue::CssWide(CssWideKeyword::Unset)),
                 ),
                 _ => None,
@@ -497,7 +523,7 @@ impl Traversal<'_> {
         let values: Vec<(LonghandId, Value<'_>)> = winners
             .iter()
             .zip(&substituted)
-            .filter_map(|((id, declared), substitute)| {
+            .filter_map(|((id, _, declared), substitute)| {
                 match substitute.as_ref().unwrap_or(declared) {
                     DeclaredValue::Value(value) => Some((*id, Value::Declared(value))),
                     DeclaredValue::CssWide(keyword) => Some((*id, Value::Keyword(*keyword))),
@@ -514,39 +540,70 @@ impl Traversal<'_> {
     }
 }
 
-fn select_winners(mut candidates: Vec<Candidate<'_>>) -> Vec<(LonghandId, &DeclaredValue)> {
-    candidates.sort_by_key(|candidate| (candidate.0, candidate.1));
+fn select_winners(
+    mut candidates: Vec<Candidate<'_>>,
+) -> Vec<(LonghandId, LonghandId, &DeclaredValue)> {
+    candidates.sort_by_key(|candidate| (candidate.id, candidate.key));
     let mut winners = Vec::new();
-    for group in candidates.chunk_by(|a, b| a.0 == b.0) {
+    for group in candidates.chunk_by(|a, b| a.id == b.id) {
         let mut end = group.len();
-        while let Some(&(id, key, origin, value)) =
-            end.checked_sub(1).and_then(|last| group.get(last))
-        {
-            match value {
+        while let Some(winner) = end.checked_sub(1).and_then(|last| group.get(last)) {
+            let earlier = group.get(..end).unwrap_or_default();
+            match winner.value {
                 DeclaredValue::CssWide(CssWideKeyword::Revert) => {
-                    end = group
-                        .get(..end)
-                        .unwrap_or_default()
+                    end = earlier
                         .iter()
-                        .take_while(|candidate| candidate.2 < origin)
+                        .take_while(|candidate| candidate.origin < winner.origin)
                         .count();
                 }
                 DeclaredValue::CssWide(CssWideKeyword::RevertLayer) => {
-                    end = group
-                        .get(..end)
-                        .unwrap_or_default()
+                    end = earlier
                         .iter()
-                        .take_while(|candidate| candidate.1.0 < key.0)
+                        .take_while(|candidate| candidate.key.0 < winner.key.0)
                         .count();
                 }
-                _ => {
-                    winners.push((id, value));
+                value => {
+                    winners.push((winner.id, winner.declared, value));
                     break;
                 }
             }
         }
     }
     winners
+}
+
+fn is_rtl(candidates: &[Candidate<'_>], parent: &ComputedStyle) -> bool {
+    let inherited = parent.inherited.direction == crate::Direction::Rtl;
+    candidates
+        .iter()
+        .filter(|candidate| candidate.id == LonghandId::Direction)
+        .max_by_key(|candidate| candidate.key)
+        .map_or(inherited, |candidate| match candidate.value {
+            DeclaredValue::Value(PropertyValue::Direction(direction)) => {
+                *direction == web_css::properties::Direction::Rtl
+            }
+            _ => inherited,
+        })
+}
+
+fn physical(id: LonghandId, rtl: bool) -> LonghandId {
+    use LonghandId as L;
+    let start = |ltr: L, rtl_side: L| if rtl { rtl_side } else { ltr };
+    match id {
+        L::MarginBlockStart => L::MarginTop,
+        L::MarginBlockEnd => L::MarginBottom,
+        L::MarginInlineStart => start(L::MarginLeft, L::MarginRight),
+        L::MarginInlineEnd => start(L::MarginRight, L::MarginLeft),
+        L::PaddingBlockStart => L::PaddingTop,
+        L::PaddingBlockEnd => L::PaddingBottom,
+        L::PaddingInlineStart => start(L::PaddingLeft, L::PaddingRight),
+        L::PaddingInlineEnd => start(L::PaddingRight, L::PaddingLeft),
+        L::InsetBlockStart => L::Top,
+        L::InsetBlockEnd => L::Bottom,
+        L::InsetInlineStart => start(L::Left, L::Right),
+        L::InsetInlineEnd => start(L::Right, L::Left),
+        other => other,
+    }
 }
 
 type CustomMap = Arc<[(Arc<str>, Arc<str>)]>;

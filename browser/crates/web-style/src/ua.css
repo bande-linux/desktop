@@ -30,8 +30,8 @@ rt { display: ruby-text; }
 html, body { display: block; }
 body { margin: 8px; }
 
-blockquote, figure, listing, p, plaintext, pre, xmp { margin-top: 1em; margin-bottom: 1em; }
-blockquote, figure { margin-left: 40px; margin-right: 40px; }
+blockquote, figure, listing, p, plaintext, pre, xmp { margin-block: 1em; }
+blockquote, figure { margin-inline: 40px; }
 address { font-style: italic; }
 center { text-align: center; }
 hr {
@@ -41,17 +41,15 @@ hr {
   margin: 0.5em auto;
   overflow: hidden;
 }
-fieldset { margin-left: 2px; margin-right: 2px; border: 2px groove; padding: 0.35em 0.75em 0.625em; }
-legend { padding-left: 2px; padding-right: 2px; }
+fieldset { margin-inline: 2px; border: 2px groove; padding: 0.35em 0.75em 0.625em; }
+legend { padding-inline: 2px; }
 
 dir, dd, dl, dt, menu, ol, ul { display: block; }
 li { text-align: match-parent; }
-dir, dl, menu, ol, ul { margin-top: 1em; margin-bottom: 1em; }
-:is(dir, dl, menu, ol, ul) :is(dir, dl, menu, ol, ul) { margin-top: 0; margin-bottom: 0; }
-dd { margin-left: 40px; }
-[dir=rtl i] dd, dd[dir=rtl i] { margin-left: 0; margin-right: 40px; }
-dir, menu, ol, ul { padding-left: 40px; }
-:is([dir=rtl i] :is(dir, menu, ol, ul), :is(dir, menu, ol, ul)[dir=rtl i]) { padding-left: 0; padding-right: 40px; }
+dir, dl, menu, ol, ul { margin-block: 1em; }
+:is(dir, dl, menu, ol, ul) :is(dir, dl, menu, ol, ul) { margin-block: 0; }
+dd { margin-inline-start: 40px; }
+dir, menu, ol, ul { padding-inline-start: 40px; }
 ol { list-style-type: decimal; }
 dir, menu, ul { list-style-type: disc; }
 :is(dir, menu, ol, ul) :is(dir, menu, ul) { list-style-type: circle; }
@@ -64,12 +62,12 @@ caption { text-align: center; }
 thead, tbody, tfoot, table > tr { vertical-align: middle; }
 tr, td, th { vertical-align: inherit; }
 
-h1 { margin-top: 0.67em; margin-bottom: 0.67em; font-size: 2em; }
-h2 { margin-top: 0.83em; margin-bottom: 0.83em; font-size: 1.5em; }
-h3 { margin-top: 1em; margin-bottom: 1em; font-size: 1.17em; }
-h4 { margin-top: 1.33em; margin-bottom: 1.33em; font-size: 1em; }
-h5 { margin-top: 1.67em; margin-bottom: 1.67em; font-size: 0.83em; }
-h6 { margin-top: 2.33em; margin-bottom: 2.33em; font-size: 0.67em; }
+h1 { margin-block: 0.67em; font-size: 2em; }
+h2 { margin-block: 0.83em; font-size: 1.5em; }
+h3 { margin-block: 1em; font-size: 1.17em; }
+h4 { margin-block: 1.33em; font-size: 1em; }
+h5 { margin-block: 1.67em; font-size: 0.83em; }
+h6 { margin-block: 2.33em; font-size: 0.67em; }
 h1, h2, h3, h4, h5, h6 { font-weight: bold; }
 
 pre, listing, xmp, plaintext { font-family: monospace; white-space: pre; }

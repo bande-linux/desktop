@@ -15,13 +15,13 @@ feature still render alike, so reftest rates overstate conformance:
 |---|---|---|---|
 | html5lib tokenizer | 7045 | 7045 | 100.0% (4 skipped) |
 | html5lib tree-construction | 1963 | 1973 | 99.5% |
-| css-parsing syntax | 148 | 177 | 83.6% |
-| css-parsing colors | 0 | 8061 | 0.0% |
+| css-parsing syntax | 176 | 177 | 99.4% |
+| css-parsing colors | 8060 | 8061 | 100.0% |
 | css-parsing An+B | 128 | 128 | 100.0% |
-| wpt reftests css/CSS2 | 1890 | 6238 | 30.3% (8 of the passes render blank) |
-| wpt reftests css/css-cascade | 15 | 50 | 30.0% (2 of the passes render blank) |
+| wpt reftests css/CSS2 | 3610 | 6238 | 57.9% (12 of the passes render blank) |
+| wpt reftests css/css-cascade | 18 | 50 | 36.0% (2 of the passes render blank) |
 | wpt reftests css/css-syntax | 1 | 1 | 100.0% |
-| wpt reftests css/selectors | 104 | 227 | 45.8% (15 of the passes render blank) |
+| wpt reftests css/selectors | 114 | 227 | 50.2% (7 of the passes render blank) |
 
 ## Phase 1: document browser (3–4 engineer-years)
 

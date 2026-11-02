@@ -25,7 +25,6 @@ mod force_quit;
 mod frame;
 mod gesture;
 mod grab;
-mod hot_corner;
 mod idle;
 mod ime;
 mod input;

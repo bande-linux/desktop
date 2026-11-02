@@ -106,7 +106,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - PipeWire 1.4.2 ignores a Props change on a suspended null sink (report upstream); per-device
   volume memory across a WirePlumber restart is unproven.
 - Not built yet: user picker and accounts (no Users pane, no fast user switching), crash
-  reports, hot corners, tiling beyond halves and quarters, custom shortcuts, input methods as
+  reports, tiling beyond halves and quarters, custom shortcuts, input methods as
   sources, spell checking, colour filters, on-screen keyboard, notifications on the lock screen,
   inline reply, file content search, spring-loading, printers pane, Wi-Fi hidden and Enterprise
   networks, more portals (GlobalShortcuts, RemoteDesktop) and portal permission review, colour

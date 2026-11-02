@@ -238,9 +238,8 @@ when they reach the screen is Bande's own.
 - **Overview.** `Super+W` (as in KDE), the Mission Control key (`XF86LaunchA`, F3 on Apple
   keyboards, without Super) or a three-finger swipe up (300 units for the whole way, tracked
   1:1 and released like the other swipes) open it; the same key, `Escape`, a click on empty
-  space or a swipe down close it. There is no hot corner: the research makes corners an
-  opt-in setting, and no setting exists yet. Every window of the active workspace flies from
-  where it is to a layout without overlap (rows by original height, left to right by
+  space or a swipe down close it. There are no hot corners (removed by the owner). Every
+  window of the active workspace flies from where it is to a layout without overlap (rows by original height, left to right by
   original position, one common scale, never enlarged) under the workspace strip, and back
   when the overview closes, with `standard`; the drawing is the window's own live buffer
   scaled, never a copy. The strip slides down from the top: one live thumbnail per workspace

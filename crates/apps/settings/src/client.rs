@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use bande_config::{
-    ArrangedDisplay, DisplaySettings, FocusScheduleValue, HotCornersValue, NightLightValue,
-    Placement, Rotation, SearchCategory,
+    ArrangedDisplay, DisplaySettings, FocusScheduleValue, NightLightValue, Placement, Rotation,
+    SearchCategory,
 };
 use bande_datetime::DateFormats;
 use bande_notify::client::NotificationCenter;
@@ -82,10 +82,6 @@ pub trait Config {
     fn text_size(&self) -> zbus::Result<u32>;
     #[zbus(property)]
     fn set_text_size(&self, percent: u32) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn hot_corners(&self) -> zbus::Result<HotCornersValue>;
-    #[zbus(property)]
-    fn set_hot_corners(&self, value: HotCornersValue) -> zbus::Result<()>;
     #[zbus(property)]
     fn focus_schedule(&self) -> zbus::Result<FocusScheduleValue>;
     #[zbus(property)]
@@ -297,7 +293,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 76] = [
+pub const CONFIG_SETTINGS: [SettingId; 72] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -312,10 +308,6 @@ pub const CONFIG_SETTINGS: [SettingId; 76] = [
     SettingId::NightLight,
     SettingId::NightSchedule,
     SettingId::FocusScheduled,
-    SettingId::HotCornerTopLeft,
-    SettingId::HotCornerTopRight,
-    SettingId::HotCornerBottomLeft,
-    SettingId::HotCornerBottomRight,
     SettingId::FocusFrom,
     SettingId::FocusTo,
     SettingId::NightFrom,
@@ -486,12 +478,6 @@ impl SettingsClient {
         )
     }
 
-    fn change_hot_corners(&self, change: impl FnOnce(&mut HotCornersValue)) -> zbus::Result<()> {
-        let mut corners = self.config.hot_corners()?;
-        change(&mut corners);
-        self.config.set_hot_corners(corners)
-    }
-
     fn change_focus_schedule(
         &self,
         change: impl FnOnce(&mut FocusScheduleValue),
@@ -520,10 +506,6 @@ impl SettingsClient {
             SettingId::NightSchedule => Value::Keyword(self.config.night_light()?.1),
             SettingId::NightFrom => Value::Text(self.config.night_light()?.2),
             SettingId::FocusScheduled => Value::Flag(self.config.focus_schedule()?.0),
-            SettingId::HotCornerTopLeft => Value::Keyword(self.config.hot_corners()?.0),
-            SettingId::HotCornerTopRight => Value::Keyword(self.config.hot_corners()?.1),
-            SettingId::HotCornerBottomLeft => Value::Keyword(self.config.hot_corners()?.2),
-            SettingId::HotCornerBottomRight => Value::Keyword(self.config.hot_corners()?.3),
             SettingId::FocusFrom => Value::Text(self.config.focus_schedule()?.1),
             SettingId::FocusTo => Value::Text(self.config.focus_schedule()?.2),
             SettingId::NightTo => Value::Text(self.config.night_light()?.3),
@@ -675,18 +657,6 @@ impl SettingsClient {
             }
             (SettingId::NightSchedule, Value::Keyword(schedule)) => {
                 self.change_night_light(|night| schedule.clone_into(&mut night.1))
-            }
-            (SettingId::HotCornerTopLeft, Value::Keyword(action)) => {
-                self.change_hot_corners(|corners| action.clone_into(&mut corners.0))
-            }
-            (SettingId::HotCornerTopRight, Value::Keyword(action)) => {
-                self.change_hot_corners(|corners| action.clone_into(&mut corners.1))
-            }
-            (SettingId::HotCornerBottomLeft, Value::Keyword(action)) => {
-                self.change_hot_corners(|corners| action.clone_into(&mut corners.2))
-            }
-            (SettingId::HotCornerBottomRight, Value::Keyword(action)) => {
-                self.change_hot_corners(|corners| action.clone_into(&mut corners.3))
             }
             (SettingId::FocusScheduled, Value::Flag(on)) => {
                 self.change_focus_schedule(|schedule| schedule.0 = *on)

@@ -59,8 +59,8 @@ shortcut to zoom, pointer colour, shake to locate, hover text, captions.
 **Control Center.** Missing: which modules show in the bar and in Control Center (Wi-Fi,
 Bluetooth, Sound, Battery percentage exists under Power).
 
-**Desktop & Dock.** Taskbar has layout, position, size, auto-hide and Hot Corners (the
-compositor acts on them). Missing: Mission Control options (group windows by app, switch to a
+**Desktop & Dock.** Taskbar has layout, position, size and auto-hide; the owner removed hot
+corners. Missing: Mission Control options (group windows by app, switch to a
 space with open windows), "click wallpaper to reveal desktop", default web browser lives in
 Apps already.
 

@@ -836,7 +836,6 @@ impl SettingsView {
             PaneId::Appearance
             | PaneId::Accessibility
             | PaneId::Bar
-            | PaneId::HotCorners
             | PaneId::Search
             | PaneId::Keyboard
             | PaneId::KeyboardShortcuts

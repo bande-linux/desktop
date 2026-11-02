@@ -250,7 +250,6 @@ impl SettingsView {
             PaneId::NightLight => self.night_light_summary(),
             PaneId::Appearance
             | PaneId::Bar
-            | PaneId::HotCorners
             | PaneId::Search
             | PaneId::Accessibility
             | PaneId::KeyboardShortcuts

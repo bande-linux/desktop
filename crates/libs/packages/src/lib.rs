@@ -291,6 +291,7 @@ impl std::error::Error for Error {}
 pub enum Status {
     #[default]
     Waiting,
+    Authorizing,
     Downloading,
     Installing,
     Removing,
@@ -300,7 +301,8 @@ pub enum Status {
 impl Status {
     fn from_raw(raw: u32) -> Self {
         match raw {
-            0..=2 | 30 | 31 => Self::Waiting,
+            0..=2 | 30 => Self::Waiting,
+            31 => Self::Authorizing,
             8 | 20..=25 => Self::Downloading,
             9 | 10 | 16 | 36 => Self::Installing,
             6 | 12 => Self::Removing,

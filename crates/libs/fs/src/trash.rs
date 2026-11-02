@@ -14,6 +14,8 @@ use rustix::fs::{
     AtFlags, CWD, Dir, FileType, Mode, OFlags, StatxFlags, openat, statat, statx, unlinkat,
 };
 
+use crate::ops::rename_new;
+
 const INFO_SUFFIX: &str = ".trashinfo";
 const INFO_HEADER: &str = "[Trash Info]";
 const STICKY: u32 = 0o1000;
@@ -179,11 +181,18 @@ impl TrashDir {
             .subsec_nanosecond(0)
             .build()
             .unwrap_or(deleted);
-        let (id, info) = self.reserve(path, deleted)?;
-        if let Err(error) = fs::rename(path, self.files().join(&id)) {
-            let _ = fs::remove_file(info);
-            return Err(error);
-        }
+        let id = loop {
+            let (id, info) = self.reserve(path, deleted)?;
+            match rename_new(path, &self.files().join(&id)) {
+                Ok(()) => break id,
+                Err(error) => {
+                    let _ = fs::remove_file(info);
+                    if error.kind() != io::ErrorKind::AlreadyExists {
+                        return Err(error);
+                    }
+                }
+            }
+        };
         Ok(TrashItem {
             trash: self.clone(),
             id,
@@ -504,16 +513,10 @@ impl Trash {
 }
 
 pub fn restore_to(item: &TrashItem, destination: &Path) -> io::Result<()> {
-    if destination.symlink_metadata().is_ok() {
-        return Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            "an item with that name already exists",
-        ));
-    }
     if let Some(parent) = destination.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::rename(item.path(), destination)?;
+    rename_new(&item.path(), destination)?;
     forget(item)
 }
 

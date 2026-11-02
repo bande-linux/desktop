@@ -26,24 +26,22 @@ Delete each line when it ships; delete the file when the list is empty.
 ## Already in Files
 
 Icons, list (with disclosure) and columns; Quick Look with full screen; Get Info inspector with
-Open With and default app; tabs; batch rename; Undo/Redo across the session's operations;
+Open With and default app; tabs; batch rename; Undo/Redo shared by all windows; View ▸ Sort By;
 spring-loaded folders; Ctrl/Shift drag modifiers; Recents and search with scopes; per-folder
 view memory; status bar and path bar; hidden files; Trash with Put Back, Empty, 30-day purge
 and per-volume `.Trash-uid`; volumes with Eject; Compress and Extract; Open in Terminal; New
 Document templates; failure alerts per item (Skip, Try Again, Skip All, Stop); a no-space
 check before copying; empty-folder and no-permission messages; Settings (General, Show in
-Sidebar, Advanced) with hidden extensions and Last Folder for new windows; `org.freedesktop.FileManager1` ("Show in Folder" from other apps,
-D-Bus activated with `--gapplication-service`); `bande-files --select <paths>`.
+Sidebar, Advanced) with hidden extensions and Last Folder for new windows;
+`org.freedesktop.FileManager1` ("Show in Folder" from other apps, D-Bus activated with
+`--gapplication-service`); `bande-files --select <paths>`.
 
 ## Open, ranked
 
 1. Get Info: an editable Name & Extension field with a per-file "Hide extension".
-2. View ▸ Use Groups (Kind, Date Last Opened, Size) and View ▸ Sort By in the menu bar.
-3. Undo across windows (one operation history for the process).
-4. New windows show: Other… (any folder).
-5. Gallery view.
-6. In-place rename field text sits 5 px right of the label (the toolkit's in-place field keeps
-   the 8 px text field padding).
-7. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
+2. View ▸ Use Groups (Kind, Date Last Opened, Size).
+3. New windows show: Other… (any folder).
+4. Gallery view.
+5. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
    (GVfs-free SMB/SFTP mounts).
-8. Content search (file contents, not only names).
+6. Content search (file contents, not only names).

@@ -1,7 +1,7 @@
 use accesskit::{ActionRequest, Node, Role};
 
 use super::control::paint_field;
-use super::editor::Editor;
+use super::editor::{Editor, ParagraphAttributes, RichText, TextAttributes};
 use super::{Context, Cursor, DragAction, Event, Menu, Parts, ScrollState, Size, Widget, WidgetId};
 use bande_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, Typeface};
 
@@ -92,6 +92,31 @@ impl TextView {
     pub fn insert(&mut self, text: &str) {
         self.editor.insert(text);
         self.editor.reveal_selection();
+    }
+
+    pub fn rich_text(&self) -> RichText {
+        self.editor.rich_text()
+    }
+
+    pub fn set_rich_text(&mut self, rich: &RichText) {
+        self.editor.set_rich_text(rich);
+        self.editor.select(0..0);
+    }
+
+    pub fn attributes(&self) -> TextAttributes {
+        self.editor.typing_attributes()
+    }
+
+    pub fn paragraph_attributes(&self) -> ParagraphAttributes {
+        self.editor.paragraph_attributes()
+    }
+
+    pub fn change_attributes(&mut self, change: impl Fn(&mut TextAttributes)) {
+        self.editor.set_attributes(&change);
+    }
+
+    pub fn change_paragraphs(&mut self, change: impl Fn(&mut ParagraphAttributes)) {
+        self.editor.set_paragraph_attributes(&change);
     }
 
     pub fn set_text(&mut self, text: &str) {

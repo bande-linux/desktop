@@ -68,6 +68,7 @@ pub use stepper::{STEPPER_SIZE, Stepper};
 pub use surface_view::{RELEASE_CHORD, SurfaceInput, SurfaceView};
 pub use table::{Cell, Column, ROW_HEIGHT, Row, Sort, Table, access_rect, group_heading};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
+pub use editor::{Alignment, ListMarker, ParagraphAttributes, RichText, TextAttributes};
 pub use text_view::TextView;
 pub use toggle::{SWITCH_SIZE, Toggle};
 pub use tooltip::TOOLTIP_DELAY;

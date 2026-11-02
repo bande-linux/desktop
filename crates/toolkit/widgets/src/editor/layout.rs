@@ -1,11 +1,20 @@
 use std::borrow::Cow;
 use std::ops::Range;
 
-use bande_graphics::{Color, Paragraph, Point, Rect, TextStyle, TextSystem};
-use parley::{Affinity, Alignment, AlignmentOptions, Cursor, Layout, Selection as Span};
+use std::borrow::Cow as Borrowed;
 
+use bande_graphics::{Color, Paragraph, Point, Rect, TextAlign, TextStyle, TextSystem};
+use parley::{
+    Affinity, AlignmentOptions, Cursor, FontFamily, FontFamilyName, FontStyle, FontWeight,
+    GenericFamily, Layout, Selection as Span, StyleProperty,
+};
+
+use super::rich::{Alignment, ListMarker, ParagraphAttributes, Runs};
 use super::selection::{Position, Selection};
 use super::{CARET_WIDTH, Editor, Preedit, Unit};
+
+const LIST_INDENT: f32 = 28.0;
+const BULLETS: [&str; 3] = ["•", "◦", "▪"];
 
 const AVERAGE_ADVANCE: f32 = 0.55;
 const KEPT_LAYOUTS: usize = 1024;
@@ -13,18 +22,32 @@ const KEPT_LAYOUTS: usize = 1024;
 pub(super) struct Block {
     pub(super) text: String,
     pub(super) layout: Option<Paragraph>,
+    pub(super) runs: Runs,
+    pub(super) paragraph: ParagraphAttributes,
+    pub(super) marker: Option<Paragraph>,
     height: Option<f32>,
     used: u64,
 }
 
 impl Block {
     pub(super) fn new(text: String) -> Self {
+        Self::styled(text, Vec::new(), ParagraphAttributes::default())
+    }
+
+    pub(super) fn styled(text: String, runs: Runs, paragraph: ParagraphAttributes) -> Self {
         Self {
             text,
             layout: None,
+            runs,
+            paragraph,
+            marker: None,
             height: None,
             used: 0,
         }
+    }
+
+    pub(super) fn forget_height(&mut self) {
+        self.height = None;
     }
 }
 
@@ -85,6 +108,49 @@ impl Editor {
         }
     }
 
+    pub(super) fn renumber(&mut self, from: usize) {
+        let mut paragraph = from;
+        while self
+            .blocks
+            .get(paragraph)
+            .is_some_and(|block| block.paragraph.list.is_some() || paragraph == from)
+        {
+            self.invalidate_paragraph(paragraph);
+            paragraph += 1;
+        }
+    }
+
+    fn number(&self, paragraph: usize) -> usize {
+        let level = self.blocks[paragraph].paragraph.level;
+        let mut number = 1;
+        for block in self.blocks[..paragraph].iter().rev() {
+            match (block.paragraph.list, block.paragraph.level) {
+                (Some(_), deeper) if deeper > level => continue,
+                (Some(ListMarker::Number), same) if same == level => number += 1,
+                _ => break,
+            }
+        }
+        number
+    }
+
+    fn marker(&self, text: &mut TextSystem, paragraph: usize) -> Option<Paragraph> {
+        let attributes = self.blocks[paragraph].paragraph;
+        let label = match attributes.list? {
+            ListMarker::Bullet => BULLETS[usize::from(attributes.level) % BULLETS.len()].to_owned(),
+            ListMarker::Number => format!("{}.", self.number(paragraph)),
+        };
+        let style = TextStyle::new(self.font_size, self.color);
+        let typeface = self.typeface.unwrap_or(style.typeface);
+        Some(text.paragraph(&label, TextStyle { typeface, ..style }, None, TextAlign::Start))
+    }
+
+    pub(super) fn left(&self, paragraph: usize) -> f32 {
+        self.blocks.get(paragraph).map_or(0.0, |block| match block.paragraph.list {
+            Some(_) => LIST_INDENT * f32::from(block.paragraph.level.min(8) + 1),
+            None => LIST_INDENT * f32::from(block.paragraph.level.min(8)),
+        })
+    }
+
     fn build(&self, text: &mut TextSystem, paragraph: usize) -> Paragraph {
         let content = self.layout_text(paragraph);
         let (fonts, layouts) = text.contexts();
@@ -92,9 +158,48 @@ impl Editor {
         let style = TextStyle::new(self.font_size, self.color);
         let typeface = self.typeface.unwrap_or(style.typeface);
         TextStyle { typeface, ..style }.apply(&mut builder);
+        let block = &self.blocks[paragraph];
+        let mut at = 0;
+        for (length, attributes) in &block.runs {
+            let start = self.layout_index(Position::new(paragraph, at));
+            at += length;
+            let range = start..self.layout_index(Position::new(paragraph, at));
+            if attributes.bold {
+                builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
+            }
+            if attributes.italic {
+                builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
+            }
+            if attributes.underline {
+                builder.push(StyleProperty::Underline(true), range.clone());
+            }
+            if attributes.strikethrough {
+                builder.push(StyleProperty::Strikethrough(true), range.clone());
+            }
+            if let Some(size) = attributes.size {
+                builder.push(StyleProperty::FontSize(size), range.clone());
+            }
+            if let Some(color) = attributes.color {
+                builder.push(StyleProperty::Brush(color), range.clone());
+            }
+            if let Some(family) = &attributes.family {
+                let families = vec![
+                    FontFamilyName::Named(Borrowed::Owned(family.to_string())),
+                    FontFamilyName::Generic(GenericFamily::SansSerif),
+                ];
+                builder.push(StyleProperty::FontFamily(FontFamily::List(families.into())), range);
+            }
+        }
         let mut layout: Layout<Color> = builder.build(&content);
-        layout.break_all_lines(self.width);
-        layout.align(Alignment::Start, AlignmentOptions::default());
+        let left = self.left(paragraph);
+        layout.break_all_lines(self.width.map(|width| (width - left).max(self.font_size)));
+        let alignment = match block.paragraph.alignment {
+            Alignment::Start => parley::Alignment::Start,
+            Alignment::Center => parley::Alignment::Center,
+            Alignment::End => parley::Alignment::End,
+            Alignment::Justify => parley::Alignment::Justify,
+        };
+        layout.align(alignment, AlignmentOptions::default());
         Paragraph::from_layout(layout)
     }
 
@@ -102,6 +207,7 @@ impl Editor {
         let frame = self.frame;
         if self.blocks[paragraph].layout.is_none() {
             let built = self.build(text, paragraph);
+            let marker = self.marker(text, paragraph);
             let height = built.height();
             if paragraph == 0 && self.blocks[0].text.is_empty() && self.preedit.is_none() {
                 self.line_height = height;
@@ -112,6 +218,7 @@ impl Editor {
             }
             block.height = Some(height);
             block.layout = Some(built);
+            block.marker = marker;
             self.laid_out += 1;
         }
         self.blocks[paragraph].used = frame;
@@ -237,7 +344,8 @@ impl Editor {
         };
         let caret =
             bounds(Cursor::from_byte_index(layout, index, affinity).geometry(layout, CARET_WIDTH));
-        Rect::new(caret.x, caret.y + top, caret.width, caret.height)
+        let left = self.left(focus.paragraph);
+        Rect::new(caret.x + left, caret.y + top, caret.width, caret.height)
     }
 
     pub(crate) fn caret_rect(&mut self, text: &mut TextSystem) -> Rect {
@@ -268,7 +376,8 @@ impl Editor {
                 }
             });
         }
-        Rect::new(area.x, area.y + top, area.width, area.height)
+        let left = self.left(focus.paragraph);
+        Rect::new(area.x + left, area.y + top, area.width, area.height)
     }
 
     pub(super) fn position_at(
@@ -287,7 +396,7 @@ impl Editor {
             return (Position::new(paragraph, 0), Affinity::Downstream);
         };
         let y = (point.y - top).clamp(0.0, (layout.height() - 1.0).max(0.0));
-        let cursor = Cursor::from_point(layout, point.x, y);
+        let cursor = Cursor::from_point(layout, point.x - self.left(paragraph), y);
         (Position::new(paragraph, cursor.index()), cursor.affinity())
     }
 
@@ -306,7 +415,8 @@ impl Editor {
                     return (at, at);
                 };
                 let y = (point.y - top).clamp(0.0, (layout.height() - 1.0).max(0.0));
-                let word = Span::word_from_point(layout, point.x, y).text_range();
+                let x = point.x - self.left(at.paragraph);
+                let word = Span::word_from_point(layout, x, y).text_range();
                 (
                     Position::new(at.paragraph, word.start),
                     Position::new(at.paragraph, word.end),

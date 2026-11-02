@@ -1,6 +1,7 @@
 mod history;
 mod keys;
 mod layout;
+mod rich;
 mod selection;
 
 use std::borrow::Cow;
@@ -12,8 +13,10 @@ use accesskit::{
 use bande_graphics::{Color, Item, Paint, Point, Rect, Shape, TextSystem, Typeface};
 use parley::{Affinity, Cursor, Selection as Span};
 
-use self::history::{Edit, EditKind, History};
+use self::history::{Edit, EditKind, History, Restyle};
 use self::layout::{Block, bounds};
+pub use self::rich::{Alignment, ListMarker, ParagraphAttributes, RichText, TextAttributes};
+use self::rich::{Fragment, attributes_at, cut, joined, normalize};
 use self::selection::{Position, Selection};
 use super::{
     ClipboardRequest, Context, DragAction, Event, Key, Menu, MenuItem, Modifiers, PointerButton,
@@ -26,6 +29,40 @@ const LINE_HEIGHT_RATIO: f32 = 1.21;
 const UNDERLINE: f32 = 1.0;
 const CLAUSE_UNDERLINE: f32 = 2.0;
 const DRAG_START: f32 = 4.0;
+const MARKER_GAP: f32 = 6.0;
+
+fn decorations(layout: &parley::Layout<Color>, origin: Point, items: &mut Vec<Item>) {
+    for line in layout.lines() {
+        for item in line.items() {
+            let parley::PositionedLayoutItem::GlyphRun(run) = item else {
+                continue;
+            };
+            let style = run.style();
+            let metrics = run.run().font_metrics();
+            let lines = [
+                style.underline.as_ref().map(|decoration| {
+                    (decoration, metrics.underline_offset, metrics.underline_size)
+                }),
+                style.strikethrough.as_ref().map(|decoration| {
+                    (decoration, metrics.strikethrough_offset, metrics.strikethrough_size)
+                }),
+            ];
+            for (decoration, offset, size) in lines.into_iter().flatten() {
+                let size = decoration.size.unwrap_or(size).max(1.0);
+                let offset = decoration.offset.unwrap_or(offset);
+                items.push(Item::Fill {
+                    shape: Shape::rect(Rect::new(
+                        origin.x + run.offset(),
+                        origin.y + run.baseline() - offset - size / 2.0,
+                        run.advance(),
+                        size,
+                    )),
+                    paint: Paint::Solid(decoration.brush),
+                });
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 struct Preedit {
@@ -85,6 +122,7 @@ pub(crate) struct Editor {
     laid_out: usize,
     revision: u64,
     offered: Option<(u64, Range<usize>)>,
+    typing: Option<(Position, TextAttributes)>,
 }
 
 fn normalized(text: &str) -> Cow<'_, str> {
@@ -123,6 +161,7 @@ impl Editor {
             laid_out: 0,
             revision: 0,
             offered: None,
+            typing: None,
         };
         editor.set_text(text);
         editor
@@ -228,6 +267,193 @@ impl Editor {
         !self.selection.is_collapsed()
     }
 
+    pub(crate) fn set_rich_text(&mut self, rich: &RichText) {
+        self.set_text(&rich.text);
+        let lines = rich.line_runs();
+        for ((block, runs), index) in self.blocks.iter_mut().zip(lines).zip(0..) {
+            block.runs = runs;
+            block.paragraph = rich.paragraphs.get(index).copied().unwrap_or_default();
+        }
+        self.invalidate();
+    }
+
+    pub(crate) fn rich_text(&self) -> RichText {
+        let mut rich = RichText {
+            text: self.text(),
+            runs: Vec::new(),
+            paragraphs: Vec::with_capacity(self.blocks.len()),
+        };
+        let mut at = 0;
+        for block in &self.blocks {
+            for (length, attributes) in &block.runs {
+                if *attributes != TextAttributes::default() {
+                    rich.runs.push((at..at + length, attributes.clone()));
+                }
+                at += length;
+            }
+            if block.runs.is_empty() {
+                at += block.text.len();
+            }
+            at += 1;
+            rich.paragraphs.push(block.paragraph);
+        }
+        rich
+    }
+
+    fn attributes_before(&self, at: Position) -> TextAttributes {
+        let block = &self.blocks[at.paragraph];
+        match (at.offset, at.paragraph) {
+            (0, 0) if block.text.is_empty() => TextAttributes::default(),
+            (0, previous) if block.text.is_empty() => {
+                let before = &self.blocks[previous - 1];
+                attributes_at(&before.runs, before.text.len().saturating_sub(1))
+            }
+            (0, _) => attributes_at(&block.runs, 0),
+            (offset, _) => attributes_at(&block.runs, offset - 1),
+        }
+    }
+
+    pub(crate) fn typing_attributes(&self) -> TextAttributes {
+        let start = self.selection.start();
+        match &self.typing {
+            Some((at, attributes)) if *at == start && self.selection.is_collapsed() => {
+                attributes.clone()
+            }
+            _ => match self.selection.is_collapsed() {
+                true => self.attributes_before(start),
+                false => attributes_at(&self.blocks[start.paragraph].runs, start.offset),
+            },
+        }
+    }
+
+    pub(crate) fn paragraph_attributes(&self) -> ParagraphAttributes {
+        self.blocks[self.selection.start().paragraph].paragraph
+    }
+
+    pub(crate) fn set_attributes(&mut self, change: &dyn Fn(&mut TextAttributes)) {
+        let (start, end) = (self.selection.start(), self.selection.end());
+        if start == end {
+            let mut attributes = self.typing_attributes();
+            change(&mut attributes);
+            self.typing = Some((start, attributes));
+            return;
+        }
+        let removed = self.slice_fragment(start, end);
+        let mut inserted = removed.clone();
+        let filled = match inserted.runs.is_empty() {
+            true => vec![(inserted.text.len(), TextAttributes::default())],
+            false => std::mem::take(&mut inserted.runs),
+        };
+        inserted.runs = normalize(
+            filled
+                .into_iter()
+                .map(|(length, mut attributes)| {
+                    change(&mut attributes);
+                    (length, attributes)
+                })
+                .collect(),
+        );
+        if inserted == removed {
+            return;
+        }
+        let before = self.selection;
+        self.history.open = false;
+        self.splice(start, end, &inserted);
+        self.selection = before;
+        self.history.record(Edit {
+            start,
+            removed,
+            inserted,
+            before,
+            kind: EditKind::Replacing,
+            restyle: None,
+        });
+        self.history.open = false;
+    }
+
+    pub(crate) fn set_paragraph_attributes(&mut self, change: &dyn Fn(&mut ParagraphAttributes)) {
+        let (first, last) = (self.selection.start().paragraph, self.selection.end().paragraph);
+        let before: Vec<ParagraphAttributes> = self.blocks[first..=last]
+            .iter()
+            .map(|block| block.paragraph)
+            .collect();
+        let after: Vec<ParagraphAttributes> = before
+            .iter()
+            .map(|attributes| {
+                let mut attributes = *attributes;
+                change(&mut attributes);
+                attributes
+            })
+            .collect();
+        if before == after {
+            return;
+        }
+        let restyle = Restyle {
+            first,
+            before,
+            after,
+        };
+        self.restyle(&restyle, true);
+        self.history.open = false;
+        self.history.record(Edit {
+            start: self.selection.start(),
+            removed: Fragment::default(),
+            inserted: Fragment::default(),
+            before: self.selection,
+            kind: EditKind::Replacing,
+            restyle: Some(restyle),
+        });
+        self.history.open = false;
+    }
+
+    pub(super) fn restyle(&mut self, restyle: &Restyle, forward: bool) {
+        let attributes = match forward {
+            true => &restyle.after,
+            false => &restyle.before,
+        };
+        for (offset, attributes) in attributes.iter().enumerate() {
+            if let Some(block) = self.blocks.get_mut(restyle.first + offset) {
+                block.paragraph = *attributes;
+            }
+            self.invalidate_paragraph(restyle.first + offset);
+            if let Some(block) = self.blocks.get_mut(restyle.first + offset) {
+                block.forget_height();
+            }
+        }
+        self.renumber(restyle.first + attributes.len());
+        self.tops_stale = true;
+        self.revision += 1;
+    }
+
+    fn slice_fragment(&self, start: Position, end: Position) -> Fragment {
+        let mut fragment = Fragment::default();
+        for paragraph in start.paragraph..=end.paragraph {
+            let block = &self.blocks[paragraph];
+            let from = match paragraph == start.paragraph {
+                true => start.offset,
+                false => 0,
+            };
+            let to = match paragraph == end.paragraph {
+                true => end.offset,
+                false => block.text.len(),
+            };
+            if paragraph > start.paragraph {
+                let newline = attributes_at(&block.runs, 0);
+                fragment.append(Fragment {
+                    text: "\n".to_owned(),
+                    runs: normalize(vec![(1, newline)]),
+                    breaks: vec![block.paragraph],
+                });
+            }
+            fragment.append(Fragment {
+                text: block.text[from..to].to_owned(),
+                runs: normalize(cut(&block.runs, from..to)),
+                breaks: Vec::new(),
+            });
+        }
+        fragment
+    }
+
     fn slice(&self, start: Position, end: Position) -> String {
         if start.paragraph == end.paragraph {
             return self.blocks[start.paragraph].text[start.offset..end.offset].to_owned();
@@ -242,41 +468,78 @@ impl Editor {
         text
     }
 
-    fn splice(&mut self, start: Position, end: Position, text: &str) -> Position {
-        let tail = self.blocks[end.paragraph].text[end.offset..].to_owned();
-        let head = &self.blocks[start.paragraph].text[..start.offset];
-        let mut lines = text.split('\n');
-        let mut texts = vec![format!("{head}{}", lines.next().unwrap_or_default())];
-        texts.extend(lines.map(str::to_owned));
-        let last = texts.len() - 1;
-        let end_position = Position::new(start.paragraph + last, texts[last].len());
-        texts[last].push_str(&tail);
-        let removed = self.blocks.splice(
-            start.paragraph..=end.paragraph,
-            texts.into_iter().map(Block::new),
+    fn splice(&mut self, start: Position, end: Position, fragment: &Fragment) -> Position {
+        let paragraph = self.blocks[start.paragraph].paragraph;
+        let (head, head_runs) = {
+            let block = &self.blocks[start.paragraph];
+            (
+                block.text[..start.offset].to_owned(),
+                cut(&block.runs, 0..start.offset),
+            )
+        };
+        let (tail, tail_runs) = {
+            let block = &self.blocks[end.paragraph];
+            (
+                block.text[end.offset..].to_owned(),
+                cut(&block.runs, end.offset..block.text.len()),
+            )
+        };
+        let mut blocks: Vec<Block> = fragment
+            .lines()
+            .enumerate()
+            .map(|(index, (line, runs))| {
+                let paragraph = match index {
+                    0 => paragraph,
+                    _ => fragment.breaks.get(index - 1).copied().unwrap_or(paragraph),
+                };
+                Block::styled(line.to_owned(), runs, paragraph)
+            })
+            .collect();
+        let last = blocks.len() - 1;
+        let first = &mut blocks[0];
+        first.runs = joined(normalize(head_runs), head.len(), std::mem::take(&mut first.runs), first.text.len());
+        first.text.insert_str(0, &head);
+        let last_block = &mut blocks[last];
+        let end_position = Position::new(start.paragraph + last, last_block.text.len());
+        last_block.runs = joined(
+            std::mem::take(&mut last_block.runs),
+            last_block.text.len(),
+            normalize(tail_runs),
+            tail.len(),
         );
+        last_block.text.push_str(&tail);
+        let removed = self.blocks.splice(start.paragraph..=end.paragraph, blocks);
         let dropped = removed.filter(|block| block.layout.is_some()).count();
         self.laid_out -= dropped;
         self.tops_stale = true;
         self.revision += 1;
+        if self.blocks.get(end_position.paragraph + 1).is_some_and(|block| block.paragraph.list.is_some()) {
+            self.renumber(end_position.paragraph + 1);
+        }
         end_position
     }
 
     fn replace(&mut self, start: Position, end: Position, text: &str, kind: EditKind) {
         let before = self.selection;
-        let removed = self.slice(start, end);
-        if removed.is_empty() && text.is_empty() {
+        if start == end && text.is_empty() {
             return;
         }
-        let caret = self.splice(start, end, text);
+        let inserted = Fragment::plain(
+            text,
+            self.typing_attributes(),
+            self.blocks[start.paragraph].paragraph,
+        );
+        let removed = self.slice_fragment(start, end);
+        let caret = self.splice(start, end, &inserted);
         self.selection = Selection::caret(caret, Affinity::Downstream);
         self.goal_x = None;
         self.history.record(Edit {
             start,
             removed,
-            inserted: text.to_owned(),
+            inserted,
             before,
             kind,
+            restyle: None,
         });
     }
 
@@ -815,8 +1078,10 @@ impl Editor {
             };
             let layout = text.layout();
             let top = origin.y + self.top(paragraph);
-            let at =
-                |rect: Rect| Rect::new(origin.x + rect.x, top + rect.y, rect.width, rect.height);
+            let left = self.left(paragraph);
+            let at = |rect: Rect| {
+                Rect::new(origin.x + left + rect.x, top + rect.y, rect.width, rect.height)
+            };
             if start.paragraph <= paragraph && paragraph <= end.paragraph && start != end {
                 let from = match paragraph == start.paragraph {
                     true => self.layout_index(start),
@@ -841,7 +1106,9 @@ impl Editor {
                         Cursor::from_byte_index(layout, layout.text_len(), Affinity::Upstream)
                             .geometry(layout, 0.0),
                     );
-                    let right = self.width.unwrap_or(edge.x + self.font_size * 0.3);
+                    let right = self
+                        .width
+                        .map_or(edge.x + self.font_size * 0.3, |width| width - left);
                     items.push(Item::Fill {
                         shape: Shape::rect(at(Rect::new(
                             edge.x,
@@ -853,10 +1120,28 @@ impl Editor {
                     });
                 }
             }
+            if let Some(marker) = &self.blocks[paragraph].marker {
+                items.push(Item::Text {
+                    origin: Point::new(
+                        origin.x + left - MARKER_GAP - marker.width(),
+                        top + layout
+                            .lines()
+                            .next()
+                            .map_or(0.0, |line| line.metrics().baseline)
+                            - marker
+                                .layout()
+                                .lines()
+                                .next()
+                                .map_or(0.0, |line| line.metrics().baseline),
+                    ),
+                    paragraph: marker.clone(),
+                });
+            }
             items.push(Item::Text {
-                origin: Point::new(origin.x, top),
+                origin: Point::new(origin.x + left, top),
                 paragraph: text.clone(),
             });
+            decorations(layout, Point::new(origin.x + left, top), items);
             if let Some(preedit) = &self.preedit
                 && self.caret_paragraph() == Some(paragraph)
             {
@@ -920,7 +1205,7 @@ impl Editor {
             bounds(Cursor::from_byte_index(layout, index, affinity).geometry(layout, CARET_WIDTH));
         Some(Item::Fill {
             shape: Shape::rect(Rect::new(
-                origin.x + caret.x,
+                origin.x + self.left(paragraph) + caret.x,
                 origin.y + self.top(paragraph) + caret.y,
                 CARET_WIDTH,
                 caret.height,
@@ -936,6 +1221,7 @@ impl Editor {
                 continue;
             };
             let top = self.top(paragraph);
+            let left = self.left(paragraph);
             let layout = text.layout();
             let count = layout.len();
             let length = self.layout_text(paragraph).len();
@@ -946,7 +1232,7 @@ impl Editor {
                     paragraph,
                     range: range.start.min(length)..range.end.min(length),
                     rect: Rect::new(
-                        metrics.offset,
+                        left + metrics.offset,
                         top + metrics.block_min_coord,
                         metrics.advance,
                         metrics.block_max_coord - metrics.block_min_coord,

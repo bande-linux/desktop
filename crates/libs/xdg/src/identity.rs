@@ -65,6 +65,20 @@ pub fn app_name(entries: &[DesktopEntry], app_id: &str) -> String {
     )
 }
 
+pub fn app_for_identity<'a>(
+    entries: &'a [DesktopEntry],
+    identity: &str,
+) -> Option<&'a DesktopEntry> {
+    if let Some(app_id) = identity.strip_prefix("flatpak:") {
+        return find_app(entries, app_id);
+    }
+    let path = Path::new(identity);
+    let executable = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    entries
+        .iter()
+        .find(|entry| entry.executable().as_ref() == Some(&executable))
+}
+
 pub fn running_app<'a>(
     entries: &[DesktopEntry],
     running: &'a [String],

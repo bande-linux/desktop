@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::ffi::OsString;
 use std::io;
 use std::path::Path;
 use std::process::Stdio;
@@ -49,19 +48,18 @@ pub struct Request {
 }
 
 impl Request {
-    fn arguments(&self) -> Vec<OsString> {
-        let mut arguments = vec![
-            OsString::from(self.kind.flag()),
-            OsString::from("--keychain"),
-            OsString::from(&self.keychain),
-        ];
+    fn header(&self) -> String {
+        let line =
+            |key: &str, value: &str| format!("{key}\t{}\n", value.replace(['\n', '\t'], " "));
+        let mut header = line("keychain", &self.keychain);
         if let Some(app) = &self.app {
-            arguments.extend([OsString::from("--app"), OsString::from(app)]);
+            header.push_str(&line("app", app));
         }
         for item in &self.items {
-            arguments.extend([OsString::from("--item"), OsString::from(item)]);
+            header.push_str(&line("item", item));
         }
-        arguments
+        header.push('\n');
+        header
     }
 }
 
@@ -110,15 +108,17 @@ impl Dialog {
             command.envs(session_environment(connection).await);
         }
         let mut child = command
-            .args(request.arguments())
+            .arg(request.kind.flag())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .kill_on_drop(true)
             .spawn()?;
-        let input = child
+        let mut input = child
             .stdin
             .take()
             .ok_or_else(|| io::Error::other("the prompt has no input"))?;
+        input.write_all(request.header().as_bytes()).await?;
+        input.flush().await?;
         let output = child
             .stdout
             .take()

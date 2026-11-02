@@ -1027,12 +1027,15 @@ dependencies = [
 name = "bande-secrets"
 version = "0.1.2"
 dependencies = [
+ "accesskit",
  "async-executor",
  "async-io",
  "async-lock",
  "async-process",
+ "bande-l10n",
  "bande-log",
  "bande-test-bus",
+ "bande-toolkit",
  "bande-xdg",
  "futures-lite",
  "oo7",

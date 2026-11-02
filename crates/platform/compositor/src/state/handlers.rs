@@ -256,7 +256,14 @@ impl XdgShellHandler for State {
     }
 
     fn maximize_request(&mut self, surface: ToplevelSurface) {
-        self.maximize(surface.wl_surface());
+        match self.window_index(surface.wl_surface()) {
+            Some(index) if self.windows[index].fixed_size() => {
+                if surface.is_initial_configure_sent() {
+                    surface.send_configure();
+                }
+            }
+            _ => self.maximize(surface.wl_surface()),
+        }
     }
 
     fn unmaximize_request(&mut self, surface: ToplevelSurface) {

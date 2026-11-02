@@ -61,6 +61,7 @@ struct Look {
     hovered: Option<Option<WindowControl>>,
     pressed: Option<WindowControl>,
     zoomed: bool,
+    zoomable: bool,
     alternate: bool,
     menu: Option<bool>,
 }
@@ -240,7 +241,9 @@ impl State {
         let on_zoom = self
             .windows
             .iter()
-            .find(|window| window.frame.hovered == Some(Some(WindowControl::Zoom)))
+            .find(|window| {
+                window.frame.hovered == Some(Some(WindowControl::Zoom)) && !window.fixed_size()
+            })
             .map(|window| window.surface().clone());
         self.rest_on_zoom(on_zoom);
         let previous = std::mem::replace(&mut self.decorations.pointed, pointed.clone());
@@ -288,7 +291,11 @@ impl State {
                     self.windows[index].frame.pressed = Some(control);
                     self.needs_redraw = true;
                 }
-                if control == WindowControl::Zoom {
+                if control == WindowControl::Zoom
+                    && self
+                        .window_index(&surface)
+                        .is_some_and(|index| !self.windows[index].fixed_size())
+                {
                     self.press_zoom(&surface);
                 }
                 true
@@ -344,6 +351,7 @@ impl State {
         match control {
             Some(WindowControl::Close) => self.windows[index].toplevel.send_close(),
             Some(WindowControl::Minimize) => self.minimize(&surface),
+            Some(WindowControl::Zoom) if self.windows[index].fixed_size() => {}
             Some(WindowControl::Zoom) if self.alternate_held() => self.fullscreen(&surface),
             Some(WindowControl::Zoom) => self.toggle_zoom(&surface),
             Some(WindowControl::Menu) | None => {}
@@ -401,6 +409,7 @@ impl State {
                 hovered: window.frame.hovered,
                 pressed: window.frame.pressed,
                 zoomed: window.has_state(xdg_toplevel::State::Maximized),
+                zoomable: !window.fixed_size(),
                 alternate,
                 menu: menu_address(window.surface()).map(|_| window.frame.menus_open),
             };
@@ -472,6 +481,7 @@ fn paint_title_bar(
             },
             pressed: look.pressed,
             zoomed: look.zoomed,
+            zoomable: look.zoomable,
             alternate: look.alternate && look.active,
             menu: look.menu.map(|open| MenuButton {
                 hover: if look.hovered == Some(Some(WindowControl::Menu)) {

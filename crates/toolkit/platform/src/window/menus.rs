@@ -27,7 +27,7 @@ impl Window {
             place("place-bottom-left"),
             place("place-bottom-right"),
             MenuItem::separator(),
-            place("place-fill").enabled(!toplevel.maximized),
+            place("place-fill").enabled(!toplevel.maximized && self.is_resizable()),
         ];
         if self.can_place() && self.state.outputs.len() > 1 {
             items.push(place("place-next-display").shortcut("Shift+Super+Right"));
@@ -69,7 +69,7 @@ impl Window {
                 &L10N.tr(if toplevel.maximized { "unzoom" } else { "zoom" }),
                 "zoom",
             )
-            .enabled(!toplevel.fullscreen),
+            .enabled(!toplevel.fullscreen && self.is_resizable()),
             MenuItem::new(
                 &L10N.tr(if toplevel.fullscreen {
                     "exit-full-screen"

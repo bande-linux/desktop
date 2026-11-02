@@ -357,7 +357,12 @@ impl State {
     ) {
         let now = Duration::from_millis(u64::from(time));
         let screen = self.pointer_screen();
-        let candidate = snap_at(pointer, self.usable_area(screen)).map(|snap| (screen, snap));
+        let fixed = self
+            .window_index(surface)
+            .is_some_and(|index| self.windows[index].fixed_size());
+        let candidate = snap_at(pointer, self.usable_area(screen))
+            .filter(|snap| !(fixed && matches!(snap, Snap::Zoom)))
+            .map(|snap| (screen, snap));
         let hold = match candidate {
             Some(target) if self.borders_another_screen(target, pointer) => SHARED_EDGE_HOLD,
             _ => Duration::ZERO,

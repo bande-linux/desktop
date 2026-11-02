@@ -316,7 +316,11 @@ impl Chrome {
             let mut button = Node::new(Role::Button);
             button.set_label(control_label(control));
             button.set_bounds(bounds(control.area(frame.title)));
-            button.add_action(Action::Click);
+            if control == Control::Zoom && self.fixed {
+                button.set_disabled();
+            } else {
+                button.add_action(Action::Click);
+            }
             if control == Control::Menu {
                 button.set_has_popup(accesskit::HasPopup::Menu);
                 button.set_expanded(self.menu_open);
@@ -345,7 +349,7 @@ impl Chrome {
             return false;
         }
         self.hovered = hovered;
-        self.zoom_rest = (hovered == Some(Some(Control::Zoom))).then_some(now);
+        self.zoom_rest = (hovered == Some(Some(Control::Zoom)) && !self.fixed).then_some(now);
         let level = |on: bool| if on { 1.0 } else { 0.0 };
         let on_menu = hovered == Some(Some(Control::Menu));
         self.hover.animate_at(
@@ -478,6 +482,7 @@ impl Chrome {
                 close_hover,
                 pressed: self.pressed.filter(|_| self.pressed_inside),
                 zoomed: look.zoomed,
+                zoomable: !self.fixed,
                 alternate: self.alternate && look.active,
                 menu: frame.menu_button().map(|_| MenuButton {
                     hover: menu_hover,

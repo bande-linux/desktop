@@ -306,6 +306,13 @@ impl Page {
             fonts,
             &|source| images.size(source),
         );
+        let mut displayed: Vec<(Arc<str>, f32, f32)> = Vec::new();
+        displayed_images(&self.fragments.root, &mut displayed);
+        for (source, width, height) in displayed {
+            self.images
+                .fit(&source, width * DEVICE_SCALE, height * DEVICE_SCALE);
+        }
+        let images = &self.images;
         self.display_list = Arc::new(DisplayList::build(
             &self.fragments,
             fonts,
@@ -572,6 +579,26 @@ fn rebase_urls(rules: &mut [CssRule], base: &str) {
             | CssRule::Container(_, _, rules)
             | CssRule::Layer(_, rules) => rebase_urls(rules, base),
             _ => {}
+        }
+    }
+}
+
+const DEVICE_SCALE: f32 = 2.0;
+
+fn displayed_images(fragment: &BoxFragment, found: &mut Vec<(Arc<str>, f32, f32)>) {
+    if let Some(source) = fragment.image() {
+        let (width, height) = (fragment.rect.width, fragment.rect.height);
+        match found.iter_mut().find(|(known, _, _)| known == source) {
+            Some(entry) => {
+                entry.1 = entry.1.max(width);
+                entry.2 = entry.2.max(height);
+            }
+            None => found.push((source.clone(), width, height)),
+        }
+    }
+    for child in &fragment.children {
+        if let Fragment::Box(child) = child {
+            displayed_images(child, found);
         }
     }
 }

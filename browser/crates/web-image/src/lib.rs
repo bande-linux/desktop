@@ -5,6 +5,7 @@ use std::sync::Arc;
 pub struct Image {
     pub width: u32,
     pub height: u32,
+    pub natural: (u32, u32),
     pub premultiplied: Arc<[u8]>,
 }
 
@@ -21,7 +22,45 @@ impl Image {
         Image {
             width,
             height,
+            natural: (width, height),
             premultiplied: rgba.into(),
+        }
+    }
+
+    fn scaled(&self, factor: u32) -> Image {
+        let width = (self.width / factor).max(1);
+        let height = (self.height / factor).max(1);
+        let mut pixels = vec![0u8; width as usize * height as usize * 4];
+        let source = &self.premultiplied;
+        let stride = self.width as usize * 4;
+        let count = factor * factor;
+        for y in 0..height as usize {
+            for x in 0..width as usize {
+                let mut sum = [0u32; 4];
+                for dy in 0..factor as usize {
+                    let row = (y * factor as usize + dy) * stride;
+                    for dx in 0..factor as usize {
+                        let at = row + (x * factor as usize + dx) * 4;
+                        if let Some(pixel) = source.get(at..at + 4) {
+                            for (total, channel) in sum.iter_mut().zip(pixel) {
+                                *total += u32::from(*channel);
+                            }
+                        }
+                    }
+                }
+                let at = (y * width as usize + x) * 4;
+                if let Some(target) = pixels.get_mut(at..at + 4) {
+                    for (channel, total) in target.iter_mut().zip(sum) {
+                        *channel = (total / count) as u8;
+                    }
+                }
+            }
+        }
+        Image {
+            width,
+            height,
+            natural: self.natural,
+            premultiplied: pixels.into(),
         }
     }
 
@@ -268,7 +307,22 @@ impl ImageCache {
 
     pub fn size(&self, url: &str) -> Option<(f32, f32)> {
         self.get(url)
-            .map(|image| (image.width as f32, image.height as f32))
+            .map(|image| (image.natural.0 as f32, image.natural.1 as f32))
+    }
+
+    pub fn fit(&mut self, url: &str, width: f32, height: f32) {
+        let Some(entry) = self.entries.iter_mut().find(|entry| &*entry.url == url) else {
+            return;
+        };
+        let Some(image) = &entry.image else {
+            return;
+        };
+        let ratio =
+            (image.width as f32 / width.max(1.0)).min(image.height as f32 / height.max(1.0));
+        let factor = (ratio.floor() as u32).min(64);
+        if factor >= 2 {
+            entry.image = Some(Arc::new(image.scaled(factor)));
+        }
     }
 
     pub fn bytes(&self) -> usize {

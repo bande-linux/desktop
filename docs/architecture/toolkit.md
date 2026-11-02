@@ -181,7 +181,7 @@ writes a hex value, a corner radius or a font name of its own.
   | `SearchField` | `well` fill, radius 8, no outline, magnifier `ink3`, clear button |
   | `ComboBox` | a text field with a single down chevron |
   | `Toggle` (switch) | 36×20 pill, `edge` off, accent on, white 15 pt knob with a small shadow |
-  | `Checkbox` | 16 pt, radius 4, 1.5 pt `ink3` outline; on: accent with a square-capped check |
+  | `Checkbox` | 16 pt, radius 4, 1.5 pt `ink3` outline; on: accent with a square-capped check; disabled: 45 % opacity, no input, insensitive to accessibility |
   | `RadioGroup` | 16 pt circles; on: accent with a 5 pt square centre |
   | `SegmentedControl` | `well` track radius 8, a raised chip radius 6 (`raised`: `overlay` light, `edge` dark) that glides on `quick`; selected label 600 `ink`; `set_selected(cx, index)` from code; `SegmentedControl::symbols` shows 16 pt symbols (`ink2`, `ink` when selected) in 32 pt segments, each with its accessible name; `fill_equally()` splits the placed frame into equal segments (a toolbar slot) |
   | `PopUpButton` | `well` fill, single down chevron, the menu opens with the current choice over the button |

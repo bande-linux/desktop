@@ -22,12 +22,14 @@ use zbus::zvariant::{OwnedValue, Value};
 use zbus::{MatchRule, message};
 
 use crate::L10N;
+use crate::apps::Apps;
 use crate::entry::{
     DesktopAction, DesktopEntry, Locale, applications, current_desktops, data_dirs, find_executable,
 };
 use crate::identity::{app_name, find_app};
+use crate::mimeapps::config_dirs;
 use crate::units::{scope_name, unit_app_ids, unit_of_object_path};
-use crate::uri::file_uri;
+use crate::uri::{file_uri, path_from_file_uri};
 
 pub const TERMINAL: &str = "bande-terminal";
 pub const ACTIVATION_TOKEN: &str = "XDG_ACTIVATION_TOKEN";
@@ -128,6 +130,17 @@ impl DesktopEntry {
 
     pub fn action_command(&self, action: &DesktopAction) -> Result<Vec<String>, ExecError> {
         self.expand(&split(&action.exec)?, &[])
+    }
+
+    pub fn command_for_uri(&self, uri: &str) -> Result<Vec<String>, ExecError> {
+        let arguments: Vec<(String, bool)> = split(&self.exec)?
+            .into_iter()
+            .map(|(argument, quoted)| match argument.as_str() {
+                "%u" | "%U" if !quoted => (uri.to_owned(), true),
+                _ => (argument, quoted),
+            })
+            .collect();
+        self.expand(&arguments, &[])
     }
 
     pub fn opens_files(&self) -> bool {
@@ -244,6 +257,47 @@ pub fn launch_with(
         start(entry, &command, activation_token)?;
     }
     Ok(())
+}
+
+#[derive(Debug)]
+pub enum OpenError {
+    NoApp(String),
+    Launch(LaunchError),
+}
+
+impl fmt::Display for OpenError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoApp(kind) => write!(f, "no app opens {kind}"),
+            Self::Launch(error) => write!(f, "{error}"),
+        }
+    }
+}
+
+impl std::error::Error for OpenError {}
+
+pub fn open(target: &str, activation_token: Option<&str>) -> Result<(), OpenError> {
+    let apps = Apps::load(data_dirs(), &config_dirs());
+    let path = path_from_file_uri(target)
+        .or_else(|| target.starts_with('/').then(|| PathBuf::from(target)));
+    let kind = match &path {
+        Some(path) => apps.mime_for(path),
+        None => {
+            let scheme = target.split_once(':').map_or(target, |(scheme, _)| scheme);
+            format!("x-scheme-handler/{}", scheme.to_ascii_lowercase())
+        }
+    };
+    let Some(entry) = apps.default_for(&kind) else {
+        return Err(OpenError::NoApp(kind));
+    };
+    match path {
+        Some(path) => launch_with(entry, &[path], activation_token),
+        None => entry
+            .command_for_uri(target)
+            .map_err(LaunchError::Exec)
+            .and_then(|command| start(entry, &command, activation_token).map(drop)),
+    }
+    .map_err(OpenError::Launch)
 }
 
 pub fn launch(entry: &DesktopEntry, activation_token: Option<&str>) -> Result<u32, LaunchError> {

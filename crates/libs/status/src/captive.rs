@@ -199,8 +199,7 @@ pub fn follow_captive_portal(
 }
 
 pub fn open_page(page: &str) {
-    let command = ["xdg-open".to_owned(), page.to_owned()];
-    if let Err(error) = bande_xdg::spawn_detached("", &command, None, None) {
+    if let Err(error) = bande_xdg::open(page, None) {
         tracing::warn!("cannot open the sign-in page: {error}");
     }
 }

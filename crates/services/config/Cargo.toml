@@ -16,13 +16,13 @@ bande-l10n.workspace = true
 bande-log.workspace = true
 bande-notify.workspace = true
 bande-watch.workspace = true
+bande-xdg.workspace = true
 zbus.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, default-dbus-session-bus | dbus-session-bus, init-system-helpers (>= 1.66)"
-recommends = "xdg-utils"
 extended-description = """\
 Serves ~/.config/bande/config.kdl as org.bande.Config on the session \
 bus, applies changes to the file atomically, writes settings back without \

@@ -529,6 +529,7 @@ dependencies = [
  "bande-log",
  "bande-notify",
  "bande-watch",
+ "bande-xdg",
  "kdl",
  "tracing",
  "zbus",

@@ -943,8 +943,7 @@ impl Screenshots {
     fn open_shot(&self, window: &mut Window, path: &Path, video: bool) {
         if video {
             let token = window.activation_token("").ok();
-            let command = ["xdg-open".to_owned(), path.to_string_lossy().into_owned()];
-            if let Err(error) = spawn_detached("", &command, None, token.as_deref()) {
+            if let Err(error) = bande_xdg::open(&path.to_string_lossy(), token.as_deref()) {
                 tracing::warn!("cannot open {}: {error}", path.display());
             }
             return;

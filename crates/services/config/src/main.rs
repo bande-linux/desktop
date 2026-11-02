@@ -1,18 +1,14 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
+use std::process::ExitCode;
 use std::sync::{Arc, Mutex, PoisonError};
-use std::thread;
 
 use bande_config::{ConfigService, ConfigStore, ErrorNotifier, config_path, share_login_picture};
 use zbus::blocking::Connection;
 
 fn open_in_editor(path: &Path) {
-    match Command::new("xdg-open").arg(path).spawn() {
-        Ok(mut editor) => {
-            thread::spawn(move || editor.wait());
-        }
-        Err(error) => tracing::warn!("cannot run xdg-open: {error}"),
+    if let Err(error) = bande_xdg::open(&path.to_string_lossy(), None) {
+        tracing::warn!("cannot open {}: {error}", path.display());
     }
 }
 

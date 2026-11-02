@@ -1921,15 +1921,20 @@ impl FilesView {
         });
     }
 
-    pub(crate) fn hidden_extension<'a>(&self, name: &'a str, folder: bool) -> Option<&'a str> {
+    pub(crate) fn hidden_extension<'a>(
+        &self,
+        name: &'a str,
+        folder: bool,
+        hidden: Option<bool>,
+    ) -> Option<&'a str> {
         match self.show_extensions || folder {
             true => None,
-            false => self.apps.extension(name),
+            false => bande_fs::hidden_extension(name, self.apps.extension(name), hidden),
         }
     }
 
     pub(crate) fn shown_name<'a>(&self, entry: &'a Entry) -> &'a str {
-        let hidden = self.hidden_extension(&entry.name, entry.is_folder());
+        let hidden = self.hidden_extension(&entry.name, entry.is_folder(), entry.extension_hidden);
         &entry.name[..entry.name.len() - hidden.map_or(0, str::len)]
     }
 

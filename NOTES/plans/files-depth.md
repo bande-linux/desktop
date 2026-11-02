@@ -29,7 +29,11 @@ Delete each line when it ships; delete the file when the list is empty.
   status bar and path bar; hidden files; Quick Look with full screen.
 - Names: known extensions hidden unless Settings ▸ Advanced shows them (Files, desktop, file
   chooser), kept on rename, a warning before changing one; batch rename.
-- Get Info inspector with Open With, default app and permissions.
+- Get Info inspector with Name & Extension (rename, extension warning) and a per-file Hide
+  extension, Open With, default app and permissions. The per-file choice is the
+  `user.bande.hide-extension` xattr (`1` hide, `0` show, absent: hide known extensions), or a
+  line in `$XDG_STATE_HOME/bande/hidden-extensions` where the volume has no xattrs; Show all
+  filename extensions overrides it.
 - Getting around: tabs; sidebar with Settings ▸ Show in Sidebar; Recents; search with scopes;
   Go ▸ Recent Folders; new windows on a standard, the last or any chosen folder (Other…); `org.freedesktop.FileManager1`
   (D-Bus activated with `--gapplication-service`) and `bande-files --select <paths>`.
@@ -44,9 +48,8 @@ Delete each line when it ships; delete the file when the list is empty.
 
 ## Open, ranked
 
-1. Get Info: an editable Name & Extension field with a per-file "Hide extension".
-2. View ▸ Use Groups (Kind, Date Last Opened, Size).
-3. Gallery: Finder's preview pane metadata beside it (today the inspector shows it).
-4. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
+1. View ▸ Use Groups (Kind, Date Last Opened, Size).
+2. Gallery: Finder's preview pane metadata beside it (today the inspector shows it).
+3. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
    (GVfs-free SMB/SFTP mounts).
-5. Content search (file contents, not only names).
+4. Content search (file contents, not only names).

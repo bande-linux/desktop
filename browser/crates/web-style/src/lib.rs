@@ -271,6 +271,7 @@ pub struct InheritedStyle {
     pub direction: Direction,
     pub text_align: TextAlign,
     pub list_style_type: ListStyleType,
+    pub list_inside: bool,
     pub border_spacing: (f32, f32),
     pub border_collapse: bool,
     pub decorations: TextDecorations,
@@ -317,9 +318,24 @@ pub struct ResetStyle {
     pub background_image: Option<Arc<str>>,
     pub background: BackgroundLayout,
     pub object_fit: ObjectFit,
-    pub content: Option<Arc<str>>,
+    pub content: Option<Arc<[ContentPart]>>,
+    pub counters: Option<Arc<CounterChanges>>,
     pub grid: Option<Arc<GridStyle>>,
     pub placement: Option<Arc<[GridLine; 4]>>,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum ContentPart {
+    Text(Arc<str>),
+    Counter(Arc<str>, ListStyleType),
+    Counters(Arc<str>, Arc<str>, ListStyleType),
+}
+
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct CounterChanges {
+    pub reset: Vec<(Arc<str>, i32)>,
+    pub increment: Vec<(Arc<str>, i32)>,
+    pub set: Vec<(Arc<str>, i32)>,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -425,6 +441,7 @@ impl InheritedStyle {
             direction: Direction::Ltr,
             text_align: TextAlign::Start,
             list_style_type: ListStyleType::Disc,
+            list_inside: false,
             border_spacing: (0.0, 0.0),
             border_collapse: false,
             decorations: TextDecorations::default(),
@@ -475,6 +492,7 @@ impl ResetStyle {
             background: BackgroundLayout::default(),
             object_fit: ObjectFit::Fill,
             content: None,
+            counters: None,
             grid: None,
             placement: None,
         }

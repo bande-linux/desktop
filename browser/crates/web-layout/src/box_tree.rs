@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use web_atoms::Atom;
 use web_dom::{Document, NodeId, NodeKind};
-use web_style::{ComputedStyle, Display, LineHeight, ListStyleType, Pseudo, Styles, VerticalAlign};
+use web_style::{
+    ComputedStyle, ContentPart, Display, LineHeight, ListStyleType, Pseudo, Styles, VerticalAlign,
+};
 use web_text::{FontKey, Fonts, Paragraph, RunStyle, ShapedParagraph};
 
 pub(crate) struct BlockBox {
@@ -135,6 +137,7 @@ struct Builder<'a> {
     styles: &'a Styles,
     fonts: &'a mut Fonts,
     depth: u32,
+    counters: Vec<Counter>,
 }
 
 struct Pending {
@@ -175,6 +178,7 @@ impl BoxTree {
             styles,
             fonts,
             depth: 0,
+            counters: Vec::new(),
         };
         let root = document
             .children(NodeId::DOCUMENT)
@@ -350,6 +354,16 @@ impl Builder<'_> {
         pending
             .paragraph
             .set_nowrap(!style.inherited.white_space.wraps());
+        let inside = style.inherited.list_inside;
+        if inside
+            && let Some(text) =
+                ordinal.and_then(|ordinal| marker_text(style.inherited.list_style_type, ordinal))
+        {
+            let tag = pending.push(node, &style, ItemKind::Text);
+            let mut run = run_style(self.fonts, &style, tag, 0.0);
+            run.white_space = web_style::WhiteSpace::Pre;
+            pending.paragraph.push_text(&format!("{text} "), run);
+        }
         self.children(node, &mut blocks, &mut pending, 0.0);
         let flex = matches!(style.display(), Display::Flex | Display::InlineFlex);
         let grid = matches!(style.display(), Display::Grid | Display::InlineGrid);
@@ -365,7 +379,9 @@ impl Builder<'_> {
             self.flush(&mut blocks, pending, &style);
             Contents::Blocks(blocks)
         };
-        let marker = ordinal.and_then(|ordinal| self.marker(&style, ordinal));
+        let marker = ordinal
+            .filter(|_| !inside)
+            .and_then(|ordinal| self.marker(&style, ordinal));
         BlockBox {
             node: Some(node),
             style,
@@ -381,13 +397,16 @@ impl Builder<'_> {
         pending: &mut Pending,
         shift: f32,
     ) {
-        let mut ordinal = list_start(self.document, node);
-        let reversed = self.document.attribute(node, Atom::REVERSED).is_some();
+        let scope = self.counters.len();
         self.generated(node, Pseudo::Before, pending, shift);
         for child in self.document.children(node) {
             let Some(style) = self.styles.get(child) else {
                 continue;
             };
+            let ordinal = (self.document.kind(child) == Some(NodeKind::Element)
+                && style.display() != Display::None)
+                .then(|| self.apply_counters(child, style))
+                .flatten();
             match self.document.kind(child) {
                 Some(NodeKind::Text) => {
                     let text = self.document.text(child).unwrap_or_default();
@@ -470,10 +489,7 @@ impl Builder<'_> {
                             );
                             self.flush(blocks, taken, &parent_style);
                         }
-                        let item_ordinal = (display == Display::ListItem).then_some(ordinal);
-                        if display == Display::ListItem {
-                            ordinal += if reversed { -1 } else { 1 };
-                        }
+                        let item_ordinal = ordinal.filter(|_| display == Display::ListItem);
                         self.depth += 1;
                         blocks.push(self.block(child, style.clone(), item_ordinal));
                         self.depth -= 1;
@@ -483,15 +499,152 @@ impl Builder<'_> {
             }
         }
         self.generated(node, Pseudo::After, pending, shift);
+        self.counters.truncate(scope);
+    }
+
+    fn counter(&self, name: &str) -> Option<usize> {
+        self.counters
+            .iter()
+            .rposition(|counter| &*counter.name == name)
+    }
+
+    fn apply_counters(&mut self, element: NodeId, style: &ComputedStyle) -> Option<i32> {
+        let changes = style.reset.counters.clone();
+        let named = |list: Option<&[(Arc<str>, i32)]>, name: &str| {
+            list.is_some_and(|list| list.iter().any(|(known, _)| &**known == name))
+        };
+        let html = self.document.html_element_name(element);
+        if matches!(html, Some(Atom::OL | Atom::UL | Atom::MENU | Atom::DIR))
+            && !named(
+                changes.as_ref().map(|changes| &changes.reset[..]),
+                LIST_ITEM,
+            )
+        {
+            let reversed = html == Some(Atom::OL)
+                && self.document.attribute(element, Atom::REVERSED).is_some();
+            let start = self
+                .document
+                .attribute(element, Atom::START)
+                .and_then(|start| start.trim().parse::<i32>().ok());
+            let (value, step) = if reversed {
+                let items = self
+                    .document
+                    .children(element)
+                    .filter(|&child| {
+                        self.styles
+                            .get(child)
+                            .is_some_and(|style| style.display() == Display::ListItem)
+                    })
+                    .count() as i32;
+                (start.unwrap_or(items).saturating_add(1), -1)
+            } else {
+                (start.unwrap_or(1).saturating_sub(1), 1)
+            };
+            self.counters.push(Counter {
+                name: Arc::from(LIST_ITEM),
+                value,
+                step,
+            });
+        }
+        if let Some(changes) = &changes {
+            for (name, value) in &changes.reset {
+                self.counters.push(Counter {
+                    name: name.clone(),
+                    value: *value,
+                    step: 1,
+                });
+            }
+            for (name, value) in &changes.set {
+                match self
+                    .counter(name)
+                    .and_then(|index| self.counters.get_mut(index))
+                {
+                    Some(counter) => counter.value = *value,
+                    None => self.counters.push(Counter {
+                        name: name.clone(),
+                        value: *value,
+                        step: 1,
+                    }),
+                }
+            }
+            for (name, value) in &changes.increment {
+                match self
+                    .counter(name)
+                    .and_then(|index| self.counters.get_mut(index))
+                {
+                    Some(counter) => counter.value = counter.value.saturating_add(*value),
+                    None => self.counters.push(Counter {
+                        name: name.clone(),
+                        value: *value,
+                        step: 1,
+                    }),
+                }
+            }
+        }
+        if style.display() != Display::ListItem {
+            return None;
+        }
+        let explicit = named(
+            changes.as_ref().map(|changes| &changes.increment[..]),
+            LIST_ITEM,
+        );
+        let item_value = self
+            .document
+            .attribute(element, Atom::VALUE)
+            .and_then(|value| value.trim().parse::<i32>().ok());
+        let index = match self.counter(LIST_ITEM) {
+            Some(index) => index,
+            None => {
+                self.counters.push(Counter {
+                    name: Arc::from(LIST_ITEM),
+                    value: 0,
+                    step: 1,
+                });
+                self.counters.len() - 1
+            }
+        };
+        let counter = self.counters.get_mut(index)?;
+        match item_value {
+            Some(value) if html == Some(Atom::LI) => counter.value = value,
+            _ if !explicit => counter.value = counter.value.saturating_add(counter.step),
+            _ => {}
+        }
+        Some(counter.value)
     }
 
     fn generated(&mut self, node: NodeId, pseudo: Pseudo, pending: &mut Pending, shift: f32) {
         let Some(style) = self.styles.pseudo(node, pseudo).cloned() else {
             return;
         };
-        let Some(text) = style.reset.content.clone() else {
+        let Some(parts) = style.reset.content.clone() else {
             return;
         };
+        let mut text = String::new();
+        for part in parts.iter() {
+            match part {
+                ContentPart::Text(part) => text.push_str(part),
+                ContentPart::Counter(name, kind) => {
+                    let value = self
+                        .counter(name)
+                        .and_then(|index| self.counters.get(index))
+                        .map_or(0, |counter| counter.value);
+                    text.push_str(&counter_text(value, *kind));
+                }
+                ContentPart::Counters(name, separator, kind) => {
+                    let values: Vec<String> = self
+                        .counters
+                        .iter()
+                        .filter(|counter| counter.name == *name)
+                        .map(|counter| counter_text(counter.value, *kind))
+                        .collect();
+                    text.push_str(&if values.is_empty() {
+                        counter_text(0, *kind)
+                    } else {
+                        values.join(separator)
+                    });
+                }
+            }
+        }
         let tag = pending.push(node, &style, ItemKind::Text);
         pending.paragraph.push_text(
             &text,
@@ -644,17 +797,7 @@ impl Builder<'_> {
     }
 
     fn marker(&mut self, style: &ComputedStyle, ordinal: i32) -> Option<Box<InlineContent>> {
-        let text = match style.inherited.list_style_type {
-            ListStyleType::None => return None,
-            ListStyleType::Disc => "•".to_owned(),
-            ListStyleType::Circle => "◦".to_owned(),
-            ListStyleType::Square => "▪".to_owned(),
-            ListStyleType::Decimal => format!("{ordinal}."),
-            ListStyleType::LowerAlpha => format!("{}.", alphabetic(ordinal, b'a')),
-            ListStyleType::UpperAlpha => format!("{}.", alphabetic(ordinal, b'A')),
-            ListStyleType::LowerRoman => format!("{}.", roman(ordinal).to_ascii_lowercase()),
-            ListStyleType::UpperRoman => format!("{}.", roman(ordinal)),
-        };
+        let text = marker_text(style.inherited.list_style_type, ordinal)?;
         let mut paragraph = Paragraph::new(is_rtl(style));
         let mut run = run_style(self.fonts, style, 0, 0.0);
         run.white_space = web_style::WhiteSpace::Pre;
@@ -668,11 +811,36 @@ impl Builder<'_> {
     }
 }
 
-fn list_start(document: &Document, node: NodeId) -> i32 {
-    document
-        .attribute(node, Atom::START)
-        .and_then(|start| start.trim().parse().ok())
-        .unwrap_or(1)
+const LIST_ITEM: &str = "list-item";
+
+struct Counter {
+    name: Arc<str>,
+    value: i32,
+    step: i32,
+}
+
+fn counter_text(value: i32, kind: ListStyleType) -> String {
+    match kind {
+        ListStyleType::None => String::new(),
+        ListStyleType::Disc => "•".to_owned(),
+        ListStyleType::Circle => "◦".to_owned(),
+        ListStyleType::Square => "▪".to_owned(),
+        ListStyleType::Decimal => value.to_string(),
+        ListStyleType::LowerAlpha => alphabetic(value, b'a'),
+        ListStyleType::UpperAlpha => alphabetic(value, b'A'),
+        ListStyleType::LowerRoman => roman(value).to_ascii_lowercase(),
+        ListStyleType::UpperRoman => roman(value),
+    }
+}
+
+fn marker_text(kind: ListStyleType, ordinal: i32) -> Option<String> {
+    match kind {
+        ListStyleType::None => None,
+        ListStyleType::Disc | ListStyleType::Circle | ListStyleType::Square => {
+            Some(counter_text(ordinal, kind))
+        }
+        _ => Some(format!("{}.", counter_text(ordinal, kind))),
+    }
 }
 
 fn alphabetic(ordinal: i32, first: u8) -> String {

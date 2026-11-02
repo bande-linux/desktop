@@ -11,9 +11,9 @@ use web_css::values::{Length, LengthUnit};
 
 use crate::stylist::Viewport;
 use crate::{
-    Align, Clear, Color, ComputedStyle, Direction, Display, FlexDirection, Float, FontFamily,
-    InheritedStyle, LengthPercentage, LineHeight, ListStyleType, MEDIUM, ObjectFit, Position,
-    ResetStyle, TextAlign, TextDecorations, VerticalAlign, WhiteSpace,
+    Align, Clear, Color, ComputedStyle, ContentPart, Direction, Display, FlexDirection, Float,
+    FontFamily, InheritedStyle, LengthPercentage, LineHeight, ListStyleType, MEDIUM, ObjectFit,
+    Position, ResetStyle, TextAlign, TextDecorations, VerticalAlign, WhiteSpace,
 };
 
 pub(crate) enum Value<'a> {
@@ -468,21 +468,24 @@ impl Computer<'_> {
                 self.inherited.visible = matches!(value, keywords::Visibility::Visible)
             }
             (Id::ListStyleType, V::ListStyleType(value)) => {
-                self.inherited.list_style_type = match value {
-                    specified::ListStyleType::None => ListStyleType::None,
-                    specified::ListStyleType::String(_) => ListStyleType::Disc,
-                    specified::ListStyleType::CounterStyle(name) => {
-                        match name.to_ascii_lowercase().as_str() {
-                            "circle" => ListStyleType::Circle,
-                            "square" => ListStyleType::Square,
-                            "decimal" | "decimal-leading-zero" => ListStyleType::Decimal,
-                            "lower-alpha" | "lower-latin" => ListStyleType::LowerAlpha,
-                            "upper-alpha" | "upper-latin" => ListStyleType::UpperAlpha,
-                            "lower-roman" => ListStyleType::LowerRoman,
-                            "upper-roman" => ListStyleType::UpperRoman,
-                            _ => ListStyleType::Disc,
-                        }
-                    }
+                self.inherited.list_style_type = list_style(value)
+            }
+            (Id::ListStylePosition, V::ListStylePosition(value)) => {
+                self.inherited.list_inside = matches!(value, keywords::ListStylePosition::Inside)
+            }
+            (Id::CounterReset | Id::CounterIncrement | Id::CounterSet, V::Counters(value)) => {
+                let default = if id == Id::CounterIncrement { 1 } else { 0 };
+                let list: Vec<(Arc<str>, i32)> = value
+                    .0
+                    .iter()
+                    .map(|(name, amount)| (Arc::from(&**name), amount.unwrap_or(default)))
+                    .collect();
+                let counters =
+                    Arc::make_mut(self.reset.counters.get_or_insert_with(Default::default));
+                match id {
+                    Id::CounterReset => counters.reset = list,
+                    Id::CounterIncrement => counters.increment = list,
+                    _ => counters.set = list,
                 }
             }
             (Id::VerticalAlign, V::VerticalAlign(value)) => {
@@ -733,18 +736,36 @@ impl Computer<'_> {
             (Id::Content, V::Content(value)) => {
                 self.reset.content = match value {
                     specified::Content::Items(items, _) => {
-                        let mut text = String::new();
+                        let mut parts = Vec::new();
                         for item in items.iter() {
-                            match item {
-                                specified::ContentItem::String(string) => text.push_str(string),
-                                specified::ContentItem::Attr(name) => text
-                                    .push_str(&(self.context.attribute)(name).unwrap_or_default()),
-                                specified::ContentItem::OpenQuote => text.push('\u{201C}'),
-                                specified::ContentItem::CloseQuote => text.push('\u{201D}'),
-                                _ => {}
-                            }
+                            let part = match item {
+                                specified::ContentItem::String(string) => {
+                                    ContentPart::Text(Arc::from(&**string))
+                                }
+                                specified::ContentItem::Attr(name) => ContentPart::Text(Arc::from(
+                                    (self.context.attribute)(name).unwrap_or_default(),
+                                )),
+                                specified::ContentItem::OpenQuote => {
+                                    ContentPart::Text(Arc::from("\u{201C}"))
+                                }
+                                specified::ContentItem::CloseQuote => {
+                                    ContentPart::Text(Arc::from("\u{201D}"))
+                                }
+                                specified::ContentItem::Counter(name, style) => {
+                                    ContentPart::Counter(Arc::from(&**name), list_style(style))
+                                }
+                                specified::ContentItem::Counters(name, separator, style) => {
+                                    ContentPart::Counters(
+                                        Arc::from(&**name),
+                                        Arc::from(&**separator),
+                                        list_style(style),
+                                    )
+                                }
+                                _ => continue,
+                            };
+                            parts.push(part);
                         }
-                        Some(Arc::from(text))
+                        Some(Arc::from(parts))
                     }
                     _ => None,
                 }
@@ -1092,6 +1113,10 @@ impl Computer<'_> {
             }
             Id::BackgroundSize => reset.background.size = from_reset.background.size,
             Id::Content => reset.content = from_reset.content.clone(),
+            Id::ListStylePosition => inherited.list_inside = from_inherited.list_inside,
+            Id::CounterReset | Id::CounterIncrement | Id::CounterSet => {
+                reset.counters = from_reset.counters.clone()
+            }
             Id::GridTemplateColumns
             | Id::GridTemplateRows
             | Id::GridTemplateAreas
@@ -1225,5 +1250,23 @@ fn grid_line(value: &specified::GridLine) -> crate::GridLine {
             crate::GridLine::Span(*count, name.as_deref().map(Arc::from))
         }
         specified::GridLine::Name(name) => crate::GridLine::Name(Arc::from(&**name)),
+    }
+}
+
+fn list_style(value: &specified::ListStyleType) -> ListStyleType {
+    match value {
+        specified::ListStyleType::None => ListStyleType::None,
+        specified::ListStyleType::String(_) => ListStyleType::Disc,
+        specified::ListStyleType::CounterStyle(name) => match name.to_ascii_lowercase().as_str() {
+            "none" => ListStyleType::None,
+            "disc" | "disclosure-open" | "disclosure-closed" => ListStyleType::Disc,
+            "circle" => ListStyleType::Circle,
+            "square" => ListStyleType::Square,
+            "lower-alpha" | "lower-latin" => ListStyleType::LowerAlpha,
+            "upper-alpha" | "upper-latin" => ListStyleType::UpperAlpha,
+            "lower-roman" => ListStyleType::LowerRoman,
+            "upper-roman" => ListStyleType::UpperRoman,
+            _ => ListStyleType::Decimal,
+        },
     }
 }

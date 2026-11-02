@@ -212,6 +212,7 @@ pub const LONGHANDS: &[Longhand] = &[
     l("quotes", "Quotes", true, "auto"),
     l("counter-reset", "Counters", false, "none"),
     l("counter-increment", "Counters", false, "none"),
+    l("counter-set", "Counters", false, "none"),
     l("cursor", "Cursor", true, "auto"),
     l("outline-width", "BorderWidth", false, "medium"),
     l("outline-style", "OutlineStyle", false, "none"),

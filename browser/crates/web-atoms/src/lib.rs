@@ -276,6 +276,12 @@ impl AtomTable {
             .map(|&slot| Atom(STATIC_NAMES.len() as u32 + slot))
     }
 
+    pub fn heap_bytes(&self) -> usize {
+        self.text.capacity()
+            + self.spans.capacity() * size_of::<(u32, u32)>()
+            + self.lookup.capacity() * (size_of::<u32>() + 1)
+    }
+
     pub fn name(&self, atom: Atom) -> &str {
         match atom.static_name() {
             Some(name) => name,

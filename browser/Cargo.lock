@@ -14,3 +14,10 @@ version = "0.1.0"
 dependencies = [
  "hashbrown",
 ]
+
+[[package]]
+name = "web-dom"
+version = "0.1.0"
+dependencies = [
+ "web-atoms",
+]

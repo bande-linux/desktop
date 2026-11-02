@@ -11,6 +11,7 @@ repository = "https://github.com/bande-linux/web"
 
 [workspace.dependencies]
 web-atoms = { path = "crates/web-atoms" }
+web-dom = { path = "crates/web-dom" }
 hashbrown = { version = "0.16", default-features = false }
 
 [workspace.lints.rust]

@@ -71,6 +71,23 @@ def installer():
     return tile(top, bottom, body)
 
 
+def velox():
+    top, bottom = hue_field(230, 0.58, 0.15)
+    rib = f'stroke="{bottom}" stroke-opacity="0.35" stroke-width="1.1" stroke-linecap="round"'
+
+    def container(x, y, width, height, fill):
+        ribs = ''.join(path(f'M{fmt(x + step)} {fmt(y + 2.6)}V{fmt(y + height - 2.6)}', 'none', rib)
+                       for step in range(4, int(width) - 1, 4))
+        return rect(x, y, width, height, 1.6, fill) + ribs
+
+    body = (container(15.5, 26, 22, 10.5, PAPER)
+            + container(19, 14, 18.5, 10.5, mix(PAPER, top, 0.18))
+            + rect(7.5, 15.4, 7.5, 2.3, 1.15, PAPER, 'opacity="0.9"')
+            + rect(5, 20, 10, 2.3, 1.15, PAPER, 'opacity="0.7"')
+            + rect(8.5, 30, 4.5, 2.3, 1.15, EMBER))
+    return tile(top, bottom, body)
+
+
 def mark_shape(color, dot, width=3.6):
     return (stroke('M16.5 13.5v10a7.5 7.5 0 0 0 15 0v-10', color, width)
             + circle(24, 24, 2.7, dot))
@@ -165,6 +182,7 @@ ICONS = {
     'org.bande.Settings': settings,
     'org.bande.ActivityMonitor': monitor,
     'org.bande.Installer': installer,
+    'org.bande.Velox': velox,
     'org.bande.Launcher': launcher,
     'org.bande.About': about,
     'org.bande.Screenshot': screenshot,

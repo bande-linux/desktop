@@ -28,7 +28,8 @@ Delete each line when it ships; delete the file when the list is empty.
 - Views: icons, list (with disclosure), columns, gallery (a large preview over a strip); View ▸ Sort By; per-folder view memory;
   View ▸ Use Groups and Group By (Kind, Application, Date Modified, Created, Added, Size) as
   headed sections in list and icon views (Date Added is the status-change time, which moving a
-  file into a folder sets);
+  file into a folder sets); in icon view each group is one sideways-scrolling row with Show All /
+  Show Less, and arrow keys move between rows by position;
   status bar and path bar; hidden files; Quick Look with full screen.
 - Names: known extensions hidden unless Settings ▸ Advanced shows them (Files, desktop, file
   chooser), kept on rename, a warning before changing one; batch rename.
@@ -36,7 +37,7 @@ Delete each line when it ships; delete the file when the list is empty.
   extension, Open With, default app and permissions. The per-file choice is the
   `user.bande.hide-extension` xattr (`1` hide, `0` show, absent: hide known extensions), or a
   line in `$XDG_STATE_HOME/bande/hidden-extensions` where the volume has no xattrs; Show all
-  filename extensions overrides it.
+  filename extensions overrides it and dims the checkbox, as the Finder does.
 - Getting around: tabs; sidebar with Settings ▸ Show in Sidebar; Recents; search with scopes;
   Go ▸ Recent Folders; new windows on a standard, the last or any chosen folder (Other…); `org.freedesktop.FileManager1`
   (D-Bus activated with `--gapplication-service`) and `bande-files --select <paths>`.
@@ -51,8 +52,8 @@ Delete each line when it ships; delete the file when the list is empty.
 
 ## Open, ranked
 
-1. Icon view groups: one row per group with Show All / Show Less, as the Finder (today every
-   group shows all its items).
+1. Icon, column and gallery views are not in the accessibility tree (only list view is), so
+   their items and the group Show All / Show Less are invisible to screen readers.
 2. Gallery: Finder's preview pane metadata beside it (today the inspector shows it).
 3. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
    (GVfs-free SMB/SFTP mounts).

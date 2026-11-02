@@ -12,14 +12,19 @@ use crate::L10N;
 use crate::controls::{Signal, sender};
 use crate::view::{FilesView, Rename};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct HideChoice {
+    on: bool,
+    enabled: bool,
+}
+
 pub(crate) struct NameControls {
     pub(crate) field: WidgetId,
-    pub(crate) hide: Option<(WidgetId, bool)>,
+    pub(crate) hide: Option<(WidgetId, HideChoice)>,
     name: String,
 }
 
 pub(crate) struct InspectorControls {
-    path: PathBuf,
     pub(crate) name: Option<NameControls>,
     pub(crate) runnable: Option<(WidgetId, bool)>,
     pub(crate) access: Vec<(Class, WidgetId, Access)>,
@@ -34,6 +39,13 @@ impl InspectorControls {
             .chain(self.runnable.iter().map(|(id, _)| *id))
             .chain(self.access.iter().map(|(_, id, _)| *id))
             .collect()
+    }
+}
+
+fn check(on: bool) -> CheckState {
+    match on {
+        true => CheckState::On,
+        false => CheckState::Off,
     }
 }
 
@@ -73,53 +85,61 @@ impl FilesView {
         Some((entry.path.clone(), entry.is_folder(), info.mode?))
     }
 
-    fn hide_wanted(&self, entry: &Entry) -> Option<bool> {
-        (!entry.is_folder() && !self.show_extensions).then(|| self.shown_name(entry) != entry.name)
+    fn hide_wanted(&self, entry: &Entry) -> Option<HideChoice> {
+        let enabled = !self.show_extensions
+            && bande_fs::hidden_extension(&entry.name, None, Some(true)).is_some();
+        (!entry.is_folder()).then(|| HideChoice {
+            on: enabled && self.shown_name(entry) != entry.name,
+            enabled,
+        })
     }
 
-    fn hide_checkbox(&mut self, on: bool) -> WidgetId {
+    fn hide_checkbox(&mut self, wanted: HideChoice) -> WidgetId {
         let send = sender(&self.signals);
-        let state = match on {
-            true => CheckState::On,
-            false => CheckState::Off,
-        };
-        self.insert(Checkbox::new(
-            &L10N.tr("hide-extension"),
-            state,
-            move |on| {
-                send(Signal::HideExtension(on));
-            },
-        ))
+        let mut checkbox = Checkbox::new(&L10N.tr("hide-extension"), check(wanted.on), move |on| {
+            send(Signal::HideExtension(on));
+        });
+        checkbox.set_enabled(wanted.enabled);
+        self.insert(checkbox)
     }
 
     fn sync_name_controls(&mut self, controls: &mut InspectorControls, entry: &Entry) {
-        let hide = self.hide_wanted(entry);
+        let wanted = self.hide_wanted(entry);
         let mut name = match controls.name.take() {
-            Some(name) if name.name == entry.name => name,
-            old => {
-                if let Some(old) = old {
-                    self.remove(old.field);
-                    if let Some((id, _)) = old.hide {
-                        self.remove(id);
-                    }
-                }
-                NameControls {
-                    field: self.insert(TextField::new("", &entry.name, |_| {})),
-                    hide: None,
-                    name: entry.name.clone(),
-                }
-            }
+            Some(name) => name,
+            None => NameControls {
+                field: self.insert(TextField::new("", &entry.name, |_| {})),
+                hide: None,
+                name: entry.name.clone(),
+            },
         };
-        match (name.hide, hide) {
-            (Some((_, shown)), Some(on)) if shown == on => {}
-            (shown, on) => {
-                if let Some((id, _)) = shown {
-                    self.remove(id);
-                }
-                name.hide = on.map(|on| (self.hide_checkbox(on), on));
-            }
+        if name.name != entry.name {
+            name.name.clone_from(&entry.name);
+            self.show_name(name.field, &entry.name);
         }
+        name.hide = match (name.hide, wanted) {
+            (Some((id, shown)), Some(wanted)) => {
+                if shown != wanted {
+                    self.ui.update_widget::<Checkbox>(id, |checkbox, cx| {
+                        checkbox.set_state(cx, check(wanted.on));
+                        checkbox.set_enabled(wanted.enabled);
+                    });
+                }
+                Some((id, wanted))
+            }
+            (Some((id, _)), None) => {
+                self.remove(id);
+                None
+            }
+            (None, wanted) => wanted.map(|wanted| (self.hide_checkbox(wanted), wanted)),
+        };
         controls.name = Some(name);
+    }
+
+    fn show_name(&mut self, field: WidgetId, name: &str) {
+        if let Some(field) = self.ui.widget_as::<TextField>(field) {
+            field.replace_text(name);
+        }
     }
 
     pub(crate) fn name_field_focused(&self) -> bool {
@@ -148,14 +168,14 @@ impl FilesView {
     }
 
     fn reset_name_field(&mut self) {
-        if let Some(name) = self
+        let shown = self
             .inspector_controls
-            .as_mut()
-            .and_then(|controls| controls.name.as_mut())
-        {
-            name.name.clear();
+            .as_ref()
+            .and_then(|controls| controls.name.as_ref())
+            .map(|name| (name.field, name.name.clone()));
+        if let Some((field, name)) = shown {
+            self.show_name(field, &name);
         }
-        self.sync_inspector_controls();
     }
 
     pub(crate) fn commit_name_field(&mut self) {
@@ -199,7 +219,7 @@ impl FilesView {
             .and_then(|controls| controls.name.as_mut())
             .and_then(|name| name.hide.as_mut())
         {
-            *shown = hidden;
+            shown.on = hidden;
         }
         match set_extension_hidden(&entry.path, hidden) {
             Ok(()) => {
@@ -247,18 +267,10 @@ impl FilesView {
             self.drop_inspector_controls();
             return;
         };
-        if self
-            .inspector_controls
-            .as_ref()
-            .is_some_and(|controls| controls.path != entry.path)
-        {
-            self.drop_inspector_controls();
-        }
         let mut controls = self
             .inspector_controls
             .take()
             .unwrap_or_else(|| InspectorControls {
-                path: entry.path.clone(),
                 name: None,
                 runnable: None,
                 access: Vec::new(),

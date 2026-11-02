@@ -3,7 +3,7 @@ use bande_graphics::{
     Color, ControlSize, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
 
-use super::control::Symbol;
+use super::control::{DISABLED_ALPHA, Symbol};
 use super::{Animated, Context, Event, Key, Parts, Size, Spring, Widget, WidgetId};
 
 pub const SEGMENTED_HEIGHT: f32 = ControlSize::Regular.height();
@@ -13,7 +13,6 @@ const FONT_SIZE: f32 = 13.0;
 const CHIP_SHADOW: f32 = 0.14;
 const SYMBOL_SEGMENT: f32 = 32.0;
 const SYMBOL_SIZE: f32 = 16.0;
-const DISABLED_ALPHA: f32 = 0.45;
 
 struct Segment {
     title: String,

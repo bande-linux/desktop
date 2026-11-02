@@ -24,7 +24,7 @@ pub(crate) struct Tab {
     mode: ViewMode,
     icon_size: u32,
     shown_root: Option<Location>,
-    grid_scroll: (Option<Location>, ScrollState),
+    grid_scroll: crate::grid::GridScroll,
     scrolls: Vec<(Location, ScrollState)>,
 }
 

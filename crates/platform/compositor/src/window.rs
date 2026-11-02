@@ -366,7 +366,10 @@ impl State {
     pub(crate) fn suspend_unseen_windows(&self) {
         let locked = self.is_locked();
         for window in &self.windows {
-            let unseen = locked || window.minimized.is_some() || window.hidden;
+            let unseen = locked
+                || window.minimized.is_some()
+                || window.hidden
+                || self.on_hidden_workspace(window);
             let changed = window.toplevel.with_pending_state(|state| {
                 if unseen {
                     state.states.set(xdg_toplevel::State::Suspended)

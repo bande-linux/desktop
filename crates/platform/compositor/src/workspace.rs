@@ -194,6 +194,14 @@ impl State {
                 .any(|screen| screen.workspaces.active_id() == window.workspace)
     }
 
+    pub(crate) fn on_hidden_workspace(&self, window: &Window) -> bool {
+        self.screens
+            .get(self.screen_of(window))
+            .is_some_and(|screen| {
+                screen.workspaces.is_settled() && screen.workspaces.active_id() != window.workspace
+            })
+    }
+
     pub(crate) fn workspace_offset(&self, window: &Window) -> f64 {
         let workspaces = &self.screens[self.screen_of(window)].workspaces;
         workspaces
@@ -619,6 +627,7 @@ impl State {
         workspaces.now = None;
         let last = (workspaces.count() - 1) as f64;
         workspaces.tracker = Some(Tracker::new(workspaces.view, time, last));
+        self.suspend_unseen_windows();
     }
 
     fn swiping_screen(&self) -> Option<usize> {
@@ -684,6 +693,7 @@ impl State {
         self.announce_full_screen();
         let key = self.key_window();
         self.announce_active_app(key.as_ref());
+        self.suspend_unseen_windows();
     }
 
     pub(crate) fn send_workspaces(&self, shell: &BandeShellV1) {

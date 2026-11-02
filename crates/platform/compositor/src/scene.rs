@@ -1,18 +1,17 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use smithay::backend::renderer::element::surface::{
-    WaylandSurfaceRenderElement, WaylandSurfaceTexture, render_elements_from_surface_tree,
-};
+use smithay::backend::renderer::element::surface::render_elements_from_surface_tree;
 use smithay::backend::renderer::element::{Element, Id, Kind, RenderElement};
 use smithay::backend::renderer::utils::{CommitCounter, DamageSet, OpaqueRegions};
 use smithay::backend::renderer::{ContextId, Renderer as _};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
-use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale};
+use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale, Transform};
 
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::Logical;
 
 use crate::effect::{blur_rects, corner_radius};
+use crate::element::SurfaceElement;
 use crate::motion::{Look, Motion};
 use crate::state::OutputElement;
 use crate::state::mapped_size;
@@ -258,6 +257,10 @@ impl<E: Element> Element for WindowElement<E> {
         self.inner.src()
     }
 
+    fn transform(&self) -> Transform {
+        self.inner.transform()
+    }
+
     fn geometry(&self, scale: Scale<f64>) -> Rectangle<i32, Physical> {
         self.placement.map(self.inner.geometry(scale))
     }
@@ -388,6 +391,7 @@ pub(crate) struct Piece {
     pub(crate) id: Id,
     pub(crate) texture: VulkanTexture,
     pub(crate) src: Rectangle<f64, BufferCoords>,
+    pub(crate) transform: Transform,
     pub(crate) geometry: Rectangle<i32, Physical>,
 }
 
@@ -415,6 +419,10 @@ impl Element for PieceElement {
         self.piece.src
     }
 
+    fn transform(&self) -> Transform {
+        self.piece.transform
+    }
+
     fn geometry(&self, _scale: Scale<f64>) -> Rectangle<i32, Physical> {
         self.piece.geometry
     }
@@ -440,7 +448,7 @@ impl RenderElement<VulkanRenderer> for PieceElement {
             dst,
             damage,
             opaque_regions,
-            smithay::utils::Transform::Normal,
+            self.piece.transform,
             self.alpha,
         )
     }
@@ -762,20 +770,17 @@ impl Drawn {
     }
 }
 
-pub(crate) fn pieces_of(
-    surfaces: &[WaylandSurfaceRenderElement<VulkanRenderer>],
-    scale: f64,
-) -> Vec<Piece> {
+pub(crate) fn pieces_of(surfaces: &[SurfaceElement], scale: f64) -> Vec<Piece> {
     surfaces
         .iter()
-        .filter_map(|surface| match surface.texture() {
-            WaylandSurfaceTexture::Texture(texture) => Some(Piece {
+        .filter_map(|surface| {
+            Some(Piece {
                 id: surface.id().clone(),
-                texture: texture.clone(),
+                texture: surface.texture()?.clone(),
                 src: surface.src(),
+                transform: surface.transform(),
                 geometry: surface.geometry(Scale::from(scale)),
-            }),
-            WaylandSurfaceTexture::SolidColor(_) => None,
+            })
         })
         .collect()
 }
@@ -922,15 +927,14 @@ pub(crate) fn window_elements(
         .to_f64()
         .to_physical(scale)
         .to_i32_round::<i32>();
-    let surfaces: Vec<WaylandSurfaceRenderElement<VulkanRenderer>> =
-        render_elements_from_surface_tree(
-            renderer,
-            window.surface(),
-            origin,
-            scale,
-            alpha,
-            Kind::Unspecified,
-        );
+    let surfaces: Vec<SurfaceElement> = render_elements_from_surface_tree(
+        renderer,
+        window.surface(),
+        origin,
+        scale,
+        alpha,
+        Kind::Unspecified,
+    );
     let fullscreen = window.has_state(xdg_toplevel::State::Fullscreen);
     let Some(geometry) = window.geometry().filter(|_| !fullscreen || look.is_some()) else {
         return (

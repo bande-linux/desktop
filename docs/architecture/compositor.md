@@ -27,7 +27,11 @@ when they reach the screen is Bande's own.
   back only for tests), the DRM output with `DrmCompositor`. Each surface keeps a texture for its
   lifetime and an import uploads only the buffer's damaged rows; the damage tracker repaints only
   damaged regions and skips what an opaque window covers. The output is laid out in points and
-  drawn in pixels at its scale.
+  drawn in pixels at its scale. All eight `wl_output` buffer transforms are drawn, combined with
+  the output's transform; `SurfaceElement` corrects Smithay's source rectangle (with a
+  `wp_viewport` crop) for the 90°/270° and flipped 90°/270° transforms and repaints a whole
+  90°/270° surface on damage, as Smithay maps their damage the wrong way round. An element the
+  renderer cannot draw is left out of the frame with one warning; only a lost device fails it.
 - **Window shape and depth.** Every window that is not full screen is clipped to its
   `xdg_surface` window geometry with 14 pt rounded corners (antialiased in the fragment shader)
   and casts a soft shadow drawn analytically (a Gaussian-blurred rounded box): the key window's

@@ -13,7 +13,7 @@ use smithay::desktop::utils::under_from_surface_tree;
 use smithay::input::pointer::{CursorIcon, CursorImageStatus};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle};
+use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle, Transform};
 
 use crate::label::Labels;
 use crate::menu_button::menu_address;
@@ -522,6 +522,7 @@ impl Window {
             id: painted.id.clone(),
             texture: painted.texture.clone(),
             src: Rectangle::<f64, BufferCoords>::from_size(texture.into()),
+            transform: Transform::Normal,
             geometry: Rectangle::new(location, size.into()),
         })
     }

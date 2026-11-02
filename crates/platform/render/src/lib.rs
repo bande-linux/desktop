@@ -73,7 +73,7 @@ impl fmt::Display for RenderError {
                 f.write_str("dma-buf offset or stride is not a multiple of the pixel size")
             }
             Self::UnsupportedFormat => f.write_str("pixel format or layout is not supported"),
-            Self::UnsupportedTransform => f.write_str("only untransformed rendering is supported"),
+            Self::UnsupportedTransform => f.write_str("flipped memory uploads are not supported"),
             Self::UnknownBuffer => f.write_str("buffer is neither wl_shm nor a dma-buf"),
             Self::ForeignResource => {
                 f.write_str("texture or render target belongs to another renderer")
@@ -86,6 +86,12 @@ impl fmt::Display for RenderError {
 }
 
 impl std::error::Error for RenderError {}
+
+impl RenderError {
+    pub fn is_device_lost(&self) -> bool {
+        matches!(self, Self::Vulkan(vk::Result::ERROR_DEVICE_LOST))
+    }
+}
 
 impl From<vk::Result> for RenderError {
     fn from(result: vk::Result) -> Self {

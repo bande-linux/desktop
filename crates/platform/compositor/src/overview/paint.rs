@@ -1,15 +1,14 @@
 use bande_graphics::Palette;
 use bande_render::VulkanRenderer;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
-use smithay::backend::renderer::element::surface::{
-    WaylandSurfaceRenderElement, render_elements_from_surface_tree,
-};
+use smithay::backend::renderer::element::surface::render_elements_from_surface_tree;
 use smithay::backend::renderer::element::{Id, Kind};
 use smithay::utils::{Logical, Point, Rectangle};
 use smithay::wayland::shell::wlr_layer::Layer;
 
 use super::layout::{inflate, real_rect};
 use super::{BACKDROP_IDS, Frame, Hit, Press};
+use crate::element::SurfaceElement;
 use crate::label::TITLE;
 use crate::scene::{
     BlurElement, CORNER_RADIUS, FillElement, Piece, fresh, pieces_of, premultiplied, rounded,
@@ -199,15 +198,14 @@ impl State {
             .placed_layers(screen, Layer::Background)
             .into_iter()
             .flat_map(|(surface, at)| {
-                let surfaces: Vec<WaylandSurfaceRenderElement<VulkanRenderer>> =
-                    render_elements_from_surface_tree(
-                        renderer,
-                        &surface,
-                        at.to_f64().to_physical(scale).to_i32_round::<i32>(),
-                        scale,
-                        1.0,
-                        Kind::Unspecified,
-                    );
+                let surfaces: Vec<SurfaceElement> = render_elements_from_surface_tree(
+                    renderer,
+                    &surface,
+                    at.to_f64().to_physical(scale).to_i32_round::<i32>(),
+                    scale,
+                    1.0,
+                    Kind::Unspecified,
+                );
                 pieces_of(&surfaces, scale)
             })
             .collect();
@@ -276,19 +274,18 @@ impl State {
                 let Some(rect) = real_rect(window) else {
                     continue;
                 };
-                let surfaces: Vec<WaylandSurfaceRenderElement<VulkanRenderer>> =
-                    render_elements_from_surface_tree(
-                        renderer,
-                        window.surface(),
-                        window
-                            .surface_origin()
-                            .to_f64()
-                            .to_physical(scale)
-                            .to_i32_round::<i32>(),
-                        scale,
-                        1.0,
-                        Kind::Unspecified,
-                    );
+                let surfaces: Vec<SurfaceElement> = render_elements_from_surface_tree(
+                    renderer,
+                    window.surface(),
+                    window
+                        .surface_origin()
+                        .to_f64()
+                        .to_physical(scale)
+                        .to_i32_round::<i32>(),
+                    scale,
+                    1.0,
+                    Kind::Unspecified,
+                );
                 let small = map(rect).to_physical(scale);
                 let mut pieces = pieces_of(&surfaces, scale);
                 pieces.extend(window.title_bar_piece(scale));

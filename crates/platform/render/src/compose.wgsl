@@ -4,15 +4,14 @@ struct Quad {
     origin: vec2<f32>,
     size: vec2<f32>,
     source_origin: vec2<f32>,
-    source_size: vec2<f32>,
+    source_across: vec2<f32>,
     alpha: f32,
     blur: f32,
     clip: vec4<f32>,
     caster: vec4<f32>,
     clip_radius: f32,
     caster_radius: f32,
-    orientation: f32,
-    padding: f32,
+    source_down: vec2<f32>,
 }
 
 var<immediate> quad: Quad;
@@ -77,31 +76,14 @@ fn box_shadow(point: vec2<f32>, rect: vec4<f32>, radius: f32, sigma: f32) -> f32
     return value;
 }
 
-fn oriented(local: vec2<f32>) -> vec2<f32> {
-    switch u32(quad.orientation) {
-        case 1u: {
-            return vec2<f32>(1.0 - local.y, local.x);
-        }
-        case 2u: {
-            return vec2<f32>(1.0 - local.x, 1.0 - local.y);
-        }
-        case 3u: {
-            return vec2<f32>(local.y, 1.0 - local.x);
-        }
-        default: {
-            return local;
-        }
-    }
-}
-
 @fragment
 fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
-    let local = oriented((position.xy - quad.origin) / quad.size);
-
-    let source = quad.source_origin + local * quad.source_size;
+    let local = (position.xy - quad.origin) / quad.size;
+    let source = quad.source_origin + local.x * quad.source_across + local.y * quad.source_down;
     let dimensions = vec2<f32>(textureDimensions(surface));
+    let stretch = vec2<f32>(length(quad.source_across), length(quad.source_down));
     var texel: vec4<f32>;
-    if all(abs(quad.source_size - quad.size) < vec2<f32>(0.001)) {
+    if all(abs(stretch - quad.size) < vec2<f32>(0.001)) {
         let last = vec2<i32>(dimensions) - 1;
         texel = textureLoad(surface, clamp(vec2<i32>(floor(source)), vec2<i32>(0), last), 0);
     } else {
@@ -129,7 +111,7 @@ fn sample_at(uv: vec2<f32>) -> vec4<f32> {
 @fragment
 fn blur_down(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let uv = position.xy / quad.size;
-    let half_texel = quad.blur * 0.5 / quad.source_size;
+    let half_texel = quad.blur * 0.5 / vec2<f32>(textureDimensions(surface));
     let diagonal = vec2<f32>(half_texel.x, -half_texel.y);
     return (sample_at(uv) * 4.0 + sample_at(uv - half_texel) + sample_at(uv + half_texel)
         + sample_at(uv + diagonal) + sample_at(uv - diagonal)) / 8.0;

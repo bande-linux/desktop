@@ -71,7 +71,7 @@ pub use cursor::{
     ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,
 };
 pub use drm::{DrmBackend, DrmBackendError, DrmNotifiers, HeadChanges};
-pub use element::ScreenElement;
+pub use element::{ScreenElement, SurfaceElement};
 pub use environment::{
     export_session_environment, notify_service_manager, watchdog_keepalive_interval,
 };

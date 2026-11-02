@@ -19,6 +19,7 @@ use std::os::unix::net::UnixStream;
 use bande_compositor::Compositor;
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_compositor::WlCompositor;
+use wayland_client::protocol::wl_output::Transform;
 use wayland_client::protocol::wl_registry::{self, WlRegistry};
 use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
@@ -139,6 +140,10 @@ impl TestClient {
         let surface = self.windows[index].0.clone();
         self.attach(&surface, image, damage);
         self.connection.flush().expect("client flush");
+    }
+
+    pub fn set_buffer_transform(&self, index: usize, transform: Transform) {
+        self.windows[index].0.set_buffer_transform(transform);
     }
 
     fn attach(

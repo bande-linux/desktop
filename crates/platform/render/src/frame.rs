@@ -87,17 +87,60 @@ impl Shadow {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+struct Sampling {
+    origin: [f64; 2],
+    across: [f64; 2],
+    down: [f64; 2],
+}
+
+const UNIT_CORNERS: [(f64, f64); 4] = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)];
+
+fn unit_point(transform: Transform, (x, y): (f64, f64)) -> (f64, f64) {
+    let moved = transform.transform_rect_in(
+        Rectangle::<f64, Physical>::new((x, y).into(), (0.0, 0.0).into()),
+        &(1.0, 1.0).into(),
+    );
+    (moved.loc.x, moved.loc.y)
+}
+
+impl Sampling {
+    fn upright(source: Rectangle<f64, BufferCoords>) -> Self {
+        Self::oriented(source, Transform::Normal, Transform::Normal)
+    }
+
+    fn oriented(source: Rectangle<f64, BufferCoords>, buffer: Transform, turn: Transform) -> Self {
+        let sample = |corner: (f64, f64)| {
+            let shown = UNIT_CORNERS
+                .into_iter()
+                .find(|&unturned| unit_point(turn, unturned) == corner)
+                .unwrap_or(corner);
+            let (x, y) = unit_point(buffer.invert(), shown);
+            [
+                source.loc.x + x * source.size.w,
+                source.loc.y + y * source.size.h,
+            ]
+        };
+        let origin = sample((0.0, 0.0));
+        let [across, down] = [sample((1.0, 0.0)), sample((0.0, 1.0))]
+            .map(|corner| [corner[0] - origin[0], corner[1] - origin[1]]);
+        Self {
+            origin,
+            across,
+            down,
+        }
+    }
+}
+
 #[derive(Default)]
 struct Quad {
     color: [f32; 4],
     destination: Rect,
-    source: Rectangle<f64, BufferCoords>,
+    sampling: Sampling,
     alpha: f32,
     blur: f32,
     clip: RoundedRect,
     caster: RoundedRect,
-    orientation: f32,
-    flipped: bool,
 }
 
 pub struct VulkanFrame<'frame, 'buffer> {
@@ -227,15 +270,6 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             self.turned(destination),
         );
         (self.turned(destination), rects)
-    }
-
-    fn orientation(&self) -> f32 {
-        match self.turn.invert() {
-            Transform::_90 => 1.0,
-            Transform::_180 => 2.0,
-            Transform::_270 => 3.0,
-            _ => 0.0,
-        }
     }
 
     fn clip(&self, rects: impl IntoIterator<Item = Rect>, within: Rect) -> Vec<Rect> {
@@ -382,22 +416,18 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 quad.destination.y as f32,
                 quad.destination.width as f32,
                 quad.destination.height as f32,
-                quad.source.loc.x as f32,
-                match quad.flipped {
-                    true => (quad.source.loc.y + quad.source.size.h) as f32,
-                    false => quad.source.loc.y as f32,
-                },
-                quad.source.size.w as f32,
-                match quad.flipped {
-                    true => -quad.source.size.h as f32,
-                    false => quad.source.size.h as f32,
-                },
-                quad.alpha,
-                quad.blur,
             ])
+            .chain(
+                [quad.sampling.origin, quad.sampling.across]
+                    .into_iter()
+                    .flatten()
+                    .map(|component| component as f32),
+            )
+            .chain([quad.alpha, quad.blur])
             .chain(quad.clip.components())
             .chain(quad.caster.components())
-            .chain([quad.clip.radius, quad.caster.radius, quad.orientation, 0.0])
+            .chain([quad.clip.radius, quad.caster.radius])
+            .chain(quad.sampling.down.map(|component| component as f32))
             .flat_map(f32::to_ne_bytes)
             .collect();
         let device = &self.renderer.device;
@@ -622,11 +652,6 @@ impl Frame for VulkanFrame<'_, '_> {
         src_transform: Transform,
         alpha: f32,
     ) -> Result<(), RenderError> {
-        let flipped = match src_transform {
-            Transform::Normal => false,
-            Transform::Flipped180 => true,
-            _ => return Err(RenderError::UnsupportedTransform),
-        };
         if texture.renderer != self.renderer.id {
             return Err(RenderError::ForeignResource);
         }
@@ -648,11 +673,9 @@ impl Frame for VulkanFrame<'_, '_> {
         self.draw(
             &Quad {
                 destination,
-                source: src,
+                sampling: Sampling::oriented(src, src_transform, self.turn),
                 alpha,
                 clip: self.clip.unwrap_or_default(),
-                orientation: self.orientation(),
-                flipped,
                 ..Quad::default()
             },
             &rects,

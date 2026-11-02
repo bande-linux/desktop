@@ -21,6 +21,7 @@ the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
 | `…compositor.rs` `only_the_screen_reader_may_grab_the_keyboard_and_it_lets_go_when_it_leaves` | The keyboard monitor serves only the screen reader's bus name, and a vanished reader releases the keyboard. |
 | `…compositor.rs` `a_hung_app_is_force_quit_from_the_keyboard_while_the_shell_is_hung` | Force Quit marks a hung separate process and kills it from Ctrl+Alt+Esc, without the shell and without keys reaching the app. |
 | `…compositor.rs` `a_window_on_a_workspace_out_of_view_is_suspended` | A window on a workspace switched out of view is suspended, and resumes when its workspace comes back. |
+| `…compositor.rs` `windows_with_turned_or_flipped_buffers_do_not_stop_the_screen_from_updating` | A window with any rotated or flipped buffer transform renders instead of failing the whole frame. |
 | `libs/app/tests/app.rs` | App framework: a second launch reaches the running instance, the app keeps running without windows, launching again reopens a window, Ctrl+Q quits. |
 | `services/portal/tests/screenshot.rs` | A stored screenshot permission is trusted only from the xdg-desktop-portal frontend; any other caller makes the user be asked. |
 | `services/notify/tests/center.rs` | A notification shows as a banner and moves to the center; the center is served only under its own bus name, not through `org.freedesktop.Notifications`. |

@@ -5,15 +5,14 @@ use bande_graphics::{
 use bande_render::VulkanRenderer;
 use bande_spring::Spring;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
-use smithay::backend::renderer::element::surface::{
-    WaylandSurfaceRenderElement, render_elements_from_surface_tree,
-};
+use smithay::backend::renderer::element::surface::render_elements_from_surface_tree;
 use smithay::backend::renderer::element::{Id, Kind};
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Rectangle, Size};
 
 use super::layout::{Layout, fitted};
 use super::{App, Card, Content, Frame, NAME_ROW, OPEN_SCALE, Painted, Switcher};
+use crate::element::SurfaceElement;
 use crate::label::Labels;
 use crate::motion::{Look, Motion};
 use crate::overview::real_rect;
@@ -246,19 +245,18 @@ impl State {
         let Some(rect) = real_rect(window) else {
             return Vec::new();
         };
-        let surfaces: Vec<WaylandSurfaceRenderElement<VulkanRenderer>> =
-            render_elements_from_surface_tree(
-                renderer,
-                window.surface(),
-                window
-                    .surface_origin()
-                    .to_f64()
-                    .to_physical(scale)
-                    .to_i32_round::<i32>(),
-                scale,
-                1.0,
-                Kind::Unspecified,
-            );
+        let surfaces: Vec<SurfaceElement> = render_elements_from_surface_tree(
+            renderer,
+            window.surface(),
+            window
+                .surface_origin()
+                .to_f64()
+                .to_physical(scale)
+                .to_i32_round::<i32>(),
+            scale,
+            1.0,
+            Kind::Unspecified,
+        );
         let mut pieces = pieces_of(&surfaces, scale);
         pieces.extend(window.title_bar_piece(scale));
         let small = to.to_physical(scale);

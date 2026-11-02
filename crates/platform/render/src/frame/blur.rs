@@ -3,7 +3,7 @@ use std::slice;
 use ash::vk;
 use smithay::utils::{Physical, Rectangle};
 
-use super::{Quad, RoundedRect, VulkanFrame, scissor};
+use super::{Quad, RoundedRect, Sampling, VulkanFrame, scissor};
 use crate::{
     ATTACHMENT, COLOR_LAYERS, Image, Program, Rect, RenderError, TRANSFER_SOURCE, Usage, barrier,
 };
@@ -110,9 +110,9 @@ impl VulkanFrame<'_, '_> {
         self.draw(
             &Quad {
                 destination: source,
-                source: Rectangle::from_size(
+                sampling: Sampling::upright(Rectangle::from_size(
                     (f64::from(source.width), f64::from(source.height)).into(),
-                ),
+                )),
                 alpha: blur.alpha,
                 clip: blur.region,
                 ..Quad::default()
@@ -241,7 +241,9 @@ impl VulkanFrame<'_, '_> {
         self.draw_quad(
             &Quad {
                 destination: bounds,
-                source: Rectangle::from_size((f64::from(from.2), f64::from(from.3)).into()),
+                sampling: Sampling::upright(Rectangle::from_size(
+                    (f64::from(from.2), f64::from(from.3)).into(),
+                )),
                 blur: offset,
                 alpha: 1.0,
                 ..Quad::default()

@@ -10,7 +10,6 @@ use std::time::{Duration, Instant};
 use smithay::backend::allocator::Buffer;
 use smithay::backend::drm::DrmNode;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
-use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
 use smithay::backend::renderer::utils::with_renderer_surface_state;
 use smithay::desktop::{PopupGrab, PopupManager};
 use smithay::input::keyboard::XkbConfig;
@@ -47,6 +46,7 @@ use bande_render::VulkanRenderer;
 
 use crate::clock::Vblank;
 use crate::cursor::{self, Cursor, CursorTheme};
+use crate::element::SurfaceElement;
 use crate::lock::Lock;
 use crate::motion::IconRect;
 use crate::scene::{BlurElement, Closing, FillElement, PieceElement, ShadowElement, WindowElement};
@@ -614,8 +614,8 @@ pub(crate) fn centered(
 
 render_elements! {
     pub OutputElement<=VulkanRenderer>;
-    Surface=WaylandSurfaceRenderElement<VulkanRenderer>,
-    Window=WindowElement<WaylandSurfaceRenderElement<VulkanRenderer>>,
+    Surface=SurfaceElement,
+    Window=WindowElement<SurfaceElement>,
     Shadow=ShadowElement,
     Closing=WindowElement<PieceElement>,
     Fill=FillElement,

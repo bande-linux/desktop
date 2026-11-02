@@ -4,14 +4,16 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use bande_compositor::{
-    Compositor, KEYBOARD_MONITOR_NAME, SCREEN_READER_NAME, UNRESPONSIVE_AFTER,
+    Compositor, KEYBOARD_MONITOR_NAME, Renderer, SCREEN_READER_NAME, UNRESPONSIVE_AFTER,
     serve_keyboard_monitor,
 };
 use bande_test_bus::SessionBus;
 use bande_test_wayland::{
-    BLUE, ConstraintAdjustment, PopupRequest, RED, SeparateApp, TestClient, act_as_separate_app,
-    chord, headless, roundtrip,
+    BLUE, ConstraintAdjustment, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
+    act_as_separate_app, chord, headless, roundtrip,
 };
+use wayland_client::protocol::wl_output::Transform;
+use wayland_client::protocol::wl_shm::Format;
 
 const KEY_ESC: u32 = 1;
 const KEY_A: u32 = 30;
@@ -204,4 +206,36 @@ fn a_window_on_a_workspace_out_of_view_is_suspended() {
     settle(&mut server, &mut [&mut editor, &mut viewer]);
     assert!(!editor.is_suspended(0));
     assert!(viewer.is_suspended(0));
+}
+
+#[test]
+fn windows_with_turned_or_flipped_buffers_do_not_stop_the_screen_from_updating() {
+    let mut server = headless(560, 520);
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+    let mut plain = TestClient::window(&mut server, "org.example.Plain");
+    let mut turned = TestClient::window(&mut server, "org.example.Turned");
+    let bytes = RED.repeat(64 * 32);
+    let image = ShmImage {
+        width: 64,
+        height: 32,
+        stride: 256,
+        format: Format::Xrgb8888,
+        bytes: &bytes,
+    };
+    for transform in [
+        Transform::_90,
+        Transform::_180,
+        Transform::_270,
+        Transform::Flipped,
+        Transform::Flipped90,
+        Transform::Flipped180,
+        Transform::Flipped270,
+    ] {
+        turned.set_buffer_transform(0, transform);
+        turned.commit_buffer(0, &image, (0, 0, 64, 32));
+        roundtrip(&mut server, &mut [&mut plain, &mut turned]);
+        renderer
+            .render(&mut server)
+            .unwrap_or_else(|error| panic!("{transform:?} stopped the screen: {error}"));
+    }
 }

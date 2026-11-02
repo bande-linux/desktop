@@ -228,7 +228,7 @@ fn edit_sidebar(home: &Path, edit: &SidebarEdit) -> std::io::Result<()> {
     match &edit.layout {
         Some(layout) => {
             let volumes_shown = !volumes_hidden(read(Some(file.clone())).as_deref());
-            replace_file(&file, &with_place_shown(layout, None, volumes_shown))
+            replace_file(&file, with_place_shown(layout, None, volumes_shown))
         }
         None => match std::fs::remove_file(&file) {
             Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),

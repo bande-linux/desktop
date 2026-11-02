@@ -26,7 +26,7 @@ pub trait Stored: Clone + PartialEq + Default + 'static {
     }
 
     fn save(&self, folder: &Path) -> io::Result<()> {
-        bande_xdg::replace_file(&folder.join(Self::FILE), &self.to_text())
+        bande_xdg::replace_file(&folder.join(Self::FILE), self.to_text())
     }
 }
 

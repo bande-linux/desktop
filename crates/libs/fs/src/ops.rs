@@ -649,10 +649,7 @@ impl Worker {
         self.check()?;
         self.progress.current = Some(source.to_path_buf());
         let fresh = target.symlink_metadata().is_err();
-        loop {
-            let Err(error) = self.copy_entry(source, target)? else {
-                break;
-            };
+        while let Err(error) = self.copy_entry(source, target)? {
             let retry = self.trouble(source, error)?;
             if fresh && target.symlink_metadata().is_ok() {
                 let _ = remove_all(target);

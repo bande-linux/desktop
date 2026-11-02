@@ -287,6 +287,7 @@ impl Builder<'_> {
     }
 
     fn fill(&mut self, rect: Rect, color: Color) {
+        let rect = snap(rect);
         if color.a != 0 && rect.width > 0.0 && rect.height > 0.0 {
             self.items.push(Item::Rect { rect, color });
         }
@@ -360,5 +361,19 @@ impl Builder<'_> {
         self.fonts.push(data);
         self.font_ids.push((font, index));
         Some(index)
+    }
+}
+
+fn snap(rect: Rect) -> Rect {
+    let (left, top) = (rect.x.round(), rect.y.round());
+    let (right, bottom) = (
+        (rect.x + rect.width).round(),
+        (rect.y + rect.height).round(),
+    );
+    Rect {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
     }
 }

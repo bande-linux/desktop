@@ -19,7 +19,12 @@ const MANUAL_FIELDS: [(SettingId, &str, &str); 3] = [
 ];
 
 impl SettingsView {
-    fn manual_field(&mut self, id: SettingId, label: &str, placeholder: &str) -> Box<dyn Widget> {
+    pub(crate) fn manual_field(
+        &mut self,
+        id: SettingId,
+        label: &str,
+        placeholder: &str,
+    ) -> Box<dyn Widget> {
         let text = self
             .drafts
             .get(&id)
@@ -51,7 +56,7 @@ impl SettingsView {
         } else if !ethernet.cable {
             L10N.tr("cable-unplugged")
         } else if ethernet.connected {
-            match &ethernet.address {
+            match &ethernet.addressing.address {
                 Some(address) => {
                     L10N.tr_args("connected-as", [("address", address.clone().into())])
                 }
@@ -61,11 +66,14 @@ impl SettingsView {
             L10N.tr("not-connected")
         };
         let mut detail = Vec::new();
-        if let Some(router) = &ethernet.router {
+        if let Some(router) = &ethernet.addressing.router {
             detail.push(L10N.tr_args("router-is", [("address", router.clone().into())]));
         }
-        if !ethernet.dns.is_empty() {
-            detail.push(L10N.tr_args("dns-is", [("servers", ethernet.dns.join(", ").into())]));
+        if !ethernet.addressing.dns.is_empty() {
+            detail.push(L10N.tr_args(
+                "dns-is",
+                [("servers", ethernet.addressing.dns.join(", ").into())],
+            ));
         }
         let mut row = Row::new(Text::new(&status, Tone::Primary), None);
         if !detail.is_empty() {

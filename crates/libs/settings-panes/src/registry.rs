@@ -170,7 +170,12 @@ impl PaneId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SettingId {
     WifiPower,
+    KnownNetworks,
     Networks,
+    WifiAddress,
+    WifiRouter,
+    WifiDns,
+    OtherNetwork,
     BluetoothPower,
     PairedDevices,
     NearbyDevices,
@@ -305,6 +310,7 @@ pub enum Value {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum List {
+    KnownNetworks,
     Networks,
     PairedDevices,
     NearbyDevices,
@@ -666,6 +672,14 @@ fn connection_panes() -> Vec<Pane> {
             PaneId::Wifi,
             vec![
                 section(None, vec![switch(SettingId::WifiPower, "wifi-power")]),
+                section(
+                    Some(L10N.tr("known-networks")),
+                    vec![list(
+                        SettingId::KnownNetworks,
+                        "known-networks",
+                        List::KnownNetworks,
+                    )],
+                ),
                 section(
                     Some(L10N.tr("networks")),
                     vec![list(SettingId::Networks, "networks", List::Networks)],

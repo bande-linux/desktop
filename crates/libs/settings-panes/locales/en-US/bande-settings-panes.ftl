@@ -1,8 +1,10 @@
 wifi = Wi-Fi
 wifi-keywords = wireless, wlan, internet, network
 wifi-power-keywords = on, off, airplane
-networks = Networks
-networks-keywords = join, connect, ssid, hotspot, password
+known-networks = Known Networks
+known-networks-keywords = saved, remembered, auto-join, forget, details, ip address, router, dns, mac address, private address, low data, metered
+networks = Other Networks
+networks-keywords = join, connect, ssid, hidden, other, password
 bluetooth = Bluetooth
 bluetooth-keywords = wireless, headphones, mouse, keyboard, speaker
 bluetooth-power-keywords = on, off

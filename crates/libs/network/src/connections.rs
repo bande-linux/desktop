@@ -14,7 +14,7 @@ use crate::{
     NetworkManager, Result,
 };
 
-const IPV4: &str = "ipv4";
+pub(crate) const IPV4: &str = "ipv4";
 const DEVICE_STATE_UNMANAGED: u32 = 10;
 const ACTIVE_STATE_ACTIVATING: u32 = 1;
 const VPN_TYPES: [&str; 2] = ["vpn", "wireguard"];
@@ -25,10 +25,15 @@ pub struct Ethernet {
     pub cable: bool,
     pub managed: bool,
     pub connected: bool,
+    pub addressing: Addressing,
+    pub manual: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Addressing {
     pub address: Option<String>,
     pub router: Option<String>,
     pub dns: Vec<String>,
-    pub manual: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,6 +122,31 @@ pub fn ipv4_settings(manual: Option<&ManualIpv4>) -> HashMap<String, OwnedValue>
     ipv4
 }
 
+pub(crate) fn configured_ipv4(settings: &ConnectionSettings) -> Option<ManualIpv4> {
+    let ipv4 = settings.get(IPV4)?;
+    if text(ipv4, "method")? != "manual" {
+        return None;
+    }
+    let first =
+        Vec::<HashMap<String, OwnedValue>>::try_from(ipv4.get("address-data")?.try_clone().ok()?)
+            .ok()?
+            .into_iter()
+            .next()?;
+    let dns = ipv4
+        .get("dns")
+        .and_then(|dns| Vec::<u32>::try_from(dns.try_clone().ok()?).ok())
+        .unwrap_or_default();
+    Some(ManualIpv4 {
+        address: text(&first, "address")?.parse().ok()?,
+        prefix: u32::try_from(first.get("prefix")?).ok()?,
+        router: text(ipv4, "gateway").and_then(|router| router.parse().ok()),
+        dns: dns
+            .into_iter()
+            .map(|server| Ipv4Addr::from(server.to_le_bytes()))
+            .collect(),
+    })
+}
+
 pub(crate) fn text(entry: &HashMap<String, OwnedValue>, key: &str) -> Option<String> {
     String::try_from(entry.get(key)?.try_clone().ok()?).ok()
 }
@@ -129,23 +159,33 @@ impl NetworkManager {
             .next())
     }
 
-    fn device(&self, path: &OwnedObjectPath) -> Result<DeviceProxyBlocking<'_>> {
+    pub(crate) fn device(&self, path: &OwnedObjectPath) -> Result<DeviceProxyBlocking<'_>> {
         Ok(DeviceProxyBlocking::builder(&self.bus)
             .path(path.clone())?
             .build()?)
     }
 
     fn connection_of(&self, device: &DeviceProxyBlocking<'_>) -> Result<Option<OwnedObjectPath>> {
-        let active = device.active_connection()?;
-        if active.as_str() != "/" {
-            return Ok(Some(
-                ActiveConnectionProxyBlocking::builder(&self.bus)
-                    .path(active)?
-                    .build()?
-                    .connection()?,
-            ));
+        match self.active_connection_of(device)? {
+            Some(connection) => Ok(Some(connection)),
+            None => Ok(device.available_connections()?.into_iter().next()),
         }
-        Ok(device.available_connections()?.into_iter().next())
+    }
+
+    pub(crate) fn active_connection_of(
+        &self,
+        device: &DeviceProxyBlocking<'_>,
+    ) -> Result<Option<OwnedObjectPath>> {
+        let active = device.active_connection()?;
+        if active.as_str() == "/" {
+            return Ok(None);
+        }
+        Ok(Some(
+            ActiveConnectionProxyBlocking::builder(&self.bus)
+                .path(active)?
+                .build()?
+                .connection()?,
+        ))
     }
 
     pub fn ethernet(&self) -> Result<Option<Ethernet>> {
@@ -162,36 +202,40 @@ impl NetworkManager {
             cable: wired.carrier()?,
             managed: state != DEVICE_STATE_UNMANAGED,
             connected: state == DEVICE_STATE_ACTIVATED,
-            address: None,
-            router: None,
-            dns: Vec::new(),
+            addressing: Addressing::default(),
             manual: false,
         };
-        let config = device.ip4_config()?;
-        if ethernet.connected && config.as_str() != "/" {
-            let config = Ip4ConfigProxyBlocking::builder(&self.bus)
-                .path(config)?
-                .build()?;
-            ethernet.address = config.address_data()?.first().and_then(|entry| {
-                let prefix = u32::try_from(entry.get("prefix")?).ok()?;
-                Some(format!("{}/{prefix}", text(entry, "address")?))
-            });
-            ethernet.router = Some(config.gateway()?).filter(|router| !router.is_empty());
-            ethernet.dns = config
-                .nameserver_data()?
-                .iter()
-                .filter_map(|entry| text(entry, "address"))
-                .collect();
+        if ethernet.connected {
+            ethernet.addressing = self.addressing(&device)?;
         }
         if let Some(connection) = self.connection_of(&device)? {
             let settings: ConnectionSettings =
                 self.settings_connection(&connection)?.get_settings()?;
-            ethernet.manual = settings
-                .get(IPV4)
-                .and_then(|ipv4| text(ipv4, "method"))
-                .is_some_and(|method| method == "manual");
+            ethernet.manual = configured_ipv4(&settings).is_some();
         }
         Ok(Some(ethernet))
+    }
+
+    pub(crate) fn addressing(&self, device: &DeviceProxyBlocking<'_>) -> Result<Addressing> {
+        let config = device.ip4_config()?;
+        if config.as_str() == "/" {
+            return Ok(Addressing::default());
+        }
+        let config = Ip4ConfigProxyBlocking::builder(&self.bus)
+            .path(config)?
+            .build()?;
+        Ok(Addressing {
+            address: config.address_data()?.first().and_then(|entry| {
+                let prefix = u32::try_from(entry.get("prefix")?).ok()?;
+                Some(format!("{}/{prefix}", text(entry, "address")?))
+            }),
+            router: Some(config.gateway()?).filter(|router| !router.is_empty()),
+            dns: config
+                .nameserver_data()?
+                .iter()
+                .filter_map(|entry| text(entry, "address"))
+                .collect(),
+        })
     }
 
     pub fn configure_ethernet(&self, manual: Option<&ManualIpv4>) -> Result<()> {
@@ -202,13 +246,31 @@ impl NetworkManager {
         let Some(connection) = self.connection_of(&device)? else {
             return Ok(());
         };
-        let settings_connection = self.settings_connection(&connection)?;
+        self.edit_connection(&connection, |settings| {
+            settings.insert(IPV4.to_owned(), ipv4_settings(manual));
+        })?;
+        self.reactivate(&connection, &path)
+    }
+
+    pub(crate) fn edit_connection(
+        &self,
+        connection: &OwnedObjectPath,
+        edit: impl FnOnce(&mut ConnectionSettings),
+    ) -> Result<()> {
+        let settings_connection = self.settings_connection(connection)?;
         let mut settings = settings_connection.get_settings()?;
-        settings.insert(IPV4.to_owned(), ipv4_settings(manual));
-        settings_connection.update(settings)?;
+        edit(&mut settings);
+        Ok(settings_connection.update(settings)?)
+    }
+
+    pub(crate) fn reactivate(
+        &self,
+        connection: &OwnedObjectPath,
+        device: &OwnedObjectPath,
+    ) -> Result<()> {
         self.manager()?.activate_connection(
             &connection.as_ref(),
-            &path.as_ref(),
+            &device.as_ref(),
             &ObjectPath::from_static_str_unchecked("/"),
         )?;
         Ok(())

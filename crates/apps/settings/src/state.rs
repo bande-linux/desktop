@@ -1,10 +1,12 @@
 use bande_bluetooth::Device;
-use bande_network::Network;
+use bande_network::{KnownNetwork, Network, WifiLink};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WifiState {
     pub enabled: bool,
     pub networks: Vec<Network>,
+    pub known: Vec<KnownNetwork>,
+    pub link: WifiLink,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

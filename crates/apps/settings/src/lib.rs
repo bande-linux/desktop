@@ -33,6 +33,7 @@ mod time;
 mod updates;
 mod view;
 mod widgets;
+mod wifi;
 
 use std::sync::LazyLock;
 

@@ -38,6 +38,7 @@ use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Questi
 use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::widgets::{Column, Crossfade, Root};
+use crate::wifi::{HIDDEN_SECURITY, Other};
 use bande_keyboard::Layouts;
 use bande_settings_panes::{
     AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
@@ -92,6 +93,12 @@ pub(crate) enum Intent {
     EndSession(SessionEnd),
     Network(NetworkCommand),
     ManualIpv4(bool),
+    OpenNetwork(Vec<u8>),
+    AskOther(bool),
+    OtherName(String),
+    OtherSecurity(usize),
+    JoinOther(Option<String>),
+    WifiManual(bool),
     ImportVpn,
     ExcludeFolder,
     IncludeFolder(String),
@@ -170,6 +177,12 @@ pub(crate) struct Join {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Detail {
+    App(String),
+    Network(Vec<u8>),
+}
+
 pub struct SettingsView {
     pub(crate) panes: Vec<Pane>,
     pub(crate) values: HashMap<SettingId, Value>,
@@ -202,7 +215,9 @@ pub struct SettingsView {
     pub(crate) login: Option<LoginItems>,
     pub(crate) battery: Option<BatteryState>,
     pub(crate) notification_apps: Option<Vec<AppNotifications>>,
-    pub(crate) app_page: Option<String>,
+    pub(crate) detail: Option<Detail>,
+    pub(crate) other: Option<Other>,
+    pub(crate) wifi_manual: bool,
     pub(crate) software: SoftwareState,
     pub(crate) network: Option<NetworkState>,
     pub(crate) manual_ipv4: bool,
@@ -280,7 +295,9 @@ impl SettingsView {
             login: None,
             battery: None,
             notification_apps: None,
-            app_page: None,
+            detail: None,
+            other: None,
+            wifi_manual: false,
             software: SoftwareState::Unknown,
             network: None,
             manual_ipv4: false,
@@ -451,7 +468,11 @@ impl SettingsView {
         let (owner, settings): (Option<PaneId>, &[SettingId]) = match update {
             Update::Wifi(_) => (
                 Some(PaneId::Wifi),
-                &[SettingId::WifiPower, SettingId::Networks],
+                &[
+                    SettingId::WifiPower,
+                    SettingId::KnownNetworks,
+                    SettingId::Networks,
+                ],
             ),
             Update::Bluetooth(_) => (
                 Some(PaneId::Bluetooth),
@@ -530,6 +551,13 @@ impl SettingsView {
                     self.values
                         .insert(SettingId::WifiPower, Value::Flag(wifi.enabled));
                 }
+                if let Some(Detail::Network(ssid)) = &self.detail
+                    && !wifi.as_ref().is_some_and(|wifi| {
+                        wifi.enabled && wifi.known.iter().any(|known| known.ssid == *ssid)
+                    })
+                {
+                    self.detail = None;
+                }
                 self.wifi = wifi;
             }
             Update::Joined(ssid, outcome) => self.joined(ssid, outcome),
@@ -585,9 +613,18 @@ impl SettingsView {
                 if let Some(ethernet) = network.ethernet.as_ref() {
                     self.manual_ipv4 |= ethernet.manual;
                     for (id, value) in [
-                        (SettingId::EthernetAddress, ethernet.address.clone()),
-                        (SettingId::EthernetRouter, ethernet.router.clone()),
-                        (SettingId::EthernetDns, Some(ethernet.dns.join(", "))),
+                        (
+                            SettingId::EthernetAddress,
+                            ethernet.addressing.address.clone(),
+                        ),
+                        (
+                            SettingId::EthernetRouter,
+                            ethernet.addressing.router.clone(),
+                        ),
+                        (
+                            SettingId::EthernetDns,
+                            Some(ethernet.addressing.dns.join(", ")),
+                        ),
                     ] {
                         if !self.manual_ipv4 || !self.values.contains_key(&id) {
                             self.values
@@ -666,10 +703,15 @@ impl SettingsView {
         }
         self.join.joining = None;
         match outcome {
-            Joined::Joined => self.join.error = None,
+            Joined::Joined => {
+                self.join.error = None;
+                self.other = None;
+            }
             Joined::WrongPassword => {
                 self.join.error = Some(L10N.tr("wrong-password"));
-                self.join.asking = Some(ssid);
+                if self.other.is_none() {
+                    self.join.asking = Some(ssid);
+                }
                 self.focus_next = Some(Anchor::Password);
             }
             Joined::Failed(reason) => {
@@ -886,6 +928,13 @@ impl SettingsView {
             Event::Key {
                 key: Key::Escape,
                 modifiers,
+            } if plain(modifiers) && self.other.is_some() => {
+                self.intents.borrow_mut().push(Intent::AskOther(false));
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
             } if plain(modifiers) && self.picking.is_some() => {
                 self.intents.borrow_mut().push(Intent::Pick(None));
                 true
@@ -1010,12 +1059,23 @@ impl SettingsView {
                 self.drafts.insert(id, text);
                 continue;
             }
+            if let Intent::OtherName(name) = intent {
+                if let Some(other) = &mut self.other {
+                    other.name = name;
+                }
+                continue;
+            }
             self.stale = true;
             match intent {
-                Intent::Draft(..) => {}
+                Intent::Draft(..) | Intent::OtherName(..) => {}
                 Intent::Back => {
-                    if let Some(group) = self.app_page.take() {
-                        self.focus_next = Some(Anchor::Item(format!("app:{group}")));
+                    if let Some(detail) = self.detail.take() {
+                        self.forgetting = None;
+                        self.message = None;
+                        self.focus_next = Some(Anchor::Item(match detail {
+                            Detail::App(group) => format!("app:{group}"),
+                            Detail::Network(ssid) => String::from_utf8_lossy(&ssid).into_owned(),
+                        }));
                     } else if let Some(parent) = self.pane.parent() {
                         self.focus_next = Some(Anchor::Item(self.pane.keyword().to_owned()));
                         self.select_pane(parent);
@@ -1044,7 +1104,7 @@ impl SettingsView {
                 Intent::Reveal(path) => self.commands.push(Command::Reveal(path)),
                 Intent::OpenApp(group) => {
                     self.focus_next = Some(Anchor::Back);
-                    self.app_page = Some(group);
+                    self.detail = Some(Detail::App(group));
                     *self.scroll.borrow_mut() = ScrollState::default();
                 }
                 Intent::Software(command) => self.commands.push(Command::Software(command)),
@@ -1079,6 +1139,28 @@ impl SettingsView {
                         .push(Command::DefaultApp(DefaultAppCommand::Choose(role, id)));
                 }
                 Intent::Locale(command) => self.set_locale(command),
+                Intent::OpenNetwork(ssid) => {
+                    self.open_network(ssid);
+                    *self.scroll.borrow_mut() = ScrollState::default();
+                }
+                Intent::AskOther(asking) => {
+                    self.join = Join::default();
+                    self.other = asking.then(Other::default);
+                    self.focus_next = Some(if asking {
+                        Anchor::Setting(SettingId::OtherNetwork, None)
+                    } else {
+                        Anchor::Item("other-network".to_owned())
+                    });
+                }
+                Intent::OtherSecurity(index) => {
+                    if let (Some(other), Some((security, _))) =
+                        (&mut self.other, HIDDEN_SECURITY.get(index))
+                    {
+                        other.security = *security;
+                    }
+                }
+                Intent::JoinOther(password) => self.join_other(password),
+                Intent::WifiManual(manual) => self.set_wifi_manual(manual),
                 Intent::ManualIpv4(manual) => {
                     self.manual_ipv4 = manual;
                     if !manual {
@@ -1313,7 +1395,8 @@ impl SettingsView {
         self.confirming_empty_trash = false;
         self.confirming_clear_clipboard = false;
         self.picking = None;
-        self.app_page = None;
+        self.detail = None;
+        self.other = None;
         self.errors.clear();
         *self.scroll.borrow_mut() = ScrollState::default();
         self.invalidate();
@@ -1442,7 +1525,13 @@ impl SettingsView {
     fn commit_drafts(&mut self) {
         for (id, text) in std::mem::take(&mut self.drafts) {
             let text = text.trim().to_owned();
-            let clearable = matches!(id, SettingId::EthernetRouter | SettingId::EthernetDns);
+            let clearable = matches!(
+                id,
+                SettingId::EthernetRouter
+                    | SettingId::EthernetDns
+                    | SettingId::WifiRouter
+                    | SettingId::WifiDns
+            );
             if clearable || !text.is_empty() {
                 self.change(id, Value::Text(text));
             }
@@ -1451,6 +1540,14 @@ impl SettingsView {
     }
 
     fn change(&mut self, id: SettingId, value: Value) {
+        if matches!(
+            id,
+            SettingId::WifiAddress | SettingId::WifiRouter | SettingId::WifiDns
+        ) {
+            self.values.insert(id, value);
+            self.change_wifi_addressing();
+            return;
+        }
         if matches!(
             id,
             SettingId::EthernetAddress | SettingId::EthernetRouter | SettingId::EthernetDns
@@ -1535,7 +1632,7 @@ impl SettingsView {
     }
 
     fn can_go_back(&self) -> bool {
-        self.app_page.is_some() || self.pane.parent().is_some()
+        self.detail.is_some() || self.pane.parent().is_some()
     }
 
     pub(crate) fn allowed(&self, id: SettingId) -> bool {

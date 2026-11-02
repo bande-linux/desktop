@@ -1,0 +1,30 @@
+[package]
+name = "web-content"
+description = "The renderer: parse, style, lay out and paint a page; headless entry points"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+web-atoms.workspace = true
+web-dom.workspace = true
+web-html.workspace = true
+web-layout.workspace = true
+web-paint.workspace = true
+web-style.workspace = true
+web-text.workspace = true
+
+[features]
+raster = ["web-paint/raster"]
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+png.workspace = true
+
+[[example]]
+name = "render-png"
+required-features = ["raster"]

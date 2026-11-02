@@ -1391,6 +1391,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-content"
+version = "0.1.0"
+dependencies = [
+ "png",
+ "web-atoms",
+ "web-dom",
+ "web-html",
+ "web-layout",
+ "web-paint",
+ "web-style",
+ "web-text",
+]
+
+[[package]]
 name = "web-css"
 version = "0.1.0"
 dependencies = [

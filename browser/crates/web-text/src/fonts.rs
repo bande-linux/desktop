@@ -45,7 +45,7 @@ pub struct Fonts {
     loaded: Vec<LoadedFont>,
     by_source: HashMap<(u64, u32), FontId>,
     primary: HashMap<FontKey, Option<FontId>>,
-    fallback: HashMap<(FontKey, char), Option<FontId>>,
+    chosen: HashMap<(FontKey, char), Option<FontId>>,
 }
 
 impl Default for Fonts {
@@ -65,7 +65,7 @@ impl Fonts {
             loaded: Vec::new(),
             by_source: HashMap::new(),
             primary: HashMap::new(),
-            fallback: HashMap::new(),
+            chosen: HashMap::new(),
         }
     }
 
@@ -99,14 +99,15 @@ impl Fonts {
     }
 
     pub(crate) fn for_char(&mut self, key: FontKey, ch: char) -> Option<FontId> {
+        if let Some(&font) = self.chosen.get(&(key, ch)) {
+            return font;
+        }
         let primary = self.primary(key);
         if let Some(primary) = primary
             && self.maps(primary, ch)
         {
+            self.chosen.insert((key, ch), Some(primary));
             return Some(primary);
-        }
-        if let Some(&font) = self.fallback.get(&(key, ch)) {
-            return font;
         }
         let script = script_of(ch);
         let mut found = None;
@@ -132,7 +133,7 @@ impl Fonts {
         });
         drop(query);
         let font = found.and_then(|found| self.load(&found)).or(primary);
-        self.fallback.insert((key, ch), font);
+        self.chosen.insert((key, ch), font);
         font
     }
 

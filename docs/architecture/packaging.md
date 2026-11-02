@@ -27,12 +27,12 @@ profiles. Sizes are in [performance.md](performance.md).
   `metapackages`): the one package that installs a complete Bande system, the way `gnome-core`
   or `kde-plasma-desktop` do.
   It depends on the compositor, the core session services, the shell, the lock
-  screen and the portal backend at the same version, on `dbus-user-session`, logind and
+  screen, the keychain (`bande-secrets`) and the portal backend at the same version, on `dbus-user-session`, logind and
   `libpam-systemd`, on PipeWire, and on `bande-greeter | x-display-manager`, so there is always
   a way to log in: the Bande login window under greetd, or the display manager the system
   already has. It recommends `bande-greeter` anyway (greetd then asks which display manager to
   start), `bande-apt-source`, the screenshot tool, Files, Settings, the tray, automount, file
-  chooser and polkit agent, all built here at the same version, and the few Debian packages in
+  chooser, polkit agent and the keychain's PAM module, all built here at the same version, and the few Debian packages in
   [Runtime stack](#runtime-stack). It also recommends, unversioned, every Bande app, listed in
   `packaging/bande-desktop/default-apps`: an app built in
   [bande-linux/apps](https://github.com/bande-linux/apps) is added there when it gets its first
@@ -71,11 +71,10 @@ another package's recommends. `bande-desktop` itself keeps:
 - `pipewire-pulse`: apps that play through PulseAudio (the session drop-ins start it);
 - `libspa-0.2-bluetooth`: Bluetooth headphones, which the shell's Bluetooth menu connects;
 - `apt-config-icons-hidpi`: the AppStream icons Software shows, at 2×;
-- `gnome-keyring`, `libpam-gnome-keyring`: the Secret Service Mail, Calendar and browsers keep
-  passwords in, unlocked at login (see [Keyring](session.md#keyring));
 - `systemd-oomd`, `systemd-zram-generator`: run the memory policy it ships.
 
-It does not pull in `pipewire-alsa`, `needrestart` (Bande has
+It does not pull in `gnome-keyring` (the Bande keychain replaces it and conflicts with it, so the
+bus name has one owner), `pipewire-alsa`, `needrestart` (Bande has
 `/usr/libexec/bande-desktop/restart-services`, below), `cups` (Settings ▸ Printers installs it on
 demand), `xdg-utils` (Bande opens files and links with `bande_xdg::open`, so neither its X11 tools
 nor a fallback terminal come along), Qt's portal platform theme, `at-spi2-core` (a screen reader

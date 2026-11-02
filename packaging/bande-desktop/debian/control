@@ -16,6 +16,7 @@ Depends: bande-compositor (= ${binary:Version}),
          bande-clipboard (= ${binary:Version}),
          bande-shell (= ${binary:Version}),
          bande-lock (= ${binary:Version}),
+         bande-secrets (= ${binary:Version}),
          xdg-desktop-portal-bande (= ${binary:Version}),
          dbus-user-session,
          default-logind | logind,
@@ -39,8 +40,7 @@ Recommends: ${bande:Recommends},
             bande-file-chooser (= ${binary:Version}),
             bande-polkit (= ${binary:Version}),
             apt-config-icons-hidpi,
-            gnome-keyring,
-            libpam-gnome-keyring,
+            libpam-bande-secrets (= ${binary:Version}),
             systemd-oomd,
             systemd-zram-generator
 Description: Bande desktop environment
@@ -53,8 +53,8 @@ Description: Bande desktop environment
  start; "dpkg-reconfigure greetd" asks again later. Sound runs on PipeWire.
  .
  It recommends the Bande APT repository, through which the system follows
- every Bande release, every Bande app, and an unlocked keyring for the
- passwords apps keep. Other apps, such as a browser, and printing come
+ every Bande release and every Bande app. Passwords apps and networks
+ keep live in the Bande keychain, unlocked when you log in. Other apps, such as a browser, and printing come
  from Software and Settings.
  .
  So that running out of memory never freezes the computer, it recommends

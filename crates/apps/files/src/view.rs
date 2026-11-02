@@ -207,6 +207,7 @@ pub struct FilesView {
     pub(crate) inspector: bool,
     pub(crate) info: Option<Info>,
     pub(crate) inspector_controls: Option<crate::inspector::InspectorControls>,
+    pub(crate) group_cache: crate::groups::GroupCache,
     pub(crate) inspector_scroll: ScrollState,
     pub(crate) column_preview: Option<ColumnPreview>,
     pub(crate) rename: Option<Rename>,
@@ -344,6 +345,7 @@ impl FilesView {
             inspector: false,
             info: None,
             inspector_controls: None,
+            group_cache: crate::groups::GroupCache::default(),
             inspector_scroll: ScrollState::default(),
             column_preview: None,
             rename: None,
@@ -1744,6 +1746,15 @@ impl FilesView {
     fn empty_trash(&mut self) {
         self.requests.push(Request::PlaySound(TRASH_SOUND));
         self.start(Task::EmptyTrash, Purpose::Erase);
+    }
+
+    pub(crate) fn set_group(&mut self, group: Option<bande_fs::GroupBy>) {
+        let current = self.browser.sort();
+        if current.group != group {
+            self.browser.set_sort(Sort { group, ..current });
+            self.remember_view();
+            self.selection_changed();
+        }
     }
 
     pub(crate) fn set_mode(&mut self, mode: ViewMode) {

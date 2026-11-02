@@ -5,7 +5,9 @@ use std::iter::Peekable;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::str::Chars;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+
+use crate::group::{GroupBy, group_of};
 
 use crate::trash::{Trash, TrashItem};
 
@@ -25,6 +27,7 @@ pub struct Entry {
     pub size: u64,
     pub modified: Option<SystemTime>,
     pub created: Option<SystemTime>,
+    pub added: Option<SystemTime>,
     pub link: bool,
     pub trashed: Option<TrashItem>,
     pub extension_hidden: Option<bool>,
@@ -45,7 +48,14 @@ impl Entry {
             modified: metadata
                 .as_ref()
                 .and_then(|metadata| metadata.modified().ok()),
-            created: metadata.and_then(|metadata| metadata.created().ok()),
+            created: metadata
+                .as_ref()
+                .and_then(|metadata| metadata.created().ok()),
+            added: metadata.and_then(|metadata| {
+                let seconds = u64::try_from(metadata.ctime()).ok()?;
+                let nanoseconds = u32::try_from(metadata.ctime_nsec()).ok()?;
+                SystemTime::UNIX_EPOCH.checked_add(Duration::new(seconds, nanoseconds))
+            }),
             link,
             extension_hidden: match link || kind == Kind::Folder {
                 true => None,
@@ -80,6 +90,7 @@ pub struct Sort {
     pub by: SortBy,
     pub descending: bool,
     pub folders_first: bool,
+    pub group: Option<GroupBy>,
 }
 
 impl Default for Sort {
@@ -88,6 +99,7 @@ impl Default for Sort {
             by: SortBy::default(),
             descending: false,
             folders_first: true,
+            group: None,
         }
     }
 }
@@ -108,7 +120,10 @@ pub fn compare(a: &Entry, b: &Entry, sort: Sort) -> Ordering {
         true => b.is_folder().cmp(&a.is_folder()),
         false => Ordering::Equal,
     };
-    folders.then(if sort.descending {
+    let grouped = sort
+        .group
+        .map_or(Ordering::Equal, |by| group_of(a, by).cmp(&group_of(b, by)));
+    grouped.then(folders).then(if sort.descending {
         order.reverse()
     } else {
         order

@@ -1,4 +1,4 @@
-use bande_fs::SortBy;
+use bande_fs::{GroupBy, SortBy};
 use bande_toolkit::ui::{Menu, MenuItem};
 
 use crate::L10N;
@@ -29,6 +29,8 @@ pub enum Command {
     NewFolder,
     Paste,
     Sort(SortBy),
+    UseGroups,
+    Group(Option<GroupBy>),
     Icons,
     Columns,
     List,
@@ -71,6 +73,17 @@ const ACTIONS: &[(&str, Command)] = &[
     ("sort:modified", Command::Sort(SortBy::Modified)),
     ("sort:size", Command::Sort(SortBy::Size)),
     ("sort:kind", Command::Sort(SortBy::Kind)),
+    ("use-groups", Command::UseGroups),
+    ("group:none", Command::Group(None)),
+    ("group:kind", Command::Group(Some(GroupBy::Kind))),
+    (
+        "group:application",
+        Command::Group(Some(GroupBy::Application)),
+    ),
+    ("group:modified", Command::Group(Some(GroupBy::Modified))),
+    ("group:created", Command::Group(Some(GroupBy::Created))),
+    ("group:added", Command::Group(Some(GroupBy::Added))),
+    ("group:size", Command::Group(Some(GroupBy::Size))),
     ("icons", Command::Icons),
     ("columns", Command::Columns),
     ("list", Command::List),
@@ -82,6 +95,20 @@ const ACTIONS: &[(&str, Command)] = &[
     ("restore-sidebar", Command::RestoreSidebar),
     ("eject", Command::Eject),
 ];
+
+pub const GROUPS: [(Option<GroupBy>, &str); 7] = [
+    (None, "menu-group-none"),
+    (Some(GroupBy::Kind), "column-kind"),
+    (Some(GroupBy::Application), "menu-group-application"),
+    (Some(GroupBy::Modified), "column-modified"),
+    (Some(GroupBy::Created), "column-created"),
+    (Some(GroupBy::Added), "menu-group-added"),
+    (Some(GroupBy::Size), "column-size"),
+];
+
+pub fn group_action(group: Option<GroupBy>) -> &'static str {
+    action(&Command::Group(group))
+}
 
 const SORTS: [(SortBy, &str); 4] = [
     (SortBy::Name, "column-name"),
@@ -230,6 +257,7 @@ pub struct Folder {
     pub trash: bool,
     pub trash_empty: bool,
     pub sort: SortBy,
+    pub group: Option<GroupBy>,
     pub mode: ViewMode,
     pub hidden_shown: bool,
     pub paste: bool,
@@ -270,7 +298,18 @@ pub fn folder_menu(folder: Folder) -> Menu {
         .iter()
         .map(|(by, message)| item(message, &Command::Sort(*by)).checked(*by == folder.sort))
         .collect();
+    let groups = GROUPS
+        .iter()
+        .map(|(group, message)| {
+            item(message, &Command::Group(*group)).checked(*group == folder.group)
+        })
+        .collect();
     items.push(MenuItem::separator());
+    items.push(item("menu-use-groups", &Command::UseGroups).checked(folder.group.is_some()));
+    items.push(MenuItem::submenu(
+        &L10N.tr("menu-group-by"),
+        Menu::new(groups),
+    ));
     items.push(MenuItem::submenu(
         &L10N.tr("menu-sort-by"),
         Menu::new(sorts),

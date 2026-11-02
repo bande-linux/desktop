@@ -1,4 +1,4 @@
-use bande_fs::Sort;
+use bande_fs::{GroupBy, Sort};
 use bande_toolkit::Point;
 use bande_toolkit::ui::Menu;
 
@@ -167,6 +167,7 @@ impl FilesView {
             trash: self.browser.active_column().location == Location::Trash,
             trash_empty: !self.trash_full,
             sort: self.browser.sort().by,
+            group: self.browser.groups(),
             mode: self.mode,
             hidden_shown: self.browser.shows_hidden(),
             paste: self.clipboard_files,
@@ -230,6 +231,14 @@ impl FilesView {
                     self.selection_changed();
                 }
             }
+            Command::UseGroups => {
+                let group = match self.browser.groups() {
+                    Some(_) => None,
+                    None => Some(GroupBy::Kind),
+                };
+                self.set_group(group);
+            }
+            Command::Group(group) => self.set_group(group),
             Command::Icons => self.set_mode(ViewMode::Icons),
             Command::Columns => self.set_mode(ViewMode::Columns),
             Command::List => self.set_mode(ViewMode::List),

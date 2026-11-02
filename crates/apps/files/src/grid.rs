@@ -17,37 +17,79 @@ const LABEL_LINE: f32 = 16.0;
 const LABEL_GAP: f32 = 4.0;
 const LABEL_INSET: f32 = 4.0;
 const SELECTION_RADIUS: f32 = Radius::S;
+const GROUP_HEADING: f32 = 34.0;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Grid {
     pub columns: usize,
     pub cell_width: f32,
     pub cell_height: f32,
     pub icon: f32,
+    count: usize,
+    sections: Vec<(usize, f32)>,
 }
 
 impl Grid {
-    pub(crate) fn new(width: f32, icon: f32) -> Self {
+    pub(crate) fn new(width: f32, icon: f32, count: usize, starts: &[usize]) -> Self {
         let minimum = (icon + 36.0).max(96.0);
         let usable = (width - 2.0 * PADDING).max(minimum);
         let columns = ((usable / minimum).floor() as usize).max(1);
+        let cell_height = (2.0 * ICON_PAD + icon + LABEL_GAP + 2.0 * LABEL_LINE + 6.0).ceil();
+        let mut sections = Vec::with_capacity(starts.len().max(1));
+        let mut top = PADDING;
+        for (index, start) in starts.iter().enumerate() {
+            let end = starts.get(index + 1).copied().unwrap_or(count);
+            sections.push((*start, top + GROUP_HEADING));
+            top += GROUP_HEADING + (end - start).div_ceil(columns) as f32 * cell_height;
+        }
+        if sections.is_empty() {
+            sections.push((0, PADDING));
+        }
         Self {
             columns,
             cell_width: (usable / columns as f32).floor(),
-            cell_height: (2.0 * ICON_PAD + icon + LABEL_GAP + 2.0 * LABEL_LINE + 6.0).ceil(),
+            cell_height,
             icon,
+            count,
+            sections,
         }
     }
 
-    pub(crate) fn content_height(&self, count: usize) -> f32 {
-        count.div_ceil(self.columns) as f32 * self.cell_height + 2.0 * PADDING
+    fn section(&self, index: usize) -> usize {
+        self.sections
+            .partition_point(|(start, _)| *start <= index)
+            .saturating_sub(1)
+    }
+
+    fn section_len(&self, section: usize) -> usize {
+        let end = self
+            .sections
+            .get(section + 1)
+            .map_or(self.count, |(start, _)| *start);
+        end.saturating_sub(self.sections[section].0)
+    }
+
+    pub(crate) fn headings(&self) -> impl Iterator<Item = (usize, f32)> + '_ {
+        self.sections
+            .iter()
+            .enumerate()
+            .filter(|_| self.sections.len() > 1 || self.sections[0].1 > PADDING)
+            .map(|(index, (_, top))| (index, top - GROUP_HEADING))
+    }
+
+    pub(crate) fn content_height(&self) -> f32 {
+        let last = self.sections.len() - 1;
+        let (_, top) = self.sections[last];
+        top + self.section_len(last).div_ceil(self.columns) as f32 * self.cell_height + PADDING
     }
 
     pub(crate) fn cell(&self, index: usize) -> Rect {
-        let (row, column) = (index / self.columns, index % self.columns);
+        let (start, top) = self.sections[self.section(index)];
+        let local = index - start;
+        let (row, column) = (local / self.columns, local % self.columns);
         Rect::new(
             PADDING + column as f32 * self.cell_width,
-            PADDING + row as f32 * self.cell_height,
+            top + row as f32 * self.cell_height,
             self.cell_width,
             self.cell_height,
         )
@@ -73,27 +115,55 @@ impl Grid {
         )
     }
 
-    pub(crate) fn visible(&self, top: f32, height: f32, count: usize) -> Range<usize> {
-        let first_row = ((top - PADDING).max(0.0) / self.cell_height).floor() as usize;
-        let last_row = ((top + height - PADDING).max(0.0) / self.cell_height).ceil() as usize;
-        (first_row * self.columns).min(count)..(last_row * self.columns).min(count)
+    fn first_where(&self, below: impl Fn(Rect) -> bool) -> usize {
+        let (mut low, mut high) = (0, self.count);
+        while low < high {
+            let middle = (low + high) / 2;
+            match below(self.cell(middle)) {
+                true => low = middle + 1,
+                false => high = middle,
+            }
+        }
+        low
     }
 
-    pub(crate) fn step(&self, from: Option<usize>, key: Key, count: usize) -> Option<usize> {
-        let last = count.checked_sub(1)?;
+    pub(crate) fn visible(&self, top: f32, height: f32) -> Range<usize> {
+        let first = self.first_where(|cell| cell.y + cell.height <= top);
+        let last = self.first_where(|cell| cell.y < top + height);
+        first..last.max(first)
+    }
+
+    pub(crate) fn step(&self, from: Option<usize>, key: Key) -> Option<usize> {
+        let last = self.count.checked_sub(1)?;
         let Some(from) = from else {
             return Some(match key {
                 Key::Up | Key::Left | Key::End => last,
                 _ => 0,
             });
         };
+        let section = self.section(from);
+        let (start, _) = self.sections[section];
+        let (local, length) = (from - start, self.section_len(section));
+        let column = local % self.columns;
         Some(match key {
             Key::Left => from.saturating_sub(1),
             Key::Right => (from + 1).min(last),
-            Key::Up if from >= self.columns => from - self.columns,
+            Key::Up if local >= self.columns => from - self.columns,
+            Key::Up if section > 0 => {
+                let (above, _) = self.sections[section - 1];
+                let length = self.section_len(section - 1);
+                let row = length.saturating_sub(1) / self.columns;
+                above + (row * self.columns + column).min(length.saturating_sub(1))
+            }
             Key::Up => from,
-            Key::Down if from + self.columns <= last => from + self.columns,
-            Key::Down if from / self.columns < last / self.columns => last,
+            Key::Down if local + self.columns < length => from + self.columns,
+            Key::Down if local / self.columns < length.saturating_sub(1) / self.columns => {
+                start + length - 1
+            }
+            Key::Down if section + 1 < self.sections.len() => {
+                let (below, _) = self.sections[section + 1];
+                below + column.min(self.section_len(section + 1).saturating_sub(1))
+            }
             Key::Down => from,
             Key::Home => 0,
             Key::End => last,
@@ -128,8 +198,19 @@ fn offset(rect: Rect, by: Point) -> Rect {
 }
 
 impl FilesView {
-    pub(crate) fn grid(&self) -> Grid {
-        Grid::new(self.content_frame().width, self.icon_size as f32)
+    pub(crate) fn grid(&mut self) -> Grid {
+        let starts = self
+            .groups()
+            .iter()
+            .map(|(start, _)| *start)
+            .collect::<Vec<_>>();
+        let count = self.browser.columns()[0].entries.len();
+        Grid::new(
+            self.content_frame().width,
+            self.icon_size as f32,
+            count,
+            &starts,
+        )
     }
 
     pub(crate) fn thumbnail_size(&self) -> ThumbnailSize {
@@ -141,8 +222,7 @@ impl FilesView {
         if self.grid_scroll.0.as_ref() != Some(&location) {
             self.grid_scroll = (Some(location), ScrollState::default());
         }
-        let count = self.browser.columns()[0].entries.len();
-        let content = self.grid().content_height(count);
+        let content = self.grid().content_height();
         let viewport = self.content_frame().height;
         self.grid_scroll.1.set_extent(content, viewport);
     }
@@ -178,8 +258,8 @@ impl FilesView {
     }
 
     pub(crate) fn grid_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
-        let column = &self.browser.columns()[0];
-        let Some(target) = self.grid().step(column.selected, key, column.entries.len()) else {
+        let selected = self.browser.columns()[0].selected;
+        let Some(target) = self.grid().step(selected, key) else {
             return false;
         };
         if modifiers.shift {
@@ -233,15 +313,14 @@ impl FilesView {
             self.grid_scroll.1.scroll_to(cx, target);
         }
         let origin = self.grid_origin();
+        let grid = self.grid();
         let Some(band) = &mut self.band else {
             return false;
         };
         band.current = Point::new(pointer.position.x - origin.x, pointer.position.y - origin.y);
         let area = normalised(band.origin, band.current);
-        let grid = Grid::new(content.width, self.icon_size as f32);
-        let count = self.browser.columns()[0].entries.len();
         let touched = grid
-            .visible(area.y, area.height, count)
+            .visible(area.y, area.height)
             .filter(|index| {
                 intersects(grid.icon_rect(*index), area)
                     || intersects(grid.label_area(*index), area)
@@ -290,14 +369,48 @@ impl FilesView {
         let content = self.content_frame();
         self.hits.push((content, Hit::Column(0)));
         let grid = self.grid();
+        let mut shown = Vec::new();
         let origin = self.grid_origin();
         let scroll = content.y - origin.y;
         let column = self.browser.columns()[0].clone();
         let count = column.entries.len();
-        let visible = grid.visible(scroll, content.height, count);
+        let visible = grid.visible(scroll, content.height);
+        let groups = self.groups();
+        for (index, y) in grid.headings() {
+            let top = origin.y + y;
+            if top + GROUP_HEADING < content.y || top > content.y + content.height {
+                continue;
+            }
+            let Some((_, title)) = groups.get(index) else {
+                continue;
+            };
+            let ink = self.palette.ink;
+            let paragraph = self.text().paragraph(
+                title,
+                TextStyle::new(LABEL_SIZE + 1.0, ink).weight(TextStyle::SEMIBOLD),
+                Some(content.width - 2.0 * PADDING),
+                TextAlign::Start,
+            );
+            let baseline = top + GROUP_HEADING - 8.0;
+            shown.push(Item::Text {
+                origin: Point::new(
+                    content.x + PADDING + LABEL_INSET,
+                    baseline - paragraph.height(),
+                ),
+                paragraph,
+            });
+            shown.push(Item::Fill {
+                shape: Shape::rect(Rect::new(
+                    content.x + PADDING,
+                    baseline + 3.0,
+                    content.width - 2.0 * PADDING,
+                    1.0,
+                )),
+                paint: self.palette.hairline.into(),
+            });
+        }
         let size = self.thumbnail_size();
         let renaming = self.rename.as_ref().map(|rename| rename.path.clone());
-        let mut shown = Vec::new();
         for index in visible.clone() {
             let entry = &column.entries[index];
             let marked = column.is_marked(index);

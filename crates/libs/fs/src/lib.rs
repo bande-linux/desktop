@@ -1,5 +1,6 @@
 mod batch;
 mod extension;
+mod group;
 mod listing;
 mod naming;
 mod operations;
@@ -17,6 +18,9 @@ pub use batch::{
     BatchItem, BatchProblem, Numbering, RenameRule, new_name, plan_renames, rename_all,
 };
 pub use extension::{extension_hidden, hidden_extension, set_extension_hidden};
+pub use group::{
+    ARCHIVES, AppGroup, DOCUMENTS, DateGroup, Group, GroupBy, KindGroup, SizeGroup, group_of,
+};
 pub use listing::{
     Entry, Kind, Listing, Recency, Sort, SortBy, compare, finder_order, format_date,
     format_list_date, format_size, is_hidden, list, list_date, list_trash, merge, same_volume,

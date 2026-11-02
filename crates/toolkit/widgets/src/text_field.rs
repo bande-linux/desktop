@@ -68,6 +68,14 @@ impl TextField {
         }
     }
 
+    pub fn padding(self, padding: f32) -> Self {
+        Self {
+            leading: padding,
+            trailing: padding,
+            ..self
+        }
+    }
+
     pub(crate) fn search(self, leading: f32, trailing: f32) -> Self {
         Self {
             border: Border::Search,

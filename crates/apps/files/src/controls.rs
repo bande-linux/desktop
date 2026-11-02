@@ -969,7 +969,9 @@ impl FilesView {
             .hidden_extension(&entry.name, folder)
             .map(str::to_owned);
         self.cancel_rename();
-        let mut field = TextField::new("", &shown, |_| {}).in_place(NAME_SIZE);
+        let mut field = TextField::new("", &shown, |_| {})
+            .in_place(NAME_SIZE)
+            .padding(FIELD_INSET);
         field.select(match hidden_extension {
             Some(_) => 0..shown.len(),
             None => 0..stem_end(&shown, folder),

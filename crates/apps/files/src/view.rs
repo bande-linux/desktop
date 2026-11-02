@@ -8,8 +8,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
 
 use bande_fs::{
-    Action, Answer, Change, Entry, Finished, FolderChanges, FolderWatch, Operations, Purpose,
-    RenameError, Resolution, Sort, Step, Task, TrashItem, archive_path, can_extract,
+    Action, Answer, Change, Entry, Finished, FolderChanges, FolderWatch, History, Operations,
+    Purpose, RenameError, Resolution, Sort, Step, Task, TrashItem, archive_path, can_extract,
 };
 use bande_preview::Preview;
 use bande_search::{Usage, recent_files};
@@ -2075,13 +2075,19 @@ impl FilesView {
     }
 
     pub fn undo_title(&self) -> Option<String> {
-        let step = self.operations.history().next_undo()?;
+        let history = self.operations.history();
+        let step = history.next_undo()?;
         Some(L10N.tr_args("menu-undo-action", [("action", step_title(step).into())]))
     }
 
     pub fn redo_title(&self) -> Option<String> {
-        let step = self.operations.history().next_redo()?;
+        let history = self.operations.history();
+        let step = history.next_redo()?;
         Some(L10N.tr_args("menu-redo-action", [("action", step_title(step).into())]))
+    }
+
+    pub fn share_history(&mut self, history: Rc<RefCell<History>>) {
+        self.operations.share_history(history);
     }
 
     pub(crate) fn copy_paths(&mut self) {

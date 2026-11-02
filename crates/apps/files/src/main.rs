@@ -1,8 +1,10 @@
 mod menu_bar;
 
+use std::cell::RefCell;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
@@ -15,7 +17,7 @@ use bande_files::{
     list_columns_file, rows, serve_file_manager, settings_view, sidebar_file, status_bar_file,
     views_file, volumes_hidden, with_bookmarks, with_place_shown, without_bookmark,
 };
-use bande_fs::Trash;
+use bande_fs::{History, Trash};
 use bande_inbox::Inbox;
 use bande_search::{recently_used_path, usage_path};
 use bande_thumbnails::Thumbnails;
@@ -158,6 +160,7 @@ struct Files {
     search_excluded: Vec<PathBuf>,
     shows: Option<Inbox<ShowRequest>>,
     last_folder: Option<PathBuf>,
+    history: Rc<RefCell<History>>,
     trash: Trash,
 }
 
@@ -398,6 +401,7 @@ impl Files {
             TextSystem::new(),
         )?;
         view.set_hidden_places(sidebar.hidden, sidebar.volumes_shown);
+        view.share_history(Rc::clone(&self.history));
         view.set_default_view(self.settings.default_view);
         view.apply_settings(&self.settings);
         if let Some(thumbnails) = thumbnails {
@@ -544,6 +548,7 @@ impl Program for Files {
             search_excluded: Vec::new(),
             shows,
             last_folder,
+            history: Rc::default(),
             trash,
         };
         match arguments.iter().any(|argument| argument == SERVICE_FLAG) {

@@ -1,5 +1,7 @@
+use std::cell::{Ref, RefCell};
 use std::io;
 use std::os::fd::BorrowedFd;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use crate::ops::{Answer, Change, Conflict, Job, Outcome, Progress, Report, Task};
@@ -41,7 +43,7 @@ pub struct Finished {
 #[derive(Debug)]
 pub struct Operations {
     trash: Trash,
-    history: History,
+    history: Rc<RefCell<History>>,
     running: Vec<Running>,
 }
 
@@ -64,7 +66,7 @@ impl Operations {
     pub fn new(trash: Trash) -> Self {
         Self {
             trash,
-            history: History::default(),
+            history: Rc::default(),
             running: Vec::new(),
         }
     }
@@ -73,8 +75,12 @@ impl Operations {
         &self.running
     }
 
-    pub fn history(&self) -> &History {
-        &self.history
+    pub fn history(&self) -> Ref<'_, History> {
+        self.history.borrow()
+    }
+
+    pub fn share_history(&mut self, history: Rc<RefCell<History>>) {
+        self.history = history;
     }
 
     pub fn start(&mut self, task: Task, purpose: Purpose) -> io::Result<()> {
@@ -92,7 +98,7 @@ impl Operations {
     }
 
     pub fn record(&mut self, action: Action, changes: Vec<Change>) {
-        self.history.record(action, changes);
+        self.history.borrow_mut().record(action, changes);
     }
 
     fn revert(&mut self, step: Step, purpose: Purpose) -> io::Result<()> {
@@ -105,7 +111,7 @@ impl Operations {
     }
 
     pub fn undo(&mut self) -> io::Result<bool> {
-        let Some(step) = self.history.take_undo() else {
+        let Some(step) = self.history.borrow_mut().take_undo() else {
             return Ok(false);
         };
         let action = step.action;
@@ -113,7 +119,7 @@ impl Operations {
     }
 
     pub fn redo(&mut self) -> io::Result<bool> {
-        let Some(step) = self.history.take_redo() else {
+        let Some(step) = self.history.borrow_mut().take_redo() else {
             return Ok(false);
         };
         let action = step.action;
@@ -174,9 +180,12 @@ impl Operations {
             changes: outcome.changes.clone(),
         };
         match running.purpose {
-            Purpose::Do(action) => self.history.record(action, outcome.changes.clone()),
-            Purpose::Undo(action) => self.history.undone(step(action)),
-            Purpose::Redo(action) => self.history.redone(step(action)),
+            Purpose::Do(action) => self
+                .history
+                .borrow_mut()
+                .record(action, outcome.changes.clone()),
+            Purpose::Undo(action) => self.history.borrow_mut().undone(step(action)),
+            Purpose::Redo(action) => self.history.borrow_mut().redone(step(action)),
             Purpose::Erase => {}
         }
         Some(Finished {

@@ -10,6 +10,7 @@ use web_style::Color;
 use web_text::{Fonts, Glyph};
 
 pub use web_layout::Rect;
+pub use web_style::Color;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Item {

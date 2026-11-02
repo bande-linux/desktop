@@ -9,6 +9,9 @@ pub fn replace_file(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<()> {
     }
     let mut staging = OsString::from(path.as_os_str());
     staging.push(".new");
-    fs::write(&staging, contents)?;
-    fs::rename(&staging, path)
+    let written = fs::write(&staging, contents).and_then(|()| fs::rename(&staging, path));
+    if written.is_err() {
+        let _ = fs::remove_file(&staging);
+    }
+    written
 }

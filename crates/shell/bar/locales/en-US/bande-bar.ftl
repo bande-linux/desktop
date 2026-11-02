@@ -66,6 +66,7 @@ menu-open = Open
 menu-keep = Keep in Taskbar
 menu-login = Open at Login
 menu-show = Show in Files
+menu-options = Options
 remove = Remove
 menu-empty-trash-ask = Empty Trash…
 menu-empty-trash = Empty Trash

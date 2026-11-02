@@ -231,7 +231,8 @@ impl Entry {
     }
 
     pub fn without_window(self) -> Self {
-        let needs_window = Standard::parse(&self.action).is_some_and(Standard::needs_window);
+        let needs_window = self.action.starts_with(KEY_ACTION)
+            || Standard::parse(&self.action).is_some_and(Standard::needs_window);
         Self {
             enabled: self.enabled && !needs_window,
             children: self

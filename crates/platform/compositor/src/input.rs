@@ -668,7 +668,10 @@ impl Compositor {
                                 state.drag_from_anywhere(&toplevel, button);
                             }
                         }
-                        None => state.focus(None),
+                        None => {
+                            state.windowless_app = None;
+                            state.focus(None);
+                        }
                     },
                 }
             }

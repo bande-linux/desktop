@@ -29,7 +29,7 @@ impl State {
             .as_ref()
             .is_some_and(|surface| self.toplevel_of(surface).is_none());
         self.key_behind_layer = self.key_window().filter(|_| onto_layer);
-        if !onto_layer {
+        if surface.is_some() && !onto_layer {
             self.windowless_app = None;
         }
         self.typed_at = None;
@@ -99,8 +99,15 @@ impl State {
             .key_behind_layer
             .clone()
             .filter(|key| self.window_index(key).is_some())
-            .or_else(|| self.frontmost(None));
+            .or_else(|| self.frontmost_unless_windowless());
         self.focus(next);
+    }
+
+    fn frontmost_unless_windowless(&self) -> Option<WlSurface> {
+        match self.windowless_app {
+            Some(_) => None,
+            None => self.frontmost(None),
+        }
     }
 
     pub(crate) fn refocus_after_losing(&mut self, lost: &WlSurface) {
@@ -218,7 +225,7 @@ impl State {
                 .iter()
                 .any(|window| window.surface() == previous && self.present(window))
         });
-        let next = previous.or_else(|| self.frontmost(None));
+        let next = previous.or_else(|| self.frontmost_unless_windowless());
         self.focus(next);
     }
 

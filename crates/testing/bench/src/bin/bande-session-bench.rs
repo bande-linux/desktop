@@ -23,11 +23,10 @@ const FOLDER_ENTRIES: usize = 400;
 const BUTTON_LEFT: u32 = 0x110;
 const BUTTON_RIGHT: u32 = 0x111;
 const KEY_ESC: u32 = 1;
+const KEY_W: u32 = 17;
 const KEY_A: u32 = 30;
 const KEY_SPACE: u32 = 57;
-const KEY_LEFTALT: u32 = 56;
 const KEY_LEFTMETA: u32 = 125;
-const KEY_UP: u32 = 103;
 const TICK_MS: f64 = 10.0;
 const FILES: &str = "org.bande.Files";
 const TERMINAL: &str = "org.bande.Terminal";
@@ -445,9 +444,9 @@ impl Bench {
 
     fn overview(&mut self) -> Result<(), Box<dyn Error>> {
         for _ in 0..2 {
-            self.tap(&[KEY_LEFTALT, KEY_LEFTMETA, KEY_UP]);
+            self.tap(&[KEY_LEFTMETA, KEY_W]);
             self.wait(STEPS / 2)?;
-            self.tap(&[KEY_LEFTALT, KEY_LEFTMETA, KEY_UP]);
+            self.tap(&[KEY_LEFTMETA, KEY_W]);
             self.wait(STEPS / 2)?;
         }
         Ok(())

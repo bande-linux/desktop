@@ -132,11 +132,14 @@ impl DateFormats {
                     formatter.format(&DateTime { date, time }).to_string()
                 })
                 .unwrap_or_else(|| at.strftime("%H:%M").to_string());
-        let digits = |character: char| character.is_ascii_digit() || character == ':';
+        let digits = |character: char| character.is_numeric() || character == ':';
         let start = formatted.find(digits).unwrap_or(0);
         let end = formatted
-            .rfind(digits)
-            .map_or(formatted.len(), |end| end + 1);
+            .char_indices()
+            .rfind(|(_, character)| digits(*character))
+            .map_or(formatted.len(), |(end, character)| {
+                end + character.len_utf8()
+            });
         let period = format!("{} {}", &formatted[..start], &formatted[end..]);
         let period = period.trim_matches(|character: char| character.is_whitespace());
         (

@@ -142,6 +142,7 @@ impl Dispatch<XdgSurface, ()> for State {
         if let xdg_surface::Event::Configure { serial } = event {
             xdg_surface.ack_configure(serial);
             state.configured = true;
+            state.configure_unapplied = true;
         }
     }
 }

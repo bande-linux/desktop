@@ -82,28 +82,28 @@ impl Window {
     pub fn set_exclusive_zone(&mut self, zone: i32) {
         if let ShellSurface::Layer(layer) = &self.role {
             layer.set_exclusive_zone(zone);
-            self.needs_redraw = true;
+            self.stage();
         }
     }
 
     pub fn set_layer(&mut self, kind: LayerKind) {
         if let ShellSurface::Layer(layer) = &self.role {
             layer.set_layer(layer_of(kind));
-            self.needs_redraw = true;
+            self.stage();
         }
     }
 
     pub fn set_layer_anchor(&mut self, anchor: Edges) {
         if let ShellSurface::Layer(layer) = &self.role {
             layer.set_anchor(anchor_of(anchor));
-            self.needs_redraw = true;
+            self.stage();
         }
     }
 
     pub fn set_layer_margin(&mut self, top: i32) {
         if let ShellSurface::Layer(layer) = &self.role {
             layer.set_margin(top, 0, 0, 0);
-            self.needs_redraw = true;
+            self.stage();
         }
     }
 
@@ -120,14 +120,14 @@ impl Window {
         while !self.state.configured {
             self.queue.blocking_dispatch(&mut self.state)?;
         }
-        self.needs_redraw = true;
+        self.stage();
         Ok(())
     }
 
     pub fn set_input_region(&mut self, region: Option<&[Rect]>) {
         let Some(rects) = region else {
             self.surface.set_input_region(None);
-            self.needs_redraw = true;
+            self.stage();
             return;
         };
         let Some(compositor) = &self.state.compositor else {
@@ -147,7 +147,7 @@ impl Window {
         }
         self.surface.set_input_region(Some(&wayland_region));
         wayland_region.destroy();
-        self.needs_redraw = true;
+        self.stage();
     }
 
     pub fn set_keyboard_focus(&mut self, focus: KeyboardFocus) -> Result<(), WindowError> {
@@ -155,7 +155,7 @@ impl Window {
             return Err(WindowError::Missing("a layer surface"));
         };
         layer.set_keyboard_interactivity(keyboard_interactivity(focus));
-        self.needs_redraw = true;
+        self.stage();
         Ok(())
     }
 }

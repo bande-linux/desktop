@@ -103,6 +103,7 @@ pub fn clock_texts(formats: &DateFormats, now: &jiff::Zoned) -> (String, String)
 struct Model {
     input_source: Option<String>,
     message: Option<String>,
+    note: String,
     position: (usize, usize),
     name: String,
     initial: String,
@@ -134,6 +135,7 @@ struct LockView {
     paragraphs: Option<[Paragraph; 4]>,
     input_source: Option<Paragraph>,
     message: Option<Paragraph>,
+    note: Option<Paragraph>,
     percent: Option<Paragraph>,
     row: Vec<Size>,
     frame: Rect,
@@ -197,6 +199,14 @@ impl Widget for LockView {
             cx.text.paragraph(
                 message,
                 TextStyle::role(TextRole::BodyStrong, palette.ink),
+                Some(MESSAGE_WIDTH),
+                TextAlign::Center,
+            )
+        });
+        self.note = (!model.note.is_empty()).then(|| {
+            cx.text.paragraph(
+                &model.note,
+                TextStyle::role(TextRole::Callout, palette.ink),
                 Some(MESSAGE_WIDTH),
                 TextAlign::Center,
             )
@@ -416,6 +426,17 @@ impl LockView {
                 paragraph: source.clone(),
             });
         }
+        if let Some(note) = &self.note {
+            let row = self.row.iter().map(|size| size.height).fold(0.0, f32::max);
+            let bottom = self.frame.y + self.frame.height - POWER_BOTTOM - row - GAP * 2.0;
+            items.push(Item::Text {
+                origin: Point::new(
+                    (centre - MESSAGE_WIDTH / 2.0).round(),
+                    (bottom - note.height()).round(),
+                ),
+                paragraph: note.clone(),
+            });
+        }
     }
 
     fn paint_status(&self, cx: &Context, items: &mut Vec<Item>) {
@@ -500,6 +521,7 @@ impl LockScreen {
         let model: Shared = Rc::new(RefCell::new(Model {
             input_source: None,
             message: None,
+            note: String::new(),
             position: (0, 1),
             name: user.full_name.clone(),
             initial: user
@@ -543,6 +565,7 @@ impl LockScreen {
             paragraphs: None,
             input_source: None,
             message: None,
+            note: None,
             percent: None,
             row: Vec::new(),
             frame: Rect::default(),
@@ -752,6 +775,10 @@ impl LockScreen {
         model
             .backdrop_shown
             .animate_at(now, false, 1.0, Spring::FADE);
+    }
+
+    pub fn set_note(&mut self, note: &str) {
+        note.trim().clone_into(&mut self.model.borrow_mut().note);
     }
 
     pub fn set_wallpaper(&mut self, image: Image) {

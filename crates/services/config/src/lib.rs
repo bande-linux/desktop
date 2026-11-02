@@ -893,6 +893,7 @@ pub struct Config {
     pub tinted_frame: bool,
     pub reopen_apps: bool,
     pub reopen_apps_after_crash: bool,
+    pub lock_message: String,
     pub clock: ClockFormat,
     pub accessibility: Accessibility,
     pub bar: Bar,
@@ -928,6 +929,7 @@ impl Default for Config {
             tinted_frame: false,
             reopen_apps: true,
             reopen_apps_after_crash: false,
+            lock_message: String::new(),
             clock: ClockFormat::Automatic,
             accessibility: Accessibility::default(),
             bar: Bar::default(),
@@ -1072,6 +1074,9 @@ impl Parser<'_> {
                     .keyword(node, &ACCENTS)
                     .map(|accent| config.accent = accent),
                 "tinted-frame" => self.flag(node).map(|tinted| config.tinted_frame = tinted),
+                "lock-message" => self
+                    .string(node)
+                    .map(|message| config.lock_message = message),
                 "reopen-apps" => self.flag(node).map(|reopen| config.reopen_apps = reopen),
                 "reopen-apps-after-crash" => self
                     .flag(node)
@@ -1649,6 +1654,15 @@ impl Parser<'_> {
             Ok(())
         });
         wallpaper
+    }
+
+    fn string(&self, node: &KdlNode) -> Result<String, ConfigError> {
+        let entry = self.argument(node)?;
+        entry
+            .value()
+            .as_string()
+            .map(str::to_owned)
+            .ok_or_else(|| self.at_entry(entry, format!("`{}` must be text", node.name().value())))
     }
 
     fn image_path(&self, node: &KdlNode) -> Result<PathBuf, ConfigError> {

@@ -31,6 +31,10 @@ pub trait Config {
     #[zbus(property)]
     fn set_tinted_frame(&self, tinted: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn lock_message(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_lock_message(&self, message: &str) -> zbus::Result<()>;
+    #[zbus(property)]
     fn reopen_apps(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_reopen_apps(&self, on: bool) -> zbus::Result<()>;
@@ -289,7 +293,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 74] = [
+pub const CONFIG_SETTINGS: [SettingId; 75] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -320,6 +324,7 @@ pub const CONFIG_SETTINGS: [SettingId; 74] = [
     SettingId::Accent,
     SettingId::TintedFrame,
     SettingId::ReopenApps,
+    SettingId::LockMessage,
     SettingId::ReopenAfterCrash,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
@@ -534,6 +539,7 @@ impl SettingsClient {
             SettingId::Accent => Value::Keyword(self.config.accent()?),
             SettingId::TintedFrame => Value::Flag(self.config.tinted_frame()?),
             SettingId::ReopenApps => Value::Flag(self.config.reopen_apps()?),
+            SettingId::LockMessage => Value::Text(self.config.lock_message()?),
             SettingId::ReopenAfterCrash => Value::Flag(self.config.reopen_apps_after_crash()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
@@ -622,6 +628,7 @@ impl SettingsClient {
             (SettingId::Accent, Value::Keyword(keyword)) => self.config.set_accent(keyword),
             (SettingId::TintedFrame, Value::Flag(tinted)) => self.config.set_tinted_frame(*tinted),
             (SettingId::ReopenApps, Value::Flag(on)) => self.config.set_reopen_apps(*on),
+            (SettingId::LockMessage, Value::Text(message)) => self.config.set_lock_message(message),
             (SettingId::ReopenAfterCrash, Value::Flag(on)) => {
                 self.config.set_reopen_apps_after_crash(*on)
             }

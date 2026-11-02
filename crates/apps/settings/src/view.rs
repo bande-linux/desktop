@@ -1678,6 +1678,7 @@ impl SettingsView {
                     | SettingId::EthernetDns
                     | SettingId::WifiRouter
                     | SettingId::WifiDns
+                    | SettingId::LockMessage
             );
             if clearable || !text.is_empty() {
                 self.change(id, Value::Text(text));

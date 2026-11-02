@@ -435,3 +435,6 @@ corner-desktop = Desktop
 corner-notification-center = Notification Center
 corner-search = Search
 corner-lock-screen = Lock Screen
+lock-message = Message on the lock screen
+lock-message-keywords = lock screen, message, contact, if found, note, text
+lock-message-description = Shown above the buttons while the screen is locked, such as how to return a lost computer

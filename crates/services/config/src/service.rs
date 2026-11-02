@@ -26,6 +26,8 @@ use crate::{
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
 pub type NightLightValue = (bool, String, String, String, u32);
 pub type FocusScheduleValue = (bool, String, String);
+const LOCK_MESSAGE_LIMIT: usize = 200;
+
 pub type HotCornersValue = (String, String, String, String);
 
 fn clock_time(text: &str) -> zbus::fdo::Result<ClockTime> {
@@ -166,6 +168,9 @@ fn publish_changes(
         }
         if before.tinted_frame != after.tinted_frame {
             let _ = guard.tinted_frame_changed(emitter).await;
+        }
+        if before.lock_message != after.lock_message {
+            let _ = guard.lock_message_changed(emitter).await;
         }
         if before.reopen_apps != after.reopen_apps {
             let _ = guard.reopen_apps_changed(emitter).await;
@@ -523,6 +528,22 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_tinted_frame(&self, tinted: bool) -> zbus::fdo::Result<()> {
         self.write(&Setting::TintedFrame(tinted))
+    }
+
+    #[zbus(property)]
+    fn lock_message(&self) -> String {
+        self.store.current().lock_message.clone()
+    }
+
+    #[zbus(property)]
+    fn set_lock_message(&self, message: String) -> zbus::fdo::Result<()> {
+        let message = message.trim().to_owned();
+        if message.chars().count() > LOCK_MESSAGE_LIMIT {
+            return Err(InvalidArgs(format!(
+                "the lock screen message takes at most {LOCK_MESSAGE_LIMIT} characters"
+            )));
+        }
+        self.write(&Setting::LockMessage(message))
     }
 
     #[zbus(property)]

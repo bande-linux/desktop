@@ -18,6 +18,7 @@ pub enum Setting {
     TintedFrame(bool),
     ReopenApps(bool),
     ReopenAppsAfterCrash(bool),
+    LockMessage(String),
     Clock(ClockFormat),
     ShowBatteryPercentage(bool),
     LowPowerOnBattery(bool),
@@ -92,6 +93,12 @@ impl Setting {
                 None,
                 "reopen-apps",
                 (!on).then_some(KdlValue::Bool(false)),
+            ),
+            Self::LockMessage(message) => set(
+                &mut document,
+                None,
+                "lock-message",
+                (!message.is_empty()).then(|| message.clone().into()),
             ),
             Self::ReopenAppsAfterCrash(on) => set(
                 &mut document,

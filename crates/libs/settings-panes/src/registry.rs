@@ -320,6 +320,7 @@ pub enum SettingId {
     NearbyPrinters,
     Accounts,
     HotCornersPage,
+    LockMessage,
     HotCornerTopLeft,
     HotCornerTopRight,
     HotCornerBottomLeft,
@@ -1581,6 +1582,13 @@ fn power_pane() -> Pane {
                         L10N.tr("sleep-after-keywords"),
                         choice(sleep_choices()),
                     ),
+                    setting(
+                        SettingId::LockMessage,
+                        L10N.tr("lock-message"),
+                        L10N.tr("lock-message-keywords"),
+                        Kind::Text,
+                    )
+                    .described("lock-message-description"),
                 ],
             ),
             section(

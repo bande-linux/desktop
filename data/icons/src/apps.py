@@ -199,6 +199,7 @@ ICONS = {
     'org.bande.Velox': velox,
     'org.bande.DiskUtility': disk_utility,
     'org.bande.Calculator': calculator,
+    'org.bande.Preview': image_viewer,
     'org.bande.Launcher': launcher,
     'org.bande.About': about,
     'org.bande.Screenshot': screenshot,

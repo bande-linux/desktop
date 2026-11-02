@@ -13,7 +13,8 @@ pub const CREATOR: &str = "bande:creator";
 pub const ALLOWED: &str = "bande:allowed";
 const CONTENT_TYPE: &str = oo7::CONTENT_TYPE_ATTRIBUTE;
 const EXTENSION: &str = "keyring";
-const CURRENT_FORMAT: &str = "v1";
+const OWN_FOLDER: &str = "bande";
+const KEYRINGS: &str = "keyrings/v1";
 
 #[derive(Debug)]
 pub enum Error {
@@ -205,13 +206,9 @@ pub struct Keychain {
 
 impl Keychain {
     pub async fn load(data_home: PathBuf) -> Self {
-        let directory = data_home.join("keyrings");
-        let mut names = keyring_names(&directory.join(CURRENT_FORMAT));
-        for legacy in keyring_names(&directory) {
-            if valid_name(&legacy) && !names.contains(&legacy) {
-                names.push(legacy);
-            }
-        }
+        let data_home = data_home.join(OWN_FOLDER);
+        let directory = data_home.join(KEYRINGS);
+        let mut names = keyring_names(&directory);
         if !names.iter().any(|name| name == LOGIN) {
             names.insert(0, LOGIN.to_owned());
         }
@@ -259,13 +256,11 @@ impl Keychain {
     }
 
     fn directory(&self) -> PathBuf {
-        self.data_home.join("keyrings")
+        self.data_home.join(KEYRINGS)
     }
 
     fn file(&self, name: &str) -> PathBuf {
-        self.directory()
-            .join(CURRENT_FORMAT)
-            .join(format!("{name}.{EXTENSION}"))
+        self.directory().join(format!("{name}.{EXTENSION}"))
     }
 
     pub fn collections(&self) -> &[Collection] {
@@ -310,17 +305,12 @@ impl Keychain {
 
     pub fn exists(&self, name: &str) -> bool {
         self.file(name).exists()
-            || self
-                .directory()
-                .join(format!("{name}.{EXTENSION}"))
-                .exists()
     }
 
     pub async fn unlock(&mut self, name: &str, password: Secret) -> Result<()> {
         if !self.collection_mut(name)?.locked() {
             return self.verify(name, &password).await;
         }
-        let imported = !self.file(name).exists();
         let keyring = UnlockedKeyring::open_at(&self.data_home, name, Some(password)).await?;
         let mut slots = Vec::new();
         for item in keyring.all_items().await? {
@@ -331,10 +321,6 @@ impl Keychain {
                 },
                 Err(_) => Slot::Unreadable,
             });
-        }
-        if imported && self.exists(name) {
-            keyring.write().await?;
-            tracing::info!("imported the {name} keyring from GNOME Keyring");
         }
         let modified = modified_seconds(&self.file(name));
         let collection = self.collection_mut(name)?;
@@ -497,12 +483,10 @@ impl Keychain {
     }
 
     pub fn set_aside(&mut self, name: &str) -> Result<()> {
-        let legacy = self.directory().join(format!("{name}.{EXTENSION}"));
-        for file in [self.file(name), legacy] {
-            if file.exists() {
-                let aside = file.with_file_name(format!("{name}-{}.{EXTENSION}", now()));
-                std::fs::rename(file, aside)?;
-            }
+        let file = self.file(name);
+        if file.exists() {
+            let aside = file.with_file_name(format!("{name}-{}.{EXTENSION}", now()));
+            std::fs::rename(file, aside)?;
         }
         self.collection_mut(name)?.open = None;
         Ok(())

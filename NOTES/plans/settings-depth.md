@@ -83,13 +83,11 @@ failure" (needs the SMC driver), scheduled sleep and wake.
 
 **Users & Groups.** Has: the accounts with picture, full name and kind; per account a page
 with picture (file chooser, crop to the circle), full name, the administrator flag, Delete
-User… keeping or deleting the home folder, and Change Password for your own; Add User… (full
-name, account name, kind, password), all through AccountsService and polkit. Missing:
-automatic login (greetd has only `initial_session`, in the packaged
-`/usr/share/bande-greeter/greetd-config.toml`, so a switch needs a root-owned configuration
-it may write first, for example a drop-in pointing greetd at `/etc/bande-greeter/greetd.toml`
-and a polkit-gated helper), resetting another user's password, groups, the guest user,
-pictures from a bundled set or the camera.
+User… keeping or deleting the home folder (refused while the user is logged in), and Change
+Password for your own; Add User… (full name, account name, kind, password), all through
+AccountsService and polkit. Missing: resetting another user's password, groups, the guest user,
+pictures from a bundled set or the camera. Not planned: automatic login (the owner decided
+Bande doesn't need it).
 
 **Passwords.** Out of scope.
 
@@ -117,6 +115,5 @@ Ranked by how often a user needs them and how badly they are stuck without them.
    `.local` name.
 4. Personal Hotspot, after `dnsmasq-base` is installed and AP mode is tried on the chip.
 5. Keyboard: editable shortcuts.
-6. Users & Groups: automatic login (see the pane above).
-7. Show scroll bars, double-click speed, Wake for network access, Bluetooth rename.
-8. Focus: days of the week and "for an hour"; Wallpaper: solid colours.
+6. Show scroll bars, double-click speed, Wake for network access, Bluetooth rename.
+7. Focus: days of the week and "for an hour"; Wallpaper: solid colours.

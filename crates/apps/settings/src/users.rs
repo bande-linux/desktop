@@ -57,6 +57,8 @@ const AVATAR_PIXELS: u32 = 160;
 const WORKING_PIXELS: u32 = 2048;
 pub const MAX_ZOOM: f32 = 4.0;
 const LONGEST_LOGIN: usize = 32;
+const LOGIN1: &str = "org.freedesktop.login1";
+const LOGIN1_MANAGER: &str = "org.freedesktop.login1.Manager";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Account {
@@ -66,6 +68,7 @@ pub struct Account {
     pub full_name: String,
     pub admin: bool,
     pub you: bool,
+    pub logged_in: bool,
     pub picture: Option<Image>,
 }
 
@@ -230,6 +233,7 @@ pub fn accounts() -> Vec<Account> {
                 full_name: name.to_owned(),
                 admin: admins.iter().any(|admin| admin == login),
                 you: id == uid,
+                logged_in: false,
                 picture: None,
             })
         })
@@ -263,11 +267,43 @@ fn described(system: &Connection, account: &mut Account) -> zbus::Result<()> {
     Ok(())
 }
 
+fn logged_in(system: &Connection) -> zbus::Result<Vec<u32>> {
+    let reply = system.call_method(
+        Some(LOGIN1),
+        "/org/freedesktop/login1",
+        Some(LOGIN1_MANAGER),
+        "ListUsers",
+        &(),
+    )?;
+    let users: Vec<(u32, String, zbus::zvariant::OwnedObjectPath)> = reply.body().deserialize()?;
+    Ok(users.into_iter().map(|(uid, ..)| uid).collect())
+}
+
+fn refuse_logged_in(system: &Connection, uid: u32) -> Result<(), String> {
+    let users = logged_in(system).map_err(|error| sentence(&error, "service-login"))?;
+    if !users.contains(&uid) {
+        return Ok(());
+    }
+    let name = accounts()
+        .into_iter()
+        .find(|account| account.uid == uid)
+        .map_or_else(|| uid.to_string(), |account| account.name);
+    Err(L10N.tr_args("delete-user-logged-in", [("name", name.into())]))
+}
+
 pub fn managed_accounts(system: Option<&Connection>) -> (Vec<Account>, bool) {
     let mut listed = accounts();
     let Some(system) = system else {
         return (listed, false);
     };
+    match logged_in(system) {
+        Ok(users) => {
+            for account in &mut listed {
+                account.logged_in = users.contains(&account.uid);
+            }
+        }
+        Err(error) => tracing::warn!("logind: {error}"),
+    }
     for account in &mut listed {
         if let Err(error) = described(system, account) {
             tracing::warn!("AccountsService: {error}");
@@ -544,6 +580,17 @@ fn follow_accounts(system: Option<Connection>, updates: Updates) -> Sender<()> {
                 {
                     signals(system, rule, watch.clone(), |_| Some(()), || true);
                 }
+                for member in ["UserNew", "UserRemoved"] {
+                    if let Ok(rule) = MatchRule::builder()
+                        .msg_type(message::Type::Signal)
+                        .sender(LOGIN1)
+                        .and_then(|builder| builder.interface(LOGIN1_MANAGER))
+                        .and_then(|builder| builder.member(member))
+                        .map(|builder| builder.build())
+                    {
+                        signals(system, rule, watch.clone(), |_| Some(()), || true);
+                    }
+                }
             }
             let (accounts, managed) = managed_accounts(system.as_ref());
             if !updates.send(Update::Accounts(accounts, managed)) {
@@ -629,6 +676,7 @@ pub fn follow_users(
                 }
                 UsersCommand::Delete(uid, remove_files) => {
                     system.as_ref().map_or(Ok(()), |system| {
+                        refuse_logged_in(system, uid)?;
                         Accounts::new(system)
                             .and_then(|accounts| accounts.delete_user(i64::from(uid), remove_files))
                             .map_err(|error| sentence(&error, "service-accounts"))
@@ -953,15 +1001,30 @@ impl SettingsView {
     }
 
     fn delete_account_row(&mut self, account: &Account) -> Box<dyn Widget> {
-        if !self.deleting_account {
+        if !self.deleting_account || account.logged_in {
             let mut ask = intent(&self.intents, |()| Intent::AskDeleteAccount(true));
-            let button = Button::new(&L10N.tr("delete-user-ellipsis"), move || ask(()));
+            let mut button = Button::new(&L10N.tr("delete-user-ellipsis"), move || ask(()));
+            button.set_enabled(!account.logged_in);
             self.anchors
                 .push((Anchor::Item("delete-user".to_owned()), button.id()));
-            return boxed(Row::new(
+            let row = Row::new(
                 Text::new(&L10N.tr("delete-user-hint"), Tone::Primary),
                 Some(boxed(button)),
-            ));
+            );
+            return boxed(if account.logged_in {
+                row.detail(
+                    Text::new(
+                        &L10N.tr_args(
+                            "delete-user-logged-in",
+                            [("name", account.name.clone().into())],
+                        ),
+                        Tone::Muted,
+                    )
+                    .caption(),
+                )
+            } else {
+                row
+            });
         }
         let uid = account.uid;
         let mut cancel = intent(&self.intents, |()| Intent::AskDeleteAccount(false));

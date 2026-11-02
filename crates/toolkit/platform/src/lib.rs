@@ -28,7 +28,7 @@ pub use bande_protocols::client::bande_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, SessionEnd, VolumeKey,
 };
 pub use chrome::{FrameRegions, Header, SHEET_INSET, WINDOW_HEADER_HEIGHT};
-pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer};
+pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer, WindowDrag};
 pub use popup::MenuPlacement;
 pub use run::{App, Surfaces, run, run_surfaces};
 pub use shell::AppWindow;

@@ -220,6 +220,7 @@ pub(crate) struct Chrome {
     pub(crate) pointer_in_content: bool,
     pub(crate) content_buttons: usize,
     pub(crate) tab_drag: Option<TabDrag>,
+    pub(crate) detachable_tabs: bool,
     pub(crate) zoom_rest: Option<Instant>,
 }
 
@@ -273,7 +274,9 @@ impl Chrome {
                 }
                 true
             }
-            Some(TabDrag::Reordering) => !(0.0..frame.title).contains(&(point.y - frame.margin)),
+            Some(TabDrag::Reordering) => {
+                !self.detachable_tabs && !(0.0..frame.title).contains(&(point.y - frame.margin))
+            }
             None => false,
         }
     }

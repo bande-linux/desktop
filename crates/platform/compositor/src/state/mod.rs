@@ -115,6 +115,7 @@ pub struct State {
     pub(crate) quitting: Vec<(BandeShellV1, Option<(String, u32)>)>,
     pub(crate) refused_tokens: Vec<XdgActivationToken>,
     pub(crate) drag: Option<crate::drag::Drag>,
+    pub(crate) toplevel_drags: Vec<smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_v1::XdgToplevelDragV1>,
     pub(crate) slide_back: Option<crate::scene::SlideBack>,
     pub(crate) watchdog: crate::watchdog::Watchdog,
     pub(crate) desktop: crate::gesture::ShowDesktop,
@@ -218,6 +219,7 @@ impl Compositor {
         handle.create_global::<State, BandeShellV1, ()>(crate::menu_button::ACTIVE_MENUS_SINCE, ());
         handle.create_global::<State, BandeAppV1, ()>(4, ());
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
+        handle.create_global::<State, smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
         State::create_capture_globals(&handle);
@@ -259,6 +261,7 @@ impl Compositor {
             quitting: Vec::new(),
             refused_tokens: Vec::new(),
             drag: None,
+            toplevel_drags: Vec::new(),
             slide_back: None,
             watchdog: crate::watchdog::Watchdog::default(),
             desktop: crate::gesture::ShowDesktop::default(),

@@ -61,6 +61,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 "xdg_toplevel_tag_manager_v1" => {
                     state.toplevel_tag = Some(registry.bind(name, 1, handle, ()));
                 }
+                "xdg_toplevel_drag_manager_v1" => {
+                    state.toplevel_drag = Some(registry.bind(name, 1, handle, ()));
+                }
                 "wl_seat" if state.seat.is_none() => {
                     state.seat = Some(registry.bind(name, version.min(9), handle, ()));
                 }
@@ -267,4 +270,6 @@ delegate_noop!(State: ignore WlSurface);
 delegate_noop!(State: ignore ZwlrLayerShellV1);
 delegate_noop!(State: ignore XdgActivationV1);
 delegate_noop!(State: ignore XdgToplevelTagManagerV1);
+delegate_noop!(State: ignore wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1);
+delegate_noop!(State: ignore wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_v1::XdgToplevelDragV1);
 delegate_noop!(State: ignore WlDataDeviceManager);

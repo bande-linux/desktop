@@ -199,10 +199,12 @@ fn surface_at(
 impl State {
     pub(crate) fn pointer_target(&self, location: Point<f64, Logical>) -> Option<Target> {
         let screen = self.screen_at(location)?;
+        let dragged = self.dragged_window().map(|(surface, _)| surface);
         self.scene(false, screen)
             .into_iter()
             .find_map(|placed| match placed {
                 Placed::Surface(surface, origin) => surface_at(&surface, origin, location),
+                Placed::Window(_, window) if Some(window.surface()) == dragged.as_ref() => None,
                 Placed::Window(_, window) => zone_at(window, location)
                     .map(|zone| Target::Frame(window.surface().clone(), zone))
                     .or_else(|| surface_at(window.surface(), window.surface_origin(), location))

@@ -306,7 +306,8 @@ impl State {
         let over_parent = if mapped {
             None
         } else {
-            self.place_over_parent(index, area)
+            self.dragged_window_at(surface)
+                .or_else(|| self.place_over_parent(index, area))
         };
         let window = &mut self.windows[index];
         if let Some(geometry) = window.geometry() {

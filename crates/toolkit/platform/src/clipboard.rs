@@ -15,6 +15,7 @@ use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_created_child};
 
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
+use wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_v1::XdgToplevelDragV1;
 
 use crate::primary::Primary;
 use crate::window::{ShmTarget, State, Target, Window, WindowError, WindowEvent};
@@ -150,6 +151,9 @@ fn from_wire(action: DndAction) -> Option<DragAction> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WindowDrag(XdgToplevelDragV1);
+
 #[derive(Debug, Clone)]
 pub struct DragIcon {
     pub scene: Scene,
@@ -199,6 +203,7 @@ struct Outgoing {
     transfer: Transfer,
     action: Option<DragAction>,
     icon: Option<Icon>,
+    window: Option<XdgToplevelDragV1>,
     dropped_at: Option<Instant>,
 }
 
@@ -408,6 +413,34 @@ impl Window {
         actions: &[DragAction],
         icon: Option<DragIcon>,
     ) -> Result<(), WindowError> {
+        self.begin_drag(transfer, actions, icon, false).map(drop)
+    }
+
+    pub fn start_window_drag(&mut self, transfer: Transfer) -> Result<WindowDrag, WindowError> {
+        self.begin_drag(transfer, &[DragAction::Move], None, true)?
+            .map(WindowDrag)
+            .ok_or(WindowError::Missing("xdg_toplevel_drag_manager_v1"))
+    }
+
+    pub fn attach_to_drag(&mut self, drag: &WindowDrag, grab: Point) -> Result<(), WindowError> {
+        let frame = self.frame();
+        let origin = frame.content_origin();
+        let at = Point::new(
+            origin.x - frame.margin + grab.x,
+            origin.y - frame.margin + grab.y,
+        );
+        drag.0
+            .attach(self.toplevel()?, at.x.round() as i32, at.y.round() as i32);
+        self.flush()
+    }
+
+    fn begin_drag(
+        &mut self,
+        transfer: Transfer,
+        actions: &[DragAction],
+        icon: Option<DragIcon>,
+        window: bool,
+    ) -> Result<Option<XdgToplevelDragV1>, WindowError> {
         let (Some(manager), Some(device), Some(serial)) = (
             &self.state.data_device_manager,
             &self.state.clipboard.device,
@@ -422,6 +455,10 @@ impl Window {
             .iter()
             .fold(DndAction::empty(), |all, action| all | wire(*action));
         source.set_actions(offered);
+        let window = match (window, &self.state.toplevel_drag) {
+            (true, Some(windows)) => Some(windows.get_xdg_toplevel_drag(&source, &handle, ())),
+            _ => None,
+        };
         let icon = match (icon, &self.state.compositor, &self.state.shm) {
             (Some(icon), Some(compositor), Some(shm)) => {
                 let surface = compositor.create_surface(&handle, ());
@@ -478,11 +515,13 @@ impl Window {
             transfer,
             action: None,
             icon,
+            window: window.clone(),
             dropped_at: None,
         }) {
             finish_outgoing(previous);
         }
-        self.flush()
+        self.flush()?;
+        Ok(window)
     }
 
     pub fn accept_drag(&mut self, action: Option<DragAction>) {
@@ -732,6 +771,9 @@ fn respond(incoming: &Incoming) {
 }
 
 fn finish_outgoing(outgoing: Outgoing) {
+    if let Some(window) = outgoing.window {
+        window.destroy();
+    }
     outgoing.source.destroy();
     if let Some(mut icon) = outgoing.icon {
         icon.target.destroy();
@@ -893,8 +935,9 @@ impl Dispatch<WlDataSource, ()> for State {
             }
             (wl_data_source::Event::Cancelled, Some(_)) => {
                 if let Some(outgoing) = clipboard.dragged.take() {
+                    let placed = outgoing.window.is_some() && outgoing.dropped_at.is_some();
                     finish_outgoing(outgoing);
-                    state.drag_event(DragEvent::Finished(None));
+                    state.drag_event(DragEvent::Finished(placed.then_some(DragAction::Move)));
                 }
             }
             (wl_data_source::Event::Cancelled, None) => {

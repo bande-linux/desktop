@@ -232,6 +232,7 @@ pub(crate) struct State {
     layer_shell: Option<ZwlrLayerShellV1>,
     pub(crate) activation: Option<XdgActivationV1>,
     toplevel_tag: Option<XdgToplevelTagManagerV1>,
+    pub(crate) toplevel_drag: Option<wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1>,
     pub(crate) seat: Option<WlSeat>,
     pub(crate) data_device_manager: Option<WlDataDeviceManager>,
     pub(crate) cursor_shape_manager: Option<WpCursorShapeManagerV1>,
@@ -274,6 +275,9 @@ impl State {
             activation.destroy();
         }
         if let Some(manager) = self.toplevel_tag.take() {
+            manager.destroy();
+        }
+        if let Some(manager) = self.toplevel_drag.take() {
             manager.destroy();
         }
         if let Some(wm_base) = self.wm_base.take() {
@@ -590,6 +594,12 @@ impl Window {
         {
             chrome.header = Some(header);
             self.needs_redraw = true;
+        }
+    }
+
+    pub fn set_detachable_tabs(&mut self, detachable: bool) {
+        if let Some(chrome) = &mut self.chrome {
+            chrome.detachable_tabs = detachable;
         }
     }
 

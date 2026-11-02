@@ -29,6 +29,16 @@ pub(crate) struct Drag {
     drawn: Option<(Vec<Piece>, Area)>,
 }
 
+impl Drag {
+    pub(crate) fn source(&self) -> Option<&WlDataSource> {
+        self.source.as_ref()
+    }
+
+    pub(crate) fn action(&self) -> DndAction {
+        self.action
+    }
+}
+
 fn take_offset(surface: &WlSurface) -> Point<i32, Logical> {
     with_states(surface, |states| {
         states

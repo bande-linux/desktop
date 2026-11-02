@@ -21,6 +21,7 @@ pub struct AppNotifications {
     pub allow: bool,
     pub banners: String,
     pub in_center: bool,
+    pub sound: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,12 +35,13 @@ fn read(rules: &NotificationCenter<'_>) -> zbus::Result<Vec<AppNotifications>> {
         .get_apps()?
         .into_iter()
         .map(
-            |(group, name, allow, banners, in_center)| AppNotifications {
+            |(group, name, allow, banners, in_center, sound)| AppNotifications {
                 name: if name.is_empty() { group.clone() } else { name },
                 group,
                 allow,
                 banners,
                 in_center,
+                sound,
             },
         )
         .collect();
@@ -59,8 +61,13 @@ pub fn follow_app_notifications(
         };
         for command in receiver {
             if let NotificationCommand::Set(app) = command
-                && let Err(error) =
-                    rules.set_app_rule(&app.group, app.allow, &app.banners, app.in_center)
+                && let Err(error) = rules.set_app_rule(
+                    &app.group,
+                    app.allow,
+                    &app.banners,
+                    app.in_center,
+                    app.sound,
+                )
             {
                 updates.send(unexpected(error));
             }
@@ -164,6 +171,17 @@ impl SettingsView {
             boxed(toggle),
             focus,
             format!("center:{}", app.group),
+        ));
+        let mut sound = rule_setter(&self.intents, app, |app, on| app.sound = on == 1);
+        let toggle = Toggle::new(&L10N.tr("play-sound"), app.sound, move |on| {
+            sound(usize::from(on))
+        });
+        let focus = toggle.id();
+        rows.push(self.rule_row(
+            &L10N.tr("play-sound"),
+            boxed(toggle),
+            focus,
+            format!("sound:{}", app.group),
         ));
         rows
     }

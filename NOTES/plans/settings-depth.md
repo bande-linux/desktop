@@ -25,8 +25,8 @@ Missing: VPN details and removal, adding a VPN by hand,
 proxies (NetworkManager's per-connection proxy only reaches apps through the portal's
 ProxyResolver, so this needs a session-wide proxy first), IPv6, service order, firewall.
 
-**Notifications.** Has: Do Not Disturb, per-app allow, banner style, show in center. Missing:
-per-app sound and badge switches, "show previews" (always / when unlocked / never), notifications
+**Notifications.** Has: Do Not Disturb, per-app allow, banner style, show in center, play sound.
+Missing: per-app badges, "show previews" (always / when unlocked / never), notifications
 while the display is mirrored or sleeping.
 
 **Focus.** Has: Do Not Disturb on/off and a daily schedule (from–to, owned by `bande-notify`).
@@ -117,6 +117,6 @@ Ranked by how often a user needs them and how badly they are stuck without them.
 4. Sound: balance and the built-in speaker and headphone names.
 7. Hot corners (compositor).
 8. Sharing: Remote Login (ssh.service through systemd's D-Bus API) and the `.local` name.
-9. Notifications: previews, sounds and badges per app.
+9. Notifications: previews and badges per app.
 10. Lock screen message, show scroll bars, double-click speed, Wake for network access.
 11. Personal hotspot.

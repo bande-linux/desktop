@@ -85,6 +85,7 @@ pub trait NotificationCenter {
         allow: bool,
         banners: &str,
         in_center: bool,
+        sound: bool,
     ) -> zbus::Result<()>;
 
     #[zbus(property)]

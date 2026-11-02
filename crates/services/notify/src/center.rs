@@ -97,6 +97,7 @@ pub struct AppRule {
     pub allow: bool,
     pub banners: Banners,
     pub in_center: bool,
+    pub sound: bool,
 }
 
 impl Default for AppRule {
@@ -105,6 +106,7 @@ impl Default for AppRule {
             allow: true,
             banners: Banners::Temporary,
             in_center: true,
+            sound: true,
         }
     }
 }
@@ -242,6 +244,14 @@ impl Center {
             },
         );
         id
+    }
+
+    pub fn plays_sound(&self, id: u32) -> bool {
+        self.get(id).is_some_and(|notification| {
+            self.apps
+                .get(notification.group())
+                .is_none_or(|app| app.rule.sound)
+        })
     }
 
     pub fn get(&self, id: u32) -> Option<&Notification> {

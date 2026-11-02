@@ -32,14 +32,14 @@ fn kdl_problems_are_reported_where_they_are_while_every_valid_setting_applies() 
 }
 
 #[test]
-fn edits_keep_comments_and_bars_from_the_split_layout_still_load() {
-    let source = "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"left\" // near the dock\n    layout \"separate\"\n    menu-bar \"separate\"\n}\n";
+fn edits_keep_comments() {
+    let source = "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"left\" // near the dock\n}\n";
     assert_eq!(
         Config::parse(source).expect("valid").bar.edge,
         BarEdge::Left
     );
     assert_eq!(
         Setting::BarEdge(BarEdge::Top).apply(source).expect("edit"),
-        "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"top\" // near the dock\n    layout \"separate\"\n    menu-bar \"separate\"\n}\n"
+        "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"top\" // near the dock\n}\n"
     );
 }

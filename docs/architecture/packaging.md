@@ -52,9 +52,6 @@ profiles. Sizes are in [performance.md](performance.md).
   them has an installation candidate in Debian testing. Installing it adds "Bande" to the sessions a
   display manager such as GDM, SDDM or greetd offers. With `--no-install-recommends` it brings
   the desktop, a login and sound and nothing else; the images install it that way.
-- The old `bande-bar`, `bande-desktop-surface`, `bande-launcher`, `bande-notifications`
-  and `bande-controlcenter` packages have no successors of their own: `bande-shell`
-  conflicts with and replaces them, so an upgrade removes them.
 - **`bande-archive-keyring`, `bande-apt-source`** are built and published by the APT
   repository itself (`bande-linux/apt`), not here. Installation is described in the
   top-level `README.md`.
@@ -78,7 +75,7 @@ another package's recommends. `bande-desktop` itself keeps:
   passwords in, unlocked at login (see [Keyring](session.md#keyring));
 - `systemd-oomd`, `systemd-zram-generator`: run the memory policy it ships.
 
-It no longer pulls in `pipewire-alsa`, `needrestart` (replaced by
+It does not pull in `pipewire-alsa`, `needrestart` (Bande has
 `/usr/libexec/bande-desktop/restart-services`, below), `cups` (Settings ▸ Printers installs it on
 demand), `xdg-utils` (Bande opens files and links with `bande_xdg::open`, so neither its X11 tools
 nor a fallback terminal come along), Qt's portal platform theme, `at-spi2-core` (a screen reader

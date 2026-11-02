@@ -102,8 +102,8 @@ A release is: bump `[workspace.package] version` in `Cargo.toml`, merge to `main
    fully green run. A flake: `gh run rerun <id> --failed` (same run id). Exit 137 in `debs` means
    the fat-LTO link ran out of memory: set `lto = "thin"` in the `dist` profile and release the
    next patch.
-3. Within 30 minutes apt's `publish.yml` takes it (or
-   `gh workflow run publish.yml -R bande-linux/apt -f repo=desktop -f run_id=<id>`), deploys the
+3. Within 30 minutes apt's `look.yml` finds it (or at once from its Run workflow button) and starts
+   `publish.yml`, which deploys the
    site and installs `bande-desktop` from it on both architectures.
 4. Check: `curl -s https://bande-linux.github.io/apt/dists/rolling/main/binary-amd64/Packages`
    lists `bande-compositor` at the new version for `amd64`, and the same for `arm64`.

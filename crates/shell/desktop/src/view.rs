@@ -86,9 +86,7 @@ pub enum Request {
     Eject(Vec<PathBuf>),
     SetWallpaper(PathBuf),
     ChangeWallpaper,
-    QuickLook {
-        full_screen: bool,
-    },
+    QuickLook,
     QuickLookKey(Key, Modifiers),
 }
 
@@ -1066,15 +1064,10 @@ impl DesktopView {
         let selected = self.desktop.selected();
         let command = modifiers.control;
         match key {
-            Key::Space if !command && (!selected.is_empty() || quick_look_shown) => {
-                self.requests.push(Request::QuickLook {
-                    full_screen: modifiers.alt,
-                });
-            }
-            Key::Down if modifiers.alt => {
-                if !selected.is_empty() {
-                    self.requests.push(Request::Open(selected));
-                }
+            Key::Space
+                if !command && !modifiers.alt && (!selected.is_empty() || quick_look_shown) =>
+            {
+                self.requests.push(Request::QuickLook);
             }
             Key::Left => self.desktop.navigate(Direction::Left, modifiers.shift),
             Key::Right => self.desktop.navigate(Direction::Right, modifiers.shift),
@@ -1164,7 +1157,7 @@ impl DesktopView {
             Command::DesktopInfo | Command::ShowDesktopFolder => Request::OpenDesktopFolder,
             Command::ChangeWallpaper => Request::ChangeWallpaper,
             Command::Open => Request::Open(selected),
-            Command::QuickLook => Request::QuickLook { full_screen: false },
+            Command::QuickLook => Request::QuickLook,
             Command::OpenWith(app) => Request::OpenWith {
                 app,
                 paths: selected,

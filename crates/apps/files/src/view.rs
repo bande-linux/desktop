@@ -286,7 +286,7 @@ pub(crate) fn home() -> PathBuf {
     std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from)
 }
 
-fn user_folder(dir: UserDir) -> PathBuf {
+pub(crate) fn user_folder(dir: UserDir) -> PathBuf {
     let home = home();
     let user_dirs = bande_xdg::config_home()
         .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
@@ -1555,18 +1555,14 @@ impl FilesView {
         let plain = !command && !alt;
         match key {
             Key::Space if plain => self.toggle_quick_look(),
-            Key::Space if alt && !command => self.toggle_quick_look_full_screen(),
-            Key::Function(11) if plain => self.toggle_quick_look_full_screen(),
             Key::Escape if self.searching.is_some() => self.end_search(),
-            Key::Character('f' | 'F') if command && shift => self.go(Location::Recents),
-            Key::Character('f' | 'F') if command => self.focus_search(),
+            Key::Character('f' | 'F') if command && !shift => self.focus_search(),
             Key::Character('h' | 'H') if command && !shift => self.toggle_hidden(),
             Key::Function(10) if shift => self.keyboard_menu(),
             Key::Up if alt => {
                 self.browser.enclosing_folder();
                 self.selection_changed();
             }
-            Key::Down if alt => self.open(),
             Key::Left if alt => self.back(),
             Key::Right if alt => {
                 self.end_search();
@@ -1625,28 +1621,14 @@ impl FilesView {
             Key::Character('n' | 'N') if command && !shift => {
                 self.requests.push(Request::NewWindow)
             }
-            Key::Delete if command && shift => self.ask_to_empty_trash(),
             Key::Delete if shift || self.selection_is_trashed() => self.confirm_delete(),
             Key::Delete if plain => self.trash_or_put_back(),
             Key::Character('z' | 'Z') if command && shift => self.redo(),
             Key::Character('z' | 'Z') if command => self.undo(),
             Key::Character('n' | 'N') if command && shift => self.new_folder(),
             Key::Character('l' | 'L') if command && !shift => self.ask_go_to(),
-            Key::Character('d' | 'D') if command && shift => {
-                self.go(Location::Folder(user_folder(UserDir::Desktop)));
-            }
-            Key::Character('e' | 'E') if command => self.eject_current(),
-            Key::Character('o' | 'O') if command && shift => {
-                self.go(Location::Folder(user_folder(UserDir::Documents)));
-            }
-            Key::Character('l' | 'L') if command && shift => {
-                self.go(Location::Folder(user_folder(UserDir::Downloads)));
-            }
-            Key::Character('/') if command => self.toggle_status_bar(),
             Key::Character('1') if command => self.set_mode(ViewMode::Icons),
             Key::Character('2') if command => self.set_mode(ViewMode::List),
-            Key::Character('3') if command => self.set_mode(ViewMode::Columns),
-            Key::Character('4') if command => self.set_mode(ViewMode::Gallery),
             Key::Character('=' | '+') if command => self.grow_icons(true),
             Key::Character('-') if command => self.grow_icons(false),
             Key::Character('i' | 'I') if command => {
@@ -1660,7 +1642,7 @@ impl FilesView {
             Key::Character('c' | 'C') if command && shift => self.copy_paths(),
             Key::Character('c' | 'C') if command => self.copy_selection(false),
             Key::Character('x' | 'X') if command => self.copy_selection(true),
-            Key::Character('v' | 'V') if command => self.paste(shift),
+            Key::Character('v' | 'V') if command && !shift => self.paste(false),
             Key::Character(character) if plain => {
                 return self.type_select(character);
             }

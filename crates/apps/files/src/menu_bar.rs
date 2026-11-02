@@ -9,6 +9,10 @@ fn shortcut(message: &str, keys: &str) -> Entry {
     key_item(&L10N.tr(message), keys)
 }
 
+fn plain(message: &str, action: &str) -> Entry {
+    Entry::item(&L10N.tr(message), action)
+}
+
 fn submenu(message: &str, entries: Vec<Entry>) -> Entry {
     Entry::submenu(&L10N.tr(message), entries)
 }
@@ -97,7 +101,7 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 shortcut("menu-move-to-trash", "Delete"),
                 shortcut("menu-delete-immediately", "Shift+Delete"),
                 Entry::separator(),
-                shortcut("menu-eject", "Ctrl+E"),
+                plain("menu-eject", "eject-current"),
                 shortcut("menu-find", "Ctrl+F"),
             ],
         ),
@@ -111,7 +115,7 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 shortcut("menu-copy", "Ctrl+C"),
                 shortcut("menu-copy-path", "Shift+Ctrl+C"),
                 shortcut("menu-paste", "Ctrl+V"),
-                shortcut("menu-move-item-here", "Shift+Ctrl+V"),
+                plain("menu-move-item-here", "move-here"),
                 shortcut("menu-select-all", "Ctrl+A"),
             ],
         ),
@@ -120,8 +124,8 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
             vec![
                 shortcut("menu-as-icons", "Ctrl+1"),
                 shortcut("menu-as-list", "Ctrl+2"),
-                shortcut("menu-as-columns", "Ctrl+3"),
-                shortcut("menu-as-gallery", "Ctrl+4"),
+                plain("menu-as-columns", "columns"),
+                plain("menu-as-gallery", "gallery"),
                 Entry::separator(),
                 Entry::item(&L10N.tr("menu-use-groups"), "use-groups")
                     .radio(view.browser().groups().is_some()),
@@ -132,9 +136,9 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 shortcut("menu-smaller-icons", "Ctrl+-"),
                 Entry::separator(),
                 shortcut("menu-show-hidden-files", "Ctrl+H"),
-                shortcut("menu-status-bar", "Ctrl+/"),
+                plain("menu-status-bar", "toggle-status-bar"),
                 shortcut("menu-quick-look", "Space"),
-                shortcut("menu-quick-look-full-screen", "F11"),
+                plain("menu-quick-look-full-screen", "quick-look-full-screen"),
             ],
         ),
         submenu(
@@ -144,11 +148,11 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 shortcut("menu-forward", "Alt+Right"),
                 shortcut("menu-enclosing-folder", "Alt+Up"),
                 Entry::separator(),
-                shortcut("menu-desktop", "Shift+Ctrl+D"),
-                shortcut("menu-documents", "Shift+Ctrl+O"),
-                shortcut("menu-downloads", "Shift+Ctrl+L"),
+                plain("menu-desktop", "go:desktop"),
+                plain("menu-documents", "go:documents"),
+                plain("menu-downloads", "go:downloads"),
                 shortcut("menu-home", "Alt+Home"),
-                shortcut("recents", "Shift+Ctrl+F"),
+                plain("recents", "go:recents"),
                 Entry::separator(),
                 submenu("menu-recent-folders", recent_entries(recent_folders)),
                 shortcut("menu-go-to-folder", "Ctrl+L"),

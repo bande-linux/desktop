@@ -129,9 +129,7 @@ impl FilesView {
 
     pub(crate) fn toggle_quick_look_full_screen(&mut self) {
         match (&self.quick_look, self.quick_look_shown()) {
-            (Some(link), true) => link
-                .borrow_mut()
-                .key(Key::Function(11), Modifiers::default()),
+            (Some(link), true) => link.borrow_mut().toggle_full_screen(),
             _ => self.open_quick_look(true),
         }
     }

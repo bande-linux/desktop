@@ -468,7 +468,6 @@ impl QuickLook {
                 self.scroll = Point::default();
             }
             Key::End if plain => self.scroll = Point::new(0.0, f32::MAX),
-            Key::Function(11) => self.toggle_full_screen(),
             Key::Enter if command && self.subjects.len() > 1 => {
                 self.index_sheet = !self.index_sheet;
             }

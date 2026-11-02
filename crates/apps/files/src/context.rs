@@ -1,17 +1,18 @@
 use bande_fs::{GroupBy, Sort};
 use bande_toolkit::Point;
 use bande_toolkit::ui::Menu;
+use bande_xdg::UserDir;
 
 use crate::browser::Location;
 use std::path::PathBuf;
 
 use crate::controls::COLUMN_ACTION;
 use crate::menus::{
-    App, Command, Folder, Place, Selection, command, folder_menu, items_menu, place_menu,
-    sidebar_menu,
+    App, Command, Destination, Folder, Place, Selection, command, folder_menu, items_menu,
+    place_menu, sidebar_menu,
 };
 use crate::sidebar::{BookmarkEdit, PlaceKind, Row, SidebarEdit, favourites, layout_text};
-use crate::view::{FilesView, Hit, Request};
+use crate::view::{FilesView, Hit, Request, user_folder};
 use crate::views::{ListColumn, ViewMode};
 
 const TERMINAL_DESKTOP_ID: &str = "org.bande.Terminal.desktop";
@@ -244,6 +245,16 @@ impl FilesView {
             Command::List => self.set_mode(ViewMode::List),
             Command::Gallery => self.set_mode(ViewMode::Gallery),
             Command::ToggleHidden => self.toggle_hidden(),
+            Command::ToggleStatusBar => self.toggle_status_bar(),
+            Command::QuickLookFullScreen => self.toggle_quick_look_full_screen(),
+            Command::MoveHere => self.paste(true),
+            Command::EjectCurrent => self.eject_current(),
+            Command::GoTo(place) => self.go(match place {
+                Destination::Desktop => Location::Folder(user_folder(UserDir::Desktop)),
+                Destination::Documents => Location::Folder(user_folder(UserDir::Documents)),
+                Destination::Downloads => Location::Folder(user_folder(UserDir::Downloads)),
+                Destination::Recents => Location::Recents,
+            }),
             Command::EmptyTrash => self.ask_to_empty_trash(),
             Command::RestoreSidebar => self.requests.push(Request::EditSidebar(SidebarEdit {
                 layout: None,

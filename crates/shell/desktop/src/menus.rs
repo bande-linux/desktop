@@ -70,7 +70,7 @@ pub fn desktop_menu(sort: SortBy, paste: bool) -> Menu {
         MenuItem::submenu(&L10N.tr("sort-by"), Menu::new(sorts)),
         item("clean-up", "clean-up").enabled(sort == SortBy::None),
         MenuItem::separator(),
-        item("show-desktop-folder", "show-desktop-folder").shortcut("Shift+Ctrl+D"),
+        item("show-desktop-folder", "show-desktop-folder"),
     ])
 }
 

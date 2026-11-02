@@ -574,7 +574,7 @@ impl DesktopSurface {
         })
     }
 
-    fn quick_look(&mut self, full_screen: bool) {
+    fn quick_look(&mut self) {
         let Some(link) = self.quick_look.clone() else {
             return;
         };
@@ -601,7 +601,7 @@ impl DesktopSurface {
             })
             .unwrap_or(0);
         if !subjects.is_empty() {
-            link.borrow_mut().open(subjects, at, full_screen);
+            link.borrow_mut().open(subjects, at, false);
         }
     }
 
@@ -627,7 +627,7 @@ impl DesktopSurface {
     fn run_requests(&mut self, window: &mut Window) {
         for request in self.view.take_requests() {
             match request {
-                Request::QuickLook { full_screen } => self.quick_look(full_screen),
+                Request::QuickLook => self.quick_look(),
                 Request::QuickLookKey(key, modifiers) => {
                     if let Some(link) = &self.quick_look {
                         link.borrow_mut().key(key, modifiers);

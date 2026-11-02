@@ -18,6 +18,7 @@ enum Message {
     },
     Follow(Box<Subject>),
     Close,
+    ToggleFullScreen,
     Key(Key, Modifiers),
 }
 
@@ -104,13 +105,18 @@ impl Link {
             return true;
         }
         match key {
-            Key::Escape | Key::Function(11) => true,
+            Key::Escape => true,
             Key::PageUp | Key::PageDown | Key::Home | Key::End => plain,
             Key::Left | Key::Right => plain && self.multiple,
             Key::Enter => command,
             Key::Character('=' | '+' | '-' | '0' | 'l' | 'L') => command,
             _ => false,
         }
+    }
+
+    pub fn toggle_full_screen(&mut self) {
+        self.posted.get_or_insert_with(Instant::now);
+        self.messages.push(Message::ToggleFullScreen);
     }
 
     pub fn key(&mut self, key: Key, modifiers: Modifiers) {
@@ -226,6 +232,7 @@ impl Panel {
                 }
                 (Message::Follow(subject), Some(shown)) => shown.follow(*subject),
                 (Message::Close, Some(shown)) => shown.close(now),
+                (Message::ToggleFullScreen, Some(shown)) => shown.toggle_full_screen(),
                 (Message::Key(key, modifiers), Some(shown)) => {
                     shown.key(key, modifiers, now);
                 }

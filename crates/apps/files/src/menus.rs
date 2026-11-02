@@ -36,12 +36,25 @@ pub enum Command {
     List,
     Gallery,
     ToggleHidden,
+    ToggleStatusBar,
+    QuickLookFullScreen,
+    MoveHere,
+    EjectCurrent,
+    GoTo(Destination),
     EmptyTrash,
     OpenPlace,
     OpenPlaceInNewTab,
     RemoveFromSidebar,
     RestoreSidebar,
     Eject,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Destination {
+    Desktop,
+    Documents,
+    Downloads,
+    Recents,
 }
 
 const OPEN_WITH: &str = "open-with:";
@@ -89,6 +102,14 @@ const ACTIONS: &[(&str, Command)] = &[
     ("list", Command::List),
     ("gallery", Command::Gallery),
     ("toggle-hidden", Command::ToggleHidden),
+    ("toggle-status-bar", Command::ToggleStatusBar),
+    ("quick-look-full-screen", Command::QuickLookFullScreen),
+    ("move-here", Command::MoveHere),
+    ("eject-current", Command::EjectCurrent),
+    ("go:desktop", Command::GoTo(Destination::Desktop)),
+    ("go:documents", Command::GoTo(Destination::Documents)),
+    ("go:downloads", Command::GoTo(Destination::Downloads)),
+    ("go:recents", Command::GoTo(Destination::Recents)),
     ("empty-trash", Command::EmptyTrash),
     ("open-place", Command::OpenPlace),
     ("remove-from-sidebar", Command::RemoveFromSidebar),
@@ -266,11 +287,7 @@ pub struct Folder {
 
 pub fn folder_menu(folder: Folder) -> Menu {
     let mut items = if folder.trash {
-        vec![
-            item("menu-empty-trash", &Command::EmptyTrash)
-                .shortcut("Shift+Ctrl+Delete")
-                .enabled(!folder.trash_empty),
-        ]
+        vec![item("menu-empty-trash", &Command::EmptyTrash).enabled(!folder.trash_empty)]
     } else {
         vec![
             item("menu-new-folder", &Command::NewFolder).shortcut("Shift+Ctrl+N"),
@@ -318,24 +335,14 @@ pub fn folder_menu(folder: Folder) -> Menu {
     for (message, command, keys, mode) in [
         ("menu-as-icons", Command::Icons, "Ctrl+1", ViewMode::Icons),
         ("menu-as-list", Command::List, "Ctrl+2", ViewMode::List),
-        (
-            "menu-as-columns",
-            Command::Columns,
-            "Ctrl+3",
-            ViewMode::Columns,
-        ),
-        (
-            "menu-as-gallery",
-            Command::Gallery,
-            "Ctrl+4",
-            ViewMode::Gallery,
-        ),
+        ("menu-as-columns", Command::Columns, "", ViewMode::Columns),
+        ("menu-as-gallery", Command::Gallery, "", ViewMode::Gallery),
     ] {
-        items.push(
-            item(message, &command)
-                .shortcut(keys)
-                .checked(folder.mode == mode),
-        );
+        let entry = item(message, &command).checked(folder.mode == mode);
+        items.push(match keys {
+            "" => entry,
+            keys => entry.shortcut(keys),
+        });
     }
     let hidden = if folder.hidden_shown {
         "menu-hide-hidden-files"
@@ -362,7 +369,7 @@ pub fn place_menu(place: Place) -> Menu {
         Place::Folder => {}
         Place::Volume => {
             items.push(MenuItem::separator());
-            items.push(item("menu-eject", &Command::Eject).shortcut("Ctrl+E"));
+            items.push(item("menu-eject", &Command::Eject));
         }
         Place::Trash { empty } => {
             items.push(MenuItem::separator());

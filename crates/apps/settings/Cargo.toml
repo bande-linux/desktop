@@ -11,7 +11,7 @@ repository.workspace = true
 accesskit.workspace = true
 bande-app.workspace = true
 jiff.workspace = true
-rustix = { workspace = true, features = ["fs"] }
+rustix = { workspace = true, features = ["fs", "pty"] }
 tracing.workspace = true
 bande-app-menu.workspace = true
 bande-audio.workspace = true
@@ -36,6 +36,7 @@ bande-xdg.workspace = true
 wayland-client.workspace = true
 wayland-protocols-wlr.workspace = true
 zbus.workspace = true
+zeroize.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

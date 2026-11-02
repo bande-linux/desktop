@@ -38,6 +38,7 @@ pub enum PaneId {
     Trackpad,
     Printers,
     Power,
+    Users,
     PrivacySecurity,
     Camera,
     Microphone,
@@ -52,7 +53,7 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 28] = [
+    const KEYWORDS: [(Self, &'static str); 29] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -70,6 +71,7 @@ impl PaneId {
         (Self::Trackpad, "trackpad"),
         (Self::Printers, "printers"),
         (Self::Power, "power"),
+        (Self::Users, "users"),
         (Self::PrivacySecurity, "privacy-security"),
         (Self::Camera, "camera"),
         (Self::Microphone, "microphone"),
@@ -97,9 +99,12 @@ impl PaneId {
             | Self::Mouse
             | Self::Trackpad
             | Self::Printers => Some(Group::Devices),
-            Self::Power | Self::PrivacySecurity | Self::Apps | Self::LanguageTime | Self::About => {
-                Some(Group::System)
-            }
+            Self::Power
+            | Self::Users
+            | Self::PrivacySecurity
+            | Self::Apps
+            | Self::LanguageTime
+            | Self::About => Some(Group::System),
             Self::KeyboardShortcuts
             | Self::NightLight
             | Self::Camera
@@ -130,6 +135,7 @@ impl PaneId {
             Self::Trackpad => "input-touchpad-symbolic",
             Self::Printers => "printer-symbolic",
             Self::Power => "system-shutdown-symbolic",
+            Self::Users => "system-users-symbolic",
             Self::PrivacySecurity => "changes-prevent-symbolic",
             Self::Camera => "camera-photo-symbolic",
             Self::Microphone => "audio-input-microphone-symbolic",
@@ -307,6 +313,7 @@ pub enum SettingId {
     SearchExcluded,
     Printers,
     NearbyPrinters,
+    Accounts,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -323,6 +330,7 @@ pub enum Value {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum List {
+    Accounts,
     Printers,
     NearbyPrinters,
     KnownNetworks,
@@ -1350,6 +1358,13 @@ fn gesture(id: SettingId, name: &str) -> Setting {
 fn system_panes() -> Vec<Pane> {
     vec![
         power_pane(),
+        pane(
+            PaneId::Users,
+            vec![section(
+                None,
+                vec![list(SettingId::Accounts, "accounts", List::Accounts)],
+            )],
+        ),
         pane(
             PaneId::PrivacySecurity,
             vec![

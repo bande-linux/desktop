@@ -36,6 +36,7 @@ use bande_xdg::{
 const SETTINGS_FOLDER: &str = "bande";
 const FILES_SETTINGS: &str = "files.conf";
 const SHOW_EXTENSIONS: &str = "show-extensions";
+const SHOW_DISKS: &str = "desktop-disks";
 const PDF: &str = "application/pdf";
 const WALLPAPER_CACHE: &str = "bande/wallpapers";
 const SETTINGS_APP: &str = "org.bande.Settings";
@@ -66,7 +67,7 @@ pub struct DesktopSurface {
     icons: HashMap<(String, u32), Option<Image>>,
     thumbnails: Option<Thumbnails>,
     items: Vec<Item>,
-    show_extensions: bool,
+    shown: Shown,
     pictures: HashMap<PathBuf, (Option<SystemTime>, Option<Option<Image>>)>,
     layouts_file: Option<PathBuf>,
     bar_edge: BarEdge,
@@ -269,13 +270,16 @@ impl DesktopSurface {
             return;
         }
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-        let volumes = mounted_volumes(&mountinfo, &self.media);
-        self.show_extensions = show_extensions();
+        self.shown = Shown::read();
+        let volumes = match self.shown.disks {
+            true => mounted_volumes(&mountinfo, &self.media),
+            false => Vec::new(),
+        };
         self.items = list(
             &mut self.apps.borrow_mut(),
             &self.desktop_dir,
             &volumes,
-            self.show_extensions,
+            self.shown.extensions,
         );
         self.show_items();
         self.watch_folders();
@@ -875,7 +879,7 @@ impl App for DesktopSurface {
                 .as_ref()
                 .is_none_or(|settings| !path.starts_with(settings))
         });
-        if elsewhere || (!changes.is_empty() && show_extensions() != self.show_extensions) {
+        if elsewhere || (!changes.is_empty() && Shown::read() != self.shown) {
             self.relist();
         }
         self.view.tick(now);
@@ -892,18 +896,30 @@ impl App for DesktopSurface {
     }
 }
 
-fn show_extensions() -> bool {
-    config_home()
-        .and_then(|config| {
-            std::fs::read_to_string(config.join(SETTINGS_FOLDER).join(FILES_SETTINGS)).ok()
-        })
-        .is_some_and(|text| {
-            text.lines().any(|line| {
-                line.split_once('=').is_some_and(|(key, value)| {
-                    key.trim() == SHOW_EXTENSIONS && value.trim() == "true"
-                })
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Shown {
+    extensions: bool,
+    disks: bool,
+}
+
+impl Shown {
+    fn read() -> Self {
+        let text = config_home()
+            .and_then(|config| {
+                std::fs::read_to_string(config.join(SETTINGS_FOLDER).join(FILES_SETTINGS)).ok()
             })
-        })
+            .unwrap_or_default();
+        let flag = |wanted: &str| {
+            text.lines()
+                .filter_map(|line| line.split_once('='))
+                .find(|(key, _)| key.trim() == wanted)
+                .map(|(_, value)| value.trim() == "true")
+        };
+        Self {
+            extensions: flag(SHOW_EXTENSIONS).unwrap_or(false),
+            disks: flag(SHOW_DISKS).unwrap_or(true),
+        }
+    }
 }
 
 fn draw_wallpaper(key: &WallpaperKey) -> Result<Picture, RenderError> {
@@ -997,7 +1013,10 @@ impl DesktopSurface {
             icons: HashMap::new(),
             thumbnails,
             items: Vec::new(),
-            show_extensions: false,
+            shown: Shown {
+                extensions: false,
+                disks: true,
+            },
             pictures: HashMap::new(),
             layouts_file,
             bar_edge,

@@ -31,8 +31,8 @@ spring-loaded folders; Ctrl/Shift drag modifiers; Recents and search with scopes
 view memory; status bar and path bar; hidden files; Trash with Put Back, Empty, 30-day purge
 and per-volume `.Trash-uid`; volumes with Eject and an alert (Force Eject) when a disk is busy; Compress and Extract; Open in Terminal; New
 Document templates; failure alerts per item (Skip, Try Again, Skip All, Stop); a no-space
-check before copying; empty-folder and no-permission messages; Settings (General, Show in
-Sidebar, Advanced) with hidden extensions and Last Folder for new windows;
+check before copying; empty-folder and no-permission messages; Settings (General with external
+disks on the desktop, Show in Sidebar, Advanced) with hidden extensions and Last Folder for new windows;
 `org.freedesktop.FileManager1` ("Show in Folder" from other apps, D-Bus activated with
 `--gapplication-service`); `bande-files --select <paths>`.
 

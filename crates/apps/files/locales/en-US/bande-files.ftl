@@ -291,6 +291,7 @@ settings-current-folder = Current Folder
 settings-last-folder = Last Folder
 settings-default-view = Default view
 settings-show-hidden = Show hidden files
+settings-desktop-disks = Show external disks on the desktop
 settings-folders-first = Keep folders on top when sorting by name
 settings-sidebar = Show in Sidebar
 settings-external-disks = External disks

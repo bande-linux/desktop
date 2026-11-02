@@ -82,6 +82,7 @@ pub struct FilesSettings {
     pub default_view: ViewMode,
     pub show_hidden: bool,
     pub show_extensions: bool,
+    pub desktop_disks: bool,
     pub warn_extension_change: bool,
     pub folders_first: bool,
     pub warn_empty_trash: bool,
@@ -96,6 +97,7 @@ impl Default for FilesSettings {
             default_view: ViewMode::default(),
             show_hidden: false,
             show_extensions: false,
+            desktop_disks: true,
             warn_extension_change: true,
             folders_first: true,
             warn_empty_trash: true,
@@ -125,6 +127,9 @@ impl Stored for FilesSettings {
                 "show-extensions" => {
                     settings.show_extensions = flag(value).unwrap_or(settings.show_extensions);
                 }
+                "desktop-disks" => {
+                    settings.desktop_disks = flag(value).unwrap_or(settings.desktop_disks);
+                }
                 "warn-extension-change" => {
                     settings.warn_extension_change =
                         flag(value).unwrap_or(settings.warn_extension_change);
@@ -151,11 +156,12 @@ impl Stored for FilesSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "new-window = {}\ndefault-view = {}\nshow-hidden = {}\nshow-extensions = {}\nwarn-extension-change = {}\nfolders-first = {}\nwarn-empty-trash = {}\npurge-trash = {}\nsearch-in = {}\n",
+            "new-window = {}\ndefault-view = {}\nshow-hidden = {}\nshow-extensions = {}\ndesktop-disks = {}\nwarn-extension-change = {}\nfolders-first = {}\nwarn-empty-trash = {}\npurge-trash = {}\nsearch-in = {}\n",
             self.new_window.name(),
             self.default_view.name(),
             self.show_hidden,
             self.show_extensions,
+            self.desktop_disks,
             self.warn_extension_change,
             self.folders_first,
             self.warn_empty_trash,
@@ -290,6 +296,12 @@ fn form(settings: &Shared<FilesSettings>) -> Form {
             "settings-show-hidden",
             current.show_hidden,
             |settings, on| settings.show_hidden = on,
+        ),
+        toggle(
+            settings,
+            "settings-desktop-disks",
+            current.desktop_disks,
+            |settings, on| settings.desktop_disks = on,
         ),
     ];
     lines.extend(sidebar_lines());

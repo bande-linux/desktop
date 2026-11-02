@@ -9,7 +9,7 @@ pub use bande_graphics::{
     window_controls_end,
 };
 pub use bande_toolkit_platform::{
-    ACTIVATION_TOKEN_VARIABLE, App, AppConnection, AppRequest, AppWindow, BrightnessKey,
+    ACTIVATION_TOKEN_VARIABLE, Anchor, App, AppConnection, AppRequest, AppWindow, BrightnessKey,
     DisplayEdge, Dmabuf, DmabufPlane, DragAction, DragEvent, DragIcon, Edges, ExternalSurface,
     FramePath, FrameRegions, Header, KeyboardFocus, LauncherMode, LayerKind, LayerOptions,
     MediaKey, MenuPlacement, Panel, RENDERER_VARIABLE, ResizeEdge, Role, SHEET_INSET, SessionEnd,

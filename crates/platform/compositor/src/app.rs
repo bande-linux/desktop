@@ -1,6 +1,7 @@
 use bande_protocols::server::bande_app_control_v1::{self, BandeAppControlV1};
 use bande_protocols::server::bande_app_v1::{self, BandeAppV1};
 use bande_protocols::server::bande_shell_v1::{self, BandeShellV1};
+use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::XdgToplevel;
 use smithay::reexports::wayland_server::WEnum;
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::{
@@ -379,6 +380,30 @@ impl Dispatch<BandeAppV1, ()> for State {
                         state.refocus_after_losing(&surface);
                     }
                     state.needs_redraw = true;
+                }
+            }
+            bande_app_v1::Request::SetPanelOrigin {
+                toplevel,
+                owner,
+                x,
+                y,
+                width,
+                height,
+            } if toplevel.client() == resource.client() && owner.client() == resource.client() => {
+                let find = |wanted: &XdgToplevel| {
+                    state
+                        .windows
+                        .iter()
+                        .position(|window| window.toplevel.xdg_toplevel() == wanted)
+                };
+                if let (Some(panel), Some(owner)) = (find(&toplevel), find(&owner))
+                    && state.windows[panel].panel
+                {
+                    let at = state.windows[owner].location;
+                    state.windows[panel].origin = Some(Rectangle::new(
+                        (f64::from(at.x + x), f64::from(at.y + y)).into(),
+                        (f64::from(width.max(1)), f64::from(height.max(1))).into(),
+                    ));
                 }
             }
             bande_app_v1::Request::MoveToWorkspace {

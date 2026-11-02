@@ -34,7 +34,7 @@ pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer, WindowDrag};
 pub use external::{Dmabuf, DmabufPlane, ExternalSurface, ShmLayout};
 pub use popup::MenuPlacement;
 pub use run::{App, Surfaces, run, run_surfaces};
-pub use shell::AppWindow;
+pub use shell::{Anchor, AppWindow};
 pub use window::{
     ACTIVATION_TOKEN_VARIABLE, Edges, FramePath, KeyboardFocus, LayerKind, LayerOptions,
     RENDERER_VARIABLE, Role, Sizing, ToplevelState, Window, WindowError, WindowEvent,

@@ -483,6 +483,21 @@ impl Builder<'_> {
             self.flush(&mut blocks, pending, &style);
             Contents::Blocks(blocks)
         };
+        let contents = match contents {
+            Contents::Blocks(mut blocks) => {
+                blocks.shrink_to_fit();
+                Contents::Blocks(blocks)
+            }
+            Contents::Flex(mut blocks) => {
+                blocks.shrink_to_fit();
+                Contents::Flex(blocks)
+            }
+            Contents::Grid(mut blocks) => {
+                blocks.shrink_to_fit();
+                Contents::Grid(blocks)
+            }
+            contents => contents,
+        };
         let marker = ordinal
             .filter(|_| !inside)
             .and_then(|ordinal| self.marker(&style, ordinal));
@@ -962,7 +977,10 @@ impl Builder<'_> {
         });
     }
 
-    fn finish(&mut self, pending: Pending) -> InlineContent {
+    fn finish(&mut self, mut pending: Pending) -> InlineContent {
+        pending.items.shrink_to_fit();
+        pending.atomics.shrink_to_fit();
+        pending.out_of_flow.shrink_to_fit();
         InlineContent {
             shaped: pending.paragraph.shape(self.fonts),
             items: pending.items,

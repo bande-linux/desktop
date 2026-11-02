@@ -242,6 +242,7 @@ impl Paragraph {
         };
         let mut shaped = ShapedParagraph {
             glyphs: Vec::new(),
+            offsets: Vec::new(),
             spans: Vec::new(),
             styles: self.runs.iter().map(|&(_, style, _)| style).collect(),
         };
@@ -264,8 +265,6 @@ impl Paragraph {
                         flags,
                         span: (shaped.spans.len() - 1) as u32,
                         advance,
-                        x_offset: 0.0,
-                        y_offset: 0.0,
                     });
                     clusters.push(range.start as u32);
                 }
@@ -318,8 +317,6 @@ impl Paragraph {
                         flags: NEWLINE | MANDATORY,
                         span: (shaped.spans.len() - 1) as u32,
                         advance: 0.0,
-                        x_offset: 0.0,
-                        y_offset: 0.0,
                     });
                     clusters.push(position as u32);
                 }
@@ -336,6 +333,9 @@ impl Paragraph {
             }
         }
         self.mark_breaks(&mut shaped.glyphs, &clusters);
+        shaped.glyphs.shrink_to_fit();
+        shaped.offsets.shrink_to_fit();
+        shaped.spans.shrink_to_fit();
         shaped
     }
 
@@ -423,13 +423,19 @@ impl Paragraph {
         for word in text.split_inclusive(' ') {
             if let Some(glyphs) = fonts.shape_word(span.font, size, rtl, word) {
                 for glyph in glyphs {
+                    let moved = glyph.x_offset != 0.0 || glyph.y_offset != 0.0;
+                    if moved {
+                        shaped.offsets.push((
+                            shaped.glyphs.len() as u32,
+                            glyph.x_offset,
+                            glyph.y_offset,
+                        ));
+                    }
                     shaped.glyphs.push(ShapedGlyph {
                         id: u16::try_from(glyph.id).unwrap_or(0),
-                        flags: 0,
+                        flags: if moved { OFFSET } else { 0 },
                         span: span_index,
                         advance: glyph.advance,
-                        x_offset: glyph.x_offset,
-                        y_offset: glyph.y_offset,
                     });
                     clusters.push(offset + glyph.cluster);
                 }
@@ -445,6 +451,7 @@ const MANDATORY: u8 = 4;
 const NEWLINE: u8 = 8;
 const SPACER: u8 = 16;
 const ATOMIC: u8 = 32;
+const OFFSET: u8 = 64;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Piece {
@@ -473,8 +480,6 @@ struct ShapedGlyph {
     flags: u8,
     span: u32,
     advance: f32,
-    x_offset: f32,
-    y_offset: f32,
 }
 
 impl ShapedGlyph {
@@ -485,6 +490,7 @@ impl ShapedGlyph {
 
 pub struct ShapedParagraph {
     glyphs: Vec<ShapedGlyph>,
+    offsets: Vec<(u32, f32, f32)>,
     spans: Vec<Span>,
     styles: Vec<RunStyle>,
 }
@@ -499,8 +505,17 @@ struct Segment {
 impl ShapedParagraph {
     pub fn heap_bytes(&self) -> usize {
         self.glyphs.capacity() * size_of::<ShapedGlyph>()
+            + self.offsets.capacity() * size_of::<(u32, f32, f32)>()
             + self.spans.capacity() * size_of::<Span>()
             + self.styles.capacity() * size_of::<RunStyle>()
+    }
+
+    fn offset(&self, index: usize) -> (f32, f32) {
+        self.offsets
+            .binary_search_by_key(&(index as u32), |&(at, _, _)| at)
+            .ok()
+            .and_then(|found| self.offsets.get(found))
+            .map_or((0.0, 0.0), |&(_, x, y)| (x, y))
     }
 
     pub fn intrinsic(&self, atomics: &[AtomicSize]) -> (f32, f32) {
@@ -637,6 +652,7 @@ impl ShapedParagraph {
         let first_item = lines.items.len();
         let mut edges: Vec<(usize, usize, f32)> = Vec::new();
         let mut groups: Vec<(LineAlign, f32, f32)> = Vec::new();
+        let base = range.start;
         let shaped = self.glyphs.get(range).unwrap_or_default();
         let hanging = shaped
             .iter()
@@ -662,13 +678,13 @@ impl ShapedParagraph {
             _ => 0.0,
         };
         let mut pen = 0.0;
-        let visual: Vec<&ShapedGlyph> = order
+        let visual: Vec<(usize, &ShapedGlyph)> = order
             .iter()
-            .filter_map(|&index| shaped.get(index))
-            .filter(|glyph| glyph.flags & NEWLINE == 0)
+            .filter_map(|&index| Some((base + index, shaped.get(index)?)))
+            .filter(|(_, glyph)| glyph.flags & NEWLINE == 0)
             .collect();
-        for group in visual.chunk_by(|a, b| a.span == b.span) {
-            let Some((span, style)) = group.first().and_then(|first| {
+        for group in visual.chunk_by(|a, b| a.1.span == b.1.span) {
+            let Some((span, style)) = group.first().map(|first| first.1).and_then(|first| {
                 let span = *self.spans.get(first.span as usize)?;
                 Some((span, *self.styles.get(span.run as usize)?))
             }) else {
@@ -676,6 +692,7 @@ impl ShapedParagraph {
             };
             let atomic = group
                 .first()
+                .map(|first| first.1)
                 .filter(|glyph| glyph.flags & ATOMIC != 0)
                 .and_then(|glyph| atomics.get(usize::from(glyph.id)));
             let (raw_above, raw_below) = match atomic {
@@ -716,13 +733,16 @@ impl ShapedParagraph {
             let scale = style.size / metrics.units_per_em;
             let start = pen;
             let glyph_start = lines.glyphs.len();
-            for glyph in group {
+            for &(index, glyph) in group {
                 if glyph.flags & (SPACER | ATOMIC) == 0 {
-                    lines.glyphs.push(Glyph::new(
-                        glyph.id,
-                        pen - start + glyph.x_offset,
-                        -glyph.y_offset,
-                    ));
+                    let (x_offset, y_offset) = if glyph.flags & OFFSET != 0 {
+                        self.offset(index)
+                    } else {
+                        (0.0, 0.0)
+                    };
+                    lines
+                        .glyphs
+                        .push(Glyph::new(glyph.id, pen - start + x_offset, -y_offset));
                 }
                 pen += Self::advance(glyph, atomics);
                 if glyph.flags & SPACE != 0 {

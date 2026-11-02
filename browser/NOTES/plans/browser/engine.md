@@ -159,14 +159,15 @@ elements, with its own stylesheets) and "Cat" (13.4k, without), at 1000 px:
 | Node core (`web-dom`) | ≤ 64 B | 40 B |
 | DOM with attributes, text and the document's atoms | ≤ 420 B | 293–400 B |
 | Computed styles (shared, 4 B index per node) | ≤ 40 B | 14–18 B |
-| Box tree with shaped text | ≤ 450 B | 380–449 B |
-| Fragment tree | ≤ 300 B | 223–256 B |
+| Box tree with shaped text | ≤ 450 B | 210–238 B |
+| Fragment tree | ≤ 300 B | 225–256 B |
 | Display list | ≤ 280 B | 185–264 B |
 
-Shaped glyphs are 20 B and laid-out glyphs 8 B (a `u16` id, the y offset in 1/16 px, x); line
-breaks and spaces are flags on the shaped glyphs, so no paragraph text is kept after shaping. Shape
-plans and shaped words are cached per font, size and direction. `tools/bench` measures the same
-stages on its generated article.
+Shaped glyphs are 12 B, with the rare mark offsets in a side table, and laid-out glyphs 8 B (a
+`u16` id, the y offset in 1/16 px, x). Line breaks and spaces are flags on the shaped glyphs, so no
+paragraph text is kept after shaping, and the shaped vectors are trimmed to length. Shape plans and
+shaped words are cached per font, size and direction. `tools/bench` measures the same stages on its
+generated article.
 
 Styles are shared three ways: siblings with the same name and classes reuse a style after
 revalidating the selectors that depend on attributes, position or siblings; elements with the same

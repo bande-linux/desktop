@@ -13,9 +13,10 @@ use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder}
 use bande_files::{
     BookmarkEdit, Browser, FilesSettings, FilesView, L10N, Location, Request, Row, SETTINGS_SIZE,
     SIDEBAR_FILE, SIDEBAR_WIDTH, Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory,
-    follow_search_excluded, hidden_places, last_folder_file as last_folder_file_in,
-    list_columns_file, rows, serve_file_manager, settings_view, sidebar_file, status_bar_file,
-    views_file, volumes_hidden, with_bookmarks, with_place_shown, without_bookmark,
+    follow_search_excluded, hidden_places, list_columns_file,
+    recent_folders_file as recent_folders_file_in, rows, serve_file_manager, settings_view,
+    sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks, with_place_shown,
+    without_bookmark,
 };
 use bande_fs::{History, Trash};
 use bande_inbox::Inbox;
@@ -160,7 +161,7 @@ struct Files {
     search_excluded: Vec<PathBuf>,
     shows: Option<Inbox<ShowRequest>>,
     ejects: Option<Inbox<EjectFailure>>,
-    last_folder: Option<PathBuf>,
+    recent_folders: Vec<PathBuf>,
     history: Rc<RefCell<History>>,
     trash: Trash,
 }
@@ -183,8 +184,8 @@ struct Sidebar {
     volumes_shown: bool,
 }
 
-fn last_folder_file(home: &Path) -> PathBuf {
-    last_folder_file_in(state_home().as_deref(), home)
+fn recent_folders_file(home: &Path) -> PathBuf {
+    recent_folders_file_in(state_home().as_deref(), home)
 }
 
 fn sidebar(home: &Path) -> Sidebar {
@@ -300,14 +301,24 @@ impl Files {
         }
     }
 
-    fn remember_last_folder(&self) {
-        let Some(folder) = &self.last_folder else {
-            return;
-        };
-        let text = format!("{}\n", folder.display());
-        if let Err(error) = replace_file(&last_folder_file(&self.home), &text) {
-            tracing::warn!("cannot remember the last folder: {error}");
+    fn remember_recent_folders(&self) {
+        let text: String = self
+            .recent_folders
+            .iter()
+            .map(|folder| format!("{}\n", folder.display()))
+            .collect();
+        if let Err(error) = replace_file(&recent_folders_file(&self.home), &text) {
+            tracing::warn!("cannot remember the recent folders: {error}");
         }
+    }
+
+    fn visited(&mut self, folder: PathBuf) {
+        if folder.as_os_str().as_encoded_bytes().contains(&b'\n') {
+            return;
+        }
+        self.recent_folders.retain(|known| *known != folder);
+        self.recent_folders.insert(0, folder);
+        self.recent_folders.truncate(RECENT_FOLDERS);
     }
 
     fn eject(&self, volume: PathBuf, force: bool) {
@@ -381,7 +392,7 @@ impl Files {
             self.settings.new_window.location(
                 &self.home,
                 user_dirs.as_deref(),
-                self.last_folder.as_deref(),
+                self.recent_folders.first().map(PathBuf::as_path),
             ),
             directory,
         );
@@ -559,8 +570,12 @@ impl Program for Files {
         {
             tracing::warn!("cannot serve org.freedesktop.FileManager1: {error}");
         }
-        let last_folder =
-            read(Some(last_folder_file(&home))).map(|text| PathBuf::from(text.trim_end()));
+        let recent_folders = read(Some(recent_folders_file(&home)))
+            .unwrap_or_default()
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(PathBuf::from)
+            .collect();
         let mut files = Self {
             home,
             settings,
@@ -572,7 +587,7 @@ impl Program for Files {
             ejects: Inbox::new()
                 .inspect_err(|error| tracing::warn!("cannot report eject failures: {error}"))
                 .ok(),
-            last_folder,
+            recent_folders,
             history: Rc::default(),
             trash,
         };
@@ -591,7 +606,7 @@ impl Program for Files {
             .and_then(|id| cx.view(id))
             .or_else(|| cx.windows().last().and_then(|id| cx.view(id)))
             .map_or_else(menu_bar::windowless_menus, |pane| {
-                menu_bar::app_menus(&pane.view)
+                menu_bar::app_menus(&pane.view, &self.recent_folders)
             })
     }
 
@@ -602,9 +617,25 @@ impl Program for Files {
             }
             return;
         };
+        if command == menu_bar::CLEAR_RECENT_FOLDERS {
+            self.recent_folders.clear();
+            self.remember_recent_folders();
+            cx.refresh_menus();
+            return;
+        }
+        let recent = command
+            .strip_prefix(menu_bar::RECENT_FOLDER)
+            .and_then(|index| index.parse::<usize>().ok())
+            .and_then(|index| self.recent_folders.get(index).cloned());
         let Some((shown, pane)) = cx.window(window) else {
             return;
         };
+        if let Some(folder) = recent {
+            pane.view.go(Location::Folder(folder));
+            shown.request_redraw();
+            self.changed(cx, window);
+            return;
+        }
         pane.view
             .set_clipboard_has_files(shown.clipboard_has_uris());
         if pane.view.menu_action(command) {
@@ -642,7 +673,7 @@ impl Program for Files {
                 shown.set_title(&title);
                 pane.title = title;
                 if let Some(folder) = pane.view.browser().current_folder() {
-                    self.last_folder = Some(folder);
+                    self.visited(folder);
                 }
             }
             shown.set_cursor(pane.view.cursor());
@@ -652,11 +683,11 @@ impl Program for Files {
     }
 
     fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, _view: Pane) {
-        self.remember_last_folder();
+        self.remember_recent_folders();
     }
 
     fn should_close(&mut self, _cx: &mut Cx<Self>, _window: WindowId) -> bool {
-        self.remember_last_folder();
+        self.remember_recent_folders();
         true
     }
 
@@ -703,6 +734,7 @@ impl Program for Files {
 const INFO_FLAG: &str = "--info";
 const NEW_WINDOW_FLAG: &str = "--new-window";
 const SELECT_FLAG: &str = "--select";
+const RECENT_FOLDERS: usize = 10;
 const SERVICE_FLAG: &str = "--gapplication-service";
 const SERVICE_WAIT: Duration = Duration::from_secs(5);
 const PURGE_AFTER_DAYS: i64 = 30;

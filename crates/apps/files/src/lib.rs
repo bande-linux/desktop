@@ -51,8 +51,8 @@ pub use view::{
     Rename, Request, SIDEBAR_WIDTH, Sheet,
 };
 pub use views::{
-    FolderView, ListColumn, SIDEBAR_FILE, ViewMemory, ViewMode, last_folder_file,
-    list_columns_file, sidebar_file, status_bar_file, views_file,
+    FolderView, ListColumn, SIDEBAR_FILE, ViewMemory, ViewMode, list_columns_file,
+    recent_folders_file, sidebar_file, status_bar_file, views_file,
 };
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-files.ftl");

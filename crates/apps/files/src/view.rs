@@ -1372,7 +1372,7 @@ impl FilesView {
         true
     }
 
-    pub(crate) fn go(&mut self, location: Location) {
+    pub fn go(&mut self, location: Location) {
         self.commit_rename();
         self.end_search();
         self.browser.go(location);

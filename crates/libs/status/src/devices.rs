@@ -413,13 +413,22 @@ fn run_controls(system: &Connection, controls: &Receiver<Control>, outbox: &Outb
         if stale.contains(&Source::Bluetooth) {
             devices.2 = bluetooth(&bluez);
         }
-        if devices != shown {
+        if !looks_alike(&devices, &shown) {
             shown = devices.clone();
             if !outbox.send(Update::Devices(devices.clone())) {
                 return;
             }
         }
     }
+}
+
+fn looks_alike(devices: &Devices, shown: &Devices) -> bool {
+    let wifi = match (&devices.1, &shown.1) {
+        (Some(wifi), Some(shown)) => wifi.looks_like(shown),
+        (None, None) => true,
+        _ => false,
+    };
+    wifi && devices.0 == shown.0 && devices.2 == shown.2
 }
 
 pub fn follow_devices(system: &Connection, outbox: Outbox<Update>) -> Sender<Control> {

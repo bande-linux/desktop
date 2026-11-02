@@ -394,7 +394,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "bande-app"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-app-menu",
@@ -415,7 +415,7 @@ dependencies = [
 
 [[package]]
 name = "bande-app-menu"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-inbox",
  "bande-keyboard",
@@ -425,7 +425,7 @@ dependencies = [
 
 [[package]]
 name = "bande-app-settings"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -438,7 +438,7 @@ dependencies = [
 
 [[package]]
 name = "bande-audio"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "pipewire",
  "serde_json",
@@ -447,7 +447,7 @@ dependencies = [
 
 [[package]]
 name = "bande-automount"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-bus",
  "bande-fs",
@@ -464,7 +464,7 @@ dependencies = [
 
 [[package]]
 name = "bande-bar"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-bluetooth",
@@ -486,7 +486,7 @@ dependencies = [
 
 [[package]]
 name = "bande-bench"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-compositor",
  "bande-files",
@@ -506,7 +506,7 @@ dependencies = [
 
 [[package]]
 name = "bande-bluetooth"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "blocking",
  "zbus",
@@ -514,7 +514,7 @@ dependencies = [
 
 [[package]]
 name = "bande-bus"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "tracing",
  "zbus",
@@ -522,7 +522,7 @@ dependencies = [
 
 [[package]]
 name = "bande-clipboard"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-log",
  "bande-xdg",
@@ -535,7 +535,7 @@ dependencies = [
 
 [[package]]
 name = "bande-compositor"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -565,7 +565,7 @@ dependencies = [
 
 [[package]]
 name = "bande-config"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-bus",
  "bande-design",
@@ -581,7 +581,7 @@ dependencies = [
 
 [[package]]
 name = "bande-content"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-fs",
  "bande-inbox",
@@ -597,7 +597,7 @@ dependencies = [
 
 [[package]]
 name = "bande-controlcenter"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-audio",
@@ -617,7 +617,7 @@ dependencies = [
 
 [[package]]
 name = "bande-datetime"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "icu_calendar",
  "icu_datetime",
@@ -630,11 +630,11 @@ dependencies = [
 
 [[package]]
 name = "bande-design"
-version = "0.1.5"
+version = "0.1.6"
 
 [[package]]
 name = "bande-desktop-surface"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-bar",
@@ -654,11 +654,11 @@ dependencies = [
 
 [[package]]
 name = "bande-edid"
-version = "0.1.5"
+version = "0.1.6"
 
 [[package]]
 name = "bande-file-chooser"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-app-settings",
@@ -676,7 +676,7 @@ dependencies = [
 
 [[package]]
 name = "bande-files"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -703,7 +703,7 @@ dependencies = [
 
 [[package]]
 name = "bande-fs"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-datetime",
  "bande-l10n",
@@ -722,7 +722,7 @@ dependencies = [
 
 [[package]]
 name = "bande-graphics"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-design",
  "fontique",
@@ -740,7 +740,7 @@ dependencies = [
 
 [[package]]
 name = "bande-greeter"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-bus",
@@ -762,14 +762,14 @@ dependencies = [
 
 [[package]]
 name = "bande-inbox"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "rustix 1.1.6",
 ]
 
 [[package]]
 name = "bande-keyboard"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-l10n",
  "roxmltree 0.21.2",
@@ -777,7 +777,7 @@ dependencies = [
 
 [[package]]
 name = "bande-l10n"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "fluent-bundle",
  "tracing",
@@ -786,7 +786,7 @@ dependencies = [
 
 [[package]]
 name = "bande-launcher"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-config",
@@ -807,7 +807,7 @@ dependencies = [
 
 [[package]]
 name = "bande-lock"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-bar",
@@ -833,7 +833,7 @@ dependencies = [
 
 [[package]]
 name = "bande-log"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "rustix 1.1.6",
  "tracing",
@@ -843,14 +843,14 @@ dependencies = [
 
 [[package]]
 name = "bande-network"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "zbus",
 ]
 
 [[package]]
 name = "bande-notifications"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-datetime",
  "bande-inbox",
@@ -866,7 +866,7 @@ dependencies = [
 
 [[package]]
 name = "bande-notify"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-bus",
  "bande-datetime",
@@ -881,7 +881,7 @@ dependencies = [
 
 [[package]]
 name = "bande-packages"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "rustix 1.1.6",
  "serde",
@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "bande-polkit"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-inbox",
@@ -907,7 +907,7 @@ dependencies = [
 
 [[package]]
 name = "bande-power"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-bus",
  "bande-l10n",
@@ -924,7 +924,7 @@ dependencies = [
 
 [[package]]
 name = "bande-printers"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "rustix 1.1.6",
  "zbus",
@@ -932,7 +932,7 @@ dependencies = [
 
 [[package]]
 name = "bande-protocols"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "wayland-backend",
  "wayland-client",
@@ -943,7 +943,7 @@ dependencies = [
 
 [[package]]
 name = "bande-quick-look"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-content",
@@ -958,7 +958,7 @@ dependencies = [
 
 [[package]]
 name = "bande-render"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "ash",
  "naga",
@@ -967,7 +967,7 @@ dependencies = [
 
 [[package]]
 name = "bande-review"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-log",
  "image",
@@ -981,7 +981,7 @@ dependencies = [
 
 [[package]]
 name = "bande-sample"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-log",
  "bande-toolkit",
@@ -990,7 +990,7 @@ dependencies = [
 
 [[package]]
 name = "bande-screenshot"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-datetime",
@@ -1017,7 +1017,7 @@ dependencies = [
 
 [[package]]
 name = "bande-search"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-inbox",
  "bande-watch",
@@ -1028,7 +1028,7 @@ dependencies = [
 
 [[package]]
 name = "bande-secrets"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "async-channel",
  "async-executor",
@@ -1050,7 +1050,7 @@ dependencies = [
 
 [[package]]
 name = "bande-secrets-prompt"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-l10n",
@@ -1064,7 +1064,7 @@ dependencies = [
 
 [[package]]
 name = "bande-settings"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-app",
@@ -1105,14 +1105,14 @@ dependencies = [
 
 [[package]]
 name = "bande-settings-panes"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-l10n",
 ]
 
 [[package]]
 name = "bande-shell"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-bar",
@@ -1134,7 +1134,7 @@ dependencies = [
 
 [[package]]
 name = "bande-sound"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-audio",
  "bande-bus",
@@ -1145,11 +1145,11 @@ dependencies = [
 
 [[package]]
 name = "bande-spring"
-version = "0.1.5"
+version = "0.1.6"
 
 [[package]]
 name = "bande-status"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-app-menu",
  "bande-audio",
@@ -1169,7 +1169,7 @@ dependencies = [
 
 [[package]]
 name = "bande-taskbar-model"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-config",
  "bande-inbox",
@@ -1179,7 +1179,7 @@ dependencies = [
 
 [[package]]
 name = "bande-test-bus"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "tempfile",
  "zbus",
@@ -1187,7 +1187,7 @@ dependencies = [
 
 [[package]]
 name = "bande-test-wayland"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-compositor",
  "bande-protocols",
@@ -1200,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "bande-thumbnails"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-inbox",
  "bande-xdg",
@@ -1212,7 +1212,7 @@ dependencies = [
 
 [[package]]
 name = "bande-toolkit"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-graphics",
@@ -1225,7 +1225,7 @@ dependencies = [
 
 [[package]]
 name = "bande-toolkit-platform"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -1249,7 +1249,7 @@ dependencies = [
 
 [[package]]
 name = "bande-tray"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-bus",
  "bande-log",
@@ -1259,7 +1259,7 @@ dependencies = [
 
 [[package]]
 name = "bande-volumes"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-test-bus",
  "tracing",
@@ -1268,7 +1268,7 @@ dependencies = [
 
 [[package]]
 name = "bande-wallpaper"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-inbox",
  "image",
@@ -1279,14 +1279,14 @@ dependencies = [
 
 [[package]]
 name = "bande-watch"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "rustix 1.1.6",
 ]
 
 [[package]]
 name = "bande-widgets"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "accesskit",
  "bande-graphics",
@@ -1298,7 +1298,7 @@ dependencies = [
 
 [[package]]
 name = "bande-xdg"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-bus",
  "bande-inbox",
@@ -3153,7 +3153,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libpam-bande-secrets"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "libc",
  "zeroize",
@@ -5937,7 +5937,7 @@ dependencies = [
 
 [[package]]
 name = "xdg-desktop-portal-bande"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bande-bus",
  "bande-config",

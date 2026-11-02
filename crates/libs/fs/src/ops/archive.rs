@@ -17,7 +17,7 @@ use zip::result::ZipError;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, DateTime, ZipArchive, ZipWriter};
 
-use super::{Change, Halt, Worker};
+use super::{Change, Halt, Worker, claim, rename_new};
 use crate::L10N;
 use crate::naming::keep_both_name;
 use crate::trash::remove_all;
@@ -195,13 +195,18 @@ fn settle(staging: &Path, destination: &Path, stem: &str) -> io::Result<PathBuf>
     let entries = fs::read_dir(staging)?.collect::<Result<Vec<_>, _>>()?;
     if let [only] = entries.as_slice() {
         let name = only.file_name().to_string_lossy().into_owned();
-        let target = free_path(destination, &name, only.file_type()?.is_dir());
-        fs::rename(only.path(), &target)?;
+        let is_dir = only.file_type()?.is_dir();
+        let (target, ()) = claim(
+            || free_path(destination, &name, is_dir),
+            |target| rename_new(&only.path(), target),
+        )?;
         fs::remove_dir(staging)?;
         return Ok(target);
     }
-    let target = free_path(destination, stem, true);
-    fs::rename(staging, &target)?;
+    let (target, ()) = claim(
+        || free_path(destination, stem, true),
+        |target| rename_new(staging, target),
+    )?;
     Ok(target)
 }
 
@@ -299,10 +304,17 @@ impl Worker {
             );
             return Ok(());
         };
-        let staging = free_path(destination, &format!(".{stem}.extracting"), true);
-        let unpacked = fs::create_dir(&staging)
-            .map_err(Stop::from)
-            .and_then(|()| self.unpack(packing, archive, &staging));
+        let staging = match claim(
+            || free_path(destination, &format!(".{stem}.extracting"), true),
+            |staging| fs::create_dir(staging),
+        ) {
+            Ok((staging, ())) => staging,
+            Err(error) => {
+                self.fail(archive, error);
+                return Ok(());
+            }
+        };
+        let unpacked = self.unpack(packing, archive, &staging);
         let settled = match unpacked {
             Ok(()) => settle(&staging, destination, &stem),
             Err(Stop::Io(error)) => Err(error),

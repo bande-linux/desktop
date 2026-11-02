@@ -1,10 +1,9 @@
 use std::collections::HashSet;
-use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::naming::split_extension;
-use crate::ops::Change;
+use crate::ops::{Change, rename_new};
 
 const COUNTER_DIGITS: usize = 5;
 
@@ -122,7 +121,7 @@ pub fn plan_renames(
 }
 
 fn moved(from: &Path, to: &Path) -> io::Result<Change> {
-    fs::rename(from, to)?;
+    rename_new(from, to)?;
     Ok(Change::Moved {
         from: from.to_path_buf(),
         to: to.to_path_buf(),

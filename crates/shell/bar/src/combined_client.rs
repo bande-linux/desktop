@@ -169,14 +169,14 @@ impl App for CombinedClient {
         if self
             .taskbar
             .deadline()
-            .is_some_and(|deadline| deadline <= now)
+            .is_some_and(|deadline| deadline <= Instant::now())
         {
             self.taskbar.tick(window, now);
         }
         if self
             .status
             .deadline()
-            .is_some_and(|deadline| deadline <= now)
+            .is_some_and(|deadline| deadline <= Instant::now())
         {
             self.status.tick(window, now);
         }

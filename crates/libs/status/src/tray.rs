@@ -12,7 +12,8 @@ use zbus::zvariant::{OwnedObjectPath, Value};
 use zbus::{MatchRule, Message, message};
 
 use crate::Update;
-use crate::dbusmenu::{APP_MENU_PATH, DBusMenu, Node, tree};
+use crate::dbusmenu::{APP_MENU_PATH, DBusMenu, Node, find, tree, with_app_row};
+use crate::gtkmenu::{self, ACTIONS_INTERFACE, Importer, MENUS_INTERFACE};
 
 const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
 const WATCHER_INTERFACE: &str = "org.kde.StatusNotifierWatcher";
@@ -210,6 +211,12 @@ pub fn host(connection: &Connection, outbox: &Outbox<Update>) -> zbus::Result<()
                     }
                     continue;
                 }
+                TrayEvent::GtkMenuChanged(sender) => {
+                    if !outbox.send(Update::GtkMenuChanged(sender)) {
+                        return Ok(());
+                    }
+                    continue;
+                }
                 TrayEvent::Items => {}
             }
             changed = true;
@@ -232,9 +239,10 @@ enum TrayEvent {
     Items,
     WatcherReturned,
     AppMenuChanged,
+    GtkMenuChanged(String),
 }
 
-fn tray_rules() -> zbus::Result<[MatchRule<'static>; 4]> {
+fn tray_rules() -> zbus::Result<[MatchRule<'static>; 6]> {
     let signal = || MatchRule::builder().msg_type(message::Type::Signal);
     Ok([
         signal().interface(ITEM_INTERFACE)?.build(),
@@ -249,6 +257,14 @@ fn tray_rules() -> zbus::Result<[MatchRule<'static>; 4]> {
             .interface(MENU_INTERFACE)?
             .member("LayoutUpdated")?
             .path(APP_MENU_PATH)?
+            .build(),
+        signal()
+            .interface(MENUS_INTERFACE)?
+            .member("Changed")?
+            .build(),
+        signal()
+            .interface(ACTIONS_INTERFACE)?
+            .member("Changed")?
             .build(),
     ])
 }
@@ -274,6 +290,9 @@ fn tray_event(message: &Message) -> Option<TrayEvent> {
         {
             Some(TrayEvent::AppMenuChanged)
         }
+        MENUS_INTERFACE | ACTIONS_INTERFACE if member == "Changed" => header
+            .sender()
+            .map(|sender| TrayEvent::GtkMenuChanged(sender.to_string())),
         _ => None,
     }
 }
@@ -314,37 +333,62 @@ fn without_repeated_app_menus(errands: impl Iterator<Item = Errand>) -> Vec<Erra
 }
 
 pub fn run_errands(connection: &Connection, errands: &Receiver<Errand>, outbox: &Outbox<Update>) {
+    let mut gtk = Importer::default();
     while let Ok(next) = errands.recv() {
         let queued = std::iter::once(next).chain(errands.try_iter());
         for errand in without_repeated_app_menus(queued) {
-            run_errand(connection, errand, outbox);
+            run_errand(connection, &mut gtk, errand, outbox);
         }
     }
 }
 
-fn run_errand(connection: &Connection, errand: Errand, outbox: &Outbox<Update>) {
+fn app_menu(connection: &Connection, gtk: &mut Importer, menu: &str) -> Option<Node> {
+    if gtkmenu::is_gtk(menu) {
+        return gtk.load(connection, menu).ok();
+    }
+    let (service, path) = split(menu);
+    let running = BusName::try_from(service).is_ok_and(|name| {
+        DBusProxy::new(connection)
+            .and_then(|bus| Ok(bus.name_has_owner(name)?))
+            .unwrap_or(false)
+    });
+    let root = running
+        .then(|| dbus_menu(connection, menu).and_then(|proxy| proxy.get_layout(0, -1, &[])))
+        .and_then(Result::ok)
+        .map(|(_, root)| tree(root))?;
+    Some(match path == APP_MENU_PATH {
+        true => root,
+        false => with_app_row(root),
+    })
+}
+
+fn run_errand(
+    connection: &Connection,
+    gtk: &mut Importer,
+    errand: Errand,
+    outbox: &Outbox<Update>,
+) {
     let result = match errand {
+        Errand::ShowMenu { menu, parent } if gtkmenu::is_gtk(&menu) => {
+            gtk.load(connection, &menu).map(|root| {
+                if let Some(root) = find(root, parent) {
+                    outbox.send(Update::Menu { menu, root });
+                }
+            })
+        }
         Errand::ShowMenu { menu, parent } => layout(connection, &menu, parent).map(|root| {
             outbox.send(Update::Menu { menu, root });
         }),
+        Errand::Clicked { menu, id } if gtkmenu::is_gtk(&menu) => {
+            gtk.activate(connection, &menu, id)
+        }
         Errand::Clicked { menu, id } => dbus_menu(connection, &menu)
             .and_then(|proxy| proxy.event(id, "clicked", &Value::from(""), 0)),
         Errand::Activate { item, x, y } => {
             item_proxy(connection, &item).and_then(|proxy| proxy.activate(x, y))
         }
         Errand::AppMenu(menu) => {
-            let (service, _) = split(&menu);
-            let running = BusName::try_from(service).is_ok_and(|name| {
-                DBusProxy::new(connection)
-                    .and_then(|bus| Ok(bus.name_has_owner(name)?))
-                    .unwrap_or(false)
-            });
-            let root = running
-                .then(|| {
-                    dbus_menu(connection, &menu).and_then(|proxy| proxy.get_layout(0, -1, &[]))
-                })
-                .and_then(Result::ok)
-                .map(|(_, root)| tree(root));
+            let root = app_menu(connection, gtk, &menu);
             outbox.send(Update::AppMenu { menu, root });
             Ok(())
         }

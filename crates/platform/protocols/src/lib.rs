@@ -1,6 +1,7 @@
 const _SHELL_PROTOCOL_SOURCE: &str = include_str!("../protocols/bande-shell-v1.xml");
 const _CAPTURE_PROTOCOL_SOURCE: &str = include_str!("../protocols/bande-capture-v1.xml");
 const _APPMENU_PROTOCOL_SOURCE: &str = include_str!("../protocols/kde-appmenu.xml");
+const _GTK_SHELL_PROTOCOL_SOURCE: &str = include_str!("../protocols/gtk-shell.xml");
 
 #[cfg(feature = "client")]
 pub mod client {
@@ -87,5 +88,20 @@ pub mod server {
         use self::__interfaces::*;
 
         wayland_scanner::generate_server_code!("protocols/kde-appmenu.xml");
+    }
+
+    pub use self::gtk_shell::{gtk_shell1, gtk_surface1};
+
+    mod gtk_shell {
+        use wayland_server;
+        use wayland_server::protocol::*;
+
+        pub mod __interfaces {
+            use wayland_server::protocol::__interfaces::*;
+            wayland_scanner::generate_interfaces!("protocols/gtk-shell.xml");
+        }
+        use self::__interfaces::*;
+
+        wayland_scanner::generate_server_code!("protocols/gtk-shell.xml");
     }
 }

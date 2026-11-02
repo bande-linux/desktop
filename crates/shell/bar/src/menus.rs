@@ -272,7 +272,7 @@ pub struct AppMenus<'a> {
     pub windows: &'a [(String, String)],
 }
 
-fn standard_app_menu(name: &str) -> Menu {
+pub fn standard_app_menu(name: &str) -> Menu {
     let app = || [("app", name.to_owned().into())];
     Menu::new(vec![
         MenuItem::new(&L10N.tr_args("app-about", app()), "").enabled(false),
@@ -286,7 +286,10 @@ fn standard_app_menu(name: &str) -> Menu {
 }
 
 pub fn cascade(menus: &AppMenus<'_>) -> Menu {
-    let exported = menus.root.and_then(|root| root.children.first());
+    let exported = menus
+        .root
+        .and_then(|root| root.children.first())
+        .filter(|node| !node.children.is_empty());
     let app_row = match exported {
         Some(node) => app_menu(node, menus.item),
         None => standard_app_menu(menus.name),

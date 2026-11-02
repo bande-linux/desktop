@@ -80,10 +80,8 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   `wip/userland-efficiency` (conflicts with `main`).
 - Windowless apps: Hide does nothing; the taskbar icon menu has no New Window; Calendar's and
   Activity Monitor's menus are empty; parked views keep their widget trees.
-- Menu button for GTK 3 windows with our title bar: offer `gtk_shell1` with the global menu bar
-  capability and import `org.gtk.Menus`/`org.gtk.Actions` (GTK 4 has no global menu); the
-  separate menu bar and Menu Search do not yet follow a third-party window's
-  `org_kde_kwin_appmenu` address, only its menu button does.
+- Third-party dbusmenu (`org_kde_kwin_appmenu`) is only re-read on `LayoutUpdated` at
+  `/org/bande/MenuBar`, so a KDE app's changed menus show at the next activation.
 - The compositor's window menu keeps its own `Labels` to follow text size; give the shared
   overlay label renderer a per-use text size.
 - Footprint: the typed property follower; the bar's own desktop-entry parsing; worker threads

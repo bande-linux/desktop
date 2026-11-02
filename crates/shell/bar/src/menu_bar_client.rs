@@ -12,7 +12,7 @@ use crate::installed_apps::InstalledApps;
 use crate::menu_bar::{HEIGHT, MenuBar, Slot, StatusView};
 use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, clock_menu, input_source_menu,
-    sound_menu, system_menu, wifi_menu,
+    sound_menu, standard_app_menu, system_menu, wifi_menu,
 };
 use bande_config::{BUS_NAME, BarEdge, BarLayout, OBJECT_PATH};
 use bande_datetime::DateFormats;
@@ -20,6 +20,7 @@ use bande_inbox::{Inbox, Outbox};
 use bande_keyboard::Layouts;
 use bande_status::dbusmenu::{APP_MENU_PATH, Node};
 use bande_status::devices::{Control, SoundControl};
+use bande_status::gtkmenu;
 use bande_status::hub::StatusHub;
 use bande_status::session::full_name;
 use bande_status::status::{InputSource, InputSources};
@@ -43,7 +44,6 @@ use crate::surfaces::Display;
 const TRAY_PIXELS: u32 = 32;
 const SCROLL_STEP: f32 = 1.0 / 16.0;
 const SETTINGS: &str = "org.bande.Settings";
-const BRING_TO_FRONT: &str = "bring-to-front";
 const TRAY_ITEM: &str = "tray-item:";
 const MENU_BAR_NAMESPACE: &str = "menubar";
 const CONFIG_INTERFACE: &str = "org.bande.Config";
@@ -406,10 +406,13 @@ impl<V: StatusView> MenuBarClient<V> {
             Slot::Bluetooth => status.bluetooth.as_ref().map(bluetooth_menu),
             Slot::InputSource => Some(input_source_menu(&status.input_sources)),
             Slot::MoreStatusItems => Some(self.more_menu(&status.input_sources)),
-            Slot::AppMenu if self.app_root.is_none() => Some(Menu::new(vec![MenuItem::new(
-                self.bar.app(),
-                BRING_TO_FRONT,
-            )])),
+            Slot::AppMenu
+                if self
+                    .app_menu_node(slot)
+                    .is_none_or(|node| node.children.is_empty()) =>
+            {
+                Some(standard_app_menu(self.bar.app()))
+            }
             _ => None,
         };
         if let Some(menu) = local {
@@ -560,10 +563,13 @@ impl<V: StatusView> App for MenuBarClient<V> {
                     window.request_redraw();
                 }
                 if app_id != self.app_id {
-                    self.follow_menus(app_menu_key(&app_id));
                     self.app_id = app_id;
                     window.request_redraw();
                 }
+                self.publish_menu(window);
+            }
+            WindowEvent::ActiveMenus(menu) => {
+                self.follow_menus(menu_key(&self.app_id, menu));
                 self.publish_menu(window);
             }
             WindowEvent::AppsChanged => self.publish_menu(window),
@@ -572,11 +578,7 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 menu,
                 anchor,
             } => {
-                let menu = match menu.is_empty() {
-                    true => app_menu_key(&app_id),
-                    false => menu,
-                };
-                self.follow_menus(menu);
+                self.follow_menus(menu_key(&app_id, menu));
                 match self.menu_loaded {
                     true => self.show_app_menu(window, anchor),
                     false => self.waiting_menus = Some(anchor),
@@ -624,9 +626,6 @@ impl<V: StatusView> App for MenuBarClient<V> {
                     && let Some(anchor) = self.bar.slot_rect(Slot::MoreStatusItems)
                 {
                     self.open_tray(window, index, anchor, false);
-                } else if action == BRING_TO_FRONT {
-                    let app = self.app_id.clone();
-                    report("bring the app forward", window.activate_app(&app));
                 } else if let Some(command) = Command::parse(&action) {
                     self.run(window, command);
                 }
@@ -733,6 +732,11 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 }
                 Update::AppMenuChanged => {
                     if !self.menu_key.is_empty() {
+                        self.status.errand(Errand::AppMenu(self.menu_key.clone()));
+                    }
+                }
+                Update::GtkMenuChanged(sender) => {
+                    if gtkmenu::changed_by(&self.menu_key, &sender) {
                         self.status.errand(Errand::AppMenu(self.menu_key.clone()));
                     }
                 }
@@ -845,10 +849,11 @@ impl<V: StatusView> MenuBarClient<V> {
     }
 }
 
-fn app_menu_key(app_id: &str) -> String {
-    match app_id.is_empty() {
-        true => String::new(),
-        false => format!("{app_id}{APP_MENU_PATH}"),
+fn menu_key(app_id: &str, menu: String) -> String {
+    match (menu.is_empty(), app_id.is_empty()) {
+        (false, _) => menu,
+        (true, true) => String::new(),
+        (true, false) => format!("{app_id}{APP_MENU_PATH}"),
     }
 }
 

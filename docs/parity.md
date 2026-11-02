@@ -19,7 +19,7 @@ the top.
 | Snapping and tiling | parity | halves and quarters, fill the other half, the zoom-button menu |
 | App switcher, same-app windows, overview, App Exposé, workspaces | parity | workspaces per display, three-finger swipes; no hot corners |
 | Taskbar: kept and running apps, Trash, icon menus, badges, drops | parity | the Dock and the menu bar in one bar |
-| App menus (menu button in the title bar, separate menu bar) and menu search | parity | from every `bande-app` app and dbusmenu exporters (`org_kde_kwin_appmenu`) |
+| App menus (menu button in the title bar, separate menu bar) and menu search | parity | from every `bande-app` app, dbusmenu exporters (`org_kde_kwin_appmenu`) and GTK 3 and GTK 4 application menu bars (`gtk_shell1`) |
 | Launcher: apps, settings, files, calculator, recents, clipboard history, emoji | parity | file names only, not contents |
 | Notifications: banners, Notification Center, Do Not Disturb | parity | no schedules, no inline reply, nothing on the lock screen |
 | Control Center, status items, volume and brightness HUD, Now Playing | parity | |

@@ -70,6 +70,7 @@ name = "web-dom"
 version = "0.1.0"
 dependencies = [
  "web-atoms",
+ "web-html",
 ]
 
 [[package]]

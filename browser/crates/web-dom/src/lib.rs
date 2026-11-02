@@ -1,6 +1,10 @@
 use std::num::NonZeroU32;
 
 use web_atoms::{Atom, AtomTable};
+use web_html::{Attributes, TreeSink};
+
+pub use web_atoms::{Namespace, QualName};
+pub use web_html::QuirksMode;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct NodeId(NonZeroU32);
@@ -28,24 +32,8 @@ pub enum NodeKind {
     Element,
     Text,
     Comment,
+    ProcessingInstruction,
     Fragment,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-#[repr(u8)]
-pub enum Namespace {
-    #[default]
-    Html,
-    Svg,
-    MathMl,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum QuirksMode {
-    #[default]
-    NoQuirks,
-    LimitedQuirks,
-    Quirks,
 }
 
 #[derive(Clone, Copy)]
@@ -69,7 +57,7 @@ struct Node {
 
 #[derive(Clone, Copy)]
 struct AttributeSlot {
-    name: Atom,
+    name: QualName,
     value: Span,
 }
 
@@ -80,6 +68,7 @@ pub struct Document {
     text: String,
     atoms: AtomTable,
     templates: Vec<(NodeId, NodeId)>,
+    doctype_ids: (String, String),
     quirks_mode: QuirksMode,
 }
 
@@ -100,6 +89,7 @@ impl Document {
             text: String::new(),
             atoms: AtomTable::new(),
             templates: Vec::new(),
+            doctype_ids: (String::new(), String::new()),
             quirks_mode: QuirksMode::NoQuirks,
         };
         document.push(NodeKind::Document, Namespace::Html, Atom::HTML, EMPTY);
@@ -205,13 +195,28 @@ impl Document {
             .map(|node| self.atoms.name(node.name))
     }
 
+    pub fn doctype_ids(&self) -> (&str, &str) {
+        (&self.doctype_ids.0, &self.doctype_ids.1)
+    }
+
+    pub fn processing_instruction_target(&self, id: NodeId) -> Option<&str> {
+        self.node(id)
+            .filter(|node| node.kind == NodeKind::ProcessingInstruction)
+            .map(|node| self.atoms.name(node.name))
+    }
+
     pub fn text(&self, id: NodeId) -> Option<&str> {
         self.node(id)
-            .filter(|node| matches!(node.kind, NodeKind::Text | NodeKind::Comment))
+            .filter(|node| {
+                matches!(
+                    node.kind,
+                    NodeKind::Text | NodeKind::Comment | NodeKind::ProcessingInstruction
+                )
+            })
             .map(|node| span_text(&self.text, node.data))
     }
 
-    pub fn attributes(&self, id: NodeId) -> impl Iterator<Item = (Atom, &str)> + '_ {
+    pub fn attributes(&self, id: NodeId) -> impl Iterator<Item = (QualName, &str)> + '_ {
         let slots = self
             .node(id)
             .filter(|node| node.kind == NodeKind::Element)
@@ -225,7 +230,11 @@ impl Document {
             .map(|slot| (slot.name, span_text(&self.attribute_text, slot.value)))
     }
 
-    pub fn attribute(&self, id: NodeId, name: Atom) -> Option<&str> {
+    pub fn attribute(&self, id: NodeId, local: Atom) -> Option<&str> {
+        self.qualified_attribute(id, QualName::attribute(local))
+    }
+
+    pub fn qualified_attribute(&self, id: NodeId, name: QualName) -> Option<&str> {
         self.attributes(id)
             .find(|&(attribute, _)| attribute == name)
             .map(|(_, value)| value)
@@ -240,9 +249,8 @@ impl Document {
 
     pub fn create_element<'a>(
         &mut self,
-        namespace: Namespace,
-        name: Atom,
-        attributes: impl IntoIterator<Item = (Atom, &'a str)>,
+        name: QualName,
+        attributes: impl IntoIterator<Item = (QualName, &'a str)>,
     ) -> NodeId {
         let start = self.attributes.len() as u32;
         for (attribute, value) in attributes {
@@ -253,21 +261,25 @@ impl Document {
             });
         }
         let len = self.attributes.len() as u32 - start;
-        let id = self.push(NodeKind::Element, namespace, name, Span { start, len });
-        if namespace == Namespace::Html && name == Atom::TEMPLATE {
-            let contents = self.push(NodeKind::Fragment, Namespace::Html, name, EMPTY);
-            self.templates.push((id, contents));
+        self.push(NodeKind::Element, name.ns, name.local, Span { start, len })
+    }
+
+    fn template_fragment(&mut self, template: NodeId) -> NodeId {
+        if let Some(contents) = Document::template_contents(self, template) {
+            return contents;
         }
-        id
+        let contents = self.push(NodeKind::Fragment, Namespace::Html, Atom::TEMPLATE, EMPTY);
+        self.templates.push((template, contents));
+        contents
     }
 
     pub fn add_attributes_if_missing<'a>(
         &mut self,
         element: NodeId,
-        attributes: impl IntoIterator<Item = (Atom, &'a str)>,
+        attributes: impl IntoIterator<Item = (QualName, &'a str)>,
     ) {
         for (name, value) in attributes {
-            if self.attribute(element, name).is_some() {
+            if self.qualified_attribute(element, name).is_some() {
                 continue;
             }
             let Some(node) = self.node(element).copied() else {
@@ -301,20 +313,25 @@ impl Document {
         self.push(NodeKind::Comment, Namespace::Html, Atom::HTML, data)
     }
 
-    pub fn create_doctype(&mut self, name: &str) -> NodeId {
+    pub fn create_processing_instruction(&mut self, target: &str, data: &str) -> NodeId {
+        let target = self.atoms.intern(target);
+        let data = push_span(&mut self.text, data);
+        self.push(
+            NodeKind::ProcessingInstruction,
+            Namespace::Html,
+            target,
+            data,
+        )
+    }
+
+    pub fn append_doctype(&mut self, name: &str, public_id: &str, system_id: &str) {
         let name = self.atoms.intern(name);
-        self.push(NodeKind::Doctype, Namespace::Html, name, EMPTY)
+        let doctype = self.push(NodeKind::Doctype, Namespace::Html, name, EMPTY);
+        self.doctype_ids = (public_id.to_owned(), system_id.to_owned());
+        self.insert(NodeId::DOCUMENT, doctype, None);
     }
 
-    pub fn append(&mut self, parent: NodeId, child: NodeId) {
-        self.insert(parent, child, None);
-    }
-
-    pub fn insert_before(&mut self, parent: NodeId, child: NodeId, reference: Option<NodeId>) {
-        self.insert(parent, child, reference);
-    }
-
-    fn insert(&mut self, parent: NodeId, child: NodeId, reference: Option<NodeId>) {
+    pub fn insert(&mut self, parent: NodeId, child: NodeId, reference: Option<NodeId>) {
         if parent == child
             || self.node(parent).is_none()
             || self.node(child).is_none()
@@ -387,31 +404,25 @@ impl Document {
     pub fn reparent_children(&mut self, from: NodeId, to: NodeId) {
         while let Some(child) = self.first_child(from) {
             let before = self.first_child(from);
-            self.append(to, child);
+            self.insert(to, child, None);
             if self.first_child(from) == before {
                 self.detach(child);
             }
         }
     }
 
-    pub fn append_text(&mut self, parent: NodeId, text: &str) {
-        match self.last_child(parent) {
-            Some(last) if self.kind(last) == Some(NodeKind::Text) => self.extend_text(last, text),
-            _ => {
-                let node = self.create_text(text);
-                self.append(parent, node);
-            }
-        }
-    }
-
-    pub fn insert_text_before(&mut self, parent: NodeId, reference: NodeId, text: &str) {
-        match self.previous_sibling(reference) {
+    pub fn insert_text(&mut self, parent: NodeId, before: Option<NodeId>, text: &str) {
+        let previous = match before {
+            Some(before) => self.previous_sibling(before),
+            None => self.last_child(parent),
+        };
+        match previous {
             Some(previous) if self.kind(previous) == Some(NodeKind::Text) => {
                 self.extend_text(previous, text)
             }
             _ => {
                 let node = self.create_text(text);
-                self.insert_before(parent, node, Some(reference));
+                self.insert(parent, node, before);
             }
         }
     }
@@ -454,7 +465,69 @@ impl Document {
             + self.attribute_text.capacity()
             + self.text.capacity()
             + self.templates.capacity() * size_of::<(NodeId, NodeId)>()
+            + self.doctype_ids.0.capacity()
+            + self.doctype_ids.1.capacity()
             + self.atoms.heap_bytes()
+    }
+}
+
+impl TreeSink for Document {
+    type Node = NodeId;
+
+    fn intern(&mut self, name: &str) -> Atom {
+        self.atoms.intern(name)
+    }
+
+    fn document(&self) -> NodeId {
+        NodeId::DOCUMENT
+    }
+
+    fn create_element(&mut self, name: QualName, attributes: Attributes<'_>) -> NodeId {
+        Document::create_element(self, name, attributes.iter())
+    }
+
+    fn create_comment(&mut self, text: &str) -> NodeId {
+        Document::create_comment(self, text)
+    }
+
+    fn create_processing_instruction(&mut self, target: &str, data: &str) -> NodeId {
+        Document::create_processing_instruction(self, target, data)
+    }
+
+    fn append_doctype(&mut self, name: &str, public_id: &str, system_id: &str) {
+        Document::append_doctype(self, name, public_id, system_id)
+    }
+
+    fn insert(&mut self, parent: NodeId, child: NodeId, before: Option<NodeId>) {
+        Document::insert(self, parent, child, before)
+    }
+
+    fn insert_text(&mut self, parent: NodeId, before: Option<NodeId>, text: &str) {
+        Document::insert_text(self, parent, before, text)
+    }
+
+    fn parent(&self, node: NodeId) -> Option<NodeId> {
+        Document::parent(self, node)
+    }
+
+    fn detach(&mut self, node: NodeId) {
+        Document::detach(self, node)
+    }
+
+    fn reparent_children(&mut self, from: NodeId, to: NodeId) {
+        Document::reparent_children(self, from, to)
+    }
+
+    fn add_attributes_if_missing(&mut self, element: NodeId, attributes: Attributes<'_>) {
+        Document::add_attributes_if_missing(self, element, attributes.iter())
+    }
+
+    fn template_contents(&mut self, template: NodeId) -> NodeId {
+        self.template_fragment(template)
+    }
+
+    fn set_quirks_mode(&mut self, mode: QuirksMode) {
+        self.quirks_mode = mode;
     }
 }
 

@@ -281,10 +281,7 @@ fn element(name: Atom) -> &'static [Declaration] {
         Atom::S | Atom::STRIKE | Atom::DEL => &[LineThrough],
         Atom::SMALL => &[FontSizeScale(1.0 / 1.2)],
         Atom::BIG => &[FontSizeScale(1.2)],
-        Atom::SUB => &[
-            FontSizeScale(1.0 / 1.2),
-            VerticalAlign(VerticalAlign::Sub),
-        ],
+        Atom::SUB => &[FontSizeScale(1.0 / 1.2), VerticalAlign(VerticalAlign::Sub)],
         Atom::SUP => &[
             FontSizeScale(1.0 / 1.2),
             VerticalAlign(VerticalAlign::Super),

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use web_atoms::Atom;
-use web_dom::{Document, Namespace, NodeId, NodeKind};
+use web_dom::{Document, NodeId, NodeKind};
 
 pub use defaults::Declaration;
 
@@ -257,8 +257,8 @@ impl Styles {
                             let Some(parent_style) = pool.get(parent as usize) else {
                                 continue;
                             };
-                            let style = parent_style
-                                .derived(defaults::declarations(key), &initial_reset);
+                            let style =
+                                parent_style.derived(defaults::declarations(key), &initial_reset);
                             pool.push(style);
                             let index = (pool.len() - 1) as u32;
                             sharing.insert((parent, key), index);
@@ -311,5 +311,5 @@ impl Styles {
 }
 
 pub(crate) fn is_html(document: &Document, node: NodeId, name: Atom) -> bool {
-    document.element_name(node) == Some((Namespace::Html, name))
+    document.html_element_name(node) == Some(name)
 }

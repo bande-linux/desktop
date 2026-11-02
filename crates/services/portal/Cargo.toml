@@ -27,7 +27,7 @@ bande-test-bus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, xdg-desktop-portal (>= 1.18), default-dbus-session-bus | dbus-session-bus"
+depends = "$auto, xdg-desktop-portal (>= 1.20), default-dbus-session-bus | dbus-session-bus"
 recommends = "bande-config, bande-file-chooser, bande-notify, bande-power, bande-screenshot"
 provides = "xdg-desktop-portal-backend"
 extended-description = """\

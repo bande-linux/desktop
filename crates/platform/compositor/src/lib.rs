@@ -2,6 +2,7 @@ mod access;
 mod access_keys;
 mod alert;
 mod app;
+mod app_states;
 mod appearance;
 mod apps;
 mod arrange;
@@ -63,6 +64,7 @@ mod window_menu;
 mod workspace;
 mod zoom;
 
+pub use app_states::{AppStatesHandle, serve_app_states};
 pub use appearance::{SystemAppearance, follow_appearance};
 pub use assistive::follow_alerts;
 pub use bande_render::{DeviceInfo, RenderError};

@@ -164,6 +164,15 @@ graph LR
   action goes to the app's `org.freedesktop.Application.ActivateAction` (D-Bus activating it)
   with the activation token, any other one is signalled as `ActionInvoked` with its target and
   the token. Re-adding an id replaces the notification; removing it closes it.
+- `org.freedesktop.impl.portal.Background`: lets the frontend export RequestBackground (run in
+  the background and start at login; since 1.19 the frontend writes the autostart file itself,
+  hence `xdg-desktop-portal (>= 1.20)`). `GetAppState` asks the compositor's `org.bande.Apps`
+  (`GetRunningApplications`, shaped like GNOME Shell's Introspect: each app with a mapped
+  window, its Flatpak id as `sandboxed-app-id` from the client's `/.flatpak-info`, and
+  `active-on-seats` for the frontmost app) and answers running (1) or active (2) per app,
+  keyed by the Flatpak id; anything else is in the background, as windowless apps are. Its
+  `RunningApplicationsChanged` is passed on. `NotifyBackground` allows, as GNOME does: an app
+  in the background keeps its running dot in the Taskbar, as on macOS, rather than a prompt.
 - Implemented in `crates/services/portal`: `Settings` (version 2) publishes
   `org.freedesktop.appearance` from `org.bande.Config`, with `color-scheme` 1 for dark (the
   default, and what every client assumes until the portal answers) and 2 for light (Automatic is resolved by the portal: dark from sunset to sunrise at the main city
@@ -193,7 +202,7 @@ graph LR
   stops the streams) are implemented over `FileChooserUi`, `ScreenshotUi` and
   `ScreenCastBackend` traits. `bande-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Bande`)
   sends every interface to Bande and secrets to GNOME Keyring; no GTK or GNOME backend is
-  used. Not implemented: Print (Bande has no print dialog), Account, Background, DynamicLauncher,
+  used. Not implemented: Print (Bande has no print dialog), Account, DynamicLauncher,
   GlobalShortcuts, InputCapture, RemoteDesktop, Clipboard and Usb; Lockdown is the frontend's
   own default (nothing locked down).
 - **Capture lives in the screenshot tool.** The portal process has no Wayland connection: its

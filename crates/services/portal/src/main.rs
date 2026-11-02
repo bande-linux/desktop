@@ -6,6 +6,7 @@ use std::thread;
 use bande_xdg::{config_home, data_home};
 use xdg_desktop_portal_bande::access::Access;
 use xdg_desktop_portal_bande::app_chooser::AppChooser;
+use xdg_desktop_portal_bande::background::Background;
 use xdg_desktop_portal_bande::capture::{ScreenshotService, ScreenshotTool};
 use xdg_desktop_portal_bande::dialog_process::{DIALOG_PROGRAM, DialogProcess};
 use xdg_desktop_portal_bande::email::Email;
@@ -88,6 +89,7 @@ fn serve() -> zbus::Result<Connection> {
     }
     Inhibit::serve(&connection, system.as_ref())?;
     Notification::serve(&connection)?;
+    Background::serve(&connection)?;
     close_sessions_when_sharing_ends(&connection, &tool_connection)?;
     connection.request_name(BUS_NAME)?;
     Ok(connection)

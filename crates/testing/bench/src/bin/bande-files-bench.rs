@@ -143,7 +143,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     for entry in 0..ENTRIES {
         fs::write(folder.join(format!("Photo {entry:06}.jpg")), b"jpeg")?;
     }
-    let trash = Trash::new(root.path().join("Trash"), 0);
+    let trash = Trash::isolated(root.path().join("Trash"), 0);
     let mut first_frame = Sample::new("Open to first frame");
     let mut fully_listed = Sample::new("Open to fully listed");
     let mut longest_stall = Sample::new("Longest stall while listing");

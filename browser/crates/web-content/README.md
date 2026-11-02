@@ -20,7 +20,11 @@ The entry points below are stable; the app and `tools/conformance` drive them.
   URLs from a stylesheet are already rebased onto the sheet's href (as passed to
   `add_stylesheets`), so the app resolves every link against the document. `add_images(&[(link,
   bytes)])` decodes them (PNG, JPEG, WebP, GIF) into premultiplied RGBA shared through `Arc` and
-  lays out again. The display list's `images` hold the same `Arc`s.
+  lays out again. The page keeps each image's encoded bytes; pixels exist only for displayed
+  images, resampled to their display size at 2x (backgrounds stay at natural size), and are
+  decoded again when that size changes. The display list's `images` hold the same `Arc`s, each
+  with a stable `id`. `release_image_pixels()` swaps them for pixel-less copies with the same ids,
+  for a renderer that has already sent the pixels.
 - Web fonts: `font_links()` lists `@font-face` `src` URLs still missing, only for faces whose
   family the page uses and whose `unicode-range` covers its text, and the next source once one
   fails. Sheet URLs are rebased like images. `add_fonts(&[(link, bytes)], fonts)` registers WOFF2,
@@ -31,8 +35,9 @@ The entry points below are stable; the app and `tools/conformance` drive them.
 - Hover: `hover_at(x, y, fonts)` or `set_hover(node, fonts)` restyle only what `:hover` rules
   can reach and return whether to repaint; `restyled()` counts the elements restyled.
 - `Fonts::new()` scans the system fonts once; keep one per thread and reuse it across pages.
-- `Page` holds the document, styles, box tree, fragment tree and `display_list`, an `Arc` the
-  app shares instead of copying; the page hit-tests the same list.
+- `Page` holds the document, styles, box tree and `display_list`, an `Arc` the app shares
+  instead of copying; the page hit-tests the same list. The fragment tree lives only during
+  layout; the page keeps each node's top for `fragment_y`.
   - `resize(width, fonts)` lays out again without restyling or reshaping.
   - `link_at(x, y)` is the `href` of the link under a point in document coordinates.
   - `fragment_y(name)` is the top of the element a `#name` link points to (an `id`, or an

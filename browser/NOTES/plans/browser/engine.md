@@ -96,13 +96,16 @@ environment, the control socket on stdin and the renderer's network socket on st
 
 **Gaps:**
 - Font files cross into the app as bytes and are parsed there. Glyph outlines (D1) remove that.
-- Image pixels are copied once into the app's `Arc`s; that is accepted for now.
+- Image pixels are copied once into the app's `Arc`s and the app keeps them for the load.
 - Only the `onBeforeRequest` stage exists.
 
 **Measured** (release, the mini, Debian's fonts):
 - An idle renderer is 1.7 MB anonymous and 8.4 MB resident (the rest is shared files). It starts,
   initialises fonts and enters the sandbox in 14–15 ms warm.
-- The Rust article's renderer is 25.8 MB anonymous, with 21 images; Cat's is 41 MB.
+- The Rust article's renderer is 14–15 MB anonymous, with 21 images; Cat's is 18–19 MB with 52.
+  The renderer keeps images encoded and drops their pixels once sent, keeps no fragment tree
+  between layouts, and caps shaped words at 2 MB. Helpers run with glibc's mmap and trim
+  thresholds fixed (`GLIBC_TUNABLES`), so freed buffers go back to the kernel.
 - The idle network process is 1–7 MB anonymous.
 - The app with one window on that article is 29.8 MiB anonymous.
 - Every process makes zero wake-ups when idle.

@@ -53,7 +53,7 @@ pub struct Fonts {
     names: Vec<Arc<[Arc<str>]>>,
     plans: HashMap<(FontId, harfrust::Script, bool), harfrust::ShapePlan>,
     words: HashMap<(FontId, u32, bool), WordCache>,
-    cached_words: usize,
+    cached_bytes: usize,
     buffer: Option<UnicodeBuffer>,
     scope: u32,
     scopes: u32,
@@ -72,16 +72,41 @@ struct WebFace {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct WordGlyph {
-    pub(crate) id: u32,
+    pub(crate) id: u16,
     pub(crate) cluster: u32,
     pub(crate) advance: f32,
-    pub(crate) x_offset: f32,
-    pub(crate) y_offset: f32,
 }
 
-const WORD_CACHE_LIMIT: usize = 65536;
+struct ShapedWord {
+    glyphs: Box<[WordGlyph]>,
+    offsets: Option<Box<[(f32, f32)]>>,
+}
 
-type WordCache = HashMap<Box<str>, Box<[WordGlyph]>>;
+impl ShapedWord {
+    fn bytes(&self, word: &str) -> usize {
+        word.len()
+            + size_of::<(Box<str>, ShapedWord)>()
+            + self.glyphs.len() * size_of::<WordGlyph>()
+            + self.offsets.as_ref().map_or(0, |offsets| offsets.len() * 8)
+    }
+
+    fn emit(&self, sink: &mut dyn FnMut(WordGlyph, (f32, f32))) {
+        for (index, glyph) in self.glyphs.iter().enumerate() {
+            let offset = self
+                .offsets
+                .as_ref()
+                .and_then(|offsets| offsets.get(index))
+                .copied()
+                .unwrap_or((0.0, 0.0));
+            sink(*glyph, offset);
+        }
+    }
+}
+
+const WORD_CACHE_BYTES: usize = 2 << 20;
+const CACHED_WORD_LENGTH: usize = 48;
+
+type WordCache = HashMap<Box<str>, ShapedWord>;
 
 impl Default for Fonts {
     fn default() -> Self {
@@ -104,7 +129,7 @@ impl Fonts {
             names: Vec::new(),
             plans: HashMap::new(),
             words: HashMap::new(),
-            cached_words: 0,
+            cached_bytes: 0,
             buffer: None,
             scope: 0,
             scopes: 0,
@@ -230,6 +255,12 @@ impl Fonts {
             }
         }
         self.words.retain(|(font, _, _), _| !fonts.contains(font));
+        self.cached_bytes = self
+            .words
+            .values()
+            .flat_map(|cache| cache.iter())
+            .map(|(word, shaped)| shaped.bytes(word))
+            .sum();
         self.plans.retain(|(font, _, _), _| !fonts.contains(font));
         self.primary.clear();
         self.chosen.clear();
@@ -255,25 +286,30 @@ impl Fonts {
         size: f32,
         rtl: bool,
         word: &str,
-    ) -> Option<&[WordGlyph]> {
+        sink: &mut dyn FnMut(WordGlyph, (f32, f32)),
+    ) -> bool {
         let key = (font, size.to_bits(), rtl);
-        let cached = self
-            .words
-            .get(&key)
-            .is_some_and(|words| words.contains_key(word));
-        if !cached {
-            let glyphs = self.shape_uncached(font, size, rtl, word)?;
-            if self.cached_words >= WORD_CACHE_LIMIT {
+        if let Some(shaped) = self.words.get(&key).and_then(|words| words.get(word)) {
+            shaped.emit(sink);
+            return true;
+        }
+        let Some(shaped) = self.shape_uncached(font, size, rtl, word) else {
+            return false;
+        };
+        shaped.emit(sink);
+        if word.len() <= CACHED_WORD_LENGTH {
+            let bytes = shaped.bytes(word);
+            if self.cached_bytes + bytes > WORD_CACHE_BYTES {
                 self.words.clear();
-                self.cached_words = 0;
+                self.cached_bytes = 0;
             }
-            self.cached_words += 1;
+            self.cached_bytes += bytes;
             self.words
                 .entry(key)
                 .or_default()
-                .insert(word.into(), glyphs);
+                .insert(word.into(), shaped);
         }
-        self.words.get(&key)?.get(word).map(|glyphs| &glyphs[..])
+        true
     }
 
     fn shape_uncached(
@@ -282,7 +318,7 @@ impl Fonts {
         size: f32,
         rtl: bool,
         word: &str,
-    ) -> Option<Box<[WordGlyph]>> {
+    ) -> Option<ShapedWord> {
         let loaded = self.loaded.get(font.0 as usize)?.as_ref()?;
         let font_ref =
             harfrust::FontRef::from_index(loaded.data.data.data(), loaded.data.index).ok()?;
@@ -305,23 +341,39 @@ impl Fonts {
             ShapeOptions::new().plan(Some(plan)).point_size(Some(size)),
         );
         let scale = size / loaded.metrics.units_per_em;
-        let mut glyphs: Box<[WordGlyph]> = output
+        let mut glyphs: Vec<WordGlyph> = Vec::with_capacity(output.glyph_infos().len());
+        let mut offsets: Vec<(f32, f32)> = Vec::new();
+        for (index, (info, position)) in output
             .glyph_infos()
             .iter()
             .zip(output.glyph_positions())
-            .map(|(info, position)| WordGlyph {
-                id: info.glyph_id,
+            .enumerate()
+        {
+            glyphs.push(WordGlyph {
+                id: u16::try_from(info.glyph_id).unwrap_or(0),
                 cluster: info.cluster,
                 advance: position.x_advance as f32 * scale,
-                x_offset: position.x_offset as f32 * scale,
-                y_offset: position.y_offset as f32 * scale,
-            })
-            .collect();
+            });
+            if position.x_offset != 0 || position.y_offset != 0 {
+                offsets.resize(index, (0.0, 0.0));
+                offsets.push((
+                    position.x_offset as f32 * scale,
+                    position.y_offset as f32 * scale,
+                ));
+            }
+        }
+        if !offsets.is_empty() {
+            offsets.resize(glyphs.len(), (0.0, 0.0));
+        }
         if rtl {
             glyphs.reverse();
+            offsets.reverse();
         }
         self.buffer = Some(output.clear());
-        Some(glyphs)
+        Some(ShapedWord {
+            glyphs: glyphs.into(),
+            offsets: (!offsets.is_empty()).then(|| offsets.into()),
+        })
     }
 
     pub fn family_names(&mut self, names: &Arc<[Arc<str>]>) -> u16 {

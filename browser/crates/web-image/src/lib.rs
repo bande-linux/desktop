@@ -3,16 +3,39 @@ mod avif;
 
 use std::io::Cursor;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Image {
+    pub id: u64,
     pub width: u32,
     pub height: u32,
     pub natural: (u32, u32),
     pub premultiplied: Arc<[u8]>,
 }
 
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
+fn next_id() -> u64 {
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
+}
+
 impl Image {
+    pub fn from_premultiplied(
+        width: u32,
+        height: u32,
+        natural: (u32, u32),
+        premultiplied: Arc<[u8]>,
+    ) -> Self {
+        Image {
+            id: next_id(),
+            width,
+            height,
+            natural,
+            premultiplied,
+        }
+    }
+
     fn new(width: u32, height: u32, mut rgba: Vec<u8>) -> Self {
         for pixel in rgba.as_chunks_mut::<4>().0 {
             let alpha = u16::from(pixel[3]);
@@ -22,54 +45,91 @@ impl Image {
                 }
             }
         }
+        Image::from_premultiplied(width, height, (width, height), rgba.into())
+    }
+
+    pub fn has_pixels(&self) -> bool {
+        !self.premultiplied.is_empty()
+    }
+
+    pub fn without_pixels(&self) -> Image {
         Image {
-            width,
-            height,
-            natural: (width, height),
-            premultiplied: rgba.into(),
+            premultiplied: Arc::from([]),
+            ..self.clone()
         }
     }
 
-    fn scaled(&self, factor: u32) -> Image {
-        let width = (self.width / factor).max(1);
-        let height = (self.height / factor).max(1);
-        let mut pixels = vec![0u8; width as usize * height as usize * 4];
+    fn resized(&self, width: u32, height: u32) -> Image {
+        let horizontal = weights(self.width, width);
+        let vertical = weights(self.height, height);
         let source = &self.premultiplied;
         let stride = self.width as usize * 4;
-        let count = factor * factor;
-        for y in 0..height as usize {
+        let mut rows = vec![0f32; width as usize * self.height as usize * 4];
+        for y in 0..self.height as usize {
+            for (x, taps) in horizontal.iter().enumerate() {
+                let mut sum = [0f32; 4];
+                for &(from, weight) in taps {
+                    let at = y * stride + from as usize * 4;
+                    if let Some(pixel) = source.get(at..at + 4) {
+                        for (total, channel) in sum.iter_mut().zip(pixel) {
+                            *total += f32::from(*channel) * weight;
+                        }
+                    }
+                }
+                let at = (y * width as usize + x) * 4;
+                if let Some(target) = rows.get_mut(at..at + 4) {
+                    target.copy_from_slice(&sum);
+                }
+            }
+        }
+        let mut pixels = vec![0u8; width as usize * height as usize * 4];
+        let row_stride = width as usize * 4;
+        for (y, taps) in vertical.iter().enumerate() {
             for x in 0..width as usize {
-                let mut sum = [0u32; 4];
-                for dy in 0..factor as usize {
-                    let row = (y * factor as usize + dy) * stride;
-                    for dx in 0..factor as usize {
-                        let at = row + (x * factor as usize + dx) * 4;
-                        if let Some(pixel) = source.get(at..at + 4) {
-                            for (total, channel) in sum.iter_mut().zip(pixel) {
-                                *total += u32::from(*channel);
-                            }
+                let mut sum = [0f32; 4];
+                for &(from, weight) in taps {
+                    let at = from as usize * row_stride + x * 4;
+                    if let Some(pixel) = rows.get(at..at + 4) {
+                        for (total, channel) in sum.iter_mut().zip(pixel) {
+                            *total += channel * weight;
                         }
                     }
                 }
                 let at = (y * width as usize + x) * 4;
                 if let Some(target) = pixels.get_mut(at..at + 4) {
                     for (channel, total) in target.iter_mut().zip(sum) {
-                        *channel = (total / count) as u8;
+                        *channel = total.round().clamp(0.0, 255.0) as u8;
                     }
                 }
             }
         }
-        Image {
-            width,
-            height,
-            natural: self.natural,
-            premultiplied: pixels.into(),
-        }
+        Image::from_premultiplied(width, height, self.natural, pixels.into())
     }
 
     pub fn bytes(&self) -> usize {
         self.premultiplied.len()
     }
+}
+
+fn weights(from: u32, to: u32) -> Vec<Vec<(u32, f32)>> {
+    let scale = from as f32 / to.max(1) as f32;
+    (0..to)
+        .map(|index| {
+            let start = index as f32 * scale;
+            let end = start + scale;
+            let mut taps = Vec::new();
+            let mut source = start.floor() as u32;
+            while (source as f32) < end && source < from {
+                let left = start.max(source as f32);
+                let right = end.min(source as f32 + 1.0);
+                if right > left {
+                    taps.push((source, (right - left) / scale));
+                }
+                source += 1;
+            }
+            taps
+        })
+        .collect()
 }
 
 const MAX_SIDE: u32 = 16384;
@@ -267,8 +327,12 @@ fn decode_gif(bytes: &[u8]) -> Option<Image> {
     Some(Image::new(width, height, canvas))
 }
 
+const ENCODED_LIMIT: usize = 32 << 20;
+
 struct Entry {
     url: Box<str>,
+    encoded: Option<Arc<[u8]>>,
+    natural: Option<(u32, u32)>,
     image: Option<Arc<Image>>,
     used: u64,
 }
@@ -294,18 +358,20 @@ impl ImageCache {
 
     pub fn insert(&mut self, url: &str, bytes: &[u8]) {
         let image = decode(bytes).map(Arc::new);
+        let natural = image.as_ref().map(|image| image.natural);
+        let encoded = (image.is_some() && bytes.len() <= ENCODED_LIMIT).then(|| Arc::from(bytes));
         self.clock += 1;
         let used = self.clock;
-        match self.entries.iter_mut().find(|entry| &*entry.url == url) {
-            Some(entry) => {
-                entry.image = image;
-                entry.used = used;
-            }
-            None => self.entries.push(Entry {
-                url: url.into(),
-                image,
-                used,
-            }),
+        let entry = Entry {
+            url: url.into(),
+            encoded,
+            natural,
+            image,
+            used,
+        };
+        match self.entries.iter_mut().find(|known| &*known.url == url) {
+            Some(known) => *known = entry,
+            None => self.entries.push(entry),
         }
         self.evict();
     }
@@ -315,7 +381,7 @@ impl ImageCache {
             let oldest = self
                 .entries
                 .iter_mut()
-                .filter(|entry| entry.image.is_some())
+                .filter(|entry| entry.image.as_ref().is_some_and(|image| image.has_pixels()))
                 .min_by_key(|entry| entry.used);
             match oldest {
                 Some(entry) => entry.image = None,
@@ -332,30 +398,78 @@ impl ImageCache {
     }
 
     pub fn size(&self, url: &str) -> Option<(f32, f32)> {
-        self.get(url)
-            .map(|image| (image.natural.0 as f32, image.natural.1 as f32))
+        self.entries
+            .iter()
+            .find(|entry| &*entry.url == url)
+            .and_then(|entry| entry.natural)
+            .map(|(width, height)| (width as f32, height as f32))
     }
 
     pub fn fit(&mut self, url: &str, width: f32, height: f32) {
+        self.clock += 1;
+        let used = self.clock;
         let Some(entry) = self.entries.iter_mut().find(|entry| &*entry.url == url) else {
             return;
         };
-        let Some(image) = &entry.image else {
+        let Some(natural) = entry.natural else {
             return;
         };
-        let ratio =
-            (image.width as f32 / width.max(1.0)).min(image.height as f32 / height.max(1.0));
-        let factor = (ratio.floor() as u32).min(64);
-        if factor >= 2 {
-            entry.image = Some(Arc::new(image.scaled(factor)));
+        let target = |wanted: f32, natural: u32| (wanted.ceil().max(1.0) as u32).min(natural);
+        let size = (target(width, natural.0), target(height, natural.1));
+        entry.used = used;
+        if entry
+            .image
+            .as_ref()
+            .is_some_and(|image| (image.width, image.height) == size)
+        {
+            return;
+        }
+        let source = match &entry.image {
+            Some(image) if image.has_pixels() && (image.width, image.height) == natural => {
+                Some(Arc::clone(image))
+            }
+            _ => entry
+                .encoded
+                .as_deref()
+                .and_then(decode)
+                .filter(|image| image.natural == natural)
+                .map(Arc::new),
+        };
+        entry.image = source.map(|source| {
+            if (source.width, source.height) == size {
+                source
+            } else {
+                Arc::new(source.resized(size.0, size.1))
+            }
+        });
+        self.evict();
+    }
+
+    pub fn keep_only(&mut self, displayed: &[&str]) {
+        for entry in &mut self.entries {
+            if !displayed.contains(&&*entry.url) {
+                entry.image = None;
+            }
+        }
+    }
+
+    pub fn release_pixels(&mut self) {
+        for entry in &mut self.entries {
+            if let Some(image) = &entry.image
+                && image.has_pixels()
+            {
+                entry.image = Some(Arc::new(image.without_pixels()));
+            }
         }
     }
 
     pub fn bytes(&self) -> usize {
         self.entries
             .iter()
-            .filter_map(|entry| entry.image.as_ref())
-            .map(|image| image.bytes())
+            .map(|entry| {
+                entry.image.as_ref().map_or(0, |image| image.bytes())
+                    + entry.encoded.as_ref().map_or(0, |encoded| encoded.len())
+            })
             .sum()
     }
 }

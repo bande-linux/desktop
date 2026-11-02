@@ -7,7 +7,7 @@ use web_css::stylesheet::{CssRule, Stylesheet, parse_stylesheet};
 use web_dom::{Document, NodeId};
 use web_html::{Options, Parser};
 use web_image::ImageCache;
-use web_layout::{BoxFragment, BoxTree, Fragment, FragmentTree};
+use web_layout::{BoxFragment, BoxTree, Fragment};
 use web_paint::DisplayList;
 use web_style::{Styles, Stylist};
 
@@ -18,7 +18,6 @@ pub struct Page {
     pub document: Document,
     pub styles: Styles,
     pub boxes: BoxTree,
-    pub fragments: FragmentTree,
     pub display_list: Arc<DisplayList>,
     stylist: Stylist,
     viewport: Viewport,
@@ -28,6 +27,8 @@ pub struct Page {
     scope: u32,
     fetched_fonts: Vec<(String, bool)>,
     font_bytes: usize,
+    tops: Vec<f32>,
+    fragment_bytes: usize,
 }
 
 const IMAGE_BUDGET: usize = 256 << 20;
@@ -158,31 +159,24 @@ impl Page {
         }
         let styles = Styles::compute(&document, &stylist);
         let boxes = BoxTree::build(&document, &styles, fonts);
-        let images = ImageCache::new(IMAGE_BUDGET);
-        let fragments = boxes.layout((viewport.width, viewport.height), fonts, &|source| {
-            images.size(source)
-        });
-        let display_list = Arc::new(DisplayList::build(
-            &fragments,
-            fonts,
-            viewport.width,
-            &|source| images.get(source).cloned(),
-        ));
-        Page {
+        let mut page = Page {
             document,
             styles,
             boxes,
-            fragments,
-            display_list,
+            display_list: Arc::default(),
             stylist,
             viewport,
             loaded: Vec::new(),
             imports,
-            images,
+            images: ImageCache::new(IMAGE_BUDGET),
             scope,
             fetched_fonts: Vec::new(),
             font_bytes: 0,
-        }
+            tops: Vec::new(),
+            fragment_bytes: 0,
+        };
+        page.relayout(fonts);
+        page
     }
 
     pub fn font_links(&self) -> Vec<String> {
@@ -481,7 +475,6 @@ impl Page {
     fn restyle(&mut self, fonts: &mut Fonts) {
         fonts.set_scope(self.scope);
         self.display_list = Arc::default();
-        self.fragments = FragmentTree::default();
         self.boxes = BoxTree::default();
         self.stylist.set_viewport(self.viewport);
         self.styles = Styles::compute(&self.document, &self.stylist);
@@ -491,25 +484,50 @@ impl Page {
 
     fn relayout(&mut self, fonts: &mut Fonts) {
         fonts.set_scope(self.scope);
+        self.display_list = Arc::default();
         let images = &self.images;
-        self.fragments = self.boxes.layout(
+        let fragments = self.boxes.layout(
             (self.viewport.width, self.viewport.height),
             fonts,
             &|source| images.size(source),
         );
         let mut displayed: Vec<(Arc<str>, f32, f32)> = Vec::new();
-        displayed_images(&self.fragments.root, &mut displayed);
-        for (source, width, height) in displayed {
+        displayed_images(&fragments.root, &mut displayed);
+        for (source, width, height) in &displayed {
             self.images
-                .fit(&source, width * DEVICE_SCALE, height * DEVICE_SCALE);
+                .fit(source, width * DEVICE_SCALE, height * DEVICE_SCALE);
         }
+        let shown: Vec<&str> = displayed.iter().map(|(source, _, _)| &**source).collect();
+        self.images.keep_only(&shown);
         let images = &self.images;
         self.display_list = Arc::new(DisplayList::build(
-            &self.fragments,
+            &fragments,
             fonts,
             self.viewport.width,
             &|source| images.get(source).cloned(),
         ));
+        self.tops.clear();
+        self.tops.resize(self.document.len(), f32::NAN);
+        record_tops(&self.document, &fragments.root, 0.0, &mut self.tops);
+        self.tops.shrink_to_fit();
+        self.fragment_bytes = fragments.heap_bytes();
+    }
+
+    pub fn release_image_pixels(&mut self) {
+        self.images.release_pixels();
+        if self
+            .display_list
+            .images
+            .iter()
+            .any(|image| image.has_pixels())
+        {
+            let list = Arc::make_mut(&mut self.display_list);
+            for image in &mut list.images {
+                if image.has_pixels() {
+                    *image = Arc::new(image.without_pixels());
+                }
+            }
+        }
     }
 
     pub fn hover_at(&mut self, x: f32, y: f32, fonts: &mut Fonts) -> bool {
@@ -572,11 +590,10 @@ impl Page {
                 || (self.document.html_element_name(node) == Some(Atom::A)
                     && self.document.attribute(node, Atom::NAME) == Some(fragment))
         })?;
-        first_y(&self.fragments.root, 0.0, &|node| {
-            self.document
-                .ancestors(node)
-                .any(|ancestor| ancestor == target)
-        })
+        self.tops
+            .get(target.index())
+            .copied()
+            .filter(|top| !top.is_nan())
     }
 
     fn find_element(&self, name: Atom) -> Option<NodeId> {
@@ -602,7 +619,7 @@ impl Page {
             dom: self.document.heap_bytes(),
             styles: self.styles.heap_bytes(),
             boxes: self.boxes.heap_bytes(),
-            fragments: self.fragments.heap_bytes(),
+            fragments: self.fragment_bytes,
             display_list: self.display_list.heap_bytes(),
             stylist: self.stylist.heap_bytes(),
             images: self.images.bytes(),
@@ -611,18 +628,31 @@ impl Page {
     }
 }
 
-fn first_y(fragment: &BoxFragment, y: f32, inside: &impl Fn(NodeId) -> bool) -> Option<f32> {
+fn record_tops(document: &Document, fragment: &BoxFragment, y: f32, tops: &mut [f32]) {
     let top = y + fragment.rect.y;
-    if fragment.node.is_some_and(inside) {
-        return Some(top);
+    let mark = |node: NodeId, at: f32, tops: &mut [f32]| {
+        let mut current = Some(node);
+        while let Some(node) = current {
+            match tops.get_mut(node.index()) {
+                Some(slot) if slot.is_nan() => *slot = at,
+                _ => break,
+            }
+            current = document.parent(node);
+        }
+    };
+    if let Some(node) = fragment.node {
+        mark(node, top, tops);
     }
-    fragment.children.iter().find_map(|child| match child {
-        Fragment::Box(child) => first_y(child, top, inside),
-        Fragment::Text(text) => text
-            .node
-            .filter(|&node| inside(node))
-            .map(|_| top + text.rect.y),
-    })
+    for child in &fragment.children {
+        match child {
+            Fragment::Box(child) => record_tops(document, child, top, tops),
+            Fragment::Text(text) => {
+                if let Some(node) = text.node {
+                    mark(node, top + text.rect.y, tops);
+                }
+            }
+        }
+    }
 }
 
 enum Source {
@@ -794,6 +824,15 @@ fn displayed_images(fragment: &BoxFragment, found: &mut Vec<(Arc<str>, f32, f32)
                 entry.2 = entry.2.max(height);
             }
             None => found.push((source.clone(), width, height)),
+        }
+    }
+    if let Some(source) = fragment.background_image() {
+        match found.iter_mut().find(|(known, _, _)| known == source) {
+            Some(entry) => {
+                entry.1 = f32::INFINITY;
+                entry.2 = f32::INFINITY;
+            }
+            None => found.push((source.clone(), f32::INFINITY, f32::INFINITY)),
         }
     }
     for child in &fragment.children {

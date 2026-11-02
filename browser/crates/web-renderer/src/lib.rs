@@ -10,7 +10,7 @@ use web_ipc::{
     Channel, Destination, FromNetwork, FromRenderer, LinkTable, Mapping, Message, Patch, Sent,
     Size, ToNetwork, ToRenderer, Url, sandbox,
 };
-use web_paint::{DisplayList, Image, Item, Rect};
+use web_paint::{DisplayList, Item, Rect};
 
 pub const MAX_BODY: usize = 64 << 20;
 const MAX_STYLESHEETS: usize = 64;
@@ -77,7 +77,7 @@ struct Renderer {
     network: Option<Channel>,
     next_fetch: u64,
     fonts_sent: Vec<(u64, u32)>,
-    images_sent: Vec<Arc<Image>>,
+    images_sent: Vec<u64>,
     sent: Option<(Arc<DisplayList>, LinkTable)>,
     shown: Option<Shown>,
     styling: Option<Styling>,
@@ -365,14 +365,14 @@ impl Renderer {
         self.show(shown)
     }
 
-    fn show(&mut self, shown: Shown) -> io::Result<()> {
+    fn show(&mut self, mut shown: Shown) -> io::Result<()> {
         let title = shown.page.title().filter(|title| !title.is_empty());
         let fragment = shown
             .url
             .fragment()
             .and_then(|name| shown.page.fragment_y(name));
         let load = shown.load;
-        let list = self.painted(&shown)?;
+        let list = self.painted(&mut shown)?;
         self.shown = Some(shown);
         self.control.send(
             &FromRenderer::Frame {
@@ -420,7 +420,7 @@ impl Renderer {
         };
         shown.page.add_fonts(&borrowed(&arrived), fonts);
         drop(arrived);
-        let relaid = self.relaid(&shown);
+        let relaid = self.relaid(&mut shown);
         self.shown = Some(shown);
         relaid?;
         self.request_fonts()
@@ -457,7 +457,7 @@ impl Renderer {
         };
         shown.page.add_images(&borrowed(&arrived), fonts);
         drop(arrived);
-        let relaid = self.relaid(&shown);
+        let relaid = self.relaid(&mut shown);
         self.shown = Some(shown);
         relaid
     }
@@ -480,20 +480,20 @@ impl Renderer {
             changed |= shown.page.hover_at(x, y, fonts);
         }
         let relaid = match changed {
-            true => self.relaid(&shown),
+            true => self.relaid(&mut shown),
             false => Ok(()),
         };
         self.shown = Some(shown);
         relaid
     }
 
-    fn relaid(&mut self, shown: &Shown) -> io::Result<()> {
+    fn relaid(&mut self, shown: &mut Shown) -> io::Result<()> {
         let list = self.painted(shown)?;
         self.control
             .send(&FromRenderer::Relaid { load: shown.load }, vec![list])
     }
 
-    fn painted(&mut self, shown: &Shown) -> io::Result<OwnedFd> {
+    fn painted(&mut self, shown: &mut Shown) -> io::Result<OwnedFd> {
         let list: &DisplayList = &shown.page.display_list;
         let mut fonts = Vec::with_capacity(list.fonts.len());
         for font in &list.fonts {
@@ -518,11 +518,7 @@ impl Renderer {
         }
         let mut images = Vec::with_capacity(list.images.len());
         for image in &list.images {
-            let id = match self
-                .images_sent
-                .iter()
-                .position(|sent| Arc::ptr_eq(sent, image))
-            {
+            let id = match self.images_sent.iter().position(|sent| *sent == image.id) {
                 Some(id) => id as u32,
                 None => {
                     let id = self.images_sent.len() as u32;
@@ -538,7 +534,7 @@ impl Renderer {
                         },
                         vec![pixels],
                     )?;
-                    self.images_sent.push(Arc::clone(image));
+                    self.images_sent.push(image.id);
                     id
                 }
             };
@@ -556,6 +552,7 @@ impl Renderer {
             targets,
         });
         let patch = Patch::encode(base.as_ref(), &sent, &fonts, &images);
+        shown.page.release_image_pixels();
         self.sent = Some((Arc::clone(&shown.page.display_list), (links, targets)));
         web_ipc::sealed(&patch)
     }

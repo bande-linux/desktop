@@ -650,12 +650,12 @@ impl Renderer {
                     return Err(invalid());
                 }
                 self.image_bytes += length;
-                self.images.push(Arc::new(Image {
+                self.images.push(Arc::new(Image::from_premultiplied(
                     width,
                     height,
-                    natural: (natural_width, natural_height),
-                    premultiplied: mapping.bytes().into(),
-                }));
+                    (natural_width, natural_height),
+                    mapping.bytes().into(),
+                )));
                 Ok(None)
             }
             FromRenderer::Frame {

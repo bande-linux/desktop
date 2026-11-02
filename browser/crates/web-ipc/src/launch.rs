@@ -15,6 +15,8 @@ const PASSED: &[&str] = &[
     "FONTCONFIG_PATH",
 ];
 
+const ALLOCATOR: &str = "glibc.malloc.mmap_threshold=65536:glibc.malloc.trim_threshold=131072:glibc.malloc.arena_max=1:glibc.malloc.top_pad=0";
+
 #[derive(Debug, Clone)]
 pub struct Program {
     pub path: PathBuf,
@@ -43,6 +45,7 @@ impl Program {
                     .iter()
                     .filter_map(|name| Some((name, std::env::var_os(name)?))),
             )
+            .env("GLIBC_TUNABLES", ALLOCATOR)
             .stdin(Stdio::from(control))
             .stdout(network.map_or_else(Stdio::null, Stdio::from))
             .stderr(Stdio::inherit());

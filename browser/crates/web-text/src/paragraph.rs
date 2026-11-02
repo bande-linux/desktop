@@ -421,25 +421,19 @@ impl Paragraph {
         shaped.spans.push(span);
         let mut offset = range.start as u32;
         for word in text.split_inclusive(' ') {
-            if let Some(glyphs) = fonts.shape_word(span.font, size, rtl, word) {
-                for glyph in glyphs {
-                    let moved = glyph.x_offset != 0.0 || glyph.y_offset != 0.0;
-                    if moved {
-                        shaped.offsets.push((
-                            shaped.glyphs.len() as u32,
-                            glyph.x_offset,
-                            glyph.y_offset,
-                        ));
-                    }
-                    shaped.glyphs.push(ShapedGlyph {
-                        id: u16::try_from(glyph.id).unwrap_or(0),
-                        flags: if moved { OFFSET } else { 0 },
-                        span: span_index,
-                        advance: glyph.advance,
-                    });
-                    clusters.push(offset + glyph.cluster);
+            fonts.shape_word(span.font, size, rtl, word, &mut |glyph, (x, y)| {
+                let moved = x != 0.0 || y != 0.0;
+                if moved {
+                    shaped.offsets.push((shaped.glyphs.len() as u32, x, y));
                 }
-            }
+                shaped.glyphs.push(ShapedGlyph {
+                    id: glyph.id,
+                    flags: if moved { OFFSET } else { 0 },
+                    span: span_index,
+                    advance: glyph.advance,
+                });
+                clusters.push(offset + glyph.cluster);
+            });
             offset += word.len() as u32;
         }
     }

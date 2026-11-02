@@ -43,6 +43,7 @@ mod overview;
 mod pointing;
 mod popup;
 mod recall;
+mod release;
 mod render;
 mod reveal;
 mod scanout;

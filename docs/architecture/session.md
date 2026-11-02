@@ -213,8 +213,7 @@ graph LR
   `ScreenCastBackend` traits. `bande-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Bande`)
   sends every interface to Bande, including `Secret`: only for calls from
   `xdg-desktop-portal` itself, it hands a sandboxed app the 64-byte key it keeps in the
-  keychain under `app_id` (GNOME Keyring's attributes, so imported keys still open the app's
-  own keyring file); no GTK or GNOME backend is used. Not implemented: Print (Bande has no print dialog), GlobalShortcuts, InputCapture,
+  keychain under `app_id`; no GTK or GNOME backend is used. Not implemented: Print (Bande has no print dialog), GlobalShortcuts, InputCapture,
   RemoteDesktop, Clipboard and Usb; Lockdown is the frontend's own default (nothing locked
   down).
 - **Capture lives in the screenshot tool.** The portal process has no Wayland connection: its
@@ -326,10 +325,10 @@ graph LR
   `org.freedesktop.secrets` (Secret Service: Service, Collection, Item, Session and Prompt
   objects; `plain` and `dh-ietf1024-sha256-aes128-cbc-pkcs7` sessions). It is D-Bus activated
   and socket-activated through `bande-secrets.socket`, and idles blocked in epoll.
-- Keychains are oo7's v1 files in `~/.local/share/keyrings/v1/<name>.keyring` (PBKDF2-SHA256,
-  AES-128-CBC with HMAC-SHA256, written 0600 through a temporary file): `login` (alias
-  `default`), the in-memory `session`, and any an app creates. The first unlock of `login`
-  imports GNOME Keyring's `~/.local/share/keyrings/login.keyring` and leaves it in place.
+- Keychains are oo7's v1 files in `~/.local/share/bande/keyrings/v1/<name>.keyring`
+  (PBKDF2-SHA256, AES-128-CBC with HMAC-SHA256, written 0600 through a temporary file):
+  `login` (alias `default`), the in-memory `session`, and any an app creates. GNOME Keyring's
+  files are not read.
 - `libpam-bande-secrets` (`crates/services/secrets-pam`) adds `pam_bande_secrets.so` through
   the pam-auth-update profile `bande-secrets`: `auth` keeps the typed password in PAM data,
   `session` hands it to the daemon over `/run/user/<uid>/bande-secrets/pam` (peer uid checked

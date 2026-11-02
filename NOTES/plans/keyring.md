@@ -12,8 +12,7 @@ GTK 3/4, gcr and pinentry they pull in can go.
 - **KeePassXC**: blocks a `SearchItems` on a locked database behind its unlock dialog; optional
   per-access confirmation.
 - **oo7** (linux-credentials, MIT): client crate with the v1 file format (AES-128-CBC +
-  HMAC-SHA256, PBKDF2-SHA256), the legacy v0 reader that imports a gnome-keyring
-  `login.keyring`, and the dh-ietf1024-sha256-aes128-cbc-pkcs7 primitives. `oo7-daemon` is a
+  HMAC-SHA256, PBKDF2-SHA256), and the dh-ietf1024-sha256-aes128-cbc-pkcs7 primitives. `oo7-daemon` is a
   tokio server with GNOME/Plasma prompters and gettext; `oo7-pam` sets a global tracing
   subscriber and spins a tokio runtime inside the PAM host process. Its v1 layout
   (`~/.local/share/keyrings/v1/<name>.keyring`) is also libsecret's file backend.
@@ -21,17 +20,16 @@ GTK 3/4, gcr and pinentry they pull in can go.
 ## Decisions
 
 - **Reuse `oo7` as a plain dependency** (`=0.7.0-beta`, `async-std` + `native_crypto` +
-  `unstable`): it gives the vetted on-disk format, the v0 import and the session crypto
+  `unstable`): it gives the vetted on-disk format and the session crypto
   (RustCrypto `aes`, `cbc`, `hkdf`, `pbkdf2`, `sha2`, `num-bigint-dig`). Not `oo7-daemon`: its
   prompter speaks GNOME's/KDE's prompt protocols, it brings tokio, clap and system gettext, and
   its object model is not built to embed. Not `oo7-pam`: a PAM module must not install a global
   tracing subscriber or a tokio runtime in greetd/login/passwd; ours is ~200 lines of FFI with
   no threads.
-- **Store**: `~/.local/share/keyrings/v1/<name>.keyring` (same layout as oo7-daemon). First run
-  imports `~/.local/share/keyrings/login.keyring` (v0) with the login password and leaves the
-  v0 file untouched, so going back to gnome-keyring still works. Collections: `login` (alias
-  `default`) and `session` (memory only, alias `session`); `CreateCollection` adds more.
-  Item paths are per-run counters; clients re-search.
+- **Store**: `~/.local/share/bande/keyrings/v1/<name>.keyring` (oo7's v1 format, own folder).
+  No import or migration of gnome-keyring data (owner: development phase, no transition code).
+  Collections: `login` (alias `default`) and `session` (memory only, alias `session`);
+  `CreateCollection` adds more. Item paths are per-run counters; clients re-search.
 - **Daemon** `bande-secrets` (crate `crates/services/secrets`, package `bande-secrets`):
   zbus object server on the async-io runtime zbus already uses; D-Bus activated
   (`org.bande.Secrets.service`, `Name=org.freedesktop.secrets`, `SystemdService=`) and
@@ -56,16 +54,16 @@ GTK 3/4, gcr and pinentry they pull in can go.
 - **Per-app access** (macOS item ACL): items record the creating app (`bande:creator`, the
   flatpak id or the executable path of the D-Bus peer). For another app the item reports
   `Locked` and lands in `SearchItems`' locked list; `Unlock` gives a prompt; "Always Allow"
-  adds the app to `bande:allowed`. Items without a creator (imported) stay open, as before.
+  adds the app to `bande:allowed`. Items without a known creator stay open.
 - **Search on a locked collection** waits for one shared unlock prompt (KeePassXC) instead of
   returning nothing, since v1 files cannot match attributes without the key.
 - **Portal** `org.freedesktop.impl.portal.Secret` in xdg-desktop-portal-bande: one item per app
   id (`xdg:schema=org.freedesktop.impl.portal.Secret`, `app_id`), 64 random bytes, written to
-  the fd; same attributes as gnome-keyring so existing Flatpak keys survive the import.
+  the fd.
 - **NetworkManager agent** in the daemon (`org.freedesktop.NetworkManager.SecretAgent`,
   identifier `org.bande.Secrets`): agent-owned secrets stored with libnm's attributes
   (`xdg:schema=org.freedesktop.NetworkManager.Connection`, `connection-uuid`, `setting-name`,
-  `setting-key`) so nm-applet/gnome-shell entries import; interactive requests show the Wi-Fi
+  `setting-key`); interactive requests show the Wi-Fi
   password prompt. Joins from Bande keep system-owned PSKs (macOS keeps Wi-Fi passwords in the
   System keychain so they work at the login window).
 - **Settings ▸ Passwords**: list with search, app column, reveal/copy/edit/delete. Opening it
@@ -96,8 +94,8 @@ GTK 3/4, gcr and pinentry they pull in can go.
 
 ## Phases (each compiles and merges)
 
-1. Daemon: store, import, Service/Collection/Item/Session/Prompt API, plain + DH sessions, PAM
-   socket, PAM module + profile, units, packaging. Verify: secret-tool, DH, import, pamtester.
+1. Daemon: store, Service/Collection/Item/Session/Prompt API, plain + DH sessions, PAM
+   socket, PAM module + profile, units, packaging. Verify: secret-tool, DH, pamtester.
 2. Prompt process: unlock, new collection, per-app access, update-login-password.
 3. Portal Secret backend.
 4. NetworkManager secret agent and Wi-Fi password prompt.

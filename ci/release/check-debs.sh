@@ -137,5 +137,5 @@ service="$root/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.ban
 grep -qx 'DBusName=org.freedesktop.impl.portal.desktop.bande' "$portal"
 grep -qx 'Name=org.freedesktop.impl.portal.desktop.bande' "$service"
 test -x "$root$(sed -n 's/^Exec=//p' "$service")"
-grep -q '^org.freedesktop.impl.portal.Settings=bande;' "$root/usr/share/xdg-desktop-portal/bande-portals.conf"
+grep -qx 'default=bande;' "$root/usr/share/xdg-desktop-portal/bande-portals.conf"
 echo "the $architecture packages passed"

@@ -192,6 +192,7 @@ pub struct TextSystem {
     fonts: FontContext,
     layouts: LayoutContext<Color>,
     size: TextSize,
+    monospace: Option<Arc<str>>,
 }
 
 impl Default for TextSystem {
@@ -206,6 +207,7 @@ impl TextSystem {
             fonts: FontContext::new(),
             layouts: LayoutContext::new(),
             size: TextSize::DEFAULT,
+            monospace: None,
         }
     }
 
@@ -214,7 +216,16 @@ impl TextSystem {
             fonts: self.fonts.clone(),
             layouts: LayoutContext::new(),
             size: self.size,
+            monospace: self.monospace.clone(),
         }
+    }
+
+    pub fn set_monospace_family(&mut self, family: Option<&str>) {
+        self.monospace = family.map(Arc::from);
+    }
+
+    pub fn has_family(&mut self, family: &str) -> bool {
+        self.fonts.collection.family_id(family).is_some()
     }
 
     pub fn set_size(&mut self, size: TextSize) {
@@ -273,6 +284,12 @@ impl TextSystem {
             self.layouts
                 .ranged_builder(&mut self.fonts, &text, self.size.scale(), true);
         style.apply(&mut builder);
+        if let (Typeface::Monospace, Some(family)) = (style.typeface, &self.monospace) {
+            let families = std::iter::once(FontFamilyName::named(family))
+                .chain(MONOSPACE_FAMILIES.iter().cloned())
+                .collect::<Vec<_>>();
+            builder.push_default(StyleProperty::FontFamily(FontFamily::List(families.into())));
+        }
         for (range, weight) in emphasis {
             if text.get(range.clone()).is_some() {
                 builder.push(

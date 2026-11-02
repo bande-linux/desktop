@@ -99,7 +99,8 @@ writes a hex value, a corner radius or a font name of its own.
   with dictionaries for Thai, Lao, Khmer and Burmese, and fallback through fontconfig (loaded at
   run time). Interface text is Inter with Datum's alternates on (`cv05` l with a tail, `cv08` I
   with serifs, `ss07`/`ss08` square punctuation and quotes); display text (window titles,
-  headings, 20 pt and up) is Manrope; monospace is JetBrains Mono with a slashed zero. A missing
+  headings, 20 pt and up) is Manrope; monospace is JetBrains Mono with a slashed zero, or the
+  family a `TextSystem` was given with `set_monospace_family` (Terminal's font). A missing
   face falls back (Manrope to Inter, JetBrains Mono to DejaVu Sans Mono, then fontconfig's
   generic family), so nothing breaks without the fonts; `bande-desktop` depends on
   `fonts-inter`, `fonts-manrope` and `fonts-jetbrains-mono`. Baselines sit on whole pixels, as

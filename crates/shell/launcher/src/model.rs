@@ -443,9 +443,9 @@ impl Model {
         model
     }
 
-    pub fn set_recently_used(&mut self, xbel: Option<&str>) {
+    pub fn set_recently_used(&mut self, recents: &[(PathBuf, u64)]) {
         let documents = match self.shows(SearchCategory::RecentDocuments) {
-            true => recent_files(xbel, &self.usage, &self.excluded, GRID_COLUMNS),
+            true => recent_files(recents, &self.usage, &self.excluded, GRID_COLUMNS),
             false => Vec::new(),
         };
         if documents != self.recent_documents {

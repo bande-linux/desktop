@@ -887,8 +887,8 @@ impl Launcher {
         self.ui.menu_action(action) || apply_menu_action(&mut self.state.borrow_mut().model, action)
     }
 
-    pub fn set_recently_used(&mut self, xbel: Option<&str>) {
-        self.state.borrow_mut().model.set_recently_used(xbel);
+    pub fn set_recently_used(&mut self, recents: &[(PathBuf, u64)]) {
+        self.state.borrow_mut().model.set_recently_used(recents);
     }
 
     pub fn set_search(&mut self, search: Search, excluded: Vec<PathBuf>) {

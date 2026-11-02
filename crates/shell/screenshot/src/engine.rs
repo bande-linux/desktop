@@ -3,7 +3,8 @@ use std::fs::File;
 use std::io;
 use std::os::fd::AsFd;
 use std::os::unix::fs::FileExt;
-use std::sync::mpsc::{self, Sender};
+use std::sync::Arc;
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -100,6 +101,8 @@ impl Shot {
 
 pub type FrameSink = Box<dyn FnMut(u32, u32, &[u8]) + Send>;
 
+pub type Reply<T> = Arc<dyn Fn(T) + Send + Sync>;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineEvent {
     ShowOptions,
@@ -107,12 +110,12 @@ pub enum EngineEvent {
 }
 
 enum Command {
-    Windows(Sender<Vec<WindowInfo>>),
-    Displays(Sender<Vec<Display>>),
+    Windows(Reply<Vec<WindowInfo>>),
+    Displays(Reply<Vec<Display>>),
     Shoot {
         source: Source,
         cursor: bool,
-        reply: Sender<Option<Shot>>,
+        reply: Reply<Option<Shot>>,
     },
     Stream {
         id: u64,
@@ -185,26 +188,49 @@ impl Engine {
         Ok(Self { commands })
     }
 
-    pub fn displays(&self) -> Vec<Display> {
+    fn wait<T: Send + 'static>(ask: impl FnOnce(Reply<T>)) -> Option<T> {
         let (reply, answer) = mpsc::channel();
-        self.commands.send(Command::Displays(reply));
-        answer.recv().unwrap_or_default()
+        ask(Arc::new(move |value| {
+            let _ = reply.send(value);
+        }));
+        answer.recv().ok()
+    }
+
+    pub fn displays(&self) -> Vec<Display> {
+        Self::wait(|reply| self.displays_then(reply)).unwrap_or_default()
     }
 
     pub fn windows(&self) -> Vec<WindowInfo> {
-        let (reply, answer) = mpsc::channel();
-        self.commands.send(Command::Windows(reply));
-        answer.recv().unwrap_or_default()
+        Self::wait(|reply| {
+            self.commands.send(Command::Windows(reply));
+        })
+        .unwrap_or_default()
     }
 
     pub fn shoot(&self, source: Source, cursor: bool) -> Option<Shot> {
-        let (reply, answer) = mpsc::channel();
+        Self::wait(|reply| self.shoot_then(source, cursor, reply)).flatten()
+    }
+
+    pub fn displays_then(&self, reply: Reply<Vec<Display>>) {
+        self.commands.send(Command::Displays(reply));
+    }
+
+    pub fn layout_then(&self, reply: Reply<(Vec<Display>, Vec<WindowInfo>)>) {
+        let commands = self.commands.clone();
+        self.displays_then(Arc::new(move |displays: Vec<Display>| {
+            let reply = Arc::clone(&reply);
+            commands.send(Command::Windows(Arc::new(move |windows| {
+                reply((displays.clone(), windows));
+            })));
+        }));
+    }
+
+    pub fn shoot_then(&self, source: Source, cursor: bool, reply: Reply<Option<Shot>>) {
         self.commands.send(Command::Shoot {
             source,
             cursor,
             reply,
         });
-        answer.recv().ok().flatten()
     }
 
     pub fn stream(&self, id: u64, source: Source, cursor: bool, sink: FrameSink) {
@@ -235,7 +261,7 @@ struct Toplevel {
 }
 
 enum Sink {
-    Once(Sender<Option<Shot>>),
+    Once(Reply<Option<Shot>>),
     Stream(u64, FrameSink),
 }
 
@@ -270,7 +296,7 @@ struct Capture {
     shell: Option<BandeCaptureV1>,
     toplevels: Vec<Toplevel>,
     listed: Vec<(String, Frame)>,
-    listings: VecDeque<Sender<Vec<WindowInfo>>>,
+    listings: VecDeque<Reply<Vec<WindowInfo>>>,
     sessions: Vec<Session>,
     next_session: u64,
     events: Outbox<EngineEvent>,
@@ -341,25 +367,21 @@ impl Capture {
                     shell.list_windows();
                     self.listings.push_back(reply);
                 }
-                None => {
-                    let _ = reply.send(self.window_infos(&[]));
-                }
+                None => reply(self.window_infos(&[])),
             },
-            Command::Displays(reply) => {
-                let _ = reply.send(
-                    self.displays
-                        .iter()
-                        .map(|output| output.display.clone())
-                        .collect(),
-                );
-            }
+            Command::Displays(reply) => reply(
+                self.displays
+                    .iter()
+                    .map(|output| output.display.clone())
+                    .collect(),
+            ),
             Command::Shoot {
                 source,
                 cursor,
                 reply,
             } => {
-                if !self.open(&source, cursor, Sink::Once(reply.clone()), handle) {
-                    let _ = reply.send(None);
+                if !self.open(&source, cursor, Sink::Once(Arc::clone(&reply)), handle) {
+                    reply(None);
                 }
             }
             Command::Stream {
@@ -538,7 +560,7 @@ impl Session {
         let (width, height) = (buffer.width, buffer.height);
         match &mut self.sink {
             Sink::Once(reply) => {
-                let _ = reply.send(Some(Shot {
+                reply(Some(Shot {
                     width,
                     height,
                     bgra: std::mem::take(&mut self.pixels),
@@ -555,9 +577,7 @@ impl Session {
 
     fn end(&mut self, events: &Outbox<EngineEvent>) {
         match &self.sink {
-            Sink::Once(reply) => {
-                let _ = reply.send(None);
-            }
+            Sink::Once(reply) => reply(None),
             Sink::Stream(id, _) => {
                 events.send(EngineEvent::StreamEnded(*id));
             }
@@ -706,7 +726,7 @@ impl Dispatch<BandeCaptureV1, ()> for Capture {
             bande_capture_v1::Event::WindowsDone => {
                 let listed = std::mem::take(&mut capture.listed);
                 if let Some(reply) = capture.listings.pop_front() {
-                    let _ = reply.send(capture.window_infos(&listed));
+                    reply(capture.window_infos(&listed));
                 }
             }
             bande_capture_v1::Event::ShowOptions => {

@@ -5,14 +5,16 @@ use std::os::fd::{AsFd, BorrowedFd};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::rc::Rc;
+use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::{Instant, SystemTime};
 
 use crate::confirm::{CONFIRM_EXTENSION_FLAG, FORCE_EJECT, confirm_extension_change, eject_failed};
+use crate::places::{Listing, SETTINGS_FOLDER, Shown, start_lister};
 use crate::{
     Artwork, Bounds, CONFIRM_DELETE_FLAG, DesktopView, EJECT_FAILED_FLAG, Item, Kind, Layer,
     Layouts, Luma, MenuApp, Request, Selection, WallpaperKey, command, confirm_delete,
-    desktop_menu, items_menu, layouts_path, list, parse_layouts, save_layouts,
+    desktop_menu, items_menu, layouts_path, parse_layouts, save_layouts,
 };
 use accesskit::TreeUpdate;
 use bande_config::{BUS_NAME, BarEdge, BarLayout, Config, OBJECT_PATH, Wallpaper, WallpaperFit};
@@ -27,7 +29,7 @@ use bande_toolkit::{
     App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
-use bande_volumes::{EjectFailure, eject, media_roots, mounted_volumes};
+use bande_volumes::{EjectFailure, eject, media_roots};
 use bande_wallpaper::{
     Choice, Fit, Picture, RenderError, Variant, choose, follow, render, render_cached,
 };
@@ -39,11 +41,6 @@ use bande_xdg::{
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
-const SETTINGS_FOLDER: &str = "bande";
-const FILES_SETTINGS: &str = "files.conf";
-const SHOW_EXTENSIONS: &str = "show-extensions";
-const SHOW_DISKS: &str = "desktop-disks";
-const WARN_EXTENSION_CHANGE: &str = "warn-extension-change";
 const BUSY: &str = "busy";
 const PDF: &str = "application/pdf";
 const WALLPAPER_CACHE: &str = "bande/wallpapers";
@@ -77,8 +74,10 @@ pub struct DesktopSurface {
     apps: Rc<RefCell<Apps>>,
     operations: Operations,
     watch: FolderWatch,
+    lister: Option<Sender<()>>,
+    listed: Inbox<Listing>,
+    select_when_listed: Vec<PathBuf>,
     desktop_dir: PathBuf,
-    wallpaper_only: bool,
     media: Vec<PathBuf>,
     data_dirs: Vec<PathBuf>,
     home: Option<PathBuf>,
@@ -194,15 +193,14 @@ impl DesktopSurface {
             Kind::Volume => vec!["drive-removable-media".to_owned()],
             Kind::Folder => vec!["folder".to_owned()],
             Kind::File => {
-                let mime = self.apps.borrow().mime_for(&item.path);
                 let launcher = self
                     .apps
                     .borrow()
-                    .launcher(&item.path, &mime)
+                    .launcher(&item.path, &item.mime)
                     .and_then(|entry| entry.icon);
                 launcher
                     .into_iter()
-                    .chain(self.apps.borrow().icon_names(&mime))
+                    .chain(self.apps.borrow().icon_names(&item.mime))
                     .collect()
             }
         };
@@ -216,14 +214,9 @@ impl DesktopSurface {
         pixels: u32,
         wanted: &mut Vec<ThumbnailRequest>,
     ) -> Option<Artwork> {
-        let mime = match item.kind {
-            Kind::File => self.apps.borrow().mime_for(&item.path),
-            _ => String::new(),
-        };
+        let mime = &item.mime;
         if self.thumbnails.is_some() && (mime.starts_with("image/") || mime == PDF) {
-            let modified = std::fs::metadata(&item.path)
-                .and_then(|metadata| metadata.modified())
-                .ok();
+            let modified = item.modified;
             let known = self
                 .pictures
                 .get(&item.path)
@@ -237,7 +230,7 @@ impl DesktopSurface {
                     self.pictures.insert(item.path.clone(), (modified, None));
                     wanted.push(ThumbnailRequest {
                         path: item.path.clone(),
-                        mime,
+                        mime: mime.clone(),
                         size: ThumbnailSize::for_pixels(pixels),
                     });
                 }
@@ -284,22 +277,25 @@ impl DesktopSurface {
     }
 
     fn relist(&mut self) {
-        if self.wallpaper_only {
-            return;
+        if let Some(lister) = &self.lister {
+            let _ = lister.send(());
         }
-        let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-        self.shown = Shown::read();
-        let volumes = match self.shown.disks {
-            true => mounted_volumes(&mountinfo, &self.media),
-            false => Vec::new(),
+    }
+
+    fn listed(&mut self) {
+        let Some(listing) = self.listed.drain().pop() else {
+            return;
         };
-        self.items = list(
-            &mut self.apps.borrow_mut(),
-            &self.desktop_dir,
-            &volumes,
-            self.shown.extensions,
-        );
-        self.show_items();
+        let changed = listing.items != self.items || listing.shown != self.shown;
+        self.shown = listing.shown;
+        self.items = listing.items;
+        if changed {
+            self.show_items();
+        }
+        let selected = std::mem::take(&mut self.select_when_listed);
+        if !selected.is_empty() {
+            self.view.select_paths(&selected);
+        }
         self.watch_folders();
         self.save_layouts();
     }
@@ -414,6 +410,7 @@ impl DesktopSurface {
         if relist {
             self.icons.clear();
             self.pictures.clear();
+            self.show_items();
             self.relist();
         }
         self.save_layouts();
@@ -798,10 +795,10 @@ impl DesktopSurface {
             })
             .filter(|path| path.parent() == Some(self.desktop_dir.as_path()))
             .collect();
-        self.relist();
         if !created.is_empty() {
-            self.view.select_paths(&created);
+            self.select_when_listed = created;
         }
+        self.relist();
     }
 }
 
@@ -886,6 +883,7 @@ impl App for DesktopSurface {
             self.choices.fd(),
             self.loaded.fd(),
             self.bar_changes.fd(),
+            self.listed.fd(),
         ];
         sources.extend(self.thumbnails.as_ref().map(Thumbnails::fd));
         sources.extend(self.operations.fds());
@@ -936,12 +934,16 @@ impl App for DesktopSurface {
                 self.follow_bar();
                 window.request_redraw();
             }
-            4 if self.thumbnails.is_some() => {
+            4 => {
+                self.listed();
+                window.request_redraw();
+            }
+            5 if self.thumbnails.is_some() => {
                 self.thumbnails_ready();
                 window.request_redraw();
             }
             index => {
-                let first = 4 + usize::from(self.thumbnails.is_some());
+                let first = 5 + usize::from(self.thumbnails.is_some());
                 if index - first == self.operations.fds().len() {
                     self.confirmed();
                 } else {
@@ -964,14 +966,7 @@ impl App for DesktopSurface {
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
-        let changes = self.watch.take_changed(now);
-        let settings = config_home().map(|config| config.join(SETTINGS_FOLDER));
-        let elsewhere = changes.folders.iter().chain(&changes.entries).any(|path| {
-            settings
-                .as_ref()
-                .is_none_or(|settings| !path.starts_with(settings))
-        });
-        if elsewhere || (!changes.is_empty() && Shown::read() != self.shown) {
+        if !self.watch.take_changed(now).is_empty() {
             self.relist();
         }
         self.view.tick(now);
@@ -985,34 +980,6 @@ impl App for DesktopSurface {
 
     fn accessibility(&self) -> Option<TreeUpdate> {
         Some(self.view.accessibility())
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Shown {
-    extensions: bool,
-    disks: bool,
-    warn_extension_change: bool,
-}
-
-impl Shown {
-    fn read() -> Self {
-        let text = config_home()
-            .and_then(|config| {
-                std::fs::read_to_string(config.join(SETTINGS_FOLDER).join(FILES_SETTINGS)).ok()
-            })
-            .unwrap_or_default();
-        let flag = |wanted: &str| {
-            text.lines()
-                .filter_map(|line| line.split_once('='))
-                .find(|(key, _)| key.trim() == wanted)
-                .map(|(_, value)| value.trim() == "true")
-        };
-        Self {
-            extensions: flag(SHOW_EXTENSIONS).unwrap_or(false),
-            disks: flag(SHOW_DISKS).unwrap_or(true),
-            warn_extension_change: flag(WARN_EXTENSION_CHANGE).unwrap_or(true),
-        }
     }
 }
 
@@ -1145,25 +1112,34 @@ impl DesktopSurface {
         let appearance = window.appearance();
         let data_dirs = data_dirs();
         let thumbnails = main.then(|| Thumbnails::for_user(&data_dirs)).flatten();
+        let media = media_roots(&user);
+        let listed = Inbox::new()?;
+        let lister = match main {
+            true => Some(start_lister(
+                apps.borrow().file_types(),
+                desktop_dir.clone(),
+                media.clone(),
+                listed.outbox(),
+            )?),
+            false => None,
+        };
         let mut surface = DesktopSurface {
             view: DesktopView::new(appearance, layouts, text),
             paste_moves: false,
             apps,
             operations: Operations::new(trash),
             watch: FolderWatch::new()?,
+            lister,
+            listed,
+            select_when_listed: Vec::new(),
             desktop_dir,
-            wallpaper_only: !main,
-            media: media_roots(&user),
+            media,
             data_dirs,
             home,
             icons: HashMap::new(),
             thumbnails,
             items: Vec::new(),
-            shown: Shown {
-                extensions: false,
-                disks: true,
-                warn_extension_change: true,
-            },
+            shown: Shown::default(),
             pictures: HashMap::new(),
             layouts_file,
             bar: (config.bar.edge, config.bar.layout, config.bar.icon_size),

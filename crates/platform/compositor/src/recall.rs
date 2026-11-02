@@ -8,6 +8,7 @@ use smithay::utils::{Logical, Point, Rectangle};
 
 use crate::shell::toplevel_names;
 use crate::state::{Compositor, State};
+use crate::window::Window;
 
 #[derive(Debug, Clone, PartialEq)]
 struct Remembered {
@@ -104,15 +105,17 @@ impl State {
     }
 
     fn recallable(&self, index: usize) -> Option<String> {
+        let main_window =
+            |window: &Window| window.toplevel.parent().is_none() && !window.fixed_size();
         let window = &self.windows[index];
         let app_id = toplevel_names(window.surface()).1;
         let alone = !self.windows.iter().enumerate().any(|(other, sibling)| {
             other != index
                 && sibling.size.is_some()
+                && main_window(sibling)
                 && toplevel_names(sibling.surface()).1 == app_id
         });
-        (!app_id.is_empty() && window.toplevel.parent().is_none() && !window.fixed_size() && alone)
-            .then_some(app_id)
+        (!app_id.is_empty() && main_window(window) && alone).then_some(app_id)
     }
 
     pub(crate) fn recall_frame(&mut self, index: usize) {

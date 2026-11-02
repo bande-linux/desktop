@@ -97,6 +97,7 @@ impl State {
         self.follow_exclusive_layer(surface, exclusive);
         let keyless = layer.cached_state().keyboard_interactivity == KeyboardInteractivity::None;
         if keyless
+            && self.menu_root().as_ref() != Some(surface)
             && self
                 .focused()
                 .is_some_and(|focused| self.root_of(&focused).as_ref() == Some(surface))

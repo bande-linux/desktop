@@ -3,6 +3,7 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::thread;
 
 use bande_audio::Audio;
 use bande_sound::{Alert, BUS_NAME, OBJECT_PATH, Policy, Sound, write_theme};
@@ -27,8 +28,10 @@ trait Config {
     fn alert_volume(&self) -> zbus::Result<f64>;
 }
 
+type Slot = Arc<Mutex<Option<Arc<Audio>>>>;
+
 struct SoundService {
-    audio: Mutex<Option<Audio>>,
+    audio: Slot,
     samples: Mutex<HashMap<Sound, Arc<[f32]>>>,
     config: Option<ConfigProxy<'static>>,
 }
@@ -37,6 +40,33 @@ fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn connected(slot: &Slot) -> Result<Arc<Audio>, bande_audio::Error> {
+    let mut current = locked(slot);
+    if let Some(audio) = current.as_ref().filter(|audio| audio.snapshot().connected) {
+        return Ok(Arc::clone(audio));
+    }
+    *current = None;
+    let audio = Arc::new(Audio::connect()?);
+    audio.follow_jacks()?;
+    *current = Some(Arc::clone(&audio));
+    let watched = Arc::clone(&audio);
+    let slot = Arc::clone(slot);
+    thread::Builder::new()
+        .name("pipewire-watch".into())
+        .spawn(move || {
+            let mut snapshot = watched.snapshot();
+            while snapshot.connected {
+                snapshot = watched.changed_since(Some(snapshot.generation));
+            }
+            drop(watched);
+            if let Err(error) = connected(&slot) {
+                tracing::warn!("sound is gone: {error}");
+            }
+        })
+        .map_err(|error| bande_audio::Error::PipeWire(error.to_string()))?;
+    Ok(audio)
 }
 
 impl SoundService {
@@ -68,29 +98,15 @@ impl SoundService {
     }
 
     fn output(&self, sound: Sound, gain: f32) -> Result<(), bande_audio::Error> {
-        let mut audio = locked(&self.audio);
+        let audio = connected(&self.audio)?;
         if audio
-            .as_ref()
-            .is_none_or(|connected| !connected.snapshot().connected)
-        {
-            *audio = None;
-            *audio = Some(Audio::connect()?);
-        }
-        let Some(connected) = audio.as_ref() else {
-            return Ok(());
-        };
-        if connected
             .snapshot()
             .default_output()
             .is_none_or(|output| output.level.muted)
         {
             return Ok(());
         }
-        let result = connected.play(self.samples(sound), gain);
-        if result == Err(bande_audio::Error::Disconnected) {
-            *audio = None;
-        }
-        result
+        audio.play(self.samples(sound), gain)
     }
 }
 
@@ -122,12 +138,12 @@ fn serve() -> Result<Connection, Box<dyn Error>> {
     let config = ConfigProxy::new(&settings)
         .inspect_err(|error| tracing::warn!("sound settings are not followed: {error}"))
         .ok();
+    let audio = Slot::default();
+    if let Err(error) = connected(&audio) {
+        tracing::warn!("no sound yet: {error}");
+    }
     let service = SoundService {
-        audio: Mutex::new(
-            Audio::connect()
-                .inspect_err(|error| tracing::warn!("no sound yet: {error}"))
-                .ok(),
-        ),
+        audio,
         samples: Mutex::default(),
         config,
     };

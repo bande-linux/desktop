@@ -15,7 +15,7 @@ use bande_config::{Config, Search, SearchCategory, config_path};
 use bande_fs::Entry;
 use bande_inbox::Inbox;
 use bande_preview::{Preview, preview};
-use bande_search::{FileIndex, Usage, recently_used_path, usage_path};
+use bande_search::{FileIndex, RecentlyUsed, Usage, recently_used_path, usage_path};
 use bande_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use bande_toolkit::{
     App, Color, Edges, Image, KeyboardFocus, LauncherMode, LayerKind, LayerOptions, MenuPlacement,
@@ -190,7 +190,7 @@ pub struct LauncherShell {
     previewer: Option<Previewer>,
     clips: Option<Clips>,
     apps: Rc<RefCell<Apps>>,
-    recently_used: PathBuf,
+    recently_used: Option<RecentlyUsed>,
     config: Option<PathBuf>,
     home: PathBuf,
     skin_tone: PathBuf,
@@ -263,11 +263,11 @@ impl LauncherShell {
         }
         self.launcher.set_now(unix_now());
         if mode == Mode::Search {
-            let xbel = self
-                .follow_search()
-                .then(|| std::fs::read_to_string(&self.recently_used).ok())
-                .flatten();
-            self.launcher.set_recently_used(xbel.as_deref());
+            let recents = match (self.follow_search(), &self.recently_used) {
+                (true, Some(recently_used)) => recently_used.recents(),
+                _ => &[],
+            };
+            self.launcher.set_recently_used(recents);
         }
         self.launcher.open(mode, inserts);
         if mode == Mode::Clipboard {
@@ -457,10 +457,14 @@ impl App for LauncherShell {
                     .map(|previewer| previewer.results.fd()),
             )
             .chain(self.clips.iter().map(Clips::fd))
+            .chain(self.recently_used.iter().map(RecentlyUsed::fd))
             .collect()
     }
 
     fn source_ready(&mut self, window: &mut Window, _index: usize) {
+        if let Some(recently_used) = &mut self.recently_used {
+            recently_used.take();
+        }
         if let Some(results) = self.index.as_mut().and_then(FileIndex::take) {
             self.launcher.set_files(results);
         }
@@ -558,12 +562,14 @@ impl LauncherShell {
             })
             .collect();
         let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
-        let recently_used = recently_used_path(
+        let recently_used = RecentlyUsed::follow(recently_used_path(
             std::env::var_os("XDG_DATA_HOME")
                 .map(PathBuf::from)
                 .as_deref(),
             &home,
-        );
+        ))
+        .inspect_err(|error| tracing::warn!("cannot follow recent documents: {error}"))
+        .ok();
         let usage_file = usage_path(bande_xdg::state_home().as_deref(), Some(&home));
         let skin_tone = usage_file
             .as_deref()

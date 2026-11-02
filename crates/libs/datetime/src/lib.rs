@@ -6,12 +6,16 @@ mod zone;
 
 use icu_calendar::Gregorian;
 use icu_calendar::week::WeekInformation;
+use std::fmt;
+
 use icu_datetime::fieldsets::{DE, E, MD, MDE, T, YM, YMD};
 use icu_datetime::input::{Date, DateTime, Time};
+use icu_datetime::parts::MONTH;
 use icu_datetime::{DateTimeFormatterPreferences, FixedCalendarDateTimeFormatter};
 use icu_locale_core::preferences::extensions::unicode::keywords::HourCycle;
 use icu_locale_core::{Locale, locale};
 use jiff::Zoned;
+use writeable::{Part, PartsWrite, Writeable};
 
 pub use minute::{ClockChanges, MinuteTimer};
 pub use month::{Month, Week};
@@ -48,6 +52,63 @@ fn date_of(at: &Zoned) -> Option<Date<Gregorian>> {
 
 fn time_of(at: &Zoned) -> Option<Time> {
     Time::try_new(at.hour() as u8, at.minute() as u8, 0, 0).ok()
+}
+
+#[derive(Default)]
+struct Parts(Vec<(Option<Part>, String)>);
+
+impl fmt::Write for Parts {
+    fn write_str(&mut self, text: &str) -> fmt::Result {
+        match self.0.last_mut() {
+            Some((None, literal)) => literal.push_str(text),
+            _ => self.0.push((None, text.to_owned())),
+        }
+        Ok(())
+    }
+}
+
+impl PartsWrite for Parts {
+    type SubPartsWrite = Self;
+
+    fn with_part(
+        &mut self,
+        part: Part,
+        mut write: impl FnMut(&mut Self) -> fmt::Result,
+    ) -> fmt::Result {
+        let mut inner = Self::default();
+        write(&mut inner)?;
+        let text = inner.0.into_iter().map(|(_, text)| text).collect();
+        self.0.push((Some(part), text));
+        Ok(())
+    }
+}
+
+fn without_month(Parts(mut parts): Parts) -> Option<String> {
+    let month = parts.iter().position(|(part, _)| *part == Some(MONTH))?;
+    let is_literal = |parts: &[(Option<Part>, String)], index: usize| {
+        parts.get(index).is_some_and(|(part, _)| part.is_none())
+    };
+    let field_before = parts[..month].iter().any(|(part, _)| part.is_some());
+    let field_after = parts[month + 1..].iter().any(|(part, _)| part.is_some());
+    if is_literal(&parts, month + 1) && (!field_after || !field_before) {
+        parts.remove(month + 1);
+    }
+    if month > 0 && is_literal(&parts, month - 1) {
+        match field_after {
+            true if field_before => {
+                parts.remove(month - 1);
+            }
+            true => {}
+            false => {
+                let literal = &mut parts[month - 1].1;
+                let attached = literal.find(char::is_whitespace).unwrap_or(literal.len());
+                literal.truncate(attached);
+            }
+        }
+    }
+    parts.retain(|(part, _)| *part != Some(MONTH));
+    let text: String = parts.into_iter().map(|(_, text)| text).collect();
+    Some(text.trim().to_owned())
 }
 
 impl DateFormats {
@@ -149,10 +210,28 @@ impl DateFormats {
     }
 
     pub fn short_day(&self, at: &Zoned) -> String {
-        FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, DE::short())
-            .ok()
-            .zip(date_of(at))
-            .map(|(formatter, date)| formatter.format(&date).to_string())
+        let date = date_of(at);
+        let with_month = FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(
+            self.preferences,
+            MDE::medium(),
+        )
+        .ok()
+        .zip(date)
+        .and_then(|(formatter, date)| {
+            let mut parts = Parts::default();
+            formatter.format(&date).write_to_parts(&mut parts).ok()?;
+            without_month(parts)
+        });
+        with_month
+            .or_else(|| {
+                FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(
+                    self.preferences,
+                    DE::short(),
+                )
+                .ok()
+                .zip(date)
+                .map(|(formatter, date)| formatter.format(&date).to_string())
+            })
             .unwrap_or_else(|| at.strftime("%a %-d").to_string())
     }
 

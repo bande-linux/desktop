@@ -35,13 +35,15 @@ profiles. Sizes are in [performance.md](performance.md).
   `libpam-gnome-keyring`, Qt's portal platform theme (so Qt apps follow dark mode), `fonts-inter`,
   `xdg-user-dirs`, `upower` and `udisks2`, all of them built here at the same version. It also
   recommends, unversioned, the default apps listed in `packaging/bande-desktop/default-apps`:
-  Terminal, Activity Monitor, Software and the Package Installer from
+  Terminal, Activity Monitor, Software, the Package Installer and Archive Utility from
   [bande-linux/apps](https://github.com/bande-linux/apps), which are released on their own.
   It recommends no apps from Debian; a browser, viewers and editors come from Software.
   `debian/default-apps.sh` turns that file into the `${bande:Recommends}` substitution variable
   at build time, so any default app can be removed or replaced. It installs
   `/usr/share/applications/bande-mimeapps.list`, read only in a Bande session, which opens
-  folders in Files and `.deb` files in the Package Installer; other types open in an installed app
+  folders in Files, `.deb` files in the Package Installer and archives (zip, tar, gzip, bzip2,
+  xz, zstd, 7-Zip) in Archive Utility, which also makes Files' Compress; Files expands an archive
+  itself only when no app opens it; other types open in an installed app
   whose desktop entry declares them, and a person's own choice in
   `~/.config/mimeapps.list` still wins. A file no installed app opens gets the Open With sheet in
   Files (every app that opens files, with "Always open with"); on the desktop, it is revealed in

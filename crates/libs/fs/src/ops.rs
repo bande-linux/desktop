@@ -14,7 +14,7 @@ use rustix::io::Errno;
 
 mod archive;
 
-pub use archive::{archive_path, can_extract};
+pub use archive::{Format, Refusal, archive_path, can_extract};
 
 use crate::listing::same_volume;
 use crate::naming::{alias_name, duplicate_name, keep_both_name, untitled_folder};
@@ -66,6 +66,8 @@ pub enum Task {
     },
     Extract {
         archives: Vec<PathBuf>,
+        into: Option<PathBuf>,
+        password: Option<String>,
     },
 }
 
@@ -524,10 +526,16 @@ impl Worker {
                 self.erase_all(&items)?;
             }
             Task::Compress { sources, archive } => self.compress(&sources, &archive)?,
-            Task::Extract { archives } => {
+            Task::Extract {
+                archives,
+                into,
+                password,
+            } => {
                 for archive in &archives {
-                    let folder = archive.parent().unwrap_or(Path::new("/"));
-                    self.extract(archive, folder)?;
+                    let folder = into
+                        .as_deref()
+                        .unwrap_or_else(|| archive.parent().unwrap_or(Path::new("/")));
+                    self.extract(archive, folder, password.as_deref())?;
                 }
             }
             Task::Revert { changes } => {

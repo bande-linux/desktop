@@ -8,9 +8,9 @@ use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
 
 use bande_fs::{
-    Action, Answer, Change, Entry, ExtensionChange, Finished, FolderChanges, FolderWatch, History,
-    Operations, Purpose, RenameError, Resolution, Sort, Step, Task, TrashItem, archive_path,
-    can_extract,
+    Action, Answer, Change, Entry, ExtensionChange, Finished, FolderChanges, FolderWatch, Format,
+    History, Operations, Purpose, RenameError, Resolution, Sort, Step, Task, TrashItem,
+    archive_path, can_extract,
 };
 use bande_preview::Preview;
 use bande_search::{Usage, recent_files, recently_used};
@@ -146,9 +146,15 @@ pub enum Hit {
     GroupToggle(usize),
 }
 
+const ARCHIVE_UTILITY_DESKTOP_ID: &str = "org.bande.ArchiveUtility.desktop";
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
     Open {
+        app: Box<DesktopEntry>,
+        files: Vec<PathBuf>,
+    },
+    Compress {
         app: Box<DesktopEntry>,
         files: Vec<PathBuf>,
     },
@@ -1863,10 +1869,22 @@ impl FilesView {
         let (archives, files): (Vec<_>, Vec<_>) = selection
             .iter()
             .filter(|entry| !entry.is_folder())
-            .partition(|entry| entry.trashed.is_none() && can_extract(&entry.path));
+            .partition(|entry| {
+                entry.trashed.is_none()
+                    && can_extract(&entry.path)
+                    && self
+                        .apps
+                        .default_for(&self.apps.mime_for(&entry.path))
+                        .is_none()
+            });
         if !archives.is_empty() {
             let archives = archives.iter().map(|entry| entry.path.clone()).collect();
-            self.start(Task::Extract { archives }, Purpose::Do(Action::Extract));
+            let task = Task::Extract {
+                archives,
+                into: None,
+                password: None,
+            };
+            self.start(task, Purpose::Do(Action::Extract));
         }
         let mut launches: Vec<(DesktopEntry, Vec<PathBuf>)> = Vec::new();
         let mut unknown = Vec::new();
@@ -2087,7 +2105,16 @@ impl FilesView {
         if self.browser.in_trash() {
             return;
         }
-        if let Some(archive) = archive_path(&sources) {
+        if let Some(app) = self.apps.find(ARCHIVE_UTILITY_DESKTOP_ID) {
+            self.requests.push(Request::Compress {
+                app: Box::new(app.clone()),
+                files: sources,
+            });
+            return;
+        }
+        let folder = sources.first().and_then(|source| source.parent());
+        if let Some(archive) = folder.and_then(|folder| archive_path(&sources, folder, Format::Zip))
+        {
             self.start(
                 Task::Compress { sources, archive },
                 Purpose::Do(Action::Compress),

@@ -76,7 +76,7 @@ sudo apt install bande-desktop
 ```
 
 `bande-desktop` brings the desktop, its login window under greetd, NetworkManager, PipeWire, the
-Bande apps Terminal, Software, Package Installer and Activity Monitor, and compressed swap in
+Bande apps Terminal, Software, Package Installer, Activity Monitor and Archive Utility, and compressed swap in
 memory; other apps, such as a browser, install from Software. With `--no-install-recommends` it
 brings only the desktop, a login and sound. Pick the **Bande** session at login. Updates arrive with `sudo apt upgrade` or
 Settings ▸ Software Update. The archive is signed with the key

@@ -1,3 +1,14 @@
 [Default Applications]
 inode/directory=org.bande.Files.desktop;
 application/vnd.debian.binary-package=org.bande.Installer.desktop;
+application/zip=org.bande.ArchiveUtility.desktop;
+application/x-tar=org.bande.ArchiveUtility.desktop;
+application/x-compressed-tar=org.bande.ArchiveUtility.desktop;
+application/x-bzip2-compressed-tar=org.bande.ArchiveUtility.desktop;
+application/x-xz-compressed-tar=org.bande.ArchiveUtility.desktop;
+application/x-zstd-compressed-tar=org.bande.ArchiveUtility.desktop;
+application/gzip=org.bande.ArchiveUtility.desktop;
+application/x-bzip2=org.bande.ArchiveUtility.desktop;
+application/x-xz=org.bande.ArchiveUtility.desktop;
+application/zstd=org.bande.ArchiveUtility.desktop;
+application/x-7z-compressed=org.bande.ArchiveUtility.desktop;

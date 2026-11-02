@@ -46,9 +46,8 @@ large files and Empty Trash; Software Update with offline updates. Date & Time: 
 time, manual date and time, time zone, 24-hour clock. Language & Region: languages, region,
 login keyboard layouts. Login Items: apps that open at login. Missing: Sharing (remote login
 over SSH, file sharing over Samba, the local hostname shown with `.local`), Startup Disk (not on
-Apple silicon under Linux: U-Boot owns it), "reopen windows after a crash" (the config key
-`reopen-apps-after-crash` exists without a switch), a "Transfer or Reset" equivalent (out of
-scope), a storage breakdown bar in About.
+Apple silicon under Linux: U-Boot owns it), a "Transfer or Reset" equivalent (out of scope), a
+storage breakdown bar in About. Apps ▸ Reopen switches reopening at login and after a crash.
 
 **Appearance.** Has: light/dark/automatic, accent colours, text size, tinted frame. Missing:
 highlight colour (follows accent, fine), sidebar icon size, show scroll bars (automatic /

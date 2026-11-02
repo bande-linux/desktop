@@ -16,6 +16,8 @@ pub enum Setting {
     Appearance(Appearance),
     Accent(Accent),
     TintedFrame(bool),
+    ReopenApps(bool),
+    ReopenAppsAfterCrash(bool),
     Clock(ClockFormat),
     ShowBatteryPercentage(bool),
     LowPowerOnBattery(bool),
@@ -83,6 +85,18 @@ impl Setting {
                 None,
                 "tinted-frame",
                 tinted.then_some(KdlValue::Bool(true)),
+            ),
+            Self::ReopenApps(on) => set(
+                &mut document,
+                None,
+                "reopen-apps",
+                (!on).then_some(KdlValue::Bool(false)),
+            ),
+            Self::ReopenAppsAfterCrash(on) => set(
+                &mut document,
+                None,
+                "reopen-apps-after-crash",
+                on.then_some(KdlValue::Bool(true)),
             ),
             Self::Clock(format) => set(
                 &mut document,

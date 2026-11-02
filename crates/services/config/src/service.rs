@@ -159,6 +159,12 @@ fn publish_changes(
         if before.tinted_frame != after.tinted_frame {
             let _ = guard.tinted_frame_changed(emitter).await;
         }
+        if before.reopen_apps != after.reopen_apps {
+            let _ = guard.reopen_apps_changed(emitter).await;
+        }
+        if before.reopen_apps_after_crash != after.reopen_apps_after_crash {
+            let _ = guard.reopen_apps_after_crash_changed(emitter).await;
+        }
         if before.clock != after.clock {
             let _ = guard.clock_format_changed(emitter).await;
         }
@@ -503,6 +509,26 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_tinted_frame(&self, tinted: bool) -> zbus::fdo::Result<()> {
         self.write(&Setting::TintedFrame(tinted))
+    }
+
+    #[zbus(property)]
+    fn reopen_apps(&self) -> bool {
+        self.store.current().reopen_apps
+    }
+
+    #[zbus(property)]
+    fn set_reopen_apps(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::ReopenApps(on))
+    }
+
+    #[zbus(property)]
+    fn reopen_apps_after_crash(&self) -> bool {
+        self.store.current().reopen_apps_after_crash
+    }
+
+    #[zbus(property)]
+    fn set_reopen_apps_after_crash(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::ReopenAppsAfterCrash(on))
     }
 
     #[zbus(property)]

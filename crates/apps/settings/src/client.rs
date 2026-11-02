@@ -30,6 +30,14 @@ pub trait Config {
     #[zbus(property)]
     fn set_tinted_frame(&self, tinted: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn reopen_apps(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_reopen_apps(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn reopen_apps_after_crash(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_reopen_apps_after_crash(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn clock_format(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_clock_format(&self, value: &str) -> zbus::Result<()>;
@@ -272,7 +280,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 65] = [
+pub const CONFIG_SETTINGS: [SettingId; 67] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -295,6 +303,8 @@ pub const CONFIG_SETTINGS: [SettingId; 65] = [
     SettingId::BounceKeys,
     SettingId::Accent,
     SettingId::TintedFrame,
+    SettingId::ReopenApps,
+    SettingId::ReopenAfterCrash,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
     SettingId::BarIconSize,
@@ -485,6 +495,8 @@ impl SettingsClient {
             SettingId::BounceKeys => Value::Flag(self.config.bounce_keys()?),
             SettingId::Accent => Value::Keyword(self.config.accent()?),
             SettingId::TintedFrame => Value::Flag(self.config.tinted_frame()?),
+            SettingId::ReopenApps => Value::Flag(self.config.reopen_apps()?),
+            SettingId::ReopenAfterCrash => Value::Flag(self.config.reopen_apps_after_crash()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
             SettingId::Clock24Hour => Value::Flag(match self.config.clock_format()?.as_str() {
@@ -571,6 +583,10 @@ impl SettingsClient {
             (SettingId::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
             (SettingId::Accent, Value::Keyword(keyword)) => self.config.set_accent(keyword),
             (SettingId::TintedFrame, Value::Flag(tinted)) => self.config.set_tinted_frame(*tinted),
+            (SettingId::ReopenApps, Value::Flag(on)) => self.config.set_reopen_apps(*on),
+            (SettingId::ReopenAfterCrash, Value::Flag(on)) => {
+                self.config.set_reopen_apps_after_crash(*on)
+            }
             (SettingId::BarEdge, Value::Keyword(keyword)) => self.config.set_bar_edge(keyword),
             (SettingId::BarMenuBar, Value::Keyword(keyword)) => {
                 self.config.set_bar_menu_bar(keyword)

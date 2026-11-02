@@ -29,6 +29,9 @@ pub trait Manager {
 
     fn suspend(&self, interactive: bool) -> zbus::Result<()>;
 
+    #[zbus(property)]
+    fn block_inhibited(&self) -> zbus::Result<String>;
+
     #[zbus(signal)]
     fn prepare_for_sleep(&self, start: bool) -> zbus::Result<()>;
 }
@@ -77,6 +80,24 @@ pub fn follow_locked_hint(
         for change in changes {
             if let Ok(locked) = change.get() {
                 changed(locked);
+            }
+        }
+    });
+    Ok(())
+}
+
+pub fn follow_idle_blocked(
+    system: &Connection,
+    changed: impl Fn(bool) + Send + 'static,
+) -> zbus::Result<()> {
+    let manager = ManagerProxyBlocking::new(system)?;
+    let blocks_idle = |what: &str| what.split(':').any(|what| what == "idle");
+    let changes = manager.receive_block_inhibited_changed();
+    changed(blocks_idle(&manager.block_inhibited()?));
+    thread::spawn(move || {
+        for change in changes {
+            if let Ok(what) = change.get() {
+                changed(blocks_idle(&what));
             }
         }
     });

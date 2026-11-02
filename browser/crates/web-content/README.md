@@ -9,11 +9,14 @@ The entry points below are stable; the app and `tools/conformance` drive them.
 
 - `render_html(html: &str, width: f32, fonts: &mut Fonts) -> Page` lays a document out at a
   viewport width in CSS px. `parse(bytes)` alone sniffs the encoding and returns the `Document`;
+  `parse_with_charset(bytes, Some(label))` passes the HTTP `charset` as the transport encoding;
   `Page::new(document, width, fonts)` renders a parsed one.
 - `Fonts::new()` scans the system fonts once; keep one per thread and reuse it across pages.
 - `Page` holds the document, styles, box tree, fragment tree and `display_list`.
   - `resize(width, fonts)` lays out again without restyling or reshaping.
   - `link_at(x, y)` is the `href` of the link under a point in document coordinates.
+  - `fragment_y(name)` is the top of the element a `#name` link points to (an `id`, or an
+    `a name`), for scrolling.
   - `title()` and `memory()` (heap bytes per stage) report on the page.
 - `DisplayList` is in document coordinates (CSS px, y down). `items` paint in order:
   - `Item::Rect { rect, color }` fills.

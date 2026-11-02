@@ -1431,6 +1431,7 @@ dependencies = [
 name = "web-content"
 version = "0.1.0"
 dependencies = [
+ "encoding_rs",
  "png",
  "web-atoms",
  "web-dom",

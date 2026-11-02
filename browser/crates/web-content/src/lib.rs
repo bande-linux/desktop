@@ -1,7 +1,8 @@
+use encoding_rs::Encoding;
 use web_atoms::Atom;
 use web_dom::{Document, NodeId};
 use web_html::{Options, Parser};
-use web_layout::{BoxTree, FragmentTree};
+use web_layout::{BoxFragment, BoxTree, Fragment, FragmentTree};
 use web_paint::DisplayList;
 use web_style::Styles;
 
@@ -26,7 +27,15 @@ pub struct Memory {
 }
 
 pub fn parse(bytes: &[u8]) -> Document {
-    let mut parser = Parser::new(Document::new(), Options::default());
+    parse_with_charset(bytes, None)
+}
+
+pub fn parse_with_charset(bytes: &[u8], charset: Option<&str>) -> Document {
+    let options = Options {
+        transport_encoding: charset.and_then(|label| Encoding::for_label(label.as_bytes())),
+        ..Options::default()
+    };
+    let mut parser = Parser::new(Document::new(), options);
     parser.feed(bytes);
     parser.finish()
 }
@@ -101,10 +110,27 @@ impl Page {
         Some(text.split_ascii_whitespace().collect::<Vec<_>>().join(" "))
     }
 
+    pub fn fragment_y(&self, fragment: &str) -> Option<f32> {
+        let target = self.find(|node| {
+            self.document.attribute(node, Atom::ID) == Some(fragment)
+                || (self.document.html_element_name(node) == Some(Atom::A)
+                    && self.document.attribute(node, Atom::NAME) == Some(fragment))
+        })?;
+        first_y(&self.fragments.root, 0.0, &|node| {
+            self.document
+                .ancestors(node)
+                .any(|ancestor| ancestor == target)
+        })
+    }
+
     fn find_element(&self, name: Atom) -> Option<NodeId> {
+        self.find(|node| self.document.html_element_name(node) == Some(name))
+    }
+
+    fn find(&self, wanted: impl Fn(NodeId) -> bool) -> Option<NodeId> {
         let mut stack = vec![NodeId::DOCUMENT];
         while let Some(node) = stack.pop() {
-            if self.document.html_element_name(node) == Some(name) {
+            if self.document.kind(node) == Some(web_dom::NodeKind::Element) && wanted(node) {
                 return Some(node);
             }
             let start = stack.len();
@@ -124,4 +150,18 @@ impl Page {
             display_list: self.display_list.heap_bytes(),
         }
     }
+}
+
+fn first_y(fragment: &BoxFragment, y: f32, inside: &impl Fn(NodeId) -> bool) -> Option<f32> {
+    let top = y + fragment.rect.y;
+    if fragment.node.is_some_and(inside) {
+        return Some(top);
+    }
+    fragment.children.iter().find_map(|child| match child {
+        Fragment::Box(child) => first_y(child, top, inside),
+        Fragment::Text(text) => text
+            .node
+            .filter(|&node| inside(node))
+            .map(|_| top + text.rect.y),
+    })
 }

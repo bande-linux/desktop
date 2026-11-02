@@ -78,6 +78,8 @@ its receiver.
   - Parsing streams as bytes arrive, and the preload scanner fetches ahead.
   - Fonts and images decode on helper threads.
   - Scrolling and compositor animations never wait on a renderer.
+  - Parse, style and layout never run on the app's UI thread: in process they run on a renderer
+    thread (until W4 moves them to the renderer process), and the UI only draws display lists.
 
 ## Measurable targets
 

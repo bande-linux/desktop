@@ -7,3 +7,6 @@ Status: started. Built, as macOS's Lock Screen settings ([session](../docs/archi
 
 crash management, bande-desktop is quite fragile and when it runs out of ram or crashes for some other reason it is quite common that it brings down the whole computer or just freezes. This never happens in MacOS so there must be better ways to handle such events. Investigate it, this is super important.
 Status: started. Kernel PSI/zram/lockup detectors, oomd and zram in the image, the session bus at the OOM floor, the compositor watchdog and opt-in reopen after a crash are built, and every failure mode now has a recovery ([session](../docs/architecture/session.md#crash-handling-and-supervision)): memory protection for the session, Relaunch for a hung shell, relaunch of a hung lock screen, a hang alarm for the login window, VT switching, renderer recovery after GPU loss, `TasksMax` for apps. Left: the owner installs `systemd-oomd` and the new kernel and tests under real memory pressure (checks in [open.md](open.md)); ramoops (panic logs kept across a reboot).
+
+
+Comebine DDC/CI brightness adjustment with normal laptop screen adjustment. Multiple displays connect gets an individual brightness bar. Status: not started

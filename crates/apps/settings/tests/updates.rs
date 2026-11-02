@@ -19,7 +19,7 @@ fn updates_install_now_unless_they_need_the_system_restarted() {
         panic!("no updates found");
     };
 
-    let state = update(&system, &client, &packages, true, &|_| {});
+    let state = update(&system, &client, &packages, &|_| {});
     assert_eq!(
         state,
         SoftwareState::Installed {
@@ -40,7 +40,7 @@ fn updates_install_now_unless_they_need_the_system_restarted() {
     );
 
     packagekit.pull_in(SYSTEMD);
-    let state = update(&system, &client, &packages, true, &|_| {});
+    let state = update(&system, &client, &packages, &|_| {});
     assert_eq!(state, SoftwareState::Prepared(2));
     assert_eq!(
         packagekit.take_calls(),

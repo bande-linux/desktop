@@ -25,6 +25,11 @@ reach a running session.
   cargo build --release -p bande-bench -p bande-shell
   dbus-run-session -- target/release/bande-footprint --hover 2864,70,2600,900 target/release/bande-shell
   ```
+- **An app without windows:** `bande-background <binary>=<app id>[,background]…` starts each app
+  on the same output with a private bus and home folder (first with `--background` when
+  `,background` is given), opens its window, closes it with Close Window and reopens it
+  (`--cycles`), and prints anonymous and resident memory and wake-ups in each state and the time
+  until each window shows.
 - **Frame times:** `bande-session-bench` runs the compositor in-process with the shell, Files and
   Terminal (`bande-terminal` from bande-linux/apps in `target/release` or on `PATH`) and replays
   typical actions (pointer over Files, dragging a window, typing, scrolling, the launcher, the

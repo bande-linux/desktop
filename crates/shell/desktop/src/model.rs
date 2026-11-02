@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -180,6 +180,7 @@ pub type Positions = HashMap<String, Slot>;
 pub struct Desktop {
     items: Vec<Item>,
     slots: Vec<Slot>,
+    indices: HashMap<PathBuf, usize>,
     grid: Grid,
     sort: SortBy,
     selected: BTreeSet<PathBuf>,
@@ -206,6 +207,7 @@ impl Desktop {
         Self {
             items: Vec::new(),
             slots: Vec::new(),
+            indices: HashMap::new(),
             grid,
             sort: SortBy::None,
             selected: BTreeSet::new(),
@@ -218,7 +220,7 @@ impl Desktop {
     }
 
     pub fn item(&self, path: &Path) -> Option<&Item> {
-        self.items.iter().find(|item| item.path == path)
+        self.index(path).map(|index| &self.items[index])
     }
 
     pub fn slot_of(&self, path: &Path) -> Option<Slot> {
@@ -226,7 +228,7 @@ impl Desktop {
     }
 
     fn index(&self, path: &Path) -> Option<usize> {
-        self.items.iter().position(|item| item.path == path)
+        self.indices.get(path).copied()
     }
 
     pub fn grid(&self) -> Grid {
@@ -246,16 +248,6 @@ impl Desktop {
             .collect()
     }
 
-    fn first_free(&self, taken: &BTreeSet<Slot>) -> Slot {
-        self.grid
-            .slots()
-            .find(|slot| !taken.contains(slot))
-            .unwrap_or(Slot {
-                column: self.grid.columns - 1,
-                row: self.grid.rows - 1,
-            })
-    }
-
     pub fn set_items(&mut self, items: Vec<Item>, remembered: &Positions) {
         let previous: HashMap<PathBuf, Slot> = self
             .items
@@ -263,7 +255,7 @@ impl Desktop {
             .map(|item| item.path)
             .zip(self.slots.drain(..))
             .collect();
-        let mut taken = BTreeSet::new();
+        let mut taken = HashSet::new();
         let mut placed: Vec<Option<Slot>> = Vec::with_capacity(items.len());
         for item in &items {
             let slot = previous
@@ -280,23 +272,25 @@ impl Desktop {
             }
             placed.push(slot);
         }
-        self.items = items;
-        self.slots = placed
-            .into_iter()
-            .map(|slot| {
-                slot.unwrap_or_else(|| {
-                    let free = self.first_free(&taken);
-                    taken.insert(free);
-                    free
-                })
-            })
+        let last = self.last_slot();
+        self.slots = {
+            let mut free = self.grid.slots().filter(|slot| !taken.contains(slot));
+            placed
+                .into_iter()
+                .map(|slot| slot.or_else(|| free.next()).unwrap_or(last))
+                .collect()
+        };
+        self.indices = items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| (item.path.clone(), index))
             .collect();
-        let paths: BTreeSet<&PathBuf> = self.items.iter().map(|item| &item.path).collect();
-        self.selected.retain(|path| paths.contains(path));
+        self.items = items;
+        self.selected.retain(|path| self.indices.contains_key(path));
         if self
             .cursor
             .as_ref()
-            .is_some_and(|cursor| !paths.contains(cursor))
+            .is_some_and(|cursor| !self.indices.contains_key(cursor))
         {
             self.cursor = None;
         }
@@ -316,6 +310,7 @@ impl Desktop {
         }
         let items = std::mem::take(&mut self.items);
         self.slots.clear();
+        self.indices.clear();
         self.set_items(items, remembered);
     }
 
@@ -340,12 +335,16 @@ impl Desktop {
         self.pack(&order);
     }
 
-    fn pack(&mut self, order: &[usize]) {
-        let mut slots = self.grid.slots();
-        let last = Slot {
+    fn last_slot(&self) -> Slot {
+        Slot {
             column: self.grid.columns - 1,
             row: self.grid.rows - 1,
-        };
+        }
+    }
+
+    fn pack(&mut self, order: &[usize]) {
+        let mut slots = self.grid.slots();
+        let last = self.last_slot();
         for index in order {
             self.slots[*index] = slots.next().unwrap_or(last);
         }

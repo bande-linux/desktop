@@ -20,6 +20,10 @@ const KEY_A: u32 = 30;
 const KEY_ENTER: u32 = 28;
 const KEY_LEFTCTRL: u32 = 29;
 const KEY_LEFTALT: u32 = 56;
+const KEY_LEFTSHIFT: u32 = 42;
+const KEY_LEFTMETA: u32 = 125;
+const KEY_LEFT: u32 = 105;
+const KEY_RIGHT: u32 = 106;
 const KEY_DOWN: u32 = 108;
 const BTN_LEFT: u32 = 0x110;
 const MONITOR: &str = "org.freedesktop.a11y.KeyboardMonitor";
@@ -206,4 +210,38 @@ fn a_hung_app_is_force_quit_from_the_keyboard_while_the_shell_is_hung() {
             .iter()
             .all(|(key, _)| ![KEY_ESC, KEY_DOWN, KEY_ENTER].contains(key))
     );
+}
+
+#[test]
+fn a_window_on_a_workspace_out_of_view_is_suspended() {
+    let (mut server, mut editor) = focused_app();
+    let mut viewer = window(&mut server, "org.example.Viewer");
+    server.press_button(BTN_LEFT, true, 0);
+    server.press_button(BTN_LEFT, false, 0);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
+    assert!(viewer.keyboard_focus_on(0));
+    server.key(KEY_LEFTMETA, true, 0);
+    server.key(KEY_LEFTCTRL, true, 0);
+    server.key(KEY_LEFTSHIFT, true, 0);
+    tap(&mut server, KEY_RIGHT);
+    server.key(KEY_LEFTSHIFT, false, 0);
+    server.key(KEY_LEFTCTRL, false, 0);
+    server.key(KEY_LEFTMETA, false, 0);
+    let settle = |server: &mut Compositor, clients: &mut [&mut TestClient]| {
+        for frame in 1..120 {
+            server.animate(Duration::from_millis(16 * frame));
+        }
+        roundtrip(server, clients);
+    };
+    settle(&mut server, &mut [&mut editor, &mut viewer]);
+    assert!(!viewer.is_suspended(0));
+    assert!(editor.is_suspended(0));
+    server.key(KEY_LEFTMETA, true, 0);
+    server.key(KEY_LEFTCTRL, true, 0);
+    tap(&mut server, KEY_LEFT);
+    server.key(KEY_LEFTCTRL, false, 0);
+    server.key(KEY_LEFTMETA, false, 0);
+    settle(&mut server, &mut [&mut editor, &mut viewer]);
+    assert!(!editor.is_suspended(0));
+    assert!(viewer.is_suspended(0));
 }

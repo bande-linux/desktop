@@ -4,7 +4,7 @@ use wayland_protocols::xdg::shell::client::xdg_popup::{self, XdgPopup};
 use wayland_protocols::xdg::shell::client::xdg_positioner::{
     Anchor, ConstraintAdjustment, Gravity, XdgPositioner,
 };
-use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
+use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
 
 use crate::{Compositor, Globals, ShmImage, TestClient};
 
@@ -21,6 +21,7 @@ pub struct PopupRequest {
 #[derive(Default)]
 pub(crate) struct Toplevels {
     popups: Vec<(XdgPopup, bool)>,
+    suspended: Vec<XdgToplevel>,
 }
 
 impl TestClient {
@@ -71,6 +72,37 @@ impl TestClient {
     pub fn popup_dismissed(&self, index: usize) -> bool {
         self.globals.toplevels.popups[index].1
     }
+
+    pub fn is_suspended(&self, index: usize) -> bool {
+        self.globals
+            .toplevels
+            .suspended
+            .contains(&self.windows[index].2)
+    }
+}
+
+impl Dispatch<XdgToplevel, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        toplevel: &XdgToplevel,
+        event: xdg_toplevel::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let xdg_toplevel::Event::Configure { states, .. } = event {
+            let suspended = states
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|state| *state == (xdg_toplevel::State::Suspended as u32).to_ne_bytes());
+            let known = &mut globals.toplevels.suspended;
+            known.retain(|known| known != toplevel);
+            if suspended {
+                known.push(toplevel.clone());
+            }
+        }
+    }
 }
 
 impl Dispatch<XdgPopup, ()> for Globals {
@@ -95,4 +127,3 @@ impl Dispatch<XdgPopup, ()> for Globals {
 }
 
 delegate_noop!(Globals: ignore XdgPositioner);
-delegate_noop!(Globals: ignore XdgToplevel);

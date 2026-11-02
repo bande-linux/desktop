@@ -219,7 +219,7 @@ enum Profile {
 }
 
 #[cfg(target_arch = "x86_64")]
-const NETWORK_ARCH_SYSCALLS: &[libc::c_long] = &[libc::SYS_renameat, libc::SYS_epoll_wait];
+const NETWORK_ARCH_SYSCALLS: &[libc::c_long] = &[libc::SYS_epoll_wait];
 
 #[cfg(not(target_arch = "x86_64"))]
 const NETWORK_ARCH_SYSCALLS: &[libc::c_long] = &[];
@@ -251,6 +251,7 @@ const NETWORK_SYSCALLS: &[libc::c_long] = &[
     libc::SYS_clock_nanosleep,
     libc::SYS_fsync,
     libc::SYS_fdatasync,
+    libc::SYS_renameat,
     libc::SYS_renameat2,
     libc::SYS_unlinkat,
     libc::SYS_mkdirat,

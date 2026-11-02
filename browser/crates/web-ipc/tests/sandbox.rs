@@ -116,7 +116,8 @@ fn network(storage: &Path) -> bool {
     let escapes = [
         (
             "no writing its storage",
-            std::fs::write(storage.join("cookies"), b"x").is_err(),
+            std::fs::write(storage.join("cookies.new"), b"x").is_err()
+                || std::fs::rename(storage.join("cookies.new"), storage.join("cookies")).is_err(),
         ),
         ("no UDP socket", UdpSocket::bind(("0.0.0.0", 0)).is_err()),
         (

@@ -34,6 +34,7 @@ use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActiva
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
+use wayland_protocols::xdg::toplevel_tag::v1::client::xdg_toplevel_tag_manager_v1::XdgToplevelTagManagerV1;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLayerShellV1;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
 
@@ -72,9 +73,21 @@ pub enum FramePath {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Role {
-    Toplevel { title: String, app_id: String },
-    Dialog { title: String, app_id: String },
-    Utility { title: String, app_id: String },
+    Toplevel {
+        title: String,
+        app_id: String,
+        tag: String,
+    },
+    Dialog {
+        title: String,
+        app_id: String,
+        tag: String,
+    },
+    Utility {
+        title: String,
+        app_id: String,
+        tag: String,
+    },
     Layer(LayerOptions),
     Lock,
 }
@@ -84,6 +97,7 @@ impl Role {
         Self::Toplevel {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
+            tag: String::new(),
         }
     }
 
@@ -91,6 +105,7 @@ impl Role {
         Self::Dialog {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
+            tag: String::new(),
         }
     }
 
@@ -98,7 +113,17 @@ impl Role {
         Self::Utility {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
+            tag: String::new(),
         }
+    }
+
+    pub fn tagged(mut self, window_tag: &str) -> Self {
+        if let Self::Toplevel { tag, .. } | Self::Dialog { tag, .. } | Self::Utility { tag, .. } =
+            &mut self
+        {
+            *tag = window_tag.to_owned();
+        }
+        self
     }
 }
 
@@ -206,6 +231,7 @@ pub(crate) struct State {
     pub(crate) wm_base: Option<XdgWmBase>,
     layer_shell: Option<ZwlrLayerShellV1>,
     pub(crate) activation: Option<XdgActivationV1>,
+    toplevel_tag: Option<XdgToplevelTagManagerV1>,
     pub(crate) seat: Option<WlSeat>,
     pub(crate) data_device_manager: Option<WlDataDeviceManager>,
     pub(crate) cursor_shape_manager: Option<WpCursorShapeManagerV1>,
@@ -246,6 +272,9 @@ impl State {
         }
         if let Some(activation) = self.activation.take() {
             activation.destroy();
+        }
+        if let Some(manager) = self.toplevel_tag.take() {
+            manager.destroy();
         }
         if let Some(wm_base) = self.wm_base.take() {
             wm_base.destroy();
@@ -401,9 +430,9 @@ impl Window {
             Role::Toplevel { .. } | Role::Layer(_) | Role::Lock => (true, false),
         };
         let role = match role {
-            Role::Toplevel { title, app_id }
-            | Role::Dialog { title, app_id }
-            | Role::Utility { title, app_id } => {
+            Role::Toplevel { title, app_id, tag }
+            | Role::Dialog { title, app_id, tag }
+            | Role::Utility { title, app_id, tag } => {
                 let wm_base = state
                     .wm_base
                     .clone()
@@ -413,6 +442,12 @@ impl Window {
                 let title = &title[..title.floor_char_boundary(TITLE_BYTES_LIMIT)];
                 toplevel.set_title(title.to_owned());
                 toplevel.set_app_id(app_id);
+                if let Some(manager) = state.toplevel_tag.take() {
+                    if !tag.is_empty() {
+                        manager.set_toplevel_tag(&toplevel, tag);
+                    }
+                    manager.destroy();
+                }
                 if fixed {
                     let (width, height) = match titled {
                         true => (

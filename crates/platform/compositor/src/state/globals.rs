@@ -31,6 +31,7 @@ use smithay::wayland::text_input::TextInputManagerState;
 use smithay::wayland::viewporter::ViewporterState;
 use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
 use smithay::wayland::xdg_activation::XdgActivationState;
+use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagManager;
 
 use super::{ClientState, ScanoutDevice, State};
 use crate::session::SessionRole;
@@ -59,6 +60,7 @@ pub(crate) struct Globals {
     _decoration_state: XdgDecorationState,
     pub(crate) kde_decoration_state: KdeDecorationState,
     _dialog_state: XdgDialogState,
+    _toplevel_tag: XdgToplevelTagManager,
     _cursor_shape_state: CursorShapeManagerState,
     _pointer_gestures_state: PointerGesturesState,
     _text_input_state: TextInputManagerState,
@@ -121,6 +123,7 @@ impl Globals {
             _decoration_state: XdgDecorationState::new::<State>(handle),
             kde_decoration_state: KdeDecorationState::new::<State>(handle, KdeDefaultMode::Server),
             _dialog_state: XdgDialogState::new::<State>(handle),
+            _toplevel_tag: XdgToplevelTagManager::new::<State>(handle),
             _cursor_shape_state: CursorShapeManagerState::new::<State>(handle),
             _pointer_gestures_state: PointerGesturesState::new::<State>(handle),
             _text_input_state: TextInputManagerState::new::<State>(handle),

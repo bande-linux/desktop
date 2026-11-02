@@ -67,6 +67,7 @@ const TILING_MENU_AFTER: Duration = Duration::from_millis(500);
 pub enum FramePath {
     Cpu,
     Gpu,
+    Unchanged,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -209,6 +210,7 @@ pub(crate) struct State {
     pub(crate) data_device_manager: Option<WlDataDeviceManager>,
     pub(crate) cursor_shape_manager: Option<WpCursorShapeManagerV1>,
     configured: bool,
+    configure_unapplied: bool,
     suggested_size: Option<(u32, u32)>,
     closed: bool,
     pub(crate) toplevel: ToplevelState,
@@ -252,6 +254,7 @@ impl State {
 
     pub(crate) fn configure(&mut self, width: u32, height: u32) {
         self.configured = true;
+        self.configure_unapplied = true;
         if width > 0 && height > 0 {
             self.suggested_size = Some((width, height));
         }
@@ -300,6 +303,7 @@ pub struct Window {
     shown_frame: Option<Frame>,
     planned: Option<FrameTime>,
     shown_opaque: Option<Rect>,
+    staged: bool,
     pub(crate) app_cursor: Cursor,
     pub(crate) accessibility: Accessibility,
     pub(crate) appearance: Rc<RefCell<AppearanceWatch>>,
@@ -518,6 +522,7 @@ impl Window {
             shown_frame: None,
             planned: None,
             shown_opaque: None,
+            staged: false,
             app_cursor: Cursor::Default,
             accessibility: Accessibility::new()?,
             appearance,
@@ -752,6 +757,15 @@ impl Window {
 
     pub fn request_redraw(&mut self) {
         self.needs_redraw = true;
+    }
+
+    fn stage(&mut self) {
+        self.staged = true;
+        self.needs_redraw = true;
+    }
+
+    pub(crate) fn wants_redraw(&self) -> bool {
+        self.needs_redraw
     }
 
     pub fn frame_time(&self) -> FrameTime {
@@ -1198,6 +1212,7 @@ impl Window {
             self.fix_dialog_size(size);
         }
         self.size = size;
+        let surface_state = (self.shown_frame, self.shown_opaque);
         let (scene, opaque) = if self.chrome.is_some() {
             let frame = self.frame();
             let sheet_opaque = scene.background.a == u8::MAX;
@@ -1213,13 +1228,25 @@ impl Window {
         };
         self.declare_opaque(opaque);
         self.needs_redraw = self.chrome.as_ref().is_some_and(|chrome| chrome.animating);
+        let scale = self.scale();
+        let unchanged = !self.state.configure_unapplied
+            && !self.staged
+            && surface_state == (self.shown_frame, self.shown_opaque)
+            && self
+                .shown_scene
+                .as_ref()
+                .is_some_and(|(shown, shown_scale)| *shown_scale == scale && *shown == scene);
+        if unchanged {
+            return Ok(FramePath::Unchanged);
+        }
+        self.state.configure_unapplied = false;
+        self.staged = false;
         let handle = self.queue.handle();
         self.surface.frame(&handle, ());
         self.state
             .presentation
             .committing(&self.surface, &handle, frame_time);
         self.state.frame_pending = true;
-        let scale = self.scale();
         self.drawn_scale = scale;
         if let Some(surface_scale) = &self.surface_scale {
             surface_scale.show_at((scene.width, scene.height));
@@ -1255,6 +1282,12 @@ impl Window {
         self.shown_scene = Some((scene, scale));
         self.flush()?;
         Ok(path)
+    }
+
+    pub(crate) fn pace(&mut self) {
+        self.surface.frame(&self.queue.handle(), ());
+        self.surface.commit();
+        self.state.frame_pending = true;
     }
 
     fn poll_gpu(&mut self) {

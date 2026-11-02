@@ -4,12 +4,12 @@ use std::path::PathBuf;
 use accesskit::{Action, Node as AccessNode, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use bande_config::BarEdge;
 use bande_datetime::DateFormats;
-use bande_status::status::{Battery, Capture, Sense, Status, speaker_waves};
+use bande_status::status::{Battery, Capture, Sense, Status, speaker_waves, wifi_quarter};
 use bande_status::unread::ClockMark;
 use bande_toolkit::ui::PointerButton;
 use bande_toolkit::{
     Color, DisplayEdge, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape,
-    TextAlign, TextStyle, TextSystem,
+    TextAlign, TextSize, TextStyle, TextSystem,
 };
 use bande_xdg::{ICON_THEMES, find_icon};
 use jiff::Zoned;
@@ -23,7 +23,7 @@ pub const LABEL_ROOM: f32 = 280.0;
 const MARK_CELL: f32 = 52.0;
 const MARK_SIZE: f32 = 22.0;
 const CLOCK_CELL: f32 = 52.0;
-const CLOCK_LENGTH: f32 = 80.0;
+const CLOCK_PADDING: f32 = 10.0;
 const STATUS_WIDTH: f32 = 52.0;
 const STATUS_HEIGHT: f32 = 58.0;
 const GRID_CELL: f32 = 26.0;
@@ -89,6 +89,13 @@ struct Clock {
     day: String,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+struct ClockFit {
+    hour24: bool,
+    size: TextSize,
+    length: f32,
+}
+
 pub struct TaskbarView {
     palette: Palette,
     text: TextSystem,
@@ -102,6 +109,7 @@ pub struct TaskbarView {
     tray: Vec<(String, Option<Image>)>,
     status: Status,
     clock: Clock,
+    clock_fit: Option<ClockFit>,
     clock_mark: ClockMark,
     battery_percentage: bool,
     workspaces: (usize, usize),
@@ -145,6 +153,19 @@ pub fn in_use_dot(rect: Rect, palette: &Palette) -> Item {
     }
 }
 
+fn day_line(period: Option<&str>, day: &str) -> String {
+    match period {
+        Some(period) => format!("{period} · {day}"),
+        None => day.to_owned(),
+    }
+}
+
+fn time_style(palette: Palette) -> TextStyle {
+    TextStyle::new(TIME_SIZE, palette.ink)
+        .weight(TextStyle::SEMIBOLD)
+        .tabular()
+}
+
 fn snap(value: f32, scale: f64) -> f32 {
     ((f64::from(value) * scale).round() / scale) as f32
 }
@@ -164,10 +185,10 @@ fn wifi_glyph(status: &Status) -> Option<String> {
     let name = match wifi.current() {
         _ if !wifi.enabled => "network-wireless-disabled",
         None => "network-wireless-offline",
-        Some(network) => match network.strength {
-            0..25 => "network-wireless-signal-weak",
-            25..50 => "network-wireless-signal-ok",
-            50..75 => "network-wireless-signal-good",
+        Some(network) => match wifi_quarter(network.strength) {
+            0 => "network-wireless-signal-weak",
+            1 => "network-wireless-signal-ok",
+            2 => "network-wireless-signal-good",
             _ => "network-wireless-signal-excellent",
         },
     };
@@ -225,6 +246,7 @@ impl TaskbarView {
                 period: None,
                 day: String::new(),
             },
+            clock_fit: None,
             clock_mark: ClockMark::Clear,
             battery_percentage: false,
             workspaces: (1, 0),
@@ -293,7 +315,10 @@ impl TaskbarView {
             }
         };
         let mut slots = vec![(Slot::BandeMenu, place(origin, MARK_CELL, thick))];
-        let clock = if vertical { CLOCK_CELL } else { CLOCK_LENGTH };
+        let clock = match (vertical, self.clock_fit) {
+            (false, Some(fit)) => fit.length,
+            _ => CLOCK_CELL,
+        };
         let mut end = origin + length - clock;
         slots.push((Slot::Clock, place(end, clock, thick)));
         let (status_along, status_cross) = match vertical {
@@ -617,19 +642,43 @@ impl TaskbarView {
         items
     }
 
+    fn fit_clock(&mut self, dates: &DateFormats) {
+        let hour24 = dates.uses_24_hour_clock();
+        let size = self.text.size();
+        if self
+            .clock_fit
+            .is_some_and(|fit| fit.hour24 == hour24 && fit.size == size)
+        {
+            return;
+        }
+        let mut length = 0.0f32;
+        for day in 19..=25 {
+            for hour in [10, 22] {
+                let Ok(at) = jiff::civil::date(2026, 1, day)
+                    .at(hour, 58, 0, 0)
+                    .to_zoned(jiff::tz::TimeZone::UTC)
+                else {
+                    continue;
+                };
+                let (time, period) = dates.time(&at);
+                let day = day_line(period.as_deref(), &dates.short_day(&at));
+                let time = self.paragraph(&time, time_style(self.palette));
+                let day = self.paragraph(&day, TextStyle::new(DAY_SIZE, self.palette.ink2));
+                length = length.max(time.width()).max(day.width());
+            }
+        }
+        self.clock_fit = Some(ClockFit {
+            hour24,
+            size,
+            length: (length + 2.0 * CLOCK_PADDING).ceil(),
+        });
+    }
+
     fn paint_clock(&mut self, rect: Rect, scale: f64, items: &mut Vec<Item>) {
         let palette = self.palette;
         let time = self.clock.time.clone();
-        let day = match &self.clock.period {
-            Some(period) => format!("{period} · {}", self.clock.day),
-            None => self.clock.day.clone(),
-        };
-        let time = self.paragraph(
-            &time,
-            TextStyle::new(TIME_SIZE, palette.ink)
-                .weight(TextStyle::SEMIBOLD)
-                .tabular(),
-        );
+        let day = day_line(self.clock.period.as_deref(), &self.clock.day);
+        let time = self.paragraph(&time, time_style(palette));
         let day = self.paragraph(&day, TextStyle::new(DAY_SIZE, palette.ink2));
         let total = time.height() + day.height();
         let top = rect.y + (rect.height - total) / 2.0;
@@ -731,8 +780,12 @@ impl StatusView for TaskbarView {
     fn set_time(&mut self, at: &Zoned, dates: &DateFormats) -> bool {
         let (time, period) = dates.time(at);
         let day = dates.short_day(at);
-        let changed =
-            self.clock.time != time || self.clock.period != period || self.clock.day != day;
+        let fit = self.clock_fit;
+        self.fit_clock(dates);
+        let changed = self.clock.time != time
+            || self.clock.period != period
+            || self.clock.day != day
+            || self.clock_fit != fit;
         self.clock = Clock { time, period, day };
         changed
     }

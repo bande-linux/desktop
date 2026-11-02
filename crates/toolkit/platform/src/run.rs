@@ -10,7 +10,7 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use wayland_client::backend::{ReadEventsGuard, WaylandError};
 use wayland_client::protocol::wl_surface::WlSurface;
 
-use crate::window::{Window, WindowError, WindowEvent};
+use crate::window::{FramePath, Window, WindowError, WindowEvent};
 
 pub trait App {
     fn scene(&mut self, window: &mut Window) -> Scene;
@@ -309,10 +309,13 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
                 let scene = app.scene(index);
                 let animating = app.animating(index);
                 let window = &mut app.windows_mut()[index];
-                window.draw(scene)?;
+                let path = window.draw(scene)?;
                 window.wake_ui_at(take_wake());
                 if animating {
                     window.request_redraw();
+                }
+                if path == FramePath::Unchanged && window.wants_redraw() {
+                    window.pace();
                 }
             }
             let area = app.text_input_area(index);

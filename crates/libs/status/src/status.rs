@@ -37,6 +37,20 @@ impl Wifi {
     pub fn current(&self) -> Option<&Network> {
         self.networks.iter().find(|network| network.current)
     }
+
+    pub fn looks_like(&self, other: &Self) -> bool {
+        let signal = |strength: u8| (wifi_bars(strength), wifi_quarter(strength));
+        self.enabled == other.enabled
+            && self.sign_in == other.sign_in
+            && self.networks.len() == other.networks.len()
+            && self.networks.iter().zip(&other.networks).all(|(a, b)| {
+                a.ssid == b.ssid
+                    && a.security == b.security
+                    && a.known == b.known
+                    && a.current == b.current
+                    && signal(a.strength) == signal(b.strength)
+            })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -95,6 +109,10 @@ pub struct Status {
     pub bluetooth: Option<Bluetooth>,
     pub input_sources: InputSources,
     pub capturing: Vec<Capture>,
+}
+
+pub fn wifi_quarter(strength: u8) -> u8 {
+    (strength / 25).min(3)
 }
 
 pub fn wifi_bars(strength: u8) -> u8 {

@@ -248,6 +248,7 @@ pub struct FilesView {
     pub(crate) band: Option<Band>,
     pub(crate) labels: HashMap<(String, u32, usize), String>,
     pub(crate) grid_wanted: Vec<Entry>,
+    pub(crate) gallery_offset: Option<(Location, f32)>,
     pub(crate) size_slider: Option<WidgetId>,
     pub(crate) requests: Vec<Request>,
     pub(crate) pending_rename: Option<(Instant, PathBuf)>,
@@ -384,6 +385,7 @@ impl FilesView {
             band: None,
             labels: HashMap::new(),
             grid_wanted: Vec::new(),
+            gallery_offset: None,
             size_slider: None,
             requests: Vec::new(),
             pending_rename: None,
@@ -1183,7 +1185,7 @@ impl FilesView {
         }
         match self.mode {
             ViewMode::Icons => return self.grid_scrolled(scroll),
-            ViewMode::Gallery => return false,
+            ViewMode::Gallery => return self.gallery_scrolled(scroll),
             ViewMode::List => return false,
             ViewMode::Columns => {}
         }

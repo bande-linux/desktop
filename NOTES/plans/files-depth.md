@@ -47,8 +47,7 @@ Delete each line when it ships; delete the file when the list is empty.
 1. Get Info: an editable Name & Extension field with a per-file "Hide extension".
 2. View ▸ Use Groups (Kind, Date Last Opened, Size).
 3. New windows show: Other… (any folder).
-4. Gallery: the strip scrolls only by the arrow keys and the selection; add wheel and
-   trackpad scrolling, and Finder's preview pane metadata beside it.
+4. Gallery: Finder's preview pane metadata beside it (today the inspector shows it).
 5. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
    (GVfs-free SMB/SFTP mounts).
 6. Content search (file contents, not only names).

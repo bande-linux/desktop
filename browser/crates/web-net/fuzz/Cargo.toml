@@ -60,4 +60,11 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "hsts_preload"
+path = "fuzz_targets/hsts_preload.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]

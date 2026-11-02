@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use url::{Host, Url};
 
 const MAX_HOSTS: usize = 10_000;
+static PRELOADED: &[u8] = include_bytes!("../data/hsts-preload.txt");
 
 struct Policy {
     expires: u64,
@@ -39,9 +40,13 @@ impl Hsts {
         })
         .enumerate()
         .any(|(depth, name)| {
-            self.hosts
+            let dynamic = self
+                .hosts
                 .get(name)
-                .is_some_and(|policy| policy.expires > now && (depth == 0 || policy.subdomains))
+                .and_then(|policy| (policy.expires > now).then_some(policy.subdomains));
+            dynamic
+                .or_else(|| preloaded(PRELOADED, name))
+                .is_some_and(|subdomains| depth == 0 || subdomains)
         });
         if known && url.set_scheme("https").is_ok() && url.port() == Some(80) {
             let _ = url.set_port(None);
@@ -124,4 +129,34 @@ impl Hsts {
             changed: false,
         }
     }
+}
+
+pub(crate) fn preloaded(table: &[u8], name: &str) -> Option<bool> {
+    let name = name.as_bytes();
+    let (mut low, mut high) = (0, table.len());
+    while low < high {
+        let middle = low + (high - low) / 2;
+        let start = table
+            .get(..middle)?
+            .iter()
+            .rposition(|&byte| byte == b'\n')
+            .map_or(0, |newline| newline + 1)
+            .max(low);
+        let end = table
+            .get(start..)?
+            .iter()
+            .position(|&byte| byte == b'\n')
+            .map_or(table.len(), |newline| start + newline);
+        let line = table.get(start..end)?;
+        let (key, flag) = match line.iter().position(|&byte| byte == b'\t') {
+            Some(tab) => (line.get(..tab)?, line.get(tab + 1..)?),
+            None => (line, &b""[..]),
+        };
+        match key.cmp(name) {
+            std::cmp::Ordering::Equal => return Some(flag == b"s"),
+            std::cmp::Ordering::Less => low = end + 1,
+            std::cmp::Ordering::Greater => high = start,
+        }
+    }
+    None
 }

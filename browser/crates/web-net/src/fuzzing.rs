@@ -100,3 +100,14 @@ pub fn data_url(text: &str) {
         let _ = crate::data::fetch(url);
     }
 }
+
+pub fn hsts_preload(data: &[u8]) {
+    let split = data
+        .iter()
+        .position(|&byte| byte == 0)
+        .unwrap_or(data.len());
+    let (table, name) = data.split_at(split);
+    let name = String::from_utf8_lossy(name);
+    let _ = crate::hsts::preloaded(table, &name);
+    let _ = crate::hsts::preloaded(table, "example.org");
+}

@@ -8,21 +8,16 @@ use std::thread;
 use bande_l10n::Localizer;
 use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
-use zbus::blocking::fdo::ObjectManagerProxy;
+use bande_volumes::udisks::{BLOCK, Change, FILESYSTEM, Objects, UDISKS, Udisks};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
-use zbus::{MatchRule, Message, message};
+use zbus::{MatchRule, message};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-automount.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-const UDISKS: &str = "org.freedesktop.UDisks2";
-const UDISKS_PATH: &str = "/org/freedesktop/UDisks2";
-pub const BLOCK: &str = "org.freedesktop.UDisks2.Block";
-pub const FILESYSTEM: &str = "org.freedesktop.UDisks2.Filesystem";
-const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
 const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
 const LOGIN1: &str = "org.freedesktop.login1";
 const LOGIN1_SESSION: &str = "org.freedesktop.login1.Session";
@@ -78,7 +73,6 @@ fn follow_session(
 }
 
 type Properties = HashMap<String, OwnedValue>;
-type Interfaces = HashMap<String, Properties>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Volume {
@@ -87,41 +81,27 @@ struct Volume {
     mounted: bool,
 }
 
-fn property<T: TryFrom<OwnedValue>>(properties: &Properties, key: &str) -> Option<T> {
-    properties
-        .get(key)
-        .and_then(|value| value.try_clone().ok())
-        .and_then(|value| T::try_from(value).ok())
-}
-
-fn mounted(filesystem: &Properties) -> bool {
-    property::<Vec<Vec<u8>>>(filesystem, "MountPoints").is_some_and(|points| !points.is_empty())
-}
-
 impl Volume {
-    fn from_interfaces(interfaces: &Interfaces) -> Option<Self> {
-        let block = interfaces.get(BLOCK)?;
-        let filesystem = interfaces.get(FILESYSTEM)?;
-        let flag = |key: &str| property::<bool>(block, key).unwrap_or(false);
-        let label = [
-            property::<String>(block, "IdLabel"),
-            property::<String>(block, "HintName"),
-        ]
-        .into_iter()
-        .flatten()
-        .find(|label| !label.is_empty())
-        .unwrap_or_else(|| L10N.tr("untitled"));
+    fn from_objects(objects: &Objects, path: &str) -> Option<Self> {
+        if !objects.has(path, BLOCK) || !objects.has(path, FILESYSTEM) {
+            return None;
+        }
+        let flag = |key: &str| objects.flag(path, BLOCK, key);
+        let label = ["IdLabel", "HintName"]
+            .into_iter()
+            .map(|key| objects.text(path, BLOCK, key))
+            .find(|label| !label.is_empty())
+            .unwrap_or_else(|| L10N.tr("untitled"));
         Some(Self {
             label,
             automount: flag("HintAuto") && !flag("HintIgnore") && !flag("HintSystem"),
-            mounted: mounted(filesystem),
+            mounted: !objects.mount_points(path).is_empty(),
         })
     }
 }
 
 #[derive(Default)]
 struct State {
-    objects: HashMap<OwnedObjectPath, Interfaces>,
     volumes: HashMap<OwnedObjectPath, Volume>,
     unlocked: bool,
     waiting: HashSet<OwnedObjectPath>,
@@ -141,16 +121,6 @@ pub struct Automounter {
 
 impl Automounter {
     pub fn start(system: &Connection, session: &Connection) -> zbus::Result<Arc<Self>> {
-        let manager = ObjectManagerProxy::builder(system)
-            .destination(UDISKS)?
-            .path(UDISKS_PATH)?
-            .build()?;
-        let rule = MatchRule::builder()
-            .msg_type(message::Type::Signal)
-            .sender(UDISKS)?
-            .path_namespace(UDISKS_PATH)?
-            .build();
-        let signals = MessageIterator::for_match_rule(rule, system, None)?;
         let automounter = Arc::new(Self {
             system: system.clone(),
             session: session.clone(),
@@ -174,65 +144,35 @@ impl Automounter {
             }
             Err(error) => tracing::warn!("cannot follow the login session: {error}"),
         }
-        for (path, interfaces) in manager.get_managed_objects()? {
-            let interfaces: Interfaces = interfaces
-                .into_iter()
-                .map(|(name, properties)| (name.to_string(), properties))
-                .collect();
-            automounter.appeared(path, &interfaces);
-        }
         let watcher = Arc::clone(&automounter);
-        thread::spawn(move || {
-            for signal in signals.flatten() {
-                watcher.handle(&signal);
-            }
-        });
+        Udisks::follow(system, move |objects, change| {
+            watcher.handle(objects, change)
+        })?;
         Ok(automounter)
     }
 
-    fn handle(&self, signal: &Message) {
-        let header = signal.header();
-        let (Some(interface), Some(member)) = (header.interface(), header.member()) else {
-            return;
-        };
-        let body = signal.body();
-        match (interface.as_str(), member.as_str()) {
-            (OBJECT_MANAGER, "InterfacesAdded") => {
-                if let Ok((path, interfaces)) = body.deserialize::<(OwnedObjectPath, Interfaces)>()
-                {
-                    self.appeared(path, &interfaces);
+    fn handle(&self, objects: &Objects, change: &Change) {
+        match change {
+            Change::Added(path) => self.appeared(objects, path),
+            Change::Removed(path, gone) => self.disappeared(path, gone),
+            Change::Changed(path, interface, keys)
+                if interface == FILESYSTEM && keys.iter().any(|key| key == "MountPoints") =>
+            {
+                if let Some(volume) = lock(&self.state).volumes.get_mut(path) {
+                    volume.mounted = !objects.mount_points(path).is_empty();
                 }
             }
-            (OBJECT_MANAGER, "InterfacesRemoved") => {
-                if let Ok((path, gone)) = body.deserialize::<(OwnedObjectPath, Vec<String>)>() {
-                    self.disappeared(&path, &gone);
-                }
-            }
-            (PROPERTIES, "PropertiesChanged") => {
-                if let (Some(path), Ok((FILESYSTEM, changed, _))) = (
-                    header.path(),
-                    body.deserialize::<(&str, Properties, Vec<String>)>(),
-                ) && changed.contains_key("MountPoints")
-                    && let Some(volume) = lock(&self.state)
-                        .volumes
-                        .get_mut(&OwnedObjectPath::from(path.to_owned()))
-                {
-                    volume.mounted = mounted(&changed);
-                }
-            }
-            _ => {}
+            Change::Changed(..) => {}
         }
     }
 
-    fn appeared(&self, path: OwnedObjectPath, interfaces: &Interfaces) {
+    fn appeared(&self, objects: &Objects, path: &OwnedObjectPath) {
         let mount = {
             let mut state = lock(&self.state);
-            let object = state.objects.entry(path.clone()).or_default();
-            object.extend(interfaces.clone());
-            let Some(volume) = Volume::from_interfaces(object) else {
+            let Some(volume) = Volume::from_objects(objects, path) else {
                 return;
             };
-            if state.volumes.contains_key(&path) {
+            if state.volumes.contains_key(path) {
                 return;
             }
             let wanted = volume.automount && !volume.mounted;
@@ -244,7 +184,7 @@ impl Automounter {
             wanted
         };
         if mount {
-            self.mount(&path);
+            self.mount(path);
         }
     }
 
@@ -284,12 +224,6 @@ impl Automounter {
     fn disappeared(&self, path: &OwnedObjectPath, interfaces: &[String]) {
         let volume = {
             let mut state = lock(&self.state);
-            if let Some(object) = state.objects.get_mut(path) {
-                object.retain(|name, _| !interfaces.contains(name));
-                if object.is_empty() {
-                    state.objects.remove(path);
-                }
-            }
             if !interfaces
                 .iter()
                 .any(|name| name == FILESYSTEM || name == BLOCK)

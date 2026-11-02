@@ -15,6 +15,7 @@ bande-fs.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
 bande-notify.workspace = true
+bande-volumes.workspace = true
 bande-xdg.workspace = true
 zbus.workspace = true
 

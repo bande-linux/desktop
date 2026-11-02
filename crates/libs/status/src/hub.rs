@@ -12,6 +12,7 @@ use zbus::blocking::Connection;
 
 use crate::Update;
 use crate::clock::{follow_minutes, follow_zone};
+use crate::clock_app::follow_clock_app;
 use crate::devices::{Control, SoundControl, follow_devices};
 #[cfg(feature = "audio")]
 use crate::sound::follow_sound;
@@ -141,6 +142,12 @@ impl StatusHub {
             spawn("status-unread", move || {
                 if let Err(error) = follow_unread(&following, &outbox) {
                     tracing::info!("cannot follow unread notifications: {error}");
+                }
+            });
+            let (following, outbox) = (session.clone(), source.clone());
+            spawn("status-clock-app", move || {
+                if let Err(error) = follow_clock_app(&following, &outbox) {
+                    tracing::info!("cannot follow Clock's timers and alarms: {error}");
                 }
             });
             let (errands, queue) = mpsc::channel();

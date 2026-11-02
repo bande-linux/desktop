@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
+use crate::collapse::{Collapsed, collapse};
 use web_atoms::Atom;
 use web_dom::{Document, NodeId, NodeKind};
 use web_style::{
-    ComputedStyle, ContentPart, Display, LineHeight, ListStyleType, Pseudo, Styles, VerticalAlign,
+    ComputedStyle, ContentPart, Display, LineHeight, ListStyleType, Pseudo, ResetStyle, Styles,
+    TableColumn, VerticalAlign,
 };
-use web_text::{FontKey, Fonts, Paragraph, RunStyle, ShapedParagraph};
+use web_text::{
+    FontKey, Fonts, LineAlign, Paragraph, RunStyle, ShapedParagraph, content_metrics, inline_extent,
+};
 
 pub(crate) struct BlockBox {
     pub(crate) node: Option<NodeId>,
@@ -26,26 +30,21 @@ pub(crate) enum Contents {
 pub(crate) struct Table {
     pub(crate) captions: Vec<BlockBox>,
     pub(crate) rows: Vec<TableRow>,
+    pub(crate) collapsed: Option<Box<Collapsed>>,
 }
 
 pub(crate) struct TableRow {
     pub(crate) node: Option<NodeId>,
     pub(crate) style: ComputedStyle,
     pub(crate) cells: Vec<TableCell>,
-    pub(crate) edges: [(f32, web_style::Color); 2],
+    pub(crate) group: Option<u32>,
 }
 
-fn edge(style: &ComputedStyle, top: bool) -> (f32, web_style::Color) {
-    let reset = &style.reset;
-    if top {
-        (reset.border.top, reset.border_color.top)
-    } else {
-        (reset.border.bottom, reset.border_color.bottom)
-    }
-}
-
-fn stronger(a: (f32, web_style::Color), b: (f32, web_style::Color)) -> (f32, web_style::Color) {
-    if b.0 > a.0 { b } else { a }
+#[derive(Default)]
+pub(crate) struct Parts {
+    pub(crate) groups: Vec<ComputedStyle>,
+    pub(crate) columns: Vec<(ComputedStyle, Option<usize>)>,
+    pub(crate) column_groups: Vec<ComputedStyle>,
 }
 
 pub(crate) struct TableCell {
@@ -201,11 +200,29 @@ impl BoxTree {
     }
 }
 
+fn keep_collapsed(style: &mut ComputedStyle, old: &ResetStyle) {
+    if style.reset.border != old.border
+        || style.reset.border_color != old.border_color
+        || style.reset.padding != old.padding
+    {
+        let reset = Arc::make_mut(&mut style.reset);
+        reset.border = old.border;
+        reset.border_color = old.border_color;
+        reset.padding = old.padding;
+    }
+}
+
 fn refresh(block: &mut BlockBox, styles: &Styles, parent: Option<&ComputedStyle>) {
+    let old = block.style.reset.clone();
     match (block.node.and_then(|node| styles.get(node)), parent) {
         (Some(style), _) => block.style = style.clone(),
         (None, Some(parent)) => block.style = styles.anonymous(parent),
         (None, None) => {}
+    }
+    if let Contents::Table(table) = &block.contents
+        && table.collapsed.is_some()
+    {
+        keep_collapsed(&mut block.style, &old);
     }
     let style = block.style.clone();
     match &mut block.contents {
@@ -236,7 +253,11 @@ fn refresh(block: &mut BlockBox, styles: &Styles, parent: Option<&ComputedStyle>
                     row.style = row_style.clone();
                 }
                 for cell in &mut row.cells {
+                    let old = cell.block.style.reset.clone();
                     refresh(&mut cell.block, styles, Some(&style));
+                    if table.collapsed.is_some() {
+                        keep_collapsed(&mut cell.block.style, &old);
+                    }
                 }
             }
             for caption in &mut table.captions {
@@ -301,6 +322,79 @@ fn own_shift(style: &ComputedStyle) -> f32 {
     }
 }
 
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Shift {
+    px: f32,
+    align: LineAlign,
+}
+
+fn shifted(fonts: &mut Fonts, style: &ComputedStyle, tag: u32, shift: Shift) -> RunStyle {
+    RunStyle {
+        align: shift.align,
+        ..run_style(fonts, style, tag, shift.px)
+    }
+}
+
+fn resolve_shift(
+    fonts: &mut Fonts,
+    parent: &ComputedStyle,
+    style: &ComputedStyle,
+    outer: Shift,
+    atomic: bool,
+    group: usize,
+) -> Shift {
+    let vertical = style.reset.vertical_align;
+    if outer.align.is_edge() {
+        return Shift {
+            px: outer.px + own_shift(style),
+            ..outer
+        };
+    }
+    let parent_metrics = |fonts: &mut Fonts| {
+        let run = run_style(fonts, parent, 0, 0.0);
+        content_metrics(fonts, run)
+    };
+    let own = |fonts: &mut Fonts| {
+        let run = run_style(fonts, style, 0, 0.0);
+        inline_extent(fonts, run)
+    };
+    match vertical {
+        VerticalAlign::Top => Shift {
+            px: 0.0,
+            align: LineAlign::top(group),
+        },
+        VerticalAlign::Bottom => Shift {
+            px: 0.0,
+            align: LineAlign::bottom(group),
+        },
+        VerticalAlign::Middle | VerticalAlign::TextTop | VerticalAlign::TextBottom => {
+            let (ascent, descent, x_height) = parent_metrics(fonts);
+            let (align, target) = match vertical {
+                VerticalAlign::Middle => (LineAlign::MIDDLE, outer.px + x_height / 2.0),
+                VerticalAlign::TextTop => (LineAlign::TEXT_TOP, outer.px + ascent),
+                _ => (LineAlign::TEXT_BOTTOM, outer.px - descent),
+            };
+            if atomic {
+                return Shift { px: target, align };
+            }
+            let (above, below) = own(fonts);
+            let px = match align {
+                LineAlign::MIDDLE => target - (above - below) / 2.0,
+                LineAlign::TEXT_TOP => target - above,
+                _ => target + below,
+            };
+            Shift {
+                px,
+                align: LineAlign::BASELINE,
+            }
+        }
+        _ => Shift {
+            px: outer.px + own_shift(style),
+            align: LineAlign::BASELINE,
+        },
+    }
+}
+
 pub(crate) fn run_style(
     fonts: &mut Fonts,
     style: &ComputedStyle,
@@ -324,6 +418,7 @@ pub(crate) fn run_style(
             LineHeight::Px(px) => Some(px),
         },
         baseline_shift,
+        align: LineAlign::BASELINE,
         white_space: inherited.white_space,
         tag,
     }
@@ -341,7 +436,16 @@ impl Builder<'_> {
             };
         }
         if matches!(style.display(), Display::Table | Display::InlineTable) {
-            let table = self.table(node, &style);
+            let mut style = style;
+            let mut parts = Parts::default();
+            let mut table = self.table(node, &style, &mut parts);
+            if style.inherited.border_collapse {
+                let outer = collapse(&mut table, &style, &parts);
+                let reset = Arc::make_mut(&mut style.reset);
+                reset.border = outer;
+                reset.border_color = web_style::Sides::all(web_style::Color::TRANSPARENT);
+                reset.padding = web_style::Sides::all(web_style::LengthPercentage::ZERO);
+            }
             return BlockBox {
                 node: Some(node),
                 style,
@@ -364,7 +468,7 @@ impl Builder<'_> {
             run.white_space = web_style::WhiteSpace::Pre;
             pending.paragraph.push_text(&format!("{text} "), run);
         }
-        self.children(node, &mut blocks, &mut pending, 0.0);
+        self.children(node, &mut blocks, &mut pending, Shift::default());
         let flex = matches!(style.display(), Display::Flex | Display::InlineFlex);
         let grid = matches!(style.display(), Display::Grid | Display::InlineGrid);
         let contents = if flex {
@@ -395,9 +499,10 @@ impl Builder<'_> {
         node: NodeId,
         blocks: &mut Vec<BlockBox>,
         pending: &mut Pending,
-        shift: f32,
+        shift: Shift,
     ) {
         let scope = self.counters.len();
+        let parent = self.styles.get(node).cloned();
         self.generated(node, Pseudo::Before, pending, shift);
         for child in self.document.children(node) {
             let Some(style) = self.styles.get(child) else {
@@ -413,7 +518,7 @@ impl Builder<'_> {
                     let tag = pending.push(child, style, ItemKind::Text);
                     pending
                         .paragraph
-                        .push_text(text, run_style(self.fonts, style, tag, shift));
+                        .push_text(text, shifted(self.fonts, style, tag, shift));
                 }
                 Some(NodeKind::Element) if self.depth >= MAX_DEPTH => {}
                 Some(NodeKind::Element) if style.display() == Display::None => {}
@@ -437,27 +542,41 @@ impl Builder<'_> {
                     if index < u16::MAX {
                         pending.atomics.push(block);
                         let tag = pending.push(child, style, ItemKind::Atomic(index));
-                        pending.paragraph.push_atomic(
-                            index,
-                            run_style(self.fonts, style, tag, shift + own_shift(style)),
+                        let own = resolve_shift(
+                            self.fonts,
+                            parent.as_ref().unwrap_or(style),
+                            style,
+                            shift,
+                            true,
+                            child.index(),
                         );
+                        pending
+                            .paragraph
+                            .push_atomic(index, shifted(self.fonts, style, tag, own));
                     }
                 }
                 Some(NodeKind::Element) => match style.display() {
                     Display::None => {}
                     Display::Inline | Display::Contents => {
-                        let inner = shift + own_shift(style);
+                        let inner = resolve_shift(
+                            self.fonts,
+                            parent.as_ref().unwrap_or(style),
+                            style,
+                            shift,
+                            false,
+                            child.index(),
+                        );
                         if self.document.html_element_name(child) == Some(Atom::BR) {
                             let tag = pending.push(child, style, ItemKind::Text);
                             pending
                                 .paragraph
-                                .push_break(run_style(self.fonts, style, tag, shift));
+                                .push_break(shifted(self.fonts, style, tag, shift));
                         } else if style.display() == Display::Inline && decorated(style) {
                             let frame = InlineFrame::of(style);
                             let start = pending.push(child, style, ItemKind::Start);
                             pending.paragraph.push_spacer(
                                 frame.start(),
-                                run_style(self.fonts, style, start, inner),
+                                shifted(self.fonts, style, start, inner),
                             );
                             pending.open.push(start);
                             self.depth += 1;
@@ -471,7 +590,7 @@ impl Builder<'_> {
                                 let end = pending.push(child, style, ItemKind::End(start));
                                 pending.paragraph.push_spacer(
                                     frame.end(),
-                                    run_style(self.fonts, style, end, inner),
+                                    shifted(self.fonts, style, end, inner),
                                 );
                             }
                         } else {
@@ -612,7 +731,7 @@ impl Builder<'_> {
         Some(counter.value)
     }
 
-    fn generated(&mut self, node: NodeId, pseudo: Pseudo, pending: &mut Pending, shift: f32) {
+    fn generated(&mut self, node: NodeId, pseudo: Pseudo, pending: &mut Pending, shift: Shift) {
         let Some(style) = self.styles.pseudo(node, pseudo).cloned() else {
             return;
         };
@@ -646,16 +765,22 @@ impl Builder<'_> {
             }
         }
         let tag = pending.push(node, &style, ItemKind::Text);
-        pending.paragraph.push_text(
-            &text,
-            run_style(self.fonts, &style, tag, shift + own_shift(&style)),
-        );
+        pending.paragraph.push_text(&text, {
+            let own = match self.styles.get(node).cloned() {
+                Some(parent) => {
+                    resolve_shift(self.fonts, &parent, &style, shift, false, node.index())
+                }
+                None => shift,
+            };
+            shifted(self.fonts, &style, tag, own)
+        });
     }
 
-    fn table(&mut self, node: NodeId, style: &ComputedStyle) -> Table {
+    fn table(&mut self, node: NodeId, style: &ComputedStyle, parts: &mut Parts) -> Table {
         let mut table = Table {
             captions: Vec::new(),
             rows: Vec::new(),
+            collapsed: None,
         };
         let mut headers = Vec::new();
         let mut footers = Vec::new();
@@ -671,11 +796,17 @@ impl Builder<'_> {
                 Display::TableCaption => {
                     table.captions.push(self.block(child, child_style, None));
                 }
-                Display::TableHeaderGroup => self.row_group(child, &mut headers),
-                Display::TableFooterGroup => self.row_group(child, &mut footers),
-                Display::TableRowGroup => self.row_group(child, &mut table.rows),
+                Display::TableHeaderGroup => {
+                    self.row_group(child, child_style, &mut headers, parts)
+                }
+                Display::TableFooterGroup => {
+                    self.row_group(child, child_style, &mut footers, parts)
+                }
+                Display::TableRowGroup => {
+                    self.row_group(child, child_style, &mut table.rows, parts)
+                }
                 Display::TableRow => table.rows.push(self.row(child, child_style)),
-                Display::None => {}
+                Display::None => self.column(child, child_style, parts),
                 _ => {
                     let cell = self.cell(child, child_style);
                     match table.rows.last_mut().filter(|row| row.node.is_none()) {
@@ -684,7 +815,7 @@ impl Builder<'_> {
                             node: None,
                             style: self.styles.anonymous(style),
                             cells: vec![cell],
-                            edges: [(0.0, web_style::Color::TRANSPARENT); 2],
+                            group: None,
                         }),
                     }
                 }
@@ -697,8 +828,15 @@ impl Builder<'_> {
         table
     }
 
-    fn row_group(&mut self, group: NodeId, rows: &mut Vec<TableRow>) {
-        let start = rows.len();
+    fn row_group(
+        &mut self,
+        group: NodeId,
+        group_style: ComputedStyle,
+        rows: &mut Vec<TableRow>,
+        parts: &mut Parts,
+    ) {
+        let id = parts.groups.len() as u32;
+        parts.groups.push(group_style);
         for child in self.document.children(group).collect::<Vec<_>>() {
             if self.document.kind(child) != Some(NodeKind::Element) {
                 continue;
@@ -707,7 +845,11 @@ impl Builder<'_> {
                 continue;
             };
             match style.display() {
-                Display::TableRow => rows.push(self.row(child, style)),
+                Display::TableRow => {
+                    let mut row = self.row(child, style);
+                    row.group = Some(id);
+                    rows.push(row);
+                }
                 Display::None => {}
                 _ => {
                     let cell = self.cell(child, style.clone());
@@ -715,20 +857,54 @@ impl Builder<'_> {
                         node: None,
                         style: self.styles.anonymous(&style),
                         cells: vec![cell],
-                        edges: [(0.0, web_style::Color::TRANSPARENT); 2],
+                        group: Some(id),
                     });
                 }
             }
         }
-        if let Some(group_style) = self.styles.get(group).cloned() {
-            if let Some(first) = rows.get_mut(start) {
-                first.edges[0] = stronger(first.edges[0], edge(&group_style, true));
+    }
+
+    fn column(&self, node: NodeId, style: ComputedStyle, parts: &mut Parts) {
+        let span = || {
+            self.document
+                .attribute(node, Atom::SPAN)
+                .and_then(|span| span.trim().parse::<usize>().ok())
+                .map_or(1, |span| span.clamp(1, 1000))
+        };
+        match style.reset.table_column {
+            Some(TableColumn::Column) => {
+                for _ in 0..span() {
+                    parts.columns.push((style.clone(), None));
+                }
             }
-            if rows.len() > start
-                && let Some(last) = rows.last_mut()
-            {
-                last.edges[1] = stronger(last.edges[1], edge(&group_style, false));
+            Some(TableColumn::Group) => {
+                let group = parts.column_groups.len();
+                let start = parts.columns.len();
+                for child in self.document.children(node) {
+                    if let Some(child_style) = self.styles.get(child)
+                        && self.document.kind(child) == Some(NodeKind::Element)
+                        && child_style.reset.table_column == Some(TableColumn::Column)
+                    {
+                        let count = self
+                            .document
+                            .attribute(child, Atom::SPAN)
+                            .and_then(|span| span.trim().parse::<usize>().ok())
+                            .map_or(1, |span| span.clamp(1, 1000));
+                        for _ in 0..count {
+                            parts.columns.push((child_style.clone(), Some(group)));
+                        }
+                    }
+                }
+                if parts.columns.len() == start {
+                    for _ in 0..span() {
+                        parts
+                            .columns
+                            .push((self.styles.anonymous(&style), Some(group)));
+                    }
+                }
+                parts.column_groups.push(style);
             }
+            None => {}
         }
     }
 
@@ -745,12 +921,11 @@ impl Builder<'_> {
                 cells.push(self.cell(child, child_style));
             }
         }
-        let edges = [edge(&style, true), edge(&style, false)];
         TableRow {
             node: Some(row),
             style,
             cells,
-            edges,
+            group: None,
         }
     }
 

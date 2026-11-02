@@ -11,9 +11,10 @@ use web_css::values::{Length, LengthUnit};
 
 use crate::stylist::Viewport;
 use crate::{
-    Align, Clear, Color, ComputedStyle, ContentPart, Direction, Display, FlexDirection, Float,
-    FontFamily, InheritedStyle, LengthPercentage, LineHeight, ListStyleType, MEDIUM, ObjectFit,
-    Position, ResetStyle, TextAlign, TextDecorations, VerticalAlign, WhiteSpace,
+    Align, BorderStyle, Clear, Color, ComputedStyle, ContentPart, Direction, Display,
+    FlexDirection, Float, FontFamily, InheritedStyle, LengthPercentage, LineHeight, ListStyleType,
+    MEDIUM, ObjectFit, Position, ResetStyle, Sides, TableColumn, TextAlign, TextDecorations,
+    VerticalAlign, WhiteSpace,
 };
 
 pub(crate) enum Value<'a> {
@@ -390,6 +391,11 @@ impl Computer<'_> {
         match (id, value) {
             (Id::Display, V::Display(display)) => {
                 use specified::Display as D;
+                self.reset.table_column = match display {
+                    D::TableColumn => Some(TableColumn::Column),
+                    D::TableColumnGroup => Some(TableColumn::Group),
+                    _ => None,
+                };
                 self.reset.display = match display {
                     D::None | D::TableColumn | D::TableColumnGroup => Display::None,
                     D::Contents => Display::Contents,
@@ -985,13 +991,35 @@ impl Computer<'_> {
     }
 
     fn border_style(&mut self, side: u8, style: keywords::LineStyle) {
-        let none = matches!(
-            style,
-            keywords::LineStyle::None | keywords::LineStyle::Hidden
+        use keywords::LineStyle as L;
+        self.set_border_style(
+            side,
+            match style {
+                L::None => BorderStyle::None,
+                L::Hidden => BorderStyle::Hidden,
+                L::Dotted => BorderStyle::Dotted,
+                L::Dashed => BorderStyle::Dashed,
+                L::Solid => BorderStyle::Solid,
+                L::Double => BorderStyle::Double,
+                L::Groove => BorderStyle::Groove,
+                L::Ridge => BorderStyle::Ridge,
+                L::Inset => BorderStyle::Inset,
+                L::Outset => BorderStyle::Outset,
+            },
         );
-        let styles = &mut self.border_styles;
-        if let Some(slot) = styles.get_mut(usize::from(side)) {
-            *slot = !none;
+    }
+
+    fn set_border_style(&mut self, side: u8, style: BorderStyle) {
+        let sides = &mut self.reset.border_style;
+        let slot = match side {
+            0 => &mut sides.top,
+            1 => &mut sides.right,
+            2 => &mut sides.bottom,
+            _ => &mut sides.left,
+        };
+        *slot = style;
+        if let Some(slot) = self.border_styles.get_mut(usize::from(side)) {
+            *slot = !matches!(style, BorderStyle::None | BorderStyle::Hidden);
         }
     }
 
@@ -1017,6 +1045,18 @@ impl Computer<'_> {
         if let Some(slot) = side.and_then(|side| self.border_colors.get_mut(side)) {
             *slot = inherits;
         }
+        let from = if inherits {
+            self.parent.reset.border_style
+        } else {
+            Sides::all(BorderStyle::None)
+        };
+        match id {
+            LonghandId::BorderTopStyle => self.set_border_style(0, from.top),
+            LonghandId::BorderRightStyle => self.set_border_style(1, from.right),
+            LonghandId::BorderBottomStyle => self.set_border_style(2, from.bottom),
+            LonghandId::BorderLeftStyle => self.set_border_style(3, from.left),
+            _ => {}
+        }
         let inherit = match keyword {
             CssWideKeyword::Inherit => true,
             CssWideKeyword::Initial => false,
@@ -1032,7 +1072,10 @@ impl Computer<'_> {
         use LonghandId as Id;
         let (inherited, reset) = (&mut self.inherited, &mut self.reset);
         match id {
-            Id::Display => reset.display = from_reset.display,
+            Id::Display => {
+                reset.display = from_reset.display;
+                reset.table_column = from_reset.table_column;
+            }
             Id::Color => inherited.color = from_inherited.color,
             Id::BackgroundColor => reset.background_color = from_reset.background_color,
             Id::FontSize => {

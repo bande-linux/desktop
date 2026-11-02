@@ -22,6 +22,7 @@ struct Extent {
     start: bool,
     end: bool,
     depth: usize,
+    shift: f32,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -983,6 +984,7 @@ impl<'a, 'b> Flow<'a, 'b> {
                                 start: false,
                                 end: false,
                                 depth: 0,
+                                shift: 0.0,
                             });
                             extents.len() - 1
                         }
@@ -991,8 +993,14 @@ impl<'a, 'b> Flow<'a, 'b> {
                         extent.left = extent.left.min(x);
                         extent.right = extent.right.max(x + item.width);
                         match edge {
-                            Some((edge, true)) if edge == tag => extent.start = true,
-                            Some((edge, false)) if edge == tag => extent.end = true,
+                            Some((edge, true)) if edge == tag => {
+                                extent.start = true;
+                                extent.shift = item.baseline_shift;
+                            }
+                            Some((edge, false)) if edge == tag => {
+                                extent.end = true;
+                                extent.shift = item.baseline_shift;
+                            }
                             _ => {}
                         }
                     }
@@ -1076,7 +1084,7 @@ impl<'a, 'b> Flow<'a, 'b> {
                 style.inherited.font_size * 0.2,
             ));
         let reset = &style.reset;
-        let shift = run_style(self.fonts, style, 0, 0.0).baseline_shift;
+        let shift = extent.shift;
         let top = baseline - shift - ascent - reset.padding.top.px - reset.border.top;
         let bottom = baseline - shift + descent + reset.padding.bottom.px + reset.border.bottom;
         let (start_border, end_border) = frame.border;

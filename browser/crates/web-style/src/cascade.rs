@@ -160,11 +160,9 @@ impl Styles {
                 Some(NodeKind::Text) => parent,
                 _ => continue,
             };
-            if styles
-                .pool
-                .get(style as usize)
-                .is_none_or(|style| style.display() == Display::None)
-            {
+            if styles.pool.get(style as usize).is_none_or(|style| {
+                style.display() == Display::None && style.reset.table_column.is_none()
+            }) {
                 continue;
             }
             if let Some(slot) = styles.per_node.get_mut(node.index()) {

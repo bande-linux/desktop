@@ -1,18 +1,19 @@
 use web_style::{Color, VerticalAlign};
 
 use crate::box_tree::{BlockBox, Table, TableCell};
+use crate::collapse::Collapsed;
 use crate::flow::{Bfc, Flow, Sizing};
 use crate::fragment::{BoxFragment, Fragment, Rect};
 
-struct Slot<'b> {
-    row: usize,
-    column: usize,
-    rows: usize,
-    columns: usize,
-    cell: &'b TableCell,
+pub(crate) struct Slot<'b> {
+    pub(crate) row: usize,
+    pub(crate) column: usize,
+    pub(crate) rows: usize,
+    pub(crate) columns: usize,
+    pub(crate) cell: &'b TableCell,
 }
 
-fn grid(table: &Table) -> (Vec<Slot<'_>>, usize) {
+pub(crate) fn grid(table: &Table) -> (Vec<Slot<'_>>, usize) {
     let row_count = table.rows.len();
     let mut occupied: Vec<Vec<bool>> = vec![Vec::new(); row_count];
     let mut slots = Vec::new();
@@ -262,46 +263,13 @@ impl<'a, 'b> Flow<'a, 'b> {
                 }
             }
         }
-        let collapse = block.style.inherited.border_collapse;
-        let mut tops = Vec::with_capacity(heights.len());
-        let mut rules = Vec::new();
+        let mut tops = Vec::with_capacity(heights.len() + 1);
         let mut top = vertical;
-        let mut previous = (0.0f32, Color::TRANSPARENT);
-        for (row, height) in table.rows.iter().zip(&heights) {
-            if collapse {
-                let edge = if row.edges[0].0 >= previous.0 {
-                    row.edges[0]
-                } else {
-                    previous
-                };
-                if edge.0 > 0.0 {
-                    rules.push((top, edge));
-                    top += edge.0;
-                }
-                previous = row.edges[1];
-            }
+        for height in &heights {
             tops.push(top);
             top += height + vertical;
         }
-        if collapse && previous.0 > 0.0 {
-            rules.push((top, previous));
-            top += previous.0;
-        }
         let grid_height = if heights.is_empty() { 0.0 } else { top };
-        for (rule_top, (width, color)) in rules {
-            children.push(Fragment::Box(BoxFragment {
-                node: None,
-                rect: Rect {
-                    x: offset.0,
-                    y: offset.1 + y + rule_top,
-                    width: x.max(0.0),
-                    height: width,
-                },
-                background: color,
-                extra: None,
-                children: Vec::new(),
-            }));
-        }
         for (row, (&row_top, &row_height)) in table.rows.iter().zip(tops.iter().zip(&heights)) {
             let background = row.style.reset.background_color;
             if background != Color::TRANSPARENT && row.node.is_some() {
@@ -360,6 +328,90 @@ impl<'a, 'b> Flow<'a, 'b> {
             fragment.rect.y = offset.1 + y + tops.get(slot.row).copied().unwrap_or(0.0);
             children.push(Fragment::Box(fragment));
         }
+        if let Some(collapsed) = &table.collapsed {
+            let mut xs = lefts.clone();
+            xs.push(x);
+            tops.push(top);
+            edges(collapsed, &xs, &tops, (offset.0, offset.1 + y), children);
+        }
         y + grid_height
+    }
+}
+
+fn edges(
+    collapsed: &Collapsed,
+    xs: &[f32],
+    ys: &[f32],
+    origin: (f32, f32),
+    children: &mut Vec<Fragment>,
+) {
+    let mut push = |rect: Rect, color: Color| {
+        if rect.width > 0.0 && rect.height > 0.0 && color != Color::TRANSPARENT {
+            children.push(Fragment::Box(BoxFragment {
+                node: None,
+                rect: Rect {
+                    x: origin.0 + rect.x,
+                    y: origin.1 + rect.y,
+                    ..rect
+                },
+                background: color,
+                extra: None,
+                children: Vec::new(),
+            }));
+        }
+    };
+    let rows = ys.len().saturating_sub(1);
+    let columns = collapsed.columns;
+    let half = |edge: Option<crate::collapse::Edge>| edge.map_or(0.0, |edge| edge.width / 2.0);
+    for row in 0..rows {
+        let (Some(&top), Some(&bottom)) = (ys.get(row), ys.get(row + 1)) else {
+            continue;
+        };
+        for column in 0..=columns {
+            let (Some(edge), Some(&x)) = (collapsed.vertical(row, column), xs.get(column)) else {
+                continue;
+            };
+            push(
+                Rect {
+                    x: x - edge.width / 2.0,
+                    y: top,
+                    width: edge.width,
+                    height: bottom - top,
+                },
+                edge.color,
+            );
+        }
+    }
+    for row in 0..=rows {
+        let Some(&y) = ys.get(row) else {
+            continue;
+        };
+        for column in 0..columns {
+            let (Some(edge), Some(&left), Some(&right)) = (
+                collapsed.horizontal(row, column),
+                xs.get(column),
+                xs.get(column + 1),
+            ) else {
+                continue;
+            };
+            let corner = |at: usize| {
+                let above = row
+                    .checked_sub(1)
+                    .and_then(|row| collapsed.vertical(row, at));
+                let below = (row < rows).then(|| collapsed.vertical(row, at)).flatten();
+                half(above).max(half(below))
+            };
+            let start = left - corner(column);
+            let end = right + corner(column + 1);
+            push(
+                Rect {
+                    x: start,
+                    y: y - edge.width / 2.0,
+                    width: end - start,
+                    height: edge.width,
+                },
+                edge.color,
+            );
+        }
     }
 }

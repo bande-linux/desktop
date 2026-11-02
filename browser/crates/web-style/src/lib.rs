@@ -169,6 +169,27 @@ pub enum TextAlign {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum TableColumn {
+    Column,
+    Group,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum BorderStyle {
+    #[default]
+    None,
+    Hidden,
+    Dotted,
+    Dashed,
+    Solid,
+    Double,
+    Groove,
+    Ridge,
+    Inset,
+    Outset,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum ListStyleType {
     None,
     Disc,
@@ -286,6 +307,8 @@ pub struct ResetStyle {
     pub padding: Sides<LengthPercentage>,
     pub border: Sides,
     pub border_color: Sides<Color>,
+    pub border_style: Sides<BorderStyle>,
+    pub table_column: Option<TableColumn>,
     pub background_color: Color,
     pub vertical_align: VerticalAlign,
     pub width: Option<LengthPercentage>,
@@ -459,6 +482,8 @@ impl ResetStyle {
             padding: Sides::all(LengthPercentage::ZERO),
             border: Sides::all(0.0),
             border_color: Sides::all(Color::BLACK),
+            border_style: Sides::all(BorderStyle::None),
+            table_column: None,
             background_color: Color::TRANSPARENT,
             vertical_align: VerticalAlign::Baseline,
             width: None,
@@ -511,9 +536,14 @@ impl ComputedStyle {
             visible: true,
             ..style.clone()
         };
+        let collapse = self.inherited.border_collapse;
         let neutral_reset = |style: &ResetStyle| ResetStyle {
             background_color: Color::TRANSPARENT,
-            border_color: Sides::all(Color::BLACK),
+            border_color: if collapse {
+                style.border_color
+            } else {
+                Sides::all(Color::BLACK)
+            },
             text_decoration: TextDecorations::default(),
             ..style.clone()
         };

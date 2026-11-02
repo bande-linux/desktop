@@ -13,8 +13,47 @@ pub struct RunStyle {
     pub size: f32,
     pub line_height: Option<f32>,
     pub baseline_shift: f32,
+    pub align: LineAlign,
     pub white_space: WhiteSpace,
     pub tag: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct LineAlign(u8);
+
+const TOP: u8 = 4;
+const BOTTOM: u8 = 5;
+
+impl LineAlign {
+    pub const BASELINE: Self = Self(0);
+    pub const MIDDLE: Self = Self(1);
+    pub const TEXT_TOP: Self = Self(2);
+    pub const TEXT_BOTTOM: Self = Self(3);
+
+    pub fn top(group: usize) -> Self {
+        Self(TOP | ((group as u8) << 3))
+    }
+
+    pub fn bottom(group: usize) -> Self {
+        Self(BOTTOM | ((group as u8) << 3))
+    }
+
+    pub fn is_edge(self) -> bool {
+        matches!(self.0 & 7, TOP | BOTTOM)
+    }
+
+    fn is_top(self) -> bool {
+        self.0 & 7 == TOP
+    }
+
+    fn shift(self, ascent: f32, descent: f32, baseline_shift: f32) -> f32 {
+        match self {
+            Self::MIDDLE => baseline_shift - (ascent - descent) / 2.0,
+            Self::TEXT_TOP => baseline_shift - ascent,
+            Self::TEXT_BOTTOM => baseline_shift + descent,
+            _ => baseline_shift,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
@@ -596,6 +635,8 @@ impl ShapedParagraph {
     ) {
         let (mut above, mut below) = vertical_extent(fonts, None, strut);
         let first_item = lines.items.len();
+        let mut edges: Vec<(usize, usize, f32)> = Vec::new();
+        let mut groups: Vec<(LineAlign, f32, f32)> = Vec::new();
         let shaped = self.glyphs.get(range).unwrap_or_default();
         let hanging = shaped
             .iter()
@@ -637,15 +678,40 @@ impl ShapedParagraph {
                 .first()
                 .filter(|glyph| glyph.flags & ATOMIC != 0)
                 .and_then(|glyph| atomics.get(usize::from(glyph.id)));
-            let (item_above, item_below) = match atomic {
-                Some(atomic) => (
-                    atomic.ascent + style.baseline_shift,
-                    atomic.descent - style.baseline_shift,
+            let (raw_above, raw_below) = match atomic {
+                Some(atomic) => (atomic.ascent, atomic.descent),
+                None => vertical_extent(
+                    fonts,
+                    Some(span.font),
+                    RunStyle {
+                        baseline_shift: 0.0,
+                        ..style
+                    },
                 ),
-                None => vertical_extent(fonts, Some(span.font), style),
             };
-            above = f32::max(above, item_above);
-            below = f32::max(below, item_below);
+            let shift = style
+                .align
+                .shift(raw_above, raw_below, style.baseline_shift);
+            match style.align {
+                align if align.is_edge() => {
+                    match groups.iter_mut().find(|group| group.0 == align) {
+                        Some(group) => {
+                            group.1 = group.1.max(raw_above + shift);
+                            group.2 = group.2.max(raw_below - shift);
+                        }
+                        None => groups.push((align, raw_above + shift, raw_below - shift)),
+                    }
+                    let group = groups
+                        .iter()
+                        .position(|group| group.0 == align)
+                        .unwrap_or_default();
+                    edges.push((lines.items.len(), group, shift));
+                }
+                _ => {
+                    above = f32::max(above, raw_above + shift);
+                    below = f32::max(below, raw_below - shift);
+                }
+            }
             let metrics = fonts.metrics(span.font);
             let scale = style.size / metrics.units_per_em;
             let start = pen;
@@ -671,9 +737,32 @@ impl ShapedParagraph {
                 width: pen - start,
                 ascent: atomic.map_or(metrics.ascent * scale, |atomic| atomic.ascent),
                 descent: atomic.map_or(metrics.descent * scale, |atomic| atomic.descent),
-                baseline_shift: style.baseline_shift,
+                baseline_shift: shift,
                 glyphs: glyph_start..lines.glyphs.len(),
             });
+        }
+        for &(align, group_above, group_below) in &groups {
+            let grow = group_above + group_below - (above + below);
+            if grow > 0.0 {
+                if align.is_top() {
+                    below += grow;
+                } else {
+                    above += grow;
+                }
+            }
+        }
+        for (index, group, shift) in edges {
+            let Some(&(align, group_above, group_below)) = groups.get(group) else {
+                continue;
+            };
+            if let Some(item) = lines.items.get_mut(index) {
+                item.baseline_shift = shift
+                    + if align.is_top() {
+                        above - group_above
+                    } else {
+                        group_below - below
+                    };
+            }
         }
         let top = lines.height;
         lines.lines.push(Line {
@@ -739,5 +828,29 @@ fn vertical_extent(fonts: &mut Fonts, font: Option<FontId>, style: RunStyle) -> 
     (
         ascent + half_leading + style.baseline_shift,
         descent + half_leading - style.baseline_shift,
+    )
+}
+
+pub fn inline_extent(fonts: &mut Fonts, style: RunStyle) -> (f32, f32) {
+    vertical_extent(
+        fonts,
+        None,
+        RunStyle {
+            baseline_shift: 0.0,
+            ..style
+        },
+    )
+}
+
+pub fn content_metrics(fonts: &mut Fonts, style: RunStyle) -> (f32, f32, f32) {
+    let Some(font) = fonts.primary(style.font) else {
+        return (style.size * 0.8, style.size * 0.2, style.size * 0.5);
+    };
+    let metrics = fonts.metrics(font);
+    let scale = style.size / metrics.units_per_em;
+    (
+        metrics.ascent * scale,
+        metrics.descent * scale,
+        metrics.x_height * scale,
     )
 }

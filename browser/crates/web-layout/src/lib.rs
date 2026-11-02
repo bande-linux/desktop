@@ -1,4 +1,5 @@
 mod box_tree;
+mod collapse;
 mod flex;
 mod flow;
 mod fragment;

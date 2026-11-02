@@ -79,7 +79,7 @@ sudo apt install bande-desktop
 default apps and compressed swap in memory; with `--no-install-recommends` only the desktop, a
 login and sound. Pick the **Bande** session at login. Updates arrive with `sudo apt upgrade` or
 Settings ▸ Software Update. The archive is signed with the key
-`6287 DE66 4599 29AA 1C01  E146 495A 6C19 8264 7E05`.
+`04FC EAF9 B799 98D9 828C  256B 7963 AC44 9BD9 992E`.
 
 ## Documentation
 

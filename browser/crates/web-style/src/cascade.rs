@@ -24,6 +24,7 @@ pub struct Restyle {
 }
 
 pub struct Styles {
+    by_value: HashMap<u64, Vec<u32>>,
     rule_sets: HashMap<(u32, Box<[u32]>), u32>,
     per_node: Vec<u32>,
     pool: Vec<ComputedStyle>,
@@ -72,6 +73,7 @@ impl Styles {
         };
         let initial_reset = root.reset.clone();
         let mut styles = Styles {
+            by_value: HashMap::new(),
             rule_sets: HashMap::new(),
             per_node: vec![UNSTYLED; document.len()],
             pool: vec![root],
@@ -347,9 +349,46 @@ impl Styles {
         {
             return parent;
         }
+        let key = fingerprint(&style);
+        let candidates = self.by_value.entry(key).or_default();
+        for &index in candidates.iter() {
+            if self.pool.get(index as usize) == Some(&style) {
+                return index;
+            }
+        }
         self.pool.push(style);
-        (self.pool.len() - 1) as u32
+        let index = (self.pool.len() - 1) as u32;
+        candidates.push(index);
+        index
     }
+}
+
+fn fingerprint(style: &ComputedStyle) -> u64 {
+    let inherited = &style.inherited;
+    let reset = &style.reset;
+    let words = [
+        inherited.font_size.to_bits(),
+        u32::from(inherited.font_weight),
+        u32::from_le_bytes([
+            inherited.color.r,
+            inherited.color.g,
+            inherited.color.b,
+            inherited.color.a,
+        ]),
+        reset.display as u32,
+        reset.margin.top.map_or(0, |margin| margin.px.to_bits()),
+        reset.padding.left.px.to_bits(),
+        reset.border.top.to_bits(),
+        u32::from_le_bytes([
+            reset.background_color.r,
+            reset.background_color.g,
+            reset.background_color.b,
+            reset.background_color.a,
+        ]),
+    ];
+    words.iter().fold(0xcbf2_9ce4_8422_2325u64, |hash, &word| {
+        (hash ^ u64::from(word)).wrapping_mul(0x0100_0000_01b3)
+    })
 }
 
 fn element_descendants(document: &Document, root: NodeId) -> Vec<NodeId> {

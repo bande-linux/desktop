@@ -18,12 +18,38 @@ pub struct BoxFragment {
     pub node: Option<NodeId>,
     pub rect: Rect,
     pub background: Color,
+    pub extra: Option<Box<Extra>>,
+    pub children: Vec<Fragment>,
+}
+
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct Extra {
     pub border: Sides,
     pub border_color: Sides<Color>,
     pub layer: Layer,
     pub image: Option<Arc<str>>,
     pub background_image: Option<Arc<str>>,
-    pub children: Vec<Fragment>,
+}
+
+impl BoxFragment {
+    pub fn layer(&self) -> Layer {
+        self.extra.as_ref().map_or(Layer::FLOW, |extra| extra.layer)
+    }
+
+    pub fn border(&self) -> (Sides, Sides<Color>) {
+        self.extra.as_ref().map_or_else(
+            || (Sides::default(), Sides::default()),
+            |extra| (extra.border, extra.border_color),
+        )
+    }
+
+    pub fn image(&self) -> Option<&Arc<str>> {
+        self.extra.as_ref()?.image.as_ref()
+    }
+
+    pub fn background_image(&self) -> Option<&Arc<str>> {
+        self.extra.as_ref()?.background_image.as_ref()
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -86,7 +112,7 @@ impl FragmentTree {
 fn extent(fragment: &BoxFragment, y: f32) -> f32 {
     let top = y + fragment.rect.y;
     let own = top + fragment.rect.height;
-    if fragment.layer.clips {
+    if fragment.layer().clips {
         return own;
     }
     fragment

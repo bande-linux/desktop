@@ -110,10 +110,10 @@ elements, with its own stylesheets) and "Cat" (13.4k, without), at 1000 px:
 |---|---|---|
 | Node core (`web-dom`) | ≤ 64 B | 40 B |
 | DOM with attributes, text and the document's atoms | ≤ 420 B | 293–400 B |
-| Computed styles (shared, 4 B index per node) | ≤ 40 B | 10–34 B |
-| Box tree with shaped text | ≤ 450 B | 331–413 B |
-| Fragment tree | ≤ 300 B | 225–288 B |
-| Display list | ≤ 280 B | 148–264 B |
+| Computed styles (shared, 4 B index per node) | ≤ 40 B | 13–16 B |
+| Box tree with shaped text | ≤ 450 B | 374–448 B |
+| Fragment tree | ≤ 300 B | 220–262 B |
+| Display list | ≤ 280 B | 185–264 B |
 
 Shaped glyphs are 20 B and laid-out glyphs 8 B (a `u16` id, the y offset in 1/16 px, x); line
 breaks and spaces are flags on the shaped glyphs, so no paragraph text is kept after shaping. Shape
@@ -123,7 +123,7 @@ stages on its generated article.
 Styles are shared three ways: siblings with the same name and classes reuse a style after
 revalidating the selectors that depend on attributes, position or siblings; elements with the same
 parent style and the same matched rules reuse one computed style (the Rust article's 9.7k elements
-need 861 styles); and inherited and reset groups are shared `Arc`s. Its 220 KB of CSS styles in
+need 861 styles); equal computed styles are interned by value; and inherited and reset groups are shared `Arc`s. Fragments keep borders, layers and images in an optional side record, so a plain box is 56 B. Its 220 KB of CSS styles in
 about 12 ms.
 
 ## `web-css` for the cascade

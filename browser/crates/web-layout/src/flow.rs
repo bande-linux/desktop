@@ -11,7 +11,7 @@ use crate::box_tree::{
     BlockBox, BoxTree, Contents, InlineContent, InlineFrame, InlineItem, ItemKind, is_rtl,
     run_style,
 };
-use crate::fragment::{BoxFragment, Fragment, FragmentTree, Layer, Rect, TextFragment};
+use crate::fragment::{BoxFragment, Extra, Fragment, FragmentTree, Layer, Rect, TextFragment};
 
 pub(crate) type ImageSizes<'a> = &'a dyn Fn(&str) -> Option<(f32, f32)>;
 
@@ -211,11 +211,7 @@ impl BoxTree {
                 node: None,
                 rect: Rect::default(),
                 background: Color::TRANSPARENT,
-                border: Sides::default(),
-                border_color: Sides::all(Color::TRANSPARENT),
-                layer: Layer::FLOW,
-                image: None,
-                background_image: None,
+                extra: None,
                 children: Vec::new(),
             },
         };
@@ -236,6 +232,25 @@ pub(crate) fn establishes_bfc(style: &ComputedStyle) -> bool {
                 | web_style::Display::Flex
                 | web_style::Display::InlineFlex
         )
+}
+
+fn extra(
+    border: Sides,
+    border_color: Sides<Color>,
+    layer: Layer,
+    image: Option<std::sync::Arc<str>>,
+    background_image: Option<std::sync::Arc<str>>,
+) -> Option<Box<Extra>> {
+    let bordered = border != Sides::default();
+    (bordered || layer != Layer::FLOW || image.is_some() || background_image.is_some()).then(|| {
+        Box::new(Extra {
+            border,
+            border_color,
+            layer,
+            image,
+            background_image,
+        })
+    })
 }
 
 fn layer(style: &ComputedStyle) -> Layer {
@@ -659,14 +674,16 @@ impl<'a, 'b> Flow<'a, 'b> {
                     height,
                 },
                 background: reset.background_color,
-                border,
-                border_color: reset.border_color,
-                layer: layer(style),
-                image: match &block.contents {
-                    Contents::Replaced(source) => source.clone(),
-                    _ => None,
-                },
-                background_image: reset.background_image.clone(),
+                extra: extra(
+                    border,
+                    reset.border_color,
+                    layer(style),
+                    match &block.contents {
+                        Contents::Replaced(source) => source.clone(),
+                        _ => None,
+                    },
+                    reset.background_image.clone(),
+                ),
                 children,
             },
             top,
@@ -992,16 +1009,18 @@ impl<'a, 'b> Flow<'a, 'b> {
                 height: (bottom - top).max(0.0),
             },
             background: reset.background_color,
-            border: Sides {
-                top: reset.border.top,
-                right: if extent.end { right_border } else { 0.0 },
-                bottom: reset.border.bottom,
-                left: if extent.start { left_border } else { 0.0 },
-            },
-            border_color: reset.border_color,
-            layer: Layer::FLOW,
-            image: None,
-            background_image: None,
+            extra: extra(
+                Sides {
+                    top: reset.border.top,
+                    right: if extent.end { right_border } else { 0.0 },
+                    bottom: reset.border.bottom,
+                    left: if extent.start { left_border } else { 0.0 },
+                },
+                reset.border_color,
+                Layer::FLOW,
+                None,
+                None,
+            ),
             children: Vec::new(),
         }
     }

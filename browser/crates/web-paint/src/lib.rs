@@ -185,7 +185,7 @@ impl Builder<'_> {
             y: y + fragment.rect.y,
             ..fragment.rect
         };
-        let layer = fragment.layer;
+        let layer = fragment.layer();
         let faded = layer.opacity < 1.0;
         if faded {
             self.items.push(Item::PushOpacity {
@@ -193,7 +193,7 @@ impl Builder<'_> {
             });
         }
         self.fill(rect, fragment.background);
-        if let Some(source) = &fragment.background_image
+        if let Some(source) = fragment.background_image()
             && let Some(image) = self.image(source)
             && let Some(data) = self.image_list.get(image as usize)
         {
@@ -207,8 +207,7 @@ impl Builder<'_> {
                 image,
             });
         }
-        let border = fragment.border;
-        let colors = fragment.border_color;
+        let (border, colors) = fragment.border();
         let sides = [
             (
                 Rect {
@@ -244,7 +243,7 @@ impl Builder<'_> {
         for (side, color) in sides {
             self.fill(side, color);
         }
-        if let Some(source) = &fragment.image
+        if let Some(source) = fragment.image()
             && let Some(image) = self.image(source)
         {
             let inner = Rect {
@@ -265,7 +264,7 @@ impl Builder<'_> {
         }
         for child in &fragment.children {
             match child {
-                Fragment::Box(child) => match child.layer.z {
+                Fragment::Box(child) => match child.layer().z {
                     Some(z) => deferred.push(Deferred {
                         z,
                         fragment: child,

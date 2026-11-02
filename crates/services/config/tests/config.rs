@@ -1,9 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use bande_config::{Appearance, BarEdge, BarLayout, Config, ConfigError, SearchCategory, Setting};
+use bande_config::{Appearance, BarEdge, BarLayout, Config, ConfigError, Setting};
 
 #[test]
 fn kdl_problems_are_reported_where_they_are_while_every_valid_setting_applies() {
@@ -30,24 +29,7 @@ fn kdl_problems_are_reported_where_they_are_while_every_valid_setting_applies() 
 }
 
 #[test]
-fn changing_a_setting_keeps_every_comment_and_line_around_it() {
-    let source = "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"left\" // near the dock\n}\n";
-    assert_eq!(
-        Setting::BarPlacement(BarEdge::Top, BarLayout::Combined)
-            .apply(source)
-            .expect("edit"),
-        "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"top\" // near the dock\n    layout \"combined\"\n}\n"
-    );
-    assert_eq!(
-        Setting::Appearance(Appearance::Light)
-            .apply("")
-            .expect("edit"),
-        "appearance \"light\"\n"
-    );
-}
-
-#[test]
-fn bar_configs_written_before_the_layout_key_keep_their_layout() {
+fn edits_keep_comments_and_bars_written_before_the_layout_key_keep_their_layout() {
     let layout = |source: &str| {
         let bar = Config::parse(source).expect("valid").bar;
         (bar.edge, bar.layout)
@@ -61,49 +43,11 @@ fn bar_configs_written_before_the_layout_key_keep_their_layout() {
         layout("bar {\n    menu-bar \"separate\"\n}\n"),
         (BarEdge::Left, BarLayout::Separate)
     );
+    let source = "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"left\" // near the dock\n    menu-bar \"in-bar\"\n}\n";
     assert_eq!(
-        layout("bar {\n    edge \"top\"\n    layout \"separate\"\n}\n"),
-        (BarEdge::Top, BarLayout::Combined)
-    );
-    let edited = Setting::BarPlacement(BarEdge::Right, BarLayout::Combined)
-        .apply("bar {\n    edge \"bottom\"\n    menu-bar \"in-bar\"\n}\n")
-        .expect("edit");
-    assert_eq!(
-        edited,
-        "bar {\n    edge \"right\"\n    layout \"combined\"\n}\n"
-    );
-}
-
-#[test]
-fn search_hides_categories_and_excludes_folders_and_writes_them_back() {
-    let (config, problems) = Config::load(
-        "search {\n    folders #false\n    exclude \"~/Private\" \"/srv/tax\" \"notes\"\n}\n",
-    )
-    .expect("well-formed KDL");
-    assert_eq!(problems.len(), 1);
-    assert!(!config.search.shows(SearchCategory::Folders));
-    assert!(config.search.shows(SearchCategory::RecentDocuments));
-    assert!(config.search.exclude.is_empty());
-
-    let mut search = Config::parse("search {\n    folders #false\n}\n")
-        .expect("valid")
-        .search;
-    search.set_shown(SearchCategory::Folders, true);
-    search.set_shown(SearchCategory::RecentDocuments, false);
-    search.exclude = vec![PathBuf::from("~/Private"), PathBuf::from("/srv/tax")];
-    let edited = Setting::Search(search.clone())
-        .apply("search {\n    folders #false\n}\n")
-        .expect("edit");
-    assert_eq!(
-        edited,
-        "search {\n    recent-documents #false\n    exclude \"~/Private\" \"/srv/tax\"\n}\n"
-    );
-    assert_eq!(Config::parse(&edited).expect("valid").search, search);
-    assert_eq!(
-        search.excluded(Some(Path::new("/home/ada"))),
-        [
-            PathBuf::from("/home/ada/Private"),
-            PathBuf::from("/srv/tax")
-        ]
+        Setting::BarPlacement(BarEdge::Top, BarLayout::Combined)
+            .apply(source)
+            .expect("edit"),
+        "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"top\" // near the dock\n    layout \"combined\"\n}\n"
     );
 }

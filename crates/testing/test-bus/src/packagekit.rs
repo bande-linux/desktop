@@ -22,6 +22,24 @@ pub struct Call {
     pub args: Vec<String>,
 }
 
+impl Call {
+    pub fn update(flags: u64, ids: &[&str]) -> Self {
+        Self {
+            method: "UpdatePackages".to_owned(),
+            flags,
+            args: ids.iter().map(|id| (*id).to_owned()).collect(),
+        }
+    }
+
+    pub fn reboot() -> Self {
+        Self {
+            method: "Trigger".to_owned(),
+            flags: 0,
+            args: vec!["reboot".to_owned()],
+        }
+    }
+}
+
 #[derive(Default)]
 struct World {
     updates: Vec<String>,

@@ -97,3 +97,20 @@ same pages, profile-free, reported in release notes, not stored in the repo.
 | No window open | ≤ 6 MB, helpers exited |
 | Speedometer 3 | phase 2–3: tracked only; phase 5: ≥ Firefox, then ≥ Chromium |
 | JetStream 2 | phase 5, with our JIT: ≥ 80% of Chromium |
+
+## `web-css` selectors for the matcher
+
+`SelectorParser::parse_list` turns a prelude into a `SelectorList` of `Selector`s. Each selector's
+`components` run in matching order: the subject compound first, then `Combinator(c)` and the
+compound to its left, and so on. Inside a compound every component must match.
+- Names are `Atom`s from the document's `AtomTable`. `LocalName` carries the name as written and
+  its ASCII lowercase (HTML elements in HTML documents compare `lower`); attributes likewise.
+- `Namespace(Any)` alone stands for `*`. `Namespace(Url)` or `Namespace(None)` precede the local
+  name when a namespace applies.
+- `Is`, `Where`, `Not` hold lists; `&` in nested rules is already replaced by `Is(parent list)`
+  (or `:scope` at the top level). `Has` holds relative selectors whose last components are
+  `Combinator(c), RelativeAnchor`; the anchor matches only the `:has` element.
+- `Nth` has `a`, `b` and an optional `of` list; `NthSelector::matches_index` takes the 1-based index.
+- `specificity` is packed `a << 20 | b << 10 | c`; `pseudo_element` is the trailing pseudo-element
+  (`WebkitUnknown` never matches); `ancestor_atoms` are up to four ids, classes and lowercase
+  local names from ancestor compounds, for the bloom filter.

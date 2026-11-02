@@ -17,6 +17,8 @@ web-style = { path = "crates/web-style" }
 web-text = { path = "crates/web-text" }
 web-layout = { path = "crates/web-layout" }
 web-paint = { path = "crates/web-paint" }
+web-css = { path = "crates/web-css" }
+hashbrown = { version = "0.16", default-features = false }
 web-net = { path = "crates/web-net" }
 brotli-decompressor = "5"
 encoding_rs = "0.8"

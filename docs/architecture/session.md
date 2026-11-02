@@ -217,6 +217,15 @@ graph LR
 - PipeWire and WirePlumber, with per-device volume memory (headphone volume is restored when
   they are plugged in) and media keys with an on-screen level. `crates/libs/audio` is the
   client library; the compositor forwards volume keys to the shell over `bande_shell_v1`.
+- Every device list (Settings ▸ Sound, Control Center, the sound menu) leaves out a device whose
+  port is unavailable, judged as WirePlumber's `haveAvailableRoutes` does and followed live
+  through the card's `Route` and `EnumRoute` params, so Headphones and Headset Microphone appear
+  only while something is plugged into the jack. As on a Mac, plugging in makes the jack the
+  default (`bande-sound` does it, once per session); a later choice holds until the next
+  plug-in, and unplugging falls back to WirePlumber's previous choice, the speaker.
+  Filter-chain streams (`node.link-group`, such as Asahi's speaker DSP output) are never listed
+  as apps, and Asahi's `hide-parent` hides the raw speaker node from clients. Settings ▸ Sound
+  shows a Left–Right balance for a stereo (FL, FR) output, set through its channel volumes.
 - The display and keyboard brightness keys go the same way (`brightness_key`, also while
   locked): Control Center moves the display backlight or the `kbd_backlight` LED one of 16
   steps (a quarter step with Option and Shift) through logind's `Session.SetBrightness` and

@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 
-use graph::{Command, Shared, State};
+use graph::{Change, Command, Shared, State};
 pub use level::{Level, VolumeKey, meter_level};
 use pipewire as pw;
 pub use stream::EFFECT_RATE;
@@ -54,6 +54,7 @@ pub struct Device {
     pub description: String,
     pub direction: Direction,
     pub level: Level,
+    pub balance: Option<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -94,17 +95,19 @@ impl Snapshot {
         let mut devices: Vec<Device> = state
             .nodes
             .iter()
+            .filter(|(_, node)| state.available(node))
             .filter_map(|(id, node)| {
-                let (channels, muted) = state.levels(node);
+                let volumes = state.levels(node);
                 Some(Device {
                     id: *id,
                     name: node.name.clone(),
                     description: node.description.clone(),
                     direction: node.direction?,
                     level: Level {
-                        volume: level::from_channel(channels.iter().copied().fold(0.0, f32::max)),
-                        muted,
+                        volume: level::loudest(&volumes.channels),
+                        muted: volumes.muted,
                     },
+                    balance: level::balance(volumes),
                 })
             })
             .filter(|device| !device.name.is_empty())
@@ -122,7 +125,7 @@ impl Snapshot {
             .nodes
             .iter()
             .filter(|(_, node)| {
-                node.app.is_some() && node.sense.is_none() && !node.channels.is_empty()
+                node.app.is_some() && node.sense.is_none() && !node.volumes.channels.is_empty()
             })
             .collect();
         streams.sort_by_key(|(id, _)| **id);
@@ -131,8 +134,8 @@ impl Snapshot {
             let Some(app) = &node.app else {
                 continue;
             };
-            let (channels, muted) = state.levels(node);
-            let volume = level::from_channel(channels.iter().copied().fold(0.0, f32::max));
+            let volumes = state.levels(node);
+            let (volume, muted) = (level::loudest(&volumes.channels), volumes.muted);
             match apps.iter_mut().find(|known| known.name == app.name) {
                 Some(known) => {
                     known.ids.push(*id);
@@ -288,32 +291,34 @@ impl Audio {
         })
     }
 
+    pub fn follow_jacks(&self) -> Result<(), Error> {
+        self.commands
+            .send(Command::FollowJacks)
+            .map_err(|_| Error::Disconnected)
+    }
+
+    fn change(&self, id: u32, change: Change) -> Result<(), Error> {
+        self.send(|done| Command::SetLevel { id, change, done })
+    }
+
     pub fn set_level(&self, device: &Device, level: Level) -> Result<(), Error> {
-        self.send(|done| Command::SetLevel {
-            id: device.id,
-            volume: Some(level.volume),
-            muted: Some(level.muted),
-            done,
-        })
+        self.change(
+            device.id,
+            Change::Volume(Some(level.volume), Some(level.muted)),
+        )
     }
 
     pub fn set_muted(&self, device: &Device, muted: bool) -> Result<(), Error> {
-        self.send(|done| Command::SetLevel {
-            id: device.id,
-            volume: None,
-            muted: Some(muted),
-            done,
-        })
+        self.change(device.id, Change::Volume(None, Some(muted)))
+    }
+
+    pub fn set_balance(&self, device: &Device, balance: f32) -> Result<(), Error> {
+        self.change(device.id, Change::Balance(balance))
     }
 
     pub fn set_app_level(&self, app: &AppStream, level: Level) -> Result<(), Error> {
         for id in &app.ids {
-            self.send(|done| Command::SetLevel {
-                id: *id,
-                volume: Some(level.volume),
-                muted: Some(level.muted),
-                done,
-            })?;
+            self.change(*id, Change::Volume(Some(level.volume), Some(level.muted)))?;
         }
         Ok(())
     }

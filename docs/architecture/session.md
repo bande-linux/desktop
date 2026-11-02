@@ -632,8 +632,11 @@ refreshes the cache when it is older than an hour. An apt "dpkg was interrupted"
 a logind `shutdown:idle` block inhibitor (not sleep), and Settings shows only the progress. There
 is no first-run assistant yet.
 
-Per-user Flatpak apps (Software turns Flathub on with `flatpak remote-add --user`) are a fourth
-class: `bande_packages::flatpak` drives the `flatpak` command line on worker threads. Software
+Per-user Flatpak apps are a fourth class, dormant by default: no Bande package depends on or
+recommends `flatpak`, and every Flatpak path treats a missing `flatpak` command as no Flatpak
+apps, so Software Update shows nothing about them. When the user installs `flatpak` with apt,
+Software (which looks for the command at launch) offers Settings… › Get apps from Flathub, which
+runs `flatpak remote-add --user`. `bande_packages::flatpak` drives the `flatpak` command line on worker threads. Software
 Update lists `flatpak remote-ls --user --updates` beside the Debian updates, refreshes their
 AppStream with the package lists and installs them first with `flatpak update --user`, without a
 password or a restart. Their desktop entries and icons come from
@@ -645,7 +648,7 @@ last opened.
 
 **Automatic updates** (`automatic-updates #true`, off by default, "Automatically keep this computer
 up to date"): the daily timer's run downloads every update in the background (PackageKit's
-`ONLY_DOWNLOAD`, `flatpak update --no-deploy`), waits for the user to be idle for five minutes
+`ONLY_DOWNLOAD`, and `flatpak update --no-deploy` when flatpak is installed), waits for the user to be idle for five minutes
 (`ext-idle-notify-v1`, which honours idle inhibitors; no polling), checks again and installs the
 live and Flatpak updates when polkit lets the user update without a password; if those would pull
 in an offline package they wait as well. Boot and offline updates, and live ones that need a

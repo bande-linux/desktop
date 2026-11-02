@@ -22,8 +22,8 @@ pub use login_picture::{
 };
 pub use report::{EDIT_ACTION, ErrorNotifier};
 pub use service::{
-    ArrangedDisplay, BUS_NAME, ConfigService, FocusScheduleValue, NightLightValue, OBJECT_PATH,
-    ServiceError,
+    ArrangedDisplay, BUS_NAME, ConfigService, FocusScheduleValue, HotCornersValue, NightLightValue,
+    OBJECT_PATH, ServiceError,
 };
 pub use store::{ConfigStore, Loaded, ReloadError};
 
@@ -705,6 +705,49 @@ impl ClockTime {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CornerAction {
+    #[default]
+    Nothing,
+    MissionControl,
+    AppWindows,
+    Desktop,
+    NotificationCenter,
+    Search,
+    LockScreen,
+}
+
+impl CornerAction {
+    pub const ALL: [Self; 7] = [
+        Self::Nothing,
+        Self::MissionControl,
+        Self::AppWindows,
+        Self::Desktop,
+        Self::NotificationCenter,
+        Self::Search,
+        Self::LockScreen,
+    ];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Nothing => "none",
+            Self::MissionControl => "mission-control",
+            Self::AppWindows => "app-windows",
+            Self::Desktop => "desktop",
+            Self::NotificationCenter => "notification-center",
+            Self::Search => "search",
+            Self::LockScreen => "lock-screen",
+        }
+    }
+}
+
+pub const HOT_CORNERS: [&str; 4] = ["top-left", "top-right", "bottom-left", "bottom-right"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct HotCorners {
+    pub actions: [CornerAction; 4],
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NightSchedule {
     Sunset,
@@ -862,6 +905,7 @@ pub struct Config {
     pub wallpaper: Wallpaper,
     pub night_light: NightLight,
     pub focus_schedule: FocusSchedule,
+    pub hot_corners: HotCorners,
     pub search: Search,
     pub displays: BTreeMap<String, DisplaySettings>,
     pub arrangements: Vec<Vec<Placement>>,
@@ -905,6 +949,7 @@ impl Default for Config {
             wallpaper: Wallpaper::default(),
             night_light: NightLight::default(),
             focus_schedule: FocusSchedule::default(),
+            hot_corners: HotCorners::default(),
             search: Search::default(),
             displays: BTreeMap::new(),
             arrangements: Vec::new(),
@@ -1079,6 +1124,10 @@ impl Parser<'_> {
                 }
                 "do-not-disturb" => {
                     config.focus_schedule = self.focus_schedule(node);
+                    Ok(())
+                }
+                "hot-corners" => {
+                    config.hot_corners = self.hot_corners(node);
                     Ok(())
                 }
                 "search" => {
@@ -1325,6 +1374,20 @@ impl Parser<'_> {
             idle.suspend = Suspend::After(idle.lock_after);
         }
         idle
+    }
+
+    fn hot_corners(&self, node: &KdlNode) -> HotCorners {
+        let mut corners = HotCorners::default();
+        let choices = CornerAction::ALL.map(|action| (action.keyword(), action));
+        self.section(node, |child| {
+            let name = child.name().value();
+            let Some(index) = HOT_CORNERS.iter().position(|corner| *corner == name) else {
+                return Err(self.unknown_child("hot-corners", child));
+            };
+            corners.actions[index] = self.keyword(child, &choices)?;
+            Ok(())
+        });
+        corners
     }
 
     fn focus_schedule(&self, node: &KdlNode) -> FocusSchedule {

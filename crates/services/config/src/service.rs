@@ -15,16 +15,18 @@ use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
     ACCENTS, Accessibility, AlertSound, Appearance, BarEdge, BarLayout, CURSOR_SIZE_RANGE,
-    CapsLock, ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, Dragging,
-    FocusSchedule, InputSource, LidOnPower, Loaded, NIGHT_LIGHT_WARMTH_RANGE, NightLight,
-    NightSchedule, Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory,
-    SecondaryClick, Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE,
-    accent_keyword, bar_placement, is_wallpaper_path, read_system_input_sources,
+    CapsLock, ClockFormat, ClockTime, Config, ConfigStore, CornerAction, DisplaySettings, Dragging,
+    FocusSchedule, HotCorners, InputSource, LidOnPower, Loaded, NIGHT_LIGHT_WARMTH_RANGE,
+    NightLight, NightSchedule, Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod,
+    SearchCategory, SecondaryClick, Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit,
+    WallpaperVariant, ZOOM_RANGE, accent_keyword, bar_placement, is_wallpaper_path,
+    read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
 pub type NightLightValue = (bool, String, String, String, u32);
 pub type FocusScheduleValue = (bool, String, String);
+pub type HotCornersValue = (String, String, String, String);
 
 fn clock_time(text: &str) -> zbus::fdo::Result<ClockTime> {
     ClockTime::parse(text)
@@ -326,6 +328,9 @@ fn publish_changes(
         }
         if before.wallpaper.fit != after.wallpaper.fit {
             let _ = guard.wallpaper_fit_changed(emitter).await;
+        }
+        if before.hot_corners != after.hot_corners {
+            let _ = guard.hot_corners_changed(emitter).await;
         }
         if before.focus_schedule != after.focus_schedule {
             let _ = guard.focus_schedule_changed(emitter).await;
@@ -1149,6 +1154,31 @@ impl ConfigInterface {
             &value,
         )?;
         self.write(&Setting::WallpaperFit(fit))
+    }
+
+    #[zbus(property)]
+    fn hot_corners(&self) -> HotCornersValue {
+        let [top_left, top_right, bottom_left, bottom_right] = self
+            .store
+            .current()
+            .hot_corners
+            .actions
+            .map(|action| action.keyword().to_owned());
+        (top_left, top_right, bottom_left, bottom_right)
+    }
+
+    #[zbus(property)]
+    fn set_hot_corners(&self, value: HotCornersValue) -> zbus::fdo::Result<()> {
+        let action = |name: &str| keyword(&CornerAction::ALL, CornerAction::keyword, name);
+        let corners = HotCorners {
+            actions: [
+                action(&value.0)?,
+                action(&value.1)?,
+                action(&value.2)?,
+                action(&value.3)?,
+            ],
+        };
+        self.write(&Setting::HotCorners(corners))
     }
 
     #[zbus(property)]

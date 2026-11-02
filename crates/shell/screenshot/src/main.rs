@@ -1,6 +1,7 @@
 mod markup_app;
 
 use std::cell::Cell;
+use std::collections::VecDeque;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -14,7 +15,7 @@ use bande_fs::Trash;
 use bande_inbox::{Inbox, Outbox};
 use bande_screenshot::area::{AreaOutcome, AreaSelection, Region, crop};
 use bande_screenshot::color::ColorPicker;
-use bande_screenshot::engine::{Engine, EngineEvent, Shot, Source};
+use bande_screenshot::engine::{Display, Engine, EngineEvent, Frame, Shot, Source, WindowInfo};
 use bande_screenshot::indicator::{Activity, Indicator};
 use bande_screenshot::options::{CaptureOptions, Destination, TIMERS};
 use bande_screenshot::palette::{Chosen, Mode as PaletteMode, Palette, PaletteAction};
@@ -73,6 +74,32 @@ enum Mode {
     Notice(Rc<Cell<bool>>),
 }
 
+enum Captured {
+    Layout(Vec<Display>, Vec<WindowInfo>),
+    Shot(Option<Shot>),
+}
+
+enum Awaiting {
+    Area {
+        window_mode: bool,
+        purpose: Purpose,
+        record: bool,
+    },
+    Screens,
+    Shot(Then),
+}
+
+enum Then {
+    Deliver(Target),
+    Screens {
+        left: VecDeque<String>,
+        images: Vec<Snapshot>,
+    },
+    Still(PathBuf, Target),
+    Portal(Target, Sender<Option<PathBuf>>),
+    Color(Sender<Option<(f64, f64, f64)>>),
+}
+
 struct Recorder {
     recording: Recording,
     target: Target,
@@ -90,6 +117,9 @@ struct Screenshots {
     engine: Option<Engine>,
     casting: Option<Arc<Casting>>,
     events: Inbox<EngineEvent>,
+    captured: Inbox<(u64, Captured)>,
+    awaiting: Option<(u64, Awaiting)>,
+    next_ticket: u64,
     requests: Inbox<UiRequest>,
     outbox: Outbox<UiRequest>,
     mode: Mode,
@@ -117,6 +147,24 @@ fn scaled(region: Region, scale: f64) -> Region {
         width: right - at(region.x),
         height: bottom - at(region.y),
     }
+}
+
+fn frames(displays: &[Display], windows: Vec<WindowInfo>) -> Vec<(String, Frame)> {
+    let (left, top) = displays.first().map_or((0, 0), |main| (main.x, main.y));
+    windows
+        .into_iter()
+        .filter_map(|window| {
+            let frame = window.frame?;
+            Some((
+                window.identifier,
+                Frame {
+                    x: frame.x - left,
+                    y: frame.y - top,
+                    ..frame
+                },
+            ))
+        })
+        .collect()
 }
 
 fn new_ui(window: &Window) -> Ui {
@@ -208,6 +256,7 @@ impl Screenshots {
     }
 
     fn cancel(&mut self, window: &mut Window) {
+        self.awaiting = None;
         match std::mem::replace(&mut self.mode, Mode::Idle) {
             Mode::Area {
                 purpose: Purpose::Portal(reply),
@@ -237,45 +286,202 @@ impl Screenshots {
         self.ui.present_dialog(dialog);
     }
 
-    fn windows(&self) -> Vec<(String, bande_screenshot::engine::Frame)> {
-        let Some(engine) = &self.engine else {
-            return Vec::new();
-        };
-        let (left, top) = engine
-            .displays()
-            .first()
-            .map_or((0, 0), |main| (main.x, main.y));
-        engine
-            .windows()
-            .into_iter()
-            .filter_map(|window| {
-                let frame = window.frame?;
-                Some((
-                    window.identifier,
-                    bande_screenshot::engine::Frame {
-                        x: frame.x - left,
-                        y: frame.y - top,
-                        ..frame
-                    },
-                ))
-            })
-            .collect()
+    fn wait(&mut self, awaiting: Awaiting) -> Option<Arc<dyn Fn(Captured) + Send + Sync>> {
+        self.engine.as_ref()?;
+        self.next_ticket += 1;
+        let ticket = self.next_ticket;
+        self.awaiting = Some((ticket, awaiting));
+        let outbox = self.captured.outbox();
+        Some(Arc::new(move |captured| {
+            outbox.send((ticket, captured));
+        }))
     }
 
-    fn shoot(&mut self, window: &mut Window, target: &Target) -> Option<Snapshot> {
+    fn ask_layout(&mut self, awaiting: Awaiting) -> bool {
+        let Some(reply) = self.wait(awaiting) else {
+            return false;
+        };
+        if let Some(engine) = &self.engine {
+            engine.layout_then(Arc::new(move |(displays, windows)| {
+                reply(Captured::Layout(displays, windows));
+            }));
+        }
+        true
+    }
+
+    fn shoot(&mut self, window: &mut Window, source: Source, cursor: bool, then: Then) -> bool {
         self.hide_overlay(window);
-        let engine = self.engine.as_ref()?;
+        let Some(reply) = self.wait(Awaiting::Shot(then)) else {
+            return false;
+        };
+        if let Some(engine) = &self.engine {
+            engine.shoot_then(
+                source,
+                cursor,
+                Arc::new(move |shot| reply(Captured::Shot(shot))),
+            );
+        }
+        true
+    }
+
+    fn shoot_target(&mut self, window: &mut Window, target: &Target, then: Then) -> bool {
+        let source = match target {
+            Target::Window(identifier) => Source::Window(identifier.clone()),
+            _ => Source::Screen,
+        };
         let pointer = self.options.show_pointer;
+        self.shoot(window, source, pointer, then)
+    }
+
+    fn select_area(
+        &mut self,
+        window: &mut Window,
+        window_mode: bool,
+        purpose: Purpose,
+        record: bool,
+    ) {
+        if record || self.engine.is_none() {
+            self.enter_area(window, Vec::new(), window_mode, purpose, record);
+            return;
+        }
+        self.ask_layout(Awaiting::Area {
+            window_mode,
+            purpose,
+            record,
+        });
+    }
+
+    fn enter_area(
+        &mut self,
+        window: &mut Window,
+        windows: Vec<(String, Frame)>,
+        window_mode: bool,
+        purpose: Purpose,
+        record: bool,
+    ) {
+        self.enter(
+            window,
+            Mode::Area {
+                selection: AreaSelection::new(windows, window_mode),
+                purpose,
+                record,
+            },
+        );
+    }
+
+    fn captured(&mut self, window: &mut Window, ticket: u64, captured: Captured) {
+        if self
+            .awaiting
+            .as_ref()
+            .is_none_or(|(asked, _)| *asked != ticket)
+        {
+            return;
+        }
+        let Some((_, awaiting)) = self.awaiting.take() else {
+            return;
+        };
+        match (awaiting, captured) {
+            (
+                Awaiting::Area {
+                    window_mode,
+                    purpose,
+                    record,
+                },
+                Captured::Layout(displays, windows),
+            ) => {
+                let frames = frames(&displays, windows);
+                self.enter_area(window, frames, window_mode, purpose, record);
+            }
+            (Awaiting::Screens, Captured::Layout(displays, _)) => {
+                self.play_shutter();
+                let left = displays.into_iter().map(|display| display.name).collect();
+                self.next_screen(window, left, Vec::new());
+            }
+            (Awaiting::Shot(then), Captured::Shot(shot)) => self.shot(window, then, shot),
+            _ => self.arrange(window),
+        }
+    }
+
+    fn next_screen(
+        &mut self,
+        window: &mut Window,
+        mut left: VecDeque<String>,
+        images: Vec<Snapshot>,
+    ) {
+        let pointer = self.options.show_pointer;
+        match left.pop_front() {
+            Some(name) => {
+                if !self.shoot(
+                    window,
+                    Source::Display(name),
+                    pointer,
+                    Then::Screens { left, images },
+                ) {
+                    self.arrange(window);
+                }
+            }
+            None => {
+                for image in images.into_iter().rev() {
+                    self.deliver(window, image);
+                }
+                self.arrange(window);
+            }
+        }
+    }
+
+    fn snapshot(window: &Window, target: &Target, shot: &Shot) -> Option<Snapshot> {
         match target {
-            Target::Window(identifier) => {
-                let shot = engine.shoot(Source::Window(identifier.clone()), pointer)?;
-                Some(with_shadow(&as_snapshot(&shot), window.scale()))
+            Target::Window(_) => Some(with_shadow(&as_snapshot(shot), window.scale())),
+            Target::Area(region) | Target::RecordArea(region) => {
+                crop(&as_snapshot(shot), scaled(*region, window.scale()))
             }
-            Target::Area(region) => {
-                let image = as_snapshot(&engine.shoot(Source::Screen, pointer)?);
-                crop(&image, scaled(*region, window.scale()))
+            Target::Screen | Target::RecordScreen => Some(as_snapshot(shot)),
+        }
+    }
+
+    fn shot(&mut self, window: &mut Window, then: Then, shot: Option<Shot>) {
+        match then {
+            Then::Deliver(target) => {
+                if let Some(image) = shot.and_then(|shot| Self::snapshot(window, &target, &shot)) {
+                    self.play_shutter();
+                    self.deliver(window, image);
+                }
+                self.arrange(window);
             }
-            _ => Some(as_snapshot(&engine.shoot(Source::Screen, pointer)?)),
+            Then::Screens { left, mut images } => {
+                images.extend(shot.as_ref().map(as_snapshot));
+                self.next_screen(window, left, images);
+            }
+            Then::Still(path, target) => {
+                if let Some(still) = shot.and_then(|shot| Self::snapshot(window, &target, &shot)) {
+                    self.show_thumbnail(window, &still, path, true);
+                }
+                self.arrange(window);
+            }
+            Then::Portal(target, reply) => {
+                let path = shot
+                    .and_then(|shot| Self::snapshot(window, &target, &shot))
+                    .and_then(|image| {
+                        let dir = self.portal_dir();
+                        save(&image, &dir, bande_datetime::now().datetime())
+                            .inspect_err(|error| {
+                                tracing::warn!("cannot save to {}: {error}", dir.display())
+                            })
+                            .ok()
+                    });
+                let _ = reply.send(path);
+                self.arrange(window);
+            }
+            Then::Color(reply) => match shot {
+                Some(shot) => self.enter(
+                    window,
+                    Mode::Color(ColorPicker::new(shot, window.scale()), reply),
+                ),
+                None => {
+                    let _ = reply.send(None);
+                    self.arrange(window);
+                }
+            },
         }
     }
 
@@ -302,36 +508,17 @@ impl Screenshots {
             }
             Target::Screen if self.options.destination != Destination::Clipboard => {
                 self.hide_overlay(window);
-                self.play_shutter();
-                let pointer = self.options.show_pointer;
-                let images: Vec<Snapshot> = self
-                    .engine
-                    .as_ref()
-                    .map(|engine| {
-                        engine
-                            .displays()
-                            .into_iter()
-                            .filter_map(|display| {
-                                engine.shoot(Source::Display(display.name), pointer)
-                            })
-                            .map(|shot| as_snapshot(&shot))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                for image in images.into_iter().rev() {
-                    self.deliver(window, image);
+                if !self.ask_layout(Awaiting::Screens) {
+                    self.arrange(window);
                 }
             }
             target => {
-                let Some(image) = self.shoot(window, &target) else {
+                let then = Then::Deliver(target.clone());
+                if !self.shoot_target(window, &target, then) {
                     self.arrange(window);
-                    return;
-                };
-                self.play_shutter();
-                self.deliver(window, image);
+                }
             }
         }
-        self.arrange(window);
     }
 
     fn deliver(&mut self, window: &mut Window, image: Snapshot) {
@@ -442,13 +629,6 @@ impl Screenshots {
         let Some(recorder) = self.recorder.take() else {
             return;
         };
-        let still = self.shoot(
-            window,
-            &match recorder.target {
-                Target::RecordArea(region) => Target::Area(region),
-                _ => Target::Screen,
-            },
-        );
         let node = recorder.recording.node;
         let finished = recorder.recording.finish();
         if let Some(casting) = &self.casting {
@@ -457,17 +637,16 @@ impl Screenshots {
         match finished {
             Ok(path) => {
                 tracing::info!("recorded {}", path.display());
-                if let Some(still) = still {
-                    self.show_thumbnail(window, &still, path, true);
+                let target = recorder.target;
+                if !self.shoot_target(window, &target, Then::Still(path, target.clone())) {
+                    self.arrange(window);
                 }
             }
             Err(error) => {
                 tracing::warn!("the recording failed: {error}");
                 self.notice(window, Failure::RecordingFailed);
-                return;
             }
         }
-        self.arrange(window);
     }
 
     fn show_palette(&mut self, window: &mut Window) {
@@ -577,18 +756,11 @@ impl Screenshots {
                     PaletteMode::Screen => self.act(window, Target::Screen),
                     PaletteMode::RecordScreen => self.act(window, Target::RecordScreen),
                     PaletteMode::Window | PaletteMode::Area | PaletteMode::RecordArea => {
-                        let window_mode = mode == PaletteMode::Window;
-                        let windows = match mode {
-                            PaletteMode::RecordArea => Vec::new(),
-                            _ => self.windows(),
-                        };
-                        self.enter(
+                        self.select_area(
                             window,
-                            Mode::Area {
-                                selection: AreaSelection::new(windows, window_mode),
-                                purpose: Purpose::Save,
-                                record: mode == PaletteMode::RecordArea,
-                            },
+                            mode == PaletteMode::Window,
+                            Purpose::Save,
+                            mode == PaletteMode::RecordArea,
                         );
                     }
                 }
@@ -647,19 +819,9 @@ impl Screenshots {
             }
             UiRequest::PickColor { reply } => {
                 self.cancel(window);
-                self.hide_overlay(window);
-                let Some(shot) = self
-                    .engine
-                    .as_ref()
-                    .and_then(|engine| engine.shoot(Source::Screen, false))
-                else {
+                if !self.shoot(window, Source::Screen, false, Then::Color(reply.clone())) {
                     let _ = reply.send(None);
-                    return;
-                };
-                self.enter(
-                    window,
-                    Mode::Color(ColorPicker::new(shot, window.scale()), reply),
-                );
+                }
             }
         }
     }
@@ -677,35 +839,18 @@ impl Screenshots {
         reply: Sender<Option<PathBuf>>,
     ) {
         if interactive {
-            let windows = self.windows();
-            self.enter(
-                window,
-                Mode::Area {
-                    selection: AreaSelection::new(windows, false),
-                    purpose: Purpose::Portal(reply),
-                    record: false,
-                },
-            );
+            self.select_area(window, false, Purpose::Portal(reply), false);
             return;
         }
-        self.portal_shot(window, &Target::Screen, reply);
+        self.portal_shot(window, Target::Screen, reply);
     }
 
-    fn portal_shot(
-        &mut self,
-        window: &mut Window,
-        target: &Target,
-        reply: Sender<Option<PathBuf>>,
-    ) {
-        let path = self.shoot(window, target).and_then(|image| {
-            let dir = self.portal_dir();
-            save(&image, &dir, bande_datetime::now().datetime())
-                .inspect_err(|error| tracing::warn!("cannot save to {}: {error}", dir.display()))
-                .ok()
-        });
-        let _ = reply.send(path);
+    fn portal_shot(&mut self, window: &mut Window, target: Target, reply: Sender<Option<PathBuf>>) {
         self.mode = Mode::Idle;
-        self.arrange(window);
+        if !self.shoot_target(window, &target, Then::Portal(target.clone(), reply.clone())) {
+            let _ = reply.send(None);
+            self.arrange(window);
+        }
     }
 
     fn chosen_area(&mut self, window: &mut Window, target: Target) {
@@ -716,7 +861,7 @@ impl Screenshots {
             return;
         };
         match (purpose, target) {
-            (Purpose::Portal(reply), target) => self.portal_shot(window, &target, reply),
+            (Purpose::Portal(reply), target) => self.portal_shot(window, target, reply),
             (Purpose::Save, Target::Area(region)) if record => {
                 self.act(window, Target::RecordArea(region));
             }
@@ -999,15 +1144,7 @@ impl App for Screenshots {
                 }
             }
             WindowEvent::CaptureArea if self.recorder.is_none() => {
-                let windows = self.windows();
-                self.enter(
-                    window,
-                    Mode::Area {
-                        selection: AreaSelection::new(windows, false),
-                        purpose: Purpose::Save,
-                        record: false,
-                    },
-                );
+                self.select_area(window, false, Purpose::Save, false);
             }
             WindowEvent::AppearanceChanged(appearance) => {
                 self.ui.set_appearance(appearance);
@@ -1070,7 +1207,7 @@ impl App for Screenshots {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.events.fd(), self.requests.fd()]
+        vec![self.events.fd(), self.requests.fd(), self.captured.fd()]
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
@@ -1095,9 +1232,14 @@ impl App for Screenshots {
                     }
                 }
             }
-            _ => {
+            1 => {
                 for request in self.requests.drain() {
                     self.request(window, request);
+                }
+            }
+            _ => {
+                for (ticket, captured) in self.captured.drain() {
+                    self.captured(window, ticket, captured);
                 }
             }
         }
@@ -1195,6 +1337,9 @@ fn run() -> Result<(), WindowError> {
         engine,
         casting,
         events,
+        captured: Inbox::new()?,
+        awaiting: None,
+        next_ticket: 0,
         requests,
         outbox,
         mode: Mode::Idle,

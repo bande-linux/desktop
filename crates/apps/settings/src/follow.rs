@@ -26,6 +26,7 @@ use crate::notifications::{AppNotifications, NotificationCommand, follow_app_not
 use crate::permissions::{Grants, PermissionCommand, follow_permissions};
 use crate::pictures::{Pair, PictureCommand, choose_file, follow_pictures};
 use crate::pointing::{PointingDevices, UDEV_DATA, follow_pointing};
+use crate::printers::{PrinterCommand, PrintersState, follow_printers};
 use crate::privacy::clear_clipboard;
 use crate::privilege::{Privilege, follow_privileges};
 use crate::services::{
@@ -70,6 +71,9 @@ pub enum Update {
     Refused(Vec<Privilege>),
     DefaultApps(Vec<DefaultApp>),
     Permissions(Grants),
+    Printers(PrintersState),
+    NearbyPrinters(Vec<bande_printers::NearbyPrinter>),
+    PrinterAdded(String, bool),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -92,6 +96,7 @@ pub enum Command {
     Locale(LocaleCommand),
     DefaultApp(DefaultAppCommand),
     Permission(PermissionCommand),
+    Printers(PrinterCommand),
     Brightness(f32),
     Reveal(PathBuf),
     EndSession(SessionEnd),
@@ -321,6 +326,7 @@ pub struct Services {
     default_apps: Sender<DefaultAppCommand>,
     permissions: Sender<PermissionCommand>,
     brightness: Option<Sender<f32>>,
+    printers: Option<Sender<PrinterCommand>>,
     _pointing: Option<FolderWatch>,
 }
 
@@ -354,6 +360,7 @@ impl Services {
             default_apps: follow_default_apps(updates.clone()),
             permissions: follow_permissions(session, updates.clone()),
             brightness: system.and_then(|system| follow_brightness(system, updates.clone())),
+            printers: system.map(|system| follow_printers(system, updates.clone())),
             _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
                 .inspect_err(|error| tracing::warn!("cannot watch {UDEV_DATA}: {error}"))
                 .ok(),
@@ -392,6 +399,10 @@ impl Services {
             Command::Login(command) => self.login.send(command).is_ok(),
             Command::DefaultApp(command) => self.default_apps.send(command).is_ok(),
             Command::Permission(command) => self.permissions.send(command).is_ok(),
+            Command::Printers(command) => self
+                .printers
+                .as_ref()
+                .is_some_and(|printers| printers.send(command).is_ok()),
             Command::Brightness(level) => self
                 .brightness
                 .as_ref()

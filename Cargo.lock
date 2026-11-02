@@ -853,6 +853,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-printers"
+version = "0.1.0"
+dependencies = [
+ "rustix 1.1.6",
+ "zbus",
+]
+
+[[package]]
 name = "bande-protocols"
 version = "0.1.0"
 dependencies = [
@@ -951,6 +959,7 @@ dependencies = [
  "bande-network",
  "bande-notify",
  "bande-packages",
+ "bande-printers",
  "bande-settings-panes",
  "bande-sound",
  "bande-status",

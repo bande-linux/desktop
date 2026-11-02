@@ -30,6 +30,7 @@ use crate::notifications::{AppNotifications, NotificationCommand};
 use crate::permissions::Grants;
 use crate::pictures::{Pair, PictureCommand};
 use crate::pointing::PointingDevices;
+use crate::printers::{PrinterCommand, PrintersState};
 use crate::privacy::focus_after_asking;
 use crate::privilege::Privilege;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
@@ -99,6 +100,13 @@ pub(crate) enum Intent {
     OtherSecurity(usize),
     JoinOther(Option<String>),
     WifiManual(bool),
+    OpenPrinter(String),
+    DefaultPrinter(String),
+    AddPrinter(bande_printers::NearbyPrinter),
+    PrinterAddress(String),
+    AddPrinterAddress,
+    CancelJob(i32),
+    PausePrinter((String, bool)),
     ImportVpn,
     ExcludeFolder,
     IncludeFolder(String),
@@ -181,6 +189,7 @@ pub(crate) struct Join {
 pub(crate) enum Detail {
     App(String),
     Network(Vec<u8>),
+    Printer(String),
 }
 
 pub struct SettingsView {
@@ -218,6 +227,10 @@ pub struct SettingsView {
     pub(crate) detail: Option<Detail>,
     pub(crate) other: Option<Other>,
     pub(crate) wifi_manual: bool,
+    pub(crate) printers: Option<PrintersState>,
+    pub(crate) nearby_printers: Option<Vec<bande_printers::NearbyPrinter>>,
+    pub(crate) adding: Option<String>,
+    pub(crate) printer_address: String,
     pub(crate) software: SoftwareState,
     pub(crate) network: Option<NetworkState>,
     pub(crate) manual_ipv4: bool,
@@ -298,6 +311,10 @@ impl SettingsView {
             detail: None,
             other: None,
             wifi_manual: false,
+            printers: None,
+            nearby_printers: None,
+            adding: None,
+            printer_address: String::new(),
             software: SoftwareState::Unknown,
             network: None,
             manual_ipv4: false,
@@ -664,6 +681,30 @@ impl SettingsView {
             Update::Refused(refused) => self.refused = refused,
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
             Update::Permissions(permissions) => self.permissions = permissions,
+            Update::Printers(printers) => {
+                if let Some(Detail::Printer(name)) = &self.detail
+                    && !printers
+                        .printers
+                        .iter()
+                        .any(|printer| printer.name == *name)
+                {
+                    self.detail = None;
+                }
+                self.printers = Some(printers);
+            }
+            Update::NearbyPrinters(nearby) => self.nearby_printers = Some(nearby),
+            Update::PrinterAdded(uri, added) => {
+                if self.adding.as_ref() == Some(&uri) {
+                    self.adding = None;
+                    if added
+                        && self
+                            .printer_address_target()
+                            .is_some_and(|target| target.uri == uri)
+                    {
+                        self.printer_address.clear();
+                    }
+                }
+            }
         }
     }
 
@@ -749,6 +790,7 @@ impl SettingsView {
             | PaneId::Screenshots
             | PaneId::ScreenSharing
             | PaneId::Apps
+            | PaneId::Printers
             | PaneId::Storage
             | PaneId::SoftwareUpdate => true,
             PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
@@ -1065,9 +1107,13 @@ impl SettingsView {
                 }
                 continue;
             }
+            if let Intent::PrinterAddress(address) = intent {
+                self.printer_address = address;
+                continue;
+            }
             self.stale = true;
             match intent {
-                Intent::Draft(..) | Intent::OtherName(..) => {}
+                Intent::Draft(..) | Intent::OtherName(..) | Intent::PrinterAddress(..) => {}
                 Intent::Back => {
                     if let Some(detail) = self.detail.take() {
                         self.forgetting = None;
@@ -1075,6 +1121,7 @@ impl SettingsView {
                         self.focus_next = Some(Anchor::Item(match detail {
                             Detail::App(group) => format!("app:{group}"),
                             Detail::Network(ssid) => String::from_utf8_lossy(&ssid).into_owned(),
+                            Detail::Printer(name) => format!("printer:{name}"),
                         }));
                     } else if let Some(parent) = self.pane.parent() {
                         self.focus_next = Some(Anchor::Item(self.pane.keyword().to_owned()));
@@ -1161,6 +1208,40 @@ impl SettingsView {
                 }
                 Intent::JoinOther(password) => self.join_other(password),
                 Intent::WifiManual(manual) => self.set_wifi_manual(manual),
+                Intent::OpenPrinter(name) => {
+                    self.detail = Some(Detail::Printer(name));
+                    self.forgetting = None;
+                    self.message = None;
+                    self.focus_next = Some(Anchor::Back);
+                    *self.scroll.borrow_mut() = ScrollState::default();
+                }
+                Intent::DefaultPrinter(name) => {
+                    self.commands
+                        .push(Command::Printers(PrinterCommand::SetDefault(name)));
+                }
+                Intent::AddPrinter(printer) => {
+                    self.message = None;
+                    self.adding = Some(printer.uri.clone());
+                    self.commands
+                        .push(Command::Printers(PrinterCommand::Add(printer)));
+                }
+                Intent::AddPrinterAddress => {
+                    if let Some(printer) = self.printer_address_target() {
+                        self.message = None;
+                        self.adding = Some(printer.uri.clone());
+                        self.commands
+                            .push(Command::Printers(PrinterCommand::Add(printer)));
+                    }
+                }
+                Intent::CancelJob(job) => {
+                    self.commands
+                        .push(Command::Printers(PrinterCommand::Cancel(job)));
+                }
+                Intent::PausePrinter((name, paused)) => {
+                    self.focus_next = Some(Anchor::Item("printer-pause".to_owned()));
+                    self.commands
+                        .push(Command::Printers(PrinterCommand::Pause(name, paused)));
+                }
                 Intent::ManualIpv4(manual) => {
                     self.manual_ipv4 = manual;
                     if !manual {
@@ -1424,6 +1505,7 @@ impl SettingsView {
             PaneId::Bluetooth => Command::Bluetooth(BluetoothCommand::Discover(on)),
             PaneId::Sound => Command::Audio(AudioCommand::Listen(on)),
             PaneId::Wifi | PaneId::Network => Command::Network(NetworkCommand::Watch(on)),
+            PaneId::Printers => Command::Printers(PrinterCommand::Watch(on)),
             _ => return,
         };
         self.commands.push(command);

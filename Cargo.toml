@@ -96,6 +96,7 @@ bande-launcher = { path = "crates/shell/launcher" }
 bande-lock = { path = "crates/shell/lock" }
 bande-log = { path = "crates/libs/log" }
 bande-network = { path = "crates/libs/network" }
+bande-printers = { path = "crates/libs/printers" }
 bande-packages = { path = "crates/libs/packages" }
 bande-notifications = { path = "crates/shell/notifications" }
 bande-notify = { path = "crates/services/notify" }

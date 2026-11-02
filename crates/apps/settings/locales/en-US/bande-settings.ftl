@@ -343,3 +343,57 @@ screenshots-none = No app has asked to take screenshots yet.
 screen-sharing-none = No app remembers what it may share.
 location-none = No app has asked for your location yet.
 forget-share-warning = It asks again before it shares your screen or a window.
+printer-add-failed = Couldn't add “{ $name }”. Check that it is turned on and on this network.
+printer-idle = Idle
+printer-printing = Printing
+printer-paused = Paused
+printer-not-accepting = Not accepting documents
+printer-offline = Offline
+printer-default = Default
+printer-jobs = { $count ->
+    [one] 1 document
+   *[other] { $count } documents
+}
+job-waiting = Waiting
+job-held = On hold
+job-printing = Printing
+job-stopped = Stopped
+no-printers = No printers
+printer-count = { $count ->
+    [one] 1 printer
+   *[other] { $count } printers
+}
+printers-with-default = { $count ->
+    [one] “{ $name }” is the default printer
+   *[other] { $count } printers · “{ $name }” is the default
+}
+no-printers-hint = No printers yet. Add one below.
+printer-no-default = None
+default-printer = Default printer
+looking-for-printers = Looking for printers on this network…
+no-nearby-printers = No other printers found on this network
+printer-adding = Adding…
+printer-add = Add
+printer-address = Add by address
+printer-address-placeholder = 192.168.1.30 or printer.local
+printer-address-detail = For a printer that does not show up: its IP address or host name
+printer-kind = Kind
+printer-location = Location
+printer-uri = Address
+printer-queue = Queue name
+print-queue = Print Queue
+no-jobs = No documents waiting
+job-number = Document { $id }
+printer-pause = Pause
+printer-resume = Resume
+printer-pause-hint = Pause printing
+printer-paused-hint = Printing is paused
+printer-make-default = Make Default
+printer-default-hint = Use as the default printer
+printer-remove = Remove
+printer-remove-ellipsis = Remove…
+printer-remove-hint = Remove this printer
+printer-remove-question = Remove “{ $name }”?
+printer-remove-warning = Documents waiting for it are cancelled. You can add it again later.
+printers-unavailable = Printing isn't set up
+printers-unavailable-hint = Install the CUPS printing system to add printers.

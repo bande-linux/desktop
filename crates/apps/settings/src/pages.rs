@@ -685,6 +685,8 @@ impl SettingsView {
     fn list_rows(&mut self, list: List) -> Widgets {
         match list {
             List::KnownNetworks => self.known_network_rows(),
+            List::Printers => self.printer_rows(),
+            List::NearbyPrinters => self.nearby_printer_rows(),
             List::Networks => self.network_rows(),
             List::PairedDevices => self.device_rows(true),
             List::NearbyDevices => self.device_rows(false),
@@ -1213,6 +1215,11 @@ impl SettingsView {
             && let Some(network) = self.network_page()
         {
             return self.page(network);
+        }
+        if pane.id == PaneId::Printers
+            && let Some(printer) = self.printer_page()
+        {
+            return self.page(printer);
         }
         page.push(self.header(&pane));
         if pane.id == PaneId::Bluetooth

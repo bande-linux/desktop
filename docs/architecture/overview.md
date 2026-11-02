@@ -121,7 +121,7 @@ thinks of it as part of the system:
   started by systemd user units or D-Bus activation ([session](session.md)).
 
 Shared code that is not UI lives in `crates/libs` (`bande-xdg`, `bande-fs`, `bande-audio`,
-`bande-network`, `bande-bluetooth`, `bande-packages`, `bande-spring` and more), and the shell
+`bande-network`, `bande-bluetooth`, `bande-printers`, `bande-packages`, `bande-spring` and more), and the shell
 and apps draw with `bande-toolkit`.
 
 ## Inter-process communication

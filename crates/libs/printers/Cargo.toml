@@ -1,0 +1,15 @@
+[package]
+name = "bande-printers"
+description = "Bande CUPS client: printers, their queues and nearby IPP printers, over IPP and D-Bus"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+rustix = { workspace = true, features = ["process"] }
+zbus.workspace = true
+
+[lints]
+workspace = true

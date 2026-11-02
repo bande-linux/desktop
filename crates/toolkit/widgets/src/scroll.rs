@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use bande_graphics::{Item, Point, Rect, Scroll, ScrollPhase, ScrollSource, Shape};
+use bande_graphics::{Color, Item, Point, Rect, Scroll, ScrollPhase, ScrollSource, Shape};
 use bande_spring::Spring;
 
 use super::{Animated, Context, Event, Size, Widget, WidgetId};
@@ -16,8 +16,241 @@ const RUBBER_BAND: f32 = 0.55;
 const SCROLLBAR_LINGER: Duration = Duration::from_millis(900);
 const SCROLLBAR_STRIP: f32 = 14.0;
 const SCROLLBAR_WIDTH: f32 = 6.0;
+const SCROLLBAR_HOVER_WIDTH: f32 = 10.0;
 const SCROLLBAR_INSET: f32 = 3.0;
+const TRACK_OPACITY: f32 = 0.25;
 const KNOB_MIN: f32 = 24.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct ScrollExtent {
+    pub offset: f32,
+    pub content: f32,
+    pub viewport: f32,
+}
+
+impl ScrollExtent {
+    pub fn limit(&self) -> f32 {
+        (self.content - self.viewport).max(0.0)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ScrollbarAction {
+    Redraw,
+    Page(f32),
+    Seek(f32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Visibility {
+    Hidden,
+    Shown { until: Instant },
+    Fading { since: Instant },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Scrollbar {
+    visibility: Visibility,
+    hovered: bool,
+    width: Animated,
+    grab: Option<f32>,
+}
+
+impl Default for Scrollbar {
+    fn default() -> Self {
+        Self {
+            visibility: Visibility::Hidden,
+            hovered: false,
+            width: Animated::points(SCROLLBAR_WIDTH),
+            grab: None,
+        }
+    }
+}
+
+impl Scrollbar {
+    pub fn reveal(&mut self, now: Instant) {
+        self.visibility = Visibility::Shown {
+            until: now + SCROLLBAR_LINGER,
+        };
+    }
+
+    fn held(&self) -> bool {
+        self.hovered || self.grab.is_some()
+    }
+
+    fn fade(&self, now: Instant) -> (f32, bool) {
+        if self.held() {
+            return (1.0, false);
+        }
+        let since = match self.visibility {
+            Visibility::Hidden => return (0.0, false),
+            Visibility::Shown { until } if now <= until => return (1.0, false),
+            Visibility::Shown { until } => until,
+            Visibility::Fading { since } => since,
+        };
+        let mut fade = Animated::new(1.0);
+        fade.animate_at(since, false, 0.0, Spring::FADE);
+        fade.value_at(now)
+    }
+
+    pub fn animating(&self, now: Instant) -> bool {
+        self.fade(now).1 || self.width.value_at(now).1
+    }
+
+    pub fn deadline(&self) -> Option<Instant> {
+        match self.visibility {
+            Visibility::Shown { until } if !self.held() => Some(until),
+            _ => None,
+        }
+    }
+
+    pub fn tick(&mut self, now: Instant) {
+        if let Visibility::Shown { until } = self.visibility
+            && until <= now
+        {
+            self.visibility = Visibility::Fading { since: until };
+        }
+    }
+
+    fn strip(frame: Rect) -> Rect {
+        Rect::new(
+            frame.x + frame.width - SCROLLBAR_STRIP,
+            frame.y,
+            SCROLLBAR_STRIP,
+            frame.height,
+        )
+    }
+
+    fn knob(&self, now: Instant, frame: Rect, extent: &ScrollExtent) -> Rect {
+        let (width, _) = self.width.value_at(now);
+        let limit = extent.limit();
+        let track = frame.height - 2.0 * SCROLLBAR_INSET;
+        let length =
+            (track * extent.viewport / extent.content.max(1.0)).clamp(KNOB_MIN.min(track), track);
+        let overshoot = if extent.offset < 0.0 {
+            -extent.offset
+        } else {
+            (extent.offset - limit).max(0.0)
+        };
+        let length = (length - overshoot).max(width);
+        let progress = (extent.offset / limit.max(1.0)).clamp(0.0, 1.0);
+        Rect::new(
+            frame.x + frame.width - SCROLLBAR_INSET - width,
+            frame.y + SCROLLBAR_INSET + progress * (track - length),
+            width,
+            length,
+        )
+    }
+
+    pub fn claims(&self, frame: Rect, extent: &ScrollExtent, point: Point) -> bool {
+        extent.limit() > 0.0 && Self::strip(frame).contains(point)
+    }
+
+    fn hover(&mut self, now: Instant, reduce_motion: bool, hovered: bool) -> bool {
+        if hovered == self.hovered {
+            return false;
+        }
+        self.hovered = hovered;
+        self.reveal(now);
+        let width = if hovered {
+            SCROLLBAR_HOVER_WIDTH
+        } else {
+            SCROLLBAR_WIDTH
+        };
+        self.width
+            .animate_at(now, reduce_motion, width, Spring::QUICK);
+        true
+    }
+
+    pub fn pointer(
+        &mut self,
+        now: Instant,
+        reduce_motion: bool,
+        frame: Rect,
+        extent: &ScrollExtent,
+        event: &Event,
+    ) -> Option<ScrollbarAction> {
+        match event {
+            Event::PointerDown(pointer)
+                if pointer.is_primary() && self.claims(frame, extent, pointer.position) =>
+            {
+                self.reveal(now);
+                let knob = self.knob(now, frame, extent);
+                if (knob.y..knob.y + knob.height).contains(&pointer.position.y) {
+                    self.grab = Some(pointer.position.y - knob.y);
+                    return Some(ScrollbarAction::Redraw);
+                }
+                let direction = if pointer.position.y < knob.y {
+                    -1.0
+                } else {
+                    1.0
+                };
+                Some(ScrollbarAction::Page(direction))
+            }
+            Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
+                if let Some(grab) = self.grab {
+                    let knob = self.knob(now, frame, extent);
+                    let track = frame.height - 2.0 * SCROLLBAR_INSET - knob.height;
+                    let progress =
+                        (pointer.position.y - grab - frame.y - SCROLLBAR_INSET) / track.max(1.0);
+                    return Some(ScrollbarAction::Seek(
+                        progress.clamp(0.0, 1.0) * extent.limit(),
+                    ));
+                }
+                let hovered = self.claims(frame, extent, pointer.position);
+                self.hover(now, reduce_motion, hovered)
+                    .then_some(ScrollbarAction::Redraw)
+            }
+            Event::PointerUp(pointer) => {
+                self.grab.take()?;
+                let hovered = self.claims(frame, extent, pointer.position);
+                self.hover(now, reduce_motion, hovered);
+                self.reveal(now);
+                Some(ScrollbarAction::Redraw)
+            }
+            Event::PointerLeave => {
+                let grabbed = self.grab.take().is_some();
+                let left = self.hover(now, reduce_motion, false);
+                (grabbed || left).then_some(ScrollbarAction::Redraw)
+            }
+            _ => None,
+        }
+    }
+
+    pub fn paint(
+        &self,
+        now: Instant,
+        frame: Rect,
+        extent: &ScrollExtent,
+        color: Color,
+        items: &mut Vec<Item>,
+    ) {
+        let (alpha, _) = self.fade(now);
+        if extent.limit() == 0.0 || alpha == 0.0 {
+            return;
+        }
+        let knob = self.knob(now, frame, extent);
+        let expanded = (knob.width - SCROLLBAR_WIDTH) / (SCROLLBAR_HOVER_WIDTH - SCROLLBAR_WIDTH);
+        if expanded > 0.0 {
+            let lane = knob.x - SCROLLBAR_INSET;
+            items.push(Item::Fill {
+                shape: Shape::rect(Rect::new(
+                    lane,
+                    frame.y,
+                    frame.x + frame.width - lane,
+                    frame.height,
+                )),
+                paint: color
+                    .with_opacity(alpha * expanded.min(1.0) * TRACK_OPACITY)
+                    .into(),
+            });
+        }
+        items.push(Item::Fill {
+            shape: Shape::rounded(knob, knob.width / 2.0),
+            paint: color.with_opacity(alpha).into(),
+        });
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Motion {
@@ -37,8 +270,7 @@ pub struct ScrollState {
     content: f32,
     viewport: f32,
     samples: Vec<(Duration, f32)>,
-    shown_until: Option<Instant>,
-    knob_grab: Option<f32>,
+    scrollbar: Scrollbar,
 }
 
 impl Default for ScrollState {
@@ -48,8 +280,7 @@ impl Default for ScrollState {
             content: 0.0,
             viewport: 0.0,
             samples: Vec::new(),
-            shown_until: None,
-            knob_grab: None,
+            scrollbar: Scrollbar::default(),
         }
     }
 }
@@ -107,13 +338,21 @@ impl ScrollState {
 
     pub fn offset(&self, cx: &Context) -> f32 {
         let (offset, moving) = self.offset_at(cx.now());
-        if moving || self.scrollbar_fading(cx.now()) {
+        if moving || self.scrollbar.animating(cx.now()) {
             cx.animating.set(true);
         }
-        if let Some(until) = self.shown_until.filter(|until| *until >= cx.now()) {
+        if let Some(until) = self.scrollbar.deadline().filter(|until| *until >= cx.now()) {
             cx.wake_at(until);
         }
         offset
+    }
+
+    fn extent(&self, now: Instant) -> ScrollExtent {
+        ScrollExtent {
+            offset: self.offset_at(now).0,
+            content: self.content,
+            viewport: self.viewport,
+        }
     }
 
     fn target(&self, now: Instant) -> f32 {
@@ -141,7 +380,7 @@ impl ScrollState {
         };
         animated.animate_at(now, cx.reduce_motion, target, Spring::QUICK);
         self.motion = Motion::Spring(animated);
-        self.shown_until = Some(now + SCROLLBAR_LINGER);
+        self.scrollbar.reveal(now);
         cx.animating.set(true);
         true
     }
@@ -181,7 +420,7 @@ impl ScrollState {
             return false;
         }
         let delta = scroll.delta.y;
-        self.shown_until = Some(now + SCROLLBAR_LINGER);
+        self.scrollbar.reveal(now);
         cx.animating.set(true);
         if scroll.source == ScrollSource::Wheel {
             let target = self.target(now) + delta;
@@ -253,125 +492,44 @@ impl ScrollState {
         }
     }
 
-    fn scrollbar_fade(&self, now: Instant) -> (f32, bool) {
-        if self.knob_grab.is_some() {
-            return (1.0, false);
-        }
-        let Some(until) = self.shown_until else {
-            return (0.0, false);
-        };
-        if now <= until {
-            return (1.0, false);
-        }
-        let mut fade = Animated::new(1.0);
-        fade.animate_at(until, false, 0.0, Spring::FADE);
-        fade.value_at(now)
-    }
-
-    fn scrollbar_alpha(&self, now: Instant) -> f32 {
-        self.scrollbar_fade(now).0
-    }
-
-    fn scrollbar_fading(&self, now: Instant) -> bool {
-        self.scrollbar_fade(now).1
-    }
-
-    fn strip(frame: Rect) -> Rect {
-        Rect::new(
-            frame.x + frame.width - SCROLLBAR_STRIP,
-            frame.y,
-            SCROLLBAR_STRIP,
-            frame.height,
-        )
-    }
-
-    fn knob(&self, frame: Rect, offset: f32) -> Rect {
-        let track = frame.height - 2.0 * SCROLLBAR_INSET;
-        let length =
-            (track * self.viewport / self.content.max(1.0)).clamp(KNOB_MIN.min(track), track);
-        let overshoot = if offset < 0.0 {
-            -offset
-        } else {
-            (offset - self.limit()).max(0.0)
-        };
-        let length = (length - overshoot).max(SCROLLBAR_WIDTH);
-        let progress = (offset / self.limit().max(1.0)).clamp(0.0, 1.0);
-        Rect::new(
-            frame.x + frame.width - SCROLLBAR_INSET - SCROLLBAR_WIDTH,
-            frame.y + SCROLLBAR_INSET + progress * (track - length),
-            SCROLLBAR_WIDTH,
-            length,
-        )
-    }
-
     pub fn claims(&self, frame: Rect, point: Point) -> bool {
-        self.limit() > 0.0 && Self::strip(frame).contains(point)
+        let extent = ScrollExtent {
+            offset: 0.0,
+            content: self.content,
+            viewport: self.viewport,
+        };
+        self.scrollbar.claims(frame, &extent, point)
     }
 
     pub fn pointer(&mut self, cx: &Context, frame: Rect, event: &Event) -> bool {
         let now = cx.now();
-        match event {
-            Event::PointerDown(pointer)
-                if pointer.is_primary() && self.claims(frame, pointer.position) =>
-            {
-                self.settle(now);
-                let (offset, _) = self.offset_at(now);
-                let knob = self.knob(frame, offset);
-                if !(knob.y..knob.y + knob.height).contains(&pointer.position.y) {
-                    let page = if pointer.position.y < knob.y {
-                        -self.viewport
-                    } else {
-                        self.viewport
-                    };
-                    self.scroll_to(cx, offset + page);
-                    return true;
-                }
-                self.knob_grab = Some(pointer.position.y - knob.y);
-                self.shown_until = Some(now + SCROLLBAR_LINGER);
+        if let Event::PointerDown(pointer) = event
+            && self.claims(frame, pointer.position)
+        {
+            self.settle(now);
+        }
+        let extent = self.extent(now);
+        match self
+            .scrollbar
+            .pointer(now, cx.reduce_motion, frame, &extent, event)
+        {
+            None => false,
+            Some(ScrollbarAction::Redraw) => true,
+            Some(ScrollbarAction::Page(direction)) => {
+                self.scroll_to(cx, extent.offset + direction * self.viewport);
                 true
             }
-            Event::PointerMove(pointer) => {
-                if let Some(grab) = self.knob_grab {
-                    let (offset, _) = self.offset_at(now);
-                    let knob = self.knob(frame, offset);
-                    let track = frame.height - 2.0 * SCROLLBAR_INSET - knob.height;
-                    let progress =
-                        (pointer.position.y - grab - frame.y - SCROLLBAR_INSET) / track.max(1.0);
-                    self.motion = Motion::Still(progress.clamp(0.0, 1.0) * self.limit());
-                    self.shown_until = Some(now + SCROLLBAR_LINGER);
-                    return true;
-                }
-                if self.claims(frame, pointer.position) {
-                    let was_shown = self.scrollbar_alpha(now) > 0.0;
-                    self.shown_until = Some(now + SCROLLBAR_LINGER);
-                    cx.animating.set(true);
-                    return !was_shown;
-                }
-                false
+            Some(ScrollbarAction::Seek(offset)) => {
+                self.motion = Motion::Still(offset);
+                true
             }
-            Event::PointerUp(_) => {
-                let grabbed = self.knob_grab.take().is_some();
-                if grabbed {
-                    self.shown_until = Some(now + SCROLLBAR_LINGER);
-                }
-                grabbed
-            }
-            Event::PointerLeave => self.knob_grab.take().is_some(),
-            _ => false,
         }
     }
 
     pub fn paint_scrollbar(&self, cx: &Context, frame: Rect, items: &mut Vec<Item>) {
-        let alpha = self.scrollbar_alpha(cx.now());
-        if self.limit() == 0.0 || alpha == 0.0 {
-            return;
-        }
-        let (offset, _) = self.offset_at(cx.now());
-        let knob = self.knob(frame, offset);
-        items.push(Item::Fill {
-            shape: Shape::rounded(knob, SCROLLBAR_WIDTH / 2.0),
-            paint: cx.palette.ink3.with_opacity(alpha).into(),
-        });
+        let now = cx.now();
+        self.scrollbar
+            .paint(now, frame, &self.extent(now), cx.palette.ink3, items);
     }
 
     pub fn describe(&self, cx: &Context, node: &mut Node) {

@@ -111,12 +111,14 @@ elements) and "Cat" (13.4k), without author styles, at 1000 px:
 | Node core (`web-dom`) | ≤ 64 B | 36 B |
 | DOM with attributes and text | ≤ 350 B | 236–321 B |
 | Computed styles (shared, 4 B index per node) | ≤ 16 B | 10 B |
-| Box tree with shaped text | ≤ 520 B | 408–507 B |
-| Fragment tree | ≤ 380 B | 283–367 B |
-| Display list | ≤ 340 B | 225–328 B |
+| Box tree with shaped text | ≤ 450 B | 354–430 B |
+| Fragment tree | ≤ 300 B | 219–279 B |
+| Display list | ≤ 280 B | 182–264 B |
 
-Shaped glyphs (28 B each) dominate the box tree; moving font and run to per-run spans (20 B) and dropping the
-per-paragraph text copy are the next savings.
+Shaped glyphs are 20 B and laid-out glyphs 8 B (a `u16` id, the y offset in 1/16 px, x); line
+breaks and spaces are flags on the shaped glyphs, so no paragraph text is kept after shaping. Shape
+plans and shaped words are cached per font, size and direction. `tools/bench` measures the same
+stages on its generated article.
 
 ## `web-css` selectors for the matcher
 

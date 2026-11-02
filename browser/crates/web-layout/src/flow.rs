@@ -34,8 +34,6 @@ pub struct TextFragment {
     pub color: Color,
     pub background: Color,
     pub decorations: TextDecorations,
-    pub underline: (f32, f32),
-    pub strikeout: (f32, f32),
     pub glyphs: Range<u32>,
 }
 
@@ -189,7 +187,6 @@ impl Flow<'_> {
             }
             Contents::Inline(inline) => {
                 let lines = inline.shaped.lines(
-                    &inline.paragraph,
                     self.fonts,
                     content_width,
                     run_style(&block.style, u32::MAX, 0.0),
@@ -306,8 +303,6 @@ impl Flow<'_> {
         size: f32,
         glyphs: Range<u32>,
     ) -> TextFragment {
-        let metrics = self.fonts.metrics(font);
-        let scale = size / metrics.units_per_em;
         TextFragment {
             node,
             rect,
@@ -317,14 +312,6 @@ impl Flow<'_> {
             color: style.inherited.color,
             background: style.reset.background_color,
             decorations: style.inherited.decorations,
-            underline: (
-                metrics.underline_offset * scale,
-                (metrics.underline_thickness * scale).max(1.0),
-            ),
-            strikeout: (
-                metrics.strikeout_offset * scale,
-                (metrics.strikeout_thickness * scale).max(1.0),
-            ),
             glyphs,
         }
     }
@@ -337,7 +324,6 @@ impl Flow<'_> {
         children: &mut Vec<Fragment>,
     ) {
         let lines = marker.shaped.lines(
-            &marker.paragraph,
             self.fonts,
             f32::INFINITY,
             run_style(&block.style, 0, 0.0),

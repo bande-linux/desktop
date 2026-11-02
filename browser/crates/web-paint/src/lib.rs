@@ -19,6 +19,7 @@ pub enum Item {
     },
     Glyphs {
         rect: Rect,
+        baseline: f32,
         node: Option<NodeId>,
         font: u32,
         size: f32,
@@ -173,22 +174,33 @@ impl Builder<'_> {
             .get(text.glyphs.start as usize..text.glyphs.end as usize)
             .unwrap_or_default();
         let start = self.glyphs.len() as u32;
-        self.glyphs.extend(source.iter().map(|glyph| Glyph {
-            id: glyph.id,
-            x: rect.x + glyph.x,
-            y: baseline + glyph.y,
-        }));
+        self.glyphs.extend(
+            source
+                .iter()
+                .map(|glyph| Glyph::new(glyph.id, rect.x + glyph.x, glyph.y())),
+        );
         self.items.push(Item::Glyphs {
             rect,
+            baseline,
             node: text.node,
             font,
             size: text.size,
             color: text.color,
             glyphs: start..self.glyphs.len() as u32,
         });
+        let metrics = self.source.metrics(text.font);
+        let scale = text.size / metrics.units_per_em;
+        let decoration =
+            |offset: f32, thickness: f32| (offset * scale, (thickness * scale).max(1.0));
         let decorations = [
-            (text.decorations.underline, text.underline),
-            (text.decorations.line_through, text.strikeout),
+            (
+                text.decorations.underline,
+                decoration(metrics.underline_offset, metrics.underline_thickness),
+            ),
+            (
+                text.decorations.line_through,
+                decoration(metrics.strikeout_offset, metrics.strikeout_thickness),
+            ),
         ];
         for (color, (offset, thickness)) in decorations {
             if let Some(color) = color {

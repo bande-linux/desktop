@@ -19,9 +19,29 @@ pub struct RunStyle {
 
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct Glyph {
-    pub id: u32,
+    pub id: u16,
+    y_offset: i16,
     pub x: f32,
-    pub y: f32,
+}
+
+const Y_UNITS: f32 = 16.0;
+
+impl Glyph {
+    pub fn new(id: u16, x: f32, y: f32) -> Self {
+        Glyph {
+            id,
+            y_offset: (y * Y_UNITS).round() as i16,
+            x,
+        }
+    }
+
+    pub fn y(self) -> f32 {
+        f32::from(self.y_offset) / Y_UNITS
+    }
+
+    pub fn translated(self, x: f32, y: f32) -> (u32, f32, f32) {
+        (u32::from(self.id), self.x + x, self.y() + y)
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -88,10 +108,6 @@ impl Paragraph {
         self.text.is_empty()
     }
 
-    pub fn text(&self) -> &str {
-        &self.text
-    }
-
     pub fn push_text(&mut self, text: &str, style: RunStyle) {
         let white_space = style.white_space;
         for ch in text.chars() {
@@ -152,7 +168,7 @@ impl Paragraph {
         BidiInfo::new(&self.text, Some(base)).levels
     }
 
-    pub fn shape(&self, fonts: &mut Fonts) -> ShapedParagraph {
+    pub fn shape(self, fonts: &mut Fonts) -> ShapedParagraph {
         let levels = self.levels();
         let base = if self.rtl { 1 } else { 0 };
         let level_at = |position: usize| {
@@ -163,7 +179,9 @@ impl Paragraph {
         let mut shaped = ShapedParagraph {
             glyphs: Vec::new(),
             spans: Vec::new(),
+            styles: self.runs.iter().map(|&(_, style)| style).collect(),
         };
+        let mut clusters = Vec::new();
         for (run_index, (range, style)) in self.run_ranges().enumerate() {
             let Some(run_text) = self.text.get(range.clone()) else {
                 continue;
@@ -194,16 +212,80 @@ impl Paragraph {
                             start..position,
                             style.size,
                             &mut shaped,
+                            &mut clusters,
                         );
                     }
                     group = span.map(|span| (span, position));
                 }
+                if ch == '\n'
+                    && let Some(font) = previous_font.or_else(|| fonts.primary(style.font))
+                {
+                    shaped.spans.push(Span {
+                        font,
+                        run: run_index as u32,
+                        level: base,
+                    });
+                    shaped.glyphs.push(ShapedGlyph {
+                        id: 0,
+                        flags: NEWLINE | MANDATORY,
+                        span: (shaped.spans.len() - 1) as u32,
+                        advance: 0.0,
+                        x_offset: 0.0,
+                        y_offset: 0.0,
+                    });
+                    clusters.push(position as u32);
+                }
             }
             if let Some((group_span, start)) = group {
-                self.shape_group(fonts, group_span, start..range.end, style.size, &mut shaped);
+                self.shape_group(
+                    fonts,
+                    group_span,
+                    start..range.end,
+                    style.size,
+                    &mut shaped,
+                    &mut clusters,
+                );
             }
         }
+        self.mark_breaks(&mut shaped.glyphs, &clusters);
         shaped
+    }
+
+    fn mark_breaks(&self, glyphs: &mut [ShapedGlyph], clusters: &[u32]) {
+        let text = self.text.as_str();
+        let bytes = text.as_bytes();
+        for (glyph, &cluster) in glyphs.iter_mut().zip(clusters) {
+            if bytes.get(cluster as usize) == Some(&b' ') {
+                glyph.flags |= SPACE;
+            }
+        }
+        let wraps_before = |position: usize| {
+            self.runs
+                .iter()
+                .find(|&&(end, _)| end as usize >= position)
+                .is_none_or(|(_, style)| style.white_space.wraps())
+        };
+        let mut glyph = 0;
+        let breaks = LineSegmenter::new_auto(LineBreakOptions::default()).segment_str(text);
+        for position in breaks {
+            if position == 0 || !(bytes.get(position - 1) == Some(&b'\n') || wraps_before(position))
+            {
+                continue;
+            }
+            while clusters
+                .get(glyph + 1)
+                .is_some_and(|&cluster| (cluster as usize) < position)
+            {
+                glyph += 1;
+            }
+            if let Some(shaped) = glyphs.get_mut(glyph)
+                && clusters
+                    .get(glyph)
+                    .is_some_and(|&cluster| (cluster as usize) < position)
+            {
+                shaped.flags |= BREAK;
+            }
+        }
     }
 
     fn shape_group(
@@ -213,6 +295,7 @@ impl Paragraph {
         range: Range<usize>,
         size: f32,
         shaped: &mut ShapedParagraph,
+        clusters: &mut Vec<u32>,
     ) {
         let Some(text) = self.text.get(range.clone()) else {
             return;
@@ -223,19 +306,27 @@ impl Paragraph {
         let mut offset = range.start as u32;
         for word in text.split_inclusive(' ') {
             if let Some(glyphs) = fonts.shape_word(span.font, size, rtl, word) {
-                shaped.glyphs.extend(glyphs.iter().map(|glyph| ShapedGlyph {
-                    id: glyph.id,
-                    cluster: offset + glyph.cluster,
-                    advance: glyph.advance,
-                    x_offset: glyph.x_offset,
-                    y_offset: glyph.y_offset,
-                    span: span_index,
-                }));
+                for glyph in glyphs {
+                    shaped.glyphs.push(ShapedGlyph {
+                        id: u16::try_from(glyph.id).unwrap_or(0),
+                        flags: 0,
+                        span: span_index,
+                        advance: glyph.advance,
+                        x_offset: glyph.x_offset,
+                        y_offset: glyph.y_offset,
+                    });
+                    clusters.push(offset + glyph.cluster);
+                }
             }
             offset += word.len() as u32;
         }
     }
 }
+
+const SPACE: u8 = 1;
+const BREAK: u8 = 2;
+const MANDATORY: u8 = 4;
+const NEWLINE: u8 = 8;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 struct Span {
@@ -246,17 +337,24 @@ struct Span {
 
 #[derive(Clone, Copy, Debug)]
 struct ShapedGlyph {
-    id: u32,
-    cluster: u32,
+    id: u16,
+    flags: u8,
+    span: u32,
     advance: f32,
     x_offset: f32,
     y_offset: f32,
-    span: u32,
+}
+
+impl ShapedGlyph {
+    fn hangs(&self) -> bool {
+        self.flags & (SPACE | NEWLINE) != 0
+    }
 }
 
 pub struct ShapedParagraph {
     glyphs: Vec<ShapedGlyph>,
     spans: Vec<Span>,
+    styles: Vec<RunStyle>,
 }
 
 struct Segment {
@@ -270,31 +368,20 @@ impl ShapedParagraph {
     pub fn heap_bytes(&self) -> usize {
         self.glyphs.capacity() * size_of::<ShapedGlyph>()
             + self.spans.capacity() * size_of::<Span>()
+            + self.styles.capacity() * size_of::<RunStyle>()
     }
 
-    pub fn lines(
-        &self,
-        paragraph: &Paragraph,
-        fonts: &mut Fonts,
-        width: f32,
-        strut: RunStyle,
-        justify: bool,
-    ) -> Lines {
+    pub fn lines(&self, fonts: &mut Fonts, width: f32, strut: RunStyle, justify: bool) -> Lines {
         let justify_to = justify.then_some(width);
-        let styles: Vec<RunStyle> = paragraph.runs.iter().map(|&(_, style)| style).collect();
-        let text = paragraph.text.as_bytes();
-        let segments = self.segments(paragraph);
         let mut lines = Lines::default();
         let mut start = 0;
         let mut line_width = 0.0;
         let mut has_content = false;
-        for segment in &segments {
+        for segment in self.segments() {
             if has_content && line_width + segment.width - segment.trailing > width {
                 self.push_line(
                     &mut lines,
                     fonts,
-                    &styles,
-                    text,
                     start..segment.glyphs.start,
                     strut,
                     justify_to,
@@ -305,86 +392,54 @@ impl ShapedParagraph {
             line_width += segment.width;
             has_content = true;
             if segment.mandatory {
-                self.push_line(
-                    &mut lines,
-                    fonts,
-                    &styles,
-                    text,
-                    start..segment.glyphs.end,
-                    strut,
-                    None,
-                );
+                self.push_line(&mut lines, fonts, start..segment.glyphs.end, strut, None);
                 start = segment.glyphs.end;
                 line_width = 0.0;
                 has_content = false;
             }
         }
         if has_content && start < self.glyphs.len() {
-            self.push_line(
-                &mut lines,
-                fonts,
-                &styles,
-                text,
-                start..self.glyphs.len(),
-                strut,
-                None,
-            );
+            self.push_line(&mut lines, fonts, start..self.glyphs.len(), strut, None);
         }
         lines
     }
 
-    fn segments(&self, paragraph: &Paragraph) -> Vec<Segment> {
-        let text = paragraph.text.as_str();
-        let bytes = text.as_bytes();
-        let wraps_before = |position: usize| {
-            paragraph
-                .runs
-                .iter()
-                .find(|&&(end, _)| end as usize >= position)
-                .is_none_or(|(_, style)| style.white_space.wraps())
-        };
-        let breaks = LineSegmenter::new_auto(LineBreakOptions::default())
-            .segment_str(text)
-            .filter(|&position| {
-                position > 0
-                    && (position == text.len()
-                        || bytes.get(position - 1) == Some(&b'\n')
-                        || wraps_before(position))
-            });
-        let mut segments = Vec::new();
-        let mut glyph = 0;
-        for end in breaks {
-            let first = glyph;
+    fn segments(&self) -> impl Iterator<Item = Segment> + '_ {
+        let mut start = 0;
+        std::iter::from_fn(move || {
+            let first = start;
             let mut width = 0.0;
             let mut trailing = 0.0;
-            while let Some(shaped) = self.glyphs.get(glyph)
-                && (shaped.cluster as usize) < end
-            {
-                width += shaped.advance;
-                if bytes.get(shaped.cluster as usize) == Some(&b' ') {
-                    trailing += shaped.advance;
+            while let Some(glyph) = self.glyphs.get(start) {
+                start += 1;
+                width += glyph.advance;
+                if glyph.hangs() {
+                    trailing += glyph.advance;
                 } else {
                     trailing = 0.0;
                 }
-                glyph += 1;
+                if glyph.flags & BREAK != 0 {
+                    return Some(Segment {
+                        glyphs: first..start,
+                        width,
+                        trailing,
+                        mandatory: glyph.flags & MANDATORY != 0,
+                    });
+                }
             }
-            segments.push(Segment {
-                glyphs: first..glyph,
+            (start > first).then_some(Segment {
+                glyphs: first..start,
                 width,
                 trailing,
-                mandatory: bytes.get(end - 1) == Some(&b'\n'),
-            });
-        }
-        segments
+                mandatory: false,
+            })
+        })
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn push_line(
         &self,
         lines: &mut Lines,
         fonts: &mut Fonts,
-        styles: &[RunStyle],
-        text: &[u8],
         range: Range<usize>,
         strut: RunStyle,
         justify_to: Option<f32>,
@@ -392,24 +447,21 @@ impl ShapedParagraph {
         let (mut above, mut below) = vertical_extent(fonts, None, strut);
         let first_item = lines.items.len();
         let shaped = self.glyphs.get(range).unwrap_or_default();
-        let is_space =
-            |glyph: &ShapedGlyph| matches!(text.get(glyph.cluster as usize), Some(b' ' | b'\n'));
         let hanging = shaped
             .iter()
             .rev()
-            .take_while(|glyph| is_space(glyph))
+            .take_while(|glyph| glyph.hangs())
             .count();
         let shaped = shaped.get(..shaped.len() - hanging).unwrap_or_default();
-        let level = |glyph: &ShapedGlyph| {
+        let order = visual_order(shaped, |glyph| {
             self.spans
                 .get(glyph.span as usize)
                 .map_or(0, |span| span.level)
-        };
-        let order = visual_order(shaped, level);
+        });
         let natural: f32 = shaped.iter().map(|glyph| glyph.advance).sum();
         let spaces = shaped
             .iter()
-            .filter(|glyph| text.get(glyph.cluster as usize) == Some(&b' '))
+            .filter(|glyph| glyph.flags & SPACE != 0)
             .count();
         let expansion = match justify_to {
             Some(width) if spaces > 0 && width > natural => (width - natural) / spaces as f32,
@@ -419,11 +471,12 @@ impl ShapedParagraph {
         let visual: Vec<&ShapedGlyph> = order
             .iter()
             .filter_map(|&index| shaped.get(index))
+            .filter(|glyph| glyph.flags & NEWLINE == 0)
             .collect();
         for group in visual.chunk_by(|a, b| a.span == b.span) {
             let Some((span, style)) = group.first().and_then(|first| {
                 let span = *self.spans.get(first.span as usize)?;
-                Some((span, *styles.get(span.run as usize)?))
+                Some((span, *self.styles.get(span.run as usize)?))
             }) else {
                 continue;
             };
@@ -435,13 +488,13 @@ impl ShapedParagraph {
             let start = pen;
             let glyph_start = lines.glyphs.len();
             for glyph in group {
-                lines.glyphs.push(Glyph {
-                    id: glyph.id,
-                    x: pen - start + glyph.x_offset,
-                    y: -glyph.y_offset,
-                });
+                lines.glyphs.push(Glyph::new(
+                    glyph.id,
+                    pen - start + glyph.x_offset,
+                    -glyph.y_offset,
+                ));
                 pen += glyph.advance;
-                if text.get(glyph.cluster as usize) == Some(&b' ') {
+                if glyph.flags & SPACE != 0 {
                     pen += expansion;
                 }
             }

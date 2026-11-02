@@ -37,6 +37,7 @@ pub(crate) fn rasterize(list: &DisplayList, scroll_y: f32, width: u16, height: u
             }
             Item::Glyphs {
                 rect,
+                baseline,
                 font,
                 size,
                 color: fill,
@@ -50,10 +51,9 @@ pub(crate) fn rasterize(list: &DisplayList, scroll_y: f32, width: u16, height: u
                     continue;
                 };
                 context.set_paint(color(*fill));
-                let glyphs = list.glyphs(glyphs).iter().map(|glyph| vello_cpu::Glyph {
-                    id: glyph.id,
-                    x: glyph.x,
-                    y: glyph.y,
+                let glyphs = list.glyphs(glyphs).iter().map(|glyph| {
+                    let (id, x, y) = glyph.translated(0.0, *baseline);
+                    vello_cpu::Glyph { id, x, y }
                 });
                 let _ = context
                     .glyph_run(&mut resources, font)

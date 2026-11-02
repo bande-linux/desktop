@@ -21,7 +21,6 @@ pub(crate) struct InlineItem {
 }
 
 pub(crate) struct InlineContent {
-    pub(crate) paragraph: Paragraph,
     pub(crate) shaped: ShapedParagraph,
     pub(crate) items: Vec<InlineItem>,
 }
@@ -91,9 +90,7 @@ fn block_bytes(block: &BlockBox) -> usize {
 }
 
 fn inline_bytes(inline: &InlineContent) -> usize {
-    inline.paragraph.text().len()
-        + inline.shaped.heap_bytes()
-        + inline.items.capacity() * size_of::<InlineItem>()
+    inline.shaped.heap_bytes() + inline.items.capacity() * size_of::<InlineItem>()
 }
 
 pub(crate) fn is_rtl(style: &ComputedStyle) -> bool {
@@ -229,10 +226,8 @@ impl Builder<'_> {
     }
 
     fn finish(&mut self, pending: Pending) -> InlineContent {
-        let shaped = pending.paragraph.shape(self.fonts);
         InlineContent {
-            paragraph: pending.paragraph,
-            shaped,
+            shaped: pending.paragraph.shape(self.fonts),
             items: pending.items,
         }
     }
@@ -249,10 +244,8 @@ impl Builder<'_> {
         let mut run = run_style(style, 0, 0.0);
         run.white_space = web_style::WhiteSpace::Pre;
         paragraph.push_text(&text, run);
-        let shaped = paragraph.shape(self.fonts);
         Some(Box::new(InlineContent {
-            paragraph,
-            shaped,
+            shaped: paragraph.shape(self.fonts),
             items: Vec::new(),
         }))
     }

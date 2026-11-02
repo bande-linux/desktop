@@ -1,0 +1,18 @@
+[package]
+name = "web-image"
+description = "Image decoding into RGBA and the per-page image cache with its memory budget"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+gif.workspace = true
+image-webp.workspace = true
+png.workspace = true
+zune-core.workspace = true
+zune-jpeg.workspace = true
+
+[lints]
+workspace = true

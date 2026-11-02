@@ -19,26 +19,31 @@ web-layout = { path = "crates/web-layout" }
 web-paint = { path = "crates/web-paint" }
 web-css = { path = "crates/web-css" }
 web-content = { path = "crates/web-content" }
+web-image = { path = "crates/web-image" }
 web-net = { path = "crates/web-net" }
 brotli-decompressor = "5"
 encoding_rs = "0.8"
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
+gif = "0.14"
 harfrust = "=0.12.0"
 hashbrown = { version = "0.16", default-features = false }
 hyper = { version = "1", features = ["client", "http1"] }
 icu_properties = "2.4"
 icu_segmenter = "2.4"
+image-webp = "0.2"
 linebender_resource_handle = "0.1.1"
 png = "0.18"
 rustix = { version = "1", features = ["event", "fs"] }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "logging", "prefer-post-quantum", "std", "tls12"] }
 rustls-platform-verifier = "0.7"
+serde_json = "1"
 skrifa = "=0.44.0"
 unicode-bidi = "0.3.18"
 url = "2"
-serde_json = "1"
 vello_cpu = "=0.3.0"
+zune-core = "0.5"
+zune-jpeg = "0.5"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

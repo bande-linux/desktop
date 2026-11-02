@@ -2,12 +2,14 @@
 mod raster;
 
 use std::ops::Range;
+use std::sync::Arc;
 
 use linebender_resource_handle::FontData;
 use web_dom::NodeId;
 use web_layout::{BoxFragment, Fragment, FragmentTree, TextFragment};
 use web_text::{Fonts, Glyph};
 
+pub use web_image::Image;
 pub use web_layout::Rect;
 pub use web_style::Color;
 
@@ -26,7 +28,21 @@ pub enum Item {
         color: Color,
         glyphs: Range<u32>,
     },
+    Image {
+        rect: Rect,
+        clip: Rect,
+        image: u32,
+    },
+    PushClip {
+        rect: Rect,
+    },
+    PushOpacity {
+        alpha: f32,
+    },
+    Pop,
 }
+
+pub type ImageSource<'a> = &'a dyn Fn(&str) -> Option<Arc<Image>>;
 
 #[derive(Clone, Debug)]
 pub struct DisplayList {
@@ -36,10 +52,16 @@ pub struct DisplayList {
     pub items: Vec<Item>,
     pub glyphs: Vec<Glyph>,
     pub fonts: Vec<FontData>,
+    pub images: Vec<Arc<Image>>,
 }
 
 impl DisplayList {
-    pub fn build(tree: &FragmentTree, fonts: &Fonts, width: f32) -> Self {
+    pub fn build(
+        tree: &FragmentTree,
+        fonts: &Fonts,
+        width: f32,
+        images: &dyn Fn(&str) -> Option<Arc<Image>>,
+    ) -> Self {
         let mut builder = Builder {
             tree,
             items: Vec::new(),
@@ -47,8 +69,12 @@ impl DisplayList {
             fonts: Vec::new(),
             font_ids: Vec::new(),
             source: fonts,
+            images,
+            image_list: Vec::new(),
+            image_ids: Vec::new(),
+            clips: Vec::new(),
         };
-        builder.box_fragment(&tree.root, 0.0, 0.0);
+        builder.context(&tree.root, 0.0, 0.0);
         DisplayList {
             width,
             height: tree.height(),
@@ -56,6 +82,7 @@ impl DisplayList {
             items: builder.items,
             glyphs: builder.glyphs,
             fonts: builder.fonts,
+            images: builder.image_list,
         }
     }
 
@@ -86,6 +113,7 @@ impl DisplayList {
         self.items.capacity() * size_of::<Item>()
             + self.glyphs.capacity() * size_of::<Glyph>()
             + self.fonts.capacity() * size_of::<FontData>()
+            + self.images.capacity() * size_of::<Arc<Image>>()
     }
 
     #[cfg(feature = "raster")]
@@ -101,16 +129,84 @@ struct Builder<'a> {
     fonts: Vec<FontData>,
     font_ids: Vec<(web_text::FontId, u32)>,
     source: &'a Fonts,
+    images: ImageSource<'a>,
+    image_list: Vec<Arc<Image>>,
+    image_ids: Vec<(Arc<str>, u32)>,
+    clips: Vec<Rect>,
+}
+
+struct Deferred<'f> {
+    z: i32,
+    fragment: &'f BoxFragment,
+    x: f32,
+    y: f32,
+    clips: Vec<Rect>,
 }
 
 impl Builder<'_> {
-    fn box_fragment(&mut self, fragment: &BoxFragment, x: f32, y: f32) {
+    fn context(&mut self, fragment: &BoxFragment, x: f32, y: f32) {
+        let mut deferred = Vec::new();
+        self.box_fragment(fragment, x, y, &mut deferred);
+        deferred.sort_by_key(|entry| entry.z);
+        let saved = std::mem::take(&mut self.clips);
+        for entry in deferred {
+            for &rect in &entry.clips {
+                self.items.push(Item::PushClip { rect });
+            }
+            self.clips = entry.clips.clone();
+            self.context(entry.fragment, entry.x, entry.y);
+            for _ in &entry.clips {
+                self.items.push(Item::Pop);
+            }
+        }
+        self.clips = saved;
+    }
+
+    fn image(&mut self, source: &Arc<str>) -> Option<u32> {
+        if let Some(&(_, index)) = self.image_ids.iter().find(|(known, _)| known == source) {
+            return Some(index);
+        }
+        let image = (self.images)(source)?;
+        let index = self.image_list.len() as u32;
+        self.image_list.push(image);
+        self.image_ids.push((source.clone(), index));
+        Some(index)
+    }
+
+    fn box_fragment<'f>(
+        &mut self,
+        fragment: &'f BoxFragment,
+        x: f32,
+        y: f32,
+        deferred: &mut Vec<Deferred<'f>>,
+    ) {
         let rect = Rect {
             x: x + fragment.rect.x,
             y: y + fragment.rect.y,
             ..fragment.rect
         };
+        let layer = fragment.layer;
+        let faded = layer.opacity < 1.0;
+        if faded {
+            self.items.push(Item::PushOpacity {
+                alpha: layer.opacity,
+            });
+        }
         self.fill(rect, fragment.background);
+        if let Some(source) = &fragment.background_image
+            && let Some(image) = self.image(source)
+            && let Some(data) = self.image_list.get(image as usize)
+        {
+            self.items.push(Item::Image {
+                rect: Rect {
+                    width: data.width as f32,
+                    height: data.height as f32,
+                    ..rect
+                },
+                clip: rect,
+                image,
+            });
+        }
         let border = fragment.border;
         let colors = fragment.border_color;
         let sides = [
@@ -148,11 +244,46 @@ impl Builder<'_> {
         for (side, color) in sides {
             self.fill(side, color);
         }
+        if let Some(source) = &fragment.image
+            && let Some(image) = self.image(source)
+        {
+            let inner = Rect {
+                x: rect.x + border.left,
+                y: rect.y + border.top,
+                width: (rect.width - border.left - border.right).max(0.0),
+                height: (rect.height - border.top - border.bottom).max(0.0),
+            };
+            self.items.push(Item::Image {
+                rect: inner,
+                clip: inner,
+                image,
+            });
+        }
+        if layer.clips {
+            self.items.push(Item::PushClip { rect });
+            self.clips.push(rect);
+        }
         for child in &fragment.children {
             match child {
-                Fragment::Box(child) => self.box_fragment(child, rect.x, rect.y),
+                Fragment::Box(child) => match child.layer.z {
+                    Some(z) => deferred.push(Deferred {
+                        z,
+                        fragment: child,
+                        x: rect.x,
+                        y: rect.y,
+                        clips: self.clips.clone(),
+                    }),
+                    None => self.box_fragment(child, rect.x, rect.y, deferred),
+                },
                 Fragment::Text(text) => self.text(text, rect.x, rect.y),
             }
+        }
+        if layer.clips {
+            self.items.push(Item::Pop);
+            self.clips.pop();
+        }
+        if faded {
+            self.items.push(Item::Pop);
         }
     }
 

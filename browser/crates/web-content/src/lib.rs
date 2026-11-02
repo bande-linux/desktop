@@ -5,6 +5,7 @@ use web_atoms::Atom;
 use web_css::stylesheet::{CssRule, Stylesheet, parse_stylesheet};
 use web_dom::{Document, NodeId};
 use web_html::{Options, Parser};
+use web_image::ImageCache;
 use web_layout::{BoxFragment, BoxTree, Fragment, FragmentTree};
 use web_paint::DisplayList;
 use web_style::{Styles, Stylist};
@@ -20,8 +21,12 @@ pub struct Page {
     pub display_list: Arc<DisplayList>,
     stylist: Stylist,
     viewport: Viewport,
-    sheets: Vec<(String, String)>,
+    loaded: Vec<String>,
+    imports: Vec<(String, u32)>,
+    images: ImageCache,
 }
+
+const IMAGE_BUDGET: usize = 256 << 20;
 
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct Memory {
@@ -81,6 +86,7 @@ pub fn render_file(path: &std::path::Path, width: u16, height: u16) -> std::io::
     let rgba = FONTS.with_borrow_mut(|fonts| {
         let mut page = Page::with_viewport(document, viewport, fonts);
         page.load_stylesheets_from(directory, fonts);
+        page.load_images_from(directory, fonts);
         page.display_list.rasterize(0.0, width, height)
     });
     Ok(Pixels {
@@ -102,11 +108,30 @@ impl Page {
     }
 
     pub fn with_viewport(mut document: Document, viewport: Viewport, fonts: &mut Fonts) -> Self {
-        let stylist = build_stylist(&mut document, &[], viewport);
+        let mut stylist = Stylist::new(document.atoms_mut(), viewport);
+        let mut imports = Vec::new();
+        for (index, (source, _)) in stylesheet_sources(&document).into_iter().enumerate() {
+            if let Source::Inline(css) = source {
+                let sheet = parse_stylesheet(&css, document.atoms_mut());
+                let position = sheet_position(index);
+                for (offset, url) in self::imports(&sheet).into_iter().enumerate() {
+                    imports.push((url, import_position(position, offset)));
+                }
+                stylist.add_sheet(sheet, position);
+            }
+        }
         let styles = Styles::compute(&document, &stylist);
         let boxes = BoxTree::build(&document, &styles, fonts);
-        let fragments = boxes.layout(viewport.width, fonts);
-        let display_list = Arc::new(DisplayList::build(&fragments, fonts, viewport.width));
+        let images = ImageCache::new(IMAGE_BUDGET);
+        let fragments = boxes.layout((viewport.width, viewport.height), fonts, &|source| {
+            images.size(source)
+        });
+        let display_list = Arc::new(DisplayList::build(
+            &fragments,
+            fonts,
+            viewport.width,
+            &|source| images.get(source).cloned(),
+        ));
         Page {
             document,
             styles,
@@ -115,7 +140,9 @@ impl Page {
             display_list,
             stylist,
             viewport,
-            sheets: Vec::new(),
+            loaded: Vec::new(),
+            imports,
+            images,
         }
     }
 
@@ -124,69 +151,156 @@ impl Page {
         self.restyle(fonts);
     }
 
-    pub fn stylesheet_links(&mut self) -> Vec<String> {
-        let mut links = Vec::new();
-        for (source, _) in stylesheet_sources(&self.document) {
-            if let Source::Link(href) = source
-                && !self.sheets.iter().any(|(loaded, _)| *loaded == href)
-            {
-                links.push(href);
-            }
-        }
-        for (href, css) in &self.sheets {
-            let sheet = parse_stylesheet(css, self.document.atoms_mut());
-            for url in imports(&sheet) {
-                if !self.sheets.iter().any(|(loaded, _)| *loaded == url) && !links.contains(&url) {
-                    links.push(resolve_relative(href, &url));
-                }
-            }
-        }
-        links.retain(|link| !self.sheets.iter().any(|(loaded, _)| loaded == link));
+    pub fn stylesheet_links(&self) -> Vec<String> {
+        let mut links: Vec<String> = stylesheet_sources(&self.document)
+            .into_iter()
+            .filter_map(|(source, _)| match source {
+                Source::Link(href) => Some(href),
+                Source::Inline(_) => None,
+            })
+            .chain(self.imports.iter().map(|(url, _)| url.clone()))
+            .filter(|href| !self.loaded.contains(href))
+            .collect();
+        links.dedup();
         links
     }
 
-    pub fn load_stylesheets_from(&mut self, directory: &std::path::Path, fonts: &mut Fonts) {
-        let mut attempted: Vec<String> = Vec::new();
-        while let Some(href) = self
-            .stylesheet_links()
+    fn position_of(&self, href: &str) -> Option<u32> {
+        stylesheet_sources(&self.document)
             .into_iter()
-            .find(|href| !attempted.contains(href))
-        {
-            let local = href.split(['?', '#']).next().unwrap_or_default();
-            let css = match local.strip_prefix('/') {
-                Some(rooted) => directory
-                    .ancestors()
-                    .find_map(|root| std::fs::read(root.join(rooted)).ok()),
-                None => std::fs::read(directory.join(local)).ok(),
+            .enumerate()
+            .find_map(|(index, (source, _))| match source {
+                Source::Link(link) if link == href => Some(sheet_position(index)),
+                _ => None,
+            })
+            .or_else(|| {
+                self.imports
+                    .iter()
+                    .find(|(url, _)| url == href)
+                    .map(|(_, position)| *position)
+            })
+    }
+
+    pub fn load_stylesheets_from(&mut self, directory: &std::path::Path, fonts: &mut Fonts) {
+        loop {
+            let links: Vec<String> = self.stylesheet_links();
+            if links.is_empty() {
+                return;
             }
-            .unwrap_or_default();
-            self.add_stylesheet(&href, &css, fonts);
-            attempted.push(href);
+            let sheets: Vec<(String, Vec<u8>)> = links
+                .into_iter()
+                .map(|href| {
+                    let css = read_local(directory, &href).unwrap_or_default();
+                    (href, css)
+                })
+                .collect();
+            let borrowed: Vec<(&str, &[u8])> = sheets
+                .iter()
+                .map(|(href, css)| (href.as_str(), css.as_slice()))
+                .collect();
+            self.add_stylesheets(&borrowed, fonts);
         }
     }
 
+    pub fn image_links(&self) -> Vec<String> {
+        let mut links: Vec<String> = Vec::new();
+        let mut stack = vec![NodeId::DOCUMENT];
+        while let Some(node) = stack.pop() {
+            let source = match self.document.html_element_name(node) {
+                Some(Atom::IMG) => self.document.attribute(node, Atom::SRC).map(str::to_owned),
+                _ => None,
+            };
+            let background = self
+                .styles
+                .get(node)
+                .filter(|_| self.document.kind(node) == Some(web_dom::NodeKind::Element))
+                .and_then(|style| style.reset.background_image.as_deref().map(str::to_owned));
+            for link in source.into_iter().chain(background) {
+                if !self.images.contains(&link) && !links.contains(&link) {
+                    links.push(link);
+                }
+            }
+            stack.extend(self.document.children(node));
+        }
+        links
+    }
+
+    pub fn add_images(&mut self, images: &[(&str, &[u8])], fonts: &mut Fonts) {
+        for &(source, bytes) in images {
+            self.images.insert(source, bytes);
+        }
+        self.relayout(fonts);
+    }
+
+    pub fn load_images_from(&mut self, directory: &std::path::Path, fonts: &mut Fonts) {
+        let images: Vec<(String, Vec<u8>)> = self
+            .image_links()
+            .into_iter()
+            .map(|source| {
+                let bytes = read_local(directory, &source).unwrap_or_default();
+                (source, bytes)
+            })
+            .collect();
+        if images.is_empty() {
+            return;
+        }
+        let borrowed: Vec<(&str, &[u8])> = images
+            .iter()
+            .map(|(source, bytes)| (source.as_str(), bytes.as_slice()))
+            .collect();
+        self.add_images(&borrowed, fonts);
+    }
+
     pub fn add_stylesheet(&mut self, href: &str, bytes: &[u8], fonts: &mut Fonts) {
-        let bytes = bytes
-            .get(..bytes.len().min(STYLESHEET_LIMIT))
-            .unwrap_or_default();
-        let (css, _) = web_css::decode_stylesheet(bytes, None, None);
-        self.sheets.push((href.to_owned(), css.into_owned()));
+        self.add_stylesheets(&[(href, bytes)], fonts);
+    }
+
+    pub fn add_stylesheets(&mut self, sheets: &[(&str, &[u8])], fonts: &mut Fonts) {
+        for &(href, bytes) in sheets {
+            if self.loaded.iter().any(|loaded| loaded == href) {
+                continue;
+            }
+            let position = self.position_of(href);
+            self.loaded.push(href.to_owned());
+            let Some(position) = position else {
+                continue;
+            };
+            let bytes = bytes
+                .get(..bytes.len().min(STYLESHEET_LIMIT))
+                .unwrap_or_default();
+            let (css, _) = web_css::decode_stylesheet(bytes, None, None);
+            let sheet = parse_stylesheet(&css, self.document.atoms_mut());
+            drop(css);
+            for (offset, url) in imports(&sheet).into_iter().enumerate() {
+                let url = resolve_relative(href, &url);
+                if !self.imports.iter().any(|(known, _)| *known == url) {
+                    self.imports.push((url, import_position(position, offset)));
+                }
+            }
+            self.stylist.add_sheet(sheet, position);
+        }
         self.restyle(fonts);
     }
 
     fn restyle(&mut self, fonts: &mut Fonts) {
-        self.stylist = build_stylist(&mut self.document, &self.sheets, self.viewport);
+        self.stylist.set_viewport(self.viewport);
         self.styles = Styles::compute(&self.document, &self.stylist);
         self.boxes = BoxTree::build(&self.document, &self.styles, fonts);
         self.relayout(fonts);
     }
 
     fn relayout(&mut self, fonts: &mut Fonts) {
-        self.fragments = self.boxes.layout(self.viewport.width, fonts);
+        let images = &self.images;
+        self.fragments = self.boxes.layout(
+            (self.viewport.width, self.viewport.height),
+            fonts,
+            &|source| images.size(source),
+        );
         self.display_list = Arc::new(DisplayList::build(
             &self.fragments,
             fonts,
             self.viewport.width,
+            &|source| images.get(source).cloned(),
         ));
     }
 
@@ -363,66 +477,40 @@ fn resolve_relative(base: &str, url: &str) -> String {
     }
 }
 
-fn build_stylist(
-    document: &mut Document,
-    sheets: &[(String, String)],
-    viewport: Viewport,
-) -> Stylist {
-    let sources = stylesheet_sources(document);
-    let mut parsed = Vec::new();
-    let mut seen = Vec::new();
-    for (source, _) in sources {
-        let (href, css) = match source {
-            Source::Inline(css) => (None, css),
-            Source::Link(href) => match sheets.iter().find(|(loaded, _)| *loaded == href) {
-                Some((_, css)) => (Some(href), css.clone()),
-                None => continue,
-            },
-        };
-        add_with_imports(
-            document,
-            sheets,
-            href.as_deref(),
-            &css,
-            &mut parsed,
-            &mut seen,
-            0,
-        );
-    }
-    Stylist::new(document.atoms_mut(), parsed, viewport)
+const SHEET_SPACING: u32 = 64;
+
+fn sheet_position(index: usize) -> u32 {
+    u32::try_from(index)
+        .unwrap_or(u32::MAX / SHEET_SPACING)
+        .saturating_mul(SHEET_SPACING)
+        .saturating_add(SHEET_SPACING / 2)
 }
 
-const IMPORT_DEPTH: u8 = 8;
+fn import_position(parent: u32, offset: usize) -> u32 {
+    let offset = u32::try_from(offset)
+        .unwrap_or(0)
+        .min(SHEET_SPACING / 2 - 1);
+    parent.saturating_sub(SHEET_SPACING / 2) + offset
+}
 
-fn add_with_imports(
-    document: &mut Document,
-    sheets: &[(String, String)],
-    href: Option<&str>,
-    css: &str,
-    parsed: &mut Vec<Stylesheet>,
-    seen: &mut Vec<String>,
-    depth: u8,
-) {
-    let sheet = parse_stylesheet(css, document.atoms_mut());
-    if depth < IMPORT_DEPTH {
-        for url in imports(&sheet) {
-            let url = href.map_or(url.clone(), |href| resolve_relative(href, &url));
-            if seen.contains(&url) {
-                continue;
-            }
-            seen.push(url.clone());
-            if let Some((_, imported)) = sheets.iter().find(|(loaded, _)| *loaded == url) {
-                add_with_imports(
-                    document,
-                    sheets,
-                    Some(&url),
-                    imported,
-                    parsed,
-                    seen,
-                    depth + 1,
-                );
-            }
-        }
+const LOCAL_LIMIT: u64 = 64 << 20;
+
+fn read_local(directory: &std::path::Path, link: &str) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let local = link.split(['?', '#']).next().unwrap_or_default();
+    let open = |path: std::path::PathBuf| {
+        let mut bytes = Vec::new();
+        std::fs::File::open(path)
+            .ok()?
+            .take(LOCAL_LIMIT)
+            .read_to_end(&mut bytes)
+            .ok()?;
+        Some(bytes)
+    };
+    match local.strip_prefix('/') {
+        Some(rooted) => directory
+            .ancestors()
+            .find_map(|root| open(root.join(rooted))),
+        None => open(directory.join(local)),
     }
-    parsed.push(sheet);
 }

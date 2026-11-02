@@ -39,6 +39,72 @@ pub enum Display {
     Inline,
     InlineBlock,
     ListItem,
+    Flex,
+    InlineFlex,
+}
+
+impl Display {
+    pub fn is_inline_level(self) -> bool {
+        matches!(
+            self,
+            Display::Inline | Display::InlineBlock | Display::InlineFlex
+        )
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Position {
+    Static,
+    Relative,
+    Absolute,
+    Fixed,
+    Sticky,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Float {
+    None,
+    Left,
+    Right,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Clear {
+    None,
+    Left,
+    Right,
+    Both,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum FlexDirection {
+    Row,
+    RowReverse,
+    Column,
+    ColumnReverse,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Align {
+    Auto,
+    Normal,
+    Start,
+    End,
+    Center,
+    Stretch,
+    Baseline,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum ObjectFit {
+    Fill,
+    Contain,
+    Cover,
+    None,
+    ScaleDown,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -207,7 +273,31 @@ pub struct ResetStyle {
     pub height: Option<LengthPercentage>,
     pub min_width: LengthPercentage,
     pub max_width: Option<LengthPercentage>,
+    pub min_height: LengthPercentage,
+    pub max_height: Option<LengthPercentage>,
+    pub border_box: bool,
     pub text_decoration: TextDecorations,
+    pub position: Position,
+    pub inset: Sides<Option<LengthPercentage>>,
+    pub float: Float,
+    pub clear: Clear,
+    pub z_index: Option<i32>,
+    pub clips: bool,
+    pub opacity: f32,
+    pub flex_direction: FlexDirection,
+    pub flex_wrap: bool,
+    pub flex_grow: f32,
+    pub flex_shrink: f32,
+    pub flex_basis: Option<LengthPercentage>,
+    pub order: i32,
+    pub justify_content: Align,
+    pub align_items: Align,
+    pub align_self: Align,
+    pub align_content: Align,
+    pub row_gap: LengthPercentage,
+    pub column_gap: LengthPercentage,
+    pub background_image: Option<Arc<str>>,
+    pub object_fit: ObjectFit,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -253,7 +343,31 @@ impl ResetStyle {
             height: None,
             min_width: LengthPercentage::ZERO,
             max_width: None,
+            min_height: LengthPercentage::ZERO,
+            max_height: None,
+            border_box: false,
             text_decoration: TextDecorations::default(),
+            position: Position::Static,
+            inset: Sides::all(None),
+            float: Float::None,
+            clear: Clear::None,
+            z_index: None,
+            clips: false,
+            opacity: 1.0,
+            flex_direction: FlexDirection::Row,
+            flex_wrap: false,
+            flex_grow: 0.0,
+            flex_shrink: 1.0,
+            flex_basis: None,
+            order: 0,
+            justify_content: Align::Normal,
+            align_items: Align::Normal,
+            align_self: Align::Auto,
+            align_content: Align::Normal,
+            row_gap: LengthPercentage::ZERO,
+            column_gap: LengthPercentage::ZERO,
+            background_image: None,
+            object_fit: ObjectFit::Fill,
         }
     }
 }
@@ -278,6 +392,14 @@ impl ComputedStyle {
         };
         neutral_inherited(&self.inherited) == neutral_inherited(&other.inherited)
             && neutral_reset(&self.reset) == neutral_reset(&other.reset)
+    }
+
+    pub fn is_out_of_flow(&self) -> bool {
+        matches!(self.reset.position, Position::Absolute | Position::Fixed)
+    }
+
+    pub fn is_positioned(&self) -> bool {
+        self.reset.position != Position::Static
     }
 
     pub fn is_rtl(&self) -> bool {

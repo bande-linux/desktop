@@ -35,6 +35,7 @@ fn render(input: &str, output: &str, width: u16) -> Result<(), Box<dyn std::erro
     let mut page = Page::new(document, f32::from(width), &mut fonts);
     if let Some(directory) = std::path::Path::new(input).parent() {
         page.load_stylesheets_from(directory, &mut fonts);
+        page.load_images_from(directory, &mut fonts);
     }
     let rendered = started.elapsed();
     let memory = page.memory();

@@ -26,6 +26,8 @@ pub(crate) struct RuleData {
     pub(crate) block: DeclarationBlock,
     pub(crate) origin: Origin,
     pub(crate) layer: u16,
+    pub(crate) order: u32,
+    media: Box<[u32]>,
 }
 
 pub(crate) struct Entry {
@@ -52,7 +54,10 @@ pub(crate) enum Key {
 pub struct Stylist {
     pub(crate) rules: Vec<RuleData>,
     pub(crate) entries: Vec<Entry>,
-    buckets: HashMap<Key, Vec<u32>>,
+    buckets: HashMap<Key, (u32, u32)>,
+    bucketed: Vec<u32>,
+    media: Vec<MediaList>,
+    media_matches: Vec<bool>,
     pub(crate) namespaces: Vec<(Atom, Namespace)>,
     pub(crate) hover_subjects: Vec<Key>,
     pub(crate) hover_ancestors: Vec<Key>,
@@ -62,11 +67,14 @@ pub struct Stylist {
 
 struct Builder<'a> {
     stylist: &'a mut Stylist,
-    environment: MediaEnvironment,
+    position: u32,
+    next: u32,
 }
 
+const RULES_PER_SHEET: u32 = 1 << 20;
+
 impl Stylist {
-    pub fn new(atoms: &mut AtomTable, sheets: Vec<Stylesheet>, viewport: Viewport) -> Self {
+    pub fn new(atoms: &mut AtomTable, viewport: Viewport) -> Self {
         let namespaces = [
             ("http://www.w3.org/1999/xhtml", Namespace::Html),
             ("http://www.w3.org/2000/svg", Namespace::Svg),
@@ -79,22 +87,89 @@ impl Stylist {
             rules: Vec::new(),
             entries: Vec::new(),
             buckets: HashMap::new(),
+            bucketed: Vec::new(),
+            media: Vec::new(),
+            media_matches: Vec::new(),
             namespaces,
             hover_subjects: Vec::new(),
             hover_ancestors: Vec::new(),
             viewport,
             layers: Vec::new(),
         };
-        let mut builder = Builder {
-            stylist: &mut stylist,
-            environment: environment(viewport),
-        };
         let user_agent = parse_stylesheet(UA_SHEET, atoms);
-        builder.add_rules(user_agent.rules, Origin::UserAgent, UNLAYERED, None);
-        for sheet in sheets {
-            builder.add_rules(sheet.rules, Origin::Author, UNLAYERED, None);
-        }
+        stylist.add(user_agent, Origin::UserAgent, 0);
         stylist
+    }
+
+    pub fn add_sheet(&mut self, sheet: Stylesheet, position: u32) {
+        self.add(sheet, Origin::Author, position.saturating_add(1));
+    }
+
+    fn add(&mut self, sheet: Stylesheet, origin: Origin, position: u32) {
+        let mut builder = Builder {
+            stylist: self,
+            position,
+            next: 0,
+        };
+        builder.add_rules(sheet.rules, origin, UNLAYERED, &[]);
+        self.reindex();
+    }
+
+    pub fn set_viewport(&mut self, viewport: Viewport) {
+        self.viewport = viewport;
+        let environment = environment(viewport);
+        self.media_matches = self
+            .media
+            .iter()
+            .map(|media| media.matches(&environment))
+            .collect();
+    }
+
+    fn reindex(&mut self) {
+        let mut keyed: Vec<(Key, u32)> = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| {
+                Some((subject_key(&entry.selector()?.components), index as u32))
+            })
+            .collect();
+        keyed.sort_by_key(|(key, index)| (key_order(*key), *index));
+        self.buckets.clear();
+        self.bucketed.clear();
+        self.bucketed.shrink_to(keyed.len());
+        for group in keyed.chunk_by(|a, b| a.0 == b.0) {
+            let start = self.bucketed.len() as u32;
+            self.bucketed.extend(group.iter().map(|(_, index)| *index));
+            if let Some((key, _)) = group.first() {
+                self.buckets.insert(*key, (start, group.len() as u32));
+            }
+        }
+        self.buckets.shrink_to_fit();
+        let environment = environment(self.viewport);
+        self.media_matches = self
+            .media
+            .iter()
+            .map(|media| media.matches(&environment))
+            .collect();
+    }
+
+    pub(crate) fn active(&self, rule: u32) -> bool {
+        self.rules.get(rule as usize).is_some_and(|rule| {
+            rule.media.iter().all(|&media| {
+                self.media_matches
+                    .get(media as usize)
+                    .copied()
+                    .unwrap_or(false)
+            })
+        })
+    }
+
+    pub fn heap_bytes(&self) -> usize {
+        self.rules.capacity() * size_of::<RuleData>()
+            + self.entries.capacity() * size_of::<Entry>()
+            + self.bucketed.capacity() * size_of::<u32>()
+            + self.buckets.capacity() * size_of::<(Key, (u32, u32))>()
     }
 
     pub(crate) fn candidates<'a>(
@@ -109,8 +184,26 @@ impl Stylist {
             .chain(classes.iter().map(|&class| Key::Class(class)))
             .chain([Key::Name(name), Key::Any]);
         keys.filter_map(|key| self.buckets.get(&key))
-            .flatten()
+            .flat_map(|&(start, len)| {
+                self.bucketed
+                    .get(start as usize..(start + len) as usize)
+                    .unwrap_or_default()
+            })
             .copied()
+            .filter(|&entry| {
+                self.entries
+                    .get(entry as usize)
+                    .is_some_and(|entry| self.active(entry.rule))
+            })
+    }
+}
+
+fn key_order(key: Key) -> (u8, u32) {
+    match key {
+        Key::Id(atom) => (0, atom.index()),
+        Key::Class(atom) => (1, atom.index()),
+        Key::Name(atom) => (2, atom.index()),
+        Key::Any => (3, 0),
     }
 }
 
@@ -160,43 +253,45 @@ impl Builder<'_> {
             .flatten()
     }
 
-    fn add_rules(
-        &mut self,
-        rules: Vec<CssRule>,
-        origin: Origin,
-        layer: u16,
-        media: Option<&MediaList>,
-    ) {
-        if media.is_some_and(|media| !media.matches(&self.environment)) {
-            return;
-        }
+    fn add_rules(&mut self, rules: Vec<CssRule>, origin: Origin, layer: u16, media: &[u32]) {
         for rule in rules {
             match rule {
                 CssRule::Style(style) => {
                     let style = *style;
                     let index = self.stylist.rules.len() as u32;
+                    let order = self
+                        .position
+                        .saturating_mul(RULES_PER_SHEET)
+                        .saturating_add(self.next.min(RULES_PER_SHEET - 1));
+                    self.next += 1;
+                    let mut block = style.declarations;
+                    block.declarations.shrink_to_fit();
+                    block.custom.shrink_to_fit();
                     self.stylist.rules.push(RuleData {
-                        block: style.declarations,
+                        block,
                         origin,
                         layer,
+                        order,
+                        media: media.into(),
                     });
                     for selector in 0..style.selectors.0.len() {
                         self.add_selector(&style.selectors, selector as u32, index);
                     }
-                    self.add_rules(style.rules, origin, layer, None);
+                    self.add_rules(style.rules, origin, layer, media);
                 }
                 CssRule::Media(list, rules) => {
-                    if list.matches(&self.environment) {
-                        self.add_rules(rules, origin, layer, None);
-                    }
+                    let index = self.stylist.media.len() as u32;
+                    self.stylist.media.push(*list);
+                    let nested: Vec<u32> = media.iter().copied().chain([index]).collect();
+                    self.add_rules(rules, origin, layer, &nested);
                 }
                 CssRule::Supports(true, rules) | CssRule::Container(_, _, rules) => {
-                    self.add_rules(rules, origin, layer, None)
+                    self.add_rules(rules, origin, layer, media)
                 }
                 CssRule::Layer(name, rules) => {
                     let parent = self.layer_path(layer);
                     let layer = self.layer(parent.as_deref(), name.as_ref());
-                    self.add_rules(rules, origin, layer, None);
+                    self.add_rules(rules, origin, layer, media);
                 }
                 CssRule::LayerStatement(names) => {
                     let parent = self.layer_path(layer);
@@ -213,7 +308,6 @@ impl Builder<'_> {
         let Some(selector) = list.0.get(index as usize) else {
             return;
         };
-        let key = subject_key(&selector.components);
         for (subject, hover_key) in hover_keys(&selector.components) {
             let keys = if subject {
                 &mut self.stylist.hover_subjects
@@ -224,14 +318,12 @@ impl Builder<'_> {
                 keys.push(hover_key);
             }
         }
-        let entry = self.stylist.entries.len() as u32;
         self.stylist.entries.push(Entry {
             sensitive: is_sensitive(&selector.components),
             list: list.clone(),
             index,
             rule,
         });
-        self.stylist.buckets.entry(key).or_default().push(entry);
     }
 }
 

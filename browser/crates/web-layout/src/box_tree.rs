@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use web_atoms::Atom;
 use web_dom::{Document, NodeId, NodeKind};
 use web_style::{ComputedStyle, Display, LineHeight, ListStyleType, Styles, VerticalAlign};
@@ -13,6 +15,8 @@ pub(crate) struct BlockBox {
 pub(crate) enum Contents {
     Blocks(Vec<BlockBox>),
     Inline(Box<InlineContent>),
+    Replaced(Option<Arc<str>>),
+    Flex(Vec<BlockBox>),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -20,6 +24,7 @@ pub(crate) enum ItemKind {
     Text,
     Start,
     End(u32),
+    Atomic(u16),
 }
 
 pub(crate) struct InlineItem {
@@ -81,6 +86,8 @@ fn decorated(style: &ComputedStyle) -> bool {
 pub(crate) struct InlineContent {
     pub(crate) shaped: ShapedParagraph,
     pub(crate) items: Vec<InlineItem>,
+    pub(crate) atomics: Vec<BlockBox>,
+    pub(crate) out_of_flow: Vec<BlockBox>,
 }
 
 pub struct BoxTree {
@@ -100,6 +107,8 @@ struct Pending {
     paragraph: Paragraph,
     items: Vec<InlineItem>,
     open: Vec<u32>,
+    atomics: Vec<BlockBox>,
+    out_of_flow: Vec<BlockBox>,
 }
 
 impl Pending {
@@ -108,6 +117,8 @@ impl Pending {
             paragraph: Paragraph::new(rtl),
             items: Vec::new(),
             open: Vec::new(),
+            atomics: Vec::new(),
+            out_of_flow: Vec::new(),
         }
     }
 
@@ -165,13 +176,22 @@ fn refresh(block: &mut BlockBox, styles: &Styles, parent: Option<&ComputedStyle>
                 refresh(child, styles, Some(&style));
             }
         }
+        Contents::Flex(children) => {
+            for child in children {
+                refresh(child, styles, Some(&style));
+            }
+        }
         Contents::Inline(inline) => {
             for item in &mut inline.items {
                 if let Some(style) = styles.get(item.node) {
                     item.style = style.clone();
                 }
             }
+            for child in inline.atomics.iter_mut().chain(&mut inline.out_of_flow) {
+                refresh(child, styles, Some(&style));
+            }
         }
+        Contents::Replaced(_) => {}
     }
 }
 
@@ -181,16 +201,24 @@ fn block_bytes(block: &BlockBox) -> usize {
     });
     marker
         + match &block.contents {
-            Contents::Blocks(children) => {
+            Contents::Blocks(children) | Contents::Flex(children) => {
                 children.capacity() * size_of::<BlockBox>()
                     + children.iter().map(block_bytes).sum::<usize>()
             }
             Contents::Inline(inline) => size_of::<InlineContent>() + inline_bytes(inline),
+            Contents::Replaced(_) => 0,
         }
 }
 
 fn inline_bytes(inline: &InlineContent) -> usize {
-    inline.shaped.heap_bytes() + inline.items.capacity() * size_of::<InlineItem>()
+    inline.shaped.heap_bytes()
+        + inline.items.capacity() * size_of::<InlineItem>()
+        + inline
+            .atomics
+            .iter()
+            .chain(&inline.out_of_flow)
+            .map(|block| size_of::<BlockBox>() + block_bytes(block))
+            .sum::<usize>()
 }
 
 pub(crate) fn is_rtl(style: &ComputedStyle) -> bool {
@@ -230,10 +258,23 @@ pub(crate) fn run_style(style: &ComputedStyle, tag: u32, baseline_shift: f32) ->
 
 impl Builder<'_> {
     fn block(&mut self, node: NodeId, style: ComputedStyle, ordinal: Option<i32>) -> BlockBox {
+        if self.document.html_element_name(node) == Some(Atom::IMG) {
+            let source = self.document.attribute(node, Atom::SRC).map(Arc::from);
+            return BlockBox {
+                node: Some(node),
+                style,
+                contents: Contents::Replaced(source),
+                marker: None,
+            };
+        }
         let mut blocks = Vec::new();
         let mut pending = Pending::new(is_rtl(&style));
         self.children(node, &mut blocks, &mut pending, 0.0);
-        let contents = if blocks.is_empty() {
+        let flex = matches!(style.display(), Display::Flex | Display::InlineFlex);
+        let contents = if flex {
+            self.flush(&mut blocks, pending, &style);
+            Contents::Flex(blocks)
+        } else if blocks.is_empty() {
             Contents::Inline(Box::new(self.finish(pending)))
         } else {
             self.flush(&mut blocks, pending, &style);
@@ -270,6 +311,32 @@ impl Builder<'_> {
                         .push_text(text, run_style(style, tag, shift));
                 }
                 Some(NodeKind::Element) if self.depth >= MAX_DEPTH => {}
+                Some(NodeKind::Element) if style.display() == Display::None => {}
+                Some(NodeKind::Element)
+                    if style.is_out_of_flow() || style.reset.float != web_style::Float::None =>
+                {
+                    self.depth += 1;
+                    let block = self.block(child, style.clone(), None);
+                    self.depth -= 1;
+                    pending.out_of_flow.push(block);
+                }
+                Some(NodeKind::Element)
+                    if style.display().is_inline_level() && style.display() != Display::Inline
+                        || (style.display() == Display::Inline
+                            && self.document.html_element_name(child) == Some(Atom::IMG)) =>
+                {
+                    self.depth += 1;
+                    let block = self.block(child, style.clone(), None);
+                    self.depth -= 1;
+                    let index = u16::try_from(pending.atomics.len()).unwrap_or(u16::MAX);
+                    if index < u16::MAX {
+                        pending.atomics.push(block);
+                        let tag = pending.push(child, style, ItemKind::Atomic(index));
+                        pending
+                            .paragraph
+                            .push_atomic(index, run_style(style, tag, shift + own_shift(style)));
+                    }
+                }
                 Some(NodeKind::Element) => match style.display() {
                     Display::None => {}
                     Display::Inline | Display::Contents => {
@@ -326,8 +393,9 @@ impl Builder<'_> {
         }
     }
 
-    fn flush(&mut self, blocks: &mut Vec<BlockBox>, pending: Pending, style: &ComputedStyle) {
-        if pending.paragraph.is_blank() {
+    fn flush(&mut self, blocks: &mut Vec<BlockBox>, mut pending: Pending, style: &ComputedStyle) {
+        if pending.paragraph.is_blank() && !pending.paragraph.has_atomics() {
+            blocks.append(&mut pending.out_of_flow);
             return;
         }
         let anonymous = self.styles.anonymous(style);
@@ -343,6 +411,8 @@ impl Builder<'_> {
         InlineContent {
             shaped: pending.paragraph.shape(self.fonts),
             items: pending.items,
+            atomics: pending.atomics,
+            out_of_flow: pending.out_of_flow,
         }
     }
 
@@ -365,6 +435,8 @@ impl Builder<'_> {
         Some(Box::new(InlineContent {
             shaped: paragraph.shape(self.fonts),
             items: Vec::new(),
+            atomics: Vec::new(),
+            out_of_flow: Vec::new(),
         }))
     }
 }

@@ -459,7 +459,7 @@ impl Traversal<'_> {
                 let key = (
                     rank(rule.origin, declaration.important, rule.layer),
                     specificity,
-                    entry.rule,
+                    rule.order,
                     order as u32,
                 );
                 candidates.push(Candidate {
@@ -474,7 +474,7 @@ impl Traversal<'_> {
                 let key = (
                     rank(rule.origin, custom.important, rule.layer),
                     specificity,
-                    entry.rule,
+                    rule.order,
                 );
                 customs.push((names.name(custom.name), key, &custom.value));
             }

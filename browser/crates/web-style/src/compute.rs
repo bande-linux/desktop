@@ -11,9 +11,9 @@ use web_css::values::{Length, LengthUnit};
 
 use crate::stylist::Viewport;
 use crate::{
-    Color, ComputedStyle, Direction, Display, FontFamily, InheritedStyle, LengthPercentage,
-    LineHeight, ListStyleType, MEDIUM, ResetStyle, TextAlign, TextDecorations, VerticalAlign,
-    WhiteSpace,
+    Align, Clear, Color, ComputedStyle, Direction, Display, FlexDirection, Float, FontFamily,
+    InheritedStyle, LengthPercentage, LineHeight, ListStyleType, MEDIUM, ObjectFit, Position,
+    ResetStyle, TextAlign, TextDecorations, VerticalAlign, WhiteSpace,
 };
 
 pub(crate) enum Value<'a> {
@@ -376,10 +376,10 @@ impl Computer<'_> {
                     D::None | D::TableColumn | D::TableColumnGroup => Display::None,
                     D::Contents => Display::Contents,
                     D::Inline | D::InlineListItem | D::Ruby | D::RubyText => Display::Inline,
-                    D::InlineBlock | D::InlineFlex | D::InlineGrid | D::InlineTable => {
-                        Display::InlineBlock
-                    }
+                    D::InlineBlock | D::InlineGrid | D::InlineTable => Display::InlineBlock,
                     D::ListItem => Display::ListItem,
+                    D::Flex => Display::Flex,
+                    D::InlineFlex => Display::InlineFlex,
                     _ => Display::Block,
                 };
             }
@@ -554,6 +554,147 @@ impl Computer<'_> {
                     _ => None,
                 }
             }
+            (Id::MinHeight, V::Size(value)) => {
+                self.reset.min_height = self.size(value).unwrap_or(LengthPercentage::ZERO)
+            }
+            (Id::MaxHeight, V::MaxSize(value)) => {
+                self.reset.max_height = match value {
+                    MaxSize::LengthPercentage(value) => Some(self.length_percentage(value)),
+                    _ => None,
+                }
+            }
+            (Id::BoxSizing, V::BoxSizing(value)) => {
+                self.reset.border_box = matches!(value, keywords::BoxSizing::BorderBox)
+            }
+            (Id::Position, V::Positioning(value)) => {
+                use keywords::Positioning as P;
+                self.reset.position = match value {
+                    P::Static => Position::Static,
+                    P::Relative => Position::Relative,
+                    P::Absolute => Position::Absolute,
+                    P::Fixed => Position::Fixed,
+                    P::Sticky | P::WebkitSticky => Position::Sticky,
+                }
+            }
+            (Id::Top, V::LengthPercentageOrAuto(value)) => self.reset.inset.top = self.auto(value),
+            (Id::Right, V::LengthPercentageOrAuto(value)) => {
+                self.reset.inset.right = self.auto(value)
+            }
+            (Id::Bottom, V::LengthPercentageOrAuto(value)) => {
+                self.reset.inset.bottom = self.auto(value)
+            }
+            (Id::Left, V::LengthPercentageOrAuto(value)) => {
+                self.reset.inset.left = self.auto(value)
+            }
+            (Id::Float, V::Float(value)) => {
+                use keywords::Float as F;
+                let rtl = self.inherited.direction == Direction::Rtl;
+                self.reset.float = match value {
+                    F::None => Float::None,
+                    F::Left => Float::Left,
+                    F::Right => Float::Right,
+                    F::InlineStart if rtl => Float::Right,
+                    F::InlineStart => Float::Left,
+                    F::InlineEnd if rtl => Float::Left,
+                    F::InlineEnd => Float::Right,
+                }
+            }
+            (Id::Clear, V::Clear(value)) => {
+                use keywords::Clear as C;
+                let rtl = self.inherited.direction == Direction::Rtl;
+                self.reset.clear = match value {
+                    C::None => Clear::None,
+                    C::Left => Clear::Left,
+                    C::Right => Clear::Right,
+                    C::Both => Clear::Both,
+                    C::InlineStart if rtl => Clear::Right,
+                    C::InlineStart => Clear::Left,
+                    C::InlineEnd if rtl => Clear::Left,
+                    C::InlineEnd => Clear::Right,
+                }
+            }
+            (Id::ZIndex, V::ZIndex(value)) => {
+                self.reset.z_index = match value {
+                    specified::ZIndex::Auto => None,
+                    specified::ZIndex::Integer(value) => Some(value.0),
+                }
+            }
+            (Id::OverflowX | Id::OverflowY, V::Overflow(value)) => {
+                if !matches!(value, keywords::Overflow::Visible) {
+                    self.reset.clips = true;
+                }
+            }
+            (Id::Opacity, V::Opacity(value)) => self.reset.opacity = value.0.clamp(0.0, 1.0),
+            (Id::FlexDirection, V::FlexDirection(value)) => {
+                use keywords::FlexDirection as F;
+                self.reset.flex_direction = match value {
+                    F::Row => FlexDirection::Row,
+                    F::RowReverse => FlexDirection::RowReverse,
+                    F::Column => FlexDirection::Column,
+                    F::ColumnReverse => FlexDirection::ColumnReverse,
+                }
+            }
+            (Id::FlexWrap, V::FlexWrap(value)) => {
+                self.reset.flex_wrap = !matches!(value, keywords::FlexWrap::Nowrap)
+            }
+            (Id::FlexGrow, V::NonNegativeNumber(value)) => self.reset.flex_grow = value.0,
+            (Id::FlexShrink, V::NonNegativeNumber(value)) => self.reset.flex_shrink = value.0,
+            (Id::FlexBasis, V::FlexBasis(value)) => {
+                self.reset.flex_basis = match value {
+                    specified::FlexBasis::Size(size) => self.size(size),
+                    specified::FlexBasis::Content => None,
+                }
+            }
+            (Id::Order, V::Integer(value)) => self.reset.order = value.0,
+            (Id::JustifyContent, V::ContentAlignment(value)) => {
+                self.reset.justify_content = content_alignment(*value)
+            }
+            (Id::AlignContent, V::ContentAlignment(value)) => {
+                self.reset.align_content = content_alignment(*value)
+            }
+            (Id::AlignItems, V::ItemAlignment(value)) => {
+                self.reset.align_items = item_alignment(*value)
+            }
+            (Id::AlignSelf, V::SelfAlignment(value)) => {
+                use keywords::SelfAlignment as S;
+                self.reset.align_self = match value {
+                    S::Auto => Align::Auto,
+                    S::Normal => Align::Normal,
+                    S::Stretch => Align::Stretch,
+                    S::Center => Align::Center,
+                    S::End | S::FlexEnd | S::SelfEnd => Align::End,
+                    S::Baseline => Align::Baseline,
+                    _ => Align::Start,
+                }
+            }
+            (Id::RowGap, V::Gap(value)) => {
+                self.reset.row_gap = match value {
+                    specified::Gap::Normal => LengthPercentage::ZERO,
+                    specified::Gap::LengthPercentage(value) => self.length_percentage(value),
+                }
+            }
+            (Id::ColumnGap, V::Gap(value)) => {
+                self.reset.column_gap = match value {
+                    specified::Gap::Normal => LengthPercentage::ZERO,
+                    specified::Gap::LengthPercentage(value) => self.length_percentage(value),
+                }
+            }
+            (Id::BackgroundImage, V::ImageList(images)) => {
+                self.reset.background_image = images.0.iter().find_map(|image| match image {
+                    specified::Image::Url(url) => Some(Arc::from(&**url)),
+                    _ => None,
+                })
+            }
+            (Id::ObjectFit, V::ObjectFit(value)) => {
+                use keywords::ObjectFit as O;
+                self.reset.object_fit = match value {
+                    O::Fill => ObjectFit::Fill,
+                    O::Contain => ObjectFit::Contain,
+                    O::Cover => ObjectFit::Cover,
+                    O::None => ObjectFit::None,
+                    O::ScaleDown => ObjectFit::ScaleDown,
+                }
+            }
             _ => {}
         }
     }
@@ -625,18 +766,59 @@ impl Computer<'_> {
             Id::Height => reset.height = from_reset.height,
             Id::MinWidth => reset.min_width = from_reset.min_width,
             Id::MaxWidth => reset.max_width = from_reset.max_width,
+            Id::MinHeight => reset.min_height = from_reset.min_height,
+            Id::MaxHeight => reset.max_height = from_reset.max_height,
+            Id::BoxSizing => reset.border_box = from_reset.border_box,
+            Id::Position => reset.position = from_reset.position,
+            Id::Top => reset.inset.top = from_reset.inset.top,
+            Id::Right => reset.inset.right = from_reset.inset.right,
+            Id::Bottom => reset.inset.bottom = from_reset.inset.bottom,
+            Id::Left => reset.inset.left = from_reset.inset.left,
+            Id::Float => reset.float = from_reset.float,
+            Id::Clear => reset.clear = from_reset.clear,
+            Id::ZIndex => reset.z_index = from_reset.z_index,
+            Id::OverflowX | Id::OverflowY => reset.clips = from_reset.clips,
+            Id::Opacity => reset.opacity = from_reset.opacity,
+            Id::FlexDirection => reset.flex_direction = from_reset.flex_direction,
+            Id::FlexWrap => reset.flex_wrap = from_reset.flex_wrap,
+            Id::FlexGrow => reset.flex_grow = from_reset.flex_grow,
+            Id::FlexShrink => reset.flex_shrink = from_reset.flex_shrink,
+            Id::FlexBasis => reset.flex_basis = from_reset.flex_basis,
+            Id::Order => reset.order = from_reset.order,
+            Id::JustifyContent => reset.justify_content = from_reset.justify_content,
+            Id::AlignContent => reset.align_content = from_reset.align_content,
+            Id::AlignItems => reset.align_items = from_reset.align_items,
+            Id::AlignSelf => reset.align_self = from_reset.align_self,
+            Id::RowGap => reset.row_gap = from_reset.row_gap,
+            Id::ColumnGap => reset.column_gap = from_reset.column_gap,
+            Id::BackgroundImage => reset.background_image = from_reset.background_image.clone(),
+            Id::ObjectFit => reset.object_fit = from_reset.object_fit,
             _ => {}
         }
     }
 
     fn finish(&mut self) {
-        if self.context.root
-            && matches!(
-                self.reset.display,
-                Display::Inline | Display::InlineBlock | Display::Contents
-            )
-        {
-            self.reset.display = Display::Block;
+        let parent_flex = matches!(
+            self.parent.reset.display,
+            Display::Flex | Display::InlineFlex
+        );
+        if parent_flex {
+            self.reset.float = Float::None;
+        }
+        if matches!(self.reset.position, Position::Absolute | Position::Fixed) {
+            self.reset.float = Float::None;
+        }
+        let blockify = self.context.root
+            || parent_flex
+            || self.reset.float != Float::None
+            || matches!(self.reset.position, Position::Absolute | Position::Fixed);
+        if blockify {
+            self.reset.display = match self.reset.display {
+                Display::InlineFlex => Display::Flex,
+                Display::Inline | Display::InlineBlock => Display::Block,
+                Display::Contents if self.context.root => Display::Block,
+                display => display,
+            };
         }
         for (width, visible) in [
             (&mut self.reset.border.top, self.border_styles[0]),
@@ -670,5 +852,31 @@ impl Computer<'_> {
                 *line = Some(decoration);
             }
         }
+    }
+}
+
+fn content_alignment(value: keywords::ContentAlignment) -> Align {
+    use keywords::ContentAlignment as C;
+    match value {
+        C::Normal => Align::Normal,
+        C::Start | C::FlexStart | C::Left => Align::Start,
+        C::End | C::FlexEnd | C::Right => Align::End,
+        C::Center => Align::Center,
+        C::SpaceBetween => Align::SpaceBetween,
+        C::SpaceAround => Align::SpaceAround,
+        C::SpaceEvenly => Align::SpaceEvenly,
+        C::Stretch => Align::Stretch,
+    }
+}
+
+fn item_alignment(value: keywords::ItemAlignment) -> Align {
+    use keywords::ItemAlignment as I;
+    match value {
+        I::Normal | I::Legacy => Align::Normal,
+        I::Stretch => Align::Stretch,
+        I::Center => Align::Center,
+        I::End | I::FlexEnd | I::SelfEnd | I::Right => Align::End,
+        I::Baseline => Align::Baseline,
+        _ => Align::Start,
     }
 }

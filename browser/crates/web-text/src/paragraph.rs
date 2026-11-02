@@ -59,6 +59,8 @@ pub struct LineItem {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Line {
+    pub left: f32,
+    pub available: f32,
     pub top: f32,
     pub baseline: f32,
     pub height: f32,
@@ -85,8 +87,9 @@ impl Lines {
 #[derive(Default)]
 pub struct Paragraph {
     rtl: bool,
+    atomics: u16,
     text: String,
-    runs: Vec<(u32, RunStyle, f32)>,
+    runs: Vec<(u32, RunStyle, Piece)>,
     column: u32,
 }
 
@@ -145,19 +148,30 @@ impl Paragraph {
     fn end_run(&mut self, style: RunStyle) {
         let end = self.text.len() as u32;
         match self.runs.last_mut() {
-            Some((last_end, last, 0.0)) if *last == style => *last_end = end,
-            Some((last_end, _, 0.0)) if *last_end == end => {}
-            _ => self.runs.push((end, style, 0.0)),
+            Some((last_end, last, Piece::Text)) if *last == style => *last_end = end,
+            Some((last_end, _, Piece::Text)) if *last_end == end => {}
+            _ => self.runs.push((end, style, Piece::Text)),
         }
     }
 
     pub fn push_spacer(&mut self, width: f32, style: RunStyle) {
         if width > 0.0 {
-            self.runs.push((self.text.len() as u32, style, width));
+            self.runs
+                .push((self.text.len() as u32, style, Piece::Spacer(width)));
         }
     }
 
-    fn run_ranges(&self) -> impl Iterator<Item = (Range<usize>, RunStyle, f32)> + '_ {
+    pub fn push_atomic(&mut self, index: u16, style: RunStyle) {
+        self.runs
+            .push((self.text.len() as u32, style, Piece::Atomic(index)));
+        self.atomics = self.atomics.max(index + 1);
+    }
+
+    pub fn has_atomics(&self) -> bool {
+        self.atomics > 0
+    }
+
+    fn run_ranges(&self) -> impl Iterator<Item = (Range<usize>, RunStyle, Piece)> + '_ {
         let mut start = 0;
         self.runs.iter().map(move |&(end, style, spacer)| {
             let range = start..end as usize;
@@ -188,8 +202,13 @@ impl Paragraph {
             styles: self.runs.iter().map(|&(_, style, _)| style).collect(),
         };
         let mut clusters = Vec::new();
-        for (run_index, (range, style, spacer)) in self.run_ranges().enumerate() {
-            if spacer > 0.0 {
+        for (run_index, (range, style, piece)) in self.run_ranges().enumerate() {
+            if piece != Piece::Text {
+                let (flags, id, advance) = match piece {
+                    Piece::Atomic(index) => (ATOMIC, index, 0.0),
+                    Piece::Spacer(width) => (SPACER, 0, width),
+                    Piece::Text => (0, 0, 0.0),
+                };
                 if let Some(font) = fonts.primary(style.font) {
                     shaped.spans.push(Span {
                         font,
@@ -197,10 +216,10 @@ impl Paragraph {
                         level: level_at(range.start.saturating_sub(1)),
                     });
                     shaped.glyphs.push(ShapedGlyph {
-                        id: 0,
-                        flags: SPACER,
+                        id,
+                        flags,
                         span: (shaped.spans.len() - 1) as u32,
-                        advance: spacer,
+                        advance,
                         x_offset: 0.0,
                         y_offset: 0.0,
                     });
@@ -280,14 +299,14 @@ impl Paragraph {
         let text = self.text.as_str();
         let bytes = text.as_bytes();
         for (glyph, &cluster) in glyphs.iter_mut().zip(clusters) {
-            if glyph.flags & SPACER == 0 && bytes.get(cluster as usize) == Some(&b' ') {
+            if glyph.flags & (SPACER | ATOMIC) == 0 && bytes.get(cluster as usize) == Some(&b' ') {
                 glyph.flags |= SPACE;
             }
         }
         let wraps_before = |position: usize| {
             self.runs
                 .iter()
-                .find(|&&(end, _, _)| end as usize >= position)
+                .find(|&&(end, _, piece)| end as usize >= position && piece == Piece::Text)
                 .is_none_or(|(_, style, _)| style.white_space.wraps())
         };
         let mut glyph = 0;
@@ -353,6 +372,21 @@ const BREAK: u8 = 2;
 const MANDATORY: u8 = 4;
 const NEWLINE: u8 = 8;
 const SPACER: u8 = 16;
+const ATOMIC: u8 = 32;
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Piece {
+    Text,
+    Spacer(f32),
+    Atomic(u16),
+}
+
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub struct AtomicSize {
+    pub width: f32,
+    pub ascent: f32,
+    pub descent: f32,
+}
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 struct Span {
@@ -397,40 +431,93 @@ impl ShapedParagraph {
             + self.styles.capacity() * size_of::<RunStyle>()
     }
 
-    pub fn lines(&self, fonts: &mut Fonts, width: f32, strut: RunStyle, justify: bool) -> Lines {
-        let justify_to = justify.then_some(width);
+    pub fn intrinsic(&self, atomics: &[AtomicSize]) -> (f32, f32) {
+        let mut minimum: f32 = 0.0;
+        let mut maximum: f32 = 0.0;
+        let mut line = 0.0;
+        for segment in self.segments(atomics) {
+            minimum = minimum.max(segment.width - segment.trailing);
+            line += segment.width;
+            if segment.mandatory {
+                maximum = maximum.max(line - segment.trailing);
+                line = 0.0;
+            }
+        }
+        (minimum, maximum.max(line))
+    }
+
+    pub fn lines(
+        &self,
+        fonts: &mut Fonts,
+        space: &mut dyn FnMut(f32) -> (f32, f32),
+        strut: RunStyle,
+        justify: bool,
+        atomics: &[AtomicSize],
+    ) -> Lines {
         let mut lines = Lines::default();
         let mut start = 0;
         let mut line_width = 0.0;
         let mut has_content = false;
-        for segment in self.segments() {
+        let (mut left, mut width) = space(0.0);
+        for segment in self.segments(atomics) {
             if has_content && line_width + segment.width - segment.trailing > width {
+                let justify_to = justify.then_some(width);
                 self.push_line(
                     &mut lines,
                     fonts,
                     start..segment.glyphs.start,
                     strut,
                     justify_to,
+                    (left, width),
+                    atomics,
                 );
+                (left, width) = space(lines.height);
                 start = segment.glyphs.start;
                 line_width = 0.0;
             }
             line_width += segment.width;
             has_content = true;
             if segment.mandatory {
-                self.push_line(&mut lines, fonts, start..segment.glyphs.end, strut, None);
+                self.push_line(
+                    &mut lines,
+                    fonts,
+                    start..segment.glyphs.end,
+                    strut,
+                    None,
+                    (left, width),
+                    atomics,
+                );
+                (left, width) = space(lines.height);
                 start = segment.glyphs.end;
                 line_width = 0.0;
                 has_content = false;
             }
         }
         if has_content && start < self.glyphs.len() {
-            self.push_line(&mut lines, fonts, start..self.glyphs.len(), strut, None);
+            self.push_line(
+                &mut lines,
+                fonts,
+                start..self.glyphs.len(),
+                strut,
+                None,
+                (left, width),
+                atomics,
+            );
         }
         lines
     }
 
-    fn segments(&self) -> impl Iterator<Item = Segment> + '_ {
+    fn advance(glyph: &ShapedGlyph, atomics: &[AtomicSize]) -> f32 {
+        if glyph.flags & ATOMIC != 0 {
+            atomics
+                .get(usize::from(glyph.id))
+                .map_or(0.0, |atomic| atomic.width)
+        } else {
+            glyph.advance
+        }
+    }
+
+    fn segments<'a>(&'a self, atomics: &'a [AtomicSize]) -> impl Iterator<Item = Segment> + 'a {
         let mut start = 0;
         std::iter::from_fn(move || {
             let first = start;
@@ -438,9 +525,10 @@ impl ShapedParagraph {
             let mut trailing = 0.0;
             while let Some(glyph) = self.glyphs.get(start) {
                 start += 1;
-                width += glyph.advance;
+                let advance = Self::advance(glyph, atomics);
+                width += advance;
                 if glyph.hangs() {
-                    trailing += glyph.advance;
+                    trailing += advance;
                 } else {
                     trailing = 0.0;
                 }
@@ -462,6 +550,7 @@ impl ShapedParagraph {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_line(
         &self,
         lines: &mut Lines,
@@ -469,6 +558,8 @@ impl ShapedParagraph {
         range: Range<usize>,
         strut: RunStyle,
         justify_to: Option<f32>,
+        left: (f32, f32),
+        atomics: &[AtomicSize],
     ) {
         let (mut above, mut below) = vertical_extent(fonts, None, strut);
         let first_item = lines.items.len();
@@ -484,7 +575,10 @@ impl ShapedParagraph {
                 .get(glyph.span as usize)
                 .map_or(0, |span| span.level)
         });
-        let natural: f32 = shaped.iter().map(|glyph| glyph.advance).sum();
+        let natural: f32 = shaped
+            .iter()
+            .map(|glyph| Self::advance(glyph, atomics))
+            .sum();
         let spaces = shaped
             .iter()
             .filter(|glyph| glyph.flags & SPACE != 0)
@@ -506,7 +600,17 @@ impl ShapedParagraph {
             }) else {
                 continue;
             };
-            let (item_above, item_below) = vertical_extent(fonts, Some(span.font), style);
+            let atomic = group
+                .first()
+                .filter(|glyph| glyph.flags & ATOMIC != 0)
+                .and_then(|glyph| atomics.get(usize::from(glyph.id)));
+            let (item_above, item_below) = match atomic {
+                Some(atomic) => (
+                    atomic.ascent + style.baseline_shift,
+                    atomic.descent - style.baseline_shift,
+                ),
+                None => vertical_extent(fonts, Some(span.font), style),
+            };
             above = f32::max(above, item_above);
             below = f32::max(below, item_below);
             let metrics = fonts.metrics(span.font);
@@ -514,14 +618,14 @@ impl ShapedParagraph {
             let start = pen;
             let glyph_start = lines.glyphs.len();
             for glyph in group {
-                if glyph.flags & SPACER == 0 {
+                if glyph.flags & (SPACER | ATOMIC) == 0 {
                     lines.glyphs.push(Glyph::new(
                         glyph.id,
                         pen - start + glyph.x_offset,
                         -glyph.y_offset,
                     ));
                 }
-                pen += glyph.advance;
+                pen += Self::advance(glyph, atomics);
                 if glyph.flags & SPACE != 0 {
                     pen += expansion;
                 }
@@ -532,14 +636,16 @@ impl ShapedParagraph {
                 size: style.size,
                 x: start,
                 width: pen - start,
-                ascent: metrics.ascent * scale,
-                descent: metrics.descent * scale,
+                ascent: atomic.map_or(metrics.ascent * scale, |atomic| atomic.ascent),
+                descent: atomic.map_or(metrics.descent * scale, |atomic| atomic.descent),
                 baseline_shift: style.baseline_shift,
                 glyphs: glyph_start..lines.glyphs.len(),
             });
         }
         let top = lines.height;
         lines.lines.push(Line {
+            left: left.0,
+            available: left.1,
             top,
             baseline: top + above,
             height: above + below,

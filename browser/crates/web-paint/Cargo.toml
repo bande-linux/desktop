@@ -11,6 +11,7 @@ repository.workspace = true
 linebender_resource_handle.workspace = true
 vello_cpu = { workspace = true, optional = true }
 web-dom.workspace = true
+web-image.workspace = true
 web-layout.workspace = true
 web-style.workspace = true
 web-text.workspace = true

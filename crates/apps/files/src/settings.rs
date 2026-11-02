@@ -3,7 +3,7 @@ use std::path::Path;
 
 use bande_app_settings::{Shared, Stored, flag, pairs};
 use bande_toolkit::ui::{
-    Context, Form, FormLine, PopUpButton, ScrollView, SegmentedControl, Toggle, Ui, Widget,
+    Context, Form, FormLine, PopUpButton, ScrollView, SegmentedControl, Slider, Toggle, Ui, Widget,
 };
 use bande_toolkit::{Appearance, TextSystem};
 use bande_xdg::{UserDir, config_home, replace_file, state_home, user_dir};
@@ -15,6 +15,8 @@ use crate::view::home;
 use crate::views::{ViewMode, sidebar_file};
 
 pub const SETTINGS_SIZE: (u32, u32) = (500, 560);
+pub const DEFAULT_SPRING_DELAY: u32 = 900;
+const SPRING_DELAYS: (u32, u32) = (200, 1600);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StartFolder {
@@ -83,6 +85,8 @@ pub struct FilesSettings {
     pub show_hidden: bool,
     pub show_extensions: bool,
     pub desktop_disks: bool,
+    pub spring_loading: bool,
+    pub spring_delay: u32,
     pub warn_extension_change: bool,
     pub folders_first: bool,
     pub warn_empty_trash: bool,
@@ -98,6 +102,8 @@ impl Default for FilesSettings {
             show_hidden: false,
             show_extensions: false,
             desktop_disks: true,
+            spring_loading: true,
+            spring_delay: DEFAULT_SPRING_DELAY,
             warn_extension_change: true,
             folders_first: true,
             warn_empty_trash: true,
@@ -126,6 +132,15 @@ impl Stored for FilesSettings {
                 "show-hidden" => settings.show_hidden = flag(value).unwrap_or(settings.show_hidden),
                 "show-extensions" => {
                     settings.show_extensions = flag(value).unwrap_or(settings.show_extensions);
+                }
+                "spring-loading" => {
+                    settings.spring_loading = flag(value).unwrap_or(settings.spring_loading);
+                }
+                "spring-delay" => {
+                    settings.spring_delay =
+                        value.parse::<u32>().map_or(settings.spring_delay, |delay| {
+                            delay.clamp(SPRING_DELAYS.0, SPRING_DELAYS.1)
+                        });
                 }
                 "desktop-disks" => {
                     settings.desktop_disks = flag(value).unwrap_or(settings.desktop_disks);
@@ -156,12 +171,14 @@ impl Stored for FilesSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "new-window = {}\ndefault-view = {}\nshow-hidden = {}\nshow-extensions = {}\ndesktop-disks = {}\nwarn-extension-change = {}\nfolders-first = {}\nwarn-empty-trash = {}\npurge-trash = {}\nsearch-in = {}\n",
+            "new-window = {}\ndefault-view = {}\nshow-hidden = {}\nshow-extensions = {}\ndesktop-disks = {}\nspring-loading = {}\nspring-delay = {}\nwarn-extension-change = {}\nfolders-first = {}\nwarn-empty-trash = {}\npurge-trash = {}\nsearch-in = {}\n",
             self.new_window.name(),
             self.default_view.name(),
             self.show_hidden,
             self.show_extensions,
             self.desktop_disks,
+            self.spring_loading,
+            self.spring_delay,
             self.warn_extension_change,
             self.folders_first,
             self.warn_empty_trash,
@@ -286,6 +303,21 @@ fn form(settings: &Shared<FilesSettings>) -> Form {
             ))
         },
     );
+    let shared = settings.clone();
+    let label = L10N.tr("settings-spring-delay");
+    let spring_delay = FormLine::Row(
+        label.clone(),
+        Box::new(Slider::new(
+            &label,
+            f64::from(current.spring_delay) / 1000.0,
+            (
+                f64::from(SPRING_DELAYS.0) / 1000.0,
+                f64::from(SPRING_DELAYS.1) / 1000.0,
+            ),
+            0.1,
+            move |seconds| shared.borrow_mut().spring_delay = (seconds * 1000.0).round() as u32,
+        )),
+    );
     let heading = |message: &str| FormLine::Heading(L10N.tr(message));
     let mut lines = vec![
         heading("settings-general"),
@@ -303,6 +335,13 @@ fn form(settings: &Shared<FilesSettings>) -> Form {
             current.desktop_disks,
             |settings, on| settings.desktop_disks = on,
         ),
+        toggle(
+            settings,
+            "settings-spring-loading",
+            current.spring_loading,
+            |settings, on| settings.spring_loading = on,
+        ),
+        spring_delay,
     ];
     lines.extend(sidebar_lines());
     lines.extend([

@@ -30,7 +30,7 @@ use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
 use crate::quick_look::QuickLook;
 use crate::search::{Index, SEARCH_HEIGHT, Searching};
-use crate::settings::FilesSettings;
+use crate::settings::{DEFAULT_SPRING_DELAY, FilesSettings};
 use crate::sidebar::{Row, SidebarEdit, with_volumes};
 use crate::tabs::{Tab, location_title};
 use crate::thumbs::Thumbs;
@@ -238,6 +238,7 @@ pub struct FilesView {
     pub(crate) show_hidden: bool,
     pub(crate) show_extensions: bool,
     warn_extension_change: bool,
+    pub(crate) spring_delay: Option<Duration>,
     pub(crate) folders_first: bool,
     warn_empty_trash: bool,
     pub(crate) search_home: bool,
@@ -373,6 +374,7 @@ impl FilesView {
             show_hidden: false,
             show_extensions: false,
             warn_extension_change: true,
+            spring_delay: Some(Duration::from_millis(u64::from(DEFAULT_SPRING_DELAY))),
             folders_first: true,
             warn_empty_trash: true,
             search_home: false,
@@ -750,7 +752,10 @@ impl FilesView {
             self.operations.deadline(),
             self.notice.as_ref().map(|(_, shown)| *shown + NOTICE_TIME),
             self.pending_rename.as_ref().map(|(due, _)| *due),
-            self.drop.as_ref().and_then(crate::drag::Hover::due),
+            self.drop
+                .as_ref()
+                .zip(self.spring_delay)
+                .and_then(|(hover, delay)| hover.due(delay)),
         ]
         .into_iter()
         .flatten()
@@ -1681,6 +1686,9 @@ impl FilesView {
     pub fn apply_settings(&mut self, settings: &FilesSettings) {
         self.warn_empty_trash = settings.warn_empty_trash;
         self.warn_extension_change = settings.warn_extension_change;
+        self.spring_delay = settings
+            .spring_loading
+            .then(|| Duration::from_millis(u64::from(settings.spring_delay)));
         self.search_home = settings.search_home;
         if settings.show_extensions != self.show_extensions {
             self.show_extensions = settings.show_extensions;

@@ -18,7 +18,6 @@ use crate::views::ViewMode;
 const DRAG_THRESHOLD: f32 = 4.0;
 const GAP_REACH: f32 = 6.0;
 const EMPTY_FAVOURITES_Y: f32 = 40.0;
-const SPRING_DELAY: Duration = Duration::from_millis(900);
 const ICON: f32 = 40.0;
 const ICON_PIXELS: u32 = 64;
 const STACK_OFFSET: f32 = 5.0;
@@ -50,8 +49,8 @@ pub(crate) struct Hover {
 }
 
 impl Hover {
-    pub(crate) fn due(&self) -> Option<Instant> {
-        self.spring.as_ref().map(|(_, since)| *since + SPRING_DELAY)
+    pub(crate) fn due(&self, delay: Duration) -> Option<Instant> {
+        self.spring.as_ref().map(|(_, since)| *since + delay)
     }
 }
 
@@ -378,7 +377,7 @@ impl FilesView {
         };
         self.drop = Some(Hover {
             spring: spring
-                .filter(|_| action.is_some())
+                .filter(|_| action.is_some() && self.spring_delay.is_some())
                 .map(|spring| (spring, since.unwrap_or_else(Instant::now))),
             target,
             highlight,
@@ -411,7 +410,7 @@ impl FilesView {
         let Some((spring, since)) = hover.spring.take() else {
             return;
         };
-        if since + SPRING_DELAY > now {
+        if self.spring_delay.is_none_or(|delay| since + delay > now) {
             hover.spring = Some((spring, since));
             return;
         }

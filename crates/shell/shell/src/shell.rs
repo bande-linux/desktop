@@ -352,7 +352,10 @@ impl Surfaces for Shell {
 
     fn tick(&mut self, now: Instant) {
         for ((_, app), window) in self.parts.iter_mut().zip(&mut self.windows) {
-            if app.deadline().is_some_and(|deadline| deadline <= Instant::now()) {
+            if app
+                .deadline()
+                .is_some_and(|deadline| deadline <= Instant::now())
+            {
                 app.tick(window, now);
             }
         }

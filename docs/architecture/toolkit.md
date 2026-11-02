@@ -267,7 +267,9 @@ writes a hex value, a corner radius or a font name of its own.
   under it, and a click while composing keeps the text and resets the input method. Text is
   published to screen readers as text runs with the caret and selection, which they can also
   set. `TextView` wraps, scrolls with a `ScrollState`, keeps the caret in view and can be
-  read-only. `TextView::document` is the editor of a document app: no change callback (the app
+  read-only; revealing the caret lays out the paragraphs it scrolls to and follows again, so a
+  far jump in a long wrapped document lands on the caret even though their heights were
+  estimates. `TextView::document` is the editor of a document app: no change callback (the app
   compares `revision`), a font (`set_font`: monospace or proportional, any size), a page width
   that wraps to a centred column instead of the view (`set_page_width`), and `insert` and
   `select` that scroll to the result. A tab is laid out as a space widened to the next stop every

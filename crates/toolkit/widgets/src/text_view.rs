@@ -9,6 +9,7 @@ const FONT_SIZE: f32 = 13.0;
 const HORIZONTAL_PADDING: f32 = 8.0;
 const VERTICAL_PADDING: f32 = 5.0;
 const CARET_ROOM: f32 = 1.0;
+const REVEAL_PASSES: usize = 4;
 
 type OnChange = Box<dyn FnMut(&str)>;
 
@@ -177,13 +178,17 @@ impl TextView {
         if self.editor.autoscroll(&mut cx.text, self.origin(), content) {
             cx.animating.set(true);
         }
-        if self.editor.take_reveal() {
-            let caret = self.editor.caret_rect(&mut cx.text);
-            self.scroll.set_extent(self.editor.height(), content.height);
-            self.scroll.follow(cx, caret.y, caret.y + caret.height);
-        }
-        let offset = self.scroll.offset(cx);
-        if offset != self.offset {
+        let mut revealing = self.editor.take_reveal();
+        for _ in 0..REVEAL_PASSES {
+            if revealing {
+                let caret = self.editor.caret_rect(&mut cx.text);
+                self.scroll.set_extent(self.editor.height(), content.height);
+                revealing = self.scroll.follow(cx, caret.y, caret.y + caret.height);
+            }
+            let offset = self.scroll.offset(cx);
+            if offset == self.offset {
+                break;
+            }
             self.offset = offset;
             self.editor.lay_out(&mut cx.text, self.visible());
             self.scroll.set_extent(self.editor.height(), content.height);

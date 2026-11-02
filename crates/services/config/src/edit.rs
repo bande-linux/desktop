@@ -5,10 +5,10 @@ use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, BarLayout, CapsLock, ClockFormat,
-    Config, ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging, FocusSchedule,
-    InputSource, LidOnPower, Mouse, NightLight, Placement, PrimaryButton, ScrollMethod, Search,
-    SearchCategory, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
-    accent_keyword, same_displays,
+    Config, ConfigError, CornerAction, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging,
+    FocusSchedule, HOT_CORNERS, HotCorners, InputSource, LidOnPower, Mouse, NightLight, Placement,
+    PrimaryButton, ScrollMethod, Search, SearchCategory, SecondaryClick, Sound, Suspend, Trackpad,
+    WallpaperFit, WallpaperVariant, accent_keyword, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -58,6 +58,7 @@ pub enum Setting {
     WallpaperFit(WallpaperFit),
     NightLight(NightLight),
     FocusSchedule(FocusSchedule),
+    HotCorners(HotCorners),
     Search(Search),
     Display(String, DisplaySettings),
     Arrangement(Vec<Placement>),
@@ -341,6 +342,16 @@ impl Setting {
             ),
             Self::NightLight(night) => set_night_light(&mut document, night),
             Self::FocusSchedule(schedule) => set_focus_schedule(&mut document, schedule),
+            Self::HotCorners(corners) => {
+                for (corner, action) in HOT_CORNERS.iter().zip(corners.actions) {
+                    set(
+                        &mut document,
+                        Some("hot-corners"),
+                        corner,
+                        (action != CornerAction::Nothing).then(|| action.keyword().into()),
+                    );
+                }
+            }
             Self::Search(search) => set_search(&mut document, search),
             Self::Display(identity, display) => set_display(&mut document, identity, display),
             Self::Arrangement(placements) => set_arrangement(&mut document, &config, placements),

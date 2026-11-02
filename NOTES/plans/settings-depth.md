@@ -60,8 +60,8 @@ shortcut to zoom, pointer colour, shake to locate, hover text, captions.
 **Control Center.** Missing: which modules show in the bar and in Control Center (Wi-Fi,
 Bluetooth, Sound, Battery percentage exists under Power).
 
-**Desktop & Dock.** The Taskbar pane is being reworked by another agent. Missing here: hot
-corners (needs the compositor), Mission Control options (group windows by app, switch to a
+**Desktop & Dock.** Taskbar has layout, position, size, auto-hide and Hot Corners (the
+compositor acts on them). Missing: Mission Control options (group windows by app, switch to a
 space with open windows), "click wallpaper to reveal desktop", default web browser lives in
 Apps already.
 
@@ -115,7 +115,6 @@ Ranked by how often a user needs them and how badly they are stuck without them.
 2. Users & Groups: picture, full name, add and remove users. Blocked: owner decision to add
    `accountsservice` to the image.
 4. Sound: balance and the built-in speaker and headphone names.
-7. Hot corners (compositor).
 8. Sharing: Remote Login (ssh.service through systemd's D-Bus API) and the `.local` name.
 9. Notifications: previews and badges per app.
 10. Lock screen message, show scroll bars, double-click speed, Wake for network access.

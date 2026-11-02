@@ -595,12 +595,15 @@ impl Table {
         self.headings.partition_point(|(start, _)| *start <= line)
     }
 
+    fn heading_of(&self, index: usize) -> Option<usize> {
+        let line = self.shown.get(index)?;
+        self.headings
+            .binary_search_by_key(line, |(start, _)| *start)
+            .ok()
+    }
+
     fn heads_group(&self, index: usize) -> bool {
-        self.shown.get(index).is_some_and(|line| {
-            self.headings
-                .binary_search_by_key(line, |(start, _)| *start)
-                .is_ok()
-        })
+        self.heading_of(index).is_some()
     }
 
     fn row_top(&self, index: usize) -> f32 {
@@ -1106,6 +1109,21 @@ impl Table {
         parts.nodes.push((header_id, header));
     }
 
+    fn heading_node(&self, heading: usize, parts: &mut Parts, bounds: Rect) {
+        let Some((_, title)) = self.headings.get(heading) else {
+            return;
+        };
+        let id = self
+            .id
+            .part(u64::from(u32::MAX - 2) - (self.columns.len() + heading) as u64);
+        let mut node = Node::new(Role::Heading);
+        node.set_label(title.clone());
+        node.set_level(2);
+        node.set_bounds(access_rect(bounds));
+        parts.children.push(id);
+        parts.nodes.push((id, node));
+    }
+
     fn row_node(&self, index: usize, row: &Line, parts: &mut Parts, bounds: Rect) {
         let row_id = self.id.part(index as u64 * (self.columns.len() as u64 + 1));
         let mut node = Node::new(Role::Row);
@@ -1344,6 +1362,15 @@ impl Widget for Table {
                 body.width,
                 self.row_height(),
             );
+            if let Some(heading) = self.heading_of(index) {
+                let above = Rect::new(
+                    bounds.x,
+                    bounds.y - bounds.height,
+                    bounds.width,
+                    bounds.height,
+                );
+                self.heading_node(heading, &mut parts, above);
+            }
             self.row_node(index, row, &mut parts, bounds);
         }
         if cx.is_focused(self.id) {

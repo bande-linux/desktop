@@ -212,7 +212,8 @@ writes a hex value, a corner radius or a font name of its own.
   4 × 1: accent with `on_accent` text while focused, `well` otherwise. A single selected run
   glides to its new rows on `quick`. `Table::set_headings` adds group headings (semibold
   `ink` over a `hairline`, one row tall) above the rows that start each group, as Files' Use
-  Groups does; a selection run never spans a heading. Scroll bars are a 6 pt `ink3` knob that fades.
+  Groups does, and level 2 heading nodes before those rows so screen readers announce each
+  group; a selection run never spans a heading. Scroll bars are a 6 pt `ink3` knob that fades.
 - **Tooltips.** A widget that returns `Widget::tooltip` (buttons and pop-up buttons through
   `.tooltip(...)`) shows it after the pointer rests on it for `TOOLTIP_DELAY`, or after Tab
   moves focus to it. It fades in under the pointer inside the window, a click or key hides it

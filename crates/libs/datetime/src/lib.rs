@@ -137,7 +137,9 @@ impl DateFormats {
         let end = formatted
             .char_indices()
             .rfind(|(_, character)| digits(*character))
-            .map_or(formatted.len(), |(end, character)| end + character.len_utf8());
+            .map_or(formatted.len(), |(end, character)| {
+                end + character.len_utf8()
+            });
         let period = format!("{} {}", &formatted[..start], &formatted[end..]);
         let period = period.trim_matches(|character: char| character.is_whitespace());
         (

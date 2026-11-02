@@ -2,13 +2,95 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, Sender};
+use std::thread;
 
 use bande_fs::{extension_hidden, is_hidden};
-use bande_xdg::{Apps, DIRECTORY};
+use bande_inbox::Outbox;
+use bande_volumes::mounted_volumes;
+use bande_xdg::{DIRECTORY, FileTypes, config_home};
 
 use crate::model::{Item, Kind, Positions, Slot};
 
 const VOLUME_KIND: &str = "inode/mount-point";
+pub(crate) const SETTINGS_FOLDER: &str = "bande";
+const FILES_SETTINGS: &str = "files.conf";
+const SHOW_EXTENSIONS: &str = "show-extensions";
+const SHOW_DISKS: &str = "desktop-disks";
+const WARN_EXTENSION_CHANGE: &str = "warn-extension-change";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Shown {
+    pub extensions: bool,
+    pub disks: bool,
+    pub warn_extension_change: bool,
+}
+
+impl Default for Shown {
+    fn default() -> Self {
+        Self {
+            extensions: false,
+            disks: true,
+            warn_extension_change: true,
+        }
+    }
+}
+
+impl Shown {
+    fn read() -> Self {
+        let text = config_home()
+            .and_then(|config| {
+                fs::read_to_string(config.join(SETTINGS_FOLDER).join(FILES_SETTINGS)).ok()
+            })
+            .unwrap_or_default();
+        let flag = |wanted: &str| {
+            text.lines()
+                .filter_map(|line| line.split_once('='))
+                .find(|(key, _)| key.trim() == wanted)
+                .map(|(_, value)| value.trim() == "true")
+        };
+        Self {
+            extensions: flag(SHOW_EXTENSIONS).unwrap_or(false),
+            disks: flag(SHOW_DISKS).unwrap_or(true),
+            warn_extension_change: flag(WARN_EXTENSION_CHANGE).unwrap_or(true),
+        }
+    }
+}
+
+pub(crate) struct Listing {
+    pub shown: Shown,
+    pub items: Vec<Item>,
+}
+
+pub(crate) fn start_lister(
+    mut types: FileTypes,
+    desktop: PathBuf,
+    media: Vec<PathBuf>,
+    listed: Outbox<Listing>,
+) -> io::Result<Sender<()>> {
+    let (requests, asked) = mpsc::channel::<()>();
+    thread::Builder::new()
+        .name("desktop lister".to_owned())
+        .spawn(move || {
+            while asked.recv().is_ok() {
+                while asked.try_recv().is_ok() {}
+                let shown = Shown::read();
+                let volumes = match shown.disks {
+                    true => {
+                        let mountinfo =
+                            fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
+                        mounted_volumes(&mountinfo, &media)
+                    }
+                    false => Vec::new(),
+                };
+                let items = list(&mut types, &desktop, &volumes, shown.extensions);
+                if !listed.send(Listing { shown, items }) {
+                    return;
+                }
+            }
+        })?;
+    Ok(requests)
+}
 
 fn name_of(path: &Path) -> String {
     path.file_name().map_or_else(
@@ -17,8 +99,8 @@ fn name_of(path: &Path) -> String {
     )
 }
 
-pub fn read_item(
-    apps: &mut Apps,
+fn read_item(
+    types: &mut FileTypes,
     path: PathBuf,
     kind_hint: Option<Kind>,
     show_extensions: bool,
@@ -29,43 +111,47 @@ pub fn read_item(
     let mime = match kind {
         Kind::Volume => VOLUME_KIND.to_owned(),
         Kind::Folder => DIRECTORY.to_owned(),
-        Kind::File => apps.mime_for(&path),
+        Kind::File => types.mime_for(&path),
     };
     let name = name_of(&path);
     let hidden = match show_extensions || kind != Kind::File {
         true => 0,
-        false => bande_fs::hidden_extension(&name, apps.extension(&name), extension_hidden(&path))
+        false => bande_fs::hidden_extension(&name, types.extension(&name), extension_hidden(&path))
             .map_or(0, str::len),
     };
     Item {
         label: name[..name.len() - hidden].to_owned(),
         name,
-        kind_name: apps.kind(&mime),
+        kind_name: types.kind(&mime),
+        mime,
         size: metadata.as_ref().map_or(0, fs::Metadata::len),
         added: metadata
             .as_ref()
             .and_then(|metadata| metadata.created().or_else(|_| metadata.modified()).ok()),
+        modified: metadata
+            .as_ref()
+            .and_then(|metadata| metadata.modified().ok()),
         kind,
         path,
     }
 }
 
-pub fn list(
-    apps: &mut Apps,
+fn list(
+    types: &mut FileTypes,
     desktop: &Path,
     volumes: &[PathBuf],
     show_extensions: bool,
 ) -> Vec<Item> {
     let mut items: Vec<Item> = volumes
         .iter()
-        .map(|volume| read_item(apps, volume.clone(), Some(Kind::Volume), show_extensions))
+        .map(|volume| read_item(types, volume.clone(), Some(Kind::Volume), show_extensions))
         .collect();
     if let Ok(entries) = fs::read_dir(desktop) {
         items.extend(
             entries
                 .filter_map(Result::ok)
                 .filter(|entry| !is_hidden(&entry.file_name().to_string_lossy()))
-                .map(|entry| read_item(apps, entry.path(), None, show_extensions)),
+                .map(|entry| read_item(types, entry.path(), None, show_extensions)),
         );
     }
     items

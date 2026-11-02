@@ -304,7 +304,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wl_seat` (`pointer`, `keyboard`, `touch`) | Input | P0 | pointer and keyboard implemented, touch not |
 | `linux-dmabuf-v1` | Zero-copy GPU buffer import | P0 | implemented (see above) |
 | `linux-drm-syncobj-v1` | Explicit sync | P0 | built, unverified on hardware |
-| `xdg_wm_base` | Application windows and popups | P0 | implemented |
+| `xdg_wm_base` | Application windows and popups | P0 | implemented; a minimised or hidden window, and every window while the session is locked, gets the `suspended` state |
 | `wlr-layer-shell-unstable-v1` | Taskbar, menu bar, notifications, overlays | P0 | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | P0 | implemented |
 | `wp_presentation` | Presentation timing, VSync | P0 | implemented |

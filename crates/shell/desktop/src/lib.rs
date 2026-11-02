@@ -18,9 +18,7 @@ pub use model::{
     Bounds, CELL_HEIGHT, CELL_WIDTH, Desktop, Direction, GRID_PADDING, Grid, ICON_SIZE, Item, Kind,
     Positions, Slot, SortBy, icon_bounds, label_bounds,
 };
-pub use places::{
-    Layouts, format_layouts, layouts_path, list, parse_layouts, read_item, save_layouts,
-};
+pub use places::{Layouts, format_layouts, layouts_path, parse_layouts, save_layouts};
 pub use view::{Artwork, DesktopView, Request, fitted_label};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-desktop-surface.ftl");

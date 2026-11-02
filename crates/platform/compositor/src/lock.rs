@@ -228,6 +228,7 @@ impl SessionLockHandler for State {
         });
         self.set_keyboard_focus(None);
         self.needs_redraw = true;
+        self.suspend_unseen_windows();
         self.settle_lock();
     }
 
@@ -237,6 +238,7 @@ impl SessionLockHandler for State {
         };
         self.report_lock_state(false);
         self.needs_redraw = true;
+        self.suspend_unseen_windows();
         let previous = lock.previous.filter(|previous| {
             self.windows
                 .iter()

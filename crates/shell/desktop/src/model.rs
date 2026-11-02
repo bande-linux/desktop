@@ -28,8 +28,10 @@ pub struct Item {
     pub label: String,
     pub kind: Kind,
     pub kind_name: String,
+    pub mime: String,
     pub size: u64,
     pub added: Option<SystemTime>,
+    pub modified: Option<SystemTime>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

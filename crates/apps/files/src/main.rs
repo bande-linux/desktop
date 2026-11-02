@@ -159,7 +159,7 @@ impl QuickLookPane {
                     launch_with(&app, &[path], token.as_deref()).map_err(|error| error.to_string())
                 }
                 Action::Copy(path) => {
-                    window.copy_transfer(Transfer::uris(vec![file_uri(&path)]));
+                    self.panel.link().borrow_mut().copy(path);
                     Ok(())
                 }
                 Action::Move => window.start_move().map_err(|error| error.to_string()),
@@ -678,9 +678,37 @@ impl Files {
         }
     }
 
+    fn copy_from_quick_look(&mut self, cx: &mut Cx<Self>) {
+        let Some(path) = self.quick_look.borrow_mut().take_copied() else {
+            return;
+        };
+        let key = cx.focused().filter(|id| browser(cx, *id).is_some());
+        if let Some((window, _)) = key.and_then(|id| browser(cx, id)) {
+            window.copy_transfer(Transfer::uris(vec![file_uri(&path)]));
+        }
+    }
+
+    fn place_quick_look(&mut self, cx: &mut Cx<Self>, owner: WindowId) {
+        let Some(panel) = self.panel.filter(|_| browser(cx, owner).is_some()) else {
+            return;
+        };
+        let Some(rect) = self.quick_look.borrow_mut().take_origin() else {
+            return;
+        };
+        let Some(anchor) = browser(cx, owner).and_then(|(window, _)| window.anchor(rect)) else {
+            return;
+        };
+        if let Some((window, _)) = cx.window(panel)
+            && let Err(error) = window.set_panel_origin(&anchor)
+        {
+            tracing::warn!("Quick Look cannot zoom from the item: {error}");
+        }
+    }
+
     fn serve(&mut self, cx: &mut Cx<Self>, id: WindowId, request: Request) {
         if let Request::ShowQuickLook = request {
             self.show_quick_look(cx);
+            self.place_quick_look(cx, id);
             return;
         }
         if let Request::NewWindow = request {
@@ -892,6 +920,7 @@ impl Program for Files {
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
+        self.copy_from_quick_look(cx);
         let requests = browser(cx, window)
             .map(|(_, pane)| pane.view.take_requests())
             .unwrap_or_default();
@@ -910,6 +939,7 @@ impl Program for Files {
             shown.set_cursor(pane.view.cursor());
             shown.request_redraw();
         }
+        self.place_quick_look(cx, window);
         cx.refresh_menus();
     }
 

@@ -24,6 +24,7 @@ pub(crate) const END_SESSION_SINCE: u32 = 3;
 pub(crate) const ACTIVE_MENUS_SINCE: u32 = 4;
 pub(crate) const MENU_BUTTON_SINCE: u32 = 4;
 pub(crate) const PANEL_SINCE: u32 = 5;
+pub(crate) const PANEL_ORIGIN_SINCE: u32 = 6;
 
 struct Toplevel {
     handle: ExtForeignToplevelHandleV1,
@@ -347,6 +348,36 @@ impl Window {
         self.app().is_ok()
     }
 
+    pub fn anchor(&self, rect: Rect) -> Option<Anchor> {
+        let offset = self.content_offset();
+        Some(Anchor {
+            toplevel: self.toplevel().ok()?.clone(),
+            rect: Rect::new(
+                rect.x + offset.x,
+                rect.y + offset.y,
+                rect.width,
+                rect.height,
+            ),
+        })
+    }
+
+    pub fn set_panel_origin(&mut self, anchor: &Anchor) -> Result<(), WindowError> {
+        let app = self.app()?;
+        if app.version() < PANEL_ORIGIN_SINCE {
+            return Err(WindowError::Missing("bande_app_v1 set_panel_origin"));
+        }
+        let rect = anchor.rect;
+        app.set_panel_origin(
+            self.toplevel()?,
+            &anchor.toplevel,
+            rect.x.round() as i32,
+            rect.y.round() as i32,
+            rect.width.round() as i32,
+            rect.height.round() as i32,
+        );
+        self.flush()
+    }
+
     pub fn set_keep_on_top(&mut self, keep: bool) -> Result<(), WindowError> {
         self.app()?
             .set_keep_on_top(self.toplevel()?, u32::from(keep));
@@ -360,6 +391,12 @@ impl Window {
             false => Err(WindowError::Missing("bande_app_v1 set_menu_button")),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Anchor {
+    toplevel: XdgToplevel,
+    rect: Rect,
 }
 
 impl Dispatch<BandeAppControlV1, ()> for State {

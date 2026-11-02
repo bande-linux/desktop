@@ -155,7 +155,7 @@ impl QuickLook {
         windowed: bool,
         now: Instant,
     ) -> std::io::Result<Self> {
-        let mut presence = Animated::new(0.0);
+        let mut presence = Animated::new(if windowed { 1.0 } else { 0.0 });
         presence.animate_at(now, reduce_motion, 1.0, Spring::STANDARD);
         let mut quick_look = Self {
             at: at.min(subjects.len().saturating_sub(1)),
@@ -308,8 +308,13 @@ impl QuickLook {
         if !self.windowed || !self.full_screen {
             remember_size(self.size);
         }
-        self.presence
-            .animate_at(now, self.reduce_motion, 0.0, Spring::QUICK);
+        match self.windowed {
+            true => self.presence.jump_to(0.0),
+            false => {
+                self.presence
+                    .animate_at(now, self.reduce_motion, 0.0, Spring::QUICK);
+            }
+        }
     }
 
     pub fn is_closed(&self, now: Instant) -> bool {

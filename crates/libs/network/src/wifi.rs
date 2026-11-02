@@ -3,7 +3,7 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 use std::net::Ipv4Addr;
 
 use crate::connections::{
-    IGNORE_AUTO_DNS, IPV4, configured_ipv4, dns_override, dns_value, ipv4_settings, text,
+    IGNORE_AUTO_DNS, IPV4, configured_ipv4, dns_override, dns_value, merge_ipv4, text,
 };
 use crate::proxy::SettingsProxyBlocking;
 use crate::{
@@ -128,9 +128,7 @@ impl ConnectionChange {
                     wireless.remove(CLONED_MAC);
                 }
             }
-            Self::Ipv4(manual) => {
-                settings.insert(IPV4.to_owned(), ipv4_settings(manual.as_ref()));
-            }
+            Self::Ipv4(manual) => merge_ipv4(settings, manual.as_ref()),
             Self::Dns(servers) => {
                 let ipv4 = settings.entry(IPV4.to_owned()).or_default();
                 ipv4.remove(DNS);
@@ -150,7 +148,9 @@ impl NetworkManager {
     pub fn known_networks(&self) -> Result<Vec<KnownNetwork>> {
         let mut known: Vec<KnownNetwork> = Vec::new();
         for path in SettingsProxyBlocking::new(&self.bus)?.list_connections()? {
-            let settings = self.settings_connection(&path)?.get_settings()?;
+            let Ok(settings) = self.settings_connection(&path)?.get_settings() else {
+                continue;
+            };
             if let Some(network) = KnownNetwork::of(&path, &settings)
                 && !known.iter().any(|seen| seen.ssid == network.ssid)
             {

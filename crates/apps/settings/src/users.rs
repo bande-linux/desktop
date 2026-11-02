@@ -201,10 +201,11 @@ pub fn change_password(current: &str, new: &str) -> PasswordOutcome {
         Ok(session) => session,
         Err(error) => return failed(error),
     };
-    if matches!(
-        session.wait_for(&[CURRENT_PROMPT, LEGACY_CURRENT_PROMPT, NEW_PROMPT]),
-        Some(0 | 1)
-    ) {
+    let first = session.wait_for(&[CURRENT_PROMPT, LEGACY_CURRENT_PROMPT, NEW_PROMPT]);
+    if first.is_none() {
+        return PasswordOutcome::Failed(session.message());
+    }
+    if matches!(first, Some(0 | 1)) {
         if let Err(error) = session.answer(current) {
             return failed(error);
         }
@@ -357,6 +358,9 @@ impl SettingsView {
     }
 
     pub(crate) fn ask_password(&mut self, asking: bool) {
+        if self.password.as_ref().is_some_and(|form| form.busy) {
+            return;
+        }
         self.password_message = None;
         self.password = asking.then(PasswordForm::default);
         self.focus_next = Some(Anchor::Item(
@@ -416,6 +420,9 @@ impl SettingsView {
 
     pub(crate) fn password_changed(&mut self, outcome: PasswordOutcome) {
         let Some(form) = self.password.as_mut() else {
+            if outcome == PasswordOutcome::Changed {
+                self.password_message = Some(L10N.tr("password-changed"));
+            }
             return;
         };
         form.busy = false;

@@ -20,6 +20,7 @@ const LANGUAGE: u8 = 0x48;
 const SUCCESS_LIMIT: u16 = 0x00FF;
 const HTTP_UNAUTHORIZED: u16 = 401;
 const HTTP_FORBIDDEN: u16 = 403;
+const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -160,6 +161,8 @@ impl Request {
     pub(crate) fn send(&mut self, socket: &Path, resource: &str, user: &str) -> Result<Vec<Group>> {
         self.body.push(END);
         let mut stream = UnixStream::connect(socket)?;
+        stream.set_read_timeout(Some(TIMEOUT))?;
+        stream.set_write_timeout(Some(TIMEOUT))?;
         let head = format!(
             "POST {resource} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/ipp\r\n\
              Content-Length: {}\r\nAuthorization: PeerCred {user}\r\nConnection: close\r\n\r\n",

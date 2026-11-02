@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 
 use bande_printers::{Cups, Job, JobState, NearbyPrinter, Printer, PrinterState, SPOOLER, browse};
@@ -97,7 +97,7 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
     spawn("printers-worker", move || {
         let cups = Cups::new();
         let watching = Arc::new(AtomicU64::new(0));
-        let mut browse_started = false;
+        let browsing = Arc::new(AtomicBool::new(false));
         for command in receiver {
             let result = match command {
                 PrinterCommand::Watch(on) => {
@@ -118,9 +118,9 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
                             );
                         }
                         let _ = changed.send(());
-                        if !browse_started {
-                            browse_started = true;
-                            let (bus, updates) = (bus.clone(), updates.clone());
+                        if !browsing.swap(true, Ordering::Relaxed) {
+                            let (bus, updates, browsing) =
+                                (bus.clone(), updates.clone(), Arc::clone(&browsing));
                             spawn("printers-nearby", move || {
                                 let found = browse(&bus, |nearby| {
                                     updates.send(Update::NearbyPrinters(nearby))
@@ -129,6 +129,7 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
                                     tracing::warn!("cannot look for nearby printers: {error}");
                                     updates.send(Update::NearbyPrinters(Vec::new()));
                                 }
+                                browsing.store(false, Ordering::Relaxed);
                             });
                         }
                     }

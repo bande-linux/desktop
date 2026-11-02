@@ -120,6 +120,22 @@ fn owned(value: Value<'_>) -> Option<OwnedValue> {
     OwnedValue::try_from(value).ok()
 }
 
+pub(crate) fn merge_ipv4(settings: &mut ConnectionSettings, manual: Option<&ManualIpv4>) {
+    let ipv4 = settings.entry(IPV4.to_owned()).or_default();
+    let keeps_dns = manual.is_none()
+        && ipv4
+            .get(IGNORE_AUTO_DNS)
+            .and_then(|value| bool::try_from(value).ok())
+            .unwrap_or(false);
+    for key in ["method", "address-data", "addresses", "gateway"] {
+        ipv4.remove(key);
+    }
+    if !keeps_dns {
+        ipv4.remove("dns");
+    }
+    ipv4.extend(ipv4_settings(manual));
+}
+
 pub fn ipv4_settings(manual: Option<&ManualIpv4>) -> HashMap<String, OwnedValue> {
     let mut ipv4 = HashMap::new();
     let Some(manual) = manual else {
@@ -273,9 +289,7 @@ impl NetworkManager {
         let Some(connection) = self.connection_of(&device)? else {
             return Ok(());
         };
-        self.edit_connection(&connection, |settings| {
-            settings.insert(IPV4.to_owned(), ipv4_settings(manual));
-        })?;
+        self.edit_connection(&connection, |settings| merge_ipv4(settings, manual))?;
         self.reactivate(&connection, &path)
     }
 

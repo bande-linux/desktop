@@ -65,13 +65,17 @@ pub(crate) fn follow_schedule(
                 schedule.and_then(|(from, to)| within_daily(&bande_datetime::now(), from, to));
             let next = match state {
                 Some((inside, next)) => {
-                    if applied != Some(inside) {
+                    let crossed = applied.is_some_and(|before| before != inside);
+                    if crossed || (applied.is_none() && inside) {
                         apply(inside);
-                        applied = Some(inside);
                     }
+                    applied = Some(inside);
                     Some(next.as_second())
                 }
                 None => {
+                    if applied == Some(true) {
+                        apply(false);
+                    }
                     applied = None;
                     None
                 }

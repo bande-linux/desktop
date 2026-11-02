@@ -242,7 +242,7 @@ impl SettingsView {
             Text::new(&L10N.tr("security"), Tone::Primary),
             Some(boxed(segmented)),
         )));
-        let joining = self.join.joining.as_deref() == Some(other.name.as_bytes());
+        let joining = self.join.joining.as_deref() == Some(other.name.trim().as_bytes());
         let detail = if joining {
             L10N.tr("joining")
         } else {

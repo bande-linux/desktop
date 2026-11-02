@@ -1,3 +1,4 @@
+mod idle;
 mod stale;
 
 use std::cell::Cell;
@@ -5,10 +6,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
+use std::time::Duration;
 
 use bande_packages::offline::{self, Results};
 use bande_packages::{
-    Class, Client, Error, ErrorCode, Failure, Mode, Progress, Restart, Status, running_release,
+    Class, Client, Error, ErrorCode, Failure, Mode, Progress, Restart, Status, flatpak,
+    running_release,
 };
 use bande_xdg::{replace_file, state_home};
 use zbus::MatchRule;
@@ -21,6 +24,7 @@ use bande_notify::Urgency;
 use bande_notify::client::{Request, close, notify};
 
 use crate::L10N;
+use crate::client::ConfigProxyBlocking;
 use crate::failure::sentence;
 use crate::follow::{Update, Updates, spawn};
 use crate::privilege::may_update_live;
@@ -30,6 +34,7 @@ const REBOOT_REQUIRED: &str = "/run/reboot-required";
 const BOOT_ID: &str = "/proc/sys/kernel/random/boot_id";
 const RESTART_FILE: &str = "bande/restart-pending";
 const INTERRUPTED: &str = "dpkg --configure -a";
+const IDLE_FOR: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Package {
@@ -163,16 +168,52 @@ fn broken(during: Stage, error: &Error) -> SoftwareState {
     SoftwareState::Failed { during, reason }
 }
 
+fn flatpak_updates() -> Vec<Package> {
+    flatpak::updates()
+        .unwrap_or_else(|error| {
+            if error != flatpak::Error::Missing {
+                tracing::warn!("cannot look for Flatpak updates: {error}");
+            }
+            Vec::new()
+        })
+        .into_iter()
+        .map(|update| Package {
+            id: update.reference,
+            name: match update.name.is_empty() {
+                true => update.id,
+                false => update.name,
+            },
+            version: update.version,
+            summary: String::new(),
+            size: 0,
+            class: Class::Flatpak,
+        })
+        .collect()
+}
+
+fn refresh_flatpak_catalogue() {
+    if let Err(error) = flatpak::refresh_catalogue()
+        && error != flatpak::Error::Missing
+    {
+        tracing::warn!("cannot refresh the Flatpak catalogue: {error}");
+    }
+}
+
 pub fn check(client: &Client, refresh: Refresh) -> SoftwareState {
     let checked = || -> Result<SoftwareState, Error> {
         if refresh == Refresh::Always || client.seconds_since_refresh()? >= FRESH_SECONDS {
             client.refresh(false)?;
+            refresh_flatpak_catalogue();
         }
         let found = client.updates()?;
-        if found.is_empty() {
+        let flatpaks = flatpak_updates();
+        if found.is_empty() && flatpaks.is_empty() {
             return Ok(SoftwareState::UpToDate);
         }
         let ids: Vec<String> = found.iter().map(|package| package.id.clone()).collect();
+        if ids.is_empty() {
+            return Ok(SoftwareState::Available(flatpaks));
+        }
         let sizes: HashMap<String, u64> = client
             .details(&ids)?
             .into_iter()
@@ -199,6 +240,7 @@ pub fn check(client: &Client, refresh: Refresh) -> SoftwareState {
                 summary: package.summary,
             })
             .collect();
+        packages.extend(flatpaks);
         packages.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(SoftwareState::Available(packages))
     };
@@ -296,6 +338,55 @@ fn prepare(
         .map_err(|error| (Stage::Download, error))
 }
 
+fn pulls_offline(client: &Client, ids: &[String]) -> Result<bool, Error> {
+    let release = running_release();
+    Ok(!ids.is_empty()
+        && client
+            .update(ids, Mode::Simulate, &|_| {})?
+            .packages
+            .iter()
+            .any(|package| Class::of(package, Restart::None, &release) == Class::Offline))
+}
+
+fn flatpak_reason(error: &flatpak::Error) -> String {
+    tracing::warn!("cannot update Flatpak apps: {error}");
+    let flatpak::Error::Failed(details) = error else {
+        return L10N.tr("updates-went-wrong");
+    };
+    let details = details.to_lowercase();
+    if ["resolve", "connect", "network"]
+        .iter()
+        .any(|word| details.contains(word))
+    {
+        L10N.tr("updates-no-network")
+    } else if details.contains("space") {
+        L10N.tr("updates-no-space")
+    } else {
+        L10N.tr("updates-went-wrong")
+    }
+}
+
+fn update_flatpaks(
+    flatpaks: &[&Package],
+    download_only: bool,
+    report: &dyn Fn(SoftwareState),
+) -> Result<(), flatpak::Error> {
+    if flatpaks.is_empty() {
+        return Ok(());
+    }
+    flatpak::update(
+        &ids(flatpaks),
+        download_only,
+        &|percent| {
+            report(match download_only {
+                true => SoftwareState::Downloading { percent },
+                false => SoftwareState::Installing { percent },
+            })
+        },
+        &flatpak::Canceller::default(),
+    )
+}
+
 pub fn update(
     system: &Connection,
     client: &Client,
@@ -303,24 +394,35 @@ pub fn update(
     live: bool,
     report: &dyn Fn(SoftwareState),
 ) -> SoftwareState {
-    let (offline, now): (Vec<&Package>, Vec<&Package>) = packages
+    let (flatpaks, debian): (Vec<&Package>, Vec<&Package>) = packages
         .iter()
+        .partition(|package| package.class == Class::Flatpak);
+    if let Err(error) = update_flatpaks(&flatpaks, false, report) {
+        return SoftwareState::Failed {
+            during: Stage::Install,
+            reason: flatpak_reason(&error),
+        };
+    }
+    if debian.is_empty() {
+        return SoftwareState::Installed {
+            count: flatpaks.len(),
+            reboot: None,
+            logout: false,
+            apps: Vec::new(),
+        };
+    }
+    let (offline, now): (Vec<&Package>, Vec<&Package>) = debian
+        .iter()
+        .copied()
         .partition(|package| !live || package.class == Class::Offline);
     let installing = Cell::new(false);
     let installed = || -> Result<SoftwareState, (Stage, Error)> {
         let now_ids = ids(&now);
-        let release = running_release();
-        let pulls_offline = !now.is_empty()
-            && client
-                .update(&now_ids, Mode::Simulate, &|_| {})
-                .map_err(|error| (Stage::Install, error))?
-                .packages
-                .iter()
-                .any(|package| Class::of(package, Restart::None, &release) == Class::Offline);
+        let pulls_offline =
+            pulls_offline(client, &now_ids).map_err(|error| (Stage::Install, error))?;
         if now.is_empty() || pulls_offline {
-            let all: Vec<&Package> = packages.iter().collect();
-            prepare(system, client, &ids(&all), report)?;
-            return Ok(SoftwareState::Prepared(packages.len()));
+            prepare(system, client, &ids(&debian), report)?;
+            return Ok(SoftwareState::Prepared(debian.len()));
         }
         let applied = client
             .update(&now_ids, Mode::Apply, &|progress: Progress| {
@@ -346,7 +448,7 @@ pub fn update(
             Some(Reboot::Install(offline.len()))
         };
         Ok(SoftwareState::Installed {
-            count: now.len(),
+            count: now.len() + flatpaks.len(),
             reboot,
             logout: false,
             apps: Vec::new(),
@@ -464,15 +566,123 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
             &L10N.tr("restart-to-finish-hint"),
         );
     }
-    let SoftwareState::Available(packages) = check(&Client::background(system), Refresh::Always)
-    else {
+    let client = Client::background(system);
+    let SoftwareState::Available(packages) = check(&client, Refresh::Always) else {
         return Ok(None);
     };
-    let body = L10N.tr_args(
-        "updates-notification-body",
-        [("count", packages.len().into())],
-    );
+    if automatic(session) {
+        return update_automatically(session, system, &client, &packages);
+    }
+    announce_available(session, packages.len())
+}
+
+fn announce_available(session: &Connection, count: usize) -> zbus::Result<Option<u32>> {
+    let body = L10N.tr_args("updates-notification-body", [("count", count.into())]);
     announce(session, &L10N.tr("updates-notification"), &body)
+}
+
+fn automatic(session: &Connection) -> bool {
+    ConfigProxyBlocking::new(session)
+        .and_then(|config| config.automatic_updates())
+        .unwrap_or_else(|error| {
+            tracing::warn!("cannot read the automatic updates setting: {error}");
+            false
+        })
+}
+
+fn download_in_background(client: &Client, packages: &[Package]) {
+    let (flatpaks, debian): (Vec<&Package>, Vec<&Package>) = packages
+        .iter()
+        .partition(|package| package.class == Class::Flatpak);
+    if !debian.is_empty()
+        && let Err(error) = client.download(&ids(&debian), &|_| {})
+    {
+        tracing::warn!("cannot download the updates: {error}");
+    }
+    if let Err(error) = update_flatpaks(&flatpaks, true, &|_| {}) {
+        tracing::warn!("cannot download the Flatpak updates: {error}");
+    }
+}
+
+fn installable_now(
+    client: &Client,
+    packages: Vec<Package>,
+    live: bool,
+) -> (Vec<Package>, Vec<Package>) {
+    let (mut now, mut later): (Vec<Package>, Vec<Package>) =
+        packages.into_iter().partition(|package| {
+            package.class == Class::Flatpak || (live && package.class == Class::Live)
+        });
+    let debian: Vec<&Package> = now
+        .iter()
+        .filter(|package| package.class != Class::Flatpak)
+        .collect();
+    if !pulls_offline(client, &ids(&debian)).unwrap_or(true) {
+        return (now, later);
+    }
+    let (flatpaks, debian): (Vec<Package>, Vec<Package>) = now
+        .drain(..)
+        .partition(|package| package.class == Class::Flatpak);
+    later.extend(debian);
+    (flatpaks, later)
+}
+
+fn update_automatically(
+    session: &Connection,
+    system: &Connection,
+    client: &Client,
+    packages: &[Package],
+) -> zbus::Result<Option<u32>> {
+    download_in_background(client, packages);
+    if let Err(error) = idle::wait_until_idle(IDLE_FOR) {
+        tracing::warn!("cannot wait for the computer to be idle: {error}");
+        return announce_available(session, packages.len());
+    }
+    let SoftwareState::Available(packages) = check(client, Refresh::WhenStale) else {
+        return Ok(None);
+    };
+    let (now, later) = installable_now(client, packages, may_update_live(system));
+    let installed = match now.is_empty() {
+        true => None,
+        false => Some(settle(session, update(system, client, &now, true, &|_| {}))),
+    };
+    let restarts = later
+        .iter()
+        .any(|package| matches!(package.class, Class::Boot | Class::Offline));
+    match installed {
+        Some(SoftwareState::Failed { reason, .. }) => {
+            announce(session, &L10N.tr("install-failed"), &reason)
+        }
+        Some(SoftwareState::Prepared(count)) => announce(
+            session,
+            &L10N.tr_args("restart-to-install", [("count", count.into())]),
+            &L10N.tr("installs-on-restart"),
+        ),
+        _ if restarts => announce(
+            session,
+            &L10N.tr_args("updates-ready-restart", [("count", later.len().into())]),
+            &L10N.tr("updates-ready-restart-hint"),
+        ),
+        _ if !later.is_empty() => announce_available(session, later.len()),
+        Some(SoftwareState::Installed {
+            reboot: Some(_), ..
+        }) => announce(
+            session,
+            &L10N.tr("restart-to-finish"),
+            &L10N.tr("restart-to-finish-hint"),
+        ),
+        Some(SoftwareState::Installed { logout: true, .. }) => announce(
+            session,
+            &L10N.tr("log-out-to-finish"),
+            &L10N.tr("log-out-to-finish-hint"),
+        ),
+        Some(SoftwareState::Installed { count, .. }) => announce(
+            session,
+            &L10N.tr_args("updates-were-installed", [("count", count.into())]),
+            "",
+        ),
+        _ => Ok(None),
+    }
 }
 
 pub fn follow_software(

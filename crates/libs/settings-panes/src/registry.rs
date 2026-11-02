@@ -268,6 +268,7 @@ pub enum SettingId {
     LoginItems,
     ReopenApps,
     ReopenAfterCrash,
+    AutomaticUpdates,
     BatteryLevel,
     PowerMode,
     LowPowerOnBattery,
@@ -1471,11 +1472,15 @@ fn system_panes() -> Vec<Pane> {
             PaneId::SoftwareUpdate,
             vec![section(
                 None,
-                vec![list(
-                    SettingId::SoftwareUpdates,
-                    "software-updates",
-                    List::SoftwareUpdates,
-                )],
+                vec![
+                    list(
+                        SettingId::SoftwareUpdates,
+                        "software-updates",
+                        List::SoftwareUpdates,
+                    ),
+                    switch(SettingId::AutomaticUpdates, "automatic-updates")
+                        .described("automatic-updates-description"),
+                ],
             )],
         ),
     ]

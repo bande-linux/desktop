@@ -519,3 +519,22 @@ refreshes the cache when it is older than an hour. An apt "dpkg was interrupted"
 "Finish Installing", which runs PackageKit's `RepairSystem`. While dpkg runs, packagekitd holds
 a logind `shutdown:idle` block inhibitor (not sleep), and Settings shows only the progress. There
 is no first-run assistant yet.
+
+Per-user Flatpak apps (Software turns Flathub on with `flatpak remote-add --user`) are a fourth
+class: `bande_packages::flatpak` drives the `flatpak` command line on worker threads. Software
+Update lists `flatpak remote-ls --user --updates` beside the Debian updates, refreshes their
+AppStream with the package lists and installs them first with `flatpak update --user`, without a
+password or a restart. Their desktop entries and icons come from
+`~/.local/share/flatpak/exports/share` on `XDG_DATA_DIRS`, which flatpak's systemd user
+environment generator (`60-flatpak`) and `/etc/profile.d/flatpak.sh` set; the Taskbar watches the
+nearest existing folder of every `applications` folder there, so the first Flatpak app appears
+without logging out, and Search reloads its apps when an `applications` folder changed since it
+last opened.
+
+**Automatic updates** (`automatic-updates #true`, off by default, "Automatically keep this computer
+up to date"): the daily timer's run downloads every update in the background (PackageKit's
+`ONLY_DOWNLOAD`, `flatpak update --no-deploy`), waits for the user to be idle for five minutes
+(`ext-idle-notify-v1`, which honours idle inhibitors; no polling), checks again and installs the
+live and Flatpak updates when polkit lets the user update without a password; if those would pull
+in an offline package they wait as well. Boot and offline updates are never installed by
+themselves: a notification says they are ready and opens Software Update.

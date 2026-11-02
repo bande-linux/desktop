@@ -34,6 +34,7 @@ bande-wallpaper.workspace = true
 bande-watch.workspace = true
 bande-xdg.workspace = true
 wayland-client.workspace = true
+wayland-protocols.workspace = true
 wayland-protocols-wlr.workspace = true
 zbus.workspace = true
 zeroize.workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "web-layout"
+description = "The box tree and block and inline layout into fragment trees"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+web-atoms.workspace = true
+web-dom.workspace = true
+web-style.workspace = true
+web-text.workspace = true
+
+[lints]
+workspace = true

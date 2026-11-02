@@ -230,6 +230,7 @@ const UNSTYLED: u32 = u32::MAX;
 pub struct Styles {
     per_node: Vec<u32>,
     pool: Vec<ComputedStyle>,
+    initial_reset: Arc<ResetStyle>,
 }
 
 impl Styles {
@@ -239,6 +240,7 @@ impl Styles {
         let mut styles = Styles {
             per_node: vec![UNSTYLED; document.len()],
             pool: vec![root],
+            initial_reset: initial_reset.clone(),
         };
         let mut sharing: HashMap<(u32, defaults::RuleKey), u32> = HashMap::new();
         let mut stack: Vec<(NodeId, u32)> = document
@@ -289,6 +291,13 @@ impl Styles {
     pub fn get(&self, node: NodeId) -> Option<&ComputedStyle> {
         let index = *self.per_node.get(node.index())?;
         self.pool.get(index as usize)
+    }
+
+    pub fn anonymous(&self, parent: &ComputedStyle) -> ComputedStyle {
+        ComputedStyle {
+            inherited: parent.inherited.clone(),
+            reset: self.initial_reset.clone(),
+        }
     }
 
     pub fn distinct(&self) -> usize {

@@ -14,16 +14,26 @@ web-atoms = { path = "crates/web-atoms" }
 web-dom = { path = "crates/web-dom" }
 web-html = { path = "crates/web-html" }
 web-style = { path = "crates/web-style" }
-hashbrown = { version = "0.16", default-features = false }
+web-text = { path = "crates/web-text" }
+web-layout = { path = "crates/web-layout" }
+web-paint = { path = "crates/web-paint" }
 web-net = { path = "crates/web-net" }
 brotli-decompressor = "5"
 encoding_rs = "0.8"
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
+harfrust = "=0.12.0"
+hashbrown = { version = "0.16", default-features = false }
 hyper = { version = "1", features = ["client", "http1"] }
+icu_properties = "2.4"
+icu_segmenter = "2.4"
+linebender_resource_handle = "0.1.1"
 rustix = { version = "1", features = ["event", "fs"] }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "logging", "prefer-post-quantum", "std", "tls12"] }
 rustls-platform-verifier = "0.7"
+skrifa = "=0.44.0"
 url = "2"
+vello_cpu = "=0.3.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -79,3 +79,11 @@ dependencies = [
  "encoding_rs",
  "web-atoms",
 ]
+
+[[package]]
+name = "web-style"
+version = "0.1.0"
+dependencies = [
+ "web-atoms",
+ "web-dom",
+]

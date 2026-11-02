@@ -13,6 +13,7 @@ repository = "https://github.com/bande-linux/web"
 web-atoms = { path = "crates/web-atoms" }
 web-dom = { path = "crates/web-dom" }
 web-html = { path = "crates/web-html" }
+web-style = { path = "crates/web-style" }
 hashbrown = { version = "0.16", default-features = false }
 encoding_rs = "0.8"
 

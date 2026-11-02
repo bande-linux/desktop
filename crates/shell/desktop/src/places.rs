@@ -3,7 +3,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use bande_fs::is_hidden;
+use bande_fs::{extension_hidden, is_hidden};
 use bande_xdg::{Apps, DIRECTORY};
 
 use crate::model::{Item, Kind, Positions, Slot};
@@ -34,7 +34,8 @@ pub fn read_item(
     let name = name_of(&path);
     let hidden = match show_extensions || kind != Kind::File {
         true => 0,
-        false => apps.extension(&name).map_or(0, str::len),
+        false => bande_fs::hidden_extension(&name, apps.extension(&name), extension_hidden(&path))
+            .map_or(0, str::len),
     };
     Item {
         label: name[..name.len() - hidden].to_owned(),

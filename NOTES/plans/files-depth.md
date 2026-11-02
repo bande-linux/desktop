@@ -31,7 +31,7 @@ Delete each line when it ships; delete the file when the list is empty.
   chooser), kept on rename, a warning before changing one; batch rename.
 - Get Info inspector with Open With, default app and permissions.
 - Getting around: tabs; sidebar with Settings ▸ Show in Sidebar; Recents; search with scopes;
-  Go ▸ Recent Folders; new windows on a chosen or the last folder; `org.freedesktop.FileManager1`
+  Go ▸ Recent Folders; new windows on a standard, the last or any chosen folder (Other…); `org.freedesktop.FileManager1`
   (D-Bus activated with `--gapplication-service`) and `bande-files --select <paths>`.
 - Changes: Undo/Redo shared by all windows; Make Alias (a symlink, Kind “Alias”);
   spring-loaded folders (a setting with its delay); Ctrl/Shift drag modifiers; Compress and
@@ -46,8 +46,7 @@ Delete each line when it ships; delete the file when the list is empty.
 
 1. Get Info: an editable Name & Extension field with a per-file "Hide extension".
 2. View ▸ Use Groups (Kind, Date Last Opened, Size).
-3. New windows show: Other… (any folder).
-4. Gallery: Finder's preview pane metadata beside it (today the inspector shows it).
-5. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
+3. Gallery: Finder's preview pane metadata beside it (today the inspector shows it).
+4. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
    (GVfs-free SMB/SFTP mounts).
-6. Content search (file contents, not only names).
+5. Content search (file contents, not only names).

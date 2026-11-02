@@ -13,8 +13,6 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   calendar, each published by apt before the next; then desktop `v0.1.0`
   ([ci.md](../docs/architecture/ci.md#releasing)); then switch the apps' desktop pin to `v0.1.0`
   and build an image from the archive.
-- The image is Debian 13 (trixie) but the archive is built for Debian testing: move the image to
-  testing, or also build a trixie set.
 - No reviewer approves a publish today; add one to apt's `apt-publish` environment if wanted.
 - `origin/wip/userland-efficiency` still has the old `ci.yml` that runs on every push: delete
   the file or the branch before pushing it again.

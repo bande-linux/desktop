@@ -79,8 +79,6 @@ With the switch on, Debian packages never move past the newest gate. Bande packa
   consistent testing state, so it's never a mix.
 - **Coverage:** containers don't exercise the Mac GPU, kernel or firmware, so "tested" ≠ tested
   on the mini.
-- **Images:** `images/build.sh:16` defaults `SUITE=trixie`, but the archive targets testing, so
-  the switch is hidden on image installs until that's resolved.
 
 ## Verify (on the mini)
 Install a locally built `bande-gate`. Then check: `apt-cache policy` shows snapshot origins;

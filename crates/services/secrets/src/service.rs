@@ -13,6 +13,7 @@ use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
 use zbus::{Connection, interface};
 
 use crate::dialog::{Dialog, Kind, Reply, Request};
+use crate::network::NETWORK_MANAGER;
 use crate::peer;
 use crate::session::{self, Session};
 use crate::store::{self, ALLOWED, CREATOR, Keychain, LOGIN, SESSION};
@@ -137,13 +138,14 @@ struct Peer {
 
 enum Job {
     Unlock(Vec<OwnedObjectPath>),
+    Reveal,
     Create { label: String, alias: String },
 }
 
 impl Job {
     fn refusal(&self) -> OwnedValue {
         let value = match self {
-            Self::Unlock(_) => Value::from(Vec::<OwnedObjectPath>::new()),
+            Self::Unlock(_) | Self::Reveal => Value::from(Vec::<OwnedObjectPath>::new()),
             Self::Create { .. } => Value::from(no_prompt()),
         };
         value
@@ -542,6 +544,136 @@ impl Daemon {
         }
     }
 
+    async fn emit_item(&self, name: &str, id: u64, created: bool) {
+        let Ok(connection) = self.connection() else {
+            return;
+        };
+        let Ok(emitter) = SignalEmitter::new(connection, collection_path(name)) else {
+            return;
+        };
+        let path = item_path(name, id);
+        let _ = if created {
+            CollectionObject::item_created(&emitter, path.as_ref()).await
+        } else {
+            CollectionObject::item_deleted(&emitter, path.as_ref()).await
+        };
+    }
+
+    pub async fn internal_items(
+        self: &Arc<Self>,
+        wanted: &HashMap<String, String>,
+        interactive: bool,
+    ) -> Vec<(HashMap<String, String>, Secret)> {
+        let default = self.keychain.lock().await.default_collection().to_owned();
+        let locked = self
+            .keychain
+            .lock()
+            .await
+            .collection(&default)
+            .is_none_or(store::Collection::locked);
+        if locked
+            && !(interactive
+                && self
+                    .ask_unlock(&default, Some(NETWORK_MANAGER.to_owned()))
+                    .await)
+        {
+            return Vec::new();
+        }
+        let keychain = self.keychain.lock().await;
+        keychain
+            .collections()
+            .iter()
+            .flat_map(store::Collection::entries)
+            .filter(|entry| store::matches(entry.item.attributes(), wanted))
+            .map(|entry| (entry.item.attributes().clone(), entry.item.secret()))
+            .collect()
+    }
+
+    pub async fn store_internal(
+        self: &Arc<Self>,
+        label: &str,
+        mut attributes: HashMap<String, String>,
+        secret: Secret,
+    ) {
+        attributes.insert(CREATOR.to_owned(), NETWORK_MANAGER.to_owned());
+        let stored = {
+            let mut keychain = self.keychain.lock().await;
+            let default = keychain.default_collection().to_owned();
+            let existing = keychain.collection(&default).and_then(|collection| {
+                collection
+                    .entries()
+                    .find(|entry| store::same_attributes(entry.item.attributes(), &attributes))
+                    .map(|entry| entry.id)
+            });
+            match existing {
+                Some(id) => keychain
+                    .update_item(&default, id, |item| {
+                        item.set_label(label);
+                        item.set_secret(secret);
+                    })
+                    .await
+                    .map(|()| None),
+                None => keychain
+                    .create_item(&default, label, &attributes, secret)
+                    .await
+                    .map(|id| Some((default, id))),
+            }
+        };
+        match stored {
+            Ok(Some((name, id))) => {
+                self.sync().await;
+                self.emit_item(&name, id, true).await;
+            }
+            Ok(None) => {}
+            Err(error) => tracing::warn!("cannot keep a network secret: {error}"),
+        }
+    }
+
+    pub async fn delete_internal(self: &Arc<Self>, wanted: &HashMap<String, String>) {
+        let mut deleted = Vec::new();
+        {
+            let mut keychain = self.keychain.lock().await;
+            let doomed = keychain
+                .collections()
+                .iter()
+                .flat_map(|collection| {
+                    collection
+                        .entries()
+                        .filter(|entry| store::matches(entry.item.attributes(), wanted))
+                        .map(|entry| (collection.name.clone(), entry.id))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            for (name, id) in doomed {
+                match keychain.delete_item(&name, id).await {
+                    Ok(()) => deleted.push((name, id)),
+                    Err(error) => tracing::warn!("cannot delete a network secret: {error}"),
+                }
+            }
+        }
+        self.sync().await;
+        for (name, id) in deleted {
+            self.emit_item(&name, id, false).await;
+        }
+    }
+
+    pub async fn ask_network(&self, network: &str) -> Option<Secret> {
+        let request = Request {
+            kind: Kind::Network,
+            app: None,
+            keychain: network.to_owned(),
+            items: Vec::new(),
+        };
+        let mut dialog = self.dialog(&request).await?;
+        match dialog.reply().await {
+            Reply::Allow(password) | Reply::Always(password) => {
+                dialog.finish().await;
+                Some(password)
+            }
+            Reply::Cancel | Reply::CreateNew => None,
+        }
+    }
+
     async fn dialog(&self, request: &Request) -> Option<Dialog> {
         let connection = self.connection().ok()?;
         match Dialog::open(&self.prompter, connection, request).await {
@@ -637,7 +769,7 @@ impl Daemon {
         true
     }
 
-    async fn ask_allow(&self, caller: &Caller, items: Vec<(String, u64)>) -> bool {
+    async fn ask_allow(&self, caller: &Caller, items: Vec<(String, u64)>, kind: Kind) -> bool {
         let Some((name, _)) = items.first().cloned() else {
             return true;
         };
@@ -655,7 +787,7 @@ impl Daemon {
             (label, labels)
         };
         let request = Request {
-            kind: Kind::Allow,
+            kind,
             app: caller.identity.clone(),
             keychain: label,
             items: labels,
@@ -667,7 +799,9 @@ impl Daemon {
             let (password, always) = match dialog.reply().await {
                 Reply::Cancel | Reply::CreateNew => return false,
                 Reply::Allow(password) => (password, false),
-                Reply::Always(password) => (password, caller.identity.is_some()),
+                Reply::Always(password) => {
+                    (password, kind == Kind::Allow && caller.identity.is_some())
+                }
             };
             let verified = self.keychain.lock().await.verify(&name, &password).await;
             match verified {
@@ -891,10 +1025,37 @@ impl Daemon {
                         })
                         .collect::<Vec<_>>()
                 };
-                if !refused.is_empty() && !self.ask_allow(&caller, refused).await {
+                if !refused.is_empty() && !self.ask_allow(&caller, refused, Kind::Allow).await {
                     return None;
                 }
                 Value::from(objects).try_into_owned().ok()
+            }
+            Job::Reveal => {
+                let default = self.keychain.lock().await.default_collection().to_owned();
+                if !self.ask_unlock(&default, caller.identity.clone()).await {
+                    return None;
+                }
+                let items = {
+                    let keychain = self.keychain.lock().await;
+                    keychain
+                        .collections()
+                        .iter()
+                        .flat_map(|collection| {
+                            collection
+                                .entries()
+                                .map(|entry| (collection.name.clone(), entry.id))
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>()
+                };
+                let paths = items
+                    .iter()
+                    .map(|(name, id)| item_path(name, *id))
+                    .collect::<Vec<_>>();
+                if !items.is_empty() && !self.ask_allow(&caller, items, Kind::Reveal).await {
+                    return None;
+                }
+                Value::from(paths).try_into_owned().ok()
             }
             Job::Create { label, alias } => {
                 let name = self.ask_create(&caller, &label).await?;
@@ -1207,6 +1368,18 @@ impl ServiceObject {
         emitter: &SignalEmitter<'_>,
         collection: ObjectPath<'_>,
     ) -> zbus::Result<()>;
+}
+
+pub struct ExtensionObject {
+    daemon: Arc<Daemon>,
+}
+
+#[interface(name = "org.bande.Secrets")]
+impl ExtensionObject {
+    async fn reveal(&self, #[zbus(header)] header: Header<'_>) -> Result<OwnedObjectPath> {
+        let caller = self.daemon.caller(&header).await;
+        self.daemon.new_prompt(&caller.sender, Job::Reveal).await
+    }
 }
 
 pub struct CollectionObject {

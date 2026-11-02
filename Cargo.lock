@@ -1028,6 +1028,7 @@ name = "bande-secrets"
 version = "0.1.2"
 dependencies = [
  "accesskit",
+ "async-channel",
  "async-executor",
  "async-io",
  "async-lock",

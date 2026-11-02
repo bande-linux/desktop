@@ -337,6 +337,12 @@ graph LR
   so it unlocks nothing; as on macOS the login keychain stays unlocked while the screen is
   locked. When the login password does not open the keychain, the next unlock offers to update
   its password or start a new one (the old file is kept).
+- The daemon is also NetworkManager's secret agent (`org.bande.Secrets`, re-registered when
+  NetworkManager restarts, answering only NetworkManager's bus name): agent-owned Wi-Fi, 802.1X,
+  mobile, PPPoE and VPN secrets are kept in the login keychain under libnm's attributes
+  (`connection-uuid`, `setting-name`, `setting-key`), and when NetworkManager needs a new
+  Wi-Fi or 802.1X password it asks through the keychain prompt. Wi-Fi joined from Bande keeps
+  its password system-wide, as macOS keeps it in the System keychain.
 - Items record the app that saved them (`bande:creator`: the Flatpak id or the executable of
   the D-Bus peer). Another app sees such an item as locked and gets it after confirming with
   the keychain password (`bande:allowed` remembers "Always Allow"). Prompts are

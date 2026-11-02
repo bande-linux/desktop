@@ -230,7 +230,11 @@ impl Chooser {
     pub fn shown_name<'a>(&self, entry: &'a Entry) -> &'a str {
         let hidden = match self.show_extensions || entry.is_folder() {
             true => None,
-            false => self.mime.extension(&entry.name),
+            false => bande_fs::hidden_extension(
+                &entry.name,
+                self.mime.extension(&entry.name),
+                entry.extension_hidden,
+            ),
         };
         &entry.name[..entry.name.len() - hidden.map_or(0, str::len)]
     }

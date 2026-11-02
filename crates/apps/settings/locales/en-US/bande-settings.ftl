@@ -345,6 +345,7 @@ screen-sharing-none = No app remembers what it may share.
 location-none = No app has asked for your location yet.
 forget-share-warning = It asks again before it shares your screen or a window.
 printer-add-failed = Couldn't add “{ $name }”. Check that it is turned on and on this network.
+printer-forbidden = Only members of the lpadmin group can change printers.
 printer-idle = Idle
 printer-printing = Printing
 printer-paused = Paused

@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use bande_fs::Entry;
 use bande_thumbnails::ThumbnailSize;
-use bande_toolkit::ui::{Key, Modifiers};
+use bande_toolkit::ui::{Key, Modifiers, Scroll};
 use bande_toolkit::{Item, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle};
 
 use crate::paint::{centred, fitted};
@@ -48,8 +48,14 @@ impl FilesView {
         if total <= room {
             return content.x + ((content.width - total) / 2.0).round();
         }
+        let scrolled = self
+            .gallery_offset
+            .as_ref()
+            .filter(|(location, _)| location == self.browser.root())
+            .map(|(_, offset)| content.x + offset);
         let centre = selected.map_or(CELL / 2.0, |row| row as f32 * CELL + CELL / 2.0);
-        (content.x + content.width / 2.0 - centre)
+        scrolled
+            .unwrap_or(content.x + content.width / 2.0 - centre)
             .clamp(
                 content.x + content.width - PADDING - total,
                 content.x + PADDING,
@@ -64,7 +70,24 @@ impl FilesView {
         first.min(count)..last.min(count)
     }
 
+    pub(crate) fn gallery_scrolled(&mut self, scroll: &Scroll) -> bool {
+        let content = self.content_frame();
+        if scroll.position.y < content.y + content.height - STRIP_HEIGHT {
+            return false;
+        }
+        let column = &self.browser.columns()[0];
+        let (count, selected) = (column.entries.len(), column.selected);
+        let start = self.gallery_strip_start(count, selected);
+        let step = match scroll.delta.x {
+            0.0 => scroll.delta.y,
+            sideways => sideways,
+        };
+        self.gallery_offset = Some((self.browser.root().clone(), start - step - content.x));
+        self.gallery_strip_start(count, selected) != start
+    }
+
     pub(crate) fn gallery_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        self.gallery_offset = None;
         let column = &self.browser.columns()[0];
         let Some(last) = column.entries.len().checked_sub(1) else {
             return false;

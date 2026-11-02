@@ -1,3 +1,6 @@
+#[cfg(feature = "avif")]
+mod avif;
+
 use std::io::Cursor;
 use std::sync::Arc;
 
@@ -101,6 +104,22 @@ pub fn decode(bytes: &[u8]) -> Option<Image> {
         ] => decode_webp(bytes),
         [b'G', b'I', b'F', b'8', ..] => decode_gif(bytes),
         [0xFF, 0x0A, ..] | [0, 0, 0, 0x0C, b'J', b'X', b'L', b' ', ..] => decode_jxl(bytes),
+        #[cfg(feature = "avif")]
+        [
+            _,
+            _,
+            _,
+            _,
+            b'f',
+            b't',
+            b'y',
+            b'p',
+            b'a',
+            b'v',
+            b'i',
+            b'f' | b's',
+            ..,
+        ] => decode_avif(bytes),
         _ => None,
     }?;
     allowed(image.width, image.height).then_some(image)
@@ -178,6 +197,13 @@ fn decode_webp(bytes: &[u8]) -> Option<Image> {
             .collect()
     };
     Some(Image::new(width, height, rgba))
+}
+
+#[cfg(feature = "avif")]
+fn decode_avif(bytes: &[u8]) -> Option<Image> {
+    let (obus, color) = avif::obus(bytes)?;
+    let frame = web_av1::decode(&obus, MAX_PIXELS, color)?;
+    allowed(frame.width, frame.height).then(|| Image::new(frame.width, frame.height, frame.rgba))
 }
 
 fn decode_jxl(bytes: &[u8]) -> Option<Image> {

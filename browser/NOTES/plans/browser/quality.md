@@ -12,7 +12,15 @@ docs, one-line commits, trunk-based, never force-push), plus these.
 
 ## `unsafe`
 
-- Every crate is `#![forbid(unsafe_code)]` except three audited modules:
+- Every crate is `#![forbid(unsafe_code)]` except four audited modules:
+  - `web-av1`, the only path to rav1d, whose Rust crate exposes nothing but dav1d's C ABI. It
+    decodes one AVIF still behind a safe `decode(obus, max_pixels, colour)`; the container is
+    parsed by safe code in `web-image`, the same size caps apply, and `web-image`'s `decode` fuzz
+    target reaches it. rav1d 1.1.0 still panics inside `dav1d_send_data` on some malformed
+    streams (an `unwrap` in `rav1d_submit_frame`'s error path), and a panic cannot unwind out of
+    a C ABI call, so it aborts the process. AVIF is therefore behind `web-image`'s `avif`
+    feature, off in the engine until images decode in the sandboxed process (W4) or rav1d fixes
+    it;
   - `web-ipc` (memfd mapping, fd passing, seccomp and landlock setup);
   - the GC and JIT code in `web-js`;
   - SIMD scanning in `web-html` (or `std::simd` once stable, and then none).

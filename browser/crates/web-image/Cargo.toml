@@ -12,8 +12,12 @@ gif.workspace = true
 image-webp.workspace = true
 jxl-oxide.workspace = true
 png.workspace = true
+web-av1 = { workspace = true, optional = true }
 zune-core.workspace = true
 zune-jpeg.workspace = true
+
+[features]
+avif = ["dep:web-av1"]
 
 [lints]
 workspace = true

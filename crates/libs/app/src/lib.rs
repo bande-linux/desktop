@@ -47,8 +47,18 @@ pub enum Keys {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Main,
-    Dialog,
-    Utility,
+    Secondary(&'static str),
+    Dialog(&'static str),
+    Utility(&'static str),
+}
+
+impl Kind {
+    pub fn tag(self) -> &'static str {
+        match self {
+            Self::Main => "main",
+            Self::Secondary(tag) | Self::Dialog(tag) | Self::Utility(tag) => tag,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

@@ -16,6 +16,7 @@ use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActiva
 use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
 use wayland_protocols::xdg::shell::client::xdg_wm_base::{self, XdgWmBase};
+use wayland_protocols::xdg::toplevel_tag::v1::client::xdg_toplevel_tag_manager_v1::XdgToplevelTagManagerV1;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLayerShellV1;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
     self, ZwlrLayerSurfaceV1,
@@ -56,6 +57,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "xdg_activation_v1" => {
                     state.activation = Some(registry.bind(name, 1, handle, ()));
+                }
+                "xdg_toplevel_tag_manager_v1" => {
+                    state.toplevel_tag = Some(registry.bind(name, 1, handle, ()));
                 }
                 "wl_seat" if state.seat.is_none() => {
                     state.seat = Some(registry.bind(name, version.min(9), handle, ()));
@@ -262,4 +266,5 @@ delegate_noop!(State: ignore WlRegion);
 delegate_noop!(State: ignore WlSurface);
 delegate_noop!(State: ignore ZwlrLayerShellV1);
 delegate_noop!(State: ignore XdgActivationV1);
+delegate_noop!(State: ignore XdgToplevelTagManagerV1);
 delegate_noop!(State: ignore WlDataDeviceManager);

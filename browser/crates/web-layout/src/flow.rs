@@ -514,12 +514,22 @@ impl<'a, 'b> Flow<'a, 'b> {
                         top.adjoin_all(laid.top);
                         if laid.through {
                             top.adjoin_all(laid.bottom);
+                            keep_empty(
+                                laid,
+                                (content_x + shift, content_y + estimate - content_origin.1),
+                                &mut children,
+                            );
                             continue;
                         }
                     } else {
                         pending.adjoin_all(laid.top);
                         if laid.through {
                             pending.adjoin_all(laid.bottom);
+                            keep_empty(
+                                laid,
+                                (content_x + shift, content_y + estimate - content_origin.1),
+                                &mut children,
+                            );
                             continue;
                         }
                         y += pending.resolve();
@@ -1068,6 +1078,16 @@ impl<'a, 'b> Flow<'a, 'b> {
             }));
         }
     }
+}
+
+fn keep_empty(laid: Laid, at: (f32, f32), children: &mut Vec<Fragment>) {
+    if laid.fragment.children.is_empty() {
+        return;
+    }
+    let mut fragment = laid.fragment;
+    fragment.rect.x += at.0;
+    fragment.rect.y = at.1;
+    children.push(Fragment::Box(fragment));
 }
 
 fn first_baseline(children: &[Fragment]) -> Option<f32> {

@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::process::ExitCode;
 
-use web_content::{Fonts, Page, parse};
+use web_content::{Fonts, Page, parse_file};
 
 const WIDTH: u16 = 800;
 const MAX_HEIGHT: u16 = 16384;
@@ -27,10 +27,9 @@ fn main() -> ExitCode {
 }
 
 fn render(input: &str, output: &str, width: u16) -> Result<(), Box<dyn std::error::Error>> {
-    let bytes = std::fs::read(input)?;
     let mut fonts = Fonts::new();
     let started = std::time::Instant::now();
-    let document = parse(&bytes);
+    let document = parse_file(std::path::Path::new(input))?;
     let parsed = started.elapsed();
     let mut page = Page::new(document, f32::from(width), &mut fonts);
     if let Some(directory) = std::path::Path::new(input).parent() {

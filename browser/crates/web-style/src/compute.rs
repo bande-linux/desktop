@@ -34,6 +34,7 @@ struct Computer<'a> {
     context: &'a Context,
     decoration_color: Option<Color>,
     border_styles: [bool; 4],
+    border_colors: [bool; 4],
 }
 
 fn priority(id: LonghandId) -> u8 {
@@ -63,6 +64,7 @@ pub(crate) fn compute(
         context,
         decoration_color: None,
         border_styles: [false; 4],
+        border_colors: [false; 4],
     };
     for (id, value) in &winners {
         match value {
@@ -532,16 +534,20 @@ impl Computer<'_> {
             (Id::BorderBottomStyle, V::LineStyle(style)) => self.border_style(2, *style),
             (Id::BorderLeftStyle, V::LineStyle(style)) => self.border_style(3, *style),
             (Id::BorderTopColor, V::Color(value)) => {
-                self.reset.border_color.top = self.color(value)
+                self.reset.border_color.top = self.color(value);
+                self.border_colors[0] = true;
             }
             (Id::BorderRightColor, V::Color(value)) => {
-                self.reset.border_color.right = self.color(value)
+                self.reset.border_color.right = self.color(value);
+                self.border_colors[1] = true;
             }
             (Id::BorderBottomColor, V::Color(value)) => {
-                self.reset.border_color.bottom = self.color(value)
+                self.reset.border_color.bottom = self.color(value);
+                self.border_colors[2] = true;
             }
             (Id::BorderLeftColor, V::Color(value)) => {
-                self.reset.border_color.left = self.color(value)
+                self.reset.border_color.left = self.color(value);
+                self.border_colors[3] = true;
             }
             (Id::Width, V::Size(value)) => self.reset.width = self.size(value),
             (Id::Height, V::Size(value)) => self.reset.height = self.size(value),
@@ -711,6 +717,17 @@ impl Computer<'_> {
     }
 
     fn keyword(&mut self, id: LonghandId, keyword: CssWideKeyword) {
+        let side = match id {
+            LonghandId::BorderTopColor => Some(0),
+            LonghandId::BorderRightColor => Some(1),
+            LonghandId::BorderBottomColor => Some(2),
+            LonghandId::BorderLeftColor => Some(3),
+            _ => None,
+        };
+        let inherits = matches!(keyword, CssWideKeyword::Inherit);
+        if let Some(slot) = side.and_then(|side| self.border_colors.get_mut(side)) {
+            *slot = inherits;
+        }
         let inherit = match keyword {
             CssWideKeyword::Inherit => true,
             CssWideKeyword::Initial => false,
@@ -819,6 +836,17 @@ impl Computer<'_> {
                 Display::Contents if self.context.root => Display::Block,
                 display => display,
             };
+        }
+        let current = self.inherited.color;
+        for (color, declared) in [
+            (&mut self.reset.border_color.top, self.border_colors[0]),
+            (&mut self.reset.border_color.right, self.border_colors[1]),
+            (&mut self.reset.border_color.bottom, self.border_colors[2]),
+            (&mut self.reset.border_color.left, self.border_colors[3]),
+        ] {
+            if !declared {
+                *color = current;
+            }
         }
         for (width, visible) in [
             (&mut self.reset.border.top, self.border_styles[0]),

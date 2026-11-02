@@ -40,6 +40,17 @@ pub struct Memory {
     pub images: usize,
 }
 
+pub fn parse_file(path: &std::path::Path) -> std::io::Result<Document> {
+    let bytes = std::fs::read(path)?;
+    let xml = path
+        .extension()
+        .is_some_and(|extension| extension == "xht" || extension == "xhtml");
+    Ok(match xml {
+        true => web_html::parse_xml(Document::new(), &bytes, None),
+        false => parse(&bytes),
+    })
+}
+
 pub fn parse(bytes: &[u8]) -> Document {
     parse_with_charset(bytes, None)
 }
@@ -72,14 +83,7 @@ pub fn render_file(path: &std::path::Path, width: u16, height: u16) -> std::io::
     thread_local! {
         static FONTS: std::cell::RefCell<Fonts> = std::cell::RefCell::new(Fonts::new());
     }
-    let bytes = std::fs::read(path)?;
-    let xml = path
-        .extension()
-        .is_some_and(|extension| extension == "xht" || extension == "xhtml");
-    let document = match xml {
-        true => web_html::parse_xml(Document::new(), &bytes, None),
-        false => parse(&bytes),
-    };
+    let document = parse_file(path)?;
     let directory = path.parent().unwrap_or(std::path::Path::new("."));
     let viewport = Viewport {
         width: f32::from(width),

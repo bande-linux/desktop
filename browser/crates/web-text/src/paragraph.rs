@@ -374,8 +374,13 @@ impl ShapedParagraph {
         let (mut above, mut below) = vertical_extent(fonts, None, strut);
         let first_item = lines.items.len();
         let mut pen = 0.0;
-        let mut content_width = 0.0;
         let shaped = self.glyphs.get(range).unwrap_or_default();
+        let hanging = shaped
+            .iter()
+            .rev()
+            .take_while(|glyph| matches!(text.get(glyph.cluster as usize), Some(b' ' | b'\n')))
+            .count();
+        let shaped = shaped.get(..shaped.len() - hanging).unwrap_or_default();
         for group in shaped.chunk_by(|a, b| a.run == b.run && a.font == b.font) {
             let Some((first, style)) = group
                 .first()
@@ -394,12 +399,9 @@ impl ShapedParagraph {
                 lines.glyphs.push(Glyph {
                     id: glyph.id,
                     x: pen - start + glyph.x_offset,
-                    y: -glyph.y_offset - style.baseline_shift,
+                    y: -glyph.y_offset,
                 });
                 pen += glyph.advance;
-                if !matches!(text.get(glyph.cluster as usize), Some(b' ' | b'\n')) {
-                    content_width = pen;
-                }
             }
             lines.items.push(LineItem {
                 tag: style.tag,
@@ -418,7 +420,7 @@ impl ShapedParagraph {
             top,
             baseline: top + above,
             height: above + below,
-            width: content_width,
+            width: pen,
             items: first_item..lines.items.len(),
         });
         lines.height = top + above + below;

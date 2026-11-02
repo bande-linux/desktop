@@ -192,7 +192,7 @@ impl Flow<'_> {
                     &inline.paragraph,
                     self.fonts,
                     content_width,
-                    run_style(&block.style, u32::MAX),
+                    run_style(&block.style, u32::MAX, 0.0),
                 );
                 if !lines.lines.is_empty() {
                     through = false;
@@ -270,13 +270,13 @@ impl Flow<'_> {
                 }
                 let start = self.glyphs.len() as u32;
                 self.glyphs.extend_from_slice(glyphs);
-                let baseline = origin.1 + line.baseline;
+                let baseline = origin.1 + line.baseline - item.baseline_shift;
                 children.push(Fragment::Text(self.text(
                     Some(source.node),
                     &source.style,
                     Rect {
                         x: origin.0 + offset + item.x,
-                        y: baseline - item.baseline_shift - item.ascent,
+                        y: baseline - item.ascent,
                         width: item.width,
                         height: item.ascent + item.descent,
                     },
@@ -328,7 +328,7 @@ impl Flow<'_> {
             &marker.paragraph,
             self.fonts,
             f32::INFINITY,
-            run_style(&block.style, 0),
+            run_style(&block.style, 0, 0.0),
         );
         let Some(line) = lines.lines.first() else {
             return;

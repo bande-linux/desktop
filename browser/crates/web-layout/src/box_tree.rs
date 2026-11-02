@@ -92,7 +92,16 @@ fn inline_bytes(inline: &InlineContent) -> usize {
         + inline.items.capacity() * size_of::<InlineItem>()
 }
 
-pub(crate) fn run_style(style: &ComputedStyle, tag: u32) -> RunStyle {
+fn own_shift(style: &ComputedStyle) -> f32 {
+    let size = style.inherited.font_size;
+    match style.reset.vertical_align {
+        VerticalAlign::Baseline => 0.0,
+        VerticalAlign::Sub => -0.25 * size,
+        VerticalAlign::Super => 0.5 * size,
+    }
+}
+
+pub(crate) fn run_style(style: &ComputedStyle, tag: u32, baseline_shift: f32) -> RunStyle {
     let inherited = &style.inherited;
     let size = inherited.font_size;
     RunStyle {
@@ -107,11 +116,7 @@ pub(crate) fn run_style(style: &ComputedStyle, tag: u32) -> RunStyle {
             LineHeight::Number(factor) => Some(factor * size),
             LineHeight::Px(px) => Some(px),
         },
-        baseline_shift: match style.reset.vertical_align {
-            VerticalAlign::Baseline => 0.0,
-            VerticalAlign::Sub => -0.25 * size,
-            VerticalAlign::Super => 0.5 * size,
-        },
+        baseline_shift,
         white_space: inherited.white_space,
         tag,
     }
@@ -121,7 +126,7 @@ impl Builder<'_> {
     fn block(&mut self, node: NodeId, style: ComputedStyle, ordinal: Option<i32>) -> BlockBox {
         let mut blocks = Vec::new();
         let mut pending = Pending::new();
-        self.children(node, &mut blocks, &mut pending);
+        self.children(node, &mut blocks, &mut pending, 0.0);
         let contents = if blocks.is_empty() {
             Contents::Inline(Box::new(self.finish(pending)))
         } else {
@@ -137,7 +142,13 @@ impl Builder<'_> {
         }
     }
 
-    fn children(&mut self, node: NodeId, blocks: &mut Vec<BlockBox>, pending: &mut Pending) {
+    fn children(
+        &mut self,
+        node: NodeId,
+        blocks: &mut Vec<BlockBox>,
+        pending: &mut Pending,
+        shift: f32,
+    ) {
         let mut ordinal = list_start(self.document, node);
         let reversed = self.document.attribute(node, Atom::REVERSED).is_some();
         for child in self.document.children(node) {
@@ -148,7 +159,7 @@ impl Builder<'_> {
                 Some(NodeKind::Text) => {
                     let text = self.document.text(child).unwrap_or_default();
                     let tag = pending.items.len() as u32;
-                    pending.paragraph.push_text(text, run_style(style, tag));
+                    pending.paragraph.push_text(text, run_style(style, tag, shift));
                     pending.items.push(InlineItem {
                         node: child,
                         style: style.clone(),
@@ -159,13 +170,13 @@ impl Builder<'_> {
                     Display::Inline => {
                         if self.document.html_element_name(child) == Some(Atom::BR) {
                             let tag = pending.items.len() as u32;
-                            pending.paragraph.push_break(run_style(style, tag));
+                            pending.paragraph.push_break(run_style(style, tag, shift));
                             pending.items.push(InlineItem {
                                 node: child,
                                 style: style.clone(),
                             });
                         } else {
-                            self.children(child, blocks, pending);
+                            self.children(child, blocks, pending, shift + own_shift(style));
                         }
                     }
                     display => {
@@ -217,7 +228,7 @@ impl Builder<'_> {
             ListStyleType::Decimal => format!("{ordinal}."),
         };
         let mut paragraph = Paragraph::new();
-        let mut run = run_style(style, 0);
+        let mut run = run_style(style, 0, 0.0);
         run.white_space = web_style::WhiteSpace::Pre;
         paragraph.push_text(&text, run);
         let shaped = paragraph.shape(self.fonts);

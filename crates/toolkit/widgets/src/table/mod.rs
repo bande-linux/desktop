@@ -92,6 +92,8 @@ pub struct Table {
     scale: f32,
     pending_reveal: Option<usize>,
     glide: Option<Glide>,
+    headings: Vec<(usize, String)>,
+    heading_texts: Vec<Paragraph>,
 }
 
 struct Glide {
@@ -140,6 +142,8 @@ impl Table {
             scale: 1.0,
             pending_reveal: None,
             glide: None,
+            headings: Vec::new(),
+            heading_texts: Vec::new(),
         }
     }
 
@@ -231,7 +235,16 @@ impl Table {
         self.texts.borrow_mut().clear();
     }
 
+    pub fn set_headings(&mut self, headings: Vec<(usize, String)>) {
+        if headings != self.headings {
+            self.headings = headings;
+            self.heading_texts.clear();
+            self.glide = None;
+        }
+    }
+
     pub fn set_rows(&mut self, rows: Vec<Row>) {
+        self.headings.clear();
         let kept = self.remembered();
         let mut lines = Vec::with_capacity(rows.len());
         flatten(rows, 0, &mut lines);
@@ -244,6 +257,7 @@ impl Table {
     }
 
     pub fn set_row_count(&mut self, count: usize, outline: bool, icons: bool) {
+        self.headings.clear();
         self.lines = std::iter::repeat_with(|| Line {
             key: String::new(),
             cells: Vec::new(),
@@ -574,6 +588,35 @@ impl Table {
         self.row + self.grown
     }
 
+    fn headings_above(&self, index: usize) -> usize {
+        let line = self.shown.get(index).copied().unwrap_or(usize::MAX);
+        self.headings.partition_point(|(start, _)| *start <= line)
+    }
+
+    fn heads_group(&self, index: usize) -> bool {
+        self.shown.get(index).is_some_and(|line| {
+            self.headings
+                .binary_search_by_key(line, |(start, _)| *start)
+                .is_ok()
+        })
+    }
+
+    fn row_top(&self, index: usize) -> f32 {
+        (index + self.headings_above(index)) as f32 * self.row_height()
+    }
+
+    fn first_row_below(&self, y: f32) -> usize {
+        let (mut low, mut high) = (0, self.shown.len());
+        while low < high {
+            let middle = (low + high) / 2;
+            match self.row_top(middle) <= y {
+                true => low = middle + 1,
+                false => high = middle,
+            }
+        }
+        low
+    }
+
     fn body(&self) -> Rect {
         Rect::new(
             self.frame.x,
@@ -630,7 +673,7 @@ impl Table {
         (index < self.shown.len()).then(|| {
             Rect::new(
                 body.x,
-                body.y + index as f32 * self.row_height() - self.offset,
+                body.y + self.row_top(index) - self.offset,
                 body.width,
                 self.row_height(),
             )
@@ -661,8 +704,8 @@ impl Table {
             return None;
         }
         let y = point.y - body.y + offset;
-        let index = (y / self.row_height()).floor();
-        (index >= 0.0 && (index as usize) < self.shown.len()).then_some(index as usize)
+        let index = self.first_row_below(y).checked_sub(1)?;
+        (y < self.row_top(index) + self.row_height()).then_some(index)
     }
 
     fn row_under(&self, cx: &Context, point: Point) -> Option<usize> {
@@ -675,8 +718,12 @@ impl Table {
     }
 
     fn reveal_row(&mut self, cx: &Context, index: usize) {
-        let top = index as f32 * self.row_height();
-        self.scroll.reveal(cx, top, top + self.row_height());
+        let top = self.row_top(index);
+        let above = match self.heads_group(index) {
+            true => self.row_height(),
+            false => 0.0,
+        };
+        self.scroll.reveal(cx, top - above, top + self.row_height());
     }
 
     fn select_only(&mut self, index: usize) {
@@ -1127,7 +1174,7 @@ impl Widget for Table {
         self.frame = frame;
         let body = self.body();
         self.scroll
-            .set_extent(self.shown.len() as f32 * self.row_height(), body.height);
+            .set_extent(self.row_top(self.shown.len()), body.height);
         if let Some(index) = self.pending_reveal.take() {
             self.reveal_row(cx, index);
         }
@@ -1137,6 +1184,15 @@ impl Widget for Table {
             .retain(|_, turn| (cx.sample(turn) - turn.target()).abs() > f32::EPSILON);
         let (first, last) = self.visible_rows(cx);
         self.prepare_texts(cx, first, last);
+        if self.heading_texts.len() != self.headings.len() {
+            let style = TextStyle::new(13.0, cx.palette.ink).weight(TextStyle::SEMIBOLD);
+            let width = (self.frame.width - 2.0 * CELL_PADDING).max(0.0);
+            self.heading_texts = self
+                .headings
+                .iter()
+                .map(|(_, title)| self.text(&mut cx.text, title, style, width, Cut::End))
+                .collect();
+        }
         self.titles = self
             .column_edges()
             .into_iter()
@@ -1174,8 +1230,9 @@ impl Widget for Table {
         let texts = self.texts.borrow();
         let mut rows = Vec::new();
         self.paint_selection(cx, body, offset, focused, &mut rows);
+        self.paint_headings(cx, body, offset, first, last, &mut rows);
         for index in first..last {
-            let y = body.y + index as f32 * self.row_height() - offset;
+            let y = body.y + self.row_top(index) - offset;
             let lit = focused && !self.sidebar && self.lit(cx, index);
             let Some(line) = self.line(index) else {
                 continue;
@@ -1279,7 +1336,7 @@ impl Widget for Table {
             };
             let bounds = Rect::new(
                 body.x,
-                body.y + index as f32 * self.row_height() - offset,
+                body.y + self.row_top(index) - offset,
                 body.width,
                 self.row_height(),
             );

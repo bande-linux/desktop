@@ -26,6 +26,9 @@ Delete each line when it ships; delete the file when the list is empty.
 ## Already in Files
 
 - Views: icons, list (with disclosure), columns, gallery (a large preview over a strip); View ▸ Sort By; per-folder view memory;
+  View ▸ Use Groups and Group By (Kind, Application, Date Modified, Created, Added, Size) as
+  headed sections in list and icon views (Date Added is the status-change time, which moving a
+  file into a folder sets);
   status bar and path bar; hidden files; Quick Look with full screen.
 - Names: known extensions hidden unless Settings ▸ Advanced shows them (Files, desktop, file
   chooser), kept on rename, a warning before changing one; batch rename.
@@ -48,7 +51,8 @@ Delete each line when it ships; delete the file when the list is empty.
 
 ## Open, ranked
 
-1. View ▸ Use Groups (Kind, Date Last Opened, Size).
+1. Icon view groups: one row per group with Show All / Show Less, as the Finder (today every
+   group shows all its items).
 2. Gallery: Finder's preview pane metadata beside it (today the inspector shows it).
 3. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
    (GVfs-free SMB/SFTP mounts).

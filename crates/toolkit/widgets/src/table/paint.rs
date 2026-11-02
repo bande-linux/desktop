@@ -136,7 +136,7 @@ impl Table {
 
     pub(super) fn visible_rows(&self, cx: &Context) -> (usize, usize) {
         let offset = self.scroll.offset(cx).max(0.0);
-        let first = (offset / self.row_height()).floor() as usize;
+        let first = self.first_row_below(offset).saturating_sub(1);
         let count = (self.body().height / self.row_height()).ceil() as usize + 2;
         (
             first.min(self.shown.len()),
@@ -208,7 +208,9 @@ impl Table {
         let mut runs: Vec<(usize, usize)> = Vec::new();
         for (index, selected) in self.selected.iter().enumerate() {
             match runs.last_mut() {
-                Some(run) if *selected && run.1 == index => run.1 = index + 1,
+                Some(run) if *selected && run.1 == index && !self.heads_group(index) => {
+                    run.1 = index + 1;
+                }
                 _ if *selected => runs.push((index, index + 1)),
                 _ => {}
             }
@@ -219,7 +221,7 @@ impl Table {
     pub(super) fn lit(&self, cx: &Context, index: usize) -> bool {
         match &self.glide {
             Some(glide) => {
-                let centre = (index as f32 + 0.5) * self.row_height();
+                let centre = self.row_top(index) + self.row_height() / 2.0;
                 cx.sample(&glide.top) <= centre && centre < cx.sample(&glide.bottom)
             }
             None => self.selected.get(index).copied().unwrap_or(false),
@@ -233,8 +235,8 @@ impl Table {
             return;
         };
         let (top, bottom) = (
-            run.0 as f32 * self.row_height(),
-            run.1 as f32 * self.row_height(),
+            self.row_top(run.0),
+            self.row_top(run.1 - 1) + self.row_height(),
         );
         match &mut self.glide {
             Some(glide) if glide.run == run => {}
@@ -273,8 +275,8 @@ impl Table {
                 .into_iter()
                 .map(|(first, last)| {
                     (
-                        first as f32 * self.row_height(),
-                        last as f32 * self.row_height(),
+                        self.row_top(first),
+                        self.row_top(last - 1) + self.row_height(),
                     )
                 })
                 .collect(),
@@ -289,6 +291,47 @@ impl Table {
             items.push(Item::Fill {
                 shape: Shape::rounded(rect, Radius::S),
                 paint: color.into(),
+            });
+        }
+    }
+
+    pub(super) fn paint_headings(
+        &self,
+        cx: &Context,
+        body: Rect,
+        offset: f32,
+        first: usize,
+        last: usize,
+        items: &mut Vec<Item>,
+    ) {
+        let Some(from) = self.shown.get(first) else {
+            return;
+        };
+        let to = self.shown.get(last).copied().unwrap_or(usize::MAX);
+        for ((start, _), paragraph) in self.headings.iter().zip(&self.heading_texts) {
+            if *start < *from || *start > to {
+                continue;
+            }
+            let Ok(index) = self.shown.binary_search(start) else {
+                continue;
+            };
+            let top = body.y + self.row_top(index) - self.row_height() - offset;
+            let bottom = top + self.row_height();
+            items.push(Item::Text {
+                origin: Point::new(
+                    body.x + CELL_PADDING,
+                    (bottom - paragraph.height() - 5.0).round(),
+                ),
+                paragraph: paragraph.clone(),
+            });
+            items.push(Item::Fill {
+                shape: Shape::rect(Rect::new(
+                    body.x + CELL_PADDING,
+                    bottom - 1.0,
+                    body.width - 2.0 * CELL_PADDING,
+                    1.0,
+                )),
+                paint: cx.palette.hairline.into(),
             });
         }
     }

@@ -823,6 +823,10 @@ impl FilesView {
             }
         }
         self.table_synced = Some((revision, edits));
+        let headings = self.groups().to_vec();
+        if let Some(table) = self.table() {
+            table.set_headings(headings);
+        }
     }
 
     pub(crate) fn fill_table(&mut self) {

@@ -313,11 +313,11 @@ impl Browser {
     fn read(&mut self, location: &Location) -> Contents {
         match location {
             Location::Folder(folder) => self.read_folder(folder),
-            Location::Trash => Contents::listed(list_trash(&self.trash, self.sort)),
+            Location::Trash => Contents::listed(list_trash(&self.trash, self.order())),
             Location::Recents => Contents::listed(entries(&self.recents)),
             Location::Search(_) => {
                 let mut found = entries(&self.found);
-                sort(&mut found, self.sort);
+                sort(&mut found, self.order());
                 Contents::listed(found)
             }
         }
@@ -338,9 +338,10 @@ impl Browser {
             None => usize::MAX,
         };
         let mut entries = listing.next_chunk(first);
-        sort(&mut entries, self.sort);
+        let order = self.order();
+        sort(&mut entries, order);
         let listing = match &mut self.lister {
-            Some(lister) if !listing.is_done() => Some(lister.finish(listing, self.sort)),
+            Some(lister) if !listing.is_done() => Some(lister.finish(listing, order)),
             _ => None,
         };
         Contents {
@@ -360,6 +361,7 @@ impl Browser {
         };
         let mut changed = false;
         let mut selected = false;
+        let order = self.order();
         for listed in lister.take() {
             let Some(index) = self
                 .columns
@@ -370,7 +372,7 @@ impl Browser {
             };
             let column = &mut self.columns[index];
             changed = true;
-            if column.merge(listed.entries, self.sort) {
+            if column.merge(listed.entries, order) {
                 selected = true;
                 if self.active <= index {
                     self.active = index;
@@ -518,7 +520,8 @@ impl Browser {
             entries.push(entry);
             depths.push(depth);
             if open {
-                let children = list(&folder, self.show_hidden, self.sort).unwrap_or_default();
+                let children =
+                    list(&folder, self.show_hidden, self.children_order()).unwrap_or_default();
                 self.nest_into(children, depth.saturating_add(1), entries, depths);
             }
         }
@@ -566,7 +569,7 @@ impl Browser {
             .filter(|(_, depth)| *depth == 0)
             .map(|(entry, _)| entry)
             .collect::<Vec<_>>();
-        sort(&mut roots, self.sort);
+        sort(&mut roots, self.order());
         let (entries, depths) = self.nested(roots);
         let rows = entries
             .iter()
@@ -619,7 +622,7 @@ impl Browser {
         let mut pending = vec![folder.to_path_buf()];
         let mut added = 0;
         while let Some(next) = pending.pop() {
-            let children = list(&next, self.show_hidden, self.sort).unwrap_or_default();
+            let children = list(&next, self.show_hidden, self.children_order()).unwrap_or_default();
             for child in children.into_iter().filter(Entry::is_folder) {
                 if added >= MAX_EXPANDED {
                     return;
@@ -657,6 +660,26 @@ impl Browser {
         self.sort
     }
 
+    fn order(&self) -> Sort {
+        Sort {
+            group: self.sort.group.filter(|_| self.single),
+            ..self.sort
+        }
+    }
+
+    fn children_order(&self) -> Sort {
+        Sort {
+            group: None,
+            ..self.sort
+        }
+    }
+
+    pub fn groups(&self) -> Option<bande_fs::GroupBy> {
+        self.order()
+            .group
+            .filter(|_| *self.root() != Location::Recents)
+    }
+
     pub fn set_folders_first(&mut self, on: bool) {
         if self.sort.folders_first != on {
             self.set_sort(Sort {
@@ -668,6 +691,7 @@ impl Browser {
 
     pub fn set_sort(&mut self, sort: Sort) {
         self.sort = sort;
+        let sort = self.order();
         for column in &mut self.columns {
             if column.location != Location::Recents && !column.is_listing() && !column.is_nested() {
                 column.resort(sort);
@@ -687,6 +711,7 @@ impl Browser {
     }
 
     pub fn set_single(&mut self, single: bool) {
+        let regroup = self.single != single && self.sort.group.is_some();
         self.single = single;
         if single {
             if let Some(folder) = self.active_folder().map(Path::to_path_buf) {
@@ -702,6 +727,9 @@ impl Browser {
             self.active = 0;
         } else {
             self.open_child(self.active);
+        }
+        if regroup {
+            self.set_sort(self.sort);
         }
     }
 
@@ -1044,7 +1072,7 @@ impl Browser {
             .columns
             .get(index + 1)
             .map(|child| child.location.clone());
-        let (sort, show_hidden) = (self.sort, self.show_hidden);
+        let (sort, show_hidden) = (self.order(), self.show_hidden);
         let column = &mut self.columns[index];
         for path in paths {
             column.patch(path, sort, show_hidden);

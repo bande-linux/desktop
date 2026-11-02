@@ -3,7 +3,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use bande_fs::{Sort, SortBy};
+use bande_fs::{GroupBy, Sort, SortBy};
 
 pub const DEFAULT_ICON_SIZE: u32 = 64;
 pub const ICON_SIZES: (u32, u32) = (32, 256);
@@ -64,13 +64,21 @@ fn sort_name(sort: Sort) -> String {
         .iter()
         .find(|(by, _)| *by == sort.by)
         .map_or("name", |(_, name)| name);
-    match sort.descending {
+    let order = match sort.descending {
         true => format!("{by}-descending"),
         false => by.to_owned(),
+    };
+    match sort.group {
+        Some(group) => format!("{order}+{}", group.name()),
+        None => order,
     }
 }
 
 fn parse_sort(text: &str) -> Option<Sort> {
+    let (text, group) = match text.split_once('+') {
+        Some((text, group)) => (text, GroupBy::parse(group)),
+        None => (text, None),
+    };
     let (name, descending) = match text.strip_suffix("-descending") {
         Some(name) => (name, true),
         None => (text, false),
@@ -81,6 +89,7 @@ fn parse_sort(text: &str) -> Option<Sort> {
         .map(|(by, _)| Sort {
             by: *by,
             descending,
+            group,
             ..Sort::default()
         })
 }

@@ -72,3 +72,16 @@ pub fn picture(system: &Connection, login: &str) -> Option<PathBuf> {
     let file = PathBuf::from(file);
     (file.is_absolute() && file.is_file()).then_some(file)
 }
+
+pub fn passwd_name(login: &str) -> Option<String> {
+    std::fs::read_to_string("/etc/passwd")
+        .ok()?
+        .lines()
+        .find_map(|line| {
+            let fields: Vec<&str> = line.split(':').collect();
+            (fields.first() == Some(&login))
+                .then(|| fields.get(4)?.split(',').next().map(str::to_owned))
+                .flatten()
+        })
+        .filter(|name| !name.is_empty())
+}

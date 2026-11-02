@@ -8,6 +8,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+tracing.workspace = true
 zbus.workspace = true
 
 [lints]

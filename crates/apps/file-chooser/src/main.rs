@@ -1,5 +1,7 @@
 mod access;
+mod account;
 mod app_chooser;
+mod launcher;
 
 use std::cell::Cell;
 use std::ffi::OsString;
@@ -24,8 +26,8 @@ use bande_xdg::{
     data_dirs, replace_file, state_home, user_dir,
 };
 use xdg_desktop_portal_bande::dialog_process::{
-    ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, SET_WALLPAPER, encode, parse, parse_access,
-    parse_app_chooser,
+    ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, CREATE_LAUNCHER, SET_WALLPAPER, SHARE_ACCOUNT, encode,
+    parse, parse_access, parse_account, parse_app_chooser, parse_launcher,
 };
 use xdg_desktop_portal_bande::file_chooser::{Dialog, Mode, Selection};
 
@@ -281,6 +283,24 @@ fn main() -> ExitCode {
     if mode == CHOOSE_APP {
         return match parse_app_chooser(arguments) {
             Ok(offer) => app_chooser::choose(&offer),
+            Err(error) => {
+                tracing::error!("{}", error.0);
+                ExitCode::from(UNAVAILABLE)
+            }
+        };
+    }
+    if mode == SHARE_ACCOUNT {
+        return match parse_account(arguments) {
+            Ok(details) => account::share(&details),
+            Err(error) => {
+                tracing::error!("{}", error.0);
+                ExitCode::from(UNAVAILABLE)
+            }
+        };
+    }
+    if mode == CREATE_LAUNCHER {
+        return match parse_launcher(arguments) {
+            Ok(launcher) => launcher::confirm(&launcher),
             Err(error) => {
                 tracing::error!("{}", error.0);
                 ExitCode::from(UNAVAILABLE)

@@ -5,10 +5,12 @@ use std::thread;
 
 use bande_xdg::{config_home, data_home};
 use xdg_desktop_portal_bande::access::Access;
+use xdg_desktop_portal_bande::account::Account;
 use xdg_desktop_portal_bande::app_chooser::AppChooser;
 use xdg_desktop_portal_bande::background::Background;
 use xdg_desktop_portal_bande::capture::{ScreenshotService, ScreenshotTool};
 use xdg_desktop_portal_bande::dialog_process::{DIALOG_PROGRAM, DialogProcess};
+use xdg_desktop_portal_bande::dynamic_launcher::DynamicLauncher;
 use xdg_desktop_portal_bande::email::Email;
 use xdg_desktop_portal_bande::file_chooser::FileChooser;
 use xdg_desktop_portal_bande::gtk::GtkHomes;
@@ -76,6 +78,19 @@ fn serve() -> zbus::Result<Connection> {
         )?;
         server.at(OBJECT_PATH, AppChooser::new(dialogs.clone()))?;
         server.at(OBJECT_PATH, Email)?;
+        server.at(
+            OBJECT_PATH,
+            Account {
+                ui: dialogs.clone(),
+                system: system.clone(),
+            },
+        )?;
+        server.at(
+            OBJECT_PATH,
+            DynamicLauncher {
+                ui: dialogs.clone(),
+            },
+        )?;
         if let Some(data_home) = data_home() {
             server.at(
                 OBJECT_PATH,

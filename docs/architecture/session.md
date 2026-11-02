@@ -173,6 +173,16 @@ graph LR
   keyed by the Flatpak id; anything else is in the background, as windowless apps are. Its
   `RunningApplicationsChanged` is passed on. `NotifyBackground` allows, as GNOME does: an app
   in the background keeps its running dot in the Taskbar, as on macOS, rather than a prompt.
+- `org.freedesktop.impl.portal.DynamicLauncher` (application and web app launchers, as browsers
+  install web apps): `bande-file-chooser --create-launcher` reads the icon from standard input
+  and asks "Add this web app to Applications?" with the icon, the name in a text field (a label
+  when the app does not let it be edited), the address, Cancel and Add; the name typed and the
+  icon go back. `RequestInstallToken` trusts only the app stores the GTK and KDE backends trust
+  (GNOME Software, AppCenter, Discover).
+- `org.freedesktop.impl.portal.Account`: `bande-file-chooser --share-account` asks "Share your
+  name and picture with <app>?" with the app's reason, the account picture, the full name and
+  login, Cancel and Share; Share returns `id` (login), `name` (AccountsService `RealName`, else
+  the passwd name, else the login) and `image` (the AccountsService picture as a `file://` URI).
 - Implemented in `crates/services/portal`: `Settings` (version 2) publishes
   `org.freedesktop.appearance` from `org.bande.Config`, with `color-scheme` 1 for dark (the
   default, and what every client assumes until the portal answers) and 2 for light (Automatic is resolved by the portal: dark from sunset to sunrise at the main city
@@ -202,9 +212,9 @@ graph LR
   stops the streams) are implemented over `FileChooserUi`, `ScreenshotUi` and
   `ScreenCastBackend` traits. `bande-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Bande`)
   sends every interface to Bande and secrets to GNOME Keyring; no GTK or GNOME backend is
-  used. Not implemented: Print (Bande has no print dialog), Account, DynamicLauncher,
-  GlobalShortcuts, InputCapture, RemoteDesktop, Clipboard and Usb; Lockdown is the frontend's
-  own default (nothing locked down).
+  used. Not implemented: Print (Bande has no print dialog), GlobalShortcuts, InputCapture,
+  RemoteDesktop, Clipboard and Usb; Lockdown is the frontend's own default (nothing locked
+  down).
 - **Capture lives in the screenshot tool.** The portal process has no Wayland connection: its
   `ScreenshotUi` and `ScreenCastBackend` forward to `org.bande.Screenshot`, served by
   `bande-screenshot`, which the compositor starts as a shell client and so already holds the

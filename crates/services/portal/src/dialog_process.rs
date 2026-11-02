@@ -9,7 +9,9 @@ use std::thread;
 use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open, pidfd_send_signal};
 
 use crate::access::{AccessUi, Answer, Question};
+use crate::account::{AccountUi, Details, Shared};
 use crate::app_chooser::{AppChooserUi, Offer, Picked};
+use crate::dynamic_launcher::{Confirmed, Launcher, LauncherUi};
 use crate::file_chooser::{
     Choice, Dialog, FileChooserUi, Filter, Mode, Outcome, Pattern, Selection,
 };
@@ -21,6 +23,8 @@ pub const CHOSEN: u8 = 0;
 pub const CANCELLED: u8 = 1;
 pub const ACCESS: &str = "--access";
 pub const CHOOSE_APP: &str = "--choose-app";
+pub const CREATE_LAUNCHER: &str = "--create-launcher";
+pub const SHARE_ACCOUNT: &str = "--share-account";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArgumentError(pub String);
@@ -519,6 +523,127 @@ impl AppChooserUi for DialogProcess {
             Some((Some(code), _)) if code == i32::from(CANCELLED) => Picked::Cancelled,
             Some(_) if cancellation.is_cancelled() => Picked::Cancelled,
             _ => Picked::Unavailable,
+        }
+    }
+}
+
+pub fn launcher_arguments(launcher: &Launcher) -> Vec<OsString> {
+    let mut arguments = vec![
+        os(CREATE_LAUNCHER),
+        os("--app-id"),
+        os(&launcher.app_id),
+        os("--name"),
+        os(&launcher.name),
+    ];
+    if let Some(target) = &launcher.target {
+        arguments.extend([os("--target"), os(target)]);
+    }
+    if launcher.webapp {
+        arguments.push(os("--webapp"));
+    }
+    if !launcher.editable_name {
+        arguments.push(os("--fixed-name"));
+    }
+    arguments
+}
+
+pub fn parse_launcher(
+    arguments: impl IntoIterator<Item = OsString>,
+) -> Result<Launcher, ArgumentError> {
+    let mut launcher = Launcher {
+        editable_name: true,
+        ..Launcher::default()
+    };
+    let mut arguments = arguments.into_iter();
+    while let Some(argument) = arguments.next() {
+        let flag = text(argument);
+        let mut value = || {
+            arguments
+                .next()
+                .map(text)
+                .ok_or_else(|| ArgumentError(format!("{flag} needs a value")))
+        };
+        match flag.as_str() {
+            CREATE_LAUNCHER => {}
+            "--app-id" => launcher.app_id = value()?,
+            "--name" => launcher.name = value()?,
+            "--target" => launcher.target = Some(value()?),
+            "--webapp" => launcher.webapp = true,
+            "--fixed-name" => launcher.editable_name = false,
+            _ => return Err(ArgumentError(format!("unknown argument {flag}"))),
+        }
+    }
+    Ok(launcher)
+}
+
+impl LauncherUi for DialogProcess {
+    fn confirm(&self, launcher: &Launcher, cancellation: &Cancellation) -> Confirmed {
+        let icon = launcher.icon.clone();
+        let feed: Feed = Box::new(move |mut stdin| {
+            let _ = stdin.write_all(&icon);
+        });
+        match self.show_fed(launcher_arguments(launcher), Some(feed), cancellation) {
+            Some((Some(code), output)) if code == i32::from(CHOSEN) => {
+                Confirmed::Named(String::from_utf8_lossy(&output).into_owned())
+            }
+            Some((Some(code), _)) if code == i32::from(CANCELLED) => Confirmed::Cancelled,
+            Some(_) if cancellation.is_cancelled() => Confirmed::Cancelled,
+            _ => Confirmed::Unavailable,
+        }
+    }
+}
+
+pub fn account_arguments(details: &Details) -> Vec<OsString> {
+    let mut arguments = vec![
+        os(SHARE_ACCOUNT),
+        os("--app-id"),
+        os(&details.app_id),
+        os("--login"),
+        os(&details.login),
+        os("--name"),
+        os(&details.name),
+    ];
+    if let Some(reason) = &details.reason {
+        arguments.extend([os("--reason"), os(reason)]);
+    }
+    if let Some(picture) = &details.picture {
+        arguments.extend([os("--picture"), picture.clone().into_os_string()]);
+    }
+    arguments
+}
+
+pub fn parse_account(
+    arguments: impl IntoIterator<Item = OsString>,
+) -> Result<Details, ArgumentError> {
+    let mut details = Details::default();
+    let mut arguments = arguments.into_iter();
+    while let Some(argument) = arguments.next() {
+        let flag = text(argument);
+        let mut value = || {
+            arguments
+                .next()
+                .ok_or_else(|| ArgumentError(format!("{flag} needs a value")))
+        };
+        match flag.as_str() {
+            SHARE_ACCOUNT => {}
+            "--app-id" => details.app_id = text(value()?),
+            "--login" => details.login = text(value()?),
+            "--name" => details.name = text(value()?),
+            "--reason" => details.reason = Some(text(value()?)),
+            "--picture" => details.picture = Some(PathBuf::from(value()?)),
+            _ => return Err(ArgumentError(format!("unknown argument {flag}"))),
+        }
+    }
+    Ok(details)
+}
+
+impl AccountUi for DialogProcess {
+    fn share(&self, details: &Details, cancellation: &Cancellation) -> Shared {
+        match self.show(account_arguments(details), cancellation) {
+            Some((Some(code), _)) if code == i32::from(CHOSEN) => Shared::Yes,
+            Some((Some(code), _)) if code == i32::from(CANCELLED) => Shared::No,
+            Some(_) if cancellation.is_cancelled() => Shared::No,
+            _ => Shared::Unavailable,
         }
     }
 }

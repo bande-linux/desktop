@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod logind;
 pub mod portal_settings;
 

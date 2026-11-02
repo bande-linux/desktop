@@ -1,8 +1,10 @@
 pub mod access;
+pub mod account;
 pub mod app_chooser;
 pub mod background;
 pub mod capture;
 pub mod dialog_process;
+pub mod dynamic_launcher;
 pub mod email;
 pub mod file_chooser;
 pub mod gtk;

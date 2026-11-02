@@ -11,6 +11,7 @@ repository.workspace = true
 rustix.workspace = true
 tracing.workspace = true
 bande-app-menu.workspace = true
+bande-bus.workspace = true
 bande-audio = { workspace = true, optional = true }
 bande-bluetooth.workspace = true
 bande-datetime.workspace = true

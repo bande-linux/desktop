@@ -27,13 +27,14 @@ app here is built this way.
 | Edit menu | `edit_submenu` items are `key:<shortcut>` actions: the focused view gets that key press, so Copy works in any text field |
 | Close | Close Window closes the active tab first where the app has tabs (`Program::close_tab`), else asks `should_close`; the close button closes the window; closing the last window leaves the app running, as on macOS, until Quit; Quit asks every window and stops at the first refusal |
 | Without windows | the app stays in the Taskbar and, when it was active, the active app: its key equivalents still reach it and its menus are in Menu Search (Shift+Super+/ or Super+F2) and the separate menu bar, as full as with a window: what needs a window (Minimize, Zoom, Close Window, the Edit menu's keys, the app's own window items) is disabled, and the app's items (New Message, a View item, Window ▸ its main window) work and open a window when they need one; Hide makes the next app active; a Taskbar click, the switcher or a second launch calls `Program::reopen`; `Program::window_closed` hands back a closed window's view so the app can keep it; program sources and deadlines keep running, window resources are released |
+| In the background | an app whose `Program::runs_in_background` says so (Calendar while its "Show alerts when Calendar is closed" setting is on) can start with `--background` (from its XDG autostart entry) and Quit leaves it running there too, as a Mac's agents (CalendarAgent) keep working behind the app: it has no window and is no running app (not in the Taskbar, Force Quit, the switcher or the apps reopened at login) and its sources and deadlines keep running. `Cx::launched_in_background` tells `Program::start` to open no window. A later launch reaches it through single instance and `Program::reopen` opens its window; from its first window it is an ordinary running app until Quit. `--background` exits at once when the app does not run in the background or is already running |
 | Appearance | every view gets each change; a view is built with the window's real appearance |
 
 ## Runtime contracts
 
 Apps built at an older pin run against a newer shell, so these only ever gain properties:
 the dbusmenu export at `/org/bande/MenuBar` with `x-bande-shell-action` and `x-bande-version`;
-`bande_app_v1.keep_running` (version 2; an older compositor makes the app quit with its last window);
+`bande_app_v1.keep_running` (version 2, sent with the first window and undone by destroying the object for the background; an older compositor makes the app quit with its last window);
 the app id as the bus name; `org.freedesktop.Application` (`Activate`, `Open` with
 `activation-token` and `x-bande-directory` in the platform data) at the path the specification
 derives from the app id; `<package> --version`; the state (`$XDG_STATE_HOME/bande/`) and config

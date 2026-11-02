@@ -5,10 +5,10 @@ use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
-    ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging, InputSource, LidOnPower,
-    MenuBarPlacement, Mouse, NightLight, Placement, PrimaryButton, ScrollMethod, Search,
-    SearchCategory, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
-    accent_keyword, same_displays,
+    ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging, FocusSchedule, InputSource,
+    LidOnPower, MenuBarPlacement, Mouse, NightLight, Placement, PrimaryButton, ScrollMethod,
+    Search, SearchCategory, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit,
+    WallpaperVariant, accent_keyword, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -58,6 +58,7 @@ pub enum Setting {
     Wallpaper(WallpaperVariant, Option<PathBuf>),
     WallpaperFit(WallpaperFit),
     NightLight(NightLight),
+    FocusSchedule(FocusSchedule),
     Search(Search),
     Display(String, DisplaySettings),
     Arrangement(Vec<Placement>),
@@ -336,6 +337,7 @@ impl Setting {
                 (*fit != WallpaperFit::Fill).then(|| fit.keyword().into()),
             ),
             Self::NightLight(night) => set_night_light(&mut document, night),
+            Self::FocusSchedule(schedule) => set_focus_schedule(&mut document, schedule),
             Self::Search(search) => set_search(&mut document, search),
             Self::Display(identity, display) => set_display(&mut document, identity, display),
             Self::Arrangement(placements) => set_arrangement(&mut document, &config, placements),
@@ -426,6 +428,29 @@ fn set_accessibility(document: &mut KdlDocument, access: &Accessibility) {
             (size != default).then_some(KdlValue::Integer(size.into())),
         );
     }
+}
+
+fn set_focus_schedule(document: &mut KdlDocument, schedule: &FocusSchedule) {
+    let standard = FocusSchedule::default();
+    let section = Some("do-not-disturb");
+    set(
+        document,
+        section,
+        "scheduled",
+        schedule.on.then_some(KdlValue::Bool(true)),
+    );
+    set(
+        document,
+        section,
+        "from",
+        (schedule.from != standard.from).then(|| schedule.from.text().into()),
+    );
+    set(
+        document,
+        section,
+        "to",
+        (schedule.to != standard.to).then(|| schedule.to.text().into()),
+    );
 }
 
 fn set_night_light(document: &mut KdlDocument, night: &NightLight) {

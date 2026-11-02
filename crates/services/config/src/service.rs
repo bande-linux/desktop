@@ -15,15 +15,21 @@ use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
     ACCENTS, Accessibility, AlertSound, Appearance, BarEdge, CURSOR_SIZE_RANGE, CapsLock,
-    ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, Dragging, InputSource,
-    LidOnPower, Loaded, MenuBarPlacement, NIGHT_LIGHT_WARMTH_RANGE, NightLight, NightSchedule,
-    Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory, SecondaryClick,
-    Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE, accent_keyword,
-    is_wallpaper_path, read_system_input_sources,
+    ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, Dragging, FocusSchedule,
+    InputSource, LidOnPower, Loaded, MenuBarPlacement, NIGHT_LIGHT_WARMTH_RANGE, NightLight,
+    NightSchedule, Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory,
+    SecondaryClick, Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE,
+    accent_keyword, is_wallpaper_path, read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
 pub type NightLightValue = (bool, String, String, String, u32);
+pub type FocusScheduleValue = (bool, String, String);
+
+fn clock_time(text: &str) -> zbus::fdo::Result<ClockTime> {
+    ClockTime::parse(text)
+        .ok_or_else(|| InvalidArgs(format!("\"{text}\" is not a time of day such as \"22:00\"")))
+}
 
 pub const BUS_NAME: &str = "org.bande.Config";
 pub const OBJECT_PATH: &str = "/org/bande/Config";
@@ -320,6 +326,9 @@ fn publish_changes(
         }
         if before.wallpaper.fit != after.wallpaper.fit {
             let _ = guard.wallpaper_fit_changed(emitter).await;
+        }
+        if before.focus_schedule != after.focus_schedule {
+            let _ = guard.focus_schedule_changed(emitter).await;
         }
         if before.night_light != after.night_light {
             let _ = guard.night_light_changed(emitter).await;
@@ -1139,6 +1148,23 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
+    fn focus_schedule(&self) -> FocusScheduleValue {
+        let schedule = self.store.current().focus_schedule;
+        (schedule.on, schedule.from.text(), schedule.to.text())
+    }
+
+    #[zbus(property)]
+    fn set_focus_schedule(&self, value: FocusScheduleValue) -> zbus::fdo::Result<()> {
+        let (on, from, to) = value;
+        let schedule = FocusSchedule {
+            on,
+            from: clock_time(&from)?,
+            to: clock_time(&to)?,
+        };
+        self.write(&Setting::FocusSchedule(schedule))
+    }
+
+    #[zbus(property)]
     fn night_light(&self) -> NightLightValue {
         let night = self.store.current().night_light;
         (
@@ -1153,11 +1179,7 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_night_light(&self, value: NightLightValue) -> zbus::fdo::Result<()> {
         let (on, schedule, from, to, warmth) = value;
-        let time = |text: &str| {
-            ClockTime::parse(text).ok_or_else(|| {
-                InvalidArgs(format!("\"{text}\" is not a time of day such as \"22:00\""))
-            })
-        };
+        let time = clock_time;
         let (least, most) = NIGHT_LIGHT_WARMTH_RANGE;
         if !(least..=most).contains(&warmth) {
             return Err(InvalidArgs(format!(

@@ -83,12 +83,19 @@ impl ClockChanges {
     }
 
     fn arm(&self) -> rustix::io::Result<()> {
+        self.wake_at(None)
+    }
+
+    pub fn wake_at(&self, seconds: Option<i64>) -> rustix::io::Result<()> {
         timerfd_settime(
             &self.timer,
             TimerfdTimerFlags::ABSTIME | TimerfdTimerFlags::CANCEL_ON_SET,
             &Itimerspec {
                 it_interval: ONCE,
-                it_value: FAR_FUTURE,
+                it_value: seconds.map_or(FAR_FUTURE, |seconds| Timespec {
+                    tv_sec: seconds,
+                    tv_nsec: 0,
+                }),
             },
         )
         .map(drop)

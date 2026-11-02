@@ -180,6 +180,9 @@ pub enum SettingId {
     PairedDevices,
     NearbyDevices,
     DoNotDisturb,
+    FocusScheduled,
+    FocusFrom,
+    FocusTo,
     OutputVolume,
     OutputMuted,
     OutputDevice,
@@ -851,6 +854,20 @@ fn desktop_panes() -> Vec<Pane> {
                     vec![
                         switch(SettingId::DoNotDisturb, "do-not-disturb")
                             .described("do-not-disturb-description"),
+                        switch(SettingId::FocusScheduled, "focus-scheduled")
+                            .described("focus-scheduled-description"),
+                        setting(
+                            SettingId::FocusFrom,
+                            L10N.tr("night-from"),
+                            L10N.tr("focus-times-keywords"),
+                            Kind::Text,
+                        ),
+                        setting(
+                            SettingId::FocusTo,
+                            L10N.tr("night-to"),
+                            L10N.tr("focus-times-keywords"),
+                            Kind::Text,
+                        ),
                     ],
                 ),
                 section(

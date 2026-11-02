@@ -481,6 +481,12 @@ impl SettingsView {
             {
                 Vec::new()
             }
+            Kind::Text
+                if matches!(setting.id, SettingId::FocusFrom | SettingId::FocusTo)
+                    && self.values.get(&SettingId::FocusScheduled) != Some(&Value::Flag(true)) =>
+            {
+                Vec::new()
+            }
             _ if setting.id == SettingId::TrackpadDragging
                 && self.values.get(&SettingId::TrackpadTapToClick) != Some(&Value::Flag(true)) =>
             {

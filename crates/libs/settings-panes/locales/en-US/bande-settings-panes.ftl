@@ -404,3 +404,7 @@ reopen-at-login-description = Apps that were open when you logged out or restart
 reopen-after-crash = Reopen apps after a crash
 reopen-after-crash-keywords = restore, recover, freeze, power loss, crash
 reopen-after-crash-description = Off by default, so an app that brought the session down does not come straight back
+focus-scheduled = Turn on by schedule
+focus-scheduled-keywords = focus, schedule, night, sleep, bedtime, quiet hours, automatic
+focus-scheduled-description = Do Not Disturb turns on and off at set times each day
+focus-times-keywords = start, end, evening, morning, schedule times, quiet hours

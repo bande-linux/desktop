@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use bande_config::{
-    ArrangedDisplay, DisplaySettings, NightLightValue, Placement, Rotation, SearchCategory,
+    ArrangedDisplay, DisplaySettings, FocusScheduleValue, NightLightValue, Placement, Rotation,
+    SearchCategory,
 };
 use bande_datetime::DateFormats;
 use bande_notify::client::NotificationCenter;
@@ -73,6 +74,10 @@ pub trait Config {
     fn text_size(&self) -> zbus::Result<u32>;
     #[zbus(property)]
     fn set_text_size(&self, percent: u32) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn focus_schedule(&self) -> zbus::Result<FocusScheduleValue>;
+    #[zbus(property)]
+    fn set_focus_schedule(&self, value: FocusScheduleValue) -> zbus::Result<()>;
     #[zbus(property)]
     fn night_light(&self) -> zbus::Result<NightLightValue>;
     #[zbus(property)]
@@ -280,7 +285,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 67] = [
+pub const CONFIG_SETTINGS: [SettingId; 70] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -294,6 +299,9 @@ pub const CONFIG_SETTINGS: [SettingId; 67] = [
     SettingId::TextSize,
     SettingId::NightLight,
     SettingId::NightSchedule,
+    SettingId::FocusScheduled,
+    SettingId::FocusFrom,
+    SettingId::FocusTo,
     SettingId::NightFrom,
     SettingId::NightTo,
     SettingId::NightWarmth,
@@ -460,6 +468,15 @@ impl SettingsClient {
         )
     }
 
+    fn change_focus_schedule(
+        &self,
+        change: impl FnOnce(&mut FocusScheduleValue),
+    ) -> zbus::Result<()> {
+        let mut schedule = self.config.focus_schedule()?;
+        change(&mut schedule);
+        self.config.set_focus_schedule(schedule)
+    }
+
     fn change_night_light(&self, change: impl FnOnce(&mut NightLightValue)) -> zbus::Result<()> {
         let mut night = self.config.night_light()?;
         change(&mut night);
@@ -478,6 +495,9 @@ impl SettingsClient {
             SettingId::NightLight => Value::Flag(self.config.night_light()?.0),
             SettingId::NightSchedule => Value::Keyword(self.config.night_light()?.1),
             SettingId::NightFrom => Value::Text(self.config.night_light()?.2),
+            SettingId::FocusScheduled => Value::Flag(self.config.focus_schedule()?.0),
+            SettingId::FocusFrom => Value::Text(self.config.focus_schedule()?.1),
+            SettingId::FocusTo => Value::Text(self.config.focus_schedule()?.2),
             SettingId::NightTo => Value::Text(self.config.night_light()?.3),
             SettingId::NightWarmth => Value::Number(self.config.night_light()?.4),
             SettingId::TextSize => Value::Number(self.config.text_size()?),
@@ -625,6 +645,15 @@ impl SettingsClient {
             }
             (SettingId::NightSchedule, Value::Keyword(schedule)) => {
                 self.change_night_light(|night| schedule.clone_into(&mut night.1))
+            }
+            (SettingId::FocusScheduled, Value::Flag(on)) => {
+                self.change_focus_schedule(|schedule| schedule.0 = *on)
+            }
+            (SettingId::FocusFrom, Value::Text(from)) => {
+                self.change_focus_schedule(|schedule| from.clone_into(&mut schedule.1))
+            }
+            (SettingId::FocusTo, Value::Text(to)) => {
+                self.change_focus_schedule(|schedule| to.clone_into(&mut schedule.2))
             }
             (SettingId::NightFrom, Value::Text(from)) => {
                 self.change_night_light(|night| from.clone_into(&mut night.2))

@@ -1574,7 +1574,11 @@ impl SettingsView {
             };
             return;
         }
-        if let (SettingId::NightFrom | SettingId::NightTo, Value::Text(text)) = (id, &value) {
+        if let (
+            SettingId::NightFrom | SettingId::NightTo | SettingId::FocusFrom | SettingId::FocusTo,
+            Value::Text(text),
+        ) = (id, &value)
+        {
             match clock_text(text) {
                 Some(time) => {
                     self.errors.remove(&id);

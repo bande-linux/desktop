@@ -29,9 +29,8 @@ ProxyResolver, so this needs a session-wide proxy first), IPv6, service order, f
 per-app sound and badge switches, "show previews" (always / when unlocked / never), notifications
 while the display is mirrored or sleeping.
 
-**Focus.** Has: Do Not Disturb on/off. Missing: a schedule (from–to, days), "until tomorrow /
-for an hour", allowed apps. Needs the notify service to own the schedule (a deadline timer, not
-polling).
+**Focus.** Has: Do Not Disturb on/off and a daily schedule (from–to, owned by `bande-notify`).
+Missing: days of the week, "for an hour / until tomorrow", allowed apps.
 
 **Screen Time.** Out of scope.
 
@@ -110,7 +109,6 @@ Ranked by how often a user needs them and how badly they are stuck without them.
    decision to add `cups` and `cups-browsed` to the image.
 2. Users & Groups: change password, picture, full name; add a user. Blocked: owner decision
    to add `accountsservice` to the image.
-3. Focus schedule for Do Not Disturb (notify service owns a deadline timer).
 4. Sound: balance and the built-in speaker and headphone names.
 5. Network: DNS override with an automatic address, for Ethernet as for Wi-Fi.
 6. Bluetooth device battery levels.

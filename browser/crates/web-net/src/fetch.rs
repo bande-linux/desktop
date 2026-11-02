@@ -64,6 +64,9 @@ async fn fetch_following(network: &Network, request: Request) -> Result<Response
         top_level,
         initiator,
     } = request;
+    if url.scheme() == "data" {
+        return crate::data::fetch(url);
+    }
     for _ in 0..=MAX_REDIRECTS {
         let now = storage::now();
         network.state.borrow_mut().hsts.upgrade(&mut url, now);

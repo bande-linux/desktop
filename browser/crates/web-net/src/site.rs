@@ -67,6 +67,10 @@ fn load() -> Option<Rules> {
         .take(LIST_LIMIT)
         .read_to_string(&mut text)
         .ok()?;
+    parse_rules(&text)
+}
+
+fn parse_rules(text: &str) -> Option<Rules> {
     let mut rules = Rules::default();
     for line in text.lines() {
         let Some(rule) = line.split_whitespace().next() else {
@@ -130,4 +134,16 @@ pub(crate) fn is_public_suffix(domain: &str) -> bool {
     let domain = normal(domain);
     let labels: Vec<&str> = domain.split('.').collect();
     suffix_length(rules, &labels) >= labels.len()
+}
+
+#[cfg(fuzzing)]
+pub(crate) fn fuzz_rules(text: &str, hosts: &[&str]) {
+    if let Some(rules) = parse_rules(text) {
+        for host in hosts {
+            let host = normal(host);
+            let labels: Vec<&str> = host.split('.').collect();
+            let suffix = suffix_length(&rules, &labels);
+            let _ = labels.get(labels.len().saturating_sub(suffix + 1)..);
+        }
+    }
 }

@@ -1,8 +1,11 @@
 mod cache;
 mod cookies;
+mod data;
 mod date;
 mod executor;
 mod fetch;
+#[cfg(fuzzing)]
+pub mod fuzzing;
 mod hsts;
 mod mime;
 mod reactor;

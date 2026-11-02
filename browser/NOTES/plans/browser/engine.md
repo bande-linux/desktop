@@ -98,6 +98,24 @@ same pages, profile-free, reported in release notes, not stored in the repo.
 | Speedometer 3 | phase 2–3: tracked only; phase 5: ≥ Firefox, then ≥ Chromium |
 | JetStream 2 | phase 5, with our JIT: ≥ 80% of Chromium |
 
+### Per-element budgets (W1 core)
+
+`Page::memory()` in `web-content` reports heap bytes per stage; the `render-png` example prints
+them per element. Measured on the English Wikipedia articles "Rust (programming language)" (9.7k
+elements) and "Cat" (13.4k), without author styles, at 1000 px:
+
+| Stage | Budget per element | Now |
+|---|---|---|
+| Node core (`web-dom`) | ≤ 64 B | 36 B |
+| DOM with attributes and text | ≤ 350 B | 236–321 B |
+| Computed styles (shared, 4 B index per node) | ≤ 16 B | 10 B |
+| Box tree with shaped text | ≤ 520 B | 408–507 B |
+| Fragment tree | ≤ 380 B | 283–367 B |
+| Display list | ≤ 340 B | 225–328 B |
+
+Shaped glyphs (24 B each) dominate the box tree; packing them to 16 B and dropping the
+per-paragraph text copy are the next savings.
+
 ## `web-css` selectors for the matcher
 
 `SelectorParser::parse_list` turns a prelude into a `SelectorList` of `Selector`s. Each selector's

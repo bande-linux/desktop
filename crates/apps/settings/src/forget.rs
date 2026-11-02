@@ -19,6 +19,7 @@ pub(crate) enum Forget {
     Device(String),
     Share(String),
     Printer(String),
+    Vpn(String),
 }
 
 impl SettingsView {
@@ -70,6 +71,7 @@ impl SettingsView {
             Some(Forget::Device(address)) => address.clone(),
             Some(Forget::Share(app)) => format!("grant:{app}"),
             Some(Forget::Printer(name)) => format!("printer:{name}"),
+            Some(Forget::Vpn(path)) => format!("vpn:{path}"),
             None => return,
         };
         self.focus_next = Some(Anchor::Item(if target.is_some() {
@@ -100,6 +102,10 @@ impl SettingsView {
                 })
                 .cloned()
                 .map(|device| Command::Bluetooth(BluetoothCommand::Forget(device))),
+            Some(Forget::Vpn(path)) => {
+                self.focus_next = Some(Anchor::Setting(SettingId::Vpns, None));
+                Some(Command::Network(NetworkCommand::RemoveVpn(path)))
+            }
             Some(Forget::Printer(name)) => {
                 self.detail = None;
                 self.focus_next = Some(Anchor::Setting(SettingId::Printers, None));

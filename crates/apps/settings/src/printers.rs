@@ -450,13 +450,13 @@ impl SettingsView {
                     [("name", printer.title().to_owned().into())],
                 ),
                 &L10N.tr("printer-remove-warning"),
-                &L10N.tr("printer-remove"),
+                &L10N.tr("remove"),
             ));
         } else {
             let mut ask = intent(&self.intents, move |()| {
                 Intent::AskForget(Some(forget.clone()))
             });
-            let button = Button::new(&L10N.tr("printer-remove-ellipsis"), move || ask(()));
+            let button = Button::new(&L10N.tr("remove-ellipsis"), move || ask(()));
             self.anchors
                 .push((Anchor::Item(format!("printer:{name}")), button.id()));
             actions.push(boxed(Row::new(

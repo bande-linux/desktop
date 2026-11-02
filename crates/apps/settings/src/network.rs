@@ -1,8 +1,10 @@
 use bande_network::VpnState;
 use bande_settings_panes::{SettingId, Value};
-use bande_toolkit::ui::{Button, SegmentedControl, TextField, Widget};
+use bande_toolkit::Spacing;
+use bande_toolkit::ui::{Axis, Button, SegmentedControl, Stack, TextField, Widget};
 
 use crate::L10N;
+use crate::forget::Forget;
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::services::NetworkCommand;
 use crate::view::{Anchor, Intent, SettingsView, intent};
@@ -135,11 +137,32 @@ impl SettingsView {
                         NetworkCommand::ConnectVpn,
                     ),
                 };
+            let forget = Forget::Vpn(vpn.path.clone());
+            if self.forgetting.as_ref() == Some(&forget) {
+                rows.push(self.confirm_row(
+                    &L10N.tr_args("vpn-remove-question", [("name", vpn.name.clone().into())]),
+                    &L10N.tr("vpn-remove-warning"),
+                    &L10N.tr("remove"),
+                ));
+                continue;
+            }
             let mut act = intent(&self.intents, Intent::Network);
             let path = vpn.path.clone();
             let button = Button::new(&action, move || act(command(path.clone())));
-            let row = Row::new(Text::new(&vpn.name, Tone::Primary), Some(boxed(button)))
-                .detail(Text::new(&status, Tone::Muted).caption());
+            let mut ask = intent(&self.intents, move |()| {
+                Intent::AskForget(Some(forget.clone()))
+            });
+            let remove = Button::new(&L10N.tr("remove-ellipsis"), move || ask(()));
+            let row = Row::new(
+                Text::new(&vpn.name, Tone::Primary),
+                Some(boxed(Stack::new(
+                    Axis::Horizontal,
+                    Spacing::S as f32,
+                    0.0,
+                    vec![boxed(remove), boxed(button)],
+                ))),
+            )
+            .detail(Text::new(&status, Tone::Muted).caption());
             rows.push(self.item_row(format!("vpn:{}", vpn.path), row));
         }
         let mut import = intent(&self.intents, |()| Intent::ImportVpn);

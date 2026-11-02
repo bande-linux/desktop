@@ -46,6 +46,7 @@ pub enum NetworkCommand {
     ConfigureEthernet(Option<ManualIpv4>),
     ConnectVpn(String),
     DisconnectVpn(String),
+    RemoveVpn(String),
     Watch(bool),
 }
 
@@ -385,6 +386,7 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                     report(&updates, network.configure_ethernet(manual.as_ref()));
                 }
                 NetworkCommand::ConnectVpn(path) => report(&updates, network.connect_vpn(&path)),
+                NetworkCommand::RemoveVpn(path) => report(&updates, network.remove_vpn(&path)),
                 NetworkCommand::DisconnectVpn(path) => {
                     report(&updates, network.disconnect_vpn(&path));
                 }

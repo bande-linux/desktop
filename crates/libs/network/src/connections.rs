@@ -345,6 +345,11 @@ impl NetworkManager {
         Ok(())
     }
 
+    pub fn remove_vpn(&self, path: &str) -> Result<()> {
+        let connection = OwnedObjectPath::try_from(path.to_owned())?;
+        Ok(self.settings_connection(&connection)?.delete()?)
+    }
+
     pub fn disconnect_vpn(&self, path: &str) -> Result<()> {
         let manager = self.manager()?;
         for active in manager.active_connections()? {

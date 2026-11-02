@@ -195,7 +195,7 @@ impl Window {
             Zone::Control(control) => {
                 chrome.pressed = Some(control);
                 chrome.pressed_inside = true;
-                chrome.zoom_rest = (control == Control::Zoom).then_some(now);
+                chrome.zoom_rest = (control == Control::Zoom && !chrome.fixed).then_some(now);
                 self.needs_redraw = true;
                 match control {
                     Control::Menu => self.show_menus(),
@@ -243,7 +243,9 @@ impl Window {
                 Ok(())
             }
             Control::Minimize => self.minimize(),
-            Control::Zoom if pointer.modifiers.alt => self.toggle_full_screen(),
+            Control::Zoom if pointer.modifiers.alt && self.is_resizable() => {
+                self.toggle_full_screen()
+            }
             Control::Zoom => self.toggle_zoom(),
             Control::Menu => Ok(()),
         };

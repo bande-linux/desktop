@@ -632,7 +632,7 @@ impl Window {
         }
     }
 
-    fn is_resizable(&self) -> bool {
+    pub fn is_resizable(&self) -> bool {
         self.chrome
             .as_ref()
             .is_some_and(|chrome| chrome.titled && !chrome.fixed)
@@ -787,6 +787,9 @@ impl Window {
     }
 
     pub fn toggle_zoom(&mut self) -> Result<(), WindowError> {
+        if !self.is_resizable() {
+            return Ok(());
+        }
         let toplevel = self.toplevel()?;
         if self.state.toplevel.maximized {
             toplevel.unset_maximized();

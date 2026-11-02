@@ -77,9 +77,12 @@ pub(crate) fn run<P: Program>(
         return Ok(());
     }
     let menu = cx.session().cloned().and_then(|session| {
-        AppMenu::serve(session, assemble(info, program.menus(&cx), true))
-            .inspect_err(|error| tracing::warn!("{error}"))
-            .ok()
+        AppMenu::serve(
+            session,
+            assemble(info, program.menus(&cx), true, cx.zoomable()),
+        )
+        .inspect_err(|error| tracing::warn!("{error}"))
+        .ok()
     });
     cx.menus_changed = false;
     let mut runner = Runner {
@@ -197,7 +200,12 @@ impl<P: Program> Runner<P> {
             return;
         };
         let windowed = !self.cx.windows.is_empty();
-        let entries = assemble(self.cx.info, self.program.menus(&self.cx), windowed);
+        let entries = assemble(
+            self.cx.info,
+            self.program.menus(&self.cx),
+            windowed,
+            self.cx.zoomable(),
+        );
         if let Err(error) = menu.update(entries) {
             tracing::warn!("cannot update the menus: {error}");
         }
@@ -314,7 +322,12 @@ impl<P: Program> Runner<P> {
 
     fn menu_shortcut(&mut self, window: Option<WindowId>, input: &Event) {
         let windowed = !self.cx.windows.is_empty();
-        let menus = assemble(self.cx.info, self.program.menus(&self.cx), windowed);
+        let menus = assemble(
+            self.cx.info,
+            self.program.menus(&self.cx),
+            windowed,
+            self.cx.zoomable(),
+        );
         if let Some(action) = shortcut_action(&menus, &|shortcut| shortcut_pressed(input, shortcut))
         {
             self.perform(window, &action);

@@ -230,7 +230,7 @@ impl State {
             item(L10N.tr("place-bottom-left"), "place-bottom-left"),
             item(L10N.tr("place-bottom-right"), "place-bottom-right"),
             MenuItem::separator(),
-            item(L10N.tr("place-fill"), "place-fill").enabled(!zoomed),
+            item(L10N.tr("place-fill"), "place-fill").enabled(!zoomed && !window.fixed_size()),
         ];
         let displays = self
             .screens
@@ -288,7 +288,8 @@ impl State {
                     false => L10N.tr("zoom"),
                 },
                 "zoom",
-            ),
+            )
+            .enabled(!self.windows[index].fixed_size()),
             MenuItem::separator(),
             MenuItem::submenu(
                 &L10N.tr("move-and-resize"),

@@ -263,7 +263,8 @@ writes a hex value, a corner radius or a font name of its own.
   read-only. `TextView::document` is the editor of a document app: no change callback (the app
   compares `revision`), a font (`set_font`: monospace or proportional, any size), a page width
   that wraps to a centred column instead of the view (`set_page_width`), and `insert` and
-  `select` that scroll to the result.
+  `select` that scroll to the result. A tab is laid out as a space widened to the next stop every
+  four spaces, so code and logs line up in any font.
 - **Animation.** `ui::Animated` holds a value that springs to its target with a preset from
   `bande-spring` (`Spring::QUICK`, `STANDARD`, `GENTLE`, `FADE`, ...). A new target retargets
   from the current position and velocity, so a reversed action never jumps or queues. Values

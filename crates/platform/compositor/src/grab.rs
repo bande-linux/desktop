@@ -21,6 +21,7 @@ use crate::tile::Tile;
 #[derive(Debug, Clone, Copy)]
 enum Operation {
     Move { origin: Point<i32, Logical> },
+    Detach,
     Resize,
 }
 
@@ -53,6 +54,7 @@ pub(crate) struct WindowGrab {
 
 const BTN_LEFT: u32 = 0x110;
 const BTN_RIGHT: u32 = 0x111;
+const DETACH_DISTANCE: i32 = 4;
 
 fn edge_toward(window: Rectangle<i32, Logical>, point: Point<i32, Logical>) -> ResizeEdge {
     let third = |start: i32, length: i32, at: i32| {
@@ -131,10 +133,23 @@ impl State {
         let Some(undo) = self.undo_move(surface) else {
             return;
         };
-        let Some(origin) = self.begin_move(surface, whole(start.location)) else {
+        let Some(operation) = self.move_operation(surface, whole(start.location)) else {
             return;
         };
-        self.start_grab(start, surface, Operation::Move { origin }, undo, serial);
+        self.start_grab(start, surface, operation, undo, serial);
+    }
+
+    fn move_operation(
+        &mut self,
+        surface: &WlSurface,
+        pointer: Point<i32, Logical>,
+    ) -> Option<Operation> {
+        match self.holds_place(surface)? {
+            true => Some(Operation::Detach),
+            false => self
+                .begin_move(surface, pointer)
+                .map(|origin| Operation::Move { origin }),
+        }
     }
 
     pub(crate) fn request_resize(
@@ -157,7 +172,7 @@ impl State {
         let Some(undo) = self.undo_move(surface) else {
             return;
         };
-        let Some(origin) = self.begin_move(surface, whole(location)) else {
+        let Some(operation) = self.move_operation(surface, whole(location)) else {
             return;
         };
         let start = GrabStartData {
@@ -166,7 +181,7 @@ impl State {
             location,
         };
         let serial = SERIAL_COUNTER.next_serial();
-        self.start_grab(start, surface, Operation::Move { origin }, undo, serial);
+        self.start_grab(start, surface, operation, undo, serial);
     }
 
     pub(crate) fn resize_from_frame(
@@ -330,13 +345,21 @@ impl PointerGrab<State> for WindowGrab {
     ) {
         handle.motion(data, None, event);
         let delta = self.delta(event.location);
+        if let Some((surface, Operation::Detach)) = &self.held
+            && delta.x.abs().max(delta.y.abs()) >= DETACH_DISTANCE
+        {
+            let surface = surface.clone();
+            self.held = data
+                .begin_move(&surface, whole(self.start.location))
+                .map(|origin| (surface, Operation::Move { origin }));
+        }
         match &self.held {
             Some((surface, Operation::Move { origin })) => {
                 data.move_window_to(surface, *origin + delta);
                 data.track_snap(surface, event.location, event.time);
             }
             Some((surface, Operation::Resize)) => data.resize_to(surface, delta),
-            None => {}
+            Some((_, Operation::Detach)) | None => {}
         }
     }
 
@@ -461,6 +484,7 @@ impl PointerGrab<State> for WindowGrab {
         match operation {
             Operation::Resize => data.end_resize(surface),
             Operation::Move { .. } => data.finish_move(surface),
+            Operation::Detach => {}
         }
     }
 }

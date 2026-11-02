@@ -1,6 +1,7 @@
 use parley::Affinity;
 
 use super::Editor;
+use super::rich::{Fragment, ParagraphAttributes};
 use super::selection::{Position, Selection};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,10 +14,18 @@ pub(super) enum EditKind {
 #[derive(Debug, Clone)]
 pub(super) struct Edit {
     pub(super) start: Position,
-    pub(super) removed: String,
-    pub(super) inserted: String,
+    pub(super) removed: Fragment,
+    pub(super) inserted: Fragment,
     pub(super) before: Selection,
     pub(super) kind: EditKind,
+    pub(super) restyle: Option<Restyle>,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct Restyle {
+    pub(super) first: usize,
+    pub(super) before: Vec<ParagraphAttributes>,
+    pub(super) after: Vec<ParagraphAttributes>,
 }
 
 #[derive(Default)]
@@ -45,23 +54,27 @@ pub(super) fn coalesce(last: &mut Edit, edit: &Edit) -> bool {
     match edit.kind {
         EditKind::Typing => {
             let contiguous =
-                edit.removed.is_empty() && last.start.after(&last.inserted) == edit.start;
-            let starts_word = !edit.inserted.starts_with(char::is_whitespace)
-                && last.inserted.ends_with(char::is_whitespace);
+                edit.removed.text.is_empty() && last.start.after(&last.inserted.text) == edit.start;
+            let starts_word = !edit.inserted.text.starts_with(char::is_whitespace)
+                && last.inserted.text.ends_with(char::is_whitespace);
             if !contiguous || starts_word {
                 return false;
             }
-            last.inserted.push_str(&edit.inserted);
+            last.inserted.append(edit.inserted.clone());
             true
         }
-        EditKind::Deleting if !last.inserted.is_empty() || !edit.inserted.is_empty() => false,
-        EditKind::Deleting if edit.start.after(&edit.removed) == last.start => {
-            last.removed.insert_str(0, &edit.removed);
+        EditKind::Deleting if !last.inserted.text.is_empty() || !edit.inserted.text.is_empty() => {
+            false
+        }
+        EditKind::Deleting if edit.start.after(&edit.removed.text) == last.start => {
+            let mut removed = edit.removed.clone();
+            removed.append(std::mem::take(&mut last.removed));
+            last.removed = removed;
             last.start = edit.start;
             true
         }
         EditKind::Deleting if edit.start == last.start => {
-            last.removed.push_str(&edit.removed);
+            last.removed.append(edit.removed.clone());
             true
         }
         _ => false,
@@ -84,8 +97,13 @@ impl Editor {
         let Some(edit) = self.history.undo.pop() else {
             return false;
         };
-        let end = edit.start.after(&edit.inserted);
-        self.splice(edit.start, end, &edit.removed);
+        match &edit.restyle {
+            Some(restyle) => self.restyle(restyle, false),
+            None => {
+                let end = edit.start.after(&edit.inserted.text);
+                self.splice(edit.start, end, &edit.removed);
+            }
+        }
         self.selection = edit.before;
         self.goal_x = None;
         self.history.redo.push(edit);
@@ -100,9 +118,17 @@ impl Editor {
         let Some(edit) = self.history.redo.pop() else {
             return false;
         };
-        let end = edit.start.after(&edit.removed);
-        let caret = self.splice(edit.start, end, &edit.inserted);
-        self.selection = Selection::caret(caret, Affinity::Downstream);
+        match &edit.restyle {
+            Some(restyle) => {
+                self.restyle(restyle, true);
+                self.selection = edit.before;
+            }
+            None => {
+                let end = edit.start.after(&edit.removed.text);
+                let caret = self.splice(edit.start, end, &edit.inserted);
+                self.selection = Selection::caret(caret, Affinity::Downstream);
+            }
+        }
         self.goal_x = None;
         self.history.undo.push(edit);
         self.history.open = false;

@@ -28,6 +28,7 @@ pub enum Command {
     QuitApp,
     AppAction(String),
     ShowWindow(String),
+    OpenClock,
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -73,6 +74,7 @@ impl Command {
             Self::QuitApp => "quit-app".to_owned(),
             Self::AppAction(id) => format!("app-action:{id}"),
             Self::ShowWindow(identifier) => format!("window:{identifier}"),
+            Self::OpenClock => "open-clock".to_owned(),
             Self::HideOthers => "hide-others".to_owned(),
             Self::ShowAll => "show-all".to_owned(),
             Self::SelectInputSource(index) => format!("input-source:{index}"),
@@ -111,6 +113,7 @@ impl Command {
             "quit-app" => Self::QuitApp,
             "app-action" => Self::AppAction(argument.to_owned()),
             "window" => Self::ShowWindow(argument.to_owned()),
+            "open-clock" => Self::OpenClock,
             "hide-others" => Self::HideOthers,
             "show-all" => Self::ShowAll,
             "input-source" => Self::SelectInputSource(argument.parse().ok()?),

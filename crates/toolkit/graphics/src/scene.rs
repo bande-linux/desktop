@@ -175,6 +175,7 @@ type Redraw = Box<dyn Fn() -> Option<Vec<u8>> + Send + Sync>;
 pub(crate) struct Pixels {
     kept: Mutex<Option<Arc<Pixmap>>>,
     redraw: Option<Redraw>,
+    redrawn_premultiplied: bool,
 }
 
 #[derive(Clone)]
@@ -289,6 +290,15 @@ impl Image {
         Self::with_pixels(width, height, rgba, Some(Box::new(redraw)))
     }
 
+    pub fn shared(width: u32, height: u32, premultiplied: Arc<[u8]>) -> Option<Self> {
+        let (width, height) = (u16::try_from(width).ok()?, u16::try_from(height).ok()?);
+        if premultiplied.len() != usize::from(width) * usize::from(height) * 4 {
+            return None;
+        }
+        let redraw: Redraw = Box::new(move || Some(premultiplied.to_vec()));
+        Self::with_kept(width, height, None, Some(redraw), true)
+    }
+
     fn with_pixels(width: u32, height: u32, rgba: Vec<u8>, redraw: Option<Redraw>) -> Option<Self> {
         let (width, height) = (u16::try_from(width).ok()?, u16::try_from(height).ok()?);
         Self::with_pixmap(width, height, premultiplied(width, height, rgba)?, redraw)
@@ -300,6 +310,16 @@ impl Image {
         pixmap: Pixmap,
         redraw: Option<Redraw>,
     ) -> Option<Self> {
+        Self::with_kept(width, height, Some(Arc::new(pixmap)), redraw, false)
+    }
+
+    fn with_kept(
+        width: u16,
+        height: u16,
+        kept: Option<Arc<Pixmap>>,
+        redraw: Option<Redraw>,
+        redrawn_premultiplied: bool,
+    ) -> Option<Self> {
         if width == 0 || height == 0 {
             return None;
         }
@@ -309,8 +329,9 @@ impl Image {
             width,
             height,
             pixels: Arc::new(Pixels {
-                kept: Mutex::new(Some(Arc::new(pixmap))),
+                kept: Mutex::new(kept),
                 redraw,
+                redrawn_premultiplied,
             }),
         })
     }
@@ -323,7 +344,11 @@ impl Image {
             .unwrap_or_else(PoisonError::into_inner);
         if kept.is_none() {
             let redrawn = self.pixels.redraw.as_ref().and_then(|redraw| redraw())?;
-            *kept = Some(Arc::new(premultiplied(self.width, self.height, redrawn)?));
+            let drawn = match self.pixels.redrawn_premultiplied {
+                true => pixmap(self.width, self.height, redrawn),
+                false => premultiplied(self.width, self.height, redrawn),
+            };
+            *kept = Some(Arc::new(drawn?));
         }
         kept.clone()
     }

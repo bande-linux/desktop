@@ -31,6 +31,7 @@ the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
 | `toolkit/widgets/tests/capture.rs` | A press cut short by a sheet is released (the stuck press). |
 | `libs/fs/tests/trash.rs` | A volume Trash whose `files` folder is a planted link is not used. |
 | `services/automount/tests/automount.rs` | A drive plugged in while the session is locked is mounted only after unlocking. |
+| `libs/volumes/tests/eject.rs` | Regression (a VM died on eject): ejecting one volume of a removable USB ISO unmounts every volume of the drive and calls `Drive.Eject`, never `PowerOff`. |
 | `libs/datetime/tests/daylight.rs` | Sunrise and sunset fall on the right day east and west of Greenwich and past the Arctic Circle. |
 | `services/config/tests/config.rs` | KDL `config.kdl` parsing reports problems at their line and column while valid settings apply; edits keep comments; bars written before the `layout` key keep their layout. |
 | `libs/keyboard/tests/layouts.rs` | The XKB rules XML is read despite its DOCTYPE. |

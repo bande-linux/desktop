@@ -86,8 +86,9 @@ writes a hex value, a corner radius or a font name of its own.
 - **Scene.** A `Scene` of fills, strokes, linear, radial and conic gradients, rounded
   rectangles, clips, opacity and blend layers (`Item::Blend`, the CSS `mix-blend-mode` set),
   2D transforms (`Item::Transform`), shadows, text, images (`Image::from_rgba` or
-  `from_premultiplied`, uploaded once per renderer and freed when the last `Image` drops; `Item::Tiles`
-  repeats one), and glyph runs laid out elsewhere (`Item::Glyphs`, e.g. a web page's, drawn
+  `from_premultiplied`, uploaded once per renderer and freed when the last `Image` drops;
+  `Image::shared` wraps an app's premultiplied `Arc<[u8]>` and copies it only while a renderer
+  needs a CPU pixmap, so the GPU path keeps no second copy; `Item::Tiles` repeats one), and glyph runs laid out elsewhere (`Item::Glyphs`, e.g. a web page's, drawn
   from their own `FontData` without reshaping), which `CpuRenderer` (`vello_cpu`) and
   `GpuRenderer` (`vello_gpu` on Vulkan) draw from one encoder.
   - The encoder records items into drawing ops (flattened paths, glyph outlines, paints) and
@@ -260,7 +261,22 @@ writes a hex value, a corner radius or a font name of its own.
   under it, and a click while composing keeps the text and resets the input method. Text is
   published to screen readers as text runs with the caret and selection, which they can also
   set. `TextView` wraps, scrolls with a `ScrollState`, keeps the caret in view and can be
-  read-only.
+  read-only. `TextView::document` is the editor of a document app: no change callback (the app
+  compares `revision`), a font (`set_font`: monospace or proportional, any size), a page width
+  that wraps to a centred column instead of the view (`set_page_width`), and `insert` and
+  `select` that scroll to the result. A tab is laid out as a space widened to the next stop every
+  four spaces, so code and logs line up in any font.
+  The editor also holds attributed text: each paragraph keeps runs of `TextAttributes` (bold,
+  italic, underline, strikethrough, typeface family, size, colour and a link target) and one
+  `ParagraphAttributes` (alignment, a bullet or numbered list marker and a nesting level that
+  indents it). `TextView::rich_text` and `set_rich_text` move a `RichText` (the plain text with
+  attribute ranges and one entry per paragraph) in and out; `change_attributes` restyles the
+  selection, or the attributes typing will use at a collapsed caret, and `change_paragraphs`
+  restyles the paragraphs it touches, each one undo step. Typing takes the attributes of the
+  character before the caret, a new paragraph continues its list, and undo restores removed text
+  with its attributes. List markers are drawn in the indent, numbered per level, and are not part
+  of the text; underline and strikethrough are drawn from the font's metrics. A plain document
+  keeps no runs, so large plain text costs nothing extra.
 - **Animation.** `ui::Animated` holds a value that springs to its target with a preset from
   `bande-spring` (`Spring::QUICK`, `STANDARD`, `GENTLE`, `FADE`, ...). A new target retargets
   from the current position and velocity, so a reversed action never jumps or queues. Values

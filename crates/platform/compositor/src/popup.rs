@@ -260,6 +260,8 @@ impl State {
         });
         if key.is_some() {
             self.focus(key);
+        } else if self.focused().is_some_and(|focused| !focused.is_alive()) {
+            self.focus_behind_layer();
         }
     }
 

@@ -1,5 +1,6 @@
 use std::sync::mpsc::{self, Sender};
 
+use bande_datetime::daylight::{Place, place_of};
 use bande_datetime::timedate::{TimedateProxyBlocking, timedate_changes};
 use jiff::Timestamp;
 use jiff::civil::DateTime;
@@ -19,6 +20,7 @@ pub struct TimeState {
     pub can_automatic: bool,
     pub zone: String,
     pub zones: Vec<String>,
+    pub place: Option<Place>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -95,10 +97,12 @@ fn read(timedate: &TimedateProxyBlocking<'_>, zones: &mut Vec<String>) -> Option
     if zones.is_empty() {
         *zones = timedate.list_timezones().unwrap_or_default();
     }
+    let zone = timedate.timezone().ok()?;
     Some(TimeState {
         automatic: timedate.ntp().ok()?,
         can_automatic: timedate.can_ntp().unwrap_or(false),
-        zone: timedate.timezone().ok()?,
+        place: TimeZone::get(&zone).ok().as_ref().and_then(place_of),
+        zone,
         zones: zones.clone(),
     })
 }

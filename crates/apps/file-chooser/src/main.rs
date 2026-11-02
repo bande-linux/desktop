@@ -7,10 +7,11 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
+use bande_app_settings::{Stored, settings_folder};
 use bande_file_chooser::{
     Chooser, ChooserView, Finished, Icons, L10N, initial_folder, remember, remembered_folder,
 };
-use bande_files::{rows, sidebar_file, with_volumes};
+use bande_files::{FilesSettings, rows, sidebar_file, with_volumes};
 use bande_toolkit::ui::Alert;
 use bande_toolkit::{App, Image, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 use bande_volumes::{media_roots, mounted_volumes};
@@ -160,7 +161,14 @@ fn run(dialog: Dialog) -> ExitCode {
         read(memory_file()).and_then(|memory| remembered_folder(&memory, &dialog.app_id));
     let folder = initial_folder(&dialog, remembered, &home, &documents);
     let dirs = data_dirs();
-    let chooser = Chooser::new(dialog.clone(), MimeDatabase::load(&dirs), folder);
+    let show_extensions =
+        settings_folder().is_some_and(|folder| FilesSettings::load(&folder).show_extensions);
+    let chooser = Chooser::new(
+        dialog.clone(),
+        MimeDatabase::load(&dirs),
+        folder,
+        show_extensions,
+    );
     let bookmarks = read(config_home().map(|config| config.join("gtk-3.0/bookmarks")));
     let user = std::env::var("USER").unwrap_or_default();
     let volumes = mounted_volumes(

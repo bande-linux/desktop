@@ -1,6 +1,9 @@
+use std::path::PathBuf;
+
 use bande_app::Menus;
 use bande_app_menu::{Entry, key_item};
 use bande_files::{FilesView, L10N};
+use bande_fs::SortBy;
 
 fn shortcut(message: &str, keys: &str) -> Entry {
     key_item(&L10N.tr(message), keys)
@@ -16,6 +19,41 @@ fn titled(title: Option<String>, message: &str, keys: &str) -> Entry {
 }
 
 pub const NEW_WINDOW: &str = "new-window";
+pub const RECENT_FOLDER: &str = "recent-folder:";
+pub const CLEAR_RECENT_FOLDERS: &str = "clear-recent-folders";
+
+fn recent_entries(recent_folders: &[PathBuf]) -> Vec<Entry> {
+    let mut entries = recent_folders
+        .iter()
+        .enumerate()
+        .map(|(index, folder)| {
+            let name = folder.file_name().map_or_else(
+                || folder.display().to_string(),
+                |name| name.to_string_lossy().into_owned(),
+            );
+            Entry::item(&name, &format!("{RECENT_FOLDER}{index}"))
+        })
+        .collect::<Vec<_>>();
+    entries.push(Entry::separator());
+    entries.push(
+        Entry::item(&L10N.tr("menu-clear-menu"), CLEAR_RECENT_FOLDERS)
+            .enabled(!recent_folders.is_empty()),
+    );
+    entries
+}
+
+fn sort_entries(view: &FilesView) -> Vec<Entry> {
+    let current = view.browser().sort().by;
+    [
+        ("column-name", "sort:name", SortBy::Name),
+        ("column-kind", "sort:kind", SortBy::Kind),
+        ("column-modified", "sort:modified", SortBy::Modified),
+        ("column-size", "sort:size", SortBy::Size),
+    ]
+    .into_iter()
+    .map(|(message, action, by)| Entry::item(&L10N.tr(message), action).radio(by == current))
+    .collect()
+}
 
 pub fn windowless_menus() -> Menus {
     Menus {
@@ -27,7 +65,7 @@ pub fn windowless_menus() -> Menus {
     }
 }
 
-pub fn app_menus(view: &FilesView) -> Menus {
+pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
     let menus = vec![
         submenu(
             "menu-file",
@@ -73,6 +111,8 @@ pub fn app_menus(view: &FilesView) -> Menus {
                 shortcut("menu-as-list", "Ctrl+2"),
                 shortcut("menu-as-columns", "Ctrl+3"),
                 Entry::separator(),
+                submenu("menu-sort-by", sort_entries(view)),
+                Entry::separator(),
                 shortcut("menu-bigger-icons", "Ctrl+="),
                 shortcut("menu-smaller-icons", "Ctrl+-"),
                 Entry::separator(),
@@ -95,6 +135,7 @@ pub fn app_menus(view: &FilesView) -> Menus {
                 shortcut("menu-home", "Alt+Home"),
                 shortcut("recents", "Shift+Ctrl+F"),
                 Entry::separator(),
+                submenu("menu-recent-folders", recent_entries(recent_folders)),
                 shortcut("menu-go-to-folder", "Ctrl+L"),
             ],
         ),

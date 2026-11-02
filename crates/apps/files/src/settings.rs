@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::Path;
 
 use bande_app_settings::{Shared, Stored, flag, pairs};
@@ -5,13 +6,15 @@ use bande_toolkit::ui::{
     Context, Form, FormLine, PopUpButton, ScrollView, SegmentedControl, Toggle, Ui, Widget,
 };
 use bande_toolkit::{Appearance, TextSystem};
-use bande_xdg::{UserDir, user_dir};
+use bande_xdg::{UserDir, config_home, replace_file, state_home, user_dir};
 
 use crate::L10N;
 use crate::browser::Location;
-use crate::views::ViewMode;
+use crate::sidebar::{hidden_places, standard_places, volumes_hidden, with_place_shown};
+use crate::view::home;
+use crate::views::{ViewMode, sidebar_file};
 
-pub const SETTINGS_SIZE: (u32, u32) = (500, 460);
+pub const SETTINGS_SIZE: (u32, u32) = (500, 560);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StartFolder {
@@ -21,15 +24,17 @@ pub enum StartFolder {
     Documents,
     Downloads,
     Recents,
+    Last,
 }
 
 impl StartFolder {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Home,
         Self::Desktop,
         Self::Documents,
         Self::Downloads,
         Self::Recents,
+        Self::Last,
     ];
 
     fn name(self) -> &'static str {
@@ -39,6 +44,7 @@ impl StartFolder {
             Self::Documents => "documents",
             Self::Downloads => "downloads",
             Self::Recents => "recents",
+            Self::Last => "last",
         }
     }
 
@@ -49,10 +55,11 @@ impl StartFolder {
             Self::Documents => "menu-documents",
             Self::Downloads => "menu-downloads",
             Self::Recents => "recents",
+            Self::Last => "settings-last-folder",
         }
     }
 
-    pub fn location(self, home: &Path, user_dirs: Option<&str>) -> Location {
+    pub fn location(self, home: &Path, user_dirs: Option<&str>, last: Option<&Path>) -> Location {
         let folder = |dir| Location::Folder(user_dir(home, user_dirs, dir));
         match self {
             Self::Home => Location::Folder(home.to_path_buf()),
@@ -60,6 +67,11 @@ impl StartFolder {
             Self::Documents => folder(UserDir::Documents),
             Self::Downloads => folder(UserDir::Downloads),
             Self::Recents => Location::Recents,
+            Self::Last => Location::Folder(
+                last.filter(|folder| folder.is_dir())
+                    .unwrap_or(home)
+                    .to_path_buf(),
+            ),
         }
     }
 }
@@ -69,6 +81,8 @@ pub struct FilesSettings {
     pub new_window: StartFolder,
     pub default_view: ViewMode,
     pub show_hidden: bool,
+    pub show_extensions: bool,
+    pub warn_extension_change: bool,
     pub folders_first: bool,
     pub warn_empty_trash: bool,
     pub purge_trash: bool,
@@ -81,6 +95,8 @@ impl Default for FilesSettings {
             new_window: StartFolder::default(),
             default_view: ViewMode::default(),
             show_hidden: false,
+            show_extensions: false,
+            warn_extension_change: true,
             folders_first: true,
             warn_empty_trash: true,
             purge_trash: false,
@@ -106,6 +122,13 @@ impl Stored for FilesSettings {
                     settings.default_view = ViewMode::parse(value).unwrap_or(settings.default_view);
                 }
                 "show-hidden" => settings.show_hidden = flag(value).unwrap_or(settings.show_hidden),
+                "show-extensions" => {
+                    settings.show_extensions = flag(value).unwrap_or(settings.show_extensions);
+                }
+                "warn-extension-change" => {
+                    settings.warn_extension_change =
+                        flag(value).unwrap_or(settings.warn_extension_change);
+                }
                 "folders-first" => {
                     settings.folders_first = flag(value).unwrap_or(settings.folders_first);
                 }
@@ -128,10 +151,12 @@ impl Stored for FilesSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "new-window = {}\ndefault-view = {}\nshow-hidden = {}\nfolders-first = {}\nwarn-empty-trash = {}\npurge-trash = {}\nsearch-in = {}\n",
+            "new-window = {}\ndefault-view = {}\nshow-hidden = {}\nshow-extensions = {}\nwarn-extension-change = {}\nfolders-first = {}\nwarn-empty-trash = {}\npurge-trash = {}\nsearch-in = {}\n",
             self.new_window.name(),
             self.default_view.name(),
             self.show_hidden,
+            self.show_extensions,
+            self.warn_extension_change,
             self.folders_first,
             self.warn_empty_trash,
             self.purge_trash,
@@ -161,6 +186,38 @@ fn choice(
     let label = L10N.tr(message);
     let widget = control(&label, choices, selected);
     FormLine::Row(label, widget)
+}
+
+fn place_toggle(file: &Path, label: String, place: Option<Location>, shown: bool) -> FormLine {
+    let file = file.to_path_buf();
+    let control = Toggle::new(&label, shown, move |on| {
+        let layout = fs::read_to_string(&file).unwrap_or_default();
+        if let Err(error) = replace_file(&file, &with_place_shown(&layout, place.as_ref(), on)) {
+            tracing::warn!("cannot change the sidebar: {error}");
+        }
+    });
+    FormLine::Row(label, Box::new(control))
+}
+
+fn sidebar_lines() -> Vec<FormLine> {
+    let home = home();
+    let file = sidebar_file(state_home().as_deref(), &home);
+    let layout = fs::read_to_string(&file).ok();
+    let hidden = hidden_places(layout.as_deref());
+    let user_dirs =
+        config_home().and_then(|config| fs::read_to_string(config.join("user-dirs.dirs")).ok());
+    let mut lines = vec![FormLine::Heading(L10N.tr("settings-sidebar"))];
+    for place in standard_places(&home, user_dirs.as_deref()) {
+        let shown = !hidden.contains(&place.location);
+        lines.push(place_toggle(&file, place.name, Some(place.location), shown));
+    }
+    lines.push(place_toggle(
+        &file,
+        L10N.tr("settings-external-disks"),
+        None,
+        !volumes_hidden(layout.as_deref()),
+    ));
+    lines
 }
 
 fn form(settings: &Shared<FilesSettings>) -> Form {
@@ -224,41 +281,53 @@ fn form(settings: &Shared<FilesSettings>) -> Form {
         },
     );
     let heading = |message: &str| FormLine::Heading(L10N.tr(message));
-    Form::new(
-        &L10N.tr("settings-title"),
-        vec![
-            heading("settings-general"),
-            new_window,
-            default_view,
-            toggle(
-                settings,
-                "settings-show-hidden",
-                current.show_hidden,
-                |settings, on| settings.show_hidden = on,
-            ),
-            toggle(
-                settings,
-                "settings-folders-first",
-                current.folders_first,
-                |settings, on| settings.folders_first = on,
-            ),
-            heading("settings-trash"),
-            toggle(
-                settings,
-                "settings-warn-empty-trash",
-                current.warn_empty_trash,
-                |settings, on| settings.warn_empty_trash = on,
-            ),
-            toggle(
-                settings,
-                "settings-purge-trash",
-                current.purge_trash,
-                |settings, on| settings.purge_trash = on,
-            ),
-            heading("settings-search"),
-            search_in,
-        ],
-    )
+    let mut lines = vec![
+        heading("settings-general"),
+        new_window,
+        default_view,
+        toggle(
+            settings,
+            "settings-show-hidden",
+            current.show_hidden,
+            |settings, on| settings.show_hidden = on,
+        ),
+    ];
+    lines.extend(sidebar_lines());
+    lines.extend([
+        heading("settings-advanced"),
+        toggle(
+            settings,
+            "settings-show-extensions",
+            current.show_extensions,
+            |settings, on| settings.show_extensions = on,
+        ),
+        toggle(
+            settings,
+            "settings-warn-extension-change",
+            current.warn_extension_change,
+            |settings, on| settings.warn_extension_change = on,
+        ),
+        toggle(
+            settings,
+            "settings-warn-empty-trash",
+            current.warn_empty_trash,
+            |settings, on| settings.warn_empty_trash = on,
+        ),
+        toggle(
+            settings,
+            "settings-purge-trash",
+            current.purge_trash,
+            |settings, on| settings.purge_trash = on,
+        ),
+        toggle(
+            settings,
+            "settings-folders-first",
+            current.folders_first,
+            |settings, on| settings.folders_first = on,
+        ),
+        search_in,
+    ]);
+    Form::new(&L10N.tr("settings-title"), lines)
 }
 
 pub fn settings_view(appearance: Appearance, settings: &Shared<FilesSettings>) -> Ui {

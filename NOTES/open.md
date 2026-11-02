@@ -33,6 +33,13 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - Power: displays off at the lock stage and after 60 s locked, wake on input, the power button,
   an external display through standby and back (`drm.rs` relink may hit EBUSY).
 - Reopen after a real crash with `reopen-apps-after-crash #true`.
+- Recovery on the mini: `Ctrl+Alt+Fn+F2` reaches a text console and `Ctrl+Alt+Fn+F7` comes back
+  (also from the login window); `kill -STOP` of `bande-shell` shows "Taskbar & Desktop (Not
+  Responding)" in Force Quit and Relaunch brings the bar back; `kill -STOP` of `bande-lock` while
+  locked brings a new lock screen within about 15 s; after `apt install systemd-oomd` and a new
+  login, `oomctl` lists `app.slice` and `systemctl show user.slice -p MemoryLow` says 640M. GPU
+  loss recovery (a new Vulkan device after `VK_ERROR_DEVICE_LOST`) is untested on asahi: the
+  journal says "the GPU was lost; starting the renderer again" when it happens.
 - Footprint on the real GPU: shell and greeter memory, the greeter's unveil after sign-in, the
   shell's PipeWire clients with two displays.
 - Login: the greetd console frame before the greeter (`vt.global_cursor_default=0` or a greetd
@@ -67,8 +74,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 
 ## Remaining work
 
-- Files: undo across windows, `org.freedesktop.FileManager1`; slices F15–F23 sit unmerged on
-  `origin/wip/files-depth-3`.
+- Files: ranked in [plans/files-depth.md](plans/files-depth.md).
 - Unmerged branches: `wip/l10n-ready` (strings into Fluent, an en-XA pseudo-locale),
   `wip/terminal-scopes` (a systemd scope per Terminal tab; apps repo now),
   `wip/userland-efficiency` (conflicts with `main`).
@@ -84,6 +90,9 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   and timeouts for the remaining blocking D-Bus calls (Control Center setters, tray).
 - Text size: menus at 200 % and long labels; Activity Monitor's CPU-core strip (apps repo).
 - A `Super+Space` pressed before the shell connects is lost.
+- Stuck state still open: an on-demand layer that drops keyboard interactivity
+  keeps focus; windows maximized while the bar was gone stay under it when it returns; the
+  window switcher keeps its key intercept through a lock until the modifier is released.
 - Notifications on several displays (banners follow the decision above).
 - Frame clock: predict with a high percentile instead of the maximum of the last 16 frames.
 - `bande-render`: `VK_EXT_host_image_copy` to copy shm buffers without staging.

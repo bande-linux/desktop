@@ -33,6 +33,9 @@ use bande_xdg::{
     user_dir,
 };
 
+const SETTINGS_FOLDER: &str = "bande";
+const FILES_SETTINGS: &str = "files.conf";
+const SHOW_EXTENSIONS: &str = "show-extensions";
 const PDF: &str = "application/pdf";
 const WALLPAPER_CACHE: &str = "bande/wallpapers";
 const SETTINGS_APP: &str = "org.bande.Settings";
@@ -63,6 +66,7 @@ pub struct DesktopSurface {
     icons: HashMap<(String, u32), Option<Image>>,
     thumbnails: Option<Thumbnails>,
     items: Vec<Item>,
+    show_extensions: bool,
     pictures: HashMap<PathBuf, (Option<SystemTime>, Option<Option<Image>>)>,
     layouts_file: Option<PathBuf>,
     bar_edge: BarEdge,
@@ -244,13 +248,35 @@ impl DesktopSurface {
         self.show_items();
     }
 
+    fn full_name(&self, path: &Path, typed: String) -> String {
+        let hidden = self
+            .items
+            .iter()
+            .find(|item| item.path == path)
+            .and_then(|item| item.name.get(item.label.len()..))
+            .unwrap_or_default();
+        match hidden.is_empty()
+            || typed.is_empty()
+            || self.apps.borrow().extension(&typed).is_some()
+        {
+            true => typed,
+            false => format!("{typed}{hidden}"),
+        }
+    }
+
     fn relist(&mut self) {
         if self.wallpaper_only {
             return;
         }
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
         let volumes = mounted_volumes(&mountinfo, &self.media);
-        self.items = list(&mut self.apps.borrow_mut(), &self.desktop_dir, &volumes);
+        self.show_extensions = show_extensions();
+        self.items = list(
+            &mut self.apps.borrow_mut(),
+            &self.desktop_dir,
+            &volumes,
+            self.show_extensions,
+        );
         self.show_items();
         self.watch_folders();
         self.save_layouts();
@@ -283,6 +309,7 @@ impl DesktopSurface {
 
     fn watch_folders(&mut self) {
         let mut folders = vec![self.desktop_dir.clone()];
+        folders.extend(config_home().map(|config| config.join(SETTINGS_FOLDER)));
         for root in &self.media {
             folders.push(root.clone());
             if let Some(parent) = root.parent() {
@@ -504,11 +531,13 @@ impl DesktopSurface {
                     },
                     Action::Move,
                 ),
-                Request::Rename { path, name } => match bande_fs::rename(&path, &name) {
-                    Ok(Some(change)) => self.operations.record(Action::Rename, vec![change]),
-                    Ok(None) => {}
-                    Err(error) => tracing::warn!("cannot rename {}: {error:?}", path.display()),
-                },
+                Request::Rename { path, name } => {
+                    match bande_fs::rename(&path, &self.full_name(&path, name)) {
+                        Ok(Some(change)) => self.operations.record(Action::Rename, vec![change]),
+                        Ok(None) => {}
+                        Err(error) => tracing::warn!("cannot rename {}: {error:?}", path.display()),
+                    }
+                }
                 Request::NewFolder => match bande_fs::new_folder(&self.desktop_dir) {
                     Ok(change) => {
                         if let Change::Created(path) = &change {
@@ -562,7 +591,7 @@ impl DesktopSurface {
                         tracing::warn!("cannot use the clipboard: {error}");
                     }
                 }
-                Request::Eject(paths) => eject(paths),
+                Request::Eject(paths) => eject(paths, false, |_| {}),
                 Request::SetWallpaper(path) => choose(path),
                 Request::ChangeWallpaper => self.change_wallpaper(window),
                 Request::Undo => {
@@ -839,7 +868,14 @@ impl App for DesktopSurface {
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
-        if !self.watch.take_changed(now).is_empty() {
+        let changes = self.watch.take_changed(now);
+        let settings = config_home().map(|config| config.join(SETTINGS_FOLDER));
+        let elsewhere = changes.folders.iter().chain(&changes.entries).any(|path| {
+            settings
+                .as_ref()
+                .is_none_or(|settings| !path.starts_with(settings))
+        });
+        if elsewhere || (!changes.is_empty() && show_extensions() != self.show_extensions) {
             self.relist();
         }
         self.view.tick(now);
@@ -854,6 +890,20 @@ impl App for DesktopSurface {
     fn accessibility(&self) -> Option<TreeUpdate> {
         Some(self.view.accessibility())
     }
+}
+
+fn show_extensions() -> bool {
+    config_home()
+        .and_then(|config| {
+            std::fs::read_to_string(config.join(SETTINGS_FOLDER).join(FILES_SETTINGS)).ok()
+        })
+        .is_some_and(|text| {
+            text.lines().any(|line| {
+                line.split_once('=').is_some_and(|(key, value)| {
+                    key.trim() == SHOW_EXTENSIONS && value.trim() == "true"
+                })
+            })
+        })
 }
 
 fn draw_wallpaper(key: &WallpaperKey) -> Result<Picture, RenderError> {
@@ -947,6 +997,7 @@ impl DesktopSurface {
             icons: HashMap::new(),
             thumbnails,
             items: Vec::new(),
+            show_extensions: false,
             pictures: HashMap::new(),
             layouts_file,
             bar_edge,

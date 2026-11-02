@@ -135,6 +135,8 @@ pub struct State {
     pub(crate) menu_relay: Option<crate::menu_button::MenuRelay>,
     pub(crate) held_window: Option<crate::grab::HeldWindow>,
     pub(crate) swallowed_button: Option<u32>,
+    pub(crate) virtual_terminal: Option<i32>,
+    pub(crate) desktop_shell: Option<Client>,
     pub(crate) minimize_sequence: u64,
     pub(crate) closing: Vec<Closing>,
     pub(crate) icon_rects: Vec<IconRect>,
@@ -150,6 +152,7 @@ pub struct State {
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
     pub(crate) cursor_status: CursorImageStatus,
+    pub(crate) cursor_owner: Option<ClientId>,
     pub(crate) cursor_theme: CursorTheme,
     cursor_arrow: Cursor,
     named_cursors: HashMap<CursorIcon, Option<Cursor>>,
@@ -209,7 +212,8 @@ impl Compositor {
         crate::menu_button::create_global(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, BandeShellV1, ()>(1, ());
+        handle
+            .create_global::<State, BandeShellV1, ()>(crate::menu_button::SHOW_APP_MENU_SINCE, ());
         handle.create_global::<State, BandeAppV1, ()>(4, ());
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
@@ -273,6 +277,8 @@ impl Compositor {
             menu_relay: None,
             held_window: None,
             swallowed_button: None,
+            virtual_terminal: None,
+            desktop_shell: None,
             minimize_sequence: 0,
             closing: Vec::new(),
             icon_rects: Vec::new(),
@@ -288,6 +294,7 @@ impl Compositor {
             pointer_location: (center.w, center.h).into(),
             cursor_shown: false,
             cursor_status: CursorImageStatus::default_named(),
+            cursor_owner: None,
             cursor_theme: CursorTheme::builtin(),
             cursor_arrow: Cursor {
                 buffer: cursor::arrow(),
@@ -408,11 +415,21 @@ impl Compositor {
                 window.size.is_none() || (state.overview.is_shown() && window.visible())
             })
             .map(|window| window.surface().clone());
+        let cursor = match &state.cursor_status {
+            CursorImageStatus::Surface(surface) => Some(surface.clone()),
+            _ => None,
+        };
+        let drag_icon = state.drag_icon();
+        let pointed = (state.pointer_screen() == screen)
+            .then_some(cursor.into_iter().chain(drag_icon))
+            .into_iter()
+            .flatten();
         let roots = state
             .stack(screen)
             .into_iter()
             .map(|(surface, _)| surface)
             .chain(unmapped)
+            .chain(pointed)
             .collect::<Vec<_>>();
         let latched = &mut state.screens[screen];
         for root in roots {

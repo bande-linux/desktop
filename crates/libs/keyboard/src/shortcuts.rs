@@ -68,6 +68,7 @@ pub enum Action {
     ShowNotificationCenter,
     ShowControlCenter,
     LockScreen,
+    TextConsole,
     ToggleZoom,
     ZoomIn,
     ZoomOut,
@@ -104,7 +105,8 @@ impl Action {
             | Self::SearchMenus
             | Self::ShowNotificationCenter
             | Self::ShowControlCenter
-            | Self::LockScreen => Area::System,
+            | Self::LockScreen
+            | Self::TextConsole => Area::System,
         }
     }
 
@@ -141,6 +143,7 @@ impl Action {
             Self::ShowNotificationCenter => L10N.tr("show-notification-center"),
             Self::ShowControlCenter => L10N.tr("show-control-center"),
             Self::LockScreen => L10N.tr("lock-screen"),
+            Self::TextConsole => L10N.tr("text-console"),
             Self::ToggleZoom => L10N.tr("toggle-zoom"),
             Self::ZoomIn => L10N.tr("zoom-in"),
             Self::ZoomOut => L10N.tr("zoom-out"),
@@ -159,7 +162,7 @@ const fn shortcut(action: Action, keys: &'static str) -> Shortcut {
     Shortcut { action, keys }
 }
 
-pub const SHORTCUTS: [Shortcut; 39] = [
+pub const SHORTCUTS: [Shortcut; 40] = [
     shortcut(Action::CloseWindow, "Alt+F4"),
     shortcut(Action::MinimizeWindow, "Super+H"),
     shortcut(Action::ToggleFullScreen, "Super+F11"),
@@ -195,6 +198,7 @@ pub const SHORTCUTS: [Shortcut; 39] = [
     shortcut(Action::ShowNotificationCenter, "Super+N"),
     shortcut(Action::ShowControlCenter, "Super+S"),
     shortcut(Action::LockScreen, "Super+L"),
+    shortcut(Action::TextConsole, "Ctrl+Alt+F2"),
     shortcut(Action::ToggleZoom, "Alt+Super+8"),
     shortcut(Action::ZoomIn, "Alt+Super+="),
     shortcut(Action::ZoomOut, "Alt+Super+-"),

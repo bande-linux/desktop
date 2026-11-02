@@ -2,7 +2,12 @@ folder = Folder
 trash = Trash
 sidebar-favourites = Favourites
 sidebar-locations = Locations
-empty-folder = Empty folder
+empty-folder = Empty Folder
+trash-empty = The Trash is empty
+recents-empty = Files you open appear here
+no-results = No results for “{ $text }” in { $folder }
+search-home = Search Home
+no-permission = You don’t have permission to see the contents of “{ $folder }”.
 no-selection = No selection
 column-name = Name
 search-placeholder = Search
@@ -17,6 +22,7 @@ item-count = { $count ->
 selected-count = { $selected } of { $count } selected
 status-free = { $items }, { $free } available
 
+info-name = Name & Extension
 info-size = Size
 info-modified = Modified
 info-created = Created
@@ -68,6 +74,37 @@ stop = Stop
 skip = Skip
 replace = Replace
 keep-both = Keep Both
+skip-all = Skip All
+try-again = Try Again
+ok = OK
+internal-disk = Internal
+failure-title = “{ $name }” couldn’t be { $action ->
+    [copy] copied
+    [move] moved
+    [duplicate] duplicated
+    [trash] moved to the Trash
+    [put-back] put back
+    [delete] deleted
+   *[other] changed
+}.
+failure-permission = You don’t have permission.
+failure-read-only = The volume is read-only.
+failure-no-space = The disk is full.
+failure-name-too-long = The name is too long.
+failure-device-gone = The disk was disconnected.
+failure-other = { $error }
+no-space-item = “{ $name }” can’t be { $action ->
+    [move] moved
+    [duplicate] duplicated
+   *[other] copied
+} because “{ $volume }” needs { $size } more space.
+no-space-items = The items can’t be { $action ->
+    [move] moved
+    [duplicate] duplicated
+   *[other] copied
+} because “{ $volume }” needs { $size } more space.
+no-space-detail = Nothing was written. Make room on the disk and try again.
+
 cancel = Cancel
 empty-trash = Empty Trash
 empty-trash-title = Are you sure you want to permanently erase the items in the Trash?
@@ -81,6 +118,16 @@ cannot-undo = You can’t undo this action.
 rename-empty = A name can’t be empty.
 rename-slash = A name can’t contain “/”.
 rename-reserved = The names “.” and “..” are reserved by the system.
+extension-change-title = Are you sure you want to change the extension from “{ $from }” to “{ $to }”?
+extension-add-title = Are you sure you want to add the extension “{ $extension }” to the end of the name?
+extension-remove-title = Are you sure you want to remove the extension “{ $extension }”?
+extension-detail = If you make this change, your document may open in a different app.
+extension-keep = Keep { $extension }
+extension-use = Use { $extension }
+extension-add = Add
+extension-dont-add = Don’t Add
+extension-remove = Remove
+extension-dont-remove = Keep
 rename-exists = The name “{ $name }” is already taken. Please choose a different name.
 error-operation = The operation couldn’t be completed: { $error }
 error-item = “{ $name }” couldn’t be handled: { $error }{ $others ->
@@ -168,6 +215,10 @@ menu-hide-hidden-files = Hide Hidden Files
 menu-empty-trash = Empty Trash…
 menu-remove-from-sidebar = Remove from Sidebar
 menu-eject = Eject
+eject-busy = The disk “{ $name }” wasn’t ejected because one or more programs may be using it.
+eject-busy-detail = To eject the disk immediately, click Force Eject. Programs using it may lose unsaved changes.
+eject-failed = The disk “{ $name }” couldn’t be ejected.
+force-eject = Force Eject
 
 app-name = Files
 menu-file = File
@@ -188,6 +239,8 @@ menu-documents = Documents
 menu-downloads = Downloads
 menu-home = Home
 menu-go-to-folder = Go to Folder…
+menu-recent-folders = Recent Folders
+menu-clear-menu = Clear Menu
 icon-size = Icon size
 menu-open-in-new-tab = Open in New Tab
 menu-new-window = New Window
@@ -232,11 +285,15 @@ settings-general = General
 settings-new-window = New windows show
 settings-home = Home
 settings-current-folder = Current Folder
+settings-last-folder = Last Folder
 settings-default-view = Default view
 settings-show-hidden = Show hidden files
-settings-folders-first = Keep folders on top
-settings-trash = Trash
-settings-warn-empty-trash = Warn before emptying the Trash
+settings-folders-first = Keep folders on top when sorting by name
+settings-sidebar = Show in Sidebar
+settings-external-disks = External disks
+settings-advanced = Advanced
+settings-show-extensions = Show all filename extensions
+settings-warn-extension-change = Show warning before changing an extension
+settings-warn-empty-trash = Show warning before emptying the Trash
 settings-purge-trash = Remove items from the Trash after 30 days
-settings-search = Search
 settings-search-in = Search in

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="bande_shell_v1">
-  <interface name="bande_shell_v1" version="1">
+  <interface name="bande_shell_v1" version="3">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the shell and the screenshot tool), never on the listening socket.
@@ -506,7 +506,24 @@
       <arg name="windowless" type="uint"/>
     </event>
 
-    <event name="show_app_menu">
+    <event name="ping" since="2">
+      <description summary="check that the client still responds">
+        As xdg_wm_base.ping, for shell clients, whose surfaces are not
+        toplevels: the client answers with pong at once. Sent while the user
+        works with the client's surfaces and when Force Quit opens. A client
+        that has not answered after 3 seconds is not responding.
+      </description>
+      <arg name="serial" type="uint"/>
+    </event>
+
+    <request name="pong" since="2">
+      <description summary="answer a ping">
+        Answers the ping event with its serial.
+      </description>
+      <arg name="serial" type="uint"/>
+    </request>
+
+    <event name="show_app_menu" since="3">
       <description summary="open an app's menus under a window's menu button">
         Sent when the user presses the menu button (⋮) of a window, or Super+F2
         while the key window has one. The shell opens the app's menus as a

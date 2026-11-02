@@ -207,10 +207,7 @@ fn load_skin_tone(path: &Path) -> Option<usize> {
 }
 
 fn save_skin_tone(path: &Path, tone: Option<usize>) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, tone.map_or(0, |tone| tone + 1).to_string())
+    bande_xdg::replace_file(path, tone.map_or(0, |tone| tone + 1).to_string())
 }
 
 fn unix_now() -> u64 {

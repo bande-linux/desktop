@@ -17,6 +17,7 @@ use bande_toolkit::{Image, Point, Rect};
 use crate::L10N;
 use crate::browser::{Location, RowEdit};
 use crate::prompt::{Kind, Prompt};
+use crate::tabs::location_title;
 use crate::view::{
     COLUMN_WIDTH, FilesView, PATH_BAR_HEIGHT, ROW_HEIGHT, Rename, Request, SLOW_CLICK_RENAME, Sheet,
 };
@@ -35,7 +36,6 @@ pub(crate) struct Formats {
 const NAME_SIZE: f32 = 13.0;
 const ROW_INSET: f32 = 6.0;
 const NAME_INSET: f32 = 28.0;
-const TABLE_TEXT_INSET: f32 = 6.0 + 16.0 + 6.0;
 const FIELD_INSET: f32 = 3.0;
 pub(crate) const SLIDER_WIDTH: f32 = 96.0;
 
@@ -312,6 +312,7 @@ impl FilesView {
             Some(self.toolbar.view),
             Some(self.toolbar.search),
             self.size_slider,
+            self.search_home_button,
         ]
         .into_iter()
         .flatten()
@@ -691,7 +692,11 @@ impl FilesView {
             .map(|time| cached_date(time, formats))
             .unwrap_or_default();
         let mut cells = Vec::with_capacity(self.list_columns.len() + 2);
-        cells.push(Cell::new(entry.name.as_str()).icon(icon).cut_in_middle());
+        let name = match self.renaming() == Some(entry.path.as_path()) {
+            true => "",
+            false => self.shown_name(entry),
+        };
+        cells.push(Cell::new(name).icon(icon).cut_in_middle());
         for column in &self.list_columns {
             let text = match column {
                 ListColumn::Modified => modified.clone(),
@@ -880,14 +885,13 @@ impl FilesView {
                 .entries
                 .iter()
                 .position(|entry| entry.path == path);
-            let Some(name) = row.and_then(|row| self.shown_table()?.cell_bounds(row, 0)) else {
+            let Some(name) = row.and_then(|row| self.shown_table()?.text_bounds(row, 0)) else {
                 return Rect::default();
             };
-            let x = name.x + TABLE_TEXT_INSET - FIELD_INSET;
             return Rect::new(
-                x,
+                name.x - FIELD_INSET,
                 name.y + 2.0,
-                (name.x + name.width - x - 4.0).max(0.0),
+                name.width + FIELD_INSET,
                 ROW_HEIGHT - 4.0,
             );
         }
@@ -941,10 +945,16 @@ impl FilesView {
                 ),
             )
         });
+        let search_home = self.search_home_frame(self.empty_area());
         let table_id = self.table;
         if let Some(host) = self.host_mut() {
             host.set_frame(table_id, table);
-            for (id, frame) in search.into_iter().chain(rename).chain(slider) {
+            for (id, frame) in search
+                .into_iter()
+                .chain(rename)
+                .chain(slider)
+                .chain(search_home)
+            {
                 host.set_frame(id, frame);
             }
         }
@@ -961,12 +971,27 @@ impl FilesView {
         let Some(entry) = self.browser.selected() else {
             return;
         };
-        let (path, name, folder) = (entry.path.clone(), entry.name.clone(), entry.is_folder());
+        let (path, folder) = (entry.path.clone(), entry.is_folder());
+        let shown = self.shown_name(entry).to_owned();
+        let hidden_extension = self
+            .hidden_extension(&entry.name, folder)
+            .map(str::to_owned);
         self.cancel_rename();
-        let mut field = TextField::new("", &name, |_| {}).in_place(NAME_SIZE);
-        field.select(0..stem_end(&name, folder));
+        let mut field = TextField::new("", &shown, |_| {})
+            .in_place(NAME_SIZE)
+            .padding(FIELD_INSET);
+        field.select(match hidden_extension {
+            Some(_) => 0..shown.len(),
+            None => 0..stem_end(&shown, folder),
+        });
         let field = self.insert(field);
-        self.rename = Some(Rename { path, field });
+        self.rename = Some(Rename {
+            path: path.clone(),
+            field,
+            hidden_extension,
+            folder,
+        });
+        self.refill_table_row(&path);
         self.focus(field);
         self.ui
             .layout(Size::new(self.size.0.max(1.0), self.size.1.max(1.0)));
@@ -975,11 +1000,30 @@ impl FilesView {
     pub(crate) fn cancel_rename(&mut self) {
         if let Some(rename) = self.rename.take() {
             self.remove(rename.field);
+            self.refill_table_row(&rename.path);
             self.focus_content();
         }
     }
 
+    fn refill_table_row(&mut self, path: &Path) {
+        let column = &self.browser.columns()[0];
+        if self.mode != ViewMode::List || column.is_nested() {
+            return;
+        }
+        let Some(row) = column.entries.iter().position(|entry| entry.path == path) else {
+            return;
+        };
+        let built = self.table_rows([row]);
+        if let Some(((index, built), table)) = built.into_iter().next().zip(self.table()) {
+            table.fill_row(index, built);
+        }
+    }
+
     pub(crate) fn commit_rename(&mut self) {
+        self.finish_rename(true);
+    }
+
+    fn finish_rename(&mut self, ask: bool) {
         let Some(rename) = self.rename.take() else {
             return;
         };
@@ -988,9 +1032,10 @@ impl FilesView {
             .widget_as::<TextField>(rename.field)
             .map(|field| field.text().to_owned());
         self.remove(rename.field);
+        self.refill_table_row(&rename.path);
         self.focus_content();
         if let Some(name) = name {
-            self.rename_to(&rename.path, &name);
+            self.rename_checked(rename, name, ask);
         }
     }
 
@@ -1037,7 +1082,63 @@ impl FilesView {
             )
             .cancel(&L10N.tr("cancel"), "cancel")
             .primary(&L10N.tr("delete"), "confirm"),
-            Sheet::Conflict { .. } | Sheet::GoTo(_) | Sheet::OpenWith(_) | Sheet::Rename(_) => {
+            Sheet::ChangeExtension { from, to, .. } => {
+                let quoted = |extension: &Option<String>| extension.clone().unwrap_or_default();
+                let (title, keep, change) = match (from, to) {
+                    (Some(_), Some(_)) => (
+                        L10N.tr_args(
+                            "extension-change-title",
+                            [("from", quoted(from).into()), ("to", quoted(to).into())],
+                        ),
+                        L10N.tr_args("extension-keep", [("extension", quoted(from).into())]),
+                        L10N.tr_args("extension-use", [("extension", quoted(to).into())]),
+                    ),
+                    (None, _) => (
+                        L10N.tr_args("extension-add-title", [("extension", quoted(to).into())]),
+                        L10N.tr("extension-dont-add"),
+                        L10N.tr("extension-add"),
+                    ),
+                    (Some(_), None) => (
+                        L10N.tr_args(
+                            "extension-remove-title",
+                            [("extension", quoted(from).into())],
+                        ),
+                        L10N.tr("extension-dont-remove"),
+                        L10N.tr("extension-remove"),
+                    ),
+                };
+                Alert::new(&title, &L10N.tr("extension-detail"), choose)
+                    .cancel(&keep, "cancel")
+                    .primary(&change, "confirm")
+            }
+            Sheet::EjectFailed {
+                volume,
+                busy,
+                message,
+            } => {
+                let name = location_title(&Location::Folder(volume.clone()));
+                match busy {
+                    true => Alert::new(
+                        &L10N.tr_args("eject-busy", [("name", name.into())]),
+                        &L10N.tr("eject-busy-detail"),
+                        choose,
+                    )
+                    .other(&L10N.tr("force-eject"), "force")
+                    .primary(&L10N.tr("ok"), "ok"),
+                    false => Alert::new(
+                        &L10N.tr_args("eject-failed", [("name", name.into())]),
+                        message,
+                        choose,
+                    )
+                    .primary(&L10N.tr("ok"), "ok"),
+                }
+            }
+            Sheet::Conflict { .. }
+            | Sheet::Failure
+            | Sheet::NoSpace
+            | Sheet::GoTo(_)
+            | Sheet::OpenWith(_)
+            | Sheet::Rename(_) => {
                 return;
             }
         };
@@ -1050,7 +1151,7 @@ impl FilesView {
         sheet: Sheet,
         cancel: Option<WidgetId>,
     ) {
-        self.commit_rename();
+        self.finish_rename(false);
         self.quick_look = None;
         self.ui.present_sheet(widget);
         self.ui

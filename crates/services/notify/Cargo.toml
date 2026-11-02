@@ -32,6 +32,7 @@ assets = [
     ["target/release/bande-notify", "usr/bin/", "755"],
     ["data/org.bande.Notify.service", "usr/share/dbus-1/services/", "644"],
     ["data/org.bande.NotificationCenter.service", "usr/share/dbus-1/services/", "644"],
+    ["data/bande-notify.service", "usr/lib/systemd/user/", "644"],
 ]
 
 [lints]

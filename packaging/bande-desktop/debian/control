@@ -74,7 +74,11 @@ Description: Bande desktop environment
  compressed swap in memory (zram, sized like Fedora's and compressed with
  zstd) and systemd-oomd, and makes the apps' slice the place where
  systemd-oomd closes an app when memory stays under pressure, so the
- compositor and the session services keep running.
+ compositor and the session services keep running. It keeps up to 640 MB
+ of the session (compositor, shell and session services) out of reclaim,
+ through MemoryLow on user.slice, user-*.slice and user@.service, so the
+ screen stays responsive while apps thrash, and caps all apps together at
+ a quarter of the system's task limit.
  .
  Updates install while the computer runs. needrestart, which it
  recommends, restarts the system services an update replaced, except the

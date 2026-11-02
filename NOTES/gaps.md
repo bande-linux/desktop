@@ -14,9 +14,6 @@ Status: started. Layouts and languages work in Settings. Left: input methods (fc
 the software update doesnt seem to work.
 Status: started. Live updates with offline install only for reboot-class packages are built. Left: the owner runs one update on the mini with no reboot-class package (installs with no restart, only "Quit and reopen …"; `sudo needrestart -b` lists no stale services; `journalctl -u packagekit` shows needrestart's hook ran without prompting), and one offline update end to end (Restart, `journalctl -b -u packagekit-offline-update`).
 
-Files has no "settings" (and other inhouse apps who needs it), for example i want to show file extensions
-Status: started. Files ▸ Settings… is built. Left: a Sidebar section, and "Last Folder" as a new-window choice (Files keeps no record of the last folder shown).
-
 we have no swap (granted this is not an official installation of debian) and it may not be up to bande-desktop, but quickly review how that should work and if we should do anything or if that is soley up to the debian installer
 Status: started. Kernel (PSI, zram) and image packages are merged; no disk swap by decision. Left: the owner installs the new kernel on the mini, `sudo apt install systemd-oomd`, upgrades `bande-desktop` and reboots.
 

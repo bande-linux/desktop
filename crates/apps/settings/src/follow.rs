@@ -8,6 +8,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
+use bande_keyboard::Layouts;
 use bande_toolkit::SessionEnd;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -62,6 +63,7 @@ pub enum Update {
     NotificationApps(Vec<AppNotifications>),
     Software(SoftwareState),
     Locale(Option<LocaleState>),
+    Layouts(Layouts),
     Pointing(PointingDevices),
     InputLevel(f32),
     Failed(Option<SettingId>, String),
@@ -326,6 +328,10 @@ impl Services {
     pub fn start(session: &Connection, system: Option<&Connection>, updates: &Updates) -> Self {
         follow_config(session, updates.clone());
         follow_notifications(session, updates.clone());
+        let layouts = updates.clone();
+        spawn("layouts", move || {
+            layouts.send(Update::Layouts(Layouts::load()));
+        });
         if let Some(system) = system {
             follow_privileges(system, updates.clone());
         }

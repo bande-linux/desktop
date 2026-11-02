@@ -100,8 +100,14 @@ pub fn views_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
     state_file(state_home, home, "files-views")
 }
 
+pub const SIDEBAR_FILE: &str = "files-sidebar";
+
+pub fn recent_folders_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
+    state_file(state_home, home, "files-recent-folders")
+}
+
 pub fn sidebar_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
-    state_file(state_home, home, "files-sidebar")
+    state_file(state_home, home, SIDEBAR_FILE)
 }
 
 pub fn list_columns_file(state_home: Option<&Path>, home: &Path) -> PathBuf {

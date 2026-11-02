@@ -74,6 +74,16 @@ where `swappiness=180` is wrong.
   `rustc` at adj 0 that caused it lived: at 200, a 10 MB service scores about 196k pages
   against 119k for the build. At 100 it scores about 98k, below any process over about 1.5 GB.
   Once the session bus is gone, no session service or app reconnects.
+- The session's memory is protected from reclaim, so the screen and the shell stay responsive
+  while apps thrash: `MemoryLow=512M` on `bande-compositor.service` and `640M` on
+  `session.slice`, and `640M` on `user.slice`, `user-.slice` and `user@.service` from
+  `bande-desktop`'s system drop-ins, because a cgroup's protection is capped by its parent's.
+  `MemoryLow` is best effort, not a reservation: unused protection stays free for apps, and
+  under extreme pressure the kernel still reclaims it rather than kill. Those drop-ins also
+  protect a logged-in user who is not at the screen, which with no fast user switching is only
+  the login window's user; 640M is small next to the RAM of any machine Bande runs on.
+- The session bus, PipeWire, WirePlumber and the portal also get `ManagedOOMPreference=avoid`,
+  so Debian's backstop on `user@.service` passes them over while an app remains.
 - Swap kill stays off (`ManagedOOMSwap=auto`, Debian's default), for the reason Ubuntu found.
 - No `oomd.conf` drop-in: Debian already sets `DefaultMemoryPressureDurationSec=20s`, and the
   per-unit limit above is the only threshold we change.
@@ -127,9 +137,8 @@ background task was stopped because memory ran low", naming the unit.
 - **`min_ttl_ms` by default.** The MGLRU knob makes the kernel kill rather than thrash, but the
   kernel OOM killer picks by size, not by app. Behind oomd it is a second, cruder killer.
   Revisit if oomd turns out too slow on low-RAM machines.
-- **A system-wide `MemoryLow` for `user@.service`** (what uresourced does dynamically). A static
-  value would protect every logged-in user, including inactive ones. Without uresourced in
-  Debian, there is no active-seat tracking to do it right.
+- **uresourced** (protection moved to the active user as seats change). It is not in Debian,
+  and with one person at the screen the static values above do the same.
 - **Pausing apps (SIGSTOP) like macOS.** Wayland clients that stop answering pings are shown as
   hung, and a stopped app holds its memory. The user chooses in the window instead.
 

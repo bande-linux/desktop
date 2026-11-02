@@ -97,6 +97,8 @@ pub(crate) struct Input {
     pub(crate) serial: Option<u32>,
     pointer_elsewhere: bool,
     keyboard_elsewhere: bool,
+    keyboard_here: bool,
+    focused: bool,
 }
 
 impl Input {
@@ -268,11 +270,6 @@ impl Input {
         self.shown_cursor = Some(self.cursor);
     }
 
-    pub(crate) fn forget_popups(&mut self) {
-        self.pointer_popup = None;
-        self.keyboard_popup = None;
-    }
-
     pub(crate) fn set_cursor(&mut self, cursor: Cursor) {
         self.cursor = cursor;
         self.show_cursor();
@@ -316,6 +313,29 @@ impl Window {
 }
 
 impl State {
+    pub(crate) fn forget_popups(&mut self) {
+        self.popup_surfaces.clear();
+        self.input.pointer_popup = None;
+        self.input.keyboard_popup = None;
+        if !self.input.keyboard_here {
+            self.lose_focus();
+        }
+    }
+
+    fn lose_focus(&mut self) {
+        if std::mem::take(&mut self.input.focused) {
+            self.events.push(WindowEvent::Focus(false));
+        }
+    }
+
+    fn release_modifiers(&mut self) {
+        if std::mem::take(&mut self.input.modifiers) != Modifiers::default() {
+            self.events.push(WindowEvent::Input(Event::ModifiersChanged(
+                Modifiers::default(),
+            )));
+        }
+    }
+
     fn pointer_event(&mut self, event: Event) {
         match self.input.pointer_popup {
             Some(level) => self.popup_input.push((level, event)),
@@ -588,15 +608,19 @@ impl Dispatch<WlKeyboard, ()> for State {
                 let input = &mut state.input;
                 input.serial = Some(serial);
                 input.keyboard_popup = popup;
+                input.keyboard_here = true;
                 if popup.is_none() {
+                    input.focused = true;
                     state.events.push(WindowEvent::Focus(true));
                 }
             }
             wl_keyboard::Event::Leave { surface, .. } => {
                 input.repeat = None;
+                input.keyboard_here = false;
+                state.release_modifiers();
                 let menu_open = !state.popup_surfaces.is_empty();
                 if state.popup_level(&surface).is_none() && !menu_open {
-                    state.events.push(WindowEvent::Focus(false));
+                    state.lose_focus();
                 }
             }
             wl_keyboard::Event::Modifiers {

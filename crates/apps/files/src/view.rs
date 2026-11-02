@@ -8,8 +8,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
 
 use bande_fs::{
-    Action, Answer, Change, Entry, Finished, FolderChanges, FolderWatch, Operations, Purpose,
-    RenameError, Resolution, Sort, Step, Task, TrashItem, archive_path, can_extract,
+    Action, Answer, Change, Entry, Finished, FolderChanges, FolderWatch, History, Operations,
+    Purpose, RenameError, Resolution, Sort, Step, Task, TrashItem, archive_path, can_extract,
 };
 use bande_preview::Preview;
 use bande_search::{Usage, recent_files};
@@ -19,7 +19,7 @@ use bande_toolkit::ui::{
     PointerButton, Scroll, ScrollState, Slider, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem};
-use bande_volumes::mounted_volumes;
+use bande_volumes::{EjectFailure, mounted_volumes};
 use bande_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
 use crate::L10N;
@@ -31,7 +31,7 @@ use crate::loader::{Loaded, Loader};
 use crate::quick_look::QuickLook;
 use crate::search::{Index, SEARCH_HEIGHT, Searching};
 use crate::settings::FilesSettings;
-use crate::sidebar::{Place, PlaceKind, Row, SidebarEdit, with_volumes};
+use crate::sidebar::{Row, SidebarEdit, with_volumes};
 use crate::tabs::{Tab, location_title};
 use crate::thumbs::Thumbs;
 use crate::toolbar::{TOOLBAR_HEIGHT, Toolbar};
@@ -91,6 +91,8 @@ pub struct Info {
 pub struct Rename {
     pub path: PathBuf,
     pub(crate) field: WidgetId,
+    pub(crate) hidden_extension: Option<String>,
+    pub(crate) folder: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,9 +101,23 @@ pub enum Sheet {
         apply_to_all: bool,
     },
     EmptyTrash,
+    Failure,
+    NoSpace,
     DeleteImmediately {
         paths: Vec<PathBuf>,
         items: Vec<TrashItem>,
+    },
+    EjectFailed {
+        volume: PathBuf,
+        busy: bool,
+        message: String,
+    },
+    ChangeExtension {
+        path: PathBuf,
+        name: String,
+        kept: String,
+        from: Option<String>,
+        to: Option<String>,
     },
     GoTo(String),
     OpenWith(crate::open_with::OpenWith),
@@ -152,6 +168,7 @@ pub enum Request {
     },
     EditSidebar(SidebarEdit),
     Eject(PathBuf),
+    ForceEject(PathBuf),
     NewWindow,
     OpenTerminal(PathBuf),
     ShowEmojiPicker,
@@ -202,12 +219,15 @@ pub struct FilesView {
     pub(crate) hover: Option<Hit>,
     pub(crate) searching: Option<Searching>,
     pub(crate) index: Option<Index>,
+    pub(crate) search_home_button: Option<WidgetId>,
     pub(crate) toolbar: Toolbar,
     pub(crate) sheet_inset: f32,
     recents: Option<(PathBuf, PathBuf)>,
     pub(crate) search_excluded: Vec<PathBuf>,
     pub(crate) menu_place: Option<usize>,
     pub(crate) hidden_places: Vec<Location>,
+    volumes_shown: bool,
+    mounted: Vec<PathBuf>,
     media: Vec<PathBuf>,
     pub(crate) favourites: Vec<Row>,
     watch: FolderWatch,
@@ -216,6 +236,8 @@ pub struct FilesView {
     pub(crate) mode: ViewMode,
     pub(crate) icon_size: u32,
     pub(crate) show_hidden: bool,
+    pub(crate) show_extensions: bool,
+    warn_extension_change: bool,
     pub(crate) folders_first: bool,
     warn_empty_trash: bool,
     pub(crate) search_home: bool,
@@ -281,7 +303,7 @@ impl FilesView {
         text: TextSystem,
     ) -> io::Result<Self> {
         let icons = Icons::new(apps.data_dirs().to_vec());
-        let operations = Operations::new(browser.trash().clone());
+        let operations = Operations::asking(browser.trash().clone());
         let signals: Signals = Rc::new(RefCell::new(Vec::new()));
         let mut host = FreeLayout::new();
         let table = crate::controls::table(&signals);
@@ -331,12 +353,15 @@ impl FilesView {
             hover: None,
             searching: None,
             index: None,
+            search_home_button: None,
             toolbar: Toolbar::default(),
             sheet_inset: SHEET_INSET as f32,
             recents: None,
             search_excluded: Vec::new(),
             menu_place: None,
             hidden_places: Vec::new(),
+            volumes_shown: true,
+            mounted: Vec::new(),
             media: Vec::new(),
             favourites: Vec::new(),
             watch: FolderWatch::new()?,
@@ -345,6 +370,8 @@ impl FilesView {
             mode: ViewMode::default(),
             icon_size: DEFAULT_ICON_SIZE,
             show_hidden: false,
+            show_extensions: false,
+            warn_extension_change: true,
             folders_first: true,
             warn_empty_trash: true,
             search_home: false,
@@ -372,14 +399,15 @@ impl FilesView {
         Ok(view)
     }
 
-    pub fn set_hidden_places(&mut self, hidden: Vec<Location>) {
+    pub fn set_hidden_places(&mut self, hidden: Vec<Location>, volumes_shown: bool) {
         self.hidden_places = hidden;
+        self.volumes_shown = volumes_shown;
         let favourites = std::mem::take(&mut self.favourites);
         self.set_sidebar(favourites);
     }
 
     pub fn set_sidebar(&mut self, sidebar: Vec<Row>) {
-        self.sidebar = self.with_volumes(&sidebar, &self.volumes());
+        self.sidebar = self.with_volumes(&sidebar, &self.mounted);
         self.favourites = sidebar;
         self.menu_place = None;
     }
@@ -394,36 +422,23 @@ impl FilesView {
         let shown = volumes
             .iter()
             .filter(|volume| {
-                !self
-                    .hidden_places
-                    .contains(&Location::Folder((*volume).clone()))
+                self.volumes_shown
+                    && !self
+                        .hidden_places
+                        .contains(&Location::Folder((*volume).clone()))
             })
             .cloned()
             .collect::<Vec<_>>();
         with_volumes(sidebar, &shown)
     }
 
-    fn volumes(&self) -> Vec<PathBuf> {
-        self.sidebar
-            .iter()
-            .filter_map(|row| match row {
-                Row::Place(Place {
-                    kind: PlaceKind::Volume,
-                    location: Location::Folder(path),
-                    ..
-                }) => Some(path.clone()),
-                _ => None,
-            })
-            .collect()
-    }
-
     fn refresh_volumes(&mut self) {
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
         let volumes = mounted_volumes(&mountinfo, &self.media);
-        let previous = self.volumes();
-        if volumes == previous {
+        if volumes == self.mounted {
             return;
         }
+        let previous = std::mem::replace(&mut self.mounted, volumes.clone());
         self.sidebar = self.with_volumes(&self.favourites, &volumes);
         self.menu_place = None;
         let gone = previous.iter().any(|volume| {
@@ -453,11 +468,11 @@ impl FilesView {
             return;
         };
         if let Some(volume) = self
-            .volumes()
-            .into_iter()
+            .mounted
+            .iter()
             .find(|volume| folder.starts_with(volume))
         {
-            self.requests.push(Request::Eject(volume));
+            self.requests.push(Request::Eject(volume.clone()));
         }
     }
 
@@ -715,8 +730,12 @@ impl FilesView {
                     true
                 }
                 None => {
-                    if self.operations.conflict().is_some() && self.sheet.is_none() {
-                        self.present_conflict();
+                    if self.sheet.is_none() {
+                        if self.operations.conflict().is_some() {
+                            self.present_conflict();
+                        } else if self.operations.failure().is_some() {
+                            self.present_failure();
+                        }
                     }
                     true
                 }
@@ -893,6 +912,7 @@ impl FilesView {
             }
         }
         self.keep_selection_visible();
+        self.sync_search_home();
         self.sync_table();
     }
 
@@ -1352,7 +1372,7 @@ impl FilesView {
         true
     }
 
-    pub(crate) fn go(&mut self, location: Location) {
+    pub fn go(&mut self, location: Location) {
         self.commit_rename();
         self.end_search();
         self.browser.go(location);
@@ -1425,10 +1445,22 @@ impl FilesView {
                     self.present_conflict();
                 }
             }
+            Sheet::Failure => {
+                self.answer_failure(action);
+                if self.operations.failure().is_some() {
+                    self.present_failure();
+                }
+            }
             Sheet::GoTo(typed) if action == "go" => self.go_to(&typed),
             Sheet::OpenWith(open_with) if action == "open" => self.open_with_chosen_app(open_with),
             Sheet::Rename(state) if action == "rename" => self.apply_batch_rename(state),
             Sheet::EmptyTrash if action == "confirm" => self.empty_trash(),
+            Sheet::EjectFailed { volume, .. } if action == "force" => {
+                self.requests.push(Request::ForceEject(volume));
+            }
+            Sheet::ChangeExtension {
+                path, name, kept, ..
+            } => self.rename_to(&path, if action == "confirm" { &name } else { &kept }),
             Sheet::DeleteImmediately { paths, items } if action == "confirm" => {
                 if !paths.is_empty() {
                     self.start(Task::Delete { sources: paths }, Purpose::Erase);
@@ -1463,6 +1495,9 @@ impl FilesView {
             Key::Escape => self.cancel_rename(),
             Key::Tab => {
                 self.commit_rename();
+                if self.sheet.is_some() {
+                    return true;
+                }
                 if modifiers.shift {
                     self.browser.up();
                 } else {
@@ -1492,12 +1527,12 @@ impl FilesView {
         let found = column
             .entries
             .iter()
-            .position(|entry| entry.name.to_lowercase().starts_with(&typed))
+            .position(|entry| self.shown_name(entry).to_lowercase().starts_with(&typed))
             .or_else(|| {
                 column
                     .entries
                     .iter()
-                    .position(|entry| entry.name.to_lowercase() >= typed)
+                    .position(|entry| self.shown_name(entry).to_lowercase() >= typed)
             });
         if let Some(row) = found {
             self.browser.select(self.browser.active(), row);
@@ -1644,7 +1679,15 @@ impl FilesView {
 
     pub fn apply_settings(&mut self, settings: &FilesSettings) {
         self.warn_empty_trash = settings.warn_empty_trash;
+        self.warn_extension_change = settings.warn_extension_change;
         self.search_home = settings.search_home;
+        if settings.show_extensions != self.show_extensions {
+            self.show_extensions = settings.show_extensions;
+            self.cancel_rename();
+            self.table_synced = None;
+            self.sync_table();
+            self.selection_changed();
+        }
         if settings.folders_first != self.folders_first {
             self.folders_first = settings.folders_first;
             self.browser.set_folders_first(self.folders_first);
@@ -1848,6 +1891,62 @@ impl FilesView {
         }
     }
 
+    pub fn present_eject_failure(&mut self, failure: EjectFailure) {
+        self.present(Sheet::EjectFailed {
+            volume: failure.mount_point,
+            busy: failure.busy,
+            message: failure.message,
+        });
+    }
+
+    pub(crate) fn hidden_extension<'a>(&self, name: &'a str, folder: bool) -> Option<&'a str> {
+        match self.show_extensions || folder {
+            true => None,
+            false => self.apps.extension(name),
+        }
+    }
+
+    pub(crate) fn shown_name<'a>(&self, entry: &'a Entry) -> &'a str {
+        let hidden = self.hidden_extension(&entry.name, entry.is_folder());
+        &entry.name[..entry.name.len() - hidden.map_or(0, str::len)]
+    }
+
+    pub(crate) fn rename_checked(&mut self, rename: Rename, typed: String, ask: bool) {
+        let name = match &rename.hidden_extension {
+            Some(extension) if !typed.is_empty() && self.apps.extension(&typed).is_none() => {
+                format!("{typed}{extension}")
+            }
+            _ => typed,
+        };
+        let extension = |name: &str| {
+            Path::new(name)
+                .extension()
+                .map(|extension| format!(".{}", extension.to_string_lossy()))
+        };
+        let old = rename
+            .path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let (from, to) = (extension(&old), extension(&name));
+        if !ask || rename.folder || !self.warn_extension_change || from == to {
+            self.rename_to(&rename.path, &name);
+            return;
+        }
+        let stem = Path::new(&name)
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let kept = format!("{stem}{}", from.as_deref().unwrap_or_default());
+        self.present(Sheet::ChangeExtension {
+            path: rename.path,
+            name,
+            kept,
+            from,
+            to,
+        });
+    }
+
     pub(crate) fn rename_to(&mut self, path: &Path, name: &str) {
         match bande_fs::rename(path, name) {
             Ok(Some(change)) => {
@@ -2008,13 +2107,19 @@ impl FilesView {
     }
 
     pub fn undo_title(&self) -> Option<String> {
-        let step = self.operations.history().next_undo()?;
+        let history = self.operations.history();
+        let step = history.next_undo()?;
         Some(L10N.tr_args("menu-undo-action", [("action", step_title(step).into())]))
     }
 
     pub fn redo_title(&self) -> Option<String> {
-        let step = self.operations.history().next_redo()?;
+        let history = self.operations.history();
+        let step = history.next_redo()?;
         Some(L10N.tr_args("menu-redo-action", [("action", step_title(step).into())]))
+    }
+
+    pub fn share_history(&mut self, history: Rc<RefCell<History>>) {
+        self.operations.share_history(history);
     }
 
     pub(crate) fn copy_paths(&mut self) {
@@ -2147,11 +2252,18 @@ impl FilesView {
                 ],
             ));
         }
-        if matches!(self.sheet, Some(Sheet::Conflict { .. }))
+        if matches!(self.sheet, Some(Sheet::Conflict { .. } | Sheet::Failure))
             && self.operations.conflict().is_none()
+            && self.operations.failure().is_none()
         {
             self.dismiss_sheet();
         }
+        if let Some(shortfall) = &outcome.shortfall
+            && self.sheet.is_none()
+        {
+            self.present_shortfall(finished.purpose, shortfall);
+        }
+
         let shown = outcome
             .changes
             .iter()

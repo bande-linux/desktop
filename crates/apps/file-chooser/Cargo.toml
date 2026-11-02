@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 tracing.workspace = true
+bande-app-settings.workspace = true
 bande-files.workspace = true
 bande-fs.workspace = true
 bande-l10n.workspace = true

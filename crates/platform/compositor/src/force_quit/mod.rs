@@ -1,6 +1,7 @@
 mod kill;
 mod view;
 
+use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 use accesskit::{ActionHandler, ActionRequest, ActivationHandler, DeactivationHandler, TreeUpdate};
@@ -22,7 +23,7 @@ use smithay::reexports::wayland_server::{Client, Resource};
 use smithay::utils::{Logical, Point, Rectangle, Size};
 
 pub(crate) use self::kill::Process;
-use self::view::{CONTENT, Effect, ForceQuitView, Listed};
+use self::view::{CONTENT, Effect, ForceQuitView, Listed, SHELL_KEY};
 use crate::L10N;
 use crate::shell::toplevel_names;
 use crate::state::{ClientState, Compositor, OutputElement, State};
@@ -175,6 +176,18 @@ fn window_scene(content: Vec<Item>, palette: &Palette) -> Scene {
     }
 }
 
+fn relaunch_shell(client: &Client) {
+    let Some(process) = client
+        .get_data::<ClientState>()
+        .and_then(|state| state.process.as_ref())
+    else {
+        return;
+    };
+    if let Err(error) = process.force_quit(&[]) {
+        tracing::warn!("cannot end the shell to start it again: {error}");
+    }
+}
+
 impl State {
     fn force_quit_appearance(&self) -> Appearance {
         Appearance {
@@ -231,6 +244,18 @@ impl State {
                 }),
             }
         }
+        if let Some(shell) = self.desktop_shell.clone().filter(|shell| {
+            shell
+                .get_data::<ClientState>()
+                .is_some_and(|state| !state.departed.load(Ordering::Relaxed))
+        }) {
+            found.push(Candidate {
+                key: SHELL_KEY.to_owned(),
+                app_id: String::new(),
+                title: String::new(),
+                clients: vec![shell],
+            });
+        }
         found
     }
 
@@ -242,9 +267,10 @@ impl State {
             .into_iter()
             .map(|candidate| {
                 let app = self.switcher.app(&candidate.app_id, &candidate.title);
-                let name = match app.name.is_empty() {
-                    false => app.name,
-                    true => candidate
+                let name = match (candidate.key == SHELL_KEY, app.name.is_empty()) {
+                    (true, _) => L10N.tr("force-quit-shell"),
+                    (false, false) => app.name,
+                    (false, true) => candidate
                         .clients
                         .iter()
                         .find_map(|client| {
@@ -362,6 +388,10 @@ impl State {
             .into_iter()
             .filter(|candidate| keys.contains(&candidate.key))
         {
+            if candidate.key == SHELL_KEY {
+                candidate.clients.iter().for_each(relaunch_shell);
+                continue;
+            }
             let ids = self.app_ids(&candidate.app_id);
             for client in &candidate.clients {
                 self.kill_client(client, &ids);

@@ -332,6 +332,7 @@ impl State {
             layer.layer_surface().send_close();
         }
         removed.retire(&self.display_handle);
+        self.stop_captures_of_lost_targets();
         for index in 0..self.windows.len() {
             let workspace = self.windows[index].workspace;
             if workspace == shown {

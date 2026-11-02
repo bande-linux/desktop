@@ -419,8 +419,7 @@ impl Menus {
     }
 
     pub(crate) fn destroy(self, state: &mut State) {
-        state.popup_surfaces.clear();
-        state.input.forget_popups();
+        state.forget_popups();
         for popup in self.popups.into_iter().rev() {
             popup.destroy();
         }
@@ -432,8 +431,7 @@ impl Menus {
         handle: &QueueHandle<State>,
         now: Instant,
     ) -> Fading {
-        state.popup_surfaces.clear();
-        state.input.forget_popups();
+        state.forget_popups();
         let mut ghosts = Vec::new();
         let mut origin = (0, 0);
         for popup in &self.popups {

@@ -17,6 +17,7 @@ use crate::shell::toplevel_names;
 use crate::state::{MENU_BAR_NAMESPACE, State};
 
 const MENU_BUTTON_SINCE: u32 = 4;
+pub(crate) const SHOW_APP_MENU_SINCE: u32 = 3;
 const APPMENU_VERSION: u32 = 2;
 
 #[derive(Default)]
@@ -85,7 +86,9 @@ impl State {
     fn shells_of(&self, surface: &WlSurface) -> Vec<BandeShellV1> {
         self.shell_resources
             .iter()
-            .filter(|shell| shell.client() == surface.client())
+            .filter(|shell| {
+                shell.client() == surface.client() && shell.version() >= SHOW_APP_MENU_SINCE
+            })
             .cloned()
             .collect()
     }

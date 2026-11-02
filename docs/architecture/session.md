@@ -425,17 +425,51 @@ prompts (they are answered in the secure field), and power and accessibility men
 
 ## Crash handling and supervision
 
-- **Supervision**: the compositor restarts the shell clients and the clipboard daemon it started
-  when they exit, at most once every 10 seconds, and keeps the session locked if the lock screen
-  dies. A crash of the shell takes the bar, the desktop, the notifications, Control Center and
-  the launcher away for a moment but never the session or its apps; the notifications live in
-  `bande-notify` and reappear with the shell. Session services run under systemd user units with
-  `Restart=on-failure`.
-- **Watchdog**: `bande-compositor.service` has `WatchdogSec=20s` and the compositor's event loop
-  pings it, so a hung compositor is killed and the session ends instead of freezing the screen.
-- **Memory**: the compositor and the session bus, PipeWire, WirePlumber and the portal sit at the
-  OOM floor while apps run in their own scopes where systemd-oomd picks them first
-  ([decision 0004](../decisions/0004-memory-pressure.md)).
+Every failure is meant to end in a working desktop without a reboot. What happens for each:
+
+- **An app hangs**: Force Quit (`Ctrl+Alt+Escape`, in the compositor, so it works while the shell
+  hangs, an app holds a popup grab, locks the pointer (released while Force Quit is open) or
+  inhibits shortcuts) marks it Not Responding after a 3 s
+  `xdg_wm_base` ping and kills its whole scope ([behaviour](behaviour.md)).
+- **The shell crashes or hangs**: the compositor restarts the shell clients and the clipboard
+  daemon it started when they exit, at most once every 10 seconds. A crash of the shell takes
+  the bar, the desktop, Control Center and the launcher away for a moment but never the session
+  or its apps; notifications live in `bande-notify` and reappear with the shell. Shell clients
+  answer `bande_shell_v1.ping`, so a hung shell shows in Force Quit as "Taskbar & Desktop (Not
+  Responding)" with Relaunch, as macOS lists the Finder; Relaunch kills it and the supervisor
+  starts it again. The lock screen is supervised too: the session stays locked if it dies, and
+  one that has not answered a ping for 10 s while locked is killed and started again.
+- **The compositor crashes or hangs**: `bande-compositor.service` has `WatchdogSec=20s` and the
+  compositor's event loop pings it, so a hung compositor is aborted (then killed after
+  `TimeoutAbortSec=10s`); a crash or abort ends the session and greetd shows the login window,
+  as a WindowServer crash returns a Mac to the login window. Wayland apps cannot outlive their
+  compositor; after such an end the open apps are offered again (below). The login window's own
+  compositor arms `alarm(20)` from its event loop every 10 s, so a hung login window ends and
+  greetd starts it again. `Ctrl+Alt+F1`…`F12` switch virtual terminals through logind
+  (libseat) while the compositor runs, for a text console login when the screen is wrong; with
+  the compositor hung the kernel ignores them until the watchdog has ended it.
+- **The GPU is lost or reset**: a `VK_ERROR_DEVICE_LOST` from a frame marks the renderer lost;
+  the DRM backend drops it, creates a new Vulkan device and repaints every display. Textures
+  are keyed by the renderer's context, so everything is uploaded again; apps keep running. If no
+  new device can be created, the compositor exits (back to the login window). A GPU that hangs
+  without reporting blocks the frame's fence wait, and the watchdog ends the compositor.
+- **Memory runs out**: zram, the low-memory window, systemd-oomd on `app.slice` and the
+  notification of a closed app ([decision 0004](../decisions/0004-memory-pressure.md)). The
+  compositor (with the shell and every client it starts) and the session bus, PipeWire,
+  WirePlumber and the portal sit at the user's OOM floor (`OOMScoreAdjust=100`, oomd `avoid`),
+  apps at 200. `MemoryLow=` keeps the session's memory out of reclaim: 512M for
+  `bande-compositor.service`, 640M for `session.slice`, and 640M down the system chain
+  (`user.slice`, `user-.slice`, `user@.service`) without which the inner values give nothing.
+- **Session services crash**: every Bande user service (`bande-config`, `-power`, `-sound`,
+  `-tray`, `-polkit-agent`, `-automount`, `-notify`, the portal backend) has
+  `Restart=on-failure` with systemd's start limit (5 in 10 s), runs in `session.slice` and is
+  restarted by D-Bus activation on the next call after that.
+- **Too many processes**: each app scope gets the user manager's default `TasksMax` (15 % of
+  the kernel's limit) and `app.slice` together 25 %, under logind's 33 % for the user, so a
+  fork bomb in an app leaves room for the session.
+- **The disk is full**: configuration and state files are written to a staging file and renamed
+  over the old one (`bande_xdg::replace_file`, `bande-config`), so a failed write leaves the old
+  file whole.
 - **After a crash**: the compositor keeps the open apps in `$XDG_STATE_HOME/bande/running`; a
   session that ended without a clean log out leaves it, and the next session reopens those apps
   only with `reopen-apps-after-crash #true`. An app that crashes posts "<App> quit unexpectedly"

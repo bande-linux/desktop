@@ -6,7 +6,7 @@ use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Modifier};
 use smithay::backend::renderer::utils::on_commit_buffer_handler;
 use smithay::desktop::{LayerSurface as MappedLayer, WindowSurfaceType, layer_map_for_output};
-use smithay::input::pointer::CursorImageStatus;
+use smithay::input::pointer::{CursorIcon, CursorImageStatus};
 
 use smithay::input::{Seat, SeatHandler, SeatState};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
@@ -179,7 +179,7 @@ impl XdgShellHandler for State {
     }
 
     fn client_pong(&mut self, client: ShellClient) {
-        self.pong(&client);
+        self.pong(client);
     }
 
     fn new_toplevel(&mut self, toplevel: ToplevelSurface) {
@@ -309,6 +309,16 @@ impl SeatHandler for State {
         if let CursorImageStatus::Named(icon) = image {
             self.load_named_cursor(icon);
         }
+        self.cursor_owner = match &image {
+            CursorImageStatus::Surface(surface) => surface.client(),
+            CursorImageStatus::Named(CursorIcon::Default) => None,
+            _ => self
+                .seat
+                .get_pointer()
+                .and_then(|pointer| pointer.current_focus())
+                .and_then(|surface| surface.client()),
+        }
+        .map(|client| client.id());
         self.cursor_status = image;
         self.needs_redraw = true;
     }
@@ -427,6 +437,12 @@ impl WlrLayerShellHandler for State {
         self.needs_redraw = true;
         self.follow_panel_zones();
         self.follow_exclusive_layer(surface.wl_surface(), None);
+        let lost = surface.wl_surface();
+        if self.focused().is_some_and(|focused| {
+            &focused == lost || !focused.is_alive() || self.root_of(&focused).as_ref() == Some(lost)
+        }) {
+            self.focus_behind_layer();
+        }
     }
 }
 

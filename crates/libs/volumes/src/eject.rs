@@ -12,6 +12,14 @@ const UDISKS_PATH: &str = "/org/freedesktop/UDisks2";
 const BLOCK: &str = "org.freedesktop.UDisks2.Block";
 const FILESYSTEM: &str = "org.freedesktop.UDisks2.Filesystem";
 const DRIVE: &str = "org.freedesktop.UDisks2.Drive";
+const BUSY: &str = "org.freedesktop.UDisks2.Error.DeviceBusy";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EjectFailure {
+    pub mount_point: PathBuf,
+    pub busy: bool,
+    pub message: String,
+}
 
 fn mounted_at(points: &[Vec<u8>], mount_point: &Path) -> bool {
     let wanted = mount_point.as_os_str().as_bytes();
@@ -20,13 +28,16 @@ fn mounted_at(points: &[Vec<u8>], mount_point: &Path) -> bool {
         .any(|point| point.strip_suffix(&[0]).unwrap_or(point) == wanted)
 }
 
-fn eject_now(mount_point: &Path) -> zbus::Result<()> {
+fn eject_now(mount_point: &Path, force: bool) -> zbus::Result<()> {
     let system = Connection::system()?;
     let manager = ObjectManagerProxy::builder(&system)
         .destination(UDISKS)?
         .path(UDISKS_PATH)?
         .build()?;
-    let options: HashMap<&str, Value<'_>> = HashMap::new();
+    let options: HashMap<&str, Value<'_>> = match force {
+        true => HashMap::from([("force", Value::from(true))]),
+        false => HashMap::new(),
+    };
     for (object, interfaces) in manager.get_managed_objects()? {
         let property = |interface: &str, name: &str| -> Option<OwnedValue> {
             interfaces
@@ -67,11 +78,26 @@ fn eject_now(mount_point: &Path) -> zbus::Result<()> {
     )))
 }
 
-pub fn eject(mount_points: Vec<PathBuf>) {
+pub fn eject(
+    mount_points: Vec<PathBuf>,
+    force: bool,
+    failed: impl Fn(EjectFailure) + Send + 'static,
+) {
     let work = move || {
         for mount_point in mount_points {
-            if let Err(error) = eject_now(&mount_point) {
+            if let Err(error) = eject_now(&mount_point, force) {
                 tracing::warn!("cannot eject {}: {error}", mount_point.display());
+                let (busy, message) = match &error {
+                    zbus::Error::MethodError(name, message, _) => {
+                        (name.as_str() == BUSY, message.clone().unwrap_or_default())
+                    }
+                    _ => (false, error.to_string()),
+                };
+                failed(EjectFailure {
+                    mount_point,
+                    busy,
+                    message,
+                });
             }
         }
     };

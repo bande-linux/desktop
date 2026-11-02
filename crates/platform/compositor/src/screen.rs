@@ -5,7 +5,7 @@ use smithay::output::{Mode, Output, PhysicalProperties, Scale as OutputScale, Su
 use smithay::reexports::wayland_server::DisplayHandle;
 use smithay::reexports::wayland_server::backend::GlobalId;
 use smithay::reexports::wayland_server::protocol::wl_callback::WlCallback;
-use smithay::utils::{Logical, Physical, Point, Raw, Rectangle, Size, Transform};
+use smithay::utils::{Clock, Logical, Monotonic, Physical, Point, Raw, Rectangle, Size, Transform};
 use smithay::wayland::presentation::PresentationFeedbackCallback;
 
 use crate::state::{REFRESH, State};
@@ -171,8 +171,15 @@ impl Screen {
         self.redraw = true;
     }
 
-    pub(crate) fn retire(&self, display: &DisplayHandle) {
-        display.remove_global::<State>(self.global.clone());
+    pub(crate) fn retire(self, display: &DisplayHandle) {
+        display.remove_global::<State>(self.global);
+        for feedback in self.latched_feedback {
+            feedback.discarded();
+        }
+        let millis = Clock::<Monotonic>::new().now().as_millis();
+        for callback in self.latched_frame_callbacks {
+            callback.done(millis);
+        }
     }
 
     pub(crate) fn name(&self) -> String {

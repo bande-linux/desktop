@@ -7,7 +7,6 @@ use bande_toolkit::{
     Color, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
 
-use crate::L10N;
 use crate::controls::Press;
 use crate::view::{FilesView, Hit};
 
@@ -340,7 +339,8 @@ impl FilesView {
             } else {
                 self.palette.ink
             };
-            let paragraph = self.grid_label(&entry.name, label.width, color);
+            let name = self.shown_name(entry).to_owned();
+            let paragraph = self.grid_label(&name, label.width, color);
             let (width, height) = (paragraph.width(), paragraph.height());
             let text_x = label.x + ((label.width - width) / 2.0).round();
             let text_area = Rect::new(text_x - 4.0, label.y - 1.0, width + 8.0, height + 2.0);
@@ -363,17 +363,7 @@ impl FilesView {
             ));
         }
         if column.entries.is_empty() {
-            let muted = self.palette.ink2;
-            let empty = self.text().paragraph(
-                &L10N.tr("empty-folder"),
-                TextStyle::new(13.0, muted),
-                Some(content.width),
-                TextAlign::Center,
-            );
-            shown.push(Item::Text {
-                origin: Point::new(content.x, content.y + 40.0),
-                paragraph: empty,
-            });
+            self.paint_empty(0, content, &mut shown);
         }
         if let Some(band) = &self.band {
             let area = offset(normalised(band.origin, band.current), origin);

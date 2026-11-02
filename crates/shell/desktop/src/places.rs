@@ -17,7 +17,12 @@ fn name_of(path: &Path) -> String {
     )
 }
 
-pub fn read_item(apps: &mut Apps, path: PathBuf, kind_hint: Option<Kind>) -> Item {
+pub fn read_item(
+    apps: &mut Apps,
+    path: PathBuf,
+    kind_hint: Option<Kind>,
+    show_extensions: bool,
+) -> Item {
     let metadata = fs::metadata(&path).ok();
     let is_dir = metadata.as_ref().is_some_and(fs::Metadata::is_dir);
     let kind = kind_hint.unwrap_or(if is_dir { Kind::Folder } else { Kind::File });
@@ -26,8 +31,14 @@ pub fn read_item(apps: &mut Apps, path: PathBuf, kind_hint: Option<Kind>) -> Ite
         Kind::Folder => DIRECTORY.to_owned(),
         Kind::File => apps.mime_for(&path),
     };
+    let name = name_of(&path);
+    let hidden = match show_extensions || kind != Kind::File {
+        true => 0,
+        false => apps.extension(&name).map_or(0, str::len),
+    };
     Item {
-        name: name_of(&path),
+        label: name[..name.len() - hidden].to_owned(),
+        name,
         kind_name: apps.kind(&mime),
         size: metadata.as_ref().map_or(0, fs::Metadata::len),
         added: metadata
@@ -38,17 +49,22 @@ pub fn read_item(apps: &mut Apps, path: PathBuf, kind_hint: Option<Kind>) -> Ite
     }
 }
 
-pub fn list(apps: &mut Apps, desktop: &Path, volumes: &[PathBuf]) -> Vec<Item> {
+pub fn list(
+    apps: &mut Apps,
+    desktop: &Path,
+    volumes: &[PathBuf],
+    show_extensions: bool,
+) -> Vec<Item> {
     let mut items: Vec<Item> = volumes
         .iter()
-        .map(|volume| read_item(apps, volume.clone(), Some(Kind::Volume)))
+        .map(|volume| read_item(apps, volume.clone(), Some(Kind::Volume), show_extensions))
         .collect();
     if let Ok(entries) = fs::read_dir(desktop) {
         items.extend(
             entries
                 .filter_map(Result::ok)
                 .filter(|entry| !is_hidden(&entry.file_name().to_string_lossy()))
-                .map(|entry| read_item(apps, entry.path(), None)),
+                .map(|entry| read_item(apps, entry.path(), None, show_extensions)),
         );
     }
     items

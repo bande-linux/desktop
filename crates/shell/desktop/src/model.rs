@@ -25,6 +25,7 @@ pub enum Kind {
 pub struct Item {
     pub path: PathBuf,
     pub name: String,
+    pub label: String,
     pub kind: Kind,
     pub kind_name: String,
     pub size: u64,
@@ -521,8 +522,8 @@ impl Desktop {
         let found = self
             .items
             .iter()
-            .filter(|item| item.name.to_lowercase() >= prefix)
-            .min_by(|a, b| finder_order(&a.name, &b.name))
+            .filter(|item| item.label.to_lowercase() >= prefix)
+            .min_by(|a, b| finder_order(&a.label, &b.label))
             .map(|item| item.path.clone());
         match found {
             Some(path) => {

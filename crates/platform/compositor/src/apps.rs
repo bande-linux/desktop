@@ -1,13 +1,11 @@
 use bande_protocols::server::bande_shell_v1::BandeShellV1;
 use bande_spring::Spring;
-use smithay::desktop::layer_map_for_output;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Resource};
-use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 
-use crate::motion::{BAR_NAMESPACE, Look};
+use crate::motion::Look;
 use crate::shell::toplevel_names;
-use crate::state::{MENU_SEARCH_NAMESPACE, State};
+use crate::state::State;
 
 impl State {
     pub(crate) fn app_windows(&self, app_id: &str) -> Vec<usize> {
@@ -143,51 +141,5 @@ impl State {
 
     pub(crate) fn request_attention(&self, app_id: String) {
         self.each_shell(|shell| shell.attention_requested(app_id.clone()));
-    }
-
-    pub(crate) fn show_menus(&mut self) {
-        if self.is_locked() || self.exclusive_layer.is_some() {
-            return;
-        }
-        if let Some(key) = self.key_window()
-            && self.show_menus_of(&key)
-        {
-            return;
-        }
-        self.focus_shell(MENU_SEARCH_NAMESPACE);
-    }
-
-    pub(crate) fn focus_shell(&mut self, namespace: &str) {
-        if self.is_locked() || self.exclusive_layer.is_some() {
-            return;
-        }
-        let pointer = self.pointer_screen();
-        let order =
-            std::iter::once(pointer).chain((0..self.screens.len()).filter(|s| *s != pointer));
-        let order: Vec<usize> = order.collect();
-        let find = |wanted: &str| {
-            order.iter().find_map(|screen| {
-                let map = layer_map_for_output(&self.screens[*screen].output);
-                map.layers()
-                    .find(|layer| {
-                        layer.namespace() == wanted
-                            && layer.cached_state().keyboard_interactivity
-                                != KeyboardInteractivity::None
-                    })
-                    .map(|layer| layer.wl_surface().clone())
-            })
-        };
-        let surface = find(namespace).or_else(|| find(BAR_NAMESPACE));
-
-        let Some(surface) = surface else {
-            return;
-        };
-        let owner = surface.client();
-        self.focus(Some(surface));
-        for shell in &self.shell_resources {
-            if shell.client() == owner {
-                shell.focus_shell(namespace.to_owned());
-            }
-        }
     }
 }

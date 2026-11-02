@@ -68,7 +68,7 @@ impl BarClient {
                 self.taskbar.event(window, event.clone());
                 self.status.event(window, event);
             }
-            WindowEvent::Input(_) | WindowEvent::Drag(_) | WindowEvent::FocusShell(_) => {
+            WindowEvent::Input(_) | WindowEvent::Drag(_) => {
                 self.taskbar.event(window, event);
             }
             WindowEvent::MenuAction(_) | WindowEvent::MenuClosed if self.taskbar.has_menu() => {

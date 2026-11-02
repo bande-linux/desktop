@@ -1,5 +1,5 @@
 # Switch the whole desktop to dark through config.kdl and look at every shell surface, then back.
-key super+space
+key super
 wait 600ms
 type "terminal"
 wait 500ms
@@ -9,7 +9,7 @@ wait 1s
 type "cp ~/.config/bande/config.kdl /tmp/config.kdl.review; sed -i '/^appearance/d' ~/.config/bande/config.kdl; echo 'appearance \"dark\"' >> ~/.config/bande/config.kdl; clear\n"
 wait 2500ms
 shot "dark terminal and shell"
-key super+space
+key super
 wait 600ms
 type "files"
 wait 500ms
@@ -17,11 +17,6 @@ key enter
 wait-for-window "org.bande.Files"
 wait 1500ms
 shot "dark files"
-key super+f2
-wait 1s
-shot "dark app menu"
-key escape
-wait 500ms
 click right 75 735
 wait 1s
 shot "dark taskbar menu"
@@ -37,7 +32,7 @@ wait 1200ms
 shot "dark control center"
 key escape
 wait 800ms
-key super+space
+key super
 wait 800ms
 type "set"
 wait 800ms

@@ -1,6 +1,6 @@
 # Open each app from the launcher, look at it, right-click inside it and open its app menu.
 note "Files"
-key super+space
+key super
 wait 600ms
 type "files"
 wait 500ms
@@ -13,14 +13,8 @@ wait 1s
 shot "files context menu"
 key escape
 wait 500ms
-note "Super+F2 opens the app menu from the window's menu button"
-key super+f2
-wait 1s
-shot "files app menu"
-key escape
-wait 500ms
 note "Settings"
-key super+space
+key super
 wait 600ms
 type "settings"
 wait 500ms
@@ -29,7 +23,7 @@ wait-for-window "org.bande.Settings"
 wait 1500ms
 shot "settings"
 note "Activity Monitor"
-key super+space
+key super
 wait 600ms
 type "activity"
 wait 500ms
@@ -43,7 +37,7 @@ shot "activity monitor context menu"
 key escape
 wait 500ms
 note "Terminal"
-key super+space
+key super
 wait 600ms
 type "terminal"
 wait 500ms
@@ -58,10 +52,4 @@ wait 1s
 shot "terminal context menu"
 key escape
 wait 500ms
-note "Force Quit"
-key ctrl+alt+escape
-wait 2s
-shot "force quit"
-key escape
-wait 1s
 shot "all apps open"

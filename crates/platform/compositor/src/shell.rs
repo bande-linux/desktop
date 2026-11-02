@@ -20,6 +20,7 @@ use crate::menu_button::{ACTIVE_MENUS_SINCE, menu_address};
 use crate::session::SessionRole;
 use crate::state::{ClientState, State};
 
+pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
 const INSERT_PATIENCE: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
@@ -78,6 +79,14 @@ impl State {
 
     pub(crate) fn show_launcher(&mut self) {
         self.each_shell(|shell| shell.show_launcher());
+    }
+
+    pub(crate) fn open_terminal(&mut self) {
+        self.each_shell(|shell| {
+            if shell.version() >= OPEN_TERMINAL_SINCE {
+                shell.open_terminal();
+            }
+        });
     }
 
     pub(crate) fn scrim_pressed(&self, owner: &WlSurface) {

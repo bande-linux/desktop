@@ -1,12 +1,12 @@
-# Place windows with Super+Ctrl+arrows and F and spread four fingers to reveal the desktop.
-key super+space
+# Place windows with Super+arrows, fill the screen with F11 and spread four fingers to reveal the desktop.
+key super
 wait 600ms
 type "terminal"
 wait 500ms
 key enter
 wait-for-window "org.bande.Terminal"
 wait 1s
-key super+space
+key super
 wait 600ms
 type "files"
 wait 500ms
@@ -18,8 +18,8 @@ note "Super+Left fills the left half"
 key super+left
 wait 1s
 shot "files on the left half"
-note "Super+Tab, then Super+Right"
-key super+tab
+note "Alt+Tab, then Super+Right"
+key alt+tab
 wait 800ms
 key super+right
 wait 1s
@@ -31,11 +31,11 @@ shot "terminal in the top right quarter"
 key super+down
 wait 1s
 shot "terminal back on the right half"
-note "Super+F11 fills the screen and toggles back"
-key super+f11
+note "F11 fills the screen and toggles back"
+key f11
 wait 1200ms
 shot "terminal full screen"
-key super+f11
+key f11
 wait 1200ms
 note "Spread four fingers to reveal the desktop"
 pinch out 4

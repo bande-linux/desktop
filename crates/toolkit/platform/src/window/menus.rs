@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use bande_graphics::{Appearance, Event, Point, Rect, TextSystem};
+use bande_keyboard::{Action, Key, keys_for, keys_of};
 use bande_widgets::{FrameTime, Menu, MenuItem, MenuOutcome};
 
 use super::{ShellSurface, Window, WindowError, WindowEvent};
@@ -21,8 +22,10 @@ impl Window {
         let place = |key: &str| MenuItem::new(&L10N.tr(key), key);
         let tile = |key: &str| place(key).enabled(resizable);
         let mut items = vec![
-            tile("place-left").shortcut("Super+Left"),
-            tile("place-right").shortcut("Super+Right"),
+            tile("place-left")
+                .shortcut(&keys_for(Action::TileWindow, Key::Left).unwrap_or_default()),
+            tile("place-right")
+                .shortcut(&keys_for(Action::TileWindow, Key::Right).unwrap_or_default()),
             MenuItem::separator(),
             tile("place-top-left"),
             tile("place-top-right"),
@@ -32,7 +35,11 @@ impl Window {
             place("place-fill").enabled(!toplevel.maximized && resizable),
         ];
         if self.can_place() && self.state.outputs.len() > 1 {
-            items.push(place("place-next-display").shortcut("Shift+Super+Right"));
+            items.push(
+                place("place-next-display").shortcut(
+                    &keys_for(Action::MoveWindowToDisplay, Key::Right).unwrap_or_default(),
+                ),
+            );
         }
         items.extend([
             MenuItem::separator(),
@@ -66,7 +73,7 @@ impl Window {
         let mut items = vec![
             MenuItem::new(&L10N.tr("minimize"), "minimize")
                 .enabled(!toplevel.fullscreen)
-                .shortcut("Super+H"),
+                .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
             MenuItem::new(
                 &L10N.tr(if toplevel.maximized { "unzoom" } else { "zoom" }),
                 "zoom",
@@ -81,7 +88,7 @@ impl Window {
                 "full-screen",
             )
             .enabled(toplevel.fullscreen || self.is_resizable())
-            .shortcut("Super+F11"),
+            .shortcut("F11"),
             MenuItem::separator(),
         ];
         if self.can_place() {
@@ -103,7 +110,8 @@ impl Window {
         items.extend([
             MenuItem::new(&L10N.tr("move"), "move").enabled(!toplevel.fullscreen),
             MenuItem::separator(),
-            MenuItem::new(&L10N.tr("close"), "close").shortcut("Alt+F4"),
+            MenuItem::new(&L10N.tr("close"), "close")
+                .shortcut(&keys_of(Action::CloseWindow).unwrap_or_default()),
             MenuItem::new(&L10N.tr("quit-app"), "quit"),
         ]);
         let offset = self.content_offset();

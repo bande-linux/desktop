@@ -71,7 +71,6 @@ fn owner_of(surface: &WlSurface) -> (String, String, Option<ClientId>) {
 enum Mode {
     Apps,
     Windows { app: usize },
-    Cycle,
 }
 
 struct Session {
@@ -89,7 +88,7 @@ impl Session {
     fn count(&self) -> usize {
         match self.mode {
             Mode::Apps => self.apps.len(),
-            Mode::Windows { .. } | Mode::Cycle => self.windows.len(),
+            Mode::Windows { .. } => self.windows.len(),
         }
     }
 }
@@ -369,9 +368,7 @@ impl State {
     }
 
     pub(crate) fn switch_apps(&mut self, backwards: bool) {
-        if let Some(session) = &self.switcher.session
-            && session.mode != Mode::Cycle
-        {
+        if self.switcher.session.is_some() {
             self.step_switcher(backwards);
             return;
         }
@@ -399,50 +396,12 @@ impl State {
         self.needs_redraw = true;
     }
 
-    pub(crate) fn cycle_windows(&mut self, backwards: bool) {
-        match self.switcher.session.as_ref().map(|session| session.mode) {
-            Some(Mode::Apps) => {
-                self.show_switcher_windows();
-                return;
-            }
-            Some(Mode::Windows { .. } | Mode::Cycle) => {
-                self.step_switcher(backwards);
-                return;
-            }
-            None => {}
-        }
-        let Some(key) = self.key_window() else {
-            return;
-        };
-        let (title, app_id, client) = owner_of(&key);
-        let app = App {
-            client,
-            ..self.switcher.app(&app_id, &title)
-        };
-        let windows = self.windows_of(&app, true);
-        if windows.len() < 2 {
-            return;
-        }
-        self.close_overview();
-        self.switcher.session = Some(Session {
-            mode: Mode::Cycle,
-            apps: Vec::new(),
-            windows,
-            selected: 0,
-            hidden: Vec::new(),
-            screen: self.pointer_screen(),
-            since: None,
-            shown: false,
-        });
-        self.step_switcher(backwards);
-    }
-
     fn step_switcher(&mut self, backwards: bool) {
         let Some(session) = self.switcher.session.as_mut() else {
             return;
         };
         session.selected = step(session.selected, session.count(), backwards);
-        self.switcher_selection_changed();
+        self.refresh_card();
     }
 
     fn select_in_switcher(&mut self, index: usize) {
@@ -451,20 +410,8 @@ impl State {
         };
         if session.selected != index && index < session.count() {
             session.selected = index;
-            self.switcher_selection_changed();
+            self.refresh_card();
         }
-    }
-
-    fn switcher_selection_changed(&mut self) {
-        let Some(session) = self.switcher.session.as_ref() else {
-            return;
-        };
-        if session.mode == Mode::Cycle
-            && let Some(window) = session.windows.get(session.selected).cloned()
-        {
-            self.bring_forward(&window);
-        }
-        self.refresh_card();
     }
 
     fn show_switcher_windows(&mut self) {
@@ -536,7 +483,6 @@ impl State {
         match session.mode {
             Mode::Apps => session.apps.get(session.selected).cloned(),
             Mode::Windows { app } => session.apps.get(app).cloned(),
-            Mode::Cycle => None,
         }
     }
 
@@ -617,7 +563,7 @@ impl State {
     fn switcher_content(&self, session: &Session) -> Content {
         match session.mode {
             Mode::Apps => Content::Icons(session.apps.clone()),
-            Mode::Windows { .. } | Mode::Cycle => Content::Windows(session.windows.clone()),
+            Mode::Windows { .. } => Content::Windows(session.windows.clone()),
         }
     }
 
@@ -660,7 +606,7 @@ impl State {
                 L10N.tr("app-switcher"),
                 session.apps.iter().map(|app| app.name.clone()).collect(),
             ),
-            Mode::Windows { .. } | Mode::Cycle => {
+            Mode::Windows { .. } => {
                 let named: Vec<(String, String)> =
                     session.windows.iter().map(toplevel_names).collect();
                 let items = named
@@ -695,7 +641,7 @@ impl State {
                 .get(session.selected)
                 .map(|app| app.name.clone())
                 .unwrap_or_default(),
-            Mode::Windows { .. } | Mode::Cycle => {
+            Mode::Windows { .. } => {
                 let Some((title, app_id)) =
                     session.windows.get(session.selected).map(toplevel_names)
                 else {
@@ -746,9 +692,7 @@ impl State {
     }
 
     pub(crate) fn switcher_pointer(&mut self, at: Point<f64, Logical>) {
-        if let Some(Some(index)) = self.switcher_hit(at)
-            && self.switcher.session.as_ref().map(|session| session.mode) != Some(Mode::Cycle)
-        {
+        if let Some(Some(index)) = self.switcher_hit(at) {
             self.select_in_switcher(index);
         }
     }
@@ -759,17 +703,10 @@ impl State {
         }
         match self.switcher_hit(self.pointer_location) {
             Some(Some(index)) => {
-                let cycling =
-                    self.switcher.session.as_ref().map(|session| session.mode) == Some(Mode::Cycle);
                 if let Some(session) = self.switcher.session.as_mut() {
                     session.selected = index;
                 }
-                if cycling {
-                    self.switcher_selection_changed();
-                    self.end_switcher();
-                } else {
-                    self.commit_switcher();
-                }
+                self.commit_switcher();
             }
             Some(None) | None => self.end_switcher(),
         }

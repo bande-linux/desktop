@@ -36,21 +36,14 @@ model of the [overview](../architecture/overview.md#keyboard-model).
 Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell.
 
 - **Super is only for the system**, in GNOME and KDE's chords, and nothing an app does (close,
-  quit, copy, paste, save, find, tabs) is on Super. The set, every row of the table in
-  `bande-keyboard`:
-  - launcher: a tap of Super, `Super+Space` (kept by the owner) and `Super+A`; clipboard history
-    `Super+V`; emoji `Super+.`; Notification Center `Super+N`; Control Center `Super+S`;
-    lock `Super+L`; app menus and taskbar `Super+F2`/`Super+F3`; menu search `Shift+Super+/`;
-  - windows: `Alt+F4` close, `Super+H` minimize, `Super+Left/Right/Up/Down` tile, maximize and
-    restore, `Super+F11` full screen, `Shift+Super+arrows` to the display beside, Super+drag
-    moves and Super+right drag resizes;
-  - apps: `Super+Tab` and `Alt+Tab` switch, ``Super+` `` the app's next window,
-    `Ctrl+Alt+Escape` Force Quit;
-  - workspaces: `Ctrl+Super+Left/Right`, `Ctrl+Super+1..9`, `Ctrl+Shift+Super+Left/Right`
-    carries the window, `Super+W` the overview, `Alt+Super+Down` the app's windows, `Super+D`
-    the desktop;
-  - input sources `Alt+Super+Space`; screenshots `Print` (options), `Shift+Print` (screen),
-    `Shift+Super+S` (area); zoom `Alt+Super+8`, `Alt+Super+=`/`-`; screen reader `Alt+Super+S`.
+  quit, copy, paste, save, find, tabs) is on Super. The set is `SHORTCUTS` in
+  `crates/libs/keyboard/src/shortcuts.rs`, the one table the compositor matches and Settings ▸
+  Keyboard lists. The owner cut it to: Search on a tap of Super; `Super+V`, `Super+.`, `Super+N`,
+  `Super+S`, `Super+L`; `Alt+F4`, `Super+H`, `Super+arrows`, `Shift+Super+arrows`; `Alt+Tab`
+  (the only switcher), `Ctrl+Alt+T` Terminal; `Ctrl+Super+Left/Right`, `Super+D`, the Mission
+  Control key; `Print`, `Shift+Print`, `Shift+Super+S`; `Ctrl+Alt+F1…F12`; the zoom and screen
+  reader keys. Force Quit, input sources, app menus and full screen have no system shortcut.
+  Super+drag moves a window and Super+right drag resizes it.
 
   Unbound Super chords reach the focused app, as in GNOME.
 - **Text fields** follow the Linux rules: `Ctrl+C/X/V/A`; `Ctrl+Z` undo, `Shift+Ctrl+Z` and
@@ -59,7 +52,8 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
   not used in text fields.
 - **Ctrl+click** toggles an item in a selection. It is no longer a right click.
 - **App standard items**: Close Window `Ctrl+W` and Quit `Ctrl+Q`, handled inside the app.
-  Minimize is `Super+H`; Hide and Hide Others stay in the app menu without a chord.
+  Minimize is `Super+H`; `F11` enters and leaves full screen (Window menu, not panels); `Ctrl+Y`
+  runs any `Shift+Ctrl+Z` redo item. Hide and Hide Others stay in the app menu without a chord.
 - **Apps take GNOME's bindings** where Linux convention differs from a plain swap: Files follows
   Nautilus (`Delete` to the Trash, `Alt+Up` to the enclosing folder, `Alt+Left/Right` back and
   forward, `Ctrl+L` Go to Folder, `Ctrl+H` hidden files, `F2` rename); Terminal puts its commands

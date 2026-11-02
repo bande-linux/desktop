@@ -51,7 +51,7 @@ pub struct MenuPanel {
 }
 
 pub(super) enum SearchLook {
-    Hint(Paragraph, ShortcutText),
+    Hint(Paragraph),
     Query(Paragraph),
 }
 
@@ -92,10 +92,7 @@ impl MenuPanel {
         let search = menu.search.as_ref().map(|search| {
             if search.query.is_empty() {
                 let style = TextStyle::new(FONT_SIZE, palette.ink3);
-                SearchLook::Hint(
-                    text.paragraph(&search.hint, style, None, TextAlign::Start),
-                    ShortcutText::new(text, &search.shortcut, style),
-                )
+                SearchLook::Hint(text.paragraph(&search.hint, style, None, TextAlign::Start))
             } else {
                 SearchLook::Query(text.paragraph(
                     &search.query,
@@ -106,10 +103,9 @@ impl MenuPanel {
             }
         });
         let (header, minimum_width) = match &search {
-            Some(SearchLook::Hint(hint, shortcut)) => (
+            Some(SearchLook::Hint(hint)) => (
                 row_height + SEPARATOR_HEIGHT,
-                (TEXT_START + hint.width() + SHORTCUT_GAP + shortcut.width() + TRAILING_PADDING)
-                    .max(widen(SEARCH_WIDTH)),
+                (TEXT_START + hint.width() + TRAILING_PADDING).max(widen(SEARCH_WIDTH)),
             ),
             Some(SearchLook::Query(_)) => (row_height + SEPARATOR_HEIGHT, widen(SEARCH_WIDTH)),
             None => (0.0, widen(MINIMUM_WIDTH)),
@@ -362,9 +358,7 @@ impl MenuPanel {
         ];
         match &self.search {
             Some(SearchLook::Query(query)) => self.paint_query(query, palette, &mut items),
-            Some(SearchLook::Hint(hint, shortcut)) => {
-                self.paint_hint(hint, shortcut, palette, &mut items);
-            }
+            Some(SearchLook::Hint(hint)) => self.paint_hint(hint, palette, &mut items),
             None => {}
         }
         let rows = self.paint_rows(palette, show_highlight);
@@ -508,26 +502,13 @@ impl MenuPanel {
         self.paint_search_rule(palette, items);
     }
 
-    fn paint_hint(
-        &self,
-        hint: &Paragraph,
-        shortcut: &ShortcutText,
-        palette: &Palette,
-        items: &mut Vec<Item>,
-    ) {
+    fn paint_hint(&self, hint: &Paragraph, palette: &Palette, items: &mut Vec<Item>) {
         let centre = self.search_centre();
         magnifier(Point::new(MAGNIFIER_CENTRE, centre), palette.ink3, items);
         items.push(Item::Text {
             origin: Point::new(TEXT_START, (centre - hint.height() / 2.0).round()),
             paragraph: hint.clone(),
         });
-        shortcut.paint(
-            Point::new(
-                (self.size.width - TRAILING_PADDING - shortcut.width()).round(),
-                (centre - shortcut.height() / 2.0).round(),
-            ),
-            items,
-        );
         self.paint_search_rule(palette, items);
     }
 

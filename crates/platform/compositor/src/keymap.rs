@@ -64,8 +64,6 @@ struct Hud {
 pub(crate) struct InputSources {
     settings: Option<KeyboardSettings>,
     active: usize,
-    previous: usize,
-    cycling: bool,
     hud: Option<Hud>,
 }
 
@@ -96,10 +94,6 @@ impl InputSources {
 
     pub(crate) fn is_animating(&self) -> bool {
         self.hud.is_some()
-    }
-
-    pub(crate) fn end_cycle(&mut self) {
-        self.cycling = false;
     }
 }
 
@@ -139,7 +133,6 @@ impl State {
         }
         let sources = &mut self.input_sources;
         sources.settings = Some(settings);
-        sources.previous = active;
         self.set_active_source(active);
     }
 
@@ -158,32 +151,7 @@ impl State {
         if index >= sources.count() || index == sources.active {
             return;
         }
-        sources.previous = sources.active;
         self.set_active_source(index);
-        self.show_source_hud();
-    }
-
-    pub(crate) fn next_input_source(&mut self, backwards: bool) {
-        let sources = &mut self.input_sources;
-        let count = sources.count();
-        if count < 2 {
-            return;
-        }
-        let next = if !sources.cycling && !backwards {
-            sources.previous
-        } else if backwards {
-            (sources.active + count - 1) % count
-        } else {
-            (sources.active + 1) % count
-        };
-        let next = if next == sources.active {
-            (sources.active + 1) % count
-        } else {
-            next
-        };
-        sources.cycling = true;
-        sources.previous = sources.active;
-        self.set_active_source(next);
         self.show_source_hud();
     }
 

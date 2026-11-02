@@ -135,7 +135,7 @@ when they reach the screen is Bande's own.
   first (`bande_shell_v1.displays`, on binding and whenever a display comes, goes,
   starts or stops mirroring or the main display changes), and the shell opens a desktop and a taskbar
   on each of them in its one process; on every display but the main one the desktop shows only
-  the wallpaper and no icons, and the menu search and the notifications stay on the main
+  the wallpaper and no icons, and the notifications stay on the main
   display. The lock
   screen asks for the password on the main display; while locked, every other display shows only
   its wallpaper.
@@ -229,17 +229,15 @@ when they reach the screen is Bande's own.
   show-desktop pinch, with `momentum` above 2 workspaces/s; a new swipe during the settle
   takes over from where the row is. Keyboard (Super is the system key and Ctrl belongs to
   apps, so `Ctrl+Left/Right` alone is not taken): `Ctrl+Super+Left/Right` switch to the
-  neighbour (as in KDE and Windows), `Ctrl+Super+1`…`9` to a workspace by position, and `Ctrl+Shift+Super+Left/Right`
-  carry the focused window along (the window stays put on screen while the row slides
-  under it; past the last workspace a new one is made). A window being dragged by its title
+  neighbour (as in KDE and Windows). A window being dragged by its title
   bar comes along to whichever workspace the user switches to. A switch started while the
   row is still moving keeps its velocity. `bande_app_v1.move_to_workspace`
   moves a window from its menu without following it: it slides off the screen and the
   keyboard goes to the next window. Focusing a window anywhere (the taskbar's activate app or
-  window, Super+Tab, an activation token) shows its workspace first. Shell clients learn the
+  window, Alt+Tab, an activation token) shows its workspace first. Shell clients learn the
   row through `bande_shell_v1`: `workspaces(count, active)`, sent on binding and on
   every change. With Reduce Motion a switch crossfades the two workspaces in place.
-- **Overview.** `Super+W` (as in KDE), the Mission Control key (`XF86LaunchA`, F3 on Apple
+- **Overview.** The Mission Control key (`XF86LaunchA`, F3 on Apple
   keyboards, without Super) or a three-finger swipe up (300 units for the whole way, tracked
   1:1 and released like the other swipes) open it; the same key, `Escape`, a click on empty
   space or a swipe down close it. There are no hot corners (removed by the owner). Every
@@ -259,12 +257,12 @@ when they reach the screen is Bande's own.
   `Ctrl+Super+Left/Right` and a horizontal swipe move between workspaces inside it, each
   workspace with its own layout. Empty workspaces are kept until the overview closes. App
   windows (App Exposé) show only one app's windows from every workspace without the strip:
-  `Alt+Super+Down` or a three-finger swipe down for the focused app, and
+  a three-finger swipe down for the focused app, and
   `bande_shell_v1.show_windows(app_id)` (an empty app id opens the plain overview) for
   the taskbar. With Reduce Motion the windows stay where they are and fade out while the
   overview fades in.
-- **Switcher, window memory and the other half.** `switcher.rs` holds the Super+Tab and
-  Super+` session (behaviour.md has the rules): a dwell of 150 ms counted in vblank time, then
+- **Switcher, window memory and the other half.** `switcher.rs` holds the Alt+Tab
+  session (behaviour.md has the rules): a dwell of 150 ms counted in vblank time, then
   a card laid out once per change (a row of tiles, shrunk uniformly to fit the display) whose
   frame and selection well are `FillElement`s driven by `Motion` on the `quick` spring, the
   icons and name painted on the CPU with `bande-graphics` into memory buffers at the output
@@ -331,6 +329,6 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | implemented |
 | `zwlr_output_power_management_v1` | Display power for idle and lock | P1 | implemented |
-| `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 keyboard focus for the taskbar, `show_app_menu` to open an app's menus below a window's menu button and `active_menus` (version 4) with the key window's menu address for Menu Search; workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
+| `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, `show_app_menu` to open an app's menus below a window's menu button, `active_menus` (version 4) with the key window's menu address, `open_terminal` (version 5) for `Ctrl+Alt+T`; workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
 | `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button | P0 | implemented, every client |
 | `ext-background-effect-v1` | Blur behind the launcher's scrim (the overview's scrim and blur are the compositor's own) | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

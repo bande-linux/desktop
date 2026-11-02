@@ -20,6 +20,7 @@ bande-config.workspace = true
 bande-datetime.workspace = true
 bande-edid.workspace = true
 bande-graphics.workspace = true
+bande-keyboard.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
 bande-protocols = { workspace = true, features = ["server"] }

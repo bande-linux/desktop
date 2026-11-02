@@ -404,7 +404,7 @@ graph LR
     `com.canonical.dbusmenu` menu below it (or calls `Activate` when it has none), a secondary
     click calls `Activate`. Our own apps use the same menu format for their app menus: an app
     owns its app id as bus name and exports `com.canonical.dbusmenu` at `/org/bande/MenuBar`;
-    the App menu of a window's menu button and Menu Search show that tree (the first top-level
+    the App menu of a window's menu button shows that tree (the first top-level
     submenu as the app row; a
     third-party window's at the address it gave with `org_kde_kwin_appmenu`, or a GTK window's
     `org.gtk.Menus` menu bar given on `gtk_shell1`, which `bande_status::gtkmenu` imports with
@@ -553,9 +553,8 @@ prompts (they are answered in the secure field), and power and accessibility men
 
 Every failure is meant to end in a working desktop without a reboot. What happens for each:
 
-- **An app hangs**: Force Quit (`Ctrl+Alt+Escape`, in the compositor, so it works while the shell
-  hangs, an app holds a popup grab, locks the pointer (released while Force Quit is open) or
-  inhibits shortcuts) marks it Not Responding after a 3 s
+- **An app hangs**: Force Quit (in the compositor, opened from the system menu, a Taskbar
+  icon's menu or Search; the pointer lock of an app is released while it is open) marks it Not Responding after a 3 s
   `xdg_wm_base` ping and kills its whole scope ([behaviour](behaviour.md)).
 - **The shell crashes or hangs**: the compositor restarts the shell clients and the clipboard
   daemon it started when they exit, at most once every 10 seconds. A crash of the shell takes

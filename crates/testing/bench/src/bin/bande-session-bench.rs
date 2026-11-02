@@ -25,7 +25,6 @@ const BUTTON_RIGHT: u32 = 0x111;
 const KEY_ESC: u32 = 1;
 const KEY_W: u32 = 17;
 const KEY_A: u32 = 30;
-const KEY_SPACE: u32 = 57;
 const KEY_LEFTMETA: u32 = 125;
 const TICK_MS: f64 = 10.0;
 const FILES: &str = "org.bande.Files";
@@ -388,7 +387,7 @@ impl Bench {
 
     fn launcher(&mut self) -> Result<(), Box<dyn Error>> {
         for _ in 0..2 {
-            self.tap(&[KEY_LEFTMETA, KEY_SPACE]);
+            self.tap(&[KEY_LEFTMETA]);
             self.wait(STEPS / 2)?;
             self.tap(&[KEY_ESC]);
             self.wait(STEPS / 2)?;

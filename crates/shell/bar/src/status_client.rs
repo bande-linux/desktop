@@ -38,7 +38,6 @@ use bande_xdg::{
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
-use crate::menu_search_client::SharedHandoff;
 use crate::surfaces::Display;
 
 const TRAY_PIXELS: u32 = 32;
@@ -54,7 +53,6 @@ static LAYOUTS: LazyLock<Layouts> = LazyLock::new(Layouts::load);
 pub struct StatusClient {
     bar: TaskbarView,
     display: Display,
-    handoff: SharedHandoff,
     edge: BarEdge,
     restart: Restart,
     workspaces: (usize, usize),
@@ -131,10 +129,6 @@ impl StatusClient {
         &mut self.bar
     }
 
-    pub fn handoff(&self) -> SharedHandoff {
-        self.handoff.clone()
-    }
-
     pub fn restart(&self) -> Restart {
         self.restart.clone()
     }
@@ -165,11 +159,6 @@ impl StatusClient {
                 }
             }
         }
-    }
-
-    fn publish_menu(&mut self, window: &Window) {
-        let menu = self.cascade(window);
-        self.handoff.borrow_mut().menu = menu;
     }
 
     fn launch(&self, window: &mut Window, app_id: &str, command: &[&str]) {
@@ -526,13 +515,10 @@ impl App for StatusClient {
                     self.app_id = app_id;
                     window.request_redraw();
                 }
-                self.publish_menu(window);
             }
             WindowEvent::ActiveMenus(menu) => {
                 self.follow_menus(menu_key(&self.app_id, menu));
-                self.publish_menu(window);
             }
-            WindowEvent::AppsChanged => self.publish_menu(window),
             WindowEvent::ShowAppMenu {
                 app_id,
                 menu,
@@ -693,7 +679,6 @@ impl App for StatusClient {
                     if menu == self.menu_key {
                         self.app_root = root;
                         self.menu_loaded = true;
-                        self.publish_menu(window);
                         if let Some(anchor) = self.waiting_menus.take() {
                             self.show_app_menu(window, anchor);
                         }
@@ -705,8 +690,7 @@ impl App for StatusClient {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        let now =
-            (!self.handoff.borrow().chosen.is_empty() || self.restart.get()).then(Instant::now);
+        let now = self.restart.get().then(Instant::now);
         now.into_iter().chain(self.apps.deadline()).min()
     }
 
@@ -719,12 +703,6 @@ impl App for StatusClient {
             self.bar
                 .set_app(&app_name(self.apps.entries(), &self.app_id));
             window.request_redraw();
-        }
-        let chosen = std::mem::take(&mut self.handoff.borrow_mut().chosen);
-        for action in chosen {
-            if let Some(command) = Command::parse(&action) {
-                self.run(window, command);
-            }
         }
     }
 }
@@ -743,7 +721,6 @@ impl StatusClient {
             edge: view.edge(),
             bar: view,
             display,
-            handoff: SharedHandoff::default(),
             restart: Restart::default(),
             workspaces: (1, 0),
             clock_mark: ClockMark::Clear,

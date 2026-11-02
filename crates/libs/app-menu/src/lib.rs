@@ -4,6 +4,7 @@ use std::os::fd::BorrowedFd;
 use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 
 use bande_inbox::{Inbox, Outbox};
+use bande_keyboard::{Action, keys_of};
 use bande_l10n::Localizer;
 use zbus::blocking::Connection;
 use zbus::zvariant::{OwnedValue, Structure, Value};
@@ -13,6 +14,9 @@ pub const SHELL_ACTION_PROPERTY: &str = "x-bande-shell-action";
 pub const VERSION_PROPERTY: &str = "x-bande-version";
 pub const KEY_ACTION: &str = "key:";
 const INTERFACE: &str = "com.canonical.dbusmenu";
+pub const REDO: &str = "Shift+Ctrl+Z";
+pub const REDO_ALIAS: &str = "Ctrl+Y";
+pub const FULL_SCREEN: &str = "F11";
 const ROOT: i32 = 0;
 const ENGLISH: &str = include_str!("../locales/en-US/bande-app-menu.ftl");
 
@@ -24,15 +28,17 @@ pub enum Standard {
     Quit,
     Minimize,
     Zoom,
+    FullScreen,
     CloseWindow,
     Settings,
 }
 
-const STANDARD: [(Standard, &str); 6] = [
+const STANDARD: [(Standard, &str); 7] = [
     (Standard::Hide, "app-menu:hide"),
     (Standard::Quit, "app-menu:quit"),
     (Standard::Minimize, "app-menu:minimize"),
     (Standard::Zoom, "app-menu:zoom"),
+    (Standard::FullScreen, "app-menu:full-screen"),
     (Standard::CloseWindow, "app-menu:close-window"),
     (Standard::Settings, "app-menu:settings"),
 ];
@@ -53,7 +59,10 @@ impl Standard {
     }
 
     pub fn needs_window(self) -> bool {
-        matches!(self, Self::Minimize | Self::Zoom | Self::CloseWindow)
+        matches!(
+            self,
+            Self::Minimize | Self::Zoom | Self::FullScreen | Self::CloseWindow
+        )
     }
 }
 
@@ -117,10 +126,19 @@ pub fn app_submenu(app: &str, version: &str, items: Vec<Entry>, quit: &str) -> E
     Entry::submenu(app, entries)
 }
 
-pub fn window_submenu(items: Vec<Entry>, zoomable: bool) -> Entry {
+pub fn window_submenu(items: Vec<Entry>, zoomable: bool, full_screen: Option<bool>) -> Entry {
+    let full_screen_label = match full_screen {
+        Some(true) => L10N.tr("exit-full-screen"),
+        _ => L10N.tr("enter-full-screen"),
+    };
     let mut entries = vec![
-        Entry::item(&L10N.tr("minimize"), Standard::Minimize.action()).shortcut("Super+H"),
-        Entry::item(&L10N.tr("zoom"), Standard::Zoom.action()).enabled(zoomable),
+        Entry::item(&L10N.tr("minimize"), Standard::Minimize.action())
+            .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
+        Entry::item(&L10N.tr("zoom"), Standard::Zoom.action())
+            .enabled(zoomable && full_screen != Some(true)),
+        Entry::item(&full_screen_label, Standard::FullScreen.action())
+            .shortcut(FULL_SCREEN)
+            .enabled(full_screen.is_some()),
     ];
     if !items.is_empty() {
         entries.push(Entry::separator());
@@ -136,7 +154,7 @@ pub fn key_item(label: &str, shortcut: &str) -> Entry {
 pub fn edit_submenu(extra: Vec<Entry>) -> Entry {
     let mut entries = vec![
         key_item(&L10N.tr("undo"), "Ctrl+Z"),
-        key_item(&L10N.tr("redo"), "Shift+Ctrl+Z"),
+        key_item(&L10N.tr("redo"), REDO),
         Entry::separator(),
         key_item(&L10N.tr("cut"), "Ctrl+X"),
         key_item(&L10N.tr("copy"), "Ctrl+C"),
@@ -163,7 +181,10 @@ pub fn shortcut_action(menus: &[Entry], pressed: &dyn Fn(&str) -> bool) -> Optio
         .iter()
         .filter(|entry| entry.enabled)
         .find_map(|entry| match &entry.shortcut {
-            Some(shortcut) if !entry.action.is_empty() && pressed(shortcut) => {
+            Some(shortcut)
+                if !entry.action.is_empty()
+                    && (pressed(shortcut) || (shortcut == REDO && pressed(REDO_ALIAS))) =>
+            {
                 Some(entry.action.clone())
             }
             _ => shortcut_action(&entry.children, pressed),

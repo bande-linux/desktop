@@ -1,5 +1,5 @@
-# Lock the screen with Super+Ctrl+Q and try a wrong password. The review user's password is unknown, so the session stays locked.
-key super+space
+# Lock the screen with Super+L and try a wrong password. The review user's password is unknown, so the session stays locked.
+key super
 wait 600ms
 type "terminal"
 wait 500ms

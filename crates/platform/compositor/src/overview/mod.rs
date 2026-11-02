@@ -273,16 +273,6 @@ impl State {
         }
     }
 
-    pub(crate) fn show_app_windows(&mut self) {
-        let app = self
-            .key_window()
-            .map(|surface| toplevel_names(&surface).1)
-            .filter(|app_id| !app_id.is_empty());
-        if app.is_some() {
-            self.toggle_overview(app);
-        }
-    }
-
     fn pick(&mut self, surface: WlSurface) {
         self.close_overview();
         self.focus(Some(surface));

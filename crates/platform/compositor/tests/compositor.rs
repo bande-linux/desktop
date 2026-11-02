@@ -17,12 +17,12 @@ use wayland_client::protocol::wl_shm::Format;
 
 const KEY_ESC: u32 = 1;
 const KEY_A: u32 = 30;
+const KEY_T: u32 = 20;
+const KEY_SPACE: u32 = 57;
 const KEY_ENTER: u32 = 28;
 const KEY_LEFTCTRL: u32 = 29;
 const KEY_LEFTALT: u32 = 56;
-const KEY_LEFTSHIFT: u32 = 42;
 const KEY_LEFTMETA: u32 = 125;
-const KEY_LEFT: u32 = 105;
 const KEY_RIGHT: u32 = 106;
 const KEY_DOWN: u32 = 108;
 const BTN_LEFT: u32 = 0x110;
@@ -129,23 +129,19 @@ fn only_the_screen_reader_may_grab_the_keyboard_and_it_lets_go_when_it_leaves() 
 }
 
 #[test]
-fn a_hung_app_is_force_quit_from_the_keyboard_while_the_shell_is_hung() {
+fn a_hung_app_is_force_quit_from_the_keyboard() {
     if act_as_separate_app() {
         return;
     }
     let mut server = headless(560, 520);
     let mut bar = TestClient::connect_as_shell(&mut server);
     bar.join_shell(&mut server);
-    let mut stuck = SeparateApp::launch(
-        &mut server,
-        "a_hung_app_is_force_quit_from_the_keyboard_while_the_shell_is_hung",
-    );
+    let mut stuck = SeparateApp::launch(&mut server, "a_hung_app_is_force_quit_from_the_keyboard");
     stuck.show_window_of(&mut server, 64, "org.example.Stuck");
     let mut editor = TestClient::window(&mut server, "org.example.Editor");
-    editor.inhibit_shortcuts(&mut server, 0);
     roundtrip(&mut server, &mut [&mut editor]);
 
-    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTALT, KEY_ESC]);
+    bar.show_force_quit(&mut server);
     let start = Duration::from_secs(10);
     server.watchdog_tick(start);
     roundtrip(&mut server, &mut [&mut editor]);
@@ -182,6 +178,31 @@ fn a_hung_app_is_force_quit_from_the_keyboard_while_the_shell_is_hung() {
 }
 
 #[test]
+fn tapping_super_opens_search_and_ctrl_alt_t_opens_terminal() {
+    let (mut server, mut editor) = focused_app();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.listen_as_shell(&mut server);
+    let opened = |shell: &TestClient, event: &str| {
+        shell
+            .shell_events()
+            .iter()
+            .filter(|sent| sent.starts_with(event))
+            .count()
+    };
+    chord(&mut server, &[KEY_LEFTMETA, KEY_SPACE]);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+    assert_eq!(opened(&shell, "ShowLauncher"), 0);
+    assert!(editor.keys().contains(&(KEY_SPACE, true)));
+    chord(&mut server, &[KEY_LEFTMETA]);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+    assert_eq!(opened(&shell, "ShowLauncher"), 1);
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTALT, KEY_T]);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+    assert_eq!(opened(&shell, "OpenTerminal"), 1);
+    assert!(!editor.keys().contains(&(KEY_T, true)));
+}
+
+#[test]
 fn a_window_on_a_workspace_out_of_view_is_suspended() {
     let (mut server, mut editor) = focused_app();
     let mut viewer = TestClient::window(&mut server, "org.example.Viewer");
@@ -189,10 +210,7 @@ fn a_window_on_a_workspace_out_of_view_is_suspended() {
     server.press_button(BTN_LEFT, false, 0);
     roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
     assert!(viewer.keyboard_focus_on(0));
-    chord(
-        &mut server,
-        &[KEY_LEFTMETA, KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_RIGHT],
-    );
+    viewer.move_to_next_workspace(&mut server, 0);
     let settle = |server: &mut Compositor, clients: &mut [&mut TestClient]| {
         for frame in 1..120 {
             server.animate(Duration::from_millis(16 * frame));
@@ -200,12 +218,12 @@ fn a_window_on_a_workspace_out_of_view_is_suspended() {
         roundtrip(server, clients);
     };
     settle(&mut server, &mut [&mut editor, &mut viewer]);
-    assert!(!viewer.is_suspended(0));
-    assert!(editor.is_suspended(0));
-    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTCTRL, KEY_LEFT]);
-    settle(&mut server, &mut [&mut editor, &mut viewer]);
     assert!(!editor.is_suspended(0));
     assert!(viewer.is_suspended(0));
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTCTRL, KEY_RIGHT]);
+    settle(&mut server, &mut [&mut editor, &mut viewer]);
+    assert!(!viewer.is_suspended(0));
+    assert!(editor.is_suspended(0));
 }
 
 #[test]

@@ -5,18 +5,16 @@ pub enum Area {
     Windows,
     Apps,
     Workspaces,
-    Keyboard,
     Screenshots,
     Accessibility,
     System,
 }
 
 impl Area {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 6] = [
         Self::Windows,
         Self::Apps,
         Self::Workspaces,
-        Self::Keyboard,
         Self::Screenshots,
         Self::Accessibility,
         Self::System,
@@ -27,7 +25,6 @@ impl Area {
             Self::Windows => L10N.tr("area-windows"),
             Self::Apps => L10N.tr("area-apps"),
             Self::Workspaces => L10N.tr("area-workspaces"),
-            Self::Keyboard => L10N.tr("area-keyboard"),
             Self::Screenshots => L10N.tr("area-screenshots"),
             Self::Accessibility => L10N.tr("area-accessibility"),
             Self::System => L10N.tr("area-system"),
@@ -39,32 +36,21 @@ impl Area {
 pub enum Action {
     CloseWindow,
     MinimizeWindow,
-    ToggleFullScreen,
     TileWindow,
+    MoveWindowToDisplay,
     NextApp,
-    NextWindow,
-    PreviousWindow,
-    ForceQuit,
+    PreviousApp,
+    OpenTerminal,
     PreviousWorkspace,
     NextWorkspace,
-    WorkspaceByNumber,
-    CarryWindowLeft,
-    CarryWindowRight,
-    MoveWindowToDisplay,
     Overview,
-    AppWindows,
     ShowDesktop,
-    NextInputSource,
-    PreviousInputSource,
     CaptureScreen,
     CaptureArea,
     CaptureOptions,
     ShowLauncher,
     ShowClipboardHistory,
     ShowEmojiPicker,
-    FocusMenuBar,
-    FocusTaskbar,
-    SearchMenus,
     ShowNotificationCenter,
     ShowControlCenter,
     LockScreen,
@@ -80,19 +66,12 @@ impl Action {
         match self {
             Self::CloseWindow
             | Self::MinimizeWindow
-            | Self::ToggleFullScreen
             | Self::TileWindow
             | Self::MoveWindowToDisplay => Area::Windows,
-            Self::NextApp | Self::NextWindow | Self::PreviousWindow | Self::ForceQuit => Area::Apps,
-            Self::PreviousWorkspace
-            | Self::NextWorkspace
-            | Self::WorkspaceByNumber
-            | Self::CarryWindowLeft
-            | Self::CarryWindowRight
-            | Self::Overview
-            | Self::AppWindows
-            | Self::ShowDesktop => Area::Workspaces,
-            Self::NextInputSource | Self::PreviousInputSource => Area::Keyboard,
+            Self::NextApp | Self::PreviousApp | Self::OpenTerminal => Area::Apps,
+            Self::PreviousWorkspace | Self::NextWorkspace | Self::Overview | Self::ShowDesktop => {
+                Area::Workspaces
+            }
             Self::CaptureScreen | Self::CaptureArea | Self::CaptureOptions => Area::Screenshots,
             Self::ToggleZoom | Self::ZoomIn | Self::ZoomOut | Self::ToggleScreenReader => {
                 Area::Accessibility
@@ -100,9 +79,6 @@ impl Action {
             Self::ShowLauncher
             | Self::ShowClipboardHistory
             | Self::ShowEmojiPicker
-            | Self::FocusMenuBar
-            | Self::FocusTaskbar
-            | Self::SearchMenus
             | Self::ShowNotificationCenter
             | Self::ShowControlCenter
             | Self::LockScreen
@@ -114,32 +90,21 @@ impl Action {
         match self {
             Self::CloseWindow => L10N.tr("close-window"),
             Self::MinimizeWindow => L10N.tr("minimize-window"),
-            Self::ToggleFullScreen => L10N.tr("toggle-full-screen"),
             Self::TileWindow => L10N.tr("tile-window"),
+            Self::MoveWindowToDisplay => L10N.tr("move-window-to-display"),
             Self::NextApp => L10N.tr("next-app"),
-            Self::NextWindow => L10N.tr("next-window"),
-            Self::PreviousWindow => L10N.tr("previous-window"),
-            Self::ForceQuit => L10N.tr("force-quit"),
+            Self::PreviousApp => L10N.tr("previous-app"),
+            Self::OpenTerminal => L10N.tr("open-terminal"),
             Self::PreviousWorkspace => L10N.tr("previous-workspace"),
             Self::NextWorkspace => L10N.tr("next-workspace"),
-            Self::WorkspaceByNumber => L10N.tr("workspace-by-number"),
-            Self::CarryWindowLeft => L10N.tr("carry-window-left"),
-            Self::CarryWindowRight => L10N.tr("carry-window-right"),
-            Self::MoveWindowToDisplay => L10N.tr("move-window-to-display"),
             Self::Overview => L10N.tr("overview"),
-            Self::AppWindows => L10N.tr("app-windows"),
             Self::ShowDesktop => L10N.tr("show-desktop"),
-            Self::NextInputSource => L10N.tr("next-input-source"),
-            Self::PreviousInputSource => L10N.tr("previous-input-source"),
             Self::CaptureScreen => L10N.tr("capture-screen"),
             Self::CaptureArea => L10N.tr("capture-area"),
             Self::CaptureOptions => L10N.tr("capture-options"),
             Self::ShowLauncher => L10N.tr("show-launcher"),
             Self::ShowClipboardHistory => L10N.tr("show-clipboard-history"),
             Self::ShowEmojiPicker => L10N.tr("show-emoji-picker"),
-            Self::FocusMenuBar => L10N.tr("focus-menu-bar"),
-            Self::FocusTaskbar => L10N.tr("focus-taskbar"),
-            Self::SearchMenus => L10N.tr("search-menus"),
             Self::ShowNotificationCenter => L10N.tr("show-notification-center"),
             Self::ShowControlCenter => L10N.tr("show-control-center"),
             Self::LockScreen => L10N.tr("lock-screen"),
@@ -152,58 +117,168 @@ impl Action {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Modifiers {
+    pub shift: bool,
+    pub ctrl: bool,
+    pub alt: bool,
+    pub logo: bool,
+}
+
+const NONE: Modifiers = Modifiers {
+    shift: false,
+    ctrl: false,
+    alt: false,
+    logo: false,
+};
+const SUPER: Modifiers = Modifiers { logo: true, ..NONE };
+const SHIFT: Modifiers = Modifiers {
+    shift: true,
+    ..NONE
+};
+const ALT: Modifiers = Modifiers { alt: true, ..NONE };
+const SHIFT_ALT: Modifiers = Modifiers { shift: true, ..ALT };
+const CTRL_ALT: Modifiers = Modifiers { ctrl: true, ..ALT };
+const SHIFT_SUPER: Modifiers = Modifiers {
+    shift: true,
+    ..SUPER
+};
+const CTRL_SUPER: Modifiers = Modifiers {
+    ctrl: true,
+    ..SUPER
+};
+const ALT_SUPER: Modifiers = Modifiers { alt: true, ..SUPER };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Key {
+    Tap,
+    Character(char),
+    Tab,
+    Print,
+    Function(u8),
+    AnyFunction,
+    Left,
+    Right,
+    Up,
+    Down,
+    AnyArrow,
+    MissionControl,
+}
+
+impl Key {
+    fn covers(self, pressed: Self) -> bool {
+        match (self, pressed) {
+            (Self::AnyFunction, Self::Function(number)) => (1..=12).contains(&number),
+            (Self::AnyArrow, Self::Left | Self::Right | Self::Up | Self::Down) => true,
+            (Self::Character('='), Self::Character('+')) => true,
+            _ => self == pressed,
+        }
+    }
+
+    fn name(self) -> String {
+        match self {
+            Self::Tap => String::new(),
+            Self::Character(character) => character.to_ascii_uppercase().to_string(),
+            Self::Tab => "Tab".to_owned(),
+            Self::Print => "Print".to_owned(),
+            Self::Function(number) => format!("F{number}"),
+            Self::AnyFunction => "F1".to_owned(),
+            Self::Left | Self::AnyArrow => "Left".to_owned(),
+            Self::Right => "Right".to_owned(),
+            Self::Up => "Up".to_owned(),
+            Self::Down => "Down".to_owned(),
+            Self::MissionControl => "Mission Control".to_owned(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Shortcut {
     pub action: Action,
-    pub keys: &'static str,
+    pub modifiers: Modifiers,
+    pub key: Key,
 }
 
-const fn shortcut(action: Action, keys: &'static str) -> Shortcut {
-    Shortcut { action, keys }
+impl Shortcut {
+    pub fn keys(&self) -> String {
+        let Modifiers {
+            shift,
+            ctrl,
+            alt,
+            logo,
+        } = self.modifiers;
+        [
+            (shift, "Shift"),
+            (ctrl, "Ctrl"),
+            (alt, "Alt"),
+            (logo, "Super"),
+        ]
+        .into_iter()
+        .filter(|(held, _)| *held)
+        .map(|(_, name)| name.to_owned())
+        .chain(Some(self.key.name()).filter(|name| !name.is_empty()))
+        .collect::<Vec<_>>()
+        .join("+")
+    }
 }
 
-pub const SHORTCUTS: [Shortcut; 40] = [
-    shortcut(Action::CloseWindow, "Alt+F4"),
-    shortcut(Action::MinimizeWindow, "Super+H"),
-    shortcut(Action::ToggleFullScreen, "Super+F11"),
-    shortcut(Action::TileWindow, "Super+Left"),
-    shortcut(Action::MoveWindowToDisplay, "Shift+Super+Right"),
-    shortcut(Action::NextApp, "Super+Tab"),
-    shortcut(Action::NextApp, "Alt+Tab"),
-    shortcut(Action::NextWindow, "Super+`"),
-    shortcut(Action::PreviousWindow, "Shift+Super+`"),
-    shortcut(Action::ForceQuit, "Ctrl+Alt+Escape"),
-    shortcut(Action::PreviousWorkspace, "Ctrl+Super+Left"),
-    shortcut(Action::NextWorkspace, "Ctrl+Super+Right"),
-    shortcut(Action::WorkspaceByNumber, "Ctrl+Super+1"),
-    shortcut(Action::CarryWindowLeft, "Ctrl+Shift+Super+Left"),
-    shortcut(Action::CarryWindowRight, "Ctrl+Shift+Super+Right"),
-    shortcut(Action::Overview, "Super+W"),
-    shortcut(Action::Overview, "Mission Control"),
-    shortcut(Action::AppWindows, "Alt+Super+Down"),
-    shortcut(Action::ShowDesktop, "Super+D"),
-    shortcut(Action::ShowDesktop, "Super+Mission Control"),
-    shortcut(Action::NextInputSource, "Alt+Super+Space"),
-    shortcut(Action::PreviousInputSource, "Alt+Shift+Super+Space"),
-    shortcut(Action::CaptureScreen, "Shift+Print"),
-    shortcut(Action::CaptureArea, "Shift+Super+S"),
-    shortcut(Action::CaptureOptions, "Print"),
-    shortcut(Action::ShowLauncher, "Super+Space"),
-    shortcut(Action::ShowLauncher, "Super+A"),
-    shortcut(Action::ShowClipboardHistory, "Super+V"),
-    shortcut(Action::ShowEmojiPicker, "Super+."),
-    shortcut(Action::FocusMenuBar, "Super+F2"),
-    shortcut(Action::FocusTaskbar, "Super+F3"),
-    shortcut(Action::SearchMenus, "Shift+Super+/"),
-    shortcut(Action::ShowNotificationCenter, "Super+N"),
-    shortcut(Action::ShowControlCenter, "Super+S"),
-    shortcut(Action::LockScreen, "Super+L"),
-    shortcut(Action::TextConsole, "Ctrl+Alt+F2"),
-    shortcut(Action::ToggleZoom, "Alt+Super+8"),
-    shortcut(Action::ZoomIn, "Alt+Super+="),
-    shortcut(Action::ZoomOut, "Alt+Super+-"),
-    shortcut(Action::ToggleScreenReader, "Alt+Super+S"),
+const fn shortcut(action: Action, modifiers: Modifiers, key: Key) -> Shortcut {
+    Shortcut {
+        action,
+        modifiers,
+        key,
+    }
+}
+
+pub const SHORTCUTS: [Shortcut; 26] = [
+    shortcut(Action::CloseWindow, ALT, Key::Function(4)),
+    shortcut(Action::MinimizeWindow, SUPER, Key::Character('h')),
+    shortcut(Action::TileWindow, SUPER, Key::AnyArrow),
+    shortcut(Action::MoveWindowToDisplay, SHIFT_SUPER, Key::AnyArrow),
+    shortcut(Action::NextApp, ALT, Key::Tab),
+    shortcut(Action::PreviousApp, SHIFT_ALT, Key::Tab),
+    shortcut(Action::OpenTerminal, CTRL_ALT, Key::Character('t')),
+    shortcut(Action::PreviousWorkspace, CTRL_SUPER, Key::Left),
+    shortcut(Action::NextWorkspace, CTRL_SUPER, Key::Right),
+    shortcut(Action::Overview, NONE, Key::MissionControl),
+    shortcut(Action::ShowDesktop, SUPER, Key::Character('d')),
+    shortcut(Action::ShowDesktop, SUPER, Key::MissionControl),
+    shortcut(Action::CaptureScreen, SHIFT, Key::Print),
+    shortcut(Action::CaptureArea, SHIFT_SUPER, Key::Character('s')),
+    shortcut(Action::CaptureOptions, NONE, Key::Print),
+    shortcut(Action::ShowLauncher, SUPER, Key::Tap),
+    shortcut(Action::ShowClipboardHistory, SUPER, Key::Character('v')),
+    shortcut(Action::ShowEmojiPicker, SUPER, Key::Character('.')),
+    shortcut(Action::ShowNotificationCenter, SUPER, Key::Character('n')),
+    shortcut(Action::ShowControlCenter, SUPER, Key::Character('s')),
+    shortcut(Action::LockScreen, SUPER, Key::Character('l')),
+    shortcut(Action::TextConsole, CTRL_ALT, Key::AnyFunction),
+    shortcut(Action::ToggleZoom, ALT_SUPER, Key::Character('8')),
+    shortcut(Action::ZoomIn, ALT_SUPER, Key::Character('=')),
+    shortcut(Action::ZoomOut, ALT_SUPER, Key::Character('-')),
+    shortcut(Action::ToggleScreenReader, ALT_SUPER, Key::Character('s')),
 ];
+
+pub fn bound(modifiers: Modifiers, pressed: Key) -> Option<Action> {
+    SHORTCUTS
+        .iter()
+        .find(|shortcut| shortcut.modifiers == modifiers && shortcut.key.covers(pressed))
+        .map(|shortcut| shortcut.action)
+}
+
+pub fn keys_of(action: Action) -> Option<String> {
+    SHORTCUTS
+        .iter()
+        .find(|shortcut| shortcut.action == action)
+        .map(Shortcut::keys)
+}
+
+pub fn keys_for(action: Action, key: Key) -> Option<String> {
+    SHORTCUTS
+        .iter()
+        .find(|shortcut| shortcut.action == action && shortcut.key.covers(key))
+        .map(|shortcut| Shortcut { key, ..*shortcut }.keys())
+}
 
 pub fn shortcuts_in(area: Area) -> impl Iterator<Item = &'static Shortcut> {
     SHORTCUTS

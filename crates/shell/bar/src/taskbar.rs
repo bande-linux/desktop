@@ -8,8 +8,7 @@ use accesskit::{Action, ActionRequest, Node, Role};
 use bande_config::{BAR_ICON_SIZE_RANGE, BarEdge};
 use bande_taskbar_model::{LauncherEntry, LauncherUpdate};
 use bande_toolkit::ui::{
-    Animated, Context, Cursor, Event, Key as KeyboardKey, Modifiers, PointerButton, Size, Spring,
-    Ui, Widget, WidgetId,
+    Animated, Context, Cursor, Event, PointerButton, Size, Spring, Ui, Widget, WidgetId,
 };
 
 use crate::L10N;
@@ -94,7 +93,6 @@ pub enum TaskbarAction {
     ShowInFiles(String),
     Menu { target: MenuTarget, at: Point },
     Keep(Vec<String>),
-    ReleaseKeyboard,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,7 +101,6 @@ enum Key {
     RunningSeparator,
     TrashSeparator,
     Trash,
-    More,
 }
 
 impl Key {
@@ -239,7 +236,6 @@ pub struct TaskbarState {
     hide_at: Option<Instant>,
     pointer_inside: bool,
     menu_open: bool,
-    selected: Option<Key>,
     rail: TaskbarLayout,
     rail_icon: f32,
     active: Option<String>,
@@ -313,7 +309,6 @@ impl TaskbarState {
             hide_at: None,
             pointer_inside: false,
             menu_open: false,
-            selected: None,
             rail: TaskbarLayout::default(),
             rail_icon: icon_size,
             active: None,
@@ -699,7 +694,7 @@ impl TaskbarState {
     fn pointer_left(&mut self, now: Instant) {
         self.pointer_inside = false;
         self.reveal_at = None;
-        if self.hides() && !self.menu_open && self.selected.is_none() && self.is_shown() {
+        if self.hides() && !self.menu_open && self.is_shown() {
             self.hide_at = Some(now + HIDE_DELAY);
         }
     }
@@ -721,7 +716,7 @@ impl TaskbarState {
             .and_then(|slot| match &slot.key {
                 Key::App(app_id) => Some(MenuTarget::App(app_id.clone())),
                 Key::Trash => Some(MenuTarget::Trash),
-                Key::RunningSeparator | Key::TrashSeparator | Key::More => None,
+                Key::RunningSeparator | Key::TrashSeparator => None,
             })
     }
 
@@ -748,106 +743,6 @@ impl TaskbarState {
             slot.press
                 .animate_at(now, reduce_motion, scale, Spring::QUICK);
         }
-    }
-
-    pub fn is_navigating(&self) -> bool {
-        self.selected.is_some()
-    }
-
-    fn reachable(&self) -> Vec<Key> {
-        let mut keys: Vec<Key> = self
-            .slots
-            .iter()
-            .filter(|slot| !slot.leaving && !slot.hidden && !slot.key.is_separator())
-            .map(|slot| slot.key.clone())
-            .collect();
-        if self.more.is_some() {
-            let at = keys
-                .iter()
-                .position(|key| *key == Key::Trash)
-                .unwrap_or(keys.len());
-            keys.insert(at, Key::More);
-        }
-        keys
-    }
-
-    pub fn start_navigation(&mut self, active: Option<&str>, now: Instant) {
-        let reachable = self.reachable();
-        let chosen = active
-            .map(|app_id| Key::App(app_id.to_owned()))
-            .filter(|key| reachable.contains(key))
-            .or_else(|| reachable.first().cloned());
-        let Some(chosen) = chosen else {
-            return;
-        };
-        self.hide_at = None;
-        self.reveal_at = None;
-        self.slide(true, now);
-        self.select(chosen, now);
-    }
-
-    pub fn end_navigation(&mut self, now: Instant) {
-        if self.selected.take().is_none() {
-            return;
-        }
-        self.hide_label(now);
-        if self.hides() && !self.pointer_inside && !self.menu_open {
-            self.hide_at = Some(now + HIDE_DELAY);
-        }
-    }
-
-    fn select(&mut self, key: Key, now: Instant) {
-        self.selected = Some(key.clone());
-        self.show_label(key, now);
-    }
-
-    pub fn navigate(&mut self, key: KeyboardKey, modifiers: Modifiers, now: Instant) -> bool {
-        let Some(selected) = self.selected.clone() else {
-            return false;
-        };
-        let reachable = self.reachable();
-        let at = reachable
-            .iter()
-            .position(|known| *known == selected)
-            .unwrap_or(0);
-        let (back, forward) = if vertical(self.edge) {
-            (KeyboardKey::Up, KeyboardKey::Down)
-        } else {
-            (KeyboardKey::Left, KeyboardKey::Right)
-        };
-        match key {
-            _ if key == back => {
-                if let Some(previous) = at.checked_sub(1).and_then(|at| reachable.get(at)) {
-                    self.select(previous.clone(), now);
-                }
-            }
-            _ if key == forward => {
-                if let Some(next) = reachable.get(at + 1) {
-                    self.select(next.clone(), now);
-                }
-            }
-            KeyboardKey::Home => {
-                if let Some(first) = reachable.first() {
-                    self.select(first.clone(), now);
-                }
-            }
-            KeyboardKey::End => {
-                if let Some(last) = reachable.last() {
-                    self.select(last.clone(), now);
-                }
-            }
-            KeyboardKey::Enter | KeyboardKey::Space => {
-                self.activate(&selected);
-                if selected != Key::More {
-                    self.actions.push(TaskbarAction::ReleaseKeyboard);
-                }
-            }
-            KeyboardKey::Menu => self.open_menu(&selected),
-            KeyboardKey::Function(10) if modifiers.shift => self.open_menu(&selected),
-            KeyboardKey::Escape => self.actions.push(TaskbarAction::ReleaseKeyboard),
-            _ => return false,
-        }
-        true
     }
 
     pub fn icon_rects(&self) -> Vec<(String, Rect)> {
@@ -1328,7 +1223,6 @@ impl TaskbarState {
         let target = match key {
             Key::App(app_id) => MenuTarget::App(app_id.clone()),
             Key::Trash => MenuTarget::Trash,
-            Key::More => return self.open_more(),
             Key::RunningSeparator | Key::TrashSeparator => return,
         };
         let Some(at) = self.menu_point(key) else {
@@ -1350,7 +1244,6 @@ impl TaskbarState {
         match key {
             Key::App(app_id) => self.actions.push(TaskbarAction::Open(app_id.clone())),
             Key::Trash => self.actions.push(TaskbarAction::OpenTrash),
-            Key::More => self.open_more(),
             Key::RunningSeparator | Key::TrashSeparator => {}
         }
     }
@@ -1486,7 +1379,6 @@ impl TaskbarState {
                 Key::RunningSeparator | Key::TrashSeparator => {
                     self.paint_separator(cx, cell, &mut slot_items);
                 }
-                Key::More => {}
                 Key::Trash => {
                     let rect = scaled(self.icon_rect(cell), cx.sample(&slot.press));
                     let image = if self.trash.is_full {
@@ -1515,31 +1407,9 @@ impl TaskbarState {
         }
         self.paint_more(cx, items);
         self.paint_ghost(cx, items);
-        self.paint_selection(cx, items);
         items.extend(on_top);
         self.paint_remove_label(cx, items);
         self.paint_label(cx, items);
-    }
-
-    fn paint_selection(&self, cx: &Context, items: &mut Vec<Item>) {
-        let cell = match self.selected.as_ref() {
-            Some(Key::More) => self.more.as_ref().map(|more| more.cell),
-            Some(key) => self
-                .slots
-                .iter()
-                .find(|slot| &slot.key == key)
-                .map(|slot| self.painted_cell(slot, cx)),
-            None => None,
-        };
-        let Some(cell) = cell else {
-            return;
-        };
-        let ring = self.icon_rect(cell).inset(-4.0);
-        items.push(Item::Stroke {
-            shape: Shape::rounded(ring, ring.width * 0.27),
-            width: 3.0,
-            paint: cx.palette.accent_text.with_alpha(200).into(),
-        });
     }
 
     fn paint_ghost(&self, cx: &Context, items: &mut Vec<Item>) {

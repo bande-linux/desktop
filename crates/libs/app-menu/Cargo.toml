@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 bande-inbox.workspace = true
+bande-keyboard.workspace = true
 bande-l10n.workspace = true
 zbus.workspace = true
 

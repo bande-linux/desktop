@@ -1,5 +1,5 @@
 # Post notifications from a terminal, watch the banners, then open the Notification Center and Control Center.
-key super+space
+key super
 wait 600ms
 type "terminal"
 wait 500ms

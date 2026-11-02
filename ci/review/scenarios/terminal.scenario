@@ -2,8 +2,8 @@
 note "A fresh session: the desktop as it appears after login"
 shot "desktop after login"
 wait 1s
-note "Super+Space opens the launcher"
-key super+space
+note "Tapping Super opens Search"
+key super
 wait 800ms
 shot "launcher open"
 type "terminal"

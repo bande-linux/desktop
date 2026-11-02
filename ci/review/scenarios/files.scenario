@@ -1,6 +1,6 @@
 # Open Files from the launcher and browse folders with the keyboard.
 note "Open Files from the launcher"
-key super+space
+key super
 wait 600ms
 type "files"
 wait 600ms

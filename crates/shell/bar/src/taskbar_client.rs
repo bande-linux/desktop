@@ -41,7 +41,6 @@ const MENU_SHOW: &str = "show";
 const MENU_EMPTY_TRASH: &str = "empty-trash";
 const MENU_CONFIRM_EMPTY: &str = "confirm-empty-trash";
 const MENU_CANCEL: &str = "cancel";
-const TASKBAR_FOCUS: &str = "taskbar";
 const KEYBOARD_GRACE: Duration = Duration::from_millis(60);
 
 const MENU_HIDE: &str = "hide";
@@ -276,7 +275,6 @@ impl Taskbar {
                 TaskbarAction::OpenTrash => self.open_in_files(window, TRASH_URI),
                 TaskbarAction::ShowInFiles(app_id) => self.show_in_files(window, &app_id),
                 TaskbarAction::Menu { target, at } => self.show_menu(window, target, at),
-                TaskbarAction::ReleaseKeyboard => self.release_keyboard(window),
                 TaskbarAction::Keep(shown) => {
                     let shown: Vec<String> = shown
                         .into_iter()
@@ -436,7 +434,6 @@ impl Taskbar {
 
     fn release_keyboard(&mut self, window: &mut Window) {
         self.release_at = None;
-        self.state.borrow_mut().end_navigation(Instant::now());
         let Some(active) = self.active.clone() else {
             return;
         };
@@ -824,7 +821,7 @@ impl Taskbar {
     }
 
     pub fn set_menu_open(&mut self, open: bool) {
-        if !open && !self.state.borrow().is_navigating() {
+        if !open {
             self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
         }
         self.state.borrow_mut().set_menu_open(open, Instant::now());
@@ -874,34 +871,12 @@ impl App for Taskbar {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
-            WindowEvent::Input(Event::Key { key, modifiers })
-                if self.state.borrow().is_navigating() =>
-            {
-                self.state
-                    .borrow_mut()
-                    .navigate(key, modifiers, Instant::now());
-                self.run_actions(window);
-            }
-            WindowEvent::FocusShell(target) if target == TASKBAR_FOCUS => {
-                self.release_at = None;
-                let active = self.active.clone();
-                self.state
-                    .borrow_mut()
-                    .start_navigation(active.as_deref(), Instant::now());
-                window.request_redraw();
-            }
             WindowEvent::Focus(true) => {
-                if !self.state.borrow().is_navigating() && !self.menu_shown() {
+                if !self.menu_shown() {
                     self.release_at = Some(Instant::now() + KEYBOARD_GRACE);
                 }
             }
-            WindowEvent::Focus(false) => {
-                self.release_at = None;
-                if !self.menu_shown() {
-                    self.state.borrow_mut().end_navigation(Instant::now());
-                    window.request_redraw();
-                }
-            }
+            WindowEvent::Focus(false) => self.release_at = None,
             WindowEvent::Input(Event::PointerDown(pointer))
                 if self.owns_open_menu_at(pointer.position) =>
             {
@@ -1031,8 +1006,7 @@ impl App for Taskbar {
     fn tick(&mut self, window: &mut Window, now: Instant) {
         if self.release_at.is_some_and(|at| now >= at) {
             self.release_at = None;
-            if !self.menu_shown() && !window.is_menu_open() && !self.state.borrow().is_navigating()
-            {
+            if !self.menu_shown() && !window.is_menu_open() {
                 self.release_keyboard(window);
             }
         }

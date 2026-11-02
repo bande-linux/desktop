@@ -32,6 +32,7 @@ use crate::units::{scope_name, unit_app_ids, unit_of_object_path};
 use crate::uri::{file_uri, path_from_file_uri};
 
 pub const TERMINAL: &str = "bande-terminal";
+pub const TERMINAL_APP_ID: &str = "org.bande.Terminal";
 pub const ACTIVATION_TOKEN: &str = "XDG_ACTIVATION_TOKEN";
 const APP_OOM_SCORE: &[u8] = b"200";
 

@@ -21,10 +21,10 @@ use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use crate::window::{State, Window, WindowError, WindowEvent};
 
 pub(crate) const END_SESSION_SINCE: u32 = 3;
-pub(crate) const ACTIVE_MENUS_SINCE: u32 = 4;
 pub(crate) const MENU_BUTTON_SINCE: u32 = 4;
 pub(crate) const PANEL_SINCE: u32 = 5;
 pub(crate) const PANEL_ORIGIN_SINCE: u32 = 6;
+pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
 
 struct Toplevel {
     handle: ExtForeignToplevelHandleV1,
@@ -517,9 +517,7 @@ impl Dispatch<BandeShellV1, ()> for State {
             bande_shell_v1::Event::AttentionRequested { app_id } => {
                 state.events.push(WindowEvent::AttentionRequested(app_id));
             }
-            bande_shell_v1::Event::FocusShell { namespace } => {
-                state.events.push(WindowEvent::FocusShell(namespace));
-            }
+            bande_shell_v1::Event::OpenTerminal => state.events.push(WindowEvent::OpenTerminal),
             bande_shell_v1::Event::ShowAppMenu {
                 surface,
                 app_id,

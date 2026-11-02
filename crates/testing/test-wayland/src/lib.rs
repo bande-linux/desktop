@@ -71,6 +71,7 @@ struct Globals {
     toplevels: toplevel::Toplevels,
     lock: lock::SessionLock,
     input_method: ime::InputMethod,
+    shell_events: Vec<String>,
 }
 
 pub struct TestClient {

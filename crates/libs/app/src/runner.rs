@@ -79,7 +79,7 @@ pub(crate) fn run<P: Program>(
     let menu = cx.session().cloned().and_then(|session| {
         AppMenu::serve(
             session,
-            assemble(info, program.menus(&cx), true, cx.zoomable()),
+            assemble(info, program.menus(&cx), true, cx.sizing()),
         )
         .inspect_err(|error| tracing::warn!("{error}"))
         .ok()
@@ -204,7 +204,7 @@ impl<P: Program> Runner<P> {
             self.cx.info,
             self.program.menus(&self.cx),
             windowed,
-            self.cx.zoomable(),
+            self.cx.sizing(),
         );
         if let Err(error) = menu.update(entries) {
             tracing::warn!("cannot update the menus: {error}");
@@ -254,12 +254,17 @@ impl<P: Program> Runner<P> {
             self.cx.menus_changed = true;
             return;
         };
+        let full_screen = window.and_then(|window| self.cx.full_screen(window));
         let shown = window
             .and_then(|window| self.cx.index(window))
             .map(|index| &mut self.cx.windows[index]);
         let result = match (standard, shown) {
             (Standard::Hide | Standard::Minimize, Some(window)) => window.minimize(),
             (Standard::Zoom, Some(window)) => window.toggle_zoom(),
+            (Standard::FullScreen, Some(window)) => match full_screen {
+                Some(_) => window.toggle_full_screen(),
+                None => Ok(()),
+            },
             (Standard::Quit, _) => {
                 self.quit();
                 Ok(())
@@ -326,7 +331,7 @@ impl<P: Program> Runner<P> {
             self.cx.info,
             self.program.menus(&self.cx),
             windowed,
-            self.cx.zoomable(),
+            self.cx.sizing(),
         );
         if let Some(action) = shortcut_action(&menus, &|shortcut| shortcut_pressed(input, shortcut))
         {

@@ -22,7 +22,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - After `rebuild-desktop` and a new login: Ctrl shortcuts everywhere and Super only for the
   system; taskbar icons of third-party apps; resize zones; snapping against the taskbar edge;
   sidebar selection.
-- Force Quit: `Ctrl+Alt+Escape` with a stopped app (`kill -STOP`) marks it within 3 s and kills
+- Force Quit from the system menu with a stopped app (`kill -STOP`) marks it within 3 s and kills
   it with its helpers; it opens under real memory pressure; Orca reads it; Shift in the system
   menu shows Force Quit "*App*".
 - Notifications after the center moved to its own bus name: banners and center fill and clear,
@@ -88,7 +88,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - Footprint: the typed property follower; the bar's own desktop-entry parsing; worker threads
   and timeouts for the remaining blocking D-Bus calls (Control Center setters, tray).
 - Text size: menus at 200 % and long labels; Activity Monitor's CPU-core strip (apps repo).
-- A `Super+Space` pressed before the shell connects is lost.
+- A Super tap or `Ctrl+Alt+T` pressed before the shell connects is lost.
 - The low-memory dialog has no test hook: it shows only on a real PSI stall with memory nearly
   exhausted, so a headless walk cannot open it.
 - Mail's Settings window (apps repo) has no title or menu button, unlike the other apps'.

@@ -1,5 +1,5 @@
 # Drag a file from Files to the desktop, from the desktop to the Trash in the taskbar, and from Files straight to the Trash.
-key super+space
+key super
 wait 600ms
 type "terminal"
 wait 500ms
@@ -8,7 +8,7 @@ wait-for-window "org.bande.Terminal"
 wait 1s
 type "touch ~/review-drag.txt ~/review-trash.txt; exit\n"
 wait 1500ms
-key super+space
+key super
 wait 600ms
 type "files"
 wait 500ms

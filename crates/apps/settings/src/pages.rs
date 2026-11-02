@@ -4,7 +4,7 @@ use std::time::Instant;
 use bande_audio::Direction;
 use bande_bluetooth::Kind as DeviceKind;
 use bande_config::{ACCENTS, MAX_INPUT_SOURCES};
-use bande_keyboard::{Action, SHORTCUTS, shortcuts_in};
+use bande_keyboard::{Action, shortcuts_in};
 use bande_toolkit::ui::{
     Axis, Button, Label, LevelIndicator, PopUpButton, ScrollView, SearchField, SecureField,
     SegmentedControl, Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
@@ -756,16 +756,6 @@ impl SettingsView {
         let sources = self.input_sources();
         let count = sources.len();
         let mut rows = Vec::new();
-        if let Some(next) = SHORTCUTS
-            .iter()
-            .find(|shortcut| shortcut.action == Action::NextInputSource)
-            .filter(|_| count > 1)
-        {
-            rows.push(boxed(Row::new(
-                Text::new(&L10N.tr("switch-sources"), Tone::Primary),
-                Some(boxed(Shortcut::new(next.keys))),
-            )));
-        }
         for (index, code) in sources.iter().enumerate() {
             let name = self.layouts().name(code);
             let short = self.layouts().short(code);
@@ -885,7 +875,7 @@ impl SettingsView {
         let mut page = Vec::new();
         for area in bande_keyboard::Area::ALL {
             page.push(boxed(Caption::new(Text::label(&area.title()))));
-            let mut bindings: Vec<(Action, Vec<&str>)> = Vec::new();
+            let mut bindings: Vec<(Action, Vec<String>)> = Vec::new();
             for shortcut in shortcuts_in(area).filter(|shortcut| {
                 shortcut.action != Action::ToggleScreenReader || self.offers_screen_reader()
             }) {
@@ -893,8 +883,8 @@ impl SettingsView {
                     .iter_mut()
                     .find(|(action, _)| *action == shortcut.action)
                 {
-                    Some((_, keys)) => keys.push(shortcut.keys),
-                    None => bindings.push((shortcut.action, vec![shortcut.keys])),
+                    Some((_, keys)) => keys.push(shortcut.keys()),
+                    None => bindings.push((shortcut.action, vec![shortcut.keys()])),
                 }
             }
             let rows = bindings
@@ -902,7 +892,7 @@ impl SettingsView {
                 .map(|(action, keys)| {
                     let keys = keys
                         .into_iter()
-                        .map(|keys| boxed(Shortcut::new(keys)))
+                        .map(|keys| boxed(Shortcut::new(&keys)))
                         .collect();
                     boxed(Row::new(
                         Text::new(&action.label(), Tone::Primary),

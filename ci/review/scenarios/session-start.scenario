@@ -26,8 +26,8 @@ wait 1200ms
 shot "notification center"
 key escape
 wait 800ms
-note "Super+Space opens the launcher"
-key super+space
+note "Tapping Super opens Search"
+key super
 wait 800ms
 shot "launcher"
 key escape

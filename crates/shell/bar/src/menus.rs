@@ -1,5 +1,5 @@
 use bande_datetime::DateFormats;
-use bande_keyboard::{Action, SHORTCUTS};
+use bande_keyboard::{Action, keys_of};
 use bande_toolkit::ui::{Menu, MenuItem};
 use jiff::{Timestamp, Zoned};
 
@@ -15,13 +15,6 @@ use crate::rail::in_use;
 
 fn item(title: &str, command: &Command) -> MenuItem {
     MenuItem::new(title, &command.action())
-}
-
-fn keys_of(action: Action) -> Option<&'static str> {
-    SHORTCUTS
-        .iter()
-        .find(|shortcut| shortcut.action == action)
-        .map(|shortcut| shortcut.keys)
 }
 
 fn note(title: &str) -> MenuItem {
@@ -101,10 +94,6 @@ pub fn clock_menu(quiet: bool, clock: &ClockApp, dates: &DateFormats, has_clock:
 
 pub fn system_menu(user: &str, frontmost: Option<&str>) -> Menu {
     let force_quit = item(&L10N.tr("force-quit"), &Command::ForceQuit);
-    let force_quit = match keys_of(Action::ForceQuit) {
-        Some(keys) => force_quit.shortcut(keys),
-        None => force_quit,
-    };
     let force_quit = match frontmost {
         Some(app) => force_quit.shift_alternate(item(
             &L10N.tr_args("force-quit-app", [("app", app.to_owned().into())]),
@@ -123,7 +112,8 @@ pub fn system_menu(user: &str, frontmost: Option<&str>) -> Menu {
         item(&L10N.tr("restart"), &Command::Restart),
         item(&L10N.tr("shut-down"), &Command::ShutDown),
         MenuItem::separator(),
-        item(&L10N.tr("lock-screen"), &Command::LockScreen).shortcut("Super+L"),
+        item(&L10N.tr("lock-screen"), &Command::LockScreen)
+            .shortcut(&keys_of(Action::LockScreen).unwrap_or_default()),
         item(
             &L10N.tr_args("log-out", [("user", user.to_owned().into())]),
             &Command::LogOut,
@@ -381,10 +371,5 @@ pub fn cascade(menus: &AppMenus<'_>) -> Menu {
             }
         }
     }
-    let shortcut = keys_of(Action::SearchMenus).unwrap_or_default();
-    Menu::new(items).searchable(
-        &L10N.tr("type-to-search"),
-        shortcut,
-        &L10N.tr("no-menu-results"),
-    )
+    Menu::new(items).searchable(&L10N.tr("type-to-search"), &L10N.tr("no-menu-results"))
 }

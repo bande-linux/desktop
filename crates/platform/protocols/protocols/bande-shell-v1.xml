@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="bande_shell_v1">
-  <interface name="bande_shell_v1" version="4">
+  <interface name="bande_shell_v1" version="5">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the shell and the screenshot tool), never on the listening socket.
@@ -25,15 +25,15 @@
 
     <event name="capture_screen">
       <description summary="the user pressed the full-screen capture shortcut">
-        Sent for Super+Shift+3, as Command-Shift-3 takes a picture of the whole
+        Sent for Shift+Print, as Command-Shift-3 takes a picture of the whole
         screen on a Mac.
       </description>
     </event>
 
     <event name="capture_area">
       <description summary="the user pressed the area capture shortcut">
-        Sent for Super+Shift+4, as Command-Shift-4 lets the user drag out the part
-        of the screen to take a picture of on a Mac.
+        Sent for Shift+Super+S, as Command-Shift-4 lets the user drag out the
+        part of the screen to take a picture of on a Mac.
       </description>
     </event>
 
@@ -118,7 +118,7 @@
 
     <request name="quit_app">
       <description summary="ask an app to quit">
-        Asks the app with this app id to quit, as Super+Q does: through
+        Asks the app with this app id to quit, as its Quit item does: through
         bande_app_v1.quit_requested when the app has bound it, otherwise by
         asking each of its windows to close. The app may ask the user first.
       </description>
@@ -174,18 +174,6 @@
       <arg name="surface" type="object" interface="wl_surface"/>
       <arg name="radius" type="uint"/>
     </request>
-
-    <event name="focus_shell">
-      <description summary="the user asked to reach a shell element from the keyboard">
-        Sent with the layer namespace "taskbar" for Super+F3, "menubar" for
-        Super+F2 and "menu-search" for Shift+Super+/, after the compositor gave
-        the keyboard to the layer surface with that namespace or, when there is
-        none, to the bar or the Taskbar.
-        The client shows its keyboard selection. To give the keyboard back, for
-        example on Escape, it calls activate_app with the active app.
-      </description>
-      <arg name="namespace" type="string"/>
-    </event>
 
     <request name="show_app">
       <description summary="show the hidden windows of an app">
@@ -283,7 +271,7 @@
     <request name="show_launcher">
       <description summary="open the launcher">
         Sent by the bar when its Bande mark is clicked. The compositor sends
-        show_launcher to the shell clients, as Super+Space does.
+        show_launcher to the shell clients, as tapping Super does.
       </description>
     </request>
 
@@ -294,7 +282,7 @@
 
     <event name="open_launcher">
       <description summary="the user asked for one of the launcher's modes">
-        Sent for Super+Shift+V (clipboard), Ctrl+Super+Space (emoji) and when
+        Sent for Super+V (clipboard), Super+. (emoji) and when
         an app asks for the emoji picker. Text field is 1 when the window that
         had the keyboard has an enabled text input, so that insert_text can
         type into it.
@@ -476,8 +464,7 @@
     <request name="show_force_quit">
       <description summary="open Force Quit">
         Opens the compositor's Force Quit window, or brings it forward when
-        it is open, as Ctrl+Alt+Escape does. Sent by the system menu's Force
-        Quit item.
+        it is open. Sent by the system menu's Force Quit item.
       </description>
     </request>
 
@@ -525,8 +512,8 @@
 
     <event name="show_app_menu" since="3">
       <description summary="open an app's menus under a window's menu button">
-        Sent when the user presses the menu button (⋮) of a window, or Super+F2
-        while the key window has one. The shell opens the app's menus as a
+        Sent when the user presses the menu button (⋮) of a window. The shell
+        opens the app's menus as a
         popup of its surface on the window's display, below the button, which
         is at this rectangle relative to that surface, and grabs it with this
         serial, which the compositor lets take over the pointer and keyboard.
@@ -555,6 +542,13 @@
       </description>
       <arg name="menu" type="string"/>
     </event>
+
+    <event name="open_terminal" since="5">
+      <description summary="the user pressed the terminal shortcut">
+        Sent for Ctrl+Alt+T. The shell opens the default terminal app, or
+        brings it forward when it is running.
+      </description>
+    </event>
   </interface>
 
   <interface name="bande_app_v1" version="6">
@@ -569,7 +563,7 @@
 
     <event name="quit_requested">
       <description summary="the user asked to quit the app">
-        Sent for Super+Q, as Command-Q quits an app on a Mac. The app should
+        Sent for the shell's Quit item, as Command-Q quits an app on a Mac. The app should
         quit: close all its windows and exit, asking the user once first if
         something would be lost, as a terminal with running programs does. If
         the user cancels, the app keeps running and nothing is closed.
@@ -591,7 +585,7 @@
       <description summary="tile one of the app's windows">
         Places the toplevel as the window menu's Move and Resize items do, with
         the same animation and tiled states as dragging the window to a screen
-        edge or pressing Ctrl+Super+Arrows. Restore undoes tiling and zoom. Zoom,
+        edge or pressing Super+Arrows. Restore undoes tiling and zoom. Zoom,
         full screen and minimise use xdg_toplevel's own requests. Ignored for a
         toplevel of another client and in full screen.
       </description>
@@ -634,7 +628,7 @@
     <request name="show_emoji_picker">
       <description summary="open the emoji and symbols picker">
         Sent by a text field's Emoji and Symbols item. The compositor opens the
-        launcher's emoji mode as Ctrl+Super+Space does, and the chosen
+        launcher's emoji mode as Super+. does, and the chosen
         character is typed into the app's focused text field.
       </description>
     </request>
@@ -699,7 +693,7 @@
       <description summary="say where a window shows its menu button">
         The toplevel draws a menu button (⋮) for the app's menus at this
         rectangle in its window geometry; a zero width or height says it has
-        none. The compositor uses it for Super+F2 and to place the menus.
+        none. The compositor uses it to place the menus.
       </description>
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
       <arg name="x" type="int"/>
@@ -775,7 +769,7 @@
 
     <request name="quit_app">
       <description summary="ask an app to quit">
-        Asks the app with this app id to quit, as Super+Q does: through
+        Asks the app with this app id to quit, as its Quit item does: through
         bande_app_v1.quit_requested when the app has bound it, otherwise by
         asking each of its windows to close. The app may ask the user first.
         Shell clients are never asked.

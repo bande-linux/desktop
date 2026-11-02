@@ -70,9 +70,6 @@ pub struct ScanoutDevice {
     pub feedback: DmabufFeedback,
 }
 
-pub(crate) const TASKBAR_FOCUS: &str = "taskbar";
-pub(crate) const MENU_SEARCH_NAMESPACE: &str = "menu-search";
-
 pub(crate) struct ExclusiveLayer {
     pub(crate) surface: WlSurface,
     pub(crate) previous: Option<WlSurface>,
@@ -216,7 +213,7 @@ impl Compositor {
         crate::menu_button::create_globals(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, BandeShellV1, ()>(crate::menu_button::ACTIVE_MENUS_SINCE, ());
+        handle.create_global::<State, BandeShellV1, ()>(crate::shell::OPEN_TERMINAL_SINCE, ());
         handle.create_global::<State, BandeAppV1, ()>(6, ());
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1, ()>(1, ());

@@ -36,7 +36,7 @@
 
     <event name="show_options">
       <description summary="the user pressed the capture options shortcut">
-        Sent for Super+Shift+5, as Command-Shift-5 opens the screenshot and
+        Sent for Print, as Command-Shift-5 opens the screenshot and
         screen recording toolbar on a Mac.
       </description>
     </event>

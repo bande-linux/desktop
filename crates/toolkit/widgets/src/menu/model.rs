@@ -10,7 +10,6 @@ pub struct Menu {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Search {
     pub hint: String,
-    pub shortcut: String,
     pub nothing_found: String,
     pub query: String,
 }
@@ -23,11 +22,10 @@ impl Menu {
         }
     }
 
-    pub fn searchable(self, hint: &str, shortcut: &str, nothing_found: &str) -> Self {
+    pub fn searchable(self, hint: &str, nothing_found: &str) -> Self {
         Self {
             search: Some(Search {
                 hint: hint.to_owned(),
-                shortcut: shortcut.to_owned(),
                 nothing_found: nothing_found.to_owned(),
                 query: String::new(),
             }),

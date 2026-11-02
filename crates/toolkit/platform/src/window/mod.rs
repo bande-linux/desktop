@@ -185,7 +185,7 @@ pub enum WindowEvent {
         responding: bool,
     },
     AttentionRequested(String),
-    FocusShell(String),
+    OpenTerminal,
     ShowAppMenu {
         app_id: String,
         menu: String,

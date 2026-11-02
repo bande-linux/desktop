@@ -22,8 +22,9 @@ use bande_toolkit::{
     Rect, Role, Scene, SessionEnd, TextSystem, Window, WindowError, WindowEvent, ui::frame_time,
 };
 use bande_xdg::{
-    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, MimeDatabase, applications,
-    current_desktops, data_dirs, find_icon, launch, launch_with, launch_with_arguments,
+    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, LaunchError, Locale, MimeDatabase, TERMINAL_APP_ID,
+    applications, current_desktops, data_dirs, find_icon, launch, launch_with,
+    launch_with_arguments,
 };
 
 const FALLBACK_DOCUMENT: &str = "application-x-generic";
@@ -368,6 +369,21 @@ impl LauncherShell {
         window.request_redraw();
     }
 
+    fn open_terminal(&mut self, window: &mut Window) {
+        let Some(entry) = self
+            .entries
+            .iter()
+            .find(|entry| entry.app_id() == TERMINAL_APP_ID)
+        else {
+            tracing::warn!("{TERMINAL_APP_ID} is not installed");
+            return;
+        };
+        let token = window.activation_token(TERMINAL_APP_ID).ok();
+        if let Err(error) = launch(entry, token.as_deref()) {
+            tracing::warn!("cannot open {TERMINAL_APP_ID}: {error}");
+        }
+    }
+
     fn open(&mut self, window: &mut Window, target: &Target) {
         let opened = match target {
             Target::App(app_id) => self
@@ -449,6 +465,7 @@ impl App for LauncherShell {
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::ShowLauncher => self.toggle(window, Mode::Search, false),
+            WindowEvent::OpenTerminal => self.open_terminal(window),
             WindowEvent::ScrimPressed => self.close(window),
             WindowEvent::OpenLauncher { mode, text_field } => {
                 let mode = match mode {

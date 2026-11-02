@@ -6,7 +6,6 @@ use bande_toolkit::{App, TextSystem, Window};
 use zbus::blocking::Connection;
 
 use crate::bar_client::{BarClient, bar_role};
-use crate::menu_search_client::{SearchCard, search_role};
 use crate::rail::TaskbarView;
 use crate::status_client::StatusClient;
 use crate::taskbar_client::Taskbar;
@@ -65,13 +64,8 @@ pub fn open(
         icon_size,
     );
     let status = StatusClient::new(view, display.clone(), services.status)?;
-    let (handoff, restart) = (status.handoff(), status.restart());
-    let mut surfaces: Vec<(Window, Box<dyn App>)> =
+    let restart = status.restart();
+    let surfaces: Vec<(Window, Box<dyn App>)> =
         vec![(window, Box::new(BarClient::new(taskbar, status)))];
-    if display.main {
-        let mut window = open_window(search_role(), (0, 0))?;
-        let card = SearchCard::new(&mut window, text.sharing_fonts(), handoff);
-        surfaces.push((window, Box::new(card)));
-    }
     Ok(Bar { surfaces, restart })
 }

@@ -1,6 +1,6 @@
 # Open System Settings from the launcher and switch to dark mode, then back.
 note "Open System Settings from the launcher"
-key super+space
+key super
 wait 600ms
 type "settings"
 wait 600ms

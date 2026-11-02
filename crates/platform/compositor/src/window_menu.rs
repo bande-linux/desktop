@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use bande_graphics::{Key, Modifiers, Palette, Scheme, TextSize, TextSystem, WindowControl};
+use bande_keyboard::{Action, Key as BoundKey, keys_for, keys_of};
 use bande_protocols::server::bande_app_v1::Placement;
 use bande_render::VulkanRenderer;
 use bande_spring::Spring;
@@ -224,8 +225,10 @@ impl State {
         let resizable = !window.fixed_size();
         let tile = |key: &str| item(L10N.tr(key), key).enabled(resizable);
         let mut items = vec![
-            tile("place-left").shortcut("Super+Left"),
-            tile("place-right").shortcut("Super+Right"),
+            tile("place-left")
+                .shortcut(&keys_for(Action::TileWindow, BoundKey::Left).unwrap_or_default()),
+            tile("place-right")
+                .shortcut(&keys_for(Action::TileWindow, BoundKey::Right).unwrap_or_default()),
             MenuItem::separator(),
             tile("place-top-left"),
             tile("place-top-right"),
@@ -241,8 +244,9 @@ impl State {
             .count();
         if displays > 1 {
             items.push(
-                item(L10N.tr("place-next-display"), "place-next-display")
-                    .shortcut("Shift+Super+Right"),
+                item(L10N.tr("place-next-display"), "place-next-display").shortcut(
+                    &keys_for(Action::MoveWindowToDisplay, BoundKey::Right).unwrap_or_default(),
+                ),
             );
         }
         items.extend([
@@ -283,7 +287,8 @@ impl State {
     fn window_menu(&self, index: usize) -> Menu {
         let zoomed = self.windows[index].has_state(xdg_toplevel::State::Maximized);
         Menu::new(vec![
-            item(L10N.tr("minimize"), "minimize").shortcut("Super+H"),
+            item(L10N.tr("minimize"), "minimize")
+                .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
             item(
                 match zoomed {
                     true => L10N.tr("unzoom"),
@@ -302,7 +307,8 @@ impl State {
                 Menu::new(self.desktop_items(index)),
             ),
             MenuItem::separator(),
-            item(L10N.tr("close"), "close").shortcut("Alt+F4"),
+            item(L10N.tr("close"), "close")
+                .shortcut(&keys_of(Action::CloseWindow).unwrap_or_default()),
         ])
     }
 

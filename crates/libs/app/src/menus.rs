@@ -1,4 +1,6 @@
-use bande_app_menu::{Entry, Standard, app_submenu, close_window, settings, window_submenu};
+use bande_app_menu::{
+    Entry, FULL_SCREEN, Standard, app_submenu, close_window, settings, window_submenu,
+};
 use bande_toolkit::ui::{Event, shortcut_pressed};
 
 use crate::{Info, Keys, Menus};
@@ -30,6 +32,7 @@ impl Keys {
             (self.close(), Standard::CloseWindow),
             (self.quit(), Standard::Quit),
             (self.settings(), Standard::Settings),
+            (FULL_SCREEN, Standard::FullScreen),
         ]
         .into_iter()
         .filter(|(_, standard)| settings || *standard != Standard::Settings)
@@ -38,7 +41,12 @@ impl Keys {
     }
 }
 
-pub(crate) fn assemble(info: &Info, menus: Menus, windowed: bool, zoomable: bool) -> Vec<Entry> {
+pub(crate) fn assemble(
+    info: &Info,
+    menus: Menus,
+    windowed: bool,
+    (zoomable, full_screen): (bool, Option<bool>),
+) -> Vec<Entry> {
     let name = (info.name)();
     let items = match info.settings {
         Some(_) => vec![settings(info.keys.settings())],
@@ -48,7 +56,7 @@ pub(crate) fn assemble(info: &Info, menus: Menus, windowed: bool, zoomable: bool
     entries.extend(menus.menus);
     let mut window = vec![close_window(info.keys.close())];
     window.extend(menus.window);
-    entries.push(window_submenu(window, zoomable));
+    entries.push(window_submenu(window, zoomable, full_screen));
     match windowed {
         true => entries,
         false => entries.into_iter().map(Entry::without_window).collect(),

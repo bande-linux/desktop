@@ -417,6 +417,7 @@ name = "bande-app-menu"
 version = "0.1.5"
 dependencies = [
  "bande-inbox",
+ "bande-keyboard",
  "bande-l10n",
  "zbus",
 ]
@@ -542,6 +543,7 @@ dependencies = [
  "bande-datetime",
  "bande-edid",
  "bande-graphics",
+ "bande-keyboard",
  "bande-l10n",
  "bande-log",
  "bande-protocols",
@@ -1228,6 +1230,7 @@ dependencies = [
  "accesskit_unix",
  "bande-bus",
  "bande-graphics",
+ "bande-keyboard",
  "bande-l10n",
  "bande-protocols",
  "bande-widgets",

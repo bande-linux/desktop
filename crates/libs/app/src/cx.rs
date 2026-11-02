@@ -36,6 +36,7 @@ pub struct Cx<P: Program> {
     pub(crate) views: Vec<(WindowId, Content<P::View>)>,
     next: u32,
     pub(crate) focused: Option<WindowId>,
+    panels: Vec<WindowId>,
     pub(crate) quitting: bool,
     pub(crate) menus_changed: bool,
     session: Option<Connection>,
@@ -56,6 +57,7 @@ impl<P: Program> Cx<P> {
             views: Vec::new(),
             next: 0,
             focused: None,
+            panels: Vec::new(),
             quitting: false,
             menus_changed: false,
             session,
@@ -105,7 +107,9 @@ impl<P: Program> Cx<P> {
         let content = content(window.appearance());
         self.windows.push(window);
         self.views.push((id, content));
-        if !panel {
+        if panel {
+            self.panels.push(id);
+        } else {
             self.focused.get_or_insert(id);
         }
         self.menus_changed = true;
@@ -170,10 +174,22 @@ impl<P: Program> Cx<P> {
             .or_else(|| self.shown().last().map(|(id, _)| *id))
     }
 
-    pub(crate) fn zoomable(&self) -> bool {
-        self.focused()
-            .and_then(|window| self.index(window))
-            .is_some_and(|index| self.windows[index].is_resizable())
+    pub(crate) fn sizing(&self) -> (bool, Option<bool>) {
+        self.focused().map_or((false, None), |window| {
+            let zoomable = self
+                .index(window)
+                .is_some_and(|index| self.windows[index].is_resizable());
+            (zoomable, self.full_screen(window))
+        })
+    }
+
+    pub(crate) fn full_screen(&self, window: WindowId) -> Option<bool> {
+        let index = self
+            .index(window)
+            .filter(|_| !self.panels.contains(&window))?;
+        let window = &self.windows[index];
+        let full_screen = window.toplevel_state().fullscreen;
+        (full_screen || window.is_resizable()).then_some(full_screen)
     }
 
     pub fn window(&mut self, window: WindowId) -> Option<(&mut Window, &mut P::View)> {
@@ -230,7 +246,9 @@ impl<P: Program> Cx<P> {
         while index < self.windows.len() {
             if self.windows[index].is_closed() {
                 self.windows.remove(index);
-                if let (id, Content::App(view)) = self.views.remove(index) {
+                let (id, content) = self.views.remove(index);
+                self.panels.retain(|panel| *panel != id);
+                if let Content::App(view) = content {
                     removed.push((id, view));
                 }
                 self.menus_changed = true;

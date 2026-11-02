@@ -1,5 +1,6 @@
 use bande_compositor::SessionRole;
-use bande_protocols::client::bande_shell_v1::BandeShellV1;
+use bande_protocols::client::bande_app_v1::{BandeAppV1, Workspace};
+use bande_protocols::client::bande_shell_v1::{self, BandeShellV1};
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop, event_created_child};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1;
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::{
@@ -23,14 +24,51 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn listen_as_shell(&mut self, server: &mut Compositor) {
+        let _: BandeShellV1 = self.bind("bande_shell_v1", 5);
+        self.exchange(server);
+    }
+
+    pub fn shell_events(&self) -> &[String] {
+        &self.globals.shell_events
+    }
+
+    pub fn show_force_quit(&mut self, server: &mut Compositor) {
+        let shell: BandeShellV1 = self.bind("bande_shell_v1", 1);
+        shell.show_force_quit();
+        self.exchange(server);
+    }
+
+    pub fn move_to_next_workspace(&mut self, server: &mut Compositor, index: usize) {
+        let app: BandeAppV1 = self.bind("bande_app_v1", 1);
+        app.move_to_workspace(&self.windows[index].2, Workspace::Next);
+        self.exchange(server);
+    }
+
     pub fn set_app_id(&mut self, server: &mut Compositor, index: usize, app_id: &str) {
         self.windows[index].2.set_app_id(app_id.to_owned());
         self.exchange(server);
     }
 }
 
-delegate_noop!(Globals: ignore BandeShellV1);
+delegate_noop!(Globals: ignore BandeAppV1);
 delegate_noop!(Globals: ignore ExtForeignToplevelHandleV1);
+
+impl Dispatch<BandeShellV1, ()> for Globals {
+    fn event(
+        globals: &mut Self,
+        shell: &BandeShellV1,
+        event: bande_shell_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        match event {
+            bande_shell_v1::Event::Ping { serial } => shell.pong(serial),
+            event => globals.shell_events.push(format!("{event:?}")),
+        }
+    }
+}
 
 impl Dispatch<ExtForeignToplevelListV1, ()> for Globals {
     fn event(

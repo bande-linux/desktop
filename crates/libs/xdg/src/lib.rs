@@ -33,8 +33,9 @@ pub use identity::{
     app_for_identity, app_name, find_app, find_app_for_process, running_app, write_launcher,
 };
 pub use launch::{
-    ACTIVATION_TOKEN, ExecError, LaunchError, OpenError, TERMINAL, follow_oom_kills, launch,
-    launch_action, launch_with, launch_with_arguments, open, spawn_detached, wait_for_exit,
+    ACTIVATION_TOKEN, ExecError, LaunchError, OpenError, TERMINAL, TERMINAL_APP_ID,
+    follow_oom_kills, launch, launch_action, launch_with, launch_with_arguments, open,
+    spawn_detached, wait_for_exit,
 };
 pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN};
 pub use mimeapps::{

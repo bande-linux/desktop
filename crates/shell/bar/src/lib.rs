@@ -2,8 +2,6 @@ mod bar_client;
 pub mod dialogs;
 mod installed_apps;
 pub mod low_memory;
-pub mod menu_search;
-mod menu_search_client;
 pub mod menus;
 pub mod pairing;
 pub mod rail;

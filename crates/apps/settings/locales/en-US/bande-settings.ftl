@@ -155,7 +155,6 @@ move-down-tooltip = Move down in the list
 remove-tooltip = Stop using this input source
 remove = Remove
 add-input-source = Add Input Source…
-switch-sources = Switch input sources
 more-input-sources = Type in more than one language or layout
 input-sources-full = Up to { $count } input sources can be used
 search-layouts = Search layouts

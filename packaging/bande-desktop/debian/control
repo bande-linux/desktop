@@ -54,8 +54,8 @@ Description: Bande desktop environment
  .
  It recommends the Bande APT repository, through which the system follows
  every Bande release and every Bande app. Passwords apps and networks
- keep live in the Bande keychain, unlocked when you log in. Other apps, such as a browser, and printing come
- from Software and Settings.
+ keep live in the Bande keychain, unlocked when you log in. Other apps,
+ such as a browser, and printing come from Software and Settings.
  .
  So that running out of memory never freezes the computer, it recommends
  compressed swap in memory (zram, sized like Fedora's and compressed with

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use web_atoms::{Atom, AtomTable};
@@ -23,6 +24,7 @@ pub struct Restyle {
 }
 
 pub struct Styles {
+    rule_sets: HashMap<(u32, Box<[u32]>), u32>,
     per_node: Vec<u32>,
     pool: Vec<ComputedStyle>,
     initial_reset: Arc<ResetStyle>,
@@ -62,6 +64,7 @@ impl Styles {
         };
         let initial_reset = root.reset.clone();
         let mut styles = Styles {
+            rule_sets: HashMap::new(),
             per_node: vec![UNSTYLED; document.len()],
             pool: vec![root],
             initial_reset,
@@ -192,7 +195,13 @@ impl Styles {
                     + size_of::<ResetStyle>() / Arc::strong_count(&style.reset)
             })
             .sum();
-        self.per_node.capacity() * size_of::<u32>()
+        let rule_sets: usize = self
+            .rule_sets
+            .keys()
+            .map(|(_, matched)| matched.len() * size_of::<u32>() + 3 * size_of::<u64>())
+            .sum();
+        rule_sets
+            + self.per_node.capacity() * size_of::<u32>()
             + self.pool.capacity() * size_of::<ComputedStyle>()
             + groups
     }
@@ -309,7 +318,22 @@ impl Styles {
         let Some(parent_style) = self.pool.get(parent as usize).cloned() else {
             return 0;
         };
-        let style = traversal.style(element, &parent_style, &self.initial_reset);
+        let matched = traversal.matched(element);
+        let cacheable = traversal.document.attribute(element, Atom::STYLE).is_none()
+            && traversal.document.parent(element) != Some(NodeId::DOCUMENT);
+        let key = (parent, matched.into_boxed_slice());
+        if cacheable && let Some(&index) = self.rule_sets.get(&key) {
+            return index;
+        }
+        let style = traversal.style(element, &key.1, &parent_style, &self.initial_reset);
+        let index = self.intern(style, parent, &parent_style);
+        if cacheable {
+            self.rule_sets.insert(key, index);
+        }
+        index
+    }
+
+    fn intern(&mut self, style: ComputedStyle, parent: u32, parent_style: &ComputedStyle) -> u32 {
         if Arc::ptr_eq(&style.inherited, &parent_style.inherited)
             && Arc::ptr_eq(&style.reset, &parent_style.reset)
         {
@@ -380,12 +404,7 @@ impl Traversal<'_> {
         })
     }
 
-    fn style(
-        &self,
-        element: NodeId,
-        parent: &ComputedStyle,
-        initial_reset: &Arc<ResetStyle>,
-    ) -> ComputedStyle {
+    fn matched(&self, element: NodeId) -> Vec<u32> {
         let context = self.context();
         let mut matched: Vec<u32> = self
             .candidates(element)
@@ -402,6 +421,16 @@ impl Traversal<'_> {
             .collect();
         matched.sort_unstable();
         matched.dedup();
+        matched
+    }
+
+    fn style(
+        &self,
+        element: NodeId,
+        matched: &[u32],
+        parent: &ComputedStyle,
+        initial_reset: &Arc<ResetStyle>,
+    ) -> ComputedStyle {
         let mut atoms = AtomTable::new();
         let style_attribute = self
             .document
@@ -410,7 +439,7 @@ impl Traversal<'_> {
         let names = self.document.atoms();
         let mut candidates: Vec<Candidate<'_>> = Vec::new();
         let mut customs: Vec<(&str, (u32, u32, u32), &CustomValue)> = Vec::new();
-        for &index in &matched {
+        for &index in matched {
             let Some(entry) = self.stylist.entries.get(index as usize) else {
                 continue;
             };

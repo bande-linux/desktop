@@ -11,6 +11,13 @@ The entry points below are stable; the app and `tools/conformance` drive them.
   viewport width in CSS px. `parse(bytes)` alone sniffs the encoding and returns the `Document`;
   `parse_with_charset(bytes, Some(label))` passes the HTTP `charset` as the transport encoding;
   `Page::new(document, width, fonts)` renders a parsed one.
+- Stylesheets: `<style>` applies at once. `stylesheet_links()` lists the `<link rel=stylesheet>`
+  and `@import` hrefs still missing (imports resolved against their sheet); the app fetches each
+  and calls `add_stylesheet(href, bytes, fonts)`, which restyles and lays out again.
+  `load_stylesheets_from(directory, fonts)` does the same from disk. `with_viewport` sets the
+  height that `vh` and media queries see (`new` assumes 4:3).
+- Hover: `hover_at(x, y, fonts)` or `set_hover(node, fonts)` restyle only what `:hover` rules
+  can reach and return whether to repaint; `restyled()` counts the elements restyled.
 - `Fonts::new()` scans the system fonts once; keep one per thread and reuse it across pages.
 - `Page` holds the document, styles, box tree, fragment tree and `display_list`.
   - `resize(width, fonts)` lays out again without restyling or reshaping.

@@ -145,8 +145,13 @@ impl Page {
             .find(|href| !attempted.contains(href))
         {
             let local = href.split(['?', '#']).next().unwrap_or_default();
-            let local = local.trim_start_matches('/');
-            let css = std::fs::read(directory.join(local)).unwrap_or_default();
+            let css = match local.strip_prefix('/') {
+                Some(rooted) => directory
+                    .ancestors()
+                    .find_map(|root| std::fs::read(root.join(rooted)).ok()),
+                None => std::fs::read(directory.join(local)).ok(),
+            }
+            .unwrap_or_default();
             self.add_stylesheet(&href, &css, fonts);
             attempted.push(href);
         }

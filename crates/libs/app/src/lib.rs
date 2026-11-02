@@ -17,7 +17,7 @@ use bande_toolkit::ui::Ui;
 use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 
 pub use cx::{Cx, WindowId};
-pub use portal::{Filter, choose_file};
+pub use portal::{Filter, choose_file, choose_save_file};
 
 pub type Error = Box<dyn std::error::Error>;
 

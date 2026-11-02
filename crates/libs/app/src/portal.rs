@@ -20,10 +20,11 @@ fn request_path(connection: &Connection, token: &str) -> Option<OwnedObjectPath>
     OwnedObjectPath::try_from(format!("{PORTAL_PATH}/request/{sender}/{token}")).ok()
 }
 
-pub fn choose_file(
+fn ask(
     session: &Connection,
+    method: &str,
     title: &str,
-    filter: Option<Filter>,
+    mut options: HashMap<&str, Value<'_>>,
 ) -> zbus::Result<Option<PathBuf>> {
     static REQUESTS: AtomicU32 = AtomicU32::new(0);
     let token = format!(
@@ -35,20 +36,9 @@ pub fn choose_file(
     let request = Proxy::new(session, PORTAL, path, REQUEST)?;
     let mut responses = request.receive_signal("Response")?;
     let chooser = Proxy::new(session, PORTAL, PORTAL_PATH, FILE_CHOOSER)?;
-    let mut options: HashMap<&str, Value<'_>> = HashMap::from([
-        ("handle_token", Value::from(token.as_str())),
-        ("modal", Value::from(true)),
-    ]);
-    match filter {
-        Some(filter) => {
-            options.insert("filters", Value::from(vec![filter.clone()]));
-            options.insert("current_filter", Value::from(filter));
-        }
-        None => {
-            options.insert("directory", Value::from(true));
-        }
-    }
-    let _: OwnedObjectPath = chooser.call("OpenFile", &("", title, options))?;
+    options.insert("handle_token", Value::from(token.clone()));
+    options.insert("modal", Value::from(true));
+    let _: OwnedObjectPath = chooser.call(method, &("", title, options))?;
     let Some(response) = responses.next() else {
         return Ok(None);
     };
@@ -65,4 +55,31 @@ pub fn choose_file(
     Ok(uris
         .first()
         .and_then(|uri| bande_xdg::path_from_file_uri(uri)))
+}
+
+pub fn choose_file(
+    session: &Connection,
+    title: &str,
+    filter: Option<Filter>,
+) -> zbus::Result<Option<PathBuf>> {
+    let mut options = HashMap::new();
+    match filter {
+        Some(filter) => {
+            options.insert("filters", Value::from(vec![filter.clone()]));
+            options.insert("current_filter", Value::from(filter));
+        }
+        None => {
+            options.insert("directory", Value::from(true));
+        }
+    }
+    ask(session, "OpenFile", title, options)
+}
+
+pub fn choose_save_file(
+    session: &Connection,
+    title: &str,
+    name: &str,
+) -> zbus::Result<Option<PathBuf>> {
+    let options = HashMap::from([("current_name", Value::from(name))]);
+    ask(session, "SaveFile", title, options)
 }

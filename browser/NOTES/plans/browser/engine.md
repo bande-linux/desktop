@@ -80,12 +80,17 @@ environment, the control socket on stdin and the renderer's network socket on st
 - Image pixels are copied once into the app's `Arc`s.
 - After a network-process crash, the next navigation restarts it.
 - Only the `onBeforeRequest` stage exists.
+- Every relayout (hover, images, resize) re-sends the whole display list. Damaged ranges will
+  replace that.
+- The scope placement is a systemd job. The renderer can get its first page a few milliseconds
+  before the move completes. Waiting for `JobRemoved` would close that gap.
 
 **Measured** (release, the mini, Debian's fonts):
 - An idle renderer is 1.7 MB anonymous and 8.4 MB resident (the rest is shared files). It starts,
   initialises fonts and enters the sandbox in 14–15 ms warm.
 - The Rust article's renderer is 25.8 MB anonymous, with 21 images; Cat's is 41 MB.
 - The idle network process is 1–7 MB anonymous.
+- The app with one window on that article is 29.8 MiB anonymous.
 - Every process makes zero wake-ups when idle.
 
 ## Pipeline and efficiency

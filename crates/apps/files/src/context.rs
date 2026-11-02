@@ -201,8 +201,8 @@ impl FilesView {
                 self.ask_open_with(files);
             }
             Command::QuickLook => {
-                if self.quick_look.is_none() {
-                    self.toggle_quick_look();
+                if !self.quick_look_shown() {
+                    self.open_quick_look(false);
                 }
             }
             Command::Info => self.show_inspector(),

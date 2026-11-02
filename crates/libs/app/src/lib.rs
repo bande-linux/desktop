@@ -50,13 +50,14 @@ pub enum Kind {
     Secondary(&'static str),
     Dialog(&'static str),
     Utility(&'static str),
+    Panel(&'static str),
 }
 
 impl Kind {
     pub fn tag(self) -> &'static str {
         match self {
             Self::Main => "main",
-            Self::Secondary(tag) | Self::Dialog(tag) | Self::Utility(tag) => tag,
+            Self::Secondary(tag) | Self::Dialog(tag) | Self::Utility(tag) | Self::Panel(tag) => tag,
         }
     }
 }

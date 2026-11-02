@@ -20,7 +20,7 @@ pub use model::{
     Positions, Slot, SortBy, icon_bounds, label_bounds,
 };
 pub use places::{Layouts, format_layouts, layouts_path, parse_layouts, save_layouts};
-pub use quick_look::{QuickLookLink, QuickLookSurface, quick_look_role};
+pub use quick_look::{QuickLookSurface, quick_look_role};
 pub use view::{Artwork, DesktopView, Request, fitted_label};
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-desktop-surface.ftl");

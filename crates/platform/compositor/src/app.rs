@@ -365,6 +365,22 @@ impl Dispatch<BandeAppV1, ()> for State {
                     state.refocus_pointer();
                 }
             }
+            bande_app_v1::Request::SetPanel { toplevel }
+                if toplevel.client() == resource.client() =>
+            {
+                if let Some(index) = state
+                    .windows
+                    .iter()
+                    .position(|window| window.toplevel.xdg_toplevel() == &toplevel)
+                {
+                    state.windows[index].panel = true;
+                    let surface = state.windows[index].surface().clone();
+                    if state.key_window().as_ref() == Some(&surface) {
+                        state.refocus_after_losing(&surface);
+                    }
+                    state.needs_redraw = true;
+                }
+            }
             bande_app_v1::Request::MoveToWorkspace {
                 toplevel,
                 workspace: WEnum::Value(workspace),

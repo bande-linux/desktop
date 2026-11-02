@@ -7,15 +7,16 @@ use bande_content::pdf::session::Phase;
 use bande_content::{Block, Tone};
 use bande_fs::{format_date, format_size};
 use bande_toolkit::{
-    Color, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, Shape, TextAlign,
-    TextRole, TextStyle, TextSystem, Transform,
+    Color, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Shape,
+    TextAlign, TextRole, TextStyle, TextSystem, Transform,
 };
 use bande_xdg::{ICON_THEMES, data_dirs, find_icon};
 use parley::{Alignment, AlignmentOptions, FontFamily, FontFamilyName, StyleProperty};
 
 use crate::content::{CodeView, DocumentView, FontView, Picture, Shown};
 use crate::pdf::{GAP, PdfView, render};
-use crate::{Edge, Hit, L10N, MIN_SIZE, QuickLook, Resizing, Subject};
+use crate::worker::SAMPLE_WIDTH;
+use crate::{Hit, L10N, MIN_SIZE, QuickLook, Resizing, Subject};
 
 const HEADER: f32 = 44.0;
 const PADDING: f32 = 16.0;
@@ -31,6 +32,7 @@ const SIDEBAR: f32 = 124.0;
 const THUMBNAIL: f32 = 84.0;
 const TILE: f32 = 150.0;
 const START_SCALE: f32 = 0.85;
+const FIELD_WIDTH: f32 = 240.0;
 
 #[derive(Default)]
 pub struct Symbols {
@@ -55,14 +57,14 @@ impl Symbols {
 pub fn resized(resizing: &Resizing, at: Point, bounds: Rect) -> (f32, f32) {
     let (dx, dy) = (at.x - resizing.from.x, at.y - resizing.from.y);
     let (horizontal, vertical) = match resizing.edge {
-        Edge::Left => (-1.0, 0.0),
-        Edge::Right => (1.0, 0.0),
-        Edge::Top => (0.0, -1.0),
-        Edge::Bottom => (0.0, 1.0),
-        Edge::TopLeft => (-1.0, -1.0),
-        Edge::TopRight => (1.0, -1.0),
-        Edge::BottomLeft => (-1.0, 1.0),
-        Edge::BottomRight => (1.0, 1.0),
+        ResizeEdge::Left => (-1.0, 0.0),
+        ResizeEdge::Right => (1.0, 0.0),
+        ResizeEdge::Top => (0.0, -1.0),
+        ResizeEdge::Bottom => (0.0, 1.0),
+        ResizeEdge::TopLeft => (-1.0, -1.0),
+        ResizeEdge::TopRight => (1.0, -1.0),
+        ResizeEdge::BottomLeft => (-1.0, 1.0),
+        ResizeEdge::BottomRight => (1.0, 1.0),
     };
     let most = (
         (bounds.width - 2.0 * MARGIN).max(MIN_SIZE.0),
@@ -92,7 +94,7 @@ fn fitted(area: Rect, width: f32, height: f32, upscale: bool) -> Rect {
     )
 }
 
-fn colored(
+pub(crate) fn colored(
     text: &mut TextSystem,
     content: &str,
     style: TextStyle,
@@ -217,6 +219,83 @@ impl Painter<'_> {
     }
 }
 
+impl Painter<'_> {
+    fn password(
+        &mut self,
+        area: Rect,
+        typed: usize,
+        retry: bool,
+        hover: Option<Hit>,
+        hits: &mut Vec<(Rect, Hit)>,
+    ) {
+        let palette = self.palette;
+        let width = FIELD_WIDTH.min(area.width);
+        let left = area.x + (area.width - width) / 2.0;
+        let top = area.y + area.height - 3.0 * BUTTON - PADDING;
+        let field = Rect::new(left, top, width, BUTTON);
+        self.items.push(Item::Fill {
+            shape: Shape::rounded(field, Radius::S),
+            paint: palette.field.into(),
+        });
+        self.items.push(Item::Stroke {
+            shape: Shape::rounded(field, Radius::S),
+            width: 2.0,
+            paint: palette.focus.into(),
+        });
+        let (shown, color) = match typed {
+            0 => (L10N.tr("password"), palette.ink3),
+            count => ("\u{2022}".repeat(count), palette.ink),
+        };
+        let paragraph =
+            self.text
+                .fitted(&shown, TextStyle::role(TextRole::Body, color), width - 16.0);
+        self.items.push(Item::Text {
+            origin: Point::new(
+                left + 8.0,
+                top + ((BUTTON - paragraph.height()) / 2.0).round(),
+            ),
+            paragraph,
+        });
+        let label = self.paragraph(
+            &L10N.tr("unlock"),
+            TextStyle::role(TextRole::Body, palette.on_accent).weight(TextStyle::MEDIUM),
+            None,
+        );
+        let button_width = (label.width() + 24.0).ceil();
+        let button = Rect::new(
+            area.x + (area.width - button_width) / 2.0,
+            top + BUTTON + 8.0,
+            button_width,
+            BUTTON,
+        );
+        let fill = match hover == Some(Hit::Unlock) {
+            true => palette.accent.mix(palette.ink, 0.1),
+            false => palette.accent,
+        };
+        self.items.push(Item::Fill {
+            shape: Shape::rounded(button, Radius::S),
+            paint: fill.into(),
+        });
+        self.items.push(Item::Text {
+            origin: Point::new(
+                button.x + 12.0,
+                button.y + ((BUTTON - label.height()) / 2.0).round(),
+            ),
+            paragraph: label,
+        });
+        hits.push((button, Hit::Unlock));
+        if retry {
+            let style = TextStyle::role(TextRole::Callout, palette.danger_text);
+            self.centered(
+                &L10N.tr("pdf-wrong-password"),
+                style,
+                area,
+                top - BUTTON + 4.0,
+            );
+        }
+    }
+}
+
 fn summary_lines(subject: &Subject, shown: &Shown) -> Vec<String> {
     let entry = &subject.entry;
     let modified = entry
@@ -262,7 +341,7 @@ fn summary_lines(subject: &Subject, shown: &Shown) -> Vec<String> {
 
 impl QuickLook {
     fn target(&self, bounds: Rect) -> Rect {
-        if self.full_screen {
+        if self.full_screen || self.windowed {
             return bounds;
         }
         let width = self
@@ -275,9 +354,13 @@ impl QuickLook {
             .1
             .clamp(MIN_SIZE.1, (bounds.height - 2.0 * MARGIN).max(MIN_SIZE.1))
             .min(bounds.height);
+        let room = (
+            ((bounds.width - width) / 2.0).max(0.0),
+            ((bounds.height - height) / 2.0).max(0.0),
+        );
         Rect::new(
-            (bounds.x + (bounds.width - width) / 2.0).round(),
-            (bounds.y + (bounds.height - height) / 2.0).round(),
+            (bounds.x + room.0 + self.offset.x.clamp(-room.0, room.0)).round(),
+            (bounds.y + room.1 + self.offset.y.clamp(-room.1, room.1)).round(),
             width.round(),
             height.round(),
         )
@@ -306,7 +389,7 @@ impl QuickLook {
             true => Shape::rect(target),
             false => Shape::rounded(target, Radius::XL),
         };
-        if !self.full_screen {
+        if !self.full_screen && !self.windowed {
             painter.items.extend(
                 Elevation::Overlay
                     .shadows(palette.scheme, true)
@@ -324,6 +407,10 @@ impl QuickLook {
             paint: palette.overlay.into(),
         });
         self.hits.push((target, Hit::Panel));
+        self.hits.push((
+            Rect::new(target.x, target.y, target.width, HEADER),
+            Hit::Header,
+        ));
         let mut content = std::mem::take(&mut painter.items);
         self.paint_header(&mut painter, target);
         let area = Rect::new(
@@ -343,7 +430,10 @@ impl QuickLook {
         if !self.full_screen {
             self.resize_hits(target);
         }
-        let origin = self.subject().and_then(|subject| subject.origin);
+        let origin = self
+            .subject()
+            .and_then(|subject| subject.origin)
+            .filter(|_| !self.windowed);
         let shown = match origin {
             Some(origin) if !self.reduce_motion => Rect::new(
                 lerp(origin.x, target.x, presence),
@@ -380,6 +470,10 @@ impl QuickLook {
     }
 
     fn resize_hits(&mut self, frame: Rect) {
+        let frame = match self.windowed {
+            true => frame.inset(GRIP),
+            false => frame,
+        };
         let (left, top) = (frame.x - GRIP, frame.y - GRIP);
         let (right, bottom) = (frame.x + frame.width - GRIP, frame.y + frame.height - GRIP);
         let (width, height) = (frame.width - 2.0 * GRIP, frame.height - 2.0 * GRIP);
@@ -387,32 +481,35 @@ impl QuickLook {
         self.hits.extend([
             (
                 Rect::new(left + grip, top, width, grip),
-                Hit::Resize(Edge::Top),
+                Hit::Resize(ResizeEdge::Top),
             ),
             (
                 Rect::new(left + grip, bottom, width, grip),
-                Hit::Resize(Edge::Bottom),
+                Hit::Resize(ResizeEdge::Bottom),
             ),
             (
                 Rect::new(left, top + grip, grip, height),
-                Hit::Resize(Edge::Left),
+                Hit::Resize(ResizeEdge::Left),
             ),
             (
                 Rect::new(right, top + grip, grip, height),
-                Hit::Resize(Edge::Right),
+                Hit::Resize(ResizeEdge::Right),
             ),
-            (Rect::new(left, top, grip, grip), Hit::Resize(Edge::TopLeft)),
+            (
+                Rect::new(left, top, grip, grip),
+                Hit::Resize(ResizeEdge::TopLeft),
+            ),
             (
                 Rect::new(right, top, grip, grip),
-                Hit::Resize(Edge::TopRight),
+                Hit::Resize(ResizeEdge::TopRight),
             ),
             (
                 Rect::new(left, bottom, grip, grip),
-                Hit::Resize(Edge::BottomLeft),
+                Hit::Resize(ResizeEdge::BottomLeft),
             ),
             (
                 Rect::new(right, bottom, grip, grip),
-                Hit::Resize(Edge::BottomRight),
+                Hit::Resize(ResizeEdge::BottomRight),
             ),
         ]);
     }
@@ -537,6 +634,13 @@ impl QuickLook {
             shown => {
                 let lines = summary_lines(&subject, shown);
                 painter.summary(&subject, area, &lines);
+                if let Shown::Pdf(pdf) = shown
+                    && let Phase::Locked { retry } = pdf.phase()
+                {
+                    let password = self.password.chars().count();
+                    let hover = self.hover;
+                    painter.password(area, password, retry, hover, &mut self.hits);
+                }
             }
         }
     }
@@ -829,7 +933,7 @@ fn block_style(block: &Block, palette: &Palette) -> TextStyle {
             TextStyle::new(size, palette.ink).weight(TextStyle::BOLD)
         }
         Block::Quote(_) => TextStyle::new(14.0, palette.ink2),
-        Block::Code(_) => TextStyle::new(CODE_SIZE, palette.ink).monospace(),
+        Block::Code(_) | Block::Plain(_) => TextStyle::new(CODE_SIZE, palette.ink).monospace(),
         Block::Paragraph(_) | Block::Bullet(_) | Block::Rule => TextStyle::new(14.0, palette.ink),
     }
 }
@@ -852,9 +956,10 @@ fn paint_document(
         for block in &document.blocks {
             let style = block_style(block, &painter.palette);
             let (text, indent) = match block {
-                Block::Heading(_, text) | Block::Paragraph(text) | Block::Code(text) => {
-                    (text.as_str(), 0.0)
-                }
+                Block::Heading(_, text)
+                | Block::Paragraph(text)
+                | Block::Code(text)
+                | Block::Plain(text) => (text.as_str(), 0.0),
                 Block::Bullet(text) | Block::Quote(text) => (text.as_str(), 18.0),
                 Block::Rule => ("", 0.0),
             };
@@ -927,7 +1032,7 @@ fn paint_document(
                     paragraph: paragraph.clone(),
                 });
             }
-            Block::Heading(..) | Block::Paragraph(_) => items.push(Item::Text {
+            Block::Heading(..) | Block::Paragraph(_) | Block::Plain(_) => items.push(Item::Text {
                 origin: Point::new(left, y),
                 paragraph: paragraph.clone(),
             }),
@@ -941,50 +1046,20 @@ fn paint_document(
 }
 
 fn paint_font(painter: &mut Painter<'_>, font: &mut FontView, area: Rect, scroll: Point) -> Point {
-    let width = area.width.min(READABLE * 1.3);
-    let left = area.x + (area.width - width) / 2.0;
-    let ink = painter.palette.ink;
-    if font
-        .laid
-        .as_ref()
-        .is_none_or(|(laid, _, _)| (laid - width).abs() > 0.5)
-    {
-        let sample = L10N.tr("font-sample");
-        let alphabet =
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ\nabcdefghijklmnopqrstuvwxyz\n0123456789 .,;:!?&@#%()[]";
-        let mut lines = vec![(font.family.clone(), 36.0), (alphabet.to_owned(), 22.0)];
-        lines.extend([12.0, 18.0, 24.0, 36.0, 48.0, 64.0].map(|size| (sample.clone(), size)));
-        let mut y = 0.0;
-        let mut laid = Vec::new();
-        for (text, size) in lines {
-            let paragraph = colored(
-                &mut font.text,
-                &text,
-                TextStyle::new(size, ink),
-                Some(&font.family),
-                &[],
-                Some(width),
-            );
-            let height = paragraph.height();
-            laid.push((y, paragraph));
-            y += height + 18.0;
-        }
-        font.laid = Some((width, laid, y));
-    }
-    let Some((_, laid, total)) = &font.laid else {
+    let Some(image) = font.image(painter.palette.ink) else {
         return scroll;
     };
-    let scroll = Point::new(0.0, scroll.y.clamp(0.0, (total - area.height).max(0.0)));
-    let items = laid
-        .iter()
-        .map(|(top, paragraph)| Item::Text {
-            origin: Point::new(left, area.y + top - scroll.y),
-            paragraph: paragraph.clone(),
-        })
-        .collect();
+    let natural = SAMPLE_WIDTH;
+    let width = natural.min(area.width);
+    let height = image.height() as f32 * width / image.width().max(1) as f32;
+    let scroll = Point::new(0.0, scroll.y.clamp(0.0, (height - area.height).max(0.0)));
+    let left = area.x + (area.width - width) / 2.0;
     painter.items.push(Item::Clip {
         shape: Shape::rect(area),
-        items,
+        items: vec![Item::Image {
+            rect: Rect::new(left, area.y - scroll.y, width, height),
+            image,
+        }],
     });
     scroll
 }

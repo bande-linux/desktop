@@ -10,6 +10,7 @@ use smithay::desktop::{LayerMap, PopupManager, WindowSurfaceType, layer_map_for_
 use smithay::input::pointer::{CursorIcon, CursorImageAttributes, CursorImageStatus};
 
 use bande_render::VulkanRenderer;
+use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Physical, Point};
@@ -465,12 +466,14 @@ impl State {
                 }
             })
             .map(|(index, window)| {
-                let band = if self.on_full_screen_space(window) || self.dragged_in_overview(window)
+                let band = if self.on_full_screen_space(window)
+                    || self.dragged_in_overview(window)
+                    || window.panel && window.has_state(xdg_toplevel::State::Fullscreen)
                 {
                     Band::Front
                 } else if window.is_minimized() {
                     Band::Leaving
-                } else if window.keep_on_top {
+                } else if window.keep_on_top || window.panel {
                     Band::OnTop
                 } else {
                     Band::Rest

@@ -1,22 +1,27 @@
+mod access;
 mod content;
 mod loader;
 mod paint;
+mod panel;
 mod pdf;
+mod worker;
 
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::time::Instant;
 
-use accesskit::{Live, Node, Role};
 use bande_fs::Entry;
 use bande_l10n::Localizer;
 use bande_toolkit::ui::{Animated, Cursor, Event, Key, Modifiers, Spring};
-use bande_toolkit::{Image, Point, Rect};
+use bande_toolkit::{Image, Point, Rect, ResizeEdge};
 use bande_xdg::{DesktopEntry, state_home};
 
 use crate::content::Shown;
 use crate::loader::Loader;
+
+pub use panel::{Link, Panel, QuickLookLink};
+pub use worker::serve_worker;
 
 const ENGLISH: &str = include_str!("../locales/en-US/bande-quick-look.ftl");
 
@@ -45,33 +50,21 @@ pub enum Action {
         path: PathBuf,
     },
     Copy(PathBuf),
-    Close,
+    Move,
+    Resize(ResizeEdge),
+    FullScreen(bool),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Edge {
-    Left,
-    Right,
-    Top,
-    Bottom,
-    TopLeft,
-    TopRight,
-    BottomLeft,
-    BottomRight,
-}
-
-impl Edge {
-    fn cursor(self) -> Cursor {
-        match self {
-            Self::Left => Cursor::ResizeLeft,
-            Self::Right => Cursor::ResizeRight,
-            Self::Top => Cursor::ResizeTop,
-            Self::Bottom => Cursor::ResizeBottom,
-            Self::TopLeft => Cursor::ResizeTopLeft,
-            Self::TopRight => Cursor::ResizeTopRight,
-            Self::BottomLeft => Cursor::ResizeBottomLeft,
-            Self::BottomRight => Cursor::ResizeBottomRight,
-        }
+fn edge_cursor(edge: ResizeEdge) -> Cursor {
+    match edge {
+        ResizeEdge::Left => Cursor::ResizeLeft,
+        ResizeEdge::Right => Cursor::ResizeRight,
+        ResizeEdge::Top => Cursor::ResizeTop,
+        ResizeEdge::Bottom => Cursor::ResizeBottom,
+        ResizeEdge::TopLeft => Cursor::ResizeTopLeft,
+        ResizeEdge::TopRight => Cursor::ResizeTopRight,
+        ResizeEdge::BottomLeft => Cursor::ResizeBottomLeft,
+        ResizeEdge::BottomRight => Cursor::ResizeBottomRight,
     }
 }
 
@@ -87,12 +80,14 @@ enum Hit {
     Open,
     Tile(usize),
     Thumbnail(usize),
-    Resize(Edge),
+    Resize(ResizeEdge),
+    Header,
+    Unlock,
     Panel,
 }
 
 struct Resizing {
-    edge: Edge,
+    edge: ResizeEdge,
     from: Point,
     size: (f32, f32),
 }
@@ -119,13 +114,18 @@ pub struct QuickLook {
     frame: Rect,
     area: Rect,
     symbols: paint::Symbols,
+    windowed: bool,
+    offset: Point,
+    moving: Option<(Point, Point)>,
+    password: String,
+    actions: Vec<Action>,
 }
 
 fn size_file() -> Option<PathBuf> {
     state_home().map(|state| state.join(SIZE_FILE))
 }
 
-fn remembered_size() -> (f32, f32) {
+pub fn remembered_size() -> (f32, f32) {
     size_file()
         .and_then(|file| std::fs::read_to_string(file).ok())
         .and_then(|text| {
@@ -152,6 +152,7 @@ impl QuickLook {
         at: usize,
         full_screen: bool,
         reduce_motion: bool,
+        windowed: bool,
         now: Instant,
     ) -> std::io::Result<Self> {
         let mut presence = Animated::new(0.0);
@@ -178,6 +179,11 @@ impl QuickLook {
             frame: Rect::default(),
             area: Rect::default(),
             symbols: paint::Symbols::default(),
+            windowed,
+            offset: Point::default(),
+            moving: None,
+            password: String::new(),
+            actions: Vec::new(),
         };
         quick_look.load();
         Ok(quick_look)
@@ -189,6 +195,7 @@ impl QuickLook {
         self.zoom = 1.0;
         self.pan = Point::default();
         self.scroll = Point::default();
+        self.password.clear();
         if let Some(subject) = self.subjects.get(self.at) {
             self.loader
                 .load(subject.entry.path.clone(), subject.mime.clone());
@@ -263,8 +270,32 @@ impl QuickLook {
         }
     }
 
+    pub fn size(&self) -> (f32, f32) {
+        self.size
+    }
+
     pub fn toggle_full_screen(&mut self) {
         self.full_screen = !self.full_screen;
+        if self.windowed {
+            self.actions.push(Action::FullScreen(self.full_screen));
+        }
+    }
+
+    pub fn take_actions(&mut self) -> Vec<Action> {
+        std::mem::take(&mut self.actions)
+    }
+
+    pub fn wants_typing(&self) -> bool {
+        !self.closing && matches!(&self.shown, Shown::Pdf(pdf) if pdf.is_locked())
+    }
+
+    fn unlock(&mut self) {
+        if let Shown::Pdf(pdf) = &mut self.shown
+            && !self.password.is_empty()
+        {
+            pdf.unlock(&self.password);
+            self.password.clear();
+        }
     }
 
     pub fn close(&mut self, now: Instant) {
@@ -273,6 +304,10 @@ impl QuickLook {
         }
         self.closing = true;
         self.resizing = None;
+        self.moving = None;
+        if !self.windowed || !self.full_screen {
+            remember_size(self.size);
+        }
         self.presence
             .animate_at(now, self.reduce_motion, 0.0, Spring::QUICK);
     }
@@ -298,7 +333,7 @@ impl QuickLook {
             0 => {
                 let mut changed = false;
                 for content in self.loader.take() {
-                    self.shown = Shown::from_content(content);
+                    self.shown = Shown::from_loaded(content);
                     changed = true;
                 }
                 changed
@@ -329,7 +364,7 @@ impl QuickLook {
     pub fn input_region(&self) -> Vec<Rect> {
         self.hits
             .iter()
-            .filter(|(_, hit)| matches!(hit, Hit::Panel | Hit::Resize(_)))
+            .filter(|(_, hit)| matches!(hit, Hit::Panel | Hit::Resize(_) | Hit::Header))
             .map(|(rect, _)| *rect)
             .collect()
     }
@@ -344,9 +379,9 @@ impl QuickLook {
 
     pub fn cursor(&self, point: Point) -> Option<Cursor> {
         match self.resizing.as_ref().map(|resizing| resizing.edge) {
-            Some(edge) => Some(edge.cursor()),
+            Some(edge) => Some(edge_cursor(edge)),
             None => match self.hit(point)? {
-                Hit::Resize(edge) => Some(edge.cursor()),
+                Hit::Resize(edge) => Some(edge_cursor(edge)),
                 _ => Some(Cursor::Default),
             },
         }
@@ -394,6 +429,27 @@ impl QuickLook {
         let command = modifiers.control;
         let plain = !command && !modifiers.shift && !modifiers.alt && !modifiers.logo;
         let page = (self.area.height - 40.0).max(40.0);
+        if self.wants_typing() {
+            match key {
+                Key::Character(character) if !command => {
+                    self.password.push(character);
+                    return true;
+                }
+                Key::Space => {
+                    self.password.push(' ');
+                    return true;
+                }
+                Key::Backspace => {
+                    self.password.pop();
+                    return true;
+                }
+                Key::Enter => {
+                    self.unlock();
+                    return true;
+                }
+                _ => {}
+            }
+        }
         match key {
             Key::Escape => self.close(now),
             Key::Left | Key::Right if plain && self.subjects.len() > 1 => {
@@ -423,131 +479,120 @@ impl QuickLook {
         true
     }
 
-    pub fn handle(&mut self, event: &Event, now: Instant) -> (bool, Option<Action>) {
+    fn activate(&mut self, hit: Hit, now: Instant) {
+        match hit {
+            Hit::Close => self.close(now),
+            Hit::FullScreen => self.toggle_full_screen(),
+            Hit::Previous => {
+                self.step(false);
+            }
+            Hit::Next => {
+                self.step(true);
+            }
+            Hit::IndexSheet => self.index_sheet = !self.index_sheet,
+            Hit::Rotate => {
+                self.rotate();
+            }
+            Hit::Copy => {
+                if let Some(path) = self.path().cloned() {
+                    self.actions.push(Action::Copy(path));
+                }
+            }
+            Hit::Open => {
+                if let Some(subject) = self.subject()
+                    && let Some(app) = subject.app.clone()
+                {
+                    let path = subject.entry.path.clone();
+                    self.actions.push(Action::Open {
+                        app: Box::new(app),
+                        path,
+                    });
+                }
+            }
+            Hit::Tile(index) => self.go_to(index),
+            Hit::Thumbnail(page) => {
+                if let Shown::Pdf(pdf) = &self.shown {
+                    self.scroll.y = pdf.top_of(page);
+                }
+            }
+            Hit::Unlock => self.unlock(),
+            Hit::Resize(_) | Hit::Header | Hit::Panel => {}
+        }
+    }
+
+    pub fn handle(&mut self, event: &Event, now: Instant) -> bool {
         if self.closing {
-            return (false, None);
+            return false;
         }
         match event {
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {
                 if let Some(resizing) = &self.resizing {
-                    self.size = paint::resized(resizing, pointer.position, self.area_bounds());
-                    return (true, None);
+                    self.size = paint::resized(resizing, pointer.position, self.area);
+                    return true;
+                }
+                if let Some((from, offset)) = self.moving {
+                    self.offset = Point::new(
+                        offset.x + pointer.position.x - from.x,
+                        offset.y + pointer.position.y - from.y,
+                    );
+                    return true;
                 }
                 let hover = self.hit(pointer.position);
                 let changed = hover != self.hover;
                 self.hover = hover;
-                (changed || hover.is_some(), None)
+                changed
             }
-            Event::PointerLeave => {
-                let changed = self.hover.take().is_some();
-                (changed, None)
-            }
+            Event::PointerLeave => self.hover.take().is_some(),
             Event::PointerDown(pointer) => {
                 let Some(hit) = self.hit(pointer.position) else {
-                    return (false, None);
+                    return false;
                 };
-                if let Hit::Resize(edge) = hit {
-                    self.resizing = Some(Resizing {
-                        edge,
-                        from: pointer.position,
-                        size: (self.frame.width, self.frame.height),
-                    });
+                match (hit, self.windowed) {
+                    (Hit::Resize(edge), true) => self.actions.push(Action::Resize(edge)),
+                    (Hit::Header, true) if !self.full_screen => self.actions.push(Action::Move),
+                    (Hit::Resize(edge), false) => {
+                        self.resizing = Some(Resizing {
+                            edge,
+                            from: pointer.position,
+                            size: (self.frame.width, self.frame.height),
+                        });
+                    }
+                    (Hit::Header, false) if !self.full_screen => {
+                        self.moving = Some((pointer.position, self.offset));
+                    }
+                    _ => {}
                 }
                 self.pressed = Some(hit);
-                (true, None)
+                true
             }
             Event::PointerUp(pointer) => {
                 if self.resizing.take().is_some() {
                     remember_size(self.size);
-                    return (true, None);
+                    return true;
                 }
+                self.moving = None;
                 let pressed = self.pressed.take();
                 let hit = self.hit(pointer.position);
-                if pressed.is_none() || pressed != hit {
-                    return (pressed.is_some(), None);
+                if let Some(hit) = hit.filter(|hit| pressed == Some(*hit)) {
+                    self.activate(hit, now);
                 }
-                let action = match hit {
-                    Some(Hit::Close) => Some(Action::Close),
-                    Some(Hit::FullScreen) => {
-                        self.toggle_full_screen();
-                        None
-                    }
-                    Some(Hit::Previous) => {
-                        self.step(false);
-                        None
-                    }
-                    Some(Hit::Next) => {
-                        self.step(true);
-                        None
-                    }
-                    Some(Hit::IndexSheet) => {
-                        self.index_sheet = !self.index_sheet;
-                        None
-                    }
-                    Some(Hit::Rotate) => {
-                        self.rotate();
-                        None
-                    }
-                    Some(Hit::Copy) => self.path().cloned().map(Action::Copy),
-                    Some(Hit::Open) => self.subject().and_then(|subject| {
-                        Some(Action::Open {
-                            app: Box::new(subject.app.clone()?),
-                            path: subject.entry.path.clone(),
-                        })
-                    }),
-                    Some(Hit::Tile(index)) => {
-                        self.go_to(index);
-                        None
-                    }
-                    Some(Hit::Thumbnail(page)) => {
-                        if let Shown::Pdf(pdf) = &self.shown {
-                            self.scroll.y = pdf.top_of(page);
-                        }
-                        None
-                    }
-                    _ => None,
-                };
-                if action == Some(Action::Close) {
-                    self.close(now);
-                }
-                (true, action)
+                pressed.is_some()
             }
             Event::Scroll(scroll) if self.contains(scroll.position) => {
                 if scroll.modifiers.control && self.shown.is_picture() {
                     self.zoom_by(scroll.delta.y < 0.0);
-                    return (true, None);
+                    return true;
                 }
                 self.scroll_by(scroll.delta);
-                (true, None)
+                true
             }
-            _ => (false, None),
+            _ => false,
         }
     }
 
-    fn area_bounds(&self) -> Rect {
-        self.area
-    }
-
-    pub fn access(&self) -> Node {
-        let mut node = Node::new(Role::Dialog);
-        node.set_label(L10N.tr("quick-look"));
-        node.set_live(Live::Polite);
-        if let Some(subject) = self.subject() {
-            let mut description = format!("{}, {}", subject.entry.name, subject.kind);
-            if let Some((at, count)) = self.position() {
-                description.push_str(", ");
-                description.push_str(
-                    &L10N.tr_args("position", [("at", at.into()), ("count", count.into())]),
-                );
-            }
-            node.set_description(description);
+    pub fn resized_window(&mut self, size: (f32, f32)) {
+        if self.windowed && !self.full_screen {
+            self.size = size;
         }
-        node.set_bounds(accesskit::Rect {
-            x0: f64::from(self.frame.x),
-            y0: f64::from(self.frame.y),
-            x1: f64::from(self.frame.x + self.frame.width),
-            y1: f64::from(self.frame.y + self.frame.height),
-        });
-        node
     }
 }

@@ -48,7 +48,8 @@ const XCURSOR_IMAGE_HEADER: usize = 36;
 const XCURSOR_TOC_ENTRY: usize = 12;
 const XCURSOR_MAX_SIDE: u32 = 0x7fff;
 const THEME_INHERITANCE_DEPTH: usize = 16;
-const DEFAULT_CURSOR_THEME: &str = "default";
+const DEFAULT_CURSOR_THEME: &str = "DMZ-Black";
+const SYSTEM_CURSOR_THEME: &str = "default";
 pub const DEFAULT_CURSOR_SIZE: u32 = 24;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,7 +125,12 @@ impl CursorTheme {
     }
 
     fn find(&self, cursor: &str) -> Option<PathBuf> {
-        let mut pending = vec![self.name.clone()];
+        self.find_in(&self.name, cursor)
+            .or_else(|| self.find_in(SYSTEM_CURSOR_THEME, cursor))
+    }
+
+    fn find_in(&self, name: &str, cursor: &str) -> Option<PathBuf> {
+        let mut pending = vec![name.to_owned()];
         let mut visited = Vec::new();
         while visited.len() < THEME_INHERITANCE_DEPTH && !pending.is_empty() {
             let theme = pending.remove(0);

@@ -165,7 +165,7 @@ impl FilesView {
 
     fn begin_search(&mut self, text: &str) {
         self.commit_rename();
-        self.quick_look = None;
+        self.close_quick_look();
         let before = self.browser.root().clone();
         let folder = match &before {
             Location::Folder(folder) => folder.clone(),

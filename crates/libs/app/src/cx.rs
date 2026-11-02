@@ -90,6 +90,7 @@ impl<P: Program> Cx<P> {
             Kind::Main | Kind::Secondary(_) => Role::toplevel(title, self.info.id),
             Kind::Dialog(_) => Role::dialog(title, self.info.id),
             Kind::Utility(_) => Role::utility(title, self.info.id),
+            Kind::Panel(_) => Role::panel(title, self.info.id),
         }
         .tagged(kind.tag());
         self.link.keep_running();
@@ -97,13 +98,16 @@ impl<P: Program> Cx<P> {
             Some(beside) => beside.open_beside(role, size)?,
             None => self.link.open(role, size)?,
         };
-        window.set_menu_button(true);
+        let panel = matches!(kind, Kind::Panel(_));
+        window.set_menu_button(!panel);
         let id = WindowId(self.next);
         self.next += 1;
         let content = content(window.appearance());
         self.windows.push(window);
         self.views.push((id, content));
-        self.focused.get_or_insert(id);
+        if !panel {
+            self.focused.get_or_insert(id);
+        }
         self.menus_changed = true;
         Ok(id)
     }

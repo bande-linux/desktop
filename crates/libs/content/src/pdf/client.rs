@@ -1,6 +1,6 @@
 use std::io::{self, BufReader, BufWriter};
 use std::os::fd::BorrowedFd;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -8,9 +8,7 @@ use std::thread;
 use bande_inbox::{Inbox, Outbox};
 
 use crate::pdf::protocol::{self, Ask, Reply, WORKER_FLAG};
-
-const WORKER_VARIABLE: &str = "BANDE_PREVIEW_WORKER";
-const OWN_PROGRAM: &str = "/proc/self/exe";
+use crate::worker_program;
 
 pub enum Incoming {
     Reply(Reply),
@@ -22,12 +20,6 @@ pub struct Worker {
     child: Child,
     asks: Sender<Ask>,
     incoming: Inbox<Incoming>,
-}
-
-fn program() -> PathBuf {
-    std::env::var_os(WORKER_VARIABLE)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(OWN_PROGRAM))
 }
 
 fn write_asks(stdin: ChildStdin, asks: Receiver<Ask>) {
@@ -59,7 +51,7 @@ fn read_replies(stdout: ChildStdout, incoming: Outbox<Incoming>) {
 
 impl Worker {
     pub fn spawn(path: &Path) -> io::Result<Self> {
-        let mut child = Command::new(program())
+        let mut child = Command::new(worker_program())
             .arg(WORKER_FLAG)
             .arg(path)
             .stdin(Stdio::piped())

@@ -19,11 +19,11 @@ use hayro::vello_cpu::color::palette::css::WHITE;
 use hayro::vello_cpu::{Pixmap, RasterizerSettings, RenderContext, Resources, TargetInit};
 use hayro::{RenderCache, RenderSettings, render_into};
 
+use crate::confine;
 use crate::decode::read_file;
 use crate::pdf::outline::{details, outline};
 use crate::pdf::protocol::{self, Ask, Glyph, MAX_RENDER_PIXELS, Opened, Render, Reply};
 
-const ADDRESS_SPACE: u64 = 6 << 30;
 const MAX_GLYPHS: usize = 200_000;
 const ASCENT: f64 = 800.0;
 const DESCENT: f64 = -200.0;
@@ -99,21 +99,6 @@ fn listen(shared: &Shared) {
     }
     shared.lock().closed = true;
     shared.ready.notify_all();
-}
-
-fn confine() {
-    let limit = rustix::process::Rlimit {
-        current: Some(ADDRESS_SPACE),
-        maximum: Some(ADDRESS_SPACE),
-    };
-    if let Err(error) = rustix::process::setrlimit(rustix::process::Resource::As, limit) {
-        tracing::warn!("cannot limit the PDF renderer's memory: {error}");
-    }
-    if let Err(error) =
-        rustix::process::set_parent_process_death_signal(Some(rustix::process::Signal::KILL))
-    {
-        tracing::warn!("cannot tie the PDF renderer to its viewer: {error}");
-    }
 }
 
 fn send(reply: &Reply, payload: &[u8]) -> bool {

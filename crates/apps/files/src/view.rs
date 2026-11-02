@@ -13,7 +13,7 @@ use bande_fs::{
     History, Operations, Purpose, RenameError, Resolution, Sort, Step, Task, TrashItem,
     archive_path, can_extract,
 };
-use bande_quick_look::QuickLook;
+use bande_quick_look::QuickLookLink;
 use bande_search::{Usage, recent_files, recently_used};
 use bande_thumbnails::Thumbnails;
 use bande_toolkit::ui::{
@@ -64,7 +64,6 @@ enum Source {
     Thumbnails,
     Index,
     Job(usize),
-    QuickLook(usize),
 }
 
 pub struct ColumnPreview {
@@ -148,6 +147,7 @@ const ARCHIVE_UTILITY_DESKTOP_ID: &str = "org.bande.ArchiveUtility.desktop";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
+    ShowQuickLook,
     Open {
         app: Box<DesktopEntry>,
         files: Vec<PathBuf>,
@@ -208,7 +208,7 @@ pub struct FilesView {
     pub(crate) active_tab: usize,
     pub(crate) sheet_cancel: Option<WidgetId>,
     pub(crate) size: (f32, f32),
-    pub(crate) quick_look: Option<QuickLook>,
+    pub(crate) quick_look: Option<QuickLookLink>,
     pub(crate) inspector: bool,
     pub(crate) info: Option<Info>,
     pub(crate) inspector_controls: Option<crate::inspector::InspectorControls>,
@@ -492,6 +492,9 @@ impl FilesView {
     }
 
     pub fn set_window_active(&mut self, active: bool) -> bool {
+        if !active {
+            self.close_quick_look();
+        }
         self.ui.set_window_active(active)
     }
 
@@ -511,26 +514,15 @@ impl FilesView {
     }
 
     pub fn cursor(&self) -> Cursor {
-        self.quick_look
-            .as_ref()
-            .and_then(|shown| shown.cursor(self.pointer))
-            .unwrap_or_else(|| self.ui.cursor())
+        self.ui.cursor()
     }
 
     pub fn animating(&self) -> bool {
         self.ui.is_animating()
-            || self
-                .quick_look
-                .as_ref()
-                .is_some_and(|shown| shown.animating(Instant::now()))
     }
 
     pub fn browser(&self) -> &Browser {
         &self.browser
-    }
-
-    pub fn quick_look(&self) -> Option<&QuickLook> {
-        self.quick_look.as_ref()
     }
 
     pub fn info(&self) -> Option<&Info> {
@@ -726,13 +718,7 @@ impl FilesView {
                 .enumerate()
                 .map(|(job, fd)| (Source::Job(job), fd)),
         );
-        sources.extend(self.quick_look.iter().flat_map(|shown| {
-            shown
-                .sources()
-                .into_iter()
-                .enumerate()
-                .map(|(index, fd)| (Source::QuickLook(index), fd))
-        }));
+
         sources
     }
 
@@ -751,10 +737,6 @@ impl FilesView {
             }
             Source::Listing => self.listed(),
             Source::Loader => self.loaded(),
-            Source::QuickLook(index) => self
-                .quick_look
-                .as_mut()
-                .is_some_and(|shown| shown.source_ready(index)),
             Source::Thumbnails => self.thumbs.take(),
             Source::Index => self.search_results(),
             Source::Job(job) => match self.operations.poll(job) {
@@ -782,7 +764,6 @@ impl FilesView {
             self.operations.deadline(),
             self.notice.as_ref().map(|(_, shown)| *shown + NOTICE_TIME),
             self.pending_rename.as_ref().map(|(due, _)| *due),
-            self.quick_look.as_ref().and_then(|shown| shown.deadline()),
             self.drop
                 .as_ref()
                 .zip(self.spring_delay)
@@ -806,9 +787,6 @@ impl FilesView {
             self.notice = None;
         }
         self.spring(now);
-        if let Some(shown) = &mut self.quick_look {
-            shown.tick(now);
-        }
         if let Some((due, path)) = self.pending_rename.take() {
             if due > now {
                 self.pending_rename = Some((due, path));

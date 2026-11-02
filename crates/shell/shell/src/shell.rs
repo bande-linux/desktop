@@ -14,9 +14,10 @@ use bande_bar::surfaces::{self, Display, Restart, Services, status_hub};
 use bande_bluetooth::register_agent;
 use bande_config::{Config, config_path};
 use bande_controlcenter::ControlCenter;
-use bande_desktop_surface::{DesktopSurface, QuickLookLink, QuickLookSurface, quick_look_role};
+use bande_desktop_surface::{DesktopSurface, QuickLookSurface, quick_look_role};
 use bande_launcher::LauncherShell;
 use bande_notifications::Notifications;
+use bande_quick_look::QuickLookLink;
 use bande_status::captive::{follow_captive_portal, open_page};
 use bande_status::hub::StatusHub;
 use bande_status::memory::{

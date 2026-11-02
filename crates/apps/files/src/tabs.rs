@@ -77,7 +77,7 @@ impl FilesView {
     fn leave_tab(&mut self) {
         self.commit_rename();
         self.end_search();
-        self.quick_look = None;
+        self.close_quick_look();
         self.band = None;
         self.table_synced = None;
     }

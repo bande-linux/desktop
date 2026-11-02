@@ -11,18 +11,21 @@ use std::time::{Instant, SystemTime};
 
 use crate::confirm::{CONFIRM_EXTENSION_FLAG, FORCE_EJECT, confirm_extension_change, eject_failed};
 use crate::places::{Listing, SETTINGS_FOLDER, Shown, start_lister};
+use crate::quick_look::QuickLookLink;
+use crate::view::QuickLookState;
 use crate::{
     Artwork, Bounds, CONFIRM_DELETE_FLAG, DesktopView, EJECT_FAILED_FLAG, Item, Kind, Layer,
     Layouts, Luma, MenuApp, Request, Selection, WallpaperKey, command, confirm_delete,
-    desktop_menu, items_menu, layouts_path, parse_layouts, save_layouts,
+    desktop_menu, icon_bounds, items_menu, layouts_path, parse_layouts, save_layouts,
 };
 use accesskit::TreeUpdate;
 use bande_config::{BUS_NAME, BarEdge, Config, OBJECT_PATH, Wallpaper, WallpaperFit};
 use bande_fs::{
-    Action, Answer, Change, ExtensionChange, FolderWatch, Operations, Purpose, Resolution, Task,
-    Trash,
+    Action, Answer, Change, Entry, ExtensionChange, FolderWatch, Operations, Purpose, Resolution,
+    Task, Trash,
 };
 use bande_inbox::{Inbox, Outbox};
+use bande_quick_look::Subject;
 use bande_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
 use bande_toolkit::ui::frame_time;
 use bande_toolkit::{
@@ -41,6 +44,7 @@ use bande_xdg::{
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
+const QUICK_LOOK_ICON: u32 = 256;
 const BUSY: &str = "busy";
 const PDF: &str = "application/pdf";
 const WALLPAPER_CACHE: &str = "bande/wallpapers";
@@ -97,6 +101,7 @@ pub struct DesktopSurface {
     scheme: Scheme,
     viewport: Option<((u32, u32), f64)>,
     confirming: Option<Confirming>,
+    quick_look: Option<QuickLookLink>,
 }
 
 impl DesktopSurface {
@@ -538,9 +543,107 @@ impl DesktopSurface {
         }
     }
 
+    fn subject(&mut self, path: &Path) -> Option<Subject> {
+        let item = self.view.desktop().item(path)?.clone();
+        let mime = match item.kind {
+            Kind::Folder | Kind::Volume => DIRECTORY.to_owned(),
+            Kind::File => item.mime.clone(),
+        };
+        let app = match item.kind {
+            Kind::File => self.apps.borrow().default_for(&mime).cloned(),
+            Kind::Folder | Kind::Volume => None,
+        };
+        let thumbnail = self
+            .pictures
+            .get(path)
+            .and_then(|(_, picture)| picture.clone().flatten());
+        let icon = thumbnail.or_else(|| {
+            let names = self.icon_names(&item);
+            self.icon(&names, QUICK_LOOK_ICON)
+        });
+        let desktop = self.view.desktop();
+        let origin = desktop.slot_of(path).map(|slot| {
+            let bounds = icon_bounds(desktop.grid().cell(slot));
+            bande_toolkit::Rect::new(bounds.x, bounds.y, bounds.width, bounds.height)
+        });
+        Some(Subject {
+            entry: Entry::read(item.path.clone(), item.name.clone()),
+            mime,
+            kind: item.kind_name.clone(),
+            app,
+            icon,
+            origin,
+        })
+    }
+
+    fn quick_look(&mut self, full_screen: bool) {
+        let Some(link) = self.quick_look.clone() else {
+            return;
+        };
+        if link.borrow().is_shown() {
+            link.borrow_mut().close();
+            return;
+        }
+        let selected = self.view.desktop().selected();
+        let current = self
+            .view
+            .desktop()
+            .cursor()
+            .filter(|cursor| selected.iter().any(|path| path == cursor))
+            .map(Path::to_path_buf);
+        let subjects: Vec<Subject> = selected
+            .iter()
+            .filter_map(|path| self.subject(path))
+            .collect();
+        let at = current
+            .and_then(|current| {
+                subjects
+                    .iter()
+                    .position(|subject| subject.entry.path == current)
+            })
+            .unwrap_or(0);
+        if !subjects.is_empty() {
+            link.borrow_mut().open(subjects, at, full_screen);
+        }
+    }
+
+    fn follow_quick_look(&mut self) {
+        let Some(link) = self.quick_look.clone() else {
+            return;
+        };
+        let state = match (link.borrow().is_shown(), link.borrow().is_multiple()) {
+            (false, _) => QuickLookState::Closed,
+            (true, false) => QuickLookState::Single,
+            (true, true) => QuickLookState::Multiple,
+        };
+        self.view.set_quick_look(state);
+        let Some(shown) = link.borrow().follows().cloned() else {
+            return;
+        };
+        match self.view.desktop().selected().as_slice() {
+            [path] if *path == shown => {}
+            [path] => {
+                if let Some(subject) = self.subject(&path.clone()) {
+                    link.borrow_mut().follow(subject);
+                }
+            }
+            [] => link.borrow_mut().close(),
+            _ => {}
+        }
+        if !link.borrow().is_shown() {
+            self.view.set_quick_look(QuickLookState::Closed);
+        }
+    }
+
     fn run_requests(&mut self, window: &mut Window) {
         for request in self.view.take_requests() {
             match request {
+                Request::QuickLook { full_screen } => self.quick_look(full_screen),
+                Request::QuickLookKey(key, modifiers) => {
+                    if let Some(link) = &self.quick_look {
+                        link.borrow_mut().key(key, modifiers);
+                    }
+                }
                 Request::Open(paths) => self.open(window, paths),
                 Request::Trash(sources) => self.start(Task::Trash { sources }, Action::Trash),
                 Request::ConfirmDelete(paths) => self.confirm_delete(paths),
@@ -639,6 +742,7 @@ impl DesktopSurface {
                 }
             }
         }
+        self.follow_quick_look();
         self.save_layouts();
         window.request_redraw();
     }
@@ -859,6 +963,11 @@ impl App for DesktopSurface {
             }
             WindowEvent::Focus(focused) => {
                 self.view.set_focused(focused);
+                if let Some(link) = self.quick_look.as_ref().filter(|_| !focused)
+                    && link.borrow().is_shown()
+                {
+                    link.borrow_mut().close();
+                }
                 self.run_requests(window);
             }
             WindowEvent::AppearanceChanged(appearance) => {
@@ -1083,6 +1192,7 @@ impl DesktopSurface {
         config: &Config,
         text: TextSystem,
         apps: Rc<RefCell<Apps>>,
+        quick_look: Option<QuickLookLink>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let home = std::env::var_os("HOME").map(PathBuf::from);
         let bar_changes = Inbox::new()?;
@@ -1142,6 +1252,7 @@ impl DesktopSurface {
             scheme: appearance.scheme,
             viewport: None,
             confirming: None,
+            quick_look,
         };
         let folder = surface.desktop_dir.clone();
         surface.view.set_folder(folder);

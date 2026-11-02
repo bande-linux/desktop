@@ -10,6 +10,8 @@ use std::time::{Duration, Instant};
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
+use bande_content::pdf::protocol::WORKER_FLAG;
+use bande_content::pdf::worker::run as run_pdf_worker;
 use bande_files::{
     BookmarkEdit, Browser, FilesSettings, FilesView, L10N, Location, Request, Row, SETTINGS_SIZE,
     SIDEBAR_FILE, SIDEBAR_WIDTH, Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory,
@@ -865,5 +867,11 @@ fn start_location(
 }
 
 fn main() -> ExitCode {
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if let [flag, path] = arguments.as_slice()
+        && flag == WORKER_FLAG
+    {
+        return run_pdf_worker(Path::new(path));
+    }
     bande_app::run::<Files>(&INFO)
 }

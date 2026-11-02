@@ -40,7 +40,6 @@ pub use menus::{GROUPS, group_action};
 pub use open_with::OpenWith;
 pub use paint::permissions;
 pub use privacy::follow_search_excluded;
-pub use quick_look::QuickLook;
 pub use search::SEARCH_HEIGHT;
 pub use settings::{FilesSettings, SETTINGS_SIZE, StartFolder, settings_view};
 pub use sidebar::{

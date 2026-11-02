@@ -12,9 +12,9 @@ use crate::{
 };
 use accesskit::TreeUpdate;
 use bande_config::{Config, Search, SearchCategory, config_path};
+use bande_content::{Preview, preview};
 use bande_fs::Entry;
 use bande_inbox::Inbox;
-use bande_preview::{Preview, preview};
 use bande_search::{FileIndex, RecentlyUsed, Usage, recently_used_path, usage_path};
 use bande_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use bande_toolkit::{

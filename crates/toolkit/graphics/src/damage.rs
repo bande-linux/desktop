@@ -300,7 +300,12 @@ fn bounds(item: &Item) -> Option<Rect> {
                 .map(|run| run.size)
                 .fold(0.0, f32::max);
             Some(outset(
-                Rect::new(origin.x, origin.y, paragraph.width(), paragraph.height()),
+                Rect::new(
+                    origin.x,
+                    origin.y,
+                    paragraph.painted_width(),
+                    paragraph.height(),
+                ),
                 size * GLYPH_OVERHANG,
             ))
         }

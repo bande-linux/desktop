@@ -1,15 +1,14 @@
-use std::fs;
 use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
+use bande_content::{Preview, image_size, preview, tree_size};
 use bande_fs::Entry;
-use bande_preview::{Preview, image_size, preview};
 use bande_toolkit::Image;
 
 #[derive(Debug)]
@@ -38,32 +37,6 @@ pub struct Loader {
     results: Receiver<Loaded>,
     generation: Arc<AtomicU64>,
     wake: UnixStream,
-}
-
-fn tree_size(path: &Path, current: &dyn Fn() -> bool) -> Option<(u64, u64)> {
-    let mut items = 0;
-    let mut bytes = 0;
-    let mut pending = vec![path.to_path_buf()];
-    while let Some(folder) = pending.pop() {
-        if !current() {
-            return None;
-        }
-        let Ok(entries) = fs::read_dir(&folder) else {
-            continue;
-        };
-        for entry in entries.filter_map(Result::ok) {
-            let Ok(metadata) = entry.metadata() else {
-                continue;
-            };
-            items += 1;
-            if metadata.is_dir() {
-                pending.push(entry.path());
-            } else {
-                bytes += metadata.len();
-            }
-        }
-    }
-    Some((items, bytes))
 }
 
 impl Loader {

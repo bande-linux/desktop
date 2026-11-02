@@ -34,6 +34,7 @@ pub enum Command {
     CleanUp,
     ShowDesktopFolder,
     Open,
+    QuickLook,
     OpenWith(String),
     Info,
     Rename,
@@ -88,6 +89,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
     }
     items.push(MenuItem::separator());
     items.push(item("get-info", "info").shortcut("Ctrl+I"));
+    items.push(item("quick-look", "quick-look").shortcut("Space"));
     items.push(
         item("rename", "rename")
             .shortcut("F2")
@@ -140,6 +142,7 @@ pub fn command(action: &str) -> Option<Command> {
         "clean-up" => Command::CleanUp,
         "show-desktop-folder" => Command::ShowDesktopFolder,
         "open" => Command::Open,
+        "quick-look" => Command::QuickLook,
         "info" => Command::Info,
         "rename" => Command::Rename,
         "duplicate" => Command::Duplicate,

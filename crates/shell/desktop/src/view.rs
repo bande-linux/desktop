@@ -85,6 +85,31 @@ pub enum Request {
     Eject(Vec<PathBuf>),
     SetWallpaper(PathBuf),
     ChangeWallpaper,
+    QuickLook {
+        full_screen: bool,
+    },
+    QuickLookKey(Key, Modifiers),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum QuickLookState {
+    #[default]
+    Closed,
+    Single,
+    Multiple,
+}
+
+fn quick_look_key(key: Key, modifiers: Modifiers, state: QuickLookState) -> bool {
+    let command = modifiers.control;
+    let plain = !command && !modifiers.alt && !modifiers.shift;
+    match key {
+        Key::Escape | Key::Function(11) => true,
+        Key::PageUp | Key::PageDown | Key::Home | Key::End => plain,
+        Key::Left | Key::Right => plain && state == QuickLookState::Multiple,
+        Key::Enter => command,
+        Key::Character('=' | '+' | '-' | '0' | 'l' | 'L') => command,
+        _ => false,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -175,6 +200,7 @@ pub struct DesktopView {
     populated: bool,
     animating: bool,
     requests: Vec<Request>,
+    quick_look: QuickLookState,
 }
 
 fn rect(bounds: Bounds) -> Rect {
@@ -277,6 +303,7 @@ impl DesktopView {
             arriving: None,
             appearance,
             focused: false,
+            quick_look: QuickLookState::Closed,
             size: (1.0, 1.0),
             scale: 1.0,
             gesture: Gesture::Idle,
@@ -403,6 +430,10 @@ impl DesktopView {
         self.appearance = appearance;
         self.ui.set_appearance(appearance);
         self.labels.clear();
+    }
+
+    pub fn set_quick_look(&mut self, state: QuickLookState) {
+        self.quick_look = state;
     }
 
     pub fn set_focused(&mut self, focused: bool) {
@@ -1040,9 +1071,23 @@ impl DesktopView {
         if modifiers.logo {
             return false;
         }
+        if self.quick_look != QuickLookState::Closed
+            && quick_look_key(key, modifiers, self.quick_look)
+        {
+            self.requests.push(Request::QuickLookKey(key, modifiers));
+            return true;
+        }
         let selected = self.desktop.selected();
         let command = modifiers.control;
         match key {
+            Key::Space
+                if !command
+                    && (!selected.is_empty() || self.quick_look != QuickLookState::Closed) =>
+            {
+                self.requests.push(Request::QuickLook {
+                    full_screen: modifiers.alt,
+                });
+            }
             Key::Down if modifiers.alt => {
                 if !selected.is_empty() {
                     self.requests.push(Request::Open(selected));
@@ -1136,6 +1181,7 @@ impl DesktopView {
             Command::DesktopInfo | Command::ShowDesktopFolder => Request::OpenDesktopFolder,
             Command::ChangeWallpaper => Request::ChangeWallpaper,
             Command::Open => Request::Open(selected),
+            Command::QuickLook => Request::QuickLook { full_screen: false },
             Command::OpenWith(app) => Request::OpenWith {
                 app,
                 paths: selected,

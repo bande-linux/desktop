@@ -104,6 +104,43 @@ pub fn can_extract(path: &Path) -> bool {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Contents {
+    pub items: u64,
+    pub bytes: u64,
+}
+
+pub fn archive_contents(path: &Path, most: u64) -> Option<Contents> {
+    let format = Format::of(path)?;
+    let file = BufReader::new(File::open(path).ok()?);
+    let mut contents = Contents { items: 0, bytes: 0 };
+    match format {
+        Format::Zip => {
+            let mut zip = ZipArchive::new(file).ok()?;
+            contents.items = zip.len() as u64;
+            for index in 0..zip.len().min(most as usize) {
+                contents.bytes += zip.by_index_raw(index).ok()?.size();
+            }
+        }
+        Format::SevenZip => {
+            let reader = ArchiveReader::new(file, Password::empty()).ok()?;
+            let files = &reader.archive().files;
+            contents.items = files.len() as u64;
+            contents.bytes = files.iter().map(|entry| entry.size).sum();
+        }
+        format if format.single() => contents.items = 1,
+        format => {
+            let mut tar = tar::Archive::new(decoder(format, file).ok()?);
+            for entry in tar.entries().ok()?.take(most as usize) {
+                let entry = entry.ok()?;
+                contents.items += 1;
+                contents.bytes += entry.header().size().unwrap_or(0);
+            }
+        }
+    }
+    Some(contents)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refusal {
     NeedsPassword,
     WrongPassword,

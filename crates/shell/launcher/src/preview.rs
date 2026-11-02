@@ -1,6 +1,6 @@
 use accesskit::{Node, Role};
+use bande_content::Preview;
 use bande_fs::{format_date, format_size};
-use bande_preview::Preview;
 use bande_toolkit::ui::{Context, Size, Widget, WidgetId};
 use bande_toolkit::{
     Image, Item, Palette, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,

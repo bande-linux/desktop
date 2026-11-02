@@ -1,0 +1,23 @@
+[package]
+name = "bande-content"
+description = "File contents for Bande's Quick Look, Files and Preview: images, PDF in a confined renderer, text, documents, fonts, folders and archives"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+hayro.workspace = true
+image = { workspace = true, features = ["gif", "jpeg", "webp"] }
+kamadak-exif.workspace = true
+resvg = { workspace = true, features = ["text", "system-fonts", "memmap-fonts", "raster-images"] }
+rustix = { workspace = true, features = ["fs", "process"] }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+bande-fs.workspace = true
+bande-inbox.workspace = true
+
+[lints]
+workspace = true

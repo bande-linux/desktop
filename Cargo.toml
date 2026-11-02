@@ -23,11 +23,13 @@ bzip2 = "=0.6.1"
 flate2 = "=1.1.10"
 fluent-bundle = "=0.16.0"
 fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
+hayro = "=0.8.0"
 icu_calendar = "=2.4.0"
 icu_datetime = "=2.4.0"
 icu_locale_core = "=2.4.0"
 image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
 jiff = "=0.2.38"
+kamadak-exif = "=0.6.1"
 kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
 libc = "=0.2.191"
 libloading = "=0.8.9"
@@ -81,6 +83,7 @@ bande-bus = { path = "crates/libs/bus" }
 bande-clipboard = { path = "crates/services/clipboard" }
 bande-compositor = { path = "crates/platform/compositor" }
 bande-config = { path = "crates/services/config" }
+bande-content = { path = "crates/libs/content" }
 bande-controlcenter = { path = "crates/shell/controlcenter" }
 bande-datetime = { path = "crates/libs/datetime" }
 bande-design = { path = "crates/toolkit/design" }
@@ -99,12 +102,12 @@ bande-lock = { path = "crates/shell/lock" }
 bande-log = { path = "crates/libs/log" }
 bande-network = { path = "crates/libs/network" }
 bande-printers = { path = "crates/libs/printers" }
+bande-quick-look = { path = "crates/libs/quick-look" }
 bande-packages = { path = "crates/libs/packages" }
 bande-notifications = { path = "crates/shell/notifications" }
 bande-notify = { path = "crates/services/notify" }
 bande-polkit = { path = "crates/services/polkit" }
 bande-power = { path = "crates/services/power" }
-bande-preview = { path = "crates/libs/preview" }
 bande-protocols = { path = "crates/platform/protocols" }
 bande-render = { path = "crates/platform/render" }
 bande-review = { path = "crates/testing/review" }

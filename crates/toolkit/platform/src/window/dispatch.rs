@@ -49,6 +49,21 @@ impl Dispatch<WlRegistry, ()> for State {
                     state.compositor = Some(registry.bind(name, version.min(5), handle, ()));
                 }
                 "wl_shm" => state.shm = Some(registry.bind(name, 1, handle, ())),
+                "wl_subcompositor" => {
+                    state.subcompositor = Some(registry.bind(name, 1, handle, ()));
+                }
+                "zwp_linux_dmabuf_v1" if version >= 3 => {
+                    state.dmabuf = Some(registry.bind(name, 3, handle, ()));
+                }
+                "zwp_keyboard_shortcuts_inhibit_manager_v1" => {
+                    state.capture.inhibit_manager = Some(registry.bind(name, 1, handle, ()));
+                }
+                "zwp_pointer_constraints_v1" => {
+                    state.capture.constraints = Some(registry.bind(name, 1, handle, ()));
+                }
+                "zwp_relative_pointer_manager_v1" => {
+                    state.capture.relative_manager = Some(registry.bind(name, 1, handle, ()));
+                }
                 "xdg_wm_base" => {
                     state.wm_base = Some(registry.bind(name, version.min(6), handle, ()));
                 }

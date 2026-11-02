@@ -299,6 +299,6 @@ fn bounds(item: &Item) -> Option<Rect> {
         } => Some(outset(through([*from, *to])?, *width)),
         Item::FillPath { path, .. } => path_bounds(path),
         Item::StrokePath { path, width, .. } => Some(outset(path_bounds(path)?, *width)),
-        Item::Image { rect, .. } => Some(*rect),
+        Item::Image { rect, .. } | Item::Surface { frame: rect, .. } => Some(*rect),
     }
 }

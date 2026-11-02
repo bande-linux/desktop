@@ -9,24 +9,25 @@ mod shm;
 use std::cell::RefCell;
 use std::io;
 use std::os::unix::net::UnixStream;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::sync::mpsc::TryRecvError;
 use std::time::{Duration, Instant};
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_graphics::{
-    Appearance, CpuRenderer, Cursor, Event, Point, Radius, Rect, Region, ResizeEdge, Scene,
-    TextSize, TextSystem, damage, pixels,
+    Appearance, Captured, CpuRenderer, Cursor, Event, Point, Radius, Rect, Region, ResizeEdge,
+    Scene, SurfaceId, TextSize, TextSystem, damage, pixels, placed_surfaces,
 };
 use bande_protocols::client::bande_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
 };
-use bande_widgets::{FrameTime, Ui};
+use bande_widgets::{CaptureRequest, FrameTime, Ui};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_data_device_manager::WlDataDeviceManager;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::WlShm;
+use wayland_client::protocol::wl_subcompositor::WlSubcompositor;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, EventQueue, Proxy};
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
@@ -46,11 +47,13 @@ use self::layer::{anchor_of, keyboard_interactivity, layer_of};
 pub(crate) use self::shm::{ShmTarget, Target};
 use crate::access::Accessibility;
 use crate::appearance::AppearanceWatch;
+use crate::capture::Capture;
 use crate::chrome::{
     Chrome, Frame, FrameRegions, Header, Look, RESIZE_MARGIN, SHEET_INSET, WINDOW_HEADER_HEIGHT,
 };
 use crate::clipboard::Clipboard;
 use crate::clipboard::{DragAction, DragEvent, DragIcon, Transfer};
+use crate::external::External;
 use crate::lock::{Locked, SessionLock};
 use crate::popup::{Fading, MenuPlacement, Menus};
 use crate::presentation::Presentation;
@@ -202,6 +205,12 @@ pub enum WindowEvent {
     AppearanceChanged(Appearance),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct Opaque {
+    area: Rect,
+    holes: Vec<Rect>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ToplevelState {
     pub maximized: bool,
@@ -228,6 +237,8 @@ fn resize_protocol(edge: ResizeEdge) -> xdg_toplevel::ResizeEdge {
 pub(crate) struct State {
     pub(crate) compositor: Option<WlCompositor>,
     pub(crate) shm: Option<WlShm>,
+    pub(crate) subcompositor: Option<WlSubcompositor>,
+    pub(crate) dmabuf: Option<wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1>,
     pub(crate) wm_base: Option<XdgWmBase>,
     layer_shell: Option<ZwlrLayerShellV1>,
     pub(crate) activation: Option<XdgActivationV1>,
@@ -254,11 +265,19 @@ pub(crate) struct State {
     pub(crate) text_input: TextInput,
     pub(crate) scaling: Scaling,
     pub(crate) presentation: Presentation,
+    pub(crate) capture: Capture,
     outputs: Vec<u32>,
 }
 
 impl State {
     fn release(&mut self) {
+        self.capture.release();
+        if let Some(subcompositor) = self.subcompositor.take() {
+            subcompositor.destroy();
+        }
+        if let Some(dmabuf) = self.dmabuf.take() {
+            dmabuf.destroy();
+        }
         self.clipboard.release();
         self.text_input.release();
         self.input.release();
@@ -335,7 +354,8 @@ pub struct Window {
     text: Option<TextSystem>,
     shown_frame: Option<Frame>,
     planned: Option<FrameTime>,
-    shown_opaque: Option<Rect>,
+    shown_opaque: Option<Opaque>,
+    pub(crate) externals: Vec<Weak<RefCell<External>>>,
     staged: bool,
     pub(crate) app_cursor: Cursor,
     pub(crate) accessibility: Accessibility,
@@ -561,6 +581,7 @@ impl Window {
             shown_frame: None,
             planned: None,
             shown_opaque: None,
+            externals: Vec::new(),
             staged: false,
             app_cursor: Cursor::Default,
             accessibility: Accessibility::new()?,
@@ -616,6 +637,13 @@ impl Window {
 
     pub fn header_height(&self) -> u32 {
         self.title_height()
+    }
+
+    pub(crate) fn content_origin(&self) -> Point {
+        match &self.chrome {
+            Some(_) => self.frame().content_origin(),
+            None => Point::default(),
+        }
     }
 
     pub(crate) fn content_offset(&self) -> Point {
@@ -807,7 +835,7 @@ impl Window {
         self.needs_redraw = true;
     }
 
-    fn stage(&mut self) {
+    pub(crate) fn stage(&mut self) {
         self.staged = true;
         self.needs_redraw = true;
     }
@@ -915,6 +943,7 @@ impl Window {
         ui: &mut Ui,
         event: WindowEvent,
     ) -> Result<Option<WindowEvent>, WindowError> {
+        ui.context().display_scale = self.scale();
         let (changed, unhandled) = match event {
             WindowEvent::Input(input) => {
                 let changed = ui.handle(&input);
@@ -974,6 +1003,16 @@ impl Window {
             }
             event => (false, Some(event)),
         };
+        match ui.take_capture_request() {
+            Some(CaptureRequest::Start { area, pointer }) => {
+                if let Err(error) = self.capture_input(area, pointer) {
+                    tracing::warn!(%error, "cannot capture the keyboard and pointer");
+                    ui.handle(&Event::Captured(Captured::Ended));
+                }
+            }
+            Some(CaptureRequest::End) => self.release_input()?,
+            None => {}
+        }
         if changed || ui.is_animating() {
             self.request_redraw();
         }
@@ -1148,15 +1187,15 @@ impl Window {
         }
     }
 
-    fn declare_opaque(&mut self, opaque: Option<Rect>) {
+    fn declare_opaque(&mut self, opaque: Option<Opaque>) {
         if self.shown_opaque == opaque {
             return;
         }
         let Some(compositor) = &self.state.compositor else {
             return;
         };
-        self.shown_opaque = opaque;
-        let Some(area) = opaque else {
+        let Some(Opaque { area, holes }) = &opaque else {
+            self.shown_opaque = None;
             self.surface.set_opaque_region(None);
             return;
         };
@@ -1169,8 +1208,26 @@ impl Window {
             ((area.x + area.width).floor() - left) as i32,
             ((area.y + area.height).floor() - top) as i32,
         );
+        for hole in holes {
+            let left = hole.x.floor();
+            let top = hole.y.floor();
+            region.subtract(
+                left as i32,
+                top as i32,
+                ((hole.x + hole.width).ceil() - left) as i32,
+                ((hole.y + hole.height).ceil() - top) as i32,
+            );
+        }
         self.surface.set_opaque_region(Some(&region));
         region.destroy();
+        self.shown_opaque = opaque;
+    }
+
+    fn externals_below(&self) -> bool {
+        match &self.gpu {
+            Gpu::Ready(gpu) => gpu.transparent,
+            Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => true,
+        }
     }
 
     fn frame_surface(&mut self, frame: &Frame) {
@@ -1260,7 +1317,7 @@ impl Window {
             self.fix_dialog_size(size);
         }
         self.size = size;
-        let surface_state = (self.shown_frame, self.shown_opaque);
+        let surface_state = (self.shown_frame, self.shown_opaque.clone());
         let (scene, opaque) = if self.chrome.is_some() {
             let frame = self.frame();
             let sheet_opaque = scene.background.a == u8::MAX;
@@ -1274,12 +1331,24 @@ impl Window {
                 .then(|| Rect::new(0.0, 0.0, scene.width as f32, scene.height as f32));
             (scene, opaque)
         };
-        self.declare_opaque(opaque);
-        self.needs_redraw = self.chrome.as_ref().is_some_and(|chrome| chrome.animating);
         let scale = self.scale();
+        let below = self.externals_below();
+        let placed: Vec<(SurfaceId, Rect)> = match self.externals.is_empty() {
+            true => Vec::new(),
+            false => placed_surfaces(&scene, scale)
+                .into_iter()
+                .map(|placed| (placed.id, placed.area))
+                .collect(),
+        };
+        let holes = match below {
+            true => placed.iter().map(|(_, area)| *area).collect(),
+            false => Vec::new(),
+        };
+        self.declare_opaque(opaque.map(|area| Opaque { area, holes }));
+        self.needs_redraw = self.chrome.as_ref().is_some_and(|chrome| chrome.animating);
         let unchanged = !self.state.configure_unapplied
             && !self.staged
-            && surface_state == (self.shown_frame, self.shown_opaque)
+            && surface_state == (self.shown_frame, self.shown_opaque.clone())
             && self
                 .shown_scene
                 .as_ref()
@@ -1304,6 +1373,9 @@ impl Window {
             .take()
             .filter(|(_, shown_scale)| *shown_scale == scale)
             .and_then(|(shown, _)| damage(&shown, &scene, scale));
+        if !self.externals.is_empty() {
+            self.place_externals(&placed, below);
+        }
         let presented = match &mut self.gpu {
             Gpu::Ready(gpu) => Some(gpu.present(&scene, scale, damage.as_deref())),
             Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => None,
@@ -1328,6 +1400,7 @@ impl Window {
             }
         };
         self.shown_scene = Some((scene, scale));
+        self.settle_externals();
         self.flush()?;
         Ok(path)
     }

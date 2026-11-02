@@ -7,6 +7,7 @@ mod input;
 mod outline;
 mod render;
 mod scene;
+mod surface;
 mod text;
 mod title_bar;
 
@@ -19,12 +20,13 @@ pub use damage::{Region, damage};
 #[cfg(feature = "gpu")]
 pub use gpu::{GpuDevice, GpuRenderer};
 pub use input::{
-    Cursor, DOUBLE_CLICK_INTERVAL, Event, Key, Modifiers, Pointer, PointerButton, Scroll,
+    Captured, Cursor, DOUBLE_CLICK_INTERVAL, Event, Key, Modifiers, Pointer, PointerButton, Scroll,
     ScrollPhase, ScrollSource,
 };
 pub use parley::FontData;
 pub use render::{DrawError, Snapshot, pixels};
 pub use scene::{Image, Item, Paint, Path, Point, Rect, Scene, Shape, Stop};
+pub use surface::{PlacedSurface, SurfaceId, SurfaceScaling, placed_surfaces, surface_area};
 pub use text::{
     Cut, GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextStyle, TextSystem, shortened,
 };

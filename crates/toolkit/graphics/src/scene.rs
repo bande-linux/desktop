@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex, PoisonError, Weak};
 use resvg::{tiny_skia, usvg};
 use vello_cpu::{PixelMetadata, Pixmap};
 
+use crate::surface::{SurfaceId, SurfaceScaling};
 use crate::text::{GlyphRun, Paragraph};
 use bande_design::{Color, Elevation, Palette, Scheme};
 
@@ -425,6 +426,12 @@ pub enum Item {
     Image {
         rect: Rect,
         image: Image,
+    },
+    Surface {
+        id: SurfaceId,
+        frame: Rect,
+        size: (u32, u32),
+        scaling: SurfaceScaling,
     },
 }
 

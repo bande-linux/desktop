@@ -212,6 +212,7 @@ impl SessionLockHandler for State {
         }
         self.release_grabs();
         self.close_overview();
+        self.end_switcher();
         self.drop_window_menu();
         self.close_force_quit();
         self.dismiss_assist();

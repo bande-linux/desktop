@@ -35,6 +35,7 @@ the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
 | `libs/keyboard/tests/layouts.rs` | The XKB rules XML is read despite its DOCTYPE. |
 | `apps/settings/tests/settings.rs` | Settings: a setting found by search and changed from the keyboard is written to `config.kdl` through `org.bande.Config`; a pane chosen after a press lost to a pop-up is shown at once (the stuck press). |
 | `apps/settings/tests/updates.rs` | Settings: updates install at once through PackageKit (trusted only, simulated first) unless one needs a restart, which is prepared for the next boot. |
+| `libs/packages/src/flatpak.rs` | Flatpak's progress lines across several refs, and an app's sandbox permissions from its metadata. |
 | `apps/settings/src/software/stale.rs` | Which processes run replaced packaged code, and the unit that holds each, from `/proc` maps and cgroup lines. |
 | `apps/files/tests/files.rs` | Files: a file goes to the Trash and is put back; a new folder is named in place and undone; a duplicate that cannot be written asks and leaves no copy. |
 | `shell/launcher/tests/launcher.rs` | Launcher: typing ranks apps, arrows and Return open the choice. |

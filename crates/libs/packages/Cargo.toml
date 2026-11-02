@@ -1,6 +1,6 @@
 [package]
 name = "bande-packages"
-description = "Bande PackageKit client: updates, offline updates and local package files"
+description = "Bande PackageKit and Flatpak clients: updates, offline updates, local package files and per-user Flatpak apps"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+rustix.workspace = true
 serde.workspace = true
 tracing.workspace = true
 zbus.workspace = true

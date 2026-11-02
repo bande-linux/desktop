@@ -1,11 +1,12 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ops::Range;
 use std::rc::Rc;
 use std::time::Instant;
 
+use crate::users::Crop;
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_toolkit::ui::{
-    Animated, Context, Event, Key, Size, Spring, Widget, WidgetId, focus_ring,
+    Animated, Context, Cursor, Event, Key, Size, Spring, Widget, WidgetId, focus_ring,
 };
 use bande_toolkit::{
     Color, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Scheme, Shape, Spacing,
@@ -39,6 +40,13 @@ const ROW_GAP: f32 = Spacing::M as f32;
 const SECTION_LEAD: f32 = Spacing::M as f32;
 const CONTROL_WIDTH: f32 = 320.0;
 const UNBOUNDED: f32 = 1.0e6;
+const ROW_AVATAR: f32 = 28.0;
+const INITIAL_SCALE: f32 = 0.42;
+const CROP_VIEW: f32 = 200.0;
+const CROP_DIM: f32 = 0.35;
+const CROP_PAN: f32 = 0.05;
+const CROP_ZOOM: f32 = 1.1;
+const CROP_SCROLL: f32 = 0.01;
 
 fn is_activation(event: &Event) -> bool {
     matches!(
@@ -528,9 +536,68 @@ fn symbol_rect(center: Point, size: f32) -> Rect {
     )
 }
 
+pub struct Avatar {
+    picture: Option<Image>,
+    initial: String,
+    paragraph: Option<Paragraph>,
+}
+
+impl Avatar {
+    pub fn new(picture: Option<Image>, name: &str) -> Self {
+        Self {
+            picture,
+            initial: name
+                .chars()
+                .next()
+                .map(|first| first.to_uppercase().collect())
+                .unwrap_or_default(),
+            paragraph: None,
+        }
+    }
+
+    fn measure(&mut self, cx: &mut Context, size: f32) {
+        if self.picture.is_none() {
+            self.paragraph = Some(cx.text.paragraph(
+                &self.initial,
+                TextStyle::new(size * INITIAL_SCALE, cx.palette.on_accent).weight(TextStyle::BOLD),
+                None,
+                TextAlign::Start,
+            ));
+        }
+    }
+
+    fn paint(&self, cx: &Context, rect: Rect, items: &mut Vec<Item>) {
+        let circle = Shape::rounded(rect, rect.width / 2.0);
+        if let Some(picture) = &self.picture {
+            items.push(Item::Clip {
+                shape: circle,
+                items: vec![Item::Image {
+                    rect,
+                    image: picture.clone(),
+                }],
+            });
+            return;
+        }
+        items.push(Item::Fill {
+            shape: circle,
+            paint: cx.palette.accent.into(),
+        });
+        if let Some(paragraph) = &self.paragraph {
+            items.push(Item::Text {
+                origin: Point::new(
+                    (rect.x + (rect.width - paragraph.width()) / 2.0).round(),
+                    (rect.y + (rect.height - paragraph.height()) / 2.0).round(),
+                ),
+                paragraph: paragraph.clone(),
+            });
+        }
+    }
+}
+
 pub struct Header {
     id: WidgetId,
     symbol: Option<Image>,
+    avatar: Option<Avatar>,
     title: Text,
     summary: Text,
     children: Vec<Box<dyn Widget>>,
@@ -548,12 +615,18 @@ impl Header {
         Self {
             id: WidgetId::next(),
             symbol,
+            avatar: None,
             title,
             summary: Text::new(summary, Tone::Muted).role(TextRole::Callout),
             children: master.into_iter().collect(),
             control: Size::default(),
             frame: Rect::default(),
         }
+    }
+
+    pub fn avatar(mut self, avatar: Avatar) -> Self {
+        self.avatar = Some(avatar);
+        self
     }
 
     fn text_height(&self) -> f32 {
@@ -577,6 +650,9 @@ impl Widget for Header {
             true => self.control.width + ROW_PADDING + ROW_GAP,
             false => 0.0,
         };
+        if let Some(avatar) = &mut self.avatar {
+            avatar.measure(cx, HEADER_TILE);
+        }
         let text_width =
             Some((available.width - HEADER_TILE - Spacing::M as f32 - beside_control).max(0.0));
         self.title.measure_within(cx, text_width);
@@ -614,10 +690,14 @@ impl Widget for Header {
             HEADER_TILE,
             HEADER_TILE,
         );
-        items.push(Item::Fill {
-            shape: Shape::rounded(tile, Radius::L),
-            paint: cx.palette.well.into(),
-        });
+        if let Some(avatar) = &self.avatar {
+            avatar.paint(cx, tile, items);
+        } else {
+            items.push(Item::Fill {
+                shape: Shape::rounded(tile, Radius::L),
+                paint: cx.palette.well.into(),
+            });
+        }
         if let Some(symbol) = &self.symbol {
             items.push(Item::Image {
                 rect: symbol_rect(
@@ -874,6 +954,7 @@ impl Widget for Card {
 pub struct Row {
     id: WidgetId,
     symbol: Option<Image>,
+    avatar: Option<Avatar>,
     label: Text,
     detail: Option<Text>,
     highlighted: bool,
@@ -889,6 +970,7 @@ impl Row {
         Self {
             id: WidgetId::next(),
             symbol: None,
+            avatar: None,
             label,
             detail: None,
             highlighted: false,
@@ -910,6 +992,11 @@ impl Row {
         self
     }
 
+    pub fn avatar(mut self, avatar: Avatar) -> Self {
+        self.avatar = Some(avatar);
+        self
+    }
+
     pub fn highlighted(mut self, highlighted: bool) -> Self {
         self.highlighted = highlighted;
         self
@@ -927,9 +1014,10 @@ impl Row {
     }
 
     fn text_inset(&self) -> f32 {
-        match self.symbol {
-            Some(_) => SIDEBAR_SYMBOL + SYMBOL_GAP,
-            None => 0.0,
+        match (&self.avatar, &self.symbol) {
+            (Some(_), _) => ROW_AVATAR + SYMBOL_GAP,
+            (None, Some(_)) => SIDEBAR_SYMBOL + SYMBOL_GAP,
+            (None, None) => 0.0,
         }
     }
 
@@ -959,6 +1047,9 @@ impl Widget for Row {
             true => self.control.width + ROW_GAP,
             false => 0.0,
         };
+        if let Some(avatar) = &mut self.avatar {
+            avatar.measure(cx, ROW_AVATAR);
+        }
         let text_width = Some(
             (available.width - 2.0 * ROW_PADDING - self.text_inset() - beside_control).max(0.0),
         );
@@ -1008,7 +1099,16 @@ impl Widget for Row {
         if cx.is_focused(self.id) {
             focus_ring(cx, shape, items);
         }
-        if let Some(symbol) = &self.symbol {
+        if let Some(avatar) = &self.avatar {
+            let rect = symbol_rect(
+                Point::new(
+                    self.frame.x + ROW_PADDING + ROW_AVATAR / 2.0,
+                    self.frame.y + self.frame.height / 2.0,
+                ),
+                ROW_AVATAR,
+            );
+            avatar.paint(cx, rect, items);
+        } else if let Some(symbol) = &self.symbol {
             items.push(Item::Image {
                 rect: symbol_rect(
                     Point::new(
@@ -2035,5 +2135,198 @@ impl Widget for Fade {
 
     fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
         &mut self.children
+    }
+}
+
+pub struct PictureCrop {
+    id: WidgetId,
+    label: String,
+    image: Image,
+    size: (u32, u32),
+    crop: Rc<Cell<Crop>>,
+    on_moved: Box<dyn FnMut()>,
+    drag: Option<(Point, Crop)>,
+    frame: Rect,
+}
+
+impl PictureCrop {
+    pub fn new(
+        label: &str,
+        image: Image,
+        crop: Rc<Cell<Crop>>,
+        on_moved: impl FnMut() + 'static,
+    ) -> Self {
+        Self {
+            id: WidgetId::next(),
+            label: label.to_owned(),
+            size: (image.width(), image.height()),
+            image,
+            crop,
+            on_moved: Box::new(on_moved),
+            drag: None,
+            frame: Rect::default(),
+        }
+    }
+
+    fn view(&self) -> Rect {
+        Rect::new(
+            (self.frame.x + (self.frame.width - CROP_VIEW) / 2.0).round(),
+            self.frame.y + ROW_PADDING,
+            CROP_VIEW,
+            CROP_VIEW,
+        )
+    }
+
+    fn current(&self) -> Crop {
+        self.crop.get().clamped(self.size.0, self.size.1)
+    }
+
+    fn scale(&self, crop: Crop) -> f32 {
+        CROP_VIEW / crop.side(self.size.0, self.size.1)
+    }
+
+    fn set(&mut self, crop: Crop) {
+        self.crop.set(crop.clamped(self.size.0, self.size.1));
+    }
+
+    fn pan(&mut self, from: Crop, by: Point) {
+        let scale = self.scale(from);
+        let (width, height) = (self.size.0.max(1) as f32, self.size.1.max(1) as f32);
+        self.set(Crop {
+            x: from.x - by.x / scale / width,
+            y: from.y - by.y / scale / height,
+            ..from
+        });
+    }
+
+    fn zoom(&mut self, factor: f32) {
+        let crop = self.current();
+        self.set(Crop {
+            zoom: crop.zoom * factor,
+            ..crop
+        });
+        (self.on_moved)();
+    }
+}
+
+impl Widget for PictureCrop {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, _cx: &mut Context, available: Size) -> Size {
+        Size::new(available.width, CROP_VIEW + 2.0 * ROW_PADDING)
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let crop = self.current();
+        let scale = self.scale(crop);
+        let view = self.view();
+        let (width, height) = (self.size.0 as f32 * scale, self.size.1 as f32 * scale);
+        let picture = Item::Image {
+            rect: Rect::new(
+                view.x + CROP_VIEW / 2.0 - crop.x * width,
+                view.y + CROP_VIEW / 2.0 - crop.y * height,
+                width,
+                height,
+            ),
+            image: self.image.clone(),
+        };
+        let circle = Shape::rounded(view, CROP_VIEW / 2.0);
+        items.push(Item::Clip {
+            shape: Shape::rounded(view, Radius::M),
+            items: vec![Item::Opacity {
+                alpha: CROP_DIM,
+                items: vec![picture.clone()],
+            }],
+        });
+        items.push(Item::Clip {
+            shape: circle,
+            items: vec![picture],
+        });
+        items.push(Item::Stroke {
+            shape: circle,
+            width: 1.0,
+            paint: cx.palette.hairline.into(),
+        });
+        if cx.is_focused(self.id) {
+            focus_ring(cx, circle, items);
+        }
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::Image);
+        node.set_label(self.label.clone());
+        node.add_action(Action::Focus);
+        node
+    }
+
+    fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
+        match event {
+            Event::PointerDown(pointer)
+                if pointer.is_primary() && self.view().contains(pointer.position) =>
+            {
+                self.drag = Some((pointer.position, self.current()));
+            }
+            Event::PointerMove(pointer) => {
+                let Some((start, from)) = self.drag else {
+                    return false;
+                };
+                self.pan(
+                    from,
+                    Point::new(pointer.position.x - start.x, pointer.position.y - start.y),
+                );
+            }
+            Event::PointerUp(_) if self.drag.is_some() => {
+                self.drag = None;
+                (self.on_moved)();
+            }
+            Event::Scroll(scroll) if self.view().contains(scroll.position) => {
+                self.zoom((-scroll.delta.y * CROP_SCROLL).exp());
+            }
+            Event::Key { key, .. } => {
+                let step = CROP_PAN * CROP_VIEW;
+                let by = match key {
+                    Key::Left => Point::new(step, 0.0),
+                    Key::Right => Point::new(-step, 0.0),
+                    Key::Up => Point::new(0.0, step),
+                    Key::Down => Point::new(0.0, -step),
+                    Key::Character('+' | '=') => {
+                        self.zoom(CROP_ZOOM);
+                        return true;
+                    }
+                    Key::Character('-') => {
+                        self.zoom(1.0 / CROP_ZOOM);
+                        return true;
+                    }
+                    _ => return false,
+                };
+                let from = self.current();
+                self.pan(from, by);
+                (self.on_moved)();
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    fn accepts_focus(&self, _cx: &Context) -> bool {
+        true
+    }
+
+    fn cursor(&self, point: Point) -> Option<Cursor> {
+        match (self.drag.is_some(), self.view().contains(point)) {
+            (true, _) => Some(Cursor::Grabbing),
+            (false, true) => Some(Cursor::Grab),
+            (false, false) => None,
+        }
     }
 }

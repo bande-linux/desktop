@@ -1,3 +1,4 @@
+pub mod flatpak;
 pub mod offline;
 mod transaction;
 
@@ -133,6 +134,7 @@ pub enum Class {
     Live,
     Boot,
     Offline,
+    Flatpak,
 }
 
 impl Class {

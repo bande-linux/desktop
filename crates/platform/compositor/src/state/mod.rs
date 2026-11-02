@@ -458,6 +458,9 @@ impl Compositor {
                             .current()
                             .frame_callbacks,
                     );
+                    latched
+                        .latched_releases
+                        .extend(crate::release::take_replaced(states));
                 },
                 |_, _, _| true,
             );
@@ -476,6 +479,7 @@ impl Compositor {
                 Kind::Vsync,
             );
         }
+        presented.latched_releases.clear();
         let millis = (vblank.time.as_millis() % (1 << 32)) as u32;
         for callback in presented.latched_frame_callbacks.drain(..) {
             callback.done(millis);

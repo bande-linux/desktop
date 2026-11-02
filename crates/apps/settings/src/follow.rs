@@ -76,8 +76,10 @@ pub enum Update {
     Printers(PrintersState),
     NearbyPrinters(Vec<bande_printers::NearbyPrinter>),
     PrinterAdded(String, bool),
-    Accounts(Vec<Account>),
+    Accounts(Vec<Account>, bool),
     Password(PasswordOutcome),
+    PictureChosen(String, bande_toolkit::Image),
+    AccountCreated(Option<String>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -367,7 +369,7 @@ impl Services {
             permissions: follow_permissions(session, updates.clone()),
             brightness: system.and_then(|system| follow_brightness(system, updates.clone())),
             printers: system.map(|system| follow_printers(system, updates.clone())),
-            users: follow_users(updates.clone()),
+            users: follow_users(session, system, updates.clone()),
             _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
                 .inspect_err(|error| tracing::warn!("cannot watch {UDEV_DATA}: {error}"))
                 .ok(),

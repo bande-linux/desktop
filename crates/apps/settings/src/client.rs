@@ -47,6 +47,10 @@ pub trait Config {
     #[zbus(property)]
     fn set_reopen_apps_after_crash(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn automatic_updates(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_automatic_updates(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn clock_format(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_clock_format(&self, value: &str) -> zbus::Result<()>;
@@ -293,7 +297,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 72] = [
+pub const CONFIG_SETTINGS: [SettingId; 73] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -323,6 +327,7 @@ pub const CONFIG_SETTINGS: [SettingId; 72] = [
     SettingId::LockMessage,
     SettingId::ShowPreviews,
     SettingId::ReopenAfterCrash,
+    SettingId::AutomaticUpdates,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
     SettingId::BarIconSize,
@@ -529,6 +534,7 @@ impl SettingsClient {
             SettingId::LockMessage => Value::Text(self.config.lock_message()?),
             SettingId::ShowPreviews => Value::Flag(self.config.show_previews()?),
             SettingId::ReopenAfterCrash => Value::Flag(self.config.reopen_apps_after_crash()?),
+            SettingId::AutomaticUpdates => Value::Flag(self.config.automatic_updates()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
             SettingId::Clock24Hour => Value::Flag(match self.config.clock_format()?.as_str() {
@@ -620,6 +626,9 @@ impl SettingsClient {
             (SettingId::ShowPreviews, Value::Flag(shown)) => self.config.set_show_previews(*shown),
             (SettingId::ReopenAfterCrash, Value::Flag(on)) => {
                 self.config.set_reopen_apps_after_crash(*on)
+            }
+            (SettingId::AutomaticUpdates, Value::Flag(on)) => {
+                self.config.set_automatic_updates(*on)
             }
             (SettingId::BarEdge, Value::Keyword(keyword)) => self.config.set_bar_edge(keyword),
             (SettingId::BarLayout, Value::Keyword(keyword)) => self.config.set_bar_layout(keyword),

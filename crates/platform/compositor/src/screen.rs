@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use smithay::backend::renderer::utils::Buffer;
 use smithay::desktop::layer_map_for_output;
 use smithay::output::{Mode, Output, PhysicalProperties, Scale as OutputScale, Subpixel};
 use smithay::reexports::wayland_server::DisplayHandle;
@@ -121,6 +122,7 @@ pub(crate) struct Screen {
     pub(crate) fitted_to: Rectangle<i32, Logical>,
     pub(crate) latched_feedback: Vec<PresentationFeedbackCallback>,
     pub(crate) latched_frame_callbacks: Vec<WlCallback>,
+    pub(crate) latched_releases: Vec<Buffer>,
 }
 
 impl Screen {
@@ -156,6 +158,7 @@ impl Screen {
             fitted_to: Rectangle::default(),
             latched_feedback: Vec::new(),
             latched_frame_callbacks: Vec::new(),
+            latched_releases: Vec::new(),
         };
         screen.apply(settings);
         screen

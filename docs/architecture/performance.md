@@ -54,6 +54,9 @@ once uploaded, and animations, sampling and timers run only while something on s
 them, so an idle process should not wake at all. A redraw whose scene is unchanged commits nothing,
 so a D-Bus change that does not alter what is shown wakes only the client, never the
 compositor; the status hub forwards Wi-Fi signal changes only when the shown level changes.
+A redraw wakes its client once more, at the frame callback: when a commit asks for one, the
+compositor holds the buffer it replaces and sends its `wl_buffer.release` in the same flush as
+the frame callback and presentation feedback of the frame that shows the new buffer.
 
 ## What wakes when idle
 

@@ -456,6 +456,11 @@ impl Model {
         }
     }
 
+    pub fn set_apps(&mut self, apps: Vec<AppInfo>) {
+        self.apps = apps.into_iter().map(IndexedApp::new).collect();
+        self.rebuild(None);
+    }
+
     pub fn set_search(&mut self, search: Search, excluded: Vec<PathBuf>) {
         if search != self.search || excluded != self.excluded {
             self.search = search;

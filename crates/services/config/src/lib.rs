@@ -850,6 +850,7 @@ pub struct Config {
     pub tinted_frame: bool,
     pub reopen_apps: bool,
     pub reopen_apps_after_crash: bool,
+    pub automatic_updates: bool,
     pub lock_message: String,
     pub show_previews: bool,
     pub clock: ClockFormat,
@@ -886,6 +887,7 @@ impl Default for Config {
             tinted_frame: false,
             reopen_apps: true,
             reopen_apps_after_crash: false,
+            automatic_updates: false,
             lock_message: String::new(),
             show_previews: true,
             clock: ClockFormat::Automatic,
@@ -1039,6 +1041,9 @@ impl Parser<'_> {
                 "reopen-apps-after-crash" => self
                     .flag(node)
                     .map(|reopen| config.reopen_apps_after_crash = reopen),
+                "automatic-updates" => self
+                    .flag(node)
+                    .map(|automatic| config.automatic_updates = automatic),
                 "accessibility" => {
                     config.accessibility = self.accessibility(node);
                     Ok(())

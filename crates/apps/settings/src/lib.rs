@@ -4,6 +4,7 @@ mod battery;
 mod brightness;
 mod client;
 mod clock;
+mod crypt;
 mod defaults;
 mod displays;
 mod failure;

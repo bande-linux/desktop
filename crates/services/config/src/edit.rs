@@ -18,6 +18,7 @@ pub enum Setting {
     TintedFrame(bool),
     ReopenApps(bool),
     ReopenAppsAfterCrash(bool),
+    AutomaticUpdates(bool),
     LockMessage(String),
     ShowPreviews(bool),
     Clock(ClockFormat),
@@ -110,6 +111,12 @@ impl Setting {
                 &mut document,
                 None,
                 "reopen-apps-after-crash",
+                on.then_some(KdlValue::Bool(true)),
+            ),
+            Self::AutomaticUpdates(on) => set(
+                &mut document,
+                None,
+                "automatic-updates",
                 on.then_some(KdlValue::Bool(true)),
             ),
             Self::Clock(format) => set(

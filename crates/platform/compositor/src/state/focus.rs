@@ -151,7 +151,7 @@ impl State {
             return true;
         };
         let owner = surface.client();
-        if focused.client() == owner {
+        if focused.client() == owner || self.key_window().is_some_and(|key| key.client() == owner) {
             return true;
         }
         if self.would_interrupt_typing(surface, &focused) {

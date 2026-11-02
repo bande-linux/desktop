@@ -178,6 +178,9 @@ fn publish_changes(
         if before.reopen_apps_after_crash != after.reopen_apps_after_crash {
             let _ = guard.reopen_apps_after_crash_changed(emitter).await;
         }
+        if before.automatic_updates != after.automatic_updates {
+            let _ = guard.automatic_updates_changed(emitter).await;
+        }
         if before.clock != after.clock {
             let _ = guard.clock_format_changed(emitter).await;
         }
@@ -571,6 +574,16 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_reopen_apps_after_crash(&self, on: bool) -> zbus::fdo::Result<()> {
         self.write(&Setting::ReopenAppsAfterCrash(on))
+    }
+
+    #[zbus(property)]
+    fn automatic_updates(&self) -> bool {
+        self.store.current().automatic_updates
+    }
+
+    #[zbus(property)]
+    fn set_automatic_updates(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::AutomaticUpdates(on))
     }
 
     #[zbus(property)]

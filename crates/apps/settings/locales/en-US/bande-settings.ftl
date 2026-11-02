@@ -287,6 +287,11 @@ updates-notification-body = { $count ->
     [one] 1 update is ready to install.
    *[other] { $count } updates are ready to install.
 }
+updates-ready-restart = { $count ->
+    [one] An update is ready to install
+   *[other] { $count } updates are ready to install
+}
+updates-ready-restart-hint = They need a restart. Open Software Update to install them when it suits you.
 show-updates = Show Updates
 manual-address-invalid = Type an address such as 192.168.1.20/24, and the router and DNS servers as addresses such as 192.168.1.1.
 ip-address = IP address
@@ -417,5 +422,36 @@ password-weak = That password is too weak. Choose a longer one.
 password-rejected = That password can't be used: { $reason }
 users-you = Logged in as { $name } ({ $login })
 users-you-login = Logged in as { $login }
+service-accounts = The accounts service
+service-files = The file chooser
+add-user-ellipsis = Add User…
+add-user-hint = Add a person who can log in to this computer
+full-name = Full name
+full-name-placeholder = Full name
+account-name = Account name
+account-name-placeholder = Account name
+account-name-detail = The name of the home folder; it can't be changed later.
+account-type = Account type
+account-administer = Allow this user to administer this computer
+account-creating = Creating the account…
+account-steps = Press Return after each password field to create the account, or Escape to cancel
+account-name-needed = Type the person's full name.
+account-name-invalid = Use lowercase letters, digits, - and _ for the account name, starting with a letter.
+account-name-taken = That account name is already used. Choose another one.
+account-password-mismatch = The passwords don't match. Type the password again.
+account-picture = Picture
+account-picture-crop = Picture, drag to move and scroll to zoom
+account-picture-zoom = Zoom
+account-picture-hint = Drag the picture to choose what shows in the circle.
+choose-account-picture = Choose a Picture
+choose-ellipsis = Choose…
+picture-unreadable = That picture can't be opened. Choose a JPEG or PNG picture.
+save = Save
+delete-user-ellipsis = Delete User…
+delete-user-hint = Delete this user
+delete-user-question = Delete “{ $name }”?
+delete-user-warning = Keep the home folder to keep their files in /home/{ $login }, or delete it and everything in it.
+delete-user-keep-home = Keep Home Folder
+delete-user-remove-home = Delete Home Folder
 vpn-remove-question = Remove the VPN “{ $name }”?
 vpn-remove-warning = Its settings and keys are deleted. Import the configuration again to use it.

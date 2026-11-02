@@ -807,6 +807,7 @@ dependencies = [
 name = "bande-packages"
 version = "0.1.0"
 dependencies = [
+ "rustix 1.1.6",
  "serde",
  "tracing",
  "zbus",
@@ -969,11 +970,15 @@ dependencies = [
  "bande-wallpaper",
  "bande-watch",
  "bande-xdg",
+ "image",
  "jiff",
+ "libc",
+ "libloading",
  "rustix 1.1.6",
  "tempfile",
  "tracing",
  "wayland-client",
+ "wayland-protocols",
  "wayland-protocols-wlr",
  "zbus",
  "zeroize",

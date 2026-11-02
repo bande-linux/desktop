@@ -509,7 +509,7 @@ impl<'a, 'b> Flow<'a, 'b> {
                         content_origin.1
                     } else {
                         let mut collapsed = pending;
-                        collapsed.adjoin(child_margin_top);
+                        collapsed.adjoin_all(leading_margins(child, content_width));
                         content_origin.1 + y + collapsed.resolve()
                     };
                     if child_style.reset.clear != Clear::None {
@@ -1133,6 +1133,33 @@ impl<'a, 'b> Flow<'a, 'b> {
             }));
         }
     }
+}
+
+fn leading_margins(block: &BlockBox, width: f32) -> Margins {
+    let mut margins = Margins::default();
+    let mut current = block;
+    for _ in 0..64 {
+        let style = &current.style;
+        margins.adjoin(resolve_margins(style, width).top.unwrap_or(0.0));
+        let reset = &style.reset;
+        if establishes_bfc(style)
+            || reset.border.top != 0.0
+            || reset.padding.top.resolve(width) != 0.0
+        {
+            break;
+        }
+        let Contents::Blocks(children) = &current.contents else {
+            break;
+        };
+        let Some(first) = children
+            .iter()
+            .find(|child| !child.style.is_out_of_flow() && child.style.reset.float == Float::None)
+        else {
+            break;
+        };
+        current = first;
+    }
+    margins
 }
 
 fn keep_empty(laid: Laid, at: (f32, f32), children: &mut Vec<Fragment>) {

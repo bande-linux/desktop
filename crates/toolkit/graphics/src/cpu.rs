@@ -1,11 +1,11 @@
 use vello_cpu::kurbo::{self, Affine, BezPath};
+use vello_cpu::peniko::BlendMode;
 use vello_cpu::{
     Glyph, PaintType, PixmapMut, RasterizerSettings, RenderContext, Resources, TargetInit,
 };
 
 use crate::damage::Region;
-use crate::draw::{self, Canvas, ImageIds};
-use crate::outline::GlyphOutlines;
+use crate::draw::{self, Caches, Canvas, Frame};
 use crate::render::{DrawError, Snapshot};
 use crate::scene::Scene;
 use crate::text::GlyphRun;
@@ -13,8 +13,7 @@ use crate::text::GlyphRun;
 pub struct CpuRenderer {
     context: RenderContext,
     resources: Resources,
-    outlines: GlyphOutlines,
-    image_ids: ImageIds,
+    caches: Caches,
 }
 
 impl Default for CpuRenderer {
@@ -28,8 +27,7 @@ impl CpuRenderer {
         Self {
             context: RenderContext::new(1, 1),
             resources: Resources::new(),
-            outlines: GlyphOutlines::default(),
-            image_ids: ImageIds::default(),
+            caches: Caches::default(),
         }
     }
 
@@ -76,15 +74,15 @@ impl CpuRenderer {
         self.context.reset_and_resize(width, height);
         let mut images = Vec::new();
         draw::images(&scene.items, &mut images);
-        for id in self.image_ids.take_dropped() {
+        for id in self.caches.images.take_dropped() {
             self.resources.destroy_image(id);
         }
         for image in images {
-            if self.image_ids.get(&image).is_none()
+            if self.caches.images.get(image.id()).is_none()
                 && let Some(pixmap) = image.pixmap()
             {
                 let id = self.resources.register_image(pixmap);
-                self.image_ids.insert(&image, id);
+                self.caches.images.insert(image.id(), id, image.liveness());
             }
         }
         draw::encode(
@@ -92,14 +90,15 @@ impl CpuRenderer {
                 context: &mut self.context,
                 resources: &mut self.resources,
             },
-            &mut self.outlines,
-            &self.image_ids,
+            &mut self.caches,
             &scene.items,
-            scale,
-            (region.x, region.y),
+            &Frame {
+                scale,
+                origin: (region.x, region.y),
+                size: (width, height),
+            },
             None,
         );
-        self.outlines.end_frame();
         self.context.flush();
         let target = PixmapMut::new(width, height, rgba).ok_or(DrawError::BufferSize)?;
         self.context.render_with(
@@ -149,8 +148,9 @@ impl Canvas for CpuCanvas<'_> {
         self.context.push_clip_layer(path);
     }
 
-    fn push_opacity_layer(&mut self, alpha: f32) {
-        self.context.push_opacity_layer(alpha);
+    fn push_layer(&mut self, blend: BlendMode, alpha: f32) {
+        self.context
+            .push_layer(None, Some(blend), Some(alpha), None, None);
     }
 
     fn pop_layer(&mut self) {

@@ -145,7 +145,24 @@ fn walk(items: &[Item], mapping: Mapping, scale: f64, placed: &mut Vec<PlacedSur
                 };
                 walk(items, inner, scale, placed);
             }
-            Item::Opacity { items, .. } => walk(items, mapping, scale, placed),
+            Item::Transform { transform, items } => {
+                let [factor, skew_y, skew_x, same, x, y] = transform.matrix;
+                if skew_x == 0.0 && skew_y == 0.0 && factor == same && factor > 0.0 {
+                    let inner = Mapping {
+                        factor: mapping.factor * factor,
+                        offset: Point::new(
+                            mapping.offset.x + mapping.factor * x,
+                            mapping.offset.y + mapping.factor * y,
+                        ),
+                        ..mapping
+                    };
+                    walk(items, inner, scale, placed);
+                }
+            }
+            Item::Opacity { items, .. } | Item::Blend { items, .. } => {
+                walk(items, mapping, scale, placed);
+            }
+            Item::Picture(picture) => walk(picture.items(), mapping, scale, placed),
             _ => {}
         }
     }

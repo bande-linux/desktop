@@ -529,6 +529,13 @@ impl Paragraph {
         self.layout.height()
     }
 
+    pub fn painted_width(&self) -> f32 {
+        self.layout
+            .lines()
+            .map(|line| line.metrics().offset + line.metrics().advance)
+            .fold(self.layout.width(), f32::max)
+    }
+
     pub fn line_count(&self) -> usize {
         self.layout.len()
     }

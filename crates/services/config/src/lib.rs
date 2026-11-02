@@ -22,7 +22,8 @@ pub use login_picture::{
 };
 pub use report::{EDIT_ACTION, ErrorNotifier};
 pub use service::{
-    ArrangedDisplay, BUS_NAME, ConfigService, NightLightValue, OBJECT_PATH, ServiceError,
+    ArrangedDisplay, BUS_NAME, ConfigService, FocusScheduleValue, NightLightValue, OBJECT_PATH,
+    ServiceError,
 };
 pub use store::{ConfigStore, Loaded, ReloadError};
 
@@ -730,6 +731,26 @@ pub struct NightLight {
     pub warmth: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FocusSchedule {
+    pub on: bool,
+    pub from: ClockTime,
+    pub to: ClockTime,
+}
+
+impl Default for FocusSchedule {
+    fn default() -> Self {
+        Self {
+            on: false,
+            from: ClockTime {
+                hour: 22,
+                minute: 0,
+            },
+            to: ClockTime { hour: 7, minute: 0 },
+        }
+    }
+}
+
 impl Default for NightLight {
     fn default() -> Self {
         Self {
@@ -840,6 +861,7 @@ pub struct Config {
     pub sound: Sound,
     pub wallpaper: Wallpaper,
     pub night_light: NightLight,
+    pub focus_schedule: FocusSchedule,
     pub search: Search,
     pub displays: BTreeMap<String, DisplaySettings>,
     pub arrangements: Vec<Vec<Placement>>,
@@ -882,6 +904,7 @@ impl Default for Config {
             sound: Sound::default(),
             wallpaper: Wallpaper::default(),
             night_light: NightLight::default(),
+            focus_schedule: FocusSchedule::default(),
             search: Search::default(),
             displays: BTreeMap::new(),
             arrangements: Vec::new(),
@@ -1052,6 +1075,10 @@ impl Parser<'_> {
                 }
                 "night-light" => {
                     config.night_light = self.night_light(node);
+                    Ok(())
+                }
+                "do-not-disturb" => {
+                    config.focus_schedule = self.focus_schedule(node);
                     Ok(())
                 }
                 "search" => {
@@ -1298,6 +1325,20 @@ impl Parser<'_> {
             idle.suspend = Suspend::After(idle.lock_after);
         }
         idle
+    }
+
+    fn focus_schedule(&self, node: &KdlNode) -> FocusSchedule {
+        let mut schedule = FocusSchedule::default();
+        self.section(node, |child| {
+            match child.name().value() {
+                "scheduled" => schedule.on = self.flag(child)?,
+                "from" => schedule.from = self.clock_time(child)?,
+                "to" => schedule.to = self.clock_time(child)?,
+                _ => return Err(self.unknown_child("do-not-disturb", child)),
+            }
+            Ok(())
+        });
+        schedule
     }
 
     fn night_light(&self, node: &KdlNode) -> NightLight {

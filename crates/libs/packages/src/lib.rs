@@ -479,9 +479,18 @@ impl Client {
             .packages)
     }
 
-    pub fn install(&self, ids: &[String], progress: &dyn Fn(Progress)) -> Result<Applied, Error> {
+    pub fn install(
+        &self,
+        ids: &[String],
+        mode: Mode,
+        progress: &dyn Fn(Progress),
+    ) -> Result<Applied, Error> {
         Ok(self
-            .run("InstallPackages", &(ONLY_TRUSTED, ids), progress)?
+            .run(
+                "InstallPackages",
+                &(ONLY_TRUSTED | mode.flags(), ids),
+                progress,
+            )?
             .applied())
     }
 

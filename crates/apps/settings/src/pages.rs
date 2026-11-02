@@ -24,8 +24,8 @@ use crate::view::{
     USE_MAIN, intent,
 };
 use crate::widgets::{
-    Caption, Captioned, Card, Check, Column, Fade, Row, SIDEBAR_SYMBOL, Signal, Swatch, Swatches,
-    Text, Thumbnail, Thumbnails, Tone,
+    Caption, Captioned, Card, Check, Column, Fade, Row, SIDEBAR_SYMBOL, Swatch, Swatches, Text,
+    Thumbnail, Thumbnails, Tone,
 };
 use bande_config::Placement;
 use bande_settings_panes::SettingHit;
@@ -37,7 +37,7 @@ const PAGE_PADDING: f32 = Spacing::XL as f32;
 const PAGE_SPACING: f32 = Spacing::S as f32;
 const ROW_INSET: f32 = Spacing::M as f32;
 const VOLUME_STEP: f64 = 1.0 / 16.0;
-const FIELD_SIZE: f32 = 13.0;
+pub(crate) const FIELD_SIZE: f32 = 13.0;
 
 pub(crate) type Widgets = Vec<Box<dyn Widget>>;
 
@@ -487,6 +487,12 @@ impl SettingsView {
             {
                 Vec::new()
             }
+            Kind::Text
+                if matches!(setting.id, SettingId::FocusFrom | SettingId::FocusTo)
+                    && self.values.get(&SettingId::FocusScheduled) != Some(&Value::Flag(true)) =>
+            {
+                Vec::new()
+            }
             _ if setting.id == SettingId::TrackpadDragging
                 && self.values.get(&SettingId::TrackpadTapToClick) != Some(&Value::Flag(true)) =>
             {
@@ -516,84 +522,6 @@ impl SettingsView {
     pub(crate) fn item_row(&mut self, anchor: String, row: Row) -> Box<dyn Widget> {
         self.anchors.push((Anchor::Item(anchor), row.id()));
         boxed(row)
-    }
-
-    fn network_rows(&mut self) -> Widgets {
-        let Some(wifi) = self.wifi.clone() else {
-            return Vec::new();
-        };
-        if wifi.networks.is_empty() {
-            return vec![muted_row(&L10N.tr("searching-networks"))];
-        }
-        let mut rows = Vec::new();
-        for network in wifi.networks {
-            let name = network.name();
-            if self.forgetting.as_ref() == Some(&Forget::Network(network.ssid.clone())) {
-                let row = self.forget_row(&name, &L10N.tr("forget-network-warning"));
-                rows.push(row);
-                continue;
-            }
-            let status = if network.current {
-                Some(L10N.tr("connected"))
-            } else if self.join.joining.as_ref() == Some(&network.ssid) {
-                Some(L10N.tr("joining"))
-            } else if network.known {
-                Some(L10N.tr("saved"))
-            } else {
-                None
-            };
-            let signal = boxed(Signal::new(
-                network.strength,
-                network.security.needs_password(),
-            ));
-            let control = if network.known {
-                boxed(Stack::new(
-                    Axis::Horizontal,
-                    Spacing::S as f32,
-                    0.0,
-                    vec![
-                        self.forget_button(Forget::Network(network.ssid.clone())),
-                        signal,
-                    ],
-                ))
-            } else {
-                signal
-            };
-            let mut row = Row::new(Text::new(&name, Tone::Primary), Some(control));
-            if let Some(status) = status {
-                row = row.detail(Text::new(&status, Tone::Muted).caption());
-            }
-            if !network.current {
-                let mut join = intent(&self.intents, Intent::Join);
-                let ssid = network.ssid.clone();
-                row = row.on_activate(move || join(ssid.clone()));
-            }
-            rows.push(self.item_row(name.clone(), row));
-            if self.join.asking.as_ref() == Some(&network.ssid) {
-                let field = SecureField::new(
-                    &L10N.tr("password"),
-                    FIELD_SIZE,
-                    submit(&self.intents, Intent::Password),
-                );
-                self.anchors.push((Anchor::Password, field.id()));
-                let detail = self
-                    .join
-                    .error
-                    .clone()
-                    .unwrap_or_else(|| L10N.tr("password-hint"));
-                rows.push(boxed(
-                    Row::new(
-                        Text::new(
-                            &L10N.tr_args("password-for", [("network", name.into())]),
-                            Tone::Primary,
-                        ),
-                        Some(boxed(field)),
-                    )
-                    .detail(Text::new(&detail, Tone::Muted).caption()),
-                ));
-            }
-        }
-        rows
     }
 
     fn device_rows(&mut self, paired: bool) -> Widgets {
@@ -756,6 +684,7 @@ impl SettingsView {
 
     fn list_rows(&mut self, list: List) -> Widgets {
         match list {
+            List::KnownNetworks => self.known_network_rows(),
             List::Networks => self.network_rows(),
             List::PairedDevices => self.device_rows(true),
             List::NearbyDevices => self.device_rows(false),
@@ -1064,7 +993,9 @@ impl SettingsView {
 
     fn section_shown(&self, section: &Section) -> bool {
         section.settings.iter().all(|setting| match setting.id {
-            SettingId::Networks => self.wifi.as_ref().is_some_and(|wifi| wifi.enabled),
+            SettingId::KnownNetworks | SettingId::Networks => {
+                self.wifi.as_ref().is_some_and(|wifi| wifi.enabled)
+            }
             SettingId::PairedDevices | SettingId::NearbyDevices => self
                 .bluetooth
                 .as_ref()
@@ -1278,6 +1209,11 @@ impl SettingsView {
         {
             return self.page(app);
         }
+        if pane.id == PaneId::Wifi
+            && let Some(network) = self.network_page()
+        {
+            return self.page(network);
+        }
         page.push(self.header(&pane));
         if pane.id == PaneId::Bluetooth
             && let Some(card) = self.pairing_card()
@@ -1329,6 +1265,7 @@ impl SettingsView {
                 .iter()
                 .any(|setting| setting.id == SettingId::Networks)
                 && self.join.asking.is_none()
+                && self.other.is_none()
                 && let Some(error) = &self.join.error
             {
                 body.push(boxed(Caption::new(Text::new(error, Tone::Muted))));

@@ -18,7 +18,10 @@ fn main() -> ExitCode {
         Ok((connection, center, server))
     });
     match server {
-        Ok((connection, _center, _server)) => {
+        Ok((connection, center, server)) => {
+            if let Err(error) = server.follow_focus_schedule(&center) {
+                tracing::warn!("cannot follow the Do Not Disturb schedule: {error}");
+            }
             bande_bus::serve_until_closed(&connection);
             ExitCode::SUCCESS
         }

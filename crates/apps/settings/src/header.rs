@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use bande_network::VpnState;
-use bande_settings_panes::{Group, Pane, PaneId, SettingId, Value};
+use bande_settings_panes::{Group, Pane, PaneId, Value};
 use bande_toolkit::ui::{ScrollView, Toggle, Widget};
 use bande_toolkit::{Color, Image, TextRole};
 use bande_xdg::{ICON_THEMES, find_icon};
@@ -172,9 +172,7 @@ impl SettingsView {
                 );
                 (!parts.is_empty()).then(|| parts.join(" · "))
             }),
-            PaneId::Notifications => (self.values.get(&SettingId::DoNotDisturb)
-                == Some(&Value::Flag(true)))
-            .then(|| L10N.tr("do-not-disturb-on")),
+            PaneId::Notifications => self.do_not_disturb_summary(),
             PaneId::Displays => match self.displays.as_slice() {
                 [] => None,
                 [display] => Some(display.name()),

@@ -18,14 +18,14 @@ Delete each line when it ships; delete the file when the list is empty.
    Open With and Change All), Quick Look, previews and thumbnails.
 4. **Arrange folders their way**: icons, list, columns (gallery), sort, groups, per-folder view
    options remembered, folders on top, hidden files.
-5. **Other apps hand them to Files**: "Show in Folder" from browsers and editors
+4. **Other apps hand them to Files**: "Show in Folder" from browsers and editors
    (`org.freedesktop.FileManager1`), Open With and defaults, drag and drop with modifiers.
-6. **Disks and servers**: external drives with Eject, Trash on volumes, Connect to Server.
+5. **Disks and servers**: external drives with Eject, Trash on volumes, Connect to Server.
 7. **Stays fast**: large folders stream, nothing blocks typing, idle costs nothing.
 
 ## Already in Files
 
-- Views: icons, list (with disclosure), columns; View ▸ Sort By; per-folder view memory;
+- Views: icons, list (with disclosure), columns, gallery (a large preview over a strip); View ▸ Sort By; per-folder view memory;
   status bar and path bar; hidden files; Quick Look with full screen.
 - Names: known extensions hidden unless Settings ▸ Advanced shows them (Files, desktop, file
   chooser), kept on rename, a warning before changing one; batch rename.
@@ -47,7 +47,7 @@ Delete each line when it ships; delete the file when the list is empty.
 1. Get Info: an editable Name & Extension field with a per-file "Hide extension".
 2. View ▸ Use Groups (Kind, Date Last Opened, Size).
 3. New windows show: Other… (any folder).
-4. Gallery view.
+4. Gallery: Finder's preview pane metadata beside it (today the inspector shows it).
 5. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
    (GVfs-free SMB/SFTP mounts).
 6. Content search (file contents, not only names).

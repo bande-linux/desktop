@@ -103,6 +103,15 @@ impl FilesView {
         if self.mode == ViewMode::Icons {
             return row.map(|row| self.grid_icon_centre(row));
         }
+        if self.mode == ViewMode::Gallery {
+            return self.hits.iter().find_map(|(rect, hit)| match hit {
+                Hit::Row { .. } if rect.contains(at) => Some(Point::new(
+                    rect.x + rect.width / 2.0,
+                    rect.y + rect.height / 2.0,
+                )),
+                _ => None,
+            });
+        }
         self.hits.iter().find_map(|(rect, hit)| match hit {
             Hit::Row { .. } if rect.contains(at) => Some(Point::new(
                 rect.x + COLUMN_ICON_CENTRE,

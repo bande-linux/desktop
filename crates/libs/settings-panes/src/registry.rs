@@ -170,11 +170,19 @@ impl PaneId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SettingId {
     WifiPower,
+    KnownNetworks,
     Networks,
+    WifiAddress,
+    WifiRouter,
+    WifiDns,
+    OtherNetwork,
     BluetoothPower,
     PairedDevices,
     NearbyDevices,
     DoNotDisturb,
+    FocusScheduled,
+    FocusFrom,
+    FocusTo,
     OutputVolume,
     OutputMuted,
     OutputDevice,
@@ -245,6 +253,8 @@ pub enum SettingId {
     TimeZone,
     Clock24Hour,
     LoginItems,
+    ReopenApps,
+    ReopenAfterCrash,
     BatteryLevel,
     PowerMode,
     LowPowerOnBattery,
@@ -305,6 +315,7 @@ pub enum Value {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum List {
+    KnownNetworks,
     Networks,
     PairedDevices,
     NearbyDevices,
@@ -667,6 +678,14 @@ fn connection_panes() -> Vec<Pane> {
             vec![
                 section(None, vec![switch(SettingId::WifiPower, "wifi-power")]),
                 section(
+                    Some(L10N.tr("known-networks")),
+                    vec![list(
+                        SettingId::KnownNetworks,
+                        "known-networks",
+                        List::KnownNetworks,
+                    )],
+                ),
+                section(
                     Some(L10N.tr("networks")),
                     vec![list(SettingId::Networks, "networks", List::Networks)],
                 ),
@@ -835,6 +854,20 @@ fn desktop_panes() -> Vec<Pane> {
                     vec![
                         switch(SettingId::DoNotDisturb, "do-not-disturb")
                             .described("do-not-disturb-description"),
+                        switch(SettingId::FocusScheduled, "focus-scheduled")
+                            .described("focus-scheduled-description"),
+                        setting(
+                            SettingId::FocusFrom,
+                            L10N.tr("night-from"),
+                            L10N.tr("focus-times-keywords"),
+                            Kind::Text,
+                        ),
+                        setting(
+                            SettingId::FocusTo,
+                            L10N.tr("night-to"),
+                            L10N.tr("focus-times-keywords"),
+                            Kind::Text,
+                        ),
                     ],
                 ),
                 section(
@@ -1340,6 +1373,15 @@ fn system_panes() -> Vec<Pane> {
                         "open-at-login",
                         List::LoginItems,
                     )],
+                ),
+                section(
+                    Some(L10N.tr("reopen")),
+                    vec![
+                        switch(SettingId::ReopenApps, "reopen-at-login")
+                            .described("reopen-at-login-description"),
+                        switch(SettingId::ReopenAfterCrash, "reopen-after-crash")
+                            .described("reopen-after-crash-description"),
+                    ],
                 ),
             ],
         ),

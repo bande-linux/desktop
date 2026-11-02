@@ -881,6 +881,15 @@ impl FilesView {
 
     fn rename_frame(&mut self, path: &Path) -> Rect {
         let content = self.content_frame();
+        if self.mode == ViewMode::Gallery {
+            let name = self.gallery_name_frame();
+            return Rect::new(
+                name.x + name.width / 4.0,
+                name.y,
+                name.width / 2.0,
+                ROW_HEIGHT - 4.0,
+            );
+        }
         if self.mode == ViewMode::Icons {
             let row = self.browser.columns()[0]
                 .entries

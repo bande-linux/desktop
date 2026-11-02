@@ -15,16 +15,18 @@ pub enum ViewMode {
     List,
     #[default]
     Columns,
+    Gallery,
 }
 
 impl ViewMode {
-    pub const ALL: [Self; 3] = [Self::Icons, Self::List, Self::Columns];
+    pub const ALL: [Self; 4] = [Self::Icons, Self::List, Self::Columns, Self::Gallery];
 
     pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Icons => "icons",
             Self::List => "list",
             Self::Columns => "columns",
+            Self::Gallery => "gallery",
         }
     }
 
@@ -37,6 +39,7 @@ impl ViewMode {
             Self::Icons => "view-icons",
             Self::List => "view-list",
             Self::Columns => "view-columns",
+            Self::Gallery => "view-gallery",
         }
     }
 }

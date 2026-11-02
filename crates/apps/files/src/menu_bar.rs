@@ -111,6 +111,7 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 shortcut("menu-as-icons", "Ctrl+1"),
                 shortcut("menu-as-list", "Ctrl+2"),
                 shortcut("menu-as-columns", "Ctrl+3"),
+                shortcut("menu-as-gallery", "Ctrl+4"),
                 Entry::separator(),
                 submenu("menu-sort-by", sort_entries(view)),
                 Entry::separator(),

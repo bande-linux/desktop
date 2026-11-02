@@ -21,4 +21,4 @@ review the CI, its performance and result has been abysmal. Right now it only st
 Status: started. Everything up to the first tag is done and dry-run on the mini. Left: the owner cuts the first releases (order in [open.md](open.md)); the first tag run is the first real test.
 
 we have no app store, should we build one?
-Status: started. Software (bande-linux/apps) browses, installs and removes Debian apps. Left: the Flatpak backend and Flathub (off until the user turns it on), Flatpak removal, rows for installed apps without a catalogue entry, the tile grid and sidebar, screenshots (needs an HTTP client), and the later store milestones.
+Status: started. Software (bande-linux/apps) browses Discover, categories, Installed and Updates with icons, screenshots and app facts, and installs and removes Debian apps; updates hand off to Software Update. Left: Flatpak and Flathub (planned in the apps repo's `NOTES/plans/software-depth.md`), automatic updates in Software Update, reviews.

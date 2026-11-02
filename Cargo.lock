@@ -792,9 +792,11 @@ name = "bande-notify"
 version = "0.1.0"
 dependencies = [
  "bande-bus",
+ "bande-datetime",
  "bande-log",
  "bande-sound",
  "bande-test-bus",
+ "jiff",
  "rustix 1.1.6",
  "tracing",
  "zbus",

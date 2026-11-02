@@ -18,6 +18,7 @@ use super::{
 };
 
 pub const ROW_HEIGHT: f32 = 32.0;
+const COMPACT_ROW_HEIGHT: f32 = 24.0;
 const CELL_PADDING: f32 = 8.0;
 const ICON_SIZE: f32 = 16.0;
 const RESIZE_GRIP: f32 = 4.0;
@@ -59,6 +60,7 @@ pub struct Table {
     id: WidgetId,
     columns: Vec<Column>,
     header: bool,
+    row: f32,
     sidebar: bool,
     lines: Vec<Line>,
     shown: Vec<usize>,
@@ -106,6 +108,7 @@ impl Table {
             id: WidgetId::next(),
             columns,
             header: true,
+            row: ROW_HEIGHT,
             sidebar: false,
             lines: Vec::new(),
             shown: Vec::new(),
@@ -137,6 +140,13 @@ impl Table {
             scale: 1.0,
             pending_reveal: None,
             glide: None,
+        }
+    }
+
+    pub fn compact(self) -> Self {
+        Self {
+            row: COMPACT_ROW_HEIGHT,
+            ..self
         }
     }
 
@@ -561,7 +571,7 @@ impl Table {
     }
 
     fn row_height(&self) -> f32 {
-        ROW_HEIGHT + self.grown
+        self.row + self.grown
     }
 
     fn body(&self) -> Rect {

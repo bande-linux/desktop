@@ -32,6 +32,7 @@ pub enum Command {
     Icons,
     Columns,
     List,
+    Gallery,
     ToggleHidden,
     EmptyTrash,
     OpenPlace,
@@ -73,6 +74,7 @@ const ACTIONS: &[(&str, Command)] = &[
     ("icons", Command::Icons),
     ("columns", Command::Columns),
     ("list", Command::List),
+    ("gallery", Command::Gallery),
     ("toggle-hidden", Command::ToggleHidden),
     ("empty-trash", Command::EmptyTrash),
     ("open-place", Command::OpenPlace),
@@ -282,6 +284,12 @@ pub fn folder_menu(folder: Folder) -> Menu {
             Command::Columns,
             "Ctrl+3",
             ViewMode::Columns,
+        ),
+        (
+            "menu-as-gallery",
+            Command::Gallery,
+            "Ctrl+4",
+            ViewMode::Gallery,
         ),
     ] {
         items.push(

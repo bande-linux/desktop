@@ -78,16 +78,20 @@ impl FilesView {
 
     fn view_control_widget(&mut self) -> SegmentedControl {
         let send = sender(&self.signals);
-        let choices = [
-            ("view-grid-symbolic", "view-icons"),
-            ("view-list-symbolic", "view-list"),
-            ("view-column-symbolic", "view-columns"),
+        let choices: [(&[&str], &str); 4] = [
+            (&["view-grid-symbolic"], "view-icons"),
+            (&["view-list-symbolic"], "view-list"),
+            (&["view-column-symbolic"], "view-columns"),
+            (
+                &["view-gallery-symbolic", "view-paged-symbolic"],
+                "view-gallery",
+            ),
         ];
         let symbols = choices
             .iter()
             .map(|(icon, title)| {
                 self.icons
-                    .first(&[icon], SYMBOL_PIXELS)
+                    .first(icon, SYMBOL_PIXELS)
                     .map(|image| (image, L10N.tr(title)))
             })
             .collect::<Option<Vec<_>>>();

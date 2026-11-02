@@ -248,6 +248,7 @@ pub struct FilesView {
     pub(crate) band: Option<Band>,
     pub(crate) labels: HashMap<(String, u32, usize), String>,
     pub(crate) grid_wanted: Vec<Entry>,
+    pub(crate) gallery_offset: Option<(Location, f32)>,
     pub(crate) size_slider: Option<WidgetId>,
     pub(crate) requests: Vec<Request>,
     pub(crate) pending_rename: Option<(Instant, PathBuf)>,
@@ -384,6 +385,7 @@ impl FilesView {
             band: None,
             labels: HashMap::new(),
             grid_wanted: Vec::new(),
+            gallery_offset: None,
             size_slider: None,
             requests: Vec::new(),
             pending_rename: None,
@@ -1183,6 +1185,7 @@ impl FilesView {
         }
         match self.mode {
             ViewMode::Icons => return self.grid_scrolled(scroll),
+            ViewMode::Gallery => return self.gallery_scrolled(scroll),
             ViewMode::List => return false,
             ViewMode::Columns => {}
         }
@@ -1583,6 +1586,11 @@ impl FilesView {
             {
                 return self.grid_key(key, modifiers);
             }
+            Key::Up | Key::Down | Key::Left | Key::Right | Key::Home | Key::End
+                if self.mode == ViewMode::Gallery && !alt =>
+            {
+                return self.gallery_key(key, modifiers);
+            }
             Key::Down if shift => {
                 self.browser.extend(true);
                 self.selection_changed();
@@ -1642,6 +1650,7 @@ impl FilesView {
             Key::Character('1') if command => self.set_mode(ViewMode::Icons),
             Key::Character('2') if command => self.set_mode(ViewMode::List),
             Key::Character('3') if command => self.set_mode(ViewMode::Columns),
+            Key::Character('4') if command => self.set_mode(ViewMode::Gallery),
             Key::Character('=' | '+') if command => self.grow_icons(true),
             Key::Character('-') if command => self.grow_icons(false),
             Key::Character('i' | 'I') if command => {

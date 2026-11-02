@@ -244,6 +244,16 @@ pub const LONGHANDS: &[Longhand] = &[
     l("image-rendering", "ImageRendering", true, "auto"),
     l("appearance", "Appearance", false, "none"),
     l("scroll-behavior", "ScrollBehavior", false, "auto"),
+    l("grid-template-columns", "GridTemplate", false, "none"),
+    l("grid-template-rows", "GridTemplate", false, "none"),
+    l("grid-template-areas", "GridAreas", false, "none"),
+    l("grid-auto-columns", "TrackSizes", false, "auto"),
+    l("grid-auto-rows", "TrackSizes", false, "auto"),
+    l("grid-auto-flow", "GridAutoFlow", false, "row"),
+    l("grid-column-start", "GridLine", false, "auto"),
+    l("grid-column-end", "GridLine", false, "auto"),
+    l("grid-row-start", "GridLine", false, "auto"),
+    l("grid-row-end", "GridLine", false, "auto"),
 ];
 
 pub const SHORTHANDS: &[Shorthand] = &[
@@ -285,6 +295,14 @@ pub const SHORTHANDS: &[Shorthand] = &[
     s("place-items", ShorthandKind::Pair, &["align-items", "justify-items"]),
     s("place-self", ShorthandKind::Pair, &["align-self", "justify-self"]),
     s("flex-flow", ShorthandKind::AnyOrder, &["flex-direction", "flex-wrap"]),
+    s("grid-column", ShorthandKind::Custom, &["grid-column-start", "grid-column-end"]),
+    s("grid-row", ShorthandKind::Custom, &["grid-row-start", "grid-row-end"]),
+    s("grid-area", ShorthandKind::Custom, &[
+        "grid-row-start", "grid-column-start", "grid-row-end", "grid-column-end",
+    ]),
+    s("grid-template", ShorthandKind::Custom, &[
+        "grid-template-rows", "grid-template-columns", "grid-template-areas",
+    ]),
     s("flex", ShorthandKind::Custom, &["flex-grow", "flex-shrink", "flex-basis"]),
     s("text-decoration", ShorthandKind::AnyOrder, &[
         "text-decoration-line", "text-decoration-style", "text-decoration-color",

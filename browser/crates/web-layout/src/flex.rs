@@ -110,6 +110,7 @@ impl<'a, 'b> Flow<'a, 'b> {
                 let measured = match basis {
                     Some(basis) => basis,
                     None => {
+                        let mark = self.mark();
                         let laid = self.block(
                             item,
                             (cross, None),
@@ -120,6 +121,7 @@ impl<'a, 'b> Flow<'a, 'b> {
                                 ..Sizing::default()
                             },
                         );
+                        self.rewind(mark);
                         laid.fragment.rect.height - item_frame.1
                     }
                 };
@@ -200,10 +202,12 @@ impl<'a, 'b> Flow<'a, 'b> {
                     }
                 }
             }
+            let mark = self.mark();
             let mut laid: Vec<Laid> = Vec::with_capacity(line.len());
             for item in &line {
                 laid.push(self.flex_item(item, row, (width, height), origin, None));
             }
+            self.rewind(mark);
             let line_cross = if line_count == 1
                 && let Some(cross) = if row { height } else { Some(width) }
             {
@@ -220,15 +224,16 @@ impl<'a, 'b> Flow<'a, 'b> {
                 } else {
                     item.block.style.reset.width.is_none()
                 };
-                if matches!(align, Align::Stretch | Align::Normal) && auto_cross {
-                    let cross = if row {
-                        line_cross - item.margin.0 - item.margin.2
-                    } else {
-                        line_cross - item.margin.1 - item.margin.3
-                    };
-                    *laid =
-                        self.flex_item(item, row, (width, height), origin, Some(cross.max(0.0)));
-                }
+                let cross =
+                    (matches!(align, Align::Stretch | Align::Normal) && auto_cross).then(|| {
+                        let cross = if row {
+                            line_cross - item.margin.0 - item.margin.2
+                        } else {
+                            line_cross - item.margin.1 - item.margin.3
+                        };
+                        cross.max(0.0)
+                    });
+                *laid = self.flex_item(item, row, (width, height), origin, cross);
             }
             let used: f32 = laid
                 .iter()

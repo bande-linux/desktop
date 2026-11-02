@@ -1917,3 +1917,395 @@ impl fmt::Display for Gradient {
         f.write_char(')')
     }
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TrackBreadth {
+    Length(LengthPercentage),
+    Flex(f32),
+    Auto,
+    MinContent,
+    MaxContent,
+}
+
+impl TrackBreadth {
+    fn parse(input: &mut Parser<'_, '_>, flex: bool) -> ParseResult<Self> {
+        if input.try_ident_matching("auto") {
+            return Ok(TrackBreadth::Auto);
+        }
+        if input.try_ident_matching("min-content") {
+            return Ok(TrackBreadth::MinContent);
+        }
+        if input.try_ident_matching("max-content") {
+            return Ok(TrackBreadth::MaxContent);
+        }
+        if flex
+            && let Ok(value) = input.try_parse(|p| match p.next_token()? {
+                Token::Dimension(number, unit)
+                    if unit.eq_ignore_ascii_case("fr") && number.value >= 0.0 =>
+                {
+                    Ok(number.value as f32)
+                }
+                _ => Err(ParseError::Invalid),
+            })
+        {
+            return Ok(TrackBreadth::Flex(value));
+        }
+        LengthPercentage::parse(input, Range::NonNegative).map(TrackBreadth::Length)
+    }
+}
+
+impl fmt::Display for TrackBreadth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TrackBreadth::Length(length) => length.fmt(f),
+            TrackBreadth::Flex(value) => {
+                write_number(f, *value)?;
+                f.write_str("fr")
+            }
+            TrackBreadth::Auto => f.write_str("auto"),
+            TrackBreadth::MinContent => f.write_str("min-content"),
+            TrackBreadth::MaxContent => f.write_str("max-content"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TrackSize {
+    Breadth(TrackBreadth),
+    MinMax(TrackBreadth, TrackBreadth),
+    FitContent(LengthPercentage),
+}
+
+impl Parse for TrackSize {
+    fn parse(input: &mut Parser<'_, '_>) -> ParseResult<Self> {
+        if input
+            .try_parse(|p| p.expect_function_matching("minmax"))
+            .is_ok()
+        {
+            return input.parse_nested_block(|p| {
+                let min = TrackBreadth::parse(p, false)?;
+                p.expect_comma()?;
+                let max = TrackBreadth::parse(p, true)?;
+                p.expect_exhausted()?;
+                Ok(TrackSize::MinMax(min, max))
+            });
+        }
+        if input
+            .try_parse(|p| p.expect_function_matching("fit-content"))
+            .is_ok()
+        {
+            return input.parse_nested_block(|p| {
+                let limit = LengthPercentage::parse(p, Range::NonNegative)?;
+                p.expect_exhausted()?;
+                Ok(TrackSize::FitContent(limit))
+            });
+        }
+        TrackBreadth::parse(input, true).map(TrackSize::Breadth)
+    }
+}
+
+impl fmt::Display for TrackSize {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TrackSize::Breadth(breadth) => breadth.fmt(f),
+            TrackSize::MinMax(min, max) => write!(f, "minmax({min}, {max})"),
+            TrackSize::FitContent(limit) => write!(f, "fit-content({limit})"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Repeat {
+    Count(u32),
+    AutoFill,
+    AutoFit,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TrackItem {
+    Names(Box<[Box<str>]>),
+    Track(TrackSize),
+    Repeat(Repeat, Box<[TrackItem]>),
+}
+
+fn parse_names(input: &mut Parser<'_, '_>) -> ParseResult<Box<[Box<str>]>> {
+    match input.next_token()? {
+        Token::OpenSquare => input.parse_nested_block(|p| {
+            let mut names = Vec::new();
+            while let Ok(name) = p.try_parse(|p| p.expect_ident()) {
+                names.push(Box::from(&*name));
+            }
+            p.expect_exhausted()?;
+            Ok(names.into_boxed_slice())
+        }),
+        _ => Err(ParseError::Invalid),
+    }
+}
+
+fn parse_track_items(input: &mut Parser<'_, '_>, nested: bool) -> ParseResult<Vec<TrackItem>> {
+    let mut items = Vec::new();
+    loop {
+        if let Ok(names) = input.try_parse(parse_names) {
+            items.push(TrackItem::Names(names));
+            continue;
+        }
+        if !nested
+            && input
+                .try_parse(|p| p.expect_function_matching("repeat"))
+                .is_ok()
+        {
+            let repeat = input.parse_nested_block(|p| {
+                let count = if p.try_ident_matching("auto-fill") {
+                    Repeat::AutoFill
+                } else if p.try_ident_matching("auto-fit") {
+                    Repeat::AutoFit
+                } else {
+                    let count = p.expect_integer()?;
+                    if count < 1 {
+                        return Err(ParseError::Invalid);
+                    }
+                    Repeat::Count(count.min(10000) as u32)
+                };
+                p.expect_comma()?;
+                let inner = parse_track_items(p, true)?;
+                p.expect_exhausted()?;
+                Ok(TrackItem::Repeat(count, inner.into_boxed_slice()))
+            })?;
+            items.push(repeat);
+            continue;
+        }
+        match input.try_parse(TrackSize::parse) {
+            Ok(track) => items.push(TrackItem::Track(track)),
+            Err(_) => break,
+        }
+    }
+    if items
+        .iter()
+        .any(|item| !matches!(item, TrackItem::Names(_)))
+    {
+        Ok(items)
+    } else {
+        Err(ParseError::Invalid)
+    }
+}
+
+impl fmt::Display for TrackItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TrackItem::Names(names) => {
+                f.write_char('[')?;
+                write_list(f, names, " ")?;
+                f.write_char(']')
+            }
+            TrackItem::Track(track) => track.fmt(f),
+            TrackItem::Repeat(count, items) => {
+                f.write_str("repeat(")?;
+                match count {
+                    Repeat::Count(count) => write!(f, "{count}")?,
+                    Repeat::AutoFill => f.write_str("auto-fill")?,
+                    Repeat::AutoFit => f.write_str("auto-fit")?,
+                }
+                f.write_str(", ")?;
+                write_list(f, items, " ")?;
+                f.write_char(')')
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GridTemplate {
+    None,
+    Tracks(Box<[TrackItem]>),
+}
+
+impl Parse for GridTemplate {
+    fn parse(input: &mut Parser<'_, '_>) -> ParseResult<Self> {
+        if input.try_ident_matching("none") {
+            return Ok(GridTemplate::None);
+        }
+        parse_track_items(input, false).map(|items| GridTemplate::Tracks(items.into_boxed_slice()))
+    }
+}
+
+impl fmt::Display for GridTemplate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GridTemplate::None => f.write_str("none"),
+            GridTemplate::Tracks(items) => write_list(f, items, " "),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrackSizes(pub Box<[TrackSize]>);
+
+impl Parse for TrackSizes {
+    fn parse(input: &mut Parser<'_, '_>) -> ParseResult<Self> {
+        let mut sizes = vec![TrackSize::parse(input)?];
+        while let Ok(size) = input.try_parse(TrackSize::parse) {
+            sizes.push(size);
+        }
+        Ok(TrackSizes(sizes.into_boxed_slice()))
+    }
+}
+
+impl fmt::Display for TrackSizes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write_list(f, &self.0, " ")
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GridLine {
+    Auto,
+    Line(i32, Option<Box<str>>),
+    Span(u32, Option<Box<str>>),
+    Name(Box<str>),
+}
+
+impl Parse for GridLine {
+    fn parse(input: &mut Parser<'_, '_>) -> ParseResult<Self> {
+        if input.try_ident_matching("auto") {
+            return Ok(GridLine::Auto);
+        }
+        let mut span = false;
+        let mut number = None;
+        let mut name: Option<Box<str>> = None;
+        for _ in 0..3 {
+            if !span && input.try_ident_matching("span") {
+                span = true;
+                continue;
+            }
+            if number.is_none()
+                && let Ok(value) = input.try_parse(|p| p.expect_integer())
+            {
+                number = Some(value);
+                continue;
+            }
+            if name.is_none()
+                && let Ok(ident) = input.try_parse(|p| p.expect_ident())
+            {
+                if ident.eq_ignore_ascii_case("auto") || ident.eq_ignore_ascii_case("span") {
+                    return Err(ParseError::Invalid);
+                }
+                name = Some(Box::from(&*ident));
+                continue;
+            }
+            break;
+        }
+        match (span, number, name) {
+            (true, number, name) => {
+                let count = number.unwrap_or(1);
+                if count < 1 {
+                    return Err(ParseError::Invalid);
+                }
+                Ok(GridLine::Span(count as u32, name))
+            }
+            (false, Some(0), _) | (false, None, None) => Err(ParseError::Invalid),
+            (false, Some(number), name) => Ok(GridLine::Line(number, name)),
+            (false, None, Some(name)) => Ok(GridLine::Name(name)),
+        }
+    }
+}
+
+impl fmt::Display for GridLine {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GridLine::Auto => f.write_str("auto"),
+            GridLine::Line(number, None) => write!(f, "{number}"),
+            GridLine::Line(number, Some(name)) => write!(f, "{number} {name}"),
+            GridLine::Span(count, None) => write!(f, "span {count}"),
+            GridLine::Span(count, Some(name)) => write!(f, "span {count} {name}"),
+            GridLine::Name(name) => f.write_str(name),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GridAreas {
+    None,
+    Rows(Box<[Box<str>]>),
+}
+
+impl Parse for GridAreas {
+    fn parse(input: &mut Parser<'_, '_>) -> ParseResult<Self> {
+        if input.try_ident_matching("none") {
+            return Ok(GridAreas::None);
+        }
+        let mut rows = Vec::new();
+        while let Ok(row) = input.try_parse(|p| p.expect_string()) {
+            rows.push(Box::<str>::from(&*row));
+        }
+        if rows.is_empty() {
+            return Err(ParseError::Invalid);
+        }
+        let width = rows.first().map(|row| row.split_ascii_whitespace().count());
+        if rows
+            .iter()
+            .any(|row| Some(row.split_ascii_whitespace().count()) != width || width == Some(0))
+        {
+            return Err(ParseError::Invalid);
+        }
+        Ok(GridAreas::Rows(rows.into_boxed_slice()))
+    }
+}
+
+impl fmt::Display for GridAreas {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GridAreas::None => f.write_str("none"),
+            GridAreas::Rows(rows) => {
+                for (index, row) in rows.iter().enumerate() {
+                    if index > 0 {
+                        f.write_char(' ')?;
+                    }
+                    write!(f, "\"{row}\"")?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GridAutoFlow {
+    pub column: bool,
+    pub dense: bool,
+}
+
+impl Parse for GridAutoFlow {
+    fn parse(input: &mut Parser<'_, '_>) -> ParseResult<Self> {
+        let mut flow = GridAutoFlow {
+            column: false,
+            dense: false,
+        };
+        let mut seen = false;
+        for _ in 0..2 {
+            if input.try_ident_matching("row") {
+                seen = true;
+            } else if input.try_ident_matching("column") {
+                flow.column = true;
+                seen = true;
+            } else if input.try_ident_matching("dense") {
+                flow.dense = true;
+                seen = true;
+            }
+        }
+        if seen {
+            Ok(flow)
+        } else {
+            Err(ParseError::Invalid)
+        }
+    }
+}
+
+impl fmt::Display for GridAutoFlow {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(if self.column { "column" } else { "row" })?;
+        if self.dense {
+            f.write_str(" dense")?;
+        }
+        Ok(())
+    }
+}

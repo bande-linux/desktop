@@ -379,7 +379,9 @@ impl Computer<'_> {
                     D::None | D::TableColumn | D::TableColumnGroup => Display::None,
                     D::Contents => Display::Contents,
                     D::Inline | D::InlineListItem | D::Ruby | D::RubyText => Display::Inline,
-                    D::InlineBlock | D::InlineGrid => Display::InlineBlock,
+                    D::InlineBlock => Display::InlineBlock,
+                    D::Grid => Display::Grid,
+                    D::InlineGrid => Display::InlineGrid,
                     D::InlineTable => Display::InlineTable,
                     D::Table => Display::Table,
                     D::TableRowGroup => Display::TableRowGroup,
@@ -728,6 +730,58 @@ impl Computer<'_> {
                     _ => None,
                 }
             }
+            (Id::GridTemplateColumns, V::GridTemplate(value)) => {
+                let tracks = self.tracks(value);
+                self.grid().columns = tracks;
+            }
+            (Id::GridTemplateRows, V::GridTemplate(value)) => {
+                let tracks = self.tracks(value);
+                self.grid().rows = tracks;
+            }
+            (Id::GridAutoColumns, V::TrackSizes(value)) => {
+                let tracks = value.0.iter().map(|size| self.track(size)).collect();
+                self.grid().auto_columns = tracks;
+            }
+            (Id::GridAutoRows, V::TrackSizes(value)) => {
+                let tracks = value.0.iter().map(|size| self.track(size)).collect();
+                self.grid().auto_rows = tracks;
+            }
+            (Id::GridAutoFlow, V::GridAutoFlow(value)) => self.grid().column_flow = value.column,
+            (Id::GridTemplateAreas, V::GridAreas(value)) => {
+                let grid = self.grid();
+                grid.areas.clear();
+                grid.area_rows = 0;
+                grid.area_columns = 0;
+                if let specified::GridAreas::Rows(rows) = value {
+                    grid.area_rows = rows.len() as u32;
+                    for (row, line) in rows.iter().enumerate() {
+                        let cells: Vec<&str> = line.split_ascii_whitespace().collect();
+                        grid.area_columns = grid.area_columns.max(cells.len() as u32);
+                        for (column, name) in cells.into_iter().enumerate() {
+                            if name.chars().all(|ch| ch == '.') {
+                                continue;
+                            }
+                            let (row, column) = (row as u32, column as u32);
+                            match grid.areas.iter_mut().find(|area| &*area.name == name) {
+                                Some(area) => {
+                                    area.rows.1 = area.rows.1.max(row + 1);
+                                    area.columns.0 = area.columns.0.min(column);
+                                    area.columns.1 = area.columns.1.max(column + 1);
+                                }
+                                None => grid.areas.push(crate::GridArea {
+                                    name: Arc::from(name),
+                                    rows: (row, row + 1),
+                                    columns: (column, column + 1),
+                                }),
+                            }
+                        }
+                    }
+                }
+            }
+            (Id::GridRowStart, V::GridLine(value)) => self.placement()[0] = grid_line(value),
+            (Id::GridColumnStart, V::GridLine(value)) => self.placement()[1] = grid_line(value),
+            (Id::GridRowEnd, V::GridLine(value)) => self.placement()[2] = grid_line(value),
+            (Id::GridColumnEnd, V::GridLine(value)) => self.placement()[3] = grid_line(value),
             (Id::ObjectFit, V::ObjectFit(value)) => {
                 use keywords::ObjectFit as O;
                 self.reset.object_fit = match value {
@@ -739,6 +793,103 @@ impl Computer<'_> {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn grid(&mut self) -> &mut crate::GridStyle {
+        Arc::make_mut(self.reset.grid.get_or_insert_with(Default::default))
+    }
+
+    fn placement(&mut self) -> &mut [crate::GridLine; 4] {
+        Arc::make_mut(self.reset.placement.get_or_insert_with(|| {
+            Arc::new([
+                crate::GridLine::Auto,
+                crate::GridLine::Auto,
+                crate::GridLine::Auto,
+                crate::GridLine::Auto,
+            ])
+        }))
+    }
+
+    fn breadth(&self, value: &specified::TrackBreadth) -> crate::Breadth {
+        match value {
+            specified::TrackBreadth::Length(length) => {
+                crate::Breadth::Fixed(self.length_percentage(length))
+            }
+            specified::TrackBreadth::Flex(value) => crate::Breadth::Flex(*value),
+            specified::TrackBreadth::Auto => crate::Breadth::Auto,
+            specified::TrackBreadth::MinContent => crate::Breadth::MinContent,
+            specified::TrackBreadth::MaxContent => crate::Breadth::MaxContent,
+        }
+    }
+
+    fn track(&self, size: &specified::TrackSize) -> crate::Track {
+        match size {
+            specified::TrackSize::Breadth(breadth) => {
+                let max = self.breadth(breadth);
+                let min = match max {
+                    crate::Breadth::Flex(_) => crate::Breadth::Auto,
+                    other => other,
+                };
+                crate::Track { min, max }
+            }
+            specified::TrackSize::MinMax(min, max) => crate::Track {
+                min: self.breadth(min),
+                max: self.breadth(max),
+            },
+            specified::TrackSize::FitContent(limit) => crate::Track {
+                min: crate::Breadth::Auto,
+                max: crate::Breadth::Fixed(self.length_percentage(limit)),
+            },
+        }
+    }
+
+    fn tracks(&self, value: &specified::GridTemplate) -> crate::Tracks {
+        let mut tracks = crate::Tracks::default();
+        if let specified::GridTemplate::Tracks(items) = value {
+            self.track_items(items, &mut tracks);
+        }
+        tracks
+    }
+
+    fn track_items(&self, items: &[specified::TrackItem], tracks: &mut crate::Tracks) {
+        const MAX_TRACKS: usize = 1000;
+        for item in items {
+            match item {
+                specified::TrackItem::Names(names) => {
+                    let line = tracks.tracks.len() as u32;
+                    tracks
+                        .names
+                        .extend(names.iter().map(|name| (Arc::from(&**name), line)));
+                }
+                specified::TrackItem::Track(size) => {
+                    if tracks.tracks.len() < MAX_TRACKS {
+                        tracks.tracks.push(self.track(size));
+                    }
+                }
+                specified::TrackItem::Repeat(specified::Repeat::Count(count), inner) => {
+                    for _ in 0..*count {
+                        if tracks.tracks.len() >= MAX_TRACKS {
+                            break;
+                        }
+                        self.track_items(inner, tracks);
+                    }
+                }
+                specified::TrackItem::Repeat(repeat, inner) => {
+                    let sizes = inner
+                        .iter()
+                        .filter_map(|item| match item {
+                            specified::TrackItem::Track(size) => Some(self.track(size)),
+                            _ => None,
+                        })
+                        .collect();
+                    tracks.repeat = Some((
+                        tracks.tracks.len() as u32,
+                        sizes,
+                        matches!(repeat, specified::Repeat::AutoFit),
+                    ));
+                }
+            }
         }
     }
 
@@ -850,6 +1001,15 @@ impl Computer<'_> {
             Id::BackgroundImage => reset.background_image = from_reset.background_image.clone(),
             Id::ObjectFit => reset.object_fit = from_reset.object_fit,
             Id::Content => reset.content = from_reset.content.clone(),
+            Id::GridTemplateColumns
+            | Id::GridTemplateRows
+            | Id::GridTemplateAreas
+            | Id::GridAutoColumns
+            | Id::GridAutoRows
+            | Id::GridAutoFlow => reset.grid = from_reset.grid.clone(),
+            Id::GridRowStart | Id::GridColumnStart | Id::GridRowEnd | Id::GridColumnEnd => {
+                reset.placement = from_reset.placement.clone()
+            }
             _ => {}
         }
     }
@@ -857,7 +1017,7 @@ impl Computer<'_> {
     fn finish(&mut self) {
         let parent_flex = matches!(
             self.parent.reset.display,
-            Display::Flex | Display::InlineFlex
+            Display::Flex | Display::InlineFlex | Display::Grid | Display::InlineGrid
         );
         if parent_flex {
             self.reset.float = Float::None;
@@ -873,6 +1033,7 @@ impl Computer<'_> {
             self.reset.display = match self.reset.display {
                 Display::InlineFlex => Display::Flex,
                 Display::InlineTable => Display::Table,
+                Display::InlineGrid => Display::Grid,
                 Display::Inline | Display::InlineBlock => Display::Block,
                 Display::Contents if self.context.root => Display::Block,
                 display => display,
@@ -947,5 +1108,18 @@ fn item_alignment(value: keywords::ItemAlignment) -> Align {
         I::End | I::FlexEnd | I::SelfEnd | I::Right => Align::End,
         I::Baseline => Align::Baseline,
         _ => Align::Start,
+    }
+}
+
+fn grid_line(value: &specified::GridLine) -> crate::GridLine {
+    match value {
+        specified::GridLine::Auto => crate::GridLine::Auto,
+        specified::GridLine::Line(number, name) => {
+            crate::GridLine::Line(*number, name.as_deref().map(Arc::from))
+        }
+        specified::GridLine::Span(count, name) => {
+            crate::GridLine::Span(*count, name.as_deref().map(Arc::from))
+        }
+        specified::GridLine::Name(name) => crate::GridLine::Name(Arc::from(&**name)),
     }
 }

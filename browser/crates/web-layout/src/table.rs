@@ -224,6 +224,7 @@ impl<'a, 'b> Flow<'a, 'b> {
             }
         }
         let mut measured = Vec::with_capacity(slots.len());
+        let mark = self.mark();
         for slot in &slots {
             let cell_width = span_width(slot);
             let laid = self.block(
@@ -244,6 +245,7 @@ impl<'a, 'b> Flow<'a, 'b> {
             }
             measured.push(height);
         }
+        self.rewind(mark);
         for (slot, &height) in slots.iter().zip(&measured) {
             if slot.rows > 1 {
                 let range = slot.row..slot.row + slot.rows;

@@ -42,6 +42,8 @@ pub enum Display {
     ListItem,
     Flex,
     InlineFlex,
+    Grid,
+    InlineGrid,
     Table,
     InlineTable,
     TableRowGroup,
@@ -56,7 +58,11 @@ impl Display {
     pub fn is_inline_level(self) -> bool {
         matches!(
             self,
-            Display::Inline | Display::InlineBlock | Display::InlineFlex | Display::InlineTable
+            Display::Inline
+                | Display::InlineBlock
+                | Display::InlineFlex
+                | Display::InlineGrid
+                | Display::InlineTable
         )
     }
 }
@@ -310,6 +316,64 @@ pub struct ResetStyle {
     pub background_image: Option<Arc<str>>,
     pub object_fit: ObjectFit,
     pub content: Option<Arc<str>>,
+    pub grid: Option<Arc<GridStyle>>,
+    pub placement: Option<Arc<[GridLine; 4]>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Breadth {
+    Fixed(LengthPercentage),
+    Flex(f32),
+    Auto,
+    MinContent,
+    MaxContent,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Track {
+    pub min: Breadth,
+    pub max: Breadth,
+}
+
+impl Track {
+    pub const AUTO: Track = Track {
+        min: Breadth::Auto,
+        max: Breadth::Auto,
+    };
+}
+
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct Tracks {
+    pub tracks: Vec<Track>,
+    pub names: Vec<(Arc<str>, u32)>,
+    pub repeat: Option<(u32, Vec<Track>, bool)>,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum GridLine {
+    Auto,
+    Line(i32, Option<Arc<str>>),
+    Span(u32, Option<Arc<str>>),
+    Name(Arc<str>),
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct GridArea {
+    pub name: Arc<str>,
+    pub rows: (u32, u32),
+    pub columns: (u32, u32),
+}
+
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct GridStyle {
+    pub columns: Tracks,
+    pub rows: Tracks,
+    pub areas: Vec<GridArea>,
+    pub area_rows: u32,
+    pub area_columns: u32,
+    pub auto_columns: Vec<Track>,
+    pub auto_rows: Vec<Track>,
+    pub column_flow: bool,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -383,6 +447,8 @@ impl ResetStyle {
             background_image: None,
             object_fit: ObjectFit::Fill,
             content: None,
+            grid: None,
+            placement: None,
         }
     }
 }

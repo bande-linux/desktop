@@ -17,6 +17,7 @@ pub(crate) enum Contents {
     Inline(Box<InlineContent>),
     Replaced(Option<Arc<str>>),
     Flex(Vec<BlockBox>),
+    Grid(Vec<BlockBox>),
     Table(Box<Table>),
 }
 
@@ -195,7 +196,7 @@ fn refresh(block: &mut BlockBox, styles: &Styles, parent: Option<&ComputedStyle>
                 refresh(child, styles, Some(&style));
             }
         }
-        Contents::Flex(children) => {
+        Contents::Flex(children) | Contents::Grid(children) => {
             for child in children {
                 refresh(child, styles, Some(&style));
             }
@@ -233,7 +234,7 @@ fn block_bytes(block: &BlockBox) -> usize {
     });
     marker
         + match &block.contents {
-            Contents::Blocks(children) | Contents::Flex(children) => {
+            Contents::Blocks(children) | Contents::Flex(children) | Contents::Grid(children) => {
                 children.capacity() * size_of::<BlockBox>()
                     + children.iter().map(block_bytes).sum::<usize>()
             }
@@ -330,9 +331,13 @@ impl Builder<'_> {
             .set_nowrap(!style.inherited.white_space.wraps());
         self.children(node, &mut blocks, &mut pending, 0.0);
         let flex = matches!(style.display(), Display::Flex | Display::InlineFlex);
+        let grid = matches!(style.display(), Display::Grid | Display::InlineGrid);
         let contents = if flex {
             self.flush(&mut blocks, pending, &style);
             Contents::Flex(blocks)
+        } else if grid {
+            self.flush(&mut blocks, pending, &style);
+            Contents::Grid(blocks)
         } else if blocks.is_empty() {
             Contents::Inline(Box::new(self.finish(pending)))
         } else {

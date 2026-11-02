@@ -231,6 +231,8 @@ pub(crate) fn establishes_bfc(style: &ComputedStyle) -> bool {
             web_style::Display::InlineBlock
                 | web_style::Display::Flex
                 | web_style::Display::InlineFlex
+                | web_style::Display::Grid
+                | web_style::Display::InlineGrid
                 | web_style::Display::Table
                 | web_style::Display::InlineTable
                 | web_style::Display::TableCell
@@ -303,6 +305,15 @@ fn resolve_height(value: LengthPercentage, cb: Option<f32>) -> Option<f32> {
 }
 
 impl<'a, 'b> Flow<'a, 'b> {
+    pub(crate) fn mark(&self) -> (usize, usize) {
+        (self.glyphs.len(), self.absolutes.len())
+    }
+
+    pub(crate) fn rewind(&mut self, mark: (usize, usize)) {
+        self.glyphs.truncate(mark.0);
+        self.absolutes.truncate(mark.1);
+    }
+
     pub(crate) fn register_absolute(&mut self, block: &'b BlockBox, origin: (f32, f32)) {
         self.absolutes.push(Absolute {
             block,
@@ -583,6 +594,17 @@ impl<'a, 'b> Flow<'a, 'b> {
                     y = height;
                     baseline = last.map(|last| content_y + last);
                 }
+            }
+            Contents::Grid(items) => {
+                y = self.grid(
+                    block,
+                    items,
+                    (content_width, specified_height),
+                    content_origin,
+                    (content_x, content_y),
+                    &mut children,
+                );
+                through = through && y == 0.0 && children.is_empty();
             }
             Contents::Flex(items) => {
                 y = self.flex(

@@ -49,7 +49,7 @@ impl<'a, 'b> Flow<'a, 'b> {
                     });
                 (min.max(floats.0), max + floats.1)
             }
-            Contents::Blocks(children) | Contents::Flex(children) => {
+            Contents::Blocks(children) | Contents::Flex(children) | Contents::Grid(children) => {
                 let row = matches!(block.style.display(), Display::Flex | Display::InlineFlex)
                     && matches!(
                         reset.flex_direction,

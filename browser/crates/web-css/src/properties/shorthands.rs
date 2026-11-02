@@ -489,3 +489,97 @@ pub fn font(input: &mut Parser<'_, '_>, out: &mut Expanded) -> ParseResult<()> {
     }
     Ok(())
 }
+
+fn line_pair(
+    input: &mut Parser<'_, '_>,
+    ids: [LonghandId; 2],
+    out: &mut Expanded,
+) -> ParseResult<()> {
+    let start = <GridLine as Parse>::parse(input)?;
+    let end = if input.try_delim('/') {
+        <GridLine as Parse>::parse(input)?
+    } else if let GridLine::Name(name) = &start {
+        GridLine::Name(name.clone())
+    } else {
+        GridLine::Auto
+    };
+    out.push((ids[0], Some(PropertyValue::GridLine(start))));
+    out.push((ids[1], Some(PropertyValue::GridLine(end))));
+    Ok(())
+}
+
+pub fn grid_column(input: &mut Parser<'_, '_>, out: &mut Expanded) -> ParseResult<()> {
+    line_pair(
+        input,
+        [LonghandId::GridColumnStart, LonghandId::GridColumnEnd],
+        out,
+    )
+}
+
+pub fn grid_row(input: &mut Parser<'_, '_>, out: &mut Expanded) -> ParseResult<()> {
+    line_pair(
+        input,
+        [LonghandId::GridRowStart, LonghandId::GridRowEnd],
+        out,
+    )
+}
+
+pub fn grid_area(input: &mut Parser<'_, '_>, out: &mut Expanded) -> ParseResult<()> {
+    let mut lines = vec![<GridLine as Parse>::parse(input)?];
+    while lines.len() < 4 && input.try_delim('/') {
+        lines.push(<GridLine as Parse>::parse(input)?);
+    }
+    let copy = |line: &GridLine| match line {
+        GridLine::Name(name) => GridLine::Name(name.clone()),
+        _ => GridLine::Auto,
+    };
+    let row_start = lines.first().cloned().unwrap_or(GridLine::Auto);
+    let column_start = lines.get(1).cloned().unwrap_or_else(|| copy(&row_start));
+    let row_end = lines.get(2).cloned().unwrap_or_else(|| copy(&row_start));
+    let column_end = lines.get(3).cloned().unwrap_or_else(|| copy(&column_start));
+    for (id, line) in [
+        (LonghandId::GridRowStart, row_start),
+        (LonghandId::GridColumnStart, column_start),
+        (LonghandId::GridRowEnd, row_end),
+        (LonghandId::GridColumnEnd, column_end),
+    ] {
+        out.push((id, Some(PropertyValue::GridLine(line))));
+    }
+    Ok(())
+}
+
+pub fn grid_template(input: &mut Parser<'_, '_>, out: &mut Expanded) -> ParseResult<()> {
+    if input.try_ident_matching("none") {
+        out.push((
+            LonghandId::GridTemplateRows,
+            Some(PropertyValue::GridTemplate(GridTemplate::None)),
+        ));
+        out.push((
+            LonghandId::GridTemplateColumns,
+            Some(PropertyValue::GridTemplate(GridTemplate::None)),
+        ));
+        out.push((
+            LonghandId::GridTemplateAreas,
+            Some(PropertyValue::GridAreas(GridAreas::None)),
+        ));
+        return Ok(());
+    }
+    let rows = <GridTemplate as Parse>::parse(input)?;
+    if !input.try_delim('/') {
+        return Err(ParseError::Invalid);
+    }
+    let columns = <GridTemplate as Parse>::parse(input)?;
+    out.push((
+        LonghandId::GridTemplateRows,
+        Some(PropertyValue::GridTemplate(rows)),
+    ));
+    out.push((
+        LonghandId::GridTemplateColumns,
+        Some(PropertyValue::GridTemplate(columns)),
+    ));
+    out.push((
+        LonghandId::GridTemplateAreas,
+        Some(PropertyValue::GridAreas(GridAreas::None)),
+    ));
+    Ok(())
+}

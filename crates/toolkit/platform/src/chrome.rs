@@ -1,7 +1,8 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use bande_graphics::{
-    Color, Cut, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene, Shape, TextAlign,
-    TextStyle, TextSystem, TitleBar, resize_zone, shortened, title_style, window_controls_area,
+    Color, Cut, Item, MenuButton, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene,
+    Shape, TextAlign, TextStyle, TextSystem, TitleBar, menu_button_area, resize_zone, shortened,
+    title_style, window_controls_area,
 };
 
 use std::time::Instant;
@@ -24,13 +25,12 @@ fn control_node(control: Control) -> NodeId {
         Control::Close => u64::MAX - 2,
         Control::Minimize => u64::MAX - 3,
         Control::Zoom => u64::MAX - 4,
+        Control::Menu => u64::MAX - 5,
     })
 }
 
 pub(crate) fn control_for_node(node: NodeId) -> Option<Control> {
-    Control::ALL
-        .into_iter()
-        .find(|control| control_node(*control) == node)
+    Control::shown(true).find(|control| control_node(*control) == node)
 }
 
 fn control_label(control: Control) -> String {
@@ -38,6 +38,7 @@ fn control_label(control: Control) -> String {
         Control::Close => "close",
         Control::Minimize => "minimize",
         Control::Zoom => "zoom",
+        Control::Menu => "menus",
     })
 }
 
@@ -98,6 +99,7 @@ pub(crate) struct Frame {
     pub(crate) inset: f32,
     pub(crate) regions: Option<FrameRegions>,
     pub(crate) header: bool,
+    pub(crate) menu: bool,
     pub(crate) width: f32,
     pub(crate) height: f32,
 }
@@ -167,7 +169,8 @@ impl Frame {
         if window.contains(point) {
             let local = Point::new(point.x - window.x, point.y - window.y);
             if local.y < self.title {
-                return Control::at(local, self.title).map_or(Zone::TitleBar, Zone::Control);
+                return Control::at(local, self.title, self.menu)
+                    .map_or(Zone::TitleBar, Zone::Control);
             }
             return if self.content().contains(local) {
                 Zone::Content
@@ -181,6 +184,10 @@ impl Frame {
     pub(crate) fn input_area(&self) -> Rect {
         self.window().inset(-self.margin)
     }
+
+    pub(crate) fn menu_button(&self) -> Option<Rect> {
+        (self.menu && self.title > 0.0).then(|| menu_button_area(self.title))
+    }
 }
 
 #[derive(Default)]
@@ -193,6 +200,10 @@ pub(crate) struct Chrome {
     hovered: Option<Option<Control>>,
     hover: Animated,
     close_hover: Animated,
+    menu_hover: Animated,
+    pub(crate) menu: bool,
+    pub(crate) menu_open: bool,
+    pub(crate) announced_menu: Option<Option<Rect>>,
     pub(crate) alternate: bool,
     pub(crate) regions: Option<FrameRegions>,
     pub(crate) header: Option<Header>,
@@ -269,14 +280,19 @@ impl Chrome {
         let mut bar = Node::new(Role::TitleBar);
         bar.set_label(self.title.clone());
         bar.set_bounds(bounds(Rect::new(0.0, 0.0, frame.width, frame.title)));
-        bar.set_children(Control::ALL.map(control_node).to_vec());
+        let menu = frame.menu_button().is_some();
+        bar.set_children(Control::shown(menu).map(control_node).collect::<Vec<_>>());
         tree.nodes.push((WINDOW_NODE, window));
         tree.nodes.push((TITLE_BAR_NODE, bar));
-        for control in Control::ALL {
+        for control in Control::shown(menu) {
             let mut button = Node::new(Role::Button);
             button.set_label(control_label(control));
             button.set_bounds(bounds(control.area(frame.title)));
             button.add_action(Action::Click);
+            if control == Control::Menu {
+                button.set_has_popup(accesskit::HasPopup::Menu);
+                button.set_expanded(self.menu_open);
+            }
             tree.nodes.push((control_node(control), button));
         }
         tree
@@ -289,18 +305,29 @@ impl Chrome {
         now: Instant,
         reduce_motion: bool,
     ) -> bool {
+        let menu = frame.menu_button().map(|_| Control::Menu.area(frame.title));
         let hovered = point
             .map(|point| Point::new(point.x - frame.margin, point.y - frame.margin))
-            .filter(|local| window_controls_area(frame.title).contains(*local))
-            .map(|local| Control::at(local, frame.title));
+            .filter(|local| {
+                window_controls_area(frame.title).contains(*local)
+                    || menu.is_some_and(|area| area.contains(*local))
+            })
+            .map(|local| Control::at(local, frame.title, menu.is_some()));
         if hovered == self.hovered {
             return false;
         }
         self.hovered = hovered;
         self.zoom_rest = (hovered == Some(Some(Control::Zoom))).then_some(now);
         let level = |on: bool| if on { 1.0 } else { 0.0 };
-        self.hover
-            .animate_at(now, reduce_motion, level(hovered.is_some()), Spring::FADE);
+        let on_menu = hovered == Some(Some(Control::Menu));
+        self.hover.animate_at(
+            now,
+            reduce_motion,
+            level(hovered.is_some() && !on_menu),
+            Spring::FADE,
+        );
+        self.menu_hover
+            .animate_at(now, reduce_motion, level(on_menu), Spring::FADE);
         self.close_hover.animate_at(
             now,
             reduce_motion,
@@ -410,7 +437,8 @@ impl Chrome {
         };
         let (hover, hovering) = self.hover.value_at(now);
         let (close_hover, closing) = self.close_hover.value_at(now);
-        self.animating = hovering || closing;
+        let (menu_hover, menu_fading) = self.menu_hover.value_at(now);
+        self.animating = hovering || closing || menu_fading;
         items.extend(
             TitleBar {
                 width: frame.width,
@@ -423,6 +451,10 @@ impl Chrome {
                 pressed: self.pressed.filter(|_| self.pressed_inside),
                 zoomed: look.zoomed,
                 alternate: self.alternate && look.active,
+                menu: frame.menu_button().map(|_| MenuButton {
+                    hover: menu_hover,
+                    open: self.menu_open,
+                }),
             }
             .items(),
         );

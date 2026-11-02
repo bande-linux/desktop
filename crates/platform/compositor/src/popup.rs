@@ -164,6 +164,20 @@ impl State {
         let Some(root) = find_popup_root_surface(&kind).ok() else {
             return;
         };
+        let relayed = self.relays_menus(serial);
+        if relayed {
+            if let Some(pointer) = seat.get_pointer()
+                && pointer.is_grabbed()
+            {
+                pointer.unset_grab(self, serial, 0);
+            }
+            if let Some(keyboard) = seat.get_keyboard()
+                && keyboard.is_grabbed()
+            {
+                keyboard.unset_grab(self);
+            }
+        }
+        let opened = kind.wl_surface().clone();
         let Ok(mut grab) = self.popups.grab_popup(root, kind, &seat, serial) else {
             return;
         };
@@ -187,6 +201,9 @@ impl State {
             pointer.set_grab(self, PopupPointerGrab::new(&grab), serial, Focus::Keep);
         }
         self.popup_grab = Some(grab);
+        if relayed {
+            self.menus_opened(&opened);
+        }
     }
 
     pub(crate) fn reachable_beside_menu(&self, surface: &WlSurface) -> bool {

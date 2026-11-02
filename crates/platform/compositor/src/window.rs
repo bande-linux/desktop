@@ -38,6 +38,7 @@ pub struct Window {
     pub(crate) parent_anchor: Option<Point<i32, Logical>>,
     pub(crate) keep_on_top: bool,
     pub(crate) frame: Frame,
+    pub(crate) menu_button: Option<Rectangle<i32, Logical>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -115,6 +116,7 @@ impl Window {
             parent_anchor: None,
             keep_on_top: false,
             frame: Frame::default(),
+            menu_button: None,
         }
     }
 

@@ -505,9 +505,29 @@
       <arg name="pid" type="int"/>
       <arg name="windowless" type="uint"/>
     </event>
+
+    <event name="show_app_menu">
+      <description summary="open an app's menus under a window's menu button">
+        Sent when the user presses the menu button (⋮) of a window, or Super+F2
+        while the key window has one. The shell opens the app's menus as a
+        popup of its surface on the window's display, below the button, which
+        is at this rectangle relative to that surface, and grabs it with this
+        serial, which the compositor lets take over the pointer and keyboard.
+        Menu is the com.canonical.dbusmenu service and object path as
+        "service/path", or empty for the app's own menu at its app id.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="app_id" type="string"/>
+      <arg name="menu" type="string"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+      <arg name="serial" type="uint"/>
+    </event>
   </interface>
 
-  <interface name="bande_app_v1" version="3">
+  <interface name="bande_app_v1" version="4">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -639,6 +659,42 @@
       </description>
       <arg name="ending" type="uint" enum="bande_shell_v1.session_end"/>
     </request>
+
+    <request name="set_menu_button" since="4">
+      <description summary="say where a window shows its menu button">
+        The toplevel draws a menu button (⋮) for the app's menus at this
+        rectangle in its window geometry; a zero width or height says it has
+        none. The compositor uses it for Super+F2 and to place the menus.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </request>
+
+    <request name="show_menus" since="4">
+      <description summary="the user pressed a window's menu button">
+        Asks the shell to open the app's menus below the toplevel's menu
+        button, with the serial of the press that pressed it or of the last
+        input event the window had when a screen reader pressed it. Ignored
+        unless the toplevel is the key window, has a menu button, and the
+        press is not the one that just closed its menus.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="serial" type="uint"/>
+    </request>
+
+    <event name="menus_open" since="4">
+      <description summary="the menus of a window's menu button opened or closed">
+        Sent with open 1 when the menus opened below the toplevel's menu
+        button and with open 0 when they closed, or did not open, so the
+        button shows itself pressed while they are open.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="open" type="uint"/>
+    </event>
   </interface>
   <interface name="bande_app_control_v1" version="1">
     <description summary="quitting apps and watching them answer, for Activity Monitor">

@@ -1,5 +1,6 @@
 const _SHELL_PROTOCOL_SOURCE: &str = include_str!("../protocols/bande-shell-v1.xml");
 const _CAPTURE_PROTOCOL_SOURCE: &str = include_str!("../protocols/bande-capture-v1.xml");
+const _APPMENU_PROTOCOL_SOURCE: &str = include_str!("../protocols/kde-appmenu.xml");
 
 #[cfg(feature = "client")]
 pub mod client {
@@ -27,6 +28,21 @@ pub mod client {
         use self::__interfaces::*;
 
         wayland_scanner::generate_client_code!("protocols/bande-capture-v1.xml");
+    }
+
+    pub use self::appmenu::{org_kde_kwin_appmenu, org_kde_kwin_appmenu_manager};
+
+    mod appmenu {
+        use wayland_client;
+        use wayland_client::protocol::*;
+
+        pub mod __interfaces {
+            use wayland_client::protocol::__interfaces::*;
+            wayland_scanner::generate_interfaces!("protocols/kde-appmenu.xml");
+        }
+        use self::__interfaces::*;
+
+        wayland_scanner::generate_client_code!("protocols/kde-appmenu.xml");
     }
 }
 
@@ -56,5 +72,20 @@ pub mod server {
         use self::__interfaces::*;
 
         wayland_scanner::generate_server_code!("protocols/bande-capture-v1.xml");
+    }
+
+    pub use self::appmenu::{org_kde_kwin_appmenu, org_kde_kwin_appmenu_manager};
+
+    mod appmenu {
+        use wayland_server;
+        use wayland_server::protocol::*;
+
+        pub mod __interfaces {
+            use wayland_server::protocol::__interfaces::*;
+            wayland_scanner::generate_interfaces!("protocols/kde-appmenu.xml");
+        }
+        use self::__interfaces::*;
+
+        wayland_scanner::generate_server_code!("protocols/kde-appmenu.xml");
     }
 }

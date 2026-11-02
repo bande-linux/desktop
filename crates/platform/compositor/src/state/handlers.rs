@@ -290,7 +290,8 @@ impl XdgShellHandler for State {
         self.reposition_popup(surface, positioner, token);
     }
 
-    fn popup_destroyed(&mut self, _surface: PopupSurface) {
+    fn popup_destroyed(&mut self, surface: PopupSurface) {
+        self.popup_gone(surface.wl_surface());
         self.needs_redraw = true;
     }
 }

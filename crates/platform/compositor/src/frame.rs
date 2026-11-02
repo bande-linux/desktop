@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use bande_graphics::{
-    Color, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_MARGIN, Rect, ResizeEdge, Scene, Scheme,
-    TextAlign, TitleBar, WindowControl, resize_zone, title_style, window_controls_area,
+    Color, DOUBLE_CLICK_INTERVAL, MenuButton, Palette, RESIZE_MARGIN, Rect, ResizeEdge, Scene,
+    Scheme, TextAlign, TitleBar, WindowControl, resize_zone, title_style, window_controls_area,
 };
 use bande_render::{VulkanRenderer, VulkanTexture};
 use smithay::backend::allocator::Fourcc;
@@ -16,6 +16,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle};
 
 use crate::label::Labels;
+use crate::menu_button::menu_address;
 use crate::scene::{CORNER_RADIUS, Piece};
 use crate::shell::toplevel_names;
 use crate::state::{Compositor, Placed, State};
@@ -61,6 +62,7 @@ struct Look {
     pressed: Option<WindowControl>,
     zoomed: bool,
     alternate: bool,
+    menu: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +77,7 @@ struct Painted {
 pub(crate) struct Frame {
     pub(crate) hovered: Option<Option<WindowControl>>,
     pub(crate) pressed: Option<WindowControl>,
+    pub(crate) menus_open: bool,
     painted: Option<Painted>,
 }
 
@@ -96,8 +99,9 @@ fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
     if let Some(edge) = resize_band(window, frame, point) {
         return Some(Zone::Resize(edge));
     }
+    let menu = menu_address(window.surface()).is_some();
     (frame.contains(point) && point.y < bar as f32)
-        .then(|| WindowControl::at(point, bar as f32).map_or(Zone::TitleBar, Zone::Control))
+        .then(|| WindowControl::at(point, bar as f32, menu).map_or(Zone::TitleBar, Zone::Control))
 }
 
 fn outer_band(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
@@ -154,9 +158,11 @@ fn hovered_control(
 ) -> Option<Option<WindowControl>> {
     let rect = window.geometry()?;
     let bar = window.title_bar_height() as f32;
-    let area = window_controls_area(bar);
+    let menu = menu_address(window.surface()).is_some();
     let point = local_point(rect, location);
-    area.contains(point).then(|| WindowControl::at(point, bar))
+    let over = window_controls_area(bar).contains(point)
+        || (menu && WindowControl::Menu.area(bar).contains(point));
+    over.then(|| WindowControl::at(point, bar, menu))
 }
 
 pub(crate) enum Target {
@@ -268,6 +274,12 @@ impl State {
             return true;
         }
         match zone {
+            Zone::Control(WindowControl::Menu) => {
+                if !self.show_menus_of(&surface) {
+                    self.swallowed_button = Some(button);
+                }
+                true
+            }
             Zone::Control(control) => {
                 if let Some(index) = self.window_index(&surface) {
                     self.windows[index].frame.pressed = Some(control);
@@ -331,7 +343,7 @@ impl State {
             Some(WindowControl::Minimize) => self.minimize(&surface),
             Some(WindowControl::Zoom) if self.alternate_held() => self.fullscreen(&surface),
             Some(WindowControl::Zoom) => self.toggle_zoom(&surface),
-            None => {}
+            Some(WindowControl::Menu) | None => {}
         }
         true
     }
@@ -387,6 +399,7 @@ impl State {
                 pressed: window.frame.pressed,
                 zoomed: window.has_state(xdg_toplevel::State::Maximized),
                 alternate,
+                menu: menu_address(window.surface()).map(|_| window.frame.menus_open),
             };
             if window
                 .frame
@@ -441,7 +454,14 @@ fn paint_title_bar(
             title,
             palette,
             active: look.active,
-            hover: if look.hovered.is_some() { 1.0 } else { 0.0 },
+            hover: if look
+                .hovered
+                .is_some_and(|control| control != Some(WindowControl::Menu))
+            {
+                1.0
+            } else {
+                0.0
+            },
             close_hover: if look.hovered == Some(Some(WindowControl::Close)) {
                 1.0
             } else {
@@ -450,6 +470,14 @@ fn paint_title_bar(
             pressed: look.pressed,
             zoomed: look.zoomed,
             alternate: look.alternate && look.active,
+            menu: look.menu.map(|open| MenuButton {
+                hover: if look.hovered == Some(Some(WindowControl::Menu)) {
+                    1.0
+                } else {
+                    0.0
+                },
+                open,
+            }),
         }
         .items(),
     };

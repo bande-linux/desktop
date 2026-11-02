@@ -28,12 +28,11 @@ use bande_status::unread::{ClockMark, set_do_not_disturb};
 use bande_status::{Command, Update};
 use bande_toolkit::ui::{Event, Menu, MenuItem, PointerButton};
 use bande_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Rect, Role, Scene,
-    SessionEnd, TextSystem, Window, WindowEvent,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Panel, Rect, Role,
+    Scene, SessionEnd, TextSystem, Window, WindowEvent,
 };
 use bande_xdg::{
-    DesktopEntry, ICON_THEMES, app_name, data_dirs, find_app, find_icon, launch_action,
-    spawn_detached,
+    DesktopEntry, app_name, data_dirs, find_app, find_icon, launch_action, spawn_detached,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -47,7 +46,6 @@ const SETTINGS: &str = "org.bande.Settings";
 const BRING_TO_FRONT: &str = "bring-to-front";
 const TRAY_ITEM: &str = "tray-item:";
 const MENU_BAR_NAMESPACE: &str = "menubar";
-const HEADER_ICON: f32 = 24.0;
 const CONFIG_INTERFACE: &str = "org.bande.Config";
 
 pub type Restart = Rc<Cell<bool>>;
@@ -70,7 +68,10 @@ pub struct MenuBarClient<V> {
     tray_icons: TrayIcons,
     open_anchor: Option<Rect>,
     app_id: String,
+    menu_key: String,
     app_root: Option<Node>,
+    menu_loaded: bool,
+    waiting_menus: Option<Rect>,
     user: String,
     dates: DateFormats,
 }
@@ -349,24 +350,34 @@ impl<V: StatusView> MenuBarClient<V> {
                 (shown.identifier, title)
             })
             .collect();
-        let item = format!("{}{APP_MENU_PATH}", self.app_id);
         cascade(&AppMenus {
             name: self.bar.app(),
             root: self.app_root.as_ref(),
-            item: &item,
+            item: &self.menu_key,
             actions: &actions,
             windows: &windows,
         })
     }
 
-    fn follow_app_icon(&mut self, window: &Window) {
-        let pixels = (f64::from(HEADER_ICON) * window.scale()).round() as u32;
-        let icon = self
-            .entry()
-            .and_then(|entry| entry.icon.clone())
-            .and_then(|name| find_icon(&name, pixels, &ICON_THEMES, &data_dirs()))
-            .and_then(|path| Image::load(&path, pixels));
-        self.bar.set_app_icon(icon);
+    fn follow_menus(&mut self, menu: String) {
+        if menu == self.menu_key {
+            return;
+        }
+        self.menu_key = menu;
+        self.app_root = None;
+        self.menu_loaded = false;
+        self.bar.set_app_menus(Vec::new());
+        if !self.menu_key.is_empty() {
+            self.status.errand(Errand::AppMenu(self.menu_key.clone()));
+        }
+    }
+
+    fn show_app_menu(&mut self, window: &mut Window, anchor: Rect) {
+        let menu = self.cascade(window);
+        report(
+            "open the app's menus",
+            window.show_menu(menu, MenuPlacement::Below(anchor)),
+        );
     }
 
     fn open(&mut self, window: &mut Window, slot: Slot) {
@@ -377,16 +388,6 @@ impl<V: StatusView> MenuBarClient<V> {
         let Some(anchor) = self.bar.slot_rect(slot) else {
             return;
         };
-        if slot == Slot::AppMenu && self.bar.cascades() {
-            let menu = self.cascade(window);
-            self.bar.set_open(Some(slot));
-            report(
-                "open the app's menus",
-                window.show_menu(menu, self.bar.menu_placement(anchor)),
-            );
-            window.request_redraw();
-            return;
-        }
         let status = self.bar.status().clone();
         let local = match slot {
             Slot::BandeMenu => Some(system_menu(&self.user, self.frontmost_name().as_deref())),
@@ -433,7 +434,7 @@ impl<V: StatusView> MenuBarClient<V> {
             ),
             Slot::AppMenu | Slot::AppMenuTitle(_) => {
                 if let Some(node) = self.app_menu_node(slot) {
-                    let menu = format!("{}{APP_MENU_PATH}", self.app_id);
+                    let menu = self.menu_key.clone();
                     let parent = node.id;
                     self.bar.set_open(Some(slot));
                     window.request_redraw();
@@ -559,19 +560,26 @@ impl<V: StatusView> App for MenuBarClient<V> {
                     window.request_redraw();
                 }
                 if app_id != self.app_id {
-                    self.app_root = None;
-                    self.bar.set_app_menus(Vec::new());
-                    self.status.errand(Errand::AppMenu(app_id.clone()));
+                    self.follow_menus(app_menu_key(&app_id));
                     self.app_id = app_id;
-                    self.follow_app_icon(window);
                     window.request_redraw();
                 }
                 self.publish_menu(window);
             }
             WindowEvent::AppsChanged => self.publish_menu(window),
-            WindowEvent::FocusShell(namespace) if namespace == MENU_BAR_NAMESPACE => {
-                if self.bar.cascades() && self.bar.open() != Some(Slot::AppMenu) {
-                    self.open(window, Slot::AppMenu);
+            WindowEvent::ShowAppMenu {
+                app_id,
+                menu,
+                anchor,
+            } => {
+                let menu = match menu.is_empty() {
+                    true => app_menu_key(&app_id),
+                    false => menu,
+                };
+                self.follow_menus(menu);
+                match self.menu_loaded {
+                    true => self.show_app_menu(window, anchor),
+                    false => self.waiting_menus = Some(anchor),
                 }
             }
             WindowEvent::Input(Event::PointerDown(pointer)) => {
@@ -640,12 +648,6 @@ impl<V: StatusView> App for MenuBarClient<V> {
             WindowEvent::AppearanceChanged(appearance) => {
                 self.bar.set_palette(appearance.palette());
                 window.request_redraw();
-            }
-            WindowEvent::ActiveOutput(output) => {
-                let key = output.is_empty() || output == self.display.output;
-                if self.bar.set_key_display(key) {
-                    window.request_redraw();
-                }
             }
             WindowEvent::Workspaces { count, active } => {
                 self.workspaces = (count, active);
@@ -728,16 +730,20 @@ impl<V: StatusView> App for MenuBarClient<V> {
                     self.bar.set_time(&bande_datetime::now(), &self.dates);
                 }
                 Update::AppMenuChanged => {
-                    if !self.app_id.is_empty() {
-                        self.status.errand(Errand::AppMenu(self.app_id.clone()));
+                    if !self.menu_key.is_empty() {
+                        self.status.errand(Errand::AppMenu(self.menu_key.clone()));
                     }
                 }
-                Update::AppMenu { app, root } => {
-                    if app == self.app_id {
+                Update::AppMenu { menu, root } => {
+                    if menu == self.menu_key {
                         self.app_root = root;
+                        self.menu_loaded = true;
                         let titles = self.app_menu_titles();
                         self.bar.set_app_menus(titles);
                         self.publish_menu(window);
+                        if let Some(anchor) = self.waiting_menus.take() {
+                            self.show_app_menu(window, anchor);
+                        }
                     }
                 }
             }
@@ -759,7 +765,6 @@ impl<V: StatusView> App for MenuBarClient<V> {
         if self.apps.reload_if_changed(now) {
             self.bar
                 .set_app(&app_name(self.apps.entries(), &self.app_id));
-            self.follow_app_icon(window);
             window.request_redraw();
         }
         let chosen = std::mem::take(&mut self.handoff.borrow_mut().chosen);
@@ -828,10 +833,20 @@ impl<V: StatusView> MenuBarClient<V> {
             tray_icons: HashMap::new(),
             open_anchor: None,
             app_id: String::new(),
+            menu_key: String::new(),
             app_root: None,
+            menu_loaded: false,
+            waiting_menus: None,
             user: full_name(),
             dates,
         })
+    }
+}
+
+fn app_menu_key(app_id: &str) -> String {
+    match app_id.is_empty() {
+        true => String::new(),
+        false => format!("{app_id}{APP_MENU_PATH}"),
     }
 }
 

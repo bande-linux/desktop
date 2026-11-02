@@ -7,7 +7,7 @@ use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 
 use crate::motion::{BAR_NAMESPACE, Look, TASKBAR_NAMESPACE};
 use crate::shell::toplevel_names;
-use crate::state::State;
+use crate::state::{MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE, State};
 
 impl State {
     pub(crate) fn app_windows(&self, app_id: &str) -> Vec<usize> {
@@ -139,6 +139,14 @@ impl State {
     pub(crate) fn focus_shell(&mut self, namespace: &str) {
         if self.is_locked() || self.exclusive_layer.is_some() {
             return;
+        }
+        if namespace == MENU_BAR_NAMESPACE {
+            if let Some(key) = self.key_window()
+                && self.show_menus_of(&key)
+            {
+                return;
+            }
+            return self.focus_shell(MENU_SEARCH_NAMESPACE);
         }
         let pointer = self.pointer_screen();
         let order =

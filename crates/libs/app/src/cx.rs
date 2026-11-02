@@ -84,10 +84,11 @@ impl<P: Program> Cx<P> {
             Kind::Dialog => Role::dialog(title, self.info.id),
             Kind::Utility => Role::utility(title, self.info.id),
         };
-        let window = match self.windows.first() {
+        let mut window = match self.windows.first() {
             Some(beside) => beside.open_beside(role, size)?,
             None => self.link.open(role, size)?,
         };
+        window.set_menu_button(true);
         let id = WindowId(self.next);
         self.next += 1;
         let content = content(window.appearance());

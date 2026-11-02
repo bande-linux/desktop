@@ -292,8 +292,9 @@ graph LR
     click calls `Activate`. Our own apps use the same menu format for their app menus: an app
     owns its app id as bus name and exports `com.canonical.dbusmenu` at `/org/bande/MenuBar`;
     the first top-level submenu is shown under the bold app name and the others become the
-    menu titles beside it. The menu bar asks for the menu when the app becomes active, and only
-    when the name has an owner, so it never starts an app by D-Bus activation. Toolkit apps
+    menu titles beside it; the App menu of a window's menu button shows the same tree (a
+    third-party window's at the address it gave with `org_kde_kwin_appmenu`). The menu bar asks
+    for the menu when the app becomes active, and only when the name has an owner, so it never starts an app by D-Bus activation. Toolkit apps
     export their menus through `crates/libs/app-menu` (`bande-app-menu`), driven by
     `bande-app` ([apps.md](apps.md)), which builds the standard App, Edit and Window menus; an
     app is one process that owns its name for as long as it runs, so the menu bar always talks

@@ -132,6 +132,7 @@ pub struct State {
     pub(crate) lock_states: Option<std::sync::mpsc::Sender<bool>>,
     pub(crate) lock: Option<Lock>,
     pub(crate) popup_grab: Option<PopupGrab<State>>,
+    pub(crate) menu_relay: Option<crate::menu_button::MenuRelay>,
     pub(crate) held_window: Option<crate::grab::HeldWindow>,
     pub(crate) swallowed_button: Option<u32>,
     pub(crate) minimize_sequence: u64,
@@ -205,10 +206,11 @@ impl Compositor {
         seat.add_pointer();
         crate::idle::create_global(&handle);
         crate::output_power::create_global(&handle);
+        crate::menu_button::create_global(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, BandeShellV1, ()>(1, ());
-        handle.create_global::<State, BandeAppV1, ()>(3, ());
+        handle.create_global::<State, BandeAppV1, ()>(4, ());
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols_wlr::output_management::v1::server::zwlr_output_manager_v1::ZwlrOutputManagerV1, ()>(crate::management::MANAGER_VERSION, ());
@@ -268,6 +270,7 @@ impl Compositor {
             lock_states: None,
             lock: None,
             popup_grab: None,
+            menu_relay: None,
             held_window: None,
             swallowed_button: None,
             minimize_sequence: 0,

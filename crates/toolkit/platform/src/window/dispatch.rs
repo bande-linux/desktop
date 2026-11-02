@@ -22,7 +22,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 };
 
 use super::{State, ToplevelState, WindowEvent};
-use crate::shell::END_SESSION_SINCE;
+use crate::shell::MENU_BUTTON_SINCE;
 
 impl Dispatch<WlRegistry, ()> for State {
     fn event(
@@ -88,7 +88,7 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "bande_app_v1" => {
                     state.shell.app =
-                        Some(registry.bind(name, version.min(END_SESSION_SINCE), handle, ()));
+                        Some(registry.bind(name, version.min(MENU_BUTTON_SINCE), handle, ()));
                 }
                 "bande_app_control_v1" => {
                     state.shell.app_control_global = Some((registry.clone(), name));

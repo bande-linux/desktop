@@ -10,6 +10,10 @@ const RESIZE_CORNER_REACH: f32 = 24.0;
 const WELL_X: f32 = 12.0;
 const WELL_WIDTH: f32 = 66.0;
 const WELL_HEIGHT: f32 = 24.0;
+const MENU_GAP: f32 = 6.0;
+const MENU_REACH: f32 = 4.0;
+const MENU_DOT: f32 = 1.25;
+const MENU_DOT_PITCH: f32 = 4.5;
 const CELL_PITCH: f32 = 21.0;
 const FIRST_GLYPH: f32 = 12.0;
 const TITLE_GAP: f32 = 16.0;
@@ -23,17 +27,14 @@ pub enum WindowControl {
     Close,
     Minimize,
     Zoom,
+    Menu,
 }
 
 impl WindowControl {
     pub const ALL: [Self; 3] = [Self::Close, Self::Minimize, Self::Zoom];
 
-    fn index(self) -> usize {
-        match self {
-            Self::Close => 0,
-            Self::Minimize => 1,
-            Self::Zoom => 2,
-        }
+    pub fn shown(menu: bool) -> impl Iterator<Item = Self> {
+        Self::ALL.into_iter().chain(menu.then_some(Self::Menu))
     }
 
     pub fn area(self, height: f32) -> Rect {
@@ -41,30 +42,53 @@ impl WindowControl {
         let start = match self {
             Self::Close => 0.0,
             Self::Minimize | Self::Zoom => centre - CELL_PITCH / 2.0,
+            Self::Menu => WELL_X + WELL_WIDTH,
         };
         let end = match self {
             Self::Zoom => WELL_X + WELL_WIDTH,
             Self::Close | Self::Minimize => centre + CELL_PITCH / 2.0,
+            Self::Menu => window_controls_end(true) + MENU_REACH,
         };
         Rect::new(start, 0.0, end - start, height)
     }
 
-    pub fn at(point: Point, height: f32) -> Option<Self> {
-        Self::ALL
-            .into_iter()
-            .find(|control| control.area(height).contains(point))
+    pub fn at(point: Point, height: f32, menu: bool) -> Option<Self> {
+        Self::shown(menu).find(|control| control.area(height).contains(point))
     }
 
     fn centre(self, height: f32) -> Point {
-        Point::new(
-            WELL_X + FIRST_GLYPH + self.index() as f32 * CELL_PITCH,
-            height / 2.0,
-        )
+        let x = match self {
+            Self::Close => WELL_X + FIRST_GLYPH,
+            Self::Minimize => WELL_X + FIRST_GLYPH + CELL_PITCH,
+            Self::Zoom => WELL_X + FIRST_GLYPH + 2.0 * CELL_PITCH,
+            Self::Menu => WELL_X + WELL_WIDTH + MENU_GAP + WELL_HEIGHT / 2.0,
+        };
+        Point::new(x, height / 2.0)
     }
+}
+
+fn menu_well(height: f32) -> Rect {
+    Rect::new(
+        WELL_X + WELL_WIDTH + MENU_GAP,
+        ((height - WELL_HEIGHT) / 2.0).round(),
+        WELL_HEIGHT,
+        WELL_HEIGHT,
+    )
 }
 
 pub fn window_controls_area(height: f32) -> Rect {
     Rect::new(0.0, 0.0, WELL_X + WELL_WIDTH, height)
+}
+
+pub fn menu_button_area(height: f32) -> Rect {
+    menu_well(height)
+}
+
+pub const fn window_controls_end(menu: bool) -> f32 {
+    match menu {
+        true => WELL_X + WELL_WIDTH + MENU_GAP + WELL_HEIGHT,
+        false => WELL_X + WELL_WIDTH,
+    }
 }
 
 pub fn title_style(palette: &Palette, active: bool) -> TextStyle {
@@ -127,6 +151,13 @@ pub struct TitleBar<'a> {
     pub pressed: Option<WindowControl>,
     pub zoomed: bool,
     pub alternate: bool,
+    pub menu: Option<MenuButton>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct MenuButton {
+    pub hover: f32,
+    pub open: bool,
 }
 
 impl TitleBar<'_> {
@@ -142,18 +173,7 @@ impl TitleBar<'_> {
             WELL_WIDTH,
             WELL_HEIGHT,
         );
-        items.push(if self.active {
-            Item::Fill {
-                shape: Shape::rounded(well, WELL_HEIGHT / 2.0),
-                paint: palette.well.into(),
-            }
-        } else {
-            Item::Stroke {
-                shape: Shape::rounded(well.inset(0.5), WELL_HEIGHT / 2.0 - 0.5),
-                width: 1.0,
-                paint: palette.hairline.into(),
-            }
-        });
+        self.well(well, &mut items);
         let rest = if self.active {
             palette.ink2
         } else {
@@ -163,7 +183,10 @@ impl TitleBar<'_> {
         for control in WindowControl::ALL {
             self.control(control, glyph, &mut items);
         }
-        let title_x = WELL_X + WELL_WIDTH + TITLE_GAP;
+        if let Some(menu) = self.menu {
+            self.menu_button(menu, rest, &mut items);
+        }
+        let title_x = window_controls_end(self.menu.is_some()) + TITLE_GAP;
         let available = Rect::new(
             title_x,
             0.0,
@@ -178,6 +201,50 @@ impl TitleBar<'_> {
             }],
         });
         items
+    }
+
+    fn well(&self, well: Rect, items: &mut Vec<Item>) {
+        let palette = self.palette;
+        items.push(if self.active {
+            Item::Fill {
+                shape: Shape::rounded(well, WELL_HEIGHT / 2.0),
+                paint: palette.well.into(),
+            }
+        } else {
+            Item::Stroke {
+                shape: Shape::rounded(well.inset(0.5), WELL_HEIGHT / 2.0 - 0.5),
+                width: 1.0,
+                paint: palette.hairline.into(),
+            }
+        });
+    }
+
+    fn menu_button(&self, menu: MenuButton, rest: Color, items: &mut Vec<Item>) {
+        let well = menu_well(self.height);
+        self.well(well, items);
+        if menu.open || self.pressed == Some(WindowControl::Menu) {
+            items.push(Item::Fill {
+                shape: Shape::rounded(well, WELL_HEIGHT / 2.0),
+                paint: self.palette.ink.with_opacity(PRESSED_OPACITY).into(),
+            });
+        }
+        let glyph = rest.mix(self.palette.ink, if menu.open { 1.0 } else { menu.hover });
+        let centre = WindowControl::Menu.centre(self.height);
+        for step in [-1.0, 0.0, 1.0] {
+            let y = centre.y + step * MENU_DOT_PITCH;
+            items.push(Item::Fill {
+                shape: Shape::rounded(
+                    Rect::new(
+                        centre.x - MENU_DOT,
+                        y - MENU_DOT,
+                        2.0 * MENU_DOT,
+                        2.0 * MENU_DOT,
+                    ),
+                    MENU_DOT,
+                ),
+                paint: glyph.into(),
+            });
+        }
     }
 
     fn control(&self, control: WindowControl, glyph: Color, items: &mut Vec<Item>) {
@@ -248,6 +315,7 @@ impl TitleBar<'_> {
                     at(1.0, 4.5),
                 ])));
             }
+            WindowControl::Menu => {}
         }
     }
 }

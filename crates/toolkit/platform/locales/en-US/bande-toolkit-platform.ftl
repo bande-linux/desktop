@@ -17,3 +17,4 @@ place-restore = Return to Previous Size
 keep-on-top = Keep on Top
 move = Move
 quit-app = Quit
+menus = Menus

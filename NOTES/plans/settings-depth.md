@@ -12,7 +12,8 @@ with signal and lock, join with password (wrong password asked again), Other… 
 networks, Sign In for a captive portal, and a Details page per known network: Auto-Join, Low
 Data Mode (metered), Private Wi-Fi Address (off / fixed / rotating), IP address, router, DNS,
 hardware address, IPv4 automatic or manual, DNS servers while automatic, Forget. Missing:
-Personal Hotspot (NetworkManager mode `ap`, method `shared`), Ask to Join, enterprise (802.1X)
+Personal Hotspot (NetworkManager mode `ap`, method `shared`; the chip reports AP mode, but
+shared mode needs `dnsmasq-base`, which is not installed), Ask to Join, enterprise (802.1X)
 and WEP networks, copying a saved password.
 
 **Bluetooth.** Has: power, my devices with connect/disconnect/forget and battery level, nearby
@@ -21,7 +22,7 @@ Bluetooth name.
 
 **Network.** Has: Ethernet status with IPv4 automatic/manual, router and DNS; VPN connect,
 disconnect, import of WireGuard and OpenVPN files, DNS servers while the address is automatic.
-Missing: VPN details and removal, adding a VPN by hand,
+Removing a VPN. Missing: VPN details, adding a VPN by hand,
 proxies (NetworkManager's per-connection proxy only reaches apps through the portal's
 ProxyResolver, so this needs a session-wide proxy first), IPv6, service order, firewall.
 
@@ -36,9 +37,11 @@ Missing: days of the week, "for an hour / until tomorrow", allowed apps.
 
 **Sound.** Has: output and input device choice, volumes and mute, input level meter, per-app
 volume, alert sound and volume, sound effects, volume feedback. Missing: balance (needs
-per-channel volume in `bande-audio`), friendly names for the Mac mini's built-in speaker and
-the headphone jack (check what WirePlumber reports now that both work), "play sound on
-startup", show a device as unplugged for the jack.
+per-channel volume in `bande-audio`), "play sound on startup", and hiding unplugged jacks: on
+the mini WirePlumber offers "Built-in Audio Headphones" and "Built-in Audio Headset
+Microphone" while its EnumRoute says Headphones and Headset are `available: no`, so both are
+listed with nothing plugged in (and the raw headphone sink sits beside the filtered "Mac mini
+speaker"; owner to decide what the jack path should look like).
 
 **General.** About: computer name, chip, memory, version, serial; storage page with categories,
 large files and Empty Trash; Software Update with offline updates. Date & Time: automatic
@@ -53,8 +56,8 @@ highlight colour (follows accent, fine), sidebar icon size, show scroll bars (au
 when scrolling / always) and "click in the scroll bar to" (needs toolkit support).
 
 **Accessibility.** Has: screen reader, zoom, increase contrast, reduce transparency, reduce
-motion, cursor size, flash screen, sticky/slow/bounce keys. Missing: Orca is not installed
-in the image (the switch has nothing to start; owner decision), zoom style and keyboard
+motion, cursor size, flash screen, sticky/slow/bounce keys (the screen reader switch hides
+while Orca is not installed, as now in the image). Missing: zoom style and keyboard
 shortcut to zoom, pointer colour, shake to locate, hover text, captions.
 
 **Control Center.** Missing: which modules show in the bar and in Control Center (Wi-Fi,
@@ -110,12 +113,16 @@ the image yet, so the pane says printing isn't set up.
 
 Ranked by how often a user needs them and how badly they are stuck without them.
 
-1. Printers: put `cups` (and `cups-client` for lpadmin) in the image and the user in `lpadmin`
-   (owner decision); then printer options, supply levels and scanners.
-2. Users & Groups: picture, full name, add and remove users. Blocked: owner decision to add
-   `accountsservice` to the image.
-4. Sound: balance and the built-in speaker and headphone names.
-8. Sharing: Remote Login (ssh.service through systemd's D-Bus API) and the `.local` name.
-9. Notifications: previews and badges per app.
-10. Show scroll bars, double-click speed, Wake for network access.
-11. Personal hotspot.
+1. Printing works only once CUPS is installed: put `cups` in the image (bande-desktop already
+   recommends it) and the user in `lpadmin`. Then printer options (paper size, duplex),
+   supply levels and scanners (eSCL / SANE).
+2. Users & Groups: picture, full name, add and remove users, through AccountsService once it is
+   in the image (owner decision).
+3. Sound: hide unplugged jacks (EnumRoute availability), balance.
+4. Notifications: show previews (always / never), badges per app.
+5. Sharing: Remote Login (ssh.service through systemd's D-Bus API with polkit) and the
+   `.local` name.
+6. Personal Hotspot, after `dnsmasq-base` is installed and AP mode is tried on the chip.
+7. Keyboard: editable shortcuts.
+8. Show scroll bars, double-click speed, Wake for network access, Bluetooth rename.
+9. Focus: days of the week and "for an hour"; Wallpaper: solid colours.

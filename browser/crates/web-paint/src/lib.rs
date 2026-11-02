@@ -252,6 +252,7 @@ impl Builder<'_> {
                 width: (rect.width - border.left - border.right).max(0.0),
                 height: (rect.height - border.top - border.bottom).max(0.0),
             };
+            let inner = snap(inner);
             self.items.push(Item::Image {
                 rect: inner,
                 clip: inner,
@@ -302,7 +303,7 @@ impl Builder<'_> {
         let Some(font) = self.font(text.font) else {
             return;
         };
-        let baseline = y + text.baseline;
+        let baseline = (y + text.baseline).round();
         let source = self
             .tree
             .glyphs

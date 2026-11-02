@@ -29,7 +29,7 @@ use bande_toolkit::{
 use bande_volumes::{EjectFailure, eject, media_roots};
 use bande_xdg::{
     Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
-    path_from_file_uri, replace_file, spawn_detached, state_home, user_dir,
+    launch_with_arguments, path_from_file_uri, replace_file, spawn_detached, state_home, user_dir,
 };
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
@@ -485,6 +485,15 @@ impl Files {
                     tracing::warn!("cannot open with {}: {error}", app.id);
                 }
             }
+            Request::Compress { app, files } => {
+                let token = window.activation_token(app.app_id()).ok();
+                let arguments: Vec<String> = std::iter::once(COMPRESS_FLAG.to_owned())
+                    .chain(files.iter().map(|file| file.to_string_lossy().into_owned()))
+                    .collect();
+                if let Err(error) = launch_with_arguments(&app, &arguments, token.as_deref()) {
+                    tracing::warn!("cannot compress with {}: {error}", app.id);
+                }
+            }
             Request::CopyFiles { paths, cut } => {
                 let uris = paths.iter().map(|path| file_uri(path)).collect();
                 let transfer = Transfer::uris(uris);
@@ -741,6 +750,7 @@ const PURGE_AFTER_DAYS: i64 = 30;
 const PURGE_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 const TERMINAL_APP_ID: &str = "org.bande.Terminal";
 const TERMINAL_DIRECTORY: &str = "--working-directory";
+const COMPRESS_FLAG: &str = "--compress";
 const TRASH_URI: &str = "trash:///";
 const RECENTS_URI: &str = "recent:///";
 

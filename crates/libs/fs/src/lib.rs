@@ -31,9 +31,9 @@ pub use naming::{
 };
 pub use operations::{Finished, Operations, Purpose, Running};
 pub use ops::{
-    Answer, Change, Conflict, Failure, Job, Outcome, Problem, Progress, RenameError, Report,
-    Resolution, Shortfall, Task, archive_path, can_extract, make_alias, new_document, new_folder,
-    rename,
+    Answer, Change, Conflict, Failure, Format, Job, Outcome, Problem, Progress, Refusal,
+    RenameError, Report, Resolution, Shortfall, Task, archive_path, can_extract, make_alias,
+    new_document, new_folder, rename,
 };
 pub use permissions::{Access, Class, access, runnable, set_mode, with_access, with_runnable};
 pub use trash::{Trash, TrashDir, TrashItem};

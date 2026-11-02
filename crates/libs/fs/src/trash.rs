@@ -315,6 +315,7 @@ fn remove_tree(parent: &OwnedFd, name: &OsStr, mount: MountKey) -> io::Result<()
 pub struct Trash {
     home: TrashDir,
     uid: u32,
+    volumes: bool,
 }
 
 struct Mounts {
@@ -404,6 +405,14 @@ impl Trash {
         Self {
             home: TrashDir::home(home),
             uid,
+            volumes: true,
+        }
+    }
+
+    pub fn isolated(home: PathBuf, uid: u32) -> Self {
+        Self {
+            volumes: false,
+            ..Self::new(home, uid)
         }
     }
 
@@ -461,6 +470,9 @@ impl Trash {
     fn dirs(&self) -> Vec<TrashDir> {
         let uid = self.uid;
         let mut dirs = vec![self.home.clone()];
+        if !self.volumes {
+            return dirs;
+        }
         for topdir in mount_points() {
             let shared = topdir.join(".Trash");
             let shared_is_dir =

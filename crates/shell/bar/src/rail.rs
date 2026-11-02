@@ -16,7 +16,7 @@ use jiff::Zoned;
 
 use crate::L10N;
 use crate::menu_bar::{Slot, StatusView};
-use crate::symbols::snap;
+use crate::symbols::{Symbol, Symbols, snap};
 use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA, vertical};
 
 pub const EDGE_PADDING: f32 = 24.0;
@@ -47,7 +47,6 @@ const HOVER_ALPHA: u8 = 18;
 const OPEN_ALPHA: u8 = 30;
 const NODE_BASE: u64 = 1 << 40;
 const CONTROL_CENTER_GLYPH: &str = "bande-control-center-symbolic";
-const MARK_GLYPH: &str = "bande-symbolic";
 
 pub fn bar_width(icon_size: f32) -> f32 {
     icon_size + EDGE_PADDING
@@ -104,6 +103,7 @@ pub struct TaskbarView {
     bar: Rect,
     icon_dirs: Vec<PathBuf>,
     icons: HashMap<(String, Color, u32), Option<Image>>,
+    symbols: Symbols,
     width: f32,
     icon_size: f32,
     app: String,
@@ -233,6 +233,7 @@ impl TaskbarView {
             bar: Rect::default(),
             icon_dirs,
             icons: HashMap::new(),
+            symbols: Symbols::default(),
             width: bar_width(icon_size),
             icon_size,
             app: String::new(),
@@ -504,20 +505,9 @@ impl TaskbarView {
         for (slot, rect) in slots.clone() {
             match slot {
                 Slot::BandeMenu => {
-                    let pixels = MARK_SIZE;
-                    let image = {
-                        let size = (f64::from(pixels) * scale).round() as u32;
-                        let dirs = &self.icon_dirs;
-                        self.icons
-                            .entry((MARK_GLYPH.to_owned(), ink, size))
-                            .or_insert_with(|| {
-                                let path = find_icon(MARK_GLYPH, size, &ICON_THEMES, dirs)?;
-                                Image::load_symbolic(&path, size, ink)
-                            })
-                            .clone()
-                    };
-                    if let Some(image) = image {
-                        Self::place_image(rect, image, pixels, scale, &mut items);
+                    let size = (MARK_SIZE, MARK_SIZE);
+                    if let Some(image) = self.symbols.image_at(Symbol::Logo, ink, size, scale) {
+                        Self::place_image(rect, image, MARK_SIZE, scale, &mut items);
                     }
                 }
                 Slot::Wifi | Slot::Sound | Slot::Bluetooth | Slot::Battery => {

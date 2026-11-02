@@ -129,7 +129,16 @@ pub struct Symbols {
 
 impl Symbols {
     pub fn image(&mut self, symbol: Symbol, color: Color, scale: f64) -> Option<Image> {
-        let (width, height) = natural_size(symbol);
+        self.image_at(symbol, color, natural_size(symbol), scale)
+    }
+
+    pub fn image_at(
+        &mut self,
+        symbol: Symbol,
+        color: Color,
+        (width, height): (f32, f32),
+        scale: f64,
+    ) -> Option<Image> {
         let pixels = |points: f32| ((f64::from(points) * scale).round() as u32).max(1);
         let key = (symbol, color, pixels(width), pixels(height));
         self.cache

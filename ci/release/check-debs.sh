@@ -51,7 +51,7 @@ for variant in light dark; do
     contains bande-shell "usr/share/bande/wallpapers/drift-$variant.svg"
 done
 root=$(extract bande-files)
-grep -qx 'Exec=bande-files' "$root/usr/share/applications/org.bande.Files.desktop"
+grep -qx 'Exec=bande-files %U' "$root/usr/share/applications/org.bande.Files.desktop"
 test -s "$root/usr/share/icons/hicolor/scalable/apps/org.bande.Files.svg"
 root=$(extract bande-settings)
 grep -qx 'Exec=bande-settings' "$root/usr/share/applications/org.bande.Settings.desktop"

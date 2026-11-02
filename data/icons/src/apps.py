@@ -183,6 +183,7 @@ ICONS = {
     'org.bande.ActivityMonitor': monitor,
     'org.bande.Installer': installer,
     'org.bande.Velox': velox,
+    'org.bande.Calculator': calculator,
     'org.bande.Launcher': launcher,
     'org.bande.About': about,
     'org.bande.Screenshot': screenshot,

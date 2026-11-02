@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod backlight;
 pub mod captive;
 pub mod clock;

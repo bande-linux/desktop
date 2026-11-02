@@ -98,15 +98,19 @@ pub fn thumbnail(pair: &Pair) -> Option<Picture> {
     Some(side_by_side(&light, &dark))
 }
 
-fn choose_picture(session: &Connection) -> zbus::Result<Option<PathBuf>> {
+pub(crate) fn choose_picture(
+    session: &Connection,
+    title: &str,
+    types: &[&str],
+) -> zbus::Result<Option<PathBuf>> {
     let filter = (
         L10N.tr("pictures"),
-        IMAGE_TYPES
+        types
             .iter()
             .map(|mime| (1u32, (*mime).to_owned()))
             .collect::<Vec<_>>(),
     );
-    choose_file(session, &L10N.tr("choose-picture"), Some(filter))
+    choose_file(session, title, Some(filter))
 }
 
 pub fn follow_pictures(
@@ -137,13 +141,14 @@ pub fn follow_pictures(
                     }
                 }
                 PictureCommand::Choose => {
-                    let chosen = match choose_picture(&session) {
-                        Ok(chosen) => chosen,
-                        Err(error) => {
-                            updates.send(unexpected(error));
-                            continue;
-                        }
-                    };
+                    let chosen =
+                        match choose_picture(&session, &L10N.tr("choose-picture"), &IMAGE_TYPES) {
+                            Ok(chosen) => chosen,
+                            Err(error) => {
+                                updates.send(unexpected(error));
+                                continue;
+                            }
+                        };
                     let Some(path) = chosen else {
                         continue;
                     };

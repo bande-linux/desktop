@@ -8,8 +8,8 @@ use accesskit::TreeUpdate;
 use bande_datetime::{DateFormats, MinuteTimer};
 use bande_keyboard::Layouts;
 use bande_lock::{
-    BackdropSource, Devices, Inbox, LockScreen, Look, PAM_SERVICE, User, Variant, authenticate,
-    current_user, load_backdrop,
+    BackdropSource, Devices, Inbox, LockScreen, Look, PAM_SERVICE, PICTURE_PIXELS, User, Variant,
+    authenticate, current_user, load_backdrop, load_picture,
 };
 use bande_toolkit::ui::frame_time;
 use bande_toolkit::{
@@ -35,6 +35,7 @@ struct Locker {
     minutes: MinuteTimer,
     backdrop: Option<Inbox<(Look, Image)>>,
     backdrop_requested: bool,
+    picture: Option<Inbox<Image>>,
     devices: Option<Devices>,
     layouts: Layouts,
     unlocked: bool,
@@ -110,6 +111,7 @@ impl App for Locker {
         let mut sources = vec![self.verdicts.as_fd(), self.minutes.as_fd()];
         sources.extend(self.devices.as_ref().map(Devices::fd));
         sources.extend(self.backdrop.as_ref().map(Inbox::fd));
+        sources.extend(self.picture.as_ref().map(Inbox::fd));
         sources
     }
 
@@ -122,6 +124,8 @@ impl App for Locker {
             window.request_redraw();
             return;
         }
+        let backdrop_at = 2 + usize::from(self.devices.is_some());
+        let picture_at = backdrop_at + usize::from(self.backdrop.is_some());
         if index == 2
             && let Some(devices) = self.devices.as_mut()
         {
@@ -132,13 +136,24 @@ impl App for Locker {
             }
             return;
         }
-        if index >= 2 {
+        if index == backdrop_at && self.backdrop.is_some() {
             if let Some((_, image)) = self
                 .backdrop
                 .take()
                 .and_then(|mut inbox| inbox.drain().pop())
             {
                 self.screen.set_backdrop(image, frame_time().on_screen());
+                window.request_redraw();
+            }
+            return;
+        }
+        if index == picture_at {
+            if let Some(picture) = self
+                .picture
+                .take()
+                .and_then(|mut inbox| inbox.drain().pop())
+            {
+                self.screen.set_picture(picture);
                 window.request_redraw();
             }
             return;
@@ -188,6 +203,9 @@ fn config_text(property: &str) -> String {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let user = current_user()?;
+    let picture = load_picture(user.login.clone(), PICTURE_PIXELS)
+        .inspect_err(|error| tracing::warn!("cannot load the account picture: {error}"))
+        .ok();
     let (verdicts, verdict_sender) = UnixStream::pair()?;
     let mut window = Window::open(Role::Lock, (0, 0))?;
     let mut locker = Locker {
@@ -204,6 +222,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         minutes: MinuteTimer::new()?,
         backdrop: None,
         backdrop_requested: false,
+        picture,
         devices: bande_bus::system()
             .inspect_err(|error| tracing::warn!("no system bus: {error}"))
             .ok()

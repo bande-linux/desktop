@@ -127,9 +127,12 @@ impl State {
     }
 
     pub(crate) fn request_move(&mut self, surface: &WlSurface, seat: &WlSeat, serial: Serial) {
-        let Some(start) = self.grab_start(seat, serial, surface) else {
+        let Some(mut start) = self.grab_start(seat, serial, surface) else {
             return;
         };
+        if let Some(pointer) = self.seat.get_pointer() {
+            start.location = pointer.current_location();
+        }
         let Some(undo) = self.undo_move(surface) else {
             return;
         };

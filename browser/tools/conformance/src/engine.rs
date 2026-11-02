@@ -97,6 +97,12 @@ pub fn render(path: &Path) -> Option<Pixels> {
 }
 
 pub fn css(entry: &str, input: &Value) -> Option<Value> {
+    if entry.starts_with("color_") {
+        return input.as_str().map(color);
+    }
+    if entry == "stylesheet_bytes" {
+        return stylesheet_bytes(input);
+    }
     let css = preprocess(input.as_str()?);
     let mut tokenizer = if entry == "component_value_list" {
         Tokenizer::with_unicode_ranges(&css)
@@ -121,6 +127,37 @@ pub fn css(entry: &str, input: &Value) -> Option<Value> {
         "An+B" => an_plus_b(input),
         _ => return None,
     })
+}
+
+fn color(css: &str) -> Value {
+    use web_css::values::color::Color;
+    let css = preprocess(css);
+    let mut tokenizer = Tokenizer::new(&css);
+    let mut input = Parser::new(&mut tokenizer);
+    let parsed = Color::parse(&mut input).and_then(|c| input.expect_exhausted().map(|_| c));
+    match parsed {
+        Ok(Color::LightDark(pair)) => json!([pair[0].to_string(), pair[1].to_string()]),
+        Ok(color) => json!(color.to_string()),
+        Err(_) if css.trim_start().starts_with("light-dark(") => json!([null, null]),
+        Err(_) => Value::Null,
+    }
+}
+
+fn stylesheet_bytes(input: &Value) -> Option<Value> {
+    let bytes: Vec<u8> = input
+        .get("css_bytes")?
+        .as_str()?
+        .chars()
+        .map(|c| c as u32 as u8)
+        .collect();
+    let protocol = input.get("protocol_encoding").and_then(Value::as_str);
+    let environment = input
+        .get("environment_encoding")
+        .and_then(Value::as_str)
+        .and_then(|label| web_css::Encoding::for_label(label.as_bytes()));
+    let (text, encoding) = web_css::decode_stylesheet(&bytes, protocol, environment);
+    let rules = css("stylesheet", &Value::String(text.into_owned()))?;
+    Some(json!([rules, encoding.name().to_ascii_lowercase()]))
 }
 
 struct Sink {

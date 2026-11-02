@@ -23,6 +23,9 @@ feature still render alike, so reftest rates overstate conformance:
 | wpt reftests css/css-syntax | 1 | 1 | 100.0% |
 | wpt reftests css/selectors | 114 | 227 | 50.2% (7 of the passes render blank) |
 
+Largest remaining CSS2 failure groups: `selectors` 392, `tables` 310, `normal-flow` 258,
+`text` 209, `positioning` 165, `backgrounds` 108, `generated-content` 92, `floats-clear` 86.
+
 ## Phase 1: document browser (3–4 engineer-years)
 
 - **W1 Text slice.**

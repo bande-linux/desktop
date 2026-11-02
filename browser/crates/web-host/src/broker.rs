@@ -1,17 +1,19 @@
 use std::collections::HashMap;
 use std::io;
+use std::ops::Range;
 use std::os::fd::OwnedFd;
 use std::process::Child;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
+use std::time::{Duration, Instant};
 
 use linebender_resource_handle::{Blob, FontData};
 use rustix::event::{PollFd, PollFlags, poll};
 use web_ipc::{
     Channel, Destination, FromNetwork, FromRenderer, MAX_LIST, Mapping, Message, NetworkControl,
-    Painted, Size, ToRenderer, Url, Verdict,
+    Patch, Size, ToRenderer, Url, Verdict,
 };
-use web_paint::{DisplayList, Image};
+use web_paint::{DisplayList, Image, Item, Rect};
 
 use crate::{
     Command, Frame, Helpers, Links, LoadId, Outcome, PausedRequest, Placement, Session, Update,
@@ -24,6 +26,7 @@ const MAX_FONT_BYTES: usize = 64 << 20;
 const MAX_IMAGE_SIDE: u32 = 1 << 15;
 const MAX_IMAGE_BYTES: usize = 512 << 20;
 const MAX_TITLE: usize = 4096;
+const RESTART_GAP: Duration = Duration::from_secs(5);
 
 struct Network {
     channel: Channel,
@@ -46,6 +49,7 @@ struct Renderer {
     fonts: Vec<FontData>,
     images: Vec<Arc<Image>>,
     image_bytes: usize,
+    shown: Option<(Arc<DisplayList>, Arc<Links>)>,
 }
 
 impl Drop for Renderer {
@@ -83,6 +87,8 @@ pub(crate) struct Broker {
     helpers: Helpers,
     placement: Placement,
     network: Option<Network>,
+    network_started: Option<Instant>,
+    intercept: bool,
     views: HashMap<ViewId, View>,
     navigations: HashMap<u64, Navigation>,
     next_fetch: u64,
@@ -97,7 +103,9 @@ fn session_code(session: Session) -> u32 {
 }
 
 fn site(url: &Url) -> String {
-    url.origin().ascii_serialization()
+    web_net::Site::of(url)
+        .map(|site| site.as_str())
+        .unwrap_or_else(|| url.origin().ascii_serialization())
 }
 
 fn interest(channel: &Channel) -> PollFlags {
@@ -128,6 +136,8 @@ impl Broker {
             helpers,
             placement,
             network: None,
+            network_started: None,
+            intercept: false,
             views: HashMap::new(),
             navigations: HashMap::new(),
             next_fetch: 0,
@@ -220,14 +230,54 @@ impl Broker {
 
     fn network(&mut self) -> io::Result<&mut Network> {
         if self.network.is_none() {
-            let (ours, theirs) = Channel::pair()?;
-            let child = self.helpers.network.launch(theirs.into_fd(), None)?;
-            self.network = Some(Network {
-                channel: ours,
-                child,
-            });
+            self.start_network()?;
         }
         self.network.as_mut().ok_or_else(invalid)
+    }
+
+    fn start_network(&mut self) -> io::Result<()> {
+        let (ours, theirs) = Channel::pair()?;
+        let child = self.helpers.network.launch(theirs.into_fd(), None)?;
+        let mut network = Network {
+            channel: ours,
+            child,
+        };
+        if self.intercept {
+            let enabled = true;
+            network
+                .channel
+                .send(&NetworkControl::Intercept { enabled }, Vec::new())?;
+        }
+        self.network = Some(network);
+        self.network_started = Some(Instant::now());
+        let connected: Vec<(ViewId, u32, u32, String)> = self
+            .views
+            .iter()
+            .filter_map(|(id, view)| {
+                let renderer = view.renderer.as_ref()?;
+                let session = session_code(view.session);
+                Some((*id, view.client, session, renderer.site.clone()))
+            })
+            .collect();
+        for (view, client, session, site) in connected {
+            let fd = self.connect(client, session, &site)?;
+            self.tell_renderer(view, ToRenderer::Network, vec![fd]);
+        }
+        Ok(())
+    }
+
+    fn connect(&mut self, client: u32, session: u32, site: &str) -> io::Result<OwnedFd> {
+        let (network_side, renderer_side) = Channel::pair()?;
+        let site = site.to_owned();
+        let connect = NetworkControl::Connect {
+            client,
+            session,
+            site,
+        };
+        self.network()?
+            .channel
+            .send(&connect, vec![network_side.into_fd()])?;
+        Ok(renderer_side.into_fd())
     }
 
     fn tell_network(&mut self, control: NetworkControl, fds: Vec<OwnedFd>) {
@@ -253,6 +303,9 @@ impl Broker {
 
     fn lose_network(&mut self) {
         self.network = None;
+        let recently = self
+            .network_started
+            .is_some_and(|started| started.elapsed() < RESTART_GAP);
         let navigations: Vec<Navigation> = self.navigations.drain().map(|(_, nav)| nav).collect();
         for navigation in navigations {
             if let Some(view) = self.views.get_mut(&navigation.view) {
@@ -266,9 +319,9 @@ impl Broker {
                 Outcome::Failed { url, message },
             );
         }
-        let views: Vec<ViewId> = self.views.keys().copied().collect();
-        for view in views {
-            self.crash(view);
+        if !recently && let Err(error) = self.start_network() {
+            eprintln!("web-host: cannot restart the network process: {error}");
+            self.network = None;
         }
     }
 
@@ -378,6 +431,7 @@ impl Broker {
                 }
             }
             Command::Intercept(enabled) => {
+                self.intercept = enabled;
                 self.tell_network(NetworkControl::Intercept { enabled }, Vec::new());
             }
             Command::Resume { request, verdict } => {
@@ -497,6 +551,7 @@ impl Broker {
             renderer.url = url.clone();
             renderer.images.clear();
             renderer.image_bytes = 0;
+            renderer.shown = None;
         }
         let commit = ToRenderer::Commit {
             load: load.0,
@@ -512,21 +567,13 @@ impl Broker {
             return Ok(());
         };
         let (ours, theirs) = Channel::pair()?;
-        let (network_side, renderer_side) = Channel::pair()?;
         self.next_client = self.next_client.wrapping_add(1).max(1);
         let client = self.next_client;
-        self.network()?.channel.send(
-            &NetworkControl::Connect {
-                client,
-                session,
-                site: site.to_owned(),
-            },
-            vec![network_side.into_fd()],
-        )?;
+        let network = self.connect(client, session, site)?;
         let child = self
             .helpers
             .renderer
-            .launch(theirs.into_fd(), Some(renderer_side.into_fd()))?;
+            .launch(theirs.into_fd(), Some(network))?;
         (self.placement)(child.id());
         if let Some(entry) = self.views.get_mut(&view) {
             entry.client = client;
@@ -539,6 +586,7 @@ impl Broker {
                 fonts: Vec::new(),
                 images: Vec::new(),
                 image_bytes: 0,
+                shown: None,
             });
         }
         Ok(())
@@ -619,7 +667,7 @@ impl Renderer {
                 if load != current.0 {
                     return Ok(None);
                 }
-                let (list, links) = self.painted(&fd)?;
+                let (list, links, _) = self.patched(&fd, true)?;
                 let title = title.map(|title| title.chars().take(MAX_TITLE).collect());
                 let frame = Frame {
                     url: self.url.clone(),
@@ -635,8 +683,8 @@ impl Renderer {
                 if load != current.0 {
                     return Ok(None);
                 }
-                let (list, links) = self.painted(&fd)?;
-                Ok(Some((current, Outcome::Relaid(list, links))))
+                let (list, links, damage) = self.patched(&fd, false)?;
+                Ok(Some((current, Outcome::Relaid(list, links, damage))))
             }
             FromRenderer::Scroll { load, y } => {
                 Ok((load == current.0).then_some((current, Outcome::Scroll(y))))
@@ -644,10 +692,42 @@ impl Renderer {
         }
     }
 
-    fn painted(&self, fd: &OwnedFd) -> io::Result<(Arc<DisplayList>, Arc<Links>)> {
+    fn patched(
+        &mut self,
+        fd: &OwnedFd,
+        fresh: bool,
+    ) -> io::Result<(Arc<DisplayList>, Arc<Links>, Option<Rect>)> {
         let mapping = Mapping::new(fd, MAX_LIST)?;
-        let painted = Painted::decode(mapping.bytes())?;
+        let patch = Patch::decode(mapping.bytes())?;
         drop(mapping);
+        let base = match fresh {
+            true => None,
+            false => Some(self.shown.clone().ok_or_else(invalid)?),
+        };
+        let empty = DisplayList::default();
+        let (old, old_links) = match &base {
+            Some((list, links)) => (list.as_ref(), Some(links)),
+            None => (&empty, None),
+        };
+        let areas: Vec<(Rect, u32)> = old_links
+            .map(|links| {
+                links
+                    .areas
+                    .iter()
+                    .map(|(rect, target)| (*rect, *target as u32))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let targets: &[Url] = old_links.map_or(&[], |links| &links.targets);
+        let reframed = patch.width != old.width
+            || patch.height != old.height
+            || patch.background != old.background;
+        let changed = Changed {
+            items: (patch.items.removed_range(), patch.items.inserted_range()),
+            glyphs: (patch.glyphs.removed_range(), patch.glyphs.inserted_range()),
+        };
+        let links_changed = patch.links.is_some();
+        let painted = patch.apply(&old.items, &old.glyphs, (&areas, targets))?;
         let fonts = painted
             .fonts
             .iter()
@@ -676,14 +756,79 @@ impl Renderer {
             fonts,
             images,
         };
-        let links = Links {
-            areas: painted
-                .links
-                .into_iter()
-                .map(|(rect, target)| (rect, target as usize))
-                .collect(),
-            targets: painted.targets,
+        let damage = match (&base, reframed) {
+            (Some(_), false) => damage(old, &list, &changed),
+            _ => None,
         };
-        Ok((Arc::new(list), Arc::new(links)))
+        let links = match (old_links, links_changed) {
+            (Some(links), false) => Arc::clone(links),
+            _ => Arc::new(Links {
+                areas: painted
+                    .links
+                    .into_iter()
+                    .map(|(rect, target)| (rect, target as usize))
+                    .collect(),
+                targets: painted.targets,
+            }),
+        };
+        let list = Arc::new(list);
+        self.shown = Some((Arc::clone(&list), Arc::clone(&links)));
+        Ok((list, links, damage))
     }
+}
+
+struct Changed {
+    items: (Range<usize>, Range<usize>),
+    glyphs: (Range<usize>, Range<usize>),
+}
+
+fn union(area: Option<Rect>, rect: Rect) -> Option<Rect> {
+    Some(match area {
+        None => rect,
+        Some(area) => {
+            let x = area.x.min(rect.x);
+            let y = area.y.min(rect.y);
+            Rect {
+                x,
+                y,
+                width: (area.x + area.width).max(rect.x + rect.width) - x,
+                height: (area.y + area.height).max(rect.y + rect.height) - y,
+            }
+        }
+    })
+}
+
+fn overlaps(range: &Range<u32>, changed: &Range<usize>) -> bool {
+    !changed.is_empty()
+        && (range.start as usize) < changed.end
+        && changed.start < range.end as usize
+}
+
+fn damage(old: &DisplayList, new: &DisplayList, changed: &Changed) -> Option<Rect> {
+    let mut area = None;
+    let removed = old.items.get(changed.items.0.clone()).unwrap_or_default();
+    let inserted = new.items.get(changed.items.1.clone()).unwrap_or_default();
+    for item in removed.iter().chain(inserted) {
+        area = match item {
+            Item::Rect { rect, .. } | Item::Glyphs { rect, .. } | Item::Image { rect, .. } => {
+                union(area, *rect)
+            }
+            Item::Tiles { clip, .. } => union(area, *clip),
+            Item::PushClip { .. } | Item::PushOpacity { .. } | Item::Pop => return None,
+        };
+    }
+    for (list, glyphs) in [(old, &changed.glyphs.0), (new, &changed.glyphs.1)] {
+        for item in &list.items {
+            if let Item::Glyphs {
+                rect,
+                glyphs: range,
+                ..
+            } = item
+                && overlaps(range, glyphs)
+            {
+                area = union(area, *rect);
+            }
+        }
+    }
+    Some(area.unwrap_or_default())
 }

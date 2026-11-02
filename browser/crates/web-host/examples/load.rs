@@ -118,8 +118,11 @@ fn run(url: Url, output: Option<PathBuf>) -> std::io::Result<()> {
                     );
                     last = Some(frame.list);
                 }
-                Outcome::Relaid(list, _) => {
-                    println!("{elapsed} ms: relaid, {} images", list.images.len());
+                Outcome::Relaid(list, _, damage) => {
+                    println!(
+                        "{elapsed} ms: relaid, {} images, damage {damage:?}",
+                        list.images.len()
+                    );
                     last = Some(list);
                 }
                 Outcome::Failed { message, .. } => println!("{elapsed} ms: failed: {message}"),

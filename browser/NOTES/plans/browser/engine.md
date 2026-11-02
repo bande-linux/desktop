@@ -37,14 +37,29 @@ One Cargo workspace with one lock. Dependencies run only downward in this list.
   session (`Session::Default` or `Private(n)`, ended when its last view closes). Cookies, the cache
   and HSTS live in web-net and so run here. The host fetches navigations; each renderer has its own
   socket to it, which the host binds to the renderer's session and site, so a renderer cannot
-  forge either and cannot fetch documents.
+  forge either and cannot fetch documents. Its sandbox:
+  - Landlock allows reading only the certificate stores, the resolver and NSS configuration,
+    `/usr/lib` (NSS modules), Debian's public suffix list and `/run/systemd/resolve`;
+  - Landlock allows writing only beneath its `--storage` folder (the app's
+    `$XDG_DATA_HOME/org.bande.Browser`), where web-net keeps cookies, HSTS and the cache;
+  - Unix sockets may connect only to systemd-resolved, nscd and avahi;
+  - it cannot exec, and it is not dumpable;
+  - a seccomp allowlist adds sockets for Unix, IPv4, IPv6 and route netlink only, `ioctl` only for
+    `FIONBIO` and `FIONREAD`, and `clone` only for threads (`clone3` returns `ENOSYS`, so glibc falls
+    back to `clone`, as in Chromium's policy);
+  - TCP ports stay open: Landlock's network rules work per port, and pages use any port.
+- **After a network-process crash** the host fails the pending navigations. It restarts the process
+  at once, or at the next command if the last start was under 5 s ago, so a crash loop never spins.
+  It then hands every live renderer a new network socket; the renderers keep their pages and treat
+  their in-flight fetches as failed.
 - **The webRequest hook** is in the network process too. With interception on, each request pauses
   before it starts (the `onBeforeRequest` stage) and the host gets `Outcome::Paused` for the view
   that made it; `Command::Resume` continues, cancels or redirects it. A timerfd armed only while
   something is paused continues a request after 10 s.
 - **One renderer per tab and site** runs HTML, style, layout, paint and image decoding (AVIF
-  included). The site is the origin for now (scheme, host and port), stricter than scheme plus
-  registrable domain until we carry the public suffix list. A navigation to another site replaces
+  included). The site is the scheme plus the registrable domain, from `web_net::Site`, which reads
+  Debian's public suffix list (the `publicsuffix` package). Without the list, a site is the full
+  origin, which is stricter. A navigation to another site replaces
   the process, chosen after redirects. Its sandbox follows Chromium's layers, and bubblewrap's
   for namespaces:
   - new user, network and IPC namespaces (best effort, before anything else);
@@ -58,7 +73,8 @@ One Cargo workspace with one lock. Dependencies run only downward in this list.
 
   It has no GPU and no Wayland. The app puts each renderer in a transient systemd user scope
   (`app-bande-org.bande.Browser.Renderer-PID.scope` in `app.slice`, `MemoryMax` 512 MB, no swap),
-  as the desktop places apps. A crash or an OOM kill reaches the host as a hang-up and becomes
+  as the desktop places apps. It waits for the scope job's `JobRemoved` signal before the host hands
+  the renderer its first page. A crash or an OOM kill reaches the host as a hang-up and becomes
   `Outcome::Crashed`.
 - **The media process** (phase 4) demuxes and decodes into NV12 dmabufs (`media.md`).
 - **The CDM process** (phase 4, per site) hosts Widevine once licensed.
@@ -70,20 +86,18 @@ IPC is `SOCK_SEQPACKET` Unix sockets with fd passing. A message is at most 64 Ki
 hand-written `Wire` impls with no versioning. Display lists, documents, images and font files
 travel in sealed memfds that the receiver maps read-only. Senders queue and never block, so a peer
 that stops reading cannot stall the host or the network process. Fonts and images go once per
-renderer (images once per load) and are referred to by id afterwards. Helpers start with a cleared
+renderer (images once per load) and are referred to by id afterwards. A display list goes as a
+patch against the previous one of the same load: the common prefix and suffix of its items and
+glyphs are kept, and the link table is sent only when it changes. A first frame is a patch against
+nothing. The host rebuilds the list, validates it whole, and reports the damaged rectangle with
+`Outcome::Relaid`: the union of the changed items, or `None` when the size, the background or a
+clip or opacity group changed. The app then rebuilds only the tiles that rectangle touches. Helpers start with a cleared
 environment, the control socket on stdin and the renderer's network socket on stdout.
 
 **Gaps:**
-- The network process is not sandboxed yet. It will get Landlock for the profile folder and a
-  seccomp policy.
 - Font files cross into the app as bytes and are parsed there. Glyph outlines (D1) remove that.
-- Image pixels are copied once into the app's `Arc`s.
-- After a network-process crash, the next navigation restarts it.
+- Image pixels are copied once into the app's `Arc`s; that is accepted for now.
 - Only the `onBeforeRequest` stage exists.
-- Every relayout (hover, images, resize) re-sends the whole display list. Damaged ranges will
-  replace that.
-- The scope placement is a systemd job. The renderer can get its first page a few milliseconds
-  before the move completes. Waiting for `JobRemoved` would close that gap.
 
 **Measured** (release, the mini, Debian's fonts):
 - An idle renderer is 1.7 MB anonymous and 8.4 MB resident (the rest is shared files). It starts,

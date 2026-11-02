@@ -7,8 +7,8 @@ use std::sync::Arc;
 use rustix::event::{PollFd, PollFlags, poll};
 use web_content::{Fonts, Page, Viewport};
 use web_ipc::{
-    Channel, Destination, FromNetwork, FromRenderer, Mapping, Message, Painted, Size, ToNetwork,
-    ToRenderer, Url, sandbox,
+    Channel, Destination, FromNetwork, FromRenderer, LinkTable, Mapping, Message, Patch, Sent,
+    Size, ToNetwork, ToRenderer, Url, sandbox,
 };
 use web_paint::{DisplayList, Image, Item, Rect};
 
@@ -35,10 +35,11 @@ fn run() -> io::Result<()> {
     sandbox::enter(&sandbox::font_directories())?;
     let mut renderer = Renderer {
         control: Channel::new(control)?,
-        network: Channel::new(network)?,
+        network: Some(Channel::new(network)?),
         next_fetch: 0,
         fonts_sent: Vec::new(),
         images_sent: Vec::new(),
+        sent: None,
         shown: None,
         styling: None,
         images: Vec::new(),
@@ -69,10 +70,11 @@ struct Styling {
 
 struct Renderer {
     control: Channel,
-    network: Channel,
+    network: Option<Channel>,
     next_fetch: u64,
     fonts_sent: Vec<(u64, u32)>,
     images_sent: Vec<Arc<Image>>,
+    sent: Option<(Arc<DisplayList>, LinkTable)>,
     shown: Option<Shown>,
     styling: Option<Styling>,
     images: Vec<(u64, String)>,
@@ -114,26 +116,28 @@ fn readable(channel: &Channel) -> PollFlags {
 impl Renderer {
     fn run(&mut self, fonts: &mut Fonts) -> io::Result<()> {
         loop {
-            let mut sources = [
-                PollFd::new(&self.control, readable(&self.control)),
-                PollFd::new(&self.network, readable(&self.network)),
-            ];
+            let mut sources = vec![PollFd::new(&self.control, readable(&self.control))];
+            sources.extend(
+                self.network
+                    .as_ref()
+                    .map(|network| PollFd::new(network, readable(network))),
+            );
             match poll(&mut sources, None) {
                 Ok(_) | Err(rustix::io::Errno::INTR) => {}
                 Err(error) => return Err(error.into()),
             }
+            drop(sources);
             self.control.flush()?;
-            self.network.flush()?;
             while let Some(mut message) = self.control.receive()? {
                 let command = message.decode::<ToRenderer>()?;
-                let body = match command {
-                    ToRenderer::Commit { .. } => Some(message.fd()?),
+                let fd = match command {
+                    ToRenderer::Commit { .. } | ToRenderer::Network => Some(message.fd()?),
                     _ => None,
                 };
-                self.command(command, body, fonts)?;
+                self.command(command, fd, fonts)?;
             }
-            while let Some(message) = self.network.receive()? {
-                self.fetched(message)?;
+            if self.receive_network().is_err() {
+                self.lose_network();
             }
             self.style(fonts)?;
             self.add_images(fonts)?;
@@ -141,18 +145,52 @@ impl Renderer {
         }
     }
 
-    fn fetch(&mut self, url: Url, destination: Destination) -> io::Result<u64> {
+    fn receive_network(&mut self) -> io::Result<()> {
+        let Some(network) = self.network.as_mut() else {
+            return Ok(());
+        };
+        network.flush()?;
+        while let Some(message) = self
+            .network
+            .as_mut()
+            .map(Channel::receive)
+            .transpose()?
+            .flatten()
+        {
+            self.fetched(message)?;
+        }
+        Ok(())
+    }
+
+    fn lose_network(&mut self) {
+        self.network = None;
+        let images = std::mem::take(&mut self.images);
+        self.images_arrived
+            .extend(images.into_iter().map(|(_, source)| (source, Vec::new())));
+        if let Some(styling) = &mut self.styling {
+            let fetches = std::mem::take(&mut styling.fetches);
+            styling
+                .arrived
+                .extend(fetches.into_iter().map(|(_, href)| (href, Vec::new())));
+        }
+    }
+
+    fn fetch(&mut self, url: Url, destination: Destination) -> Option<u64> {
         self.next_fetch += 1;
         let id = self.next_fetch;
-        self.network.send(
-            &ToNetwork::Fetch {
-                id,
-                url,
-                destination,
-            },
-            Vec::new(),
-        )?;
-        Ok(id)
+        let fetch = ToNetwork::Fetch {
+            id,
+            url,
+            destination,
+        };
+        let sent = self.network.as_mut()?.send(&fetch, Vec::new());
+        match sent {
+            Ok(()) => Some(id),
+            Err(_) => {
+                self.lose_network();
+                None
+            }
+        }
     }
 
     fn cancel(&mut self) -> io::Result<()> {
@@ -166,8 +204,10 @@ impl Renderer {
             .map(|(id, _)| id);
         let pending: Vec<u64> = sheets.chain(images).collect();
         self.images_arrived.clear();
-        for id in pending {
-            self.network.send(&ToNetwork::Cancel { id }, Vec::new())?;
+        if let Some(network) = self.network.as_mut() {
+            for id in pending {
+                network.send(&ToNetwork::Cancel { id }, Vec::new())?;
+            }
         }
         Ok(())
     }
@@ -175,7 +215,7 @@ impl Renderer {
     fn command(
         &mut self,
         command: ToRenderer,
-        document: Option<OwnedFd>,
+        fd: Option<OwnedFd>,
         fonts: &mut Fonts,
     ) -> io::Result<()> {
         match command {
@@ -186,7 +226,7 @@ impl Renderer {
                 viewport,
             } => {
                 self.cancel()?;
-                let mapping = document
+                let mapping = fd
                     .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidData))
                     .and_then(|fd| Mapping::new(&fd, MAX_BODY))?;
                 let document = web_content::parse_with_charset(mapping.bytes(), charset.as_deref());
@@ -198,6 +238,7 @@ impl Renderer {
                 self.resized = false;
                 self.images_attempted = 0;
                 self.images_sent.clear();
+                self.sent = None;
                 self.shown = None;
                 self.styling = Some(Styling {
                     shown: Shown {
@@ -227,6 +268,10 @@ impl Renderer {
                 }
             }
             ToRenderer::Stop => self.cancel()?,
+            ToRenderer::Network => {
+                let fd = fd.ok_or_else(|| io::Error::from(io::ErrorKind::InvalidData))?;
+                self.network = Some(Channel::new(fd)?);
+            }
         }
         Ok(())
     }
@@ -278,10 +323,10 @@ impl Renderer {
                 continue;
             }
             styling.attempted.push(href.clone());
-            match resolved(&styling.shown.url, &href) {
-                Some(url) => styling
-                    .fetches
-                    .push((self.fetch(url, Destination::Style)?, href)),
+            match resolved(&styling.shown.url, &href)
+                .and_then(|url| self.fetch(url, Destination::Style))
+            {
+                Some(id) => styling.fetches.push((id, href)),
                 None => styling.arrived.push((href, Vec::new())),
             }
         }
@@ -329,11 +374,8 @@ impl Renderer {
                 continue;
             }
             self.images_attempted += 1;
-            match resolved(&base, &source) {
-                Some(url) => {
-                    let id = self.fetch(url, Destination::Image)?;
-                    self.images.push((id, source));
-                }
+            match resolved(&base, &source).and_then(|url| self.fetch(url, Destination::Image)) {
+                Some(id) => self.images.push((id, source)),
                 None => self.images_arrived.push((source, Vec::new())),
             }
         }
@@ -438,7 +480,19 @@ impl Renderer {
             images.push(id);
         }
         let (links, targets) = links(&shown.page, &shown.url);
-        web_ipc::sealed(&Painted::encode(list, fonts, images, links, targets))
+        let sent = Sent {
+            list,
+            links: &links,
+            targets: &targets,
+        };
+        let base = self.sent.as_ref().map(|(list, (links, targets))| Sent {
+            list,
+            links,
+            targets,
+        });
+        let patch = Patch::encode(base.as_ref(), &sent, &fonts, &images);
+        self.sent = Some((Arc::clone(&shown.page.display_list), (links, targets)));
+        web_ipc::sealed(&patch)
     }
 }
 

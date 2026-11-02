@@ -1901,6 +1901,7 @@ dependencies = [
  "png",
  "rustix",
  "web-ipc",
+ "web-net",
  "web-netd",
  "web-paint",
  "web-renderer",

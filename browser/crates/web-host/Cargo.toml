@@ -11,6 +11,7 @@ repository.workspace = true
 linebender_resource_handle.workspace = true
 rustix = { workspace = true, features = ["event"] }
 web-ipc.workspace = true
+web-net.workspace = true
 web-paint.workspace = true
 
 [lints]

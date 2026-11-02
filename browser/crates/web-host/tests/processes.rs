@@ -22,7 +22,7 @@ fn main() -> ExitCode {
     }
     match scenario() {
         Ok(()) => {
-            println!("processes: hook, crash and reload work");
+            println!("processes: hook, crash, reload and a network restart work");
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -160,14 +160,54 @@ fn scenario() -> Result<(), String> {
         }
     }
     link.send(load(2));
+    framed(&host, &mut pending, LoadId(2))?;
+    for pid in helpers_named("network") {
+        Process::new("kill")
+            .args(["-KILL", &pid])
+            .status()
+            .map_err(|error| error.to_string())?;
+    }
+    link.send(load(3));
+    if framed(&host, &mut pending, LoadId(3)).is_ok() {
+        return Ok(());
+    }
+    link.send(load(4));
+    framed(&host, &mut pending, LoadId(4))
+}
+
+fn framed(host: &Host, pending: &mut Vec<Update>, load: LoadId) -> Result<(), String> {
     loop {
-        let update = next(&host, &mut pending)?;
+        let update = next(host, pending)?;
         match update.outcome {
-            Outcome::Frame(_) if update.load == LoadId(2) => return Ok(()),
-            Outcome::Failed { message, .. } | Outcome::Unsupported { kind: message, .. } => {
+            Outcome::Frame(_) if update.load == load => return Ok(()),
+            Outcome::Crashed { .. } => return Err("a renderer crashed".into()),
+            Outcome::Failed { message, .. } | Outcome::Unsupported { kind: message, .. }
+                if update.load == load =>
+            {
                 return Err(message);
             }
             _ => {}
         }
     }
+}
+
+fn helpers_named(role: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let tasks = std::fs::read_dir("/proc/self/task")
+        .into_iter()
+        .flatten()
+        .flatten();
+    for task in tasks {
+        let children = std::fs::read_to_string(task.path().join("children")).unwrap_or_default();
+        for pid in children.split_whitespace() {
+            let command = std::fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default();
+            if command
+                .split(|byte| *byte == 0)
+                .any(|argument| argument == role.as_bytes())
+            {
+                found.push(pid.to_owned());
+            }
+        }
+    }
+    found
 }

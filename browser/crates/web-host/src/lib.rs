@@ -93,7 +93,7 @@ pub struct PausedRequest {
 
 pub enum Outcome {
     Frame(Frame),
-    Relaid(Arc<DisplayList>, Arc<Links>),
+    Relaid(Arc<DisplayList>, Arc<Links>, Option<Rect>),
     Scroll(f32),
     Failed { url: Url, message: String },
     Unsupported { url: Url, kind: String },

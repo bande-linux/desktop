@@ -45,11 +45,12 @@ Conformance suites are the tests, with one expectations file per suite, pinned t
 Pass rates are the progress metric; a regression fails the check. Our own tests are few:
 - tricky pure logic;
 - regressions for real bugs;
-- the sandbox boundary: a renderer can't open a file or a socket, or exec (`web-ipc`'s
-  `sandbox` test);
+- the sandbox boundary: a renderer can't open a file or a socket, or exec; the network process
+  writes only its storage, opens no UDP socket, reaches no other Unix socket and can't exec
+  (`web-ipc`'s `sandbox` test);
 - the process model end to end: the paused-request hook, a killed renderer reported as crashed,
-  and a reload after it (`web-host`'s `processes` test, which re-runs its own binary as the
-  helpers).
+  a reload after it, and loads working again after the network process is killed (`web-host`'s
+  `processes` test, which re-runs its own binary as the helpers).
 
 The app has one end-to-end test (about 40 lines, within the apps guide of 80–100 lines per app). It opens a local page on the headless
 compositor and finds its heading and a link over AT-SPI.

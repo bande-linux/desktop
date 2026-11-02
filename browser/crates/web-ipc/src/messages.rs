@@ -27,6 +27,7 @@ wire_enum! {
         Hover { load: u64, x: f32, y: f32 } = 2,
         Fragment { load: u64, name: String } = 3,
         Stop = 4,
+        Network = 5,
     }
 }
 

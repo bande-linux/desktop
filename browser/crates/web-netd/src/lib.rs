@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::io;
+use std::net::ToSocketAddrs;
+use std::os::unix::fs::DirBuilderExt;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
@@ -9,7 +11,9 @@ use rustix::time::{
     Itimerspec, TimerfdClockId, TimerfdFlags, TimerfdTimerFlags, Timespec, timerfd_create,
     timerfd_settime,
 };
-use web_ipc::{Channel, Destination, FromNetwork, NetworkControl, ToNetwork, Url, Verdict, sealed};
+use web_ipc::{
+    Channel, Destination, FromNetwork, NetworkControl, ToNetwork, Url, Verdict, sandbox, sealed,
+};
 use web_net::{FetchError, FetchId, Fetcher, Response, Storage};
 
 pub const HOST: u32 = 0;
@@ -44,6 +48,15 @@ fn run() -> io::Result<()> {
         TimerfdClockId::Monotonic,
         TimerfdFlags::CLOEXEC | TimerfdFlags::NONBLOCK,
     )?;
+    let profile = profile();
+    if let Some(profile) = &profile {
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(profile)?;
+    }
+    let _ = ("localhost", 0).to_socket_addrs();
+    sandbox::enter_network(profile.as_deref())?;
     Network {
         host,
         timer,
@@ -53,7 +66,7 @@ fn run() -> io::Result<()> {
         intercept: false,
         paused: HashMap::new(),
         next_request: 0,
-        profile: profile(),
+        profile,
     }
     .run()
 }

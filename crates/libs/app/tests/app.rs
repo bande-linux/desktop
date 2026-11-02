@@ -12,10 +12,12 @@ use bande_compositor::Compositor;
 use bande_test_bus::SessionBus;
 use bande_test_wayland::{Frames, chord, headless};
 use bande_toolkit::{Appearance, Scene, Window, WindowEvent};
+use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 
 const KEY_LEFTCTRL: u32 = 29;
 const KEY_Q: u32 = 16;
 const KEY_W: u32 = 17;
+const KEY_F11: u32 = 87;
 
 static RECORD: Mutex<Option<Sender<Seen>>> = Mutex::new(None);
 static ONE_BUS_AT_A_TIME: Mutex<()> = Mutex::new(());
@@ -201,7 +203,7 @@ fn an_app_started_in_the_background_runs_unlisted_until_its_window_opens_and_qui
 }
 
 #[test]
-fn a_second_launch_reaches_the_running_app_which_keeps_running_without_windows_until_quit() {
+fn f11_fills_the_screen_and_a_second_launch_reaches_the_running_app_until_quit() {
     let _serial = ONE_BUS_AT_A_TIME
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
@@ -251,6 +253,21 @@ fn a_second_launch_reaches_the_running_app_which_keeps_running_without_windows_u
     let launched_again = launch(&[], unused);
     wait_for(&mut server, &|seen| active_windows(seen) == 2);
     assert_eq!(launched_again.join().expect("launched again"), Ok(()));
+    let full_screen = |server: &Compositor| {
+        server
+            .windows()
+            .iter()
+            .any(|window| window.has_state(xdg_toplevel::State::Fullscreen))
+    };
+    for wanted in [true, false] {
+        chord(&mut server, &[KEY_F11]);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while full_screen(&server) != wanted {
+            assert!(Instant::now() < deadline, "F11 did not toggle full screen");
+            let mut stepped = false;
+            frames.run_until(&mut server, || std::mem::replace(&mut stepped, true));
+        }
+    }
 
     chord(&mut server, &[KEY_LEFTCTRL, KEY_Q]);
     frames.run_until(&mut server, || app.is_finished());

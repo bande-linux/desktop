@@ -23,7 +23,7 @@ the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
 | `…compositor.rs` `tapping_super_opens_search_and_ctrl_alt_t_opens_terminal` | The shortcut table drives the keys: Super+Space reaches the app and opens nothing, a Super tap sends `show_launcher`, `Ctrl+Alt+T` sends `open_terminal` and does not reach the app. |
 | `…compositor.rs` `a_window_on_a_workspace_out_of_view_is_suspended` | A window on a workspace switched out of view is suspended, and resumes when its workspace comes back. |
 | `…compositor.rs` `windows_with_turned_or_flipped_buffers_do_not_stop_the_screen_from_updating` | A window with any rotated or flipped buffer transform renders instead of failing the whole frame. |
-| `libs/app/tests/app.rs` | App framework: a second launch reaches the running instance, the app keeps running without windows, launching again reopens a window, Ctrl+Q quits. |
+| `libs/app/tests/app.rs` | App framework: a second launch reaches the running instance, the app keeps running without windows, launching again reopens a window, F11 enters and leaves full screen, Ctrl+Q quits. |
 | `services/portal/tests/screenshot.rs` | A stored screenshot permission is trusted only from the xdg-desktop-portal frontend; any other caller makes the user be asked. |
 | `services/notify/tests/center.rs` | A notification shows as a banner and moves to the center; the center is served only under its own bus name, not through `org.freedesktop.Notifications`. |
 | `libs/xdg/tests/xdg.rs` `exec_lines_follow_…` | `.desktop` Exec parsing: quoting, escapes, field codes and reserved characters. |

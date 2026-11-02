@@ -163,15 +163,11 @@ fn wifi(network: &NetworkManager) -> Option<Wifi> {
 }
 
 fn bluetooth(bluez: &BlueZ) -> Option<Bluetooth> {
-    if !bluez.available().ok()? {
-        return None;
-    }
-    let powered = bluez.powered().ok()?;
+    let radio = bluez.radio().ok()??;
     Some(Bluetooth {
-        powered,
-        devices: bluez
-            .paired_devices()
-            .unwrap_or_default()
+        powered: radio.powered,
+        devices: radio
+            .paired
             .into_iter()
             .map(|device| Gadget {
                 address: device.address,
@@ -208,8 +204,9 @@ fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
 
 fn paired(bluez: &BlueZ, address: &str) -> Option<bande_bluetooth::Device> {
     bluez
-        .paired_devices()
-        .unwrap_or_default()
+        .radio()
+        .ok()??
+        .paired
         .into_iter()
         .find(|device| device.address == address)
 }

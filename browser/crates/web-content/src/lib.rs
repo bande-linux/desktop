@@ -93,7 +93,10 @@ impl Page {
     }
 
     pub fn link_at(&self, x: f32, y: f32) -> Option<&str> {
-        let node = self.display_list.hit_test(x, y)?;
+        self.link_of(self.display_list.hit_test(x, y)?)
+    }
+
+    pub fn link_of(&self, node: NodeId) -> Option<&str> {
         self.document
             .ancestors(node)
             .find(|&ancestor| self.document.html_element_name(ancestor) == Some(Atom::A))

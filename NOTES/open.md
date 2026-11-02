@@ -69,7 +69,6 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - Title-bar toolbars stay at 100 % at large text sizes.
 - The unused private `set_corner_radius` request: keep or remove.
 - Debian policy: make the greeter opt-in instead of taking over greetd.
-- Shared code between the GUI binaries (a multicall binary): only if it saves 20 MB at idle.
 
 ## Remaining work
 

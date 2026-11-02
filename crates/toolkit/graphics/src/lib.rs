@@ -25,7 +25,9 @@ pub use input::{
 };
 pub use parley::FontData;
 pub use render::{DrawError, Snapshot, pixels};
-pub use scene::{Image, Item, Paint, Path, Point, Rect, Scene, Shape, Stop};
+pub use scene::{
+    Blend, Image, Item, Paint, Path, Picture, Point, Rect, Scene, Shape, Stop, Transform,
+};
 pub use surface::{PlacedSurface, SurfaceId, SurfaceScaling, placed_surfaces, surface_area};
 pub use text::{
     Cut, GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextStyle, TextSystem, shortened,

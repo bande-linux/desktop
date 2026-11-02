@@ -83,9 +83,17 @@ writes a hex value, a corner radius or a font name of its own.
 ## Implemented (`crates/toolkit/toolkit`)
 
 - **Tokens.** See [Design tokens](#design-tokens).
-- **Scene.** A `Scene` of fills, strokes, linear gradients, rounded rectangles, clips, shadows,
-  text, and glyph runs laid out elsewhere (`Item::Glyphs`, e.g. a web page's) that `CpuRenderer` (`vello_cpu`) and `GpuRenderer` (`vello_gpu` on Vulkan) draw from
-  one encoder.
+- **Scene.** A `Scene` of fills, strokes, linear, radial and conic gradients, rounded
+  rectangles, clips, opacity and blend layers (`Item::Blend`, the CSS `mix-blend-mode` set),
+  2D transforms (`Item::Transform`), shadows, text, images (`Image::from_rgba` or
+  `from_premultiplied`, uploaded once per renderer and freed when the last `Image` drops; `Item::Tiles`
+  repeats one), and glyph runs laid out elsewhere (`Item::Glyphs`, e.g. a web page's, drawn
+  from their own `FontData` without reshaping), which `CpuRenderer` (`vello_cpu`) and
+  `GpuRenderer` (`vello_gpu` on Vulkan) draw from one encoder.
+  - The encoder records items into drawing ops (flattened paths, glyph outlines, paints) and
+    replays them. A `Picture` is a retained sub-scene: each renderer records it once, keeps the
+    ops until the last clone drops, and skips it when its bounds are off screen. A long document
+    split into pictures per tile scrolls by translating them, without rebuilding or re-recording.
   - Curves are flattened by the toolkit at 0.004 px instead of Vello's 0.25 px, so edges are
     within 1/255 of their exact area coverage. Glyph outlines come from `skrifa`, unhinted and in
     font units (no 26.6 rounding), are cached per glyph and size, and are drawn at fractional

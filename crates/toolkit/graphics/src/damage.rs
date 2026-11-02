@@ -1,4 +1,4 @@
-use crate::scene::{Item, Path, PathElement, Point, Rect, Scene, Shape};
+use crate::scene::{Item, Path, PathElement, Point, Rect, Scene, Shape, Transform};
 
 const MAX_REGIONS: usize = 8;
 const ANTIALIASING_MARGIN: f32 = 1.0;
@@ -168,6 +168,16 @@ fn diff_item(before: &Item, after: &Item, damaged: &mut Vec<Rect>) {
             },
         ) if alpha == same => diff(previous, next, damaged),
         (
+            Item::Blend {
+                mode,
+                items: previous,
+            },
+            Item::Blend {
+                mode: same,
+                items: next,
+            },
+        ) if mode == same => diff(previous, next, damaged),
+        (
             Item::Scale {
                 origin,
                 factor,
@@ -235,6 +245,18 @@ fn scaled(rect: Rect, origin: Point, factor: f32) -> Rect {
     )
 }
 
+fn transformed(rect: Rect, transform: Transform) -> Option<Rect> {
+    through(
+        [
+            Point::new(rect.x, rect.y),
+            Point::new(rect.x + rect.width, rect.y),
+            Point::new(rect.x, rect.y + rect.height),
+            Point::new(rect.x + rect.width, rect.y + rect.height),
+        ]
+        .map(|corner| transform.apply(corner)),
+    )
+}
+
 fn through(points: impl IntoIterator<Item = Point>) -> Option<Rect> {
     points
         .into_iter()
@@ -250,7 +272,7 @@ fn path_bounds(path: &Path) -> Option<Rect> {
     }))
 }
 
-fn children(items: &[Item]) -> Option<Rect> {
+pub(crate) fn children(items: &[Item]) -> Option<Rect> {
     items.iter().filter_map(bounds).reduce(union)
 }
 
@@ -288,7 +310,9 @@ fn bounds(item: &Item) -> Option<Rect> {
         )),
         Item::Clip { shape, items } => intersect(children(items)?, shape.rect),
         Item::Translate { offset, items } => Some(translated(children(items)?, *offset)),
-        Item::Opacity { items, .. } => children(items),
+        Item::Opacity { items, .. } | Item::Blend { items, .. } => children(items),
+        Item::Transform { transform, items } => transformed(children(items)?, *transform),
+        Item::Picture(picture) => picture.bounds(),
         Item::Scale {
             origin,
             factor,
@@ -299,6 +323,8 @@ fn bounds(item: &Item) -> Option<Rect> {
         } => Some(outset(through([*from, *to])?, *width)),
         Item::FillPath { path, .. } => path_bounds(path),
         Item::StrokePath { path, width, .. } => Some(outset(path_bounds(path)?, *width)),
-        Item::Image { rect, .. } | Item::Surface { frame: rect, .. } => Some(*rect),
+        Item::Image { rect, .. } | Item::Tiles { rect, .. } | Item::Surface { frame: rect, .. } => {
+            Some(*rect)
+        }
     }
 }

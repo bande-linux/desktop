@@ -54,7 +54,6 @@ Recommends: ${bande:Recommends},
             at-spi2-core,
             systemd-oomd,
             systemd-zram-generator
-Suggests: ${bande:Suggests}
 Description: Bande desktop environment
  The Bande desktop: a pure Wayland desktop with its own compositor, shell,
  session services, login window and applications, on Debian testing.
@@ -65,10 +64,10 @@ Description: Bande desktop environment
  start; "dpkg-reconfigure greetd" asks again later. Sound runs on PipeWire.
  .
  It recommends NetworkManager, the Bande APT repository, through which
- the system follows every Bande release, a browser, text editor, image
- viewer, PDF viewer, calculator and video player, and opens files in them
- by default, an unlocked keyring for the passwords browsers and editors
- keep, fallback fonts for every script and the print service.
+ the system follows every Bande release, the Bande apps Terminal, Software,
+ Package Installer and Activity Monitor, an unlocked keyring for the
+ passwords apps keep, fallback fonts for every script and the print
+ service. Other apps, such as a browser, come from Software.
  .
  So that running out of memory never freezes the computer, it recommends
  compressed swap in memory (zram, sized like Fedora's and compressed with

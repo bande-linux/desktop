@@ -587,11 +587,6 @@ def phone():
     return layers(S().frame(4, 1.4, 8, 13.2, 1.8, 1.4).line(6.8, 12.2, 9.2, 12.2, 1.2))
 
 
-def bande_mark():
-    return layers(S().arc(8, 8.6, 4.6, 0, 180, 2.0, caps=False).line(3.4, 2.4, 3.4, 8.6, 2.0).line(12.6, 2.4, 12.6, 8.6, 2.0)
-                  .circle(8, 8, 1.3))
-
-
 BATTERY_LEVELS = range(0, 101, 10)
 
 
@@ -659,7 +654,6 @@ STATUS = {
     'system-log-out-symbolic': logout,
     'system-suspend-symbolic': moon,
     'avatar-default-symbolic': avatar,
-    'bande-symbolic': bande_mark,
 }
 
 ACTIONS = {

@@ -6,8 +6,8 @@ Linux equivalent), **basic** works but is thinner, **none** is missing. Open wor
 [`architecture/behaviour.md`](architecture/behaviour.md).
 
 Bande's own apps are Files, Settings, the launcher (Spotlight) and, in bande-linux/apps,
-Terminal, Activity Monitor, Software, the Package Installer, Mail and Calendar. Firefox, Text
-Editor, Loupe, Papers, Calculator and Showtime come preinstalled from Debian. The Taskbar sits on
+Terminal, Activity Monitor, Software, the Package Installer, Mail and Calendar. No Debian apps
+come preinstalled; a browser, viewers and editors install from Software. The Taskbar sits on
 the left; each window's menu button (⋮) holds the app's menus, and a setting adds a menu bar at
 the top.
 

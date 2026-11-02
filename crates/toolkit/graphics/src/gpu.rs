@@ -4,14 +4,14 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak, mpsc};
 use vello_cpu::Glyph;
 
 use vello_gpu::kurbo::{self, Affine, BezPath};
+use vello_gpu::peniko::BlendMode;
 use vello_gpu::{
     AtlasConfig, ClearSettings, MemorySettings, PaintType, RectU16, RenderSettings, RenderSize,
     RenderTargetConfig, Renderer, Resources, TargetInit, TextureBindings,
 };
 
 use crate::damage::Region;
-use crate::draw::{self, Canvas, ImageIds};
-use crate::outline::GlyphOutlines;
+use crate::draw::{self, Caches, Canvas, Frame};
 use crate::render::{DrawError, Snapshot};
 use crate::scene::{Image, Scene};
 use crate::text::GlyphRun;
@@ -134,10 +134,9 @@ pub struct GpuRenderer {
     atlas: (u16, u16),
     renderer: Renderer,
     resources: Resources,
-    outlines: GlyphOutlines,
+    caches: Caches,
     scene: vello_gpu::Scene,
     depth: Option<(RenderSize, wgpu::TextureView)>,
-    image_ids: ImageIds,
     frame: Option<wgpu::Texture>,
 }
 
@@ -215,10 +214,9 @@ impl GpuRenderer {
             atlas,
             renderer,
             resources,
-            outlines: GlyphOutlines::default(),
+            caches: Caches::default(),
             scene: vello_gpu::Scene::new(1, 1),
             depth: None,
-            image_ids: ImageIds::default(),
             frame: None,
         }
     }
@@ -322,14 +320,15 @@ impl GpuRenderer {
         };
         draw::encode(
             &mut canvas,
-            &mut self.outlines,
-            &self.image_ids,
+            &mut self.caches,
             &scene.items,
-            scale,
-            (0, 0),
+            &Frame {
+                scale,
+                origin: (0, 0),
+                size: (width, height),
+            },
             damage.map(outline),
         );
-        self.outlines.end_frame();
         let cleared: Vec<RectU16> = damage
             .unwrap_or_default()
             .iter()
@@ -391,7 +390,7 @@ impl GpuRenderer {
         images.dedup_by_key(|image| image.id());
         let needed = images
             .iter()
-            .filter(|image| self.image_ids.get(image).is_none())
+            .filter(|image| self.caches.images.get(image.id()).is_none())
             .fold((0, 0), |(width, height), image| {
                 (width.max(image.width()), height.max(image.height()))
             });
@@ -400,11 +399,11 @@ impl GpuRenderer {
         }
         let atlas = self.atlas;
         images.retain(|image| {
-            self.image_ids.get(image).is_none()
+            self.caches.images.get(image.id()).is_none()
                 && image.width() <= u32::from(atlas.0)
                 && image.height() <= u32::from(atlas.1)
         });
-        let dropped = self.image_ids.take_dropped();
+        let dropped = self.caches.images.take_dropped();
         if !dropped.is_empty() {
             let mut clearing = self
                 .gpu
@@ -434,7 +433,7 @@ impl GpuRenderer {
                 &mut encoder,
                 &pixmap,
             );
-            self.image_ids.insert(&image, id);
+            self.caches.images.insert(image.id(), id, image.liveness());
             image.release_pixels();
         }
         self.gpu.queue.submit([encoder.finish()]);
@@ -454,7 +453,7 @@ impl GpuRenderer {
         }
         (self.renderer, self.resources) = renderer(&self.gpu.device, self.format, atlas);
         self.atlas = atlas;
-        self.image_ids = ImageIds::default();
+        self.caches.images = Default::default();
     }
 
     fn read_back(
@@ -560,8 +559,9 @@ impl Canvas for GpuCanvas<'_> {
         self.scene.push_clip_layer(path);
     }
 
-    fn push_opacity_layer(&mut self, alpha: f32) {
-        self.scene.push_opacity_layer(alpha);
+    fn push_layer(&mut self, blend: BlendMode, alpha: f32) {
+        self.scene
+            .push_layer(None, Some(blend), Some(alpha), None, None);
     }
 
     fn pop_layer(&mut self) {

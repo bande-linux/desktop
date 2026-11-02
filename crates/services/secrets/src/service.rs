@@ -13,6 +13,7 @@ use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
 use zbus::{Connection, interface};
 
 use crate::dialog::{Dialog, Kind, Reply, Request};
+use crate::network::NETWORK_MANAGER;
 use crate::peer;
 use crate::session::{self, Session};
 use crate::store::{self, ALLOWED, CREATOR, Keychain, LOGIN, SESSION};
@@ -539,6 +540,136 @@ impl Daemon {
                 tracing::warn!("cannot change the login keychain password: {error}");
                 false
             }
+        }
+    }
+
+    async fn emit_item(&self, name: &str, id: u64, created: bool) {
+        let Ok(connection) = self.connection() else {
+            return;
+        };
+        let Ok(emitter) = SignalEmitter::new(connection, collection_path(name)) else {
+            return;
+        };
+        let path = item_path(name, id);
+        let _ = if created {
+            CollectionObject::item_created(&emitter, path.as_ref()).await
+        } else {
+            CollectionObject::item_deleted(&emitter, path.as_ref()).await
+        };
+    }
+
+    pub async fn internal_items(
+        self: &Arc<Self>,
+        wanted: &HashMap<String, String>,
+        interactive: bool,
+    ) -> Vec<(HashMap<String, String>, Secret)> {
+        let default = self.keychain.lock().await.default_collection().to_owned();
+        let locked = self
+            .keychain
+            .lock()
+            .await
+            .collection(&default)
+            .is_none_or(store::Collection::locked);
+        if locked
+            && !(interactive
+                && self
+                    .ask_unlock(&default, Some(NETWORK_MANAGER.to_owned()))
+                    .await)
+        {
+            return Vec::new();
+        }
+        let keychain = self.keychain.lock().await;
+        keychain
+            .collections()
+            .iter()
+            .flat_map(store::Collection::entries)
+            .filter(|entry| store::matches(entry.item.attributes(), wanted))
+            .map(|entry| (entry.item.attributes().clone(), entry.item.secret()))
+            .collect()
+    }
+
+    pub async fn store_internal(
+        self: &Arc<Self>,
+        label: &str,
+        mut attributes: HashMap<String, String>,
+        secret: Secret,
+    ) {
+        attributes.insert(CREATOR.to_owned(), NETWORK_MANAGER.to_owned());
+        let stored = {
+            let mut keychain = self.keychain.lock().await;
+            let default = keychain.default_collection().to_owned();
+            let existing = keychain.collection(&default).and_then(|collection| {
+                collection
+                    .entries()
+                    .find(|entry| store::same_attributes(entry.item.attributes(), &attributes))
+                    .map(|entry| entry.id)
+            });
+            match existing {
+                Some(id) => keychain
+                    .update_item(&default, id, |item| {
+                        item.set_label(label);
+                        item.set_secret(secret);
+                    })
+                    .await
+                    .map(|()| None),
+                None => keychain
+                    .create_item(&default, label, &attributes, secret)
+                    .await
+                    .map(|id| Some((default, id))),
+            }
+        };
+        match stored {
+            Ok(Some((name, id))) => {
+                self.sync().await;
+                self.emit_item(&name, id, true).await;
+            }
+            Ok(None) => {}
+            Err(error) => tracing::warn!("cannot keep a network secret: {error}"),
+        }
+    }
+
+    pub async fn delete_internal(self: &Arc<Self>, wanted: &HashMap<String, String>) {
+        let mut deleted = Vec::new();
+        {
+            let mut keychain = self.keychain.lock().await;
+            let doomed = keychain
+                .collections()
+                .iter()
+                .flat_map(|collection| {
+                    collection
+                        .entries()
+                        .filter(|entry| store::matches(entry.item.attributes(), wanted))
+                        .map(|entry| (collection.name.clone(), entry.id))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            for (name, id) in doomed {
+                match keychain.delete_item(&name, id).await {
+                    Ok(()) => deleted.push((name, id)),
+                    Err(error) => tracing::warn!("cannot delete a network secret: {error}"),
+                }
+            }
+        }
+        self.sync().await;
+        for (name, id) in deleted {
+            self.emit_item(&name, id, false).await;
+        }
+    }
+
+    pub async fn ask_network(&self, network: &str) -> Option<Secret> {
+        let request = Request {
+            kind: Kind::Network,
+            app: None,
+            keychain: network.to_owned(),
+            items: Vec::new(),
+        };
+        let mut dialog = self.dialog(&request).await?;
+        match dialog.reply().await {
+            Reply::Allow(password) | Reply::Always(password) => {
+                dialog.finish().await;
+                Some(password)
+            }
+            Reply::Cancel | Reply::CreateNew => None,
         }
     }
 

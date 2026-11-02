@@ -20,6 +20,7 @@ pub enum Kind {
     Allow,
     Create,
     UpdateLogin,
+    Network,
 }
 
 impl Kind {
@@ -29,6 +30,7 @@ impl Kind {
             Self::Allow => "--allow",
             Self::Create => "--create",
             Self::UpdateLogin => "--update-login",
+            Self::Network => "--network",
         }
     }
 }

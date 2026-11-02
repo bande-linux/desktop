@@ -31,6 +31,7 @@ enum Mode {
     Allow,
     Create,
     UpdateLogin,
+    Network,
 }
 
 struct Request {
@@ -65,6 +66,7 @@ fn request() -> Option<Request> {
         "--allow" => Mode::Allow,
         "--create" => Mode::Create,
         "--update-login" => Mode::UpdateLogin,
+        "--network" => Mode::Network,
         _ => return None,
     };
     let mut keychain = String::new();
@@ -149,6 +151,10 @@ impl Prompt {
                 L10N.tr("verify-message"),
             ),
             (Mode::UpdateLogin, _) => (L10N.tr("login-title"), L10N.tr("login-message")),
+            (Mode::Network, _) => (
+                L10N.tr_args("network-title", [("network", keychain())]),
+                L10N.tr("network-message"),
+            ),
         };
         match note {
             Some(note) => (title, format!("{note} {message}")),
@@ -185,6 +191,9 @@ impl Prompt {
             Mode::Create => alert
                 .cancel(&L10N.tr("cancel"), "cancel")
                 .primary(&L10N.tr("create"), "allow"),
+            Mode::Network => alert
+                .cancel(&L10N.tr("cancel"), "cancel")
+                .primary(&L10N.tr("join"), "allow"),
             Mode::UpdateLogin => alert
                 .other(&L10N.tr("new-keychain"), "new")
                 .cancel(&L10N.tr("not-now"), "cancel")

@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use bande_secrets::dialog::PROGRAM;
-use bande_secrets::pam;
 use bande_secrets::service::Daemon;
 use bande_secrets::store::Keychain;
+use bande_secrets::{network, pam};
 use rustix::process::{DumpableBehavior, Resource, Rlimit, set_dumpable_behavior, setrlimit};
 
 fn harden() -> rustix::io::Result<()> {
@@ -28,6 +28,23 @@ async fn serve() -> Result<(), Box<dyn Error>> {
     let daemon = Daemon::new(Keychain::load(data_home).await, PathBuf::from(PROGRAM));
     let connection = zbus::connection::Builder::session()?.build().await?;
     daemon.serve(&connection).await?;
+    match zbus::connection::Builder::system()?.build().await {
+        Ok(system) => connection
+            .executor()
+            .spawn(
+                {
+                    let daemon = daemon.clone();
+                    async move {
+                        if let Err(error) = network::serve(daemon, system).await {
+                            tracing::warn!("the network secret agent stopped: {error}");
+                        }
+                    }
+                },
+                "bande-secrets network",
+            )
+            .detach(),
+        Err(error) => tracing::warn!("no system bus for the network secret agent: {error}"),
+    }
     pam::serve(daemon, connection, listener).await?;
     Ok(())
 }

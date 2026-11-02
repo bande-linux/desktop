@@ -26,6 +26,10 @@ Only these run in CI alone:
   runs no containers.
 - The check that a released commit is on `main`: the train only ever pushes `main`.
 - The amd64 debs: the build machine is arm64; both architectures build from the same scripts.
+- Fat LTO: the build machine's release-batch gate builds the `dist` debs one crate at a time
+  with thin LTO (`CARGO_PROFILE_DIST_LTO=thin`), since a fat-LTO link of the shell needs more
+  memory than the build machine spares next to the session, and systemd-oomd stops it; the dry
+  run builds them with fat LTO.
 
 ## The local gate
 
@@ -104,8 +108,8 @@ from the last tag, which sorts above that tag and below the next.
 Hosted runners start from a clean machine, so `Swatinem/rust-cache` restores the cargo
 registry, the installed `cargo-deb` and the target directory, keyed per job and architecture
 and saved only from runs on `main`, whose caches every branch and tag can read. The `test` and `debs` jobs first free disk on the host by emptying
-the .NET, Android and GHC installations they mount, and `debs` builds two crates at a time so
-the fat-LTO links stay within the runner's memory.
+the .NET, Android and GHC installations they mount, and `build-debs.sh` builds the `dist`
+profile two crates at a time (`DIST_BUILD_JOBS`), so the fat-LTO links stay within memory.
 
 ## Releasing
 

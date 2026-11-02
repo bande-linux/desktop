@@ -8,7 +8,11 @@ mapfile -t packages < ci/release/packages
 mapfile -t bundled < ci/release/bundled
 profile=${VERIFY_PROFILE:-dist}
 compression=()
-[ "$profile" = dist ] || compression=(--fast)
+if [ "$profile" = dist ]; then
+    export CARGO_BUILD_JOBS=${DIST_BUILD_JOBS:-2}
+else
+    compression=(--fast)
+fi
 
 echo "Building ${#packages[@]} packages $version for $(dpkg --print-architecture)"
 rm -rf "$target/debian"

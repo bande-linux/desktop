@@ -82,8 +82,6 @@ jobs:
         - /usr/local/lib/android:/host/android
         - /opt/ghc:/host/ghc
     timeout-minutes: 240
-    env:
-      CARGO_BUILD_JOBS: '2'
     steps:
       - name: Free disk space on the host
         run: rm -rf /host/dotnet/* /host/android/* /host/ghc/* && df -h /

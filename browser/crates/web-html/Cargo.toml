@@ -11,5 +11,8 @@ repository.workspace = true
 web-atoms.workspace = true
 encoding_rs.workspace = true
 
+[dev-dependencies]
+web-dom.workspace = true
+
 [lints]
 workspace = true

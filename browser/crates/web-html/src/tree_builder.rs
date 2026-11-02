@@ -5,6 +5,7 @@ use crate::encoding::{charset_from_meta_content, label_encoding};
 use crate::foreign::{
     adjust_foreign_attributes, adjust_mathml_attributes, adjust_svg_attributes, svg_tag_name,
 };
+use crate::open_elements::{Open, OpenElements};
 use crate::sink::{QuirksMode, TreeSink};
 use crate::tokenizer::{Doctype, State, Tag, Token};
 
@@ -43,13 +44,6 @@ enum Tok<'a> {
     Eof,
 }
 
-#[derive(Clone, Copy)]
-struct Open<N> {
-    node: N,
-    name: QualName,
-    html_integration: bool,
-}
-
 enum Formatting<N> {
     Marker,
     Element { node: N, tag: Tag },
@@ -70,7 +64,7 @@ pub(crate) struct TreeBuilder<S: TreeSink> {
     mode: Mode,
     original_mode: Mode,
     template_modes: Vec<Mode>,
-    open: Vec<Open<S::Node>>,
+    open: OpenElements<S::Node>,
     formatting: Vec<Formatting<S::Node>>,
     head: Option<S::Node>,
     form: Option<S::Node>,
@@ -83,6 +77,8 @@ pub(crate) struct TreeBuilder<S: TreeSink> {
     table_text: String,
     table_text_has_content: bool,
 }
+
+const MAX_DEPTH: usize = 512;
 
 const fn html(local: Atom) -> QualName {
     QualName::html(local)
@@ -356,7 +352,7 @@ impl<S: TreeSink> TreeBuilder<S> {
             mode: Mode::Initial,
             original_mode: Mode::Initial,
             template_modes: Vec::new(),
-            open: Vec::new(),
+            open: OpenElements::new(),
             formatting: Vec::new(),
             head: None,
             form: None,
@@ -504,7 +500,8 @@ impl<S: TreeSink> TreeBuilder<S> {
     }
 
     fn in_scope(&self, local: Atom, scope: Scope) -> bool {
-        self.in_scope_where(scope, |open| open.name == html(local))
+        self.open.contains_html(local)
+            && self.in_scope_where(scope, |open| open.name == html(local))
     }
 
     fn in_template_contents(&self) -> bool {
@@ -515,7 +512,7 @@ impl<S: TreeSink> TreeBuilder<S> {
     }
 
     fn has_open(&self, local: Atom) -> bool {
-        self.open.iter().any(|open| open.name == html(local))
+        self.open.contains_html(local)
     }
 
     fn pop(&mut self) {
@@ -621,6 +618,12 @@ impl<S: TreeSink> TreeBuilder<S> {
     }
 
     fn insert_element(&mut self, tag: &Tag, ns: Namespace) -> S::Node {
+        if self.open.len() >= MAX_DEPTH
+            && let Some(deepest) = self.open.pop()
+            && let Some(i) = self.formatting_index(deepest.node)
+        {
+            self.formatting.remove(i);
+        }
         let name = QualName {
             ns,
             local: tag.name,
@@ -718,7 +721,9 @@ impl<S: TreeSink> TreeBuilder<S> {
     fn reconstruct_formatting(&mut self) {
         let needs = |builder: &Self, entry: &Formatting<S::Node>| match entry {
             Formatting::Marker => false,
-            Formatting::Element { node, .. } => builder.open_index(*node).is_none(),
+            Formatting::Element { node, tag } => {
+                !builder.open.contains_html(tag.name) || builder.open_index(*node).is_none()
+            }
         };
         let Some(last) = self.formatting.last() else {
             return;
@@ -736,15 +741,20 @@ impl<S: TreeSink> TreeBuilder<S> {
             }
             start -= 1;
         }
-        for i in start..self.formatting.len() {
-            let Some(Formatting::Element { tag, .. }) = self.formatting.get(i) else {
+        let mut i = start;
+        while let Some(entry) = self.formatting.get(i) {
+            let Formatting::Element { tag, .. } = entry else {
+                i += 1;
                 continue;
             };
             let tag = tag.clone();
+            let before = self.formatting.len();
             let node = self.insert_html(&tag);
+            i -= before - self.formatting.len();
             if let Some(entry) = self.formatting.get_mut(i) {
                 *entry = Formatting::Element { node, tag };
             }
+            i += 1;
         }
     }
 
@@ -1700,9 +1710,7 @@ impl<S: TreeSink> TreeBuilder<S> {
                 };
                 let tag = tag.clone();
                 let new = self.sink.create_element(html(tag.name), tag.attributes());
-                if let Some(open) = self.open.get_mut(node_i) {
-                    open.node = new;
-                }
+                self.open.set_node(node_i, new);
                 if last_node == furthest_node {
                     bookmark = entry + 1;
                 }

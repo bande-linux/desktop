@@ -3,6 +3,7 @@
 mod encoding;
 mod foreign;
 mod input;
+mod open_elements;
 mod sink;
 mod tokenizer;
 mod tree_builder;

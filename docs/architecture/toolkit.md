@@ -86,8 +86,9 @@ writes a hex value, a corner radius or a font name of its own.
 - **Scene.** A `Scene` of fills, strokes, linear, radial and conic gradients, rounded
   rectangles, clips, opacity and blend layers (`Item::Blend`, the CSS `mix-blend-mode` set),
   2D transforms (`Item::Transform`), shadows, text, images (`Image::from_rgba` or
-  `from_premultiplied`, uploaded once per renderer and freed when the last `Image` drops; `Item::Tiles`
-  repeats one), and glyph runs laid out elsewhere (`Item::Glyphs`, e.g. a web page's, drawn
+  `from_premultiplied`, uploaded once per renderer and freed when the last `Image` drops;
+  `Image::shared` wraps an app's premultiplied `Arc<[u8]>` and copies it only while a renderer
+  needs a CPU pixmap, so the GPU path keeps no second copy; `Item::Tiles` repeats one), and glyph runs laid out elsewhere (`Item::Glyphs`, e.g. a web page's, drawn
   from their own `FontData` without reshaping), which `CpuRenderer` (`vello_cpu`) and
   `GpuRenderer` (`vello_gpu` on Vulkan) draw from one encoder.
   - The encoder records items into drawing ops (flattened paths, glyph outlines, paints) and

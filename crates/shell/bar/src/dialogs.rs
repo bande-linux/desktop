@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::L10N;
-use crate::menu_bar_client::report;
+use crate::status_client::report;
 use bande_status::devices::end_session;
 use bande_status::session::{Effect, Ending, Facts, SessionEnding, Stage, facts, quitting_apps};
 use bande_toolkit::ui::{Alert, Event, Form, FormLine, Key, Label, Size, Ui};

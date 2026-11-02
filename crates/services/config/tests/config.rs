@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use bande_config::{Appearance, BarEdge, BarLayout, Config, ConfigError, Setting};
+use bande_config::{Appearance, BarEdge, Config, ConfigError, Setting};
 
 #[test]
 fn kdl_problems_are_reported_where_they_are_while_every_valid_setting_applies() {
@@ -32,25 +32,14 @@ fn kdl_problems_are_reported_where_they_are_while_every_valid_setting_applies() 
 }
 
 #[test]
-fn edits_keep_comments_and_bars_written_before_the_layout_key_keep_their_layout() {
-    let layout = |source: &str| {
-        let bar = Config::parse(source).expect("valid").bar;
-        (bar.edge, bar.layout)
-    };
-    assert_eq!(layout(""), (BarEdge::Left, BarLayout::Combined));
+fn edits_keep_comments_and_bars_from_the_split_layout_still_load() {
+    let source = "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"left\" // near the dock\n    layout \"separate\"\n    menu-bar \"separate\"\n}\n";
     assert_eq!(
-        layout("bar {\n    edge \"bottom\"\n}\n"),
-        (BarEdge::Bottom, BarLayout::Separate)
+        Config::parse(source).expect("valid").bar.edge,
+        BarEdge::Left
     );
     assert_eq!(
-        layout("bar {\n    menu-bar \"separate\"\n}\n"),
-        (BarEdge::Left, BarLayout::Separate)
-    );
-    let source = "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"left\" // near the dock\n    menu-bar \"in-bar\"\n}\n";
-    assert_eq!(
-        Setting::BarPlacement(BarEdge::Top, BarLayout::Combined)
-            .apply(source)
-            .expect("edit"),
-        "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"top\" // near the dock\n    layout \"combined\"\n}\n"
+        Setting::BarEdge(BarEdge::Top).apply(source).expect("edit"),
+        "// Bande settings\nappearance \"dark\" // at night\n\nbar {\n    edge \"top\" // near the dock\n    layout \"separate\"\n    menu-bar \"separate\"\n}\n"
     );
 }

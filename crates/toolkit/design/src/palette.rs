@@ -5,8 +5,8 @@ const DARK_NEUTRAL_HUE: f64 = 262.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Scheme {
-    #[default]
     Light,
+    #[default]
     Dark,
 }
 

@@ -1,18 +1,17 @@
 use std::path::Path;
 
-use bande_config::{BarLayout, Config};
+use bande_config::Config;
 use bande_status::hub::StatusHub;
 use bande_toolkit::{App, TextSystem, Window};
 use zbus::blocking::Connection;
 
-use crate::combined_client::{CombinedClient, combined_role};
-use crate::menu_bar_client::{MENU_BAR_SIZE, MenuBarClient, menu_bar_role};
+use crate::bar_client::{BarClient, bar_role};
 use crate::menu_search_client::{SearchCard, search_role};
 use crate::rail::TaskbarView;
-use crate::taskbar::surface_size;
-use crate::taskbar_client::{Taskbar, taskbar_role};
+use crate::status_client::StatusClient;
+use crate::taskbar_client::Taskbar;
 
-pub use crate::menu_bar_client::{Restart, status_hub};
+pub use crate::status_client::{Restart, status_hub};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Display {
@@ -47,62 +46,28 @@ pub fn open(
         Ok(window)
     };
     let bar = &config.bar;
-    let layout = (bar.layout, bar.edge);
     let icon_size = bar.icon_size as f32;
-    let mut surfaces: Vec<(Window, Box<dyn App>)> = Vec::new();
-    let (handoff, restart) = match bar.layout {
-        BarLayout::Combined => {
-            let (role, size) = combined_role(bar.edge, icon_size);
-            let window = open_window(role, size)?;
-            let taskbar = Taskbar::new(
-                &window,
-                &display.output,
-                bar,
-                text.sharing_fonts(),
-                services.session,
-                homes,
-            )?;
-            let view = TaskbarView::new(
-                window.appearance().palette(),
-                text.sharing_fonts(),
-                bar.edge,
-                bande_xdg::data_dirs(),
-                icon_size,
-            );
-            let status = MenuBarClient::with_view(view, display.clone(), services.status, layout)?;
-            let shared = (status.handoff(), status.restart());
-            surfaces.push((window, Box::new(CombinedClient::new(taskbar, status))));
-            shared
-        }
-        BarLayout::Separate => {
-            let mut window = open_window(menu_bar_role(), MENU_BAR_SIZE)?;
-            let client = MenuBarClient::new(
-                &mut window,
-                text.sharing_fonts(),
-                display.clone(),
-                services.status,
-                layout,
-            )?;
-            let shared = (client.handoff(), client.restart());
-            surfaces.push((window, Box::new(client)));
-            if display.main {
-                let window = open_window(
-                    taskbar_role(bar.edge, icon_size),
-                    surface_size(bar.edge, icon_size, (1, 1)),
-                )?;
-                let taskbar = Taskbar::new(
-                    &window,
-                    &display.output,
-                    bar,
-                    text.sharing_fonts(),
-                    services.session,
-                    homes,
-                )?;
-                surfaces.push((window, Box::new(taskbar)));
-            }
-            shared
-        }
-    };
+    let (role, size) = bar_role(bar.edge, icon_size);
+    let window = open_window(role, size)?;
+    let taskbar = Taskbar::new(
+        &window,
+        &display.output,
+        bar,
+        text.sharing_fonts(),
+        services.session,
+        homes,
+    )?;
+    let view = TaskbarView::new(
+        window.appearance().palette(),
+        text.sharing_fonts(),
+        bar.edge,
+        bande_xdg::data_dirs(),
+        icon_size,
+    );
+    let status = StatusClient::new(view, display.clone(), services.status)?;
+    let (handoff, restart) = (status.handoff(), status.restart());
+    let mut surfaces: Vec<(Window, Box<dyn App>)> =
+        vec![(window, Box::new(BarClient::new(taskbar, status)))];
     if display.main {
         let mut window = open_window(search_role(), (0, 0))?;
         let card = SearchCard::new(&mut window, text.sharing_fonts(), handoff);

@@ -70,7 +70,7 @@ pub struct ScanoutDevice {
     pub feedback: DmabufFeedback,
 }
 
-pub(crate) const MENU_BAR_NAMESPACE: &str = "menubar";
+pub(crate) const TASKBAR_FOCUS: &str = "taskbar";
 pub(crate) const MENU_SEARCH_NAMESPACE: &str = "menu-search";
 
 pub(crate) struct ExclusiveLayer {

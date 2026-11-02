@@ -24,7 +24,7 @@ better.
 ## 2. Everything responds
 
 - **Every object is right-clickable.** Windows, title bars, taskbar icons, desktop, files, text,
-  menu bar items, notifications. The context menu lists what can be done to that object, most
+  taskbar items, notifications. The context menu lists what can be done to that object, most
   common first.
 - **Every action is keyboard-reachable.** Every menu item, every control, every list. Shortcuts
   are shown in menus. Ctrl runs app shortcuts and Super the system (see the [keyboard model](../architecture/overview.md#keyboard-model)).
@@ -76,9 +76,9 @@ better.
 
 ## 6. Where Bande deliberately differs from macOS
 
-- One combined bar, the Taskbar ([behaviour](../architecture/behaviour.md)), on the left edge by
-  default holds the launcher mark, the active app's menus, the apps, status and the clock; a
-  separate top menu bar is an option.
+- One bar, the Taskbar ([behaviour](../architecture/behaviour.md)), on the left edge by default
+  or any edge the user picks, holds the launcher mark, the apps, status and the clock; there is
+  no separate top menu bar, and each window's menu button holds its app's menus.
 - Window controls sit on the left as one neutral pill, not traffic lights.
 - Ctrl runs app shortcuts and Super the system, as on GNOME and KDE, not Command as on macOS.
 - Pure Wayland; no X11 compatibility layer.

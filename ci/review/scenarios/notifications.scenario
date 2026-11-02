@@ -21,15 +21,15 @@ shot "banner hovered"
 move 1500 900
 wait 7s
 shot "banners gone"
-note "The clock opens the Notification Center"
-click 2800 22
+note "Super+N opens the Notification Center"
+key super+n
 wait 1200ms
 shot "notification center"
 key escape
 wait 800ms
 shot "notification center closed"
-note "Control Center from its menu bar item"
-click 2635 22
+note "Super+S opens Control Center"
+key super+s
 wait 1200ms
 shot "control center"
 key escape

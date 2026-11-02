@@ -16,7 +16,7 @@ use smithay::wayland::compositor::with_states;
 
 use crate::motion::BAR_NAMESPACE;
 use crate::shell::toplevel_names;
-use crate::state::{MENU_BAR_NAMESPACE, State};
+use crate::state::State;
 
 const MENU_BUTTON_SINCE: u32 = 4;
 pub(crate) const SHOW_APP_MENU_SINCE: u32 = 3;
@@ -93,13 +93,9 @@ impl State {
 
     fn shell_bar(&self, screen: usize) -> Option<WlSurface> {
         let map = layer_map_for_output(&self.screens[screen].output);
-        [BAR_NAMESPACE, MENU_BAR_NAMESPACE]
-            .into_iter()
-            .find_map(|namespace| {
-                map.layers()
-                    .find(|layer| layer.namespace() == namespace)
-                    .map(|layer| layer.wl_surface().clone())
-            })
+        map.layers()
+            .find(|layer| layer.namespace() == BAR_NAMESPACE)
+            .map(|layer| layer.wl_surface().clone())
     }
 
     fn shells_of(&self, surface: &WlSurface) -> Vec<BandeShellV1> {

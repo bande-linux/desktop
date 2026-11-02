@@ -132,8 +132,8 @@ graph LR
   `$XDG_STATE_HOME/bande/file-chooser-folders`. Choices are answered with their initial
   values, and the dialog is not yet parented to the app window (xdg-foreign).
 - Implemented in `crates/services/portal`: `Settings` (version 2) publishes
-  `org.freedesktop.appearance` from `org.bande.Config`, with `color-scheme` 1 for dark and 2
-  for light (Automatic is resolved by the portal: dark from sunset to sunrise at the main city
+  `org.freedesktop.appearance` from `org.bande.Config`, with `color-scheme` 1 for dark (the
+  default, and what every client assumes until the portal answers) and 2 for light (Automatic is resolved by the portal: dark from sunset to sunrise at the main city
   of the time zone in `zone.tab`, 19:00 to 07:00 when the zone is unknown, re-checked at each
   change and every minute), `accent-color` the exact Datum colour of the chosen accent in that
   scheme, and `contrast` 0, signalling changes. `org.bande.appearance` `frame-tint` carries
@@ -176,7 +176,7 @@ graph LR
   (shared memory, BGRx or BGRA, the source's size, renegotiated when a window is resized, at most
   60 frames per second and only when something on the screen changed), with the cursor
   painted in for `cursor_mode` embedded and left out for hidden. While anything is shared, a
-  blue screen symbol sits in the menu bar (a StatusNotifierItem on a connection of its own, so it
+  blue screen symbol sits in the Taskbar (a StatusNotifierItem on a connection of its own, so it
   disappears with it); clicking it stops sharing, and the portal then closes the app's session
   with `Session.Closed`, as it does when a shared window closes. `persist_mode` hands back
   restore data with the source ids, and a restored window that has since closed brings the
@@ -210,7 +210,7 @@ graph LR
 - **Screen recording**: Record Entire Screen or Record Area opens a private PipeWire stream of the
   screen and runs `gst-launch-1.0` (`pipewiresrc`, `videocrop` for an area, 30 frames per second)
   into an MP4 (H.264 by `x264enc`, from `gstreamer1.0-plugins-ugly`) or, without it, a WebM (VP8
-  by `vp8enc`). A red stop symbol sits in the menu bar while recording; clicking it or pressing
+  by `vp8enc`). A red stop symbol sits in the Taskbar while recording; clicking it or pressing
   `Print` stops the recorder with an end of stream, so the file is finalised, and the
   recording appears as a thumbnail with a play mark. Without GStreamer the palette explains what to
   install instead of failing silently.
@@ -322,26 +322,26 @@ graph LR
     `org.kde.StatusNotifierWatcher` at `/StatusNotifierWatcher`. An item registered by bus name
     is listed as `<name>/StatusNotifierItem`, one registered by object path (libappindicator,
     Ayatana) as `<caller><path>`, as KDE's watcher does; items and hosts are dropped when their
-    connection leaves the bus. The menu bar is the host (`org.kde.StatusNotifierHost-<pid>`): it
+    connection leaves the bus. The Taskbar is the host (`org.kde.StatusNotifierHost-<pid>`): it
     shows each item that is not `Passive` by its icon name or pixmap; a click opens the item's
     `com.canonical.dbusmenu` menu below it (or calls `Activate` when it has none), a secondary
     click calls `Activate`. Our own apps use the same menu format for their app menus: an app
     owns its app id as bus name and exports `com.canonical.dbusmenu` at `/org/bande/MenuBar`;
-    the first top-level submenu is shown under the bold app name and the others become the
-    menu titles beside it; the App menu of a window's menu button shows the same tree (a
+    the App menu of a window's menu button and Menu Search show that tree (the first top-level
+    submenu as the app row; a
     third-party window's at the address it gave with `org_kde_kwin_appmenu`, or a GTK window's
     `org.gtk.Menus` menu bar given on `gtk_shell1`, which `bande_status::gtkmenu` imports with
     `Start` (kept subscribed while followed), enables and ticks from `org.gtk.Actions`
     `DescribeAll`, refreshes on either `Changed` signal from that bus name and runs with
-    `Activate`). The menu bar asks
+    `Activate`). The shell asks
     for the menu when the app becomes active, and only when the name has an owner, so it never starts an app by D-Bus activation. Toolkit apps
     export their menus through `crates/libs/app-menu` (`bande-app-menu`), driven by
     `bande-app` ([apps.md](apps.md)), which builds the standard App, Edit and Window menus; an
-    app is one process that owns its name for as long as it runs, so the menu bar always talks
-    to the process the user is working in. The menu bar reads the menu again on
+    app is one process that owns its name for as long as it runs, so the shell always talks
+    to the process the user is working in. The shell reads the menu again on
     `LayoutUpdated` and shows each item's `shortcut` right-aligned as words ("Shift+Ctrl+N";
     `bande-app-menu` exports Ctrl as `Control`, as the dbusmenu spec asks). Items of the
-    standard app menu carry `x-bande-shell-action`, which the menu bar performs itself
+    standard app menu carry `x-bande-shell-action`, which the shell performs itself
     through `bande_shell_v1`, since an app cannot hide itself: About (a small window with the
     app's icon and name from its desktop entry and the version in `x-bande-version`), Hide
     (which also hands the active app to the frontmost other window when the app has none),

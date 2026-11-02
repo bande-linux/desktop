@@ -231,9 +231,8 @@ impl Reader {
     fn read(&mut self, now: &Zoned) -> (Look, Option<Timestamp>) {
         let config = &self.config;
         let (scheme, next) = match config.appearance().unwrap_or_default().as_str() {
-            "dark" => (Scheme::Dark, None),
             "light" => (Scheme::Light, None),
-            _ => {
+            "automatic" => {
                 sky(now, place_of(now.time_zone())).map_or((Scheme::Light, None), |(sky, next)| {
                     let scheme = match sky {
                         Sky::Day => Scheme::Light,
@@ -242,6 +241,7 @@ impl Reader {
                     (scheme, Some(next))
                 })
             }
+            _ => (Scheme::Dark, None),
         };
         let accent = config.accent().unwrap_or_default();
         let tint = config

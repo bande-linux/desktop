@@ -130,12 +130,12 @@ when they reach the screen is Bande's own.
   arrangement): it keeps no windows or workspaces of its own, the pointer does not enter it, and
   it shows its source drawn again at the scale that fits it, centred. A rotated display is laid
   out upright in points and the renderer turns every quad, clip and shadow into the framebuffer.
-  The desktop surface and the menu bar are drawn on every
+  The desktop surface and the taskbar are drawn on every
   display: the compositor tells the shell the displays that show their own picture, the main one
   first (`bande_shell_v1.displays`, on binding and whenever a display comes, goes,
   starts or stops mirroring or the main display changes), and the shell opens a desktop and a taskbar
   on each of them in its one process; on every display but the main one the desktop shows only
-  the wallpaper and no icons, and the separate layout's apps strip, the menu search and the notifications stay on the main
+  the wallpaper and no icons, and the menu search and the notifications stay on the main
   display. The lock
   screen asks for the password on the main display; while locked, every other display shows only
   its wallpaper.
@@ -143,7 +143,7 @@ when they reach the screen is Bande's own.
   lets the user drag a display's rectangle; on release it snaps edge to edge beside the nearest
   display, aligning tops, bottoms or centres within 48 pt, and never onto another display; with
   the keyboard, Space picks a display and the arrows put it on that side of the main display.
-  The main display carries a white bar for its menu bar. Each display then offers Use as (Main
+  The main display carries a white bar along its top. Each display then offers Use as (Main
   display, Extended, Mirror), Resolution (up to four sizes of its native shape), Size of text
   and controls, Refresh rate, Rotation and Variable refresh rate. Every change is written to
   `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
@@ -308,7 +308,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `linux-dmabuf-v1` | Zero-copy GPU buffer import | P0 | implemented (see above) |
 | `linux-drm-syncobj-v1` | Explicit sync | P0 | built, unverified on hardware |
 | `xdg_wm_base` | Application windows and popups | P0 | implemented; a minimised or hidden window, a window on a workspace out of view once the workspaces settle, and every window while the session is locked, get the `suspended` state |
-| `wlr-layer-shell-unstable-v1` | Taskbar, menu bar, notifications, overlays | P0 | implemented |
+| `wlr-layer-shell-unstable-v1` | Taskbar, notifications, overlays | P0 | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | P0 | implemented |
 | `wp_presentation` | Presentation timing, VSync | P0 | implemented |
 | `ext-session-lock-v1` | Screen locking | P0 | implemented |
@@ -331,6 +331,6 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | implemented |
 | `zwlr_output_power_management_v1` | Display power for idle and lock | P1 | implemented |
-| `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 keyboard focus for the taskbar, `show_app_menu` to open an app's menus below a window's menu button and `active_menus` (version 4) with the key window's menu address for the menu bar and Menu Search; workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
+| `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, Super+F3 keyboard focus for the taskbar, `show_app_menu` to open an app's menus below a window's menu button and `active_menus` (version 4) with the key window's menu address for Menu Search; workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
 | `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button | P0 | implemented, every client |
 | `ext-background-effect-v1` | Blur behind the launcher's scrim (the overview's scrim and blur are the compositor's own) | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

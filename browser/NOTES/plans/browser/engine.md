@@ -52,6 +52,10 @@ One Cargo workspace with one lock. Dependencies run only downward in this list.
   at once, or at the next command if the last start was under 5 s ago, so a crash loop never spins.
   It then hands every live renderer a new network socket; the renderers keep their pages and treat
   their in-flight fetches as failed.
+- **Site data** goes through the host as well. `Command::ClearData { session, clear }` runs
+  web-net's `Fetcher::clear` (cookies and cache by time and site) in that session.
+  `Command::SiteData { view, session }` is answered to that view with `Outcome::SiteData`; the list
+  travels in a sealed memfd, and comes back empty if the network process dies first.
 - **The webRequest hook** is in the network process too. With interception on, each request pauses
   before it starts (the `onBeforeRequest` stage) and the host gets `Outcome::Paused` for the view
   that made it; `Command::Resume` continues, cancels or redirects it. A timerfd armed only while

@@ -6,7 +6,9 @@ use std::time::{Duration, Instant};
 
 use rustix::event::{PollFd, PollFlags, poll};
 use rustix::time::Timespec;
-use web_host::{Command, Helpers, Host, LoadId, Outcome, Program, Session, Url, ViewId, Viewport};
+use web_host::{
+    Clear, Command, Helpers, Host, LoadId, Outcome, Program, Session, Url, ViewId, Viewport,
+};
 
 const WIDTH: u16 = 1000;
 const HEIGHT: u16 = 2000;
@@ -128,7 +130,34 @@ fn run(url: Url, output: Option<PathBuf>) -> std::io::Result<()> {
                 Outcome::Failed { message, .. } => println!("{elapsed} ms: failed: {message}"),
                 Outcome::Unsupported { kind, .. } => println!("{elapsed} ms: unsupported {kind}"),
                 Outcome::Crashed { url } => println!("{elapsed} ms: crashed at {url}"),
+                Outcome::SiteData(sites) => {
+                    for site in sites {
+                        println!(
+                            "{elapsed} ms: {} has {} cookies and {} cached bytes",
+                            site.site, site.cookies, site.cache_bytes
+                        );
+                    }
+                }
                 Outcome::Scroll(_) | Outcome::Paused(_) => {}
+            }
+        }
+    }
+    let session = Session::Default;
+    host.link().send(Command::SiteData { view, session });
+    host.link().send(Command::ClearData {
+        session,
+        clear: Clear {
+            since: 0,
+            cookies: true,
+            cache: true,
+            sites: None,
+        },
+    });
+    host.link().send(Command::SiteData { view, session });
+    while wait(&host, Duration::from_secs(2)) {
+        for update in host.updates() {
+            if let Outcome::SiteData(sites) = update.outcome {
+                println!("site data: {} sites", sites.len());
             }
         }
     }

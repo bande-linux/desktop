@@ -297,7 +297,7 @@ impl Renderer {
         let (id, ok) = match message.decode::<FromNetwork>()? {
             FromNetwork::Fetched { id, status, .. } => (id, (200..300).contains(&status)),
             FromNetwork::Failed { id, .. } => (id, false),
-            FromNetwork::Paused { .. } => {
+            FromNetwork::Paused { .. } | FromNetwork::SiteData { .. } => {
                 return Err(io::Error::from(io::ErrorKind::InvalidData));
             }
         };

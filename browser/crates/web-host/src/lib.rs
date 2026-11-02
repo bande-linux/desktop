@@ -8,6 +8,7 @@ use std::thread::JoinHandle;
 
 use rustix::event::{EventfdFlags, eventfd};
 pub use web_ipc::{Destination, Program, Size as Viewport, Url, Verdict};
+pub use web_net::{Clear, SiteData};
 use web_paint::{DisplayList, Rect};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -57,6 +58,14 @@ pub enum Command {
         request: u64,
         verdict: Verdict,
     },
+    ClearData {
+        session: Session,
+        clear: Clear,
+    },
+    SiteData {
+        view: ViewId,
+        session: Session,
+    },
     Quit,
 }
 
@@ -99,6 +108,7 @@ pub enum Outcome {
     Unsupported { url: Url, kind: String },
     Crashed { url: Url },
     Paused(PausedRequest),
+    SiteData(Vec<SiteData>),
 }
 
 pub struct Update {

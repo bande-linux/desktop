@@ -12,9 +12,10 @@ use rustix::time::{
     timerfd_settime,
 };
 use web_ipc::{
-    Channel, Destination, FromNetwork, NetworkControl, ToNetwork, Url, Verdict, sandbox, sealed,
+    Channel, Destination, FromNetwork, NetworkControl, ToNetwork, Url, Verdict, Writer, sandbox,
+    sealed,
 };
-use web_net::{FetchError, FetchId, Fetcher, Response, Storage};
+use web_net::{Clear, FetchError, FetchId, Fetcher, Response, Storage};
 
 pub const HOST: u32 = 0;
 pub const STORAGE_FLAG: &str = "--storage";
@@ -235,6 +236,31 @@ impl Network {
                         self.arm()?;
                     }
                 }
+                NetworkControl::Clear {
+                    session,
+                    since,
+                    cookies,
+                    cache,
+                    sites,
+                } => self.fetcher(session)?.clear(Clear {
+                    since,
+                    cookies,
+                    cache,
+                    sites,
+                }),
+                NetworkControl::SiteData { request, session } => {
+                    let sites: Vec<(String, (u64, u64))> = self
+                        .fetcher(session)?
+                        .site_data()
+                        .into_iter()
+                        .map(|data| (data.site, (data.cookies as u64, data.cache_bytes)))
+                        .collect();
+                    let mut writer = Writer::default();
+                    writer.put(&sites);
+                    let blob = sealed(&writer.into_bytes())?;
+                    self.host
+                        .send(&FromNetwork::SiteData { request }, vec![blob])?;
+                }
             }
         }
     }
@@ -393,17 +419,21 @@ impl Network {
         self.arm()
     }
 
-    fn start(&mut self, request: Request) -> io::Result<()> {
-        let storage = match (request.session, &self.profile) {
+    fn fetcher(&mut self, session: u32) -> io::Result<&mut Fetcher> {
+        let storage = match (session, &self.profile) {
             (DEFAULT_SESSION, Some(profile)) => Storage::Disk(profile.clone()),
             _ => Storage::Memory,
         };
-        let fetcher = match self.sessions.entry(request.session) {
+        Ok(match self.sessions.entry(session) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
             std::collections::hash_map::Entry::Vacant(entry) => {
                 entry.insert(Fetcher::with_storage(storage)?)
             }
-        };
+        })
+    }
+
+    fn start(&mut self, request: Request) -> io::Result<()> {
+        let fetcher = self.fetcher(request.session)?;
         let fetch = fetcher.request(match &request.top_level {
             Some(top_level) => web_net::Request::subresource(request.url, top_level),
             None => web_net::Request::navigation(request.url, None),

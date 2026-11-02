@@ -69,6 +69,8 @@ wire_enum! {
         EndSession { session: u32 } = 3,
         Intercept { enabled: bool } = 4,
         Resume { request: u64, verdict: Verdict } = 5,
+        Clear { session: u32, since: u64, cookies: bool, cache: bool, sites: Option<Vec<String>> } = 6,
+        SiteData { request: u64, session: u32 } = 7,
     }
 }
 
@@ -85,5 +87,6 @@ wire_enum! {
         } = 0,
         Failed { id: u64, message: String } = 1,
         Paused { request: u64, client: u32, id: u64, url: Url, destination: Destination } = 2,
+        SiteData { request: u64 } = 3,
     }
 }

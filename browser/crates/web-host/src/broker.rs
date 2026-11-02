@@ -11,13 +11,13 @@ use linebender_resource_handle::{Blob, FontData};
 use rustix::event::{PollFd, PollFlags, poll};
 use web_ipc::{
     Channel, Destination, FromNetwork, FromRenderer, MAX_LIST, Mapping, Message, NetworkControl,
-    Patch, Size, ToRenderer, Url, Verdict,
+    Patch, Reader, Size, ToRenderer, Url, Verdict,
 };
 use web_paint::{DisplayList, Image, Item, Rect};
 
 use crate::{
-    Command, Frame, Helpers, Links, LoadId, Outcome, PausedRequest, Placement, Session, Update,
-    ViewId,
+    Clear, Command, Frame, Helpers, Links, LoadId, Outcome, PausedRequest, Placement, Session,
+    SiteData, Update, ViewId,
 };
 
 const HOST: u32 = 0;
@@ -26,6 +26,7 @@ const MAX_FONT_BYTES: usize = 64 << 20;
 const MAX_IMAGE_SIDE: u32 = 1 << 15;
 const MAX_IMAGE_BYTES: usize = 512 << 20;
 const MAX_TITLE: usize = 4096;
+const MAX_SITE_DATA: usize = 16 << 20;
 const RESTART_GAP: Duration = Duration::from_secs(5);
 
 struct Network {
@@ -89,6 +90,7 @@ pub(crate) struct Broker {
     network: Option<Network>,
     network_started: Option<Instant>,
     intercept: bool,
+    site_requests: HashMap<u64, ViewId>,
     views: HashMap<ViewId, View>,
     navigations: HashMap<u64, Navigation>,
     next_fetch: u64,
@@ -138,6 +140,7 @@ impl Broker {
             network: None,
             network_started: None,
             intercept: false,
+            site_requests: HashMap::new(),
             views: HashMap::new(),
             navigations: HashMap::new(),
             next_fetch: 0,
@@ -303,6 +306,10 @@ impl Broker {
 
     fn lose_network(&mut self) {
         self.network = None;
+        let requests: Vec<ViewId> = self.site_requests.drain().map(|(_, view)| view).collect();
+        for view in requests {
+            self.send(view, LoadId(0), Outcome::SiteData(Vec::new()));
+        }
         let recently = self
             .network_started
             .is_some_and(|started| started.elapsed() < RESTART_GAP);
@@ -434,6 +441,30 @@ impl Broker {
                 self.intercept = enabled;
                 self.tell_network(NetworkControl::Intercept { enabled }, Vec::new());
             }
+            Command::ClearData { session, clear } => {
+                let Clear {
+                    since,
+                    cookies,
+                    cache,
+                    sites,
+                } = clear;
+                let session = session_code(session);
+                let clear = NetworkControl::Clear {
+                    session,
+                    since,
+                    cookies,
+                    cache,
+                    sites,
+                };
+                self.tell_network(clear, Vec::new());
+            }
+            Command::SiteData { view, session } => {
+                self.next_fetch += 1;
+                let request = self.next_fetch;
+                self.site_requests.insert(request, view);
+                let session = session_code(session);
+                self.tell_network(NetworkControl::SiteData { request, session }, Vec::new());
+            }
             Command::Resume { request, verdict } => {
                 self.tell_network(NetworkControl::Resume { request, verdict }, Vec::new());
             }
@@ -479,6 +510,24 @@ impl Broker {
                     url,
                     destination,
                 } => self.paused(request, client, id, url, destination),
+                FromNetwork::SiteData { request } => {
+                    let fd = message.fd()?;
+                    let mapping = Mapping::new(&fd, MAX_SITE_DATA)?;
+                    let mut reader = Reader::new(mapping.bytes());
+                    let sites: Vec<(String, (u64, u64))> = reader.get()?;
+                    reader.finish()?;
+                    let sites = sites
+                        .into_iter()
+                        .map(|(site, (cookies, cache_bytes))| SiteData {
+                            site,
+                            cookies: cookies as usize,
+                            cache_bytes,
+                        })
+                        .collect();
+                    if let Some(view) = self.site_requests.remove(&request) {
+                        self.send(view, LoadId(0), Outcome::SiteData(sites));
+                    }
+                }
             }
         }
     }

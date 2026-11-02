@@ -20,6 +20,7 @@ use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
 use crate::widgets::{Caption, Card, HEADER_SYMBOL, Header, Row, Text, Tone};
 
 pub(crate) const PRINTER_SYMBOL: &str = "printer-symbolic";
+const FORBIDDEN: &str = "Forbidden";
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct PrintersState {
@@ -58,7 +59,7 @@ fn read(cups: &Cups) -> Option<PrintersState> {
 fn sentence(error: &bande_printers::Error) -> String {
     tracing::warn!("CUPS: {error}");
     match error {
-        bande_printers::Error::NotAllowed => L10N.tr("administrator-only"),
+        bande_printers::Error::NotAllowed => L10N.tr("printer-forbidden"),
         bande_printers::Error::Refused(_, message) if !message.is_empty() => message.clone(),
         _ => L10N.tr("couldnt-change"),
     }
@@ -135,7 +136,11 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
                     updates.send(Update::PrinterAdded(printer.uri.clone(), added.is_ok()));
                     added.map(drop).map_err(|error| {
                         tracing::warn!("cannot add {}: {error}", printer.uri);
-                        L10N.tr_args("printer-add-failed", [("name", printer.name.into())])
+                        if error.to_string().contains(FORBIDDEN) {
+                            L10N.tr("printer-forbidden")
+                        } else {
+                            L10N.tr_args("printer-add-failed", [("name", printer.name.into())])
+                        }
                     })
                 }
             };

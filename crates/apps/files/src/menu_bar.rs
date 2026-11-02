@@ -78,6 +78,7 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 shortcut("menu-get-info", "Ctrl+I"),
                 shortcut("menu-rename", "F2"),
                 Entry::item(&L10N.tr("menu-duplicate"), "duplicate"),
+                Entry::item(&L10N.tr("menu-make-alias"), "make-alias"),
                 shortcut("menu-add-to-sidebar", "Ctrl+D"),
                 Entry::item(&L10N.tr("menu-open-in-terminal"), "open-in-terminal")
                     .enabled(view.terminal_installed()),

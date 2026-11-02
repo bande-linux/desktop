@@ -207,6 +207,7 @@ impl FilesView {
             Command::Info => self.show_inspector(),
             Command::Rename => self.start_rename(),
             Command::Duplicate => self.duplicate(),
+            Command::MakeAlias => self.make_alias(),
             Command::Compress => self.compress(),
             Command::Copy => self.copy_selection(false),
             Command::CopyPath => self.copy_paths(),

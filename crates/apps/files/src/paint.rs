@@ -122,7 +122,14 @@ impl FilesView {
         if entry.is_folder() {
             return self.icons.first(&["folder"], pixels);
         }
-        let names = self.apps.icon_names_for_name(&entry.name);
+        let target = entry
+            .link
+            .then(|| std::fs::read_link(&entry.path).ok())
+            .flatten()
+            .and_then(|target| Some(target.file_name()?.to_string_lossy().into_owned()));
+        let names = self
+            .apps
+            .icon_names_for_name(target.as_deref().unwrap_or(&entry.name));
         let names = names.iter().map(String::as_str).collect::<Vec<_>>();
         self.icons.first(&names, pixels)
     }
@@ -1355,7 +1362,9 @@ fn action_id(action: bande_fs::Action) -> &'static str {
         bande_fs::Action::Move => "move",
         bande_fs::Action::Duplicate => "duplicate",
         bande_fs::Action::Rename => "rename",
-        bande_fs::Action::NewFolder | bande_fs::Action::NewDocument => "new-folder",
+        bande_fs::Action::NewFolder
+        | bande_fs::Action::NewDocument
+        | bande_fs::Action::MakeAlias => "new-folder",
         bande_fs::Action::Trash => "trash",
         bande_fs::Action::PutBack => "put-back",
         bande_fs::Action::Compress => "compress",

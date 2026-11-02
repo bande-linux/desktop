@@ -8,6 +8,7 @@ pub enum Action {
     Rename,
     NewFolder,
     NewDocument,
+    MakeAlias,
     Trash,
     PutBack,
     Compress,

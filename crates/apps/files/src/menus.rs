@@ -16,6 +16,7 @@ pub enum Command {
     Info,
     Rename,
     Duplicate,
+    MakeAlias,
     Compress,
     Copy,
     CopyPath,
@@ -53,6 +54,7 @@ const ACTIONS: &[(&str, Command)] = &[
     ("info", Command::Info),
     ("rename", Command::Rename),
     ("duplicate", Command::Duplicate),
+    ("make-alias", Command::MakeAlias),
     ("compress", Command::Compress),
     ("copy", Command::Copy),
     ("copy-path", Command::CopyPath),
@@ -179,6 +181,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
     };
     items.push(MenuItem::new(&rename, action(&Command::Rename)).shortcut("F2"));
     items.push(item("menu-duplicate", &Command::Duplicate));
+    items.push(item("menu-make-alias", &Command::MakeAlias));
     let compress = match count {
         1 => L10N.tr_args("menu-compress", [("name", selection.name.clone().into())]),
         _ => L10N.tr_args("menu-compress-items", [("count", count.into())]),

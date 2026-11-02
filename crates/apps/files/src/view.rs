@@ -268,6 +268,7 @@ fn step_title(step: &Step) -> String {
         Action::PutBack => "edit-put-back",
         Action::Compress => "edit-compress",
         Action::Extract => "edit-extract",
+        Action::MakeAlias => "edit-make-alias",
     };
     L10N.tr_args(id, [("count", step.changes.len().into())])
 }
@@ -2063,6 +2064,35 @@ impl FilesView {
                 Task::Compress { sources, archive },
                 Purpose::Do(Action::Compress),
             );
+        }
+    }
+
+    pub(crate) fn make_alias(&mut self) {
+        if self.browser.in_trash() {
+            return;
+        }
+        let mut changes = Vec::new();
+        for path in self.browser.selected_paths() {
+            match bande_fs::make_alias(&path) {
+                Ok(change) => changes.push(change),
+                Err(error) => {
+                    self.show_notice(
+                        L10N.tr_args("error-operation", [("error", error.to_string().into())]),
+                    );
+                    break;
+                }
+            }
+        }
+        let made = changes
+            .iter()
+            .filter_map(|change| match change {
+                Change::Created(path) => Some(path.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if !changes.is_empty() {
+            self.operations.record(Action::MakeAlias, changes);
+            self.reveal_after_change(&made);
         }
     }
 

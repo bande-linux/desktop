@@ -4,6 +4,7 @@ pub mod battery;
 pub mod controller;
 pub mod idle;
 pub mod logind;
+pub mod password;
 pub mod screensaver;
 pub mod wayland;
 

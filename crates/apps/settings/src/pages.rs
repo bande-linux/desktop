@@ -456,7 +456,10 @@ impl SettingsView {
     ) -> Box<dyn Widget> {
         let (summary, revealed) = match setting.id {
             SettingId::TextSizeLink => (self.text_size_label(), Some(SettingId::TextSize)),
-            SettingId::ScreenLock => (self.pane_summary(child), Some(SettingId::LockAfter)),
+            SettingId::ScreenLock => (
+                self.pane_summary(child),
+                Some(SettingId::RequirePasswordAfter),
+            ),
             _ => (self.pane_summary(child), None),
         };
         let value = summary.map_or_else(|| "›".to_owned(), |summary| format!("{summary}  ›"));

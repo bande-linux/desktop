@@ -27,6 +27,16 @@ fn variant_of(scheme: Scheme) -> Variant {
     }
 }
 
+#[zbus::proxy(
+    interface = "org.bande.Power",
+    default_service = "org.bande.Power",
+    default_path = "/org/bande/Power"
+)]
+trait Power {
+    #[zbus(property)]
+    fn password_required(&self) -> zbus::Result<bool>;
+}
+
 struct Locker {
     screen: LockScreen,
     user: User,
@@ -38,10 +48,25 @@ struct Locker {
     picture: Option<Inbox<Image>>,
     devices: Option<Devices>,
     layouts: Layouts,
+    power: Option<PowerProxyBlocking<'static>>,
     unlocked: bool,
 }
 
 impl Locker {
+    fn password_required(&self) -> bool {
+        self.power
+            .as_ref()
+            .and_then(|power| power.cached_password_required().ok().flatten())
+            .unwrap_or(true)
+    }
+
+    fn unlock(&mut self, window: &mut Window) {
+        match window.unlock() {
+            Ok(()) => self.unlocked = true,
+            Err(error) => tracing::warn!("cannot unlock: {error}"),
+        }
+    }
+
     fn check(&mut self, password: Zeroizing<String>) {
         let Ok(mut sender) = self.verdict_sender.try_clone() else {
             self.screen.reject(frame_time().on_screen());
@@ -82,6 +107,10 @@ impl App for Locker {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        if matches!(event, WindowEvent::Input(_)) && !self.password_required() {
+            self.unlock(window);
+            return;
+        }
         let changed = match event {
             WindowEvent::Input(input) => self.screen.handle(&input),
             WindowEvent::Accessibility(request) => self.screen.perform(&request),
@@ -163,10 +192,7 @@ impl App for Locker {
             return;
         }
         if verdict[0] == ACCEPTED {
-            match window.unlock() {
-                Ok(()) => self.unlocked = true,
-                Err(error) => tracing::warn!("cannot unlock: {error}"),
-            }
+            self.unlock(window);
         } else {
             self.screen.reject(frame_time().on_screen());
             window.request_redraw();
@@ -229,6 +255,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             .as_ref()
             .and_then(Devices::follow),
         layouts: Layouts::load(),
+        power: bande_bus::session()
+            .and_then(|session| PowerProxyBlocking::new(&session))
+            .inspect_err(|error| tracing::warn!("the password is always required: {error}"))
+            .ok(),
         unlocked: false,
     };
     locker.screen.set_note(&config_text("LockMessage"));

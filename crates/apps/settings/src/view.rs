@@ -21,7 +21,6 @@ use crate::battery::{BatteryCommand, BatteryState};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
 use crate::follow::{Command, Update};
 use crate::forget::Forget;
-use crate::idle::Idle;
 use crate::language::{SAME_AS_LANGUAGE, locale_matches};
 use crate::locale::{LocaleCommand, LocaleState};
 use crate::login::{LoginCommand, LoginItems, login_matches};
@@ -1717,18 +1716,6 @@ impl SettingsView {
         }
     }
 
-    fn idle(&self) -> Option<Idle> {
-        let seconds = |id| match self.values.get(&id) {
-            Some(Value::Seconds(seconds)) => Some(*seconds),
-            _ => None,
-        };
-        Some(Idle {
-            dim: seconds(SettingId::DimAfter)?,
-            lock: seconds(SettingId::LockAfter)?,
-            sleep: seconds(SettingId::SleepAfter),
-        })
-    }
-
     fn command(id: SettingId, value: Value) -> Command {
         match (id, value) {
             (SettingId::OutputVolume, Value::Fraction(volume)) => {
@@ -1884,16 +1871,8 @@ impl SettingsView {
         if self.values.get(&id) == Some(&value) {
             return;
         }
-        let writes = match (id, self.idle()) {
-            (SettingId::DimAfter | SettingId::LockAfter | SettingId::SleepAfter, Some(idle)) => {
-                idle.writes(id, &value)
-            }
-            _ => vec![(id, value)],
-        };
-        for (id, value) in writes {
-            self.values.insert(id, value.clone());
-            self.commands.push(Self::command(id, value));
-        }
+        self.values.insert(id, value.clone());
+        self.commands.push(Self::command(id, value));
         let unmuted = match id {
             SettingId::OutputVolume => Some(SettingId::OutputMuted),
             SettingId::InputVolume => Some(SettingId::InputMuted),

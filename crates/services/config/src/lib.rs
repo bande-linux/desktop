@@ -162,15 +162,16 @@ pub enum Suspend {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Idle {
-    pub dim_after: Duration,
-    pub lock_after: Duration,
+    pub screen_saver_after: Option<Duration>,
+    pub display_off_after: Option<Duration>,
+    pub require_password_after: Duration,
     pub suspend: Suspend,
 }
 
 impl Idle {
     pub fn suspend_after(&self) -> Option<Duration> {
         match self.suspend {
-            Suspend::WithDisplayOff => Some(self.lock_after),
+            Suspend::WithDisplayOff => self.display_off_after,
             Suspend::After(after) => Some(after),
             Suspend::Never => None,
         }
@@ -894,8 +895,9 @@ impl Default for Config {
             accessibility: Accessibility::default(),
             bar: Bar::default(),
             idle: Idle {
-                dim_after: Duration::from_secs(5 * 60),
-                lock_after: Duration::from_secs(10 * 60),
+                screen_saver_after: Some(Duration::from_secs(5 * 60)),
+                display_off_after: Some(Duration::from_secs(10 * 60)),
+                require_password_after: Duration::ZERO,
                 suspend: Suspend::WithDisplayOff,
             },
             keyboard: Keyboard {
@@ -1299,46 +1301,40 @@ impl Parser<'_> {
     }
 
     fn idle(&self, node: &KdlNode, mut idle: Idle) -> Idle {
-        let mut lock_node = node;
-        let mut suspend_node = node;
         self.section(node, |child| {
             match child.name().value() {
-                "dim-after" => idle.dim_after = self.duration(child)?,
-                "lock-after" => {
-                    idle.lock_after = self.duration(child)?;
-                    lock_node = child;
+                "screen-saver-after" => idle.screen_saver_after = self.duration_or_never(child)?,
+                "display-off-after" => idle.display_off_after = self.duration_or_never(child)?,
+                "require-password-after" => {
+                    idle.require_password_after = match self.argument(child)?.value().as_string() {
+                        Some("immediately") => Duration::ZERO,
+                        _ => self.duration(child).map_err(|error| ConfigError {
+                            message: format!("{} or \"immediately\"", error.message),
+                            ..error
+                        })?,
+                    };
                 }
                 "suspend-after" => {
-                    idle.suspend = match self.argument(child)?.value().as_string() {
-                        Some("never") => Suspend::Never,
-                        _ => Suspend::After(self.duration(child).map_err(|error| ConfigError {
-                            message: format!("{} or \"never\"", error.message),
-                            ..error
-                        })?),
+                    idle.suspend = match self.duration_or_never(child)? {
+                        Some(after) => Suspend::After(after),
+                        None => Suspend::Never,
                     };
-                    suspend_node = child;
                 }
                 _ => return Err(self.unknown_child("idle", child)),
             }
             Ok(())
         });
-        if idle.lock_after < idle.dim_after {
-            self.settle(Err(self.at_node(
-                lock_node,
-                "`idle lock-after` must not be shorter than `idle dim-after`",
-            )));
-            idle.lock_after = idle.dim_after;
-        }
-        if let Suspend::After(after) = idle.suspend
-            && after < idle.lock_after
-        {
-            self.settle(Err(self.at_node(
-                suspend_node,
-                "`idle suspend-after` must not be shorter than `idle lock-after`",
-            )));
-            idle.suspend = Suspend::After(idle.lock_after);
-        }
         idle
+    }
+
+    fn duration_or_never(&self, node: &KdlNode) -> Result<Option<Duration>, ConfigError> {
+        if self.argument(node)?.value().as_string() == Some("never") {
+            return Ok(None);
+        }
+        self.duration(node).map(Some).map_err(|error| ConfigError {
+            message: format!("{} or \"never\"", error.message),
+            ..error
+        })
     }
 
     fn focus_schedule(&self, node: &KdlNode) -> FocusSchedule {

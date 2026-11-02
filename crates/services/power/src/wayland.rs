@@ -1,5 +1,6 @@
 use std::io::{self, Read};
 use std::os::fd::AsFd;
+use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -84,7 +85,7 @@ impl Watcher {
 pub fn watch_idle(
     connection: Connection,
     controller: Arc<IdleController>,
-) -> Result<JoinHandle<Result<(), WatchError>>, WatchError> {
+) -> Result<JoinHandle<()>, WatchError> {
     let mut commands = controller.wayland_commands().map_err(WatchError::Io)?;
     let mut queue = connection.new_event_queue();
     connection.display().get_registry(&queue.handle(), ());
@@ -106,61 +107,71 @@ pub fn watch_idle(
         .as_ref()
         .ok_or(WatchError::Missing("wl_seat"))?;
     Ok(thread::spawn(move || {
-        let mut notifications = watcher.watch(&queue);
-        loop {
-            queue.dispatch_pending(&mut watcher).map_err(wayland)?;
-            queue.flush().map_err(wayland)?;
-            let Some(guard) = queue.prepare_read() else {
-                continue;
-            };
-            let (wayland_ready, commanded) = {
-                let connection_fd = guard.connection_fd();
-                let changes_fd = commands.as_fd();
-                let mut fds = [
-                    PollFd::new(&connection_fd, PollFlags::IN),
-                    PollFd::new(&changes_fd, PollFlags::IN),
-                ];
-                match poll(&mut fds, None) {
-                    Ok(_) | Err(rustix::io::Errno::INTR) => {}
-                    Err(error) => return Err(WatchError::Io(error.into())),
-                }
-                (!fds[0].revents().is_empty(), !fds[1].revents().is_empty())
-            };
-            if wayland_ready {
-                match guard.read() {
-                    Ok(_) => {}
-                    Err(WaylandError::Io(error)) if error.kind() == io::ErrorKind::WouldBlock => {}
-                    Err(error) => return Err(wayland(error)),
-                }
-            } else {
-                drop(guard);
-            }
-            if commanded {
-                let mut drained = [0u8; 64];
-                let read = commands.read(&mut drained).map_err(WatchError::Io)?;
-                if read == 0 {
-                    return Ok(());
-                }
-                let received: Vec<WaylandCommand> = drained[..read]
-                    .iter()
-                    .filter_map(|byte| WaylandCommand::from_byte(*byte))
-                    .collect();
-                for command in &received {
-                    match command {
-                        WaylandCommand::DisplayOff => watcher.power_outputs(Mode::Off, &queue),
-                        WaylandCommand::DisplayOn => watcher.power_outputs(Mode::On, &queue),
-                        WaylandCommand::RestartIdleTimers => {}
-                    }
-                }
-                if received.contains(&WaylandCommand::RestartIdleTimers) {
-                    for notification in notifications.drain(..) {
-                        notification.destroy();
-                    }
-                    notifications = watcher.watch(&queue);
-                }
-            }
+        if let Err(error) = follow(&mut watcher, &mut queue, &mut commands) {
+            tracing::error!("stopped watching for idle: {error}");
         }
     }))
+}
+
+fn follow(
+    watcher: &mut Watcher,
+    queue: &mut EventQueue<Watcher>,
+    commands: &mut UnixStream,
+) -> Result<(), WatchError> {
+    let mut notifications = watcher.watch(queue);
+    loop {
+        queue.dispatch_pending(watcher).map_err(wayland)?;
+        queue.flush().map_err(wayland)?;
+        let Some(guard) = queue.prepare_read() else {
+            continue;
+        };
+        let (wayland_ready, commanded) = {
+            let connection_fd = guard.connection_fd();
+            let changes_fd = commands.as_fd();
+            let mut fds = [
+                PollFd::new(&connection_fd, PollFlags::IN),
+                PollFd::new(&changes_fd, PollFlags::IN),
+            ];
+            match poll(&mut fds, None) {
+                Ok(_) | Err(rustix::io::Errno::INTR) => {}
+                Err(error) => return Err(WatchError::Io(error.into())),
+            }
+            (!fds[0].revents().is_empty(), !fds[1].revents().is_empty())
+        };
+        if wayland_ready {
+            match guard.read() {
+                Ok(_) => {}
+                Err(WaylandError::Io(error)) if error.kind() == io::ErrorKind::WouldBlock => {}
+                Err(error) => return Err(wayland(error)),
+            }
+        } else {
+            drop(guard);
+        }
+        if commanded {
+            let mut drained = [0u8; 64];
+            let read = commands.read(&mut drained).map_err(WatchError::Io)?;
+            if read == 0 {
+                return Ok(());
+            }
+            let received: Vec<WaylandCommand> = drained[..read]
+                .iter()
+                .filter_map(|byte| WaylandCommand::from_byte(*byte))
+                .collect();
+            for command in &received {
+                match command {
+                    WaylandCommand::DisplayOff => watcher.power_outputs(Mode::Off, queue),
+                    WaylandCommand::DisplayOn => watcher.power_outputs(Mode::On, queue),
+                    WaylandCommand::RestartIdleTimers => {}
+                }
+            }
+            if received.contains(&WaylandCommand::RestartIdleTimers) {
+                for notification in notifications.drain(..) {
+                    notification.destroy();
+                }
+                notifications = watcher.watch(queue);
+            }
+        }
+    }
 }
 
 impl Dispatch<WlRegistry, ()> for Watcher {

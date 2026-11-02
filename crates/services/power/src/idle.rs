@@ -28,6 +28,12 @@ pub enum Command {
     RestartIdleTimers,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Inhibitor {
+    ScreenSaver,
+    Logind,
+}
+
 #[derive(Debug)]
 pub struct IdleMachine {
     policy: Policy,
@@ -35,7 +41,7 @@ pub struct IdleMachine {
     dimmed: bool,
     display_off: bool,
     locked: bool,
-    inhibited: bool,
+    inhibitors: Vec<Inhibitor>,
 }
 
 impl IdleMachine {
@@ -46,7 +52,7 @@ impl IdleMachine {
             dimmed: false,
             display_off: false,
             locked: false,
-            inhibited: false,
+            inhibitors: Vec::new(),
         }
     }
 
@@ -70,7 +76,7 @@ impl IdleMachine {
     }
 
     pub fn idle_for(&mut self, idle: Duration) -> Vec<Command> {
-        if self.inhibited {
+        if !self.inhibitors.is_empty() {
             return Vec::new();
         }
         let mut commands = Vec::new();
@@ -109,11 +115,16 @@ impl IdleMachine {
         self.undim()
     }
 
-    pub fn set_inhibited(&mut self, inhibited: bool) -> Vec<Command> {
-        if inhibited == self.inhibited {
+    pub fn set_inhibited(&mut self, inhibitor: Inhibitor, held: bool) -> Vec<Command> {
+        let was_inhibited = !self.inhibitors.is_empty();
+        self.inhibitors.retain(|kind| *kind != inhibitor);
+        if held {
+            self.inhibitors.push(inhibitor);
+        }
+        let inhibited = !self.inhibitors.is_empty();
+        if inhibited == was_inhibited {
             return Vec::new();
         }
-        self.inhibited = inhibited;
         if inhibited {
             if self.stage == Stage::Dimmed {
                 self.stage = Stage::Active;

@@ -8,7 +8,7 @@ use std::os::unix::net::UnixStream;
 use zbus::blocking::Connection;
 
 use crate::backlight::{Backlight, KeyboardBacklight, dimmed};
-use crate::idle::{Command, IdleMachine, Policy};
+use crate::idle::{Command, IdleMachine, Inhibitor, Policy};
 use crate::logind::{self, ManagerProxyBlocking, SessionProxyBlocking};
 
 #[zbus::proxy(
@@ -95,8 +95,8 @@ impl IdleController {
         self.run(IdleMachine::resumed);
     }
 
-    pub fn set_inhibited(&self, inhibited: bool) {
-        self.run(|machine| machine.set_inhibited(inhibited));
+    pub fn set_inhibited(&self, inhibitor: Inhibitor, held: bool) {
+        self.run(|machine| machine.set_inhibited(inhibitor, held));
     }
 
     pub fn set_locked(&self, locked: bool) {
@@ -162,6 +162,16 @@ pub fn follow_config(session: &Connection, controller: &Arc<IdleController>) -> 
     }
     controller.set_policy(policy(&config)?);
     Ok(())
+}
+
+pub fn follow_idle_inhibitors(
+    system: &Connection,
+    controller: &Arc<IdleController>,
+) -> zbus::Result<()> {
+    let controller = Arc::clone(controller);
+    logind::follow_idle_blocked(system, move |held| {
+        controller.set_inhibited(Inhibitor::Logind, held);
+    })
 }
 
 pub fn follow_lock(system: &Connection, controller: &Arc<IdleController>) -> zbus::Result<()> {

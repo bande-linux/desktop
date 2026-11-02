@@ -12,7 +12,7 @@ its not possible to install more keyboard layouts or languages in settings *impo
 Status: started. Layouts and languages work in Settings. Left: input methods (fcitx5) in Settings, deferred by decision; the owner picks a language and checks `locale -a`, and checks "Use at Login Screen" at the greeter (needs a logout).
 
 the software update doesnt seem to work.
-Status: started. Live updates with offline install only for reboot-class packages are built. Left: the owner runs one update on the mini with no reboot-class package (installs with no restart, only "Quit and reopen …"; `sudo needrestart -b` lists no stale services; `journalctl -u packagekit` shows needrestart's hook ran without prompting), and one offline update end to end (Restart, `journalctl -b -u packagekit-offline-update`).
+Status: started. Live updates with offline install only for reboot-class packages are built. Left: the owner runs one update on the mini with no reboot-class package (installs with no restart, only "Quit and reopen …"; no system service outside the excluded ones still maps a deleted `/usr` library afterwards, so `bande-desktop`'s `restart-services` hook ran), and one offline update end to end (Restart, `journalctl -b -u packagekit-offline-update`).
 
 we have no swap (granted this is not an official installation of debian) and it may not be up to bande-desktop, but quickly review how that should work and if we should do anything or if that is soley up to the debian installer
 Status: started. Kernel (PSI, zram) and image packages are merged; no disk swap by decision. Left: the owner installs the new kernel on the mini, `sudo apt install systemd-oomd`, upgrades `bande-desktop` and reboots.

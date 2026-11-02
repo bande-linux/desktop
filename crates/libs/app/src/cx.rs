@@ -166,6 +166,12 @@ impl<P: Program> Cx<P> {
             .or_else(|| self.shown().last().map(|(id, _)| *id))
     }
 
+    pub(crate) fn zoomable(&self) -> bool {
+        self.focused()
+            .and_then(|window| self.index(window))
+            .is_some_and(|index| self.windows[index].is_resizable())
+    }
+
     pub fn window(&mut self, window: WindowId) -> Option<(&mut Window, &mut P::View)> {
         let index = self.index(window)?;
         match &mut self.views[index].1 {

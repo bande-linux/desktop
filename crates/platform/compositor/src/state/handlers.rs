@@ -115,6 +115,16 @@ impl State {
         }
         true
     }
+
+    fn decline_for_fixed_size(&self, surface: &ToplevelSurface) -> bool {
+        let fixed = self
+            .window_index(surface.wl_surface())
+            .is_some_and(|index| self.windows[index].fixed_size());
+        if fixed && surface.is_initial_configure_sent() {
+            surface.send_configure();
+        }
+        fixed
+    }
 }
 
 impl CompositorHandler for State {
@@ -256,7 +266,9 @@ impl XdgShellHandler for State {
     }
 
     fn maximize_request(&mut self, surface: ToplevelSurface) {
-        self.maximize(surface.wl_surface());
+        if !self.decline_for_fixed_size(&surface) {
+            self.maximize(surface.wl_surface());
+        }
     }
 
     fn unmaximize_request(&mut self, surface: ToplevelSurface) {
@@ -264,7 +276,9 @@ impl XdgShellHandler for State {
     }
 
     fn fullscreen_request(&mut self, surface: ToplevelSurface, _output: Option<WlOutput>) {
-        self.fullscreen(surface.wl_surface());
+        if !self.decline_for_fixed_size(&surface) {
+            self.fullscreen(surface.wl_surface());
+        }
     }
 
     fn unfullscreen_request(&mut self, surface: ToplevelSurface) {

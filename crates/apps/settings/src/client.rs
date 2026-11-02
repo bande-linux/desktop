@@ -143,13 +143,17 @@ pub trait Config {
     #[zbus(property)]
     fn set_bar_layout(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
-    fn idle_dim_after(&self) -> zbus::Result<u64>;
+    fn idle_screen_saver_after(&self) -> zbus::Result<u64>;
     #[zbus(property)]
-    fn set_idle_dim_after(&self, seconds: u64) -> zbus::Result<()>;
+    fn set_idle_screen_saver_after(&self, seconds: u64) -> zbus::Result<()>;
     #[zbus(property)]
-    fn idle_lock_after(&self) -> zbus::Result<u64>;
+    fn idle_display_off_after(&self) -> zbus::Result<u64>;
     #[zbus(property)]
-    fn set_idle_lock_after(&self, seconds: u64) -> zbus::Result<()>;
+    fn set_idle_display_off_after(&self, seconds: u64) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn idle_require_password_after(&self) -> zbus::Result<u64>;
+    #[zbus(property)]
+    fn set_idle_require_password_after(&self, seconds: u64) -> zbus::Result<()>;
     #[zbus(property)]
     fn idle_suspend_after(&self) -> zbus::Result<u64>;
     #[zbus(property)]
@@ -297,7 +301,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 73] = [
+pub const CONFIG_SETTINGS: [SettingId; 74] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -334,8 +338,9 @@ pub const CONFIG_SETTINGS: [SettingId; 73] = [
     SettingId::BarAutoHide,
     SettingId::BarEdge,
     SettingId::BarLayout,
-    SettingId::DimAfter,
-    SettingId::LockAfter,
+    SettingId::ScreenSaverAfter,
+    SettingId::DisplayOffAfter,
+    SettingId::RequirePasswordAfter,
     SettingId::SleepAfter,
     SettingId::KeyRepeatRate,
     SettingId::KeyRepeatDelay,
@@ -551,8 +556,11 @@ impl SettingsClient {
             SettingId::BarAutoHide => Value::Flag(self.config.bar_auto_hide()?),
             SettingId::BarEdge => Value::Keyword(self.config.bar_edge()?),
             SettingId::BarLayout => Value::Keyword(self.config.bar_layout()?),
-            SettingId::DimAfter => Value::Seconds(self.config.idle_dim_after()?),
-            SettingId::LockAfter => Value::Seconds(self.config.idle_lock_after()?),
+            SettingId::ScreenSaverAfter => Value::Seconds(self.config.idle_screen_saver_after()?),
+            SettingId::DisplayOffAfter => Value::Seconds(self.config.idle_display_off_after()?),
+            SettingId::RequirePasswordAfter => {
+                Value::Seconds(self.config.idle_require_password_after()?)
+            }
             SettingId::SleepAfter if self.config.idle_suspend_with_display()? => {
                 Value::Keyword(WITH_DISPLAY.to_owned())
             }
@@ -701,11 +709,14 @@ impl SettingsClient {
                 self.config.set_bar_auto_hide(*auto_hide)
             }
 
-            (SettingId::DimAfter, Value::Seconds(seconds)) => {
-                self.config.set_idle_dim_after(*seconds)
+            (SettingId::ScreenSaverAfter, Value::Seconds(seconds)) => {
+                self.config.set_idle_screen_saver_after(*seconds)
             }
-            (SettingId::LockAfter, Value::Seconds(seconds)) => {
-                self.config.set_idle_lock_after(*seconds)
+            (SettingId::DisplayOffAfter, Value::Seconds(seconds)) => {
+                self.config.set_idle_display_off_after(*seconds)
+            }
+            (SettingId::RequirePasswordAfter, Value::Seconds(seconds)) => {
+                self.config.set_idle_require_password_after(*seconds)
             }
             (SettingId::SleepAfter, Value::Keyword(keyword)) if keyword == WITH_DISPLAY => {
                 self.config.set_idle_suspend_with_display(true)

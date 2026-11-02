@@ -118,15 +118,15 @@ impl State {
     }
 
     fn recallable(&self, index: usize) -> Option<(String, String)> {
-        let main_window =
-            |window: &Window| window.toplevel.parent().is_none() && !window.fixed_size();
-        let key = |window: &Window| (toplevel_names(window.surface()).1, window.tag.clone());
-        let window = &self.windows[index];
-        let own = key(window);
+        let kind = |window: &Window| {
+            (window.toplevel.parent().is_none() && !(window.fixed_size() && window.tag.is_empty()))
+                .then(|| (toplevel_names(window.surface()).1, window.tag.clone()))
+        };
+        let own = kind(&self.windows[index]).filter(|(app_id, _)| !app_id.is_empty())?;
         let alone = !self.windows.iter().enumerate().any(|(other, sibling)| {
-            other != index && sibling.size.is_some() && main_window(sibling) && key(sibling) == own
+            other != index && sibling.size.is_some() && kind(sibling).as_ref() == Some(&own)
         });
-        (!own.0.is_empty() && main_window(window) && alone).then_some(own)
+        alone.then_some(own)
     }
 
     pub(crate) fn recall_frame(&mut self, index: usize) {
@@ -155,7 +155,9 @@ impl State {
         let window = &mut self.windows[index];
         window.workspace = self.screens[screen].workspaces.active_id();
         window.recalled = Some(frame.loc);
-        window.request_size(Some(frame.size));
+        if !window.fixed_size() {
+            window.request_size(Some(frame.size));
+        }
     }
 
     pub(crate) fn recall_late(&mut self, surface: &WlSurface) {

@@ -117,10 +117,10 @@ pub fn app_submenu(app: &str, version: &str, items: Vec<Entry>, quit: &str) -> E
     Entry::submenu(app, entries)
 }
 
-pub fn window_submenu(items: Vec<Entry>) -> Entry {
+pub fn window_submenu(items: Vec<Entry>, zoomable: bool) -> Entry {
     let mut entries = vec![
         Entry::item(&L10N.tr("minimize"), Standard::Minimize.action()).shortcut("Super+H"),
-        Entry::item(&L10N.tr("zoom"), Standard::Zoom.action()),
+        Entry::item(&L10N.tr("zoom"), Standard::Zoom.action()).enabled(zoomable),
     ];
     if !items.is_empty() {
         entries.push(Entry::separator());

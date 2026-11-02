@@ -46,6 +46,12 @@ pub struct Package {
     pub class: Class,
 }
 
+impl Package {
+    pub(crate) fn needs_restart(&self) -> bool {
+        matches!(self.class, Class::Boot | Class::Offline)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stage {
     Check,
@@ -391,7 +397,6 @@ pub fn update(
     system: &Connection,
     client: &Client,
     packages: &[Package],
-    live: bool,
     report: &dyn Fn(SoftwareState),
 ) -> SoftwareState {
     let (flatpaks, debian): (Vec<&Package>, Vec<&Package>) = packages
@@ -414,7 +419,7 @@ pub fn update(
     let (offline, now): (Vec<&Package>, Vec<&Package>) = debian
         .iter()
         .copied()
-        .partition(|package| !live || package.class == Class::Offline);
+        .partition(|package| package.class == Class::Offline);
     let installing = Cell::new(false);
     let installed = || -> Result<SoftwareState, (Stage, Error)> {
         let now_ids = ids(&now);
@@ -573,11 +578,33 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
     if automatic(session) {
         return update_automatically(session, system, &client, &packages);
     }
-    announce_available(session, packages.len())
+    announce_available(session, &packages)
 }
 
-fn announce_available(session: &Connection, count: usize) -> zbus::Result<Option<u32>> {
-    let body = L10N.tr_args("updates-notification-body", [("count", count.into())]);
+fn announce_available(session: &Connection, packages: &[Package]) -> zbus::Result<Option<u32>> {
+    let restart = packages
+        .iter()
+        .filter(|package| package.needs_restart())
+        .count();
+    announce_waiting(session, packages.len() - restart, restart)
+}
+
+fn announce_waiting(
+    session: &Connection,
+    approve: usize,
+    restart: usize,
+) -> zbus::Result<Option<u32>> {
+    let body = match (approve, restart) {
+        (_, 0) => L10N.tr_args("updates-notification-body", [("count", approve.into())]),
+        (0, _) => L10N.tr_args("updates-need-restart-body", [("count", restart.into())]),
+        _ => L10N.tr_args(
+            "updates-some-need-restart-body",
+            [
+                ("count", (approve + restart).into()),
+                ("restart", restart.into()),
+            ],
+        ),
+    };
     announce(session, &L10N.tr("updates-notification"), &body)
 }
 
@@ -604,27 +631,37 @@ fn download_in_background(client: &Client, packages: &[Package]) {
     }
 }
 
-fn installable_now(
-    client: &Client,
-    packages: Vec<Package>,
-    live: bool,
-) -> (Vec<Package>, Vec<Package>) {
-    let (mut now, mut later): (Vec<Package>, Vec<Package>) =
-        packages.into_iter().partition(|package| {
-            package.class == Class::Flatpak || (live && package.class == Class::Live)
-        });
+struct Sorted {
+    now: Vec<Package>,
+    approve: usize,
+    restart: usize,
+}
+
+fn sort_updates(client: &Client, packages: Vec<Package>, live: bool) -> Sorted {
+    let (mut now, later): (Vec<Package>, Vec<Package>) = packages
+        .into_iter()
+        .partition(|package| matches!(package.class, Class::Flatpak | Class::Live));
     let debian: Vec<&Package> = now
         .iter()
-        .filter(|package| package.class != Class::Flatpak)
+        .filter(|package| package.class == Class::Live)
         .collect();
-    if !pulls_offline(client, &ids(&debian)).unwrap_or(true) {
-        return (now, later);
+    let count = debian.len();
+    let mut sorted = Sorted {
+        now: Vec::new(),
+        approve: 0,
+        restart: later.len(),
+    };
+    if pulls_offline(client, &ids(&debian)).unwrap_or(true) {
+        sorted.restart += count;
+    } else if !live {
+        sorted.approve = count;
+    } else {
+        sorted.now = now;
+        return sorted;
     }
-    let (flatpaks, debian): (Vec<Package>, Vec<Package>) = now
-        .drain(..)
-        .partition(|package| package.class == Class::Flatpak);
-    later.extend(debian);
-    (flatpaks, later)
+    now.retain(|package| package.class == Class::Flatpak);
+    sorted.now = now;
+    sorted
 }
 
 fn update_automatically(
@@ -636,19 +673,20 @@ fn update_automatically(
     download_in_background(client, packages);
     if let Err(error) = idle::wait_until_idle(IDLE_FOR) {
         tracing::warn!("cannot wait for the computer to be idle: {error}");
-        return announce_available(session, packages.len());
+        return announce_available(session, packages);
     }
     let SoftwareState::Available(packages) = check(client, Refresh::WhenStale) else {
         return Ok(None);
     };
-    let (now, later) = installable_now(client, packages, may_update_live(system));
+    let Sorted {
+        now,
+        approve,
+        restart,
+    } = sort_updates(client, packages, may_update_live(system));
     let installed = match now.is_empty() {
         true => None,
-        false => Some(settle(session, update(system, client, &now, true, &|_| {}))),
+        false => Some(settle(session, update(system, client, &now, &|_| {}))),
     };
-    let restarts = later
-        .iter()
-        .any(|package| matches!(package.class, Class::Boot | Class::Offline));
     match installed {
         Some(SoftwareState::Failed { reason, .. }) => {
             announce(session, &L10N.tr("install-failed"), &reason)
@@ -658,12 +696,7 @@ fn update_automatically(
             &L10N.tr_args("restart-to-install", [("count", count.into())]),
             &L10N.tr("installs-on-restart"),
         ),
-        _ if restarts => announce(
-            session,
-            &L10N.tr_args("updates-ready-restart", [("count", later.len().into())]),
-            &L10N.tr("updates-ready-restart-hint"),
-        ),
-        _ if !later.is_empty() => announce_available(session, later.len()),
+        _ if approve + restart > 0 => announce_waiting(session, approve, restart),
         Some(SoftwareState::Installed {
             reboot: Some(_), ..
         }) => announce(
@@ -709,8 +742,7 @@ pub fn follow_software(
                     updates.send(Update::Software(SoftwareState::Downloading {
                         percent: None,
                     }));
-                    let live = may_update_live(&system);
-                    let state = update(&system, &client, &packages, live, &|state| {
+                    let state = update(&system, &client, &packages, &|state| {
                         updates.send(Update::Software(state));
                     });
                     settle(&session, state)

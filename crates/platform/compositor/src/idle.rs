@@ -31,6 +31,8 @@ pub(crate) struct Idle {
     inhibitors: Vec<WlSurface>,
     last_activity: Option<Duration>,
     activity: bool,
+    inhibited: bool,
+    inhibition_ended: Duration,
 }
 
 pub(crate) fn create_global(display: &DisplayHandle) {
@@ -84,33 +86,51 @@ impl Compositor {
             .watches
             .retain(|watch| watch.notification.is_alive());
         state.idle.inhibitors.retain(Resource::is_alive);
+        let mut told = false;
         if std::mem::take(&mut state.idle.activity) || state.idle.last_activity.is_none() {
             state.idle.last_activity = Some(now);
             for watch in state.idle.watches.iter_mut().filter(|watch| watch.idled) {
                 watch.notification.resumed();
                 watch.idled = false;
+                told = true;
             }
         }
-        let inhibited = state
+        if state
             .idle
             .watches
             .iter()
             .any(|watch| !watch.idled && watch.obeys_inhibitors)
-            && state.inhibited();
+        {
+            let inhibited = state.inhibited();
+            if state.idle.inhibited && !inhibited {
+                state.idle.inhibition_ended = now;
+            }
+            state.idle.inhibited = inhibited;
+        }
+        let inhibited = state.idle.inhibited;
         let last = state.idle.last_activity.unwrap_or(now);
+        let inhibition_ended = state.idle.inhibition_ended;
         let mut next = None::<Duration>;
         for watch in state.idle.watches.iter_mut().filter(|watch| !watch.idled) {
             let since = *watch.since.get_or_insert(now);
-            if watch.obeys_inhibitors && inhibited {
-                continue;
+            let mut start = last.max(since);
+            if watch.obeys_inhibitors {
+                if inhibited {
+                    continue;
+                }
+                start = start.max(inhibition_ended);
             }
-            let due = last.max(since) + watch.timeout;
+            let due = start + watch.timeout;
             if now >= due {
                 watch.notification.idled();
                 watch.idled = true;
+                told = true;
             } else {
                 next = Some(next.map_or(due, |next| next.min(due)));
             }
+        }
+        if told && let Err(error) = self.flush() {
+            tracing::warn!("cannot tell the idle watchers: {error}");
         }
         next
     }

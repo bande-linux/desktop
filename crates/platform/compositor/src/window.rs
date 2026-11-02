@@ -451,7 +451,10 @@ impl State {
     }
 
     pub(crate) fn maximize(&mut self, surface: &WlSurface) {
-        if let Some(index) = self.window_index(surface) {
+        if let Some(index) = self
+            .window_index(surface)
+            .filter(|index| !self.windows[*index].fixed_size())
+        {
             let area = self.usable_area(self.screen_of(&self.windows[index]));
             self.place(index, xdg_toplevel::State::Maximized, Some(area));
         }
@@ -514,7 +517,10 @@ impl State {
     }
 
     pub(crate) fn fullscreen(&mut self, surface: &WlSurface) {
-        if let Some(index) = self.window_index(surface) {
+        if let Some(index) = self
+            .window_index(surface)
+            .filter(|index| !self.windows[*index].fixed_size())
+        {
             let output = self.screen_rect(self.screen_of(&self.windows[index]));
             let was_maximized = self.windows[index].has_state(xdg_toplevel::State::Maximized);
             self.place(index, xdg_toplevel::State::Fullscreen, Some(output));

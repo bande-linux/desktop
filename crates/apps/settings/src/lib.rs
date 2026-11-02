@@ -12,7 +12,6 @@ mod follow;
 mod forget;
 mod general;
 mod header;
-mod idle;
 mod language;
 mod locale;
 mod login;
@@ -49,7 +48,6 @@ pub use client::{CONFIG_SETTINGS, SettingsClient};
 pub use defaults::{DefaultApp, DefaultAppCommand, choose_default, default_apps};
 pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};
-pub use idle::Idle;
 pub use locale::{
     AvailableLocale, LocaleCommand, LocaleState, assignments, locale_name, login_codes,
     parse_assignments, supported_locales, x11_keyboard,

@@ -233,8 +233,9 @@ pub enum SettingId {
     RefreshRate,
     DisplayRotation,
     VariableRefreshRate,
-    DimAfter,
-    LockAfter,
+    ScreenSaverAfter,
+    DisplayOffAfter,
+    RequirePasswordAfter,
     SleepAfter,
     KeyRepeatRate,
     KeyRepeatDelay,
@@ -603,6 +604,19 @@ fn durations(choices: &[u64]) -> Vec<Choice> {
 
 pub const WITH_DISPLAY: &str = "with-display";
 
+fn password_choices() -> Vec<Choice> {
+    PASSWORD_CHOICES
+        .iter()
+        .map(|&seconds| Choice {
+            label: match seconds {
+                0 => L10N.tr("immediately"),
+                seconds => duration_label(seconds),
+            },
+            value: Value::Seconds(seconds),
+        })
+        .collect()
+}
+
 fn sleep_choices() -> Vec<Choice> {
     let mut choices = keyword_choices(vec![(L10N.tr("with-display"), WITH_DISPLAY)]);
     choices.extend(durations(&SLEEP_CHOICES));
@@ -630,8 +644,9 @@ fn numbers(values: &[u32]) -> Vec<Choice> {
         .collect()
 }
 
-pub const DIM_CHOICES: [u64; 5] = [30, 60, 120, 300, 600];
-pub const LOCK_CHOICES: [u64; 5] = [60, 300, 600, 1200, 3600];
+const SCREEN_SAVER_CHOICES: [u64; 8] = [60, 120, 300, 600, 1200, 1800, 3600, 0];
+const DISPLAY_OFF_CHOICES: [u64; 9] = [60, 120, 300, 600, 1200, 1800, 3600, 10800, 0];
+const PASSWORD_CHOICES: [u64; 7] = [0, 5, 60, 300, 900, 3600, 28800];
 pub const SLEEP_CHOICES: [u64; 4] = [1800, 3600, 10800, 0];
 pub const CURSOR_SIZES: [u32; 5] = [24, 32, 48, 64, 96];
 const REPEAT_RATES: [u32; 9] = [2, 5, 10, 15, 20, 25, 30, 45, 60];
@@ -1532,19 +1547,25 @@ fn power_pane() -> Pane {
                 ],
             ),
             section(
-                Some(L10N.tr("when-inactive")),
+                Some(L10N.tr("lock-screen")),
                 vec![
                     setting(
-                        SettingId::DimAfter,
-                        L10N.tr("dim-after"),
-                        L10N.tr("dim-after-keywords"),
-                        choice(durations(&DIM_CHOICES)),
+                        SettingId::ScreenSaverAfter,
+                        L10N.tr("screen-saver-after"),
+                        L10N.tr("screen-saver-after-keywords"),
+                        choice(durations(&SCREEN_SAVER_CHOICES)),
                     ),
                     setting(
-                        SettingId::LockAfter,
-                        L10N.tr("lock-after"),
-                        L10N.tr("lock-after-keywords"),
-                        choice(durations(&LOCK_CHOICES)),
+                        SettingId::DisplayOffAfter,
+                        L10N.tr("display-off-after"),
+                        L10N.tr("display-off-after-keywords"),
+                        choice(durations(&DISPLAY_OFF_CHOICES)),
+                    ),
+                    setting(
+                        SettingId::RequirePasswordAfter,
+                        L10N.tr("require-password-after"),
+                        L10N.tr("require-password-after-keywords"),
+                        choice(password_choices()),
                     ),
                     setting(
                         SettingId::SleepAfter,

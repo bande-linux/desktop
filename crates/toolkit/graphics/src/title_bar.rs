@@ -21,6 +21,7 @@ const TRAILING_INSET: f32 = 12.0;
 const GLYPH_STROKE: f32 = 1.5;
 const DISC_RADIUS: f32 = 8.0;
 const PRESSED_OPACITY: f32 = 0.12;
+const DISABLED_OPACITY: f32 = 0.45;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WindowControl {
@@ -150,6 +151,7 @@ pub struct TitleBar<'a> {
     pub close_hover: f32,
     pub pressed: Option<WindowControl>,
     pub zoomed: bool,
+    pub zoomable: bool,
     pub alternate: bool,
     pub menu: Option<MenuButton>,
 }
@@ -181,6 +183,10 @@ impl TitleBar<'_> {
         };
         let glyph = rest.mix(palette.ink, self.hover);
         for control in WindowControl::ALL {
+            let glyph = match control {
+                WindowControl::Zoom if !self.zoomable => rest.with_opacity(DISABLED_OPACITY),
+                _ => glyph,
+            };
             self.control(control, glyph, &mut items);
         }
         if let Some(menu) = self.menu {
@@ -267,7 +273,7 @@ impl TitleBar<'_> {
         } else {
             glyph
         };
-        if self.pressed == Some(control) {
+        if self.pressed == Some(control) && (control != WindowControl::Zoom || self.zoomable) {
             items.push(Item::Fill {
                 shape: disc,
                 paint: self.palette.ink.with_opacity(PRESSED_OPACITY).into(),
@@ -287,7 +293,7 @@ impl TitleBar<'_> {
             WindowControl::Minimize => {
                 items.push(stroke(Path::through(&[at(-4.0, 0.0), at(4.0, 0.0)])));
             }
-            WindowControl::Zoom if self.alternate => {
+            WindowControl::Zoom if self.alternate && self.zoomable => {
                 items.push(stroke(Path::through(&[at(-4.0, 0.0), at(4.0, 0.0)])));
                 items.push(stroke(Path::through(&[at(0.0, -4.0), at(0.0, 4.0)])));
             }

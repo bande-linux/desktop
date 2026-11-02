@@ -8,8 +8,9 @@ use std::os::unix::net::UnixStream;
 use zbus::blocking::Connection;
 
 use crate::backlight::{Backlight, KeyboardBacklight, dimmed};
-use crate::idle::{Command, IdleMachine, Policy};
+use crate::idle::{Command, IdleMachine, Inhibitor, Policy};
 use crate::logind::{self, ManagerProxyBlocking, SessionProxyBlocking};
+use crate::password::PasswordPolicy;
 
 #[zbus::proxy(
     interface = "org.bande.Config",
@@ -18,10 +19,13 @@ use crate::logind::{self, ManagerProxyBlocking, SessionProxyBlocking};
 )]
 pub trait Config {
     #[zbus(property)]
-    fn idle_dim_after(&self) -> zbus::Result<u64>;
+    fn idle_screen_saver_after(&self) -> zbus::Result<u64>;
 
     #[zbus(property)]
-    fn idle_lock_after(&self) -> zbus::Result<u64>;
+    fn idle_display_off_after(&self) -> zbus::Result<u64>;
+
+    #[zbus(property)]
+    fn idle_require_password_after(&self) -> zbus::Result<u64>;
 
     #[zbus(property)]
     fn idle_suspend_after(&self) -> zbus::Result<u64>;
@@ -43,7 +47,11 @@ impl WaylandCommand {
             Command::RestartIdleTimers => Some(Self::RestartIdleTimers),
             Command::DisplayOff => Some(Self::DisplayOff),
             Command::DisplayOn => Some(Self::DisplayOn),
-            Command::Dim | Command::Undim | Command::Lock | Command::Suspend => None,
+            Command::Dim
+            | Command::Undim
+            | Command::Lock
+            | Command::RequirePassword(_)
+            | Command::Suspend => None,
         }
     }
 
@@ -95,15 +103,12 @@ impl IdleController {
         self.run(IdleMachine::resumed);
     }
 
-    pub fn set_inhibited(&self, inhibited: bool) {
-        self.run(|machine| machine.set_inhibited(inhibited));
+    pub fn set_inhibited(&self, inhibitor: Inhibitor, held: bool) {
+        self.run(|machine| machine.set_inhibited(inhibitor, held));
     }
 
     pub fn set_locked(&self, locked: bool) {
-        self.run(|machine| {
-            machine.set_locked(locked);
-            Vec::new()
-        });
+        self.run(|machine| machine.set_locked(locked));
     }
 
     pub fn set_policy(&self, policy: Policy) {
@@ -130,11 +135,12 @@ impl IdleController {
 }
 
 fn policy(config: &ConfigProxyBlocking<'_>) -> zbus::Result<Policy> {
-    let suspend_after = config.idle_suspend_after()?;
+    let unless_never = |seconds: u64| (seconds > 0).then(|| Duration::from_secs(seconds));
     Ok(Policy {
-        dim_after: Duration::from_secs(config.idle_dim_after()?),
-        lock_after: Duration::from_secs(config.idle_lock_after()?),
-        suspend_after: (suspend_after > 0).then(|| Duration::from_secs(suspend_after)),
+        screen_saver_after: unless_never(config.idle_screen_saver_after()?),
+        display_off_after: unless_never(config.idle_display_off_after()?),
+        require_password_after: Duration::from_secs(config.idle_require_password_after()?),
+        suspend_after: unless_never(config.idle_suspend_after()?),
     })
 }
 
@@ -142,26 +148,56 @@ pub fn configured_policy(session: &Connection) -> zbus::Result<Policy> {
     policy(&ConfigProxyBlocking::new(session)?)
 }
 
+fn refresh_on<T>(
+    changes: impl Iterator<Item = T> + Send + 'static,
+    config: &ConfigProxyBlocking<'static>,
+    controller: &Arc<IdleController>,
+) {
+    let config = config.clone();
+    let controller = Arc::clone(controller);
+    thread::spawn(move || {
+        for _ in changes {
+            if let Ok(policy) = policy(&config) {
+                controller.set_policy(policy);
+            }
+        }
+    });
+}
+
 pub fn follow_config(session: &Connection, controller: &Arc<IdleController>) -> zbus::Result<()> {
     let config = ConfigProxyBlocking::new(session)?;
-    let changes = [
-        config.receive_idle_dim_after_changed(),
-        config.receive_idle_lock_after_changed(),
+    refresh_on(
+        config.receive_idle_screen_saver_after_changed(),
+        &config,
+        controller,
+    );
+    refresh_on(
+        config.receive_idle_display_off_after_changed(),
+        &config,
+        controller,
+    );
+    refresh_on(
+        config.receive_idle_require_password_after_changed(),
+        &config,
+        controller,
+    );
+    refresh_on(
         config.receive_idle_suspend_after_changed(),
-    ];
-    for change in changes {
-        let config = config.clone();
-        let controller = Arc::clone(controller);
-        thread::spawn(move || {
-            for _ in change {
-                if let Ok(policy) = policy(&config) {
-                    controller.set_policy(policy);
-                }
-            }
-        });
-    }
+        &config,
+        controller,
+    );
     controller.set_policy(policy(&config)?);
     Ok(())
+}
+
+pub fn follow_idle_inhibitors(
+    system: &Connection,
+    controller: &Arc<IdleController>,
+) -> zbus::Result<()> {
+    let controller = Arc::clone(controller);
+    logind::follow_idle_blocked(system, move |held| {
+        controller.set_inhibited(Inhibitor::Logind, held);
+    })
 }
 
 pub fn follow_lock(system: &Connection, controller: &Arc<IdleController>) -> zbus::Result<()> {
@@ -174,6 +210,7 @@ pub fn logind_executor(
     session: SessionProxyBlocking<'static>,
     backlight: Option<Backlight>,
     keyboard: Option<KeyboardBacklight>,
+    password: PasswordPolicy,
 ) -> impl Fn(Command) + Send + Sync + 'static {
     let undimmed = Mutex::new(None);
     let keyboard_lit = Mutex::new(None);
@@ -188,6 +225,7 @@ pub fn logind_executor(
         };
         let result = match command {
             Command::Lock => session.lock(),
+            Command::RequirePassword(required) => password.require(required),
             Command::Suspend => match manager.can_suspend() {
                 Ok(answer) if answer == "yes" => manager.suspend(false),
                 Ok(_) => Ok(()),

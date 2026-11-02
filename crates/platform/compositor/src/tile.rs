@@ -182,6 +182,9 @@ impl State {
     }
 
     pub(crate) fn tile_window(&mut self, index: usize, tile: Tile, spring: Spring) {
+        if self.windows[index].fixed_size() {
+            return;
+        }
         let target = tile.rect(self.usable_area(self.screen_of(&self.windows[index])));
         let window = &mut self.windows[index];
         if window.restore.is_none()
@@ -357,7 +360,12 @@ impl State {
     ) {
         let now = Duration::from_millis(u64::from(time));
         let screen = self.pointer_screen();
-        let candidate = snap_at(pointer, self.usable_area(screen)).map(|snap| (screen, snap));
+        let fixed = self
+            .window_index(surface)
+            .is_some_and(|index| self.windows[index].fixed_size());
+        let candidate = snap_at(pointer, self.usable_area(screen))
+            .filter(|_| !fixed)
+            .map(|snap| (screen, snap));
         let hold = match candidate {
             Some(target) if self.borders_another_screen(target, pointer) => SHARED_EDGE_HOLD,
             _ => Duration::ZERO,

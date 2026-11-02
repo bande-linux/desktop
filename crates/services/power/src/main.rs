@@ -9,7 +9,9 @@ use bande_power::adapter;
 use bande_power::backlight::{Backlight, KeyboardBacklight, SYSFS_BACKLIGHT, SYSFS_LEDS};
 use bande_power::battery::{self, BatteryNotifier};
 use bande_power::controller::{self, IdleController};
+use bande_power::idle::Inhibitor;
 use bande_power::logind::{self, ManagerProxyBlocking, SleepGuard};
+use bande_power::password::PasswordPolicy;
 use bande_power::screensaver::InhibitionService;
 use zbus::blocking::Connection;
 
@@ -38,6 +40,7 @@ fn serve() -> Result<Services, Box<dyn Error>> {
             logind::own_session(&system)?,
             Backlight::find(Path::new(SYSFS_BACKLIGHT)),
             KeyboardBacklight::find(Path::new(SYSFS_LEDS)),
+            PasswordPolicy::serve(&session)?,
         ),
     ));
     let logind = system.clone();
@@ -49,10 +52,11 @@ fn serve() -> Result<Services, Box<dyn Error>> {
                 .inspect_err(|error| tracing::warn!("cannot inhibit idle: {error}"))
                 .ok()
         },
-        move |held| inhibited.set_inhibited(held),
+        move |held| inhibited.set_inhibited(Inhibitor::ScreenSaver, held),
     )?;
     controller::follow_config(&session, &idle)?;
     controller::follow_lock(&system, &idle)?;
+    controller::follow_idle_inhibitors(&system, &idle)?;
     match wayland_client::Connection::connect_to_env() {
         Ok(connection) => {
             if let Err(error) = bande_power::wayland::watch_idle(connection, Arc::clone(&idle)) {

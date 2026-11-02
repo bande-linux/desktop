@@ -4,8 +4,7 @@ use std::thread;
 
 use smithay::reexports::calloop::channel::Sender;
 use zbus::blocking::Connection;
-
-const OWN_SESSION: &str = "/org/freedesktop/login1/session/auto";
+use zbus::zvariant::OwnedObjectPath;
 
 #[zbus::proxy(
     interface = "org.freedesktop.login1.Session",
@@ -31,6 +30,8 @@ trait Manager {
         why: &str,
         mode: &str,
     ) -> zbus::Result<zbus::zvariant::OwnedFd>;
+
+    fn get_session(&self, session_id: &str) -> zbus::Result<OwnedObjectPath>;
 
     #[zbus(signal)]
     fn prepare_for_sleep(&self, start: bool) -> zbus::Result<()>;
@@ -111,8 +112,9 @@ pub fn follow_session(
     lock_states: Receiver<bool>,
     requests: Sender<SessionRequest>,
 ) -> zbus::Result<()> {
+    let path = ManagerProxyBlocking::new(connection)?.get_session("auto")?;
     let session = SessionProxyBlocking::builder(connection)
-        .path(OWN_SESSION)?
+        .path(path)?
         .build()?;
     let locks = session.receive_lock()?;
     thread::spawn(move || {

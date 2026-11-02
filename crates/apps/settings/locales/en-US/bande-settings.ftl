@@ -287,12 +287,19 @@ updates-notification-body = { $count ->
     [one] 1 update is ready to install.
    *[other] { $count } updates are ready to install.
 }
-updates-ready-restart = { $count ->
-    [one] An update is ready to install
-   *[other] { $count } updates are ready to install
+updates-need-restart-body = { $count ->
+    [one] 1 update is ready to install. It needs a restart.
+   *[other] { $count } updates are ready to install. They need a restart.
 }
-updates-ready-restart-hint = They need a restart. Open Software Update to install them when it suits you.
+updates-some-need-restart-body = { $count ->
+    [one] 1 update is ready to install.
+   *[other] { $count } updates are ready to install.
+} { $restart ->
+    [one] 1 of them needs a restart.
+   *[other] { $restart } of them need a restart.
+}
 show-updates = Show Updates
+flatpak-version = { $version } · Flatpak
 manual-address-invalid = Type an address such as 192.168.1.20/24, and the router and DNS servers as addresses such as 192.168.1.1.
 ip-address = IP address
 ip-address-placeholder = 192.168.1.20/24
@@ -424,6 +431,7 @@ users-you = Logged in as { $name } ({ $login })
 users-you-login = Logged in as { $login }
 service-accounts = The accounts service
 service-files = The file chooser
+service-login = The login service
 add-user-ellipsis = Add User…
 add-user-hint = Add a person who can log in to this computer
 full-name = Full name
@@ -453,5 +461,6 @@ delete-user-question = Delete “{ $name }”?
 delete-user-warning = Keep the home folder to keep their files in /home/{ $login }, or delete it and everything in it.
 delete-user-keep-home = Keep Home Folder
 delete-user-remove-home = Delete Home Folder
+delete-user-logged-in = { $name } is logged in. To delete this user, they must log out first.
 vpn-remove-question = Remove the VPN “{ $name }”?
 vpn-remove-warning = Its settings and keys are deleted. Import the configuration again to use it.

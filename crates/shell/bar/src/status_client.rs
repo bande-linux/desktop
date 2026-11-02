@@ -9,12 +9,12 @@ use std::time::Instant;
 
 use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
-use crate::menu_bar::{HEIGHT, MenuBar, Slot, StatusView};
 use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, clock_menu, input_source_menu,
-    sound_menu, standard_app_menu, system_menu, wifi_menu,
+    sound_menu, system_menu, wifi_menu,
 };
-use bande_config::{BUS_NAME, BarEdge, BarLayout, OBJECT_PATH};
+use crate::rail::{Slot, TaskbarView, display_edge};
+use bande_config::{BUS_NAME, BarEdge, OBJECT_PATH};
 use bande_datetime::DateFormats;
 use bande_inbox::{Inbox, Outbox};
 use bande_keyboard::Layouts;
@@ -29,8 +29,7 @@ use bande_status::unread::{ClockMark, set_do_not_disturb};
 use bande_status::{Command, Update};
 use bande_toolkit::ui::{Event, Menu, MenuItem, PointerButton};
 use bande_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, MenuPlacement, Panel, Rect, Role,
-    Scene, SessionEnd, TextSystem, Window, WindowEvent,
+    App, Image, MenuPlacement, Panel, Rect, Scene, SessionEnd, Window, WindowEvent,
 };
 use bande_xdg::{
     DesktopEntry, app_name, data_dirs, find_app, find_icon, launch_action, spawn_detached,
@@ -45,18 +44,17 @@ const TRAY_PIXELS: u32 = 32;
 const SCROLL_STEP: f32 = 1.0 / 16.0;
 const SETTINGS: &str = "org.bande.Settings";
 const TRAY_ITEM: &str = "tray-item:";
-const MENU_BAR_NAMESPACE: &str = "menubar";
 const CONFIG_INTERFACE: &str = "org.bande.Config";
 
 pub type Restart = Rc<Cell<bool>>;
 
 static LAYOUTS: LazyLock<Layouts> = LazyLock::new(Layouts::load);
 
-pub struct MenuBarClient<V> {
-    bar: V,
+pub struct StatusClient {
+    bar: TaskbarView,
     display: Display,
     handoff: SharedHandoff,
-    layout: (BarLayout, BarEdge),
+    edge: BarEdge,
     restart: Restart,
     workspaces: (usize, usize),
     clock_mark: ClockMark,
@@ -126,8 +124,8 @@ fn tray_images(
         .collect()
 }
 
-impl<V: StatusView> MenuBarClient<V> {
-    pub fn view_mut(&mut self) -> &mut V {
+impl StatusClient {
+    pub fn view_mut(&mut self) -> &mut TaskbarView {
         &mut self.bar
     }
 
@@ -143,7 +141,7 @@ impl<V: StatusView> MenuBarClient<V> {
         if !self.display.main {
             return;
         }
-        let edge = self.bar.edge();
+        let edge = display_edge(self.bar.edge());
         for (panel, slot) in [
             (Panel::ControlCenter, Slot::ControlCenter),
             (Panel::NotificationCenter, Slot::Clock),
@@ -282,34 +280,6 @@ impl<V: StatusView> MenuBarClient<V> {
         }
     }
 
-    fn app_menu_titles(&self) -> Vec<String> {
-        self.app_root
-            .as_ref()
-            .map(|root| {
-                root.children
-                    .iter()
-                    .skip(1)
-                    .filter(|child| child.visible && !child.separator)
-                    .map(|child| child.label.clone())
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    fn app_menu_node(&self, slot: Slot) -> Option<&Node> {
-        let root = self.app_root.as_ref()?;
-        let visible = || {
-            root.children
-                .iter()
-                .filter(|child| child.visible && !child.separator)
-        };
-        match slot {
-            Slot::AppMenu => root.children.first(),
-            Slot::AppMenuTitle(index) => visible().skip(1).nth(index),
-            _ => None,
-        }
-    }
-
     fn entry(&self) -> Option<&DesktopEntry> {
         find_app(self.apps.entries(), &self.app_id)
     }
@@ -366,7 +336,6 @@ impl<V: StatusView> MenuBarClient<V> {
         self.menu_key = menu;
         self.app_root = None;
         self.menu_loaded = false;
-        self.bar.set_app_menus(Vec::new());
         if !self.menu_key.is_empty() {
             self.status.errand(Errand::AppMenu(self.menu_key.clone()));
         }
@@ -406,13 +375,6 @@ impl<V: StatusView> MenuBarClient<V> {
             Slot::Bluetooth => status.bluetooth.as_ref().map(bluetooth_menu),
             Slot::InputSource => Some(input_source_menu(&status.input_sources)),
             Slot::MoreStatusItems => Some(self.more_menu(&status.input_sources)),
-            Slot::AppMenu
-                if self
-                    .app_menu_node(slot)
-                    .is_none_or(|node| node.children.is_empty()) =>
-            {
-                Some(standard_app_menu(self.bar.app()))
-            }
             _ => None,
         };
         if let Some(menu) = local {
@@ -435,16 +397,6 @@ impl<V: StatusView> MenuBarClient<V> {
                 "open the Notification Center",
                 window.toggle_panel(Panel::NotificationCenter),
             ),
-            Slot::AppMenu | Slot::AppMenuTitle(_) => {
-                if let Some(node) = self.app_menu_node(slot) {
-                    let menu = self.menu_key.clone();
-                    let parent = node.id;
-                    self.bar.set_open(Some(slot));
-                    window.request_redraw();
-                    self.open_anchor = Some(anchor);
-                    self.status.errand(Errand::ShowMenu { menu, parent });
-                }
-            }
             Slot::StatusItem(index) => self.open_tray(window, index, anchor, false),
             Slot::Workspace(index) if index == self.workspaces.1 => {
                 report("show the windows", window.show_windows(""));
@@ -547,7 +499,7 @@ impl<V: StatusView> MenuBarClient<V> {
     }
 }
 
-impl<V: StatusView> App for MenuBarClient<V> {
+impl App for StatusClient {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         let scale = window.scale();
@@ -596,15 +548,6 @@ impl<V: StatusView> App for MenuBarClient<V> {
                 let slot = self.bar.slot_at(pointer.position, PointerButton::Primary);
                 if self.bar.set_hovered(slot) {
                     window.request_redraw();
-                }
-                if let (Some(open), Some(slot)) = (self.bar.open(), slot)
-                    && self.bar.slides_between_menus()
-                    && open != slot
-                    && !matches!(slot, Slot::ControlCenter | Slot::Clock)
-                {
-                    window.close_menu();
-                    self.bar.set_open(None);
-                    self.open(window, slot);
                 }
             }
             WindowEvent::Input(Event::Scroll(scroll)) => {
@@ -705,16 +648,13 @@ impl<V: StatusView> App for MenuBarClient<V> {
                         );
                     }
                 }
-                Update::BarLayout { layout, edge } => {
-                    let wanted = (
-                        BarLayout::from_keyword(&layout).unwrap_or(self.layout.0),
-                        BarEdge::from_keyword(&edge).unwrap_or(self.layout.1),
-                    );
-                    let combined = self.layout.0 == BarLayout::Combined;
-                    if wanted.0 != self.layout.0 || (combined && wanted.1 != self.layout.1) {
+                Update::BarEdge(edge) => {
+                    if let Some(edge) = BarEdge::from_keyword(&edge)
+                        && edge != self.edge
+                    {
                         self.restart.set(true);
+                        self.edge = edge;
                     }
-                    self.layout = wanted;
                 }
                 Update::ClockMark(mark) => {
                     self.clock_mark = mark;
@@ -744,8 +684,6 @@ impl<V: StatusView> App for MenuBarClient<V> {
                     if menu == self.menu_key {
                         self.app_root = root;
                         self.menu_loaded = true;
-                        let titles = self.app_menu_titles();
-                        self.bar.set_app_menus(titles);
                         self.publish_menu(window);
                         if let Some(anchor) = self.waiting_menus.take() {
                             self.show_app_menu(window, anchor);
@@ -782,52 +720,21 @@ impl<V: StatusView> App for MenuBarClient<V> {
     }
 }
 
-pub fn menu_bar_role() -> Role {
-    Role::Layer(LayerOptions {
-        layer: LayerKind::Top,
-        anchor: Edges {
-            top: true,
-            left: true,
-            right: true,
-            bottom: false,
-        },
-        exclusive_zone: HEIGHT as i32,
-        keyboard: KeyboardFocus::None,
-        namespace: MENU_BAR_NAMESPACE.to_owned(),
-    })
-}
-
-pub const MENU_BAR_SIZE: (u32, u32) = (0, HEIGHT);
-
-impl MenuBarClient<MenuBar> {
+impl StatusClient {
     pub fn new(
-        window: &mut Window,
-        text: TextSystem,
+        mut view: TaskbarView,
         display: Display,
         status: &StatusHub,
-        layout: (BarLayout, BarEdge),
-    ) -> std::io::Result<Self> {
-        let bar = MenuBar::new(window.appearance().palette(), text, String::new());
-        MenuBarClient::with_view(bar, display, status, layout)
-    }
-}
-
-impl<V: StatusView> MenuBarClient<V> {
-    pub fn with_view(
-        mut view: V,
-        display: Display,
-        status: &StatusHub,
-        layout: (BarLayout, BarEdge),
     ) -> std::io::Result<Self> {
         let inbox = Inbox::new()?;
         status.subscribe(inbox.outbox());
         let dates = DateFormats::from_env();
         view.set_time(&bande_datetime::now(), &dates);
         Ok(Self {
+            edge: view.edge(),
             bar: view,
             display,
             handoff: SharedHandoff::default(),
-            layout,
             restart: Restart::default(),
             workspaces: (1, 0),
             clock_mark: ClockMark::Clear,
@@ -893,10 +800,7 @@ fn follow_config(session: &Connection, outbox: &Outbox<Update>) -> zbus::Result<
         Ok(outbox.send(Update::BatteryPercentage(
             config.get_property("ShowBatteryPercentage")?,
         )) && outbox.send(Update::ClockFormat(config.get_property("ClockFormat")?))
-            && outbox.send(Update::BarLayout {
-                layout: config.get_property("BarLayout")?,
-                edge: config.get_property("BarEdge")?,
-            }))
+            && outbox.send(Update::BarEdge(config.get_property("BarEdge")?)))
     };
     if !publish()? {
         return Ok(());

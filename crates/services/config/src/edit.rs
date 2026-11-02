@@ -4,11 +4,11 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
-    Accent, Accessibility, AlertSound, Appearance, BarEdge, BarLayout, CapsLock, ClockFormat,
-    Config, ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging, FocusSchedule,
-    InputSource, LidOnPower, Mouse, NightLight, Placement, PrimaryButton, ScrollMethod, Search,
-    SearchCategory, SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
-    accent_keyword, same_displays,
+    Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
+    ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging, FocusSchedule, InputSource,
+    LidOnPower, Mouse, NightLight, Placement, PrimaryButton, ScrollMethod, Search, SearchCategory,
+    SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant, accent_keyword,
+    same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -26,7 +26,7 @@ pub enum Setting {
     LowPowerOnBattery(bool),
     LidOnPower(LidOnPower),
     Accessibility(Accessibility),
-    BarPlacement(BarEdge, BarLayout),
+    BarEdge(BarEdge),
     BarApps(Vec<String>),
     BarAutoHide(bool),
     BarIconSize(u32),
@@ -145,22 +145,12 @@ impl Setting {
                 (*action != LidOnPower::Sleep).then(|| action.keyword().into()),
             ),
             Self::Accessibility(access) => set_accessibility(&mut document, access),
-            Self::BarPlacement(edge, layout) => {
-                let default = *edge == BarEdge::Left && *layout == BarLayout::Combined;
-                set(
-                    &mut document,
-                    Some("bar"),
-                    "edge",
-                    (*edge != BarEdge::Left).then(|| edge.keyword().into()),
-                );
-                set(
-                    &mut document,
-                    Some("bar"),
-                    "layout",
-                    (!default).then(|| layout.keyword().into()),
-                );
-                set(&mut document, Some("bar"), "menu-bar", None);
-            }
+            Self::BarEdge(edge) => set(
+                &mut document,
+                Some("bar"),
+                "edge",
+                (*edge != BarEdge::Left).then(|| edge.keyword().into()),
+            ),
             Self::BarApps(apps) => set_values(
                 &mut document,
                 Some("bar"),

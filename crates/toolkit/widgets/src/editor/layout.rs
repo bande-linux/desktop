@@ -1,8 +1,6 @@
 use std::borrow::Cow;
 use std::ops::Range;
 
-use std::borrow::Cow as Borrowed;
-
 use bande_graphics::{Color, Paragraph, Point, Rect, TextAlign, TextStyle, TextSystem};
 use parley::{
     Affinity, AlignmentOptions, Cursor, FontFamily, FontFamilyName, FontStyle, FontWeight,
@@ -18,6 +16,7 @@ const BULLETS: [&str; 3] = ["•", "◦", "▪"];
 
 const AVERAGE_ADVANCE: f32 = 0.55;
 const KEPT_LAYOUTS: usize = 1024;
+const TAB_SPACES: f32 = 4.0;
 
 pub(super) struct Block {
     pub(super) text: String,
@@ -151,10 +150,15 @@ impl Editor {
         })
     }
 
-    fn build(&self, text: &mut TextSystem, paragraph: usize) -> Paragraph {
-        let content = self.layout_text(paragraph);
+    fn shape(
+        &self,
+        text: &mut TextSystem,
+        paragraph: usize,
+        content: &str,
+        tabs: &[(usize, f32)],
+    ) -> Layout<Color> {
         let (fonts, layouts) = text.contexts();
-        let mut builder = layouts.ranged_builder(fonts, &content, self.scale, true);
+        let mut builder = layouts.ranged_builder(fonts, content, self.scale, true);
         let style = TextStyle::new(self.font_size, self.color);
         let typeface = self.typeface.unwrap_or(style.typeface);
         TextStyle { typeface, ..style }.apply(&mut builder);
@@ -184,13 +188,16 @@ impl Editor {
             }
             if let Some(family) = &attributes.family {
                 let families = vec![
-                    FontFamilyName::Named(Borrowed::Owned(family.to_string())),
+                    FontFamilyName::Named(Cow::Owned(family.to_string())),
                     FontFamilyName::Generic(GenericFamily::SansSerif),
                 ];
                 builder.push(StyleProperty::FontFamily(FontFamily::List(families.into())), range);
             }
         }
-        let mut layout: Layout<Color> = builder.build(&content);
+        for (at, spacing) in tabs {
+            builder.push(StyleProperty::LetterSpacing(*spacing), *at..*at + 1);
+        }
+        let mut layout: Layout<Color> = builder.build(content);
         let left = self.left(paragraph);
         layout.break_all_lines(self.width.map(|width| (width - left).max(self.font_size)));
         let alignment = match block.paragraph.alignment {
@@ -200,7 +207,38 @@ impl Editor {
             Alignment::Justify => parley::Alignment::Justify,
         };
         layout.align(alignment, AlignmentOptions::default());
-        Paragraph::from_layout(layout)
+        layout
+    }
+
+    fn build(&self, text: &mut TextSystem, paragraph: usize) -> Paragraph {
+        let content = self.layout_text(paragraph);
+        if !content.contains('\t') {
+            return Paragraph::from_layout(self.shape(text, paragraph, &content, &[]));
+        }
+        let spaced = content.replace('\t', " ");
+        let plain = self.shape(text, paragraph, &spaced, &[]);
+        let x = |index: usize| {
+            bounds(
+                Cursor::from_byte_index(&plain, index, Affinity::Downstream).geometry(&plain, 0.0),
+            )
+            .x
+        };
+        let mut shift = 0.0;
+        let tabs: Vec<(usize, f32)> = content
+            .match_indices('\t')
+            .map(|(at, _)| {
+                let (start, space) = (x(at) + shift, x(at + 1) - x(at));
+                let stop = space * TAB_SPACES;
+                let target = match stop > 0.0 {
+                    true => ((start / stop).floor() + 1.0) * stop,
+                    false => start,
+                };
+                let extra = (target - start - space).max(0.0);
+                shift += extra;
+                (at, extra / self.scale)
+            })
+            .collect();
+        Paragraph::from_layout(self.shape(text, paragraph, &spaced, &tabs))
     }
 
     fn ensure(&mut self, text: &mut TextSystem, paragraph: usize) {

@@ -13,9 +13,9 @@ use smithay::wayland::compositor::get_parent;
 use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 use smithay::wayland::shell::xdg::{PopupSurface, PositionerState};
 
-use crate::motion::{BAR_NAMESPACE, TASKBAR_NAMESPACE};
+use crate::motion::BAR_NAMESPACE;
 
-use crate::state::{Compositor, MENU_BAR_NAMESPACE, State};
+use crate::state::{Compositor, State};
 
 const SCREEN_MARGIN: i32 = 6;
 
@@ -232,10 +232,7 @@ impl State {
         self.screens.iter().any(|screen| {
             layer_map_for_output(&screen.output)
                 .layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)
-                .is_some_and(|layer| {
-                    [MENU_BAR_NAMESPACE, BAR_NAMESPACE, TASKBAR_NAMESPACE]
-                        .contains(&layer.namespace())
-                })
+                .is_some_and(|layer| layer.namespace() == BAR_NAMESPACE)
         })
     }
 

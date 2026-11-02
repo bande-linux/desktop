@@ -51,7 +51,6 @@ graph TB
         subgraph "bande-shell"
             DESKTOP[Desktop]
             DOCK[Taskbar]
-            MENUBAR[Menu bar]
             NOTES[Notifications]
             LAUNCHER[Launcher]
             CC[Control Center]
@@ -82,15 +81,15 @@ graph TB
     TOOLKIT[bande-toolkit: Vello, Parley, AccessKit, Wayland windows]
 
     DRM & INPUT & SEAT --> SMITHAY
-    DOCK & MENUBAR & LAUNCHER & CC & SHOT & LOCK & GREETER -->|Wayland| SMITHAY
+    DOCK & LAUNCHER & CC & SHOT & LOCK & GREETER -->|Wayland| SMITHAY
     FILES & SETTINGS & TERM -->|Wayland| SMITHAY
     CLIP -->|Wayland, trusted socket| SMITHAY
-    DOCK & MENUBAR & LAUNCHER & FILES & SETTINGS & TERM --- TOOLKIT
+    DOCK & LAUNCHER & FILES & SETTINGS & TERM --- TOOLKIT
     CONFIG & NOTIFY & POWER & TRAY & AUTOMOUNT & PORTAL & POLKIT <-->|D-Bus| SYS
-    SETTINGS & MENUBAR & CC <-->|D-Bus| CONFIG
+    SETTINGS & DOCK & CC <-->|D-Bus| CONFIG
 ```
 
-The desktop and the taskbar of every display (with the menu bar when it is separate), the notifications, Control Center and the
+The desktop and the taskbar of every display, the notifications, Control Center and the
 launcher are one process, `bande-shell` (`crates/shell/shell`), with one Wayland connection, one
 GPU device, one font database and one connection per D-Bus bus. Each part is a library crate
 (`bande-desktop-surface`, `bande-bar`, `bande-notifications`, `bande-controlcenter`,
@@ -107,7 +106,7 @@ thinks of it as part of the system:
   every client hangs: Force Quit, the window menu, the switcher and overview, and title bars
   for apps that ask for server-side ones. Everything else is drawn by clients.
 - **Shell clients.** Wayland clients that make up the desktop around the apps: the shell (desktop,
-  taskbar, menu bar, notifications, launcher, Control Center), the screenshot tool, the lock screen
+  taskbar, notifications, launcher, Control Center), the screenshot tool, the lock screen
   and the greeter. The compositor starts them on
   socket pairs and restarts them when they exit; only these connections see the private
   `bande_shell_v1` protocol and `ext-foreign-toplevel-list-v1`
@@ -186,8 +185,8 @@ small `key = value` file each next to it (`files.conf`, `terminal.conf`).
   `night-light`, `do-not-disturb`, `search`, `display "<name>"` (one per display, named by EDID maker, model and serial) and
   `arrangement` (one per set of displays). Every setting is optional and has a default.
   ```kdl
-  appearance "automatic"        // "dark" | "light" | "automatic"
-  bar { edge "left"; size 40; auto-hide #false; layout "combined" }   // or "separate"
+  appearance "dark"             // "dark" (default) | "light" | "automatic"
+  bar { edge "left"; size 40; auto-hide #false }   // edge "left" | "bottom" | "right" | "top"
   idle { screen-saver-after "5m"; display-off-after "10m"; require-password-after "immediately" }   // or "never"; suspend-after follows the display unless set
   keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape" }
   trackpad { tap-to-click #true; natural-scrolling #true }

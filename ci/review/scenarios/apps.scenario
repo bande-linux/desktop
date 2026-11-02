@@ -1,4 +1,4 @@
-# Open each app from the launcher, look at it, right-click inside it and open its menu bar menus.
+# Open each app from the launcher, look at it, right-click inside it and open its app menu.
 note "Files"
 key super+space
 wait 600ms
@@ -13,8 +13,8 @@ wait 1s
 shot "files context menu"
 key escape
 wait 500ms
-note "The app's first menu in the menu bar"
-click 170 22
+note "Super+F2 opens the app menu from the window's menu button"
+key super+f2
 wait 1s
 shot "files app menu"
 key escape

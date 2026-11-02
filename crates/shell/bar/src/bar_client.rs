@@ -2,8 +2,7 @@ use std::os::fd::BorrowedFd;
 use std::time::Instant;
 
 use crate::L10N;
-use crate::menu_bar::StatusView;
-use crate::rail::{TaskbarView, bar_width, edge_band, owns_node, surface_size};
+use crate::rail::{bar_width, edge_band, owns_node, surface_size};
 use crate::taskbar_client::anchor;
 use accesskit::{Node, NodeId, Role as AccessRole, TreeInfo, TreeUpdate};
 use bande_config::BarEdge;
@@ -13,7 +12,7 @@ use bande_toolkit::{
     WindowEvent,
 };
 
-use crate::menu_bar_client::MenuBarClient;
+use crate::status_client::StatusClient;
 use crate::taskbar_client::Taskbar;
 
 const BAR_NAMESPACE: &str = "bar";
@@ -21,7 +20,7 @@ const ROOT: NodeId = NodeId(1 << 41);
 const HIDDEN_SHADOW: f32 = 8.0;
 const UNREAD_SLIVER: (f32, f32) = (2.0, 24.0);
 
-pub fn combined_role(edge: BarEdge, icon_size: f32) -> (Role, (u32, u32)) {
+pub fn bar_role(edge: BarEdge, icon_size: f32) -> (Role, (u32, u32)) {
     (
         Role::Layer(LayerOptions {
             layer: LayerKind::Top,
@@ -34,9 +33,9 @@ pub fn combined_role(edge: BarEdge, icon_size: f32) -> (Role, (u32, u32)) {
     )
 }
 
-pub struct CombinedClient {
+pub struct BarClient {
     taskbar: Taskbar,
-    status: MenuBarClient<TaskbarView>,
+    status: StatusClient,
     status_open: bool,
 }
 
@@ -54,8 +53,8 @@ fn pointer(event: &WindowEvent) -> bool {
     )
 }
 
-impl CombinedClient {
-    pub fn new(taskbar: Taskbar, status: MenuBarClient<TaskbarView>) -> Self {
+impl BarClient {
+    pub fn new(taskbar: Taskbar, status: StatusClient) -> Self {
         Self {
             taskbar,
             status,
@@ -90,7 +89,7 @@ impl CombinedClient {
     }
 }
 
-impl App for CombinedClient {
+impl App for BarClient {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         let view = self.status.view_mut();

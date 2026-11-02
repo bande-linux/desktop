@@ -11,12 +11,7 @@ pub enum Symbol {
     Logo,
     Wifi { bars: u8 },
     WifiOff,
-    Speaker { waves: u8 },
-    SpeakerMuted,
-    Bluetooth,
-    BluetoothOff,
     Bolt,
-    ControlCenter,
 }
 
 const WIFI_ARCS: [&str; 3] = [
@@ -24,14 +19,6 @@ const WIFI_ARCS: [&str; 3] = [
     "M3.34 7.34A8 8 0 0 1 14.66 7.34",
     "M0.9 4.6A11.6 11.6 0 0 1 17.1 4.6",
 ];
-
-const SPEAKER_WAVES: [&str; 3] = [
-    "M11.4 4.9A3.3 3.3 0 0 1 11.4 9.1",
-    "M13.3 3.1A6 6 0 0 1 13.3 10.9",
-    "M15.2 1.3A8.7 8.7 0 0 1 15.2 12.7",
-];
-
-const SPEAKER_BODY: &str = "M1.5 4.6h2.8L8.2 1.4v11.2L4.3 9.4H1.5z";
 
 fn hex(color: Color) -> String {
     format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b)
@@ -73,39 +60,9 @@ pub fn svg(symbol: Symbol, color: Color) -> String {
                 arcs(&WIFI_ARCS, 0, &color, 1.8)
             ),
         ),
-        Symbol::Speaker { waves } => (
-            "0 0 18 14",
-            format!(
-                r#"<path d="{SPEAKER_BODY}" fill="{color}"/>{}"#,
-                arcs(&SPEAKER_WAVES, waves, &color, 1.5)
-            ),
-        ),
-        Symbol::SpeakerMuted => (
-            "0 0 18 14",
-            format!(
-                r#"<path d="{SPEAKER_BODY}" fill="{color}"/><path d="M11.5 4.8l4.4 4.4M15.9 4.8l-4.4 4.4" stroke="{color}" stroke-width="1.5" stroke-linecap="round"/>"#
-            ),
-        ),
-        Symbol::Bluetooth | Symbol::BluetoothOff => (
-            "0 0 10 16",
-            format!(
-                r#"<path d="M1.8 4.6L8 10.6L5 13.8V2.2L8 5.4L1.8 11.4" fill="none" stroke="{color}" stroke-opacity="{}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
-                if symbol == Symbol::Bluetooth {
-                    1.0
-                } else {
-                    0.4
-                }
-            ),
-        ),
         Symbol::Bolt => (
             "0 0 8 12",
             format!(r#"<path d="M5 0L0.4 6.9H3.6L2.6 12L7.6 4.8H4.4z" fill="{color}"/>"#),
-        ),
-        Symbol::ControlCenter => (
-            "0 0 16 14",
-            format!(
-                r#"<rect x="0.75" y="0.75" width="14.5" height="5" rx="2.5" fill="none" stroke="{color}" stroke-width="1.3"/><circle cx="12.75" cy="3.25" r="1.6" fill="{color}"/><rect x="0.75" y="8.25" width="14.5" height="5" rx="2.5" fill="none" stroke="{color}" stroke-width="1.3"/><circle cx="3.25" cy="10.75" r="1.6" fill="{color}"/>"#
-            ),
         ),
     };
     format!(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="{view}">{body}</svg>"#)
@@ -115,10 +72,7 @@ pub fn natural_size(symbol: Symbol) -> (f32, f32) {
     match symbol {
         Symbol::Logo => (15.0, 15.0),
         Symbol::Wifi { .. } | Symbol::WifiOff => (17.0, 13.0),
-        Symbol::Speaker { .. } | Symbol::SpeakerMuted => (17.0, 13.0),
-        Symbol::Bluetooth | Symbol::BluetoothOff => (9.0, 14.0),
         Symbol::Bolt => (6.0, 9.0),
-        Symbol::ControlCenter => (15.0, 13.0),
     }
 }
 

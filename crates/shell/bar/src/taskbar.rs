@@ -19,17 +19,12 @@ use bande_toolkit::{
     Shape, TextAlign, TextStyle, TextSystem,
 };
 
-const CELL_PADDING: f32 = 5.0;
 const CROSS_PADDING: f32 = 8.0;
-const END_PADDING: f32 = 6.0;
-const SCREEN_GAP: f32 = 6.0;
 const SEPARATOR_CELL: f32 = 13.0;
-const LABEL_ROOM: f32 = 280.0;
 const LABEL_GAP: f32 = 10.0;
 const LABEL_TEXT: f32 = 13.0;
 const LABEL_DELAY: Duration = Duration::from_millis(400);
 const LABEL_GRACE: Duration = Duration::from_millis(250);
-const DOT: f32 = 4.0;
 const PRESSED_SCALE: f32 = 0.86;
 const LAUNCH_TIMEOUT: Duration = Duration::from_secs(10);
 const LAUNCH_PERIOD: f32 = 1.2;
@@ -44,7 +39,6 @@ const REVEAL_DWELL: Duration = Duration::from_millis(120);
 const FULL_SCREEN_DWELL: Duration = Duration::from_millis(300);
 const HIDE_DELAY: Duration = Duration::from_millis(450);
 const EDGE_STRIP: f32 = 2.0;
-const HIDDEN_SHADOW: f32 = 24.0;
 const DRAG_THRESHOLD: f32 = 4.0;
 const DROP_SCALE: f32 = 1.12;
 
@@ -74,7 +68,7 @@ pub enum MenuTarget {
     More(Vec<String>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct TaskbarLayout {
     pub start: f32,
     pub end: f32,
@@ -246,7 +240,7 @@ pub struct TaskbarState {
     pointer_inside: bool,
     menu_open: bool,
     selected: Option<Key>,
-    rail: Option<TaskbarLayout>,
+    rail: TaskbarLayout,
     rail_icon: f32,
     active: Option<String>,
     more: Option<More>,
@@ -258,16 +252,8 @@ pub fn vertical(edge: BarEdge) -> bool {
     matches!(edge, BarEdge::Left | BarEdge::Right)
 }
 
-pub fn thickness(icon_size: f32) -> f32 {
+fn thickness(icon_size: f32) -> f32 {
     icon_size + 2.0 * CROSS_PADDING
-}
-
-pub fn exclusive_zone(icon_size: f32) -> f32 {
-    thickness(icon_size) + 2.0 * SCREEN_GAP
-}
-
-pub fn surface_depth(icon_size: f32) -> f32 {
-    exclusive_zone(icon_size) + LABEL_ROOM
 }
 
 fn scaled(rect: Rect, factor: f32) -> Rect {
@@ -294,7 +280,7 @@ impl TaskbarState {
         let mut state = Self {
             edge,
             icon_size,
-            scheme: Scheme::Light,
+            scheme: Scheme::default(),
             reduce_motion: false,
             slots: Vec::new(),
             trash: TrashIcons::default(),
@@ -328,7 +314,7 @@ impl TaskbarState {
             pointer_inside: false,
             menu_open: false,
             selected: None,
-            rail: None,
+            rail: TaskbarLayout::default(),
             rail_icon: icon_size,
             active: None,
             more: None,
@@ -513,11 +499,7 @@ impl TaskbarState {
     }
 
     pub fn set_rail(&mut self, rail: TaskbarLayout) {
-        self.rail = Some(rail);
-    }
-
-    pub fn rail(&self) -> Option<TaskbarLayout> {
-        self.rail
+        self.rail = rail;
     }
 
     pub fn set_active(&mut self, app_id: Option<&str>) {
@@ -634,10 +616,6 @@ impl TaskbarState {
                 }))
     }
 
-    pub fn panel(&self) -> Rect {
-        self.panel
-    }
-
     pub fn set_auto_hide(&mut self, auto_hide: bool, now: Instant) {
         self.auto_hide = auto_hide;
         self.follow_hiding(now);
@@ -686,40 +664,17 @@ impl TaskbarState {
         if self.hides() {
             return 0;
         }
-        match self.rail {
-            Some(rail) => rail.thickness().round() as i32,
-            None => exclusive_zone(self.icon_size).round() as i32,
-        }
+        self.rail.thickness().round() as i32
     }
 
     pub fn input_region(&self) -> Rect {
-        if let Some(rail) = self.rail {
-            let depth = if self.is_shown() {
-                rail.thickness()
-            } else {
-                EDGE_STRIP
-            };
-            let size = (self.surface.width, self.surface.height);
-            return edge_band(self.edge, size, depth);
-        }
-        let panel = self.panel;
-        let size = self.surface;
         let depth = if self.is_shown() {
-            SCREEN_GAP + panel.width.min(panel.height)
+            self.rail.thickness()
         } else {
             EDGE_STRIP
         };
-        let along = if vertical(self.edge) {
-            (panel.y, panel.height)
-        } else {
-            (panel.x, panel.width)
-        };
-        match self.edge {
-            BarEdge::Left => Rect::new(0.0, along.0, depth, along.1),
-            BarEdge::Right => Rect::new(size.width - depth, along.0, depth, along.1),
-            BarEdge::Top => Rect::new(along.0, 0.0, along.1, depth),
-            BarEdge::Bottom => Rect::new(along.0, size.height - depth, along.1, depth),
-        }
+        let size = (self.surface.width, self.surface.height);
+        edge_band(self.edge, size, depth)
     }
 
     fn slide(&mut self, shown: bool, now: Instant) {
@@ -906,24 +861,6 @@ impl TaskbarState {
             .collect()
     }
 
-    pub fn set_edge(&mut self, edge: BarEdge, now: Instant) {
-        if edge == self.edge {
-            return;
-        }
-        self.edge = edge;
-        self.drag = None;
-        self.hide_label(now);
-        self.label.opacity.jump_to(0.0);
-        for slot in &mut self.slots {
-            slot.cell = Rect::default();
-            slot.pinned = None;
-            slot.shift = (Animated::points(0.0), Animated::points(0.0));
-        }
-        self.reveal.jump_to(0.0);
-        let shown = !self.hides() || self.pointer_inside || self.menu_open;
-        self.slide(shown, now);
-    }
-
     pub fn is_dragging(&self) -> bool {
         self.drag.is_some()
     }
@@ -950,12 +887,7 @@ impl TaskbarState {
     }
 
     fn beyond_taskbar(&self, point: Point) -> bool {
-        let taskbar = self
-            .rail
-            .map_or(SCREEN_GAP + thickness(self.icon_size), |rail| {
-                rail.thickness()
-            });
-        self.depth_of(point) > taskbar + self.icon_size
+        self.depth_of(point) > self.rail.thickness() + self.icon_size
     }
 
     fn press_at(&mut self, key: &Key, point: Point) {
@@ -1083,7 +1015,7 @@ impl TaskbarState {
             return;
         };
         if drag.removing {
-            let size = self.effective_icon(self.along(self.surface));
+            let size = self.rail_icon;
             let mut fade = Animated::new(1.0);
             fade.animate_at(now, self.reduce_motion, 0.0, Spring::STANDARD);
             let slot = &mut self.slots[index];
@@ -1193,31 +1125,8 @@ impl TaskbarState {
             .find(|slot| &slot.key == key && !slot.leaving)
     }
 
-    fn effective_icon(&self, length: f32) -> f32 {
-        if self.rail.is_some() {
-            return self.rail_icon;
-        }
-        let (cells, separators) =
-            self.slots
-                .iter()
-                .fold((0.0, 0.0), |(cells, separators), slot| {
-                    let presence = slot.presence.target();
-                    if slot.key.is_separator() {
-                        (cells, separators + presence * SEPARATOR_CELL)
-                    } else {
-                        (cells + presence, separators)
-                    }
-                });
-        if cells <= 0.0 {
-            return self.icon_size;
-        }
-        let room = length - 2.0 * SCREEN_GAP - 2.0 * END_PADDING - separators;
-        let fitting = room / cells - 2.0 * CELL_PADDING;
-        self.icon_size.min(fitting).max(16.0)
-    }
-
     fn icon_rect(&self, cell: Rect) -> Rect {
-        let icon = self.effective_icon(self.along(self.surface));
+        let icon = self.rail_icon;
         Rect::new(
             cell.x + (cell.width - icon) / 2.0,
             cell.y + (cell.height - icon) / 2.0,
@@ -1226,71 +1135,8 @@ impl TaskbarState {
         )
     }
 
-    fn along(&self, size: Size) -> f32 {
-        if vertical(self.edge) {
-            size.height
-        } else {
-            size.width
-        }
-    }
-
     fn layout(&mut self, size: Size, now: Instant) {
-        if let Some(rail) = self.rail {
-            self.layout_rail(rail, size, now);
-            return;
-        }
-        self.surface = size;
-        let along_length = self.along(size);
-        let icon = self.effective_icon(along_length);
-        let thick = thickness(self.icon_size);
-        let lengths = self
-            .slots
-            .iter()
-            .map(|slot| {
-                slot.cell_length(icon, CELL_PADDING) * slot.presence.value_at(now).0.max(0.0)
-            })
-            .collect::<Vec<_>>();
-        let total = 2.0 * END_PADDING + lengths.iter().sum::<f32>();
-        let start = ((along_length - total) / 2.0).max(SCREEN_GAP);
-        let edge = self.edge;
-        let hidden = (1.0 - self.reveal.value_at(now).0) * (SCREEN_GAP + thick + HIDDEN_SHADOW);
-        let cross = match edge {
-            BarEdge::Left | BarEdge::Top => SCREEN_GAP - hidden,
-            BarEdge::Right => size.width - SCREEN_GAP - thick + hidden,
-            BarEdge::Bottom => size.height - SCREEN_GAP - thick + hidden,
-        };
-        let place = |along: f32, length: f32| {
-            if vertical(edge) {
-                Rect::new(cross, along, thick, length)
-            } else {
-                Rect::new(along, cross, length, thick)
-            }
-        };
-        self.panel = place(start, total);
-        let before = self
-            .slots
-            .iter()
-            .map(|slot| (slot.id, slot.cell))
-            .collect::<Vec<_>>();
-        let mut offset = start + END_PADDING;
-        for (slot, length) in self.slots.iter_mut().zip(lengths) {
-            let full = slot.cell_length(icon, CELL_PADDING);
-            slot.cell = place(offset - (full - length) / 2.0, full);
-            offset += length;
-        }
-        self.settle_moves(&before, now);
-        self.slots
-            .retain(|slot| !(slot.leaving && !slot.presence.value_at(now).1));
-        if self
-            .ghost
-            .as_ref()
-            .is_some_and(|ghost| !ghost.fade.value_at(now).1)
-        {
-            self.ghost = None;
-        }
-    }
-
-    fn layout_rail(&mut self, rail: TaskbarLayout, size: Size, now: Instant) {
+        let rail = self.rail;
         self.surface = size;
         let pinned_to_end = |key: &Key| matches!(key, Key::Trash | Key::TrashSeparator);
         let wanted = |icon: f32| -> f32 {
@@ -1380,18 +1226,10 @@ impl TaskbarState {
     }
 
     fn reach(&self, cell: Rect) -> Rect {
-        if let Some(rail) = self.rail {
-            let (bar, band) = (rail.bar, rail.thickness());
-            return match vertical(self.edge) {
-                true => Rect::new(bar.x, cell.y, band, cell.height),
-                false => Rect::new(cell.x, bar.y, cell.width, band),
-            };
-        }
-        match self.edge {
-            BarEdge::Left => Rect::new(0.0, cell.y, cell.x + cell.width, cell.height),
-            BarEdge::Right => Rect::new(cell.x, cell.y, self.surface.width - cell.x, cell.height),
-            BarEdge::Top => Rect::new(cell.x, 0.0, cell.width, cell.y + cell.height),
-            BarEdge::Bottom => Rect::new(cell.x, cell.y, cell.width, self.surface.height - cell.y),
+        let (bar, band) = (self.rail.bar, self.rail.thickness());
+        match vertical(self.edge) {
+            true => Rect::new(bar.x, cell.y, band, cell.height),
+            false => Rect::new(cell.x, bar.y, cell.width, band),
         }
     }
 
@@ -1629,9 +1467,6 @@ impl TaskbarState {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let now = cx.now();
-        if self.rail.is_none() {
-            self.paint_panel(cx, items);
-        }
         let dragged = self.drag.as_ref().map(|drag| &drag.key);
         let mut on_top = Vec::new();
         for slot in &self.slots {
@@ -1751,7 +1586,7 @@ impl TaskbarState {
         else {
             return;
         };
-        let icon = self.effective_icon(self.along(self.surface));
+        let icon = self.rail_icon;
         let width = (text.width() + 16.0).ceil();
         let height = (text.height() + 6.0).ceil();
         let rect = Rect::new(
@@ -1780,71 +1615,26 @@ impl TaskbarState {
         });
     }
 
-    pub fn panel_radius(&self) -> f32 {
-        if self.rail.is_some() {
-            return 0.0;
-        }
-        (thickness(self.icon_size) * 0.3).round()
-    }
-
-    fn paint_panel(&self, cx: &Context, items: &mut Vec<Item>) {
-        let radius = self.panel_radius();
-        let shape = Shape::rounded(self.panel, radius);
-        items.extend(Item::shadows(shape, Elevation::Overlay, self.scheme, true));
-        items.push(Item::Fill {
-            shape,
-            paint: cx.palette.chassis.into(),
-        });
-        items.push(Item::Stroke {
-            shape: Shape::rounded(self.panel.inset(0.5), radius - 0.5),
-            width: 1.0,
-            paint: cx.palette.edge.into(),
-        });
-    }
-
     fn paint_separator(&self, cx: &Context, cell: Rect, items: &mut Vec<Item>) {
-        if let Some(rail) = self.rail {
-            let (bar, band) = (rail.bar, rail.thickness());
-            let offset = ((band - RAIL_HAIRLINE) / 2.0).round();
-            let rect = match vertical(self.edge) {
-                true => Rect::new(
-                    bar.x + offset,
-                    (cell.y + cell.height / 2.0 - 0.5).round(),
-                    RAIL_HAIRLINE,
-                    1.0,
-                ),
-                false => Rect::new(
-                    (cell.x + cell.width / 2.0 - 0.5).round(),
-                    bar.y + offset,
-                    1.0,
-                    RAIL_HAIRLINE,
-                ),
-            };
-            items.push(Item::Fill {
-                shape: Shape::rect(rect),
-                paint: cx.palette.hairline.into(),
-            });
-            return;
-        }
-        let span = thickness(self.icon_size) * 0.56;
-        let rect = if vertical(self.edge) {
-            Rect::new(
-                cell.x + (cell.width - span) / 2.0,
+        let (bar, band) = (self.rail.bar, self.rail.thickness());
+        let offset = ((band - RAIL_HAIRLINE) / 2.0).round();
+        let rect = match vertical(self.edge) {
+            true => Rect::new(
+                bar.x + offset,
                 (cell.y + cell.height / 2.0 - 0.5).round(),
-                span,
+                RAIL_HAIRLINE,
                 1.0,
-            )
-        } else {
-            Rect::new(
+            ),
+            false => Rect::new(
                 (cell.x + cell.width / 2.0 - 0.5).round(),
-                cell.y + (cell.height - span) / 2.0,
+                bar.y + offset,
                 1.0,
-                span,
-            )
+                RAIL_HAIRLINE,
+            ),
         };
         items.push(Item::Fill {
-            shape: Shape::rounded(rect, 0.5),
-            paint: cx.palette.ink2.with_alpha(90).into(),
+            shape: Shape::rect(rect),
+            paint: cx.palette.hairline.into(),
         });
     }
 
@@ -1909,22 +1699,7 @@ impl TaskbarState {
             });
         }
         let dot = cx.sample(&slot.dot);
-        if let Some(rail) = self.rail {
-            self.paint_indicators(cx, rail.bar, base, app_id, dot, items);
-        } else if dot > 0.0 {
-            let center = self.dot_center(cell, base);
-            let size = DOT * (0.5 + 0.5 * dot);
-            items.push(Item::Opacity {
-                alpha: dot.min(1.0),
-                items: vec![Item::Fill {
-                    shape: Shape::rounded(
-                        Rect::new(center.x - size / 2.0, center.y - size / 2.0, size, size),
-                        size / 2.0,
-                    ),
-                    paint: cx.palette.ink.with_alpha(220).into(),
-                }],
-            });
-        }
+        self.paint_indicators(cx, self.rail.bar, base, app_id, dot, items);
         let entry = self.launcher.get(app_id).copied().unwrap_or_default();
         if entry.progress().is_some() {
             let progress = cx.sample(&slot.progress).clamp(0.0, 1.0);
@@ -2041,16 +1816,6 @@ impl TaskbarState {
                 ),
                 paragraph: text.clone(),
             });
-        }
-    }
-
-    fn dot_center(&self, cell: Rect, icon: Rect) -> Point {
-        let inset = CROSS_PADDING / 2.0;
-        match self.edge {
-            BarEdge::Left => Point::new(cell.x + inset, icon.y + icon.height / 2.0),
-            BarEdge::Right => Point::new(cell.x + cell.width - inset, icon.y + icon.height / 2.0),
-            BarEdge::Top => Point::new(icon.x + icon.width / 2.0, cell.y + inset),
-            BarEdge::Bottom => Point::new(icon.x + icon.width / 2.0, cell.y + cell.height - inset),
         }
     }
 
@@ -2456,15 +2221,6 @@ pub fn taskbar_ui(state: Shared, palette: Palette, text: TextSystem) -> Ui {
         }),
         Context::new(text, palette),
     )
-}
-
-pub fn surface_size(edge: BarEdge, icon_size: f32, output: (u32, u32)) -> (u32, u32) {
-    let depth = surface_depth(icon_size).ceil() as u32;
-    if vertical(edge) {
-        (depth, output.1)
-    } else {
-        (output.0, depth)
-    }
 }
 
 pub fn scene(ui: &mut Ui, size: (u32, u32)) -> Scene {

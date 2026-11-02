@@ -14,12 +14,12 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
-    ACCENTS, Accessibility, AlertSound, Appearance, BarEdge, BarLayout, CURSOR_SIZE_RANGE,
-    CapsLock, ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, Dragging,
-    FocusSchedule, InputSource, LidOnPower, Loaded, NIGHT_LIGHT_WARMTH_RANGE, NightLight,
-    NightSchedule, Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory,
-    SecondaryClick, Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE,
-    accent_keyword, bar_placement, is_wallpaper_path, read_system_input_sources,
+    ACCENTS, Accessibility, AlertSound, Appearance, BarEdge, CURSOR_SIZE_RANGE, CapsLock,
+    ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, Dragging, FocusSchedule,
+    InputSource, LidOnPower, Loaded, NIGHT_LIGHT_WARMTH_RANGE, NightLight, NightSchedule,
+    Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory, SecondaryClick,
+    Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE, accent_keyword,
+    is_wallpaper_path, read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
@@ -238,9 +238,6 @@ fn publish_changes(
         }
         if before.bar.icon_size != after.bar.icon_size {
             let _ = guard.bar_icon_size_changed(emitter).await;
-        }
-        if before.bar.layout != after.bar.layout {
-            let _ = guard.bar_layout_changed(emitter).await;
         }
         if before.idle.screen_saver_after != after.idle.screen_saver_after {
             let _ = guard.idle_screen_saver_after_changed(emitter).await;
@@ -782,22 +779,7 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_bar_edge(&self, value: String) -> zbus::fdo::Result<()> {
         let edge = keyword(&BarEdge::ALL, BarEdge::keyword, &value)?;
-        let layout = self.store.current().bar.layout;
-        let (edge, layout) = bar_placement(edge, layout, false);
-        self.write(&Setting::BarPlacement(edge, layout))
-    }
-
-    #[zbus(property)]
-    fn bar_layout(&self) -> String {
-        self.store.current().bar.layout.keyword().to_owned()
-    }
-
-    #[zbus(property)]
-    fn set_bar_layout(&self, value: String) -> zbus::fdo::Result<()> {
-        let layout = keyword(&BarLayout::ALL, BarLayout::keyword, &value)?;
-        let edge = self.store.current().bar.edge;
-        let (edge, layout) = bar_placement(edge, layout, true);
-        self.write(&Setting::BarPlacement(edge, layout))
+        self.write(&Setting::BarEdge(edge))
     }
 
     #[zbus(property)]

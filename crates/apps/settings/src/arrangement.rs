@@ -7,7 +7,7 @@ use crate::widgets::{Text, Tone};
 const HEIGHT: f32 = 200.0;
 const PADDING: f32 = 24.0;
 const RADIUS: f32 = 6.0;
-const MENU_BAR: f32 = 5.0;
+const MAIN_MARK: f32 = 5.0;
 const ALIGN: i32 = 48;
 const FOCUS_RING: f32 = 3.0;
 
@@ -269,7 +269,7 @@ impl Widget for Arrangement {
             if self.screens[index].main {
                 items.push(Item::Fill {
                     shape: Shape::rounded(
-                        Rect::new(rect.x + 1.0, rect.y + 1.0, rect.width - 2.0, MENU_BAR),
+                        Rect::new(rect.x + 1.0, rect.y + 1.0, rect.width - 2.0, MAIN_MARK),
                         2.0,
                     ),
                     paint: cx.palette.ink.with_alpha(160).into(),

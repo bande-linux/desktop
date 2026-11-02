@@ -226,7 +226,6 @@ pub enum SettingId {
     BarEdge,
     BarIconSize,
     BarAutoHide,
-    BarLayout,
     DisplayUse,
     DisplayResolution,
     DisplayScale,
@@ -849,15 +848,6 @@ fn desktop_panes() -> Vec<Pane> {
             vec![section(
                 None,
                 vec![
-                    setting(
-                        SettingId::BarLayout,
-                        L10N.tr("bar-layout"),
-                        L10N.tr("bar-layout-keywords"),
-                        Kind::Choices(keyword_choices(vec![
-                            (L10N.tr("bar-layout-combined"), "combined"),
-                            (L10N.tr("bar-layout-separate"), "separate"),
-                        ])),
-                    ),
                     setting(
                         SettingId::BarEdge,
                         L10N.tr("bar-position"),

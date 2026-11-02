@@ -17,7 +17,7 @@ key enter
 wait-for-window "org.bande.Files"
 wait 1500ms
 shot "dark files"
-click 170 22
+key super+f2
 wait 1s
 shot "dark app menu"
 key escape
@@ -27,12 +27,12 @@ wait 1s
 shot "dark taskbar menu"
 key escape
 wait 500ms
-click 2800 22
+key super+n
 wait 1200ms
 shot "dark notification center"
 key escape
 wait 800ms
-click 2635 22
+key super+s
 wait 1200ms
 shot "dark control center"
 key escape

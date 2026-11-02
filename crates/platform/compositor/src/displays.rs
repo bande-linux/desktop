@@ -10,14 +10,7 @@ use crate::motion::{Look, OPENING_SCALE};
 use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::state::{Compositor, State};
 
-const MAIN_SCREEN_LAYERS: [&str; 6] = [
-    "taskbar",
-    "menubar",
-    "desktop",
-    "notifications",
-    "greeter",
-    "screenshot",
-];
+const MAIN_SCREEN_LAYERS: [&str; 4] = ["desktop", "notifications", "greeter", "screenshot"];
 
 pub(crate) struct Departed {
     identity: String,

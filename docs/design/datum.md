@@ -61,7 +61,7 @@ Defined in **OKLCH** and generated, Linear-style, from a few inputs: a neutral h
 ### Neutrals
 | Role | Light | Dark | Use |
 |---|---|---|---|
-| `chassis` | `#ECEAE7` (L .938) | `#1F2329` (L .255) | window frame, sidebar, title bar, combined bar |
+| `chassis` | `#ECEAE7` (L .938) | `#1F2329` (L .255) | window frame, sidebar, title bar, Taskbar |
 | `sheet` | `#FCFBF9` (L .988) | `#272A30` (L .285) | content inside windows, Settings content, document background |
 | `overlay` | `#FFFFFF` | `#34373C` (L .335) | menus, popovers, notifications, alert body |
 | `well` | `#E2DFDB` (L .905) | `#31343A` (L .325) | control fill (buttons, segmented track, window-control well, search), unfocused selection, sidebar selection |
@@ -239,9 +239,9 @@ The presets are `bande-spring`'s (`QUICK`, `STANDARD`, `GENTLE`, `FADE`, `INTERA
 
 A dry, short, *wooden-percussive* palette: soft-attack mallet and click tones under 150 ms, all pitched within D major pentatonic so overlapping sounds never clash, mastered to about −20 LUFS. Alert is two notes (A4→D5); trash is a soft paper rustle plus a low tick; screenshot is a mechanical shutter click; volume tick is a single 5 ms woodblock; plug-in rises a fifth, unplug falls a fifth. There are no chimes and no glassy pads, the sonic equivalent of solid material. Haptics on trackpads that support them: one light tick on slider detents and on snapping a window to a tile.
 
-## 13. The shell: the combined bar
+## 13. The shell: the Taskbar
 
-The combined bar (the Taskbar) is an edge-anchored bar, 64 pt at the default icon size, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
+The Taskbar is an edge-anchored bar, 64 pt at the default icon size, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
 - Bar surface = `chassis` (same tone as window frames, so the bar reads as the desktop's frame), with a 1 pt `edge` on the inner side only, square at the screen edge. It is opaque; "Tinted chassis" applies here too.
 - **Active app = a 3×16 accent tick** on the screen-edge side; **running = a 3×3 `ink2` square** (the square motif; a dot would be macOS).
 - The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 14 panels).

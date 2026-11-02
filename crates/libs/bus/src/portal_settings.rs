@@ -5,7 +5,7 @@ use zbus::zvariant::OwnedValue;
 
 pub const APPEARANCE: &str = "org.freedesktop.appearance";
 pub const BANDE_APPEARANCE: &str = "org.bande.appearance";
-pub const PREFER_DARK: u32 = 1;
+pub const PREFER_LIGHT: u32 = 2;
 
 const PORTAL: &str = "org.freedesktop.portal.Desktop";
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";

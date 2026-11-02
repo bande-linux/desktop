@@ -1,7 +1,7 @@
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use super::{ClientState, MENU_BAR_NAMESPACE, State, is_mapped, send_preferred_scale};
+use super::{ClientState, State, is_mapped, send_preferred_scale};
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::{Buffer, Modifier};
 use smithay::backend::renderer::utils::on_commit_buffer_handler;
@@ -425,24 +425,10 @@ impl WlrLayerShellHandler for State {
                     .position(|screen| screen.output.owns(output))
             })
             .unwrap_or_else(|| self.screen_for_layer(&namespace));
-        let spans_the_edge = namespace == MENU_BAR_NAMESPACE;
         let mapped = MappedLayer::new(surface.clone(), namespace);
         let mut map = layer_map_for_output(&self.screens[screen].output);
-        let arranged_after: Vec<MappedLayer> = if spans_the_edge {
-            map.layers().cloned().collect()
-        } else {
-            Vec::new()
-        };
-        for layer in &arranged_after {
-            map.unmap_layer(layer);
-        }
         if map.map_layer(&mapped).is_err() {
             surface.send_close();
-        }
-        for layer in &arranged_after {
-            if map.map_layer(layer).is_err() {
-                layer.layer_surface().send_close();
-            }
         }
     }
 

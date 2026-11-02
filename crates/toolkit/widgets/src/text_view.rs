@@ -10,12 +10,14 @@ const HORIZONTAL_PADDING: f32 = 8.0;
 const VERTICAL_PADDING: f32 = 5.0;
 const CARET_ROOM: f32 = 1.0;
 
+type OnChange = Box<dyn FnMut(&str)>;
+
 pub struct TextView {
     id: WidgetId,
     placeholder: String,
     placeholder_paragraph: Option<Paragraph>,
     editor: Editor,
-    on_change: Option<Box<dyn FnMut(&str)>>,
+    on_change: Option<OnChange>,
     page_width: Option<f32>,
     scroll: ScrollState,
     offset: f32,

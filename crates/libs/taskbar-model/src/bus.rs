@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
-use bande_config::{BUS_NAME, BarEdge, OBJECT_PATH};
+use bande_config::{BUS_NAME, OBJECT_PATH};
 use bande_inbox::Outbox;
 use zbus::blocking::fdo::PropertiesProxy;
 use zbus::blocking::{Connection, MessageIterator, Proxy};
@@ -17,7 +17,6 @@ const CONFIG_INTERFACE: &str = "org.bande.Config";
 #[derive(Debug, Clone, PartialEq)]
 pub enum BusEvent {
     Apps(Vec<String>),
-    Edge(BarEdge),
     AutoHide(bool),
     IconSize(u32),
     Launcher(String, LauncherUpdate),
@@ -96,14 +95,6 @@ fn bar_settings(config: &Proxy<'_>) -> zbus::Result<Vec<BusEvent>> {
     }
     if let Ok(auto_hide) = config.get_property::<bool>("BarAutoHide") {
         events.push(BusEvent::AutoHide(auto_hide));
-    }
-    if let Some(edge) = config
-        .get_property::<String>("BarEdge")
-        .ok()
-        .as_deref()
-        .and_then(BarEdge::from_keyword)
-    {
-        events.push(BusEvent::Edge(edge));
     }
     events.push(BusEvent::Apps(
         config.get_property::<Vec<String>>("BarApps")?,

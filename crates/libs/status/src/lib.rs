@@ -50,8 +50,5 @@ pub enum Update {
     Minute,
     BatteryPercentage(bool),
     ClockMark(unread::ClockMark),
-    BarLayout {
-        layout: String,
-        edge: String,
-    },
+    BarEdge(String),
 }

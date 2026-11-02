@@ -5,9 +5,9 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Resource};
 use smithay::wayland::shell::wlr_layer::KeyboardInteractivity;
 
-use crate::motion::{BAR_NAMESPACE, Look, TASKBAR_NAMESPACE};
+use crate::motion::{BAR_NAMESPACE, Look};
 use crate::shell::toplevel_names;
-use crate::state::{MENU_BAR_NAMESPACE, MENU_SEARCH_NAMESPACE, State};
+use crate::state::{MENU_SEARCH_NAMESPACE, State};
 
 impl State {
     pub(crate) fn app_windows(&self, app_id: &str) -> Vec<usize> {
@@ -145,17 +145,21 @@ impl State {
         self.each_shell(|shell| shell.attention_requested(app_id.clone()));
     }
 
-    pub(crate) fn focus_shell(&mut self, namespace: &str) {
+    pub(crate) fn show_menus(&mut self) {
         if self.is_locked() || self.exclusive_layer.is_some() {
             return;
         }
-        if namespace == MENU_BAR_NAMESPACE {
-            if let Some(key) = self.key_window()
-                && self.show_menus_of(&key)
-            {
-                return;
-            }
-            return self.focus_shell(MENU_SEARCH_NAMESPACE);
+        if let Some(key) = self.key_window()
+            && self.show_menus_of(&key)
+        {
+            return;
+        }
+        self.focus_shell(MENU_SEARCH_NAMESPACE);
+    }
+
+    pub(crate) fn focus_shell(&mut self, namespace: &str) {
+        if self.is_locked() || self.exclusive_layer.is_some() {
+            return;
         }
         let pointer = self.pointer_screen();
         let order =
@@ -173,9 +177,7 @@ impl State {
                     .map(|layer| layer.wl_surface().clone())
             })
         };
-        let surface = find(namespace)
-            .or_else(|| find(BAR_NAMESPACE))
-            .or_else(|| find(TASKBAR_NAMESPACE));
+        let surface = find(namespace).or_else(|| find(BAR_NAMESPACE));
 
         let Some(surface) = surface else {
             return;

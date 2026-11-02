@@ -1,15 +1,25 @@
 use std::thread;
 
-use bande_bus::portal_settings::{self, APPEARANCE, BANDE_APPEARANCE, PREFER_DARK};
+use bande_bus::portal_settings::{self, APPEARANCE, BANDE_APPEARANCE, PREFER_LIGHT};
 use bande_graphics::TextSize;
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedValue;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SystemAppearance {
     pub reduce_motion: bool,
     pub dark: bool,
     pub text_size: TextSize,
+}
+
+impl Default for SystemAppearance {
+    fn default() -> Self {
+        Self {
+            reduce_motion: false,
+            dark: true,
+            text_size: TextSize::default(),
+        }
+    }
 }
 
 impl SystemAppearance {
@@ -19,7 +29,7 @@ impl SystemAppearance {
             (APPEARANCE, "reduced-motion") => {
                 self.reduce_motion = value.is_some_and(|reduce| reduce != 0);
             }
-            (APPEARANCE, "color-scheme") => self.dark = value == Some(PREFER_DARK),
+            (APPEARANCE, "color-scheme") => self.dark = value != Some(PREFER_LIGHT),
             (BANDE_APPEARANCE, "text-size") => {
                 self.text_size = value.map_or(TextSize::DEFAULT, TextSize::from_percent);
             }

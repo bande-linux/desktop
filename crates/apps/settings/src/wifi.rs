@@ -65,7 +65,10 @@ impl SettingsView {
 
     fn known_status(&self, known: &KnownNetwork) -> String {
         let nearby = self.nearby(&known.ssid);
-        if nearby.is_some_and(|network| network.current) {
+        let current = nearby.is_some_and(|network| network.current);
+        if current && self.wifi.as_ref().is_some_and(|wifi| wifi.sign_in) {
+            L10N.tr("sign-in-required")
+        } else if current {
             L10N.tr("connected")
         } else if self.join.joining.as_ref() == Some(&known.ssid) {
             L10N.tr("joining")
@@ -106,7 +109,15 @@ impl SettingsView {
         for network in known {
             let name = network.name();
             let nearby = self.nearby(&network.ssid).cloned();
-            let mut controls = vec![self.details_button(&network.ssid)];
+            let mut controls = Vec::new();
+            if wifi.sign_in && nearby.as_ref().is_some_and(|nearby| nearby.current) {
+                let mut sign_in =
+                    intent(&self.intents, |()| Intent::Network(NetworkCommand::SignIn));
+                controls.push(boxed(
+                    Button::new(&L10N.tr("sign-in-ellipsis"), move || sign_in(())).primary(),
+                ));
+            }
+            controls.push(self.details_button(&network.ssid));
             if let Some(nearby) = &nearby {
                 controls.push(boxed(Signal::new(
                     nearby.strength,
@@ -398,6 +409,12 @@ impl SettingsView {
             for (id, label, placeholder) in WIFI_FIELDS {
                 addressing.push(self.manual_field(id, label, placeholder));
             }
+        } else {
+            addressing.push(self.manual_field(
+                SettingId::WifiDns,
+                "dns-servers",
+                "dns-automatic-placeholder",
+            ));
         }
         page.push(boxed(Caption::new(Text::label(&L10N.tr("tcp-ip")))));
         page.push(boxed(Card::new(addressing)));
@@ -451,7 +468,12 @@ impl SettingsView {
             None => [
                 link.address.unwrap_or_default(),
                 link.router.unwrap_or_default(),
-                link.dns.join(", "),
+                known
+                    .dns
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", "),
             ],
         };
         for ((id, _, _), value) in WIFI_FIELDS.iter().zip(values) {
@@ -464,7 +486,7 @@ impl SettingsView {
         self.focus_next = Some(Anchor::Back);
     }
 
-    pub(crate) fn change_wifi_addressing(&mut self) {
+    pub(crate) fn change_wifi_addressing(&mut self, id: SettingId) {
         let Some(Detail::Network(ssid)) = &self.detail else {
             return;
         };
@@ -480,25 +502,43 @@ impl SettingsView {
             Some(Value::Text(text)) => text.clone(),
             _ => String::new(),
         };
-        let manual = bande_network::parse_manual(
-            &text(SettingId::WifiAddress),
-            &text(SettingId::WifiRouter),
-            &text(SettingId::WifiDns),
-        );
-        self.message =
-            match manual {
-                Some(manual) => {
-                    self.commands.push(crate::follow::Command::Network(
-                        NetworkCommand::ChangeWifi(path, WifiChange::Ipv4(Some(manual))),
-                    ));
-                    None
-                }
-                None => Some(L10N.tr("manual-address-invalid")),
-            };
+        let change = if self.wifi_manual {
+            bande_network::parse_manual(
+                &text(SettingId::WifiAddress),
+                &text(SettingId::WifiRouter),
+                &text(SettingId::WifiDns),
+            )
+            .map(|manual| WifiChange::Ipv4(Some(manual)))
+        } else if id == SettingId::WifiDns {
+            bande_network::parse_dns(&text(SettingId::WifiDns)).map(WifiChange::Dns)
+        } else {
+            return;
+        };
+        self.message = match change {
+            Some(change) => {
+                self.commands
+                    .push(crate::follow::Command::Network(NetworkCommand::ChangeWifi(
+                        path, change,
+                    )));
+                None
+            }
+            None => Some(L10N.tr(if self.wifi_manual {
+                "manual-address-invalid"
+            } else {
+                "dns-invalid"
+            })),
+        };
     }
 
     pub(crate) fn set_wifi_manual(&mut self, manual: bool) {
         self.wifi_manual = manual;
+        let dns = match self.wifi.as_ref() {
+            Some(wifi) if manual => wifi.link.addressing.dns.join(", "),
+            _ => String::new(),
+        };
+        if !manual || self.values.get(&SettingId::WifiDns) == Some(&Value::Text(String::new())) {
+            self.values.insert(SettingId::WifiDns, Value::Text(dns));
+        }
         if manual {
             return;
         }

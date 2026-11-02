@@ -42,6 +42,7 @@ pub enum NetworkCommand {
     JoinHidden(Vec<u8>, Security, Option<String>),
     Forget(Vec<u8>),
     ChangeWifi(String, WifiChange),
+    SignIn,
     ConfigureEthernet(Option<ManualIpv4>),
     ConnectVpn(String),
     DisconnectVpn(String),
@@ -270,6 +271,7 @@ fn read_wifi(network: &NetworkManager) -> Option<WifiState> {
         networks,
         known: network.known_networks().unwrap_or_default(),
         link,
+        sign_in: enabled && matches!(network.sign_in_page(), Ok(Some(_))),
     })
 }
 
@@ -387,6 +389,11 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                     report(&updates, network.disconnect_vpn(&path));
                 }
                 NetworkCommand::Forget(ssid) => report(&updates, network.forget(&ssid)),
+                NetworkCommand::SignIn => match network.sign_in_page() {
+                    Ok(Some(page)) => bande_status::captive::open_page(&page),
+                    Ok(None) => {}
+                    Err(error) => tracing::warn!("cannot find the sign-in page: {error}"),
+                },
                 NetworkCommand::ChangeWifi(path, change) => {
                     report(&updates, network.change_wifi(&path, &change));
                 }

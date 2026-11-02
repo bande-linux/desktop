@@ -1545,7 +1545,7 @@ impl SettingsView {
             SettingId::WifiAddress | SettingId::WifiRouter | SettingId::WifiDns
         ) {
             self.values.insert(id, value);
-            self.change_wifi_addressing();
+            self.change_wifi_addressing(id);
             return;
         }
         if matches!(

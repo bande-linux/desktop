@@ -171,15 +171,19 @@ impl App for Locker {
     }
 }
 
-fn clock_format() -> zbus::Result<String> {
-    let session = bande_bus::session()?;
-    zbus::blocking::Proxy::new(
-        &session,
-        "org.bande.Config",
-        "/org/bande/Config",
-        "org.bande.Config",
-    )?
-    .get_property("ClockFormat")
+fn config_text(property: &str) -> String {
+    bande_bus::session()
+        .and_then(|session| {
+            zbus::blocking::Proxy::new(
+                &session,
+                "org.bande.Config",
+                "/org/bande/Config",
+                "org.bande.Config",
+            )?
+            .get_property(property)
+        })
+        .inspect_err(|error| tracing::warn!("no {property}: {error}"))
+        .unwrap_or_default()
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -189,11 +193,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut locker = Locker {
         screen: LockScreen::new(
             &user,
-            DateFormats::from_env().with_clock_format(
-                &clock_format()
-                    .inspect_err(|error| tracing::warn!("no clock format: {error}"))
-                    .unwrap_or_default(),
-            ),
+            DateFormats::from_env().with_clock_format(&config_text("ClockFormat")),
             &bande_datetime::now(),
             window.appearance(),
             TextSystem::new(),
@@ -212,6 +212,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         layouts: Layouts::load(),
         unlocked: false,
     };
+    locker.screen.set_note(&config_text("LockMessage"));
     bande_toolkit::run(&mut window, &mut locker).map_err(|error: WindowError| error.into())
 }
 

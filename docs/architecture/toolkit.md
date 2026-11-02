@@ -181,7 +181,7 @@ writes a hex value, a corner radius or a font name of its own.
   | `SearchField` | `well` fill, radius 8, no outline, magnifier `ink3`, clear button |
   | `ComboBox` | a text field with a single down chevron |
   | `Toggle` (switch) | 36×20 pill, `edge` off, accent on, white 15 pt knob with a small shadow |
-  | `Checkbox` | 16 pt, radius 4, 1.5 pt `ink3` outline; on: accent with a square-capped check |
+  | `Checkbox` | 16 pt, radius 4, 1.5 pt `ink3` outline; on: accent with a square-capped check; disabled: 45 % opacity, no input, insensitive to accessibility |
   | `RadioGroup` | 16 pt circles; on: accent with a 5 pt square centre |
   | `SegmentedControl` | `well` track radius 8, a raised chip radius 6 (`raised`: `overlay` light, `edge` dark) that glides on `quick`; selected label 600 `ink`; `set_selected(cx, index)` from code; `SegmentedControl::symbols` shows 16 pt symbols (`ink2`, `ink` when selected) in 32 pt segments, each with its accessible name; `fill_equally()` splits the placed frame into equal segments (a toolbar slot) |
   | `PopUpButton` | `well` fill, single down chevron, the menu opens with the current choice over the button |
@@ -210,7 +210,10 @@ writes a hex value, a corner radius or a font name of its own.
   tracked capitals in `ink3` (`ink2` for the sorted column) over a `hairline` underline, no
   stripes and no column separators. Contiguous selected rows form one block of radius 6 inset
   4 × 1: accent with `on_accent` text while focused, `well` otherwise. A single selected run
-  glides to its new rows on `quick`. Scroll bars are a 6 pt `ink3` knob that fades.
+  glides to its new rows on `quick`. `Table::set_headings` adds group headings (semibold
+  `ink` over a `hairline`, one row tall) above the rows that start each group, as Files' Use
+  Groups does, and level 2 heading nodes before those rows so screen readers announce each
+  group; a selection run never spans a heading. Scroll bars are a 6 pt `ink3` knob that fades.
 - **Tooltips.** A widget that returns `Widget::tooltip` (buttons and pop-up buttons through
   `.tooltip(...)`) shows it after the pointer rests on it for `TOOLTIP_DELAY`, or after Tab
   moves focus to it. It fades in under the pointer inside the window, a click or key hides it

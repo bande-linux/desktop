@@ -239,13 +239,12 @@ fn edit_sidebar(home: &Path, edit: &SidebarEdit) -> std::io::Result<()> {
 
 impl Files {
     fn store(&mut self, settings: FilesSettings) {
-        self.settings = settings;
-        let Some(folder) = settings_folder() else {
-            return;
-        };
-        if let Err(error) = settings.save(&folder) {
+        if let Some(folder) = settings_folder()
+            && let Err(error) = settings.save(&folder)
+        {
             tracing::warn!("cannot save the Files settings: {error}");
         }
+        self.settings = settings;
     }
 
     fn follow_settings(&mut self, cx: &mut Cx<Self>) {
@@ -265,7 +264,7 @@ impl Files {
         self.settings = settings;
         for id in cx.windows().collect::<Vec<_>>() {
             if let Some((window, pane)) = cx.window(id) {
-                pane.view.apply_settings(&settings);
+                pane.view.apply_settings(&self.settings);
                 window.request_redraw();
             }
             self.changed(cx, id);
@@ -393,6 +392,7 @@ impl Files {
                 &self.home,
                 user_dirs.as_deref(),
                 self.recent_folders.first().map(PathBuf::as_path),
+                self.settings.new_window_folder.as_deref(),
             ),
             directory,
         );
@@ -532,7 +532,7 @@ impl Files {
             Request::PlaySound(name) => play_sound(name),
             Request::ShowHidden(show) => self.store(FilesSettings {
                 show_hidden: show,
-                ..self.settings
+                ..self.settings.clone()
             }),
         }
     }

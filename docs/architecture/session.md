@@ -307,7 +307,8 @@ graph LR
     `bande-app-menu` exports Ctrl as `Control`, as the dbusmenu spec asks). Items of the
     standard app menu carry `x-bande-shell-action`, which the menu bar performs itself
     through `bande_shell_v1`, since an app cannot hide itself: About (a small window with the
-    app's icon and name from its desktop entry and the version in `x-bande-version`), Hide,
+    app's icon and name from its desktop entry and the version in `x-bande-version`), Hide
+    (which also hands the active app to the frontmost other window when the app has none),
     Hide Others and Show All (`show_app` for every running app).
 - **Network and Bluetooth**: NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ
   (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Control Center and Settings, through

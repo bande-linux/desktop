@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 
 use bande_printers::{Cups, Job, JobState, NearbyPrinter, Printer, PrinterState, SPOOLER, browse};
@@ -16,14 +16,18 @@ use crate::forget::Forget;
 use crate::general::info_row;
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::services::{SETTLE, signals};
+use crate::users::{accounts, members_of};
 use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
 use crate::widgets::{Caption, Card, HEADER_SYMBOL, Header, Row, Text, Tone};
 
 pub(crate) const PRINTER_SYMBOL: &str = "printer-symbolic";
+const FORBIDDEN: &str = "Forbidden";
+const PRINTER_ADMINS: &str = "lpadmin";
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct PrintersState {
     pub installed: bool,
+    pub may_change: bool,
     pub printers: Vec<Printer>,
     pub jobs: Vec<Job>,
 }
@@ -45,6 +49,7 @@ fn read(cups: &Cups) -> Option<PrintersState> {
     match (cups.printers(), cups.jobs()) {
         (Ok(printers), Ok(jobs)) => Some(PrintersState {
             installed: true,
+            may_change: may_change(),
             printers,
             jobs,
         }),
@@ -55,10 +60,19 @@ fn read(cups: &Cups) -> Option<PrintersState> {
     }
 }
 
+fn may_change() -> bool {
+    let members = members_of(&[PRINTER_ADMINS]);
+    rustix::process::getuid().is_root()
+        || accounts()
+            .into_iter()
+            .find(|account| account.you)
+            .is_some_and(|you| members.contains(&you.login))
+}
+
 fn sentence(error: &bande_printers::Error) -> String {
     tracing::warn!("CUPS: {error}");
     match error {
-        bande_printers::Error::NotAllowed => L10N.tr("administrator-only"),
+        bande_printers::Error::NotAllowed => L10N.tr("printer-forbidden"),
         bande_printers::Error::Refused(_, message) if !message.is_empty() => message.clone(),
         _ => L10N.tr("couldnt-change"),
     }
@@ -83,7 +97,7 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
     spawn("printers-worker", move || {
         let cups = Cups::new();
         let watching = Arc::new(AtomicU64::new(0));
-        let mut browse_started = false;
+        let browsing = Arc::new(AtomicBool::new(false));
         for command in receiver {
             let result = match command {
                 PrinterCommand::Watch(on) => {
@@ -104,9 +118,9 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
                             );
                         }
                         let _ = changed.send(());
-                        if !browse_started {
-                            browse_started = true;
-                            let (bus, updates) = (bus.clone(), updates.clone());
+                        if !browsing.swap(true, Ordering::Relaxed) {
+                            let (bus, updates, browsing) =
+                                (bus.clone(), updates.clone(), Arc::clone(&browsing));
                             spawn("printers-nearby", move || {
                                 let found = browse(&bus, |nearby| {
                                     updates.send(Update::NearbyPrinters(nearby))
@@ -115,6 +129,7 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
                                     tracing::warn!("cannot look for nearby printers: {error}");
                                     updates.send(Update::NearbyPrinters(Vec::new()));
                                 }
+                                browsing.store(false, Ordering::Relaxed);
                             });
                         }
                     }
@@ -135,7 +150,11 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
                     updates.send(Update::PrinterAdded(printer.uri.clone(), added.is_ok()));
                     added.map(drop).map_err(|error| {
                         tracing::warn!("cannot add {}: {error}", printer.uri);
-                        L10N.tr_args("printer-add-failed", [("name", printer.name.into())])
+                        if error.to_string().contains(FORBIDDEN) {
+                            L10N.tr("printer-forbidden")
+                        } else {
+                            L10N.tr_args("printer-add-failed", [("name", printer.name.into())])
+                        }
                     })
                 }
             };
@@ -347,6 +366,13 @@ impl SettingsView {
             )
             .detail(Text::new(&detail, Tone::Muted).caption()),
         ));
+        if self
+            .printers
+            .as_ref()
+            .is_some_and(|state| !state.may_change)
+        {
+            rows.push(muted_row(&L10N.tr("printer-forbidden")));
+        }
         rows
     }
 
@@ -450,13 +476,13 @@ impl SettingsView {
                     [("name", printer.title().to_owned().into())],
                 ),
                 &L10N.tr("printer-remove-warning"),
-                &L10N.tr("printer-remove"),
+                &L10N.tr("remove"),
             ));
         } else {
             let mut ask = intent(&self.intents, move |()| {
                 Intent::AskForget(Some(forget.clone()))
             });
-            let button = Button::new(&L10N.tr("printer-remove-ellipsis"), move || ask(()));
+            let button = Button::new(&L10N.tr("remove-ellipsis"), move || ask(()));
             self.anchors
                 .push((Anchor::Item(format!("printer:{name}")), button.id()));
             actions.push(boxed(Row::new(

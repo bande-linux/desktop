@@ -50,6 +50,8 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   display (review: the last display is never removed).
 - Software (apps repo): install and remove a Debian app; catalogue icons once
   `apt-config-icons` is installed.
+- The `bande-shell` installed before `a458c1b9` polls `/proc/pressure/memory` itself and spins one
+  core at 100 % from login (seen 2026-11-02 03:00); after the rebuild `top` shows it idle.
 
 ## Owner decisions
 
@@ -90,6 +92,9 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   and timeouts for the remaining blocking D-Bus calls (Control Center setters, tray).
 - Text size: menus at 200 % and long labels; Activity Monitor's CPU-core strip (apps repo).
 - A `Super+Space` pressed before the shell connects is lost.
+- The low-memory dialog has no test hook: it shows only on a real PSI stall with memory nearly
+  exhausted, so a headless walk cannot open it.
+- Mail's Settings window (apps repo) has no title or menu button, unlike the other apps'.
 - Stuck state still open: windows maximized while the bar was gone stay under it when it
   returns (`fit_to_usable_areas` refits on every layer commit and destroy, so the cause is
   elsewhere; reproduce first).

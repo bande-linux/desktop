@@ -89,7 +89,7 @@ impl TextField {
         Self { trailing, ..self }
     }
 
-    pub(crate) fn replace_text(&mut self, text: &str) {
+    pub fn replace_text(&mut self, text: &str) {
         let revision = self.editor.revision();
         self.editor.select_all();
         self.editor.insert(text);

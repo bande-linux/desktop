@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use bande_app::Menus;
 use bande_app_menu::{Entry, key_item};
-use bande_files::{FilesView, L10N};
+use bande_files::{FilesView, GROUPS, L10N, group_action};
 use bande_fs::SortBy;
 
 fn shortcut(message: &str, keys: &str) -> Entry {
@@ -40,6 +40,16 @@ fn recent_entries(recent_folders: &[PathBuf]) -> Vec<Entry> {
             .enabled(!recent_folders.is_empty()),
     );
     entries
+}
+
+fn group_entries(view: &FilesView) -> Vec<Entry> {
+    let current = view.browser().groups();
+    GROUPS
+        .iter()
+        .map(|(group, message)| {
+            Entry::item(&L10N.tr(message), group_action(*group)).radio(*group == current)
+        })
+        .collect()
 }
 
 fn sort_entries(view: &FilesView) -> Vec<Entry> {
@@ -113,6 +123,9 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 shortcut("menu-as-columns", "Ctrl+3"),
                 shortcut("menu-as-gallery", "Ctrl+4"),
                 Entry::separator(),
+                Entry::item(&L10N.tr("menu-use-groups"), "use-groups")
+                    .radio(view.browser().groups().is_some()),
+                submenu("menu-group-by", group_entries(view)),
                 submenu("menu-sort-by", sort_entries(view)),
                 Entry::separator(),
                 shortcut("menu-bigger-icons", "Ctrl+="),

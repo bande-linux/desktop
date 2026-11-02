@@ -1,25 +1,51 @@
 use std::path::PathBuf;
 
-use bande_fs::{Access, Class, access, runnable, set_mode, with_access, with_runnable};
-use bande_toolkit::ui::{PopUpButton, Toggle, WidgetId};
+use bande_fs::{
+    Access, Class, Entry, access, runnable, set_extension_hidden, set_mode, with_access,
+    with_runnable,
+};
+use bande_toolkit::ui::{
+    CheckState, Checkbox, Key, Modifiers, PopUpButton, TextField, Toggle, WidgetId,
+};
 
 use crate::L10N;
 use crate::controls::{Signal, sender};
-use crate::view::FilesView;
+use crate::view::{FilesView, Rename};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct HideChoice {
+    on: bool,
+    enabled: bool,
+}
+
+pub(crate) struct NameControls {
+    pub(crate) field: WidgetId,
+    pub(crate) hide: Option<(WidgetId, HideChoice)>,
+    name: String,
+}
 
 pub(crate) struct InspectorControls {
-    path: PathBuf,
+    pub(crate) name: Option<NameControls>,
     pub(crate) runnable: Option<(WidgetId, bool)>,
     pub(crate) access: Vec<(Class, WidgetId, Access)>,
 }
 
 impl InspectorControls {
     pub(crate) fn ids(&self) -> Vec<WidgetId> {
-        self.runnable
+        self.name
             .iter()
-            .map(|(id, _)| *id)
+            .flat_map(|name| [Some(name.field), name.hide.map(|(id, _)| id)])
+            .flatten()
+            .chain(self.runnable.iter().map(|(id, _)| *id))
             .chain(self.access.iter().map(|(_, id, _)| *id))
             .collect()
+    }
+}
+
+fn check(on: bool) -> CheckState {
+    match on {
+        true => CheckState::On,
+        false => CheckState::Off,
     }
 }
 
@@ -45,13 +71,165 @@ fn access_titles() -> Vec<String> {
 }
 
 impl FilesView {
-    fn editable(&self) -> Option<(PathBuf, bool, u32)> {
+    fn inspected(&self) -> Option<&Entry> {
         let info = self.info.as_ref().filter(|_| self.inspector)?;
-        match (info.entries.as_slice(), info.mode) {
-            ([entry], Some(mode)) if info.owned && !entry.link && entry.trashed.is_none() => {
-                Some((entry.path.clone(), entry.is_folder(), mode))
-            }
+        match info.entries.as_slice() {
+            [entry] if entry.trashed.is_none() => Some(entry),
             _ => None,
+        }
+    }
+
+    fn editable(&self) -> Option<(PathBuf, bool, u32)> {
+        let info = self.info.as_ref()?;
+        let entry = self.inspected().filter(|entry| info.owned && !entry.link)?;
+        Some((entry.path.clone(), entry.is_folder(), info.mode?))
+    }
+
+    fn hide_wanted(&self, entry: &Entry) -> Option<HideChoice> {
+        let enabled = !self.show_extensions
+            && bande_fs::hidden_extension(&entry.name, None, Some(true)).is_some();
+        (!entry.is_folder()).then(|| HideChoice {
+            on: enabled && self.shown_name(entry) != entry.name,
+            enabled,
+        })
+    }
+
+    fn hide_checkbox(&mut self, wanted: HideChoice) -> WidgetId {
+        let send = sender(&self.signals);
+        let mut checkbox = Checkbox::new(&L10N.tr("hide-extension"), check(wanted.on), move |on| {
+            send(Signal::HideExtension(on));
+        });
+        checkbox.set_enabled(wanted.enabled);
+        self.insert(checkbox)
+    }
+
+    fn sync_name_controls(&mut self, controls: &mut InspectorControls, entry: &Entry) {
+        let wanted = self.hide_wanted(entry);
+        let mut name = match controls.name.take() {
+            Some(name) => name,
+            None => NameControls {
+                field: self.insert(TextField::new("", &entry.name, |_| {})),
+                hide: None,
+                name: entry.name.clone(),
+            },
+        };
+        if name.name != entry.name {
+            name.name.clone_from(&entry.name);
+            self.show_name(name.field, &entry.name);
+        }
+        name.hide = match (name.hide, wanted) {
+            (Some((id, shown)), Some(wanted)) => {
+                if shown != wanted {
+                    self.ui.update_widget::<Checkbox>(id, |checkbox, cx| {
+                        checkbox.set_state(cx, check(wanted.on));
+                        checkbox.set_enabled(wanted.enabled);
+                    });
+                }
+                Some((id, wanted))
+            }
+            (Some((id, _)), None) => {
+                self.remove(id);
+                None
+            }
+            (None, wanted) => wanted.map(|wanted| (self.hide_checkbox(wanted), wanted)),
+        };
+        controls.name = Some(name);
+    }
+
+    fn show_name(&mut self, field: WidgetId, name: &str) {
+        if let Some(field) = self.ui.widget_as::<TextField>(field) {
+            field.replace_text(name);
+        }
+    }
+
+    pub(crate) fn name_field_focused(&self) -> bool {
+        let field = self
+            .inspector_controls
+            .as_ref()
+            .and_then(|controls| controls.name.as_ref())
+            .map(|name| name.field);
+        field.is_some() && self.ui.focus() == field
+    }
+
+    pub(crate) fn name_field_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        match key {
+            Key::Enter => self.commit_name_field(),
+            Key::Escape => {
+                self.reset_name_field();
+                self.focus_content();
+            }
+            _ => {
+                return self
+                    .ui
+                    .handle(&bande_toolkit::ui::Event::Key { key, modifiers });
+            }
+        }
+        true
+    }
+
+    fn reset_name_field(&mut self) {
+        let shown = self
+            .inspector_controls
+            .as_ref()
+            .and_then(|controls| controls.name.as_ref())
+            .map(|name| (name.field, name.name.clone()));
+        if let Some((field, name)) = shown {
+            self.show_name(field, &name);
+        }
+    }
+
+    pub(crate) fn commit_name_field(&mut self) {
+        if !self.name_field_focused() {
+            return;
+        }
+        let Some((field, entry)) = self
+            .inspector_controls
+            .as_ref()
+            .and_then(|controls| controls.name.as_ref())
+            .map(|name| name.field)
+            .zip(self.inspected().cloned())
+        else {
+            return;
+        };
+        let typed = self
+            .ui
+            .widget_as::<TextField>(field)
+            .map(|field| field.text())
+            .unwrap_or_default();
+        self.reset_name_field();
+        self.focus_content();
+        if typed != entry.name {
+            let rename = Rename {
+                path: entry.path.clone(),
+                field,
+                hidden_extension: None,
+                folder: entry.is_folder(),
+            };
+            self.rename_checked(rename, typed, true);
+        }
+    }
+
+    pub(crate) fn set_extension_hidden(&mut self, hidden: bool) {
+        let Some(entry) = self.inspected().cloned() else {
+            return;
+        };
+        if let Some((_, shown)) = self
+            .inspector_controls
+            .as_mut()
+            .and_then(|controls| controls.name.as_mut())
+            .and_then(|name| name.hide.as_mut())
+        {
+            shown.on = hidden;
+        }
+        match set_extension_hidden(&entry.path, hidden) {
+            Ok(()) => {
+                let folders = entry.path.parent().map(PathBuf::from);
+                self.browser.refresh(folders.as_slice());
+                self.selection_changed();
+            }
+            Err(error) => self.show_notice(
+                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
+            ),
         }
     }
 
@@ -85,26 +263,23 @@ impl FilesView {
     }
 
     pub(crate) fn sync_inspector_controls(&mut self) {
-        let Some((path, folder, mode)) = self.editable() else {
+        let Some(entry) = self.inspected().cloned() else {
             self.drop_inspector_controls();
             return;
         };
-        if self
-            .inspector_controls
-            .as_ref()
-            .is_some_and(|controls| controls.path != path)
-        {
-            self.drop_inspector_controls();
-        }
         let mut controls = self
             .inspector_controls
             .take()
             .unwrap_or_else(|| InspectorControls {
-                path,
+                name: None,
                 runnable: None,
                 access: Vec::new(),
             });
-        let wanted = (!folder).then(|| runnable(mode));
+        self.sync_name_controls(&mut controls, &entry);
+        let editable = self.editable();
+        let wanted = editable
+            .as_ref()
+            .and_then(|(_, folder, mode)| (!folder).then(|| runnable(*mode)));
         match (controls.runnable, wanted) {
             (Some((_, shown)), Some(on)) if shown == on => {}
             (shown, on) => {
@@ -116,12 +291,18 @@ impl FilesView {
         }
         let mut access_controls = Vec::new();
         for class in Class::ALL {
-            let wanted = access(mode, class);
             let kept = controls
                 .access
                 .iter()
                 .find(|(known, _, _)| *known == class)
                 .copied();
+            let Some((_, _, mode)) = editable else {
+                if let Some((_, id, _)) = kept {
+                    self.remove(id);
+                }
+                continue;
+            };
+            let wanted = access(mode, class);
             let id = match kept {
                 Some((_, id, shown)) if shown == wanted => id,
                 kept => {

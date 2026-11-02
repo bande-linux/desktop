@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
-use bande_fs::is_hidden;
+use bande_fs::{extension_hidden, is_hidden};
 use bande_inbox::Outbox;
 use bande_volumes::mounted_volumes;
 use bande_xdg::{DIRECTORY, FileTypes, config_home};
@@ -116,7 +116,8 @@ fn read_item(
     let name = name_of(&path);
     let hidden = match show_extensions || kind != Kind::File {
         true => 0,
-        false => types.extension(&name).map_or(0, str::len),
+        false => bande_fs::hidden_extension(&name, types.extension(&name), extension_hidden(&path))
+            .map_or(0, str::len),
     };
     Item {
         label: name[..name.len() - hidden].to_owned(),

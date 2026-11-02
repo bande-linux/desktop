@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use bande_fs::Recency;
+use bande_fs::{ARCHIVES, DOCUMENTS, Recency};
 use bande_search::{FUZZY, FileIndex};
 use bande_toolkit::ui::{BUTTON_HEIGHT, PopUpButton, SEGMENTED_HEIGHT, SegmentedControl, WidgetId};
 use bande_toolkit::{Item, Point, Rect, TextAlign, TextStyle};
@@ -16,31 +16,6 @@ pub const SEARCH_HEIGHT: f32 = 36.0;
 const MAX_FOUND: usize = 2000;
 const FILTER_WIDTH: f32 = 130.0;
 const FILTER_GAP: f32 = 8.0;
-const ARCHIVES: &[&str] = &[
-    "application/zip",
-    "application/gzip",
-    "application/x-tar",
-    "application/x-7z-compressed",
-    "application/x-rar",
-    "application/vnd.rar",
-    "application/x-xz",
-    "application/x-bzip2",
-    "application/zstd",
-    "application/x-compressed-tar",
-    "application/x-xz-compressed-tar",
-    "application/x-bzip2-compressed-tar",
-    "application/x-zstd-compressed-tar",
-];
-const DOCUMENTS: &[&str] = &[
-    "application/pdf",
-    "application/rtf",
-    "application/msword",
-    "application/epub+zip",
-    "application/vnd.oasis.opendocument.",
-    "application/vnd.openxmlformats-officedocument.",
-    "application/vnd.ms-",
-];
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchKind {
     Any,

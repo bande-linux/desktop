@@ -65,6 +65,7 @@ pub(crate) enum Signal {
     RenameField(crate::batch_rename::RenameField, String),
     RenameChoice(crate::batch_rename::RenameChoice, usize),
     Access(bande_fs::Class, usize),
+    HideExtension(bool),
 }
 
 pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
@@ -365,6 +366,9 @@ impl FilesView {
         if self.rename.is_some() {
             return self.rename_key(key, modifiers);
         }
+        if self.name_field_focused() {
+            return self.name_field_key(key, modifiers);
+        }
         if self.search_focused() {
             return self.search_key(key, modifiers);
         }
@@ -413,6 +417,16 @@ impl FilesView {
                 return self.ui.handle(event);
             }
             self.commit_rename();
+        }
+        let name_field = self
+            .inspector_controls
+            .as_ref()
+            .and_then(|controls| controls.name.as_ref())
+            .map(|name| name.field);
+        if let Some(field) = name_field
+            && !self.frame_of(field).is_some_and(|frame| frame.contains(at))
+        {
+            self.commit_name_field();
         }
         let on_control = self
             .controls()
@@ -575,6 +589,7 @@ impl FilesView {
                         self.dismiss_sheet();
                     }
                     Signal::Access(class, index) => self.set_access(class, index),
+                    Signal::HideExtension(hidden) => self.set_extension_hidden(hidden),
                     Signal::Forward => self.forward(),
                     Signal::Scope(everywhere) => self.set_scope(everywhere),
                     Signal::IconSize(size) => self.set_icon_size(size.round() as u32),
@@ -808,6 +823,10 @@ impl FilesView {
             }
         }
         self.table_synced = Some((revision, edits));
+        let headings = self.groups().to_vec();
+        if let Some(table) = self.table() {
+            table.set_headings(headings);
+        }
     }
 
     pub(crate) fn fill_table(&mut self) {
@@ -991,7 +1010,7 @@ impl FilesView {
         let (path, folder) = (entry.path.clone(), entry.is_folder());
         let shown = self.shown_name(entry).to_owned();
         let hidden_extension = self
-            .hidden_extension(&entry.name, folder)
+            .hidden_extension(&entry.name, folder, entry.extension_hidden)
             .map(str::to_owned);
         self.cancel_rename();
         let mut field = TextField::new("", &shown, |_| {})

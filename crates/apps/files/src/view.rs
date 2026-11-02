@@ -207,6 +207,7 @@ pub struct FilesView {
     pub(crate) inspector: bool,
     pub(crate) info: Option<Info>,
     pub(crate) inspector_controls: Option<crate::inspector::InspectorControls>,
+    pub(crate) group_cache: crate::groups::GroupCache,
     pub(crate) inspector_scroll: ScrollState,
     pub(crate) column_preview: Option<ColumnPreview>,
     pub(crate) rename: Option<Rename>,
@@ -344,6 +345,7 @@ impl FilesView {
             inspector: false,
             info: None,
             inspector_controls: None,
+            group_cache: crate::groups::GroupCache::default(),
             inspector_scroll: ScrollState::default(),
             column_preview: None,
             rename: None,
@@ -1746,6 +1748,15 @@ impl FilesView {
         self.start(Task::EmptyTrash, Purpose::Erase);
     }
 
+    pub(crate) fn set_group(&mut self, group: Option<bande_fs::GroupBy>) {
+        let current = self.browser.sort();
+        if current.group != group {
+            self.browser.set_sort(Sort { group, ..current });
+            self.remember_view();
+            self.selection_changed();
+        }
+    }
+
     pub(crate) fn set_mode(&mut self, mode: ViewMode) {
         if self.searching.is_some() {
             self.refresh_view_control();
@@ -1921,15 +1932,20 @@ impl FilesView {
         });
     }
 
-    pub(crate) fn hidden_extension<'a>(&self, name: &'a str, folder: bool) -> Option<&'a str> {
+    pub(crate) fn hidden_extension<'a>(
+        &self,
+        name: &'a str,
+        folder: bool,
+        hidden: Option<bool>,
+    ) -> Option<&'a str> {
         match self.show_extensions || folder {
             true => None,
-            false => self.apps.extension(name),
+            false => bande_fs::hidden_extension(name, self.apps.extension(name), hidden),
         }
     }
 
     pub(crate) fn shown_name<'a>(&self, entry: &'a Entry) -> &'a str {
-        let hidden = self.hidden_extension(&entry.name, entry.is_folder());
+        let hidden = self.hidden_extension(&entry.name, entry.is_folder(), entry.extension_hidden);
         &entry.name[..entry.name.len() - hidden.map_or(0, str::len)]
     }
 

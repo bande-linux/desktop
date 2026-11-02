@@ -186,6 +186,7 @@ ICONS = {
     'org.bande.Launcher': launcher,
     'org.bande.About': about,
     'org.bande.Screenshot': screenshot,
+    'org.bande.TextEdit': text_editor,
     'org.gnome.TextEditor': text_editor,
     'org.gnome.Loupe': image_viewer,
     'org.gnome.Papers': document_viewer,

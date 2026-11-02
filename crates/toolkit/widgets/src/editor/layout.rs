@@ -89,7 +89,9 @@ impl Editor {
         let content = self.layout_text(paragraph);
         let (fonts, layouts) = text.contexts();
         let mut builder = layouts.ranged_builder(fonts, &content, self.scale, true);
-        TextStyle::new(self.font_size, self.color).apply(&mut builder);
+        let style = TextStyle::new(self.font_size, self.color);
+        let typeface = self.typeface.unwrap_or(style.typeface);
+        TextStyle { typeface, ..style }.apply(&mut builder);
         let mut layout: Layout<Color> = builder.build(&content);
         layout.break_all_lines(self.width);
         layout.align(Alignment::Start, AlignmentOptions::default());

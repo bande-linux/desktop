@@ -9,7 +9,7 @@ use std::ops::Range;
 use accesskit::{
     Action, ActionData, ActionRequest, Node, NodeId, Role, TextPosition, TextSelection,
 };
-use bande_graphics::{Color, Item, Paint, Point, Rect, Shape, TextSystem};
+use bande_graphics::{Color, Item, Paint, Point, Rect, Shape, TextSystem, Typeface};
 use parley::{Affinity, Cursor, Selection as Span};
 
 use self::history::{Edit, EditKind, History};
@@ -68,6 +68,7 @@ pub(crate) struct Editor {
     preedit: Option<Preedit>,
     history: History,
     font_size: f32,
+    typeface: Option<Typeface>,
     scale: f32,
     multi_line: bool,
     width: Option<f32>,
@@ -105,6 +106,7 @@ impl Editor {
             preedit: None,
             history: History::default(),
             font_size,
+            typeface: None,
             scale: 1.0,
             multi_line,
             width: None,
@@ -335,6 +337,20 @@ impl Editor {
         self.scale = scale;
         self.line_height = (self.font_size * LINE_HEIGHT_RATIO * scale).ceil();
         self.invalidate();
+    }
+
+    pub(crate) fn set_font(&mut self, typeface: Option<Typeface>, font_size: f32) {
+        if self.typeface == typeface && self.font_size == font_size {
+            return;
+        }
+        self.typeface = typeface;
+        self.font_size = font_size;
+        self.line_height = (font_size * LINE_HEIGHT_RATIO * self.scale).ceil();
+        self.invalidate();
+    }
+
+    pub(crate) fn reveal_selection(&mut self) {
+        self.reveal = true;
     }
 
     pub(crate) fn set_color(&mut self, color: Color) {

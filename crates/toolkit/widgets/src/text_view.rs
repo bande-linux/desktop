@@ -3,7 +3,7 @@ use accesskit::{ActionRequest, Node, Role};
 use super::control::paint_field;
 use super::editor::Editor;
 use super::{Context, Cursor, DragAction, Event, Menu, Parts, ScrollState, Size, Widget, WidgetId};
-use bande_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
+use bande_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, Typeface};
 
 const FONT_SIZE: f32 = 13.0;
 const HORIZONTAL_PADDING: f32 = 8.0;
@@ -15,7 +15,8 @@ pub struct TextView {
     placeholder: String,
     placeholder_paragraph: Option<Paragraph>,
     editor: Editor,
-    on_change: Box<dyn FnMut(&str)>,
+    on_change: Option<Box<dyn FnMut(&str)>>,
+    page_width: Option<f32>,
     scroll: ScrollState,
     offset: f32,
     visible_lines: Option<u16>,
@@ -32,12 +33,20 @@ impl TextView {
             placeholder: placeholder.to_owned(),
             placeholder_paragraph: None,
             editor,
-            on_change: Box::new(on_change),
+            on_change: Some(Box::new(on_change)),
+            page_width: None,
             scroll: ScrollState::default(),
             offset: 0.0,
             visible_lines: None,
             borderless: false,
             frame: Rect::default(),
+        }
+    }
+
+    pub fn document(text: &str) -> Self {
+        Self {
+            on_change: None,
+            ..Self::new("", text, |_| {})
         }
     }
 
@@ -64,6 +73,27 @@ impl TextView {
         self.editor.text()
     }
 
+    pub fn revision(&self) -> u64 {
+        self.editor.revision()
+    }
+
+    pub fn set_font(&mut self, monospace: bool, size: f32) {
+        let typeface = match monospace {
+            true => Typeface::Monospace,
+            false => Typeface::Interface,
+        };
+        self.editor.set_font(Some(typeface), size);
+    }
+
+    pub fn set_page_width(&mut self, width: Option<f32>) {
+        self.page_width = width;
+    }
+
+    pub fn insert(&mut self, text: &str) {
+        self.editor.insert(text);
+        self.editor.reveal_selection();
+    }
+
     pub fn set_text(&mut self, text: &str) {
         self.editor.set_text(text);
         self.editor.select(0..0);
@@ -75,6 +105,7 @@ impl TextView {
 
     pub fn select(&mut self, range: std::ops::Range<usize>) {
         self.editor.select(range);
+        self.editor.reveal_selection();
     }
 
     pub fn offset(&self) -> f32 {
@@ -82,10 +113,12 @@ impl TextView {
     }
 
     fn content(&self) -> Rect {
+        let width = (self.frame.width - 2.0 * HORIZONTAL_PADDING - CARET_ROOM).max(0.0);
+        let column = self.page_width.map_or(width, |page| page.min(width));
         Rect::new(
-            self.frame.x + HORIZONTAL_PADDING,
+            self.frame.x + HORIZONTAL_PADDING + ((width - column) / 2.0).round(),
             self.frame.y + VERTICAL_PADDING,
-            (self.frame.width - 2.0 * HORIZONTAL_PADDING - CARET_ROOM).max(0.0),
+            column,
             (self.frame.height - 2.0 * VERTICAL_PADDING).max(0.0),
         )
     }
@@ -100,8 +133,10 @@ impl TextView {
     }
 
     fn changed(&mut self, revision: u64) {
-        if self.editor.revision() != revision {
-            (self.on_change)(&self.editor.text());
+        if self.editor.revision() != revision
+            && let Some(on_change) = &mut self.on_change
+        {
+            on_change(&self.editor.text());
         }
     }
 

@@ -1,3 +1,4 @@
 [Default Applications]
 inode/directory=org.bande.Files.desktop;
 application/vnd.debian.binary-package=org.bande.Installer.desktop;
+text/plain=org.bande.TextEdit.desktop;

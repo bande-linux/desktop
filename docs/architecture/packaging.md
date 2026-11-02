@@ -41,7 +41,8 @@ profiles. Sizes are in [performance.md](performance.md).
   `debian/default-apps.sh` turns that file into the `${bande:Recommends}` substitution variable
   at build time, so any default app can be removed or replaced. It installs
   `/usr/share/applications/bande-mimeapps.list`, read only in a Bande session, which opens
-  folders in Files and `.deb` files in the Package Installer; other types open in an installed app
+  folders in Files, `.deb` files in the Package Installer and plain text (with source code and
+  logs, its subtypes) in TextEdit when it is installed; other types open in an installed app
   whose desktop entry declares them, and a person's own choice in
   `~/.config/mimeapps.list` still wins. A file no installed app opens gets the Open With sheet in
   Files (every app that opens files, with "Always open with"); on the desktop, it is revealed in

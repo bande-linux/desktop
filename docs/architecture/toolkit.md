@@ -260,7 +260,10 @@ writes a hex value, a corner radius or a font name of its own.
   under it, and a click while composing keeps the text and resets the input method. Text is
   published to screen readers as text runs with the caret and selection, which they can also
   set. `TextView` wraps, scrolls with a `ScrollState`, keeps the caret in view and can be
-  read-only.
+  read-only. `TextView::document` is the editor of a document app: no change callback (the app
+  compares `revision`), a font (`set_font`: monospace or proportional, any size), a page width
+  that wraps to a centred column instead of the view (`set_page_width`), and `insert` and
+  `select` that scroll to the result.
 - **Animation.** `ui::Animated` holds a value that springs to its target with a preset from
   `bande-spring` (`Spring::QUICK`, `STANDARD`, `GENTLE`, `FADE`, ...). A new target retargets
   from the current position and velocity, so a reversed action never jumps or queues. Values

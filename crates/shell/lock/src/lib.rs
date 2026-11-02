@@ -27,7 +27,7 @@ use bande_toolkit::{
 };
 use zeroize::Zeroizing;
 
-pub use backdrop::{BackdropSource, Look, load_backdrop};
+pub use backdrop::{BackdropSource, Look, load_backdrop, load_picture};
 pub use bande_inbox::Inbox;
 pub use bande_wallpaper::Variant;
 pub use devices::Devices;
@@ -45,6 +45,7 @@ const TIME_SIZE: f32 = 96.0;
 const TIME_WEIGHT: f32 = 300.0;
 const INITIAL_SIZE: f32 = 30.0;
 const AVATAR: f32 = 72.0;
+pub const PICTURE_PIXELS: u32 = 216;
 const FIELD_WIDTH: f32 = 240.0;
 const FIELD_FONT: f32 = 15.0;
 const GAP: f32 = 12.0;
@@ -107,6 +108,7 @@ struct Model {
     position: (usize, usize),
     name: String,
     initial: String,
+    picture: Option<Image>,
     date: String,
     time: String,
     submitted: Option<Zeroizing<String>>,
@@ -364,18 +366,28 @@ impl LockView {
             paragraph: time.clone(),
         });
         let avatar = self.avatar();
-        items.push(Item::Fill {
-            shape: Shape::rounded(avatar, AVATAR / 2.0),
-            paint: cx.palette.accent.into(),
-        });
-        items.push(Item::Text {
-            origin: centred(
-                initial,
-                centre,
-                avatar.y + (AVATAR - initial.height()) / 2.0,
-            ),
-            paragraph: initial.clone(),
-        });
+        if let Some(picture) = self.model.borrow().picture.clone() {
+            items.push(Item::Clip {
+                shape: Shape::rounded(avatar, AVATAR / 2.0),
+                items: vec![Item::Image {
+                    rect: avatar,
+                    image: picture,
+                }],
+            });
+        } else {
+            items.push(Item::Fill {
+                shape: Shape::rounded(avatar, AVATAR / 2.0),
+                paint: cx.palette.accent.into(),
+            });
+            items.push(Item::Text {
+                origin: centred(
+                    initial,
+                    centre,
+                    avatar.y + (AVATAR - initial.height()) / 2.0,
+                ),
+                paragraph: initial.clone(),
+            });
+        }
         items.push(Item::Text {
             origin: centred(name, centre, avatar.y + AVATAR + GAP),
             paragraph: name.clone(),
@@ -530,6 +542,7 @@ impl LockScreen {
                 .next()
                 .map(|initial| initial.to_uppercase().collect())
                 .unwrap_or_default(),
+            picture: None,
             date,
             time,
             submitted: None,
@@ -779,6 +792,10 @@ impl LockScreen {
 
     pub fn set_note(&mut self, note: &str) {
         note.trim().clone_into(&mut self.model.borrow_mut().note);
+    }
+
+    pub fn set_picture(&mut self, picture: Image) {
+        self.model.borrow_mut().picture = Some(picture);
     }
 
     pub fn set_wallpaper(&mut self, image: Image) {

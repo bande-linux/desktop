@@ -81,12 +81,15 @@ sleep timers, battery percentage in the bar. Missing: wake for network access (W
 through NetworkManager `802-3-ethernet.wake-on-lan`), "start up automatically after a power
 failure" (needs the SMC driver), scheduled sleep and wake.
 
-**Users & Groups.** Has: the accounts on this computer (administrator or standard) and Change
-Password for your own, which runs `passwd` on a pseudo-terminal as GNOME's fallback does (the
-current password, the new one twice, and passwd's own reason when it refuses one). Missing:
-picture and full name, add and remove users, the administrator flag, automatic login.
-AccountsService (`org.freedesktop.Accounts`: SetRealName, SetIconFile, CreateUser,
-SetAccountType) is the right service for those but is not in the image.
+**Users & Groups.** Has: the accounts with picture, full name and kind; per account a page
+with picture (file chooser, crop to the circle), full name, the administrator flag, Delete
+User… keeping or deleting the home folder, and Change Password for your own; Add User… (full
+name, account name, kind, password), all through AccountsService and polkit. Missing:
+automatic login (greetd has only `initial_session`, in the packaged
+`/usr/share/bande-greeter/greetd-config.toml`, so a switch needs a root-owned configuration
+it may write first, for example a drop-in pointing greetd at `/etc/bande-greeter/greetd.toml`
+and a polkit-gated helper), resetting another user's password, groups, the guest user,
+pictures from a bundled set or the camera.
 
 **Passwords.** Out of scope.
 
@@ -102,22 +105,18 @@ nearby printers, `com.redhat.PrinterSpooler` signals for changes): printers with
 queued documents, the default printer, nearby IPP printers to add (driverless, `lpadmin -m
 everywhere`), add by address, and a page per printer with kind, location, address, its queue
 with Cancel, Pause/Resume, Make Default and Remove. Missing: scanners (SANE / eSCL), printer
-options (paper size, duplex, colour defaults), supply levels, sharing a printer. CUPS is not in
-the image yet, so the pane says printing isn't set up.
+options (paper size, duplex, colour defaults), supply levels, sharing a printer.
 
 ## Ranked gaps
 
 Ranked by how often a user needs them and how badly they are stuck without them.
 
-1. Printing works only once CUPS is installed: put `cups` in the image (bande-desktop already
-   recommends it) and the user in `lpadmin`. Then printer options (paper size, duplex),
-   supply levels and scanners (eSCL / SANE).
-2. Users & Groups: picture, full name, add and remove users, through AccountsService once it is
-   in the image (owner decision).
-3. Notifications: badges per app.
-4. Sharing: Remote Login (ssh.service through systemd's D-Bus API with polkit) and the
+1. Printing: printer options (paper size, duplex), supply levels and scanners (eSCL / SANE).
+2. Notifications: badges per app.
+3. Sharing: Remote Login (ssh.service through systemd's D-Bus API with polkit) and the
    `.local` name.
-5. Personal Hotspot, after `dnsmasq-base` is installed and AP mode is tried on the chip.
-6. Keyboard: editable shortcuts.
+4. Personal Hotspot, after `dnsmasq-base` is installed and AP mode is tried on the chip.
+5. Keyboard: editable shortcuts.
+6. Users & Groups: automatic login (see the pane above).
 7. Show scroll bars, double-click speed, Wake for network access, Bluetooth rename.
 8. Focus: days of the week and "for an hour"; Wallpaper: solid colours.

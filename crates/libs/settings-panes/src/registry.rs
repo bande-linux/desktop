@@ -315,6 +315,7 @@ pub enum SettingId {
     Printers,
     NearbyPrinters,
     Accounts,
+    FullName,
     LockMessage,
     ShowPreviews,
 }

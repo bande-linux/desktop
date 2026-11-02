@@ -7,7 +7,7 @@ use std::thread;
 
 use bande_inbox::Inbox;
 use bande_toolkit::Image;
-use bande_wallpaper::{Choice, Variant, backdrop, read, render};
+use bande_wallpaper::{Choice, Fit, Variant, backdrop, read, render};
 use bande_xdg::data_dirs;
 
 #[derive(Debug, Clone)]
@@ -82,6 +82,32 @@ pub fn load_backdrop(
                 {
                     return;
                 }
+            }
+        })?;
+    Ok(received)
+}
+
+pub fn load_picture(login: String, size: u32) -> io::Result<Inbox<Image>> {
+    let received = Inbox::new()?;
+    let sender = received.outbox();
+    thread::Builder::new()
+        .name("picture".to_owned())
+        .spawn(move || {
+            let Some(path) = bande_bus::system()
+                .ok()
+                .and_then(|system| bande_status::accounts::picture(&system, &login))
+            else {
+                return;
+            };
+            match render(&path, Fit::Fill, size, size) {
+                Ok(picture) => {
+                    if let Some(image) =
+                        Image::from_rgba(picture.width, picture.height, picture.rgba)
+                    {
+                        sender.send(image);
+                    }
+                }
+                Err(error) => tracing::warn!("cannot show {}: {error}", path.display()),
             }
         })?;
     Ok(received)

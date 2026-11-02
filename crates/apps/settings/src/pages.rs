@@ -1222,6 +1222,11 @@ impl SettingsView {
         {
             return self.page(printer);
         }
+        if pane.id == PaneId::Users
+            && let Some(account) = self.account_page()
+        {
+            return self.page(account);
+        }
         page.push(self.header(&pane));
         if pane.id == PaneId::Bluetooth
             && let Some(card) = self.pairing_card()

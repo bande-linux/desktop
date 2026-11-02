@@ -38,7 +38,7 @@ use crate::software::{Need, SoftwareCommand, SoftwareState};
 use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
-use crate::users::{Account, PasswordForm, UsersCommand};
+use crate::users::{Account, NewAccountForm, PasswordForm, PictureEdit, UsersCommand};
 use crate::widgets::{Column, Crossfade, Root};
 use crate::wifi::{HIDDEN_SECURITY, Other};
 use bande_keyboard::Layouts;
@@ -110,6 +110,18 @@ pub(crate) enum Intent {
     PausePrinter((String, bool)),
     AskPassword(bool),
     PasswordEntry(usize, String),
+    OpenAccount(String),
+    ChooseAccountPicture,
+    KeepPicture(bool),
+    PictureMoved,
+    Administrator(String, bool),
+    AskNewAccount(bool),
+    NewAccountName(String),
+    NewAccountLogin(String),
+    NewAccountAdmin(bool),
+    NewAccountPassword(usize, String),
+    AskDeleteAccount(bool),
+    DeleteAccount(u32, bool),
     ImportVpn,
     ExcludeFolder,
     IncludeFolder(String),
@@ -193,6 +205,7 @@ pub(crate) enum Detail {
     App(String),
     Network(Vec<u8>),
     Printer(String),
+    Account(String),
 }
 
 pub struct SettingsView {
@@ -235,6 +248,10 @@ pub struct SettingsView {
     pub(crate) adding: Option<String>,
     pub(crate) printer_address: String,
     pub(crate) accounts: Option<Vec<Account>>,
+    pub(crate) accounts_managed: bool,
+    pub(crate) picture_edit: Option<PictureEdit>,
+    pub(crate) new_account: Option<NewAccountForm>,
+    pub(crate) deleting_account: bool,
     pub(crate) password: Option<PasswordForm>,
     pub(crate) password_message: Option<String>,
     pub(crate) software: SoftwareState,
@@ -322,6 +339,10 @@ impl SettingsView {
             adding: None,
             printer_address: String::new(),
             accounts: None,
+            accounts_managed: false,
+            picture_edit: None,
+            new_account: None,
+            deleting_account: false,
             password: None,
             password_message: None,
             software: SoftwareState::Unknown,
@@ -474,7 +495,10 @@ impl SettingsView {
         let mut answered = false;
         for update in changes {
             shown |= self.shows(&update);
-            answered |= matches!(update, Update::Joined(..) | Update::Password(_));
+            answered |= matches!(
+                update,
+                Update::Joined(..) | Update::Password(_) | Update::AccountCreated(_)
+            );
             self.take(update);
         }
         self.refresh_hits();
@@ -567,9 +591,10 @@ impl SettingsView {
                 Some(PaneId::Printers),
                 &[SettingId::Printers, SettingId::NearbyPrinters],
             ),
-            Update::Accounts(_) | Update::Password(_) => {
-                (Some(PaneId::Users), &[SettingId::Accounts])
-            }
+            Update::Accounts(..)
+            | Update::Password(_)
+            | Update::PictureChosen(..)
+            | Update::AccountCreated(_) => (Some(PaneId::Users), &[SettingId::Accounts]),
             _ => return true,
         };
         let feeds = |setting: &Setting| {
@@ -735,7 +760,9 @@ impl SettingsView {
                 self.printers = Some(printers);
             }
             Update::NearbyPrinters(nearby) => self.nearby_printers = Some(nearby),
-            Update::Accounts(accounts) => self.accounts = Some(accounts),
+            Update::Accounts(accounts, managed) => self.take_accounts(accounts, managed),
+            Update::PictureChosen(login, image) => self.picture_chosen(login, image),
+            Update::AccountCreated(error) => self.account_created(error),
             Update::Password(outcome) => self.password_changed(outcome),
             Update::PrinterAdded(uri, added) => {
                 if self.adding.as_ref() == Some(&uri) {
@@ -1040,6 +1067,29 @@ impl SettingsView {
             Event::Key {
                 key: Key::Escape,
                 modifiers,
+            } if plain(modifiers) && self.picture_edit.is_some() => {
+                self.intents.borrow_mut().push(Intent::KeepPicture(false));
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && self.new_account.is_some() => {
+                self.intents.borrow_mut().push(Intent::AskNewAccount(false));
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && self.deleting_account => {
+                self.intents
+                    .borrow_mut()
+                    .push(Intent::AskDeleteAccount(false));
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
             } if plain(modifiers) && self.picking.is_some() => {
                 self.intents.borrow_mut().push(Intent::Pick(None));
                 true
@@ -1164,6 +1214,13 @@ impl SettingsView {
                 self.drafts.insert(id, text);
                 continue;
             }
+            if let Intent::NewAccountName(_)
+            | Intent::NewAccountLogin(_)
+            | Intent::NewAccountAdmin(_) = intent
+            {
+                self.new_account_field(intent);
+                continue;
+            }
             if let Intent::OtherName(name) = intent {
                 if let Some(other) = &mut self.other {
                     other.name = name;
@@ -1178,6 +1235,11 @@ impl SettingsView {
             match intent {
                 Intent::Draft(..) | Intent::OtherName(..) | Intent::PrinterAddress(..) => {}
                 Intent::Back => {
+                    if matches!(self.detail, Some(Detail::Account(_)))
+                        && let Some(name) = self.drafts.remove(&SettingId::FullName)
+                    {
+                        self.rename_account(Value::Text(name));
+                    }
                     if let Some(detail) = self.detail.take() {
                         self.forgetting = None;
                         self.message = None;
@@ -1185,7 +1247,11 @@ impl SettingsView {
                             Detail::App(group) => format!("app:{group}"),
                             Detail::Network(ssid) => String::from_utf8_lossy(&ssid).into_owned(),
                             Detail::Printer(name) => format!("printer:{name}"),
+                            Detail::Account(login) => format!("account:{login}"),
                         }));
+                        self.picture_edit = None;
+                        self.deleting_account = false;
+                        self.password = None;
                     } else if let Some(parent) = self.pane.parent() {
                         self.focus_next = Some(Anchor::Item(self.pane.keyword().to_owned()));
                         self.select_pane(parent);
@@ -1302,6 +1368,18 @@ impl SettingsView {
                 }
                 Intent::AskPassword(asking) => self.ask_password(asking),
                 Intent::PasswordEntry(step, text) => self.password_entry(step, text),
+                Intent::OpenAccount(login) => self.open_account(login),
+                Intent::ChooseAccountPicture => self.choose_account_picture(),
+                Intent::KeepPicture(keep) => self.keep_picture(keep),
+                Intent::PictureMoved => {}
+                Intent::Administrator(login, on) => self.set_administrator(login, on),
+                Intent::AskNewAccount(asking) => self.ask_new_account(asking),
+                Intent::NewAccountPassword(step, text) => self.new_account_password(step, text),
+                Intent::AskDeleteAccount(asking) => self.ask_delete_account(asking),
+                Intent::DeleteAccount(uid, remove_files) => self.delete_account(uid, remove_files),
+                Intent::NewAccountName(_)
+                | Intent::NewAccountLogin(_)
+                | Intent::NewAccountAdmin(_) => {}
                 Intent::PausePrinter((name, paused)) => {
                     self.focus_next = Some(Anchor::Item("printer-pause".to_owned()));
                     self.commands
@@ -1554,6 +1632,9 @@ impl SettingsView {
         self.other = None;
         self.password = None;
         self.password_message = None;
+        self.picture_edit = None;
+        self.new_account = None;
+        self.deleting_account = false;
         self.errors.clear();
         *self.scroll.borrow_mut() = ScrollState::default();
         self.invalidate();
@@ -1702,6 +1783,10 @@ impl SettingsView {
     }
 
     fn change(&mut self, id: SettingId, value: Value) {
+        if id == SettingId::FullName {
+            self.rename_account(value);
+            return;
+        }
         if matches!(
             id,
             SettingId::WifiAddress | SettingId::WifiRouter | SettingId::WifiDns

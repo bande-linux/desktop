@@ -15,7 +15,8 @@ use bande_greeter::{
 };
 use bande_keyboard::Layouts;
 use bande_lock::{
-    BackdropSource, Devices, Inbox, LockScreen, Look, PowerAction, User, Variant, load_backdrop,
+    BackdropSource, Devices, Inbox, LockScreen, Look, PICTURE_PIXELS, PowerAction, User, Variant,
+    load_backdrop, load_picture,
 };
 use bande_status::devices::{powers, use_power};
 use bande_status::status::{Battery, Wifi};
@@ -67,6 +68,7 @@ struct Greeter {
     backdrop: Option<Inbox<(Look, Image)>>,
     backdrop_size: Option<(u32, u32)>,
     sharp: Option<Inbox<(Look, Image)>>,
+    account_picture: Option<Inbox<Image>>,
     picture: Option<Arc<File>>,
     wallpaper: Option<Image>,
     last_user: Option<PathBuf>,
@@ -91,6 +93,12 @@ impl Greeter {
         )
     }
 
+    fn account_picture(user: &User) -> Option<Inbox<Image>> {
+        load_picture(user.login.clone(), PICTURE_PIXELS)
+            .inspect_err(|error| tracing::warn!("cannot load the account picture: {error}"))
+            .ok()
+    }
+
     fn switch_user(&mut self, forward: bool) -> bool {
         let count = self.users.len();
         if count < 2 || self.conversation.is_some() {
@@ -102,6 +110,7 @@ impl Greeter {
             (self.user + count - 1) % count
         };
         self.screen = Self::screen_for(&self.users[self.user], self.text.sharing_fonts());
+        self.account_picture = Self::account_picture(&self.users[self.user]);
         self.screen.set_position(self.user, count);
         self.screen.offer_power(&self.powers);
         self.screen.set_input_source(self.input_source.clone());
@@ -313,6 +322,7 @@ impl App for Greeter {
             .chain(self.devices.as_ref().map(Devices::fd))
             .chain(self.backdrop.as_ref().map(Inbox::fd))
             .chain(self.sharp.as_ref().map(Inbox::fd))
+            .chain(self.account_picture.as_ref().map(Inbox::fd))
             .chain(
                 self.conversation
                     .as_ref()
@@ -342,6 +352,18 @@ impl App for Greeter {
         }
         let backdrop = following + 1;
         let sharp = backdrop + usize::from(self.backdrop.is_some());
+        let account_picture = sharp + usize::from(self.sharp.is_some());
+        if index == account_picture && self.account_picture.is_some() {
+            if let Some(picture) = self
+                .account_picture
+                .take()
+                .and_then(|mut inbox| inbox.drain().pop())
+            {
+                self.screen.set_picture(picture);
+                window.request_redraw();
+            }
+            return;
+        }
         let drawn = match (&mut self.backdrop, &mut self.sharp) {
             (Some(inbox), _) if index == backdrop => Some(inbox.drain()),
             (_, Some(inbox)) if index == sharp => Some(inbox.drain()),
@@ -412,6 +434,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         (0, 0),
     )?;
     let devices = system.as_ref().and_then(Devices::follow);
+    let account_picture = users.get(user).and_then(Greeter::account_picture);
     let mut greeter = Greeter {
         users,
         user,
@@ -422,6 +445,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         backdrop: None,
         backdrop_size: None,
         sharp: None,
+        account_picture,
         picture,
         wallpaper: None,
         last_user,

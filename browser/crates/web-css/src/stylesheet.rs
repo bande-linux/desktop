@@ -53,6 +53,8 @@ pub struct Stylesheet {
     pub namespaces: Namespaces,
 }
 
+const MAX_NESTING_EXPANSION: usize = 256;
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Phase {
     Imports,
@@ -83,6 +85,7 @@ struct RuleParser<'a> {
     atoms: &'a mut AtomTable,
     namespaces: &'a mut Namespaces,
     parent: Option<SelectorList>,
+    expansion: usize,
     phase: Phase,
     declarations: DeclarationBlock,
 }
@@ -204,10 +207,18 @@ fn keyframe_offsets(input: &mut Parser<'_, '_>) -> ParseResult<Box<[f32]>> {
 
 impl RuleParser<'_> {
     fn nested(&mut self, parent: Option<SelectorList>) -> RuleParser<'_> {
+        let expansion = match (&parent, &self.parent) {
+            (Some(list), Some(previous)) if !std::sync::Arc::ptr_eq(&list.0, &previous.0) => {
+                self.expansion.saturating_mul(list.0.len().max(1))
+            }
+            (Some(list), None) => list.0.len().max(1),
+            _ => self.expansion,
+        };
         RuleParser {
             atoms: &mut *self.atoms,
             namespaces: &mut *self.namespaces,
             parent,
+            expansion,
             phase: Phase::Body,
             declarations: DeclarationBlock::default(),
         }
@@ -444,6 +455,9 @@ impl<'i> RuleHandler<'i> for RuleParser<'_> {
 
     fn qualified_rule_prelude(&mut self, input: &mut Parser<'i, '_>) -> ParseResult<SelectorList> {
         self.phase = Phase::Body;
+        if self.expansion > MAX_NESTING_EXPANSION {
+            return Err(ParseError::TooDeep);
+        }
         SelectorParser {
             atoms: &mut *self.atoms,
             namespaces: &*self.namespaces,
@@ -559,6 +573,7 @@ pub fn parse_stylesheet(css: &str, atoms: &mut AtomTable) -> Stylesheet {
         atoms,
         namespaces: &mut namespaces,
         parent: None,
+        expansion: 1,
         phase: Phase::Imports,
         declarations: DeclarationBlock::default(),
     };

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use web_atoms::{Atom, AtomTable};
 
 use crate::nth::parse_nth;
@@ -5,7 +7,7 @@ use crate::parser::{Delimiters, ParseError, ParseResult, Parser};
 use crate::tokenizer::Token;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SelectorList(pub Box<[Selector]>);
+pub struct SelectorList(pub Arc<[Selector]>);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Selector {
@@ -293,7 +295,7 @@ impl<'a> SelectorParser<'a> {
         if selectors.is_empty() && mode != ListMode::Forgiving {
             return Err(ParseError::Invalid);
         }
-        Ok(SelectorList(selectors.into_boxed_slice()))
+        Ok(SelectorList(selectors.into()))
     }
 
     fn parse_complex(

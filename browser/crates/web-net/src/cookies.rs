@@ -1,7 +1,7 @@
 use url::{Host, Url};
 
 use crate::date::parse_cookie_date;
-use crate::site::{Site, is_public_suffix};
+use crate::site::{Site, is_public_suffix, registrable};
 
 const MAX_COOKIE: usize = 4096;
 const MAX_PER_DOMAIN: usize = 180;
@@ -54,7 +54,6 @@ pub(crate) struct Context<'a> {
 #[derive(Default)]
 pub(crate) struct Jar {
     cookies: Vec<Cookie>,
-    next: u64,
     changed: bool,
 }
 
@@ -131,10 +130,7 @@ impl Jar {
                 }
                 old.created
             }
-            None => {
-                self.next += 1;
-                self.next
-            }
+            None => now,
         };
         self.changed = true;
         if cookie.expired(now) {
@@ -307,6 +303,31 @@ impl Jar {
         )
     }
 
+    fn site(cookie: &Cookie) -> String {
+        registrable(&cookie.domain).unwrap_or_else(|| cookie.domain.clone())
+    }
+
+    pub(crate) fn clear(&mut self, since: u64, sites: Option<&[String]>) {
+        let before = self.cookies.len();
+        self.cookies.retain(|cookie| {
+            let chosen = sites.is_none_or(|sites| {
+                sites.contains(&Self::site(cookie))
+                    || cookie
+                        .partition
+                        .as_ref()
+                        .is_some_and(|partition| sites.contains(&partition.domain().to_owned()))
+            });
+            !(chosen && cookie.created >= since)
+        });
+        self.changed |= self.cookies.len() != before;
+    }
+
+    pub(crate) fn sites(&self, counts: &mut std::collections::HashMap<String, (usize, u64)>) {
+        for cookie in &self.cookies {
+            counts.entry(Self::site(cookie)).or_default().0 += 1;
+        }
+    }
+
     pub(crate) fn save(&self) -> String {
         let mut text = String::new();
         for cookie in &self.cookies {
@@ -386,7 +407,6 @@ impl Jar {
                 created,
             };
             if !cookie.expired(now) {
-                jar.next = jar.next.max(created);
                 jar.cookies.push(cookie);
             }
         }

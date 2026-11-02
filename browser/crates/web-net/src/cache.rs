@@ -8,6 +8,7 @@ use hyper::header::{
 use url::Url;
 
 use crate::date::parse_cookie_date;
+use crate::site::Site;
 use crate::{ContentType, Response};
 
 const MEMORY_LIMIT: usize = 32 * 1024 * 1024;
@@ -315,6 +316,31 @@ impl Cache {
         self.evict();
     }
 
+    pub(crate) fn clear(&mut self, since: u64, sites: Option<&[String]>) {
+        let chosen: Vec<u64> = self
+            .entries
+            .iter()
+            .filter(|(_, entry)| entry.stored >= since)
+            .filter(|(_, entry)| {
+                sites.is_none_or(|sites| {
+                    sites.contains(&site_of(&entry.url))
+                        || Site::parse(&entry.partition)
+                            .is_some_and(|partition| sites.contains(&partition.domain().to_owned()))
+                })
+            })
+            .map(|(key, _)| *key)
+            .collect();
+        for key in chosen {
+            self.remove(key);
+        }
+    }
+
+    pub(crate) fn sites(&self, counts: &mut HashMap<String, (usize, u64)>) {
+        for entry in self.entries.values() {
+            counts.entry(site_of(&entry.url)).or_default().1 += entry.size as u64;
+        }
+    }
+
     fn remove(&mut self, key: u64) {
         if let Some(entry) = self.entries.remove(&key) {
             self.total = self.total.saturating_sub(entry.size);
@@ -391,4 +417,10 @@ fn lifetime(headers: &HeaderMap, now: u64) -> Option<u64> {
     }
     let modified = header(headers, LAST_MODIFIED).and_then(parse_cookie_date)?;
     Some((date.saturating_sub(modified) / 10).min(HEURISTIC_LIMIT))
+}
+
+fn site_of(url: &Url) -> String {
+    Site::of(url)
+        .map(|site| site.domain().to_owned())
+        .unwrap_or_default()
 }

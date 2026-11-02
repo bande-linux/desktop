@@ -116,6 +116,21 @@ impl std::error::Error for FetchError {}
 
 pub type Completion = (FetchId, Result<Response, FetchError>);
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Clear {
+    pub since: u64,
+    pub cookies: bool,
+    pub cache: bool,
+    pub sites: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SiteData {
+    pub site: String,
+    pub cookies: usize,
+    pub cache_bytes: u64,
+}
+
 pub struct Fetcher {
     commands: Sender<Command>,
     signal: Arc<OwnedFd>,
@@ -164,6 +179,16 @@ impl Fetcher {
         self.next_id += 1;
         self.send(Command::Fetch(id, Box::new(request)));
         id
+    }
+
+    pub fn clear(&mut self, clear: Clear) {
+        self.send(Command::Clear(clear));
+    }
+
+    pub fn site_data(&mut self) -> Vec<SiteData> {
+        let (reply, answer) = mpsc::channel();
+        self.send(Command::SiteData(reply));
+        answer.recv().unwrap_or_default()
     }
 
     pub fn cancel(&mut self, id: FetchId) {

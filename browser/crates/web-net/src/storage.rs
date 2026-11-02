@@ -6,6 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::cache::Cache;
 use crate::cookies::Jar;
 use crate::hsts::Hsts;
+use crate::{Clear, SiteData};
+use std::collections::HashMap;
 
 const COOKIES: &str = "cookies";
 const HSTS: &str = "hsts";
@@ -66,6 +68,34 @@ impl State {
                 }
             }
         }
+    }
+
+    pub(crate) fn clear(&mut self, clear: &Clear) {
+        let sites = clear.sites.as_deref();
+        if clear.cookies {
+            self.cookies.clear(clear.since, sites);
+        }
+        if clear.cache {
+            self.cache.clear(clear.since, sites);
+        }
+        self.persist();
+    }
+
+    pub(crate) fn site_data(&self) -> Vec<SiteData> {
+        let mut counts = HashMap::new();
+        self.cookies.sites(&mut counts);
+        self.cache.sites(&mut counts);
+        let mut sites: Vec<SiteData> = counts
+            .into_iter()
+            .filter(|(site, _)| !site.is_empty())
+            .map(|(site, (cookies, cache_bytes))| SiteData {
+                site,
+                cookies,
+                cache_bytes,
+            })
+            .collect();
+        sites.sort_by(|a, b| a.site.cmp(&b.site));
+        sites
     }
 
     pub(crate) fn persist(&mut self) {

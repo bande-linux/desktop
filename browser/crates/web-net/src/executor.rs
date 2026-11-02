@@ -17,7 +17,7 @@ use rustls_platform_verifier::BuilderVerifierExt;
 use crate::fetch::{Network, fetch};
 use crate::reactor::Reactor;
 use crate::storage::{State, Storage};
-use crate::{Completion, FetchError, FetchId, Request, Response};
+use crate::{Clear, Completion, FetchError, FetchId, Request, Response, SiteData};
 
 const FETCH_TIMEOUT: Duration = Duration::from_secs(120);
 const ALPN_HTTP1: &[u8] = b"http/1.1";
@@ -25,6 +25,8 @@ const ALPN_HTTP1: &[u8] = b"http/1.1";
 pub(crate) enum Command {
     Fetch(FetchId, Box<Request>),
     Cancel(FetchId),
+    Clear(Clear),
+    SiteData(Sender<Vec<SiteData>>),
     Quit,
 }
 
@@ -156,6 +158,10 @@ impl Executor {
                 }
                 Ok(Command::Cancel(id)) => {
                     self.tasks.remove(&id);
+                }
+                Ok(Command::Clear(clear)) => network.state.borrow_mut().clear(&clear),
+                Ok(Command::SiteData(reply)) => {
+                    let _ = reply.send(network.state.borrow().site_data());
                 }
                 Ok(Command::Quit) | Err(TryRecvError::Disconnected) => return false,
                 Err(TryRecvError::Empty) => return true,

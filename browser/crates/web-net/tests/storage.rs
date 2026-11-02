@@ -3,7 +3,7 @@ use std::net::TcpListener;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use web_net::{FetchId, Fetcher, Request, Response, Storage, Url};
+use web_net::{Clear, FetchId, Fetcher, Request, Response, Storage, Url};
 
 fn serve(listener: TcpListener, hits: Arc<AtomicUsize>) {
     for stream in listener.incoming() {
@@ -104,6 +104,20 @@ fn cookies_cache_and_storage() -> Result<(), Box<dyn std::error::Error>> {
     let before = hits.load(Ordering::SeqCst);
     assert_eq!(get(&mut restarted, navigation(local("/set")?))?, "set");
     assert_eq!(hits.load(Ordering::SeqCst), before);
+    let data = restarted.site_data();
+    assert!(
+        data.iter()
+            .any(|site| site.site == "localhost" && site.cookies == 1)
+    );
+    restarted.clear(Clear {
+        since: 0,
+        cookies: true,
+        cache: true,
+        sites: Some(vec!["localhost".to_owned()]),
+    });
+    assert_eq!(get(&mut restarted, navigation(local("/echo")?))?, "");
+    assert_eq!(get(&mut restarted, navigation(local("/set")?))?, "set");
+    assert_eq!(hits.load(Ordering::SeqCst), before + 2);
     drop(restarted);
 
     let mut private = Fetcher::new()?;

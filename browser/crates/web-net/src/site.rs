@@ -32,6 +32,10 @@ impl Site {
         })
     }
 
+    pub fn domain(&self) -> &str {
+        &self.domain
+    }
+
     pub fn as_str(&self) -> String {
         let scheme = if self.secure { "https" } else { "http" };
         format!("{scheme}://{}", self.domain)

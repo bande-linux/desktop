@@ -1214,7 +1214,6 @@ impl Parser<'_> {
                 }
                 "apps" => bar.apps = self.app_ids(child)?,
                 "auto-hide" => bar.auto_hide = self.flag(child)?,
-                "names" | "layout" | "menu-bar" => {}
                 "size" => bar.icon_size = self.integer_in(child, BAR_ICON_SIZE_RANGE)?,
                 _ => return Err(self.unknown_child("bar", child)),
             }

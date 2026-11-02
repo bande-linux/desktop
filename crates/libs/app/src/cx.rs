@@ -123,7 +123,7 @@ impl<P: Program> Cx<P> {
         }
         let view = settings.view;
         if let Err(error) = self.open_content(
-            Kind::Main,
+            Kind::Utility,
             &(settings.title)(),
             settings.size,
             |appearance| Content::Settings(view(appearance)),

@@ -1,6 +1,5 @@
 use std::ops::Range;
 
-use harfrust::{BufferClusterLevel, Direction, ShapeOptions, UnicodeBuffer};
 use icu_segmenter::LineSegmenter;
 use icu_segmenter::options::LineBreakOptions;
 use unicode_bidi::{BidiInfo, Level};
@@ -165,21 +164,21 @@ impl Paragraph {
             glyphs: Vec::new(),
             spans: Vec::new(),
         };
-        let mut buffer = UnicodeBuffer::new();
         for (run_index, (range, style)) in self.run_ranges().enumerate() {
             let Some(run_text) = self.text.get(range.clone()) else {
                 continue;
             };
             let mut group: Option<(Span, usize)> = None;
             let mut previous_font = None;
+            let mut ascii = [None; 128];
             for (offset, ch) in run_text.char_indices() {
                 let position = range.start + offset;
-                let font = if ch == '\n' {
-                    None
-                } else if is_inherited(ch) && previous_font.is_some() {
-                    previous_font
-                } else {
-                    fonts.for_char(style.font, ch)
+                let font = match ascii.get_mut(ch as usize) {
+                    _ if ch == '\n' => None,
+                    Some(Some(font)) => *font,
+                    Some(slot) => *slot.insert(fonts.for_char(style.font, ch)),
+                    None if is_inherited(ch) && previous_font.is_some() => previous_font,
+                    None => fonts.for_char(style.font, ch),
                 };
                 previous_font = font.or(previous_font);
                 let span = font.map(|font| Span {
@@ -189,12 +188,11 @@ impl Paragraph {
                 });
                 if group.map(|(group_span, _)| group_span) != span {
                     if let Some((group_span, start)) = group.take() {
-                        buffer = self.shape_group(
+                        self.shape_group(
                             fonts,
                             group_span,
                             start..position,
                             style.size,
-                            buffer,
                             &mut shaped,
                         );
                     }
@@ -202,14 +200,7 @@ impl Paragraph {
                 }
             }
             if let Some((group_span, start)) = group {
-                buffer = self.shape_group(
-                    fonts,
-                    group_span,
-                    start..range.end,
-                    style.size,
-                    buffer,
-                    &mut shaped,
-                );
+                self.shape_group(fonts, group_span, start..range.end, style.size, &mut shaped);
             }
         }
         shaped
@@ -217,59 +208,32 @@ impl Paragraph {
 
     fn shape_group(
         &self,
-        fonts: &Fonts,
+        fonts: &mut Fonts,
         span: Span,
         range: Range<usize>,
         size: f32,
-        mut buffer: UnicodeBuffer,
         shaped: &mut ShapedParagraph,
-    ) -> UnicodeBuffer {
-        let (Some(loaded), Some(text)) = (fonts.loaded(span.font), self.text.get(range.clone()))
-        else {
-            return buffer;
+    ) {
+        let Some(text) = self.text.get(range.clone()) else {
+            return;
         };
-        let Ok(font_ref) =
-            harfrust::FontRef::from_index(loaded.data.data.data(), loaded.data.index)
-        else {
-            return buffer;
-        };
-        let shaper = loaded.shaper.shaper(&font_ref).build();
-        for (offset, ch) in text.char_indices() {
-            buffer.add(ch, (range.start + offset) as u32);
-        }
-        buffer.set_pre_context(self.text.get(..range.start).unwrap_or_default());
-        buffer.set_post_context(self.text.get(range.end..).unwrap_or_default());
-        buffer.guess_segment_properties();
         let rtl = span.level % 2 == 1;
-        buffer.set_direction(if rtl {
-            Direction::RightToLeft
-        } else {
-            Direction::LeftToRight
-        });
-        buffer.set_cluster_level(BufferClusterLevel::MonotoneCharacters);
-        let output = shaper.shape(buffer, ShapeOptions::new().point_size(Some(size)));
-        let scale = size / loaded.metrics.units_per_em;
         let span_index = shaped.spans.len() as u32;
         shaped.spans.push(span);
-        let first = shaped.glyphs.len();
-        shaped.glyphs.extend(
-            output
-                .glyph_infos()
-                .iter()
-                .zip(output.glyph_positions())
-                .map(|(info, position)| ShapedGlyph {
-                    id: info.glyph_id,
-                    cluster: info.cluster,
-                    advance: position.x_advance as f32 * scale,
-                    x_offset: position.x_offset as f32 * scale,
-                    y_offset: position.y_offset as f32 * scale,
+        let mut offset = range.start as u32;
+        for word in text.split_inclusive(' ') {
+            if let Some(glyphs) = fonts.shape_word(span.font, size, rtl, word) {
+                shaped.glyphs.extend(glyphs.iter().map(|glyph| ShapedGlyph {
+                    id: glyph.id,
+                    cluster: offset + glyph.cluster,
+                    advance: glyph.advance,
+                    x_offset: glyph.x_offset,
+                    y_offset: glyph.y_offset,
                     span: span_index,
-                }),
-        );
-        if rtl && let Some(glyphs) = shaped.glyphs.get_mut(first..) {
-            glyphs.reverse();
+                }));
+            }
+            offset += word.len() as u32;
         }
-        output.clear()
     }
 }
 

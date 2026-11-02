@@ -4,6 +4,7 @@ use fontique::{
     Attributes, Collection, CollectionOptions, FallbackKey, FontStyle, FontWeight, FontWidth,
     GenericFamily, QueryFamily, QueryFont, QueryStatus, Script, SourceCache,
 };
+use harfrust::{BufferClusterLevel, Direction, ShapeOptions, UnicodeBuffer};
 use icu_properties::props::Script as UnicodeScript;
 use icu_properties::{CodePointMapData, PropertyNamesShort};
 use linebender_resource_handle::FontData;
@@ -46,7 +47,24 @@ pub struct Fonts {
     by_source: HashMap<(u64, u32), FontId>,
     primary: HashMap<FontKey, Option<FontId>>,
     chosen: HashMap<(FontKey, char), Option<FontId>>,
+    plans: HashMap<(FontId, harfrust::Script, bool), harfrust::ShapePlan>,
+    words: HashMap<(FontId, u32, bool), WordCache>,
+    cached_words: usize,
+    buffer: Option<UnicodeBuffer>,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct WordGlyph {
+    pub(crate) id: u32,
+    pub(crate) cluster: u32,
+    pub(crate) advance: f32,
+    pub(crate) x_offset: f32,
+    pub(crate) y_offset: f32,
+}
+
+const WORD_CACHE_LIMIT: usize = 65536;
+
+type WordCache = HashMap<Box<str>, Box<[WordGlyph]>>;
 
 impl Default for Fonts {
     fn default() -> Self {
@@ -66,6 +84,10 @@ impl Fonts {
             by_source: HashMap::new(),
             primary: HashMap::new(),
             chosen: HashMap::new(),
+            plans: HashMap::new(),
+            words: HashMap::new(),
+            cached_words: 0,
+            buffer: None,
         }
     }
 
@@ -80,8 +102,83 @@ impl Fonts {
             .unwrap_or_default()
     }
 
-    pub(crate) fn loaded(&self, font: FontId) -> Option<&LoadedFont> {
+    fn loaded(&self, font: FontId) -> Option<&LoadedFont> {
         self.loaded.get(font.0 as usize)
+    }
+
+    pub(crate) fn shape_word(
+        &mut self,
+        font: FontId,
+        size: f32,
+        rtl: bool,
+        word: &str,
+    ) -> Option<&[WordGlyph]> {
+        let key = (font, size.to_bits(), rtl);
+        let cached = self
+            .words
+            .get(&key)
+            .is_some_and(|words| words.contains_key(word));
+        if !cached {
+            let glyphs = self.shape_uncached(font, size, rtl, word)?;
+            if self.cached_words >= WORD_CACHE_LIMIT {
+                self.words.clear();
+                self.cached_words = 0;
+            }
+            self.cached_words += 1;
+            self.words
+                .entry(key)
+                .or_default()
+                .insert(word.into(), glyphs);
+        }
+        self.words.get(&key)?.get(word).map(|glyphs| &glyphs[..])
+    }
+
+    fn shape_uncached(
+        &mut self,
+        font: FontId,
+        size: f32,
+        rtl: bool,
+        word: &str,
+    ) -> Option<Box<[WordGlyph]>> {
+        let loaded = self.loaded.get(font.0 as usize)?;
+        let font_ref =
+            harfrust::FontRef::from_index(loaded.data.data.data(), loaded.data.index).ok()?;
+        let shaper = loaded.shaper.shaper(&font_ref).build();
+        let mut buffer = self.buffer.take().unwrap_or_default();
+        buffer.push_str(word);
+        buffer.guess_segment_properties();
+        buffer.set_direction(if rtl {
+            Direction::RightToLeft
+        } else {
+            Direction::LeftToRight
+        });
+        buffer.set_cluster_level(BufferClusterLevel::MonotoneCharacters);
+        let script = buffer.script();
+        let plan = self.plans.entry((font, script, rtl)).or_insert_with(|| {
+            harfrust::ShapePlan::new(&shaper, buffer.direction(), Some(script), None, &[])
+        });
+        let output = shaper.shape(
+            buffer,
+            ShapeOptions::new().plan(Some(plan)).point_size(Some(size)),
+        );
+        let scale = size / loaded.metrics.units_per_em;
+        let mut glyphs: Box<[WordGlyph]> = output
+            .glyph_infos()
+            .iter()
+            .zip(output.glyph_positions())
+            .map(|(info, position)| WordGlyph {
+                id: info.glyph_id,
+                cluster: info.cluster,
+                advance: position.x_advance as f32 * scale,
+                x_offset: position.x_offset as f32 * scale,
+                y_offset: position.y_offset as f32 * scale,
+            })
+            .collect();
+        if rtl {
+            glyphs.reverse();
+        }
+        self.buffer = Some(output.clear());
+        Some(glyphs)
     }
 
     pub fn primary(&mut self, key: FontKey) -> Option<FontId> {

@@ -21,7 +21,7 @@ apt-get install -y -q --no-install-recommends $ours < /dev/null
 
 echo "== every package bande-desktop recommends is in Debian testing or built here"
 default_apps="$(dirname "$0")/../../../packaging/bande-desktop/default-apps"
-from_the_archive=" bande-apt-source $(awk '/^\[/ { apps = $0 == "[apps]"; next } apps && /^[a-z0-9]/ { print $1 }' "$default_apps" | xargs) "
+from_the_archive=" bande-apt-source $(grep -E '^[a-z0-9]' "$default_apps" | xargs) "
 apt-cache show bande-desktop | sed -n 's/^Recommends: //p' | tr ',' '\n' | sed 's/^ *//; s/[ (].*//' |
     while read -r recommended; do
         [ -n "$recommended" ] && [[ $from_the_archive != *" $recommended "* ]] || continue

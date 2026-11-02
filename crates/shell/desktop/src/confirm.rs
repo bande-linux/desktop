@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use bande_fs::ExtensionChange;
 use bande_toolkit::WindowError;
 use bande_toolkit::ui::Alert;
 
@@ -8,6 +9,7 @@ use crate::L10N;
 
 pub const CONFIRM_DELETE_FLAG: &str = "--confirm-delete";
 pub const EJECT_FAILED_FLAG: &str = "--eject-failed";
+pub const CONFIRM_EXTENSION_FLAG: &str = "--confirm-extension";
 pub const FORCE_EJECT: &str = "force";
 
 pub fn confirm_delete(count: usize) -> Result<bool, WindowError> {
@@ -21,6 +23,19 @@ pub fn confirm_delete(count: usize) -> Result<bool, WindowError> {
         )
         .cancel(&L10N.tr("cancel"), "cancel")
         .primary(&L10N.tr("delete"), "delete")
+    })?;
+    Ok(confirmed.get())
+}
+
+pub fn confirm_extension_change(change: &ExtensionChange) -> Result<bool, WindowError> {
+    let confirmed = Rc::new(Cell::new(false));
+    let chosen = confirmed.clone();
+    bande_toolkit::ask("desktop-confirmation", |_| {
+        Alert::new(&change.title(), &ExtensionChange::detail(), move |action| {
+            chosen.set(action == "change")
+        })
+        .cancel(&change.keep(), "keep")
+        .primary(&change.change(), "change")
     })?;
     Ok(confirmed.get())
 }

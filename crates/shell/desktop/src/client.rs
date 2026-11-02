@@ -8,7 +8,7 @@ use std::rc::Rc;
 use std::thread;
 use std::time::{Instant, SystemTime};
 
-use crate::confirm::{FORCE_EJECT, eject_failed};
+use crate::confirm::{CONFIRM_EXTENSION_FLAG, FORCE_EJECT, confirm_extension_change, eject_failed};
 use crate::{
     Artwork, Bounds, CONFIRM_DELETE_FLAG, DesktopView, EJECT_FAILED_FLAG, Item, Kind, Layer,
     Layouts, Luma, MenuApp, Request, Selection, WallpaperKey, command, confirm_delete,
@@ -16,7 +16,10 @@ use crate::{
 };
 use accesskit::TreeUpdate;
 use bande_config::{BUS_NAME, BarEdge, BarLayout, Config, OBJECT_PATH, Wallpaper, WallpaperFit};
-use bande_fs::{Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash};
+use bande_fs::{
+    Action, Answer, Change, ExtensionChange, FolderWatch, Operations, Purpose, Resolution, Task,
+    Trash,
+};
 use bande_inbox::{Inbox, Outbox};
 use bande_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
 use bande_toolkit::ui::frame_time;
@@ -40,6 +43,7 @@ const SETTINGS_FOLDER: &str = "bande";
 const FILES_SETTINGS: &str = "files.conf";
 const SHOW_EXTENSIONS: &str = "show-extensions";
 const SHOW_DISKS: &str = "desktop-disks";
+const WARN_EXTENSION_CHANGE: &str = "warn-extension-change";
 const BUSY: &str = "busy";
 const PDF: &str = "application/pdf";
 const WALLPAPER_CACHE: &str = "bande/wallpapers";
@@ -50,11 +54,21 @@ const FILES_INFO_FLAG: &str = "--info";
 type Loaded = (WallpaperKey, Option<(Picture, Luma)>);
 
 const CONFIRMED: &str = "delete";
+const CHANGE_EXTENSION: &str = "change";
+
+enum Confirmed {
+    Delete(Vec<PathBuf>),
+    Rename {
+        path: PathBuf,
+        name: String,
+        kept: String,
+    },
+}
 
 struct Confirming {
     child: Child,
     answer: ChildStdout,
-    paths: Vec<PathBuf>,
+    then: Confirmed,
 }
 
 pub struct DesktopSurface {
@@ -564,11 +578,8 @@ impl DesktopSurface {
                     Action::Move,
                 ),
                 Request::Rename { path, name } => {
-                    match bande_fs::rename(&path, &self.full_name(&path, name)) {
-                        Ok(Some(change)) => self.operations.record(Action::Rename, vec![change]),
-                        Ok(None) => {}
-                        Err(error) => tracing::warn!("cannot rename {}: {error:?}", path.display()),
-                    }
+                    let name = self.full_name(&path, name);
+                    self.rename_checked(path, name);
                 }
                 Request::NewFolder => match bande_fs::new_folder(&self.desktop_dir) {
                     Ok(change) => {
@@ -642,14 +653,50 @@ impl DesktopSurface {
         window.request_redraw();
     }
 
+    fn rename(&mut self, path: &Path, name: &str) {
+        match bande_fs::rename(path, name) {
+            Ok(Some(change)) => self.operations.record(Action::Rename, vec![change]),
+            Ok(None) => {}
+            Err(error) => tracing::warn!("cannot rename {}: {error:?}", path.display()),
+        }
+    }
+
+    fn rename_checked(&mut self, path: PathBuf, name: String) {
+        let change = ExtensionChange::of(&path, &name)
+            .filter(|_| self.shown.warn_extension_change && !path.is_dir());
+        let Some(change) = change else {
+            self.rename(&path, &name);
+            return;
+        };
+        if self.confirming.is_some() {
+            self.rename(&path, &change.kept);
+            return;
+        }
+        let arguments = [
+            CONFIRM_EXTENSION_FLAG.to_owned(),
+            change.from.unwrap_or_default(),
+            change.to.unwrap_or_default(),
+        ];
+        let then = Confirmed::Rename {
+            path,
+            name,
+            kept: change.kept,
+        };
+        self.ask(&arguments, then);
+    }
+
     fn confirm_delete(&mut self, paths: Vec<PathBuf>) {
         if self.confirming.is_some() {
             return;
         }
+        let arguments = [CONFIRM_DELETE_FLAG.to_owned(), paths.len().to_string()];
+        self.ask(&arguments, Confirmed::Delete(paths));
+    }
+
+    fn ask(&mut self, arguments: &[String], then: Confirmed) {
         let spawned = std::env::current_exe().and_then(|program| {
             Command::new(program)
-                .arg(CONFIRM_DELETE_FLAG)
-                .arg(paths.len().to_string())
+                .args(arguments)
                 .stdout(Stdio::piped())
                 .spawn()
         });
@@ -659,12 +706,12 @@ impl DesktopSurface {
                     self.confirming = Some(Confirming {
                         child,
                         answer,
-                        paths,
+                        then,
                     })
                 }
-                None => tracing::warn!("cannot hear the delete confirmation"),
+                None => tracing::warn!("cannot hear the confirmation"),
             },
-            Err(error) => tracing::warn!("cannot ask to delete: {error}"),
+            Err(error) => tracing::warn!("cannot ask for a confirmation: {error}"),
         }
     }
 
@@ -679,12 +726,20 @@ impl DesktopSurface {
         if let Err(error) = confirming.child.wait() {
             tracing::warn!("cannot finish the delete confirmation: {error}");
         }
-        if answer.trim() == CONFIRMED {
-            let task = Task::Delete {
-                sources: confirming.paths,
-            };
-            if let Err(error) = self.operations.start(task, Purpose::Erase) {
-                tracing::warn!("cannot delete: {error}");
+        match confirming.then {
+            Confirmed::Delete(sources) if answer.trim() == CONFIRMED => {
+                let task = Task::Delete { sources };
+                if let Err(error) = self.operations.start(task, Purpose::Erase) {
+                    tracing::warn!("cannot delete: {error}");
+                }
+            }
+            Confirmed::Delete(_) => {}
+            Confirmed::Rename { path, name, kept } => {
+                let chosen = match answer.trim() == CHANGE_EXTENSION {
+                    true => name,
+                    false => kept,
+                };
+                self.rename(&path, &chosen);
             }
         }
     }
@@ -937,6 +992,7 @@ impl App for DesktopSurface {
 struct Shown {
     extensions: bool,
     disks: bool,
+    warn_extension_change: bool,
 }
 
 impl Shown {
@@ -955,6 +1011,7 @@ impl Shown {
         Self {
             extensions: flag(SHOW_EXTENSIONS).unwrap_or(false),
             disks: flag(SHOW_DISKS).unwrap_or(true),
+            warn_extension_change: flag(WARN_EXTENSION_CHANGE).unwrap_or(true),
         }
     }
 }
@@ -1105,6 +1162,7 @@ impl DesktopSurface {
             shown: Shown {
                 extensions: false,
                 disks: true,
+                warn_extension_change: true,
             },
             pictures: HashMap::new(),
             layouts_file,
@@ -1154,6 +1212,19 @@ pub fn report_eject_failure(
 ) -> Result<(), Box<dyn std::error::Error>> {
     if eject_failed(name, busy == BUSY, message)? {
         println!("{FORCE_EJECT}");
+    }
+    Ok(())
+}
+
+pub fn confirm_extension(from: &str, to: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let known = |extension: &str| Some(extension.to_owned()).filter(|known| !known.is_empty());
+    let change = ExtensionChange {
+        from: known(from),
+        to: known(to),
+        kept: String::new(),
+    };
+    if confirm_extension_change(&change)? {
+        println!("{CHANGE_EXTENSION}");
     }
     Ok(())
 }

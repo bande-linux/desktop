@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use bande_bar::dialogs;
 use bande_bar::pairing::{PAIR_FLAG, run_pairing};
-use bande_desktop_surface::{CONFIRM_DELETE_FLAG, EJECT_FAILED_FLAG};
+use bande_desktop_surface::{CONFIRM_DELETE_FLAG, CONFIRM_EXTENSION_FLAG, EJECT_FAILED_FLAG};
 use bande_status::session::Ending;
 
 fn main() -> ExitCode {
@@ -19,6 +19,9 @@ fn main() -> ExitCode {
         ["--about"] => dialogs::run_about(),
         ["--about-app", app_id, version] => dialogs::run_about_app(app_id, version),
         [flag, count] if *flag == CONFIRM_DELETE_FLAG => bande_desktop_surface::confirm(count),
+        [flag, from, to] if *flag == CONFIRM_EXTENSION_FLAG => {
+            bande_desktop_surface::confirm_extension(from, to)
+        }
         [flag, name, busy, message] if *flag == EJECT_FAILED_FLAG => {
             bande_desktop_surface::report_eject_failure(name, busy, message)
         }

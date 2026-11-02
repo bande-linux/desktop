@@ -11,8 +11,8 @@ use std::sync::LazyLock;
 use bande_l10n::Localizer;
 
 pub use backdrop::{Key as WallpaperKey, Layer, Luma};
-pub use client::{DesktopSurface, confirm, report_eject_failure, role};
-pub use confirm::{CONFIRM_DELETE_FLAG, EJECT_FAILED_FLAG, confirm_delete};
+pub use client::{DesktopSurface, confirm, confirm_extension, report_eject_failure, role};
+pub use confirm::{CONFIRM_DELETE_FLAG, CONFIRM_EXTENSION_FLAG, EJECT_FAILED_FLAG, confirm_delete};
 pub use menus::{App as MenuApp, Command, Selection, command, desktop_menu, items_menu};
 pub use model::{
     Bounds, CELL_HEIGHT, CELL_WIDTH, Desktop, Direction, GRID_PADDING, Grid, ICON_SIZE, Item, Kind,

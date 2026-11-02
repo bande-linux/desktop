@@ -1,7 +1,7 @@
 [Icon Theme]
 Name=Bande
 Comment=The Bande desktop icons in the Datum language
-Inherits=Adwaita,hicolor
+Inherits=hicolor
 Directories=16x16/mimetypes,24x24/mimetypes,scalable/apps,scalable/mimetypes,scalable/places,scalable/devices,symbolic/status,symbolic/actions,symbolic/places,symbolic/devices
 
 [16x16/mimetypes]

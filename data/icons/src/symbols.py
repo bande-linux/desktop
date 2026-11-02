@@ -587,6 +587,52 @@ def phone():
     return layers(S().frame(4, 1.4, 8, 13.2, 1.8, 1.4).line(6.8, 12.2, 9.2, 12.2, 1.2))
 
 
+def headset():
+    shape = S().arc(8, 8, 5.8, 180, 360, W, caps=False)
+    shape.rrect(1.4, 7.6, 3.4, 5.2, 1.3).rrect(11.2, 7.6, 3.4, 5.2, 1.3)
+    shape.polyline([(3.1, 12.8), (3.1, 14.2), (7.2, 14.2)], 1.2).circle(8.2, 14.2, 1)
+    return layers(shape)
+
+
+def pin():
+    shape = S().raw('M8 15C8 15 2.8 9.6 2.8 6.2A5.2 5.2 0 0 1 13.2 6.2C13.2 9.6 8 15 8 15Z')
+    shape.circle(8, 6.2, 2, clockwise=False)
+    return layers(shape)
+
+
+def gamepad():
+    shape = S().raw('M4.6 3.8H11.4C13.4 3.8 14.6 5.4 14.9 7.6L15.4 11.2C15.6 12.8 14 13.6 12.8 12.6L10.6 10.6H5.4'
+                    'L3.2 12.6C2 13.6 0.4 12.8 0.6 11.2L1.1 7.6C1.4 5.4 2.6 3.8 4.6 3.8Z')
+    shape.rrect(3.5, 6.6, 3.4, 1.2, 0.4, clockwise=False).rrect(4.6, 5.5, 1.2, 3.4, 0.4, clockwise=False)
+    shape.circle(10.4, 6.4, 0.8, clockwise=False).circle(12, 8, 0.8, clockwise=False)
+    return layers(shape)
+
+
+def tablet():
+    shape = S().frame(1.4, 2.2, 10.4, 11.6, 1.6, 1.4)
+    shape.polygon([(13.4, 1.6), (15, 3.2), (9.4, 8.8), (7.6, 9.2), (8, 7.4)])
+    return layers(shape)
+
+
+def fullscreen(restore=False):
+    shape = S()
+    for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+        cx, cy = 8 - sx * 6, 8 - sy * 6
+        if restore:
+            cx, cy = 8 - sx * 2.2, 8 - sy * 2.2
+            shape.polyline([(cx - sx * 3.6, cy), (cx, cy), (cx, cy - sy * 3.6)], W)
+        else:
+            shape.polyline([(cx, cy + sy * 3.6), (cx, cy), (cx + sx * 3.6, cy)], W)
+    return layers(shape)
+
+
+def gallery():
+    shape = S().frame(1.4, 1.6, 13.2, 8.4, 1.6, 1.4)
+    for x in (1.4, 6.1, 10.8):
+        shape.rrect(x, 11.6, 3.8, 2.8, 0.8)
+    return layers(shape)
+
+
 BATTERY_LEVELS = range(0, 101, 10)
 
 
@@ -654,6 +700,8 @@ STATUS = {
     'system-log-out-symbolic': logout,
     'system-suspend-symbolic': moon,
     'avatar-default-symbolic': avatar,
+    'find-location-symbolic': pin,
+    'system-users-symbolic': people,
 }
 
 ACTIONS = {
@@ -665,6 +713,11 @@ ACTIONS = {
     'view-grid-symbolic': view_grid,
     'view-app-grid-symbolic': view_grid,
     'view-column-symbolic': view_columns,
+    'view-gallery-symbolic': gallery,
+    'view-paged-symbolic': gallery,
+    'view-fullscreen-symbolic': fullscreen,
+    'view-restore-symbolic': lambda: fullscreen(True),
+    'object-rotate-left-symbolic': lambda: circular_arrow(False),
     'view-more-symbolic': view_more,
     'view-more-horizontal-symbolic': view_more,
     'view-more-vertical-symbolic': lambda: view_more(True),
@@ -745,6 +798,10 @@ DEVICES = {
     'computer-symbolic': laptop,
     'video-display-symbolic': desktop,
     'audio-headphones-symbolic': headphones,
+    'audio-headset-symbolic': headset,
+    'audio-card-symbolic': lambda: volume(3),
+    'input-gaming-symbolic': gamepad,
+    'input-tablet-symbolic': tablet,
     'input-mouse-symbolic': mouse,
     'input-touchpad-symbolic': touchpad,
     'printer-symbolic': printer,

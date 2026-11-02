@@ -46,7 +46,7 @@ ci/release/build-all.sh
   crates; graphics and widgets stay off Wayland) and `ci/check-apps.sh`.
 - `test` (arm64): the workspace tests on the hermetic bus, as in the local gate.
 - `debs (arm64)`, `debs (amd64)`: each on its native runner, `ci/release/build-debs.sh` runs
-  `cargo build --profile dist` for the crates in `ci/release/packages` and `cargo deb` for each
+  `cargo build --profile dist` for the crates in `ci/release/packages` and `ci/release/bundled` and `cargo deb` for each
   at the version from `ci/deb/version.sh`. cargo-deb takes the architecture from the native
   target and the shared-library dependencies from Debian testing's `dpkg-shlibdeps`.
   `ci/release/check-debs.sh` checks that every package is there for `dpkg --print-architecture`

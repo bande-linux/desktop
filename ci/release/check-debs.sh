@@ -87,6 +87,7 @@ service="$root/usr/share/dbus-1/services/org.bande.Secrets.service"
 grep -qx 'Name=org.freedesktop.secrets' "$service"
 grep -qx 'SystemdService=bande-secrets.service' "$service"
 test -x "$root$(sed -n 's/^Exec=//p' "$service")"
+test -x "$root/usr/libexec/bande-secrets-prompt"
 grep -qx 'ListenStream=%t/bande-secrets/pam' "$root/usr/lib/systemd/user/bande-secrets.socket"
 grep -qx 'BusName=org.freedesktop.secrets' "$root/usr/lib/systemd/user/bande-secrets.service"
 field bande-secrets Provides | grep -qw org.freedesktop.secrets

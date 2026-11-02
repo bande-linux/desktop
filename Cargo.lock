@@ -1027,16 +1027,13 @@ dependencies = [
 name = "bande-secrets"
 version = "0.1.4"
 dependencies = [
- "accesskit",
  "async-channel",
  "async-executor",
  "async-io",
  "async-lock",
  "async-process",
- "bande-l10n",
  "bande-log",
  "bande-test-bus",
- "bande-toolkit",
  "bande-xdg",
  "futures-lite",
  "oo7",
@@ -1045,6 +1042,20 @@ dependencies = [
  "tempfile",
  "tracing",
  "zbus",
+ "zeroize",
+]
+
+[[package]]
+name = "bande-secrets-prompt"
+version = "0.1.4"
+dependencies = [
+ "accesskit",
+ "bande-l10n",
+ "bande-log",
+ "bande-toolkit",
+ "bande-xdg",
+ "rustix 1.1.6",
+ "tracing",
  "zeroize",
 ]
 

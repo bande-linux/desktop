@@ -19,8 +19,9 @@ crates/
   toolkit/   toolkit, design, graphics, platform, widgets
   shell/     shell, bar, desktop, notifications, controlcenter, launcher,
              screenshot, lock, greeter
-  apps/      files, settings, file-chooser
-  services/  config, notify, power, sound, clipboard, tray, automount, portal, polkit
+  apps/      files, settings, file-chooser, secrets-prompt
+  services/  config, notify, power, sound, clipboard, tray, automount, portal, polkit,
+             secrets, secrets-pam
   libs/      app, app-menu, app-settings, settings-panes, xdg, fs, content, quick-look, thumbnails,
              search, status, taskbar-model, packages, audio, network, bluetooth, volumes,
              keyboard, datetime, l10n, log, bus, inbox, watch, wallpaper, edid, spring
@@ -42,8 +43,9 @@ these crates at a pinned revision.
   process that hosts the parts `desktop`, `bar`, `notifications`, `controlcenter` and `launcher`
   (library crates, see [overview](../architecture/overview.md)); `screenshot`, `lock` and
   `greeter` stay processes of their own.
-- **`apps/`**: one crate per app built here, each on `bande-app` (`libs/app`); the file chooser
-  is the portal's dialog.
+- **`apps/`**: one crate per app built here, each on `bande-app` (`libs/app`), and the dialog
+  processes of services: `file-chooser` is the portal's dialog and `secrets-prompt` the
+  keychain's (`bande-secrets-prompt`, installed by `bande-secrets`).
 - **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-bande`.
 - **`libs/`**: shared logic without UI. `xdg` holds desktop entries, icons, MIME types,
   `mimeapps.list`, user directories and `Apps`, the one answer to "which apps open this path";
@@ -65,7 +67,8 @@ Rules:
 2. **One crate per process.** Each app, shell client and service is its own crate; each part
    hosted by `bande-shell` is its own library crate.
 3. **Dependency direction.** `libs` ← `toolkit` ← `shell` and `apps`. Services never depend on
-   the widget crates (except the polkit agent, which shows a dialog); `ci/release/lint.sh` checks this.
+   the widget crates (except the polkit agent, which shows a dialog); a service that needs a
+   window starts a dialog process from `apps/`; `ci/release/lint.sh` checks this.
 4. **Crate structure.** In each app and shell crate, `main.rs` is thin, model modules hold no
    toolkit types, and view modules build on the toolkit. Logic that a second crate needs moves
    to `libs`.

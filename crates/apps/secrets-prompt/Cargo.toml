@@ -1,0 +1,21 @@
+[package]
+name = "bande-secrets-prompt"
+description = "Bande keychain prompts: unlock, allow an app, new keychain, network passwords"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+rustix = { workspace = true, features = ["fs", "process"] }
+tracing.workspace = true
+bande-l10n.workspace = true
+bande-log.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+zeroize.workspace = true
+
+[lints]
+workspace = true

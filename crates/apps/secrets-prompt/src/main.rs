@@ -19,7 +19,7 @@ use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use zeroize::Zeroizing;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-secrets.ftl");
+const ENGLISH: &str = include_str!("../locales/en-US/bande-secrets-prompt.ftl");
 const NAMESPACE: &str = "bande-secrets-prompt";
 const FIELD_FONT: f32 = 13.0;
 

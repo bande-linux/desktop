@@ -346,7 +346,8 @@ graph LR
 - Items record the app that saved them (`bande:creator`: the Flatpak id or the executable of
   the D-Bus peer). Another app sees such an item as locked and gets it after confirming with
   the keychain password (`bande:allowed` remembers "Always Allow"). Prompts are
-  `bande-secrets-prompt` processes; the daemon is not dumpable and has no core limit.
+  `bande-secrets-prompt` processes (`crates/apps/secrets-prompt`, installed by `bande-secrets`
+  next to the daemon in `/usr/libexec`), so the daemon never links the toolkit; the daemon is not dumpable and has no core limit.
 
 ### Session startup
 

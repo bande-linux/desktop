@@ -18,7 +18,8 @@ profiles. Sizes are in [performance.md](performance.md).
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
   `bande-settings`, `bande-file-chooser`). Package names stay `bande-*` whatever directory the crate lives in
-  ([decision 0003](../decisions/0003-repository-layout.md)). Packages in `ci/release/arch-variants` build
+  ([decision 0003](../decisions/0003-repository-layout.md)). Crates in `ci/release/bundled` build with them and ship inside another package
+  (`bande-secrets-prompt` in `bande-secrets`). Packages in `ci/release/arch-variants` build
   with `--variant <arch>`, whose assets name the multiarch path (`libpam-bande-secrets`' PAM module). `bande-shell` installs the one
   shell binary that hosts the desktop, the bar, the notifications, Control Center and the
   launcher, together with the Bande wallpapers and icon theme; the crates of those parts are

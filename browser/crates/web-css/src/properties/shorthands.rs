@@ -204,9 +204,9 @@ pub fn list_style(input: &mut Parser<'_, '_>, out: &mut Expanded) -> ParseResult
     let none_type = || Some(PropertyValue::ListStyleType(ListStyleType::None));
     match (nones, image.is_some(), kind.is_some()) {
         (0, _, _) => {}
-        (1, false, _) => image = none_image(),
+        (1, false, true) => image = none_image(),
         (1, true, false) => kind = none_type(),
-        (2, false, false) => {
+        (1, false, false) | (2, false, false) => {
             image = none_image();
             kind = none_type();
         }

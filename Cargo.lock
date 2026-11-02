@@ -975,6 +975,7 @@ dependencies = [
  "wayland-client",
  "wayland-protocols-wlr",
  "zbus",
+ "zeroize",
 ]
 
 [[package]]

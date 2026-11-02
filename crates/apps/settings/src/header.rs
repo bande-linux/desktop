@@ -174,6 +174,20 @@ impl SettingsView {
             }),
             PaneId::Notifications => self.do_not_disturb_summary(),
             PaneId::Printers => self.printers_summary(),
+            PaneId::Users => self.accounts.as_ref().and_then(|accounts| {
+                let you = accounts.iter().find(|account| account.you)?;
+                Some(if you.name == you.login {
+                    L10N.tr_args("users-you-login", [("login", you.login.clone().into())])
+                } else {
+                    L10N.tr_args(
+                        "users-you",
+                        [
+                            ("name", you.name.clone().into()),
+                            ("login", you.login.clone().into()),
+                        ],
+                    )
+                })
+            }),
             PaneId::Displays => match self.displays.as_slice() {
                 [] => None,
                 [display] => Some(display.name()),

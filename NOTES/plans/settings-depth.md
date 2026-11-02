@@ -82,10 +82,12 @@ sleep timers, battery percentage in the bar. Missing: wake for network access (W
 through NetworkManager `802-3-ethernet.wake-on-lan`), "start up automatically after a power
 failure" (needs the SMC driver), scheduled sleep and wake.
 
-**Users & Groups.** Missing entirely: change my password, my picture and full name, add and
-remove users, administrator flag, automatic login. AccountsService (`org.freedesktop.Accounts`)
-is the right service for all of it (SetPassword takes a crypt(3) hash, SetIconFile, SetRealName,
-CreateUser, SetAccountType) but it is not in the image.
+**Users & Groups.** Has: the accounts on this computer (administrator or standard) and Change
+Password for your own, which runs `passwd` on a pseudo-terminal as GNOME's fallback does (the
+current password, the new one twice, and passwd's own reason when it refuses one). Missing:
+picture and full name, add and remove users, the administrator flag, automatic login.
+AccountsService (`org.freedesktop.Accounts`: SetRealName, SetIconFile, CreateUser,
+SetAccountType) is the right service for those but is not in the image.
 
 **Passwords.** Out of scope.
 
@@ -110,8 +112,8 @@ Ranked by how often a user needs them and how badly they are stuck without them.
 
 1. Printers: put `cups` (and `cups-client` for lpadmin) in the image and the user in `lpadmin`
    (owner decision); then printer options, supply levels and scanners.
-2. Users & Groups: change password, picture, full name; add a user. Blocked: owner decision
-   to add `accountsservice` to the image.
+2. Users & Groups: picture, full name, add and remove users. Blocked: owner decision to add
+   `accountsservice` to the image.
 4. Sound: balance and the built-in speaker and headphone names.
 5. Network: DNS override with an automatic address, for Ethernet as for Wi-Fi.
 7. Hot corners (compositor).

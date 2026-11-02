@@ -36,6 +36,7 @@ use crate::software::{SoftwareCommand, SoftwareState, follow_software};
 use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
+use crate::users::{Account, PasswordOutcome, UsersCommand, follow_users};
 use bande_network::import_vpn;
 use bande_settings_panes::{SettingId, Value};
 use bande_watch::FolderWatch;
@@ -74,6 +75,8 @@ pub enum Update {
     Printers(PrintersState),
     NearbyPrinters(Vec<bande_printers::NearbyPrinter>),
     PrinterAdded(String, bool),
+    Accounts(Vec<Account>),
+    Password(PasswordOutcome),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -97,6 +100,7 @@ pub enum Command {
     DefaultApp(DefaultAppCommand),
     Permission(PermissionCommand),
     Printers(PrinterCommand),
+    Users(UsersCommand),
     Brightness(f32),
     Reveal(PathBuf),
     EndSession(SessionEnd),
@@ -327,6 +331,7 @@ pub struct Services {
     permissions: Sender<PermissionCommand>,
     brightness: Option<Sender<f32>>,
     printers: Option<Sender<PrinterCommand>>,
+    users: Sender<UsersCommand>,
     _pointing: Option<FolderWatch>,
 }
 
@@ -361,6 +366,7 @@ impl Services {
             permissions: follow_permissions(session, updates.clone()),
             brightness: system.and_then(|system| follow_brightness(system, updates.clone())),
             printers: system.map(|system| follow_printers(system, updates.clone())),
+            users: follow_users(updates.clone()),
             _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
                 .inspect_err(|error| tracing::warn!("cannot watch {UDEV_DATA}: {error}"))
                 .ok(),
@@ -399,6 +405,7 @@ impl Services {
             Command::Login(command) => self.login.send(command).is_ok(),
             Command::DefaultApp(command) => self.default_apps.send(command).is_ok(),
             Command::Permission(command) => self.permissions.send(command).is_ok(),
+            Command::Users(command) => self.users.send(command).is_ok(),
             Command::Printers(command) => self
                 .printers
                 .as_ref()

@@ -32,6 +32,7 @@ mod state;
 mod storage;
 mod time;
 mod updates;
+mod users;
 mod view;
 mod widgets;
 mod wifi;

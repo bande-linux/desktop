@@ -38,6 +38,7 @@ use crate::software::{Need, SoftwareCommand, SoftwareState};
 use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand};
 use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
+use crate::users::{Account, PasswordForm, UsersCommand};
 use crate::widgets::{Column, Crossfade, Root};
 use crate::wifi::{HIDDEN_SECURITY, Other};
 use bande_keyboard::Layouts;
@@ -107,6 +108,8 @@ pub(crate) enum Intent {
     AddPrinterAddress,
     CancelJob(i32),
     PausePrinter((String, bool)),
+    AskPassword(bool),
+    PasswordEntry(usize, String),
     ImportVpn,
     ExcludeFolder,
     IncludeFolder(String),
@@ -231,6 +234,9 @@ pub struct SettingsView {
     pub(crate) nearby_printers: Option<Vec<bande_printers::NearbyPrinter>>,
     pub(crate) adding: Option<String>,
     pub(crate) printer_address: String,
+    pub(crate) accounts: Option<Vec<Account>>,
+    pub(crate) password: Option<PasswordForm>,
+    pub(crate) password_message: Option<String>,
     pub(crate) software: SoftwareState,
     pub(crate) network: Option<NetworkState>,
     pub(crate) manual_ipv4: bool,
@@ -315,6 +321,9 @@ impl SettingsView {
             nearby_printers: None,
             adding: None,
             printer_address: String::new(),
+            accounts: None,
+            password: None,
+            password_message: None,
             software: SoftwareState::Unknown,
             network: None,
             manual_ipv4: false,
@@ -693,6 +702,8 @@ impl SettingsView {
                 self.printers = Some(printers);
             }
             Update::NearbyPrinters(nearby) => self.nearby_printers = Some(nearby),
+            Update::Accounts(accounts) => self.accounts = Some(accounts),
+            Update::Password(outcome) => self.password_changed(outcome),
             Update::PrinterAdded(uri, added) => {
                 if self.adding.as_ref() == Some(&uri) {
                     self.adding = None;
@@ -791,6 +802,7 @@ impl SettingsView {
             | PaneId::ScreenSharing
             | PaneId::Apps
             | PaneId::Printers
+            | PaneId::Users
             | PaneId::Storage
             | PaneId::SoftwareUpdate => true,
             PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
@@ -972,6 +984,13 @@ impl SettingsView {
                 modifiers,
             } if plain(modifiers) && self.other.is_some() => {
                 self.intents.borrow_mut().push(Intent::AskOther(false));
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && self.password.is_some() => {
+                self.intents.borrow_mut().push(Intent::AskPassword(false));
                 true
             }
             Event::Key {
@@ -1237,6 +1256,8 @@ impl SettingsView {
                     self.commands
                         .push(Command::Printers(PrinterCommand::Cancel(job)));
                 }
+                Intent::AskPassword(asking) => self.ask_password(asking),
+                Intent::PasswordEntry(step, text) => self.password_entry(step, text),
                 Intent::PausePrinter((name, paused)) => {
                     self.focus_next = Some(Anchor::Item("printer-pause".to_owned()));
                     self.commands
@@ -1466,6 +1487,7 @@ impl SettingsView {
             PaneId::Notifications => self
                 .commands
                 .push(Command::Notifications(NotificationCommand::Refresh)),
+            PaneId::Users => self.commands.push(Command::Users(UsersCommand::Refresh)),
             PaneId::SoftwareUpdate if self.software == SoftwareState::Unknown => {
                 self.commands.push(Command::Software(SoftwareCommand::Open))
             }
@@ -1478,6 +1500,8 @@ impl SettingsView {
         self.picking = None;
         self.detail = None;
         self.other = None;
+        self.password = None;
+        self.password_message = None;
         self.errors.clear();
         *self.scroll.borrow_mut() = ScrollState::default();
         self.invalidate();

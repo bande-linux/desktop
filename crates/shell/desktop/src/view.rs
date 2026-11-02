@@ -343,7 +343,7 @@ impl DesktopView {
         self.labels.retain(|path, label| {
             self.desktop
                 .item(path)
-                .is_some_and(|item| item.name == label.name)
+                .is_some_and(|item| item.label == label.name)
         });
         if let Some(path) = self.rename_when_listed.take() {
             match self.desktop.item(&path) {
@@ -499,9 +499,9 @@ impl DesktopView {
         if item.kind == Kind::Volume {
             return;
         }
-        let name = item.name.clone();
+        let name = item.label.clone();
         let stem = match item.kind {
-            Kind::File => Path::new(&name)
+            Kind::File if item.label == item.name => Path::new(&name)
                 .file_stem()
                 .map_or(name.len(), |stem| stem.len()),
             _ => name.len(),
@@ -555,6 +555,15 @@ impl DesktopView {
             .map(|field| field.text().trim().to_owned())
             .unwrap_or_default();
         self.cancel_rename();
+        let hidden = self
+            .desktop
+            .item(&path)
+            .and_then(|item| item.name.get(item.label.len()..))
+            .unwrap_or_default();
+        let name = match name.is_empty() || name.ends_with(hidden) {
+            true => name,
+            false => format!("{name}{hidden}"),
+        };
         let unchanged = self
             .desktop
             .item(&path)
@@ -1179,7 +1188,7 @@ impl DesktopView {
                 .is_light(bounds, self.scale)
                 .unwrap_or(self.appearance.scheme == Scheme::Light);
         if let Some(label) = self.labels.get(&item.path)
-            && label.name == item.name
+            && label.name == item.label
             && label.on_light == on_light
             && label.selected == selected
         {
@@ -1203,11 +1212,11 @@ impl DesktopView {
             }
         };
         let style = TextStyle::new(LABEL_SIZE, color).weight(TextStyle::MEDIUM);
-        let text = fitted_label(&mut self.ui.context().text, &item.name, style, LABEL_WIDTH);
+        let text = fitted_label(&mut self.ui.context().text, &item.label, style, LABEL_WIDTH);
         let shadow = shadow.map(|shadow| {
             fitted_label(
                 &mut self.ui.context().text,
-                &item.name,
+                &item.label,
                 TextStyle {
                     color: shadow,
                     ..style
@@ -1216,7 +1225,7 @@ impl DesktopView {
             )
         });
         let label = Label {
-            name: item.name.clone(),
+            name: item.label.clone(),
             on_light,
             selected,
             text,
@@ -1435,7 +1444,7 @@ impl DesktopView {
             let id = Self::item_node(index);
             let cell = self.desktop.grid().cell(slot);
             let mut node = Node::new(Role::ListBoxOption);
-            node.set_label(item.name.clone());
+            node.set_label(item.label.clone());
             node.set_description(item.kind_name.clone());
             node.set_selected(self.desktop.is_selected(&item.path));
             node.set_bounds(accesskit::Rect {

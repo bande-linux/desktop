@@ -32,7 +32,7 @@ pub enum Update {
     Capturing(Vec<bande_audio::Capture>),
     Tray(Vec<TrayItem>),
     Menu { menu: String, root: Node },
-    AppMenu { app: String, root: Option<Node> },
+    AppMenu { menu: String, root: Option<Node> },
     AppMenuChanged,
     ClockFormat(String),
     Minute,

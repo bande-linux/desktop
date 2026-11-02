@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="appmenu">
+  <interface name="org_kde_kwin_appmenu_manager" version="2">
+    <description summary="where a window's menus are exported">
+      KDE's protocol for a client to say on which com.canonical.dbusmenu
+      service and object path a surface's menus live, so the desktop can show
+      them outside the window.
+    </description>
+    <request name="create">
+      <arg name="id" type="new_id" interface="org_kde_kwin_appmenu"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+    <request name="release" type="destructor" since="2"/>
+  </interface>
+
+  <interface name="org_kde_kwin_appmenu" version="2">
+    <description summary="the menus of one surface"/>
+    <request name="set_address">
+      <arg name="service_name" type="string"/>
+      <arg name="object_path" type="string"/>
+    </request>
+    <request name="release" type="destructor"/>
+  </interface>
+</protocol>

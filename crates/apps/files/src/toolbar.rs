@@ -2,7 +2,7 @@ use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, SEGMENTED_HEIGHT, SearchField, SegmentedControl, TEXT_FIELD_HEIGHT,
     WidgetId,
 };
-use bande_toolkit::{Header, Rect, WINDOW_HEADER_HEIGHT, window_controls_area};
+use bande_toolkit::{Header, Rect, WINDOW_HEADER_HEIGHT, window_controls_end};
 
 use crate::L10N;
 use crate::controls::{Signal, sender};
@@ -149,7 +149,7 @@ impl FilesView {
     }
 
     pub(crate) fn toolbar_frames(&self) -> [(WidgetId, Rect); 4] {
-        let back_x = window_controls_area(TOOLBAR_HEIGHT).width + CONTROLS_GAP;
+        let back_x = window_controls_end(true) + CONTROLS_GAP;
         let button_y = centred(BUTTON_HEIGHT);
         let right = self.size.0 - TRAILING_INSET;
         let view_width = ViewMode::ALL.len() as f32 * SYMBOL_SEGMENT;

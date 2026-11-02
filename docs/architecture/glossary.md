@@ -7,8 +7,9 @@ Bande follows them. "In code" is what the code calls the part today.
 | :--- | :--- | :--- | :--- |
 | Taskbar | The whole bar on the left edge of every display, holding everything below; with a separate menu bar, only the Taskbar icons on the configured edge | menu bar + Dock | crate `bande-bar`, `TaskbarView`, `Taskbar`, layer namespaces `bar` and `taskbar` |
 | Bande menu | The logo at the top: a click opens Search, a right click the Bande menu (About This Computer, System Settings…, Force Quit…, Sleep, Restart…, Shut Down…, Lock Screen, Log Out) | Apple menu | `Slot::BandeMenu`, `Slot::Search`, `Symbol::Logo`, `system_menu` |
-| App menu | The active app's icon and name with `›` under the Bande menu, and the cascade it opens (Super+F2): the "Type to search" field, the app row, then File, Edit, View… | application menu and the app's menus | `Slot::AppMenu`, `paint_app_menu`, `menus::cascade` |
-| Menu Search | The centred card on Shift+Super+/ listing every menu item of the active app | Help menu search | `menu_search`, namespace `menu-search` |
+| Menu button | The ⋮ right of a window's close, minimise and zoom controls, in Bande apps' title bars and in the compositor's bar of third-party windows that export menus; it opens the App menu below it (also Super+F2) | the app's menus in the menu bar | `WindowControl::Menu`, `MenuButton`, `show_app_menu` |
+| App menu | The cascade the menu button opens: the "Type to search" field, the app row, then File, Edit, View… | application menu and the app's menus | `menus::cascade` |
+| Menu Search | The centred card on Shift+Super+/ (and Super+F2 when the key window has no menu button) listing every menu item of the active app | Help menu search | `menu_search`, namespace `menu-search` |
 | Search | The centred card on Super+Space (no Ctrl+Space binding) (or Super+A, or a tap of Super): apps, settings, files, calculator; also Clipboard History (Super+V) and Emoji & Symbols (Super+.) | Spotlight | crate `bande-launcher`, `Action::ShowLauncher` |
 | Taskbar icons | The app icons of the Taskbar: kept apps, a hairline, running apps, then the Trash; there is no separate Dock | Dock | `Taskbar`, `TaskbarLayout`, namespace `taskbar` |
 | Kept apps / running apps | The two groups of the Taskbar icons: apps kept in the Taskbar, and running apps that are not | Keep in Dock / recent apps | `kept`, `running` |
@@ -25,6 +26,6 @@ Bande follows them. "In code" is what the code calls the part today.
 | Control Center | The panel the button opens | Control Center | crate `bande-controlcenter` |
 | Clock | Time over the short day, with a notification dot or a Do Not Disturb moon; a click opens Notification Center | clock | `Slot::Clock`, `ClockMark` |
 | Notification Center | The sheet of notifications beside the taskbar | Notification Center | crate `bande-notifications` |
-| Menu bar | The separate layout: a bar at the top with the Bande menu, the app's menus, status items and clock | menu bar | `MenuBar`, namespace `menubar` |
+| Menu bar | The separate layout: a bar at the top with the Bande menu, the app's name and menus, status items and clock; windows keep their menu button | menu bar | `MenuBar`, `Slot::AppMenu`, namespace `menubar` |
 | App Switcher | The row of apps on Super+Tab | Command-Tab | `switcher` |
 | Overview | All windows of the active desktop, and the desktops | Mission Control | `overview` |

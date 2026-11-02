@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use bande_graphics::Modifiers;
 use bande_xdg::{remember_running_apps, write_running_apps};
+use smithay::utils::Rectangle;
 use smithay::wayland::xdg_activation::XdgActivationTokenData;
 
 use crate::shell::{is_shell, toplevel_names};
@@ -362,6 +363,34 @@ impl Dispatch<BandeAppV1, ()> for State {
                         workspace == bande_app_v1::Workspace::Next,
                         false,
                     );
+                }
+            }
+            bande_app_v1::Request::SetMenuButton {
+                toplevel,
+                x,
+                y,
+                width,
+                height,
+            } if toplevel.client() == resource.client() => {
+                if let Some(window) = state
+                    .windows
+                    .iter_mut()
+                    .find(|window| window.toplevel.xdg_toplevel() == &toplevel)
+                {
+                    window.menu_button = (width > 0 && height > 0)
+                        .then(|| Rectangle::new((x, y).into(), (width, height).into()));
+                }
+            }
+            bande_app_v1::Request::ShowMenus { toplevel, .. }
+                if toplevel.client() == resource.client() =>
+            {
+                if let Some(surface) = state
+                    .windows
+                    .iter()
+                    .find(|window| window.toplevel.xdg_toplevel() == &toplevel)
+                    .map(|window| window.surface().clone())
+                {
+                    state.request_menus(&surface);
                 }
             }
             bande_app_v1::Request::EndSession {

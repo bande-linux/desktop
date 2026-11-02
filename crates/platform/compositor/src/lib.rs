@@ -35,6 +35,7 @@ mod label;
 mod lock;
 mod logind;
 mod management;
+mod menu_button;
 mod motion;
 mod night;
 mod output_power;

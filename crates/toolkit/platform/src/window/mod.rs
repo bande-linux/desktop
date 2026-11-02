@@ -141,6 +141,11 @@ pub enum WindowEvent {
     },
     AttentionRequested(String),
     FocusShell(String),
+    ShowAppMenu {
+        app_id: String,
+        menu: String,
+        anchor: Rect,
+    },
     InputSources {
         sources: Vec<String>,
         active: usize,
@@ -547,6 +552,17 @@ impl Window {
         }
     }
 
+    pub fn set_menu_button(&mut self, shown: bool) {
+        if let Some(chrome) = &mut self.chrome
+            && chrome.titled
+            && chrome.menu != shown
+        {
+            chrome.menu = shown;
+            self.needs_redraw = true;
+            self.announce_menu_button();
+        }
+    }
+
     pub fn header_height(&self) -> u32 {
         self.title_height()
     }
@@ -609,7 +625,7 @@ impl Window {
         }
     }
 
-    fn frame(&self) -> Frame {
+    pub(crate) fn frame(&self) -> Frame {
         let (width, height) = self.geometry();
         let title = self.title_height();
         Frame {
@@ -622,6 +638,7 @@ impl Window {
                 .chrome
                 .as_ref()
                 .is_some_and(|chrome| chrome.header.is_some()),
+            menu: self.chrome.as_ref().is_some_and(|chrome| chrome.menu),
             width: width as f32,
             height: height as f32,
         }
@@ -687,7 +704,7 @@ impl Window {
         }
     }
 
-    fn grab(&self) -> Result<(&WlSeat, u32), WindowError> {
+    pub(crate) fn grab(&self) -> Result<(&WlSeat, u32), WindowError> {
         let seat = self
             .state
             .seat
@@ -810,6 +827,15 @@ impl Window {
         self.take_arrival();
         self.take_drop();
         self.serve_menus(self.frame_time());
+        let menus_open = std::mem::take(&mut self.state.shell.menus_open);
+        if let (Ok(own), Some(chrome)) = (self.toplevel().cloned(), &mut self.chrome) {
+            for (toplevel, open) in menus_open {
+                if toplevel == own && chrome.menu_open != open {
+                    chrome.menu_open = open;
+                    self.needs_redraw = true;
+                }
+            }
+        }
         let events = std::mem::take(&mut self.state.events);
         if self.chrome.is_none() {
             return events;
@@ -1088,6 +1114,7 @@ impl Window {
         if self.shown_frame.as_ref() == Some(frame) {
             return;
         }
+        self.announce_menu_button();
         self.shown_frame = Some(*frame);
         let ShellSurface::Toplevel(xdg_surface, _) = &self.role else {
             return;

@@ -8,7 +8,8 @@ Linux equivalent), **basic** works but is thinner, **none** is missing. Open wor
 Bande's own apps are Files, Settings, the launcher (Spotlight) and, in bande-linux/apps,
 Terminal, Activity Monitor, Software, the Package Installer, Mail and Calendar. Firefox, Text
 Editor, Loupe, Papers, Calculator and Showtime come preinstalled from Debian. The Taskbar sits on
-the left and holds the menu bar; a setting moves the menu bar to the top.
+the left; each window's menu button (⋮) holds the app's menus, and a setting adds a menu bar at
+the top.
 
 | Area | Status | Notes |
 | :--- | :--- | :--- |
@@ -18,7 +19,7 @@ the left and holds the menu bar; a setting moves the menu bar to the top.
 | Snapping and tiling | parity | halves and quarters, fill the other half, the zoom-button menu |
 | App switcher, same-app windows, overview, App Exposé, workspaces | parity | workspaces per display, three-finger swipes; no hot corners |
 | Taskbar: kept and running apps, Trash, icon menus, badges, drops | parity | the Dock and the menu bar in one bar |
-| Menu bar app menus and menu search | parity | from every `bande-app` app and dbusmenu exporters |
+| App menus (menu button in the title bar, separate menu bar) and menu search | parity | from every `bande-app` app and dbusmenu exporters (`org_kde_kwin_appmenu`) |
 | Launcher: apps, settings, files, calculator, recents, clipboard history, emoji | parity | file names only, not contents |
 | Notifications: banners, Notification Center, Do Not Disturb | parity | no schedules, no inline reply, nothing on the lock screen |
 | Control Center, status items, volume and brightness HUD, Now Playing | parity | |

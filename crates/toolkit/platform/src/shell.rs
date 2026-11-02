@@ -16,11 +16,13 @@ use wayland_protocols::xdg::activation::v1::client::xdg_activation_token_v1::{
 };
 
 use bande_graphics::Rect;
+use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 
 use crate::window::{State, Window, WindowError, WindowEvent};
 
 pub(crate) const END_SESSION_SINCE: u32 = 3;
-pub(crate) const PING_SINCE: u32 = 2;
+pub(crate) const SHOW_APP_MENU_SINCE: u32 = 3;
+pub(crate) const MENU_BUTTON_SINCE: u32 = 4;
 
 struct Toplevel {
     handle: ExtForeignToplevelHandleV1,
@@ -50,6 +52,7 @@ pub(crate) struct Shell {
     minimized: Vec<String>,
     token: Option<String>,
     displays: Vec<String>,
+    pub(crate) menus_open: Vec<(XdgToplevel, bool)>,
 }
 
 impl Shell {
@@ -348,6 +351,14 @@ impl Window {
             .set_keep_on_top(self.toplevel()?, u32::from(keep));
         self.flush()
     }
+
+    pub(crate) fn menu_app(&self) -> Result<&BandeAppV1, WindowError> {
+        let app = self.app()?;
+        match app.version() >= MENU_BUTTON_SINCE {
+            true => Ok(app),
+            false => Err(WindowError::Missing("bande_app_v1 set_menu_button")),
+        }
+    }
 }
 
 impl Dispatch<BandeAppControlV1, ()> for State {
@@ -383,8 +394,12 @@ impl Dispatch<BandeAppV1, ()> for State {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let bande_app_v1::Event::QuitRequested = event {
-            state.events.push(WindowEvent::QuitRequested);
+        match event {
+            bande_app_v1::Event::QuitRequested => state.events.push(WindowEvent::QuitRequested),
+            bande_app_v1::Event::MenusOpen { toplevel, open } => {
+                state.shell.menus_open.push((toplevel, open != 0));
+            }
+            _ => {}
         }
     }
 }
@@ -463,6 +478,23 @@ impl Dispatch<BandeShellV1, ()> for State {
             }
             bande_shell_v1::Event::FocusShell { namespace } => {
                 state.events.push(WindowEvent::FocusShell(namespace));
+            }
+            bande_shell_v1::Event::ShowAppMenu {
+                surface,
+                app_id,
+                menu,
+                x,
+                y,
+                width,
+                height,
+                serial,
+            } if state.own_surface.as_ref() == Some(&surface) => {
+                state.input.serial = Some(serial);
+                state.events.push(WindowEvent::ShowAppMenu {
+                    app_id,
+                    menu,
+                    anchor: Rect::new(x as f32, y as f32, width as f32, height as f32),
+                });
             }
             bande_shell_v1::Event::ActiveOutput { name } => {
                 state.events.push(WindowEvent::ActiveOutput(name));

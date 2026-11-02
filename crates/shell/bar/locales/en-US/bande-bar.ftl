@@ -96,7 +96,6 @@ app-quit = Quit { $app }
 search-menus = Search menus
 type-to-search = Type to search
 no-menu-results = No Results
-app-menus = Menus of { $app }
 pairing-request = Pairing Request
 pair-confirm-code = Does { $device } show the code { $code }?
 pair-authorize = Allow { $device } to connect?

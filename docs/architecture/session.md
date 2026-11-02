@@ -48,7 +48,20 @@ graph LR
   draws a blank frame and a new locker may take over the lock.
 - Idle pipeline: `ext-idle-notify-v1` dims the display, then locks, then suspends through
   logind, at the times set in [`config.kdl`](overview.md#configuration).
-- Video inhibition: `idle-inhibit-v1` lets media players and browsers hold off idle.
+- Keeping awake: a playing video holds off dimming, the display turning off and the lock, as
+  macOS's display-sleep assertion does, through whichever path the player uses:
+
+  | Path | Used by | Bande |
+  |---|---|---|
+  | `org.freedesktop.ScreenSaver.Inhibit` | Firefox (first choice), Chromium/Electron (after GNOME's) | `bande-power`, held until `UnInhibit` or the caller leaves the bus |
+  | `org.freedesktop.portal.Inhibit`, idle flag | sandboxed apps | the GTK backend forwards it to `org.freedesktop.ScreenSaver`; the suspend flag is dropped |
+  | logind `idle` block inhibitor (`systemd-inhibit --what=idle`) | scripts, `caffeinate`-style tools | `bande-power` follows logind's `BlockInhibited` |
+  | `zwp_idle_inhibitor_v1` on a surface | mpv, Chromium (on the focused window), Firefox (last resort) | the compositor, while the surface's window is on screen, covered or not and focused or not; not while minimised, as in KWin and sway |
+
+  Audio alone keeps nothing on (Firefox and Chromium take a suspend-only lock for it, as macOS
+  keeps the system but not the display awake), and neither do CPU load, builds nor
+  MPRIS. Idle time restarts when the last inhibitor ends, so a finished film does not lock the
+  screen at once.
 - Implemented in `crates/shell/lock`: date, time, the user's picture (AccountsService's
   `IconFile`, read off the UI thread; the initial on the accent colour without one) and name
   and a secure field; PAM (`/etc/pam.d/bande-lock`) runs off the UI thread, and a rejected password clears
@@ -71,7 +84,8 @@ graph LR
   `org.bande.Config` (followed as it changes), the session's `LockedHint`, and logind's
   `Session.Lock` and `Suspend` as actions; suspend is skipped when `CanSuspend` is not `yes`.
   Idle time comes from the compositor's `ext-idle-notify-v1`, one notification per policy
-  threshold. Dimming sets the preferred backlight (`firmware`, then `platform`, then `raw`) to
+  threshold, sent as soon as it is due. The compositor follows `Lock` on the session's own
+  logind object path (from `GetSession("auto")`; logind never signals on `session/auto`). Dimming sets the preferred backlight (`firmware`, then `platform`, then `raw`) to
   a quarter of its level through logind's `Session.SetBrightness` and restores it on activity;
   displays without a backlight do not dim.
 

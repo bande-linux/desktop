@@ -3,6 +3,7 @@ mod instance;
 mod menus;
 mod portal;
 mod runner;
+mod tabs;
 
 use std::ffi::OsString;
 use std::os::fd::BorrowedFd;
@@ -18,6 +19,7 @@ use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 
 pub use cx::{Cx, WindowId};
 pub use portal::{Filter, choose_file, choose_save_file};
+pub use tabs::{Detached, TabCarry, TabDrop, TabDropTarget, TabHost};
 
 pub type Error = Box<dyn std::error::Error>;
 

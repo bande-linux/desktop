@@ -194,6 +194,7 @@ writes a hex value, a corner radius or a font name of its own.
   | `Button::symbol(image, label, action)` | 28×28 icon button: a symbolic `Image` tinted `ink2` (`ink` on hover), `well` on hover; `label` is its tooltip and accessible name; `set_enabled(false)` dims any button to `ink3` and ignores it |
   | `TextField`, `TextView`, `SecureField` | `field` fill (`overlay` light, `well` dark), 1 pt `edge` outline, placeholder `ink3`, 1.5 pt accent caret, selection `accent_soft` (`well` when unfocused); `SecureField` shows a Caps Lock sign while focused with Caps Lock on (`Context::caps_lock`, set by `Window::drive`), and Ctrl+Backspace clears it |
   | `SearchField` | `well` fill, radius 8, no outline, magnifier `ink3`, clear button |
+  | `TabStrip` | the header's tab bar for apps with tabs (Terminal, Browser): 28 pt tabs sharing the width left of a + button, the active one on `well`, close cross and badge in the leading 16 pt; press selects, dragging reorders with springs, dragging out of the strip returns `TabAction::Detach`; `TabStripLayout` gives the slots, `slide_to` and `insertion_index` serve a tab dragged in from another window |
   | `ComboBox` | a text field with a single down chevron |
   | `Toggle` (switch) | 36×20 pill, `edge` off, accent on, white 15 pt knob with a small shadow |
   | `Checkbox` | 16 pt, radius 4, 1.5 pt `ink3` outline; on: accent with a square-capped check; disabled: 45 % opacity, no input, insensitive to accessibility |

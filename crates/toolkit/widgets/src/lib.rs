@@ -25,6 +25,7 @@ mod slider;
 mod stack;
 mod stepper;
 mod surface_view;
+mod tab_strip;
 mod table;
 mod text_field;
 mod text_view;
@@ -69,6 +70,9 @@ pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
 pub use stepper::{STEPPER_SIZE, Stepper};
 pub use surface_view::{RELEASE_CHORD, SurfaceInput, SurfaceView};
+pub use tab_strip::{
+    TAB_HEIGHT, TabAction, TabLabel, TabStrip, TabStripLayout, TabTarget, TabsShown,
+};
 pub use table::{Cell, Column, ROW_HEIGHT, Row, Sort, Table, access_rect, group_heading};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
 pub use text_view::TextView;

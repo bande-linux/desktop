@@ -1,0 +1,25 @@
+[package]
+name = "web-net"
+description = "Fetch over HTTP/1.1 and TLS on a small epoll executor: redirects, content types, bounded bodies"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+brotli-decompressor.workspace = true
+encoding_rs.workspace = true
+flate2.workspace = true
+hyper.workspace = true
+rustix.workspace = true
+rustls.workspace = true
+rustls-platform-verifier.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+flate2.workspace = true
+rustix.workspace = true
+
+[lints]
+workspace = true

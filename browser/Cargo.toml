@@ -15,7 +15,15 @@ web-dom = { path = "crates/web-dom" }
 web-html = { path = "crates/web-html" }
 web-style = { path = "crates/web-style" }
 hashbrown = { version = "0.16", default-features = false }
+web-net = { path = "crates/web-net" }
+brotli-decompressor = "5"
 encoding_rs = "0.8"
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+hyper = { version = "1", features = ["client", "http1"] }
+rustix = { version = "1", features = ["event", "fs"] }
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "logging", "prefer-post-quantum", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
+url = "2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -108,8 +108,8 @@ impl ColorSpace {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AbsoluteColor {
     pub space: ColorSpace,
-    pub components: [f32; 3],
-    pub alpha: f32,
+    pub components: [f64; 3],
+    pub alpha: f64,
     pub missing: u8,
     pub legacy: bool,
 }
@@ -120,8 +120,8 @@ impl AbsoluteColor {
     pub fn srgb_legacy(rgba: Rgba) -> AbsoluteColor {
         AbsoluteColor {
             space: ColorSpace::Srgb,
-            components: [rgba.r, rgba.g, rgba.b],
-            alpha: rgba.a,
+            components: [rgba.r, rgba.g, rgba.b].map(f64::from),
+            alpha: rgba.a.into(),
             missing: 0,
             legacy: true,
         }
@@ -130,10 +130,10 @@ impl AbsoluteColor {
     pub fn to_rgba(&self) -> Rgba {
         let [r, g, b] = self.to_space(ColorSpace::Srgb).components;
         Rgba::new(
-            r.clamp(0.0, 1.0),
-            g.clamp(0.0, 1.0),
-            b.clamp(0.0, 1.0),
-            self.alpha.clamp(0.0, 1.0),
+            r.clamp(0.0, 1.0) as f32,
+            g.clamp(0.0, 1.0) as f32,
+            b.clamp(0.0, 1.0) as f32,
+            self.alpha.clamp(0.0, 1.0) as f32,
         )
     }
 
@@ -152,7 +152,7 @@ impl AbsoluteColor {
         }
     }
 
-    fn resolved_components(&self) -> [f32; 3] {
+    fn resolved_components(&self) -> [f64; 3] {
         let mut c = self.components;
         for (i, value) in c.iter_mut().enumerate() {
             if self.missing & (1 << i) != 0 {
@@ -220,16 +220,16 @@ pub struct ColorMix {
     pub space: ColorSpace,
     pub hue: HueMethod,
     pub first: Color,
-    pub first_percentage: Option<f32>,
+    pub first_percentage: Option<f64>,
     pub second: Color,
-    pub second_percentage: Option<f32>,
+    pub second_percentage: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProfiledColor {
     pub profile: Box<str>,
-    pub components: Box<[f32]>,
-    pub alpha: f32,
+    pub components: Box<[f64]>,
+    pub alpha: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -239,7 +239,7 @@ pub enum Color {
     System(SystemColor),
     LightDark(Box<[Color; 2]>),
     Mix(Box<ColorMix>),
-    DeviceCmyk(Box<[f32; 5]>),
+    DeviceCmyk(Box<[f64; 5]>),
     Profiled(Box<ProfiledColor>),
 }
 
@@ -270,10 +270,10 @@ impl Color {
             Color::DeviceCmyk(cmyk) => {
                 let [c, m, y, k, a] = **cmyk;
                 Rgba::new(
-                    1.0 - (c * (1.0 - k) + k).min(1.0),
-                    1.0 - (m * (1.0 - k) + k).min(1.0),
-                    1.0 - (y * (1.0 - k) + k).min(1.0),
-                    a,
+                    (1.0 - (c * (1.0 - k) + k).min(1.0)) as f32,
+                    (1.0 - (m * (1.0 - k) + k).min(1.0)) as f32,
+                    (1.0 - (y * (1.0 - k) + k).min(1.0)) as f32,
+                    a as f32,
                 )
             }
             Color::Profiled(_) => Rgba::TRANSPARENT,
@@ -282,7 +282,7 @@ impl Color {
 
     pub fn parse(input: &mut Parser<'_, '_>) -> ParseResult<Color> {
         match input.next_token()? {
-            Token::IdHash(hex) | Token::Hash(hex) => parse_hex(&hex).map(Color::rgba),
+            Token::IdHash(hex) | Token::Hash(hex) => parse_hex(&hex).map(byte_color),
             Token::Ident(name) => parse_named(&name),
             Token::Function(name) => {
                 let name = name.to_ascii_lowercase();
@@ -304,7 +304,7 @@ fn parse_named(name: &str) -> ParseResult<Color> {
     if let Ok(index) = NAMED_COLORS.binary_search_by(|(n, _)| (*n).cmp(lower.as_str())) {
         return NAMED_COLORS
             .get(index)
-            .map(|(_, rgb)| Color::rgba(Rgba::from_bytes(*rgb)))
+            .map(|(_, [r, g, b])| byte_color([*r, *g, *b, 255].map(u32::from)))
             .ok_or(ParseError::Invalid);
     }
     match lower.as_str() {
@@ -316,13 +316,17 @@ fn parse_named(name: &str) -> ParseResult<Color> {
     }
 }
 
-fn parse_hex(hex: &str) -> ParseResult<Rgba> {
+fn byte_color(rgba: [u32; 4]) -> Color {
+    let [r, g, b, a] = rgba.map(|v| f64::from(v) / 255.0);
+    legacy([r, g, b], a)
+}
+
+fn parse_hex(hex: &str) -> ParseResult<[u32; 4]> {
     let digits: Vec<u32> = hex
         .chars()
         .map(|c| c.to_digit(16))
         .collect::<Option<_>>()
         .ok_or(ParseError::Invalid)?;
-    let channel = |v: u32| v as f32 / 255.0;
     let (r, g, b, a) = match digits[..] {
         [r, g, b] => (r * 17, g * 17, b * 17, 255),
         [r, g, b, a] => (r * 17, g * 17, b * 17, a * 17),
@@ -332,19 +336,19 @@ fn parse_hex(hex: &str) -> ParseResult<Rgba> {
         }
         _ => return Err(ParseError::Invalid),
     };
-    Ok(Rgba::new(channel(r), channel(g), channel(b), channel(a)))
+    Ok([r, g, b, a])
 }
 
 #[derive(Clone, Copy, PartialEq)]
 enum Channel {
-    Number(f32),
-    Percentage(f32),
-    Angle(f32),
+    Number(f64),
+    Percentage(f64),
+    Angle(f64),
     None,
 }
 
 impl Channel {
-    fn value(self, percent_reference: f32) -> Option<f32> {
+    fn value(self, percent_reference: f64) -> Option<f64> {
         match self {
             Channel::Number(v) | Channel::Angle(v) => Some(v),
             Channel::Percentage(p) => Some(p / 100.0 * percent_reference),
@@ -352,7 +356,7 @@ impl Channel {
         }
     }
 
-    fn hue(self) -> ParseResult<Option<f32>> {
+    fn hue(self) -> ParseResult<Option<f64>> {
         match self {
             Channel::Number(v) | Channel::Angle(v) => Ok(Some(v)),
             Channel::None => Ok(None),
@@ -363,9 +367,10 @@ impl Channel {
 
 fn parse_channel(input: &mut Parser<'_, '_>) -> ParseResult<Channel> {
     match input.next_token()? {
-        Token::Number(n) => Ok(Channel::Number(n.value as f32)),
-        Token::Percentage(n) => Ok(Channel::Percentage(n.value as f32)),
+        Token::Number(n) => Ok(Channel::Number(n.value)),
+        Token::Percentage(n) => Ok(Channel::Percentage(n.value)),
         Token::Dimension(n, unit) => angle_to_degrees(n.value as f32, &unit)
+            .map(f64::from)
             .map(Channel::Angle)
             .ok_or(ParseError::Invalid),
         Token::Ident(ident) if ident.eq_ignore_ascii_case("none") => Ok(Channel::None),
@@ -375,9 +380,9 @@ fn parse_channel(input: &mut Parser<'_, '_>) -> ParseResult<Channel> {
             }
             .parse_function_any(&name, input)?;
             match node.as_leaf() {
-                Some(CalcLeaf::Number(v)) => Ok(Channel::Number(v)),
-                Some(CalcLeaf::Percentage(v)) => Ok(Channel::Percentage(v)),
-                Some(CalcLeaf::Angle(v)) => Ok(Channel::Angle(v)),
+                Some(CalcLeaf::Number(v)) => Ok(Channel::Number(v.into())),
+                Some(CalcLeaf::Percentage(v)) => Ok(Channel::Percentage(v.into())),
+                Some(CalcLeaf::Angle(v)) => Ok(Channel::Angle(v.into())),
                 _ => Err(ParseError::Invalid),
             }
         }
@@ -385,7 +390,7 @@ fn parse_channel(input: &mut Parser<'_, '_>) -> ParseResult<Channel> {
     }
 }
 
-fn parse_alpha(input: &mut Parser<'_, '_>) -> ParseResult<Option<f32>> {
+fn parse_alpha(input: &mut Parser<'_, '_>) -> ParseResult<Option<f64>> {
     match parse_channel(input)? {
         Channel::Number(v) => Ok(Some(v.clamp(0.0, 1.0))),
         Channel::Percentage(p) => Ok(Some((p / 100.0).clamp(0.0, 1.0))),
@@ -394,7 +399,7 @@ fn parse_alpha(input: &mut Parser<'_, '_>) -> ParseResult<Option<f32>> {
     }
 }
 
-fn parse_modern(input: &mut Parser<'_, '_>) -> ParseResult<([Channel; 3], Option<f32>, bool)> {
+fn parse_modern(input: &mut Parser<'_, '_>) -> ParseResult<([Channel; 3], Option<f64>, bool)> {
     let channels = [
         parse_channel(input)?,
         parse_channel(input)?,
@@ -411,7 +416,7 @@ fn parse_modern(input: &mut Parser<'_, '_>) -> ParseResult<([Channel; 3], Option
     Ok((channels, alpha, alpha_missing))
 }
 
-fn parse_legacy(input: &mut Parser<'_, '_>, first: Channel) -> ParseResult<([Channel; 3], f32)> {
+fn parse_legacy(input: &mut Parser<'_, '_>, first: Channel) -> ParseResult<([Channel; 3], f64)> {
     input.expect_comma()?;
     let second = parse_channel(input)?;
     input.expect_comma()?;
@@ -435,7 +440,7 @@ fn is_comma_next(input: &mut Parser<'_, '_>) -> bool {
     comma
 }
 
-fn absolute(space: ColorSpace, values: [Option<f32>; 3], alpha: Option<f32>) -> Color {
+fn absolute(space: ColorSpace, values: [Option<f64>; 3], alpha: Option<f64>) -> Color {
     let mut missing = 0;
     let mut components = [0.0; 3];
     for (i, value) in values.iter().enumerate() {
@@ -456,13 +461,14 @@ fn absolute(space: ColorSpace, values: [Option<f32>; 3], alpha: Option<f32>) -> 
     })
 }
 
-fn legacy(rgb: [f32; 3], alpha: f32) -> Color {
-    Color::rgba(Rgba::new(
-        rgb[0].clamp(0.0, 1.0),
-        rgb[1].clamp(0.0, 1.0),
-        rgb[2].clamp(0.0, 1.0),
+fn legacy(rgb: [f64; 3], alpha: f64) -> Color {
+    Color::Absolute(AbsoluteColor {
+        space: ColorSpace::Srgb,
+        components: rgb.map(|c| c.clamp(0.0, 1.0)),
         alpha,
-    ))
+        missing: 0,
+        legacy: true,
+    })
 }
 
 fn parse_function(name: &str, input: &mut Parser<'_, '_>) -> ParseResult<Color> {
@@ -569,7 +575,7 @@ fn parse_function(name: &str, input: &mut Parser<'_, '_>) -> ParseResult<Color> 
 fn parse_rest_modern(
     input: &mut Parser<'_, '_>,
     first: Channel,
-) -> ParseResult<([Channel; 3], Option<f32>, bool)> {
+) -> ParseResult<([Channel; 3], Option<f64>, bool)> {
     let channels = [first, parse_channel(input)?, parse_channel(input)?];
     let (alpha, missing) = if input.try_delim('/') {
         match parse_alpha(input)? {
@@ -582,7 +588,7 @@ fn parse_rest_modern(
     Ok((channels, alpha, missing))
 }
 
-fn number_or_percent(channel: Channel, percent_reference: f32) -> ParseResult<Option<f32>> {
+fn number_or_percent(channel: Channel, percent_reference: f64) -> ParseResult<Option<f64>> {
     match channel {
         Channel::Angle(_) => Err(ParseError::Invalid),
         other => Ok(other.value(percent_reference)),
@@ -663,10 +669,11 @@ fn parse_device_cmyk(input: &mut Parser<'_, '_>) -> ParseResult<Color> {
     Ok(Color::DeviceCmyk(Box::new(cmyk)))
 }
 
-fn parse_mix_item(input: &mut Parser<'_, '_>) -> ParseResult<(Color, Option<f32>)> {
+fn parse_mix_item(input: &mut Parser<'_, '_>) -> ParseResult<(Color, Option<f64>)> {
     let percentage = |p: &mut Parser<'_, '_>| {
         p.try_parse(|p| crate::values::parse_percentage(p, crate::values::Range::All))
             .ok()
+            .map(f64::from)
     };
     let mut amount = percentage(input);
     let color = Color::parse(input)?;
@@ -801,22 +808,22 @@ fn carry_missing(original: &AbsoluteColor, converted: &mut AbsoluteColor) {
     }
 }
 
-fn component(color: &AbsoluteColor, i: usize) -> f32 {
+fn component(color: &AbsoluteColor, i: usize) -> f64 {
     color.components.get(i).copied().unwrap_or(color.alpha)
 }
 
-fn set_component(color: &mut AbsoluteColor, i: usize, value: f32) {
+fn set_component(color: &mut AbsoluteColor, i: usize, value: f64) {
     match color.components.get_mut(i) {
         Some(c) => *c = value,
         None => color.alpha = value,
     }
 }
 
-pub fn hsl_to_srgb([hue, saturation, lightness]: [f32; 3]) -> [f32; 3] {
+pub fn hsl_to_srgb([hue, saturation, lightness]: [f64; 3]) -> [f64; 3] {
     let s = saturation / 100.0;
     let l = lightness / 100.0;
     let h = hue.rem_euclid(360.0);
-    let f = |n: f32| {
+    let f = |n: f64| {
         let k = (n + h / 30.0) % 12.0;
         let a = s * l.min(1.0 - l);
         l - a * (k - 3.0).min(9.0 - k).clamp(-1.0, 1.0)
@@ -824,7 +831,7 @@ pub fn hsl_to_srgb([hue, saturation, lightness]: [f32; 3]) -> [f32; 3] {
     [f(0.0), f(8.0), f(4.0)]
 }
 
-pub fn hwb_to_srgb([hue, white, black]: [f32; 3]) -> [f32; 3] {
+pub fn hwb_to_srgb([hue, white, black]: [f64; 3]) -> [f64; 3] {
     let (w, b) = (white / 100.0, black / 100.0);
     if w + b >= 1.0 {
         let gray = w / (w + b);
@@ -833,7 +840,7 @@ pub fn hwb_to_srgb([hue, white, black]: [f32; 3]) -> [f32; 3] {
     hsl_to_srgb([hue, 100.0, 50.0]).map(|c| c * (1.0 - w - b) + w)
 }
 
-fn srgb_to_hsl([r, g, b]: [f32; 3]) -> [f32; 3] {
+fn srgb_to_hsl([r, g, b]: [f64; 3]) -> [f64; 3] {
     let max = r.max(g).max(b);
     let min = r.min(g).min(b);
     let l = (max + min) / 2.0;
@@ -856,7 +863,7 @@ fn srgb_to_hsl([r, g, b]: [f32; 3]) -> [f32; 3] {
     [h, s * 100.0, l * 100.0]
 }
 
-fn srgb_to_hwb(rgb: [f32; 3]) -> [f32; 3] {
+fn srgb_to_hwb(rgb: [f64; 3]) -> [f64; 3] {
     let [h, _, _] = srgb_to_hsl(rgb);
     let white = rgb[0].min(rgb[1]).min(rgb[2]);
     let black = 1.0 - rgb[0].max(rgb[1]).max(rgb[2]);
@@ -1030,8 +1037,7 @@ fn linear_to_srgb(c: f64) -> f64 {
 const REC_ALPHA: f64 = 1.09929682680944;
 const REC_BETA: f64 = 0.018053968510807;
 
-fn to_xyz_d65(space: ColorSpace, c: [f32; 3]) -> [f64; 3] {
-    let c = c.map(f64::from);
+fn to_xyz_d65(space: ColorSpace, c: [f64; 3]) -> [f64; 3] {
     match space {
         ColorSpace::Srgb => multiply(&SRGB_TO_XYZ, c.map(srgb_to_linear)),
         ColorSpace::SrgbLinear => multiply(&SRGB_TO_XYZ, c),
@@ -1072,13 +1078,13 @@ fn to_xyz_d65(space: ColorSpace, c: [f32; 3]) -> [f64; 3] {
         ColorSpace::Lch => multiply(&D50_TO_D65, lab_to_xyz_d50(lch_to_lab(c))),
         ColorSpace::Oklab => oklab_to_xyz(c),
         ColorSpace::Oklch => oklab_to_xyz(lch_to_lab(c)),
-        ColorSpace::Hsl => to_xyz_d65(ColorSpace::Srgb, hsl_to_srgb(c.map(|v| v as f32))),
-        ColorSpace::Hwb => to_xyz_d65(ColorSpace::Srgb, hwb_to_srgb(c.map(|v| v as f32))),
+        ColorSpace::Hsl => to_xyz_d65(ColorSpace::Srgb, hsl_to_srgb(c)),
+        ColorSpace::Hwb => to_xyz_d65(ColorSpace::Srgb, hwb_to_srgb(c)),
     }
 }
 
-fn from_xyz_d65(space: ColorSpace, xyz: [f64; 3]) -> [f32; 3] {
-    let out = match space {
+fn from_xyz_d65(space: ColorSpace, xyz: [f64; 3]) -> [f64; 3] {
+    match space {
         ColorSpace::Srgb => multiply(&XYZ_TO_SRGB, xyz).map(linear_to_srgb),
         ColorSpace::SrgbLinear => multiply(&XYZ_TO_SRGB, xyz),
         ColorSpace::DisplayP3 => multiply(&XYZ_TO_P3, xyz).map(linear_to_srgb),
@@ -1113,15 +1119,13 @@ fn from_xyz_d65(space: ColorSpace, xyz: [f64; 3]) -> [f32; 3] {
         ColorSpace::Oklch => lab_to_lch(xyz_to_oklab(xyz)),
         ColorSpace::Hsl | ColorSpace::Hwb => {
             let rgb = from_xyz_d65(ColorSpace::Srgb, xyz);
-            let converted = if space == ColorSpace::Hsl {
+            if space == ColorSpace::Hsl {
                 srgb_to_hsl(rgb)
             } else {
                 srgb_to_hwb(rgb)
-            };
-            return converted;
+            }
         }
-    };
-    out.map(|v| v as f32)
+    }
 }
 
 const KAPPA: f64 = 24389.0 / 27.0;
@@ -1180,8 +1184,8 @@ fn oklab_to_xyz(lab: [f64; 3]) -> [f64; 3] {
     multiply(&LMS_TO_XYZ, multiply(&OKLAB_TO_LMS, lab).map(|v| v.powi(3)))
 }
 
-pub fn write_number(out: &mut impl Write, value: f32) -> fmt::Result {
-    let rounded = (f64::from(value) * 1e6).round() / 1e6;
+pub fn write_number(out: &mut impl Write, value: impl Into<f64>) -> fmt::Result {
+    let rounded = ((value.into() + 1e-7) * 1e6).round() / 1e6;
     if rounded == rounded.trunc() && rounded.abs() < 1e15 {
         write!(out, "{}", rounded as i64)
     } else {

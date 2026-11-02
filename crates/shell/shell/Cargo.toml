@@ -14,6 +14,7 @@ tracing.workspace = true
 bande-bar.workspace = true
 bande-bluetooth.workspace = true
 bande-config.workspace = true
+bande-content.workspace = true
 bande-controlcenter.workspace = true
 bande-desktop-surface.workspace = true
 bande-launcher.workspace = true

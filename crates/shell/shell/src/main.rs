@@ -1,9 +1,12 @@
 mod shell;
 
+use std::path::Path;
 use std::process::ExitCode;
 
 use bande_bar::dialogs;
 use bande_bar::pairing::{PAIR_FLAG, run_pairing};
+use bande_content::pdf::protocol::WORKER_FLAG;
+use bande_content::pdf::worker::run as run_pdf_worker;
 use bande_desktop_surface::{CONFIRM_DELETE_FLAG, CONFIRM_EXTENSION_FLAG, EJECT_FAILED_FLAG};
 use bande_status::session::Ending;
 
@@ -16,6 +19,7 @@ fn main() -> ExitCode {
         .collect::<Vec<_>>()
         .as_slice()
     {
+        [flag, path] if *flag == WORKER_FLAG => return run_pdf_worker(Path::new(path)),
         ["--about"] => dialogs::run_about(),
         ["--about-app", app_id, version] => dialogs::run_about_app(app_id, version),
         [flag, count] if *flag == CONFIRM_DELETE_FLAG => bande_desktop_surface::confirm(count),

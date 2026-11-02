@@ -1,8 +1,8 @@
 use std::os::fd::BorrowedFd;
 use std::sync::mpsc::{Sender, channel};
 
+use bande_content::Preview;
 use bande_inbox::Inbox;
-use bande_preview::Preview;
 use bande_toolkit::Image;
 
 use crate::model::Clip;

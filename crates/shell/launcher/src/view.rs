@@ -7,8 +7,8 @@ use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_config::Search;
+use bande_content::Preview;
 use bande_fs::Entry;
-use bande_preview::Preview;
 use bande_search::{FileResults, Usage};
 use bande_toolkit::Appearance;
 use bande_toolkit::ui::{

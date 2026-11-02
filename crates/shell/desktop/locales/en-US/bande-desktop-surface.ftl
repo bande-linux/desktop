@@ -1,6 +1,7 @@
 desktop = Desktop
 new-folder = New Folder
 get-info = Get Info
+quick-look = Quick Look
 change-wallpaper = Change Wallpaper…
 sort-by = Sort By
 sort-none = None

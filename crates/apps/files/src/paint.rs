@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use bande_content::Preview;
 use bande_fs::{Entry, Purpose, format_date, format_size};
-use bande_preview::Preview;
 use bande_thumbnails::ThumbnailSize;
 use bande_toolkit::ui::{
     BUTTON_HEIGHT as CONTROL_HEIGHT, CHECKBOX_SIZE, SWITCH_SIZE, Size, TEXT_FIELD_HEIGHT, WidgetId,
@@ -207,11 +207,6 @@ impl FilesView {
 
     fn want_thumbnails(&mut self) {
         let mut wanted = Vec::new();
-        if let Some(shown) = &self.quick_look
-            && let Some(Preview::Other { .. }) = shown.preview
-        {
-            wanted.push((&shown.entry, ThumbnailSize::XLarge));
-        }
         if let Some(info) = &self.info
             && let ([entry], Some(Preview::Other { .. })) = (info.entries.as_slice(), &info.preview)
         {
@@ -1366,65 +1361,6 @@ impl FilesView {
                     color: Color::BLACK.with_opacity(shadow.opacity),
                 }),
         );
-    }
-
-    pub(crate) fn panel(&self, panel: Rect, items: &mut Vec<Item>) -> Shape {
-        let shape = Shape::rounded(panel, Radius::XL);
-        self.overlay_shadows(shape, items);
-        items.push(Item::Fill {
-            shape,
-            paint: self.palette.overlay.into(),
-        });
-        shape
-    }
-
-    pub(crate) fn summary(
-        &mut self,
-        entry: &Entry,
-        area: Rect,
-        kind: &str,
-        detail: &str,
-        items: &mut Vec<Item>,
-    ) {
-        let icon = self.entry_icon(entry, LARGE_ICON_PIXELS);
-        let primary = self.palette.ink;
-        let muted = self.palette.ink2;
-        let kind = self.text().paragraph(
-            kind,
-            TextStyle::new(NAME_SIZE + 4.0, primary).weight(TextStyle::MEDIUM),
-            Some(area.width),
-            TextAlign::Center,
-        );
-        let detail = self.text().paragraph(
-            detail,
-            TextStyle::new(NAME_SIZE, muted),
-            Some(area.width),
-            TextAlign::Center,
-        );
-        let icon_size = 128.0;
-        let total = icon_size + 12.0 + kind.height() + 4.0 + detail.height();
-        let top = area.y + ((area.height - total) / 2.0).round();
-        if let Some(image) = icon {
-            items.push(Item::Image {
-                rect: Rect::new(
-                    area.x + ((area.width - icon_size) / 2.0).round(),
-                    top,
-                    icon_size,
-                    icon_size,
-                ),
-                image,
-            });
-        }
-        let kind_y = top + icon_size + 12.0;
-        let detail_y = kind_y + kind.height() + 4.0;
-        items.push(Item::Text {
-            origin: Point::new(area.x, kind_y),
-            paragraph: kind,
-        });
-        items.push(Item::Text {
-            origin: Point::new(area.x, detail_y),
-            paragraph: detail,
-        });
     }
 }
 

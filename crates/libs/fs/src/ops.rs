@@ -14,7 +14,7 @@ use rustix::io::Errno;
 
 mod archive;
 
-pub use archive::{Format, Refusal, archive_path, can_extract};
+pub use archive::{Contents, Format, Refusal, archive_contents, archive_path, can_extract};
 
 use crate::listing::same_volume;
 use crate::naming::{alias_name, duplicate_name, keep_both_name, untitled_folder};

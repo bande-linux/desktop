@@ -1,0 +1,22 @@
+[package]
+name = "bande-quick-look"
+description = "Bande's Quick Look panel, shared by Files and the desktop: previews of the selected files that follow the selection"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+parley.workspace = true
+tracing.workspace = true
+bande-content.workspace = true
+bande-fs.workspace = true
+bande-inbox.workspace = true
+bande-l10n.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+
+[lints]
+workspace = true

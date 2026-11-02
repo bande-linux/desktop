@@ -7,12 +7,13 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
 
+use bande_content::Preview;
 use bande_fs::{
     Action, Answer, Change, Entry, ExtensionChange, Finished, FolderChanges, FolderWatch, Format,
     History, Operations, Purpose, RenameError, Resolution, Sort, Step, Task, TrashItem,
     archive_path, can_extract,
 };
-use bande_preview::Preview;
+use bande_quick_look::QuickLook;
 use bande_search::{Usage, recent_files, recently_used};
 use bande_thumbnails::Thumbnails;
 use bande_toolkit::ui::{
@@ -29,7 +30,6 @@ use crate::controls::{Formats, Press, Signals};
 use crate::grid::Band;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
-use crate::quick_look::QuickLook;
 use crate::search::{Index, SEARCH_HEIGHT, Searching};
 use crate::settings::{DEFAULT_SPRING_DELAY, FilesSettings};
 use crate::sidebar::{Row, SidebarEdit, with_volumes};
@@ -64,6 +64,7 @@ enum Source {
     Thumbnails,
     Index,
     Job(usize),
+    QuickLook(usize),
 }
 
 pub struct ColumnPreview {
@@ -140,9 +141,6 @@ pub enum Hit {
     Tab(usize),
     CloseTab(usize),
     NewTab,
-    QuickLook,
-    QuickLookOpen,
-    QuickLookFullScreen,
     GroupToggle(usize),
 }
 
@@ -513,11 +511,18 @@ impl FilesView {
     }
 
     pub fn cursor(&self) -> Cursor {
-        self.ui.cursor()
+        self.quick_look
+            .as_ref()
+            .and_then(|shown| shown.cursor(self.pointer))
+            .unwrap_or_else(|| self.ui.cursor())
     }
 
     pub fn animating(&self) -> bool {
         self.ui.is_animating()
+            || self
+                .quick_look
+                .as_ref()
+                .is_some_and(|shown| shown.animating(Instant::now()))
     }
 
     pub fn browser(&self) -> &Browser {
@@ -721,6 +726,13 @@ impl FilesView {
                 .enumerate()
                 .map(|(job, fd)| (Source::Job(job), fd)),
         );
+        sources.extend(self.quick_look.iter().flat_map(|shown| {
+            shown
+                .sources()
+                .into_iter()
+                .enumerate()
+                .map(|(index, fd)| (Source::QuickLook(index), fd))
+        }));
         sources
     }
 
@@ -739,6 +751,10 @@ impl FilesView {
             }
             Source::Listing => self.listed(),
             Source::Loader => self.loaded(),
+            Source::QuickLook(index) => self
+                .quick_look
+                .as_mut()
+                .is_some_and(|shown| shown.source_ready(index)),
             Source::Thumbnails => self.thumbs.take(),
             Source::Index => self.search_results(),
             Source::Job(job) => match self.operations.poll(job) {
@@ -766,6 +782,7 @@ impl FilesView {
             self.operations.deadline(),
             self.notice.as_ref().map(|(_, shown)| *shown + NOTICE_TIME),
             self.pending_rename.as_ref().map(|(due, _)| *due),
+            self.quick_look.as_ref().and_then(|shown| shown.deadline()),
             self.drop
                 .as_ref()
                 .zip(self.spring_delay)
@@ -789,6 +806,9 @@ impl FilesView {
             self.notice = None;
         }
         self.spring(now);
+        if let Some(shown) = &mut self.quick_look {
+            shown.tick(now);
+        }
         if let Some((due, path)) = self.pending_rename.take() {
             if due > now {
                 self.pending_rename = Some((due, path));
@@ -861,12 +881,6 @@ impl FilesView {
                         shown.preview = Some(preview.clone());
                         changed = true;
                     }
-                    if let Some(quick_look) = &mut self.quick_look
-                        && quick_look.entry.path == path
-                    {
-                        quick_look.preview = Some(preview.clone());
-                        changed = true;
-                    }
                     if let Some(info) = &mut self.info
                         && info.entries.len() == 1
                         && info.entries[0].path == path
@@ -901,11 +915,6 @@ impl FilesView {
         self.loader.forget_pending();
         let entry = self.browser.selected().cloned();
         self.follow_selection_in_quick_look(entry.as_ref());
-        let quick_look = self
-            .quick_look
-            .as_ref()
-            .filter(|shown| shown.preview.is_none())
-            .map(|shown| shown.entry.clone());
         if self.inspector {
             self.update_info();
         } else {
@@ -917,16 +926,10 @@ impl FilesView {
             .column_preview
             .as_ref()
             .is_some_and(|shown| shown.entry.is_some() && shown.preview.is_none());
-        let quick_look_path = quick_look.as_ref().map(|shown| shown.path.clone());
-        if let Some(shown) = quick_look {
-            self.loader.preview(shown);
-        }
         if let Some(entry) = entry
             && (self.inspector || column_preview)
         {
-            if quick_look_path.as_ref() != Some(&entry.path) {
-                self.loader.preview(entry.clone());
-            }
+            self.loader.preview(entry.clone());
             if self.inspector && entry.is_folder() {
                 self.loader.folder_size(entry.path);
             }
@@ -1345,10 +1348,7 @@ impl FilesView {
                 self.close_tab(index);
             }
             Hit::NewTab => self.open_tab(self.browser.root().clone()),
-            Hit::QuickLookOpen => self.open_quick_look_item(),
-            Hit::QuickLookFullScreen => self.toggle_quick_look_full_screen(),
             Hit::GroupToggle(section) => self.toggle_group(section),
-            Hit::QuickLook => {}
         }
         true
     }
@@ -1424,8 +1424,6 @@ impl FilesView {
                     | Hit::Tab(_)
                     | Hit::CloseTab(_)
                     | Hit::NewTab
-                    | Hit::QuickLookOpen
-                    | Hit::QuickLookFullScreen
                     | Hit::GroupToggle(_)
             )
         });
@@ -1579,6 +1577,7 @@ impl FilesView {
         let plain = !command && !alt;
         match key {
             Key::Space if plain => self.toggle_quick_look(),
+            Key::Space if alt && !command => self.toggle_quick_look_full_screen(),
             Key::Function(11) if plain => self.toggle_quick_look_full_screen(),
             Key::Escape if self.searching.is_some() => self.end_search(),
             Key::Character('f' | 'F') if command && shift => self.go(Location::Recents),

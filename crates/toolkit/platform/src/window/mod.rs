@@ -303,6 +303,7 @@ pub struct Window {
     shown_frame: Option<Frame>,
     planned: Option<FrameTime>,
     shown_opaque: Option<Rect>,
+    staged: bool,
     pub(crate) app_cursor: Cursor,
     pub(crate) accessibility: Accessibility,
     pub(crate) appearance: Rc<RefCell<AppearanceWatch>>,
@@ -521,6 +522,7 @@ impl Window {
             shown_frame: None,
             planned: None,
             shown_opaque: None,
+            staged: false,
             app_cursor: Cursor::Default,
             accessibility: Accessibility::new()?,
             appearance,
@@ -754,6 +756,11 @@ impl Window {
     }
 
     pub fn request_redraw(&mut self) {
+        self.needs_redraw = true;
+    }
+
+    fn stage(&mut self) {
+        self.staged = true;
         self.needs_redraw = true;
     }
 
@@ -1223,6 +1230,7 @@ impl Window {
         self.needs_redraw = self.chrome.as_ref().is_some_and(|chrome| chrome.animating);
         let scale = self.scale();
         let unchanged = !self.state.configure_unapplied
+            && !self.staged
             && surface_state == (self.shown_frame, self.shown_opaque)
             && self
                 .shown_scene
@@ -1232,6 +1240,7 @@ impl Window {
             return Ok(FramePath::Unchanged);
         }
         self.state.configure_unapplied = false;
+        self.staged = false;
         let handle = self.queue.handle();
         self.surface.frame(&handle, ());
         self.state

@@ -43,6 +43,7 @@ enum Shortcut {
     MinimizeWindow,
     LockScreen,
     ForceQuit,
+    VirtualTerminal(i32),
     FocusShell(&'static str),
     ToggleFullScreen,
     Place(Direction),
@@ -98,6 +99,12 @@ fn media_key(keysym: u32) -> Option<MediaKey> {
         keysyms::KEY_XF86AudioPrev => Some(MediaKey::Previous),
         _ => None,
     }
+}
+
+fn virtual_terminal(keysym: u32) -> Option<i32> {
+    (keysyms::KEY_XF86Switch_VT_1..=keysyms::KEY_XF86Switch_VT_12)
+        .contains(&keysym)
+        .then(|| (keysym - keysyms::KEY_XF86Switch_VT_1 + 1) as i32)
 }
 
 fn without_super(keysym: u32, ctrl: bool, alt: bool, shift: bool) -> Option<Shortcut> {
@@ -236,6 +243,10 @@ impl State {
             self.send_app_key(keysym, modifiers);
             return;
         }
+        if let Shortcut::VirtualTerminal(number) = shortcut {
+            self.virtual_terminal = Some(number);
+            return;
+        }
         if let Shortcut::Volume(key, fine) = shortcut {
             self.volume_key(key, fine);
             return;
@@ -366,6 +377,7 @@ impl State {
             | Shortcut::OpenLauncher(_)
             | Shortcut::LockScreen
             | Shortcut::ForceQuit
+            | Shortcut::VirtualTerminal(_)
             | Shortcut::FocusShell(_)
             | Shortcut::CaptureScreen
             | Shortcut::CaptureArea
@@ -753,6 +765,10 @@ impl State {
                     } else {
                         FilterResult::Forward
                     };
+                }
+                if let Some(number) = virtual_terminal(keysym.modified_sym().raw()) {
+                    state.held_shortcut_keys.push(evdev_code);
+                    return FilterResult::Intercept(Some(Shortcut::VirtualTerminal(number)));
                 }
                 if let Some(key) = volume_key(keysym.modified_sym().raw()) {
                     state.held_shortcut_keys.push(evdev_code);

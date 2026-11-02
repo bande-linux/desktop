@@ -71,7 +71,7 @@ impl MarkupApp {
                 .rendered()
                 .ok_or_else(|| std::io::Error::other("the picture cannot be drawn"))
                 .and_then(|image| bande_screenshot::png(&image))
-                .and_then(|bytes| std::fs::write(&self.path, bytes));
+                .and_then(|bytes| bande_xdg::replace_file(&self.path, bytes));
             if let Err(error) = saved {
                 tracing::warn!("cannot save {}: {error}", self.path.display());
             }

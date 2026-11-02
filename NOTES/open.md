@@ -33,6 +33,13 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - Power: displays off at the lock stage and after 60 s locked, wake on input, the power button,
   an external display through standby and back (`drm.rs` relink may hit EBUSY).
 - Reopen after a real crash with `reopen-apps-after-crash #true`.
+- Recovery on the mini: `Ctrl+Alt+Fn+F2` reaches a text console and `Ctrl+Alt+Fn+F7` comes back
+  (also from the login window); `kill -STOP` of `bande-shell` shows "Taskbar & Desktop (Not
+  Responding)" in Force Quit and Relaunch brings the bar back; `kill -STOP` of `bande-lock` while
+  locked brings a new lock screen within about 15 s; after `apt install systemd-oomd` and a new
+  login, `oomctl` lists `app.slice` and `systemctl show user.slice -p MemoryLow` says 640M. GPU
+  loss recovery (a new Vulkan device after `VK_ERROR_DEVICE_LOST`) is untested on asahi: the
+  journal says "the GPU was lost; starting the renderer again" when it happens.
 - Footprint on the real GPU: shell and greeter memory, the greeter's unveil after sign-in, the
   shell's PipeWire clients with two displays.
 - Login: the greetd console frame before the greeter (`vt.global_cursor_default=0` or a greetd

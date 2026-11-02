@@ -8,3 +8,4 @@ Slice=session.slice
 Type=dbus
 BusName=org.freedesktop.impl.portal.desktop.bande
 ExecStart=/usr/libexec/xdg-desktop-portal-bande
+Restart=on-failure

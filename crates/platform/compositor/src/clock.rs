@@ -117,6 +117,12 @@ pub trait FrameOutput {
     ) -> Result<Submission, Self::Error>;
 
     fn set_color_temperature(&mut self, _kelvin: f64) {}
+
+    fn switch_virtual_terminal(&mut self, _number: i32) {}
+
+    fn renew_lost_renderer(&mut self) -> Result<bool, Self::Error> {
+        Ok(false)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

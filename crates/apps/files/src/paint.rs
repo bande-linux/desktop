@@ -162,6 +162,10 @@ impl FilesView {
             items: content,
         });
         items.extend(controls);
+        if self.mode == ViewMode::List {
+            let area = self.empty_area();
+            self.paint_empty(0, area, &mut items);
+        }
         self.paint_drop(&mut items);
         let mut overlays = Vec::new();
         self.paint_progress(&mut overlays);
@@ -584,17 +588,7 @@ impl FilesView {
             }
         }
         if empty {
-            let muted = self.palette.ink2;
-            let empty = self.text().paragraph(
-                &L10N.tr("empty-folder"),
-                TextStyle::new(NAME_SIZE, muted),
-                Some(COLUMN_WIDTH),
-                TextAlign::Center,
-            );
-            rows.push(Item::Text {
-                origin: Point::new(x, content.y + 40.0),
-                paragraph: empty,
-            });
+            self.paint_empty(index, frame, &mut rows);
         }
         items.push(Item::Clip {
             shape: Shape::rect(frame),

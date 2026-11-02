@@ -21,7 +21,7 @@ fn within(region: Option<&RegionAttributes>, point: Point<f64, Logical>) -> bool
 impl State {
     fn may_constrain(&self, surface: &WlSurface) -> bool {
         let focused = self.focused();
-        focused.is_some() && self.toplevel_of(surface) == focused
+        focused.is_some() && self.toplevel_of(surface) == focused && !self.force_quit.is_open()
     }
 
     fn held_constraint(&self, surface: &WlSurface, pointer: &PointerHandle<State>) -> Option<Held> {

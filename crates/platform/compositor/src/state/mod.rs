@@ -53,6 +53,7 @@ use crate::scene::{BlurElement, Closing, FillElement, PieceElement, ShadowElemen
 use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::session::{LockScreen, SessionClient, SessionRole, Summoned};
 use crate::tile::{Preview, SnapDrag};
+use crate::watchdog::PING_SINCE;
 use crate::window::Window;
 
 mod compose;
@@ -134,6 +135,8 @@ pub struct State {
     pub(crate) popup_grab: Option<PopupGrab<State>>,
     pub(crate) held_window: Option<crate::grab::HeldWindow>,
     pub(crate) swallowed_button: Option<u32>,
+    pub(crate) virtual_terminal: Option<i32>,
+    pub(crate) desktop_shell: Option<Client>,
     pub(crate) minimize_sequence: u64,
     pub(crate) closing: Vec<Closing>,
     pub(crate) icon_rects: Vec<IconRect>,
@@ -208,7 +211,7 @@ impl Compositor {
         crate::output_power::create_global(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, BandeShellV1, ()>(1, ());
+        handle.create_global::<State, BandeShellV1, ()>(PING_SINCE, ());
         handle.create_global::<State, BandeAppV1, ()>(3, ());
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
@@ -271,6 +274,8 @@ impl Compositor {
             popup_grab: None,
             held_window: None,
             swallowed_button: None,
+            virtual_terminal: None,
+            desktop_shell: None,
             minimize_sequence: 0,
             closing: Vec::new(),
             icon_rects: Vec::new(),

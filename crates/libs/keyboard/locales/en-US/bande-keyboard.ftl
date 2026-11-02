@@ -36,6 +36,7 @@ search-menus = Search the active app's menus
 show-notification-center = Open or close the Notification Center
 show-control-center = Open or close Control Center
 lock-screen = Lock Screen
+text-console = Switch to a text console (F1 to F12)
 toggle-zoom = Turn zoom on or off
 zoom-in = Zoom in
 zoom-out = Zoom out

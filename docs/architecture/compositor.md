@@ -271,9 +271,12 @@ when they reach the screen is Bande's own.
   overview's `arrange` and the switcher's thumbnails.
 - **Force Quit** (`force_quit/`): the compositor's own window, so it opens when the shell or
   the focused app hangs; [behaviour](behaviour.md) has the rules. Apps are killed through a
-  pidfd taken at connection, and through `cgroup.kill` when they run in their own scope.
+  pidfd taken at connection, and through `cgroup.kill` when they run in their own scope. The
+  shell is listed as "Taskbar & Desktop" with Relaunch, which kills it for the supervisor to
+  start again.
 - **Not responding.** Whenever the user interacts with a window, and for every app when Force
-  Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second).
+  Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second),
+  and shell clients, whose surfaces are not toplevels, through `bande_shell_v1.ping`.
   An app that has not answered after 3 s is not responding: its windows are veiled in a soft
   grey (24 %), the pointer over them is the theme's `wait` cursor, and shell clients get
   `bande_shell_v1.app_responding(pid, app_id, 0)` so the taskbar can mark it; the compositor's

@@ -3,6 +3,7 @@ mod browser;
 mod context;
 mod controls;
 mod drag;
+mod empty;
 mod file_manager;
 mod grid;
 mod icons;
@@ -21,6 +22,7 @@ mod sidebar;
 mod tabs;
 mod thumbs;
 mod toolbar;
+mod trouble;
 mod view;
 mod views;
 

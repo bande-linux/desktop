@@ -58,12 +58,9 @@ pub fn apps_to_reopen<'a>(entries: &'a [DesktopEntry], running: &[String]) -> Ve
 }
 
 pub fn remember_apps(file: &Path, apps: &[&str]) -> io::Result<()> {
-    if let Some(directory) = file.parent() {
-        fs::create_dir_all(directory)?;
-    }
     let mut listed = apps.join("\n");
     listed.push('\n');
-    fs::write(file, listed)
+    crate::replace_file(file, listed)
 }
 
 pub fn remember_running_apps(file: &Path, running: &[String]) {

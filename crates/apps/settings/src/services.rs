@@ -6,7 +6,7 @@ use std::time::Duration;
 use std::sync::mpsc::RecvTimeoutError;
 
 use bande_audio::{Audio, Direction, Level, Meter};
-use bande_bluetooth::{Bluetooth, PairingPrompt, register_agent, shown_change};
+use bande_bluetooth::{Bluetooth, PairingPrompt, change_rules, register_agent, shown_change};
 use bande_network::{
     ConnectionChange, JoinOutcome, ManualIpv4, NetworkManager, Security, WifiLink, set_strength,
     strength_signal,
@@ -23,7 +23,6 @@ pub(crate) const SETTLE: Duration = Duration::from_millis(200);
 const METER_INTERVAL: Duration = Duration::from_millis(50);
 const ANSWER_WAIT: Duration = Duration::from_secs(60);
 const NETWORK_MANAGER: &str = "/org/freedesktop/NetworkManager";
-const BLUEZ: &str = "org.bluez";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AudioCommand {
@@ -340,7 +339,7 @@ fn read_network(network: &NetworkManager) -> NetworkState {
     }
 }
 
-fn rule(build: impl FnOnce() -> zbus::Result<MatchRule<'static>>) -> Option<MatchRule<'static>> {
+fn rule<T>(build: impl FnOnce() -> zbus::Result<T>) -> Option<T> {
     build()
         .inspect_err(|error| tracing::warn!("invalid match rule: {error}"))
         .ok()
@@ -433,14 +432,11 @@ fn joined(result: bande_network::Result<JoinOutcome>) -> Joined {
 }
 
 fn read_bluetooth(bluetooth: &Bluetooth) -> Option<BluetoothState> {
-    if !bluetooth.available().ok()? {
-        return None;
-    }
-    Some(BluetoothState {
-        powered: bluetooth.powered().ok()?,
-        paired: bluetooth.paired_devices().unwrap_or_default(),
-        nearby: bluetooth.nearby_devices().unwrap_or_default(),
-    })
+    bluetooth
+        .radio()
+        .inspect_err(|error| tracing::debug!("cannot read Bluetooth: {error}"))
+        .ok()
+        .flatten()
 }
 
 struct Prompt {
@@ -499,16 +495,11 @@ pub fn follow_bluetooth(
     updates: Updates,
 ) -> (Sender<BluetoothCommand>, Sender<Answer>) {
     let (changed, changes) = mpsc::channel();
-    if let Some(rule) = rule(|| {
-        Ok(MatchRule::builder()
-            .msg_type(message::Type::Signal)
-            .sender(BLUEZ)?
-            .build())
-    }) {
+    for rule in rule(change_rules).into_iter().flatten() {
         signals(
             system,
             rule,
-            changed,
+            changed.clone(),
             |message| shown_change(message).then_some(()),
             || true,
         );

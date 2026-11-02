@@ -105,13 +105,9 @@ fn read_connected(
             .and_then(|networks| networks.into_iter().find(|found| found.current))
             .map(|current| current.name()),
         sign_in: network.is_some_and(|network| matches!(network.sign_in_page(), Ok(Some(_)))),
-        bluetooth: bluetooth.and_then(|bluetooth| {
-            bluetooth
-                .available()
-                .ok()
-                .filter(|available| *available)
-                .and_then(|_| bluetooth.powered().ok())
-        }),
+        bluetooth: bluetooth
+            .and_then(|bluetooth| bluetooth.radio().ok().flatten())
+            .map(|radio| radio.powered),
         do_not_disturb: session
             .and_then(|session| NotificationCenter::new(session).ok())
             .and_then(|center| center.do_not_disturb().ok())

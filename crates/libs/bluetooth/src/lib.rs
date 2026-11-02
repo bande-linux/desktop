@@ -6,9 +6,13 @@ pub use agent::{AGENT_PATH, PairingPrompt, register_agent};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::{DBusProxy, ObjectManagerProxy};
 use zbus::names::OwnedInterfaceName;
+use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::{MatchRule, message};
 
 const SERVICE: &str = "org.bluez";
+const OBJECTS: &str = "/org/bluez";
+const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
 const ADAPTER: &str = "org.bluez.Adapter1";
 const DEVICE: &str = "org.bluez.Device1";
 const BATTERY: &str = "org.bluez.Battery1";
@@ -180,8 +184,41 @@ pub fn shown_change(message: &zbus::Message) -> bool {
         })
 }
 
+pub fn change_rules() -> zbus::Result<Vec<MatchRule<'static>>> {
+    let signals = || {
+        MatchRule::builder()
+            .msg_type(message::Type::Signal)
+            .sender(SERVICE)
+    };
+    Ok(vec![
+        signals()?.path_namespace(OBJECTS)?.build(),
+        signals()?.path("/")?.interface(OBJECT_MANAGER)?.build(),
+    ])
+}
+
 fn bluez_running(bus: &Connection) -> zbus::Result<bool> {
     Ok(DBusProxy::new(bus)?.name_has_owner(SERVICE.try_into()?)?)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Radio {
+    pub powered: bool,
+    pub paired: Vec<Device>,
+    pub nearby: Vec<Device>,
+}
+
+fn first_adapter(
+    objects: &HashMap<OwnedObjectPath, Interfaces>,
+) -> Option<(&OwnedObjectPath, &HashMap<String, OwnedValue>)> {
+    objects
+        .iter()
+        .filter_map(|(path, interfaces)| {
+            interfaces
+                .iter()
+                .find(|(name, _)| name.as_str() == ADAPTER)
+                .map(|(_, properties)| (path, properties))
+        })
+        .min_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()))
 }
 
 pub struct Bluetooth {
@@ -207,29 +244,39 @@ impl Bluetooth {
     }
 
     fn adapter(&self) -> zbus::Result<Option<AdapterProxyBlocking<'static>>> {
-        let mut adapters: Vec<OwnedObjectPath> = self
-            .objects()?
-            .into_iter()
-            .filter(|(_, interfaces)| interfaces.keys().any(|name| name.as_str() == ADAPTER))
-            .map(|(path, _)| path)
-            .collect();
-        adapters.sort_by(|a, b| a.as_str().cmp(b.as_str()));
-        adapters
-            .into_iter()
-            .next()
-            .map(|path| AdapterProxyBlocking::builder(&self.bus).path(path)?.build())
+        first_adapter(&self.objects()?)
+            .map(|(path, _)| {
+                AdapterProxyBlocking::builder(&self.bus)
+                    .path(path.clone())?
+                    .cache_properties(CacheProperties::No)
+                    .build()
+            })
             .transpose()
     }
 
-    pub fn available(&self) -> zbus::Result<bool> {
-        Ok(self.adapter()?.is_some())
-    }
-
-    pub fn powered(&self) -> zbus::Result<bool> {
-        match self.adapter()? {
-            Some(adapter) => adapter.powered(),
-            None => Ok(false),
-        }
+    pub fn radio(&self) -> zbus::Result<Option<Radio>> {
+        let objects = self.objects()?;
+        let Some((_, adapter)) = first_adapter(&objects) else {
+            return Ok(None);
+        };
+        let mut devices: Vec<Device> = objects
+            .iter()
+            .filter_map(|(path, interfaces)| Device::from_interfaces(path.clone(), interfaces))
+            .collect();
+        devices.sort_by(|a, b| {
+            b.connected
+                .cmp(&a.connected)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                .then_with(|| a.address.cmp(&b.address))
+        });
+        let (paired, mut nearby): (Vec<Device>, Vec<Device>) =
+            devices.into_iter().partition(|device| device.paired);
+        nearby.retain(|device| device.named);
+        Ok(Some(Radio {
+            powered: property(adapter, "Powered").unwrap_or(false),
+            paired,
+            nearby,
+        }))
     }
 
     pub fn set_powered(&self, powered: bool) -> zbus::Result<()> {
@@ -239,32 +286,6 @@ impl Bluetooth {
                 "this computer has no Bluetooth adapter".into(),
             )),
         }
-    }
-
-    fn devices(&self, paired: bool) -> zbus::Result<Vec<Device>> {
-        let mut devices: Vec<Device> = self
-            .objects()?
-            .into_iter()
-            .filter_map(|(path, interfaces)| Device::from_interfaces(path, &interfaces))
-            .filter(|device| device.paired == paired)
-            .collect();
-        devices.sort_by(|a, b| {
-            b.connected
-                .cmp(&a.connected)
-                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-                .then_with(|| a.address.cmp(&b.address))
-        });
-        Ok(devices)
-    }
-
-    pub fn paired_devices(&self) -> zbus::Result<Vec<Device>> {
-        self.devices(true)
-    }
-
-    pub fn nearby_devices(&self) -> zbus::Result<Vec<Device>> {
-        let mut devices = self.devices(false)?;
-        devices.retain(|device| device.named);
-        Ok(devices)
     }
 
     pub fn set_discovering(&self, discovering: bool) -> zbus::Result<()> {

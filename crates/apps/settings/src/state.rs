@@ -1,4 +1,3 @@
-use bande_bluetooth::Device;
 use bande_network::{KnownNetwork, Network, WifiLink};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -16,12 +15,7 @@ pub struct NetworkState {
     pub vpns: Vec<bande_network::Vpn>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct BluetoothState {
-    pub powered: bool,
-    pub paired: Vec<Device>,
-    pub nearby: Vec<Device>,
-}
+pub use bande_bluetooth::Radio as BluetoothState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Joined {

@@ -96,9 +96,9 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   exhausted, so a headless walk cannot open it.
 - Mail's Settings window (apps repo) has no title or menu button, unlike the other apps'.
 - Notifications on several displays (banners follow the decision above).
-- Idle wake-ups left (`bande-idle`): Settings 2.4/s with its window open (async-io, zbus,
-  bluetooth threads); the shell 1.0/s with windows open. Every redraw of an idle app costs two
-  more wake-ups than its timer: the `wl_buffer.release` arrives a few ms before the frame
+- Idle wake-ups: Activity Monitor (apps repo, installed 2026-11-01 build) wakes 5–7/s minimised
+  and locked (its 2 s sample keeps running, plus D-Bus traffic). Every redraw of an idle app
+  costs two more wake-ups than its timer: the `wl_buffer.release` arrives a few ms before the frame
   callback and presentation feedback (Activity Monitor: 1.5/s at its 2 s interval). Sending the
   release with the frame callback would save one per redraw for every app.
 - Frame clock: predict with a high percentile instead of the maximum of the last 16 frames.

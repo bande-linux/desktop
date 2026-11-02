@@ -184,6 +184,10 @@ pub trait Program: Sized + 'static {
     }
 
     fn tick(&mut self, _cx: &mut Cx<Self>, _now: Instant) {}
+
+    fn runs_in_background() -> bool {
+        false
+    }
 }
 
 pub fn run<P: Program>(info: &'static Info) -> ExitCode {

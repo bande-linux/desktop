@@ -39,6 +39,7 @@ pub struct Cx<P: Program> {
     pub(crate) quitting: bool,
     pub(crate) menus_changed: bool,
     session: Option<Connection>,
+    background: bool,
 }
 
 impl<P: Program> Cx<P> {
@@ -46,6 +47,7 @@ impl<P: Program> Cx<P> {
         info: &'static Info,
         link: AppConnection,
         session: Option<Connection>,
+        background: bool,
     ) -> Self {
         Self {
             info,
@@ -57,7 +59,12 @@ impl<P: Program> Cx<P> {
             quitting: false,
             menus_changed: false,
             session,
+            background,
         }
+    }
+
+    pub fn launched_in_background(&self) -> bool {
+        self.background
     }
 
     pub fn open(
@@ -85,6 +92,7 @@ impl<P: Program> Cx<P> {
             Kind::Utility(_) => Role::utility(title, self.info.id),
         }
         .tagged(kind.tag());
+        self.link.keep_running();
         let mut window = match self.windows.first() {
             Some(beside) => beside.open_beside(role, size)?,
             None => self.link.open(role, size)?,

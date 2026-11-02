@@ -23,6 +23,7 @@ pub enum AppRequest {
 
 #[derive(Default)]
 struct Link {
+    global: Option<(WlRegistry, u32)>,
     app: Option<BandeAppV1>,
     requests: Vec<AppRequest>,
 }
@@ -31,6 +32,8 @@ pub struct AppConnection {
     connection: Connection,
     queue: EventQueue<Link>,
     link: Link,
+    app_id: String,
+    kept: bool,
 }
 
 fn modifiers(bits: u32) -> Modifiers {
@@ -62,19 +65,36 @@ impl AppConnection {
         connection.display().get_registry(&queue.handle(), ());
         let mut link = Link::default();
         queue.roundtrip(&mut link)?;
-        if let Some(app) = &link.app {
-            app.keep_running(app_id.to_owned());
-        }
-        connection.flush()?;
         Ok(Self {
             connection,
             queue,
             link,
+            app_id: app_id.to_owned(),
+            kept: false,
         })
     }
 
     pub fn keeps_running(&self) -> bool {
         self.link.app.is_some()
+    }
+
+    pub fn keep_running(&mut self) {
+        if let Some(app) = self.link.app.as_ref().filter(|_| !self.kept) {
+            app.keep_running(self.app_id.clone());
+            self.kept = true;
+        }
+    }
+
+    pub fn run_in_background(&mut self) {
+        if !std::mem::take(&mut self.kept) {
+            return;
+        }
+        if let Some(app) = self.link.app.take() {
+            app.destroy();
+        }
+        self.link.app = self.link.global.as_ref().map(|(registry, name)| {
+            registry.bind(*name, KEEP_RUNNING_SINCE, &self.queue.handle(), ())
+        });
     }
 
     pub fn open(&self, role: Role, size: (u32, u32)) -> Result<Window, WindowError> {
@@ -130,6 +150,7 @@ impl Dispatch<WlRegistry, ()> for Link {
             && version >= KEEP_RUNNING_SINCE
         {
             link.app = Some(registry.bind(name, KEEP_RUNNING_SINCE, handle, ()));
+            link.global = Some((registry.clone(), name));
         }
     }
 }

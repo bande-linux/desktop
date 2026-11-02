@@ -131,6 +131,23 @@ impl State {
         found
     }
 
+    fn stop_keeping(&mut self, resource: &BandeAppV1) {
+        let kept = self.kept_apps.iter().any(|(app, _)| app == resource);
+        self.kept_apps.retain(|(app, _)| app != resource);
+        let client = resource.client();
+        let active = self
+            .windowless_app
+            .as_ref()
+            .is_some_and(|(app, _)| client.as_ref() == Some(app));
+        if kept && active {
+            self.windowless_app = None;
+            let next = self.frontmost(None);
+            self.focus(next);
+            let key = self.key_window();
+            self.announce_active_app(key.as_ref());
+        }
+    }
+
     pub(crate) fn kept_app_is_active(&self) -> bool {
         self.windowless_app.as_ref().is_some_and(|(client, _)| {
             self.kept_apps
@@ -405,7 +422,7 @@ impl Dispatch<BandeAppV1, ()> for State {
             }
             bande_app_v1::Request::Destroy => {
                 state.app_resources.retain(|app| app != resource);
-                state.kept_apps.retain(|(app, _)| app != resource);
+                state.stop_keeping(resource);
             }
             _ => {}
         }

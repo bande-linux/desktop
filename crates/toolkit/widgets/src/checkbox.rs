@@ -1,7 +1,7 @@
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
 use bande_graphics::{Color, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle};
 
-use super::control::square_capped;
+use super::control::{DISABLED_ALPHA, square_capped};
 use super::{Animated, Context, Event, Key, Size, Spring, Widget, WidgetId};
 
 pub const CHECKBOX_SIZE: f32 = 16.0;
@@ -29,6 +29,7 @@ pub struct Checkbox {
     paragraph: Option<Paragraph>,
     width: f32,
     frame: Rect,
+    enabled: bool,
 }
 
 fn level(state: CheckState) -> f32 {
@@ -50,6 +51,7 @@ impl Checkbox {
             paragraph: None,
             width: 0.0,
             frame: Rect::default(),
+            enabled: true,
         }
     }
 
@@ -57,9 +59,14 @@ impl Checkbox {
         self.state
     }
 
-    fn set_state(&mut self, cx: &Context, state: CheckState) {
+    pub fn set_state(&mut self, cx: &Context, state: CheckState) {
         self.state = state;
         cx.animate(&mut self.shown, level(state), Spring::QUICK);
+    }
+
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+        self.pressed &= enabled;
     }
 
     fn toggle(&mut self, cx: &Context) {
@@ -72,6 +79,35 @@ impl Checkbox {
             },
         );
         (self.on_change)(on);
+    }
+
+    fn paint_control(&self, cx: &Context, items: &mut Vec<Item>) {
+        let rect = self.box_rect();
+        let shown = cx.sample(&self.shown);
+        paint_box(cx, rect, Radius::XS, shown, self.pressed, items);
+        if cx.is_focused(self.id) {
+            super::focus_ring(cx, Shape::rounded(rect, Radius::XS), items);
+        }
+        let at = |x: f32, y: f32| Point::new(rect.x + x, rect.y + y);
+        let points = match self.state {
+            CheckState::Mixed => vec![at(4.5, 8.0), at(11.5, 8.0)],
+            _ => vec![at(4.5, 8.25), at(7.0, 10.75), at(11.75, 5.25)],
+        };
+        if self.state != CheckState::Off || shown > 0.0 {
+            items.push(Item::FillPath {
+                path: square_capped(&points, MARK),
+                paint: cx.palette.on_accent.with_opacity(shown).into(),
+            });
+        }
+        if let Some(paragraph) = &self.paragraph {
+            items.push(Item::Text {
+                origin: Point::new(
+                    rect.x + CHECKBOX_SIZE + GAP,
+                    self.frame.y + ((self.frame.height - paragraph.height()) / 2.0).round(),
+                ),
+                paragraph: paragraph.clone(),
+            });
+        }
     }
 
     fn box_rect(&self) -> Rect {
@@ -146,32 +182,16 @@ impl Widget for Checkbox {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let rect = self.box_rect();
-        let shown = cx.sample(&self.shown);
-        paint_box(cx, rect, Radius::XS, shown, self.pressed, items);
-        if cx.is_focused(self.id) {
-            super::focus_ring(cx, Shape::rounded(rect, Radius::XS), items);
+        if self.enabled {
+            self.paint_control(cx, items);
+            return;
         }
-        let at = |x: f32, y: f32| Point::new(rect.x + x, rect.y + y);
-        let points = match self.state {
-            CheckState::Mixed => vec![at(4.5, 8.0), at(11.5, 8.0)],
-            _ => vec![at(4.5, 8.25), at(7.0, 10.75), at(11.75, 5.25)],
-        };
-        if self.state != CheckState::Off || shown > 0.0 {
-            items.push(Item::FillPath {
-                path: square_capped(&points, MARK),
-                paint: cx.palette.on_accent.with_opacity(shown).into(),
-            });
-        }
-        if let Some(paragraph) = &self.paragraph {
-            items.push(Item::Text {
-                origin: Point::new(
-                    rect.x + CHECKBOX_SIZE + GAP,
-                    self.frame.y + ((self.frame.height - paragraph.height()) / 2.0).round(),
-                ),
-                paragraph: paragraph.clone(),
-            });
-        }
+        let mut dimmed = Vec::new();
+        self.paint_control(cx, &mut dimmed);
+        items.push(Item::Opacity {
+            alpha: DISABLED_ALPHA,
+            items: dimmed,
+        });
     }
 
     fn access(&self, _cx: &Context) -> Node {
@@ -182,11 +202,17 @@ impl Widget for Checkbox {
             CheckState::On => Toggled::True,
             CheckState::Mixed => Toggled::Mixed,
         });
-        node.add_action(Action::Click);
+        match self.enabled {
+            true => node.add_action(Action::Click),
+            false => node.set_disabled(),
+        }
         node
     }
 
     fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
+        if !self.enabled {
+            return false;
+        }
         match event {
             Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
             Event::PointerLeave if self.pressed => self.pressed = false,
@@ -209,7 +235,7 @@ impl Widget for Checkbox {
     }
 
     fn perform(&mut self, cx: &mut Context, request: &ActionRequest) -> bool {
-        if request.action == Action::Click {
+        if self.enabled && request.action == Action::Click {
             self.toggle(cx);
             return true;
         }
@@ -217,6 +243,6 @@ impl Widget for Checkbox {
     }
 
     fn accepts_focus(&self, cx: &Context) -> bool {
-        cx.keyboard_navigation
+        self.enabled && cx.keyboard_navigation
     }
 }

@@ -36,7 +36,7 @@ Delete each line when it ships; delete the file when the list is empty.
   extension, Open With, default app and permissions. The per-file choice is the
   `user.bande.hide-extension` xattr (`1` hide, `0` show, absent: hide known extensions), or a
   line in `$XDG_STATE_HOME/bande/hidden-extensions` where the volume has no xattrs; Show all
-  filename extensions overrides it.
+  filename extensions overrides it and dims the checkbox, as the Finder does.
 - Getting around: tabs; sidebar with Settings ▸ Show in Sidebar; Recents; search with scopes;
   Go ▸ Recent Folders; new windows on a standard, the last or any chosen folder (Other…); `org.freedesktop.FileManager1`
   (D-Bus activated with `--gapplication-service`) and `bande-files --select <paths>`.

@@ -53,8 +53,8 @@ impl History {
 pub(super) fn coalesce(last: &mut Edit, edit: &Edit) -> bool {
     match edit.kind {
         EditKind::Typing => {
-            let contiguous = edit.removed.text.is_empty()
-                && last.start.after(&last.inserted.text) == edit.start;
+            let contiguous =
+                edit.removed.text.is_empty() && last.start.after(&last.inserted.text) == edit.start;
             let starts_word = !edit.inserted.text.starts_with(char::is_whitespace)
                 && last.inserted.text.ends_with(char::is_whitespace);
             if !contiguous || starts_word {
@@ -63,9 +63,7 @@ pub(super) fn coalesce(last: &mut Edit, edit: &Edit) -> bool {
             last.inserted.append(edit.inserted.clone());
             true
         }
-        EditKind::Deleting
-            if !last.inserted.text.is_empty() || !edit.inserted.text.is_empty() =>
-        {
+        EditKind::Deleting if !last.inserted.text.is_empty() || !edit.inserted.text.is_empty() => {
             false
         }
         EditKind::Deleting if edit.start.after(&edit.removed.text) == last.start => {

@@ -44,7 +44,11 @@ fn decorations(layout: &parley::Layout<Color>, origin: Point, items: &mut Vec<It
                     (decoration, metrics.underline_offset, metrics.underline_size)
                 }),
                 style.strikethrough.as_ref().map(|decoration| {
-                    (decoration, metrics.strikethrough_offset, metrics.strikethrough_size)
+                    (
+                        decoration,
+                        metrics.strikethrough_offset,
+                        metrics.strikethrough_size,
+                    )
                 }),
             ];
             for (decoration, offset, size) in lines.into_iter().flatten() {
@@ -372,7 +376,10 @@ impl Editor {
     }
 
     pub(crate) fn set_paragraph_attributes(&mut self, change: &dyn Fn(&mut ParagraphAttributes)) {
-        let (first, last) = (self.selection.start().paragraph, self.selection.end().paragraph);
+        let (first, last) = (
+            self.selection.start().paragraph,
+            self.selection.end().paragraph,
+        );
         let before: Vec<ParagraphAttributes> = self.blocks[first..=last]
             .iter()
             .map(|block| block.paragraph)
@@ -406,7 +413,7 @@ impl Editor {
         self.history.open = false;
     }
 
-    pub(super) fn restyle(&mut self, restyle: &Restyle, forward: bool) {
+    fn restyle(&mut self, restyle: &Restyle, forward: bool) {
         let attributes = match forward {
             true => &restyle.after,
             false => &restyle.before,
@@ -497,7 +504,12 @@ impl Editor {
             .collect();
         let last = blocks.len() - 1;
         let first = &mut blocks[0];
-        first.runs = joined(normalize(head_runs), head.len(), std::mem::take(&mut first.runs), first.text.len());
+        first.runs = joined(
+            normalize(head_runs),
+            head.len(),
+            std::mem::take(&mut first.runs),
+            first.text.len(),
+        );
         first.text.insert_str(0, &head);
         let last_block = &mut blocks[last];
         let end_position = Position::new(start.paragraph + last, last_block.text.len());
@@ -513,7 +525,11 @@ impl Editor {
         self.laid_out -= dropped;
         self.tops_stale = true;
         self.revision += 1;
-        if self.blocks.get(end_position.paragraph + 1).is_some_and(|block| block.paragraph.list.is_some()) {
+        if self
+            .blocks
+            .get(end_position.paragraph + 1)
+            .is_some_and(|block| block.paragraph.list.is_some())
+        {
             self.renumber(end_position.paragraph + 1);
         }
         end_position
@@ -1080,7 +1096,12 @@ impl Editor {
             let top = origin.y + self.top(paragraph);
             let left = self.left(paragraph);
             let at = |rect: Rect| {
-                Rect::new(origin.x + left + rect.x, top + rect.y, rect.width, rect.height)
+                Rect::new(
+                    origin.x + left + rect.x,
+                    top + rect.y,
+                    rect.width,
+                    rect.height,
+                )
             };
             if start.paragraph <= paragraph && paragraph <= end.paragraph && start != end {
                 let from = match paragraph == start.paragraph {

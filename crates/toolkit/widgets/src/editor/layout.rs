@@ -140,14 +140,21 @@ impl Editor {
         };
         let style = TextStyle::new(self.font_size, self.color);
         let typeface = self.typeface.unwrap_or(style.typeface);
-        Some(text.paragraph(&label, TextStyle { typeface, ..style }, None, TextAlign::Start))
+        Some(text.paragraph(
+            &label,
+            TextStyle { typeface, ..style },
+            None,
+            TextAlign::Start,
+        ))
     }
 
     pub(super) fn left(&self, paragraph: usize) -> f32 {
-        self.blocks.get(paragraph).map_or(0.0, |block| match block.paragraph.list {
-            Some(_) => LIST_INDENT * f32::from(block.paragraph.level.min(8) + 1),
-            None => LIST_INDENT * f32::from(block.paragraph.level.min(8)),
-        })
+        self.blocks
+            .get(paragraph)
+            .map_or(0.0, |block| match block.paragraph.list {
+                Some(_) => LIST_INDENT * f32::from(block.paragraph.level.min(8) + 1),
+                None => LIST_INDENT * f32::from(block.paragraph.level.min(8)),
+            })
     }
 
     fn shape(
@@ -191,7 +198,10 @@ impl Editor {
                     FontFamilyName::Named(Cow::Owned(family.to_string())),
                     FontFamilyName::Generic(GenericFamily::SansSerif),
                 ];
-                builder.push(StyleProperty::FontFamily(FontFamily::List(families.into())), range);
+                builder.push(
+                    StyleProperty::FontFamily(FontFamily::List(families.into())),
+                    range,
+                );
             }
         }
         for (at, spacing) in tabs {

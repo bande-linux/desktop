@@ -64,7 +64,10 @@ pub(super) fn normalize(runs: Runs) -> Runs {
             _ => merged.push((length, attributes)),
         }
     }
-    match merged.iter().all(|(_, attributes)| *attributes == TextAttributes::default()) {
+    match merged
+        .iter()
+        .all(|(_, attributes)| *attributes == TextAttributes::default())
+    {
         true => Vec::new(),
         false => merged,
     }
@@ -108,7 +111,11 @@ pub(super) fn attributes_at(runs: &Runs, offset: usize) -> TextAttributes {
 }
 
 impl Fragment {
-    pub(super) fn plain(text: &str, attributes: TextAttributes, paragraph: ParagraphAttributes) -> Self {
+    pub(super) fn plain(
+        text: &str,
+        attributes: TextAttributes,
+        paragraph: ParagraphAttributes,
+    ) -> Self {
         Self {
             text: text.to_owned(),
             runs: normalize(vec![(text.len(), attributes)]),

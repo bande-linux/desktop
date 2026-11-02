@@ -16,6 +16,11 @@ The entry points below are stable; the app and `tools/conformance` drive them.
   and calls `add_stylesheet(href, bytes, fonts)`, which restyles and lays out again.
   `load_stylesheets_from(directory, fonts)` does the same from disk. `with_viewport` sets the
   height that `vh` and media queries see (`new` assumes 4:3).
+- Images: `image_links()` lists `<img>` sources and CSS `background-image` URLs still missing.
+  URLs from a stylesheet are already rebased onto the sheet's href (as passed to
+  `add_stylesheets`), so the app resolves every link against the document. `add_images(&[(link,
+  bytes)])` decodes them (PNG, JPEG, WebP, GIF) into premultiplied RGBA shared through `Arc` and
+  lays out again. The display list's `images` hold the same `Arc`s.
 - Hover: `hover_at(x, y, fonts)` or `set_hover(node, fonts)` restyle only what `:hover` rules
   can reach and return whether to repaint; `restyled()` counts the elements restyled.
 - `Fonts::new()` scans the system fonts once; keep one per thread and reuse it across pages.

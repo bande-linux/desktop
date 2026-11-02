@@ -1,16 +1,32 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Image {
     pub width: u32,
     pub height: u32,
-    pub rgba: Box<[u8]>,
+    pub premultiplied: Arc<[u8]>,
 }
 
 impl Image {
+    fn new(width: u32, height: u32, mut rgba: Vec<u8>) -> Self {
+        for pixel in rgba.as_chunks_mut::<4>().0 {
+            let alpha = u16::from(pixel[3]);
+            if alpha != 255 {
+                for channel in &mut pixel[..3] {
+                    *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
+                }
+            }
+        }
+        Image {
+            width,
+            height,
+            premultiplied: rgba.into(),
+        }
+    }
+
     pub fn bytes(&self) -> usize {
-        self.rgba.len()
+        self.premultiplied.len()
     }
 }
 
@@ -81,11 +97,7 @@ fn decode_png(bytes: &[u8]) -> Option<Image> {
             .collect(),
         png::ColorType::Indexed => return None,
     };
-    Some(Image {
-        width: output.width,
-        height: output.height,
-        rgba: rgba.into(),
-    })
+    Some(Image::new(output.width, output.height, rgba))
 }
 
 fn decode_jpeg(bytes: &[u8]) -> Option<Image> {
@@ -104,11 +116,7 @@ fn decode_jpeg(bytes: &[u8]) -> Option<Image> {
         return None;
     }
     let rgba = decoder.decode().ok()?;
-    (rgba.len() == width as usize * height as usize * 4).then(|| Image {
-        width,
-        height,
-        rgba: rgba.into(),
-    })
+    (rgba.len() == width as usize * height as usize * 4).then(|| Image::new(width, height, rgba))
 }
 
 fn decode_webp(bytes: &[u8]) -> Option<Image> {
@@ -129,11 +137,7 @@ fn decode_webp(bytes: &[u8]) -> Option<Image> {
             .flat_map(|&[r, g, b]| [r, g, b, 255])
             .collect()
     };
-    Some(Image {
-        width,
-        height,
-        rgba: rgba.into(),
-    })
+    Some(Image::new(width, height, rgba))
 }
 
 fn decode_gif(bytes: &[u8]) -> Option<Image> {
@@ -165,11 +169,7 @@ fn decode_gif(bytes: &[u8]) -> Option<Image> {
             target.copy_from_slice(source);
         }
     }
-    Some(Image {
-        width,
-        height,
-        rgba: canvas.into(),
-    })
+    Some(Image::new(width, height, canvas))
 }
 
 struct Entry {

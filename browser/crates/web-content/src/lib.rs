@@ -275,8 +275,9 @@ impl Page {
                 .get(..bytes.len().min(STYLESHEET_LIMIT))
                 .unwrap_or_default();
             let (css, _) = web_css::decode_stylesheet(bytes, None, None);
-            let sheet = parse_stylesheet(&css, self.document.atoms_mut());
+            let mut sheet = parse_stylesheet(&css, self.document.atoms_mut());
             drop(css);
+            rebase_urls(&mut sheet.rules, href);
             for (offset, url) in imports(&sheet).into_iter().enumerate() {
                 let url = resolve_relative(href, &url);
                 if !self.imports.iter().any(|(known, _)| *known == url) {
@@ -479,9 +480,30 @@ fn imports(sheet: &Stylesheet) -> Vec<String> {
 }
 
 fn resolve_relative(base: &str, url: &str) -> String {
-    if url.contains("://") || url.starts_with('/') {
+    if url.contains(':') {
         return url.to_owned();
     }
+    let scheme_end = base.find("://");
+    if let Some(rest) = url.strip_prefix("//") {
+        return match scheme_end {
+            Some(end) => format!("{}//{rest}", base.get(..=end).unwrap_or_default()),
+            None => url.to_owned(),
+        };
+    }
+    if url.starts_with('/') {
+        return match scheme_end {
+            Some(end) => {
+                let host_end = base
+                    .get(end + 3..)
+                    .and_then(|rest| rest.find('/'))
+                    .map_or(base.len(), |slash| end + 3 + slash);
+                format!("{}{url}", base.get(..host_end).unwrap_or_default())
+            }
+            None => url.to_owned(),
+        };
+    }
+    let path_end = base.find(['?', '#']).unwrap_or(base.len());
+    let base = base.get(..path_end).unwrap_or(base);
     match base.rfind('/') {
         Some(slash) => format!("{}{url}", base.get(..=slash).unwrap_or_default()),
         None => url.to_owned(),
@@ -523,5 +545,33 @@ fn read_local(directory: &std::path::Path, link: &str) -> Option<Vec<u8>> {
             .ancestors()
             .find_map(|root| open(root.join(rooted))),
         None => open(directory.join(local)),
+    }
+}
+
+fn rebase_urls(rules: &mut [CssRule], base: &str) {
+    use web_css::properties::{DeclaredValue, PropertyValue};
+    use web_css::values::specified::Image;
+    for rule in rules {
+        match rule {
+            CssRule::Style(style) => {
+                for declaration in &mut style.declarations.declarations {
+                    if let DeclaredValue::Value(PropertyValue::ImageList(list)) =
+                        &mut declaration.value
+                    {
+                        for image in list.0.iter_mut() {
+                            if let Image::Url(url) = image {
+                                *url = resolve_relative(base, url).into();
+                            }
+                        }
+                    }
+                }
+                rebase_urls(&mut style.rules, base);
+            }
+            CssRule::Media(_, rules)
+            | CssRule::Supports(_, rules)
+            | CssRule::Container(_, _, rules)
+            | CssRule::Layer(_, rules) => rebase_urls(rules, base),
+            _ => {}
+        }
     }
 }

@@ -122,15 +122,8 @@ pub(crate) fn rasterize(list: &DisplayList, scroll_y: f32, width: u16, height: u
 fn pixmap(image: &web_image::Image) -> Option<Pixmap> {
     let width = u16::try_from(image.width).ok()?;
     let height = u16::try_from(image.height).ok()?;
-    let mut rgba = image.rgba.to_vec();
-    for pixel in rgba.as_chunks_mut::<4>().0 {
-        let alpha = u16::from(pixel[3]);
-        for channel in &mut pixel[..3] {
-            *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
-        }
-    }
     Some(Pixmap::from_parts(
-        rgba,
+        image.premultiplied.to_vec(),
         width,
         height,
         PixelMetadata::default(),

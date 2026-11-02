@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fmt;
 use std::ops::Range;
 use std::sync::Arc;
@@ -16,6 +17,7 @@ use crate::Rect;
 const DISPLAY_SIZE: f32 = 20.0;
 const ELLIPSIS: char = '\u{2026}';
 const KEPT_TAIL: usize = 7;
+const CACHED_PARAGRAPHS: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Cut {
@@ -180,7 +182,7 @@ impl TextStyle {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum TextAlign {
     #[default]
     Start,
@@ -188,11 +190,89 @@ pub enum TextAlign {
     End,
 }
 
+#[derive(PartialEq, Eq, Hash)]
+struct ParagraphKey {
+    text: String,
+    size: u32,
+    weight: u32,
+    color: Color,
+    typeface: Typeface,
+    tabular: bool,
+    line_height: Option<u32>,
+    tracking: u32,
+    caps: bool,
+    emphasis: Vec<(usize, usize, u32)>,
+    max_width: Option<u32>,
+    align: TextAlign,
+}
+
+impl ParagraphKey {
+    fn new(
+        text: &str,
+        style: TextStyle,
+        emphasis: &[(Range<usize>, f32)],
+        max_width: Option<f32>,
+        align: TextAlign,
+    ) -> Self {
+        Self {
+            text: text.to_owned(),
+            size: style.size.to_bits(),
+            weight: style.weight.to_bits(),
+            color: style.color,
+            typeface: style.typeface,
+            tabular: style.tabular,
+            line_height: style.line_height.map(f32::to_bits),
+            tracking: style.tracking.to_bits(),
+            caps: style.caps,
+            emphasis: emphasis
+                .iter()
+                .map(|(range, weight)| (range.start, range.end, weight.to_bits()))
+                .collect(),
+            max_width: max_width.map(f32::to_bits),
+            align,
+        }
+    }
+}
+
+#[derive(Default)]
+struct ParagraphCache {
+    recent: HashMap<ParagraphKey, Paragraph>,
+    older: HashMap<ParagraphKey, Paragraph>,
+}
+
+impl ParagraphCache {
+    fn get(&mut self, key: ParagraphKey) -> Result<Paragraph, ParagraphKey> {
+        if let Some(paragraph) = self.recent.get(&key) {
+            return Ok(paragraph.clone());
+        }
+        match self.older.remove(&key) {
+            Some(paragraph) => {
+                self.insert(key, paragraph.clone());
+                Ok(paragraph)
+            }
+            None => Err(key),
+        }
+    }
+
+    fn insert(&mut self, key: ParagraphKey, paragraph: Paragraph) {
+        if self.recent.len() >= CACHED_PARAGRAPHS {
+            self.older = std::mem::take(&mut self.recent);
+        }
+        self.recent.insert(key, paragraph);
+    }
+
+    fn clear(&mut self) {
+        self.recent.clear();
+        self.older.clear();
+    }
+}
+
 pub struct TextSystem {
     fonts: FontContext,
     layouts: LayoutContext<Color>,
     size: TextSize,
     monospace: Option<Arc<str>>,
+    cache: ParagraphCache,
 }
 
 impl Default for TextSystem {
@@ -208,6 +288,7 @@ impl TextSystem {
             layouts: LayoutContext::new(),
             size: TextSize::DEFAULT,
             monospace: None,
+            cache: ParagraphCache::default(),
         }
     }
 
@@ -217,11 +298,13 @@ impl TextSystem {
             layouts: LayoutContext::new(),
             size: self.size,
             monospace: self.monospace.clone(),
+            cache: ParagraphCache::default(),
         }
     }
 
     pub fn set_monospace_family(&mut self, family: Option<&str>) {
         self.monospace = family.map(Arc::from);
+        self.cache.clear();
     }
 
     pub fn has_family(&mut self, family: &str) -> bool {
@@ -229,7 +312,10 @@ impl TextSystem {
     }
 
     pub fn set_size(&mut self, size: TextSize) {
-        self.size = size;
+        if self.size != size {
+            self.size = size;
+            self.cache.clear();
+        }
     }
 
     pub fn size(&self) -> TextSize {
@@ -268,6 +354,26 @@ impl TextSystem {
     }
 
     pub fn emphasized(
+        &mut self,
+        text: &str,
+        style: TextStyle,
+        emphasis: &[(Range<usize>, f32)],
+        max_width: Option<f32>,
+        align: TextAlign,
+    ) -> Paragraph {
+        let key = match self
+            .cache
+            .get(ParagraphKey::new(text, style, emphasis, max_width, align))
+        {
+            Ok(paragraph) => return paragraph,
+            Err(key) => key,
+        };
+        let paragraph = self.shape(text, style, emphasis, max_width, align);
+        self.cache.insert(key, paragraph.clone());
+        paragraph
+    }
+
+    fn shape(
         &mut self,
         text: &str,
         style: TextStyle,

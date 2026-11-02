@@ -10,7 +10,7 @@ use resvg::{tiny_skia, usvg};
 use vello_cpu::{PixelMetadata, Pixmap};
 
 use crate::surface::{SurfaceId, SurfaceScaling};
-use crate::text::Paragraph;
+use crate::text::{GlyphRun, Paragraph};
 use bande_design::{Color, Elevation, Palette, Scheme};
 
 const SYMBOLIC_INK: &str = "#201E1A";
@@ -390,6 +390,7 @@ pub enum Item {
         origin: Point,
         paragraph: Paragraph,
     },
+    Glyphs(GlyphRun),
     Clip {
         shape: Shape,
         items: Vec<Item>,

@@ -8,6 +8,7 @@ mod disclosure;
 mod editor;
 mod form;
 mod free_layout;
+mod graph;
 mod label;
 mod menu;
 mod pop_up_button;
@@ -46,6 +47,7 @@ pub use context_menu::ContextMenu;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
 pub use form::{Form, FormLine};
 pub use free_layout::FreeLayout;
+pub use graph::{Band, Graph, GraphKind, Series, SeriesColor};
 pub use label::Label;
 pub use menu::{
     MENU_RADIUS, MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker, Search,

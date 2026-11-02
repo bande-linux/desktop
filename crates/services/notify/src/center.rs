@@ -167,6 +167,7 @@ pub struct Center {
     screen_shared: bool,
     full_screen: bool,
     banners_held: bool,
+    hide_previews: bool,
     apps: BTreeMap<String, App>,
 }
 
@@ -410,6 +411,10 @@ impl Center {
             .min()
     }
 
+    pub fn set_hide_previews(&mut self, hidden: bool) {
+        self.hide_previews = hidden;
+    }
+
     pub fn presentation(&self) -> Presentation {
         Presentation {
             banners: self.stacks(|entry| entry.banner != Banner::Hidden),
@@ -426,11 +431,16 @@ impl Center {
         let mut stacks: Vec<Stack> = Vec::new();
         for entry in entries {
             let group = entry.notification.group();
+            let mut notification = entry.notification.clone();
+            if self.hide_previews {
+                notification.body.clear();
+                notification.picture = None;
+            }
             match stacks.iter_mut().find(|stack| stack.group == group) {
-                Some(stack) => stack.notifications.push(entry.notification.clone()),
+                Some(stack) => stack.notifications.push(notification),
                 None => stacks.push(Stack {
                     group: group.to_owned(),
-                    notifications: vec![entry.notification.clone()],
+                    notifications: vec![notification],
                 }),
             }
         }

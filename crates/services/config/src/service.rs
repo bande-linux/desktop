@@ -169,6 +169,9 @@ fn publish_changes(
         if before.tinted_frame != after.tinted_frame {
             let _ = guard.tinted_frame_changed(emitter).await;
         }
+        if before.show_previews != after.show_previews {
+            let _ = guard.show_previews_changed(emitter).await;
+        }
         if before.lock_message != after.lock_message {
             let _ = guard.lock_message_changed(emitter).await;
         }
@@ -528,6 +531,16 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_tinted_frame(&self, tinted: bool) -> zbus::fdo::Result<()> {
         self.write(&Setting::TintedFrame(tinted))
+    }
+
+    #[zbus(property)]
+    fn show_previews(&self) -> bool {
+        self.store.current().show_previews
+    }
+
+    #[zbus(property)]
+    fn set_show_previews(&self, shown: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::ShowPreviews(shown))
     }
 
     #[zbus(property)]

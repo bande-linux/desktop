@@ -321,6 +321,7 @@ pub enum SettingId {
     Accounts,
     HotCornersPage,
     LockMessage,
+    ShowPreviews,
     HotCornerTopLeft,
     HotCornerTopRight,
     HotCornerBottomLeft,
@@ -890,6 +891,8 @@ fn desktop_panes() -> Vec<Pane> {
                     vec![
                         switch(SettingId::DoNotDisturb, "do-not-disturb")
                             .described("do-not-disturb-description"),
+                        switch(SettingId::ShowPreviews, "show-previews")
+                            .described("show-previews-description"),
                         switch(SettingId::FocusScheduled, "focus-scheduled")
                             .described("focus-scheduled-description"),
                         setting(

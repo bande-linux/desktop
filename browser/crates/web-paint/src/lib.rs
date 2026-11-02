@@ -6,7 +6,6 @@ use std::ops::Range;
 use linebender_resource_handle::FontData;
 use web_dom::NodeId;
 use web_layout::{BoxFragment, Fragment, FragmentTree, TextFragment};
-use web_style::Color;
 use web_text::{Fonts, Glyph};
 
 pub use web_layout::Rect;

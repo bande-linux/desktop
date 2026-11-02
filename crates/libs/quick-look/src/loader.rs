@@ -6,12 +6,20 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
-use bande_content::{Content, content};
+use bande_content::{Content, Contents, content};
+
+use crate::worker::{Sample, read_archive, read_font_sample};
+
+pub enum Loaded {
+    Content(Content),
+    FontSample(Option<Sample>),
+    Archive(Option<Contents>),
+}
 use bande_inbox::Inbox;
 
 pub struct Loader {
     requests: Sender<(u64, PathBuf, String)>,
-    loaded: Inbox<(u64, Content)>,
+    loaded: Inbox<(u64, Loaded)>,
     generation: Arc<AtomicU64>,
 }
 
@@ -30,8 +38,12 @@ impl Loader {
                     if !current() {
                         continue;
                     }
-                    let content = content(&path, &mime, &current);
-                    if current() && !outbox.send((asked, content)) {
+                    let loaded = match content(&path, &mime, &current) {
+                        Content::Font => Loaded::FontSample(read_font_sample(&path)),
+                        Content::Archive => Loaded::Archive(read_archive(&path)),
+                        content => Loaded::Content(content),
+                    };
+                    if current() && !outbox.send((asked, loaded)) {
                         return;
                     }
                 }
@@ -52,7 +64,7 @@ impl Loader {
         self.loaded.fd()
     }
 
-    pub fn take(&mut self) -> Vec<Content> {
+    pub fn take(&mut self) -> Vec<Loaded> {
         let latest = self.generation.load(Ordering::Relaxed);
         self.loaded
             .drain()

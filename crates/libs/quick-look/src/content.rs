@@ -1,8 +1,11 @@
-use std::sync::Arc;
 use std::time::Instant;
 
 use bande_content::{Block, Code, Content, Contents, Frame, Level, Pixels};
-use bande_toolkit::{Image, Paragraph, TextSystem};
+use bande_toolkit::Color;
+
+use crate::loader::Loaded;
+use crate::worker::Sample;
+use bande_toolkit::{Image, Paragraph};
 
 use crate::pdf::PdfView;
 
@@ -58,9 +61,21 @@ pub struct DocumentView {
 }
 
 pub struct FontView {
-    pub text: TextSystem,
-    pub family: String,
-    pub laid: Laid<(f32, Paragraph)>,
+    pub sample: Image,
+    pub tinted: Option<(Color, Image)>,
+}
+
+impl FontView {
+    pub fn image(&mut self, color: Color) -> Option<Image> {
+        if let Some((tint, image)) = &self.tinted
+            && *tint == color
+        {
+            return Some(image.clone());
+        }
+        let image = self.sample.tinted(color)?;
+        self.tinted = Some((color, image.clone()));
+        Some(image)
+    }
 }
 
 pub enum Shown {
@@ -76,23 +91,30 @@ pub enum Shown {
     Other,
 }
 
-fn font(bytes: Vec<u8>) -> Option<FontView> {
-    let mut text = TextSystem::new();
-    let (fonts, _) = text.contexts();
-    let registered = fonts
-        .collection
-        .register_fonts(parley::fontique::Blob::new(Arc::new(bytes)), None);
-    let (family, _) = registered.first()?;
-    let family = fonts.collection.family_name(*family)?.to_owned();
-    Some(FontView {
-        text,
-        family,
-        laid: None,
-    })
-}
-
 impl Shown {
-    pub fn from_content(content: Content) -> Self {
+    pub fn from_loaded(loaded: Loaded) -> Self {
+        match loaded {
+            Loaded::Content(content) => Self::from_content(content),
+            Loaded::FontSample(sample) => sample
+                .and_then(
+                    |Sample {
+                         width,
+                         height,
+                         rgba,
+                     }| { Image::from_premultiplied(width, height, rgba) },
+                )
+                .map_or(Self::Other, |sample| {
+                    Self::Font(Box::new(FontView {
+                        sample,
+                        tinted: None,
+                    }))
+                }),
+            Loaded::Archive(Some(contents)) => Self::Archive(contents),
+            Loaded::Archive(None) => Self::Other,
+        }
+    }
+
+    fn from_content(content: Content) -> Self {
         match content {
             Content::Picture(decoded) => {
                 let (levels, frames) = match decoded.pixels {
@@ -132,13 +154,9 @@ impl Shown {
                 })
             }
             Content::Document(blocks) => Self::Document(DocumentView { blocks, laid: None }),
-            Content::Font(bytes) => {
-                font(bytes).map_or(Self::Other, |font| Self::Font(Box::new(font)))
-            }
             Content::Folder { items, bytes } => Self::Folder { items, bytes },
-            Content::Archive(contents) => Self::Archive(contents),
             Content::Media => Self::Media,
-            Content::Other => Self::Other,
+            Content::Font | Content::Archive | Content::Other => Self::Other,
         }
     }
 

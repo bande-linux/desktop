@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use bande_fs::same_volume;
+use bande_quick_look::QuickLookLink;
 use bande_toolkit::ui::{
     Animated, ClipboardRequest, Context, Event, FreeLayout, Key, Modifiers, Pointer, PointerButton,
     Size, Spring, TextField, Ui, Widget, WidgetId,
@@ -89,27 +90,6 @@ pub enum Request {
         full_screen: bool,
     },
     QuickLookKey(Key, Modifiers),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum QuickLookState {
-    #[default]
-    Closed,
-    Single,
-    Multiple,
-}
-
-fn quick_look_key(key: Key, modifiers: Modifiers, state: QuickLookState) -> bool {
-    let command = modifiers.control;
-    let plain = !command && !modifiers.alt && !modifiers.shift;
-    match key {
-        Key::Escape | Key::Function(11) => true,
-        Key::PageUp | Key::PageDown | Key::Home | Key::End => plain,
-        Key::Left | Key::Right => plain && state == QuickLookState::Multiple,
-        Key::Enter => command,
-        Key::Character('=' | '+' | '-' | '0' | 'l' | 'L') => command,
-        _ => false,
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -200,7 +180,7 @@ pub struct DesktopView {
     populated: bool,
     animating: bool,
     requests: Vec<Request>,
-    quick_look: QuickLookState,
+    quick_look: Option<QuickLookLink>,
 }
 
 fn rect(bounds: Bounds) -> Rect {
@@ -303,7 +283,7 @@ impl DesktopView {
             arriving: None,
             appearance,
             focused: false,
-            quick_look: QuickLookState::Closed,
+            quick_look: None,
             size: (1.0, 1.0),
             scale: 1.0,
             gesture: Gesture::Idle,
@@ -432,8 +412,8 @@ impl DesktopView {
         self.labels.clear();
     }
 
-    pub fn set_quick_look(&mut self, state: QuickLookState) {
-        self.quick_look = state;
+    pub fn set_quick_look(&mut self, link: Option<QuickLookLink>) {
+        self.quick_look = link;
     }
 
     pub fn set_focused(&mut self, focused: bool) {
@@ -1071,8 +1051,14 @@ impl DesktopView {
         if modifiers.logo {
             return false;
         }
-        if self.quick_look != QuickLookState::Closed
-            && quick_look_key(key, modifiers, self.quick_look)
+        let quick_look_shown = self
+            .quick_look
+            .as_ref()
+            .is_some_and(|link| link.borrow().is_shown());
+        if self
+            .quick_look
+            .as_ref()
+            .is_some_and(|link| link.borrow().takes_key(key, modifiers))
         {
             self.requests.push(Request::QuickLookKey(key, modifiers));
             return true;
@@ -1080,10 +1066,7 @@ impl DesktopView {
         let selected = self.desktop.selected();
         let command = modifiers.control;
         match key {
-            Key::Space
-                if !command
-                    && (!selected.is_empty() || self.quick_look != QuickLookState::Closed) =>
-            {
+            Key::Space if !command && (!selected.is_empty() || quick_look_shown) => {
                 self.requests.push(Request::QuickLook {
                     full_screen: modifiers.alt,
                 });

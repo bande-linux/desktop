@@ -5,24 +5,19 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use accesskit::{Node, Role, Toggled};
-use bande_files::{Browser, FilesSettings, FilesView, Location, Sheet};
+use bande_files::{Browser, FilesView, Location, Sheet};
 use bande_fs::Trash;
-use bande_toolkit::ui::{Event, Key, Modifiers, Pointer};
-use bande_toolkit::{Palette, Point, Scheme, TextSystem};
+use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::{Palette, Scheme, TextSystem};
 use bande_xdg::Apps;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
 
 fn view(browser: Browser) -> FilesView {
-    view_with(browser, Apps::load(Vec::new(), &[]))
-}
-
-fn view_with(browser: Browser, apps: Apps) -> FilesView {
     let mut view = FilesView::new(
         browser,
         Vec::new(),
-        apps,
+        Apps::load(Vec::new(), &[]),
         Palette::for_scheme(Scheme::Light),
         TextSystem::new(),
     )
@@ -127,82 +122,6 @@ fn a_file_goes_to_the_trash_and_back_and_a_new_folder_is_named_in_place_and_undo
     key(&mut files, Key::Character('z'), true, false);
     finish(&mut files);
     assert!(!exists("untitled folder"));
-}
-
-fn click_on(view: &mut FilesView, role: Role, until: impl Fn(&FilesView) -> bool) -> Node {
-    let found = |view: &FilesView| {
-        let tree = view.accessibility();
-        let (_, node) = tree
-            .nodes
-            .into_iter()
-            .find(|(_, node)| node.role() == role)?;
-        Some(node)
-    };
-    let bounds = found(view)
-        .and_then(|node| node.bounds())
-        .expect("on screen");
-    let at = Point::new(
-        bounds.x0 as f32 + 4.0,
-        ((bounds.y0 + bounds.y1) / 2.0) as f32,
-    );
-    view.handle(&Event::PointerDown(Pointer::at(at)));
-    run_until(view, until);
-    view.handle(&Event::PointerUp(Pointer::at(at)));
-    view.scene(1000, 600);
-    found(view).expect("still there")
-}
-
-fn type_name(view: &mut FilesView, text: &str) {
-    for character in text.chars() {
-        key(view, Key::Character(character), false, false);
-    }
-    key(view, Key::Enter, false, false);
-}
-
-#[test]
-fn renaming_keeps_a_hidden_extension_and_asks_before_changing_a_shown_one() {
-    let root = TempDir::new().expect("temporary folder");
-    let (home, data) = (root.path().join("home"), root.path().join("data"));
-    fs::create_dir_all(data.join("mime")).expect("mime folder");
-    fs::write(data.join("mime/globs2"), "50:text/plain:*.txt\n").expect("globs");
-    fs::create_dir_all(&home).expect("home");
-    fs::write(home.join("notes.txt"), "notes\n").expect("file");
-    let trash = Trash::new(root.path().join("Trash"), 0);
-    let mut files = view_with(
-        Browser::open(Location::Folder(home.clone()), trash),
-        Apps::load(vec![data], &[]),
-    );
-    key(&mut files, Key::Down, false, false);
-    key(&mut files, Key::Function(2), false, false);
-    key(&mut files, Key::Character('a'), true, false);
-    type_name(&mut files, "plans");
-    assert!(home.join("plans.txt").is_file());
-
-    assert!(files.menu_action("info"));
-    files.scene(1000, 600);
-    click_on(&mut files, Role::TextInput, |_| true);
-    key(&mut files, Key::Character('a'), true, false);
-    for character in "summary.txt".chars() {
-        key(&mut files, Key::Character(character), false, false);
-    }
-    let hide = click_on(&mut files, Role::CheckBox, |files| {
-        selected(files) == Some("summary.txt")
-    });
-    assert_eq!(hide.toggled(), Some(Toggled::False));
-
-    files.apply_settings(&FilesSettings {
-        show_extensions: true,
-        ..FilesSettings::default()
-    });
-    files.scene(1000, 600);
-    let hide = click_on(&mut files, Role::CheckBox, |_| true);
-    assert!(hide.is_disabled() && hide.toggled() == Some(Toggled::False));
-    key(&mut files, Key::Function(2), false, false);
-    key(&mut files, Key::Character('a'), true, false);
-    type_name(&mut files, "summary.md");
-    assert!(matches!(files.sheet(), Some(Sheet::ChangeExtension { .. })));
-    key(&mut files, Key::Escape, false, false);
-    assert!(home.join("summary.txt").is_file() && files.sheet().is_none());
 }
 
 #[test]

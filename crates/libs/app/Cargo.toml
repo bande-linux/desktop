@@ -21,9 +21,9 @@ rustix.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
-smithay.workspace = true
 bande-compositor.workspace = true
 bande-test-bus.workspace = true
+bande-test-wayland.workspace = true
 
 [lints]
 workspace = true

@@ -18,13 +18,13 @@ const ENGLISH: &str = include_str!("../locales/en-US/bande-automount.ftl");
 
 pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
 
-pub const UDISKS: &str = "org.freedesktop.UDisks2";
-pub const UDISKS_PATH: &str = "/org/freedesktop/UDisks2";
+const UDISKS: &str = "org.freedesktop.UDisks2";
+const UDISKS_PATH: &str = "/org/freedesktop/UDisks2";
 pub const BLOCK: &str = "org.freedesktop.UDisks2.Block";
 pub const FILESYSTEM: &str = "org.freedesktop.UDisks2.Filesystem";
 const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
 const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
-pub const LOGIN1: &str = "org.freedesktop.login1";
+const LOGIN1: &str = "org.freedesktop.login1";
 const LOGIN1_SESSION: &str = "org.freedesktop.login1.Session";
 
 #[zbus::proxy(

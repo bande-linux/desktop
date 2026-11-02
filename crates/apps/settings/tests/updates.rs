@@ -9,22 +9,6 @@ const LIBC: &str = "libc6;2.42-1;arm64;debian";
 const ASPELL: &str = "aspell;0.60.8.2-5;arm64;debian";
 const SYSTEMD: &str = "systemd;259-1;arm64;debian";
 
-fn updated(flags: u64, ids: &[&str]) -> Call {
-    Call {
-        method: "UpdatePackages".to_owned(),
-        flags,
-        args: ids.iter().map(|id| (*id).to_owned()).collect(),
-    }
-}
-
-fn triggered() -> Call {
-    Call {
-        method: "Trigger".to_owned(),
-        flags: 0,
-        args: vec!["reboot".to_owned()],
-    }
-}
-
 #[test]
 fn updates_install_now_unless_they_need_the_system_restarted() {
     let bus = SessionBus::start().expect("dbus-daemon");
@@ -48,10 +32,10 @@ fn updates_install_now_unless_they_need_the_system_restarted() {
     assert_eq!(
         packagekit.take_calls(),
         [
-            updated(ONLY_TRUSTED | SIMULATE, &[ASPELL]),
-            updated(ONLY_TRUSTED, &[ASPELL]),
-            updated(ONLY_TRUSTED | ONLY_DOWNLOAD, &[LIBC]),
-            triggered(),
+            Call::update(ONLY_TRUSTED | SIMULATE, &[ASPELL]),
+            Call::update(ONLY_TRUSTED, &[ASPELL]),
+            Call::update(ONLY_TRUSTED | ONLY_DOWNLOAD, &[LIBC]),
+            Call::reboot(),
         ]
     );
 
@@ -61,9 +45,9 @@ fn updates_install_now_unless_they_need_the_system_restarted() {
     assert_eq!(
         packagekit.take_calls(),
         [
-            updated(ONLY_TRUSTED | SIMULATE, &[ASPELL]),
-            updated(ONLY_TRUSTED | ONLY_DOWNLOAD, &[ASPELL, LIBC]),
-            triggered(),
+            Call::update(ONLY_TRUSTED | SIMULATE, &[ASPELL]),
+            Call::update(ONLY_TRUSTED | ONLY_DOWNLOAD, &[ASPELL, LIBC]),
+            Call::reboot(),
         ]
     );
 }

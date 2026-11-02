@@ -14,9 +14,8 @@ bande-toolkit-platform.workspace = true
 bande-widgets.workspace = true
 
 [dev-dependencies]
-smithay.workspace = true
-bande-compositor.workspace = true
 bande-test-bus.workspace = true
+bande-test-wayland.workspace = true
 zbus.workspace = true
 
 [lints]

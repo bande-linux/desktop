@@ -23,13 +23,6 @@ const RULES: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
         </variant>
       </variantList>
     </layout>
-    <layout>
-      <configItem>
-        <name>custom</name>
-        <description>A user-defined custom Layout</description>
-      </configItem>
-      <variantList/>
-    </layout>
   </layoutList>
 </xkbConfigRegistry>
 "#;

@@ -9,50 +9,27 @@ use bande_compositor::{
 };
 use bande_test_bus::SessionBus;
 use bande_test_wayland::{
-    BLUE, ConstraintAdjustment, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
-    act_as_separate_app, roundtrip,
+    BLUE, ConstraintAdjustment, PopupRequest, RED, SeparateApp, TestClient, act_as_separate_app,
+    chord, headless, roundtrip,
 };
-use smithay::utils::Size;
-use wayland_client::protocol::wl_shm::Format;
 
 const KEY_ESC: u32 = 1;
 const KEY_A: u32 = 30;
 const KEY_ENTER: u32 = 28;
 const KEY_LEFTCTRL: u32 = 29;
 const KEY_LEFTALT: u32 = 56;
+const KEY_LEFTSHIFT: u32 = 42;
+const KEY_LEFTMETA: u32 = 125;
+const KEY_LEFT: u32 = 105;
+const KEY_RIGHT: u32 = 106;
 const KEY_DOWN: u32 = 108;
 const BTN_LEFT: u32 = 0x110;
 const MONITOR: &str = "org.freedesktop.a11y.KeyboardMonitor";
 const MONITOR_PATH: &str = "/org/freedesktop/a11y/Manager";
 
-fn tap(server: &mut Compositor, key: u32) {
-    server.key(key, true, 0);
-    server.key(key, false, 0);
-}
-
-fn window(server: &mut Compositor, app_id: &str) -> TestClient {
-    let bytes = RED.repeat(64 * 64);
-    let mut client = TestClient::connect(server);
-    client.use_seat(server);
-    client.show_window(
-        server,
-        &ShmImage {
-            width: 64,
-            height: 64,
-            stride: 256,
-            format: Format::Xrgb8888,
-            bytes: &bytes,
-        },
-    );
-    client.set_app_id(server, 0, app_id);
-    roundtrip(server, &mut [&mut client]);
-    client
-}
-
 fn focused_app() -> (Compositor, TestClient) {
-    let mut server = Compositor::new(Size::from((560, 520))).expect("headless compositor");
-    server.set_reduce_motion(true);
-    let mut editor = window(&mut server, "org.example.Editor");
+    let mut server = headless(560, 520);
+    let mut editor = TestClient::window(&mut server, "org.example.Editor");
     server.move_pointer_to((280.0, 260.0).into(), 0);
     server.press_button(BTN_LEFT, true, 0);
     server.press_button(BTN_LEFT, false, 0);
@@ -95,7 +72,7 @@ fn while_locked_no_popup_grab_or_input_method_takes_keys_from_the_lock_surface()
     );
     let clicks_before = editor.buttons().len();
 
-    tap(&mut server, KEY_A);
+    chord(&mut server, &[KEY_A]);
     server.move_pointer_to((280.0, 260.0).into(), 3);
     server.press_button(BTN_LEFT, true, 4);
     server.press_button(BTN_LEFT, false, 5);
@@ -135,7 +112,7 @@ fn only_the_screen_reader_may_grab_the_keyboard_and_it_lets_go_when_it_leaves() 
         .request_name(SCREEN_READER_NAME)
         .expect("screen reader name");
     grab(&reader).expect("the screen reader grabs the keyboard");
-    tap(&mut server, KEY_A);
+    chord(&mut server, &[KEY_A]);
     roundtrip(&mut server, &mut [&mut app]);
     assert!(app.keys().is_empty());
 
@@ -143,7 +120,7 @@ fn only_the_screen_reader_may_grab_the_keyboard_and_it_lets_go_when_it_leaves() 
     let deadline = Instant::now() + Duration::from_secs(5);
     while app.keys().is_empty() && Instant::now() < deadline {
         thread::sleep(Duration::from_millis(20));
-        tap(&mut server, KEY_A);
+        chord(&mut server, &[KEY_A]);
         roundtrip(&mut server, &mut [&mut app]);
     }
     assert!(!app.keys().is_empty());
@@ -154,8 +131,7 @@ fn a_hung_app_is_force_quit_from_the_keyboard_while_the_shell_is_hung() {
     if act_as_separate_app() {
         return;
     }
-    let mut server = Compositor::new(Size::from((560, 520))).expect("headless compositor");
-    server.set_reduce_motion(true);
+    let mut server = headless(560, 520);
     let mut bar = TestClient::connect_as_shell(&mut server);
     bar.join_shell(&mut server);
     let mut stuck = SeparateApp::launch(
@@ -163,16 +139,11 @@ fn a_hung_app_is_force_quit_from_the_keyboard_while_the_shell_is_hung() {
         "a_hung_app_is_force_quit_from_the_keyboard_while_the_shell_is_hung",
     );
     stuck.show_window_of(&mut server, 64, "org.example.Stuck");
-    let mut editor = window(&mut server, "org.example.Editor");
+    let mut editor = TestClient::window(&mut server, "org.example.Editor");
     editor.inhibit_shortcuts(&mut server, 0);
     roundtrip(&mut server, &mut [&mut editor]);
 
-    for key in [KEY_LEFTCTRL, KEY_LEFTALT, KEY_ESC] {
-        server.key(key, true, 0);
-    }
-    for key in [KEY_ESC, KEY_LEFTALT, KEY_LEFTCTRL] {
-        server.key(key, false, 0);
-    }
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTALT, KEY_ESC]);
     let start = Duration::from_secs(10);
     server.watchdog_tick(start);
     roundtrip(&mut server, &mut [&mut editor]);
@@ -182,10 +153,10 @@ fn a_hung_app_is_force_quit_from_the_keyboard_while_the_shell_is_hung() {
         server.force_quit_rows(),
         ["Editor", "Stuck (Not Responding)"]
     );
-    tap(&mut server, KEY_DOWN);
-    tap(&mut server, KEY_ENTER);
+    chord(&mut server, &[KEY_DOWN]);
+    chord(&mut server, &[KEY_ENTER]);
     assert!(server.force_quit_asks());
-    tap(&mut server, KEY_ENTER);
+    chord(&mut server, &[KEY_ENTER]);
     let deadline = Instant::now() + Duration::from_secs(10);
     while server
         .windows()
@@ -206,4 +177,31 @@ fn a_hung_app_is_force_quit_from_the_keyboard_while_the_shell_is_hung() {
             .iter()
             .all(|(key, _)| ![KEY_ESC, KEY_DOWN, KEY_ENTER].contains(key))
     );
+}
+
+#[test]
+fn a_window_on_a_workspace_out_of_view_is_suspended() {
+    let (mut server, mut editor) = focused_app();
+    let mut viewer = TestClient::window(&mut server, "org.example.Viewer");
+    server.press_button(BTN_LEFT, true, 0);
+    server.press_button(BTN_LEFT, false, 0);
+    roundtrip(&mut server, &mut [&mut editor, &mut viewer]);
+    assert!(viewer.keyboard_focus_on(0));
+    chord(
+        &mut server,
+        &[KEY_LEFTMETA, KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_RIGHT],
+    );
+    let settle = |server: &mut Compositor, clients: &mut [&mut TestClient]| {
+        for frame in 1..120 {
+            server.animate(Duration::from_millis(16 * frame));
+        }
+        roundtrip(server, clients);
+    };
+    settle(&mut server, &mut [&mut editor, &mut viewer]);
+    assert!(!viewer.is_suspended(0));
+    assert!(editor.is_suspended(0));
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTCTRL, KEY_LEFT]);
+    settle(&mut server, &mut [&mut editor, &mut viewer]);
+    assert!(!editor.is_suspended(0));
+    assert!(viewer.is_suspended(0));
 }

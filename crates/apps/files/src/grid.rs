@@ -30,6 +30,12 @@ pub(crate) struct GridScroll {
     gesture: Option<String>,
 }
 
+impl GridScroll {
+    pub(crate) fn shows_all(&self, group: &str) -> bool {
+        self.expanded.contains(group)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct GroupLayout {
     pub start: usize,
@@ -588,6 +594,18 @@ impl FilesView {
                 TextAlign::Start,
             );
             let baseline = top + GROUP_HEADING - 8.0;
+            self.headings.push((
+                clipped(
+                    Rect::new(
+                        content.x + PADDING,
+                        top,
+                        content.width - 2.0 * PADDING,
+                        GROUP_HEADING,
+                    ),
+                    content,
+                ),
+                index,
+            ));
             shown.push(Item::Text {
                 origin: Point::new(
                     content.x + PADDING + LABEL_INSET,

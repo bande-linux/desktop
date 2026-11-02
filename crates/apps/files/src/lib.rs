@@ -1,3 +1,4 @@
+mod access;
 mod batch_rename;
 mod browser;
 mod context;

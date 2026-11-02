@@ -97,6 +97,7 @@ impl CpuRenderer {
             &scene.items,
             scale,
             (region.x, region.y),
+            None,
         );
         self.outlines.end_frame();
         self.context.flush();
@@ -153,6 +154,20 @@ impl Canvas for CpuCanvas<'_> {
     }
 
     fn pop_layer(&mut self) {
+        self.context.pop_layer();
+    }
+
+    fn push_clip_path(&mut self, path: &BezPath) {
+        self.context.push_clip_path(path);
+    }
+
+    fn pop_clip(&mut self) {
+        self.context.pop_clip();
+    }
+
+    fn clear_path(&mut self, path: &BezPath) {
+        self.context
+            .push_layer(Some(path), Some(draw::CLEAR), None, None, None);
         self.context.pop_layer();
     }
 

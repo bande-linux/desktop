@@ -22,6 +22,7 @@ mod shortcut;
 mod slider;
 mod stack;
 mod stepper;
+mod surface_view;
 mod table;
 mod text_field;
 mod text_view;
@@ -62,6 +63,7 @@ pub use shortcut::{Shortcut, ShortcutText, parse_shortcut, shortcut_label, short
 pub use slider::{SLIDER_HEIGHT, Slider};
 pub use stack::{Axis, Stack};
 pub use stepper::{STEPPER_SIZE, Stepper};
+pub use surface_view::{RELEASE_CHORD, SurfaceInput, SurfaceView};
 pub use table::{Cell, Column, ROW_HEIGHT, Row, Sort, Table, access_rect, group_heading};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
 pub use text_view::TextView;
@@ -82,7 +84,8 @@ use bande_graphics::{
     TextSystem, grown_line,
 };
 pub use bande_graphics::{
-    Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
+    Captured, Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase,
+    ScrollSource, SurfaceId, SurfaceScaling,
 };
 pub use control::{focus_ring, focus_ring_for};
 
@@ -150,6 +153,7 @@ pub struct Context {
     pub window_active: bool,
     pub reduce_motion: bool,
     pub caps_lock: bool,
+    pub display_scale: f64,
     focus: Option<WidgetId>,
     now: Instant,
     start: Instant,
@@ -160,6 +164,21 @@ pub struct Context {
     emoji_picker: bool,
     menu: Option<(Menu, Point)>,
     drag: Option<String>,
+    capture: Option<CaptureRequest>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PointerCapture {
+    #[default]
+    Free,
+    Confined,
+    Locked,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CaptureRequest {
+    Start { area: Rect, pointer: PointerCapture },
+    End,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -179,6 +198,7 @@ impl Context {
             window_active: true,
             reduce_motion: false,
             caps_lock: false,
+            display_scale: 1.0,
             focus: None,
             now: Instant::now(),
             start: Instant::now(),
@@ -189,7 +209,16 @@ impl Context {
             emoji_picker: false,
             menu: None,
             drag: None,
+            capture: None,
         }
+    }
+
+    pub fn capture_input(&mut self, area: Rect, pointer: PointerCapture) {
+        self.capture = Some(CaptureRequest::Start { area, pointer });
+    }
+
+    pub fn release_input(&mut self) {
+        self.capture = Some(CaptureRequest::End);
     }
 
     pub fn copy(&mut self, text: &str) {
@@ -348,6 +377,8 @@ pub struct Ui {
     tooltips: Tooltips,
     drag_source: Option<WidgetId>,
     drop_owner: Option<WidgetId>,
+    input_owner: Option<WidgetId>,
+    capture_request: Option<CaptureRequest>,
 }
 
 fn find_mut(widget: &mut dyn Widget, id: WidgetId) -> Option<&mut dyn Widget> {
@@ -494,6 +525,8 @@ impl Ui {
             tooltips: Tooltips::default(),
             drag_source: None,
             drop_owner: None,
+            input_owner: None,
+            capture_request: None,
         }
     }
 
@@ -580,6 +613,7 @@ impl Ui {
     fn present(&mut self, widget: Box<dyn Widget>, floating: bool) {
         self.sync_event_clock();
         self.cancel_capture();
+        self.end_input_capture();
         let previous_focus = self.cx.focus.take();
         let mut shown = Animated::new(0.0);
         self.cx.animate(&mut shown, 1.0, Spring::QUICK);
@@ -847,7 +881,36 @@ impl Ui {
                 .cx
                 .focus
                 .is_some_and(|target| self.deliver(target, event)),
+            Event::Captured(captured) => {
+                let owner = self
+                    .input_owner
+                    .filter(|owner| self.lookup(*owner).is_some());
+                let Some(owner) = owner else {
+                    self.input_owner = None;
+                    if *captured != Captured::Ended {
+                        self.capture_request = Some(CaptureRequest::End);
+                    }
+                    return false;
+                };
+                if *captured == Captured::Ended {
+                    self.input_owner = None;
+                }
+                self.deliver(owner, event)
+            }
         }
+    }
+
+    fn end_input_capture(&mut self) {
+        let Some(owner) = self.input_owner else {
+            return;
+        };
+        self.deliver(owner, &Event::Captured(Captured::Ended));
+        self.input_owner = None;
+        self.capture_request = Some(CaptureRequest::End);
+    }
+
+    pub fn take_capture_request(&mut self) -> Option<CaptureRequest> {
+        self.capture_request.take()
     }
 
     fn press_equivalent(&mut self, key: Key) -> bool {
@@ -1092,6 +1155,13 @@ impl Ui {
         let handled = widget.handle(&mut self.cx, event);
         if self.cx.drag.is_some() {
             self.drag_source = Some(target);
+        }
+        if let Some(request) = self.cx.capture.take() {
+            self.input_owner = match request {
+                CaptureRequest::Start { .. } => Some(target),
+                CaptureRequest::End => None,
+            };
+            self.capture_request = Some(request);
         }
         self.take_widget_menu(target);
         self.dismiss_finished_sheet();

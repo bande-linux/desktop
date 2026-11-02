@@ -320,10 +320,6 @@ impl GpuRenderer {
             scene: &mut self.scene,
             resources: &mut self.resources,
         };
-        if let Some(regions) = damage {
-            canvas.set_transform(Affine::IDENTITY);
-            canvas.push_clip_layer(&outline(regions));
-        }
         draw::encode(
             &mut canvas,
             &mut self.outlines,
@@ -331,10 +327,8 @@ impl GpuRenderer {
             &scene.items,
             scale,
             (0, 0),
+            damage.map(outline),
         );
-        if damage.is_some() {
-            canvas.pop_layer();
-        }
         self.outlines.end_frame();
         let cleared: Vec<RectU16> = damage
             .unwrap_or_default()
@@ -571,6 +565,20 @@ impl Canvas for GpuCanvas<'_> {
     }
 
     fn pop_layer(&mut self) {
+        self.scene.pop_layer();
+    }
+
+    fn push_clip_path(&mut self, path: &BezPath) {
+        self.scene.push_clip_path(path);
+    }
+
+    fn pop_clip(&mut self) {
+        self.scene.pop_clip();
+    }
+
+    fn clear_path(&mut self, path: &BezPath) {
+        self.scene
+            .push_layer(Some(path), Some(draw::CLEAR), None, None, None);
         self.scene.pop_layer();
     }
 

@@ -1,7 +1,8 @@
 use std::time::{Duration, Instant};
 
 use bande_graphics::{
-    Cursor, Event, Key, Modifiers, Point, Pointer, PointerButton, Scroll, ScrollPhase, ScrollSource,
+    Captured, Cursor, Event, Key, Modifiers, Point, Pointer, PointerButton, Scroll, ScrollPhase,
+    ScrollSource,
 };
 use wayland_client::protocol::wl_keyboard::{self, KeymapFormat, WlKeyboard};
 use wayland_client::protocol::wl_pointer::{self, WlPointer};
@@ -99,6 +100,8 @@ pub(crate) struct Input {
     keyboard_elsewhere: bool,
     keyboard_here: bool,
     focused: bool,
+    raw_keys: bool,
+    cursor_hidden: bool,
 }
 
 impl Input {
@@ -260,6 +263,12 @@ impl Input {
     }
 
     fn show_cursor(&mut self) {
+        if self.cursor_hidden {
+            if let (Some(pointer), Some(serial)) = (&self.pointer, self.enter_serial) {
+                pointer.set_cursor(serial, None, 0, 0);
+            }
+            return;
+        }
         let (Some(device), Some(serial)) = (&self.cursor_device, self.enter_serial) else {
             return;
         };
@@ -273,6 +282,23 @@ impl Input {
     pub(crate) fn set_cursor(&mut self, cursor: Cursor) {
         self.cursor = cursor;
         self.show_cursor();
+    }
+
+    pub(crate) fn set_cursor_hidden(&mut self, hidden: bool) {
+        if self.cursor_hidden != hidden {
+            self.cursor_hidden = hidden;
+            self.shown_cursor = None;
+            self.show_cursor();
+        }
+    }
+
+    pub(crate) fn set_raw_keys(&mut self, raw: bool) {
+        self.raw_keys = raw;
+        self.repeat = None;
+    }
+
+    pub(crate) fn wl_pointer(&self) -> Option<WlPointer> {
+        self.pointer.clone()
     }
 
     fn pointer(&self, position: Point) -> Pointer {
@@ -617,6 +643,7 @@ impl Dispatch<WlKeyboard, ()> for State {
             wl_keyboard::Event::Leave { surface, .. } => {
                 input.repeat = None;
                 input.keyboard_here = false;
+                state.end_capture();
                 state.release_modifiers();
                 let menu_open = !state.popup_surfaces.is_empty();
                 if state.popup_level(&surface).is_none() && !menu_open {
@@ -663,6 +690,16 @@ impl Dispatch<WlKeyboard, ()> for State {
                 ..
             } => {
                 input.serial = Some(serial);
+                if input.raw_keys {
+                    let pressed = key_state == wl_keyboard::KeyState::Pressed;
+                    state
+                        .events
+                        .push(WindowEvent::Input(Event::Captured(Captured::Key {
+                            code: key,
+                            pressed,
+                        })));
+                    return;
+                }
                 let keycode = Keycode::new(key + EVDEV_OFFSET);
                 if key_state == wl_keyboard::KeyState::Pressed {
                     input.keyboard_initiated = true;

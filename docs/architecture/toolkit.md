@@ -266,6 +266,32 @@ writes a hex value, a corner radius or a font name of its own.
   outwards, and reports the hovered widget's cursor, which `Window::set_cursor` shows through
   `wp_cursor_shape_v1`. A close request (close button, Ctrl+W in the app, Alt+F4) asks `App::should_close`, so an
   app can keep its window open, ask first or close a tab instead; `Window::close` closes it.
+- **External surfaces.** Pixels an app gets from elsewhere (a VM's display, later video) go
+  to the compositor without passing through the app's scene. `Window::create_external_surface`
+  makes an `ExternalSurface`: a desync `wl_subsurface` with a `wp_viewport` and an empty input
+  region. `show_shm(fd, ShmLayout)` wraps the app's own memory in a `wl_shm` buffer without a
+  copy, `show_dmabuf(&Dmabuf)` imports a dmabuf through `zwp_linux_dmabuf_v1` (`flipped` for
+  bottom-up GL scanouts), and `damage(&[Region])` commits the changed rectangles of the current
+  buffer. A frame wakes neither the app's scene nor the window's renderer.
+  `ui::SurfaceView::new(surface.id(), label, on_input)` places it: it paints an
+  `Item::Surface`, which the renderers draw as black letterboxing around a transparent hole
+  (cut through the enclosing clips, so it keeps the sheet's rounded corners). The window puts
+  the subsurface below itself under the hole (above it when its GPU surface is opaque), leaves
+  the hole out of its opaque region, and positions and sizes it on the frame that moved it, so
+  sheets, tooltips and the capture hint draw over the pixels. `SurfaceScaling::Fit` keeps the
+  aspect ratio, `Native` shows one buffer pixel per device pixel (shrunk only when it does not
+  fit); `set_size(width, height)` gives the buffer's size.
+- **Input pass-through and capture.** `SurfaceView` sends `SurfaceInput` to `on_input`: the
+  pointer in buffer pixels, buttons, scrolling, and while captured raw evdev key codes and
+  relative motion. With `.capture_on_click(PointerCapture::{Free, Confined, Locked})` a click
+  captures: the window inhibits the compositor's shortcuts (`zwp_keyboard_shortcuts_inhibit_v1`,
+  so Super and Alt+Tab reach the guest), confines or locks the pointer
+  (`zwp_pointer_constraints_v1`, with `zwp_relative_pointer_v1` motion while locked, the cursor
+  hidden), and delivers every key as `Event::Captured(Captured::Key)` instead of text. As in
+  macOS VM apps, Ctrl+Alt (`RELEASE_CHORD`) releases, and a hint "Press Ctrl+Alt to release"
+  shows for 3 s; leaving the window, losing the lock or a sheet appearing releases too, and held
+  keys are sent up first. Widgets ask through `Context::capture_input`/`release_input`;
+  `Window::capture_input`/`release_input` do it for apps without `Ui`.
 
 Since `wayland-backend` is built with `client_system`, every Wayland client in a workspace
 build, `bande-test-wayland` included, goes through libwayland.

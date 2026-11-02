@@ -2,13 +2,14 @@ use std::collections::HashMap;
 use std::sync::Weak;
 use vello_cpu::color::{AlphaColor, Srgb};
 use vello_cpu::kurbo::{self, Affine, BezPath, Shape as _, Stroke, StrokeOpts};
-use vello_cpu::peniko::Gradient;
+use vello_cpu::peniko::{BlendMode, Compose, Gradient, Mix};
 
 use vello_cpu::peniko::{ImageQuality, ImageSampler};
 use vello_cpu::{Glyph, ImageId, ImageSource, PaintType};
 
 use crate::outline::{GlyphOutlines, TOLERANCE};
 use crate::scene::{Image, Item, Paint, Path, PathElement, Pixels, Shape};
+use crate::surface::surface_area;
 use crate::text::GlyphRun;
 use bande_design::Color;
 
@@ -22,8 +23,13 @@ pub(crate) trait Canvas {
     fn push_clip_layer(&mut self, path: &BezPath);
     fn push_opacity_layer(&mut self, alpha: f32);
     fn pop_layer(&mut self);
+    fn push_clip_path(&mut self, path: &BezPath);
+    fn pop_clip(&mut self);
+    fn clear_path(&mut self, path: &BezPath);
     fn fill_glyphs(&mut self, run: &GlyphRun, glyphs: &[Glyph]);
 }
+
+pub(crate) const CLEAR: BlendMode = BlendMode::new(Mix::Normal, Compose::Clear);
 
 pub(crate) fn color(color: Color) -> AlphaColor<Srgb> {
     AlphaColor::from_rgba8(color.r, color.g, color.b, color.a)
@@ -131,10 +137,51 @@ pub(crate) fn encode(
     items: &[Item],
     scale: f64,
     origin: (u32, u32),
+    outer_clip: Option<BezPath>,
 ) {
     let base =
         Affine::translate((-f64::from(origin.0), -f64::from(origin.1))) * Affine::scale(scale);
-    encode_at(canvas, outlines, image_ids, items, base);
+    let mut layers = Layers::default();
+    if let Some(clip) = outer_clip {
+        canvas.set_transform(Affine::IDENTITY);
+        canvas.push_clip_layer(&clip);
+        layers.clips.push((clip, Affine::IDENTITY));
+    }
+    encode_at(canvas, outlines, image_ids, &mut layers, items, base);
+    if !layers.clips.is_empty() {
+        canvas.pop_layer();
+    }
+}
+
+#[derive(Default)]
+struct Layers {
+    clips: Vec<(BezPath, Affine)>,
+    isolated: bool,
+}
+
+fn punch(canvas: &mut impl Canvas, layers: &Layers, hole: &BezPath, base: Affine) {
+    let reach = !layers.isolated;
+    if reach {
+        for _ in &layers.clips {
+            canvas.pop_layer();
+        }
+        for (clip, at) in &layers.clips {
+            canvas.set_transform(*at);
+            canvas.push_clip_path(clip);
+        }
+    }
+    canvas.set_transform(base);
+    canvas.clear_path(hole);
+    if reach {
+        for _ in &layers.clips {
+            canvas.pop_clip();
+        }
+        for (clip, at) in &layers.clips {
+            canvas.set_transform(*at);
+            canvas.push_clip_layer(clip);
+        }
+        canvas.set_transform(base);
+    }
 }
 
 fn bezier(path: &Path) -> BezPath {
@@ -164,6 +211,7 @@ fn encode_at(
     canvas: &mut impl Canvas,
     outlines: &mut GlyphOutlines,
     image_ids: &ImageIds,
+    layers: &mut Layers,
     items: &[Item],
     base: Affine,
 ) {
@@ -228,20 +276,45 @@ fn encode_at(
                 }
             }
             Item::Clip { shape, items } => {
-                canvas.push_clip_layer(&path(shape));
-                encode_at(canvas, outlines, image_ids, items, base);
+                let clip = path(shape);
+                canvas.push_clip_layer(&clip);
+                layers.clips.push((clip, base));
+                encode_at(canvas, outlines, image_ids, layers, items, base);
+                layers.clips.pop();
                 canvas.set_transform(base);
                 canvas.pop_layer();
             }
             Item::Translate { offset, items } => {
-                encode_at(canvas, outlines, image_ids, items, snapped(base, *offset));
+                encode_at(
+                    canvas,
+                    outlines,
+                    image_ids,
+                    layers,
+                    items,
+                    snapped(base, *offset),
+                );
                 canvas.set_transform(base);
             }
             Item::Opacity { alpha, items } => {
                 canvas.push_opacity_layer(*alpha);
-                encode_at(canvas, outlines, image_ids, items, base);
+                let isolated = std::mem::replace(&mut layers.isolated, true);
+                encode_at(canvas, outlines, image_ids, layers, items, base);
+                layers.isolated = isolated;
                 canvas.set_transform(base);
                 canvas.pop_layer();
+            }
+            Item::Surface {
+                frame,
+                size,
+                scaling,
+                ..
+            } => {
+                canvas.set_paint(color(Color::BLACK).into());
+                canvas.fill_path(&path(&Shape::rect(*frame)));
+                let scale = base.as_coeffs()[0];
+                if let Some(area) = surface_area(*frame, *size, *scaling, scale) {
+                    punch(canvas, layers, &path(&Shape::rect(area)), base);
+                }
             }
             Item::Line {
                 from,
@@ -290,7 +363,7 @@ fn encode_at(
                     * Affine::translate(pivot)
                     * Affine::scale(f64::from(*factor))
                     * Affine::translate(-pivot);
-                encode_at(canvas, outlines, image_ids, items, scaled);
+                encode_at(canvas, outlines, image_ids, layers, items, scaled);
                 canvas.set_transform(base);
             }
             Item::Image { rect: area, image } => {

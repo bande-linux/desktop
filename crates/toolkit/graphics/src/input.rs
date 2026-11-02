@@ -136,6 +136,13 @@ pub enum Cursor {
     ResizeBottomRight,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Captured {
+    Key { code: u32, pressed: bool },
+    Motion { delta: Point, unaccelerated: Point },
+    Ended,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     PointerDown(Pointer),
@@ -154,4 +161,5 @@ pub enum Event {
         text: String,
         cursor: Option<(usize, usize)>,
     },
+    Captured(Captured),
 }

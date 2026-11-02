@@ -1,5 +1,6 @@
 pub mod access;
 pub mod app_chooser;
+pub mod background;
 pub mod capture;
 pub mod dialog_process;
 pub mod email;

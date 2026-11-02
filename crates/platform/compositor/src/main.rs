@@ -8,8 +8,8 @@ use bande_compositor::{
     FrameScheduler, GREETER, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
     SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
     export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
-    follow_session, follow_shutdown, follow_sleep, notify_service_manager, serve_keyboard_monitor,
-    user_config, watchdog_keepalive_interval,
+    follow_session, follow_shutdown, follow_sleep, notify_service_manager, serve_app_states,
+    serve_keyboard_monitor, user_config, watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, OBJECT_PATH};
 use bande_datetime::ClockChanges;
@@ -527,6 +527,10 @@ fn follow_session_bus<O: 'static>(
     match serve_keyboard_monitor(bus) {
         Ok(monitor) => app.compositor.monitor_keyboard(monitor),
         Err(error) => tracing::warn!("assistive technologies cannot watch the keyboard: {error}"),
+    }
+    match serve_app_states(bus) {
+        Ok(states) => app.compositor.publish_app_states(states),
+        Err(error) => tracing::warn!("the portal cannot see which apps have windows: {error}"),
     }
     follow(
         handle,

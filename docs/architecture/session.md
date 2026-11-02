@@ -527,10 +527,10 @@ and by PackageKit's `GetUpdateDetail` restart answer. **Offline** (installed at 
 updates to `greetd` or `libpam*`, and anything else PackageKit says needs a system restart.
 **Boot** (installed now, "Restart to finish updating"): other kernels, `firmware-*`,
 `initramfs-tools` and bootloaders. Everything else is **live**. Update Now first simulates the live
-set; if apt would pull in an offline package, or the user may not update without a password
-(polkit `system-update`, which PackageKit grants active sudo members), everything goes offline:
-download, `Offline.Trigger`, "Restart to install n updates", with no password. Otherwise the live
-set installs now with `UpdatePackages`, then the offline set is downloaded and triggered.
+set; if apt would pull in an offline package, everything goes offline: download, `Offline.Trigger`,
+"Restart to install n updates". Otherwise the live set installs now with `UpdatePackages`, which
+asks for a password through the polkit agent unless polkit grants `system-update` (PackageKit grants
+it to active sudo members), then the offline set is downloaded and triggered.
 needrestart (recommended by `bande-desktop`, `/etc/needrestart/conf.d/bande.conf`) restarts the
 system services an update replaced from apt's hook, never greetd, the buses, logind, getty,
 `user@`, polkit or PackageKit. Settings then looks at the user's own processes that map a deleted
@@ -564,5 +564,6 @@ up to date"): the daily timer's run downloads every update in the background (Pa
 `ONLY_DOWNLOAD`, `flatpak update --no-deploy`), waits for the user to be idle for five minutes
 (`ext-idle-notify-v1`, which honours idle inhibitors; no polling), checks again and installs the
 live and Flatpak updates when polkit lets the user update without a password; if those would pull
-in an offline package they wait as well. Boot and offline updates are never installed by
-themselves: a notification says they are ready and opens Software Update.
+in an offline package they wait as well. Boot and offline updates, and live ones that need a
+password, are never installed by themselves: a notification says how many are ready to install and
+how many of them need a restart, and opens Software Update.

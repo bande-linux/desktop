@@ -611,18 +611,18 @@ impl Program for Files {
     }
 
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
-        let Some(window) = window else {
-            if command == menu_bar::NEW_WINDOW {
-                self.reopen(cx);
-            }
-            return;
-        };
         if command == menu_bar::CLEAR_RECENT_FOLDERS {
             self.recent_folders.clear();
             self.remember_recent_folders();
             cx.refresh_menus();
             return;
         }
+        let Some(window) = window.filter(|window| cx.view(*window).is_some()) else {
+            if command == menu_bar::NEW_WINDOW {
+                self.reopen(cx);
+            }
+            return;
+        };
         let recent = command
             .strip_prefix(menu_bar::RECENT_FOLDER)
             .and_then(|index| index.parse::<usize>().ok())

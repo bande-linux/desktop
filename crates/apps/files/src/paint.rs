@@ -148,6 +148,7 @@ impl FilesView {
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
         self.size = (width as f32, height as f32);
         self.hits.clear();
+        self.headings.clear();
         self.layout_controls();
         self.refresh_navigation();
         if self.mode == ViewMode::List {
@@ -164,6 +165,7 @@ impl FilesView {
         self.paint_sidebar(&mut items);
         let mut content = Vec::new();
         self.paint_columns(&mut content);
+        self.learn_kinds();
         self.paint_scope_bar(&mut content);
         self.paint_tab_bar(&mut content);
         self.paint_path_bar(&mut content);

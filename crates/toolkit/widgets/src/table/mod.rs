@@ -1116,12 +1116,8 @@ impl Table {
         let id = self
             .id
             .part(u64::from(u32::MAX - 2) - (self.columns.len() + heading) as u64);
-        let mut node = Node::new(Role::Heading);
-        node.set_label(title.clone());
-        node.set_level(2);
-        node.set_bounds(access_rect(bounds));
         parts.children.push(id);
-        parts.nodes.push((id, node));
+        parts.nodes.push((id, group_heading(title, bounds)));
     }
 
     fn row_node(&self, index: usize, row: &Line, parts: &mut Parts, bounds: Rect) {
@@ -1165,7 +1161,15 @@ impl Table {
     }
 }
 
-fn access_rect(rect: Rect) -> accesskit::Rect {
+pub fn group_heading(title: &str, bounds: Rect) -> Node {
+    let mut node = Node::new(Role::Heading);
+    node.set_label(title);
+    node.set_level(2);
+    node.set_bounds(access_rect(bounds));
+    node
+}
+
+pub fn access_rect(rect: Rect) -> accesskit::Rect {
     accesskit::Rect {
         x0: f64::from(rect.x),
         y0: f64::from(rect.y),

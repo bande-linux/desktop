@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use web_atoms::{Atom, AtomTable, Namespace};
+use web_css::font_face::FontFace;
 use web_css::media::{MediaEnvironment, MediaList};
 use web_css::properties::DeclarationBlock;
 use web_css::selectors::{
@@ -66,6 +67,7 @@ pub struct Stylist {
     pub(crate) viewport: Viewport,
     pub(crate) pseudos: bool,
     layers: Vec<Box<[Atom]>>,
+    font_faces: Vec<(FontFace, Box<[u32]>)>,
 }
 
 struct Builder<'a> {
@@ -99,6 +101,7 @@ impl Stylist {
             viewport,
             pseudos: false,
             layers: Vec::new(),
+            font_faces: Vec::new(),
         };
         let user_agent = parse_stylesheet(UA_SHEET, atoms);
         stylist.add(user_agent, Origin::UserAgent, 0);
@@ -159,14 +162,25 @@ impl Stylist {
     }
 
     pub(crate) fn active(&self, rule: u32) -> bool {
-        self.rules.get(rule as usize).is_some_and(|rule| {
-            rule.media.iter().all(|&media| {
-                self.media_matches
-                    .get(media as usize)
-                    .copied()
-                    .unwrap_or(false)
-            })
+        self.rules
+            .get(rule as usize)
+            .is_some_and(|rule| self.media_active(&rule.media))
+    }
+
+    fn media_active(&self, media: &[u32]) -> bool {
+        media.iter().all(|&media| {
+            self.media_matches
+                .get(media as usize)
+                .copied()
+                .unwrap_or(false)
         })
+    }
+
+    pub fn font_faces(&self) -> impl Iterator<Item = &FontFace> {
+        self.font_faces
+            .iter()
+            .filter(|(_, media)| self.media_active(media))
+            .map(|(face, _)| face)
     }
 
     pub fn heap_bytes(&self) -> usize {
@@ -302,6 +316,11 @@ impl Builder<'_> {
                     let parent = self.layer_path(layer);
                     let layer = self.layer(parent.as_deref(), name.as_ref());
                     self.add_rules(rules, origin, layer, media);
+                }
+                CssRule::FontFace(face) => {
+                    if !face.family.is_empty() && !face.sources.is_empty() {
+                        self.stylist.font_faces.push((*face, media.into()));
+                    }
                 }
                 CssRule::LayerStatement(names) => {
                     let parent = self.layer_path(layer);

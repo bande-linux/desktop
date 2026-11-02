@@ -21,6 +21,13 @@ The entry points below are stable; the app and `tools/conformance` drive them.
   `add_stylesheets`), so the app resolves every link against the document. `add_images(&[(link,
   bytes)])` decodes them (PNG, JPEG, WebP, GIF) into premultiplied RGBA shared through `Arc` and
   lays out again. The display list's `images` hold the same `Arc`s.
+- Web fonts: `font_links()` lists `@font-face` `src` URLs still missing, only for faces whose
+  family the page uses and whose `unicode-range` covers its text, and the next source once one
+  fails. Sheet URLs are rebased like images. `add_fonts(&[(link, bytes)], fonts)` registers WOFF2,
+  WOFF, TTF or OTF for this page only and lays out again; text shows in fallback fonts until then.
+  A page holds at most 64 MB of fonts (`memory().fonts`), and a font decodes to at most 32 MB.
+  `load_fonts_from(directory, fonts)` does the same from disk. `release(fonts)` drops the page's
+  fonts from the shared `Fonts`; call it before dropping the page.
 - Hover: `hover_at(x, y, fonts)` or `set_hover(node, fonts)` restyle only what `:hover` rules
   can reach and return whether to repaint; `restyled()` counts the elements restyled.
 - `Fonts::new()` scans the system fonts once; keep one per thread and reuse it across pages.

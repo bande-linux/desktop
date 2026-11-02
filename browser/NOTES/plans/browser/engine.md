@@ -183,6 +183,12 @@ paragraph text is kept after shaping, and the shaped vectors are trimmed to leng
 shaped words are cached per font, size and direction. `tools/bench` measures the same stages on its
 generated article.
 
+Web fonts decode in `web-text` (`decode_font`: WOFF2 with the glyf, loca and hmtx transforms,
+WOFF, TTF and OTF; fuzzed). Each page registers its `@font-face` faces in the shared `Fonts` under
+private family aliases, one per family and `unicode-range`, so pages never see each other's fonts,
+and `release` unregisters them. Only faces the page uses are fetched, and layout never waits for
+them.
+
 Styles are shared three ways: siblings with the same name and classes reuse a style after
 revalidating the selectors that depend on attributes, position or siblings; elements with the same
 parent style and the same matched rules reuse one computed style (the Rust article's 9.7k elements
@@ -193,7 +199,7 @@ about 12 ms.
 
 - **Entry points:** `parse_stylesheet(css, atoms)` gives a `Stylesheet` of `CssRule`s (style rules
   with nested rules, `@media`, `@supports` evaluated at parse time, `@container`, `@layer`,
-  `@import`, `@font-face` descriptors as text, `@keyframes`); `@namespace` fills `namespaces`.
+  `@import`, `@font-face` as a parsed `FontFace`, `@keyframes`); `@namespace` fills `namespaces`.
   `parse_style_attribute` gives a `DeclarationBlock`; `decode_stylesheet` turns bytes into text
   by BOM, protocol label, `@charset` and environment encoding.
 - **Properties:** `properties.rs` (crate root) is the table; `build.rs` generates `LonghandId`

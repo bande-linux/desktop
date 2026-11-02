@@ -57,9 +57,10 @@ compositor and finds its heading and a link over AT-SPI.
 
 ## Fuzzing and security
 
-- **Fuzzing:** cargo-fuzz targets for the HTML tokenizer and tree builder, the XML parser, the CSS parser, the
-  selector matcher, HTTP response handling, cookies, image decoding through our cache, and every
-  IPC message. They run on the mini between merges and aren't counted as tests.
+- **Fuzzing:** cargo-fuzz targets for the HTML tokenizer and tree builder, the XML parser, the CSS
+  parser, the selector matcher, HTTP response handling, cookies, image decoding through our cache,
+  WOFF and WOFF2 font decoding, and every IPC message. They run on the mini between merges and
+  aren't counted as tests.
 - **Advisories and upstreams:** `cargo audit` and `cargo deny` (licences, advisories, duplicate
   crates) on every merge. An agent watches RustSec and the dependencies' releases, and WPT and
   the specs for changes.

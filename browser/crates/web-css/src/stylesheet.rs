@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use web_atoms::{Atom, AtomTable};
 
+use crate::font_face::{FontFace, descriptor};
 use crate::media::MediaList;
 use crate::parser::{Delimiters, ParseError, ParseResult, Parser};
 use crate::properties::DeclarationBlock;
@@ -43,7 +44,7 @@ pub enum CssRule {
     Layer(Option<LayerName>, Vec<CssRule>),
     LayerStatement(Box<[LayerName]>),
     Import(Box<ImportRule>),
-    FontFace(Box<[(Box<str>, Box<str>)]>),
+    FontFace(Box<FontFace>),
     Keyframes(Box<str>, Box<[Keyframe]>),
 }
 
@@ -418,7 +419,7 @@ impl<'i> RuleHandler<'i> for RuleParser<'_> {
             AtPrelude::FontFace => {
                 let mut descriptors = FontFaceDescriptors::default();
                 for _ in BlockContentsParser::new(input, &mut descriptors) {}
-                CssRule::FontFace(descriptors.0.into_boxed_slice())
+                CssRule::FontFace(Box::new(descriptors.0))
             }
             AtPrelude::Keyframes(name) => {
                 let mut keyframes = KeyframesParser {
@@ -490,7 +491,7 @@ impl<'i> RuleHandler<'i> for RuleParser<'_> {
 }
 
 #[derive(Default)]
-struct FontFaceDescriptors(Vec<(Box<str>, Box<str>)>);
+struct FontFaceDescriptors(FontFace);
 
 impl<'i> RuleHandler<'i> for FontFaceDescriptors {
     type AtPrelude = ();
@@ -498,12 +499,9 @@ impl<'i> RuleHandler<'i> for FontFaceDescriptors {
     type Item = ();
 
     fn declaration(&mut self, name: Cow<'i, str>, input: &mut Parser<'i, '_>) -> ParseResult<()> {
-        let value = rest_as_text(input);
-        if value.is_empty() {
-            return Err(ParseError::Invalid);
-        }
-        self.0
-            .push((name.to_ascii_lowercase().into(), value.into()));
+        let mut face = self.0.clone();
+        descriptor(&mut face, &name.to_ascii_lowercase(), input)?;
+        self.0 = face;
         Ok(())
     }
 }

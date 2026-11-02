@@ -2011,6 +2011,8 @@ dependencies = [
 name = "web-text"
 version = "0.1.0"
 dependencies = [
+ "brotli-decompressor",
+ "flate2",
  "fontique",
  "harfrust",
  "icu_properties",

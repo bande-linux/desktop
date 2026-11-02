@@ -8,6 +8,8 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+brotli-decompressor.workspace = true
+flate2.workspace = true
 fontique.workspace = true
 harfrust.workspace = true
 icu_properties.workspace = true

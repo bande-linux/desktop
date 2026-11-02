@@ -699,7 +699,7 @@ impl ShapedParagraph {
                 Some(atomic) => (atomic.ascent, atomic.descent),
                 None => vertical_extent(
                     fonts,
-                    Some(span.font),
+                    style.line_height.is_none().then_some(span.font),
                     RunStyle {
                         baseline_shift: 0.0,
                         ..style

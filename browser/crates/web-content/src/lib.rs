@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use encoding_rs::Encoding;
 use web_atoms::Atom;
+use web_css::font_face::{FontFace, FontSource};
 use web_css::stylesheet::{CssRule, Stylesheet, parse_stylesheet};
 use web_dom::{Document, NodeId};
 use web_html::{Options, Parser};
@@ -24,6 +25,9 @@ pub struct Page {
     loaded: Vec<String>,
     imports: Vec<(String, u32)>,
     images: ImageCache,
+    scope: u32,
+    fetched_fonts: Vec<(String, bool)>,
+    font_bytes: usize,
 }
 
 const IMAGE_BUDGET: usize = 256 << 20;
@@ -38,6 +42,7 @@ pub struct Memory {
     pub display_list: usize,
     pub stylist: usize,
     pub images: usize,
+    pub fonts: usize,
 }
 
 pub fn parse_file(path: &std::path::Path) -> std::io::Result<Document> {
@@ -111,8 +116,11 @@ pub fn render_file(path: &std::path::Path, width: u16, height: u16) -> std::io::
     let rgba = FONTS.with_borrow_mut(|fonts| {
         let mut page = Page::with_viewport(document, viewport, fonts);
         page.load_stylesheets_from(directory, fonts);
+        page.load_fonts_from(directory, fonts);
         page.load_images_from(directory, fonts);
-        page.display_list.rasterize(0.0, width, height)
+        let rgba = page.display_list.rasterize(0.0, width, height);
+        page.release(fonts);
+        rgba
     });
     Ok(Pixels {
         width: u32::from(width),
@@ -122,6 +130,7 @@ pub fn render_file(path: &std::path::Path, width: u16, height: u16) -> std::io::
 }
 
 const STYLESHEET_LIMIT: usize = 8 << 20;
+const FONT_BUDGET: usize = 64 << 20;
 
 impl Page {
     pub fn new(document: Document, width: f32, fonts: &mut Fonts) -> Self {
@@ -133,6 +142,8 @@ impl Page {
     }
 
     pub fn with_viewport(mut document: Document, viewport: Viewport, fonts: &mut Fonts) -> Self {
+        let scope = fonts.new_scope();
+        fonts.set_scope(scope);
         let mut stylist = Stylist::new(document.atoms_mut(), viewport);
         let mut imports = Vec::new();
         for (index, (source, _)) in stylesheet_sources(&document).into_iter().enumerate() {
@@ -168,7 +179,166 @@ impl Page {
             loaded: Vec::new(),
             imports,
             images,
+            scope,
+            fetched_fonts: Vec::new(),
+            font_bytes: 0,
         }
+    }
+
+    pub fn font_links(&self) -> Vec<String> {
+        let faces: Vec<&FontFace> = self.stylist.font_faces().collect();
+        if faces.is_empty() {
+            return Vec::new();
+        }
+        let families = self.used_families();
+        let characters = self.used_characters();
+        let mut links: Vec<String> = Vec::new();
+        for face in faces {
+            if !families
+                .iter()
+                .any(|family| family.eq_ignore_ascii_case(&face.family))
+                || !characters.iter().any(|&ch| face.covers(ch))
+            {
+                continue;
+            }
+            let urls = face.sources.iter().filter_map(|source| match source {
+                FontSource::Url(url) => Some(url.as_ref()),
+                FontSource::Local(_) => None,
+            });
+            let mut pending = None;
+            for url in urls {
+                match self.fetched_fonts.iter().find(|(known, _)| known == url) {
+                    Some((_, true)) => {
+                        pending = None;
+                        break;
+                    }
+                    Some((_, false)) => {}
+                    None => {
+                        pending = pending.or(Some(url));
+                    }
+                }
+            }
+            if let Some(url) = pending
+                && !links.iter().any(|link| link == url)
+            {
+                links.push(url.to_owned());
+            }
+        }
+        links
+    }
+
+    fn used_families(&self) -> Vec<Arc<str>> {
+        let mut families: Vec<Arc<str>> = Vec::new();
+        let mut seen: Vec<*const [Arc<str>]> = Vec::new();
+        let mut stack = vec![NodeId::DOCUMENT];
+        while let Some(node) = stack.pop() {
+            if let Some(style) = self.styles.get(node) {
+                let names = &style.inherited.font_names;
+                let key = Arc::as_ptr(names);
+                if !seen.contains(&key) {
+                    seen.push(key);
+                    for name in names.iter() {
+                        if !families.contains(name) {
+                            families.push(name.clone());
+                        }
+                    }
+                }
+            }
+            stack.extend(self.document.children(node));
+        }
+        families
+    }
+
+    fn used_characters(&self) -> Vec<char> {
+        let mut seen = [false; 128];
+        let mut other: Vec<char> = Vec::new();
+        let mut stack = vec![NodeId::DOCUMENT];
+        while let Some(node) = stack.pop() {
+            if let Some(text) = self.document.text(node) {
+                for ch in text.chars() {
+                    match seen.get_mut(ch as usize) {
+                        Some(slot) => *slot = true,
+                        None if !other.contains(&ch) && other.len() < 4096 => other.push(ch),
+                        None => {}
+                    }
+                }
+            }
+            stack.extend(self.document.children(node));
+        }
+        (0u8..128)
+            .filter(|&byte| seen.get(usize::from(byte)).copied().unwrap_or(false))
+            .map(char::from)
+            .chain(other)
+            .collect()
+    }
+
+    pub fn add_fonts(&mut self, files: &[(&str, &[u8])], fonts: &mut Fonts) {
+        let mut added = false;
+        for &(url, bytes) in files {
+            if self.fetched_fonts.iter().any(|(known, _)| known == url) {
+                continue;
+            }
+            let mut ok = false;
+            if self.font_bytes.saturating_add(bytes.len()) <= FONT_BUDGET {
+                let faces: Vec<FontFace> = self
+                    .stylist
+                    .font_faces()
+                    .filter(|face| {
+                        face.sources.iter().any(
+                            |source| matches!(source, FontSource::Url(known) if **known == *url),
+                        )
+                    })
+                    .cloned()
+                    .collect();
+                for face in faces {
+                    ok |= fonts.add_face(
+                        self.scope,
+                        &face.family,
+                        bytes,
+                        face.weight,
+                        face.italic,
+                        &face.ranges,
+                    );
+                }
+            }
+            if ok {
+                self.font_bytes = fonts.face_bytes(self.scope);
+                added = true;
+            }
+            self.fetched_fonts.push((url.to_owned(), ok));
+        }
+        if added {
+            fonts.set_scope(self.scope);
+            self.boxes = BoxTree::default();
+            self.boxes = BoxTree::build(&self.document, &self.styles, fonts);
+            self.relayout(fonts);
+        }
+    }
+
+    pub fn load_fonts_from(&mut self, directory: &std::path::Path, fonts: &mut Fonts) {
+        loop {
+            let files: Vec<(String, Vec<u8>)> = self
+                .font_links()
+                .into_iter()
+                .map(|url| {
+                    let bytes = read_local(directory, &url).unwrap_or_default();
+                    (url, bytes)
+                })
+                .collect();
+            if files.is_empty() {
+                return;
+            }
+            let borrowed: Vec<(&str, &[u8])> = files
+                .iter()
+                .map(|(url, bytes)| (url.as_str(), bytes.as_slice()))
+                .collect();
+            self.add_fonts(&borrowed, fonts);
+        }
+    }
+
+    pub fn release(&mut self, fonts: &mut Fonts) {
+        fonts.forget_scope(self.scope);
+        self.font_bytes = 0;
     }
 
     pub fn resize(&mut self, width: f32, fonts: &mut Fonts) {
@@ -309,6 +479,7 @@ impl Page {
     }
 
     fn restyle(&mut self, fonts: &mut Fonts) {
+        fonts.set_scope(self.scope);
         self.display_list = Arc::default();
         self.fragments = FragmentTree::default();
         self.boxes = BoxTree::default();
@@ -319,6 +490,7 @@ impl Page {
     }
 
     fn relayout(&mut self, fonts: &mut Fonts) {
+        fonts.set_scope(self.scope);
         let images = &self.images;
         self.fragments = self.boxes.layout(
             (self.viewport.width, self.viewport.height),
@@ -359,6 +531,7 @@ impl Page {
         if restyle.changed.is_empty() {
             return false;
         }
+        fonts.set_scope(self.scope);
         if restyle.layout {
             self.boxes = BoxTree::build(&self.document, &self.styles, fonts);
         } else {
@@ -433,6 +606,7 @@ impl Page {
             display_list: self.display_list.heap_bytes(),
             stylist: self.stylist.heap_bytes(),
             images: self.images.bytes(),
+            fonts: self.font_bytes,
         }
     }
 }
@@ -592,6 +766,13 @@ fn rebase_urls(rules: &mut [CssRule], base: &str) {
                     }
                 }
                 rebase_urls(&mut style.rules, base);
+            }
+            CssRule::FontFace(face) => {
+                for source in &mut face.sources {
+                    if let FontSource::Url(url) = source {
+                        *url = resolve_relative(base, url).into();
+                    }
+                }
             }
             CssRule::Media(_, rules)
             | CssRule::Supports(_, rules)

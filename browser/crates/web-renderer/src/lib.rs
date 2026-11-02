@@ -15,6 +15,7 @@ use web_paint::{DisplayList, Image, Item, Rect};
 pub const MAX_BODY: usize = 64 << 20;
 const MAX_STYLESHEETS: usize = 64;
 const MAX_IMAGES: usize = 256;
+const MAX_FONTS: usize = 32;
 
 pub fn main() -> ExitCode {
     match run() {
@@ -45,6 +46,9 @@ fn run() -> io::Result<()> {
         images: Vec::new(),
         images_arrived: Vec::new(),
         images_attempted: 0,
+        web_fonts: Vec::new(),
+        web_fonts_arrived: Vec::new(),
+        web_fonts_attempted: 0,
         viewport: Viewport {
             width: 1.0,
             height: 1.0,
@@ -80,6 +84,9 @@ struct Renderer {
     images: Vec<(u64, String)>,
     images_arrived: Vec<(String, Vec<u8>)>,
     images_attempted: usize,
+    web_fonts: Vec<(u64, String)>,
+    web_fonts_arrived: Vec<(String, Vec<u8>)>,
+    web_fonts_attempted: usize,
     viewport: Viewport,
     resized: bool,
     hover: Option<(u64, f32, f32)>,
@@ -141,6 +148,7 @@ impl Renderer {
             }
             self.style(fonts)?;
             self.add_images(fonts)?;
+            self.add_fonts(fonts)?;
             self.relayout(fonts)?;
         }
     }
@@ -193,17 +201,23 @@ impl Renderer {
         }
     }
 
-    fn cancel(&mut self) -> io::Result<()> {
-        let sheets = self
-            .styling
-            .take()
+    fn cancel(&mut self, fonts: &mut Fonts) -> io::Result<()> {
+        let mut styling = self.styling.take();
+        if let Some(styling) = &mut styling {
+            styling.shown.page.release(fonts);
+        }
+        let sheets = styling
             .into_iter()
             .flat_map(|styling| styling.fetches.into_iter().map(|(id, _)| id));
         let images = std::mem::take(&mut self.images)
             .into_iter()
             .map(|(id, _)| id);
-        let pending: Vec<u64> = sheets.chain(images).collect();
+        let web_fonts = std::mem::take(&mut self.web_fonts)
+            .into_iter()
+            .map(|(id, _)| id);
+        let pending: Vec<u64> = sheets.chain(images).chain(web_fonts).collect();
         self.images_arrived.clear();
+        self.web_fonts_arrived.clear();
         if let Some(network) = self.network.as_mut() {
             for id in pending {
                 network.send(&ToNetwork::Cancel { id }, Vec::new())?;
@@ -225,7 +239,7 @@ impl Renderer {
                 charset,
                 viewport,
             } => {
-                self.cancel()?;
+                self.cancel(fonts)?;
                 let mapping = fd
                     .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidData))
                     .and_then(|fd| Mapping::new(&fd, MAX_BODY))?;
@@ -237,9 +251,12 @@ impl Renderer {
                 };
                 self.resized = false;
                 self.images_attempted = 0;
+                self.web_fonts_attempted = 0;
                 self.images_sent.clear();
                 self.sent = None;
-                self.shown = None;
+                if let Some(mut shown) = self.shown.take() {
+                    shown.page.release(fonts);
+                }
                 self.styling = Some(Styling {
                     shown: Shown {
                         load,
@@ -267,7 +284,7 @@ impl Renderer {
                         .send(&FromRenderer::Scroll { load, y }, Vec::new())?;
                 }
             }
-            ToRenderer::Stop => self.cancel()?,
+            ToRenderer::Stop => self.cancel(fonts)?,
             ToRenderer::Network => {
                 let fd = fd.ok_or_else(|| io::Error::from(io::ErrorKind::InvalidData))?;
                 self.network = Some(Channel::new(fd)?);
@@ -291,6 +308,13 @@ impl Renderer {
         if let Some(index) = self.images.iter().position(|(pending, _)| *pending == id) {
             let (_, source) = self.images.swap_remove(index);
             self.images_arrived.push((source, bytes));
+        } else if let Some(index) = self
+            .web_fonts
+            .iter()
+            .position(|(pending, _)| *pending == id)
+        {
+            let (_, source) = self.web_fonts.swap_remove(index);
+            self.web_fonts_arrived.push((source, bytes));
         } else if let Some(styling) = &mut self.styling
             && let Some(index) = styling
                 .fetches
@@ -358,7 +382,48 @@ impl Renderer {
             },
             vec![list],
         )?;
-        self.request_images()
+        self.request_images()?;
+        self.request_fonts()
+    }
+
+    fn request_fonts(&mut self) -> io::Result<()> {
+        let Some(shown) = &self.shown else {
+            return Ok(());
+        };
+        let base = shown.url.clone();
+        for source in shown.page.font_links() {
+            if self.web_fonts_attempted >= MAX_FONTS
+                || self.web_fonts.iter().any(|(_, pending)| *pending == source)
+                || self
+                    .web_fonts_arrived
+                    .iter()
+                    .any(|(arrived, _)| *arrived == source)
+            {
+                continue;
+            }
+            self.web_fonts_attempted += 1;
+            match resolved(&base, &source).and_then(|url| self.fetch(url, Destination::Font)) {
+                Some(id) => self.web_fonts.push((id, source)),
+                None => self.web_fonts_arrived.push((source, Vec::new())),
+            }
+        }
+        Ok(())
+    }
+
+    fn add_fonts(&mut self, fonts: &mut Fonts) -> io::Result<()> {
+        if self.web_fonts_arrived.is_empty() {
+            return Ok(());
+        }
+        let arrived = std::mem::take(&mut self.web_fonts_arrived);
+        let Some(mut shown) = self.shown.take() else {
+            return Ok(());
+        };
+        shown.page.add_fonts(&borrowed(&arrived), fonts);
+        drop(arrived);
+        let relaid = self.relaid(&shown);
+        self.shown = Some(shown);
+        relaid?;
+        self.request_fonts()
     }
 
     fn request_images(&mut self) -> io::Result<()> {

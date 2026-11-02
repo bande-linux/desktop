@@ -8,6 +8,7 @@ pub use parser::{Delimiters, ParseError, ParseResult, Parser, ParserState};
 pub use rules::{BlockContentsParser, RuleHandler, RuleListParser, parse_important};
 pub use tokenizer::{Numeric, Token, Tokenizer, preprocess};
 pub mod encoding;
+pub mod font_face;
 pub mod media;
 pub mod nth;
 pub mod selectors;

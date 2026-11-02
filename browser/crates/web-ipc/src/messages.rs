@@ -16,6 +16,7 @@ wire_enum! {
         Document = 0,
         Style = 1,
         Image = 2,
+        Font = 3,
     }
 }
 

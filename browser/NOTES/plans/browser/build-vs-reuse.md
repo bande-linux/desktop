@@ -38,6 +38,7 @@ are our estimates for a first complete version, in lines of Rust.
 | accesskit | shared with the toolkit, so page accessibility joins the window's tree |
 | rustix, landlock, seccompiler | thin system-call layers; the policy is ours |
 | rusqlite | history, bookmarks, and the storage under IndexedDB, as Firefox does |
+| serde_json (tools only) | the conformance runner reads the suites' JSON test files; never linked into the engine |
 | wasmtime (Cranelift) | WebAssembly in phase 4 until our JS engine has its own WASM tier (WASM GC must share the JS heap) |
 
 Not used: Stylo, taffy, Blitz, html5ever, cssparser, parley, usvg, tokio, reqwest, serde for IPC.

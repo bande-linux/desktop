@@ -7,6 +7,22 @@ the desktop repo.
 *interactive* or *works*, plus pass rates per WPT directory. Shares are estimates until the
 scorer exists (W1).
 
+**Conformance today**, written by `conformance --summary` (README, Tools); `--baseline` fails a
+run that passes fewer cases than recorded here. Until author styles apply (W2), unstyled tests
+and references often render alike, so reftest rates overstate conformance:
+
+| Suite | Passed | Total | Rate |
+|---|---|---|---|
+| html5lib tokenizer | 7045 | 7045 | 100.0% (4 skipped) |
+| html5lib tree-construction | 1963 | 1973 | 99.5% |
+| css-parsing syntax | 148 | 177 | 83.6% |
+| css-parsing colors | 0 | 8061 | 0.0% |
+| css-parsing An+B | 128 | 128 | 100.0% |
+| wpt reftests css/CSS2 | 4437 | 6238 | 71.1% (117 of the passes render blank) |
+| wpt reftests css/css-cascade | 41 | 50 | 82.0% (7 of the passes render blank) |
+| wpt reftests css/css-syntax | 1 | 1 | 100.0% |
+| wpt reftests css/selectors | 192 | 227 | 84.6% (24 of the passes render blank) |
+
 ## Phase 1: document browser (3–4 engineer-years)
 
 - **W1 Text slice.**

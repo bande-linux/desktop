@@ -60,4 +60,5 @@ compositor and finds its heading and a link over AT-SPI.
   dependencies keep that within reach.
 - GitHub CI runs only for release tags (`web-vX.Y.Z` in the web repo, `browser-vX.Y.Z` here) and
   on dispatch.
-- The WPT, html5lib-tests and test262 runs and the fuzzers run on the mini, not in CI.
+- The WPT, html5lib-tests and test262 runs and the fuzzers run on the mini; the tag CI also runs
+  the conformance runners, checking the parser suites against the plan's baseline table.

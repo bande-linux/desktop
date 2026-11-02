@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 
+use bande_packages::{Client, Info, Mode};
 use bande_printers::{Cups, Job, JobState, NearbyPrinter, Printer, PrinterState, SPOOLER, browse};
 use bande_settings_panes::PaneId;
 use bande_toolkit::Spacing;
@@ -23,6 +24,7 @@ use crate::widgets::{Caption, Card, HEADER_SYMBOL, Header, Row, Text, Tone};
 pub(crate) const PRINTER_SYMBOL: &str = "printer-symbolic";
 const FORBIDDEN: &str = "Forbidden";
 const PRINTER_ADMINS: &str = "lpadmin";
+const PRINTING_PACKAGE: &str = "cups";
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct PrintersState {
@@ -40,6 +42,7 @@ pub enum PrinterCommand {
     Pause(String, bool),
     Cancel(i32),
     Add(NearbyPrinter),
+    InstallPrinting,
 }
 
 fn read(cups: &Cups) -> Option<PrintersState> {
@@ -58,6 +61,21 @@ fn read(cups: &Cups) -> Option<PrintersState> {
             None
         }
     }
+}
+
+fn install_printing(system: &Connection) -> Result<(), bande_packages::Error> {
+    let client = Client::new(system);
+    let ids: Vec<String> = client
+        .resolve(&[PRINTING_PACKAGE.to_owned()])?
+        .into_iter()
+        .filter(|package| package.info == Info::Available)
+        .map(|package| package.id)
+        .take(1)
+        .collect();
+    if ids.is_empty() {
+        return Ok(());
+    }
+    client.install(&ids, Mode::Apply, &|_| {}).map(drop)
 }
 
 fn may_change() -> bool {
@@ -145,6 +163,14 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
                     cups.pause(&name, paused).map_err(|error| sentence(&error))
                 }
                 PrinterCommand::Cancel(job) => cups.cancel(job).map_err(|error| sentence(&error)),
+                PrinterCommand::InstallPrinting => {
+                    let installed = install_printing(&bus);
+                    updates.send(Update::PrintingInstalled);
+                    installed.map_err(|error| {
+                        tracing::warn!("cannot install printing: {error}");
+                        L10N.tr("printing-install-failed")
+                    })
+                }
                 PrinterCommand::Add(printer) => {
                     let added = cups.add(&printer);
                     updates.send(Update::PrinterAdded(printer.uri.clone(), added.is_ok()));
@@ -374,6 +400,26 @@ impl SettingsView {
             rows.push(muted_row(&L10N.tr("printer-forbidden")));
         }
         rows
+    }
+
+    pub(crate) fn install_printing_card(&mut self) -> Box<dyn Widget> {
+        let mut install = intent(&self.intents, |()| Intent::InstallPrinting);
+        let mut button = Button::new(&L10N.tr("printing-install"), move || install(()));
+        button.set_enabled(!self.installing_printing);
+        let detail = L10N.tr(if self.installing_printing {
+            "printing-installing"
+        } else {
+            "printing-install-detail"
+        });
+        self.anchors
+            .push((Anchor::Item("install-printing".to_owned()), button.id()));
+        boxed(Card::new(vec![boxed(
+            Row::new(
+                Text::new(&L10N.tr("printing-support"), Tone::Primary),
+                Some(boxed(button)),
+            )
+            .detail(Text::new(&detail, Tone::Muted).caption()),
+        )]))
     }
 
     pub(crate) fn printer_page(&mut self) -> Option<Widgets> {

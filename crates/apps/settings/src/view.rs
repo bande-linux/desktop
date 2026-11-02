@@ -105,6 +105,7 @@ pub(crate) enum Intent {
     AddPrinter(bande_printers::NearbyPrinter),
     PrinterAddress(String),
     AddPrinterAddress,
+    InstallPrinting,
     CancelJob(i32),
     PausePrinter((String, bool)),
     AskPassword(bool),
@@ -245,6 +246,7 @@ pub struct SettingsView {
     pub(crate) printers: Option<PrintersState>,
     pub(crate) nearby_printers: Option<Vec<bande_printers::NearbyPrinter>>,
     pub(crate) adding: Option<String>,
+    pub(crate) installing_printing: bool,
     pub(crate) printer_address: String,
     pub(crate) accounts: Option<Vec<Account>>,
     pub(crate) accounts_managed: bool,
@@ -336,6 +338,7 @@ impl SettingsView {
             printers: None,
             nearby_printers: None,
             adding: None,
+            installing_printing: false,
             printer_address: String::new(),
             accounts: None,
             accounts_managed: false,
@@ -586,7 +589,10 @@ impl SettingsView {
             ),
             Update::Software(_) => (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates]),
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
-            Update::Printers(_) | Update::NearbyPrinters(_) | Update::PrinterAdded(..) => (
+            Update::Printers(_)
+            | Update::NearbyPrinters(_)
+            | Update::PrinterAdded(..)
+            | Update::PrintingInstalled => (
                 Some(PaneId::Printers),
                 &[SettingId::Printers, SettingId::NearbyPrinters],
             ),
@@ -759,6 +765,7 @@ impl SettingsView {
                 self.printers = Some(printers);
             }
             Update::NearbyPrinters(nearby) => self.nearby_printers = Some(nearby),
+            Update::PrintingInstalled => self.installing_printing = false,
             Update::Accounts(accounts, managed) => self.take_accounts(accounts, managed),
             Update::PictureChosen(login, image) => self.picture_chosen(login, image),
             Update::AccountCreated(error) => self.account_created(error),
@@ -1352,6 +1359,12 @@ impl SettingsView {
                     self.adding = Some(printer.uri.clone());
                     self.commands
                         .push(Command::Printers(PrinterCommand::Add(printer)));
+                }
+                Intent::InstallPrinting => {
+                    self.message = None;
+                    self.installing_printing = true;
+                    self.commands
+                        .push(Command::Printers(PrinterCommand::InstallPrinting));
                 }
                 Intent::AddPrinterAddress => {
                     if let Some(printer) = self.printer_address_target() {

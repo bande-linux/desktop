@@ -76,6 +76,7 @@ pub enum Update {
     Printers(PrintersState),
     NearbyPrinters(Vec<bande_printers::NearbyPrinter>),
     PrinterAdded(String, bool),
+    PrintingInstalled,
     Accounts(Vec<Account>, bool),
     Password(PasswordOutcome),
     PictureChosen(String, bande_toolkit::Image),

@@ -1233,6 +1233,11 @@ impl SettingsView {
         let notice = self.notice(&pane);
         self.crossfade_on(pane.id, notice.is_some());
         let mut body: Widgets = notice.into_iter().collect();
+        if pane.id == PaneId::Printers
+            && self.printers.as_ref().is_some_and(|state| !state.installed)
+        {
+            body.push(self.install_printing_card());
+        }
         let sections: &[Section] = if body.is_empty() { &pane.sections } else { &[] };
         for section in sections {
             if section

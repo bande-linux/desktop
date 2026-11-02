@@ -165,6 +165,10 @@ impl ComputedStyle {
         }
     }
 
+    fn same_as(&self, other: &ComputedStyle) -> bool {
+        Arc::ptr_eq(&self.inherited, &other.inherited) && Arc::ptr_eq(&self.reset, &other.reset)
+    }
+
     pub fn display(&self) -> Display {
         self.reset.display
     }
@@ -261,8 +265,12 @@ impl Styles {
                             };
                             let style =
                                 parent_style.derived(defaults::declarations(key), &initial_reset);
-                            pool.push(style);
-                            let index = (pool.len() - 1) as u32;
+                            let index = if style.same_as(parent_style) {
+                                parent
+                            } else {
+                                pool.push(style);
+                                (pool.len() - 1) as u32
+                            };
                             sharing.insert((parent, key), index);
                             index
                         }

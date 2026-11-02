@@ -30,10 +30,13 @@ pub struct BoxTree {
     pub(crate) root: Option<BlockBox>,
 }
 
+const MAX_DEPTH: u32 = 512;
+
 struct Builder<'a> {
     document: &'a Document,
     styles: &'a Styles,
     fonts: &'a mut Fonts,
+    depth: u32,
 }
 
 struct Pending {
@@ -56,6 +59,7 @@ impl BoxTree {
             document,
             styles,
             fonts,
+            depth: 0,
         };
         let root = document
             .children(NodeId::DOCUMENT)
@@ -167,6 +171,7 @@ impl Builder<'_> {
                         style: style.clone(),
                     });
                 }
+                Some(NodeKind::Element) if self.depth >= MAX_DEPTH => {}
                 Some(NodeKind::Element) => match style.display() {
                     Display::None => {}
                     Display::Inline => {
@@ -178,7 +183,9 @@ impl Builder<'_> {
                                 style: style.clone(),
                             });
                         } else {
+                            self.depth += 1;
                             self.children(child, blocks, pending, shift + own_shift(style));
+                            self.depth -= 1;
                         }
                     }
                     display => {
@@ -191,7 +198,9 @@ impl Builder<'_> {
                         if display == Display::ListItem {
                             ordinal += if reversed { -1 } else { 1 };
                         }
+                        self.depth += 1;
                         blocks.push(self.block(child, style.clone(), item_ordinal));
+                        self.depth -= 1;
                     }
                 },
                 _ => {}

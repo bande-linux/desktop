@@ -336,7 +336,8 @@ impl Document {
             || self.node(parent).is_none()
             || self.node(child).is_none()
             || reference.is_some_and(|reference| self.parent(reference) != Some(parent))
-            || self.ancestors(parent).any(|ancestor| ancestor == child)
+            || (self.first_child(child).is_some()
+                && self.ancestors(parent).any(|ancestor| ancestor == child))
         {
             return;
         }

@@ -46,10 +46,6 @@ feature still render alike, so reftest rates overstate conformance:
 - **D1** `Scene` gains affine transforms, blend and opacity layers, radial and sweep gradients,
   glyph runs from given outlines, repeating images, and retained sub-scenes translated without
   re-encoding.
-- **W4 Processes.**
-  - Builds: network process with the paused-request hook for extensions, per-site renderers, IPC, landlock and seccomp, the memory cgroup per
-    tab.
-  - **Done:** the sandbox regression test passes; a killed renderer shows "page crashed".
 - **D2** Terminal's tab bar moves into the toolkit as a widget.
 - **A1** Tabs, windows, private windows, session restore, Default Apps entry.
 - **D3** The toolkit grafts an external AccessKit subtree under a node.

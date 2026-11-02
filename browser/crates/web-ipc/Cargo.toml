@@ -1,0 +1,30 @@
+[package]
+name = "web-ipc"
+description = "The process model's shared layer: bounded typed messages over Unix sockets, sealed memfds, process launch and the renderer sandbox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+landlock.workspace = true
+libc.workspace = true
+rustix = { workspace = true, features = ["fs", "mm", "net", "process", "thread"] }
+seccompiler.workspace = true
+url.workspace = true
+web-paint.workspace = true
+web-text.workspace = true
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+undocumented_unsafe_blocks = "deny"
+
+[[test]]
+name = "sandbox"
+harness = false

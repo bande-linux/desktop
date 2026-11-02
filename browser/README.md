@@ -24,6 +24,10 @@ Builds on the mini go through `flock ~/bande-linux/kbuild.lock ~/bande-linux/bin
   parse and parse-style-layout throughput, bytes per element for the DOM, styles, boxes,
   fragments and display list (and the process's anonymous memory growth), and CSS parse
   throughput. Without arguments it uses a generated article and stylesheet.
+- **Processes:** `cargo build --release -p web-renderer -p web-netd` and then `cargo run --release
+  -p web-host --example load -- URL [OUT.png]` load a page through the network process and a
+  sandboxed renderer, print each frame, then each helper's memory and wake-ups over 10 idle
+  seconds, and rasterise the last display list.
 - **CI:** `.github/workflows/ci.yml` runs fmt, clippy and the conformance runners on arm64 and
   amd64, only for `web-vX.Y.Z` tags and on dispatch.
 

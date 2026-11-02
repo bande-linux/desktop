@@ -20,6 +20,7 @@ web-style.workspace = true
 web-text.workspace = true
 
 [features]
+avif = ["web-image/avif"]
 raster = ["web-paint/raster"]
 
 [lints]

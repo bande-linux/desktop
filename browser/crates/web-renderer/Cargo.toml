@@ -1,0 +1,17 @@
+[package]
+name = "web-renderer"
+description = "The sandboxed renderer process: one site's page, fed by the host and the network process over web-ipc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+rustix = { workspace = true, features = ["event"] }
+web-content = { workspace = true, features = ["avif"] }
+web-ipc.workspace = true
+web-paint.workspace = true
+
+[lints]
+workspace = true

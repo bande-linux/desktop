@@ -19,9 +19,9 @@ docs, one-line commits, trunk-based, never force-push), plus these.
     target reaches it. rav1d 1.1.0 still panics inside `dav1d_send_data` on some malformed
     streams (an `unwrap` in `rav1d_submit_frame`'s error path), and a panic cannot unwind out of
     a C ABI call, so it aborts the process. AVIF is therefore behind `web-image`'s `avif`
-    feature, off in the engine until images decode in the sandboxed process (W4) or rav1d fixes
-    it;
-  - `web-ipc` (memfd mapping, fd passing, seccomp and landlock setup);
+    feature, which only the sandboxed renderer process turns on: an abort crashes that one tab;
+  - `web-ipc`: mapping sealed memfds and `unshare` (fd passing, seccomp and Landlock go through
+    rustix, seccompiler and landlock's safe APIs);
   - the GC and JIT code in `web-js`;
   - SIMD scanning in `web-html` (or `std::simd` once stable, and then none).
 - Each holds its invariants in `docs/unsafe.md` and runs under Miri where Miri can run it.
@@ -45,7 +45,11 @@ Conformance suites are the tests, with one expectations file per suite, pinned t
 Pass rates are the progress metric; a regression fails the check. Our own tests are few:
 - tricky pure logic;
 - regressions for real bugs;
-- the sandbox boundary: a renderer can't open a file or a socket.
+- the sandbox boundary: a renderer can't open a file or a socket, or exec (`web-ipc`'s
+  `sandbox` test);
+- the process model end to end: the paused-request hook, a killed renderer reported as crashed,
+  and a reload after it (`web-host`'s `processes` test, which re-runs its own binary as the
+  helpers).
 
 The app has one end-to-end test (about 40 lines, within the apps guide of 80–100 lines per app). It opens a local page on the headless
 compositor and finds its heading and a link over AT-SPI.

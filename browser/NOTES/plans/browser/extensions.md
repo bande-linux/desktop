@@ -23,8 +23,8 @@ Firefox build** uses, so it runs at full strength. Firefox's MV2, and Firefox's 
   is designed for several worlds per document from phase 2, so this needs no redesign.
 - **The network hook.** The network process pauses a request at each `webRequest` stage and asks
   the extension process. A deadline bounds how long it waits; the request never polls.
-  `filterResponseData` streams the body through the extension. The hook exists from W4 (phase 1),
-  with no extension behind it.
+  `filterResponseData` streams the body through the extension. The `onBeforeRequest` stage exists
+  (continue, cancel or redirect, continued after 10 s, `engine.md`), with no extension behind it.
 - **Install.** `.xpi` files from addons.mozilla.org. Mozilla's add-on signature is verified
   against its root, and updates come through AMO's update service. Extension ids follow Gecko's,
   so uBO's settings import works.

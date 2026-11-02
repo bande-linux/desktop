@@ -22,6 +22,10 @@ web-content = { path = "crates/web-content" }
 web-image = { path = "crates/web-image" }
 web-av1 = { path = "crates/web-av1" }
 web-net = { path = "crates/web-net" }
+web-ipc = { path = "crates/web-ipc" }
+web-renderer = { path = "crates/web-renderer" }
+web-netd = { path = "crates/web-netd" }
+web-host = { path = "crates/web-host" }
 brotli-decompressor = "5"
 encoding_rs = "0.8"
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
@@ -34,12 +38,15 @@ icu_properties = "2.4"
 icu_segmenter = "2.4"
 image-webp = "0.2"
 jxl-oxide = { version = "=0.12.6", default-features = false }
+landlock = "0.4.4"
+libc = "0.2"
 linebender_resource_handle = "0.1.1"
 png = "0.18"
 rav1d = { version = "=1.1.0", default-features = false, features = ["bitdepth_8", "bitdepth_16"] }
 rustix = { version = "1", features = ["event", "fs"] }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "logging", "prefer-post-quantum", "std", "tls12"] }
 rustls-platform-verifier = "0.7"
+seccompiler = "0.5"
 serde_json = "1"
 skrifa = "=0.44.0"
 unicode-bidi = "0.3.18"

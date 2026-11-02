@@ -29,14 +29,15 @@ are our estimates for a first complete version, in lines of Rust.
 | rustls 0.23 with aws-lc-rs, rustls-platform-verifier | memory-safe TLS, audited, constant-time crypto in assembly; owning crypto is pure risk. Mail and Calendar already trust it |
 | hyper 1 and h2; quinn and h3 for HTTP/3 | protocol framing is spec-locked and heavily fuzzed; we own everything above it (Fetch, pools, priorities) and drive it with our own executor through `hyper::rt` and quinn's runtime traits. h3 is still experimental (0.0.8), so it waits for phase 4 |
 | zlib-rs or flate2, brotli-decompressor, zstd | content encodings; spec-locked, fuzzed, speed tuned |
-| png, zune-jpeg, image-webp, gif, jxl-oxide, rav1d (AVIF and AV1) | decoders are a known attack surface where mature fuzzed code beats new code; they run only inside sandboxed processes; our image cache owns decoding at display size and memory budgets. `web-image` uses all but rav1d today: rav1d exposes only its C ABI, so AVIF needs one audited `unsafe` wrapper module (with the ISOBMFF parser we own) before it lands |
+| png, zune-jpeg, image-webp, gif, jxl-oxide, rav1d (AVIF and AV1) | decoders are a known attack surface where mature fuzzed code beats new code; they run only inside sandboxed processes; our image cache owns decoding at display size and memory budgets. rav1d exposes only its C ABI, so it sits behind one audited wrapper, `web-av1`, with the ISOBMFF parser we own; AVIF is on only in the renderer process |
 | symphonia (AAC-LC, MP3, Vorbis, FLAC); Debian's libavcodec only where the AVD is missing | see `media.md`: our own demuxers, Opus and AVD bitstream parsers; these decoders run only in the sandboxed media process |
 | skrifa, read-fonts, harfrust, fontique | font parsing and shaping are spec-locked (OpenType) and shared with Bande's toolkit; web fonts are parsed only in sandboxed renderers |
 | ICU4X (segmenter, normalizer, collator, plural rules, data), unicode-bidi, encoding_rs | Unicode and WHATWG Encoding data and algorithms; ICU4X also serves JS `Intl` |
 | url | the WHATWG URL parser, small and conformant; replace only if WPT `url` shows gaps |
 | wgpu, naga, vello (through `bande-toolkit`) | Bande's own render stack; WebGPU maps onto wgpu as Firefox does; vello also draws canvas 2D |
 | accesskit | shared with the toolkit, so page accessibility joins the window's tree |
-| rustix, landlock, seccompiler | thin system-call layers; the policy is ours |
+| rustix, landlock, seccompiler | thin system-call layers; the policy is ours. Landlock and seccomp-bpf are what Chromium, Firefox and bubblewrap build on, and both crates are maintained by those kernel features' own communities (landlock by its kernel maintainers, seccompiler by Firecracker), so we own the rules but not the BPF assembler or the ABI compatibility code |
+| libc | the syscall numbers (`SYS_*`) per architecture for the seccomp allowlist; seccompiler already depends on it |
 | rusqlite | history, bookmarks, and the storage under IndexedDB, as Firefox does |
 | serde_json (tools only) | the conformance runner reads the suites' JSON test files; never linked into the engine |
 | wasmtime (Cranelift) | WebAssembly in phase 4 until our JS engine has its own WASM tier (WASM GC must share the JS heap) |

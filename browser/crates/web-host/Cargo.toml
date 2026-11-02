@@ -1,0 +1,30 @@
+[package]
+name = "web-host"
+description = "The app side of the process model: launches the network process and a sandboxed renderer per tab and site, routes navigations and reports crashes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+linebender_resource_handle.workspace = true
+rustix = { workspace = true, features = ["event"] }
+web-ipc.workspace = true
+web-paint.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+png.workspace = true
+web-netd.workspace = true
+web-paint = { workspace = true, features = ["raster"] }
+web-renderer.workspace = true
+
+[[example]]
+name = "load"
+
+[[test]]
+name = "processes"
+harness = false

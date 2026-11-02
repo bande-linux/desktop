@@ -21,29 +21,72 @@ One Cargo workspace with one lock. Dependencies run only downward in this list.
 | `web-cdm` | EME and the CDM host |
 | `web-extensions` | the WebExtensions APIs |
 | `web-ipc` | message schema, shared memory, process launch and sandbox |
+| `web-host` | in the app process: launches the helpers, routes navigations to renderers, validates what they send, reports crashes |
+| `web-renderer`, `web-netd` | the renderer and network processes (libraries with a `main`; the app ships them as `bande-browser-renderer` and `bande-browser-network`) |
 | `web-compositor` | in the app process: layers, async scroll and animation, drawing into the toolkit `Scene` |
-| `web-content`, `web-netd`, `web-mediad`, `web-cdmd`, `web-gpu` | the helper processes' `main`s |
+| `web-mediad`, `web-cdmd`, `web-gpu` | the later helper processes' `main`s |
 | `tools/wpt`, `fuzz/` | the conformance runner and the fuzz targets |
 
 ## Processes
 
 - **The app process** (`bande-browser`, a bande-app app) runs the UI, the compositor and the GPU
-  device. It holds no page data beyond display lists and accessibility trees, which it validates
-  as untrusted.
-- **The network process** does all sockets, TLS, cookies, cache and the webRequest hook.
-- **One renderer per site** (scheme plus registrable domain; cross-site iframes get their own)
-  runs HTML, style, layout, paint and script. It has no files (landlock: read-only fonts and its
-  own executable), no sockets (seccomp), no GPU, no Wayland, `PR_SET_NO_NEW_PRIVS`, and a memory
-  cgroup at its tab budget.
+  device. It holds no page data beyond display lists and accessibility trees. `web-host`'s broker
+  thread there validates them as untrusted: every count and index is bounded, coordinates are
+  finite, link targets are http(s), and a malformed message kills the renderer.
+- **The network process** (`web-netd`) does all sockets and TLS, with one `Fetcher` per browsing
+  session (`Session::Default` or `Private(n)`, ended when its last view closes). Cookies, the cache
+  and HSTS live in web-net and so run here. The host fetches navigations; each renderer has its own
+  socket to it, which the host binds to the renderer's session and site, so a renderer cannot
+  forge either and cannot fetch documents.
+- **The webRequest hook** is in the network process too. With interception on, each request pauses
+  before it starts (the `onBeforeRequest` stage) and the host gets `Outcome::Paused` for the view
+  that made it; `Command::Resume` continues, cancels or redirects it. A timerfd armed only while
+  something is paused continues a request after 10 s.
+- **One renderer per tab and site** runs HTML, style, layout, paint and image decoding (AVIF
+  included). The site is the origin for now (scheme, host and port), stricter than scheme plus
+  registrable domain until we carry the public suffix list. A navigation to another site replaces
+  the process, chosen after redirects. Its sandbox follows Chromium's layers, and bubblewrap's
+  for namespaces:
+  - new user, network and IPC namespaces (best effort, before anything else);
+  - fonts and fontconfig initialised;
+  - Landlock (ABI up to 9, best effort, but refusing to run unenforced) allowing only reading
+    under the font and fontconfig folders: no other reads, no writes, no exec, no TCP, no
+    pathname or abstract Unix sockets, no signals out;
+  - not dumpable;
+  - a seccomp allowlist (EPERM for the rest): no `socket`, `connect`, `clone`, `execve`,
+    `ptrace` or `ioctl`, and `tgkill` only to itself.
+
+  It has no GPU and no Wayland. The app puts each renderer in a transient systemd user scope
+  (`app-bande-org.bande.Browser.Renderer-PID.scope` in `app.slice`, `MemoryMax` 512 MB, no swap),
+  as the desktop places apps. A crash or an OOM kill reaches the host as a hang-up and becomes
+  `Outcome::Crashed`.
 - **The media process** (phase 4) demuxes and decodes into NV12 dmabufs (`media.md`).
 - **The CDM process** (phase 4, per site) hosts Widevine once licensed.
 - **The extension process** (phase 4, one per extension) runs the extension's pages.
 - **The GPU process** (phase 4) runs WebGL and WebGPU through wgpu and hands frames over as
   dmabuf, so untrusted shaders never run in the app.
 
-IPC uses Unix sockets with fd passing and fixed-layout messages read without copying. Large data
-(images, glyph outlines, display lists) travels in sealed memfds. Every message is validated by
-its receiver.
+IPC is `SOCK_SEQPACKET` Unix sockets with fd passing. A message is at most 64 KiB, encoded by
+hand-written `Wire` impls with no versioning. Display lists, documents, images and font files
+travel in sealed memfds that the receiver maps read-only. Senders queue and never block, so a peer
+that stops reading cannot stall the host or the network process. Fonts and images go once per
+renderer (images once per load) and are referred to by id afterwards. Helpers start with a cleared
+environment, the control socket on stdin and the renderer's network socket on stdout.
+
+**Gaps:**
+- The network process is not sandboxed yet. It will get Landlock for the profile folder and a
+  seccomp policy.
+- Font files cross into the app as bytes and are parsed there. Glyph outlines (D1) remove that.
+- Image pixels are copied once into the app's `Arc`s.
+- After a network-process crash, the next navigation restarts it.
+- Only the `onBeforeRequest` stage exists.
+
+**Measured** (release, the mini, Debian's fonts):
+- An idle renderer is 1.7 MB anonymous and 8.4 MB resident (the rest is shared files). It starts,
+  initialises fonts and enters the sandbox in 14–15 ms warm.
+- The Rust article's renderer is 25.8 MB anonymous, with 21 images; Cat's is 41 MB.
+- The idle network process is 1–7 MB anonymous.
+- Every process makes zero wake-ups when idle.
 
 ## Pipeline and efficiency
 
@@ -78,8 +121,8 @@ its receiver.
   - Parsing streams as bytes arrive, and the preload scanner fetches ahead.
   - Fonts and images decode on helper threads.
   - Scrolling and compositor animations never wait on a renderer.
-  - Parse, style and layout never run on the app's UI thread: in process they run on a renderer
-    thread (until W4 moves them to the renderer process), and the UI only draws display lists.
+  - Parse, style and layout run in the renderer process, never in the app; the UI only draws
+    display lists.
 
 ## Measurable targets
 

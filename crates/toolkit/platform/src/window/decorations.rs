@@ -2,9 +2,8 @@ use accesskit::ActionRequest;
 use bande_graphics::{Cursor, Event, Modifiers, Point, Pointer, PointerButton, ResizeEdge, Scroll};
 
 use super::{Window, WindowError, WindowEvent};
-use crate::chrome::{Control, Frame, Zone, control_for_node};
+use crate::chrome::{Control, Frame, TabDrag, Zone, control_for_node};
 use crate::clipboard::DragEvent;
-use crate::seat::CLICK_SLOP;
 
 fn resize_cursor(edge: ResizeEdge) -> Cursor {
     match edge {
@@ -111,10 +110,8 @@ impl Window {
         let Some(chrome) = self.chrome.as_mut() else {
             return;
         };
-        if let Some(start) = chrome.tab_press
-            && (pointer.position.x - start.x).hypot(pointer.position.y - start.y) > CLICK_SLOP
-        {
-            chrome.tab_press = None;
+        if chrome.tab_drag_moves_window(frame, pointer.position) {
+            chrome.tab_drag = None;
             chrome.content_buttons = 0;
             if std::mem::take(&mut chrome.pointer_in_content) {
                 passed.push(WindowEvent::Input(Event::PointerLeave));
@@ -175,7 +172,7 @@ impl Window {
                 && pointer.button == PointerButton::Primary
                 && chrome.tab_at(frame, pointer.position)
             {
-                chrome.tab_press = Some(pointer.position);
+                chrome.tab_drag = Some(TabDrag::Pressed(pointer.position));
             }
             chrome.content_buttons += 1;
             passed.push(WindowEvent::Input(Event::PointerDown(into_content(
@@ -224,7 +221,7 @@ impl Window {
         let Some(chrome) = self.chrome.as_mut() else {
             return;
         };
-        chrome.tab_press = None;
+        chrome.tab_drag = None;
         chrome.zoom_rest = None;
         if chrome.content_buttons > 0 {
             chrome.content_buttons -= 1;
@@ -271,7 +268,7 @@ impl Window {
             return;
         };
         chrome.content_buttons = 0;
-        chrome.tab_press = None;
+        chrome.tab_drag = None;
         chrome.zoom_rest = None;
         if chrome.hover(frame, None, now, reduce_motion) | chrome.pressed.take().is_some() {
             self.needs_redraw = true;

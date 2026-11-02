@@ -191,7 +191,7 @@ ICONS = {
     'org.gnome.Papers': document_viewer,
     'org.gnome.Showtime': video_player,
     'org.gnome.Calculator': calculator,
-    'org.gnome.clocks': clocks,
+    'org.bande.Clock': clocks,
 }
 
 HICOLOR = {

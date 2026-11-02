@@ -211,21 +211,26 @@ impl DateFormats {
 
     pub fn short_day(&self, at: &Zoned) -> String {
         let date = date_of(at);
-        let with_month =
-            FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, MDE::medium())
-                .ok()
-                .zip(date)
-                .and_then(|(formatter, date)| {
-                    let mut parts = Parts::default();
-                    formatter.format(&date).write_to_parts(&mut parts).ok()?;
-                    without_month(parts)
-                });
+        let with_month = FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(
+            self.preferences,
+            MDE::medium(),
+        )
+        .ok()
+        .zip(date)
+        .and_then(|(formatter, date)| {
+            let mut parts = Parts::default();
+            formatter.format(&date).write_to_parts(&mut parts).ok()?;
+            without_month(parts)
+        });
         with_month
             .or_else(|| {
-                FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, DE::short())
-                    .ok()
-                    .zip(date)
-                    .map(|(formatter, date)| formatter.format(&date).to_string())
+                FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(
+                    self.preferences,
+                    DE::short(),
+                )
+                .ok()
+                .zip(date)
+                .map(|(formatter, date)| formatter.format(&date).to_string())
             })
             .unwrap_or_else(|| at.strftime("%a %-d").to_string())
     }

@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+#[cfg(feature = "audio")]
 pub use bande_audio::{Capture, Sense};
 use bande_network::Network;
 
@@ -108,6 +109,7 @@ pub struct Status {
     pub sound: Option<Sound>,
     pub bluetooth: Option<Bluetooth>,
     pub input_sources: InputSources,
+    #[cfg(feature = "audio")]
     pub capturing: Vec<Capture>,
 }
 

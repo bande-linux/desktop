@@ -9,6 +9,8 @@ pub mod history;
 pub mod hub;
 pub mod memory;
 pub mod session;
+#[cfg(feature = "audio")]
+mod sound;
 pub mod status;
 pub mod tray;
 pub mod unread;
@@ -31,15 +33,25 @@ static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", E
 pub enum Update {
     Devices(devices::Devices),
     Sound(Option<status::Sound>),
+    #[cfg(feature = "audio")]
     Capturing(Vec<bande_audio::Capture>),
     Tray(Vec<TrayItem>),
-    Menu { menu: String, root: Node },
-    AppMenu { menu: String, root: Option<Node> },
+    Menu {
+        menu: String,
+        root: Node,
+    },
+    AppMenu {
+        menu: String,
+        root: Option<Node>,
+    },
     AppMenuChanged,
     GtkMenuChanged(String),
     ClockFormat(String),
     Minute,
     BatteryPercentage(bool),
     ClockMark(unread::ClockMark),
-    BarLayout { layout: String, edge: String },
+    BarLayout {
+        layout: String,
+        edge: String,
+    },
 }

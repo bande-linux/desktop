@@ -4,6 +4,7 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
+#[cfg(feature = "audio")]
 use bande_audio::Audio;
 use bande_inbox::{Inbox, Outbox};
 use rustix::event::{PollFd, PollFlags, poll};
@@ -11,7 +12,9 @@ use zbus::blocking::Connection;
 
 use crate::Update;
 use crate::clock::{follow_minutes, follow_zone};
-use crate::devices::{Control, SoundControl, follow_devices, follow_sound};
+use crate::devices::{Control, SoundControl, follow_devices};
+#[cfg(feature = "audio")]
+use crate::sound::follow_sound;
 use crate::tray::{Errand, host, run_errands};
 use crate::unread::follow_unread;
 
@@ -61,6 +64,7 @@ pub struct StatusHub {
     devices: Option<Sender<Control>>,
     sound: Option<Sender<SoundControl>>,
     errands: Option<Sender<Errand>>,
+    #[cfg(feature = "audio")]
     audio: Option<Arc<Audio>>,
     worker_lost: Arc<AtomicBool>,
 }
@@ -103,13 +107,17 @@ impl StatusHub {
         let relay = Arc::new(Mutex::new(Relay::default()));
         let relaying = Arc::clone(&relay);
         spawn("status-relay", move || relay_updates(inbox, &relaying));
+        #[cfg(feature = "audio")]
         let audio = Audio::connect()
             .inspect_err(|error| tracing::warn!("no sound: {error}"))
             .ok()
             .map(Arc::new);
+        #[cfg(feature = "audio")]
         let sound = audio
             .as_ref()
             .map(|audio| follow_sound(Arc::clone(audio), source.clone()));
+        #[cfg(not(feature = "audio"))]
+        let sound = None;
         let devices = system.map(|system| follow_devices(system, source.clone()));
         if let Some(system) = system
             && let Err(error) = follow_zone(system, source.clone())
@@ -148,6 +156,7 @@ impl StatusHub {
             devices,
             sound,
             errands,
+            #[cfg(feature = "audio")]
             audio,
             worker_lost: Arc::default(),
         })
@@ -161,6 +170,7 @@ impl StatusHub {
         self.source.clone()
     }
 
+    #[cfg(feature = "audio")]
     pub fn audio(&self) -> Option<Arc<Audio>> {
         self.audio.clone()
     }

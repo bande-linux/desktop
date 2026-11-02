@@ -11,7 +11,7 @@ repository.workspace = true
 rustix.workspace = true
 tracing.workspace = true
 bande-app-menu.workspace = true
-bande-audio.workspace = true
+bande-audio = { workspace = true, optional = true }
 bande-bluetooth.workspace = true
 bande-datetime.workspace = true
 bande-inbox.workspace = true
@@ -21,6 +21,10 @@ bande-notify.workspace = true
 bande-power.workspace = true
 bande-xdg.workspace = true
 zbus.workspace = true
+
+[features]
+default = ["audio"]
+audio = ["dep:bande-audio"]
 
 [lints]
 workspace = true

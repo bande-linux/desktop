@@ -14,7 +14,7 @@ use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, clock_menu, input_source_menu,
     sound_menu, system_menu, wifi_menu,
 };
-use bande_config::{BUS_NAME, BarEdge, MenuBarPlacement, OBJECT_PATH};
+use bande_config::{BUS_NAME, BarEdge, BarLayout, OBJECT_PATH};
 use bande_datetime::DateFormats;
 use bande_inbox::{Inbox, Outbox};
 use bande_keyboard::Layouts;
@@ -56,7 +56,7 @@ pub struct MenuBarClient<V> {
     bar: V,
     display: Display,
     handoff: SharedHandoff,
-    layout: (MenuBarPlacement, BarEdge),
+    layout: (BarLayout, BarEdge),
     restart: Restart,
     workspaces: (usize, usize),
     clock_mark: ClockMark,
@@ -706,14 +706,16 @@ impl<V: StatusView> App for MenuBarClient<V> {
                         );
                     }
                 }
-                Update::BarLayout { menu_bar, edge } => {
+                Update::BarLayout { layout, edge } => {
                     let wanted = (
-                        MenuBarPlacement::from_keyword(&menu_bar).unwrap_or(self.layout.0),
+                        BarLayout::from_keyword(&layout).unwrap_or(self.layout.0),
                         BarEdge::from_keyword(&edge).unwrap_or(self.layout.1),
                     );
-                    if wanted.0.combines(wanted.1) != self.layout.0.combines(self.layout.1) {
+                    let combined = self.layout.0 == BarLayout::Combined;
+                    if wanted.0 != self.layout.0 || (combined && wanted.1 != self.layout.1) {
                         self.restart.set(true);
                     }
+                    self.layout = wanted;
                 }
                 Update::ClockMark(mark) => {
                     self.clock_mark = mark;
@@ -799,7 +801,7 @@ impl MenuBarClient<MenuBar> {
         text: TextSystem,
         display: Display,
         status: &StatusHub,
-        layout: (MenuBarPlacement, BarEdge),
+        layout: (BarLayout, BarEdge),
     ) -> std::io::Result<Self> {
         let bar = MenuBar::new(window.appearance().palette(), text, String::new());
         MenuBarClient::with_view(bar, display, status, layout)
@@ -811,7 +813,7 @@ impl<V: StatusView> MenuBarClient<V> {
         mut view: V,
         display: Display,
         status: &StatusHub,
-        layout: (MenuBarPlacement, BarEdge),
+        layout: (BarLayout, BarEdge),
     ) -> std::io::Result<Self> {
         let inbox = Inbox::new()?;
         status.subscribe(inbox.outbox());
@@ -887,7 +889,7 @@ fn follow_config(session: &Connection, outbox: &Outbox<Update>) -> zbus::Result<
             config.get_property("ShowBatteryPercentage")?,
         )) && outbox.send(Update::ClockFormat(config.get_property("ClockFormat")?))
             && outbox.send(Update::BarLayout {
-                menu_bar: config.get_property("BarMenuBar")?,
+                layout: config.get_property("BarLayout")?,
                 edge: config.get_property("BarEdge")?,
             }))
     };

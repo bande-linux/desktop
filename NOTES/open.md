@@ -55,10 +55,10 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 
 - Light scheme: move it to the dark scheme's slate family, or keep it warm.
 - Mouse scroll speed: add a setting (scales wheel deltas in `input.rs`), or not.
-- Taskbar options: drop Top from Position; show the Menu bar row only on the left; drop Scroll
-  method, Trackpad acceleration and Disable while typing; fold Variable refresh rate into Refresh
-  rate (the switch writes a key nothing reads); dim shortly before the display turns off instead
-  of Dim after; where `reopen-apps` lives (Log Out checkbox, always on or always off).
+- Settings options: drop Scroll method, Trackpad acceleration and Disable while typing; fold
+  Variable refresh rate into Refresh rate (the switch writes a key nothing reads); dim shortly
+  before the display turns off instead of Dim after; where `reopen-apps` lives (Log Out
+  checkbox, always on or always off).
 - A click on the clock or Control Center while the launcher is open: open the panel too, or only
   close the launcher (today).
 - Several displays: banners on the main display or on the one with the active window.

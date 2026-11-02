@@ -15,9 +15,9 @@ use crate::{
     desktop_menu, items_menu, layouts_path, list, parse_layouts, save_layouts,
 };
 use accesskit::TreeUpdate;
-use bande_config::{BarEdge, Config, Wallpaper, WallpaperFit};
+use bande_config::{BUS_NAME, BarEdge, BarLayout, Config, OBJECT_PATH, Wallpaper, WallpaperFit};
 use bande_fs::{Action, Answer, Change, FolderWatch, Operations, Purpose, Resolution, Task, Trash};
-use bande_inbox::Inbox;
+use bande_inbox::{Inbox, Outbox};
 use bande_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
 use bande_toolkit::ui::frame_time;
 use bande_toolkit::{
@@ -33,6 +33,8 @@ use bande_xdg::{
     data_dirs, file_uri, find_icon, launch, launch_with, launch_with_arguments, path_from_file_uri,
     user_dir,
 };
+use zbus::blocking::Connection;
+use zbus::blocking::fdo::PropertiesProxy;
 
 const SETTINGS_FOLDER: &str = "bande";
 const FILES_SETTINGS: &str = "files.conf";
@@ -72,8 +74,8 @@ pub struct DesktopSurface {
     shown: Shown,
     pictures: HashMap<PathBuf, (Option<SystemTime>, Option<Option<Image>>)>,
     layouts_file: Option<PathBuf>,
-    bar_edge: BarEdge,
-    combined_bar: bool,
+    bar: BarPlacement,
+    bar_changes: Inbox<BarPlacement>,
     choice: Option<Choice>,
     choices: Inbox<Choice>,
     loaded: Inbox<Loaded>,
@@ -339,15 +341,20 @@ impl DesktopSurface {
 
     fn area(&self, size: (u32, u32)) -> Bounds {
         let (width, height) = (size.0 as f32, size.1 as f32);
-        let top = bande_bar::menu_bar::HEIGHT as f32;
-        let taskbar = bande_bar::taskbar::exclusive_zone(bande_bar::taskbar::ICON_SIZE);
-        let bar = bande_bar::rail::bar_width(bande_bar::taskbar::ICON_SIZE);
-        let (left, right, bottom, top) = match (self.bar_edge, self.combined_bar) {
-            (_, true) => (bar, 0.0, 0.0, 0.0),
-            (BarEdge::Left, false) => (taskbar, 0.0, 0.0, top),
-            (BarEdge::Right, false) => (0.0, taskbar, 0.0, top),
-            (BarEdge::Bottom, false) => (0.0, 0.0, taskbar, top),
-            (BarEdge::Top, false) => (0.0, 0.0, 0.0, top + taskbar),
+        let (bar_edge, layout, icon_size) = self.bar;
+        let icon_size = icon_size as f32;
+        let (edge, top) = match layout {
+            BarLayout::Combined => (bande_bar::rail::bar_width(icon_size), 0.0),
+            BarLayout::Separate => (
+                bande_bar::taskbar::exclusive_zone(icon_size),
+                bande_bar::menu_bar::HEIGHT as f32,
+            ),
+        };
+        let (left, right, bottom, top) = match bar_edge {
+            BarEdge::Left => (edge, 0.0, 0.0, top),
+            BarEdge::Right => (0.0, edge, 0.0, top),
+            BarEdge::Bottom => (0.0, 0.0, edge, top),
+            BarEdge::Top => (0.0, 0.0, 0.0, top + edge),
         };
         Bounds::new(
             left,
@@ -355,6 +362,25 @@ impl DesktopSurface {
             (width - left - right).max(1.0),
             (height - top - bottom).max(1.0),
         )
+    }
+
+    fn follow_bar(&mut self) {
+        let Some(bar) = self.bar_changes.drain().pop() else {
+            return;
+        };
+        if bar == self.bar {
+            return;
+        }
+        self.bar = bar;
+        if let Some((size, scale)) = self.viewport {
+            self.view.set_viewport(
+                (size.0 as f32, size.1 as f32),
+                scale as f32,
+                self.area(size),
+                frame_time().on_screen(),
+            );
+            self.save_layouts();
+        }
     }
 
     fn follow_viewport(&mut self, window: &mut Window) {
@@ -800,7 +826,12 @@ impl App for DesktopSurface {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = vec![self.watch.fd(), self.choices.fd(), self.loaded.fd()];
+        let mut sources = vec![
+            self.watch.fd(),
+            self.choices.fd(),
+            self.loaded.fd(),
+            self.bar_changes.fd(),
+        ];
         sources.extend(self.thumbnails.as_ref().map(Thumbnails::fd));
         sources.extend(self.operations.fds());
         sources.extend(
@@ -846,12 +877,16 @@ impl App for DesktopSurface {
                     window.request_redraw();
                 }
             }
-            3 if self.thumbnails.is_some() => {
+            3 => {
+                self.follow_bar();
+                window.request_redraw();
+            }
+            4 if self.thumbnails.is_some() => {
                 self.thumbnails_ready();
                 window.request_redraw();
             }
             index => {
-                let first = 3 + usize::from(self.thumbnails.is_some());
+                let first = 4 + usize::from(self.thumbnails.is_some());
                 if index - first == self.operations.fds().len() {
                     self.confirmed();
                 } else {
@@ -965,6 +1000,58 @@ fn desktop_folder(home: &Path) -> PathBuf {
     folder
 }
 
+type BarPlacement = (BarEdge, BarLayout, u32);
+
+fn follow_bar_placement(placements: Outbox<BarPlacement>) {
+    let work = move || {
+        let follow = || -> zbus::Result<()> {
+            let session = Connection::session()?;
+            let config = zbus::blocking::proxy::Builder::<zbus::blocking::Proxy>::new(&session)
+                .destination(BUS_NAME)?
+                .path(OBJECT_PATH)?
+                .interface(BUS_NAME)?
+                .cache_properties(zbus::proxy::CacheProperties::No)
+                .build()?;
+            let changes = PropertiesProxy::builder(&session)
+                .destination(BUS_NAME)?
+                .path(OBJECT_PATH)?
+                .build()?
+                .receive_properties_changed()?;
+            let read = || -> zbus::Result<Option<BarPlacement>> {
+                let edge = config.get_property::<String>("BarEdge")?;
+                let layout = config.get_property::<String>("BarLayout")?;
+                let size = config.get_property::<u32>("BarIconSize")?;
+                Ok(BarEdge::from_keyword(&edge)
+                    .zip(BarLayout::from_keyword(&layout))
+                    .map(|(edge, layout)| (edge, layout, size)))
+            };
+            let mut last = None;
+            for _ in std::iter::once(()).chain(changes.map(drop)) {
+                let placement = read()?;
+                if placement == last {
+                    continue;
+                }
+                last = placement;
+                if let Some(placement) = placement
+                    && !placements.send(placement)
+                {
+                    break;
+                }
+            }
+            Ok(())
+        };
+        if let Err(error) = follow() {
+            tracing::warn!("the desktop does not follow the taskbar's place: {error}");
+        }
+    };
+    if let Err(error) = thread::Builder::new()
+        .name("bar placement".to_owned())
+        .spawn(work)
+    {
+        tracing::warn!("cannot follow the taskbar's place: {error}");
+    }
+}
+
 pub fn role() -> Role {
     Role::Layer(LayerOptions {
         layer: LayerKind::Background,
@@ -984,8 +1071,8 @@ impl DesktopSurface {
         apps: Rc<RefCell<Apps>>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let home = std::env::var_os("HOME").map(PathBuf::from);
-        let bar_edge = config.bar.edge;
-        let combined_bar = config.bar.menu_bar.combines(config.bar.edge);
+        let bar_changes = Inbox::new()?;
+        follow_bar_placement(bar_changes.outbox());
         let desktop_dir = desktop_folder(home.as_deref().unwrap_or(Path::new("/")));
         let user = std::env::var("USER").unwrap_or_default();
         let trash = Trash::for_user().ok_or("no home folder for the Trash")?;
@@ -1021,8 +1108,8 @@ impl DesktopSurface {
             },
             pictures: HashMap::new(),
             layouts_file,
-            bar_edge,
-            combined_bar,
+            bar: (config.bar.edge, config.bar.layout, config.bar.icon_size),
+            bar_changes,
             choice: Some(configured_choice(&config.wallpaper)),
             choices,
             loaded,

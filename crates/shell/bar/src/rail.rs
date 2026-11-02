@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use accesskit::{Action, Node as AccessNode, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
+use bande_config::BarEdge;
 use bande_datetime::DateFormats;
 use bande_status::status::{Battery, Capture, Sense, Status, speaker_waves};
 use bande_status::unread::ClockMark;
@@ -15,13 +16,14 @@ use jiff::Zoned;
 
 use crate::L10N;
 use crate::menu_bar::{Slot, StatusView};
-use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA};
+use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA, vertical};
 
 pub const EDGE_PADDING: f32 = 24.0;
 pub const LABEL_ROOM: f32 = 280.0;
 const MARK_CELL: f32 = 52.0;
 const MARK_SIZE: f32 = 22.0;
 const CLOCK_CELL: f32 = 52.0;
+const CLOCK_LENGTH: f32 = 80.0;
 const STATUS_WIDTH: f32 = 52.0;
 const STATUS_HEIGHT: f32 = 58.0;
 const GRID_CELL: f32 = 26.0;
@@ -50,8 +52,31 @@ pub fn bar_width(icon_size: f32) -> f32 {
     icon_size + EDGE_PADDING
 }
 
-pub fn surface_size(icon_size: f32) -> (u32, u32) {
-    ((bar_width(icon_size) + LABEL_ROOM).ceil() as u32, 0)
+pub fn surface_size(edge: BarEdge, icon_size: f32) -> (u32, u32) {
+    let depth = (bar_width(icon_size) + LABEL_ROOM).ceil() as u32;
+    match vertical(edge) {
+        true => (depth, 0),
+        false => (0, depth),
+    }
+}
+
+pub fn edge_band(edge: BarEdge, size: (f32, f32), depth: f32) -> Rect {
+    let (width, height) = size;
+    match edge {
+        BarEdge::Left => Rect::new(0.0, 0.0, depth, height),
+        BarEdge::Right => Rect::new(width - depth, 0.0, depth, height),
+        BarEdge::Top => Rect::new(0.0, 0.0, width, depth),
+        BarEdge::Bottom => Rect::new(0.0, height - depth, width, depth),
+    }
+}
+
+pub fn display_edge(edge: BarEdge) -> DisplayEdge {
+    match edge {
+        BarEdge::Left => DisplayEdge::Left,
+        BarEdge::Right => DisplayEdge::Right,
+        BarEdge::Top => DisplayEdge::Top,
+        BarEdge::Bottom => DisplayEdge::Bottom,
+    }
 }
 
 pub fn owns_node(node: NodeId) -> bool {
@@ -67,6 +92,8 @@ struct Clock {
 pub struct TaskbarView {
     palette: Palette,
     text: TextSystem,
+    edge: BarEdge,
+    bar: Rect,
     icon_dirs: Vec<PathBuf>,
     icons: HashMap<(String, Color, u32), Option<Image>>,
     width: f32,
@@ -177,12 +204,15 @@ impl TaskbarView {
     pub fn new(
         palette: Palette,
         text: TextSystem,
+        edge: BarEdge,
         icon_dirs: Vec<PathBuf>,
         icon_size: f32,
     ) -> Self {
         Self {
             palette,
             text,
+            edge,
+            bar: Rect::default(),
             icon_dirs,
             icons: HashMap::new(),
             width: bar_width(icon_size),
@@ -206,6 +236,10 @@ impl TaskbarView {
 
     pub fn width(&self) -> f32 {
         self.width
+    }
+
+    pub fn edge(&self) -> BarEdge {
+        self.edge
     }
 
     pub fn unread(&self) -> bool {
@@ -243,76 +277,101 @@ impl TaskbarView {
         ]
     }
 
-    fn layout(&self, height: f32) -> (Vec<(Slot, Rect)>, AppsRegion, Vec<f32>) {
-        let width = self.width;
-        let mut slots = vec![(Slot::BandeMenu, Rect::new(0.0, 0.0, width, MARK_CELL))];
-        let mut hairlines = Vec::new();
-        let mut bottom = height - CLOCK_CELL;
-        slots.push((Slot::Clock, Rect::new(0.0, bottom, width, CLOCK_CELL)));
-        let group_x = ((width - STATUS_WIDTH) / 2.0).round();
-        bottom -= STATUS_HEIGHT + GROUP_GAP;
-        let status = Rect::new(group_x, bottom, STATUS_WIDTH, STATUS_HEIGHT);
+    fn layout(&self, size: (f32, f32)) -> (Vec<(Slot, Rect)>, AppsRegion, Vec<Rect>) {
+        let thick = self.width;
+        let bar = edge_band(self.edge, size, thick);
+        let vertical = vertical(self.edge);
+        let (origin, length) = match vertical {
+            true => (bar.y, bar.height),
+            false => (bar.x, bar.width),
+        };
+        let place = |along: f32, extent: f32, cross: f32| {
+            let offset = ((thick - cross) / 2.0).round();
+            match vertical {
+                true => Rect::new(bar.x + offset, along, cross, extent),
+                false => Rect::new(along, bar.y + offset, extent, cross),
+            }
+        };
+        let mut slots = vec![(Slot::BandeMenu, place(origin, MARK_CELL, thick))];
+        let clock = if vertical { CLOCK_CELL } else { CLOCK_LENGTH };
+        let mut end = origin + length - clock;
+        slots.push((Slot::Clock, place(end, clock, thick)));
+        let (status_along, status_cross) = match vertical {
+            true => (STATUS_HEIGHT, STATUS_WIDTH),
+            false => (STATUS_WIDTH, STATUS_HEIGHT),
+        };
+        end -= status_along + GROUP_GAP;
+        let status = place(end, status_along, status_cross);
         slots.push((Slot::ControlCenter, status));
-        let row = STATUS_HEIGHT / 2.0;
+        let (column_width, row_height) = (status.width / 2.0, status.height / 2.0);
         for (index, (slot, _)) in self.glyph_slots().into_iter().enumerate() {
             let column = (index % 2) as f32;
-            let line = (index / 2) as f32;
+            let row = (index / 2) as f32;
             slots.push((
                 slot,
                 Rect::new(
-                    group_x + column * GRID_CELL,
-                    bottom + line * row,
-                    GRID_CELL,
-                    row,
+                    status.x + column * column_width,
+                    status.y + row * row_height,
+                    column_width,
+                    row_height,
                 ),
             ));
         }
         let tray = self.tray_cells();
         if !tray.is_empty() {
-            let rows = tray.len().div_ceil(2);
-            bottom -= GROUP_GAP + rows as f32 * GRID_CELL;
+            let lines = tray.len().div_ceil(2) as f32;
+            end -= GROUP_GAP + lines * GRID_CELL;
+            let group = place(end, lines * GRID_CELL, 2.0 * GRID_CELL);
             for (index, slot) in tray.into_iter().enumerate() {
-                let column = (index % 2) as f32;
-                let line = (index / 2) as f32;
+                let across = (index % 2) as f32;
+                let along = (index / 2) as f32;
+                let (column, row) = if vertical {
+                    (across, along)
+                } else {
+                    (along, across)
+                };
                 slots.push((
                     slot,
                     Rect::new(
-                        group_x + column * GRID_CELL,
-                        bottom + line * GRID_CELL,
+                        group.x + column * GRID_CELL,
+                        group.y + row * GRID_CELL,
                         GRID_CELL,
                         GRID_CELL,
                     ),
                 ));
             }
         }
-        let (count, _) = self.workspaces;
+        let (count, active) = self.workspaces;
         if count >= 2 {
-            bottom -= GROUP_GAP + count as f32 * WORKSPACE_CELL + (WORKSPACE_PILL - WORKSPACE_DOT);
-            let mut y = bottom;
+            end -= GROUP_GAP + count as f32 * WORKSPACE_CELL + (WORKSPACE_PILL - WORKSPACE_DOT);
+            let mut at = end;
             for index in 0..count {
-                let length = if index == self.workspaces.1 {
+                let extent = if index == active {
                     WORKSPACE_PILL
                 } else {
                     WORKSPACE_DOT
                 } + (WORKSPACE_CELL - WORKSPACE_DOT);
-                slots.push((Slot::Workspace(index), Rect::new(0.0, y, width, length)));
-                y += length;
+                slots.push((Slot::Workspace(index), place(at, extent, thick)));
+                at += extent;
             }
         }
-        bottom -= HAIRLINE_CELL;
-        hairlines.push(bottom + HAIRLINE_CELL / 2.0);
-        let top = MARK_CELL + HAIRLINE_CELL;
-        hairlines.push(MARK_CELL + HAIRLINE_CELL / 2.0);
+        end -= HAIRLINE_CELL;
+        let hairline = |center: f32| place((center - 0.5).round(), 1.0, HAIRLINE);
+        let start = origin + MARK_CELL + HAIRLINE_CELL;
+        let hairlines = vec![
+            hairline(end + HAIRLINE_CELL / 2.0),
+            hairline(origin + MARK_CELL + HAIRLINE_CELL / 2.0),
+        ];
         let region = AppsRegion {
-            top,
-            bottom: bottom.max(top),
-            width,
+            start,
+            end: end.max(start),
+            bar,
         };
         (slots, region, hairlines)
     }
 
-    pub fn apps_region(&self, height: f32) -> AppsRegion {
-        self.layout(height).1
+    pub fn apps_region(&self, size: (f32, f32)) -> AppsRegion {
+        self.layout(size).1
     }
 
     fn glyph(&mut self, name: &str, color: Color, scale: f64) -> Option<Image> {
@@ -357,12 +416,16 @@ impl TaskbarView {
         let Some(alpha) = self.slot_alpha(slot) else {
             return;
         };
+        let (inset_x, inset_y) = match vertical(self.edge) {
+            true => (6.0, 4.0),
+            false => (4.0, 6.0),
+        };
         let inset = match slot {
             Slot::BandeMenu | Slot::Clock => Rect::new(
-                rect.x + 6.0,
-                rect.y + 4.0,
-                rect.width - 12.0,
-                rect.height - 8.0,
+                rect.x + inset_x,
+                rect.y + inset_y,
+                rect.width - 2.0 * inset_x,
+                rect.height - 2.0 * inset_y,
             ),
             Slot::Workspace(_) => return,
             _ => rect,
@@ -373,28 +436,31 @@ impl TaskbarView {
         });
     }
 
-    fn paint(&mut self, width: f32, height: f32, scale: f64) -> Vec<Item> {
-        let (slots, _, hairlines) = self.layout(height);
+    fn paint(&mut self, size: (f32, f32), scale: f64) -> Vec<Item> {
+        let (slots, region, hairlines) = self.layout(size);
+        let bar = region.bar;
+        self.bar = bar;
         let palette = self.palette;
         let ink = palette.ink;
+        let inner_edge = match self.edge {
+            BarEdge::Left => Rect::new(bar.x + bar.width - 1.0, bar.y, 1.0, bar.height),
+            BarEdge::Right => Rect::new(bar.x, bar.y, 1.0, bar.height),
+            BarEdge::Top => Rect::new(bar.x, bar.y + bar.height - 1.0, bar.width, 1.0),
+            BarEdge::Bottom => Rect::new(bar.x, bar.y, bar.width, 1.0),
+        };
         let mut items = vec![
             Item::Fill {
-                shape: Shape::rect(Rect::new(0.0, 0.0, width, height)),
+                shape: Shape::rect(bar),
                 paint: palette.chassis.into(),
             },
             Item::Fill {
-                shape: Shape::rect(Rect::new(width - 1.0, 0.0, 1.0, height)),
+                shape: Shape::rect(inner_edge),
                 paint: palette.edge.into(),
             },
         ];
-        for y in hairlines {
+        for hairline in hairlines {
             items.push(Item::Fill {
-                shape: Shape::rect(Rect::new(
-                    ((self.width - HAIRLINE) / 2.0).round(),
-                    (y - 0.5).round(),
-                    HAIRLINE,
-                    1.0,
-                )),
+                shape: Shape::rect(hairline),
                 paint: palette.hairline.into(),
             });
         }
@@ -525,11 +591,15 @@ impl TaskbarView {
                     } else {
                         WORKSPACE_DOT
                     };
+                    let (dot_width, dot_height) = match vertical(self.edge) {
+                        true => (WORKSPACE_DOT, length),
+                        false => (length, WORKSPACE_DOT),
+                    };
                     let dot = Rect::new(
-                        ((width - WORKSPACE_DOT) / 2.0).round(),
-                        (rect.y + (rect.height - length) / 2.0).round(),
-                        WORKSPACE_DOT,
-                        length,
+                        (rect.x + (rect.width - dot_width) / 2.0).round(),
+                        (rect.y + (rect.height - dot_height) / 2.0).round(),
+                        dot_width,
+                        dot_height,
                     );
                     items.push(Item::Fill {
                         shape: Shape::rounded(dot, WORKSPACE_DOT / 2.0),
@@ -715,11 +785,17 @@ impl StatusView for TaskbarView {
     }
 
     fn edge(&self) -> DisplayEdge {
-        DisplayEdge::Left
+        display_edge(self.edge)
     }
 
     fn menu_placement(&self, anchor: Rect) -> MenuPlacement {
-        MenuPlacement::AtPoint(Point::new(self.width + GROUP_GAP, anchor.y))
+        let bar = self.bar;
+        MenuPlacement::AtPoint(match self.edge {
+            BarEdge::Left => Point::new(bar.x + bar.width + GROUP_GAP, anchor.y),
+            BarEdge::Right => Point::new(bar.x - GROUP_GAP, anchor.y),
+            BarEdge::Top => Point::new(anchor.x, bar.y + bar.height + GROUP_GAP),
+            BarEdge::Bottom => Point::new(anchor.x, bar.y - GROUP_GAP),
+        })
     }
 
     fn slides_between_menus(&self) -> bool {
@@ -759,7 +835,7 @@ impl StatusView for TaskbarView {
     }
 
     fn scene(&mut self, width: u32, height: u32, scale: f64) -> Scene {
-        let items = self.paint(self.width.min(width as f32), height as f32, scale);
+        let items = self.paint((width as f32, height as f32), scale);
         Scene {
             width,
             height,

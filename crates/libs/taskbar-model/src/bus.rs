@@ -114,7 +114,12 @@ fn bar_settings(config: &Proxy<'_>) -> zbus::Result<Vec<BusEvent>> {
 fn follow_bar_settings(session: Connection, outbox: Outbox<BusEvent>) {
     spawn("bar-settings", move || {
         let follow = || -> zbus::Result<()> {
-            let config = Proxy::new(&session, BUS_NAME, OBJECT_PATH, CONFIG_INTERFACE)?;
+            let config = zbus::blocking::proxy::Builder::<Proxy>::new(&session)
+                .destination(BUS_NAME)?
+                .path(OBJECT_PATH)?
+                .interface(CONFIG_INTERFACE)?
+                .cache_properties(zbus::proxy::CacheProperties::No)
+                .build()?;
             let changes = PropertiesProxy::builder(&session)
                 .destination(BUS_NAME)?
                 .path(OBJECT_PATH)?

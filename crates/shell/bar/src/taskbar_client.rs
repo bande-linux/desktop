@@ -798,7 +798,7 @@ impl Taskbar {
         self.load_trash_icons();
         self.sync();
         let size = if self.state.borrow().rail().is_some() {
-            rail_surface_size(icon_size)
+            rail_surface_size(edge, icon_size)
         } else {
             surface_size(edge, icon_size, (0, 0))
         };

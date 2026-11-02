@@ -26,7 +26,7 @@ Delete each line when it ships; delete the file when the list is empty.
 ## Already in Files
 
 Icons, list (with disclosure) and columns; Quick Look with full screen; Get Info inspector with
-Open With and default app; tabs; batch rename; Undo/Redo shared by all windows; View ▸ Sort By;
+Open With and default app; tabs; batch rename; Undo/Redo shared by all windows; View ▸ Sort By; Go ▸ Recent Folders;
 spring-loaded folders; Ctrl/Shift drag modifiers; Recents and search with scopes; per-folder
 view memory; status bar and path bar; hidden files; Trash with Put Back, Empty, 30-day purge
 and per-volume `.Trash-uid`; volumes with Eject and an alert (Force Eject) when a disk is busy; Compress and Extract; Open in Terminal; New

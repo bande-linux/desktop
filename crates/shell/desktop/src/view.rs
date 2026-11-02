@@ -555,19 +555,10 @@ impl DesktopView {
             .map(|field| field.text().trim().to_owned())
             .unwrap_or_default();
         self.cancel_rename();
-        let hidden = self
-            .desktop
-            .item(&path)
-            .and_then(|item| item.name.get(item.label.len()..))
-            .unwrap_or_default();
-        let name = match name.is_empty() || name.ends_with(hidden) {
-            true => name,
-            false => format!("{name}{hidden}"),
-        };
         let unchanged = self
             .desktop
             .item(&path)
-            .is_some_and(|item| item.name == name);
+            .is_some_and(|item| item.label == name);
         if !name.is_empty() && !unchanged {
             self.requests.push(Request::Rename { path, name });
         }

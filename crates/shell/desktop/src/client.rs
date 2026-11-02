@@ -248,6 +248,22 @@ impl DesktopSurface {
         self.show_items();
     }
 
+    fn full_name(&self, path: &Path, typed: String) -> String {
+        let hidden = self
+            .items
+            .iter()
+            .find(|item| item.path == path)
+            .and_then(|item| item.name.get(item.label.len()..))
+            .unwrap_or_default();
+        match hidden.is_empty()
+            || typed.is_empty()
+            || self.apps.borrow().extension(&typed).is_some()
+        {
+            true => typed,
+            false => format!("{typed}{hidden}"),
+        }
+    }
+
     fn relist(&mut self) {
         if self.wallpaper_only {
             return;
@@ -515,11 +531,13 @@ impl DesktopSurface {
                     },
                     Action::Move,
                 ),
-                Request::Rename { path, name } => match bande_fs::rename(&path, &name) {
-                    Ok(Some(change)) => self.operations.record(Action::Rename, vec![change]),
-                    Ok(None) => {}
-                    Err(error) => tracing::warn!("cannot rename {}: {error:?}", path.display()),
-                },
+                Request::Rename { path, name } => {
+                    match bande_fs::rename(&path, &self.full_name(&path, name)) {
+                        Ok(Some(change)) => self.operations.record(Action::Rename, vec![change]),
+                        Ok(None) => {}
+                        Err(error) => tracing::warn!("cannot rename {}: {error:?}", path.display()),
+                    }
+                }
                 Request::NewFolder => match bande_fs::new_folder(&self.desktop_dir) {
                     Ok(change) => {
                         if let Change::Created(path) = &change {

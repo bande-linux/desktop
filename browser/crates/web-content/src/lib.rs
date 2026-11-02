@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use encoding_rs::Encoding;
 use web_atoms::Atom;
 use web_css::stylesheet::{CssRule, Stylesheet, parse_stylesheet};
@@ -15,7 +17,7 @@ pub struct Page {
     pub styles: Styles,
     pub boxes: BoxTree,
     pub fragments: FragmentTree,
-    pub display_list: DisplayList,
+    pub display_list: Arc<DisplayList>,
     stylist: Stylist,
     viewport: Viewport,
     sheets: Vec<(String, String)>,
@@ -98,7 +100,7 @@ impl Page {
         let styles = Styles::compute(&document, &stylist);
         let boxes = BoxTree::build(&document, &styles, fonts);
         let fragments = boxes.layout(viewport.width, fonts);
-        let display_list = DisplayList::build(&fragments, fonts, viewport.width);
+        let display_list = Arc::new(DisplayList::build(&fragments, fonts, viewport.width));
         Page {
             document,
             styles,
@@ -175,7 +177,11 @@ impl Page {
 
     fn relayout(&mut self, fonts: &mut Fonts) {
         self.fragments = self.boxes.layout(self.viewport.width, fonts);
-        self.display_list = DisplayList::build(&self.fragments, fonts, self.viewport.width);
+        self.display_list = Arc::new(DisplayList::build(
+            &self.fragments,
+            fonts,
+            self.viewport.width,
+        ));
     }
 
     pub fn hover_at(&mut self, x: f32, y: f32, fonts: &mut Fonts) -> bool {

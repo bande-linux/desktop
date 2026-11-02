@@ -19,7 +19,8 @@ The entry points below are stable; the app and `tools/conformance` drive them.
 - Hover: `hover_at(x, y, fonts)` or `set_hover(node, fonts)` restyle only what `:hover` rules
   can reach and return whether to repaint; `restyled()` counts the elements restyled.
 - `Fonts::new()` scans the system fonts once; keep one per thread and reuse it across pages.
-- `Page` holds the document, styles, box tree, fragment tree and `display_list`.
+- `Page` holds the document, styles, box tree, fragment tree and `display_list`, an `Arc` the
+  app shares instead of copying; the page hit-tests the same list.
   - `resize(width, fonts)` lays out again without restyling or reshaping.
   - `link_at(x, y)` is the `href` of the link under a point in document coordinates.
   - `fragment_y(name)` is the top of the element a `#name` link points to (an `id`, or an

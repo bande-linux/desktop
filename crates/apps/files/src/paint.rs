@@ -42,6 +42,7 @@ const TOP_GAP: f32 = 8.0;
 const FACT_LABEL: f32 = 96.0;
 const PAGE_PADDING: f32 = 10.0;
 const FACT_COLUMN: f32 = 90.0;
+const FACT_GAP: f32 = 8.0;
 const NAMES_KEPT: usize = 4000;
 
 pub fn permissions(mode: u32) -> String {
@@ -1070,7 +1071,12 @@ impl FilesView {
             _ => {}
         }
         for (label, value) in facts {
-            let label = self.label(&label, SMALL_SIZE, muted);
+            let label = self.text().paragraph(
+                &label,
+                TextStyle::new(SMALL_SIZE, muted).weight(TextStyle::REGULAR),
+                Some(FACT_COLUMN - FACT_GAP),
+                TextAlign::Start,
+            );
             let value_paragraph = self.text().paragraph(
                 &value,
                 TextStyle::new(SMALL_SIZE, primary),

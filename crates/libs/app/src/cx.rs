@@ -131,7 +131,7 @@ impl<P: Program> Cx<P> {
         }
     }
 
-    pub(crate) fn raise(&mut self, window: WindowId, token: Option<String>) {
+    pub fn raise(&mut self, window: WindowId, token: Option<String>) {
         let Some(index) = self.index(window) else {
             return;
         };

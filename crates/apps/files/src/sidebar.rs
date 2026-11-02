@@ -62,6 +62,7 @@ fn bookmark(line: &str) -> Option<Place> {
 
 const RECENTS: &str = "recents";
 const TRASH: &str = "trash";
+const VOLUMES: &str = "volumes";
 const HIDDEN: char = '-';
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,6 +106,44 @@ fn recents() -> Place {
         icon: "document-open-recent",
         kind: PlaceKind::Standard,
     }
+}
+
+fn trash() -> Place {
+    Place {
+        name: L10N.tr("trash"),
+        location: Location::Trash,
+        icon: "user-trash",
+        kind: PlaceKind::Standard,
+    }
+}
+
+pub fn standard_places(home: &Path, user_dirs: Option<&str>) -> Vec<Place> {
+    let mut places = defaults(home, user_dirs, None);
+    places.push(trash());
+    places
+}
+
+pub fn volumes_hidden(layout: Option<&str>) -> bool {
+    layout
+        .into_iter()
+        .flat_map(str::lines)
+        .any(|line| line.strip_prefix(HIDDEN).map(str::trim) == Some(VOLUMES))
+}
+
+pub fn with_place_shown(layout: &str, place: Option<&Location>, shown: bool) -> String {
+    let Some(token) = place.map_or_else(|| Some(VOLUMES.to_owned()), token) else {
+        return layout.to_owned();
+    };
+    let hidden = format!("{HIDDEN}{token}");
+    let mut lines = layout
+        .lines()
+        .filter(|line| line.trim() != hidden)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if !shown {
+        lines.push(hidden);
+    }
+    lines.into_iter().map(|line| format!("{line}\n")).collect()
 }
 
 fn defaults(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Vec<Place> {
@@ -198,12 +237,7 @@ pub fn rows(
     rows.extend(favourites.into_iter().map(Row::Place));
     rows.push(Row::Heading(L10N.tr("sidebar-locations")));
     if !hidden.contains(&Location::Trash) {
-        rows.push(Row::Place(Place {
-            name: L10N.tr("trash"),
-            location: Location::Trash,
-            icon: "user-trash",
-            kind: PlaceKind::Standard,
-        }));
+        rows.push(Row::Place(trash()));
     }
     rows
 }

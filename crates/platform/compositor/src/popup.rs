@@ -255,14 +255,32 @@ impl State {
     }
 
     pub(crate) fn return_from_menu(&mut self) {
+        let owner = self.relayed_menu_owner.take();
         let key = self.end_popup_grab().and_then(|root| {
             self.toplevel_of(&root)
                 .or_else(|| self.focusable_layer_of(&root))
         });
-        if key.is_some() {
+        if let Some(owner) = owner {
+            self.return_to_menu_owner(owner);
+        } else if key.is_some() {
             self.focus(key);
         } else if self.focused().is_some_and(|focused| !focused.is_alive()) {
             self.focus_behind_layer();
+        }
+    }
+
+    fn return_to_menu_owner(&mut self, owner: WlSurface) {
+        let shown = self
+            .window_index(&owner)
+            .is_some_and(|index| self.windows[index].visible());
+        if shown {
+            return self.focus(Some(owner));
+        }
+        let windowless = self.windowless_app.take();
+        self.focus(None);
+        if windowless.is_some() {
+            self.windowless_app = windowless;
+            self.announce_active_app(None);
         }
     }
 
@@ -284,6 +302,7 @@ impl State {
     }
 
     pub(crate) fn end_popup_grab(&mut self) -> Option<WlSurface> {
+        self.relayed_menu_owner = None;
         let mut grab = self.popup_grab.take()?;
         let serials = [
             grab.serial(),

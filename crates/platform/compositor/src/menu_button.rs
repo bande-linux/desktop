@@ -169,6 +169,7 @@ impl State {
         };
         relay.popup = Some(popup.clone());
         let window = relay.window.clone();
+        self.relayed_menu_owner = Some(window.clone());
         self.set_menus_open(&window, true);
     }
 

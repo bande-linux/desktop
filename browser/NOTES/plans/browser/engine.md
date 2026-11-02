@@ -113,7 +113,7 @@ elements) and "Cat" (13.4k), without author styles, at 1000 px:
 | Fragment tree | ≤ 380 B | 283–367 B |
 | Display list | ≤ 340 B | 225–328 B |
 
-Shaped glyphs (24 B each) dominate the box tree; packing them to 16 B and dropping the
+Shaped glyphs (28 B each) dominate the box tree; moving font and run to per-run spans (20 B) and dropping the
 per-paragraph text copy are the next savings.
 
 ## `web-css` selectors for the matcher

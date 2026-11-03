@@ -159,6 +159,9 @@ impl State {
             .map(|screen| screen.name())
             .filter(|name| self.powered(name))
             .collect();
+        if names.is_empty() {
+            return;
+        }
         let Some(lock) = &mut self.lock else {
             return;
         };

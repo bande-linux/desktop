@@ -5,6 +5,7 @@ use std::time::Duration;
 use crate::state::Compositor;
 
 pub const SAFETY_MARGIN: Duration = Duration::from_millis(1);
+const FLIP_TIMEOUT: Duration = Duration::from_secs(1);
 
 const REMEMBERED_RENDERS: usize = 16;
 const TYPICAL_RENDER_WEIGHT: f64 = 0.1;
@@ -131,6 +132,7 @@ enum Phase {
     Waiting(Vblank),
     Rendered(Vblank),
     Held,
+    AwaitingFlip(Duration),
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -215,7 +217,8 @@ impl FrameScheduler {
                     now = clock();
                     self.clock.record_render(deadline, started, now);
                     self.phase = match submission {
-                        Submission::AwaitingFlip | Submission::Paused => Phase::Held,
+                        Submission::AwaitingFlip => Phase::AwaitingFlip(now),
+                        Submission::Paused => Phase::Held,
                         Submission::AtVblank if now <= vblank.time => Phase::Rendered(vblank),
                         Submission::AtVblank => Phase::Rendered(self.clock.vblank_after(now)),
                     };
@@ -225,6 +228,17 @@ impl FrameScheduler {
                         wake_at: None,
                         presented,
                     });
+                }
+                Phase::AwaitingFlip(since) if now < since + FLIP_TIMEOUT => {
+                    return Ok(Poll {
+                        wake_at: Some(since + FLIP_TIMEOUT),
+                        presented,
+                    });
+                }
+                Phase::AwaitingFlip(_) => {
+                    tracing::warn!("page flip timed out, recovering");
+                    self.phase = Phase::Idle;
+                    self.wanted = true;
                 }
                 Phase::Rendered(vblank) if now < vblank.time => {
                     return Ok(Poll {

@@ -16,6 +16,7 @@ debian/*.substvars
 .idea/
 *.iml
 *.DS_Store
+*.pyc
 
 # Factory Local Worktrees & Cache
 .worktrees/

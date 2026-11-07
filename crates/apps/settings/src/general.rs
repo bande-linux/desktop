@@ -6,6 +6,7 @@ use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Button, Label, SearchField, Stack, Widget};
 
 use crate::L10N;
+use crate::login::App;
 use crate::pages::{Widgets, boxed, muted_row, submit};
 use crate::software::SoftwareState;
 use crate::storage::Category;
@@ -225,15 +226,20 @@ impl SettingsView {
             )));
             return rows;
         };
+        rows.extend(self.app_search(&L10N.tr("add-login-item"), &query, &login.apps));
+        rows
+    }
+
+    pub(crate) fn app_search(&mut self, title: &str, query: &str, apps: &[App]) -> Widgets {
         let field = SearchField::new(
             &L10N.tr("search-apps"),
-            &query,
+            query,
             submit(&self.intents, Intent::PickQuery),
         );
         self.anchors.push((Anchor::Picker, field.id()));
         let mut cancel = intent(&self.intents, |()| Intent::Pick(None));
-        rows.push(boxed(Row::new(
-            Text::new(&L10N.tr("add-login-item"), Tone::Primary),
+        let mut rows = vec![boxed(Row::new(
+            Text::new(title, Tone::Primary),
             Some(boxed(Stack::new(
                 Axis::Horizontal,
                 Spacing::S as f32,
@@ -243,13 +249,13 @@ impl SettingsView {
                     boxed(Button::new(&L10N.tr("cancel"), move || cancel(())).cancel()),
                 ],
             ))),
-        )));
+        ))];
         let results = self.pick_results();
         if results.is_empty() && !query.trim().is_empty() {
             rows.push(muted_row(&L10N.tr("no-apps")));
         }
         for id in results {
-            let Some(app) = login.apps.iter().find(|app| app.id == id) else {
+            let Some(app) = apps.iter().find(|app| app.id == id) else {
                 continue;
             };
             let mut choose = intent(&self.intents, Intent::Picked);

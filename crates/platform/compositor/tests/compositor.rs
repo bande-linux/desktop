@@ -220,6 +220,7 @@ fn only_the_lock_screen_may_lock_and_a_sandbox_gets_no_privileged_protocol() {
     let sandboxed = TestClient::connect_sandboxed(&mut server, "org.example.App");
     for privileged in [
         "ext_session_lock_manager_v1",
+        "bande_app_control_v1",
         "zwlr_layer_shell_v1",
         "zwlr_output_manager_v1",
         "zwlr_output_power_manager_v1",

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, OnceLock};
@@ -16,7 +17,7 @@ const PKEXEC: &str = "/usr/bin/pkexec";
 const HELPER_REFUSED_VALUE: i32 = 2;
 const PKEXEC_DISMISSED: i32 = 126;
 const PKEXEC_NOT_AUTHORIZED: i32 = 127;
-const DEFAULT_LOCALE: &str = "C.UTF-8";
+pub(crate) const DEFAULT_LOCALE: &str = "C.UTF-8";
 pub const REGION_CATEGORIES: [&str; 5] = [
     "LC_TIME",
     "LC_NUMERIC",
@@ -179,8 +180,60 @@ fn keyboard_failure(failure: HelperFailure) -> String {
     }
 }
 
+fn user_file() -> Option<PathBuf> {
+    Some(bande_xdg::config_home()?.join("locale.conf"))
+}
+
+fn with_user_choices(system: Vec<String>) -> Vec<String> {
+    let user = user_file().and_then(|path| std::fs::read_to_string(path).ok());
+    overlaid(system, user.as_deref().unwrap_or_default())
+}
+
+fn overlaid(system: Vec<String>, user: &str) -> Vec<String> {
+    let chosen: Vec<&str> = user.lines().filter(|line| line.contains('=')).collect();
+    let key = |line: &str| line.split('=').next().unwrap_or_default().to_owned();
+    let mut merged: Vec<String> = system
+        .into_iter()
+        .filter(|line| !chosen.iter().any(|mine| key(mine) == key(line)))
+        .collect();
+    merged.extend(chosen.iter().map(|line| (*line).to_owned()));
+    merged
+}
+
+fn user_lines(wanted: &[String], language: &str) -> String {
+    wanted
+        .iter()
+        .map(|line| match line.strip_suffix('=') {
+            Some(key) => format!("{key}={language}\n"),
+            None => format!("{line}\n"),
+        })
+        .collect()
+}
+
+fn write_user_file(contents: &str) -> std::io::Result<()> {
+    let path = user_file().ok_or(std::io::ErrorKind::NotFound)?;
+    if let Some(folder) = path.parent() {
+        std::fs::create_dir_all(folder)?;
+    }
+    let temporary = path.with_extension("conf.new");
+    std::fs::write(&temporary, contents)?;
+    std::fs::rename(temporary, path)
+}
+
+fn generated(code: &str) -> bool {
+    let normal = |name: &str| name.to_lowercase().replace("utf-8", "utf8");
+    Command::new("/usr/bin/locale")
+        .arg("-a")
+        .output()
+        .is_ok_and(|output| {
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .any(|name| normal(name) == normal(code))
+        })
+}
+
 fn read(locale: &LocaleProxyBlocking<'_>, available: &[AvailableLocale]) -> Option<LocaleState> {
-    let (language, region) = parse_assignments(&locale.locale().ok()?);
+    let (language, region) = parse_assignments(&with_user_choices(locale.locale().ok()?));
     Some(LocaleState {
         available: available.to_vec(),
         language,
@@ -243,7 +296,7 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 LocaleCommand::Read | LocaleCommand::LoginKeyboard(_) => continue,
             };
             let current = match locale.locale() {
-                Ok(current) => current,
+                Ok(current) => with_user_choices(current),
                 Err(error) => {
                     updates.send(Update::PaneFailed(
                         PaneId::LanguageTime,
@@ -263,17 +316,57 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             } else {
                 assignments(&current, &language, chosen.as_deref())
             };
+            let shown = if setting == SettingId::Language {
+                chosen.clone().unwrap_or_else(|| language.clone())
+            } else {
+                language.clone()
+            };
+            let needed = chosen.as_deref().unwrap_or(&language);
+            let contents = user_lines(&wanted, &shown);
             let mut arguments = vec!["locale".to_owned()];
             arguments.extend(wanted);
-            if let Err(failure) = run_helper(&arguments) {
-                let code = chosen.as_deref().unwrap_or(&language);
-                updates.send(Update::Failed(
-                    setting,
-                    change_failure(failure, code, available),
-                ));
+            let outcome = match run_helper(&arguments) {
+                Err(HelperFailure::NotAllowed) if generated(needed) => Ok(()),
+                other => other,
+            };
+            match outcome {
+                Ok(()) => {
+                    if let Err(error) = write_user_file(&contents) {
+                        tracing::warn!("cannot write the language choice: {error}");
+                        updates.send(Update::Failed(setting, L10N.tr("couldnt-change")));
+                    }
+                }
+                Err(failure) => {
+                    updates.send(Update::Failed(
+                        setting,
+                        change_failure(failure, needed, available),
+                    ));
+                }
             }
             updates.send(Update::Locale(read(&locale, available)));
         }
     });
     sender
+}
+
+#[cfg(test)]
+mod per_user_tests {
+    use super::*;
+
+    #[test]
+    fn the_users_choice_wins_and_clearing_formats_overrides_the_system() {
+        let merged = overlaid(
+            vec![
+                "LANG=en_US.UTF-8".to_owned(),
+                "LC_TIME=de_DE.UTF-8".to_owned(),
+            ],
+            &user_lines(
+                &["LANG=sv_SE.UTF-8".to_owned(), "LC_TIME=".to_owned()],
+                "sv_SE.UTF-8",
+            ),
+        );
+        let (language, region) = parse_assignments(&merged);
+        assert_eq!(language, "sv_SE.UTF-8");
+        assert_eq!(region, None);
+    }
 }

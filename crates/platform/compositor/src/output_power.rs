@@ -1,3 +1,5 @@
+use std::sync::mpsc::Sender;
+
 use smithay::reexports::wayland_protocols_wlr::output_power_management::v1::server::{
     zwlr_output_power_manager_v1::{self, ZwlrOutputPowerManagerV1},
     zwlr_output_power_v1::{self, Mode, ZwlrOutputPowerV1},
@@ -10,12 +12,15 @@ use smithay::reexports::wayland_server::{
 use crate::state::{Compositor, State};
 
 const MANAGER_VERSION: u32 = 1;
+const POWER_KEY_HELD_MILLIS: u32 = 5000;
 
 #[derive(Default)]
 pub(crate) struct OutputPower {
     controls: Vec<(ZwlrOutputPowerV1, String)>,
     off: Vec<String>,
     turned_on: bool,
+    power_key_pressed_at: Option<u32>,
+    sleep_requests: Option<Sender<()>>,
 }
 
 pub(crate) fn create_global(display: &DisplayHandle) {
@@ -70,6 +75,18 @@ impl State {
         self.power_mode(output) == Mode::On
     }
 
+    pub(crate) fn power_key(&mut self, pressed: bool, time: u32) {
+        let power = &mut self.output_power;
+        let held = power.power_key_pressed_at.take();
+        if pressed {
+            power.power_key_pressed_at = Some(time);
+        } else if held.is_some_and(|at| time.wrapping_sub(at) < POWER_KEY_HELD_MILLIS)
+            && let Some(requests) = &power.sleep_requests
+        {
+            let _ = requests.send(());
+        }
+    }
+
     pub(crate) fn power_on_every_output(&mut self) {
         for output in self.output_power.off.clone() {
             self.set_output_power(&output, Mode::On);
@@ -84,6 +101,10 @@ impl Compositor {
 
     pub fn take_outputs_powered_on(&mut self) -> bool {
         std::mem::take(&mut self.state.output_power.turned_on)
+    }
+
+    pub fn sleep_on_the_power_key(&mut self, requests: Sender<()>) {
+        self.state.output_power.sleep_requests = Some(requests);
     }
 
     pub fn take_virtual_terminal(&mut self) -> Option<i32> {

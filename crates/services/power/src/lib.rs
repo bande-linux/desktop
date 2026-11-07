@@ -1,4 +1,5 @@
 pub mod adapter;
+pub mod audio;
 pub mod backlight;
 pub mod battery;
 pub mod controller;

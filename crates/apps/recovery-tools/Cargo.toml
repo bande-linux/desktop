@@ -1,0 +1,38 @@
+[package]
+name = "bande-recovery-tools"
+description = "Bande Recovery: reinstall, restore and repair from the recovery environment"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+zeroize.workspace = true
+bande-app.workspace = true
+bande-inbox.workspace = true
+bande-l10n.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "misc"
+depends = "$auto, fonts-inter, pkexec, util-linux"
+extended-description = """\
+The window of the Bande recovery environment and install USB: install or \
+reinstall Bande, keeping your files, go back to a previous version, restore \
+from a backup, and open Disks and Terminal."""
+assets = [
+    ["target/release/bande-recovery-tools", "usr/bin/", "755"],
+    ["data/org.bande.RecoveryTools.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.RecoveryTools.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["data/org.bande.RecoveryTools.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+]

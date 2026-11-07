@@ -690,11 +690,14 @@ dependencies = [
  "bande-content",
  "bande-files",
  "bande-fs",
+ "bande-graphics",
  "bande-inbox",
  "bande-l10n",
  "bande-log",
  "bande-pdf",
  "bande-printers",
+ "bande-test-bus",
+ "bande-test-wayland",
  "bande-toolkit",
  "bande-volumes",
  "bande-wallpaper",
@@ -778,10 +781,12 @@ dependencies = [
  "bande-bus",
  "bande-config",
  "bande-datetime",
+ "bande-inbox",
  "bande-keyboard",
  "bande-l10n",
  "bande-lock",
  "bande-log",
+ "bande-network",
  "bande-status",
  "bande-toolkit",
  "libc",
@@ -1028,7 +1033,6 @@ dependencies = [
  "bande-pdf",
  "bande-printers",
  "bande-test-bus",
- "bande-test-wayland",
  "bande-xdg",
  "blocking",
  "ring",
@@ -1084,6 +1088,22 @@ dependencies = [
  "bande-log",
  "tracing",
  "zbus",
+]
+
+[[package]]
+name = "bande-recovery-tools"
+version = "0.1.7"
+dependencies = [
+ "accesskit",
+ "bande-app",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-toolkit",
+ "bande-xdg",
+ "serde",
+ "serde_json",
+ "tracing",
+ "zeroize",
 ]
 
 [[package]]
@@ -1207,6 +1227,7 @@ dependencies = [
  "bande-app-menu",
  "bande-audio",
  "bande-bluetooth",
+ "bande-bus",
  "bande-config",
  "bande-datetime",
  "bande-edid",

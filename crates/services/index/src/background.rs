@@ -214,6 +214,7 @@ impl Background {
                 {
                     tracing::warn!("cannot finish merging the search index: {error}");
                 }
+                unsafe { libc::malloc_trim(0) };
                 Reply::Committed
             }
         }

@@ -58,6 +58,7 @@ pub struct Cell {
     pub text: Rc<str>,
     pub icon: Option<Image>,
     pub muted: bool,
+    pub dimmed: bool,
     pub tint: Option<Color>,
     pub label: bool,
     pub tabular: bool,
@@ -70,6 +71,7 @@ impl Cell {
             text: text.into(),
             icon: None,
             muted: false,
+            dimmed: false,
             tint: None,
             label: false,
             tabular: false,
@@ -133,6 +135,13 @@ impl Row {
             children: Vec::new(),
             expandable: false,
         }
+    }
+
+    pub fn dimmed(mut self) -> Self {
+        for cell in &mut self.cells {
+            cell.dimmed = true;
+        }
+        self
     }
 
     pub fn children(self, children: Vec<Row>) -> Self {

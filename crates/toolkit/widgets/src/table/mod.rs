@@ -1340,7 +1340,14 @@ impl Widget for Table {
             for column in 0..line.cells.len().min(self.columns.len()) {
                 if Some(column) != floating {
                     let x = edges[column].0 + shifts[column];
-                    self.paint_cell(cx, (&texts, &widths), line, column, (x, y, lit), &mut rows);
+                    self.paint_cell(
+                        cx,
+                        (&texts, &widths),
+                        (line, index),
+                        column,
+                        (x, y, lit),
+                        &mut rows,
+                    );
                 }
             }
         }

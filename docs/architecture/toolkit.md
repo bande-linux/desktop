@@ -229,13 +229,14 @@ writes a hex value, a corner radius or a font name of its own.
   glides to its new rows on `quick`. `Table::set_headings` adds group headings (semibold
   `ink` over a `hairline`, one row tall) above the rows that start each group, as Files' Use
   Groups does, and level 2 heading nodes before those rows so screen readers announce each
-  group; a selection run never spans a heading. `Column::movable` columns can be dragged along
-  the header: the whole column lifts and follows the pointer, neighbours slide aside on
-  `standard`, Escape puts it back, and a click without a drag still sorts (on release). The
-  first column never moves. Column and `Sort` indices keep the app's order, so moving needs no
-  new rows: the app stores what `Table::on_column_order` reports and restores it with
-  `set_column_order`; `Table::move_column` is the menu and keyboard way. The slide itself is
-  `Reorder`, which `TabStrip` also uses and a hand-drawn list can too. Scroll bars are macOS overlay scrollers
+  group; a selection run never spans a heading. `Row::dimmed` tones a row down one ink step
+  with its icons at `Palette::DIMMED_ALPHA`, for normally hidden files. `Column::movable`
+  columns can be dragged along the header: the whole column lifts and follows the pointer,
+  neighbours slide aside on `standard`, Escape puts it back, and a click without a drag still
+  sorts (on release). The first column never moves. Column and `Sort` indices keep the app's
+  order, so moving needs no new rows: the app stores what `Table::on_column_order` reports and
+  restores it with `set_column_order`; `Table::move_column` is the menu and keyboard way. The
+  slide itself is `Reorder`, which `TabStrip` also uses and a hand-drawn list can too. Scroll bars are macOS overlay scrollers
   (`Scrollbar`, also usable on its own by views that scroll themselves, such as Terminal): a
   6 pt `ink3` knob shown while scrolling or when the pointer is in the right 14 pt, widening to
   10 pt over a faint lane on hover; drag the knob, click the lane to page; it fades 0.9 s

@@ -229,6 +229,7 @@ back-tooltip = Gå tillbaka (Alt+Vänster)
 available-of = { $available } tillgängligt av { $capacity }
 about-model = Modell
 about-chip = Chip
+about-chip-cores = { $family } ({ $cores } kärnor)
 about-memory = Minne
 about-bande = Bande
 about-system = System

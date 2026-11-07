@@ -33,3 +33,4 @@ key-page-up = Page Up
 key-page-down = Page Down
 key-insert = Insert
 key-menu = Meny
+look-up = Slå upp ”{ $word }”

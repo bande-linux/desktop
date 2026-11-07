@@ -2252,6 +2252,9 @@ impl SettingsView {
             (SettingId::RefreshRate, Value::Number(hertz)) => {
                 display.refresh_rate = Some(f64::from(hertz));
             }
+            (SettingId::MatchColours, Value::Flag(on)) => {
+                display.match_colours = (!on).then_some(false);
+            }
             _ => return,
         }
         if confirm && display != previous {

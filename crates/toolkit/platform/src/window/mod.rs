@@ -69,7 +69,7 @@ use crate::popup::{Fading, MenuPlacement, Menus};
 use crate::presentation::Presentation;
 use crate::scale::{Scaling, SurfaceScale};
 use crate::seat::Input;
-use crate::shell::{PANEL_SINCE, Shell};
+use crate::shell::{PANEL_SINCE, POPOVER_SINCE, Shell};
 use crate::text_input::TextInput;
 
 pub const ACTIVATION_TOKEN_VARIABLE: &str = "XDG_ACTIVATION_TOKEN";
@@ -104,6 +104,12 @@ pub enum Role {
         session: Option<WindowInSession>,
     },
     Panel {
+        title: String,
+        app_id: String,
+        tag: String,
+        session: Option<WindowInSession>,
+    },
+    Popover {
         title: String,
         app_id: String,
         tag: String,
@@ -150,11 +156,21 @@ impl Role {
         }
     }
 
+    pub fn popover(title: &str, app_id: &str) -> Self {
+        Self::Popover {
+            title: title.to_owned(),
+            app_id: app_id.to_owned(),
+            tag: String::new(),
+            session: None,
+        }
+    }
+
     pub fn tagged(mut self, window_tag: &str) -> Self {
         if let Self::Toplevel { tag, .. }
         | Self::Dialog { tag, .. }
         | Self::Utility { tag, .. }
-        | Self::Panel { tag, .. } = &mut self
+        | Self::Panel { tag, .. }
+        | Self::Popover { tag, .. } = &mut self
         {
             *tag = window_tag.to_owned();
         }
@@ -165,7 +181,8 @@ impl Role {
         if let Self::Toplevel { session, .. }
         | Self::Dialog { session, .. }
         | Self::Utility { session, .. }
-        | Self::Panel { session, .. } = &mut self
+        | Self::Panel { session, .. }
+        | Self::Popover { session, .. } = &mut self
         {
             *session = window;
         }
@@ -530,8 +547,9 @@ impl Window {
         }
         let mut chrome = None;
         let panel = matches!(role, Role::Panel { .. });
+        let popover = matches!(role, Role::Popover { .. });
         let (titled, fixed) = match &role {
-            Role::Dialog { .. } => (false, true),
+            Role::Dialog { .. } | Role::Popover { .. } => (false, true),
             Role::Utility { .. } => (true, true),
             Role::Panel { .. } => (false, false),
             Role::Toplevel { .. } | Role::Layer(_) | Role::Lock => (true, false),
@@ -560,6 +578,12 @@ impl Window {
                 app_id,
                 tag,
                 session,
+            }
+            | Role::Popover {
+                title,
+                app_id,
+                tag,
+                session,
             } => {
                 let wm_base = state
                     .wm_base
@@ -577,6 +601,14 @@ impl Window {
                     .filter(|app| panel && app.version() >= PANEL_SINCE)
                 {
                     app.set_panel(&toplevel);
+                }
+                if let Some(app) = state
+                    .shell
+                    .app
+                    .as_ref()
+                    .filter(|app| popover && app.version() >= POPOVER_SINCE)
+                {
+                    app.set_popover(&toplevel);
                 }
                 if let Some(manager) = state.toplevel_tag.take() {
                     if !tag.is_empty() {
@@ -1155,6 +1187,9 @@ impl Window {
                     )?;
                 }
                 self.set_cursor(ui.cursor());
+                if let Some(text) = ui.take_look_up_request() {
+                    self.look_up(text);
+                }
                 let unhandled = match input {
                     Event::Key { .. } if !changed => Some(WindowEvent::Input(input)),
                     _ => None,
@@ -1171,6 +1206,9 @@ impl Window {
                 true => {
                     if ui.take_emoji_picker_request() {
                         self.show_emoji_picker()?;
+                    }
+                    if let Some(text) = ui.take_look_up_request() {
+                        self.look_up(text);
                     }
                     (true, None)
                 }

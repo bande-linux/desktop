@@ -107,6 +107,7 @@ bande-desktop-surface = { path = "crates/shell/desktop" }
 bande-taskbar-model = { path = "crates/libs/taskbar-model" }
 bande-edid = { path = "crates/libs/edid" }
 bande-files = { path = "crates/apps/files" }
+bande-lookup = { path = "crates/apps/lookup" }
 bande-fs = { path = "crates/libs/fs" }
 bande-graphics = { path = "crates/toolkit/graphics" }
 bande-pdf = { path = "crates/toolkit/pdf" }

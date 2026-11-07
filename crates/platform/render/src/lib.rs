@@ -266,6 +266,8 @@ impl Drop for MappedExport {
     }
 }
 
+pub type OutputColour = [[f32; 3]; 3];
+
 struct Target {
     image: Image,
     format: vk::Format,
@@ -325,6 +327,8 @@ pub struct VulkanRenderer {
     output_on_device: bool,
     samples_video: bool,
     video_acquires: Vec<u64>,
+    output_colour: Option<OutputColour>,
+    colour_scratch: HashMap<(i32, i32, vk::Format), Image>,
     memory: vk::PhysicalDeviceMemoryProperties,
     info: DeviceInfo,
     reduced_effects: bool,
@@ -374,6 +378,7 @@ enum Program {
     BlurDown,
     BlurUp,
     BlurTone,
+    DisplayColour,
 }
 
 impl Program {
@@ -381,6 +386,7 @@ impl Program {
         match self {
             Self::Texture => c"fragment",
             Self::Video => c"video",
+            Self::DisplayColour => c"display_colour",
             Self::Solid => c"solid",
             Self::Shadow => c"shadow",
             Self::BlurDown => c"blur_down",
@@ -622,6 +628,8 @@ impl VulkanRenderer {
             output_on_device: chosen.output_on_device,
             samples_video: chosen.samples_video,
             video_acquires: Vec::new(),
+            output_colour: None,
+            colour_scratch: HashMap::new(),
             memory: unsafe { instance.get_physical_device_memory_properties(chosen.physical) },
             reduced_effects: chosen.info.software,
             info: chosen.info,
@@ -734,6 +742,7 @@ impl VulkanRenderer {
             for program in [
                 Program::Texture,
                 Program::Video,
+                Program::DisplayColour,
                 Program::Solid,
                 Program::Shadow,
                 Program::BlurDown,
@@ -840,6 +849,10 @@ impl VulkanRenderer {
         for chain in self.blur_chains.values_mut() {
             chain.used = false;
         }
+    }
+
+    pub fn set_output_colour(&mut self, colour: Option<OutputColour>) {
+        self.output_colour = colour;
     }
 
     pub fn device_info(&self) -> &DeviceInfo {
@@ -1367,7 +1380,9 @@ impl VulkanRenderer {
                     width,
                     height,
                     vk_format,
-                    vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
+                    vk::ImageUsageFlags::COLOR_ATTACHMENT
+                        | vk::ImageUsageFlags::TRANSFER_SRC
+                        | vk::ImageUsageFlags::SAMPLED,
                     vk::ComponentSwizzle::IDENTITY,
                 )?;
                 Ok((image, vk_format))
@@ -1402,6 +1417,21 @@ impl VulkanRenderer {
     fn forget_target(&mut self, id: u64) {
         if let Some(removed) = self.targets.remove(&id) {
             self.destroy_target(&removed);
+            let size = (removed.image.width, removed.image.height);
+            let (kept, retired): (HashMap<_, _>, HashMap<_, _>) =
+                std::mem::take(&mut self.colour_scratch)
+                    .into_iter()
+                    .partition(|((width, height, _), _)| {
+                        (*width, *height) != size
+                            || self
+                                .targets
+                                .values()
+                                .any(|target| (target.image.width, target.image.height) == size)
+                    });
+            for image in retired.values() {
+                self.destroy_image(image);
+            }
+            self.colour_scratch = kept;
         }
     }
 
@@ -1867,6 +1897,9 @@ impl Drop for VulkanRenderer {
         }
         for (_, target) in std::mem::take(&mut self.targets) {
             self.destroy_target(&target);
+        }
+        for (_, image) in std::mem::take(&mut self.colour_scratch) {
+            self.destroy_image(&image);
         }
         for staging in std::mem::take(&mut self.staging) {
             self.destroy_staging(&staging);

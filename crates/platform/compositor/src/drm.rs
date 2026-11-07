@@ -38,6 +38,7 @@ use crate::render::background;
 use crate::scanout::ScanoutExporter;
 use crate::screen::{OutputConfig, OutputMode};
 use crate::state::{Compositor, REFRESH, ScanoutDevice};
+use bande_render::OutputColour;
 
 pub type DrmBackendError = Box<dyn Error>;
 
@@ -61,6 +62,8 @@ struct Head {
     relink_wanted: bool,
     flip_pending: bool,
     refused: bool,
+    display_colour: Option<OutputColour>,
+    converting: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -519,6 +522,10 @@ impl DrmBackend {
             relink_wanted: false,
             flip_pending: false,
             refused: false,
+            display_colour: edid_of(&self.device, info.handle())
+                .as_ref()
+                .and_then(crate::colour::srgb_to_display),
+            converting: false,
         }))
     }
 
@@ -1018,13 +1025,20 @@ impl DrmBackend {
                     .into(),
                 transform: settings.transform,
             });
+        let conversion = head.display_colour.filter(|_| settings.match_colours);
+        if conversion.is_some() != head.converting {
+            head.converting = conversion.is_some();
+            head.compositor.reset_buffers();
+        }
+        self.renderer.set_output_colour(conversion);
+        let flags = match conversion {
+            Some(_) => FrameFlags::empty(),
+            None => FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
+        };
         let elements = compositor.render_elements_on(&mut self.renderer, output);
-        let frame = head.compositor.render_frame(
-            &mut self.renderer,
-            &elements,
-            background(),
-            FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
-        )?;
+        let frame =
+            head.compositor
+                .render_frame(&mut self.renderer, &elements, background(), flags)?;
         self.renderer.finish_uploads()?;
         head.scanned_out = matches!(frame.primary_element, PrimaryPlaneElement::Element(_));
         let empty = frame.is_empty;

@@ -602,6 +602,9 @@ impl FilesView {
         if let Some((menu, at)) = self.ui.take_menu_request() {
             self.requests.push(Request::ShowMenu { menu, at });
         }
+        if let Some(text) = self.ui.take_look_up_request() {
+            self.requests.push(Request::LookUp(text));
+        }
         if self.ui.take_emoji_picker_request() {
             self.requests.push(Request::ShowEmojiPicker);
         }

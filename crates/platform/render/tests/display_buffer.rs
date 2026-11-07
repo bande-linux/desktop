@@ -93,3 +93,23 @@ fn a_frame_reaches_the_display_buffer() {
         );
     }
 }
+
+#[test]
+fn a_converted_frame_reaches_the_display_buffer() {
+    let Some((mut memory, mut dmabuf)) = shared_buffer() else {
+        return;
+    };
+    let mut renderer = VulkanRenderer::new().expect("Vulkan renderer");
+    renderer.set_output_colour(Some([[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]));
+    let whole = [Rectangle::<i32, Physical>::from_size(SIZE.into())];
+    let mut framebuffer = renderer.bind(&mut dmabuf).unwrap();
+    let mut frame = renderer
+        .render(&mut framebuffer, SIZE.into(), Transform::Normal)
+        .unwrap();
+    frame.clear(Color32F::new(1.0, 0.0, 0.0, 1.0), &whole).unwrap();
+    drop(frame.finish().unwrap());
+    drop(framebuffer);
+    let converts = !renderer.device_info().software;
+    let expected = if converts { [0, 255, 0] } else { [255, 0, 0] };
+    assert_eq!(pixel(&mut memory, 100, 50), expected);
+}

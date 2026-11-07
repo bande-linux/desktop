@@ -371,6 +371,20 @@ impl Widget for TextView {
         Some(self.editor.context_menu(cx))
     }
 
+    fn selected_text(&self) -> Option<String> {
+        self.editor
+            .has_selection()
+            .then(|| self.editor.selected_text())
+    }
+
+    fn word_at(&mut self, cx: &mut Context, point: Point) -> Option<String> {
+        let origin = self.origin();
+        Some(self.editor.word_at(
+            &mut cx.text,
+            Point::new(point.x - origin.x, point.y - origin.y),
+        ))
+    }
+
     fn menu_action(&mut self, cx: &mut Context, action: &str) -> bool {
         let revision = self.editor.revision();
         let handled = self.editor.menu_action(cx, action);

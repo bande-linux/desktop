@@ -2,6 +2,8 @@
 
 Plan only; nothing here is built. It continues [rendering-path.md](rendering-path.md), which owns stages 0-4. Delete items as they land.
 
+**Scope (owner, 2026-11-07):** most users run Debian's own kernel, so every item must work there with any GPU through atomic KMS. No feature may need a Bande kernel patch. Kernel and DCP items below (E1, G, the plane changes in 8, HDR's kernel part in 9, V, K's DCP specifics) are optional Apple extras behind runtime checks, never dependencies. The frame scheduler T learns flip times, render times and commit lead per output on the machine it runs on, so it suits any driver without per-GPU constants.
+
 Stack: Smithay 0.7.0, `ash` 0.38, Honeykrisp in Mesa 26.1.6, our kernel `patches/7.3`, DCP firmware 13.5 on system firmware 26.2. Asahi's distributions run KWin or GNOME on this same driver, so what those do is what Asahi does; its own work is cited where it exists.
 
 Marks: **[ran]** measured for this plan on the M2 (Honeykrisp, Mesa 26.1.6, 2560x1440 unless stated, other agents' jobs alongside, load about 4). **[code]** read from our code or the driver. **[Apple]** Apple's documents. **[memory]** from memory, unverified. **[computed]** arithmetic from the others.
@@ -569,7 +571,7 @@ Ten per update today (plan path). **Feel:** only power and CPU. **Design:** coun
 
 **Others:** GNOME 48 ([Phoronix](https://www.phoronix.com/news/GNOME-wp_color_management_v1)). KWin versioned since 6.1, official protocol in 6.4 and v2 in 6.6. wlroots protocol in 0.19, render plumbing in 0.20 ([timeline, secondary](https://www.youngju.dev/blog/2026-07-17-wayland-color-management-hdr-shipping-timeline-xserver.en)). KWin turns overlays off with a colour profile unless the KMS pipeline can do it.
 
-**Branch point: stage 2's boot** (a1e373 reports it): does DCP convert `BG_SRGB` on an external display?
+**Starting point:** the sRGB-to-display shader is built (`rendering-path.md`, Colour) and works on every GPU. DCP converting `BG_SRGB` would be an optional Apple saving (mode A below); without it, always mode B.
 
 **Design.**
 
@@ -671,7 +673,9 @@ Ten per update today (plan path). **Feel:** only power and CPU. **Design:** coun
 - **Compressed scanout.** `INTERCHANGE` is the only compressed layout DCP scans, kernel supports it, Mesa's Vulkan doesn't offer it. Why it matters: LINEAR scanout reads 1.77 GB/s at 120 Hz forever **[computed]**, even idle, a plausible idle-power saving of real size, and macOS surely avoids it **[memory]**. Unknown: can AGX write that format at all, or only the media blocks? Experiment: test whether Mesa's `ail` can address it, and render one frame on a throwaway build; scan out by test session. High risk of "no". Worth one day because idle power is everything on a laptop, less on the mini. Bytes-to-DRAM counters are still not found; measure by B5 only.
 - **shm without a copy.** `udmabuf`, as KWin does. Toolkit uses shm only for first frames, and `VK_EXT_external_memory_host` isn't on Honeykrisp **[ran]**. Low value. Do it when a real shm client shows in a trace.
 
-## Kernel and DCP work needed
+## Optional Apple kernel and DCP work
+
+None of this is needed by any feature; each item is an extra on top of a standard-KMS path.
 
 | Change | Item | Boot | uAPI? |
 |---|---|---|---|
@@ -691,7 +695,7 @@ Batch them: E1 and G share a boot; 7 and 8a tags share another. All through `pat
 1. **Done: the DCP trace** (B1). Again after each scheduler stage, the same gesture for ten seconds; agents can run it if they're allowed that root command without asking each time.
 2. **Later: the phone test,** ten minutes at 240 fps with a visible key press.
 3. **One macOS boot, later:** the same phone test and filming animations on this monitor. It's the only real macOS comparison.
-4. **Test boots,** at their pace, batched: E1 + G first; G decides if a GPU hog can ever be beaten.
+4. **Optional test boots,** only for Apple extras, at their pace: E1 + G first.
 5. **Yes or no on uAPI:** plane colour property, plane order. Asked when reached.
 6. **Eye tests:** colour switching, Glass after half-size blur, prediction by hand, HDR.
 

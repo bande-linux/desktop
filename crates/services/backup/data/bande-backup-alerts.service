@@ -1,0 +1,12 @@
+[Unit]
+Description=Bande backup alerts
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Slice=session.slice
+ExecStart=/usr/libexec/bande-backup-alerts
+Restart=on-failure
+
+[Install]
+WantedBy=bande-session.target

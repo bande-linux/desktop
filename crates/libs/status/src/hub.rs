@@ -109,7 +109,7 @@ impl StatusHub {
         let relaying = Arc::clone(&relay);
         spawn("status-relay", move || relay_updates(inbox, &relaying));
         #[cfg(feature = "audio")]
-        let audio = Audio::connect()
+        let audio = Audio::start()
             .inspect_err(|error| tracing::warn!("no sound: {error}"))
             .ok()
             .map(Arc::new);

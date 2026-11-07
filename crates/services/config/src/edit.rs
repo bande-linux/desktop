@@ -573,12 +573,6 @@ fn set_display(document: &mut KdlDocument, identity: &str, display: &DisplaySett
                 .rotation
                 .map(|rotation| vec![pixels(rotation.degrees())]),
         ),
-        (
-            "variable-refresh-rate",
-            display
-                .variable_refresh_rate
-                .map(|enabled| vec![KdlValue::Bool(enabled)]),
-        ),
     ];
     let position = document.nodes().iter().position(|node| {
         node.name().value() == "display"

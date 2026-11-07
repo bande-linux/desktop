@@ -16,16 +16,15 @@ use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-xdg.ftl");
-
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-xdg")));
 
 pub use apps::{Apps, FileTypes, OpenWithChoice};
 pub use autostart::{autostart_dir, opens_at_login, set_open_at_login};
 pub use dirs::{UserDir, user_dir};
 pub use entry::{
     CURRENT_DESKTOP, DesktopAction, DesktopEntry, Locale, applications, current_desktops,
-    data_dirs, find_executable, handlers,
+    data_dirs, find_executable, handlers, own_code_replaced, own_executable, runs_replaced_code,
 };
 pub use file::{replace_file, sync_folder};
 pub use icon::{FALLBACK_THEME, ICON_THEMES, find_icon};

@@ -1,0 +1,9 @@
+[Unit]
+Description=Send waiting Bande fault reports
+
+[Path]
+DirectoryNotEmpty=/var/lib/bande/reports/outbox
+Unit=bande-reporter-send.service
+
+[Install]
+WantedBy=paths.target

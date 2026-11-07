@@ -81,9 +81,6 @@ fn display_value(
                 .map(|rate| rate.round() as u32)
                 .or_else(|| display.current.map(|mode| mode.hertz()))?,
         ),
-        SettingId::VariableRefreshRate => {
-            Value::Flag(output.variable_refresh_rate.unwrap_or(false))
-        }
         SettingId::DisplayResolution => {
             let (width, height) = output.resolution.or_else(|| {
                 let mode = display.current?;
@@ -418,9 +415,6 @@ impl SettingsView {
         scope: Option<&Display>,
         matched: Option<&SettingHit>,
     ) -> Option<Box<dyn Widget>> {
-        if setting.id == SettingId::VariableRefreshRate && !scope?.variable_refresh_capable() {
-            return None;
-        }
         let (control, focus) = match self.allowed(setting.id) {
             true => self.control(setting, scope)?,
             false => {
@@ -725,6 +719,7 @@ impl SettingsView {
             List::Storage => self.storage_rows(),
             List::CrashReports => self.crash_report_rows(),
             List::LargeFiles => self.large_file_rows(),
+            List::Backup => self.backup_rows(),
             List::Clock => self.clock_rows(),
             List::TimeZones => self.zone_rows(),
             List::LoginItems => self.login_rows(),

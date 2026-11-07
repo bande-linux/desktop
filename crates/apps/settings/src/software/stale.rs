@@ -5,14 +5,12 @@ use std::path::Path;
 
 use bande_xdg::{
     DesktopEntry, Locale, applications, current_desktops, data_dirs, find_app,
-    find_app_for_process, unit_app_ids,
+    find_app_for_process, runs_replaced_code, unit_app_ids,
 };
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedObjectPath;
 
 const PROC: &str = "/proc";
-const DELETED: &str = " (deleted)";
-const PACKAGED: [&str; 2] = ["/usr/", "/opt/"];
 const SESSION_SLICE: &str = "session.slice";
 const APP_SLICE: &str = "app.slice";
 const SESSION_UNITS: [&str; 2] = ["bande-compositor.service", "dbus.service"];
@@ -23,6 +21,7 @@ const SESSION_UNITS: [&str; 2] = ["bande-compositor.service", "dbus.service"];
     default_path = "/org/freedesktop/systemd1"
 )]
 trait Systemd {
+    fn reload(&self) -> zbus::Result<()>;
     fn try_restart_unit(&self, name: &str, mode: &str) -> zbus::Result<OwnedObjectPath>;
 }
 
@@ -37,23 +36,6 @@ enum Holder {
 pub(crate) struct Stale {
     pub(crate) logout: bool,
     pub(crate) apps: Vec<String>,
-}
-
-fn replaced(path: &str) -> bool {
-    path.strip_suffix(DELETED)
-        .is_some_and(|path| PACKAGED.iter().any(|root| path.starts_with(root)))
-}
-
-fn runs_replaced_code(executable: &str, maps: &str) -> bool {
-    replaced(executable)
-        || maps.lines().any(|line| {
-            let mut fields = line.splitn(6, ' ');
-            let executable = fields.nth(1).is_some_and(|perms| perms.contains('x'));
-            executable
-                && fields
-                    .nth(3)
-                    .is_some_and(|path| replaced(path.trim_start()))
-        })
 }
 
 fn holder(cgroup: &str) -> Option<Holder> {
@@ -110,6 +92,27 @@ fn holders() -> Vec<(u32, Holder)> {
 
 pub(crate) fn finish_in_session(session: &Connection) -> Stale {
     let found = holders();
+    if !found.is_empty() {
+        restart_services(session, &found);
+    }
+    stale_of(&found)
+}
+
+pub(crate) fn look() -> Stale {
+    stale_of(&holders())
+}
+
+fn restart_services(session: &Connection, found: &[(u32, Holder)]) {
+    let systemd = match SystemdProxyBlocking::new(session) {
+        Ok(systemd) => systemd,
+        Err(error) => {
+            tracing::warn!("cannot reach the user's systemd: {error}");
+            return;
+        }
+    };
+    if let Err(error) = systemd.reload() {
+        tracing::warn!("cannot reload the user's units: {error}");
+    }
     let services: BTreeSet<&str> = found
         .iter()
         .filter_map(|(_, holder)| match holder {
@@ -117,18 +120,14 @@ pub(crate) fn finish_in_session(session: &Connection) -> Stale {
             _ => None,
         })
         .collect();
-    if !services.is_empty() {
-        match SystemdProxyBlocking::new(session) {
-            Ok(systemd) => {
-                for unit in services {
-                    if let Err(error) = systemd.try_restart_unit(unit, "replace") {
-                        tracing::warn!("cannot restart {unit}: {error}");
-                    }
-                }
-            }
-            Err(error) => tracing::warn!("cannot reach the user's systemd: {error}"),
+    for unit in services {
+        if let Err(error) = systemd.try_restart_unit(unit, "replace") {
+            tracing::warn!("cannot restart {unit}: {error}");
         }
     }
+}
+
+fn stale_of(found: &[(u32, Holder)]) -> Stale {
     let entries = applications(
         &data_dirs(),
         Locale::from_env().as_ref(),

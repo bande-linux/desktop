@@ -8,6 +8,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+serde.workspace = true
 accesskit.workspace = true
 bande-app.workspace = true
 rustix = { workspace = true, features = ["event", "fs", "process"] }
@@ -31,8 +32,6 @@ zbus.workspace = true
 
 [dev-dependencies]
 rustix = { workspace = true, features = ["process"] }
-bande-test-bus.workspace = true
-bande-test-wayland.workspace = true
 tempfile.workspace = true
 
 [package.metadata.deb]

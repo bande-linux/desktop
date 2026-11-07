@@ -21,7 +21,10 @@ use zip::{CompressionMethod, DateTime, ZipArchive, ZipWriter};
 
 use super::{Change, Failure, Halt, Worker, claim, free_space, rename_new};
 use crate::L10N;
+use bande_xdg::sync_folder;
+
 use crate::naming::keep_both_name;
+use crate::partial::{Anchor, partial_path};
 use crate::trash::remove_all;
 
 mod sink;
@@ -342,6 +345,20 @@ fn link_target(reader: &mut (impl Read + ?Sized)) -> io::Result<PathBuf> {
     Ok(PathBuf::from(target))
 }
 
+fn claim_archive(archive: &Path, staged: &Path) -> io::Result<(PathBuf, ())> {
+    let folder = archive.parent().unwrap_or(Path::new("/"));
+    let name = archive.file_name().unwrap_or_default();
+    let mut first = Some(archive.to_path_buf());
+    claim(
+        || {
+            first
+                .take()
+                .unwrap_or_else(|| keep_both_name(folder, name, false))
+        },
+        |target| rename_new(staged, target),
+    )
+}
+
 fn settle(staging: &Path, destination: &Path, stem: &str) -> io::Result<PathBuf> {
     let entries = fs::read_dir(staging)?.collect::<Result<Vec<_>, _>>()?;
     if let [only] = entries.as_slice() {
@@ -398,8 +415,14 @@ impl Worker {
 
     pub(super) fn compress(&mut self, sources: &[PathBuf], archive: &Path) -> Result<(), Halt> {
         self.count(sources);
-        let file = match File::create_new(archive) {
-            Ok(file) => file,
+        let folder = archive.parent().unwrap_or(Path::new("/"));
+        let staged = partial_path(folder);
+        let created = File::create_new(&staged).and_then(|file| {
+            let anchor = Anchor::file(&file)?;
+            Ok((file, anchor))
+        });
+        let (file, anchor) = match created {
+            Ok(created) => created,
             Err(error) => {
                 self.fail(archive, error);
                 return Ok(());
@@ -409,15 +432,19 @@ impl Worker {
             Some(Format::Zip) | None => self.write_zip(file, sources),
             Some(format) => self.write_tar(file, sources, format),
         };
-        match written {
-            Ok(()) => {
-                self.outcome
-                    .changes
-                    .push(Change::Created(archive.to_path_buf()));
+        let landed = written.and_then(|()| {
+            anchor.settle()?;
+            let (target, ()) = claim_archive(archive, &staged)?;
+            sync_folder(folder)?;
+            Ok(target)
+        });
+        match landed {
+            Ok(target) => {
+                self.outcome.changes.push(Change::Created(target));
                 Ok(())
             }
             Err(stop) => {
-                let _ = fs::remove_file(archive);
+                let _ = fs::remove_file(&staged);
                 match stop {
                     Stop::Halt(halt) => Err(halt),
                     Stop::Io(error) => {
@@ -543,11 +570,10 @@ impl Worker {
             );
             return Ok(());
         };
-        let staging = match claim(
-            || free_path(destination, &format!(".{stem}.extracting"), true),
-            |staging| fs::create_dir(staging),
-        ) {
-            Ok((staging, ())) => staging,
+        let staging = partial_path(destination);
+        let anchor = fs::create_dir(&staging).and_then(|()| Anchor::folder(&staging));
+        let anchor = match anchor {
+            Ok(anchor) => anchor,
             Err(error) => {
                 self.fail(archive, error);
                 return Ok(());
@@ -555,7 +581,10 @@ impl Worker {
         };
         let unpacked = self.unpack(format, archive, &staging, &stem, password);
         let settled = match unpacked {
-            Ok(()) => settle(&staging, destination, &stem),
+            Ok(()) => anchor
+                .settle()
+                .and_then(|()| settle(&staging, destination, &stem))
+                .and_then(|path| sync_folder(destination).map(|()| path)),
             Err(Stop::Io(error)) => Err(error),
             Err(Stop::Halt(halt)) => {
                 let _ = remove_all(&staging);

@@ -25,9 +25,9 @@ pub use autostart::{autostart_dir, opens_at_login, set_open_at_login};
 pub use dirs::{UserDir, user_dir};
 pub use entry::{
     CURRENT_DESKTOP, DesktopAction, DesktopEntry, Locale, applications, current_desktops,
-    data_dirs, find_executable, handlers, own_executable,
+    data_dirs, find_executable, handlers, own_code_replaced, own_executable, runs_replaced_code,
 };
-pub use file::replace_file;
+pub use file::{replace_file, sync_folder};
 pub use icon::{FALLBACK_THEME, ICON_THEMES, find_icon};
 pub use identity::{
     app_for_identity, app_name, find_app, find_app_for_process, running_app, write_launcher,
@@ -43,8 +43,9 @@ pub use mimeapps::{
     state_home,
 };
 pub use reopen::{
-    apps_to_reopen, crashed_apps_file, remember_apps, remember_running_apps, reopen_file,
-    running_apps_file, set_aside_apps_of_unclean_end, take_apps_to_reopen, write_running_apps,
+    crashed_apps_file, forget_saved_windows, listed_apps, remember_running_apps, reopen_file,
+    reopen_listed_apps, running_apps_contents, running_apps_file, set_aside_apps_of_unclean_end,
+    take_apps_to_reopen,
 };
 pub use units::unit_app_ids;
 pub use uri::{file_uri, path_from_file_uri, percent_decode, percent_encode};

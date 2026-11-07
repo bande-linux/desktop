@@ -222,6 +222,29 @@ fn actions(
         .collect()
 }
 
+fn replaced(path: &str) -> bool {
+    path.strip_suffix(" (deleted)")
+        .is_some_and(|path| ["/usr/", "/opt/"].iter().any(|root| path.starts_with(root)))
+}
+
+pub fn runs_replaced_code(executable: &str, maps: &str) -> bool {
+    replaced(executable)
+        || maps.lines().any(|line| {
+            let mut fields = line.splitn(6, ' ');
+            let executable = fields.nth(1).is_some_and(|perms| perms.contains('x'));
+            executable
+                && fields
+                    .nth(3)
+                    .is_some_and(|path| replaced(path.trim_start()))
+        })
+}
+
+pub fn own_code_replaced() -> bool {
+    let executable = fs::read_link("/proc/self/exe").unwrap_or_default();
+    let maps = fs::read_to_string("/proc/self/maps").unwrap_or_default();
+    runs_replaced_code(&executable.to_string_lossy(), &maps)
+}
+
 pub fn own_executable() -> PathBuf {
     PathBuf::from(format!("/proc/{}/exe", std::process::id()))
 }

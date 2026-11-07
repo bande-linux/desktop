@@ -5,6 +5,8 @@ After=graphical-session.target
 
 [Service]
 Slice=session.slice
+Type=dbus
+BusName=org.bande.Mounts
 ExecStart=/usr/bin/bande-automount
 Restart=on-failure
 

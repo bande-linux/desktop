@@ -16,7 +16,14 @@ pub(crate) struct Departed {
     identity: String,
     spaces: Vec<u64>,
     landed: u64,
-    windows: Vec<(WlSurface, Rectangle<i32, Logical>, bool)>,
+    windows: Vec<Away>,
+}
+
+struct Away {
+    surface: WlSurface,
+    frame: Rectangle<i32, Logical>,
+    restore: Option<Rectangle<i32, Logical>>,
+    shown: bool,
 }
 
 fn center(rect: Rectangle<i32, Logical>) -> (f64, f64) {
@@ -229,16 +236,33 @@ impl State {
         self.focus(Some(surface.clone()));
     }
 
-    pub(crate) fn add_screen(&mut self, config: OutputConfig, settings: OutputSettings) {
-        if self.screen_named(&config.name).is_some() {
+    fn parked_screen(&self) -> Option<usize> {
+        self.screens.iter().position(|screen| screen.parked)
+    }
+
+    fn add_screen(&mut self, config: OutputConfig, settings: OutputSettings) {
+        let identity = config.identity();
+        let parked = self.parked_screen();
+        if let Some(screen) = parked.filter(|screen| {
+            let known = &self.screens[*screen];
+            known.name() == config.name && known.config.identity() == identity
+        }) {
+            self.screens[screen].parked = false;
+            self.screens[screen].config = config;
+            self.after_screens_changed();
             return;
         }
-        let identity = config.identity();
+        if parked.is_none() && self.screen_named(&config.name).is_some() {
+            return;
+        }
         self.screens
             .push(Screen::new(&self.display_handle, config, settings));
         let screen = self.screens.len() - 1;
         self.bring_back(&identity, screen);
-        self.after_screens_changed();
+        match parked {
+            Some(parked) => self.remove_screen(parked),
+            None => self.after_screens_changed(),
+        }
     }
 
     fn bring_back(&mut self, identity: &str, screen: usize) {
@@ -254,17 +278,17 @@ impl State {
         let returning: Vec<_> = departed
             .windows
             .iter()
-            .filter_map(|(surface, rect, was_shown)| {
-                let index = self.window_index(surface)?;
+            .filter_map(|away| {
+                let index = self.window_index(&away.surface)?;
                 let workspace = self.windows[index].workspace;
-                let comes_back = if *was_shown {
+                let comes_back = if away.shown {
                     workspace == departed.landed
                 } else {
                     departed.spaces.contains(&workspace)
                 };
                 comes_back.then(|| {
                     let from = self.screen_rect(self.screen_of(&self.windows[index]));
-                    (index, from, Some(*rect))
+                    (index, from, away.frame, away.restore)
                 })
             })
             .collect();
@@ -282,17 +306,24 @@ impl State {
         }
         self.screens[screen].workspaces.adopt(spaces);
         let origin = self.screen_rect(screen).loc;
-        for (index, from, rect) in returning {
+        for (index, from, frame, restore) in returning {
             if !departed.spaces.contains(&self.windows[index].workspace) {
                 self.windows[index].workspace = fresh;
             }
-            let free = rect.map(|rect| Rectangle::new(origin + rect.loc, rect.size));
-            self.put_window(index, from, screen, free);
+            self.put_window(
+                index,
+                from,
+                screen,
+                Some(Rectangle::new(origin + frame.loc, frame.size)),
+            );
+            self.windows[index].restore =
+                restore.map(|restore| Rectangle::new(origin + restore.loc, restore.size));
         }
     }
 
     pub(crate) fn remove_screen(&mut self, screen: usize) {
         if self.screens.len() < 2 {
+            self.screens[screen].parked = true;
             return;
         }
         let from = self.screen_rect(screen);
@@ -304,17 +335,20 @@ impl State {
             .into_iter()
             .filter(|id| *id != shown)
             .collect();
-        let windows: Vec<(WlSurface, Rectangle<i32, Logical>, bool)> = self
+        let windows: Vec<Away> = self
             .windows
             .iter()
             .filter(|window| window.workspace == shown || spaces.contains(&window.workspace))
             .filter_map(|window| {
                 let geometry = window.geometry()?;
-                Some((
-                    window.surface().clone(),
-                    Rectangle::new(geometry.loc - from.loc, geometry.size),
-                    window.workspace == shown,
-                ))
+                Some(Away {
+                    surface: window.surface().clone(),
+                    frame: Rectangle::new(geometry.loc - from.loc, geometry.size),
+                    restore: window
+                        .restore
+                        .map(|restore| Rectangle::new(restore.loc - from.loc, restore.size)),
+                    shown: window.workspace == shown,
+                })
             })
             .collect();
         let removed = self.screens.remove(screen);
@@ -498,19 +532,22 @@ impl Compositor {
     }
 
     pub fn add_output(&mut self, config: OutputConfig) {
-        let Some(mut settings) = config.default_settings() else {
+        let Some(default) = config.default_settings() else {
             return;
         };
-        let main = self.state.screen_rect(0);
-        let right = self
+        let heads: Vec<OutputConfig> = self
             .state
             .screens
             .iter()
-            .map(|screen| screen.rect())
-            .map(|rect| rect.loc.x + rect.size.w)
-            .max()
-            .unwrap_or(0);
-        settings.position = (right, main.loc.y).into();
+            .filter(|screen| !screen.parked)
+            .map(|screen| screen.config.clone())
+            .chain([config.clone()])
+            .collect();
+        let main = self.state.main_screen().name();
+        let settings = crate::arrange::arrange(&heads, &main, &self.state.display_config)
+            .into_iter()
+            .find(|display| display.name == config.name)
+            .map_or(default, |display| display.settings);
         self.state.add_screen(config, settings);
         self.state.arrange_screens();
     }
@@ -520,6 +557,19 @@ impl Compositor {
             self.state.remove_screen(screen);
             self.state.arrange_screens();
         }
+    }
+
+    pub fn refit_output(&mut self, config: OutputConfig) {
+        if let Some(screen) = self.state.screen_named(&config.name) {
+            self.state.screens[screen].config = config;
+            self.state.arrange_screens();
+            self.state.needs_redraw = true;
+            self.state.outputs_refitted = true;
+        }
+    }
+
+    pub fn take_outputs_refitted(&mut self) -> bool {
+        std::mem::take(&mut self.state.outputs_refitted)
     }
 
     pub fn set_display_config(&mut self, config: bande_config::Config) {

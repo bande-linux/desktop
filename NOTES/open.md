@@ -61,8 +61,8 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   compositor until then; needs reverse engineering of the firmware's calls).
 - Apple hardware: Night Light gamma on the DCP; overlay planes and direct scanout; the
   `VK_KHR_external_semaphore_fd` release path and dma-buf modifiers on Honeykrisp; the GPU
-  fence wait each frame; input-to-photon latency with a camera; swapping or moving the only
-  display (review: the last display is never removed).
+  fence wait each frame; input-to-photon latency with a camera; swapping or moving the only display, unplugging it and
+  plugging it back (`NOTES/plans/displays.md`).
 - Software (apps repo): install and remove a Debian app; catalogue icons once
   `apt-config-icons` is installed.
 - The `bande-shell` installed before `a458c1b9` polls `/proc/pressure/memory` itself and spins one
@@ -84,14 +84,15 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   Asahi.
 - The lock screen ignores logind's `Unlock` (`loginctl unlock-session`): honour it or not.
 - Naming: the clash with Debian's `bande` DNS resolver packages; the `org.bande.*` domain.
-- Product: a welcome assistant; an audio player (Totem or Rhythmbox); which UI languages first.
-- Files: tags; Connect to Server.
+- Product: a welcome assistant; which UI languages first.
+- Files: tags.
 - Title-bar toolbars stay at 100 % at large text sizes.
 - The unused private `set_corner_radius` request: keep or remove.
 - Debian policy: make the greeter opt-in instead of taking over greetd.
 
 ## Remaining work
 
+- Resume: Terminal brings back tabs and folders, not the scrollback text; no "Close windows when quitting" setting (Quit always closes them).
 - Files: ranked in [plans/files-depth.md](plans/files-depth.md).
 - Unmerged branches: `wip/l10n-ready` (strings into Fluent, an en-XA pseudo-locale),
   `wip/terminal-scopes` (a systemd scope per Terminal tab; apps repo now),
@@ -121,10 +122,14 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - Not built yet: user picker and accounts (no Users pane, no fast user switching), crash
   reports, tiling beyond halves and quarters, custom shortcuts, input methods as
   sources, spell checking, colour filters, on-screen keyboard, notifications on the lock screen,
-  inline reply, file content search, spring-loading, printers pane, Wi-Fi hidden and Enterprise
+  inline reply, file content search, spring-loading, Wi-Fi hidden and Enterprise
   networks, more portals (GlobalShortcuts, RemoteDesktop) and portal permission review, colour
   management, battery charge limit, Do Not Disturb schedules.
 - Debian archive upload: asset provenance for the sounds and `emoji.tsv`, man pages, a
   `debian:sid` toolchain build, about 25 Rust stacks to package and 15 to update in Debian,
   then `debian/`, an ITP and a sponsor (full audit:
   `git show 37b326aa:docs/debian-readiness.md`).
+
+## Printing
+- Browser: no Print yet; the web engine has no paged layout. Calendar prints the month as a list, not its grid. Multiple-copy and media choices are checked against the fake printer only until a real one has printed.
+- USB: `bande-printd` lists `ipp-usb` printers when it looks (dialog or pane opening); no prompt yet when a USB printer is plugged in, and printers that need a vendor driver need a CUPS queue set up by hand.

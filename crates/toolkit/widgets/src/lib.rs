@@ -50,7 +50,9 @@ pub use clock::{FrameTime, frame_time, request_wake, set_frame_time, take_wake};
 pub use combo_box::ComboBox;
 pub use context_menu::ContextMenu;
 pub use disclosure::{DISCLOSURE_HEIGHT, Disclosure};
-pub use editor::{Alignment, ListMarker, ParagraphAttributes, RichText, TextAttributes};
+pub use editor::{
+    Alignment, ListMarker, ParagraphAttributes, PrintedBlock, RichText, TextAttributes,
+};
 pub use form::{Form, FormLine};
 pub use free_layout::FreeLayout;
 pub use graph::{Band, Graph, GraphKind, Series, SeriesColor};

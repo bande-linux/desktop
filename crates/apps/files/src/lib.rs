@@ -50,7 +50,7 @@ pub use sidebar::{
     standard_places, volumes_hidden, with_bookmarks, with_nearby, with_place_shown, with_volumes,
     without_bookmark,
 };
-pub use tabs::{CarriedTab, TAB_BAR_HEIGHT};
+pub use tabs::{CarriedTab, SavedTab, TAB_BAR_HEIGHT};
 pub use toolbar::TOOLBAR_HEIGHT;
 pub use view::{
     COLUMN_WIDTH, ColumnPreview, FilesView, Hit, Info, PATH_BAR_HEIGHT, PREVIEW_WIDTH, ROW_HEIGHT,

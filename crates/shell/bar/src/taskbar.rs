@@ -13,10 +13,10 @@ use bande_toolkit::ui::{
 };
 
 use crate::L10N;
-use crate::rail::{cross_margin, edge_band};
+use crate::rail::{BarForm, cross_margin, edge_band, zone_margin};
 use bande_toolkit::{
-    Appearance, BarForm, Color, Elevation, Image, Item, Palette, Paragraph, Point, Rect, Scene,
-    Scheme, Shape, TextAlign, TextStyle, TextSystem,
+    Appearance, Color, Elevation, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme,
+    Shape, TextAlign, TextStyle, TextSystem,
 };
 
 const CROSS_PADDING: f32 = 8.0;
@@ -361,8 +361,15 @@ impl TaskbarState {
         true
     }
 
+    pub fn set_form(&mut self, form: BarForm) {
+        self.form = form;
+    }
+
+    pub fn form(&self) -> BarForm {
+        self.form
+    }
+
     pub fn set_appearance(&mut self, appearance: Appearance) {
-        self.form = appearance.look().bar;
         self.scheme = appearance.scheme;
         self.reduce_motion = appearance.reduce_motion;
     }
@@ -655,7 +662,7 @@ impl TaskbarState {
         if self.hides() {
             return 0;
         }
-        (self.rail.thickness() + cross_margin(self.form)).round() as i32
+        (self.rail.thickness() + zone_margin(self.form)).round() as i32
     }
 
     pub fn input_region(&self) -> Rect {

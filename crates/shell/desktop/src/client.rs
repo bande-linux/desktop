@@ -27,7 +27,7 @@ use bande_quick_look::{QuickLookLink, Subject};
 use bande_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
 use bande_toolkit::ui::frame_time;
 use bande_toolkit::{
-    App, BarForm, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
+    App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
 use bande_volumes::{EjectFailure, eject, media_roots};
@@ -89,7 +89,6 @@ pub struct DesktopSurface {
     pictures: HashMap<PathBuf, (Option<SystemTime>, Option<Option<Image>>)>,
     layouts_file: Option<PathBuf>,
     bar: BarPlacement,
-    form: BarForm,
     bar_changes: Inbox<BarPlacement>,
     choice: Option<Choice>,
     choices: Inbox<Choice>,
@@ -354,8 +353,11 @@ impl DesktopSurface {
 
     fn area(&self, size: (u32, u32)) -> Bounds {
         let (width, height) = (size.0 as f32, size.1 as f32);
-        let (bar_edge, icon_size) = self.bar;
-        let edge = bande_bar::rail::bar_zone(icon_size as f32, self.form);
+        let (bar_edge, icon_size, floating) = self.bar;
+        let edge = bande_bar::rail::bar_zone(
+            icon_size as f32,
+            bande_bar::rail::BarForm::from_floating(floating),
+        );
         let (left, right, bottom, top) = match bar_edge {
             BarEdge::Left => (edge, 0.0, 0.0, 0.0),
             BarEdge::Right => (0.0, edge, 0.0, 0.0),
@@ -378,10 +380,6 @@ impl DesktopSurface {
             return;
         }
         self.bar = bar;
-        self.fit_to_bar();
-    }
-
-    fn fit_to_bar(&mut self) {
         if let Some((size, scale)) = self.viewport {
             self.view.set_viewport(
                 (size.0 as f32, size.1 as f32),
@@ -945,11 +943,6 @@ impl App for DesktopSurface {
             WindowEvent::AppearanceChanged(appearance) => {
                 self.scheme = appearance.scheme;
                 self.view.set_appearance(appearance);
-                let form = appearance.look().bar;
-                if form != self.form {
-                    self.form = form;
-                    self.fit_to_bar();
-                }
                 self.refresh_wallpaper(window);
             }
             _ => {}
@@ -1103,7 +1096,7 @@ fn desktop_folder(home: &Path) -> PathBuf {
     folder
 }
 
-type BarPlacement = (BarEdge, u32);
+type BarPlacement = (BarEdge, u32, bool);
 
 fn follow_bar_placement(placements: Outbox<BarPlacement>) {
     let work = move || {
@@ -1123,7 +1116,8 @@ fn follow_bar_placement(placements: Outbox<BarPlacement>) {
             let read = || -> zbus::Result<Option<BarPlacement>> {
                 let edge = config.get_property::<String>("BarEdge")?;
                 let size = config.get_property::<u32>("BarIconSize")?;
-                Ok(BarEdge::from_keyword(&edge).map(|edge| (edge, size)))
+                let floating = config.get_property::<bool>("BarFloating")?;
+                Ok(BarEdge::from_keyword(&edge).map(|edge| (edge, size, floating)))
             };
             let mut last = None;
             for _ in std::iter::once(()).chain(changes.map(drop)) {
@@ -1219,8 +1213,7 @@ impl DesktopSurface {
             shown: Shown::default(),
             pictures: HashMap::new(),
             layouts_file,
-            bar: (config.bar.edge, config.bar.icon_size),
-            form: appearance.look().bar,
+            bar: (config.bar.edge, config.bar.icon_size, config.bar.floating),
             bar_changes,
             choice: Some(configured_choice(&config.wallpaper)),
             choices,

@@ -50,6 +50,12 @@ pub trait Config {
     fn automatic_updates(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_automatic_updates(&self, on: bool) -> zbus::Result<()>;
+
+    #[zbus(property)]
+    fn update_check_every(&self) -> zbus::Result<u64>;
+
+    #[zbus(property)]
+    fn set_update_check_every(&self, seconds: u64) -> zbus::Result<()>;
     #[zbus(property)]
     fn clock_format(&self) -> zbus::Result<String>;
     #[zbus(property)]
@@ -134,6 +140,10 @@ pub trait Config {
     fn bar_icon_size(&self) -> zbus::Result<u32>;
     #[zbus(property)]
     fn set_bar_icon_size(&self, size: u32) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn bar_floating(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_bar_floating(&self, floating: bool) -> zbus::Result<()>;
     #[zbus(property)]
     fn bar_auto_hide(&self) -> zbus::Result<bool>;
     #[zbus(property)]
@@ -301,7 +311,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 74] = [
+pub const CONFIG_SETTINGS: [SettingId; 76] = [
     SettingId::Appearance,
     SettingId::Style,
     SettingId::Clock24Hour,
@@ -333,10 +343,12 @@ pub const CONFIG_SETTINGS: [SettingId; 74] = [
     SettingId::ShowPreviews,
     SettingId::ReopenAfterCrash,
     SettingId::AutomaticUpdates,
+    SettingId::UpdateCheckEvery,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
     SettingId::BarIconSize,
     SettingId::BarAutoHide,
+    SettingId::BarFloating,
     SettingId::BarEdge,
     SettingId::ScreenSaverAfter,
     SettingId::DisplayOffAfter,
@@ -541,6 +553,7 @@ impl SettingsClient {
             SettingId::ShowPreviews => Value::Flag(self.config.show_previews()?),
             SettingId::ReopenAfterCrash => Value::Flag(self.config.reopen_apps_after_crash()?),
             SettingId::AutomaticUpdates => Value::Flag(self.config.automatic_updates()?),
+            SettingId::UpdateCheckEvery => Value::Seconds(self.config.update_check_every()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
             SettingId::Clock24Hour => Value::Flag(match self.config.clock_format()?.as_str() {
@@ -555,6 +568,7 @@ impl SettingsClient {
             SettingId::WallpaperFit => Value::Keyword(self.config.wallpaper_fit()?),
             SettingId::BarIconSize => Value::Number(self.config.bar_icon_size()?),
             SettingId::BarAutoHide => Value::Flag(self.config.bar_auto_hide()?),
+            SettingId::BarFloating => Value::Flag(self.config.bar_floating()?),
             SettingId::BarEdge => Value::Keyword(self.config.bar_edge()?),
             SettingId::ScreenSaverAfter => Value::Seconds(self.config.idle_screen_saver_after()?),
             SettingId::DisplayOffAfter => Value::Seconds(self.config.idle_display_off_after()?),
@@ -705,10 +719,16 @@ impl SettingsClient {
                 self.config.set_wallpaper_fit(keyword)
             }
             (SettingId::BarIconSize, Value::Number(size)) => self.config.set_bar_icon_size(*size),
+            (SettingId::BarFloating, Value::Flag(floating)) => {
+                self.config.set_bar_floating(*floating)
+            }
             (SettingId::BarAutoHide, Value::Flag(auto_hide)) => {
                 self.config.set_bar_auto_hide(*auto_hide)
             }
 
+            (SettingId::UpdateCheckEvery, Value::Seconds(seconds)) => {
+                self.config.set_update_check_every(*seconds)
+            }
             (SettingId::ScreenSaverAfter, Value::Seconds(seconds)) => {
                 self.config.set_idle_screen_saver_after(*seconds)
             }

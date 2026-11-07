@@ -351,11 +351,10 @@ impl Appearance {
     }
 
     pub fn look(self) -> Look {
-        let look = self.style.look();
         if self.reduce_transparency || self.contrast == Contrast::Increased {
-            look.solid()
+            Look::SOLID
         } else {
-            look
+            self.style.look()
         }
     }
 }

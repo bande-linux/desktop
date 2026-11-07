@@ -20,6 +20,7 @@ pub enum Setting {
     ReopenApps(bool),
     ReopenAppsAfterCrash(bool),
     AutomaticUpdates(bool),
+    UpdateCheckEvery(Option<Duration>),
     LockMessage(String),
     ShowPreviews(bool),
     Clock(ClockFormat),
@@ -30,6 +31,7 @@ pub enum Setting {
     BarEdge(BarEdge),
     BarApps(Vec<String>),
     BarAutoHide(bool),
+    BarFloating(bool),
     BarIconSize(u32),
     IdleScreenSaverAfter(Option<Duration>),
     IdleDisplayOffAfter(Option<Duration>),
@@ -122,6 +124,12 @@ impl Setting {
                 "automatic-updates",
                 on.then_some(KdlValue::Bool(true)),
             ),
+            Self::UpdateCheckEvery(every) => set(
+                &mut document,
+                None,
+                "update-check-every",
+                every.map(|every| duration(every).into()),
+            ),
             Self::Clock(format) => set(
                 &mut document,
                 None,
@@ -164,6 +172,12 @@ impl Setting {
                 Some("bar"),
                 "auto-hide",
                 auto_hide.then_some(KdlValue::Bool(true)),
+            ),
+            Self::BarFloating(floating) => set(
+                &mut document,
+                Some("bar"),
+                "floating",
+                (!floating).then_some(KdlValue::Bool(false)),
             ),
             Self::BarIconSize(size) => set(
                 &mut document,

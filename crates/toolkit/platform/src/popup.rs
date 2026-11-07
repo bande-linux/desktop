@@ -568,7 +568,11 @@ impl Menus {
             };
             let translucent = palette.panel.a != u8::MAX;
             let size = panel.size();
-            popup.declare_backdrop(state, handle, translucent.then_some((size.width, size.height)));
+            popup.declare_backdrop(
+                state,
+                handle,
+                translucent.then_some((size.width, size.height)),
+            );
             popup.paint(look, cpu, || panel.scene(&palette, show_highlight))?;
             popup.present(&frame, flashing)?;
         }

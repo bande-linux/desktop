@@ -22,7 +22,9 @@ use crate::state::OutputElement;
 use crate::state::mapped_size;
 use crate::tile::Preview;
 use crate::window::Window;
-use bande_graphics::{BackdropTone, Color, Elevation, Palette, Radius, Scheme, window_edge_opacity};
+use bande_graphics::{
+    BackdropTone, Color, Elevation, Palette, Radius, Scheme, window_edge_opacity,
+};
 use bande_render::{
     Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
 };
@@ -1077,8 +1079,8 @@ pub(crate) fn window_elements(
         to: shown,
     };
     let title_bar = window.title_bar_piece(scale);
-    let mut pieces = pieces_of(&surfaces, scale);
-    pieces.extend(title_bar.clone());
+    let mut pieces = title_bar.clone().into_iter().collect::<Vec<_>>();
+    pieces.extend(pieces_of(&surfaces, scale));
     let shadow = (!fullscreen)
         .then(|| {
             cast_shadows(
@@ -1116,11 +1118,6 @@ pub(crate) fn window_elements(
     });
     let elements = veil
         .into_iter()
-        .chain(
-            surfaces
-                .into_iter()
-                .map(|surface| OutputElement::Window(WindowElement::new(surface, placement, clip))),
-        )
         .chain(scaled_pieces(
             title_bar.as_slice(),
             area,
@@ -1128,6 +1125,11 @@ pub(crate) fn window_elements(
             clip,
             alpha,
         ))
+        .chain(
+            surfaces
+                .into_iter()
+                .map(|surface| OutputElement::Window(WindowElement::new(surface, placement, clip))),
+        )
         .chain(shadow)
         .chain(blurs)
         .collect();

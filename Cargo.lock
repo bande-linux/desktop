@@ -400,7 +400,6 @@ dependencies = [
  "bande-app-menu",
  "bande-bus",
  "bande-compositor",
- "bande-config",
  "bande-inbox",
  "bande-log",
  "bande-test-bus",
@@ -409,7 +408,6 @@ dependencies = [
  "bande-xdg",
  "libc",
  "rustix 1.1.6",
- "smithay",
  "tracing",
  "zbus",
 ]
@@ -691,8 +689,6 @@ dependencies = [
  "bande-quick-look",
  "bande-search",
  "bande-sound",
- "bande-test-bus",
- "bande-test-wayland",
  "bande-thumbnails",
  "bande-toolkit",
  "bande-volumes",
@@ -939,10 +935,8 @@ dependencies = [
  "bande-log",
  "bande-notify",
  "bande-sound",
- "bande-test-bus",
  "bande-xdg",
  "rustix 1.1.6",
- "tempfile",
  "tracing",
  "wayland-client",
  "wayland-protocols",
@@ -1262,13 +1256,11 @@ name = "bande-toolkit"
 version = "0.1.7"
 dependencies = [
  "accesskit",
- "bande-compositor",
  "bande-graphics",
  "bande-test-bus",
  "bande-test-wayland",
  "bande-toolkit-platform",
  "bande-widgets",
- "smithay",
  "zbus",
 ]
 

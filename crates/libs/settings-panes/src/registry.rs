@@ -294,6 +294,7 @@ pub enum SettingId {
     SoftwareUpdatePage,
     ShortcutsPage,
     ClipboardHistory,
+    KeyboardAccess,
     DefaultApps,
     Brightness,
     NightLightPage,
@@ -371,6 +372,7 @@ pub enum List {
     Regions,
     DefaultApps,
     Clipboard,
+    KeyboardAccess,
     SearchExcluded,
     Permissions(Permission),
     Passwords,
@@ -1419,6 +1421,14 @@ fn system_panes() -> Vec<Pane> {
                         page(SettingId::ScreenSharingPage, PaneId::ScreenSharing),
                         page(SettingId::LocationPage, PaneId::Location),
                     ],
+                ),
+                section(
+                    Some(L10N.tr("keyboard-access")),
+                    vec![list(
+                        SettingId::KeyboardAccess,
+                        "keyboard-access",
+                        List::KeyboardAccess,
+                    )],
                 ),
                 section(
                     Some(L10N.tr("clipboard")),

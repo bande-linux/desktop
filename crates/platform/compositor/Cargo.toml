@@ -12,7 +12,7 @@ accesskit.workspace = true
 accesskit_unix.workspace = true
 jiff.workspace = true
 libc.workspace = true
-rustix = { workspace = true, features = ["net", "time"] }
+rustix = { workspace = true, features = ["fs", "net", "time"] }
 smithay = { workspace = true, features = ["backend_drm", "backend_gbm", "backend_libinput", "backend_session_libseat", "backend_udev", "desktop"] }
 tracing.workspace = true
 bande-bus.workspace = true
@@ -38,7 +38,7 @@ wayland-client.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, libvulkan1, mesa-vulkan-drivers | vulkan-icd, systemd"
+depends = "$auto, libvulkan1, mesa-vulkan-drivers | vulkan-icd, systemd, pkexec"
 recommends = "bande-clipboard, bande-shell, bande-lock, bande-screenshot, bande-files, bande-settings, dmz-cursor-theme"
 suggests = "fcitx5"
 extended-description = """\
@@ -53,6 +53,8 @@ assets = [
     ["data/bande-session.target", "usr/lib/systemd/user/", "644"],
     ["data/bande.desktop", "usr/share/wayland-sessions/", "644"],
     ["data/session-clients", "usr/share/bande-compositor/", "644"],
+    ["data/bande-consent", "usr/libexec/", "755"],
+    ["data/org.bande.consent.policy", "usr/share/polkit-1/actions/", "644"],
 ]
 
 [lints]

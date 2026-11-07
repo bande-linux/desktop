@@ -67,9 +67,9 @@ shakes the field. Forgot it: "Use recovery key".
 btrfs inside. Kernel and initrd on the ESP, unencrypted, so rollbacks and boot counting are unaffected:
 snapshot entries change `rootflags` only.
 
-**Mac image** (macOS cannot run cryptsetup). `root.img` is LUKS2 with a well-known empty key and a
+**Mac image** (macOS cannot run cryptsetup). `root.img` is LUKS2 with the well-known passphrase `bande-provisional` (cheap KDF) and a
 header token `bande-provisional`. Grow first, then at first run the helper adds the user's slot,
-removes the empty one and reencrypts online in the background, because every image shares one volume
+removes the provisional one and reencrypts online in the background, because every image shares one volume
 key until then. A resume service continues it across reboots. USB install: fresh volume key at
 install, no reencrypt.
 

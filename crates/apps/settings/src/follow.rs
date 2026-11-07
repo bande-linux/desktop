@@ -20,6 +20,7 @@ use crate::about::{About, AboutCommand, follow_about};
 use crate::battery::{BatteryCommand, BatteryState, follow_battery};
 use crate::brightness::follow_brightness;
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
+use crate::consent::{KeyboardAccess, follow_keyboard_access};
 use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
 use crate::failure::{explained, pane_failed, sentence};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
@@ -79,6 +80,7 @@ pub enum Update {
     Refused(Vec<Privilege>),
     DefaultApps(Vec<DefaultApp>),
     Permissions(Grants),
+    KeyboardAccess(Vec<KeyboardAccess>),
     Printers(PrintersState),
     NearbyPrinters(Vec<bande_printers::NearbyPrinter>),
     PrinterAdded(String, bool),
@@ -112,6 +114,7 @@ pub enum Command {
     Locale(LocaleCommand),
     DefaultApp(DefaultAppCommand),
     Permission(PermissionCommand),
+    KeyboardAccess(String, bool),
     Printers(PrinterCommand),
     Users(UsersCommand),
     Brightness(LevelRequest),
@@ -358,6 +361,7 @@ pub struct Services {
     locale: Option<Sender<LocaleCommand>>,
     default_apps: Sender<DefaultAppCommand>,
     permissions: Sender<PermissionCommand>,
+    keyboard_access: Sender<(String, bool)>,
     passwords: Sender<PasswordCommand>,
     brightness: Option<Sender<LevelRequest>>,
     printers: Option<Sender<PrinterCommand>>,
@@ -395,6 +399,7 @@ impl Services {
             locale: system.map(|system| follow_locale(system, updates.clone())),
             default_apps: follow_default_apps(updates.clone()),
             permissions: follow_permissions(session, updates.clone()),
+            keyboard_access: follow_keyboard_access(updates.clone()),
             passwords: follow_passwords(session, system, updates.clone()),
             brightness: follow_brightness(session, updates.clone()),
             printers: system.map(|system| follow_printers(system, updates.clone())),
@@ -437,6 +442,7 @@ impl Services {
             Command::Login(command) => self.login.send(command).is_ok(),
             Command::DefaultApp(command) => self.default_apps.send(command).is_ok(),
             Command::Permission(command) => self.permissions.send(command).is_ok(),
+            Command::KeyboardAccess(line, on) => self.keyboard_access.send((line, on)).is_ok(),
             Command::Passwords(command) => self.passwords.send(command).is_ok(),
             Command::Users(command) => self.users.send(command).is_ok(),
             Command::Printers(command) => self

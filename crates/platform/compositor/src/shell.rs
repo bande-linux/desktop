@@ -41,7 +41,11 @@ pub(crate) struct PendingInsert {
 pub(crate) fn is_shell(client: &Client) -> bool {
     client
         .get_data::<ClientState>()
-        .is_some_and(|state| state.role == Some(SessionRole::Shell))
+        .is_some_and(|state| plays_shell(state.role))
+}
+
+fn plays_shell(role: Option<SessionRole>) -> bool {
+    matches!(role, Some(SessionRole::Shell | SessionRole::LockScreen))
 }
 
 pub(crate) fn is_shell_client(display: &DisplayHandle, id: &ClientId) -> bool {
@@ -51,7 +55,7 @@ pub(crate) fn is_shell_client(display: &DisplayHandle, id: &ClientId) -> bool {
         .ok()
         .and_then(|data| {
             data.downcast_ref::<ClientState>()
-                .map(|state| state.role == Some(SessionRole::Shell))
+                .map(|state| plays_shell(state.role))
         })
         .unwrap_or(false)
 }

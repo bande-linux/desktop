@@ -598,7 +598,13 @@ impl State {
         } else {
             KeyState::Released
         };
-        if state.is_locked() && keyboard.is_grabbed() {
+        let held_by_input_method = keyboard
+            .grab_start_data()
+            .is_some_and(|grab| grab.focus.is_none());
+        if keyboard.is_grabbed()
+            && (state.is_locked()
+                || (held_by_input_method && state.input_method_must_not_see_keys()))
+        {
             keyboard.unset_grab(state);
         }
         let before = keyboard.modifier_state();

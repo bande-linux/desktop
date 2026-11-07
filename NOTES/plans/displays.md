@@ -20,7 +20,6 @@
 - **Relink happens in `present`**, after any pending flip, so it cannot race one.
 - **Kernel:** a display that publishes no modes gets its DP link cycled a few times instead of waiting for a replug.
 
-## Stages
-1. Compositor: probing, grace, parking, mode tests, relink in the frame path, window restore.
-2. Kernel branch: no-modes recovery. Not installed.
-3. Check on real DRM (vkms in a VM) if a VM can drive it.
+## Left
+- Kernel: branch `fix-displays` in the kernel repo adds the no-modes recovery. Not installed, not booted.
+- On the mini: unplug and replug the only display, and swap it for another (`NOTES/open.md`). Real DRM hot-plug has only run on a builder's virtio-gpu, through the connector's sysfs `status` and a `change` uevent. Delete this plan once that passes.

@@ -47,7 +47,7 @@ graph LR
 - **Crash resilience**: if the lock screen crashes, the session stays locked; the compositor
   draws a blank frame and a new locker may take over the lock.
 - Idle, as in macOS's Lock Screen settings ([`config.kdl`](overview.md#configuration) `idle`,
-  Settings ▸ Lock Screen): the backlight dims 10 s before the screen saver or the
+  Settings ▸ Lock Screen): the displays dim 10 s before the screen saver or the
   display turning off, whichever comes first (default 5 and 10 min). The screen saver is the lock
   screen itself, resting: its clock and date over the blurred desktop picture and nothing
   else, covering the desktop through `ext-session-lock`, as macOS hands its saver over to the

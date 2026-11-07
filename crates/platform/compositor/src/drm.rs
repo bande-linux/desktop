@@ -773,7 +773,7 @@ impl FrameOutput for DrmBackend {
             if let Err(error) = head.compositor.reset_state() {
                 tracing::warn!("cannot reset {}: {error}", head.config.name);
             }
-            head.warmth = None;
+            head.tone = None;
         }
         Ok(())
     }

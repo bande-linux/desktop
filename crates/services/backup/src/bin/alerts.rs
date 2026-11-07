@@ -10,8 +10,8 @@ use bande_notify::client::{self, Request};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
-const ENGLISH: &str = include_str!("../../locales/en-US/bande-backup.ftl");
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-backup")));
 
 const OPEN: &str = "open-settings";
 const SETTINGS: &str = "org.bande.Settings";

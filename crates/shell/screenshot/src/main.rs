@@ -956,11 +956,8 @@ impl Screenshots {
             }
             return;
         }
-        let Ok(program) = std::env::current_exe() else {
-            return;
-        };
         let command = [
-            program.to_string_lossy().into_owned(),
+            bande_xdg::own_executable().to_string_lossy().into_owned(),
             MARKUP_FLAG.to_owned(),
             path.to_string_lossy().into_owned(),
         ];

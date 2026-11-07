@@ -529,9 +529,10 @@ impl Mounts {
             .find(|user| !user.is_empty())
             .unwrap_or_default();
         server.user = (!user.is_empty()).then(|| user.clone());
-        let password = match request.password.is_empty() {
-            true => stored_password(&server.origin(), &user),
-            false => Some(request.password.clone()),
+        let password = match (request.password.is_empty(), user.is_empty()) {
+            (true, false) => stored_password(&server.origin(), &user),
+            (true, true) => None,
+            (false, _) => Some(request.password.clone()),
         };
         let outcome = match server.protocol {
             Protocol::Smb if server.path.is_empty() => {

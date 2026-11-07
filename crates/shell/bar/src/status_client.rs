@@ -176,10 +176,7 @@ impl StatusClient {
     }
 
     fn myself(&self) -> String {
-        std::env::current_exe()
-            .ok()
-            .and_then(|path| path.to_str().map(str::to_owned))
-            .unwrap_or_else(|| "bande-shell".to_owned())
+        bande_xdg::own_executable().to_string_lossy().into_owned()
     }
 
     fn run(&mut self, window: &mut Window, command: Command) {

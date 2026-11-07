@@ -165,7 +165,7 @@ when they reach the screen is Bande's own.
   the keyboard, Space picks a display and the arrows put it on that side of the main display.
   The main display carries a white bar along its top. Each display then offers Use as (Main
   display, Extended, Mirror), Resolution (up to four sizes of its native shape), Size of text
-  and controls, Refresh rate, Rotation and Variable refresh rate. Every change is written to
+  and controls, Refresh rate and Rotation. Every change is written to
   `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
   settings?" with Keep and Revert and comes back by itself after 15 s, as macOS does.
 

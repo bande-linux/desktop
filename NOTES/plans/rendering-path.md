@@ -7,7 +7,6 @@ Audit gap 18. Plan only; nothing here is built. Delete stages as they land.
 - Colours that are right on a wide-gamut monitor, without a setting. Today every sRGB pixel is sent unconverted to a monitor that is not sRGB.
 - Dragging, animation and Glass with room to spare at 120 Hz, because the CPU no longer copies frames.
 - Video and browser frames shown without a copy, and screen sharing without a CPU copy.
-- No switch in Settings that does nothing.
 
 ## What happens to a pixel today
 
@@ -89,20 +88,19 @@ The correct order is sRGB correct first, then tagged content, then HDR.
 - **Fallback:** a matrix from EDID primaries in the compositor's shaders. Overlays then need turning off for anything not already correct, as KWin does. The DCP CTM (Night Light uses it) is one global matrix, in an unknown space.
 - **HDR:** DCP lists PQ modes on this monitor at 120 Hz (mode 127: 12-bit YCbCr 4:4:4, BT.2020, max 409 nits, frame average 391). appledrm exposes only CTM: no `Colorspace`, no `HDR_OUTPUT_METADATA`, no `COLOR_PIPELINE`. Changing colour mode is a modeset (about 0.5 s of black in `dmesg`). So HDR means a per-display Settings toggle, as on a Mac, and a kernel project. Last.
 
-## Variable refresh: remove the switch
+## Variable refresh: no switch until the kernel reports it
 
 - The compositor reads nothing, and Settings shows it for any display faster than 48 Hz.
 - The kernel always sends `IOMFBPARAM_ADAPTIVE_SYNC` 0 and exposes no `vrr_capable`.
 - DCP says of this monitor over HDMI: `SupportsVariableRefreshRate` false, and every 2560x1440 timing has min and max VRR 0 (the attributes list 48-144 Hz).
 - Asahi's PR 477 is open, marked NOUPSTREAM, behind a module parameter, needs a modeset to toggle, has requested changes, and is untested on HDMI.
 
-Implementing it would be a kernel fork with black flashes, with no benefit here. Bring the switch back when the kernel reports `vrr_capable`.
+Implementing it would be a kernel fork with black flashes, with no benefit here. The switch is gone; bring it back when the kernel reports `vrr_capable`.
 
 ## Stages, by benefit per risk
 
 | # | Stage | Gain, measured | Risk | Blocker | Size |
 |---|---|---|---|---|---|
-| 0 | Remove the VRR switch and key | no dead control | none | none | S |
 | 1 | GPU copy to the scanout buffer | 2.0 ms to 0.45 ms per full frame, CPU part gone | low | none | S |
 | 2 | Colour probe, then sRGB correct | every pixel on this monitor | low for the probe; **black screen** possible until booted | owner boot | S if DCP does it, M if shaders |
 | 3 | Sample NV12 without copying | 0.34-0.66 ms per video frame | medium | none | S-M |

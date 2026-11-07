@@ -426,12 +426,12 @@ made again.
 - `bande-session` also sets `ELECTRON_OZONE_PLATFORM_HINT=auto` (unless already set), so
   Electron apps that do not yet default to Wayland run natively instead of failing for want of
   an X server, and `QT_QPA_PLATFORMTHEME` as described under the portal.
-- `bande-session` takes the language and formats from `/etc/locale.conf` and replaces those in
+- `bande-session` takes the language and formats from `/etc/locale.conf`, then `~/.config/locale.conf` (each person's own choice, written by Settings), and replaces those in
   the user manager and in D-Bus activation. greetd and a lingering user manager keep what they had
   when they started, so without this a choice in Settings would only arrive after a restart.
   The login window does the same each time it starts: greetd runs `bande-greeter-session`, which
   reads that file before starting `bande-compositor --greeter`.
-- Settings ▸ Language & Region sets `LANG` and the five format categories (`LC_TIME`,
+- Settings ▸ Language & Region writes the person's file and, for an administrator, the system default the login window uses. It sets `LANG` and the five format categories (`LC_TIME`,
   `LC_NUMERIC`, `LC_MONETARY`, `LC_MEASUREMENT`, `LC_PAPER`) through `bande-locale-helper` under
   `pkexec` (`org.bande.locale-helper`, no prompt for active `sudo` members). Debian forbids
   localed's `SetLocale` and `SetX11Keyboard` even to root, so localed is only read, each time

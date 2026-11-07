@@ -1150,6 +1150,7 @@ dependencies = [
  "ash",
  "naga",
  "smithay",
+ "tracing",
 ]
 
 [[package]]
@@ -1208,6 +1209,7 @@ dependencies = [
  "blocking",
  "image",
  "jiff",
+ "libc",
  "pipewire",
  "rustix 1.1.6",
  "tracing",

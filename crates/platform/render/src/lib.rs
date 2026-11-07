@@ -123,6 +123,7 @@ pub struct DeviceInfo {
     pub driver: String,
     pub software: bool,
     pub max_image_side: u32,
+    pub render_device: Option<u64>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -422,13 +423,26 @@ fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
                 .iter()
                 .position(|family| family.queue_flags.contains(vk::QueueFlags::GRAPHICS))?;
             let mut driver = vk::PhysicalDeviceDriverProperties::default();
+            let mut node = vk::PhysicalDeviceDrmPropertiesEXT::default();
+            let knows_node = extensions.iter().any(|extension| {
+                extension.extension_name_as_c_str() == Ok(ash::ext::physical_device_drm::NAME)
+            });
             let mut properties2 = vk::PhysicalDeviceProperties2::default().push_next(&mut driver);
+            if knows_node {
+                properties2 = properties2.push_next(&mut node);
+            }
             unsafe { instance.get_physical_device_properties2(physical, &mut properties2) };
             let info = DeviceInfo {
                 name: text(properties.device_name_as_c_str()),
                 driver: text(driver.driver_name_as_c_str()),
                 software: properties.device_type == vk::PhysicalDeviceType::CPU,
                 max_image_side: properties.limits.max_image_dimension2_d,
+                render_device: (node.has_render == vk::TRUE).then(|| {
+                    smithay::reexports::rustix::fs::makedev(
+                        node.render_major as u32,
+                        node.render_minor as u32,
+                    )
+                }),
             };
             Some((
                 device_rank(properties.device_type),

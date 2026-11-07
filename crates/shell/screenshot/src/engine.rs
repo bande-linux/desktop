@@ -1,16 +1,22 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io;
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, OwnedFd};
 use std::os::unix::fs::FileExt;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_inbox::{Inbox, Outbox};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::fs::{MemfdFlags, memfd_create};
-use bande_inbox::{Inbox, Outbox};
+use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_buffer_params_v1::{
+    self, ZwpLinuxBufferParamsV1,
+};
+use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
+
+use crate::cast::{CastPool, SharedBuffer};
 use bande_protocols::client::bande_capture_v1::{self, BandeCaptureV1};
 use wayland_client::backend::WaylandError;
 use wayland_client::globals::{GlobalListContents, registry_queue_init};
@@ -40,6 +46,7 @@ use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_captu
 };
 
 const FORMAT: Format = Format::Argb8888;
+const DMABUF_FOURCC: u32 = 0x3432_5241;
 const BYTES_PER_PIXEL: u32 = 4;
 const MOST_FRAMES_PER_SECOND: u32 = 60;
 
@@ -99,8 +106,6 @@ impl Shot {
     }
 }
 
-pub type FrameSink = Box<dyn FnMut(u32, u32, &[u8]) + Send>;
-
 pub type Reply<T> = Arc<dyn Fn(T) + Send + Sync>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,8 +126,9 @@ enum Command {
         id: u64,
         source: Source,
         cursor: bool,
-        sink: FrameSink,
+        pool: CastPool,
     },
+    PoolChanged,
     Stop(u64),
 }
 
@@ -140,6 +146,7 @@ impl Engine {
         let handle = queue.handle();
         let mut capture = Capture {
             shm: globals.bind(&handle, 1..=1, ()).ok(),
+            dmabuf: globals.bind(&handle, 3..=3, ()).ok(),
             displays: Vec::new(),
             output_sources: globals.bind(&handle, 1..=1, ()).ok(),
             toplevel_sources: globals.bind(&handle, 1..=1, ()).ok(),
@@ -233,12 +240,16 @@ impl Engine {
         });
     }
 
-    pub fn stream(&self, id: u64, source: Source, cursor: bool, sink: FrameSink) {
+    pub fn stream(&self, id: u64, source: Source, cursor: bool, pool: CastPool) {
+        let commands = self.commands.clone();
+        pool.on_change(Box::new(move || {
+            commands.send(Command::PoolChanged);
+        }));
         self.commands.send(Command::Stream {
             id,
             source,
             cursor,
-            sink,
+            pool,
         });
     }
 
@@ -262,7 +273,17 @@ struct Toplevel {
 
 enum Sink {
     Once(Reply<Option<Shot>>),
-    Stream(u64, FrameSink),
+    Cast(u64, CastPool),
+}
+
+struct CastSlot {
+    shared: SharedBuffer,
+    buffer: Option<WlBuffer>,
+}
+
+struct Pending {
+    session: u64,
+    slot: u32,
 }
 
 struct Buffer {
@@ -285,10 +306,18 @@ struct Session {
     next_frame: Option<Instant>,
     sink: Sink,
     ended: bool,
+    options: Options,
+    announced_size: Option<(u32, u32)>,
+    slots: HashMap<u32, CastSlot>,
+    capturing: Option<u32>,
+    requested_at: Instant,
+    dmabuf_offered: bool,
+    dmabuf_refused: bool,
 }
 
 struct Capture {
     shm: Option<WlShm>,
+    dmabuf: Option<ZwpLinuxDmabufV1>,
     displays: Vec<Output>,
     output_sources: Option<ExtOutputImageCaptureSourceManagerV1>,
     toplevel_sources: Option<ExtForeignToplevelImageCaptureSourceManagerV1>,
@@ -388,17 +417,18 @@ impl Capture {
                 id,
                 source,
                 cursor,
-                sink,
+                pool,
             } => {
-                if !self.open(&source, cursor, Sink::Stream(id, sink), handle) {
+                if !self.open(&source, cursor, Sink::Cast(id, pool), handle) {
                     self.events.send(EngineEvent::StreamEnded(id));
                 }
             }
+            Command::PoolChanged => {}
             Command::Stop(id) => {
                 if let Some(session) = self
                     .sessions
                     .iter_mut()
-                    .find(|session| matches!(session.sink, Sink::Stream(stream, _) if stream == id))
+                    .find(|session| matches!(session.sink, Sink::Cast(stream, _) if stream == id))
                 {
                     session.close();
                 }
@@ -490,23 +520,40 @@ impl Capture {
             next_frame: None,
             sink,
             ended: false,
+            options,
+            announced_size: None,
+            slots: HashMap::new(),
+            capturing: None,
+            requested_at: Instant::now(),
+            dmabuf_offered: false,
+            dmabuf_refused: false,
         });
         true
     }
 
     fn request_due_frames(&mut self, now: Instant, handle: &QueueHandle<Self>) {
-        let Some(shm) = self.shm.clone() else {
+        let (Some(shm), Some(copy)) = (self.shm.clone(), self.copy.clone()) else {
             return;
         };
+        let dmabuf = self.dmabuf.clone();
         for session in &mut self.sessions {
-            if session.ended || session.frame.is_some() || !session.ready {
+            session.apply_pool_changes(&copy, handle);
+            if session.ended
+                || session.frame.is_some()
+                || session.capturing.is_some()
+                || !session.ready
+            {
                 continue;
             }
             if session.next_frame.is_some_and(|due| due > now) {
                 continue;
             }
             session.next_frame = None;
-            if let Err(error) = session.request_frame(&shm, handle) {
+            let requested = match &session.sink {
+                Sink::Once(_) => session.request_frame(&shm, handle),
+                Sink::Cast(..) => session.request_cast_frame(&shm, dmabuf.as_ref(), handle),
+            };
+            if let Err(error) = requested {
                 tracing::warn!("cannot capture a frame: {error}");
                 session.end(&self.events);
             }
@@ -547,6 +594,134 @@ impl Session {
         Ok(())
     }
 
+    fn apply_pool_changes(
+        &mut self,
+        copy: &ExtImageCopyCaptureManagerV1,
+        handle: &QueueHandle<Capture>,
+    ) {
+        let Sink::Cast(_, pool) = &self.sink else {
+            return;
+        };
+        let changes = pool.changes();
+        for slot in changes.removed {
+            if let Some(removed) = self.slots.remove(&slot)
+                && let Some(buffer) = removed.buffer
+            {
+                buffer.destroy();
+            }
+        }
+        for shared in changes.added {
+            self.slots.insert(
+                shared.slot,
+                CastSlot {
+                    shared,
+                    buffer: None,
+                },
+            );
+        }
+        if changes.restarted && !self.ended {
+            if let Some(frame) = self.frame.take() {
+                frame.destroy();
+            }
+            if let (Sink::Cast(_, pool), Some(slot)) = (&self.sink, self.capturing.take()) {
+                pool.give_back(slot);
+            }
+            self.session.destroy();
+            self.session = copy.create_session(&self.source, self.options, handle, self.id);
+            self.ready = false;
+        }
+    }
+
+    fn request_cast_frame(
+        &mut self,
+        shm: &WlShm,
+        dmabuf: Option<&ZwpLinuxDmabufV1>,
+        handle: &QueueHandle<Capture>,
+    ) -> io::Result<()> {
+        let (width, height) = self
+            .size
+            .filter(|_| self.formats.contains(&FORMAT))
+            .ok_or_else(|| io::Error::other("the compositor offers no usable buffer"))?;
+        let Sink::Cast(_, pool) = &self.sink else {
+            return Ok(());
+        };
+        if self.announced_size != Some((width, height)) {
+            self.announced_size = Some((width, height));
+            pool.set_size(width, height);
+        }
+        let Some(slot) = pool.next_free() else {
+            return Ok(());
+        };
+        let Some(entry) = self.slots.get_mut(&slot) else {
+            return Ok(());
+        };
+        if (entry.shared.width, entry.shared.height) != (width, height) {
+            return Ok(());
+        }
+        self.capturing = Some(slot);
+        self.requested_at = Instant::now();
+        if entry.buffer.is_some() {
+            return self.capture_into(slot, handle);
+        }
+        match (dmabuf, &entry.shared.dmabuf) {
+            (Some(dmabuf), Some(fd)) if self.dmabuf_offered && !self.dmabuf_refused => {
+                request_dmabuf_buffer(dmabuf, fd, &entry.shared, self.id, slot, handle);
+                Ok(())
+            }
+            _ => {
+                entry.buffer = Some(shm_buffer(shm, &entry.shared, handle)?);
+                self.capture_into(slot, handle)
+            }
+        }
+    }
+
+    fn capture_into(&mut self, slot: u32, handle: &QueueHandle<Capture>) -> io::Result<()> {
+        let Some(CastSlot {
+            shared,
+            buffer: Some(buffer),
+        }) = self.slots.get(&slot)
+        else {
+            return Ok(());
+        };
+        let frame = self.session.create_frame(handle, self.id);
+        frame.attach_buffer(buffer);
+        frame.damage_buffer(0, 0, side(shared.width)?, side(shared.height)?);
+        frame.capture();
+        self.frame = Some(frame);
+        Ok(())
+    }
+
+    fn cast_frame_ready(&mut self) {
+        if let (Sink::Cast(_, pool), Some(slot)) = (&self.sink, self.capturing.take()) {
+            pool.present(slot);
+        }
+        self.next_frame = Some(self.requested_at + Duration::from_secs(1) / MOST_FRAMES_PER_SECOND);
+    }
+
+    fn cast_buffer_refused(&mut self) {
+        let Some(slot) = self.capturing else {
+            return;
+        };
+        let sized = self.slots.get(&slot).map(|slot| (slot.shared.width, slot.shared.height));
+        if sized == self.size {
+            self.refuse_dmabuf();
+        } else {
+            self.capturing = None;
+        }
+    }
+
+    fn refuse_dmabuf(&mut self) {
+        self.dmabuf_refused = true;
+        for slot in self.slots.values_mut() {
+            if let Some(buffer) = slot.buffer.take() {
+                buffer.destroy();
+            }
+        }
+        if let (Sink::Cast(_, pool), Some(slot)) = (&self.sink, self.capturing.take()) {
+            pool.give_back(slot);
+        }
+    }
+
     fn deliver(&mut self, events: &Outbox<EngineEvent>) {
         let Some(buffer) = &self.buffer else {
             return;
@@ -567,18 +742,14 @@ impl Session {
                 }));
                 self.close();
             }
-            Sink::Stream(_, sink) => {
-                sink(width, height, &self.pixels);
-                self.next_frame =
-                    Some(Instant::now() + Duration::from_secs(1) / MOST_FRAMES_PER_SECOND);
-            }
+            Sink::Cast(..) => {}
         }
     }
 
     fn end(&mut self, events: &Outbox<EngineEvent>) {
         match &self.sink {
             Sink::Once(reply) => reply(None),
-            Sink::Stream(id, _) => {
+            Sink::Cast(id, _) => {
                 events.send(EngineEvent::StreamEnded(*id));
             }
         }
@@ -592,6 +763,11 @@ impl Session {
         if let Some(buffer) = self.buffer.take() {
             buffer.buffer.destroy();
         }
+        for slot in self.slots.drain().map(|(_, slot)| slot) {
+            if let Some(buffer) = slot.buffer {
+                buffer.destroy();
+            }
+        }
         self.session.destroy();
         self.source.destroy();
         self.ended = true;
@@ -600,6 +776,49 @@ impl Session {
 
 fn side(value: u32) -> io::Result<i32> {
     i32::try_from(value).map_err(|_| io::Error::other("the capture is too large"))
+}
+
+fn request_dmabuf_buffer(
+    dmabuf: &ZwpLinuxDmabufV1,
+    fd: &OwnedFd,
+    shared: &SharedBuffer,
+    session: u64,
+    slot: u32,
+    handle: &QueueHandle<Capture>,
+) {
+    let params = dmabuf.create_params(handle, Pending { session, slot });
+    params.add(fd.as_fd(), 0, 0, shared.stride, 0, 0);
+    params.create(
+        shared.width as i32,
+        shared.height as i32,
+        DMABUF_FOURCC,
+        zwp_linux_buffer_params_v1::Flags::empty(),
+    );
+}
+
+fn shm_buffer(
+    shm: &WlShm,
+    shared: &SharedBuffer,
+    handle: &QueueHandle<Capture>,
+) -> io::Result<WlBuffer> {
+    let length = shared.memory.metadata()?.len();
+    let pool: WlShmPool = shm.create_pool(
+        shared.memory.as_fd(),
+        i32::try_from(length).map_err(|_| io::Error::other("the capture is too large"))?,
+        handle,
+        (),
+    );
+    let buffer = pool.create_buffer(
+        0,
+        side(shared.width)?,
+        side(shared.height)?,
+        side(shared.stride)?,
+        FORMAT,
+        handle,
+        (),
+    );
+    pool.destroy();
+    Ok(buffer)
 }
 
 fn allocate(
@@ -653,7 +872,14 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, u64> for Capture {
             ext_image_copy_capture_session_v1::Event::BufferSize { width, height } => {
                 session.size = Some((width, height));
                 session.formats.clear();
+                session.dmabuf_offered = false;
                 session.ready = false;
+            }
+            ext_image_copy_capture_session_v1::Event::DmabufFormat { format, modifiers } => {
+                session.dmabuf_offered |= format == DMABUF_FOURCC
+                    && modifiers
+                        .chunks_exact(8)
+                        .any(|modifier| modifier == 0u64.to_ne_bytes());
             }
             ext_image_copy_capture_session_v1::Event::ShmFormat {
                 format: WEnum::Value(format),
@@ -683,7 +909,10 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, u64> for Capture {
                 if let Some(frame) = session.frame.take() {
                     frame.destroy();
                 }
-                session.deliver(&events);
+                match session.sink {
+                    Sink::Once(_) => session.deliver(&events),
+                    Sink::Cast(..) => session.cast_frame_ready(),
+                }
             }
             ext_image_copy_capture_frame_v1::Event::Failed { reason } => {
                 if let Some(frame) = session.frame.take() {
@@ -691,6 +920,8 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, u64> for Capture {
                 }
                 if reason != WEnum::Value(FailureReason::BufferConstraints) {
                     session.end(&events);
+                } else {
+                    session.cast_buffer_refused();
                 }
             }
             _ => {}
@@ -860,6 +1091,41 @@ impl Dispatch<WlOutput, u32> for Capture {
     }
 }
 
+impl Dispatch<ZwpLinuxBufferParamsV1, Pending> for Capture {
+    fn event(
+        capture: &mut Self,
+        params: &ZwpLinuxBufferParamsV1,
+        event: zwp_linux_buffer_params_v1::Event,
+        pending: &Pending,
+        _: &Connection,
+        handle: &QueueHandle<Self>,
+    ) {
+        params.destroy();
+        let Some(session) = capture.session(pending.session) else {
+            return;
+        };
+        match event {
+            zwp_linux_buffer_params_v1::Event::Created { buffer } => {
+                if let Some(slot) = session.slots.get_mut(&pending.slot) {
+                    slot.buffer = Some(buffer);
+                    if let Err(error) = session.capture_into(pending.slot, handle) {
+                        tracing::warn!("cannot capture a frame: {error}");
+                    }
+                } else {
+                    buffer.destroy();
+                }
+            }
+            zwp_linux_buffer_params_v1::Event::Failed => session.refuse_dmabuf(),
+            _ => {}
+        }
+    }
+
+    event_created_child!(Capture, ZwpLinuxBufferParamsV1, [
+        zwp_linux_buffer_params_v1::EVT_CREATED_OPCODE => (WlBuffer, ()),
+    ]);
+}
+
+delegate_noop!(Capture: ignore ZwpLinuxDmabufV1);
 delegate_noop!(Capture: ignore WlShm);
 delegate_noop!(Capture: WlShmPool);
 delegate_noop!(Capture: ignore WlBuffer);

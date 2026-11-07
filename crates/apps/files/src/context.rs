@@ -137,6 +137,16 @@ impl FilesView {
                     .all(|entry| entry.is_folder() && entry.trashed.is_none()),
             terminal: self.terminal_installed(),
             apps,
+            mail: only_files && !trashed && self.mail_app().is_some(),
+            places: match trashed {
+                true => Vec::new(),
+                false => self
+                    .mounted
+                    .iter()
+                    .filter(|place| !selection.iter().any(|entry| entry.path.starts_with(place)))
+                    .cloned()
+                    .collect(),
+            },
         })
     }
 
@@ -203,6 +213,8 @@ impl FilesView {
             Command::Duplicate => self.duplicate(),
             Command::MakeAlias => self.make_alias(),
             Command::Compress => self.compress(),
+            Command::ShareMail => self.share_by_mail(),
+            Command::ShareTo(place) => self.share_to(place),
             Command::Copy => self.copy_selection(false),
             Command::CopyPath => self.copy_paths(),
             Command::AddToSidebar => self.add_to_sidebar(),

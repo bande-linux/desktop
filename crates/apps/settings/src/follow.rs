@@ -35,6 +35,7 @@ use crate::privilege::{Privilege, follow_privileges};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
 };
+use crate::sharing::{SharingCommand, SharingState, follow_sharing};
 use crate::software::{SoftwareCommand, SoftwareState, follow_software};
 use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand, follow_storage};
@@ -82,6 +83,7 @@ pub enum Update {
     Permissions(Grants),
     Printers(PrintersState),
     NearbyPrinters(Vec<bande_printers::NearbyPrinter>),
+    Sharing(SharingState),
     PrinterAdded(String, bool),
     PrintingInstalled,
     Accounts(Vec<Account>, bool),
@@ -114,6 +116,7 @@ pub enum Command {
     DefaultApp(DefaultAppCommand),
     Permission(PermissionCommand),
     Printers(PrinterCommand),
+    Sharing(SharingCommand),
     Users(UsersCommand),
     Brightness(LevelRequest),
     Reveal(PathBuf),
@@ -362,6 +365,7 @@ pub struct Services {
     passwords: Sender<PasswordCommand>,
     brightness: Option<Sender<LevelRequest>>,
     printers: Option<Sender<PrinterCommand>>,
+    sharing: Sender<SharingCommand>,
     users: Sender<UsersCommand>,
     _pointing: Option<FolderWatch>,
 }
@@ -399,6 +403,7 @@ impl Services {
             passwords: follow_passwords(session, system, updates.clone()),
             brightness: follow_brightness(session, updates.clone()),
             printers: system.map(|system| follow_printers(system, updates.clone())),
+            sharing: follow_sharing(Some(session.clone()), system.cloned(), updates.clone()),
             users: follow_users(session, system, updates.clone()),
             _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
                 .inspect_err(|error| tracing::warn!("cannot watch {UDEV_DATA}: {error}"))
@@ -440,6 +445,7 @@ impl Services {
             Command::Permission(command) => self.permissions.send(command).is_ok(),
             Command::Passwords(command) => self.passwords.send(command).is_ok(),
             Command::Users(command) => self.users.send(command).is_ok(),
+            Command::Sharing(command) => self.sharing.send(command).is_ok(),
             Command::Printers(command) => self
                 .printers
                 .as_ref()

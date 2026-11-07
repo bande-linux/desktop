@@ -126,6 +126,7 @@ pub struct State {
     pub(crate) switcher: crate::switcher::Switcher,
     pub(crate) assist: crate::assist::Assist,
     pub(crate) recall: crate::recall::Recall,
+    pub(crate) resume: crate::resume::Resume,
     pub(crate) reopen_file: Option<std::path::PathBuf>,
     pub(crate) running_apps: Option<crate::app::RunningApps>,
     pub(crate) apps_changed: bool,
@@ -220,8 +221,9 @@ impl Compositor {
         crate::menu_button::create_globals(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, BandeShellV1, ()>(crate::shell::OPEN_TERMINAL_SINCE, ());
-        handle.create_global::<State, BandeAppV1, ()>(8, ());
+        handle.create_global::<State, BandeShellV1, ()>(crate::shell::SHELL_VERSION, ());
+        handle.create_global::<State, BandeAppV1, ()>(9, ());
+        crate::resume::create_global(&handle);
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
@@ -277,6 +279,7 @@ impl Compositor {
             switcher: crate::switcher::Switcher::default(),
             assist: crate::assist::Assist::default(),
             recall: crate::recall::Recall::default(),
+            resume: crate::resume::Resume::default(),
             reopen_file: None,
             running_apps: None,
             apps_changed: false,
@@ -392,6 +395,7 @@ impl Compositor {
         self.state.announce_windowless_apps();
         self.state.announce_apps_running();
         self.state.note_running_apps();
+        self.state.note_window_sessions();
         self.state.note_app_states();
         self.state.popups.cleanup();
         self.state.end_orphaned_drag();
@@ -420,6 +424,7 @@ impl Compositor {
     }
 
     pub fn latch_on(&mut self, output: &str) {
+        self.state.note_window_sessions();
         if let Some(screen) = self.state.screen_named(output) {
             self.latch_screen(screen);
         }

@@ -21,6 +21,7 @@ use crate::session::SessionRole;
 use crate::state::{ClientState, State};
 
 pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
+pub(crate) const SHELL_VERSION: u32 = 6;
 const INSERT_PATIENCE: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
@@ -515,6 +516,7 @@ impl Dispatch<BandeShellV1, ()> for State {
             }
             bande_shell_v1::Request::QuitApp { app_id } => state.quit_app_named(&app_id),
             bande_shell_v1::Request::ForceQuitApp { app_id } => state.force_quit_app(&app_id),
+            bande_shell_v1::Request::ReopeningApp { app_id } => state.note_app_reopening(app_id),
             bande_shell_v1::Request::ShowForceQuit => state.open_force_quit(),
             bande_shell_v1::Request::ActivateWindow { identifier } => {
                 state.activate_window(&identifier);

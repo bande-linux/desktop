@@ -275,7 +275,6 @@ pub enum SettingId {
     Clock24Hour,
     LoginItems,
     ReopenApps,
-    ReopenAfterCrash,
     AutomaticUpdates,
     UpdateCheckEvery,
     BatteryLevel,
@@ -1492,8 +1491,6 @@ fn system_panes() -> Vec<Pane> {
                     vec![
                         switch(SettingId::ReopenApps, "reopen-at-login")
                             .described("reopen-at-login-description"),
-                        switch(SettingId::ReopenAfterCrash, "reopen-after-crash")
-                            .described("reopen-after-crash-description"),
                     ],
                 ),
             ],

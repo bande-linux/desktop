@@ -1635,6 +1635,7 @@ impl SettingsView {
                     locale.pending = Some(SettingId::Region);
                 }
                 LocaleCommand::LoginKeyboard(codes) => locale.login_sources.clone_from(codes),
+                LocaleCommand::Read => {}
             }
         }
         self.commands.push(Command::Locale(command));
@@ -1789,6 +1790,7 @@ impl SettingsView {
             PaneId::Wifi | PaneId::Network => Command::Network(NetworkCommand::Watch(on)),
             PaneId::Printers => Command::Printers(PrinterCommand::Watch(on)),
             PaneId::Sharing if on => Command::Sharing(SharingCommand::Read),
+            PaneId::LanguageTime | PaneId::Keyboard if on => Command::Locale(LocaleCommand::Read),
             _ => return,
         };
         self.commands.push(command);
@@ -2193,9 +2195,6 @@ impl SettingsView {
             }
             (SettingId::RefreshRate, Value::Number(hertz)) => {
                 display.refresh_rate = Some(f64::from(hertz));
-            }
-            (SettingId::VariableRefreshRate, Value::Flag(on)) => {
-                display.variable_refresh_rate = on.then_some(true);
             }
             _ => return,
         }

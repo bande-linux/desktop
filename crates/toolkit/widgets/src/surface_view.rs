@@ -2,8 +2,8 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Node, Role};
 use bande_graphics::{
-    Captured, Item, Paragraph, Point, Radius, Rect, Shape, Spacing, SurfaceId, SurfaceScaling,
-    TextAlign, TextRole, TextStyle, surface_area,
+    Captured, Cursor, Item, Paragraph, Point, Radius, Rect, Shape, Spacing, SurfaceId,
+    SurfaceScaling, TextAlign, TextRole, TextStyle, surface_area,
 };
 
 use super::{
@@ -49,6 +49,7 @@ pub struct SurfaceView {
     size: (u32, u32),
     scaling: SurfaceScaling,
     capture: Option<PointerCapture>,
+    cursor: Option<Cursor>,
     captured: bool,
     inside: bool,
     held_keys: Vec<u32>,
@@ -73,6 +74,7 @@ impl SurfaceView {
             size: (0, 0),
             scaling: SurfaceScaling::Fit,
             capture: None,
+            cursor: None,
             captured: false,
             inside: false,
             held_keys: Vec::new(),
@@ -101,6 +103,10 @@ impl SurfaceView {
 
     pub fn set_scaling(&mut self, scaling: SurfaceScaling) {
         self.scaling = scaling;
+    }
+
+    pub fn set_cursor(&mut self, cursor: Cursor) {
+        self.cursor = Some(cursor);
     }
 
     pub fn is_captured(&self) -> bool {
@@ -235,6 +241,10 @@ impl Widget for SurfaceView {
                 },
             ],
         });
+    }
+
+    fn cursor(&self, point: Point) -> Option<Cursor> {
+        self.cursor.filter(|_| self.frame.contains(point))
     }
 
     fn access(&self, _cx: &Context) -> Node {

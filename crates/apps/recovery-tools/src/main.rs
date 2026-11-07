@@ -153,7 +153,7 @@ fn run_engine(arguments: Vec<String>, input: Option<Zeroizing<String>>, outbox: 
                 Some(("version", version)) => {
                     let mut fields = version.split('\t');
                     let id = fields.next().unwrap_or_default().to_owned();
-                    let created = fields.nth(0).unwrap_or_default();
+                    let created = fields.next().unwrap_or_default();
                     let why = fields.next().unwrap_or_default();
                     versions.push((id, format!("{created} {why}")));
                 }

@@ -573,6 +573,7 @@ dependencies = [
  "bande-test-bus",
  "bande-test-wayland",
  "bande-wallpaper",
+ "bande-watch",
  "bande-widgets",
  "bande-xdg",
  "jiff",

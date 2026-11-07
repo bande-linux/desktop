@@ -38,6 +38,7 @@ In the prepared tree, `export QUILT_PATCHES=debian/patches QUILT_PC=.pc`, then `
   Only `browser.xhtml` may keep one: the compositor draws its control well over every client-side
   `org.bande.Browser` window, so any other window that draws its own title bar would get the well
   on top of it. `patches/<esr>/bande/no-custom-titlebars.patch` removes the known two.
+- Windows that aren't the main browser window must carry their own `windowclass`, or they get the well too.
 - Re-run the network capture and go through what the new ESR added.
 
 ## Licence

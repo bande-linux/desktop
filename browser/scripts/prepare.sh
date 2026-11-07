@@ -63,7 +63,7 @@ s = re.sub(r'\n\s*CRASH_REPORTER = 1', '\n\tNO_CRASH_REPORTER = 1', s)
 s = s.replace('export MOZ_APP_REMOTINGNAME := $($(PRODUCT))', 'export MOZ_APP_REMOTINGNAME := org.bande.Browser')
 open(rules, 'w').write(s)
 s = open(install).read()
-s = s.replace('debian/@browser@.desktop usr/share/applications\n', 'debian/org.bande.Browser.desktop usr/share/applications\ndebian/org.bande.Browser.metainfo.xml usr/share/metainfo\ndebian/org.bande.Browser.svg usr/share/icons/hicolor/scalable/apps\n')
+s = s.replace('debian/@browser@.desktop usr/share/applications\n', 'debian/org.bande.Browser.desktop usr/share/applications\ndebian/org.bande.Browser.metainfo.xml usr/share/metainfo\ndebian/org.bande.Browser.svg usr/share/icons/hicolor/scalable/apps\ndebian/org.bande.Browser.PictureInPicture.desktop usr/share/applications\ndebian/org.bande.Browser.Sharing.desktop usr/share/applications\ndebian/org.bande.Browser.PictureInPicture.svg usr/share/icons/hicolor/scalable/apps\ndebian/org.bande.Browser.Sharing.svg usr/share/icons/hicolor/scalable/apps\n')
 s = s.replace('debian/@browser@-symbolic.svg usr/share/icons/hicolor/symbolic/apps\n', '')
 s = s.replace('usr/lib/@browser@/pingsender\n', '')
 s = s.replace('debian/vendor.js usr/share/@browser@/browser/defaults/preferences\n', 'debian/00-bande.js usr/share/@browser@/browser/defaults/preferences\n')
@@ -74,6 +74,10 @@ sed -i 's/^Depends: ${shlibs:Depends},/Depends: bande-compositor (>= 0.1.8), ${s
 rm -f debian/google.key debian/mls.key debian/browser.desktop.in debian/browser-symbolic.svg.in
 sed -i 's/^stamps\/dh_install:: debian\/noinstall debian\/$($(PRODUCT))-symbolic.svg/stamps\/dh_install:: debian\/noinstall/' debian/rules
 cp "$repo/prefs/bande.js" debian/00-bande.js
+for window in PictureInPicture:Picture-in-Picture Sharing:Sharing\ Indicator; do
+    printf '[Desktop Entry]\nType=Application\nName=%s\nIcon=org.bande.Browser\nExec=bande-browser\nNoDisplay=true\n' "${window#*:}" > "debian/org.bande.Browser.${window%%:*}.desktop"
+    cp "$repo/branding/org.bande.Browser.svg" "debian/org.bande.Browser.${window%%:*}.svg"
+done
 cp "$repo/branding/org.bande.Browser.desktop" "$repo/branding/org.bande.Browser.metainfo.xml" "$repo/branding/org.bande.Browser.svg" debian/
 
 b=browser/branding/bande

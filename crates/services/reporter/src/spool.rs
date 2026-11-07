@@ -349,7 +349,7 @@ impl Spool {
         self.unqueue(id)
     }
 
-    fn unqueue(&self, id: &str) -> io::Result<()> {
+    pub fn unqueue(&self, id: &str) -> io::Result<()> {
         match fs::remove_file(self.outbox().join(id)) {
             Ok(()) => sync_folder(&self.outbox()),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),

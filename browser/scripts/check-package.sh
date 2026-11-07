@@ -6,11 +6,12 @@ deb=$(realpath "$1")
 repo=$(dirname "$(dirname "$(realpath "$0")")")
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq --no-install-recommends gpg ca-certificates curl tcpdump iproute2 python3 dbus \
+apt-get install -y -qq --no-install-recommends ca-certificates curl tcpdump iproute2 python3 dbus \
     mesa-vulkan-drivers > /dev/null
-curl -fsSL https://bande-linux.github.io/apt/archive-key.asc | gpg --dearmor > /usr/share/keyrings/bande.gpg
-printf 'Types: deb\nURIs: https://bande-linux.github.io/apt\nSuites: rolling\nComponents: main\nSigned-By: /usr/share/keyrings/bande.gpg\n' \
-    > /etc/apt/sources.list.d/bande.sources
+keys=$(mktemp -d)
+curl -fsSL -o "$keys/keyring.deb" https://github.com/bande-linux/apt/releases/latest/download/bande-archive-keyring.deb
+curl -fsSL -o "$keys/source.deb" https://github.com/bande-linux/apt/releases/latest/download/bande-apt-source.deb
+apt-get install -y -qq "$keys/keyring.deb" "$keys/source.deb" > /dev/null
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends bande-compositor bande-config xdg-desktop-portal-bande "$deb" > /dev/null
 profile=$(mktemp -d)

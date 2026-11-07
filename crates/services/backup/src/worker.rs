@@ -32,6 +32,7 @@ const SPACE_ATTEMPTS: u32 = 16;
 const TIME_TEMPLATE: &str = "2006-01-02T15:04:05";
 
 pub enum Command {
+    Wake,
     BackUpNow,
     Pause,
     Resume,
@@ -207,6 +208,7 @@ impl Worker {
 
     fn handle(&mut self, command: Command) {
         match command {
+            Command::Wake => self.reconcile(false),
             Command::BackUpNow => {
                 self.shared.change(|state| state.paused_until = 0);
                 self.run_now();

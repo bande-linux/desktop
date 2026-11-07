@@ -28,3 +28,4 @@ finishing = Setting up your desktop.
 invalid-name = Enter a name, and an account name of lowercase letters and digits.
 empty-password = Enter a password.
 password-mismatch = The passwords do not match.
+step-failed = That step did not work. Try again, or restart this computer.

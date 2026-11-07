@@ -15,6 +15,5 @@ use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-bar.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-bar")));

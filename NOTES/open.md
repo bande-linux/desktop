@@ -63,7 +63,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   text, the bar flicker at login, time to desktop.
 - Apple hardware: DDC/CI through DCP's I2C in `appledrm` (external displays are dimmed by the
   compositor until then; needs reverse engineering of the firmware's calls).
-- Apple hardware: Night Light gamma on the DCP; overlay planes and direct scanout; the
+- Apple hardware: Night Light gamma on the DCP; direct scanout of a full-screen window (a shell surface on an overlay plane is confirmed working); the
   `VK_KHR_external_semaphore_fd` release path and dma-buf modifiers on Honeykrisp; the GPU
   fence wait each frame; input-to-photon latency with a camera; swapping or moving the only display, unplugging it and
   plugging it back (`NOTES/plans/displays.md`).
@@ -76,8 +76,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 
 - Light scheme: move it to the dark scheme's slate family, or keep it warm.
 - Mouse scroll speed: add a setting (scales wheel deltas in `input.rs`), or not.
-- Settings options: drop Scroll method, Trackpad acceleration and Disable while typing; fold
-  Variable refresh rate into Refresh rate (the switch writes a key nothing reads); where `reopen-apps` lives (Log Out
+- Settings options: drop Scroll method, Trackpad acceleration and Disable while typing; where `reopen-apps` lives (Log Out
   checkbox, always on or always off).
 - A click on the clock or Control Center while the launcher is open: open the panel too, or only
   close the launcher (today).

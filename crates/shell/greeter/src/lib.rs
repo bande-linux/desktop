@@ -13,6 +13,5 @@ pub use greetd::{
 };
 pub use users::login_users;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-greeter.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-greeter")));

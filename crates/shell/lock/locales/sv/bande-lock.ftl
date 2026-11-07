@@ -1,0 +1,10 @@
+locked = Låst. { $name }
+enter-password = Ange lösenord
+input-source = Inmatningskälla { $name }
+user-position = Användare { $index } av { $count }. Upp och Ned väljer en annan.
+battery-percent = { $percent } %
+battery-level = Batteri { $percent } %
+sleep = Vila
+cancel = Avbryt
+wrong-password = Fel lösenord. Försök igen.
+checking = Kontrollerar lösenordet

@@ -27,12 +27,8 @@ const WINDOW_SIZE: (u32, u32) = (620, 640);
 const FIELD_FONT: f32 = 13.0;
 const LIST_HEIGHT: f32 = 240.0;
 
-static L10N: LazyLock<Localizer> = LazyLock::new(|| {
-    Localizer::new(&[(
-        "en-US",
-        include_str!("../locales/en-US/bande-recovery-tools.ftl"),
-    )])
-});
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-recovery-tools")));
 
 static INFO: Info = Info {
     id: APP_ID,

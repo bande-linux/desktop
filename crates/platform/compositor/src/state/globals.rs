@@ -39,7 +39,7 @@ use crate::shell;
 
 const MONOTONIC: u32 = 1;
 
-const DMABUF_FOURCCS: [Fourcc; 2] = [Fourcc::Argb8888, Fourcc::Xrgb8888];
+const DMABUF_FOURCCS: [Fourcc; 3] = [Fourcc::Argb8888, Fourcc::Xrgb8888, Fourcc::Nv12];
 
 pub(crate) struct Globals {
     pub(crate) syncobj_state: Option<DrmSyncobjState>,

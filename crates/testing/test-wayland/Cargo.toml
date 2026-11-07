@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+libc.workspace = true
 tempfile.workspace = true
 bande-compositor.workspace = true
 smithay.workspace = true

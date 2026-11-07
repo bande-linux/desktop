@@ -1232,6 +1232,7 @@ version = "0.1.7"
 dependencies = [
  "bande-compositor",
  "bande-protocols",
+ "libc",
  "smithay",
  "tempfile",
  "wayland-client",

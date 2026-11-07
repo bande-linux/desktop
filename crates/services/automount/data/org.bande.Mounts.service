@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.bande.Mounts
+Exec=/usr/bin/false
+SystemdService=bande-automount.service

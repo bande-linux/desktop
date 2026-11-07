@@ -304,6 +304,20 @@ restart-to-install = { $count ->
    *[other] Restart to install { $count } updates
 }
 installs-on-restart = Updates install while the computer restarts
+update-ready-hint = The update is ready. If it can't start, your computer goes back to this version by itself
+update-went-back = The update couldn't start
+update-went-back-hint = Your computer went back to the previous version. Your files are as you left them
+last-checked = Last checked { $date }
+previous-versions = Previous Versions
+previous-versions-hint = Bring back an earlier system. Your files, accounts, passwords and Wi-Fi networks stay as they are now
+version-changed = { $count ->
+    [one] 1 update: { $names }
+   *[other] { $count } updates: { $names }
+}
+version-kept = Copy kept before a change
+version-failed = This version couldn't start
+version-running = Running now
+version-restore = Restore
 updates-were-installed = { $count ->
     [one] 1 update was installed
    *[other] { $count } updates were installed

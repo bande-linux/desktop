@@ -1,12 +1,16 @@
+use bande_datetime::DateFormats;
 use bande_fs::format_size;
 use bande_packages::Class;
 use bande_settings_panes::SettingId;
 use bande_toolkit::ui::{Axis, Button, Label, ProgressBar, Spinner, Stack, Widget};
 use bande_toolkit::{SessionEnd, Spacing};
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
 
 use crate::L10N;
 use crate::pages::{Widgets, boxed};
-use crate::software::{Need, Package, Reboot, SoftwareCommand, SoftwareState, Stage};
+use crate::software::versions::{self, Condition, Version};
+use crate::software::{Need, Package, Reboot, SoftwareCommand, SoftwareState, Stage, restart_hint};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
 
@@ -82,7 +86,7 @@ impl SettingsView {
                 ),
                 Reboot::Install(count) => (
                     L10N.tr_args("restart-to-install", [("count", count.into())]),
-                    L10N.tr("installs-on-restart"),
+                    restart_hint(),
                 ),
             };
             let buttons =
@@ -153,7 +157,70 @@ impl SettingsView {
         rows
     }
 
+    fn version_row(&mut self, version: &Version, dates: &DateFormats) -> Box<dyn Widget> {
+        let title = Timestamp::from_second(version.created)
+            .map(|at| dates.long_date(&at.to_zoned(TimeZone::system())))
+            .unwrap_or_default();
+        let detail = match version.condition {
+            Condition::Failed => L10N.tr("version-failed"),
+            _ if version.changed > 0 => L10N.tr_args(
+                "version-changed",
+                [
+                    ("count", version.changed.into()),
+                    ("names", version.names.clone().into()),
+                ],
+            ),
+            _ => L10N.tr("version-kept"),
+        };
+        let control = match version.running {
+            true => boxed(Label::new(&L10N.tr("version-running"))),
+            false => self.software_button(
+                &L10N.tr("version-restore"),
+                Intent::Software(SoftwareCommand::Restore(version.id)),
+                false,
+            ),
+        };
+        self.status_row(&title, Some(&detail), Some(control))
+    }
+
+    fn version_rows(&mut self) -> Widgets {
+        let found = versions::read();
+        if found.len() < 2 {
+            return Vec::new();
+        }
+        let dates = DateFormats::from_env();
+        let mut rows = vec![self.status_row(
+            &L10N.tr("previous-versions"),
+            Some(&L10N.tr("previous-versions-hint")),
+            None,
+        )];
+        for version in found
+            .iter()
+            .filter(|version| version.condition != Condition::Pending)
+        {
+            rows.push(self.version_row(version, &dates));
+        }
+        rows
+    }
+
+    fn last_check_row(&mut self) -> Option<Box<dyn Widget>> {
+        let checked = Timestamp::from_second(self.software_checked?).ok()?;
+        let date = DateFormats::from_env().long_date(&checked.to_zoned(TimeZone::system()));
+        Some(self.status_row(
+            &L10N.tr_args("last-checked", [("date", date.into())]),
+            None,
+            None,
+        ))
+    }
+
     pub(crate) fn software_rows(&mut self) -> Widgets {
+        let mut rows = self.update_rows();
+        rows.extend(self.last_check_row());
+        rows.extend(self.version_rows());
+        rows
+    }
+
+    fn update_rows(&mut self) -> Widgets {
         let system = self
             .about
             .as_ref()
@@ -214,7 +281,7 @@ impl SettingsView {
                 );
                 vec![self.status_row(
                     &L10N.tr_args("restart-to-install", [("count", count.into())]),
-                    Some(&L10N.tr("installs-on-restart")),
+                    Some(&restart_hint()),
                     Some(restart),
                 )]
             }

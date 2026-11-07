@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::io;
 use std::os::fd::BorrowedFd;
 use std::rc::{Rc, Weak};
+use std::sync::Mutex;
 
 use bande_graphics::{Rect, Region, SurfaceId};
 use wayland_client::backend::WaylandError;
@@ -11,7 +12,9 @@ use wayland_client::protocol::wl_shm::{self, WlShm};
 use wayland_client::protocol::wl_subcompositor::WlSubcompositor;
 use wayland_client::protocol::wl_subsurface::WlSubsurface;
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
+use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, delegate_noop};
+use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1;
+use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibitor_v1::ZwpIdleInhibitorV1;
 use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_buffer_params_v1::{
     Flags, ZwpLinuxBufferParamsV1,
 };
@@ -53,6 +56,36 @@ pub struct ExternalSurface {
     shared: Rc<RefCell<External>>,
 }
 
+struct HeldBuffer {
+    buffer: WlBuffer,
+    size: (u32, u32),
+    flipped: bool,
+}
+
+impl HeldBuffer {
+    fn released(&self) {
+        if let Some(data) = self.buffer.data::<ExternalBuffer>() {
+            data.released();
+        }
+    }
+}
+
+impl Drop for HeldBuffer {
+    fn drop(&mut self) {
+        self.buffer.destroy();
+    }
+}
+
+#[derive(Clone)]
+pub struct SurfaceBuffer {
+    held: Rc<HeldBuffer>,
+}
+
+struct Current {
+    held: Rc<HeldBuffer>,
+    attached: bool,
+}
+
 pub(crate) struct External {
     id: SurfaceId,
     surface: WlSurface,
@@ -62,7 +95,9 @@ pub(crate) struct External {
     dmabuf: Option<ZwpLinuxDmabufV1>,
     handle: QueueHandle<State>,
     connection: Connection,
-    buffer: Option<WlBuffer>,
+    current: Option<Current>,
+    idle_inhibit: Option<ZwpIdleInhibitManagerV1>,
+    idle_inhibitor: Option<ZwpIdleInhibitorV1>,
     flipped: bool,
     position: Option<(i32, i32)>,
     destination: Option<(i32, i32)>,
@@ -70,8 +105,28 @@ pub(crate) struct External {
     synced: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct ExternalBuffer;
+type ReleaseCallback = Box<dyn FnMut() + Send>;
+
+#[derive(Default)]
+pub(crate) struct ExternalBuffer {
+    on_release: Mutex<Option<ReleaseCallback>>,
+}
+
+impl ExternalBuffer {
+    fn new(on_release: impl FnMut() + Send + 'static) -> Self {
+        Self {
+            on_release: Mutex::new(Some(Box::new(on_release))),
+        }
+    }
+
+    fn released(&self) {
+        if let Ok(mut callback) = self.on_release.lock()
+            && let Some(callback) = callback.as_mut()
+        {
+            callback();
+        }
+    }
+}
 
 fn shm_format(fourcc: u32) -> wl_shm::Format {
     match fourcc {
@@ -119,7 +174,9 @@ impl Window {
             dmabuf: state.dmabuf.clone(),
             handle,
             connection: self.connection.clone(),
-            buffer: None,
+            current: None,
+            idle_inhibit: state.idle_inhibit_manager.clone(),
+            idle_inhibitor: None,
             flipped: false,
             position: None,
             destination: None,
@@ -190,34 +247,32 @@ impl External {
         self.subsurface.set_sync();
         self.synced = true;
         self.viewport.set_destination(destination.0, destination.1);
-        if mapping && let Some(buffer) = &self.buffer {
-            self.surface.attach(Some(buffer), 0, 0);
+        if mapping && let Some(current) = &mut self.current {
+            self.surface.attach(Some(&current.held.buffer), 0, 0);
             self.surface.damage_buffer(0, 0, i32::MAX, i32::MAX);
+            current.attached = true;
         }
         self.surface.commit();
     }
 
-    fn show(
-        &mut self,
-        buffer: WlBuffer,
-        size: (u32, u32),
-        flipped: bool,
-    ) -> Result<(), WindowError> {
-        if self.flipped != flipped {
-            self.surface.set_buffer_transform(match flipped {
+    fn present(&mut self, held: Rc<HeldBuffer>) -> Result<(), WindowError> {
+        if self.flipped != held.flipped {
+            self.surface.set_buffer_transform(match held.flipped {
                 true => Transform::Flipped180,
                 false => Transform::Normal,
             });
-            self.flipped = flipped;
+            self.flipped = held.flipped;
         }
-        if self.destination.is_some() {
-            self.surface.attach(Some(&buffer), 0, 0);
+        let attached = self.destination.is_some();
+        if attached {
+            self.surface.attach(Some(&held.buffer), 0, 0);
             self.surface
-                .damage_buffer(0, 0, whole(size.0), whole(size.1));
+                .damage_buffer(0, 0, whole(held.size.0), whole(held.size.1));
             self.surface.commit();
         }
-        if let Some(previous) = self.buffer.replace(buffer) {
-            previous.destroy();
+        let replaced = self.current.replace(Current { held, attached });
+        if let Some(replaced) = replaced.filter(|replaced| !replaced.attached) {
+            replaced.held.released();
         }
         self.flush()
     }
@@ -237,7 +292,43 @@ impl ExternalSurface {
     }
 
     pub fn show_shm(&mut self, fd: BorrowedFd<'_>, layout: ShmLayout) -> Result<(), WindowError> {
-        let mut external = self.shared.borrow_mut();
+        let buffer = self.create_shm(fd, layout, ExternalBuffer::default())?;
+        self.present(&buffer)
+    }
+
+    pub fn show_dmabuf(&mut self, dmabuf: &Dmabuf<'_>) -> Result<(), WindowError> {
+        let buffer = self.create_dmabuf(dmabuf, ExternalBuffer::default())?;
+        self.present(&buffer)
+    }
+
+    pub fn shm_buffer(
+        &self,
+        fd: BorrowedFd<'_>,
+        layout: ShmLayout,
+        on_release: impl FnMut() + Send + 'static,
+    ) -> Result<SurfaceBuffer, WindowError> {
+        self.create_shm(fd, layout, ExternalBuffer::new(on_release))
+    }
+
+    pub fn dmabuf_buffer(
+        &self,
+        dmabuf: &Dmabuf<'_>,
+        on_release: impl FnMut() + Send + 'static,
+    ) -> Result<SurfaceBuffer, WindowError> {
+        self.create_dmabuf(dmabuf, ExternalBuffer::new(on_release))
+    }
+
+    pub fn present(&mut self, buffer: &SurfaceBuffer) -> Result<(), WindowError> {
+        self.shared.borrow_mut().present(Rc::clone(&buffer.held))
+    }
+
+    fn create_shm(
+        &self,
+        fd: BorrowedFd<'_>,
+        layout: ShmLayout,
+        data: ExternalBuffer,
+    ) -> Result<SurfaceBuffer, WindowError> {
+        let external = self.shared.borrow();
         let length = u64::from(layout.offset) + u64::from(layout.stride) * u64::from(layout.height);
         let length = i32::try_from(length).map_err(|_| {
             WindowError::Io(io::Error::new(
@@ -253,14 +344,24 @@ impl ExternalSurface {
             whole(layout.stride),
             shm_format(layout.fourcc),
             &external.handle,
-            ExternalBuffer,
+            data,
         );
         pool.destroy();
-        external.show(buffer, (layout.width, layout.height), false)
+        Ok(SurfaceBuffer {
+            held: Rc::new(HeldBuffer {
+                buffer,
+                size: (layout.width, layout.height),
+                flipped: false,
+            }),
+        })
     }
 
-    pub fn show_dmabuf(&mut self, dmabuf: &Dmabuf<'_>) -> Result<(), WindowError> {
-        let mut external = self.shared.borrow_mut();
+    fn create_dmabuf(
+        &self,
+        dmabuf: &Dmabuf<'_>,
+        data: ExternalBuffer,
+    ) -> Result<SurfaceBuffer, WindowError> {
+        let external = self.shared.borrow();
         let manager = external
             .dmabuf
             .as_ref()
@@ -282,18 +383,38 @@ impl ExternalSurface {
             dmabuf.fourcc,
             Flags::empty(),
             &external.handle,
-            ExternalBuffer,
+            data,
         );
         params.destroy();
-        external.show(buffer, (dmabuf.width, dmabuf.height), dmabuf.flipped)
+        Ok(SurfaceBuffer {
+            held: Rc::new(HeldBuffer {
+                buffer,
+                size: (dmabuf.width, dmabuf.height),
+                flipped: dmabuf.flipped,
+            }),
+        })
+    }
+
+    pub fn set_idle_inhibited(&mut self, inhibited: bool) {
+        let external = &mut *self.shared.borrow_mut();
+        if !inhibited {
+            if let Some(inhibitor) = external.idle_inhibitor.take() {
+                inhibitor.destroy();
+            }
+        } else if external.idle_inhibitor.is_none()
+            && let Some(manager) = &external.idle_inhibit
+        {
+            external.idle_inhibitor =
+                Some(manager.create_inhibitor(&external.surface, &external.handle, ()));
+        }
     }
 
     pub fn damage(&mut self, regions: &[Region]) -> Result<(), WindowError> {
         let external = self.shared.borrow();
-        let (Some(_), Some(buffer)) = (external.destination, &external.buffer) else {
+        let (Some(_), Some(current)) = (external.destination, &external.current) else {
             return Ok(());
         };
-        external.surface.attach(Some(buffer), 0, 0);
+        external.surface.attach(Some(&current.held.buffer), 0, 0);
         for region in regions {
             external.surface.damage_buffer(
                 whole(region.x),
@@ -309,8 +430,9 @@ impl ExternalSurface {
 
 impl Drop for External {
     fn drop(&mut self) {
-        if let Some(buffer) = self.buffer.take() {
-            buffer.destroy();
+        self.current = None;
+        if let Some(inhibitor) = self.idle_inhibitor.take() {
+            inhibitor.destroy();
         }
         self.viewport.destroy();
         self.subsurface.destroy();
@@ -323,11 +445,14 @@ impl Dispatch<WlBuffer, ExternalBuffer> for State {
     fn event(
         _: &mut Self,
         _: &WlBuffer,
-        _: wayland_client::protocol::wl_buffer::Event,
-        _: &ExternalBuffer,
+        event: wayland_client::protocol::wl_buffer::Event,
+        data: &ExternalBuffer,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+        if matches!(event, wayland_client::protocol::wl_buffer::Event::Release) {
+            data.released();
+        }
     }
 }
 

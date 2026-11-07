@@ -10,13 +10,15 @@ STUB_HEAD = """/* This Source Code Form is subject to the terms of the Mozilla P
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// Removed in Bande's Browser.
+// Removed in Bande's Browser. Getters read as nothing, questions answer no, and everything else
+// does nothing and resolves at once.
+const getters = new Set(GETTERS);
 const nothing = new Proxy(function () {}, {
   get(target, key) {
-    if (key === "then" || typeof key === "symbol") {
+    if (key === "then" || typeof key === "symbol" || getters.has(key)) {
       return undefined;
     }
-    if (/^(is|has|can|should|enabled|initialized|available)/.test(key)) {
+    if (/^(is|has|can|should|was|needs|supports)[A-Z]/.test(key)) {
       return () => false;
     }
     return nothing;
@@ -25,10 +27,11 @@ const nothing = new Proxy(function () {}, {
     return Promise.resolve();
   },
   construct() {
-    return {};
+    return nothing;
   },
 });
 """
+GETTER = re.compile(r"^\s*(?:static\s+)?get\s+([A-Za-z_$][\w$]*)\s*\(", re.M)
 EXPORT = re.compile(r"^export\s+(?:async\s+)?(const|let|var|class|function\*?)\s+([A-Za-z_$][\w$]*)", re.M)
 EXPORT_LIST = re.compile(r"^export\s*\{([^}]*)\}", re.M)
 BLANK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>\n'
@@ -41,7 +44,7 @@ def stub(text):
             item = item.strip()
             if item:
                 names.add(item.split(" as ")[-1].strip())
-    out = [STUB_HEAD]
+    out = [STUB_HEAD.replace("GETTERS", repr(sorted(set(GETTER.findall(text)))))]
     for name in sorted(names):
         if name.endswith("Child") or name.endswith("Parent"):
             base = "JSWindowActorChild" if name.endswith("Child") else "JSWindowActorParent"

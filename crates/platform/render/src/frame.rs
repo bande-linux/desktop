@@ -10,7 +10,8 @@ use smithay::reexports::rustix::ioctl;
 
 use crate::{
     ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DeviceExport, Export, MappedExport, Program, Rect,
-    RenderError, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer, VulkanTexture, barrier, disjoint,
+    RenderError, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer, VulkanTexture, barrier,
+    disjoint,
 };
 
 mod blur;
@@ -645,7 +646,11 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         copied
     }
 
-    fn copy_readbacks(&self, export: &MappedExport, readbacks: &[Readback]) -> Result<(), RenderError> {
+    fn copy_readbacks(
+        &self,
+        export: &MappedExport,
+        readbacks: &[Readback],
+    ) -> Result<(), RenderError> {
         for readback in readbacks {
             let rect = readback.rect;
             let row_bytes = rect.width.unsigned_abs() as usize * BYTES_PER_PIXEL;

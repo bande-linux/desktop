@@ -333,6 +333,16 @@ impl FilesView {
             return;
         };
         let changed = change(mode, folder);
+        if bande_volumes::on_connected_volume(&path) {
+            if let Some(info) = &mut self.info {
+                info.mode = Some(changed);
+            }
+            self.on_server(move || {
+                ServerDone::Changed(Action::Rename, Vec::new(), set_mode(&path, changed).err())
+            });
+            self.sync_inspector_controls();
+            return;
+        }
         match set_mode(&path, changed) {
             Ok(()) => {
                 if let Some(info) = &mut self.info {

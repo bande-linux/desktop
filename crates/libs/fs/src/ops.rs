@@ -118,6 +118,8 @@ pub struct Failure {
     pub no_trash: bool,
 }
 
+const KERNEL_RESTART_CODES: std::ops::RangeInclusive<i32> = 512..=516;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Problem {
     Permission,
@@ -152,6 +154,12 @@ impl Failure {
         ]
         .into_iter()
         .any(errno)
+        {
+            Problem::ServerGone
+        } else if self
+            .error
+            .raw_os_error()
+            .is_some_and(|code| KERNEL_RESTART_CODES.contains(&code))
         {
             Problem::ServerGone
         } else if errno(Errno::ROFS) {
@@ -1038,6 +1046,13 @@ impl Worker {
         target: &Path,
         metadata: &Metadata,
     ) -> Result<io::Result<()>, Halt> {
+        if self
+            .stage
+            .as_ref()
+            .is_some_and(|stage| target.starts_with(&stage.path))
+        {
+            let _ = fs::remove_file(target);
+        }
         let opened = File::open(source).and_then(|input| {
             OpenOptions::new()
                 .write(true)

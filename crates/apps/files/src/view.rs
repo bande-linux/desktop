@@ -176,6 +176,7 @@ const ARCHIVE_UTILITY_DESKTOP_ID: &str = "org.bande.ArchiveUtility.desktop";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
+    ForgetServer(String),
     Compose {
         app: Box<DesktopEntry>,
         arguments: Vec<String>,

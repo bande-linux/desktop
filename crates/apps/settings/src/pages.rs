@@ -81,6 +81,7 @@ fn display_value(
                 .map(|rate| rate.round() as u32)
                 .or_else(|| display.current.map(|mode| mode.hertz()))?,
         ),
+        SettingId::MatchColours => Value::Flag(output.match_colours.unwrap_or(true)),
         SettingId::DisplayResolution => {
             let (width, height) = output.resolution.or_else(|| {
                 let mode = display.current?;

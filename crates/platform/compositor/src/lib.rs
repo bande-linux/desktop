@@ -12,6 +12,7 @@ mod capture;
 mod capture_shell;
 mod cascade;
 mod clock;
+mod colour;
 mod constraint;
 mod cursor;
 mod decoration;

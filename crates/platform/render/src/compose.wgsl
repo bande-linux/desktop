@@ -154,6 +154,31 @@ fn blur_tone(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     return toned * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius);
 }
 
+fn srgb_decode(encoded: vec3<f32>) -> vec3<f32> {
+    let low = encoded / 12.92;
+    let high = pow((encoded + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+    return select(high, low, encoded <= vec3<f32>(0.04045));
+}
+
+fn srgb_encode(linear: vec3<f32>) -> vec3<f32> {
+    let clamped = clamp(linear, vec3<f32>(0.0), vec3<f32>(1.0));
+    let low = clamped * 12.92;
+    let high = 1.055 * pow(clamped, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055);
+    return select(high, low, clamped <= vec3<f32>(0.0031308));
+}
+
+@fragment
+fn display_colour(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let texel = textureLoad(surface, vec2<i32>(position.xy), 0);
+    let linear = srgb_decode(texel.rgb);
+    let converted = vec3<f32>(
+        dot(quad.color.xyz, linear),
+        dot(quad.clip.xyz, linear),
+        dot(quad.caster.xyz, linear),
+    );
+    return vec4<f32>(srgb_encode(converted), 1.0);
+}
+
 @fragment
 fn blur_down(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let uv = position.xy / quad.size;

@@ -484,7 +484,8 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .and_then(|target| target.export.as_ref());
         let mut readbacks = Vec::new();
         if let Some(Export::OnDevice(device)) = export {
-            self.record_output_copy(device, &drawn);
+            let device = *device;
+            self.record_output(&device, &drawn);
         } else if export.is_some() {
             for rect in drawn {
                 let bytes = rect.area() as usize * BYTES_PER_PIXEL;
@@ -512,10 +513,100 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         written
     }
 
-    fn record_output_copy(&self, export: &DeviceExport, drawn: &[Rect]) {
+    fn record_output(&mut self, export: &DeviceExport, drawn: &[Rect]) {
         if drawn.is_empty() {
             return;
         }
+        let Some(colour) = self.renderer.output_colour else {
+            self.record_output_copy(export, self.image, drawn);
+            barrier(
+                &self.renderer.device,
+                self.renderer.command_buffer,
+                self.image,
+                TRANSFER_SOURCE,
+                ATTACHMENT,
+            );
+            return;
+        };
+        match self.convert_output(colour, drawn) {
+            Ok(scratch) => {
+                self.record_output_copy(export, scratch, drawn);
+                barrier(
+                    &self.renderer.device,
+                    self.renderer.command_buffer,
+                    self.image,
+                    blur::SAMPLED,
+                    ATTACHMENT,
+                );
+            }
+            Err(error) => {
+                tracing::warn!("showing colours unconverted: {error}");
+                self.renderer.output_colour = None;
+                self.record_output_copy(export, self.image, drawn);
+                barrier(
+                    &self.renderer.device,
+                    self.renderer.command_buffer,
+                    self.image,
+                    TRANSFER_SOURCE,
+                    ATTACHMENT,
+                );
+            }
+        }
+    }
+
+    fn convert_output(
+        &mut self,
+        colour: crate::OutputColour,
+        drawn: &[Rect],
+    ) -> Result<vk::Image, RenderError> {
+        let key = (self.bounds.width, self.bounds.height, self.format);
+        if !self.renderer.colour_scratch.contains_key(&key) {
+            let scratch = self.renderer.create_image(
+                self.bounds.width,
+                self.bounds.height,
+                self.format,
+                vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
+                vk::ComponentSwizzle::IDENTITY,
+            )?;
+            self.renderer.colour_scratch.insert(key, scratch);
+        }
+        let scratch = self
+            .renderer
+            .colour_scratch
+            .get(&key)
+            .map(|scratch| (scratch.image, scratch.view))
+            .ok_or(RenderError::ForeignResource)?;
+        self.bound = None;
+        self.bind(Program::DisplayColour)?;
+        let device = &self.renderer.device;
+        let commands = self.renderer.command_buffer;
+        barrier(device, commands, self.image, ATTACHMENT, blur::SAMPLED);
+        barrier(device, commands, scratch.0, blur::DISCARDED, blur::DRAWN);
+        self.begin_rendering(scratch.1, self.bounds, vk::AttachmentLoadOp::DONT_CARE);
+        self.push_texture(self.target_view);
+        let row = |values: [f32; 3]| RoundedRect {
+            x: values[0],
+            y: values[1],
+            width: values[2],
+            ..RoundedRect::default()
+        };
+        self.draw_quad(
+            &Quad {
+                color: [colour[0][0], colour[0][1], colour[0][2], 0.0],
+                destination: self.bounds,
+                clip: row(colour[1]),
+                caster: row(colour[2]),
+                ..Quad::default()
+            },
+            drawn,
+        );
+        let device = &self.renderer.device;
+        unsafe { device.cmd_end_rendering(commands) };
+        barrier(device, commands, scratch.0, blur::DRAWN, TRANSFER_SOURCE);
+        Ok(scratch.0)
+    }
+
+    fn record_output_copy(&self, export: &DeviceExport, source: vk::Image, drawn: &[Rect]) {
         let device = &self.renderer.device;
         let commands = self.renderer.command_buffer;
         let family = self.renderer.queue_family;
@@ -558,7 +649,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .dst_queue_family_index(vk::QUEUE_FAMILY_EXTERNAL)
             .buffer(buffer)
             .size(vk::WHOLE_SIZE);
-        barrier(device, commands, self.image, ATTACHMENT, TRANSFER_SOURCE);
+        if source == self.image {
+            barrier(device, commands, self.image, ATTACHMENT, TRANSFER_SOURCE);
+        }
         unsafe {
             device.cmd_pipeline_barrier2(
                 commands,
@@ -566,7 +659,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             );
             device.cmd_copy_image_to_buffer(
                 commands,
-                self.image,
+                source,
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                 buffer,
                 &regions,
@@ -576,7 +669,6 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 &vk::DependencyInfo::default().buffer_memory_barriers(slice::from_ref(&release)),
             );
         }
-        barrier(device, commands, self.image, TRANSFER_SOURCE, ATTACHMENT);
     }
 
     fn record_readbacks(&self, readbacks: &[Readback]) {

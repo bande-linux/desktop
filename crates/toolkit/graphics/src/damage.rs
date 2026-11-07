@@ -289,6 +289,12 @@ fn bounds(item: &Item) -> Option<Rect> {
             offset,
             blur_radius,
             ..
+        }
+        | Item::CastShadow {
+            shape,
+            offset,
+            blur_radius,
+            ..
         } => Some(outset(
             translated(shape.rect, *offset),
             blur_radius * SHADOW_REACH,

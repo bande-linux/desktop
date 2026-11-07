@@ -10,8 +10,13 @@ use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale, 
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::Logical;
 
+use smithay::backend::renderer::Texture;
+use smithay::wayland::compositor::get_role;
+use smithay::wayland::shell::xdg::XDG_POPUP_ROLE;
+
 use crate::effect::{blur_rects, corner_radius};
 use crate::element::SurfaceElement;
+use crate::material::MaterialTexture;
 use crate::motion::{Look, Motion};
 use crate::state::OutputElement;
 use crate::state::mapped_size;
@@ -395,11 +400,16 @@ pub(crate) struct Piece {
 pub struct PieceElement {
     piece: Piece,
     alpha: f32,
+    commit: usize,
 }
 
 impl PieceElement {
     pub(crate) fn new(piece: Piece, alpha: f32) -> Self {
-        Self { piece, alpha }
+        Self {
+            piece,
+            alpha,
+            commit: 0,
+        }
     }
 }
 
@@ -409,7 +419,7 @@ impl Element for PieceElement {
     }
 
     fn current_commit(&self) -> CommitCounter {
-        CommitCounter::default()
+        CommitCounter::from(self.commit)
     }
 
     fn src(&self) -> Rectangle<f64, BufferCoords> {
@@ -550,20 +560,59 @@ pub(crate) fn scrim(renderer: &VulkanRenderer, scheme: Scheme) -> Option<[f32; 4
     })
 }
 
-fn behind(
-    id: Id,
-    region: RoundedRect,
-    scale: f64,
-    alpha: f32,
-    backdrop: Option<[f32; 4]>,
-) -> OutputElement {
-    match backdrop {
-        Some(color) => OutputElement::Fill(FillElement::backdrop(
+#[derive(Clone)]
+pub(crate) enum Behind {
+    Live,
+    Fill([f32; 4]),
+    Wallpaper {
+        material: MaterialTexture,
+        screen: Area,
+    },
+}
+
+fn behind(id: Id, region: RoundedRect, scale: f64, alpha: f32, source: &Behind) -> OutputElement {
+    match source {
+        Behind::Fill(color) => OutputElement::Fill(FillElement::backdrop(
             id,
             region,
             color.map(|channel| channel * alpha),
         )),
-        None => OutputElement::Blur(BlurElement::new(id, region, scale, alpha)),
+        Behind::Live => OutputElement::Blur(BlurElement::new(id, region, scale, alpha)),
+        Behind::Wallpaper { material, screen } => {
+            let area: Area = Rectangle::new(
+                (f64::from(region.x), f64::from(region.y)).into(),
+                (f64::from(region.width), f64::from(region.height)).into(),
+            );
+            let across = f64::from(Texture::width(&material.texture)) / screen.size.w.max(1.0);
+            let down = f64::from(Texture::height(&material.texture)) / screen.size.h.max(1.0);
+            let piece = Piece {
+                id,
+                texture: material.texture.clone(),
+                src: Rectangle::new(
+                    (
+                        (area.loc.x - screen.loc.x) * across,
+                        (area.loc.y - screen.loc.y) * down,
+                    )
+                        .into(),
+                    (area.size.w * across, area.size.h * down).into(),
+                ),
+                transform: Transform::Normal,
+                geometry: area.to_i32_round(),
+            };
+            let element = PieceElement {
+                piece,
+                alpha,
+                commit: material.commit as usize,
+            };
+            OutputElement::Closing(WindowElement::new(
+                element,
+                Placement {
+                    from: area,
+                    to: area,
+                },
+                region,
+            ))
+        }
     }
 }
 
@@ -571,19 +620,28 @@ pub(crate) fn surface_blurs(
     surface: &WlSurface,
     location: Point<i32, Logical>,
     scale: f64,
-    backdrop: Option<[f32; 4]>,
+    source: &Behind,
 ) -> Vec<OutputElement> {
     let Some(size) = mapped_size(surface) else {
         return Vec::new();
     };
     let bounds = Rectangle::new(location, size);
-    let radius = corner_radius(surface);
+    let popup = get_role(surface) == Some(XDG_POPUP_ROLE);
+    let radius = if popup {
+        f64::from(Radius::L)
+    } else {
+        corner_radius(surface)
+    };
     blur_rects(surface)
         .into_iter()
         .filter_map(|(id, rect)| {
-            let rect = Rectangle::new(location + rect.loc, rect.size).intersection(bounds)?;
+            let placed = Rectangle::new(location + rect.loc, rect.size);
+            let rect = match radius > 0.0 {
+                true => placed,
+                false => placed.intersection(bounds)?,
+            };
             let shape = rounded(rect.to_f64().to_physical(scale), radius * scale);
-            Some(behind(id, shape, scale, 1.0, backdrop))
+            Some(behind(id, shape, scale, 1.0, source))
         })
         .collect()
 }
@@ -954,7 +1012,7 @@ pub(crate) fn window_elements(
     shading: Shading,
     hung: bool,
     look: Option<Look>,
-    backdrop: Option<[f32; 4]>,
+    source: &Behind,
 ) -> (Vec<OutputElement>, Option<Drawn>) {
     let alpha = look.map_or(1.0, |look| look.alpha) as f32;
     if alpha <= 0.0 {
@@ -1012,7 +1070,11 @@ pub(crate) fn window_elements(
         .into_iter()
         .flatten();
     let origin = window.surface_origin().to_f64();
-    let backdrop = backdrop.or_else(|| scrim(renderer, shading.scheme));
+    let reduced = scrim(renderer, shading.scheme).map(Behind::Fill);
+    let source = match source {
+        Behind::Live => reduced.as_ref().unwrap_or(source),
+        _ => source,
+    };
     let blurs = blur_rects(window.surface())
         .into_iter()
         .filter_map(|(id, rect)| {
@@ -1020,7 +1082,7 @@ pub(crate) fn window_elements(
                 .to_physical(scale)
                 .intersection(area)?;
             let mapped = placement.map_area(rect);
-            Some(behind(id, rounded(mapped, radius), scale, alpha, backdrop))
+            Some(behind(id, rounded(mapped, radius), scale, alpha, source))
         });
     let veil = hung.then(|| {
         OutputElement::Fill(FillElement::new(

@@ -49,26 +49,43 @@ graph LR
 - Idle, as in macOS's Lock Screen settings ([`config.kdl`](overview.md#configuration) `idle`,
   Settings ▸ Power ▸ Lock Screen): the backlight dims 10 s before the screen saver or the
   display turning off, whichever comes first (default 5 and 10 min). The screen saver is the lock
-  screen itself, its clock and date over the blurred desktop picture, covering the desktop
-  through `ext-session-lock`, as macOS hands its saver over to the lock screen. "Require
+  screen itself, resting: its clock and date over the blurred desktop picture and nothing
+  else, covering the desktop through `ext-session-lock`, as macOS hands its saver over to the
+  lock screen. Every lock starts resting; the first key, click, scroll or movement, or waking
+  from sleep, fades in the picture, name and password field (a typed letter lands in the
+  field), and a minute without input clears the field and rests again. "Require
   password after screen saver begins or display is turned off" (default immediately) is a grace
   period: until it passes, any key, click or movement dismisses the saver without a password.
   Locks from `Super+L`, logind, sleep and the power button always ask for it. The computer
-  sleeps with the display unless `suspend-after` is later or `"never"`.
+  sleeps with the display unless `suspend-after` is later or `"never"`, and only if logind
+  says `CanSuspend` is `yes`: the `bande-power` package ships `AllowSuspend=no` (below).
 - Keeping awake: a playing video holds off dimming, the display turning off and the lock, as
   macOS's display-sleep assertion does, through whichever path the player uses:
 
   | Path | Used by | Bande |
   |---|---|---|
   | `org.freedesktop.ScreenSaver.Inhibit` | Firefox (first choice), Chromium/Electron (after GNOME's) | `bande-power`, held until `UnInhibit` or the caller leaves the bus |
-  | `org.freedesktop.portal.Inhibit`, idle flag | sandboxed apps | the GTK backend forwards it to `org.freedesktop.ScreenSaver`; the suspend flag is dropped |
+  | `org.freedesktop.portal.Inhibit`, idle flag | sandboxed apps | `xdg-desktop-portal-bande` forwards it to `org.freedesktop.ScreenSaver` |
   | logind `idle` block inhibitor (`systemd-inhibit --what=idle`) | scripts, `caffeinate`-style tools | `bande-power` follows logind's `BlockInhibited` |
   | `zwp_idle_inhibitor_v1` on a surface | mpv, Chromium (on the focused window), Firefox (last resort) | the compositor, while the surface's window is on screen, covered or not and focused or not; not while minimised, as in KWin and sway |
 
-  Audio alone keeps nothing on (Firefox and Chromium take a suspend-only lock for it, as macOS
-  keeps the system but not the display awake), and neither do CPU load, builds nor
-  MPRIS. Idle time restarts when the last inhibitor ends, so a finished film does not lock the
-  screen at once.
+  Audio alone keeps the computer but not the display awake, as on macOS, and neither CPU load,
+  builds nor MPRIS keep anything awake. Idle time restarts when the last inhibitor ends, so a
+  finished film does not lock the screen at once.
+- Keeping the computer awake only holds back idle sleep. Nothing stops Sleep in a menu, the
+  power button or the lid, as macOS's `PreventUserIdleSystemSleep` does not, so these are not
+  logind `sleep` block inhibitors (those would turn an explicit Sleep into an administrator
+  prompt and hide it from the menus). The paths are any app's running PipeWire stream (output,
+  microphone or camera; not a paused one, the system's own filters or Bande's event sounds,
+  through `bande-audio`), the portal's suspend flag (`org.bande.Power.KeepAwake`, `Hold` and
+  `Release`, freed when the caller leaves the bus) and someone else's logind `sleep` block
+  inhibitor. When the last one ends, the computer sleeps after a full `suspend-after` more.
+- Sleep is off until s2idle survives ten clean cycles on the mini
+  (`~/bande-linux/bin/s2idle-test.sh`, which overrides the switch for its own cycles). The one
+  switch is the line `AllowSuspend=no` in `crates/services/power/data/sleep.conf`: `CanSuspend`
+  then answers `na`, so Sleep leaves the menus and idle stays awake. Changing it to `yes` brings
+  all of it back, including the power button: logind's press always locks, and the compositor
+  asks for `Suspend` on a press shorter than the five-second hold when `CanSuspend` is `yes`.
 - Implemented in `crates/shell/lock`: date, time, the user's picture (AccountsService's
   `IconFile`, read off the UI thread; the initial on the accent colour without one) and name
   and a secure field; PAM (`/etc/pam.d/bande-lock`) runs off the UI thread, and a rejected password clears
@@ -85,8 +102,8 @@ graph LR
   in `systemd-inhibit --list` as macOS lists power assertions. Battery alerts follow UPower's
   `WarningLevel` of the display device: a "Low Battery" notification at `Low`, replaced by a
   critical one that stays on screen at `Critical` or `Action`, closed when the level clears.
-  The idle state machine (`bande_power::idle`) maps idle time to dim, saver (lock), password
-  required, display off and suspend, skips locking an already locked session, turns the display
+  The idle state machine (`bande_power::idle`) maps idle time to dim, saver (lock, and logind's
+  `IdleHint` until the next input), password required, display off and suspend, skips locking an already locked session, turns the display
   off after 60 s on a lock it did not start, undims on activity without unlocking, and restarts the
   idle timers when an inhibitor ends; `IdleController` runs it in the service with the policy of
   `org.bande.Config` (followed as it changes), the session's `LockedHint`, and logind's
@@ -150,8 +167,8 @@ graph LR
   default `x-scheme-handler/mailto` app with the app's activation token.
 - `org.freedesktop.impl.portal.Inhibit`: the idle flag takes an `org.freedesktop.ScreenSaver`
   inhibitor from `bande-power` (so the idle chain and its logind idle lock see it), named
-  after the app and its reason; the suspend flag takes a logind `sleep` block inhibitor;
-  closing the request releases both. Logout and user switch are not inhibited (Bande's
+  after the app and its reason; the suspend flag holds off idle sleep through
+  `org.bande.Power.KeepAwake`; closing the request releases both. Logout and user switch are not inhibited (Bande's
   Log Out asks running apps to quit instead). Monitors report `screensaver-active` from the
   session's `LockedHint` as it changes and `session-state` running; there is no query-end.
 - `org.freedesktop.impl.portal.Notification` (version 2): posts to

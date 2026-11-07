@@ -39,6 +39,8 @@ pub trait Manager {
 pub trait Session {
     fn lock(&self) -> zbus::Result<()>;
 
+    fn set_idle_hint(&self, idle: bool) -> zbus::Result<()>;
+
     fn set_brightness(&self, subsystem: &str, name: &str, brightness: u32) -> zbus::Result<()>;
 
     #[zbus(property)]
@@ -82,18 +84,19 @@ pub fn follow_locked_hint(
     Ok(())
 }
 
-pub fn follow_idle_blocked(
+pub fn follow_blocked(
     system: &Connection,
+    operation: &'static str,
     changed: impl Fn(bool) + Send + 'static,
 ) -> zbus::Result<()> {
     let manager = ManagerProxyBlocking::new(system)?;
-    let blocks_idle = |what: &str| what.split(':').any(|what| what == "idle");
+    let blocks = move |what: &str| what.split(':').any(|what| what == operation);
     let changes = manager.receive_block_inhibited_changed();
-    changed(blocks_idle(&manager.block_inhibited()?));
+    changed(blocks(&manager.block_inhibited()?));
     thread::spawn(move || {
         for change in changes {
             if let Ok(what) = change.get() {
-                changed(blocks_idle(&what));
+                changed(blocks(&what));
             }
         }
     });

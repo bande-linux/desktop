@@ -1276,6 +1276,13 @@ impl Program for Files {
             .strip_prefix(menu_bar::RECENT_FOLDER)
             .and_then(|index| index.parse::<usize>().ok())
             .and_then(|index| self.recent_folders.get(index).cloned());
+        if command == bande_app_menu::PRINT {
+            let printable = browser(cx, window).and_then(|(_, pane)| pane.view.printable());
+            if let Some((title, document)) = printable {
+                cx.print(&title, document);
+            }
+            return;
+        }
         let Some((shown, pane)) = browser(cx, window) else {
             return;
         };

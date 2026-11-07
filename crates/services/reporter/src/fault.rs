@@ -124,6 +124,9 @@ impl Fault {
             };
             manifest.insert(name, value);
         }
+        if let Some(description) = self.detail_raw_description.take() {
+            manifest.insert("description".to_owned(), json!(description));
+        }
         let journal =
             facts::journal_around(self.boot.as_deref(), Some(self.time.as_second()), &scrubber);
         push_text(&mut self.attachments, "journal.txt", journal);

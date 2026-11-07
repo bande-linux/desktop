@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use zbus::blocking::Connection;
 use zbus::object_server::SignalEmitter;
@@ -13,10 +13,44 @@ const LOGIN1: &str = "org.freedesktop.login1";
 const SESSION: &str = "org.freedesktop.login1.Session";
 const SESSION_PATH: &str = "/org/freedesktop/login1/session/_31";
 
-struct Manager;
+type InhibitorRow = (String, String, String, String, u32, u32);
+
+#[derive(Default)]
+struct Power {
+    ended: Vec<&'static str>,
+    inhibitors: Vec<(String, String)>,
+}
+
+#[derive(Clone, Default)]
+struct Manager(Arc<Mutex<Power>>);
+
+impl Manager {
+    fn power(&self) -> MutexGuard<'_, Power> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
 
 #[zbus::interface(name = "org.freedesktop.login1.Manager")]
 impl Manager {
+    fn power_off(&self, _interactive: bool) {
+        self.power().ended.push("poweroff");
+    }
+
+    fn reboot(&self, _interactive: bool) {
+        self.power().ended.push("reboot");
+    }
+
+    fn list_inhibitors(&self) -> Vec<InhibitorRow> {
+        self.power()
+            .inhibitors
+            .iter()
+            .map(|(who, why)| {
+                let what = "shutdown:sleep".to_owned();
+                (what, who.clone(), why.clone(), "block".to_owned(), 0, 0)
+            })
+            .collect()
+    }
+
     fn get_session(&self, _session_id: String) -> zbus::fdo::Result<OwnedObjectPath> {
         OwnedObjectPath::try_from(SESSION_PATH)
             .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))
@@ -53,6 +87,7 @@ impl Session {
 pub struct FakeLogind {
     _daemon: Connection,
     caller: Connection,
+    manager: Manager,
 }
 
 impl FakeLogind {
@@ -60,15 +95,28 @@ impl FakeLogind {
         let session = Session {
             locked: AtomicBool::new(false),
         };
+        let manager = Manager::default();
         let daemon = zbus::blocking::connection::Builder::address(bus.address())?
             .name(LOGIN1)?
-            .serve_at("/org/freedesktop/login1", Manager)?
+            .serve_at("/org/freedesktop/login1", manager.clone())?
             .serve_at(SESSION_PATH, session)?
             .build()?;
         Ok(Self {
             _daemon: daemon,
             caller: bus.connect()?,
+            manager,
         })
+    }
+
+    pub fn ended(&self) -> Vec<&'static str> {
+        self.manager.power().ended.clone()
+    }
+
+    pub fn inhibit(&self, who: &str, why: &str) {
+        self.manager
+            .power()
+            .inhibitors
+            .push((who.to_owned(), why.to_owned()));
     }
 
     pub fn set_locked(&self, locked: bool) -> zbus::Result<()> {

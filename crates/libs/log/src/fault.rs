@@ -1,11 +1,18 @@
 use std::fs::{self, DirBuilder, File};
 use std::io::{self, BufRead, BufReader, Write};
+use std::os::fd::OwnedFd;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use rustix::time::{
+    ClockId, Itimerspec, TimerfdClockId, TimerfdFlags, TimerfdTimerFlags, Timespec, clock_gettime,
+    timerfd_create, timerfd_settime,
+};
 
 use crate::ring::Ring;
 
@@ -114,24 +121,46 @@ pub fn write_session_facts(json: &str) {
     }
 }
 
-#[derive(Default)]
-struct StallState {
-    busy_since: Option<Instant>,
-    generation: u64,
-    watching: bool,
-}
-
-#[derive(Default)]
 struct StallShared {
-    state: Mutex<StallState>,
-    wake: Condvar,
+    busy_since: AtomicU64,
+    generation: AtomicU64,
+    armed: AtomicBool,
+    timer: OwnedFd,
 }
 
 pub struct StallWatch(Arc<StallShared>);
 
+fn now_ns() -> u64 {
+    let now = clock_gettime(ClockId::Monotonic);
+    (now.tv_sec as u64)
+        .saturating_mul(1_000_000_000)
+        .saturating_add(now.tv_nsec as u64)
+}
+
+fn arm(timer: &OwnedFd, after: Duration) -> io::Result<()> {
+    let value = Itimerspec {
+        it_interval: Timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        },
+        it_value: Timespec {
+            tv_sec: after.as_secs() as i64,
+            tv_nsec: i64::from(after.subsec_nanos().max(1)),
+        },
+    };
+    timerfd_settime(timer, TimerfdTimerFlags::empty(), &value)?;
+    Ok(())
+}
+
 impl StallWatch {
     pub fn start(kind: &'static str, limit: Duration) -> io::Result<Self> {
-        let shared = Arc::new(StallShared::default());
+        let timer = timerfd_create(TimerfdClockId::Monotonic, TimerfdFlags::CLOEXEC)?;
+        let shared = Arc::new(StallShared {
+            busy_since: AtomicU64::new(0),
+            generation: AtomicU64::new(0),
+            armed: AtomicBool::new(false),
+            timer,
+        });
         let watched = Arc::clone(&shared);
         thread::Builder::new()
             .name("stall-watch".to_owned())
@@ -139,60 +168,57 @@ impl StallWatch {
         Ok(Self(shared))
     }
 
-    pub fn busy(&self) {
-        if let Ok(mut state) = self.0.state.lock() {
-            state.busy_since = Some(Instant::now());
-            state.generation = state.generation.wrapping_add(1);
-            if !state.watching {
-                state.watching = true;
-                self.0.wake.notify_one();
-            }
+    pub fn busy(&self, limit: Duration) {
+        self.0.busy_since.store(now_ns(), Ordering::Release);
+        self.0.generation.fetch_add(1, Ordering::Relaxed);
+        if !self.0.armed.swap(true, Ordering::AcqRel)
+            && let Err(error) = arm(&self.0.timer, limit)
+        {
+            tracing::debug!("cannot arm the stall watch: {error}");
         }
     }
 
     pub fn idle(&self) {
-        if let Ok(mut state) = self.0.state.lock() {
-            state.busy_since = None;
-        }
+        self.0.busy_since.store(0, Ordering::Release);
     }
 }
 
 fn watch(shared: &StallShared, kind: &'static str, limit: Duration) {
+    let mut expirations = [0u8; 8];
     let mut reported = None;
-    let Ok(mut state) = shared.state.lock() else {
-        return;
-    };
     loop {
-        let Some(since) = state.busy_since else {
-            state.watching = false;
-            let Ok(next) = shared.wake.wait(state) else {
-                return;
-            };
-            state = next;
-            continue;
-        };
-        let elapsed = since.elapsed();
-        if elapsed < limit {
-            let Ok((next, _)) = shared.wake.wait_timeout(state, limit - elapsed) else {
-                return;
-            };
-            state = next;
-            continue;
-        }
-        if reported != Some(state.generation) {
-            reported = Some(state.generation);
-            let seconds = elapsed.as_secs();
-            drop(state);
-            report_hang_and_wait(kind, std::process::id(), seconds, WAIT_FOR_ANSWER);
-            let Ok(next) = shared.state.lock() else {
-                return;
-            };
-            state = next;
-            continue;
-        }
-        let Ok((next, _)) = shared.wake.wait_timeout(state, limit) else {
+        if let Err(error) = rustix::io::read(&shared.timer, &mut expirations) {
+            if error == rustix::io::Errno::INTR {
+                continue;
+            }
             return;
+        }
+        let since = shared.busy_since.load(Ordering::Acquire);
+        if since == 0 {
+            shared.armed.store(false, Ordering::Release);
+            if shared.busy_since.load(Ordering::Acquire) == 0
+                || shared.armed.swap(true, Ordering::AcqRel)
+            {
+                continue;
+            }
+            if let Err(error) = arm(&shared.timer, limit) {
+                tracing::debug!("cannot arm the stall watch: {error}");
+            }
+            continue;
+        }
+        let elapsed = Duration::from_nanos(now_ns().saturating_sub(since));
+        let generation = shared.generation.load(Ordering::Relaxed);
+        if elapsed >= limit && reported != Some(generation) {
+            reported = Some(generation);
+            report_hang_and_wait(kind, std::process::id(), elapsed.as_secs(), WAIT_FOR_ANSWER);
+        }
+        let next = if elapsed >= limit {
+            limit
+        } else {
+            limit - elapsed
         };
-        state = next;
+        if let Err(error) = arm(&shared.timer, next) {
+            tracing::debug!("cannot arm the stall watch: {error}");
+        }
     }
 }

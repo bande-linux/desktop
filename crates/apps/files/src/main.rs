@@ -37,7 +37,8 @@ use bande_volumes::{
 };
 use bande_xdg::{
     Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
-    launch_with_arguments, path_from_file_uri, replace_file, spawn_detached, state_home, user_dir,
+    launch_with_arguments, path_from_file_uri, read_user_dirs, replace_file, spawn_detached,
+    state_home, user_dir,
 };
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use zbus::blocking::{Connection, MessageIterator};
@@ -470,7 +471,7 @@ fn sidebar(home: &Path) -> Sidebar {
     let layout = read(Some(layout_file(home)));
     let rows = rows(
         home,
-        read(config_home().map(|config| config.join("user-dirs.dirs"))).as_deref(),
+        read_user_dirs().as_deref(),
         read(bookmarks_file()).as_deref(),
         layout.as_deref(),
     );
@@ -805,8 +806,7 @@ impl Files {
     ) -> Result<WindowId, bande_app::Error> {
         let info = arguments.first().is_some_and(|flag| flag == INFO_FLAG);
         let select = info || arguments.first().is_some_and(|flag| flag == SELECT_FLAG);
-        let user_dirs = config_home()
-            .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
+        let user_dirs = read_user_dirs();
         let mut targets = arguments
             .iter()
             .skip(usize::from(select))
@@ -889,8 +889,7 @@ impl Files {
     fn new_view(&self, browser: Browser) -> Result<FilesView, bande_app::Error> {
         let sidebar = sidebar(&self.home);
         let apps = Apps::load(data_dirs(), &config_dirs());
-        let user_dirs = config_home()
-            .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
+        let user_dirs = read_user_dirs();
         let thumbnails = Thumbnails::for_user(apps.data_dirs());
         let mut view = FilesView::new(
             browser,

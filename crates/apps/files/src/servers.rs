@@ -1,7 +1,11 @@
 use bande_toolkit::ui::{
     Axis, CheckState, Checkbox, PopUpButton, SecureField, Stack, TextField, Widget,
 };
+use std::path::PathBuf;
+
+use bande_fs::{Action, Purpose, Task};
 use bande_volumes::{SavedServer, load_saved_servers};
+use bande_xdg::{DesktopEntry, file_uri};
 
 use crate::L10N;
 use crate::browser::Location;
@@ -41,7 +45,55 @@ pub enum ServerField {
     Share(usize),
 }
 
+const MAIL_SCHEME: &str = "x-scheme-handler/mailto";
+const BANDE_MAIL: &str = "org.bande.Mail.desktop";
+
 impl FilesView {
+    pub(crate) fn mail_app(&self) -> Option<&DesktopEntry> {
+        self.apps.default_for(MAIL_SCHEME)
+    }
+
+    pub(crate) fn share_by_mail(&mut self) {
+        let files = self.browser.selected_paths();
+        let Some(app) = self.mail_app().cloned() else {
+            return;
+        };
+        let arguments = match app.id == BANDE_MAIL {
+            true => std::iter::once("--attach".to_owned())
+                .chain(files.iter().map(|file| file.to_string_lossy().into_owned()))
+                .collect(),
+            false => {
+                let fields: Vec<String> = files
+                    .iter()
+                    .map(|file| {
+                        format!(
+                            "attachment={}",
+                            file_uri(file).trim_start_matches("file://")
+                        )
+                    })
+                    .collect();
+                vec![format!("mailto:?{}", fields.join("&"))]
+            }
+        };
+        self.requests.push(Request::Compose {
+            app: Box::new(app),
+            arguments,
+        });
+    }
+
+    pub(crate) fn share_to(&mut self, place: PathBuf) {
+        let sources = self.browser.selected_paths();
+        if !sources.is_empty() {
+            self.start(
+                Task::Copy {
+                    sources,
+                    destination: place,
+                },
+                Purpose::Do(Action::Copy),
+            );
+        }
+    }
+
     pub(crate) fn ask_connect(&mut self) {
         self.ask_connect_to(ServerRequest::default());
     }

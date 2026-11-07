@@ -38,7 +38,8 @@ impl SettingsView {
         let mut draft = intent(&self.intents, move |text: String| Intent::Draft(id, text));
         let field = TextField::new(&L10N.tr(placeholder), &text, move |text| {
             draft(text.to_owned())
-        });
+        })
+        .without_text_checking();
         self.anchors.push((Anchor::Setting(id, None), field.id()));
         boxed(Row::new(
             Text::new(&L10N.tr(label), Tone::Primary),

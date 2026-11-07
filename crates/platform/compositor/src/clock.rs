@@ -183,6 +183,13 @@ impl FrameClock {
         }
     }
 
+    fn start_after(&self, vblank: Vblank) -> Option<Duration> {
+        match &self.timing {
+            Timing::Measured(pacing) => Some(pacing.start_for(pacing.slot(vblank.sequence + 1))),
+            Timing::Classic(_) => None,
+        }
+    }
+
     fn woke_late(&mut self, by: Duration) {
         if let Timing::Measured(pacing) = &mut self.timing {
             pacing.prediction.record_wake(by);
@@ -351,6 +358,22 @@ impl FrameScheduler {
         compositor: &mut Compositor,
         output: &mut O,
     ) -> Result<Poll, O::Error> {
+        let mut poll = self.poll_frames(&clock, compositor, output)?;
+        let name = self
+            .output
+            .clone()
+            .unwrap_or_else(|| compositor.main_output());
+        let callbacks = compositor.send_due_callbacks_on(&name, clock())?;
+        poll.wake_at = poll.wake_at.into_iter().chain(callbacks).min();
+        Ok(poll)
+    }
+
+    fn poll_frames<O: FrameOutput>(
+        &mut self,
+        clock: impl Fn() -> Duration,
+        compositor: &mut Compositor,
+        output: &mut O,
+    ) -> Result<Poll, O::Error> {
         let mut now = clock();
         let name = self
             .output
@@ -404,6 +427,11 @@ impl FrameScheduler {
                         sequence: vblank.sequence,
                         at: now,
                     });
+                    if matches!(submission, Submission::AwaitingFlip | Submission::AtVblank)
+                        && let Some(next_start) = self.clock.start_after(vblank)
+                    {
+                        compositor.release_callbacks_on(&name, now, next_start);
+                    }
                     if let Some(refresh) = output.refresh(&name)
                         && refresh != self.clock.refresh()
                     {

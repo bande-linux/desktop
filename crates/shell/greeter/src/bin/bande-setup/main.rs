@@ -230,8 +230,10 @@ impl Assistant {
             }
             Page::Account => {
                 let full_name =
-                    TextField::new(&L10N.tr("full-name"), &self.answers.full_name, |_| {});
-                let login = TextField::new(&L10N.tr("account-name"), &self.answers.login, |_| {});
+                    TextField::new(&L10N.tr("full-name"), &self.answers.full_name, |_| {})
+                        .without_text_checking();
+                let login = TextField::new(&L10N.tr("account-name"), &self.answers.login, |_| {})
+                    .without_text_checking();
                 let password = SecureField::new(&L10N.tr("password"), FIELD_FONT, |_| {});
                 let intents = Rc::clone(&self.intents);
                 let verify = SecureField::new(&L10N.tr("verify"), FIELD_FONT, move |_| {

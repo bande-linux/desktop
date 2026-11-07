@@ -16,7 +16,7 @@ pub const BUS_NAME: &str = "org.bande.Spell";
 pub const OBJECT_PATH: &str = "/org/bande/Spell";
 const IDLE_EXIT: Duration = Duration::from_secs(60);
 
-struct Engine {
+pub struct Engine {
     store: Store,
     region: Option<String>,
     system_language: Option<String>,
@@ -73,7 +73,7 @@ impl Engine {
         self.store.learned.contains(word) || self.store.learned.contains(&word.to_lowercase())
     }
 
-    fn check(&mut self, words: &[String]) -> Vec<bool> {
+    pub fn check(&mut self, words: &[String]) -> Vec<bool> {
         if self.store.options.get("spelling") == Some(&false) {
             return vec![true; words.len()];
         }
@@ -91,7 +91,44 @@ impl Engine {
             .collect()
     }
 
-    fn suggest(&mut self, word: &str) -> Vec<String> {
+    pub fn correction(&mut self, word: &str) -> String {
+        if self.store.options.get("autocorrect") == Some(&false)
+            || !correctable(word)
+            || self.check(&[word.to_owned()]) == [true]
+        {
+            return String::new();
+        }
+        self.dictionaries();
+        let mut candidates: Vec<(String, bool)> = Vec::new();
+        for name in self.active() {
+            let Some(dictionary) = self.loaded.get(&name) else {
+                continue;
+            };
+            let allowed = language_data(language_of(&name))
+                .get("autocorrect")
+                .is_some_and(|value| value == "true");
+            let mut suggestions = Vec::new();
+            dictionary.suggest(word, &mut suggestions);
+            for suggestion in suggestions {
+                if one_edit_apart(word, &suggestion) {
+                    candidates.push((suggestion, allowed));
+                }
+            }
+        }
+        let first = candidates.first().map(|(word, _)| word.clone());
+        match first {
+            Some(only)
+                if candidates
+                    .iter()
+                    .all(|(candidate, allowed)| *candidate == only && *allowed) =>
+            {
+                only
+            }
+            _ => String::new(),
+        }
+    }
+
+    pub fn suggest(&mut self, word: &str) -> Vec<String> {
         let mut merged: Vec<String> = Vec::new();
         for dictionary in self.dictionaries() {
             let mut suggestions = Vec::new();
@@ -104,6 +141,37 @@ impl Engine {
         }
         merged
     }
+}
+
+fn correctable(word: &str) -> bool {
+    let mut characters = word.chars();
+    characters.next().is_some_and(char::is_alphabetic)
+        && characters.all(|character| character.is_alphabetic() && !character.is_uppercase())
+}
+
+fn one_edit_apart(typed: &str, candidate: &str) -> bool {
+    let typed: Vec<char> = typed.chars().flat_map(char::to_lowercase).collect();
+    let candidate: Vec<char> = candidate.chars().flat_map(char::to_lowercase).collect();
+    if typed == candidate || typed.len().abs_diff(candidate.len()) > 1 {
+        return false;
+    }
+    let prefix = typed
+        .iter()
+        .zip(&candidate)
+        .take_while(|(left, right)| left == right)
+        .count();
+    let (rest_typed, rest_candidate) = (&typed[prefix..], &candidate[prefix..]);
+    let same_after = |skip_typed: usize, skip_candidate: usize| {
+        rest_typed.get(skip_typed..) == rest_candidate.get(skip_candidate..)
+    };
+    same_after(1, 1)
+        || same_after(1, 0)
+        || same_after(0, 1)
+        || (rest_typed.len() >= 2
+            && rest_candidate.len() >= 2
+            && rest_typed[0] == rest_candidate[1]
+            && rest_typed[1] == rest_candidate[0]
+            && same_after(2, 2))
 }
 
 pub struct Spell {
@@ -130,6 +198,33 @@ impl Spell {
 
     fn suggest(&self, word: String) -> Vec<String> {
         self.engine().suggest(&word)
+    }
+
+    fn rules(&self) -> (HashMap<String, String>, HashMap<String, String>) {
+        let engine = self.engine();
+        let mut rules = language_data("en");
+        if let Some(language) = &engine.system_language {
+            rules.extend(language_data(language));
+        }
+        for name in ["capitalise", "double-space", "smart-quotes", "links"] {
+            let on = engine.store.options.get(name).copied().unwrap_or(true);
+            rules.insert(format!("{name}-on"), on.to_string());
+        }
+        (rules, engine.store.replacements())
+    }
+
+    async fn set_replacements(
+        &self,
+        replacements: HashMap<String, String>,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        saved(self.engine().store.save_replacements(&replacements))?;
+        Self::changed(&emitter).await?;
+        Ok(())
+    }
+
+    fn correction(&self, word: String) -> String {
+        self.engine().correction(&word)
     }
 
     async fn learn(
@@ -249,21 +344,27 @@ fn wait_until_idle(activity: &Receiver<()>) {
     }
 }
 
+impl Engine {
+    pub fn open() -> Result<Self, Box<dyn std::error::Error>> {
+        let home = std::env::home_dir();
+        let config = std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .or_else(|| home.as_ref().map(|home| home.join(".config")))
+            .ok_or("neither XDG_CONFIG_HOME nor HOME is set")?;
+        let data = bande_data_home().ok_or("neither XDG_DATA_HOME nor HOME is set")?;
+        let (system_language, region) = system_locale();
+        Ok(Self {
+            store: Store::open(&config, &data),
+            region,
+            system_language,
+            input_languages: input_languages(&config),
+            loaded: HashMap::new(),
+        })
+    }
+}
+
 pub fn serve() -> Result<(), Box<dyn std::error::Error>> {
-    let home = std::env::home_dir();
-    let config = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| home.as_ref().map(|home| home.join(".config")))
-        .ok_or("neither XDG_CONFIG_HOME nor HOME is set")?;
-    let data = bande_data_home().ok_or("neither XDG_DATA_HOME nor HOME is set")?;
-    let (system_language, region) = system_locale();
-    let engine = Engine {
-        store: Store::open(&config, &data),
-        region,
-        system_language,
-        input_languages: input_languages(&config),
-        loaded: HashMap::new(),
-    };
+    let engine = Engine::open()?;
     let (activity, idle) = channel();
     let spell = Spell {
         engine: Arc::new(Mutex::new(engine)),

@@ -473,3 +473,4 @@ sharing-keywords = share, file sharing, samba, smb, remote login, ssh, network f
 sharing-summary = Share folders with other computers and allow remote login
 sharing-list = Sharing
 sharing-list-keywords = file sharing, samba, smb, remote login, ssh, shared folders
+spelling = Spelling

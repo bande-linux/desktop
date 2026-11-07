@@ -418,7 +418,12 @@ impl<P: Program> Runner<P> {
 
     fn key(&mut self, index: usize, window: WindowId, input: Event) {
         let settings = self.cx.info.settings.is_some();
-        if let Some(standard) = self.cx.info.keys.standard(&input, settings) {
+        let keys = self.cx.views[index]
+            .1
+            .view_ref()
+            .keys()
+            .unwrap_or(self.cx.info.keys);
+        if let Some(standard) = keys.standard(&input, settings) {
             return self.perform(Some(window), standard.action());
         }
         if self.deliver(index, window, WindowEvent::Input(input.clone())) {

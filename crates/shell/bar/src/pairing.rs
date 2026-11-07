@@ -276,7 +276,8 @@ impl Dialog {
             let typed = Rc::clone(&pin);
             let input = TextField::new(&L10N.tr("pair-pin"), "", move |text| {
                 *typed.borrow_mut() = text.to_owned();
-            });
+            })
+            .without_text_checking();
             field = Some(input.id());
             alert = alert.accessory(input);
         }

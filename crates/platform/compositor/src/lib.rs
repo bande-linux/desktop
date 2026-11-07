@@ -37,6 +37,7 @@ mod label;
 mod lock;
 mod logind;
 mod management;
+mod material;
 mod menu_button;
 mod motion;
 mod night;
@@ -91,6 +92,7 @@ pub use keymap::KeyboardSettings;
 pub use logind::{
     SessionRequest, Sleep, follow_session, follow_shutdown, follow_sleep, sleep_on_request,
 };
+pub use material::{MaterialPicture, MaterialRequest, render_material};
 pub use night::NightTick;
 pub use pointing::PointerSettings;
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};

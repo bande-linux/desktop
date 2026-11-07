@@ -56,13 +56,15 @@ pub fn open(
         services.session,
         homes,
     )?;
-    let view = TaskbarView::new(
+    let form = window.appearance().look().bar;
+    let mut view = TaskbarView::new(
         window.appearance().palette(),
         text.sharing_fonts(),
         bar.edge,
         bande_xdg::data_dirs(),
         icon_size,
     );
+    view.set_form(form);
     let status = StatusClient::new(view, display.clone(), services.status)?;
     let restart = status.restart();
     let surfaces: Vec<(Window, Box<dyn App>)> =

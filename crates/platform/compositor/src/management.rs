@@ -114,6 +114,7 @@ impl State {
     }
 
     pub(crate) fn announce_outputs(&mut self) {
+        self.refresh_materials();
         self.output_serial = self.output_serial.wrapping_add(1);
         let display = self.display_handle.clone();
         let mut managers = std::mem::take(&mut self.output_managers);

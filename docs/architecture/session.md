@@ -439,7 +439,7 @@ made again.
   a colon, so a stale list is replaced by one name.
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
   `bande-config`, `bande-power`, `bande-sound`, `bande-tray`, `bande-indexer`, `bande-automount`,
-  `bande-polkit-agent`. `bande-notify` and
+  `bande-polkit-agent`. `bande-notify`, `bande-spell` (spelling; exits after a minute idle) and
   the portal backend are started by D-Bus activation, and `bande-clipboard` and the shell
   clients by the compositor ([behaviour](behaviour.md)): `bande-shell`, one process for the
   desktop, the bar, the notifications, Control Center and the launcher of every display, and
@@ -552,6 +552,7 @@ graph TD
             OWN3["org.bande.Clipboard (bande-clipboard)"]
             OWN4["org.bande.Screenshot (bande-screenshot)"]
             OWN5["org.bande.Sound (bande-sound)"]
+            OWN6["org.bande.Spell (bande-spell)"]
         end
     end
 ```

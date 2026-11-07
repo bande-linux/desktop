@@ -10,10 +10,10 @@ pub use bande_graphics::{
 };
 pub use bande_toolkit_platform::{
     ACTIVATION_TOKEN_VARIABLE, Anchor, App, AppConnection, AppRequest, AppWindow, BrightnessKey,
-    DisplayEdge, Dmabuf, DmabufPlane, DragAction, DragEvent, DragIcon, Edges, ExternalSurface,
-    FramePath, FrameRegions, Header, KeyboardFocus, LauncherMode, LayerKind, LayerOptions,
-    MediaKey, MenuPlacement, Panel, RENDERER_VARIABLE, ResizeEdge, Role, SHEET_INSET, SessionEnd,
-    ShmLayout, Sizing, SurfaceBuffer, Surfaces, ToplevelState, Transfer, VolumeKey,
+    CursorImage, DisplayEdge, Dmabuf, DmabufPlane, DragAction, DragEvent, DragIcon, Edges,
+    ExternalSurface, FramePath, FrameRegions, Header, KeyboardFocus, LauncherMode, LayerKind,
+    LayerOptions, MediaKey, MenuPlacement, Panel, RENDERER_VARIABLE, ResizeEdge, Role, SHEET_INSET,
+    SessionEnd, ShmLayout, Sizing, SurfaceBuffer, Surfaces, ToplevelState, Transfer, VolumeKey,
     WINDOW_HEADER_HEIGHT, Window, WindowDrag, WindowError, WindowEvent, WindowInSession, run,
     run_surfaces,
 };

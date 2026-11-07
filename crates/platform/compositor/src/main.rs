@@ -4,8 +4,8 @@ use std::process::{Child, ExitCode};
 use std::time::{Duration, Instant};
 
 use bande_compositor::{
-    CLIPBOARD_DAEMON, Compositor, CursorTheme, DrmBackend, DrmNotifiers, FrameClock, FrameOutput,
-    FrameScheduler, GREETER, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
+    Awaited, CLIPBOARD_DAEMON, Compositor, CursorTheme, DrmBackend, DrmNotifiers, FrameClock,
+    FrameOutput, FrameScheduler, GREETER, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
     SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
     export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
     follow_session, follow_shutdown, follow_sleep, notify_service_manager, serve_app_states,
@@ -623,13 +623,21 @@ where
     listen(&event_loop.handle(), &mut app)?;
     let (mut greeter, mut review) = match session {
         Session::User => {
-            app.compositor
-                .hold_until_shell_ready(app.started, app.started + SHELL_READY_TIMEOUT);
+            app.compositor.hold_frames_until(
+                Awaited::Shell,
+                app.started,
+                app.started + SHELL_READY_TIMEOUT,
+            );
             (None, start_user_session(event_loop, &mut app)?)
         }
         Session::Greeter => {
             end_greeter_when_hung(&event_loop.handle())?;
             app.compositor.apply_input_settings(InputSettings::system());
+            app.compositor.hold_frames_until(
+                Awaited::LoginWindow,
+                app.started,
+                app.started + SHELL_READY_TIMEOUT,
+            );
             (Some(Greeter::start(&mut app.compositor)), None)
         }
     };

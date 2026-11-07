@@ -4,7 +4,7 @@ use super::control::paint_field;
 use super::{Context, Cursor, Event, Key, Size, Widget, WidgetId};
 use crate::L10N;
 use bande_graphics::{
-    ControlSize, Item, Paragraph, Path, Point, Rect, Shape, TextAlign, TextStyle,
+    ControlSize, Item, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
 use zeroize::Zeroizing;
 
@@ -14,6 +14,8 @@ const CARET_WIDTH: f32 = 1.5;
 const CAPS_LOCK_SIZE: f32 = 12.0;
 const CAPS_LOCK_STROKE: f32 = 1.25;
 const BODY_FONT: f32 = 13.0;
+const GO_INSET: f32 = 4.0;
+const GO_STROKE: f32 = 1.5;
 
 pub struct SecureField {
     id: WidgetId,
@@ -24,6 +26,7 @@ pub struct SecureField {
     on_submit: Box<dyn FnMut(&str)>,
     bullets: Option<Paragraph>,
     placeholder_paragraph: Option<Paragraph>,
+    go_button: bool,
     frame: Rect,
 }
 
@@ -38,8 +41,49 @@ impl SecureField {
             on_submit: Box::new(on_submit),
             bullets: None,
             placeholder_paragraph: None,
+            go_button: false,
             frame: Rect::default(),
         }
+    }
+
+    pub fn with_go_button(mut self) -> Self {
+        self.go_button = true;
+        self
+    }
+
+    fn go_rect(&self) -> Option<Rect> {
+        (self.go_button && !self.secret.is_empty()).then(|| {
+            let side = self.frame.height - 2.0 * GO_INSET;
+            Rect::new(
+                self.frame.x + self.frame.width - GO_INSET - side,
+                self.frame.y + GO_INSET,
+                side,
+                side,
+            )
+        })
+    }
+
+    fn paint_go_button(&self, cx: &Context, items: &mut Vec<Item>) {
+        let Some(rect) = self.go_rect() else {
+            return;
+        };
+        items.push(Item::Fill {
+            shape: Shape::rounded(rect, Radius::XS),
+            paint: cx.palette.accent.into(),
+        });
+        let middle = Point::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0);
+        let reach = rect.width / 5.0;
+        let at = |dx: f32, dy: f32| Point::new(middle.x + dx * reach, middle.y + dy * reach);
+        items.push(Item::StrokePath {
+            path: Path::through(&[at(-1.0, 0.0), at(1.0, 0.0)]),
+            width: GO_STROKE,
+            paint: cx.palette.on_accent.into(),
+        });
+        items.push(Item::StrokePath {
+            path: Path::through(&[at(0.2, -0.8), at(1.0, 0.0), at(0.2, 0.8)]),
+            width: GO_STROKE,
+            paint: cx.palette.on_accent.into(),
+        });
     }
 
     pub fn set_placeholder(&mut self, placeholder: &str) {
@@ -59,7 +103,10 @@ impl SecureField {
     fn paint_caps_lock(&self, cx: &Context, items: &mut Vec<Item>) {
         let size = CAPS_LOCK_SIZE * (self.font_size / BODY_FONT).max(1.0);
         let unit = size / CAPS_LOCK_SIZE;
-        let x = self.frame.x + self.frame.width - PADDING - size;
+        let right = self
+            .go_rect()
+            .map_or(self.frame.x + self.frame.width, |go| go.x);
+        let x = right - PADDING - size;
         let y = self.frame.y + ((self.frame.height - size) / 2.0).round();
         let at = |dx: f32, dy: f32| Point::new(x + dx * unit, y + dy * unit);
         items.push(Item::StrokePath {
@@ -133,6 +180,7 @@ impl Widget for SecureField {
         if focused && cx.caps_lock {
             self.paint_caps_lock(cx, items);
         }
+        self.paint_go_button(cx, items);
         let shown = if self.secret.is_empty() {
             self.placeholder_paragraph.as_ref()
         } else {
@@ -187,7 +235,19 @@ impl Widget for SecureField {
 
     fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
         let Event::Key { key, modifiers } = event else {
-            return matches!(event, Event::PointerDown(pointer) if pointer.is_primary());
+            let Event::PointerDown(pointer) = event else {
+                return false;
+            };
+            if !pointer.is_primary() {
+                return false;
+            }
+            if self
+                .go_rect()
+                .is_some_and(|go| go.contains(pointer.position))
+            {
+                (self.on_submit)(&self.secret);
+            }
+            return true;
         };
         if modifiers.logo {
             return false;

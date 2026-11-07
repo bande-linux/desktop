@@ -1,4 +1,6 @@
 use std::error::Error;
+use std::io;
+use std::os::fd::{AsFd, AsRawFd};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -19,7 +21,7 @@ use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{EventLoop, Interest, Mode as Trigger, PostAction};
 use smithay::reexports::drm::control::atomic::AtomicModeReq;
 use smithay::reexports::drm::control::{
-    AtomicCommitFlags, Device as ControlDevice, Mode, ModeTypeFlags, connector, crtc, property,
+    AtomicCommitFlags, Device as ControlDevice, Mode, ModeTypeFlags, connector, crtc, framebuffer, property,
 };
 use smithay::reexports::input::Libinput;
 use smithay::reexports::rustix::fs::OFlags;
@@ -39,6 +41,7 @@ pub type DrmBackendError = Box<dyn Error>;
 
 type OutputCompositor = DrmCompositor<DumbAllocator, ScanoutExporter, (), DrmDeviceFd>;
 
+const DRM_IOCTL_MODE_CLOSEFB: libc::c_ulong = 0xC008_64D0;
 const CURSOR_SIZE: (u32, u32) = (64, 64);
 const COLOR_FORMATS: [Fourcc; 2] = [Fourcc::Xrgb8888, Fourcc::Argb8888];
 
@@ -535,6 +538,17 @@ impl DrmBackend {
     }
 
     pub fn leave_on_screen(mut self) {
+        match self.device.resource_handles() {
+            Ok(resources) => {
+                for &framebuffer in resources.framebuffers() {
+                    if let Err(error) = close_framebuffer(&self.device, framebuffer) {
+                        tracing::warn!("the frame on screen ends with this process: {error}");
+                        break;
+                    }
+                }
+            }
+            Err(error) => tracing::warn!("the frame on screen ends with this process: {error}"),
+        }
         self.device.pause();
         for head in self.heads.drain(..) {
             std::mem::forget(head.compositor);
@@ -621,6 +635,23 @@ impl DrmBackend {
                 .map_err(|()| "libinput cannot resume its devices")?;
         }
         Ok(())
+    }
+}
+
+fn close_framebuffer(device: &DrmDevice, framebuffer: framebuffer::Handle) -> io::Result<()> {
+    #[repr(C)]
+    struct CloseFramebuffer {
+        id: u32,
+        pad: u32,
+    }
+    let request = CloseFramebuffer {
+        id: framebuffer.into(),
+        pad: 0,
+    };
+    let fd = device.device_fd().as_fd().as_raw_fd();
+    match unsafe { libc::ioctl(fd, DRM_IOCTL_MODE_CLOSEFB, &request) } {
+        0 => Ok(()),
+        _ => Err(io::Error::last_os_error()),
     }
 }
 

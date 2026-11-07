@@ -429,14 +429,19 @@ made again.
 - `bande-session` takes the language and formats from `/etc/locale.conf` and replaces those in
   the user manager and in D-Bus activation. greetd and a lingering user manager keep what they had
   when they started, so without this a choice in Settings would only arrive after a restart.
-  The login window itself still follows the language greetd started with.
+  The login window does the same each time it starts: greetd runs `bande-greeter-session`, which
+  reads that file before starting `bande-compositor --greeter`.
 - Settings ▸ Language & Region sets `LANG` and the five format categories (`LC_TIME`,
-  `LC_NUMERIC`, `LC_MONETARY`, `LC_MEASUREMENT`, `LC_PAPER`) through localed `SetLocale`. Its
-  choices are the UTF-8 entries of `/usr/share/i18n/SUPPORTED`, named exactly as written there,
-  because that is what localed matches before running `locale-gen` once per changed variable.
-  localed merges rather than replaces: anything left out stays, so "Same as language" sends
-  the formats equal to `LANG`, and localed drops those. It also refuses a `LANGUAGE` holding
-  a colon, so a stale list is replaced by one name.
+  `LC_NUMERIC`, `LC_MONETARY`, `LC_MEASUREMENT`, `LC_PAPER`) through `bande-locale-helper` under
+  `pkexec` (`org.bande.locale-helper`, no prompt for active `sudo` members). Debian forbids
+  localed's `SetLocale` and `SetX11Keyboard` even to root, so localed is only read, each time
+  the pane opens and again after each change. The helper takes only UTF-8 names from
+  `/usr/share/i18n/SUPPORTED`, enables them in `/etc/locale.gen`, runs `locale-gen --keep-existing`,
+  and only then replaces `/etc/locale.conf` atomically (`/etc/default/locale` is Debian's symlink to
+  it). The pane says "setting up" meanwhile, off the UI thread, and shows any failure on the row.
+  The same helper writes the login keyboard: `layout(variant)` codes checked against xkb's
+  `evdev.lst`, written to `/etc/default/keyboard` (`/etc/vconsole.conf` is Debian's symlink to it),
+  then a udev `change` for input devices and `setupcon --force --save` for the console.
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
   `bande-config`, `bande-power`, `bande-sound`, `bande-tray`, `bande-indexer`, `bande-automount`,
   `bande-polkit-agent`. `bande-notify`, `bande-spell` (spelling; exits after a minute idle) and
@@ -655,9 +660,8 @@ further prompt. A refused password shakes the field (the `shake` spring) and say
 failures show PAM's or greetd's reason. The field shows a Caps Lock sign while Caps Lock is on
 (`WindowEvent::CapsLock` from the toolkit), and the active keyboard layout in the top corner when
 the system has several. The greeter compositor applies the system's input settings, so the
-layouts are those localed keeps in `/etc/vconsole.conf` (`XKBLAYOUT`, `XKBVARIANT`), or of
-`/etc/default/keyboard` when that has none; Settings > Keyboard offers "Use at Login Screen",
-which hands the user's layouts to localed `SetX11Keyboard`. After authentication the greeter asks greetd to
+layouts are those in `/etc/default/keyboard` (`XKBLAYOUT`, `XKBVARIANT`); Settings > Keyboard
+offers "Use at Login Screen", which writes the user's layouts there through `bande-locale-helper`. After authentication the greeter asks greetd to
 start `bande-session` (the wrapper the `bande.desktop` session entry runs, which starts
 `bande-compositor.service` in the user's manager) with `XDG_SESSION_TYPE=wayland`,
 `XDG_CURRENT_DESKTOP=Bande` and `XDG_SESSION_DESKTOP=bande`, so `pam_systemd` registers a

@@ -135,6 +135,7 @@ pub struct Background {
     pub watcher: Option<Arc<FolderWatch>>,
     pub writer: Option<IndexWriter>,
     pub written: usize,
+    pub watch_failed: bool,
 }
 
 fn lower_own_priority() {
@@ -286,11 +287,13 @@ impl Background {
         }
     }
 
-    fn list(&self, path: &Path, excluded: &[PathBuf]) -> Vec<Child> {
+    fn list(&mut self, path: &Path, excluded: &[PathBuf]) -> Vec<Child> {
         if let Some(watcher) = &self.watcher
             && let Err(error) = watcher.rewatch(path)
+            && !self.watch_failed
         {
-            tracing::warn!("cannot watch {}: {error}", path.display());
+            self.watch_failed = true;
+            tracing::warn!("cannot watch {} and perhaps others: {error}", path.display());
         }
         let Ok(listing) = fs::read_dir(path) else {
             return Vec::new();

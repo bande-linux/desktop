@@ -3,7 +3,7 @@ import pathlib
 import re
 import sys
 
-ENFORCED = set()
+ENFORCED = {"sv"}
 MESSAGE = re.compile(r"^(-?[a-zA-Z][a-zA-Z0-9_-]*) *=")
 ATTRIBUTE = re.compile(r"^\s+\.[a-zA-Z][a-zA-Z0-9_-]* *=")
 VARIABLE = re.compile(r"\{\s*\$([a-zA-Z][a-zA-Z0-9_-]*)")

@@ -20,7 +20,7 @@ if [ -n "$live" ]; then
     slirp4netns --configure --mtu=65520 "$target" tap0 > "$log.slirp" 2>&1 &
     slirp=$!
     sleep 1
-    echo "nameserver 10.0.2.3" > /etc/resolv.conf
+    echo "nameserver 1.1.1.1" > /etc/resolv.conf
     set +e
     nsenter -t "$target" -n bash -c '
         ip link set lo up

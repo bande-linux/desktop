@@ -56,10 +56,8 @@ LAN) that phones and other computers already run. Its own stage, last.
 
 ## Stages
 
-Connect to Server, not blocking on mounts, phones and cameras, and discovery have shipped.
+Connect to Server, not blocking on mounts, phones and cameras, discovery, Settings ▸ Sharing and the Share menu have shipped.
 
-5. Settings ▸ Sharing.
-6. Share menu.
 7. Nearby transfer (LocalSend protocol).
 
 Windows PCs announce through WS-Discovery, not mDNS, so they do not appear under Network yet; `smb://name` works.

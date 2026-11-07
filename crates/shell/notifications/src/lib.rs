@@ -13,7 +13,7 @@ use bande_spring::rubber_band;
 use bande_toolkit::ui::{Animated, Event, Key, Spring, focus_ring_for, past_drag_slop};
 use bande_toolkit::{
     Color, ControlSize, DisplayEdge, Elevation, Item, Palette, Paragraph, Point, Radius, Rect,
-    Scene, Scheme, Shape, Spacing, TextAlign, TextRole, TextStyle, TextSystem,
+    Scene, Shape, Spacing, TextAlign, TextRole, TextStyle, TextSystem,
 };
 use jiff::civil::Date;
 
@@ -674,6 +674,10 @@ impl Screen {
         (self.content_height() - self.panel_height()).max(0.0)
     }
 
+    pub fn backdrop(&self, now: Instant) -> Option<Rect> {
+        (self.open && self.palette.panel.a != u8::MAX).then(|| self.panel_rect(now))
+    }
+
     fn panel_rect(&self, now: Instant) -> Rect {
         let (offset, _) = self.center_x.value_at(now);
         let (x, y, _) = self.panel_frame();
@@ -1214,15 +1218,9 @@ impl Screen {
         ));
         items.push(Item::Fill {
             shape,
-            paint: palette.chassis.into(),
+            paint: palette.on_panel(palette.chassis).into(),
         });
-        if palette.scheme == Scheme::Dark {
-            items.push(Item::Stroke {
-                shape: Shape::rounded(panel.inset(0.5), CENTER_RADIUS - 0.5),
-                width: 1.0,
-                paint: palette.hairline.into(),
-            });
-        }
+        items.push(Item::lit_edge(shape, &palette));
         let focused = self.focus.and_then(|at| self.targets().get(at).cloned());
         let hovered = self
             .pointer

@@ -128,9 +128,7 @@ fn outer_band(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
 }
 
 fn resizable(window: &Window) -> bool {
-    !window.has_state(xdg_toplevel::State::Maximized)
-        && !window.has_state(xdg_toplevel::State::Fullscreen)
-        && !window.fixed_size()
+    !window.has_state(xdg_toplevel::State::Fullscreen) && !window.fixed_size()
 }
 
 fn resize_band(window: &Window, frame: Rect, point: bande_graphics::Point) -> Option<ResizeEdge> {
@@ -459,6 +457,7 @@ impl State {
 impl Compositor {
     pub fn set_dark_appearance(&mut self, dark: bool) {
         self.state.decorations.scheme = if dark { Scheme::Dark } else { Scheme::Light };
+        self.state.refresh_materials();
         self.state.needs_redraw = true;
     }
 }

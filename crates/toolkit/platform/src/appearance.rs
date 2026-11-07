@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use bande_bus::portal_settings::{self, APPEARANCE, BANDE_APPEARANCE, PREFER_LIGHT};
-use bande_graphics::{Accent, Appearance, Color, Contrast, Scheme, TextSize};
+use bande_graphics::{Accent, Appearance, Color, Contrast, Scheme, Style, TextSize};
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedValue;
 
@@ -92,6 +92,15 @@ fn apply(appearance: &mut Appearance, namespace: &str, key: &str, value: OwnedVa
         }
         (APPEARANCE, "reduced-motion") => {
             appearance.reduce_motion = u32::try_from(&value) == Ok(REDUCE);
+        }
+        (BANDE_APPEARANCE, "style") => {
+            appearance.style = String::try_from(value)
+                .ok()
+                .and_then(|keyword| Style::from_keyword(&keyword))
+                .unwrap_or_default();
+        }
+        (BANDE_APPEARANCE, "reduce-transparency") => {
+            appearance.reduce_transparency = u32::try_from(&value).is_ok_and(|reduce| reduce != 0);
         }
         (BANDE_APPEARANCE, "text-size") => {
             appearance.text_size =

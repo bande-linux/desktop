@@ -80,6 +80,8 @@ assets = [
     ["data/bande-update-check.service", "usr/lib/systemd/user/", "644"],
     ["data/bande-update-check.timer", "usr/lib/systemd/user/", "644"],
     ["data/50-bande-settings.rules", "usr/share/polkit-1/rules.d/", "644"],
+    ["target/release/bande-sharing-helper", "usr/libexec/", "755"],
+    ["data/org.bande.sharing-helper.policy", "usr/share/polkit-1/actions/", "644"],
     ["data/bande-disk-encryption", "usr/libexec/", "755"],
     ["data/bande-disk-encryption.service", "usr/lib/systemd/system/", "644"],
 ]

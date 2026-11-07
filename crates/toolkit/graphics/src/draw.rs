@@ -332,6 +332,25 @@ fn record_item(item: &Item, outlines: &mut GlyphOutlines, ops: &mut Vec<Op>) {
             std_dev: blur_radius / 2.0 * std::f32::consts::SQRT_2,
             color: color(*shadow),
         }),
+        Item::CastShadow {
+            shape,
+            offset,
+            blur_radius,
+            color: shadow,
+        } => {
+            let reach = f64::from(*blur_radius * 4.0 + offset.x.abs() + offset.y.abs());
+            let around = rect(shape.rect).inflate(reach, reach);
+            let mut outside = kurbo::Shape::to_path(&around, TOLERANCE);
+            outside.extend(path(shape).reverse_subpaths().iter());
+            ops.push(Op::Clip(outside));
+            ops.push(Op::Shadow {
+                rect: rect(shape.rect) + Vec2::new(f64::from(offset.x), f64::from(offset.y)),
+                radius: shape.radius,
+                std_dev: blur_radius / 2.0 * std::f32::consts::SQRT_2,
+                color: color(*shadow),
+            });
+            ops.push(Op::End);
+        }
         Item::Text { origin, paragraph } => {
             for run in paragraph.glyph_runs() {
                 record_run(outlines, &run, *origin, ops);

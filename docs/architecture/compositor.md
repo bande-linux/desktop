@@ -93,7 +93,9 @@ when they reach the screen is Bande's own.
   title bar. Everything else in the row is the client's, so free tab-row space stays its own
   move request. Full screen removes the well. The rule is the app id plus client-side, so a build
   that asks for server-side gets a normal title bar, and any other Firefox is left alone.
-- **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers with the
+- **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers, and NV12 for
+  video (one dmabuf for both planes, BT.709 limited range; its planes are copied to two textures
+  and converted in the `video` shader), with the
   LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche
   of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that
   `DrmCompositor` can scan them out. A dma-buf is imported once as a Vulkan buffer and its
@@ -385,4 +387,4 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwlr_output_power_management_v1` | Display power for idle and lock | P1 | implemented |
 | `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, `show_app_menu` to open an app's menus below a window's menu button, `active_menus` (version 4) with the key window's menu address, `open_terminal` (version 5) for `Ctrl+Alt+T`; workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
 | `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 8) for the Move & Resize menu on a toolkit window's zoom control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button | P0 | implemented, every client |
-| `ext-background-effect-v1` | Blur behind the launcher's scrim (the overview's scrim and blur are the compositor's own) | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |
+| `ext-background-effect-v1` | Blur behind the launcher's scrim (the overview's scrim and blur are the compositor's own), and the backdrop of window frames, the Taskbar and menus: the [style](../design/datum.md#styles) decides what fills it (`material.rs` for the wallpaper copy) | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

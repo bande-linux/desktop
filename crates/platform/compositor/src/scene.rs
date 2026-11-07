@@ -859,6 +859,7 @@ pub(crate) struct Closing {
     shadow: Casting,
     pub(crate) motion: Motion,
     pub(crate) output: String,
+    pub(crate) covering: bool,
 }
 
 impl Closing {
@@ -869,6 +870,14 @@ impl Closing {
             shadow: Casting::new(),
             motion,
             output,
+            covering: false,
+        }
+    }
+
+    pub(crate) fn covering(drawn: Drawn, motion: Motion, output: String) -> Self {
+        Self {
+            covering: true,
+            ..Self::new(drawn, motion, output)
         }
     }
 
@@ -887,8 +896,18 @@ impl Closing {
             return Vec::new();
         }
         let shown = look.rect.to_physical(scale);
-        let clip = rounded(shown, shaped_radius(self.drawn.area, shown, scale));
         let alpha = look.alpha as f32;
+        if self.covering {
+            return scaled_pieces(
+                &self.drawn.pieces,
+                self.drawn.area,
+                shown,
+                rounded(shown, 0.0),
+                alpha,
+            )
+            .collect();
+        }
+        let clip = rounded(shown, shaped_radius(self.drawn.area, shown, scale));
         scaled_pieces(&self.drawn.pieces, self.drawn.area, shown, clip, alpha)
             .chain(cast_shadows(
                 &self.shadow,
@@ -907,6 +926,28 @@ pub(crate) fn shaped_radius(area: Area, shown: Area, scale: f64) -> f64 {
         .min(shown.size.h / area.size.h.max(1.0))
         .min(1.0);
     CORNER_RADIUS * scale * shrink
+}
+
+pub(crate) fn drawn_screen(
+    surface: &WlSurface,
+    renderer: &mut VulkanRenderer,
+    rect: Rectangle<f64, Logical>,
+    scale: f64,
+    scheme: Scheme,
+) -> Drawn {
+    let origin = rect.loc.to_physical(scale).to_i32_round::<i32>();
+    let surfaces: Vec<SurfaceElement> =
+        render_elements_from_surface_tree(renderer, surface, origin, scale, 1.0, Kind::Unspecified);
+    Drawn {
+        pieces: pieces_of(&surfaces, scale),
+        context: renderer.context_id(),
+        area: rect.to_physical(scale),
+        look: Look::shown(rect),
+        shading: Shading {
+            active: false,
+            scheme,
+        },
+    }
 }
 
 pub(crate) fn window_elements(

@@ -91,8 +91,9 @@ graph LR
   asks for `Suspend` on a press shorter than the five-second hold when `CanSuspend` is `yes`.
 - Implemented in `crates/shell/lock`: date, time, the user's picture (AccountsService's
   `IconFile`, read off the UI thread; the initial on the accent colour without one) and name
-  and a secure field; PAM (`/etc/pam.d/bande-lock`) runs off the UI thread, and a rejected password clears
-  and shakes the field. `Super+L` and logind's `Lock` signal start it; the compositor sets
+  and a secure field. PAM
+  (`/etc/pam.d/bande-lock`) runs off the UI thread with a progress row if it takes longer than
+  200 ms, and a rejected password clears and shakes the field and says so. `Super+L` and logind's `Lock` signal start it; the compositor sets
   logind's `LockedHint`.
 - Implemented in `crates/services/power` (`bande-power`, a session service): before the
   computer sleeps, the session is locked through logind (`Session.Lock`) while a `delay` sleep
@@ -540,10 +541,50 @@ Bande uses `greetd` for the privileged part of login and keeps its own UI unpriv
    PAM.
 2. **The greeter**: `bande-greeter` is an unprivileged client. It runs as greetd's greeter
    user (`_greetd` on Debian), talks to `greetd` over its JSON IPC socket, and shows the login
-   UI: the user with their picture (as on the lock screen), password field, wallpaper, and
-   later accessibility and power menus.
+   UI, the same screen as the lock (`bande_lock::LockScreen`): date and time, the user's picture
+   and name, password field, the blurred wallpaper, battery, Wi-Fi and input source in the corner,
+   and Sleep, Restart and Shut Down below.
 3. **Handover**: after authentication, `greetd` opens the PAM session through `pam_systemd.so`
    and starts the user's session, which runs `bande-compositor`.
+
+### From power-on to the desktop
+
+The picture never goes black between stages; each one leaves the last on screen until the next has
+something to show.
+
+| Stage | What shows | How |
+|---|---|---|
+| bootloader, U-Boot | the mark, centred on black | the bootloader's logos; U-Boot's console is silent (`silent=1`) until an EFI program starts, or until no boot entry is found, when it lists what it scanned |
+| systemd-boot, kernel | the mark | `timeout 0`; the kernel's console logo (`logo_bande_clut224.ppm`, `fbcon=logo-pos:center`); `quiet` also silences the EFI stub |
+| `apple-drm` binds | the mark again after the display comes up | `bande-display-keeper@<card>` draws it into the console's framebuffer (the kernel's own logo is only drawn during boot and never for a module) |
+| login window | black with the mark, cross-fading to the login window | the compositor holds frames until the greeter is mapped; the greeter draws the same mark and opens once the desktop picture is decoded |
+| session | the picture the login window ended on, then the bar and icons fade in | below |
+
+Plymouth was the alternative: its graphical plugins are in `plymouth-themes`, which brings Pango,
+Cairo, fontconfig and fonts into the initramfs, it needs root to quit after the first frame, and
+it would add a third owner of the display during boot. The console path needs none of this, and
+shows text by itself: the mark sits in the console's own framebuffer, so anything the kernel or
+systemd prints (a failing boot, the emergency shell) appears over it.
+
+Diagnostics stay one key away: holding Space at power-on opens systemd-boot's menu, where each
+kernel has a "(boot messages)" entry without `quiet` (`95-bande-boot-messages.install`);
+`Ctrl+Alt+F2` reaches a text console at any time, and when greetd gives up
+`bande-console-fallback.service` brings the console to the front.
+
+**Keeping a frame through the handover.** Three parts of the kernel would otherwise clear the
+screen when one compositor ends and the next has not drawn: closing the last reference to a
+framebuffer turns its plane off (`drm_fb_release`), closing the last file of the device restores
+the console's framebuffer (`drm_lastclose`), and logind and greetd setting the VT back to `KD_TEXT`
+makes the console repaint. So a compositor leaving the screen closes its framebuffers with
+`DRM_IOCTL_MODE_CLOSEFB`, which leaves them on their planes;
+`bande-display-keeper@<card>` (started by udev per card, unprivileged, asleep in `pause()`) keeps
+the device open with no master; and `fbcon=vc:1-6` leaves VT 7, greetd's, without a console. The
+next compositor takes the master and its first commit replaces the frame, without a modeset when
+the mode is the same. This was checked under QEMU with virtio-gpu; on a system without the kernel
+argument, the keeper or a kernel of at least 6.8, the same steps work with a black gap.
+
+Unlocking is one compositor and needs none of this: the last lock frame stays over the desktop and
+fades out, so input reaches the desktop at once.
 
 Implemented in `crates/shell/greeter`: greetd's IPC inside `bande-compositor --greeter`,
 which runs only the greeter and exits with it. The conversation runs on the greeter's event
@@ -553,7 +594,7 @@ placeholder and takes the next answer; PAM's information and error messages stay
 field until the next attempt or Escape, which also clears the field and cancels a pending
 further prompt. A refused password shakes the field (the `shake` spring) and says so; other
 failures show PAM's or greetd's reason. The field shows a Caps Lock sign while Caps Lock is on
-(`WindowEvent::CapsLock` from the toolkit), and the active keyboard layout under the field when
+(`WindowEvent::CapsLock` from the toolkit), and the active keyboard layout in the top corner when
 the system has several. The greeter compositor applies the system's input settings, so the
 layouts are those localed keeps in `/etc/vconsole.conf` (`XKBLAYOUT`, `XKBVARIANT`), or of
 `/etc/default/keyboard` when that has none; Settings > Keyboard offers "Use at Login Screen",
@@ -612,7 +653,7 @@ mode 0640 is readable by its owner and the login window alone. The greeter opens
 and within the size limit, then decodes it through `/proc/self/fd`, so the file it checked is
 the file it shows; anything else falls back to the bundled default. Also not done: a user picker (Up/Down switches users
 for now), choosing among several sessions, a visible (non-secret) field for PAM's visible
-prompts (they are answered in the secure field), and power and accessibility menus.
+prompts (they are answered in the secure field), and an accessibility menu.
 
 
 ## Crash handling and supervision

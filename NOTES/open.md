@@ -54,8 +54,9 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   journal says "starting the renderer again" when it happens.
 - Footprint on the real GPU: shell and greeter memory, the greeter's unveil after sign-in, the
   shell's PipeWire clients with two displays.
-- Login: the greetd console frame before the greeter (`vt.global_cursor_default=0` or a greetd
-  change), the bar flicker at login, time to desktop.
+- Login: no text and no black from power-on to the desktop on the mini (kernel, cmdline, bootloader
+  and U-Boot of `gap-login-look`), Space at power-on opens the menu and "(boot messages)" boots with
+  text, the bar flicker at login, time to desktop.
 - Apple hardware: DDC/CI through DCP's I2C in `appledrm` (external displays are dimmed by the
   compositor until then; needs reverse engineering of the firmware's calls).
 - Apple hardware: Night Light gamma on the DCP; overlay planes and direct scanout; the

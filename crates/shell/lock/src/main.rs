@@ -72,7 +72,7 @@ impl Locker {
 
     fn check(&mut self, password: Zeroizing<String>) {
         let Ok(mut sender) = self.verdict_sender.try_clone() else {
-            self.screen.reject(frame_time().on_screen());
+            self.screen.reject_password(frame_time().on_screen());
             return;
         };
         let login = self.user.login.clone();
@@ -219,7 +219,7 @@ impl App for Locker {
         if verdict[0] == ACCEPTED {
             self.unlock(window);
         } else {
-            self.screen.reject(frame_time().on_screen());
+            self.screen.reject_password(frame_time().on_screen());
             window.request_redraw();
         }
     }

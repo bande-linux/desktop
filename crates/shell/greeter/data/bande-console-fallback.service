@@ -1,0 +1,7 @@
+[Unit]
+Description=Bring the text console to the front when the login window cannot start
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/chvt 1

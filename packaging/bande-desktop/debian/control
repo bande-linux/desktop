@@ -11,6 +11,7 @@ Architecture: all
 Depends: bande-compositor (= ${binary:Version}),
          bande-config (= ${binary:Version}),
          bande-power (= ${binary:Version}),
+         bande-recovery (= ${binary:Version}),
          bande-sound (= ${binary:Version}),
          bande-notify (= ${binary:Version}),
          bande-clipboard (= ${binary:Version}),

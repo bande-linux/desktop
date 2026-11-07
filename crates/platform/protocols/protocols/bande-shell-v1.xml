@@ -435,7 +435,9 @@
       <description summary="an app still holds a window">
         Sent after quit_all_apps and again whenever the answer changes: how
         many apps still hold a window, and the app id of the frontmost of
-        them. A count of 0 means every app has closed its windows.
+        them. A count of 0 means every app has closed its windows, or that
+        the compositor gave up on those left: a window that has not answered
+        pings and an app without a window are given ten seconds.
       </description>
       <arg name="app_id" type="string"/>
       <arg name="count" type="uint"/>

@@ -69,14 +69,6 @@ enum PowerPress {
     Confirm,
 }
 
-fn ending_of(action: PowerAction) -> Option<Ending> {
-    match action {
-        PowerAction::Sleep => None,
-        PowerAction::Restart => Some(Ending::Restart),
-        PowerAction::ShutDown => Some(Ending::ShutDown),
-    }
-}
-
 pub fn night(appearance: Appearance) -> Palette {
     Appearance {
         scheme: Scheme::Dark,
@@ -667,7 +659,7 @@ impl LockScreen {
             let model = self.model.borrow();
             (model.powers.clone(), model.asking)
         };
-        let row: Vec<Button> = match asking.and_then(ending_of) {
+        let row: Vec<Button> = match asking.and_then(PowerAction::ending) {
             Some(ending) => vec![
                 self.power_button(&L10N.tr("cancel"), PowerPress::Cancel)
                     .cancel(),
@@ -677,7 +669,9 @@ impl LockScreen {
             None => powers
                 .into_iter()
                 .map(|power| {
-                    let title = ending_of(power).map_or_else(|| L10N.tr("sleep"), Ending::button);
+                    let title = power
+                        .ending()
+                        .map_or_else(|| L10N.tr("sleep"), Ending::button);
                     self.power_button(&title, PowerPress::Ask(power))
                 })
                 .collect(),
@@ -702,7 +696,7 @@ impl LockScreen {
     fn ask_power(&mut self, asking: Option<PowerAction>) {
         let mut model = self.model.borrow_mut();
         model.asking = asking;
-        model.message = asking.and_then(ending_of).map(Ending::question);
+        model.message = asking.and_then(PowerAction::ending).map(Ending::question);
         drop(model);
         self.show_power_row();
     }

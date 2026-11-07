@@ -74,6 +74,67 @@ impl Ending {
             Self::LogOut => "anyway-log-out",
         })
     }
+
+    pub fn progress(self) -> String {
+        L10N.tr(match self {
+            Self::Restart => "ending-restart",
+            Self::ShutDown => "ending-shut-down",
+            Self::LogOut => "ending-log-out",
+        })
+    }
+
+    pub fn failed(self) -> String {
+        L10N.tr(match self {
+            Self::Restart => "failed-restart",
+            Self::ShutDown => "failed-shut-down",
+            Self::LogOut => "failed-log-out",
+        })
+    }
+
+    pub fn inhibited(self) -> String {
+        L10N.tr(match self {
+            Self::Restart => "inhibited-restart",
+            Self::ShutDown => "inhibited-shut-down",
+            Self::LogOut => "failed-log-out",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Inhibitor {
+    pub who: String,
+    pub why: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Refusal {
+    Inhibited(Vec<Inhibitor>),
+    Failed(String),
+}
+
+impl Refusal {
+    pub fn explanation(&self) -> String {
+        match self {
+            Self::Inhibited(inhibitors) => inhibitors
+                .iter()
+                .map(|inhibitor| {
+                    L10N.tr_args(
+                        "inhibitor",
+                        [
+                            ("who", inhibitor.who.clone().into()),
+                            ("why", inhibitor.why.clone().into()),
+                        ],
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Self::Failed(reason) => reason.clone(),
+        }
+    }
+}
+
+pub fn try_again() -> String {
+    L10N.tr("try-again")
 }
 
 pub fn quitting_apps() -> String {
@@ -93,13 +154,14 @@ pub enum Stage {
         app_id: String,
     },
     Ending,
+    Refused(Refusal),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     QuitApps,
     Activate(String),
-    End,
+    End { insist: bool },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,20 +193,27 @@ impl SessionEnding {
                 };
                 Some(Effect::QuitApps)
             }
-            Stage::Quitting { .. } | Stage::Blocked { .. } => {
-                self.stage = Stage::Ending;
-                Some(Effect::End)
-            }
+            Stage::Quitting { .. } | Stage::Blocked { .. } => self.end(false),
+            Stage::Refused(Refusal::Inhibited(_)) => self.end(true),
+            Stage::Refused(Refusal::Failed(_)) => self.end(false),
             Stage::Ending => None,
+        }
+    }
+
+    fn end(&mut self, insist: bool) -> Option<Effect> {
+        self.stage = Stage::Ending;
+        Some(Effect::End { insist })
+    }
+
+    pub fn refused(&mut self, refusal: Refusal) {
+        if self.stage == Stage::Ending {
+            self.stage = Stage::Refused(refusal);
         }
     }
 
     pub fn apps_running(&mut self, app_id: String, count: u32, now: Instant) -> Option<Effect> {
         match &mut self.stage {
-            Stage::Quitting { .. } | Stage::Blocked { .. } if count == 0 => {
-                self.stage = Stage::Ending;
-                Some(Effect::End)
-            }
+            Stage::Quitting { .. } | Stage::Blocked { .. } if count == 0 => self.end(false),
             Stage::Quitting { running, .. } => {
                 *running = Some(app_id);
                 self.tick(now)

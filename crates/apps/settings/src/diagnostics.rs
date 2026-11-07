@@ -256,11 +256,11 @@ impl SettingsView {
     pub(crate) fn diagnostics_rows(&mut self) -> Vec<Box<dyn Widget>> {
         let mut rows: Vec<Box<dyn Widget>> = Vec::new();
         let configured = self.diagnostics.configured;
-        let mut set = intent(&self.intents, Intent::SetSendingReports);
+        let set = intent(&self.intents, Intent::SetSendingReports);
         let toggle = Toggle::new(
             &L10N.tr("reports-send-automatically"),
             self.diagnostics.sending,
-            move |on| set(on),
+            set,
         );
         rows.push(boxed(toggle));
         rows.push(muted_row(&L10N.tr(if self.diagnostics.sending {

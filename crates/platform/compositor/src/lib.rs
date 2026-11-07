@@ -68,7 +68,10 @@ pub use app_states::{AppStatesHandle, serve_app_states};
 pub use appearance::{SystemAppearance, follow_appearance};
 pub use assistive::follow_alerts;
 pub use bande_render::{DeviceInfo, RenderError};
-pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};
+pub use clock::{
+    FrameClock, FrameOutput, FrameRecovery, FrameScheduler, Poll, RecoveryStep, SAFETY_MARGIN,
+    Submission, Vblank,
+};
 pub use cursor::{
     ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,
 };

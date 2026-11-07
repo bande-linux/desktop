@@ -480,6 +480,12 @@ impl Client {
         .map(drop)
     }
 
+    pub fn search_names(&self, prefix: &str) -> Result<Vec<Package>, Error> {
+        Ok(self
+            .run("SearchNames", &(FILTER_NONE, [prefix]), &|_| {})?
+            .packages)
+    }
+
     pub fn resolve(&self, names: &[String]) -> Result<Vec<Package>, Error> {
         Ok(self
             .run("Resolve", &(FILTER_NONE, names), &|_| {})?

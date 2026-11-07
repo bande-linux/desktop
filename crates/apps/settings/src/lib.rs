@@ -18,6 +18,7 @@ mod header;
 mod language;
 mod locale;
 mod login;
+mod lookup;
 mod network;
 mod night;
 mod notifications;

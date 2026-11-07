@@ -13,7 +13,7 @@ flate2.workspace = true
 jiff.workspace = true
 ring.workspace = true
 rustix = { workspace = true, features = ["fs", "net"] }
-rustls.workspace = true
+bande-https.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 

@@ -175,6 +175,7 @@ impl Role {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WindowEvent {
+    SpellingAnswered,
     Input(Event),
     Focus(bool),
     CloseRequested,
@@ -499,6 +500,7 @@ impl Window {
         shared_appearance: Option<Rc<RefCell<AppearanceWatch>>>,
         output: Option<String>,
     ) -> Result<Self, WindowError> {
+        crate::spelling::start();
         let fresh = shared_appearance.is_none();
         let appearance = match shared_appearance {
             Some(appearance) => appearance,
@@ -1133,6 +1135,11 @@ impl Window {
                 if let Some((menu, at)) = ui.take_menu_request() {
                     self.show_menu(menu, MenuPlacement::AtPoint(at))?;
                 }
+                if let Some(link) = ui.take_link_request()
+                    && let Err(error) = bande_xdg::open(&link, None)
+                {
+                    tracing::warn!("cannot open a link: {error}");
+                }
                 if let Some(request) = ui.take_clipboard_request() {
                     self.serve_clipboard(request)?;
                 }
@@ -1179,6 +1186,13 @@ impl Window {
             WindowEvent::AppearanceChanged(appearance) => {
                 ui.set_appearance(appearance);
                 (true, Some(WindowEvent::AppearanceChanged(appearance)))
+            }
+            WindowEvent::SpellingAnswered => {
+                ui.spelling_answered();
+                if let Some((menu, at)) = ui.take_menu_request() {
+                    self.show_menu(menu, MenuPlacement::AtPoint(at))?;
+                }
+                (true, None)
             }
             WindowEvent::CapsLock(on) => {
                 ui.context().caps_lock = on;

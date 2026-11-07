@@ -139,6 +139,7 @@ pub(crate) enum Intent {
     DefaultApp(&'static str, String),
     Grant(Permission, String, bool),
     KeyboardAccess(String, bool),
+    Spelling(crate::spelling::SpellingCommand),
     Passwords(PasswordCommand),
     PasswordQuery(String),
     ChangePassword(Option<String>),
@@ -291,6 +292,7 @@ pub struct SettingsView {
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
     pub(crate) permissions: Grants,
     pub(crate) keyboard_access: Vec<crate::consent::KeyboardAccess>,
+    pub(crate) spelling: crate::spelling::SpellingState,
     pub(crate) security: crate::security_status::SecurityStatus,
     pub(crate) keychain: Keychain,
     stale: bool,
@@ -391,6 +393,7 @@ impl SettingsView {
             default_apps: None,
             permissions: Vec::new(),
             keyboard_access: Vec::new(),
+            spelling: Default::default(),
             security: crate::security_status::SecurityStatus::default(),
             keychain: Keychain::default(),
             stale: true,
@@ -817,6 +820,7 @@ impl SettingsView {
                 self.sharing = Some(state);
             }
             Update::KeyboardAccess(access) => self.keyboard_access = access,
+            Update::Spelling(state) => self.spelling = state,
             Update::Security(status) => self.security = status,
             Update::Printers(printers) => {
                 if let Some(Detail::Printer(id)) = &self.detail
@@ -1372,6 +1376,7 @@ impl SettingsView {
                 }
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
                 Intent::KeyboardAccess(line, on) => self.change_keyboard_access(line, on),
+                Intent::Spelling(command) => self.change_spelling(command),
                 Intent::Passwords(command) => self.password_command(command),
                 Intent::PasswordQuery(query) => {
                     self.keychain.query = query;
@@ -1627,6 +1632,9 @@ impl SettingsView {
         if let Some(locale) = &mut self.locale {
             match &command {
                 LocaleCommand::Language(language) => {
+                    self.commands.push(Command::Spelling(
+                        crate::spelling::SpellingCommand::GetDictionary(language.clone()),
+                    ));
                     language.clone_into(&mut locale.language);
                     locale.pending = Some(SettingId::Language);
                 }

@@ -225,7 +225,8 @@ impl FilesView {
         let send = sender(&self.signals);
         let address = TextField::new(&L10N.tr("server-address-hint"), &request.url, move |text| {
             send(Signal::Server(ServerField::Address(text.to_owned())));
-        });
+        })
+        .without_text_checking();
         let send = sender(&self.signals);
         let reconnect = Checkbox::new(
             &L10N.tr("server-reconnect"),
@@ -424,7 +425,8 @@ impl FilesView {
         let send = sender(&self.signals);
         let name = TextField::new(&L10N.tr("server-user"), user, move |text| {
             send(Signal::Server(ServerField::User(text.to_owned())));
-        });
+        })
+        .without_text_checking();
         let edit = sender(&self.signals);
         let submit = sender(&self.signals);
         let password = SecureField::new(&L10N.tr("server-password"), FIELD_SIZE, move |_: &str| {

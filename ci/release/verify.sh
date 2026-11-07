@@ -25,7 +25,7 @@ packages() {
     case $1 in
         lint) echo curl ca-certificates shellcheck ;;
         test) echo libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin at-spi2-core libfontconfig1 \
-            libwayland-client0 procps fonts-inter pipewire-bin ;;
+            libwayland-client0 procps fonts-inter ;;
         debs) echo dpkg-dev libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin systemd dbus-user-session ;;
         all) echo build-essential debhelper dpkg-dev lintian ;;
     esac

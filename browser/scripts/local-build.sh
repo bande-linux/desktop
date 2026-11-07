@@ -23,7 +23,7 @@ in_chroot() {
         mount --rbind /dev "$c/dev"
         for m in repo work out; do mkdir -p "$c/$m"; mount --bind "$d/$m" "$c/$m"; done
         cp /etc/resolv.conf "$c/etc/resolv.conf"
-        exec /usr/sbin/chroot "$c" env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LANG=C.UTF-8 BROWSER_JOBS="${BROWSER_JOBS:-}" "$@"
+        exec /usr/sbin/chroot "$c" env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LANG=C.UTF-8 BROWSER_JOBS="${BROWSER_JOBS:-}" BROWSER_RUST_LTO="${BROWSER_RUST_LTO:-}" "$@"
     ' "$dir" "$@"
 }
 

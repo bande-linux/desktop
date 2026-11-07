@@ -27,8 +27,10 @@ compile)
     cd "$src"
     apt-get build-dep -y -qq . > /dev/null
     jobs=${BROWSER_JOBS:-$(nproc)}
+    start_note="jobs $jobs, Rust ${BROWSER_RUST_LTO:--Clto=thin}"
+    echo "build: $start_note"
     start=$SECONDS
-    DEB_BUILD_OPTIONS="parallel=$jobs nocheck" DEBIAN_RUST_LTO=-Clto=thin dpkg-buildpackage -B -uc -us -nc
+    DEB_BUILD_OPTIONS="parallel=$jobs nocheck" DEBIAN_RUST_LTO=${BROWSER_RUST_LTO:--Clto=thin} dpkg-buildpackage -B -uc -us -nc
     echo "build: $(( (SECONDS - start) / 60 )) min"
     mkdir -p "$out"
     cp "$work"/bande-browser_"$version"_*.deb "$out/"

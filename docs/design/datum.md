@@ -138,7 +138,7 @@ Settings ▸ Appearance ▸ Style, `style` in `config.kdl`. The tokens live in `
 
 - **The material is only ever behind the frame.** The sheet is opaque and declared so, which also spares the compositor drawing under it.
 - **Readable over anything.** The backdrop's luminance is limited before the frame goes on it, to at most .16 in dark and at least .60 in light. That bound gives `ink` ≥ 7:1, `ink2` ≥ 4.5:1 and `ink3` ≥ 3:1 over any picture; a test in the design crate enumerates it.
-- **Glass** draws the blur only where a frame shows: the sheet is declared opaque and so culled, which means content changing inside a window does not redo the blur behind its frame unless the frame's own area changes.
+- **Glass** draws the blur only where a frame shows: the sheet is declared opaque and so culled, which means content changing inside a window does not redo the blur behind that window's own frame. A window changing under another window's blur, or within 24 pt of it, does redo that blur for the whole of the other window.
 - **Wallpaper-Lit** keeps a 480 pixel wide picture per display, blurred and saturated 1.35× once on a worker thread, and makes it again only when the wallpaper, the scheme or the display changes. Nothing redraws at idle.
 - **Reduce Transparency and Increase Contrast** make every style solid.
 - **Third-party windows.** GTK and Qt apps draw their own frames, and server-side title bars use opaque `chassis`, so those stay solid in every style.

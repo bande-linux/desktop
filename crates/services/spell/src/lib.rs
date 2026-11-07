@@ -2,4 +2,4 @@ mod dictionaries;
 mod service;
 mod store;
 
-pub use service::{BUS_NAME, OBJECT_PATH, Spell, serve};
+pub use service::{BUS_NAME, Engine, OBJECT_PATH, Spell, serve};

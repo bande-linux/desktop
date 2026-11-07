@@ -1,42 +1,43 @@
 Ask for a search engine on first launch: no default until the user picks one
 
---- a/browser/base/content/bande-search-choice.js
-+++ b/browser/base/content/bande-search-choice.js
-@@ -0,0 +1,26 @@
+--- /dev/null
++++ firefox-esr-153.6.0esr/browser/base/content/bande-search-choice.js
+@@ -0,0 +1,27 @@
 +/* This Source Code Form is subject to the terms of the Mozilla Public
 + * License, v. 2.0. If a copy of the MPL was not distributed with this
 + * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 +
 +"use strict";
 +
++const { SearchService } = ChromeUtils.importESModule(
++  "moz-src:///toolkit/components/search/SearchService.sys.mjs"
++);
++
 +window.addEventListener("DOMContentLoaded", async () => {
 +  document.getElementById("none").addEventListener("click", () => window.close());
 +  const list = document.getElementById("engines");
-+  for (const engine of await Services.search.getVisibleEngines()) {
++  for (const engine of await SearchService.getVisibleEngines()) {
 +    if (engine.id.startsWith("wikipedia")) {
 +      continue;
 +    }
 +    const button = document.createElement("button");
 +    button.textContent = engine.name;
 +    button.addEventListener("click", async () => {
-+      await Services.search.setDefault(
-+        engine,
-+        Ci.nsISearchService.CHANGE_REASON_USER
-+      );
++      await SearchService.setDefault(engine, SearchService.CHANGE_REASON.USER);
 +      Services.prefs.setBoolPref("keyword.enabled", true);
 +      window.close();
 +    });
 +    list.append(button);
 +  }
 +});
---- a/browser/base/content/bande-search-choice.xhtml
-+++ b/browser/base/content/bande-search-choice.xhtml
+--- /dev/null
++++ firefox-esr-153.6.0esr/browser/base/content/bande-search-choice.xhtml
 @@ -0,0 +1,23 @@
 +<?xml version="1.0"?>
 +<!-- This Source Code Form is subject to the terms of the Mozilla Public
 +   - License, v. 2.0. If a copy of the MPL was not distributed with this
 +   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
-+<html xmlns="http://www.w3.org/1999/xhtml" style="width: 28em">
++<html xmlns="http://www.w3.org/1999/xhtml" style="width: 28em; height: 30em">
 +  <head>
 +    <title>Choose a search engine</title>
 +    <link rel="stylesheet" href="chrome://global/skin/global.css" />
@@ -55,9 +56,9 @@ Ask for a search engine on first launch: no default until the user picks one
 +    <button id="none">Don't use a search engine for now</button>
 +  </body>
 +</html>
---- a/browser/base/content/browser-init.js
-+++ b/browser/base/content/browser-init.js
-@@ -473,6 +473,25 @@
+--- firefox-esr-153.6.0esr.orig/browser/base/content/browser-init.js
++++ firefox-esr-153.6.0esr/browser/base/content/browser-init.js
+@@ -473,6 +473,25 @@ var gBrowserInit = {
      this._boundDelayedStartup = null;
    },
  
@@ -83,7 +84,7 @@ Ask for a search engine on first launch: no default until the user picks one
    _delayedStartup() {
      Glean.browserTimings.startupTimeline.delayedStartupStarted.set(
        Services.telemetry.msSinceProcessStart()
-@@ -804,6 +823,8 @@
+@@ -804,6 +823,8 @@ var gBrowserInit = {
        document.documentElement.setAttribute("sessionrestored", "true");
      });
  
@@ -92,9 +93,9 @@ Ask for a search engine on first launch: no default until the user picks one
      this.delayedStartupFinished = true;
      _resolveDelayedStartup();
      Services.obs.notifyObservers(window, "browser-delayed-startup-finished");
---- a/browser/base/jar.mn
-+++ b/browser/base/jar.mn
-@@ -46,6 +46,8 @@
+--- firefox-esr-153.6.0esr.orig/browser/base/jar.mn
++++ firefox-esr-153.6.0esr/browser/base/jar.mn
+@@ -46,6 +46,8 @@ browser.jar:
          content/browser/browser-fullScreenAndPointerLock.js (content/browser-fullScreenAndPointerLock.js)
          content/browser/browser-gestureSupport.js           (content/browser-gestureSupport.js)
          content/browser/browser-init.js                     (content/browser-init.js)

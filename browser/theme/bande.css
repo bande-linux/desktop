@@ -23,37 +23,37 @@
     --bande-ink3: #8D9198;
     --bande-danger: #CF4040;
   }
-  --toolbox-bgcolor: var(--bande-chassis);
-  --toolbox-bgcolor-inactive: var(--bande-chassis);
-  --toolbox-textcolor: var(--bande-ink);
-  --toolbox-textcolor-inactive: var(--bande-ink3);
-  --toolbar-bgcolor: var(--bande-chassis);
-  --toolbar-color: var(--bande-ink);
-  --toolbarbutton-icon-fill: var(--bande-ink2);
-  --toolbarbutton-border-radius: 6px;
-  --chrome-content-separator-color: transparent;
-  --toolbarseparator-color: var(--bande-hairline);
-  --urlbar-box-bgcolor: var(--bande-well);
-  --urlbar-box-focus-bgcolor: var(--bande-sheet);
-  --urlbar-box-hover-bgcolor: var(--bande-well);
-  --urlbar-box-text-color: var(--bande-ink);
-  --toolbar-field-background-color: var(--bande-well);
-  --toolbar-field-focus-background-color: var(--bande-sheet);
-  --toolbar-field-color: var(--bande-ink);
-  --toolbar-field-focus-color: var(--bande-ink);
-  --toolbar-field-border-color: transparent;
-  --focus-outline-color: var(--bande-accent);
-  --tab-selected-bgcolor: var(--bande-sheet);
-  --tab-selected-textcolor: var(--bande-ink);
-  --tab-hover-background-color: var(--bande-well);
-  --tab-border-radius: 8px;
-  --arrowpanel-background: var(--bande-overlay);
-  --arrowpanel-color: var(--bande-ink);
-  --arrowpanel-border-color: var(--bande-hairline);
-  --arrowpanel-border-radius: 10px;
-  --panel-background: var(--bande-overlay);
-  --panel-color: var(--bande-ink);
-  --font-family-system: Inter, sans-serif;
+  --toolbox-bgcolor: var(--bande-chassis) !important;
+  --toolbox-bgcolor-inactive: var(--bande-chassis) !important;
+  --toolbox-textcolor: var(--bande-ink) !important;
+  --toolbox-textcolor-inactive: var(--bande-ink3) !important;
+  --toolbar-bgcolor: var(--bande-chassis) !important;
+  --toolbar-color: var(--bande-ink) !important;
+  --toolbarbutton-icon-fill: var(--bande-ink2) !important;
+  --toolbarbutton-border-radius: 6px !important !important;
+  --chrome-content-separator-color: transparent !important !important;
+  --toolbarseparator-color: var(--bande-hairline) !important;
+  --urlbar-box-bgcolor: var(--bande-well) !important;
+  --urlbar-box-focus-bgcolor: var(--bande-sheet) !important;
+  --urlbar-box-hover-bgcolor: var(--bande-well) !important;
+  --urlbar-box-text-color: var(--bande-ink) !important;
+  --toolbar-field-background-color: var(--bande-well) !important;
+  --toolbar-field-focus-background-color: var(--bande-sheet) !important;
+  --toolbar-field-color: var(--bande-ink) !important;
+  --toolbar-field-focus-color: var(--bande-ink) !important;
+  --toolbar-field-border-color: transparent !important !important;
+  --focus-outline-color: var(--bande-accent) !important;
+  --tab-selected-bgcolor: var(--bande-sheet) !important;
+  --tab-selected-textcolor: var(--bande-ink) !important;
+  --tab-hover-background-color: var(--bande-well) !important;
+  --tab-border-radius: 8px !important !important;
+  --arrowpanel-background: var(--bande-overlay) !important;
+  --arrowpanel-color: var(--bande-ink) !important;
+  --arrowpanel-border-color: var(--bande-hairline) !important;
+  --arrowpanel-border-radius: 10px !important !important;
+  --panel-background: var(--bande-overlay) !important;
+  --panel-color: var(--bande-ink) !important;
+  --font-family-system: Inter, sans-serif !important !important;
 }
 
 #navigator-toolbox { border-bottom: none; }
@@ -62,3 +62,4 @@
 .tab-label { font-size: 13px; }
 menupopup, panel { --panel-border-radius: 10px; }
 menuitem, menu { border-radius: 6px; min-height: 28px; }
+#TabsToolbar, #nav-bar, #PersonalToolbar, #navigator-toolbox { background: var(--bande-chassis) !important; color: var(--bande-ink) !important; }

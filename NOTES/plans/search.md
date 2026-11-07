@@ -28,6 +28,8 @@ Measured on 106,692 files, 1.6 GB of text (the kernel tree), top 40 by relevance
 
 Search runs on each keystroke, so query speed decides, and saves are batched anyway. tantivy is built without its zstd C code; it adds about 50 pure Rust crates and only this service links it.
 
+The service itself, on 11,441 files and 85 MB of text with a PDF among them: indexed in about 6 s into 20 MiB; 21.6 MiB private memory and no context switches in 60 s once idle; every search under 10 ms measured from the shell, process start included.
+
 - **fanotify**: a whole-filesystem mark needs `CAP_SYS_ADMIN`, so a privileged helper reading everyone's file events to spare one user a watch per folder. Unprivileged fanotify offers only per-inode marks, the same as inotify. Not worth the attack surface.
 - **Apps' stores read directly** (the indexer opens Mail's SQLite file): ties a desktop service to each app's schema, across repositories, and breaks silently.
 - **Asking apps at query time** (GNOME's search providers): starts Mail on a keystroke, and is only as fast as the slowest app.

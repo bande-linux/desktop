@@ -6,8 +6,8 @@ time targets are in [`../decisions/0001-rendering.md`](../decisions/0001-renderi
 ## How to measure
 
 Measure when a change is about memory, CPU or wake-ups: before and after, with release builds of
-both sides from the same worktree and its own target directory, under the build lock
-(`flock ~/bande-linux/kbuild.lock ~/bande-linux/bin/gentle …` on the build machine). Live numbers
+both sides from the same worktree and its own target directory, on the mini
+(`build-run --here <worktree> …`, so that the numbers are this machine's). Live numbers
 on the mini are read from `/proc` only; nothing restarts the owner's session. The tools are in
 `crates/testing/bench` and run on a headless compositor inside a private bus, so they never
 reach a running session.

@@ -15,3 +15,4 @@ librewolf/remove-organization-policy-banner.patch
 librewolf/firefox-view.patch
 librewolf/hide-finish-setup-bookmark.patch
 bande/search-choice.patch
+bande/disconnect-startup.patch

@@ -1,0 +1,120 @@
+Disconnect promos, VPN, AI, report-broken-site, Suggest, DoH rollout and usage telemetry from startup
+
+--- a/browser/components/BrowserComponents.manifest
++++ b/browser/components/BrowserComponents.manifest
+@@ -15,7 +15,6 @@
+ category browser-before-ui-startup resource:///modules/sessionstore/SessionStore.sys.mjs SessionStore.init
+ category browser-before-ui-startup resource:///modules/BuiltInThemes.sys.mjs BuiltInThemes.maybeInstallActiveBuiltInTheme
+ #ifdef MOZ_NORMANDY
+-category browser-before-ui-startup resource://normandy/Normandy.sys.mjs Normandy.init
+ #endif
+ category browser-before-ui-startup moz-src:///browser/components/privatebrowsing/ResetPBMPanel.sys.mjs ResetPBMPanel.init
+ category browser-before-ui-startup resource:///modules/AboutHomeStartupCache.sys.mjs AboutHomeStartupCache.init
+@@ -59,8 +58,6 @@
+ 
+ category browser-window-delayed-startup moz-src:///browser/components/contentanalysis/content/ContentAnalysis.sys.mjs ContentAnalysis.initialize
+ category browser-window-delayed-startup resource:///modules/HomePage.sys.mjs HomePage.delayedStartup
+-category browser-window-delayed-startup moz-src:///browser/components/genai/LinkPreview.sys.mjs LinkPreview.init
+-category browser-window-delayed-startup moz-src:///browser/components/reportbrokensite/ReportBrokenSite.sys.mjs ReportBrokenSite.init
+ category browser-window-delayed-startup moz-src:///browser/components/search/SearchUIUtils.sys.mjs SearchUIUtils.init
+ category browser-window-delayed-startup resource:///modules/taskbartabs/TaskbarTabsPageAction.sys.mjs TaskbarTabsPageAction.init
+ 
+@@ -70,14 +67,12 @@
+ category browser-window-location-change chrome://browser/content/browser-pageActions.js BrowserPageActions.onLocationChange
+ category browser-window-location-change moz-src:///browser/components/urlbar/UrlbarProviderSearchTips.sys.mjs UrlbarProviderSearchTips.onLocationChange
+ category browser-window-location-change moz-src:///browser/components/urlbar/ActionsProviderContextualSearch.sys.mjs ActionsProviderContextualSearch.onLocationChange
+-category browser-window-location-change resource:///modules/asrouter/CFRPageActions.sys.mjs CFRPageActions.onLocationChange
+ category browser-window-location-change resource:///actors/AboutReaderParent.sys.mjs AboutReaderParent.onLocationChange
+ category browser-window-location-change resource://gre/actors/TranslationsParent.sys.mjs TranslationsParent.onLocationChange
+ category browser-window-location-change resource://gre/modules/PictureInPicture.sys.mjs PictureInPicture.onLocationChange
+ 
+ category browser-window-unload-begin chrome://browser/content/browser-customtitlebar.js CustomTitlebar.uninit
+ category browser-window-unload-begin moz-src:///browser/themes/ToolbarIconColor.sys.mjs ToolbarIconColor.uninit
+-category browser-window-unload-begin moz-src:///browser/components/reportbrokensite/ReportBrokenSite.sys.mjs ReportBrokenSite.uninit
+ category browser-window-unload-begin chrome://browser/content/browser.js gUIDensity.uninit
+ 
+ category browser-window-unload chrome://browser/content/downloads/indicator.js DownloadsButton.uninit
+@@ -107,12 +102,9 @@
+ category browser-first-window-ready resource://gre/modules/PageThumbs.sys.mjs PageThumbs.init
+ category browser-first-window-ready resource://gre/modules/NewTabUtils.sys.mjs NewTabUtils.init
+ category browser-first-window-ready resource:///modules/PageActions.sys.mjs PageActions.init
+-category browser-first-window-ready moz-src:///toolkit/components/doh/DoHController.sys.mjs DoHController.init
+ category browser-first-window-ready moz-src:///toolkit/profile/ProfilesDatastoreService.sys.mjs ProfilesDatastoreService.init
+ category browser-first-window-ready resource:///modules/profiles/SelectableProfileService.sys.mjs SelectableProfileService.init
+ category browser-first-window-ready moz-src:///browser/components/protections/ContentBlockingPrefs.sys.mjs ContentBlockingPrefs.init
+-category browser-first-window-ready resource://gre/modules/CaptchaDetectionPingUtils.sys.mjs CaptchaDetectionPingUtils.init
+-category browser-first-window-ready moz-src:///browser/components/ipprotection/IPProtectionHelpers.sys.mjs IPProtectionActivator.init
+ category browser-first-window-ready moz-src:///browser/components/customizableui/SearchWidgetTracker.sys.mjs SearchWidgetTracker.init
+ #ifdef MOZ_SANDBOX
+ #ifdef XP_LINUX
+@@ -128,8 +120,6 @@
+ category browser-idle-startup resource://gre/modules/Blocklist.sys.mjs Blocklist.loadBlocklistAsync
+ category browser-idle-startup resource://gre/modules/psm/RemoteSecuritySettings.sys.mjs RemoteSecuritySettings.init
+ category browser-idle-startup moz-src:///browser/components/tabbrowser/TabUnloader.sys.mjs TabUnloader.init
+-category browser-idle-startup resource:///modules/GenAI.sys.mjs GenAI.init
+-category browser-idle-startup moz-src:///browser/components/urlbar/QuickSuggest.sys.mjs QuickSuggest.init
+ category browser-idle-startup moz-src:///browser/components/urlbar/UrlbarSearchTermsPersistence.sys.mjs UrlbarSearchTermsPersistence.init
+ category browser-idle-startup moz-src:///browser/components/search/SERPCategorization.sys.mjs SERPCategorization.init
+ category browser-idle-startup resource://gre/modules/ContentRelevancyManager.sys.mjs ContentRelevancyManager.init
+@@ -149,25 +139,18 @@
+ 
+ # Note that these telemetry entries schedule their own idle tasks,
+ # so they are guaranteed to run after everything else.
+-category browser-idle-startup moz-src:///browser/components/StartupTelemetry.sys.mjs StartupTelemetry.browserIdleStartup
+-category browser-best-effort-idle-startup moz-src:///browser/components/StartupTelemetry.sys.mjs StartupTelemetry.bestEffortIdleStartup
+ 
+ # App shutdown consumers
+-category browser-quit-application-granted resource:///modules/BrowserUsageTelemetry.sys.mjs BrowserUsageTelemetry.uninit
+ category browser-quit-application-granted moz-src:///browser/components/places/Interactions.sys.mjs Interactions.uninit
+ category browser-quit-application-granted moz-src:///browser/components/pagedata/PageDataService.sys.mjs PageDataService.uninit
+ category browser-quit-application-granted resource://gre/modules/PageThumbs.sys.mjs PageThumbs.uninit
+ category browser-quit-application-granted resource://gre/modules/NewTabUtils.sys.mjs NewTabUtils.uninit
+-category browser-quit-application-granted resource://normandy/Normandy.sys.mjs Normandy.uninit
+ category browser-quit-application-granted resource://gre/modules/RFPHelper.sys.mjs RFPHelper.uninit
+-category browser-quit-application-granted resource:///modules/asrouter/ASRouterNewTabHook.sys.mjs ASRouterNewTabHook.destroy
+ category browser-quit-application-granted moz-src:///browser/components/search/SERPCategorization.sys.mjs SERPCategorization.uninit
+-category browser-quit-application-granted moz-src:///browser/components/search/SearchSERPTelemetry.sys.mjs SearchSERPTelemetry.uninit
+ #ifdef MOZ_UPDATER
+ category browser-quit-application-granted resource://gre/modules/UpdateListener.sys.mjs UpdateListener.reset
+ #endif
+ category browser-quit-application-granted moz-src:///browser/components/urlbar/UrlbarSearchTermsPersistence.sys.mjs UrlbarSearchTermsPersistence.uninit
+-category browser-quit-application-granted moz-src:///browser/components/ipprotection/IPProtectionHelpers.sys.mjs IPProtectionActivator.uninit
+ 
+ category search-service-notification moz-src:///browser/components/search/SearchUIUtils.sys.mjs SearchUIUtils.showSearchServiceNotification
+ 
+--- a/browser/components/BrowserGlue.sys.mjs
++++ b/browser/components/BrowserGlue.sys.mjs
+@@ -1208,13 +1208,6 @@
+       },
+ 
+       {
+-        name: "ASRouterNewTabHook.createInstance",
+-        task: () => {
+-          lazy.ASRouterNewTabHook.createInstance(lazy.ASRouterDefaultConfig());
+-        },
+-      },
+-
+-      {
+         name: "BackgroundUpdate",
+         condition: AppConstants.MOZ_UPDATE_AGENT && AppConstants.MOZ_UPDATER,
+         task: async () => {
+@@ -1786,6 +1779,9 @@
+       lazy.DefaultBrowserCheck.prompt(win);
+     }
+ 
++    if (lazy.ASRouter) {
++      return;
++    }
+     await lazy.ASRouter.waitForInitialized;
+     await lazy.ASRouter.sendTriggerMessage({
+       browser: lazy.BrowserWindowTracker.getTopWindow({
+--- a/browser/extensions/moz.build
++++ b/browser/extensions/moz.build
+@@ -4,7 +4,6 @@
+ 
+ DIRS += [
+     "formautofill",
+-    "ipp-activator",
+     "webcompat",
+     "pictureinpicture",
+     "search-detection",

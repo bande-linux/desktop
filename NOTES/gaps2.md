@@ -51,9 +51,6 @@ Status: started, branch gap-search-shortcut.
 bande-browser icon is like a safari clone but we own our own design theme and should stick to that now clone apple.
 Status: started, branch gap-browser-icon.
 
-there is no point in having: Current releases on https://bande-linux.github.io if since they are not updated. I stripped down moreof the website because it contained alot of unneeded information. Remove this also.
-Status: started.
-
 Passwords (keyring) cant be unlocked from Settings->Passwords. When failing to unlock the text "Couldnt make this change" stick to the settings window in all tabs no matter what view i go to.
 Status: started, branch gap-passwords.
 

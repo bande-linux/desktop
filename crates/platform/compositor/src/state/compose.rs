@@ -18,8 +18,8 @@ use smithay::wayland::compositor::with_states;
 use smithay::wayland::shell::wlr_layer::Layer;
 
 use crate::scene::{
-    Behind, Closing, Drawn, Shading, preview_elements, scrim, surface_blurs,
-    tie_blurs_to_what_lies_below, window_elements,
+    Closing, Drawn, Shading, preview_elements, surface_blurs, tie_blurs_to_what_lies_below,
+    window_elements,
 };
 use crate::window::Window;
 

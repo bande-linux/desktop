@@ -541,6 +541,12 @@ pub enum Item {
         blur_radius: f32,
         color: Color,
     },
+    CastShadow {
+        shape: Shape,
+        offset: Point,
+        blur_radius: f32,
+        color: Color,
+    },
     Text {
         origin: Point,
         paragraph: Paragraph,
@@ -608,7 +614,7 @@ impl Item {
     pub fn shadows(shape: Shape, elevation: Elevation, scheme: Scheme, active: bool) -> [Self; 2] {
         elevation
             .shadows(scheme, active)
-            .map(|shadow| Self::Shadow {
+            .map(|shadow| Self::CastShadow {
                 shape,
                 offset: Point::new(0.0, shadow.offset),
                 blur_radius: shadow.blur,

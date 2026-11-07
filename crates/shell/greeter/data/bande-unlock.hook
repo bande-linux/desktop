@@ -5,6 +5,8 @@ case "$1" in
 prereqs) prereqs; exit 0 ;;
 esac
 
+grep -q '^bande-root[[:space:]]' /etc/crypttab 2>/dev/null || exit 0
+
 . /usr/share/initramfs-tools/hook-functions
 
 copy_exec /usr/libexec/bande-unlock /usr/libexec

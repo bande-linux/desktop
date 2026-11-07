@@ -93,6 +93,7 @@ impl Compositor {
         self.state
             .screens
             .iter()
+            .filter(|screen| !screen.parked)
             .map(|screen| {
                 let config = &screen.config;
                 (

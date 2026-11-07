@@ -88,7 +88,7 @@ fn list_rest(request: Request, sender: &Sender<Listed>, signal: &UnixStream) -> 
                 id,
                 entries,
                 done,
-                failed: None,
+                failed: listing.failure(),
             })
             .is_err()
         {

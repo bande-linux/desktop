@@ -7,6 +7,7 @@ pub use toplevel::PopupRequest;
 pub use wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment;
 mod drive;
 mod ime;
+pub mod keys;
 mod lock;
 mod seat;
 mod separate;
@@ -20,7 +21,6 @@ use std::os::unix::net::UnixStream;
 pub use bande_compositor::Compositor;
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_compositor::WlCompositor;
-use wayland_client::protocol::wl_output::Transform;
 use wayland_client::protocol::wl_registry::{self, WlRegistry};
 use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
@@ -72,7 +72,6 @@ struct Globals {
     toplevels: toplevel::Toplevels,
     lock: lock::SessionLock,
     input_method: ime::InputMethod,
-    shell_events: Vec<String>,
 }
 
 pub struct TestClient {
@@ -142,10 +141,6 @@ impl TestClient {
         let surface = self.windows[index].0.clone();
         self.attach(&surface, image, damage);
         self.connection.flush().expect("client flush");
-    }
-
-    pub fn set_buffer_transform(&self, index: usize, transform: Transform) {
-        self.windows[index].0.set_buffer_transform(transform);
     }
 
     fn attach(

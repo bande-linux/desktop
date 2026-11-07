@@ -773,7 +773,7 @@ impl State {
             state.run(Shortcut::Bound(action, Key::Tap));
         }
         let after = keyboard.modifier_state();
-        if after.alt != before.alt && state.has_server_side_frames() {
+        if after.alt != before.alt && state.has_compositor_controls() {
             state.needs_redraw = true;
         }
         if (after.ctrl, after.shift) != (before.ctrl, before.shift) {

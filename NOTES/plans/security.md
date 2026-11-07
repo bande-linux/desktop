@@ -11,11 +11,12 @@ assistant, `fix-update-safety` the btrfs layout inside the LUKS volume, `fix-bac
 | 2 | Someone at a locked Mac, or a program acting while it is locked | virtual keyboard types into the lock field; input method can feed it | nothing but the lock client's own wl_keyboard reaches the lock surface; `bande-lock` gets its own role | yes |
 | 3 | A sandboxed app (Flatpak) | reads every key, types anywhere, reconfigures displays, overlays the screen | `wp_security_context_v1`; privileged protocols refused unless consented | yes |
 | 4 | Others on the network | SSH with password login is on in the image; LLMNR answers | SSH off until asked for (Remote Login, key or password chosen there); LLMNR off; firewall below | yes |
-| 5 | A hostile unsandboxed program of the user's | everything the user can reach | raises the bar only: the same gates, consent kept where the user cannot write, `yama.ptrace_scope=1`, private session-bus services restricted | **no** |
+| 5 | A hostile unsandboxed program of the user's | everything the user can reach | raises the bar only: the same gates, consent kept where the user cannot write, `yama.ptrace_scope=1` | **no** |
 | 6 | Whoever tampers with updates | | apt signatures, audited below | yes |
 | 7 | Evil maid: changes the unencrypted boot files while the Mac is away | the passphrase on next boot | none. The chain after Apple's firmware is unsigned and the SEP is out of reach. Stated in the pane | not covered |
 
-Row 5 stays honest. A program running as you can edit your `~/.profile` and be inside your next
+Clipboard history over the session bus stays open to unsandboxed callers: its files are readable by
+the same user anyway, and a sandbox never reaches that bus. Row 5 stays honest. A program running as you can edit your `~/.profile` and be inside your next
 session; Linux has no SIP. Nothing in Settings may claim otherwise. Sandboxes and root-owned consent
 are what we have; macOS-level containment of unsandboxed apps is not reachable.
 
@@ -128,6 +129,6 @@ what native apps can reach.
 
 1. Input method and virtual keyboard gate, lock role, security context, secure input.
 2. Consent store, helper, notification, pane.
-3. Remaining gates: overlays, displays, idle; clipboard history; ptrace scope; SSH and LLMNR defaults.
+3. Remaining gates: overlays, displays, idle; ptrace scope; SSH and LLMNR defaults.
 4. Disk: helper, keyscript, `bande-unlock`, proven in QEMU, with first-run and update-safety.
 5. One password; firewall; signed-update audit results in the pane.

@@ -354,11 +354,7 @@ impl MenuPanel {
                 shape: outline,
                 paint: palette.overlay.into(),
             },
-            Item::Stroke {
-                shape: Shape::rounded(outline.rect.inset(0.25), MENU_RADIUS - 0.25),
-                width: 0.5,
-                paint: palette.hairline.into(),
-            },
+            Item::lit_edge(outline, palette),
         ];
         match &self.search {
             Some(SearchLook::Query(query)) => self.paint_query(query, palette, &mut items),

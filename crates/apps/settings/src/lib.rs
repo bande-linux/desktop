@@ -28,6 +28,7 @@ mod printers;
 mod privacy;
 mod privilege;
 mod services;
+mod sharing;
 mod software;
 mod state;
 mod storage;

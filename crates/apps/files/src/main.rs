@@ -1128,6 +1128,12 @@ impl Files {
                     tracing::warn!("cannot show the menu: {error}");
                 }
             }
+            Request::Compose { app, arguments } => {
+                let token = window.activation_token(app.app_id()).ok();
+                if let Err(error) = launch_with_arguments(&app, &arguments, token.as_deref()) {
+                    tracing::warn!("cannot write the mail with {}: {error}", app.id);
+                }
+            }
             Request::ConnectServer { token, request } => self.ask_server(token, request),
             Request::InstallServerTools {
                 token,

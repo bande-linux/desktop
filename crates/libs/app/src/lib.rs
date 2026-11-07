@@ -23,7 +23,7 @@ pub use bande_pdf::{Block, Orientation, Page, PageItem, PageSetup, Paper, flow};
 pub use cx::{Cx, WindowId};
 pub use portal::{Filter, choose_file, choose_save_file, parent_window};
 pub use print::{
-    Document, Layout, file_document, image_document, print, rich_document, text_document,
+    Document, Layout, can_print, file_document, image_document, print, rich_document, text_document,
 };
 pub use tabs::{Detached, TabCarry, TabDrop, TabDropTarget, TabHost, move_tab};
 

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use bande_content::Preview;
-use bande_fs::{Entry, Purpose, format_date, format_size, is_hidden};
+use bande_fs::{Entry, Purpose, format_civil_date, format_date, format_size, is_hidden};
 use bande_thumbnails::ThumbnailSize;
 use bande_toolkit::ui::{
     BUTTON_HEIGHT as CONTROL_HEIGHT, CHECKBOX_SIZE, SWITCH_SIZE, Size, TEXT_FIELD_HEIGHT, WidgetId,
@@ -173,6 +173,7 @@ impl FilesView {
         self.headings.clear();
         self.layout_controls();
         self.refresh_navigation();
+        self.notice_left_backups();
         if self.mode == ViewMode::List {
             self.ui.layout(Size::new(width as f32, height as f32));
             self.fill_table();
@@ -189,6 +190,7 @@ impl FilesView {
         self.paint_columns(&mut content);
         self.learn_kinds();
         self.paint_scope_bar(&mut content);
+        self.paint_backup_bar(&mut content);
         self.paint_tab_bar(&mut content);
         self.paint_path_bar(&mut content);
         content.extend(inspector);
@@ -1074,10 +1076,7 @@ impl FilesView {
                 if let Some(item) = &entry.trashed
                     && let Some(deleted) = item.deleted
                 {
-                    facts.push((
-                        L10N.tr("info-deleted"),
-                        deleted.strftime("%-d %b %Y, %H:%M").to_string(),
-                    ));
+                    facts.push((L10N.tr("info-deleted"), format_civil_date(deleted)));
                 }
                 let editable = self
                     .inspector_controls

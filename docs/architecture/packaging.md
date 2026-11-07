@@ -19,8 +19,8 @@ profiles. Sizes are in [performance.md](performance.md).
 ## Packages
 
 - **Per crate** (`cargo deb`, one build per architecture; the list is `ci/release/packages`): `bande-compositor`, the session services
-  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-recovery`, `bande-crash-reports`, `bande-sound`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
-  `bande-automount`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
+  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-recovery`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-spell`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
+  `bande-automount`, `bande-backup`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
   `bande-settings`, `bande-file-chooser`). Package names stay `bande-*` whatever directory the crate lives in
@@ -100,6 +100,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 - `bande-player` (apps repo) is the one package linking GStreamer: its engine process plays for Player and Quick Look; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
 - `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc` and the H.264 and VP8 encoders
   for screen recording;
+- `bande-backup` depends on `restic` and `fuse3`: Debian's restic is the backup engine ([session.md](session.md#backups)).
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`;
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides
@@ -110,8 +111,9 @@ After each dpkg run, `restart-services` (`DPkg::Post-Invoke` in
 `/etc/apt/apt.conf.d/50bande-restart-services`) try-restarts every `system.slice` service whose
 processes map a replaced `/usr` or `/opt` executable or library, as needrestart did, except the
 login managers, the buses, logind, getty, `user@`, polkit, PackageKit, networking, Bluetooth and
-container managers; it does nothing in a chroot or without systemd. Settings handles the
-session's own processes ([Software Update](session.md)).
+container managers; it does nothing in a chroot or without systemd. It then touches
+`/run/bande-desktop/packages-installed`, which makes each logged-in user's
+`bande-update-finish.path` deal with the session's own processes ([Software Update](session.md)).
 
 No package depends on an X server, XWayland or an X session; the `install` jobs check that none
 comes along.

@@ -21,9 +21,8 @@ use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-toolkit-platform.ftl");
-
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-toolkit-platform")));
 
 pub use app_connection::{AppConnection, AppRequest, WindowInSession};
 pub use bande_graphics::ResizeEdge;
@@ -32,7 +31,7 @@ pub use bande_protocols::client::bande_shell_v1::{
 };
 pub use chrome::{FrameRegions, Header, SHEET_INSET, WINDOW_HEADER_HEIGHT};
 pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer, WindowDrag};
-pub use external::{Dmabuf, DmabufPlane, ExternalSurface, ShmLayout, SurfaceBuffer};
+pub use external::{CursorImage, Dmabuf, DmabufPlane, ExternalSurface, ShmLayout, SurfaceBuffer};
 pub use popup::MenuPlacement;
 pub use run::{App, Surfaces, run, run_surfaces};
 pub use shell::{Anchor, AppWindow};

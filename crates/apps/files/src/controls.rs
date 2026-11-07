@@ -64,6 +64,9 @@ pub(crate) enum Signal {
     Scope(bool),
     Back,
     Forward,
+    BackupStep(bool),
+    BackupRestore,
+    BackupDone,
     Expand(Vec<String>, bool, bool),
     Runnable(bool),
     SearchKind(usize),
@@ -628,6 +631,9 @@ impl FilesView {
                     Signal::ColumnOrder(order) => self.table_order_chosen(&order),
                     Signal::Search(text) => self.search_changed(&text),
                     Signal::View(index) => self.view_chosen(index),
+                    Signal::BackupStep(older) => self.step_backup(older),
+                    Signal::BackupRestore => self.restore_from_backup(),
+                    Signal::BackupDone => self.leave_backups(),
                     Signal::Back => self.back(),
                     Signal::Runnable(on) => self.set_runnable(on),
                     Signal::SearchKind(index) => self.set_search_kind(index),
@@ -1121,7 +1127,11 @@ impl FilesView {
             true => content,
             false => Rect::default(),
         };
-        let search = self.toolbar_frames().into_iter().chain(self.scope_frames());
+        let search = self
+            .toolbar_frames()
+            .into_iter()
+            .chain(self.scope_frames())
+            .chain(self.backup_bar_frames());
         let rename = self
             .rename
             .as_ref()

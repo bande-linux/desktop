@@ -44,7 +44,11 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - Panic logs on the mini: whether RAM survives its reboot is unknown. Test with one normal reboot:
   `reserve_mem=2M:16384:oops ramoops.mem_name=oops ramoops.console_size=262144` in
   `/etc/kernel/cmdline` and `ramoops` in `modules-load.d`; `/sys/fs/pstore` then has the previous
-  boot's console if it does. Ship it in the images only then.
+  boot's console if it does. Ship it in the images only then. A saved kernel log then appears in Crash Reports by itself.
+- Crash Reports on the real desktop: after an update, `kill -ILL` an app's pid; a report with function
+  names is under Settings ▸ About ▸ Crash Reports within seconds and Copy works; pulling the power gives
+  "Restart without a clean shutdown" at the next boot; a `kill -STOP`ped app that is force quit is killed
+  within 8 s (a stopped process cannot dump); force quitting a truly hung app leaves a "Not responding" report.
 - Recovery on the mini: `Ctrl+Alt+Fn+F2` reaches a text console and `Ctrl+Alt+Fn+F7` comes back
   (also from the login window); `kill -STOP` of `bande-shell` shows "Taskbar & Desktop (Not
   Responding)" in Force Quit and Relaunch brings the bar back; `kill -STOP` of `bande-lock` while
@@ -59,7 +63,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   text, the bar flicker at login, time to desktop.
 - Apple hardware: DDC/CI through DCP's I2C in `appledrm` (external displays are dimmed by the
   compositor until then; needs reverse engineering of the firmware's calls).
-- Apple hardware: Night Light gamma on the DCP; overlay planes and direct scanout; the
+- Apple hardware: Night Light gamma on the DCP; direct scanout of a full-screen window (a shell surface on an overlay plane is confirmed working); the
   `VK_KHR_external_semaphore_fd` release path and dma-buf modifiers on Honeykrisp; the GPU
   fence wait each frame; input-to-photon latency with a camera; swapping or moving the only display, unplugging it and
   plugging it back (`NOTES/plans/displays.md`).
@@ -72,8 +76,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 
 - Light scheme: move it to the dark scheme's slate family, or keep it warm.
 - Mouse scroll speed: add a setting (scales wheel deltas in `input.rs`), or not.
-- Settings options: drop Scroll method, Trackpad acceleration and Disable while typing; fold
-  Variable refresh rate into Refresh rate (the switch writes a key nothing reads); where `reopen-apps` lives (Log Out
+- Settings options: drop Scroll method, Trackpad acceleration and Disable while typing; where `reopen-apps` lives (Log Out
   checkbox, always on or always off).
 - A click on the clock or Control Center while the launcher is open: open the panel too, or only
   close the launcher (today).
@@ -119,8 +122,8 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - `bande-render`: `VK_EXT_host_image_copy` to copy shm buffers without staging.
 - PipeWire 1.4.2 ignores a Props change on a suspended null sink (report upstream); per-device
   volume memory across a WirePlumber restart is unproven.
-- Not built yet: user picker and accounts (no Users pane, no fast user switching), crash
-  reports, tiling beyond halves and quarters, custom shortcuts, input methods as
+- Not built yet: user picker and accounts (no Users pane, no fast user switching),
+  tiling beyond halves and quarters, custom shortcuts, input methods as
   sources, spell checking, colour filters, on-screen keyboard, notifications on the lock screen,
   inline reply, spring-loading, Wi-Fi hidden and Enterprise
   networks, more portals (GlobalShortcuts, RemoteDesktop) and portal permission review, colour

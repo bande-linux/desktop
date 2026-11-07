@@ -38,6 +38,10 @@ service="$root/usr/share/dbus-1/services/org.bande.Notify.service"
 grep -qx 'Name=org.freedesktop.Notifications' "$service"
 test -x "$root$(sed -n 's/^Exec=//p' "$service")"
 
+echo "== the spelling service's package"
+contains bande-spell usr/libexec/bande-spell
+contains bande-spell usr/share/dbus-1/services/org.bande.Spell.service
+
 echo "== the clipboard daemon's package"
 contains bande-clipboard usr/bin/bande-clipboard
 field bande-compositor Recommends | grep -qw bande-clipboard

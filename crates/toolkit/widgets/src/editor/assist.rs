@@ -135,7 +135,8 @@ impl Editor {
             self.apply_step(start, end, &expansion);
             return;
         }
-        let capitalised = spelling::option("capitalise") && self.at_sentence_start(start);
+        let sentence_start = self.at_sentence_start(start);
+        let capitalised = spelling::option("capitalise") && sentence_start;
         if capitalised && word.chars().next().is_some_and(char::is_lowercase) {
             let mut characters = word.chars();
             let upper: String = characters
@@ -150,16 +151,28 @@ impl Editor {
                 Position::new(start.paragraph, start.offset + word.len()),
                 &upper,
             );
-            spelling::ask_correction(&upper);
-            self.pending = Some(Pending {
-                start,
-                end,
-                word: upper,
-            });
+            self.ask_correction(start, end, upper, true);
             return;
         }
-        spelling::ask_correction(&word);
-        self.pending = Some(Pending { start, end, word });
+        self.ask_correction(start, end, word, sentence_start);
+    }
+
+    fn ask_correction(
+        &mut self,
+        start: Position,
+        end: Position,
+        word: String,
+        sentence_start: bool,
+    ) {
+        let elsewhere = self.blocks.iter().enumerate().any(|(paragraph, block)| {
+            spelling::words(&block.text).into_iter().any(|range| {
+                block.text[range.clone()].eq_ignore_ascii_case(&word)
+                    && !(paragraph == start.paragraph && range.start == start.offset)
+            })
+        });
+        if !elsewhere && spelling::ask_correction(&word, sentence_start) {
+            self.pending = Some(Pending { start, end, word });
+        }
     }
 
     pub(crate) fn spelling_answered(&mut self) {

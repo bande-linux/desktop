@@ -7,7 +7,7 @@ pub enum SpellRequest {
     Check(Vec<String>),
     Suggest(String),
     Learn(String),
-    Correct(String),
+    Correct(String, bool),
     Rules,
 }
 
@@ -34,6 +34,7 @@ struct State {
     rules: HashMap<String, String>,
     replacements: HashMap<String, String>,
     rules_asked: bool,
+    typed: HashSet<String>,
     changed_back: HashMap<String, u8>,
 }
 
@@ -163,13 +164,17 @@ pub(crate) fn replacement(word: &str) -> Option<String> {
     STATE.with_borrow(|state| state.replacements.get(word).cloned())
 }
 
-pub(crate) fn ask_correction(word: &str) {
+pub(crate) fn ask_correction(word: &str, sentence_start: bool) -> bool {
     STATE.with_borrow_mut(|state| {
+        if !state.typed.insert(word.to_lowercase()) {
+            return false;
+        }
         state.corrections.remove(word);
         if let Some(send) = &state.send {
-            send(SpellRequest::Correct(word.to_owned()));
+            send(SpellRequest::Correct(word.to_owned(), sentence_start));
         }
-    });
+        true
+    })
 }
 
 pub(crate) fn correction(word: &str) -> Option<String> {

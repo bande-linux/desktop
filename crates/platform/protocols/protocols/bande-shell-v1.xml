@@ -818,9 +818,9 @@
   </interface>
   <interface name="bande_app_control_v1" version="1">
     <description summary="quitting apps and watching them answer, for Activity Monitor">
-      Offered to every client. It carries only what an app may already do to
-      another app of the same user, politely: ask it to quit and learn whether
-      it answers. It lists no windows and types no text. A client that binds
+      Offered to every client outside a sandbox. It carries only what an app
+      may already do to another app of the same user, politely: ask it to quit
+      and learn whether it answers. It lists no windows and types no text. A client that binds
       it receives app_responding until it destroys it.
     </description>
 

@@ -125,7 +125,7 @@ fn disks() -> Vec<(String, String)> {
     let running = running_disk();
     devices
         .into_iter()
-        .filter(|device| device.kind == "disk" && !device.rm)
+        .filter(|device| device.kind == "disk" && !device.rm && !device.path.contains("zram"))
         .filter(|device| running.as_deref() != Some(device.path.as_str()))
         .map(|device| {
             let name = format!(

@@ -2,7 +2,9 @@
 set -euo pipefail
 
 [ $# -eq 2 ] || { echo "usage: run.sh <old-debs-dir> <new-debs-dir>" >&2; exit 2; }
-command -v qemu-img mformat mcopy > /dev/null || { echo "run.sh: needs qemu and mtools" >&2; exit 127; }
+for tool in qemu-img mformat mcopy ssh-keygen; do
+    command -v "$tool" > /dev/null || { echo "run.sh: needs $tool" >&2; exit 127; }
+done
 old=$(realpath "$1")
 new=$(realpath "$2")
 here=$(realpath "$(dirname "$0")")
@@ -57,7 +59,7 @@ guest=(-i "$scratch/key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/
 boot() {
     port=$((20000 + RANDOM % 20000))
     qemu-img create -q -f qcow2 -F qcow2 -b "$cache/$image" "$scratch/disk.qcow2" 12G
-    "${qemu[@]}" -enable-kvm -smp "${UPGRADE_TEST_CPUS:-4}" -m "${UPGRADE_TEST_MEMORY:-6G}" -nographic \
+    "${qemu[@]}" -enable-kvm -smp "3" -m "4G" -nographic \
         -serial "file:${UPGRADE_TEST_SERIAL:-/dev/null}" -monitor none -pidfile "$scratch/qemu.pid" \
         -drive "file=$scratch/disk.qcow2,if=virtio" \
         -drive "file=$scratch/seed.img,if=virtio,format=raw,readonly=on" \

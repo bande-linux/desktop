@@ -8,6 +8,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+bande-volumes.workspace = true
 rustix = { workspace = true, features = ["event", "fs", "process"] }
 bande-bus.workspace = true
 bande-inbox.workspace = true

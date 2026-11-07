@@ -79,6 +79,11 @@ fn drain(channel: &Channel, unsent: &mut Vec<Command>) {
 impl Drop for Player {
     fn drop(&mut self) {
         let _ = self.engine.kill();
-        let _ = self.engine.wait();
+        let reaped = rustix::process::Pid::from_raw(self.engine.id() as i32);
+        let _ = std::thread::Builder::new()
+            .name("reap".to_owned())
+            .spawn(move || {
+                let _ = rustix::process::waitpid(reaped, rustix::process::WaitOptions::empty());
+            });
     }
 }

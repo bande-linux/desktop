@@ -860,6 +860,7 @@ dependencies = [
  "bande-status",
  "bande-thumbnails",
  "bande-toolkit",
+ "bande-volumes",
  "bande-xdg",
  "image",
  "tracing",
@@ -1070,6 +1071,7 @@ dependencies = [
  "bande-l10n",
  "bande-media-view",
  "bande-toolkit",
+ "bande-volumes",
  "bande-xdg",
  "parley",
  "tracing",
@@ -1151,6 +1153,7 @@ dependencies = [
  "bande-config",
  "bande-fs",
  "bande-inbox",
+ "bande-volumes",
  "bande-watch",
  "bande-xdg",
  "jiff",
@@ -1345,6 +1348,7 @@ name = "bande-thumbnails"
 version = "0.1.7"
 dependencies = [
  "bande-inbox",
+ "bande-volumes",
  "bande-xdg",
  "image",
  "md-5 0.10.6",
@@ -1414,6 +1418,7 @@ name = "bande-wallpaper"
 version = "0.1.7"
 dependencies = [
  "bande-inbox",
+ "bande-volumes",
  "image",
  "resvg",
  "tracing",
@@ -1447,6 +1452,7 @@ dependencies = [
  "bande-inbox",
  "bande-l10n",
  "bande-notify",
+ "bande-volumes",
  "rustix 1.1.6",
  "tempfile",
  "tracing",

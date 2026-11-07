@@ -41,7 +41,7 @@ pub use menus::{GROUPS, group_action};
 pub use open_with::OpenWith;
 pub use paint::permissions;
 pub use search::SEARCH_HEIGHT;
-pub use servers::{ServerAnswer, ServerRequest};
+pub use servers::{ServerAnswer, ServerRequest, ServersSeen};
 pub use settings::{FilesSettings, SETTINGS_SIZE, StartFolder, settings_view};
 pub use sidebar::{
     BookmarkEdit, Place, PlaceKind, Row, SidebarEdit, favourites, hidden_places, layout_text, rows,

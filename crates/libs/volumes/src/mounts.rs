@@ -1,7 +1,8 @@
+use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex, Once, PoisonError};
 
-use rustix::event::{PollFd, PollFlags, poll};
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 const SYSTEM_MOUNTS: &str = "/run/bande/volumes";
 
@@ -22,10 +23,58 @@ pub fn connected_roots() -> Vec<PathBuf> {
         .collect()
 }
 
-static CONNECTED_ROOTS: LazyLock<Vec<PathBuf>> = LazyLock::new(connected_roots);
+const NETWORK_TYPES: [&str; 7] = ["nfs", "nfs4", "cifs", "smb3", "fuse.sshfs", "9p", "ceph"];
+
+struct Watched {
+    table: Option<File>,
+    roots: Vec<PathBuf>,
+}
+
+static WATCHED: LazyLock<Mutex<Watched>> = LazyLock::new(|| {
+    Mutex::new(Watched {
+        table: File::open("/proc/self/mountinfo").ok(),
+        roots: Vec::new(),
+    })
+});
+static FIRST_READ: Once = Once::new();
+
+fn is_network_mount(mount: &Mounted) -> bool {
+    NETWORK_TYPES.contains(&mount.fs_type.as_str())
+        || (mount.fs_type == "fuse" && mount.source.starts_with("http"))
+}
+
+fn read_roots() -> Vec<PathBuf> {
+    let table = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
+    connected_roots()
+        .into_iter()
+        .chain(
+            mounted(&table)
+                .filter(is_network_mount)
+                .map(|mount| mount.point),
+        )
+        .collect()
+}
+
+fn network_roots() -> Vec<PathBuf> {
+    let mut watched = WATCHED.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut changed = false;
+    FIRST_READ.call_once(|| changed = true);
+    if let Some(table) = &watched.table {
+        let mut polled = [PollFd::new(table, PollFlags::PRI)];
+        let zero = Timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        changed |= matches!(poll(&mut polled, Some(&zero)), Ok(ready) if ready > 0);
+    }
+    if changed {
+        watched.roots = read_roots();
+    }
+    watched.roots.clone()
+}
 
 pub fn on_connected_volume(path: &Path) -> bool {
-    CONNECTED_ROOTS.iter().any(|root| path.starts_with(root))
+    network_roots().iter().any(|root| path.starts_with(root))
 }
 
 pub fn quick_is_dir(path: &Path) -> bool {
@@ -33,10 +82,36 @@ pub fn quick_is_dir(path: &Path) -> bool {
 }
 
 pub fn connected_volume_of(path: &Path) -> Option<PathBuf> {
-    CONNECTED_ROOTS.iter().find_map(|root| {
-        let name = path.strip_prefix(root).ok()?.components().next()?;
-        Some(root.join(name))
-    })
+    let roots = network_roots();
+    let user_roots = connected_roots();
+    roots
+        .iter()
+        .filter(|root| path.starts_with(root))
+        .max_by_key(|root| root.as_os_str().len())
+        .and_then(|root| match user_roots.contains(root) {
+            true => {
+                let name = path.strip_prefix(root).ok()?.components().next()?;
+                Some(root.join(name))
+            }
+            false => Some(root.clone()),
+        })
+}
+
+pub fn leads_to_connected_volume(path: &Path) -> bool {
+    if on_connected_volume(path) {
+        return true;
+    }
+    let mut walked = PathBuf::new();
+    for component in path.components() {
+        walked.push(component);
+        if let Ok(target) = std::fs::read_link(&walked) {
+            let resolved = walked.parent().unwrap_or(Path::new("/")).join(target);
+            if on_connected_volume(&resolved) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 pub fn is_connected(point: &Path) -> bool {

@@ -1,10 +1,13 @@
 use bande_toolkit::ui::{
     Axis, CheckState, Checkbox, PopUpButton, SecureField, Stack, TextField, Widget,
 };
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
-use bande_fs::{Action, Purpose, Task};
-use bande_volumes::{SavedServer, load_saved_servers};
+use bande_fs::{Action, Change, Purpose, RenameError, Task};
+use bande_inbox::Inbox;
+use bande_volumes::{SavedServer, load_saved_servers, on_connected_volume};
 use bande_xdg::{DesktopEntry, file_uri};
 
 use crate::L10N;
@@ -15,6 +18,7 @@ use crate::view::{FilesView, Request, Sheet};
 
 const FIELD_SIZE: f32 = 13.0;
 const STACK_GAP: f32 = 8.0;
+const SERVER_REFRESH: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ServerRequest {
@@ -34,6 +38,19 @@ pub struct ServerAnswer {
     pub details: Vec<String>,
 }
 
+pub enum ServerDone {
+    Renamed(Result<Option<Change>, RenameError>, String),
+    Created(Action, io::Result<Change>),
+    Changed(Action, Vec<Change>, Option<io::Error>),
+    FreeSpace(PathBuf, u64),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ServersSeen {
+    pub nearby: Vec<(String, String)>,
+    pub unresponsive: Vec<PathBuf>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServerField {
     Address(String),
@@ -49,6 +66,111 @@ const MAIL_SCHEME: &str = "x-scheme-handler/mailto";
 const BANDE_MAIL: &str = "org.bande.Mail.desktop";
 
 impl FilesView {
+    pub(crate) fn on_server(&mut self, work: impl FnOnce() -> ServerDone + Send + 'static) {
+        let Some(outbox) = self.server_work.as_ref().map(Inbox::outbox) else {
+            return;
+        };
+        let spawned = std::thread::Builder::new()
+            .name("server work".to_owned())
+            .spawn(move || {
+                outbox.send(work());
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot start work on the server: {error}");
+        }
+    }
+
+    pub(crate) fn rename_on_server(&mut self, path: PathBuf, name: String) {
+        self.on_server(move || ServerDone::Renamed(bande_fs::rename(&path, &name), name));
+    }
+
+    pub(crate) fn server_work_done(&mut self) -> bool {
+        let done = self
+            .server_work
+            .as_mut()
+            .map(Inbox::drain)
+            .unwrap_or_default();
+        for item in done {
+            match item {
+                ServerDone::Renamed(result, name) => self.renamed(result, &name),
+                ServerDone::Created(action, result) => self.created(action, result),
+                ServerDone::Changed(action, changes, failure) => {
+                    if !changes.is_empty() {
+                        self.operations.record(action, changes);
+                    }
+                    if let Some(error) = failure {
+                        self.show_notice(
+                            L10N.tr_args("error-operation", [("error", error.to_string().into())]),
+                        );
+                    }
+                    self.browser.reload_connected();
+                }
+                ServerDone::FreeSpace(folder, bytes) => {
+                    self.free_on_server = Some((folder, bytes));
+                }
+            }
+        }
+        true
+    }
+
+    pub(crate) fn connected_free(&self, folder: &Path) -> Option<u64> {
+        self.free_on_server
+            .as_ref()
+            .filter(|(known, _)| known == folder)
+            .map(|(_, bytes)| *bytes)
+    }
+
+    fn shows_server(&self) -> Option<PathBuf> {
+        self.browser
+            .current_folder()
+            .filter(|folder| on_connected_volume(folder))
+    }
+
+    pub(crate) fn refresh_due(&self) -> Option<Instant> {
+        self.shows_server()?;
+        match self.next_refresh {
+            None => Some(Instant::now()),
+            Some(due) => self.window_active.then_some(due),
+        }
+    }
+
+    pub(crate) fn refresh_if_due(&mut self, now: Instant) {
+        let shown = self.shows_server();
+        if shown.is_none() {
+            self.next_refresh = None;
+            return;
+        }
+        match self.next_refresh {
+            Some(due) if due > now => return,
+            Some(_) if self.window_active => self.refresh_server_folder(),
+            Some(_) => return,
+            None => self.refresh_server_folder(),
+        }
+        self.next_refresh = Some(now + SERVER_REFRESH);
+    }
+
+    pub fn refresh_server_folder(&mut self) {
+        let Some(folder) = self.shows_server() else {
+            return;
+        };
+        self.browser.reload_connected();
+        self.on_server(move || {
+            let bytes = rustix::fs::statvfs(&folder)
+                .map(|stats| stats.f_bavail * stats.f_frsize)
+                .unwrap_or_default();
+            ServerDone::FreeSpace(folder, bytes)
+        });
+    }
+
+    pub(crate) fn server_window_active(&mut self, active: bool) {
+        let woke = active && !self.window_active;
+        self.window_active = active;
+        if woke {
+            self.refresh_server_folder();
+            self.next_refresh = Some(Instant::now() + SERVER_REFRESH);
+        }
+    }
+
     pub(crate) fn mail_app(&self) -> Option<&DesktopEntry> {
         self.apps.default_for(MAIL_SCHEME)
     }

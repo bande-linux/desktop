@@ -130,7 +130,10 @@ pub fn recent_files(
     ordered
         .into_iter()
         .map(|(path, _)| path)
-        .filter(|path| !is_excluded(path, excluded) && path.is_file())
+        .filter(|path| {
+            !is_excluded(path, excluded)
+                && (bande_volumes::on_connected_volume(path) || path.is_file())
+        })
         .take(limit)
         .collect()
 }

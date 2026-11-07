@@ -152,7 +152,9 @@ impl FilesView {
 
     fn single_file(&self) -> Option<PathBuf> {
         match self.browser.selected_paths().as_slice() {
-            [path] if path.is_file() => Some(path.clone()),
+            [path] if !bande_volumes::on_connected_volume(path) && path.is_file() => {
+                Some(path.clone())
+            }
             _ => None,
         }
     }

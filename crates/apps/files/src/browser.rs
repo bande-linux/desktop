@@ -8,7 +8,7 @@ use bande_fs::{
     Entry, FolderChanges, Listing, Sort, Trash, compare, is_hidden, is_partial, list, list_trash,
     merge, sort,
 };
-use bande_volumes::on_connected_volume;
+use bande_volumes::{leads_to_connected_volume, on_connected_volume};
 
 use crate::lister::{FIRST_CHUNK, Lister, Ticket};
 
@@ -33,7 +33,7 @@ pub struct Column {
     pub depths: Vec<u8>,
     pub denied: bool,
     pub unavailable: bool,
-    replacing: bool,
+    incoming: Option<Vec<Entry>>,
     listing: Option<Ticket>,
     awaited: Vec<PathBuf>,
 }
@@ -76,7 +76,7 @@ impl Column {
             depths: Vec::new(),
             denied: contents.denied,
             unavailable: false,
-            replacing: false,
+            incoming: None,
             location,
             entries: contents.entries,
             selected: None,
@@ -200,6 +200,23 @@ impl Column {
         self.selected = self.selected.and_then(to);
         self.anchor = self.anchor.and_then(to);
         self.replaced();
+    }
+
+    fn refreshed(&mut self, mut fresh: Vec<Entry>, order: Sort) {
+        sort(&mut fresh, order);
+        if fresh == self.entries {
+            return;
+        }
+        self.awaited = self
+            .selection()
+            .iter()
+            .map(|entry| entry.path.clone())
+            .collect();
+        self.entries.clear();
+        self.marked.clear();
+        self.selected = None;
+        self.anchor = None;
+        self.merge(fresh, order);
     }
 
     fn merge(&mut self, chunk: Vec<Entry>, sort: Sort) -> bool {
@@ -336,7 +353,7 @@ impl Browser {
     }
 
     fn read_folder(&mut self, folder: &Path) -> Contents {
-        if on_connected_volume(folder) {
+        if leads_to_connected_volume(folder) {
             let (hidden, order) = (self.show_hidden, self.order());
             let listing = self.lister.as_mut().and_then(|lister| {
                 lister
@@ -403,12 +420,17 @@ impl Browser {
                 Some(_) => column.unavailable = true,
                 None => column.unavailable = false,
             }
-            if std::mem::take(&mut column.replacing) {
-                column.awaited = column.selection().iter().map(|e| e.path.clone()).collect();
-                column.entries.clear();
-                column.marked.clear();
-                column.selected = None;
-                column.anchor = None;
+            if let Some(incoming) = &mut column.incoming {
+                incoming.extend(listed.entries);
+                if listed.done {
+                    column.listing = None;
+                    if let Some(fresh) = column.incoming.take()
+                        && listed.failed.is_none()
+                    {
+                        column.refreshed(fresh, order);
+                    }
+                }
+                continue;
             }
             if column.merge(listed.entries, order) {
                 selected = true;
@@ -1011,13 +1033,16 @@ impl Browser {
     fn reload_column(&mut self, index: usize) {
         if let Some(folder) = self.columns[index]
             .folder()
-            .filter(|folder| on_connected_volume(folder))
+            .filter(|folder| leads_to_connected_volume(folder))
             .map(Path::to_path_buf)
         {
+            if self.columns[index].listing.is_some() {
+                return;
+            }
             let listing = self.read_folder(&folder).listing;
             let column = &mut self.columns[index];
             column.listing = listing;
-            column.replacing = !column.entries.is_empty();
+            column.incoming = (!column.entries.is_empty()).then(Vec::new);
             return;
         }
         let column = &self.columns[index];
@@ -1218,6 +1243,12 @@ impl Browser {
             Location::Server(_) => false,
             Location::Recents | Location::Search(_) => true,
         });
+    }
+
+    pub fn reload_connected(&mut self) {
+        self.reload_where(
+            |location| matches!(location, Location::Folder(folder) if on_connected_volume(folder)),
+        );
     }
 
     pub fn reload(&mut self) {

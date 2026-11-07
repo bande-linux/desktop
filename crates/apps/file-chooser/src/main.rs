@@ -7,6 +7,7 @@ mod print;
 use std::cell::Cell;
 use std::ffi::OsString;
 use std::io::Write;
+use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::rc::Rc;
@@ -73,6 +74,15 @@ impl App for FileDialog {
             self.chosen = Some(finished);
             window.close();
         }
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        self.view.listing_fd().into_iter().collect()
+    }
+
+    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+        self.view.listing_ready();
+        window.request_redraw();
     }
 
     fn deadline(&self) -> Option<Instant> {

@@ -1,5 +1,6 @@
 use std::cell::{Cell as Flag, RefCell};
 use std::collections::HashMap;
+use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -724,6 +725,16 @@ impl ChooserView {
         )
     }
 
+    pub fn listing_fd(&self) -> Option<BorrowedFd<'_>> {
+        self.chooser.listing_fd()
+    }
+
+    pub fn listing_ready(&mut self) {
+        if self.chooser.take_listings() {
+            self.rebuild();
+        }
+    }
+
     fn rebuild(&mut self) {
         let sidebar = self.sidebar();
         let files = self.files_table();
@@ -866,7 +877,7 @@ impl ChooserView {
 
     fn go_to(&mut self, typed: &str) {
         let path = bande_fs::typed_location(typed, &self.home, self.chooser.folder());
-        if path.is_dir() {
+        if bande_volumes::quick_is_dir(&path) {
             self.go(path);
         } else if let Some(parent) = path.parent().filter(|_| path.exists()) {
             self.go(parent.to_path_buf());
@@ -934,6 +945,21 @@ impl ChooserView {
             return;
         }
         let folder = self.chooser.folder().join(name);
+        if bande_volumes::on_connected_volume(&folder) {
+            let made = folder.clone();
+            let spawned = std::thread::Builder::new()
+                .name("new folder on a server".to_owned())
+                .spawn(move || {
+                    if let Err(error) = std::fs::create_dir(&made) {
+                        tracing::warn!("cannot create {}: {error}", made.display());
+                    }
+                });
+            if let Err(error) = spawned {
+                tracing::warn!("cannot create {}: {error}", folder.display());
+            }
+            self.go(folder);
+            return;
+        }
         match std::fs::create_dir(&folder) {
             Ok(()) => self.go(folder),
             Err(error) => tracing::warn!("cannot create {}: {error}", folder.display()),
@@ -953,7 +979,7 @@ impl ChooserView {
                         self.selected = self.paths(&keys);
                         if let (Mode::Save { .. }, [only]) =
                             (&self.chooser.dialog().mode, self.selected.as_slice())
-                            && !only.is_dir()
+                            && !self.chooser.is_folder(only)
                             && let Some(name) = only.file_name()
                         {
                             self.chooser.name = name.to_string_lossy().into_owned();
@@ -963,7 +989,7 @@ impl ChooserView {
                     Intent::Activate(keys) => {
                         self.selected = self.paths(&keys);
                         match self.selected.as_slice() {
-                            [only] if only.is_dir() => self.go(only.clone()),
+                            [only] if self.chooser.is_folder(only) => self.go(only.clone()),
                             _ => self.accept(),
                         }
                     }
@@ -1057,7 +1083,7 @@ impl ChooserView {
             }
             Key::Down if alt => {
                 if let [only] = self.selected.as_slice()
-                    && only.is_dir()
+                    && self.chooser.is_folder(only)
                 {
                     self.go(only.clone());
                 }

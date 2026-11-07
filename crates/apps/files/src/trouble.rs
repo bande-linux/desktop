@@ -49,6 +49,9 @@ pub(crate) fn failure_sentence(failure: &Failure) -> String {
 }
 
 fn mount_point(path: &Path) -> PathBuf {
+    if let Some(volume) = bande_volumes::connected_volume_of(path) {
+        return volume;
+    }
     let device = |path: &Path| std::fs::metadata(path).map(|metadata| metadata.dev()).ok();
     let own = device(path);
     path.ancestors()

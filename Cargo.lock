@@ -1150,6 +1150,7 @@ dependencies = [
  "ash",
  "naga",
  "smithay",
+ "tracing",
 ]
 
 [[package]]

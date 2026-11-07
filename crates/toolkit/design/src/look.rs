@@ -31,9 +31,9 @@ pub struct Look {
 
 const LIT_FRAME_OPACITY: f32 = 0.74;
 const BACKDROP_CEILING: f64 = 0.16;
-const BACKDROP_FLOOR: f64 = 0.55;
-const GLASS_FRAME_OPACITY: f32 = 0.60;
-const GLASS_PANEL_OPACITY: f32 = 0.66;
+const BACKDROP_FLOOR: f64 = 0.60;
+const GLASS_FRAME_OPACITY: f32 = 0.68;
+const GLASS_PANEL_OPACITY: f32 = 0.72;
 pub const BACKDROP_SATURATION: f32 = 1.35;
 
 impl Style {

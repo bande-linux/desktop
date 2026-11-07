@@ -809,13 +809,15 @@ for a new disk or mains power, and D-Bus start it; it exits after a minute with 
 `bande-backup-alerts` is a session service that turns the service's `problem` into one notification.
 `bande-backup-restore` is for the recovery environment, without a bus.
 
-A repository is `BandeBackups/<machine-id>` on any filesystem, on any drive but the startup one. Two restic
+A repository is `BandeBackups/<machine-id>` on any filesystem on any drive but the startup one, or on an SMB or NFS
+share or a restic rest server. Settings can erase a blank or foreign disk to make one. Two restic
 keys open it: a random one in `/var/lib/bande-backup/key` that runs the backups, and the password the person
 chose, for restoring when the machine is gone. The disk is mounted under `/run/bande-backup` only during work.
 
 Settings ▸ Backup holds the choice of disk and the status. Files browses `restic mount` at
 `/run/bande-backup-browse/versions/<time>`, read-only, with each file's old owner and mode enforced by
-the kernel, and restores by copying as the person. Nothing privileged runs on their behalf.
+the kernel, and restores by copying as the person. Nothing privileged runs on their behalf. On btrfs, hourly
+read-only snapshots of `/home` while the destination is away appear beside them.
 
 ## Updates
 

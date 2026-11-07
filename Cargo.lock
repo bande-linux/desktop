@@ -400,6 +400,7 @@ dependencies = [
  "bande-app-menu",
  "bande-bus",
  "bande-compositor",
+ "bande-config",
  "bande-inbox",
  "bande-log",
  "bande-test-bus",

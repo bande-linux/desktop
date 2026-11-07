@@ -379,9 +379,11 @@ graph LR
   `bande-polkit-agent` binary and a systemd user unit wanted by `bande-session.target`: an
   `org.freedesktop.PolicyKit1.AuthenticationAgent` object that registers with polkitd for the
   user's logind session (logind's `auto` session, which is the display session for a user
-  service), runs `/usr/lib/polkit-1/polkit-agent-helper-1` for the chosen
-  user (the cookie on standard input, PAM prompts and results as escaped lines, as polkit 126's
-  own agent library does) and answers `CancelAuthentication` by stopping the helper. It
+  service), connects to polkit's socket-activated helper at `/run/polkit/agent-helper.socket`
+  (Debian's helper is not setuid, so an agent cannot run it itself), sends the chosen user and the
+  cookie, exchanges PAM prompts and results as escaped lines, as polkit's own agent library does,
+  and answers `CancelAuthentication` by closing the socket. A helper that cannot start or stops
+  early is an error in the journal and a refusal to polkitd, never a silent cancel. It
   authenticates as the requesting user when polkitd lists them, otherwise as the first listed
   user, as macOS pre-fills the dialog with the current administrator. Each request opens a
   Datum dialog on an overlay layer with exclusive keyboard focus: a padlock, polkit's message as
@@ -389,9 +391,9 @@ graph LR
   wrong password shakes the dialog, clears the field and says so, and the dialog stays open
   until the right password or Cancel, as the macOS authorization dialog does. Requests are
   shown one at a time. Once the field hands the password over, it stays in zeroized buffers
-  up to the helper's standard input. Settings checks its actions without interaction and
+  up to the helper's socket. Settings checks its actions without interaction and
   leaves rows changeable when polkit answers with a challenge, so changing them brings up the
-  dialog. Its polkitd test (ignored; it needs polkitd on the system bus) runs the agent against the real polkitd and PAM.
+  dialog.
 
 ## Desktop integration
 

@@ -5,6 +5,7 @@ if [ "$1" = "configure" ] && [ -z "$DPKG_ROOT" ]; then
 	mkdir -p "$PICTURES"
 	chown root:_greetd "$PICTURES"
 	chmod 3733 "$PICTURES"
+	deb-systemd-helper enable bande-unlock-assets.path >/dev/null || true
 	if [ -d /run/systemd/system ]; then
 		systemctl --system daemon-reload >/dev/null 2>&1 || true
 	fi

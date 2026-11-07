@@ -128,9 +128,16 @@ fn the_zoom_control_offers_placements_only_while_the_pointer_rests_and_still_zoo
 
     stage.point_at(FREE_TITLE_BAR);
     stage.double_click();
-    assert_eq!(stage.width(), floating, "free title bar double-click unzooms");
+    assert_eq!(
+        stage.width(),
+        floating,
+        "free title bar double-click unzooms"
+    );
 
     stage.point_at(MOVE_AREA);
     stage.double_click();
-    assert!(stage.width() > floating, "an app's move area acts as title bar");
+    assert!(
+        stage.width() > floating,
+        "an app's move area acts as title bar"
+    );
 }

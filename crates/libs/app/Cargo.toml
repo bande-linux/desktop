@@ -19,6 +19,9 @@ bande-toolkit.workspace = true
 bande-xdg.workspace = true
 libc.workspace = true
 rustix.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+bande-l10n.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]

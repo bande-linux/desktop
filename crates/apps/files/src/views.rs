@@ -10,7 +10,7 @@ pub const DEFAULT_ICON_SIZE: u32 = 64;
 pub const ICON_SIZES: (u32, u32) = (32, 256);
 const KEPT: usize = 500;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ViewMode {
     Icons,
     List,

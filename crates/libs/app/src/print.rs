@@ -76,6 +76,10 @@ pub fn image_document(path: PathBuf) -> Option<Document> {
     })))
 }
 
+pub fn can_print(mime: &str) -> bool {
+    mime == "application/pdf" || mime.starts_with("image/") || mime.starts_with("text/")
+}
+
 pub fn file_document(path: &Path, mime: &str) -> Option<Document> {
     match mime {
         "application/pdf" => Some(Document::File(path.to_path_buf())),

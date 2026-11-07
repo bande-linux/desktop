@@ -112,11 +112,13 @@ pub fn run(home: PathBuf, folder: PathBuf) -> io::Result<()> {
     let root_mount = inspect(&home).map(|inspected| inspected.mount);
     let background = Background {
         index: store.index.clone(),
+        reader: store.reader(),
         fields: store.fields,
         root_mount,
         watcher,
         writer: None,
         written: 0,
+        watch_failed: false,
     };
     thread::Builder::new()
         .name("index-background".to_owned())
@@ -161,7 +163,13 @@ pub fn run(home: PathBuf, folder: PathBuf) -> io::Result<()> {
     follow_policy(home, move |policy| {
         policy_messages.send(Message::Policy(policy)).is_ok()
     });
-    let _connection = bus::start(messages).map_err(io::Error::other)?;
+    let connection = bus::start(messages).map_err(io::Error::other)?;
+    thread::Builder::new()
+        .name("index-bus".to_owned())
+        .spawn(move || {
+            bande_bus::serve_until_closed(&connection);
+            std::process::exit(0);
+        })?;
     service.run(received);
     Ok(())
 }
@@ -374,7 +382,6 @@ impl Service {
             Reply::Imported { id, stamp } => self.imported(id, stamp),
             Reply::Committed => {
                 self.saved_at = Some(Instant::now());
-                self.store.reload();
             }
             Reply::Done => {}
         }
@@ -540,7 +547,9 @@ impl Service {
 
     fn moved_here(&mut self, child: &Child, parent: u32, parent_path: &Path) -> Option<u32> {
         let id = *self.reconcile.as_ref()?.by_inode.get(&child.stamp.inode)?;
-        if self.tree.is_folder(id) != child.folder {
+        if self.tree.is_folder(id) != child.folder
+            || self.tree.stamp(id)?.inode != child.stamp.inode
+        {
             return None;
         }
         let old = self.tree.path(&self.home, id);

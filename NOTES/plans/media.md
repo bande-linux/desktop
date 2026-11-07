@@ -24,8 +24,9 @@ video keeps the display awake. A codec that crashes takes down neither Files nor
 ## Stages
 1. Done: engine, Player, MPRIS, media keys, keep awake, Quick Look.
 2. Done: NV12 dmabufs (`udmabuf` for software decode, BT.709 with the engine converting anything
-   else), copied to textures by the GPU and converted by the compositor's `video` shader. XRGB in
-   shared memory is the fallback. Sampling the dmabuf without the copy is the next saving.
+   else), sampled in place by the compositor's `video` shader (copied first when stride or offsets are not
+   multiples of 16, or on a CPU renderer). XRGB in shared memory is the fallback. A video width
+   whose stride isn't a multiple of 16 still copies: padding the pool's rows would remove that.
 3. Hardware decode, on the kernel repo's `fix-media` branch, not merged: AVD driver in the kernel
    build, `avd-fw` packaged, a small package of the `v4l2codecs` and `videoparsersbad` plugins. It
    needs a test boot on the mini. Browser decode needs VA-API or a Firefox V4L2-request path and is

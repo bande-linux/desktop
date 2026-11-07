@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, Write};
 use std::os::fd::OwnedFd;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -30,6 +30,8 @@ const FIRST_RETRY: Duration = Duration::from_secs(15);
 const LONGEST_RETRY: Duration = Duration::from_secs(300);
 const FOLLOW_FAILURES: u32 = 6;
 const STAY_AFTER_IDLE: Duration = Duration::from_secs(30);
+const IPP_USB: &str = "/usr/sbin/ipp-usb";
+const IPP_USB_PORTS: std::ops::Range<u16> = 60000..60004;
 const BUSY: u16 = 0x0507;
 const FORMAT_REFUSED: u16 = 0x040A;
 const TROUBLES: [&str; 8] = [
@@ -54,6 +56,7 @@ struct Job {
 struct Inner {
     printers: Printers,
     found: HashMap<String, Found>,
+    usb: HashSet<String>,
     watchers: HashSet<String>,
     jobs: Vec<Job>,
     sending_to: HashSet<String>,
@@ -179,6 +182,8 @@ impl Spool {
                 };
                 inner.stop_browsing = Some(keep);
                 drop(inner);
+                let usb = Arc::clone(self);
+                std::thread::spawn(move || usb.look_for_usb_printers());
                 let spool = Arc::clone(self);
                 std::thread::spawn(move || {
                     let browsing = crate::mdns::browse(&wake, |found| {
@@ -196,6 +201,34 @@ impl Spool {
             }
             _ => {}
         }
+    }
+
+    fn look_for_usb_printers(&self) {
+        if !Path::new(IPP_USB).exists() {
+            return;
+        }
+        for port in IPP_USB_PORTS {
+            let uri = format!("ipp://localhost:{port}/ipp/print");
+            let Some(address) = Address::parse(&uri) else {
+                continue;
+            };
+            let Ok((_, model)) = abilities(&address, &uri, &self.pins) else {
+                break;
+            };
+            let id = format!("usb:{port}");
+            let mut inner = self.lock();
+            inner.printers.known.insert(
+                id.clone(),
+                Known {
+                    name: model.clone(),
+                    model,
+                    plain: Some(uri),
+                    ..Known::default()
+                },
+            );
+            inner.usb.insert(id);
+        }
+        self.touched();
     }
 
     fn found(&self, found: Vec<Found>) {
@@ -233,7 +266,10 @@ impl Spool {
             .known
             .iter()
             .filter(|(id, known)| {
-                (inner.found.contains_key(*id) || known.by_address || known.used)
+                (inner.found.contains_key(*id)
+                    || inner.usb.contains(*id)
+                    || known.by_address
+                    || known.used)
                     && !queues.iter().any(|queue| queue.title() == known.name)
             })
             .map(|(id, known)| PrinterInfo {
@@ -247,7 +283,9 @@ impl Spool {
                     Kind::Direct
                 },
                 default: default.as_ref() == Some(id),
-                reachable: inner.found.contains_key(id) || known.by_address,
+                reachable: inner.found.contains_key(id)
+                    || inner.usb.contains(id)
+                    || known.by_address,
             })
             .collect();
         list.extend(queues.iter().map(|queue| {

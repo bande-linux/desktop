@@ -5,7 +5,9 @@ use bande_toolkit::ui::{Label, PopUpButton, Widget};
 use bande_xdg::{Apps, config_dirs, data_dirs};
 
 use crate::L10N;
-use crate::failure::unexpected;
+use bande_settings_panes::PaneId;
+
+use crate::failure::pane_failed;
 use crate::follow::{Update, Updates, spawn};
 use crate::login::App;
 use crate::pages::{Widgets, boxed, muted_row};
@@ -137,7 +139,7 @@ pub fn follow_default_apps(updates: Updates) -> Sender<DefaultAppCommand> {
             if let DefaultAppCommand::Choose(role, id) = command
                 && let Err(error) = choose_default(apps, role, &id)
             {
-                updates.send(unexpected(error));
+                updates.send(pane_failed(PaneId::Apps, "default-app-failed", error));
             }
             if !updates.send(Update::DefaultApps(default_apps(apps))) {
                 break;

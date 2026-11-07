@@ -35,6 +35,7 @@ use bande_l10n::Localizer;
 
 pub use batch_rename::{BatchRename, RuleKind};
 pub use browser::{Browser, Column, Location, RowEdit};
+pub use controls::{list_column_action, list_column_move_action, list_column_title};
 pub use file_manager::{Show, ShowRequest, serve_file_manager};
 pub use menus::{GROUPS, group_action};
 pub use open_with::OpenWith;

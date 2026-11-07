@@ -293,7 +293,11 @@ impl SettingsView {
     ) -> Box<dyn Widget> {
         let path = path.to_owned();
         let set = intent(&self.intents, move |on: bool| {
-            Intent::Network(NetworkCommand::ChangeConnection(path.clone(), change(on)))
+            Intent::Network(NetworkCommand::ChangeConnection(
+                PaneId::Wifi,
+                path.clone(),
+                change(on),
+            ))
         });
         let toggle = Toggle::new(&L10N.tr(label), on, set);
         self.anchors
@@ -352,6 +356,7 @@ impl SettingsView {
                 .get(index)
                 .map_or(PrivateAddress::Off, |(choice, _)| *choice);
             Intent::Network(NetworkCommand::ChangeConnection(
+                PaneId::Wifi,
                 path.clone(),
                 ConnectionChange::PrivateAddress(choice),
             ))
@@ -418,9 +423,6 @@ impl SettingsView {
         }
         page.push(boxed(Caption::new(Text::label(&L10N.tr("tcp-ip")))));
         page.push(boxed(Card::new(addressing)));
-        if let Some(message) = &self.message {
-            page.push(boxed(Caption::new(Text::new(message, Tone::Muted))));
-        }
         let forget = if self.forgetting.as_ref() == Some(&Forget::Network(ssid.clone())) {
             self.forget_row(&name, &L10N.tr("forget-network-warning"))
         } else {
@@ -482,7 +484,7 @@ impl SettingsView {
         self.wifi_manual = known.manual.is_some();
         self.detail = Some(Detail::Network(ssid));
         self.forgetting = None;
-        self.message = None;
+        self.clear_failure();
         self.focus_next = Some(Anchor::Back);
     }
 
@@ -514,19 +516,19 @@ impl SettingsView {
         } else {
             return;
         };
-        self.message = match change {
+        match change {
             Some(change) => {
+                self.clear_failure();
                 self.commands.push(crate::follow::Command::Network(
-                    NetworkCommand::ChangeConnection(path, change),
+                    NetworkCommand::ChangeConnection(PaneId::Wifi, path, change),
                 ));
-                None
             }
-            None => Some(L10N.tr(if self.wifi_manual {
+            None => self.fail_here(L10N.tr(if self.wifi_manual {
                 "manual-address-invalid"
             } else {
                 "dns-invalid"
             })),
-        };
+        }
     }
 
     pub(crate) fn set_wifi_manual(&mut self, manual: bool) {
@@ -551,7 +553,11 @@ impl SettingsView {
             .filter(|known| known.manual.is_some())
         {
             self.commands.push(crate::follow::Command::Network(
-                NetworkCommand::ChangeConnection(known.path.clone(), ConnectionChange::Ipv4(None)),
+                NetworkCommand::ChangeConnection(
+                    PaneId::Wifi,
+                    known.path.clone(),
+                    ConnectionChange::Ipv4(None),
+                ),
             ));
         }
     }

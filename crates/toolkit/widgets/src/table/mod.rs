@@ -1,3 +1,4 @@
+mod columns;
 mod model;
 mod paint;
 
@@ -12,6 +13,7 @@ pub use self::model::{Cell, Column, Row, Sort};
 use self::model::{Line, flatten};
 use self::paint::TextKey;
 use super::disclosure::chevron;
+use super::reorder::Reorder;
 use super::{
     Animated, Context, Cursor, Event, Key, Menu, Modifiers, Parts, Pointer, PointerButton,
     ScrollState, Size, Spring, Widget, WidgetId,
@@ -42,6 +44,11 @@ enum Drag {
         collapse: bool,
     },
     Select,
+    Header {
+        from: Point,
+        column: usize,
+    },
+    Column,
     Resize {
         column: usize,
         from: f32,
@@ -55,10 +62,15 @@ type ExpandCallback = Box<dyn FnMut(&[String], bool, bool)>;
 type MenuSource = Box<dyn FnMut(&[String]) -> Option<Menu>>;
 type MenuChoice = Box<dyn FnMut(&str, &[String])>;
 type DragStart = Box<dyn FnMut(&[String], Point)>;
+type ColumnOrder = Box<dyn FnMut(&[usize])>;
 
 pub struct Table {
     id: WidgetId,
     columns: Vec<Column>,
+    order: Vec<usize>,
+    reorder: Reorder,
+    rise: Animated,
+    on_column_order: ColumnOrder,
     header: bool,
     row: f32,
     sidebar: bool,
@@ -109,6 +121,10 @@ impl Table {
     pub fn new(columns: Vec<Column>) -> Self {
         Self {
             id: WidgetId::next(),
+            order: (0..columns.len()).collect(),
+            reorder: Reorder::new(columns.len()),
+            rise: Animated::new(0.0),
+            on_column_order: Box::new(|_| {}),
             columns,
             header: true,
             row: ROW_HEIGHT,
@@ -231,6 +247,9 @@ impl Table {
     }
 
     pub fn set_columns(&mut self, columns: Vec<Column>) {
+        self.order = (0..columns.len()).collect();
+        self.reorder = Reorder::new(columns.len());
+        self.rise.jump_to(0.0);
         self.columns = columns;
         self.sort = None;
         self.drag = None;
@@ -658,15 +677,14 @@ impl Table {
     }
 
     fn column_edges(&self) -> Vec<(f32, f32)> {
+        let widths = self.widths();
+        let mut edges = vec![(0.0, 0.0); widths.len()];
         let mut x = self.frame.x;
-        self.widths()
-            .into_iter()
-            .map(|width| {
-                let edge = (x, width);
-                x += width;
-                edge
-            })
-            .collect()
+        for column in &self.order {
+            edges[*column] = (x, widths[*column]);
+            x += widths[*column];
+        }
+        edges
     }
 
     pub fn row_at(&self, point: Point) -> Option<usize> {
@@ -806,6 +824,10 @@ impl Table {
             return false;
         }
         match key {
+            Key::Escape if self.drag == Some(Drag::Column) => {
+                self.cancel_column(cx);
+                true
+            }
             Key::Up => self.step(
                 cx,
                 cursor.map_or(last, |index| index.saturating_sub(1)),
@@ -840,9 +862,9 @@ impl Table {
                     .zip(&self.selected)
                     .filter(|(_, selected)| **selected)
                     .map(|(line, _)| {
-                        self.lines[*line]
-                            .cells
+                        self.order
                             .iter()
+                            .filter_map(|column| self.lines[*line].cells.get(*column))
                             .map(|cell| cell.text.as_ref())
                             .collect::<Vec<_>>()
                             .join("\t")
@@ -912,15 +934,8 @@ impl Table {
         }
     }
 
-    fn header_click(&mut self, point: Point) -> bool {
-        let Some(column) = self
-            .column_edges()
-            .iter()
-            .position(|(x, width)| point.x >= *x && point.x < x + width)
-        else {
-            return false;
-        };
-        if !self.columns[column].sortable {
+    fn sort_by_column(&mut self, column: usize) -> bool {
+        if !self.columns.get(column).is_some_and(|shown| shown.sortable) {
             return false;
         }
         let ascending = match self.sort {
@@ -933,22 +948,34 @@ impl Table {
         true
     }
 
+    fn in_header(&self, point: Point) -> bool {
+        point.y >= self.frame.y && point.y < self.frame.y + self.header_height()
+    }
+
     fn resize_grip(&self, point: Point) -> Option<usize> {
-        if point.y < self.frame.y || point.y >= self.frame.y + self.header_height() {
+        if !self.in_header(point) {
             return None;
         }
         let edges = self.column_edges();
-        edges
+        self.order
             .iter()
-            .take(edges.len().saturating_sub(1))
-            .position(|(x, width)| (point.x - (x + width)).abs() <= RESIZE_GRIP)
+            .take(self.order.len().saturating_sub(1))
+            .position(|column| {
+                let (x, width) = edges[*column];
+                (point.x - (x + width)).abs() <= RESIZE_GRIP
+            })
     }
 
     fn pointer_down(&mut self, cx: &mut Context, pointer: &Pointer) -> bool {
         if pointer.button == PointerButton::Primary {
             if let Some(grip) = self.resize_grip(pointer.position) {
-                let inverted = grip >= self.stretched();
-                let column = grip + usize::from(inverted);
+                let stretched = self.stretched();
+                let inverted = self
+                    .order
+                    .iter()
+                    .take(grip + 1)
+                    .any(|column| *column == stretched);
+                let column = self.order[grip + usize::from(inverted)];
                 self.drag = Some(Drag::Resize {
                     column,
                     from: pointer.position.x,
@@ -958,7 +985,14 @@ impl Table {
                 return true;
             }
             if pointer.position.y < self.frame.y + self.header_height() {
-                return self.header_click(pointer.position);
+                let Some(column) = self.column_at(pointer.position) else {
+                    return false;
+                };
+                self.drag = Some(Drag::Header {
+                    from: pointer.position,
+                    column,
+                });
+                return true;
             }
         }
         let index = self.row_under(cx, pointer.position);
@@ -998,8 +1032,17 @@ impl Table {
         self.click(index, modifiers, pointer.count)
     }
 
-    fn pointer_up(&mut self) -> bool {
+    fn pointer_up(&mut self, cx: &mut Context, at: Point) -> bool {
         match self.drag.take() {
+            Some(Drag::Header { column, .. }) => {
+                self.in_header(at)
+                    && self.column_at(at) == Some(column)
+                    && self.sort_by_column(column)
+            }
+            Some(Drag::Column) => {
+                self.drop_column(cx);
+                true
+            }
             Some(Drag::Press {
                 row,
                 collapse: true,
@@ -1052,6 +1095,14 @@ impl Table {
                 true
             }
             Some(Drag::Press { from, row, .. }) => self.press_moved(cx, from, row, point),
+            Some(Drag::Header { from, column }) => {
+                (point.x - from.x).hypot(point.y - from.y) >= DRAG_THRESHOLD
+                    && self.lift_column(cx, column, from, point)
+            }
+            Some(Drag::Column) => {
+                self.drag_column(cx, point.x);
+                true
+            }
             Some(Drag::Select) => {
                 let body = self.body();
                 let clamped =
@@ -1082,10 +1133,13 @@ impl Table {
         let header_id = self.id.part(u64::from(u32::MAX - 1));
         let mut header = Node::new(Role::Row);
         let mut titles = Vec::new();
-        for (column, (x, width)) in self.column_edges().into_iter().enumerate() {
+        let edges = self.column_edges();
+        for (shown, column) in self.order.iter().copied().enumerate() {
+            let (x, width) = edges[column];
             let id = self.id.part(u64::from(u32::MAX - 2) - column as u64);
             let mut title = Node::new(Role::ColumnHeader);
             title.set_label(self.columns[column].title.clone());
+            title.set_column_index(shown);
             title.set_bounds(access_rect(Rect::new(
                 x,
                 self.frame.y,
@@ -1141,13 +1195,16 @@ impl Table {
         node.add_action(Action::ScrollIntoView);
         node.set_bounds(access_rect(bounds));
         let mut cells = Vec::new();
-        for (column, cell) in row.cells.iter().enumerate().take(self.columns.len()) {
+        for (shown, column) in self.order.iter().copied().enumerate() {
+            let Some(cell) = row.cells.get(column) else {
+                continue;
+            };
             let cell_id = self
                 .id
                 .part(index as u64 * (self.columns.len() as u64 + 1) + column as u64 + 1);
             let mut cell_node = Node::new(Role::Cell);
             cell_node.set_label(cell.text.as_ref());
-            cell_node.set_column_index(column);
+            cell_node.set_column_index(shown);
             cell_node.set_row_index(index);
             cells.push(cell_id);
             parts.nodes.push((cell_id, cell_node));
@@ -1253,6 +1310,8 @@ impl Widget for Table {
         let (first, last) = self.visible_rows(cx);
         let widths = self.widths();
         let edges = self.column_edges();
+        let shifts = self.column_shifts(cx);
+        let floating = self.floating_column(cx);
         let texts = self.texts.borrow();
         let mut rows = Vec::new();
         self.paint_selection(cx, body, offset, focused, &mut rows);
@@ -1278,38 +1337,18 @@ impl Widget for Table {
                 };
                 chevron(centre, self.turn(cx, line), color, &mut rows);
             }
-            for (column, cell) in line.cells.iter().enumerate().take(self.columns.len()) {
-                let (x, width) = edges[column];
-                let mut text_x = x + CELL_PADDING;
-                if column == 0 {
-                    text_x += self.indent(line);
+            for column in 0..line.cells.len().min(self.columns.len()) {
+                if Some(column) != floating {
+                    let x = edges[column].0 + shifts[column];
+                    self.paint_cell(
+                        cx,
+                        (&texts, &widths),
+                        (line, index),
+                        column,
+                        (x, y, lit),
+                        &mut rows,
+                    );
                 }
-                if let Some(icon) = &cell.icon {
-                    rows.push(Item::Image {
-                        rect: Rect::new(
-                            text_x,
-                            y + (self.row_height() - ICON_SIZE) / 2.0,
-                            ICON_SIZE,
-                            ICON_SIZE,
-                        ),
-                        image: icon.clone(),
-                    });
-                }
-                text_x += self.icon_space(column, cell);
-                let key = self.text_key(cx, line, column, lit, &widths);
-                let Some(paragraph) = texts.get(&key) else {
-                    continue;
-                };
-                if self.columns[column].numeric {
-                    text_x = x + widths[column].min(width) - CELL_PADDING - paragraph.width();
-                }
-                rows.push(Item::Text {
-                    origin: Point::new(
-                        text_x,
-                        y + ((self.row_height() - paragraph.height()) / 2.0).round(),
-                    ),
-                    paragraph: paragraph.clone(),
-                });
             }
         }
         items.push(Item::Clip {
@@ -1324,10 +1363,13 @@ impl Widget for Table {
                     self.frame.x,
                     self.frame.y,
                     self.frame.width,
-                    Self::HEADER_HEIGHT,
+                    self.header_bar(),
                 )),
                 items: header,
             });
+        }
+        if let Some(column) = floating {
+            self.paint_floating_column(cx, column, edges[column], shifts[column], items);
         }
         self.scroll.paint_scrollbar(cx, body, items);
     }
@@ -1390,9 +1432,7 @@ impl Widget for Table {
         let header_start = u64::from(u32::MAX - 2) - self.columns.len() as u64;
         if part > header_start && part <= u64::from(u32::MAX - 2) {
             let column = (u64::from(u32::MAX - 2) - part) as usize;
-            let x = self.column_edges().get(column).map_or(0.0, |(x, _)| *x);
-            return request.action == Action::Click
-                && self.header_click(Point::new(x + 1.0, self.frame.y + 1.0));
+            return request.action == Action::Click && self.sort_by_column(column);
         }
         let index = (part / stride) as usize;
         if index >= self.shown.len() {
@@ -1423,9 +1463,13 @@ impl Widget for Table {
                 self.scroll.pointer(cx, self.body(), event)
                     | self.pointer_move(cx, pointer.position)
             }
-            Event::PointerUp(_) => self.pointer_up() | self.scroll.pointer(cx, self.body(), event),
+            Event::PointerUp(pointer) => {
+                self.pointer_up(cx, pointer.position) | self.scroll.pointer(cx, self.body(), event)
+            }
             Event::PointerLeave => {
-                self.drag = None;
+                if self.drag.take() == Some(Drag::Column) {
+                    self.drop_column(cx);
+                }
                 self.scroll.pointer(cx, self.body(), event)
             }
             Event::Key { key, modifiers } => self.key(cx, *key, *modifiers),
@@ -1442,7 +1486,10 @@ impl Widget for Table {
     }
 
     fn cursor(&self, point: Point) -> Option<Cursor> {
-        self.resize_grip(point).map(|_| Cursor::ColumnResize)
+        match self.drag {
+            Some(Drag::Column) => Some(Cursor::Grabbing),
+            _ => self.resize_grip(point).map(|_| Cursor::ColumnResize),
+        }
     }
 
     fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {

@@ -214,7 +214,7 @@ impl Compositor {
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, BandeShellV1, ()>(crate::shell::OPEN_TERMINAL_SINCE, ());
-        handle.create_global::<State, BandeAppV1, ()>(6, ());
+        handle.create_global::<State, BandeAppV1, ()>(7, ());
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());

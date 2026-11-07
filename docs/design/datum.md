@@ -89,6 +89,8 @@ Light keeps the warm hue (paper and stone). Dark moved in 2026 from warm near-bl
 
 Targets: body text Lc ≥ 90 in light; in dark Lc 75–90, because APCA gives Lc 90 as the advisory maximum in dark mode, where halation, not lack of contrast, is the problem (a test fails if ink is brightened back to near white); secondary Lc ≥ 60 at 12–13 pt medium (met); `ink3` only for labels ≥ 10.5 pt semibold, placeholders and disabled (Lc ≥ 30 floor; dark `ink3` at Lc 39 is placeholder-only, and labels on dark use `ink2` when ≤ 11 pt in Increase Contrast). Non-text control boundaries: ≥ 1.9:1 default, ≥ 3:1 with Increase Contrast (`edge` darkens to L .62 light / lightens to L .58 dark). Add a test that computes these from the tokens and fails CI below target.
 
+**Dimmed items:** an item that is normally hidden, shown on request (a dotfile in Files and the file chooser), steps down one ink: its name in `ink2`, its details in `ink3` (`ink2` on an unfocused selection, so they stay readable on `well`), and its icon or thumbnail at `Palette::DIMMED_ALPHA` (50 %). On an accent selection the text is `on_accent` as usual and the icon stays dimmed.
+
 ### The signal: accent strategy
 - **Default accent: Ultramarine.** Light `#4859DD` (oklch .53 .20 272), dark `#7E96FB` (oklch .70 .15 272). It is bluer-violet than Apple's azure `#007AFF` and sits with the existing blue-violet wallpapers. It is chosen because selection must read as neutral "this one", and a warm signal would read as a warning.
 - **Dark selections are mid-tone fills with white text.** Each accent has a dark *fill* tone, solved to luminance ≈ 0.175 so white text reaches ≥ 4.5:1 and the fill stays ≥ 3:1 on chassis and sheet; the brighter tone is the dark *text* tone (links, focus rings, carets, chart lines, ANSI colours). This halves the brightest area on a dark screen. Amber and Graphite keep a light fill with `deep` text, since white cannot reach 4.5:1 on them.
@@ -243,9 +245,9 @@ A dry, short, *wooden-percussive* palette: soft-attack mallet and click tones un
 
 The Taskbar is an edge-anchored bar, 64 pt at the default icon size, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
 - Bar surface = `chassis` (same tone as window frames, so the bar reads as the desktop's frame), with a 1 pt `edge` on the inner side only, square at the screen edge. It is opaque; "Tinted chassis" applies here too.
-- **Active app = a 3×16 accent tick** on the screen-edge side; **running = a 3×3 `ink2` square** (the square motif; a dot would be macOS).
+- **Active app = a `focus` frame** around its icon: 4 pt outside it, a 1.5 pt `focus` line over a `focus` plate at 14 % (22 % hovered, 30 % pressed), radius concentric with the icon. It is the one `focus` shape on the bar and glides to the next active app on `quick` (a cross-fade under Reduce Motion). **Other running apps = a 3×3 `ink2` square** on the screen-edge side (the square motif; a dot would be macOS).
 - The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 14 panels).
 - The clock is Inter 15/600 tnum stacked "14 / 32".
 - The mark is a "B" knocked out of a rounded square in `ink`, stroked at the weight of the bar glyphs.
 - Bar pop-overs (Control Center, calendar, notifications) are `overlay` panels with radius 14 that slide out from the bar along its normal axis (`standard`).
-- Horizontal placement uses the same rules with the tick on the bottom edge.
+- Horizontal placement uses the same rules with the square on the bottom edge.

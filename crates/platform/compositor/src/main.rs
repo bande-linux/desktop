@@ -5,11 +5,11 @@ use std::time::{Duration, Instant};
 
 use bande_compositor::{
     CLIPBOARD_DAEMON, Compositor, CursorTheme, DrmBackend, DrmNotifiers, FrameClock, FrameOutput,
-    FrameScheduler, GREETER, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
-    SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
-    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
+    FrameRecovery, FrameScheduler, GREETER, InputSettings, REFRESH, REVIEW, RecoveryStep, Renderer,
+    SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep,
+    Sleep, export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
     follow_session, follow_shutdown, follow_sleep, notify_service_manager, serve_app_states,
-    serve_keyboard_monitor, user_config, watchdog_keepalive_interval,
+    serve_keyboard_monitor, sleep_on_request, user_config, watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, OBJECT_PATH};
 use bande_datetime::ClockChanges;
@@ -30,6 +30,7 @@ const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
 const SHELL_READY_TIMEOUT: Duration = Duration::from_millis(2500);
 const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
 const GREETER_HANG_CHECK: Duration = Duration::from_secs(10);
+const MINIMUM_UPTIME_TO_RESTART: Duration = Duration::from_secs(300);
 
 enum Backend {
     Headless,
@@ -471,6 +472,28 @@ fn listen<O: 'static>(
     Ok(())
 }
 
+fn restart_the_computer(system: Option<&Connection>) {
+    let uptime = std::fs::read_to_string("/proc/uptime")
+        .ok()
+        .and_then(|text| text.split('.').next()?.parse::<u64>().ok());
+    if uptime.is_none_or(|seconds| seconds < MINIMUM_UPTIME_TO_RESTART.as_secs()) {
+        return;
+    }
+    let Some(system) = system else {
+        return;
+    };
+    tracing::error!("the login window cannot reach the display; restarting the computer");
+    if let Err(error) = system.call_method(
+        Some("org.freedesktop.login1"),
+        "/org/freedesktop/login1",
+        Some("org.freedesktop.login1.Manager"),
+        "Reboot",
+        &false,
+    ) {
+        tracing::warn!("cannot restart the computer: {error}");
+    }
+}
+
 fn end_greeter_when_hung<O: 'static>(
     handle: &LoopHandle<'static, App<O>>,
 ) -> Result<(), Box<dyn Error>> {
@@ -621,6 +644,13 @@ where
     O::Error: Into<Box<dyn Error>>,
 {
     listen(&event_loop.handle(), &mut app)?;
+    if let Some(system) = &app.buses.system {
+        let (requests, received) = std::sync::mpsc::channel();
+        match sleep_on_request(system, received) {
+            Ok(()) => app.compositor.sleep_on_the_power_key(requests),
+            Err(error) => tracing::warn!("the power button cannot sleep: {error}"),
+        }
+    }
     let (mut greeter, mut review) = match session {
         Session::User => {
             app.compositor
@@ -634,6 +664,8 @@ where
         }
     };
     let mut timeout = None;
+    let mut recovery = FrameRecovery::default();
+    let mut frame_error = None;
     loop {
         event_loop.dispatch(timeout, &mut app)?;
         if let Some(child) = review.as_mut()
@@ -692,21 +724,50 @@ where
         for scheduler in schedulers.iter_mut() {
             match scheduler.poll(now, compositor, output) {
                 Ok(frame) => frame_wake = frame_wake.into_iter().chain(frame.wake_at).min(),
-                Err(error) => tracing::warn!("cannot show a frame: {}", error.into()),
+                Err(error) => {
+                    let text = error.into().to_string();
+                    if frame_error.as_ref() != Some(&text) {
+                        tracing::warn!("cannot show a frame: {text}");
+                        frame_error = Some(text);
+                    }
+                    frame_wake = Some(now());
+                }
             }
         }
-        match output.renew_lost_renderer() {
+        match output.renew_failed_renderer() {
             Ok(true) => {
-                schedulers.iter_mut().for_each(FrameScheduler::resume);
+                schedulers.iter_mut().for_each(FrameScheduler::restart);
                 frame_wake = Some(now());
             }
             Ok(false) => {}
             Err(error) => {
-                return Err(format!(
-                    "the GPU was lost and the renderer cannot start again: {}",
-                    error.into()
-                )
-                .into());
+                return Err(format!("the renderer cannot start again: {}", error.into()).into());
+            }
+        }
+        let stalled_for = schedulers
+            .iter()
+            .map(FrameScheduler::stalled_since)
+            .collect::<Option<Vec<_>>>()
+            .and_then(|since| since.into_iter().max())
+            .map(|since| now().saturating_sub(since));
+        if stalled_for.is_none() {
+            frame_error = None;
+        }
+        match recovery.step(stalled_for) {
+            RecoveryStep::Wait => {}
+            RecoveryStep::RestartDisplay => {
+                tracing::error!("no frame reached the display for a while; restarting it");
+                if let Err(error) = output.restart_display() {
+                    return Err(format!("cannot restart the display: {}", error.into()).into());
+                }
+                schedulers.iter_mut().for_each(FrameScheduler::restart);
+                frame_wake = Some(now());
+            }
+            RecoveryStep::GiveUp => {
+                if session == Session::Greeter {
+                    restart_the_computer(app.buses.system.as_ref());
+                }
+                return Err("no frame reached the display; ending the session".into());
             }
         }
         let frame_wait = frame_wake.map(|at: Duration| at.saturating_sub(now()));

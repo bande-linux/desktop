@@ -115,6 +115,7 @@ bande-notifications = { path = "crates/shell/notifications" }
 bande-notify = { path = "crates/services/notify" }
 bande-polkit = { path = "crates/services/polkit" }
 bande-power = { path = "crates/services/power" }
+bande-recovery = { path = "crates/services/recovery" }
 bande-protocols = { path = "crates/platform/protocols" }
 bande-render = { path = "crates/platform/render" }
 bande-review = { path = "crates/testing/review" }

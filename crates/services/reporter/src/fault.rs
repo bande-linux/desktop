@@ -1,0 +1,307 @@
+use std::fs;
+use std::io;
+use std::path::Path;
+use std::process::{Command, Stdio};
+use std::thread::sleep;
+use std::time::{Duration, Instant};
+
+use jiff::Timestamp;
+use ring::digest::{SHA256, digest};
+use serde_json::{Map, Value, json};
+
+use crate::config::Config;
+use crate::facts;
+use crate::scrub::Scrubber;
+use crate::signature::{Frame, signature};
+use crate::spool::{Attachment, Spool};
+use crate::stacks::{Stacks, parse_eu_stack};
+
+const SNAPSHOTS: usize = 3;
+const SNAPSHOT_GAP: Duration = Duration::from_secs(1);
+const EU_STACK_PATIENCE: Duration = Duration::from_secs(8);
+const EU_STACK_CHECK: Duration = Duration::from_millis(50);
+const NETWORK_FILESYSTEMS: [(&str, &str); 7] = [
+    ("cifs", "smb"),
+    ("smb3", "smb"),
+    ("nfs4", "nfs"),
+    ("nfs", "nfs"),
+    ("rpc_", "nfs"),
+    ("fuse", "fuse"),
+    ("sshfs", "fuse"),
+];
+
+pub struct Fault {
+    pub kind: String,
+    pub program: Option<String>,
+    pub owner: Option<u32>,
+    pub pid: Option<String>,
+    pub detail: Map<String, Value>,
+    pub panic_location: Option<String>,
+    pub signature_text: Option<String>,
+    pub stacks: Stacks,
+    pub time: Timestamp,
+    pub boot: Option<String>,
+    pub attachments: Vec<Attachment>,
+}
+
+impl Fault {
+    pub fn new(kind: &str) -> Self {
+        Self {
+            kind: kind.to_owned(),
+            program: None,
+            owner: None,
+            pid: None,
+            detail: Map::new(),
+            panic_location: None,
+            signature_text: None,
+            stacks: Stacks::default(),
+            time: Timestamp::now(),
+            boot: None,
+            attachments: Vec::new(),
+        }
+    }
+
+    fn signature(&self) -> String {
+        let extra = self.signature_text.as_deref().map(|text| Frame {
+            symbol: Some(text),
+            module: "",
+            offset: 0,
+        });
+        let mut frames: Vec<Frame<'_>> = extra.into_iter().collect();
+        frames.extend(self.stacks.faulting());
+        signature(
+            &format!("{} {}", self.kind, self.program.as_deref().unwrap_or("-")),
+            self.panic_location.as_deref(),
+            &frames,
+        )
+    }
+
+    pub fn store(
+        mut self,
+        spool: &Spool,
+        config: &Config,
+        spool_root: &Path,
+    ) -> io::Result<String> {
+        let scrubber = Scrubber::for_this_computer();
+        let mut manifest = Map::new();
+        manifest.insert("signature".to_owned(), json!(self.signature()));
+        manifest.insert("kind".to_owned(), json!(self.kind));
+        manifest.insert("time".to_owned(), json!(self.time.to_string()));
+        manifest.insert("program".to_owned(), json!(self.program));
+        manifest.insert("owner_uid".to_owned(), json!(self.owner));
+        manifest.insert("build_ids".to_owned(), self.stacks.build_ids());
+        manifest.insert("threads".to_owned(), self.stacks.threads_json());
+        manifest.insert("images".to_owned(), self.stacks.images_json());
+        manifest.insert("panic_location".to_owned(), json!(self.panic_location));
+        manifest.insert("counters".to_owned(), facts::counters_of(spool_root));
+        manifest.extend(facts::machine());
+        if let Some(uid) = self.owner {
+            facts::session(uid, &mut manifest);
+        }
+        for (name, value) in std::mem::take(&mut self.detail) {
+            let value = match value {
+                Value::String(text) => Value::String(scrubber.text(&text)),
+                other => other,
+            };
+            manifest.insert(name, value);
+        }
+        let journal =
+            facts::journal_around(self.boot.as_deref(), Some(self.time.as_second()), &scrubber);
+        push_text(&mut self.attachments, "journal.txt", journal);
+        if let (Some(uid), Some(program)) = (self.owner, self.program.as_deref()) {
+            let ring = facts::ring_lines(uid, program, self.pid.as_deref());
+            push_text(&mut self.attachments, "ring.txt", scrubber.text(&ring));
+        }
+        spool.store(manifest, self.attachments, config.sends_automatically())
+    }
+}
+
+pub fn push_text(attachments: &mut Vec<Attachment>, name: &str, text: String) {
+    if !text.trim().is_empty() {
+        attachments.push(Attachment {
+            name: name.to_owned(),
+            bytes: text.into_bytes(),
+        });
+    }
+}
+
+fn thread_ids(pid: &str) -> Vec<String> {
+    let mut ids: Vec<String> = fs::read_dir(format!("/proc/{pid}/task"))
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter_map(|entry| entry.file_name().into_string().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    ids.sort();
+    ids
+}
+
+fn kernel_state(pid: &str, tid: &str) -> String {
+    let read = |name: &str| {
+        fs::read_to_string(format!("/proc/{pid}/task/{tid}/{name}"))
+            .unwrap_or_default()
+            .trim()
+            .to_owned()
+    };
+    let stat = read("stat");
+    let state = stat
+        .rsplit_once(") ")
+        .and_then(|(_, rest)| rest.split(' ').next())
+        .unwrap_or("?");
+    format!(
+        "thread {tid} {} state={state} wchan={} syscall={}\n{}\n",
+        read("comm"),
+        read("wchan"),
+        read("syscall").split(' ').next().unwrap_or("?"),
+        read("stack"),
+    )
+}
+
+pub fn snapshot_threads(pid: &str) -> String {
+    let mut text = String::new();
+    for snapshot in 0..SNAPSHOTS {
+        if snapshot > 0 {
+            sleep(SNAPSHOT_GAP);
+        }
+        text.push_str(&format!("--- snapshot {snapshot}\n"));
+        for tid in thread_ids(pid) {
+            text.push_str(&kernel_state(pid, &tid));
+        }
+    }
+    text
+}
+
+fn user_stacks(pid: &str) -> String {
+    let Ok(mut child) = Command::new("eu-stack")
+        .args(["-p", pid, "-m", "-b", "-s", "-n", "48"])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .stdout(Stdio::piped())
+        .spawn()
+    else {
+        return String::new();
+    };
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if started.elapsed() < EU_STACK_PATIENCE => sleep(EU_STACK_CHECK),
+            _ => {
+                if let Err(error) = child.kill() {
+                    tracing::debug!("cannot stop eu-stack: {error}");
+                }
+                break;
+            }
+        }
+    }
+    child
+        .wait_with_output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        .unwrap_or_default()
+}
+
+fn network_filesystem_in(stacks: &str) -> Option<&'static str> {
+    stacks.lines().find_map(|line| {
+        NETWORK_FILESYSTEMS
+            .iter()
+            .find(|(name, _)| line.contains(name))
+            .map(|(_, protocol)| *protocol)
+    })
+}
+
+fn hashed_servers(protocol: &str) -> Value {
+    let mounts = fs::read_to_string("/proc/mounts").unwrap_or_default();
+    let hashes: Vec<String> = mounts
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split(' ');
+            let source = fields.next()?;
+            let kind = fields.nth(1)?;
+            kind.starts_with(protocol).then(|| {
+                let server = source
+                    .trim_start_matches('/')
+                    .split(['/', ':'])
+                    .next()
+                    .unwrap_or(source);
+                let hash = digest(&SHA256, server.as_bytes());
+                hash.as_ref()[..8]
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect()
+            })
+        })
+        .collect();
+    json!(hashes)
+}
+
+fn first_kernel_frames(snapshot: &str) -> String {
+    snapshot
+        .lines()
+        .filter(|line| line.starts_with('['))
+        .take(4)
+        .filter_map(|line| line.split_whitespace().nth(1))
+        .map(|frame| frame.split('+').next().unwrap_or(frame))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+pub fn capture_hang(fault: &mut Fault, pid: &str, seconds: Option<u64>) {
+    let snapshots = snapshot_threads(pid);
+    let eu = user_stacks(pid);
+    let main_tid = pid.parse().unwrap_or(0);
+    fault.stacks = parse_eu_stack(&eu, main_tid);
+    if let Some(protocol) = network_filesystem_in(&snapshots) {
+        fault.kind = "mount-stall".to_owned();
+        fault.detail.insert("protocol".to_owned(), json!(protocol));
+        fault
+            .detail
+            .insert("servers_hashed".to_owned(), hashed_servers(protocol));
+    }
+    if let Some(seconds) = seconds {
+        fault
+            .detail
+            .insert("stalled_seconds".to_owned(), json!(seconds));
+    }
+    if fault.stacks.threads.is_empty() {
+        fault.signature_text = Some(first_kernel_frames(&snapshots));
+    }
+    push_text(&mut fault.attachments, "kernel-stacks.txt", snapshots);
+}
+
+pub fn stuck_tasks() -> String {
+    let mut text = String::new();
+    let Ok(entries) = fs::read_dir("/proc") else {
+        return text;
+    };
+    for entry in entries.flatten() {
+        let Some(pid) = entry.file_name().into_string().ok() else {
+            continue;
+        };
+        if !pid.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        for tid in thread_ids(&pid) {
+            let stat =
+                fs::read_to_string(format!("/proc/{pid}/task/{tid}/stat")).unwrap_or_default();
+            if stat
+                .rsplit_once(") ")
+                .is_some_and(|(_, rest)| rest.starts_with('D'))
+            {
+                text.push_str(&kernel_state(&pid, &tid));
+            }
+        }
+    }
+    text
+}
+
+pub fn mount_stall_details(stuck: &str, fault: &mut Fault) {
+    if let Some(protocol) = network_filesystem_in(stuck) {
+        fault.kind = "mount-stall".to_owned();
+        fault.detail.insert("protocol".to_owned(), json!(protocol));
+        fault
+            .detail
+            .insert("servers_hashed".to_owned(), hashed_servers(protocol));
+    }
+}

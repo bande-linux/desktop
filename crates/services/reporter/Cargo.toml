@@ -12,7 +12,7 @@ bande-log.workspace = true
 flate2.workspace = true
 jiff.workspace = true
 ring.workspace = true
-rustix = { workspace = true, features = ["fs", "net"] }
+rustix = { workspace = true, features = ["fs", "net", "stdio"] }
 rustls.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
@@ -20,7 +20,7 @@ tracing.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, systemd (>= 257), init-system-helpers (>= 1.66)"
+depends = "$auto, systemd (>= 257), init-system-helpers (>= 1.66), elfutils"
 extended-description = """\
 Keeps a small report of each fault in a root-only folder. Reports leave the \
 computer only if sending is switched on and a server is configured; nothing is \
@@ -31,6 +31,9 @@ assets = [
     ["target/release/bande-reporter", "usr/libexec/", "755"],
     ["data/bande-reporter-send.service", "usr/lib/systemd/system/", "644"],
     ["data/bande-reporter-send.path", "usr/lib/systemd/system/", "644"],
+    ["data/bande-reporter.socket", "usr/lib/systemd/system/", "644"],
+    ["data/bande-reporter.service", "usr/lib/systemd/system/", "644"],
+    ["data/bande-reporter-watch.service", "usr/lib/systemd/system/", "644"],
     ["data/bande-reporter.tmpfiles", "usr/lib/tmpfiles.d/bande-reporter.conf", "644"],
 ]
 

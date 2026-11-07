@@ -29,10 +29,8 @@ Sources: <https://keith.github.io/xcode-man-pages/mount_nfs.8.html>, <https://ke
 
 Health: while a mount exists the service runs one statfs in a disposable thread and a TCP connect, every 10 s and at once on wake or a network change. This is a justified deadline and stops with the last mount. Two misses mean unresponsive.
 
-## Stages
+## Left
 
-NFS, forced unmount, health, the alert, the dead timer, reconnecting, and the Files, chooser, desktop and library paths have shipped.
-
-- Apps: Terminal starting in a server folder, TextEdit, Preview, Disks.
-- Copy under a cut link, logout, shutdown and sleep with a dead mount: measure, fix what they find.
-- Quick Look panel and print of a text or image file on a server (printing is off there for now).
+- Print a text or image file on a server (off there for now), Preview's next and previous there, and Disks' size check of a restore image on a server: run them off the UI thread.
+- Wake from sleep with a dead mount: entering sleep is measured; waking needs a real machine.
+- Shutdown stays bounded by `cifs`'s own teardown (about 16 s measured), which systemd's mount job waits for. Windows PCs under Network.

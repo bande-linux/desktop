@@ -82,7 +82,11 @@ impl MountsInterface {
 
     async fn forget(&self, url: String) {
         let mounts = self.0.clone();
-        unblock(move || mounts.forget(&url)).await;
+        unblock(move || {
+            mounts.forget(&url);
+            mounts.announce();
+        })
+        .await;
     }
 
     async fn install(&self, packages: Vec<String>) -> zbus::fdo::Result<()> {

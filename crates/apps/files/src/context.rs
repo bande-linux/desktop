@@ -342,6 +342,10 @@ impl FilesView {
         let Some(Row::Place(place)) = self.sidebar.get(index).cloned() else {
             return;
         };
+        if let Location::Server(url) = &place.location {
+            self.requests.push(Request::ForgetServer(url.clone()));
+            return;
+        }
         let mut places = self.favourite_places();
         places.retain(|known| known.location != place.location);
         let mut hidden = self.hidden_places.clone();

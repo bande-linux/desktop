@@ -642,10 +642,7 @@ impl FilesView {
             let (picture, thumbnail) = self.grid_picture(entry, size);
             if let Some(image) = picture {
                 let fitted = crate::paint::fitted(icon, &image);
-                shown.push(Item::Image {
-                    rect: fitted,
-                    image,
-                });
+                shown.push(crate::paint::entry_picture(entry, fitted, image));
                 if thumbnail {
                     shown.push(Item::Stroke {
                         shape: Shape::rect(fitted.inset(-0.5)),
@@ -667,7 +664,7 @@ impl FilesView {
             let color = if marked {
                 self.palette.on_accent
             } else {
-                self.palette.ink
+                self.entry_ink(entry)
             };
             let name = self.shown_name(entry).to_owned();
             let paragraph = self.grid_label(&name, label.width, color);

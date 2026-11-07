@@ -169,14 +169,10 @@ fn run(dialog: Dialog) -> ExitCode {
         read(memory_file()).and_then(|memory| remembered_folder(&memory, &dialog.app_id));
     let folder = initial_folder(&dialog, remembered, &home, &documents);
     let dirs = data_dirs();
-    let show_extensions =
-        settings_folder().is_some_and(|folder| FilesSettings::load(&folder).show_extensions);
-    let chooser = Chooser::new(
-        dialog.clone(),
-        MimeDatabase::load(&dirs),
-        folder,
-        show_extensions,
-    );
+    let settings = settings_folder()
+        .map(|folder| FilesSettings::load(&folder))
+        .unwrap_or_default();
+    let chooser = Chooser::new(dialog.clone(), MimeDatabase::load(&dirs), folder, &settings);
     let bookmarks = read(config_home().map(|config| config.join("gtk-3.0/bookmarks")));
     let user = std::env::var("USER").unwrap_or_default();
     let volumes = mounted_volumes(

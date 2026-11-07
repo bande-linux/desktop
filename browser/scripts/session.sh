@@ -1,38 +1,33 @@
 #!/bin/bash
-# session.sh <out dir> <shot name> <seconds> <command...>: inside a test chroot, runs the command
-# under the real headless Bande compositor on a private bus and a temporary runtime dir, with the
-# portal running, and takes one screenshot after <seconds> into <out dir>/<shot name>.png. The
-# compositor only lets the client it spawns itself capture, so grim stands in at /usr/bin/bande-review.
+# session.sh <command...>: inside a test chroot, runs the command under the real headless Bande
+# compositor on a private bus and runtime dir, with the portal running, and returns its exit code.
+# The compositor only lets the client it spawns capture the screen, so scripts/shot.py stands in at
+# /usr/bin/bande-review; `SHOT_DIR` tells the command where to ask for screenshots.
 set -euo pipefail
-out=$1 shot=$2 delay=$3; shift 3
+repo=$(dirname "$(dirname "$(realpath "$0")")")
 run=$(mktemp -d)
 chmod 700 "$run"
-mkdir -p "$out"
-cat > /usr/bin/bande-review <<REVIEW
-#!/bin/sh
-sleep $delay
-grim "$out/$shot.png"
-touch "$run/shot-done"
-REVIEW
+mkdir -p "$run/shots"
+export SHOT_DIR=$run/shots
+printf '#!/bin/sh\nexec python3 -I %s/scripts/shot.py %s\n' "$repo" "$SHOT_DIR" > /usr/bin/bande-review
 chmod +x /usr/bin/bande-review
 export XDG_RUNTIME_DIR=$run XDG_SESSION_TYPE=wayland BANDE_REVIEW_JOB=1
-export VK_DRIVER_FILES=$(ls /usr/share/vulkan/icd.d/lvp_icd.*.json | head -1)
+export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json
 export HOME=${HOME:-/root} XDG_CONFIG_HOME=${TEST_CONFIG:-$run/config} XDG_DATA_HOME=$run/data XDG_CACHE_HOME=$run/cache
+mkdir -p "$XDG_CONFIG_HOME"
 exec dbus-run-session -- bash -c '
-    run=$0 limit=$1; shift
+    run=$0
     bande-compositor --headless > "$run/compositor.out" 2> "$run/compositor.err" &
-    comp=$!
     for _ in $(seq 100); do grep -q "^WAYLAND_DISPLAY=" "$run/compositor.out" 2>/dev/null && break; sleep 0.2; done
-    export $(grep "^WAYLAND_DISPLAY=" "$run/compositor.out")
-    [ -n "${WAYLAND_DISPLAY:-}" ] || { cat "$run/compositor.err" >&2; exit 1; }
-    [ -x /usr/bin/bande-config ] && { bande-config > "$run/config.log" 2>&1 & }
+    display=$(grep "^WAYLAND_DISPLAY=" "$run/compositor.out") || { cat "$run/compositor.err" >&2; exit 1; }
+    export "$display"
+    bande-config > "$run/config.log" 2>&1 &
     /usr/libexec/xdg-desktop-portal-bande > "$run/portal.log" 2>&1 &
-    "$@" &
-    app=$!
-    for _ in $(seq $((limit * 5))); do [ -e "$run/shot-done" ] && break; sleep 0.2; done
+    set +e
+    "$@"
+    status=$?
+    kill $(jobs -p) 2>/dev/null
     sleep 1
-    kill $app 2>/dev/null || true
-    kill $comp 2>/dev/null || true
-    wait 2>/dev/null || true
-    [ -e "$run/shot-done" ]
-' "$run" "$((delay + 60))" "$@"
+    kill -9 $(jobs -p) 2>/dev/null
+    exit $status
+' "$run" "$@"

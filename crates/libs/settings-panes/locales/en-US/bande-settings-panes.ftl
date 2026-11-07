@@ -478,3 +478,5 @@ sharing-summary = Share folders with other computers and allow remote login
 sharing-list = Sharing
 sharing-list-keywords = file sharing, samba, smb, remote login, ssh, shared folders
 spelling = Spelling
+look-up = Look Up
+look-up-keywords = dictionary, dictionaries, look up, define, definition, thesaurus, wikipedia

@@ -483,6 +483,64 @@ pub fn look_up(packs: &[Pack], text: &str, wanted: Preferences<'_>) -> io::Resul
     Ok(unique)
 }
 
+const PACK_FOLDER: &str = "bande/dict";
+const CHOICES_FILE: &str = "bande/lookup";
+
+pub fn installed() -> Vec<Pack> {
+    let folders: Vec<PathBuf> = bande_xdg::data_dirs()
+        .into_iter()
+        .map(|folder| folder.join(PACK_FOLDER))
+        .collect();
+    discover(&folders)
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Choices {
+    pub off: Vec<String>,
+    pub order: Vec<String>,
+    pub wikipedia: bool,
+}
+
+fn ids(value: &str) -> Vec<String> {
+    value.split_whitespace().map(str::to_owned).collect()
+}
+
+impl Choices {
+    fn path() -> Option<PathBuf> {
+        bande_xdg::config_home().map(|folder| folder.join(CHOICES_FILE))
+    }
+
+    pub fn load() -> Self {
+        let mut choices = Self::default();
+        let Some(text) = Self::path().and_then(|path| fs::read_to_string(path).ok()) else {
+            return choices;
+        };
+        for line in text.lines() {
+            match line.split_once('=') {
+                Some(("off", value)) => choices.off = ids(value),
+                Some(("order", value)) => choices.order = ids(value),
+                Some(("wikipedia", value)) => choices.wikipedia = value.trim() == "on",
+                _ => {}
+            }
+        }
+        choices
+    }
+
+    pub fn save(&self) -> io::Result<()> {
+        let path = Self::path().ok_or_else(|| invalid("no configuration folder"))?;
+        let wikipedia = match self.wikipedia {
+            true => "on",
+            false => "off",
+        };
+        let text = format!(
+            "off={}\norder={}\nwikipedia={wikipedia}\n",
+            self.off.join(" "),
+            self.order.join(" ")
+        );
+        bande_xdg::replace_file(&path, text.as_bytes())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

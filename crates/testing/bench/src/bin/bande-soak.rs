@@ -451,7 +451,7 @@ impl Soak {
             return Err("the shell is not running".into());
         };
         self.expected_crashes.insert(old);
-        kill_process(Pid::from_raw(old as i32).ok_or("no process")?, Signal::SEGV)?;
+        kill_process(Pid::from_raw(old as i32).ok_or("no process")?, Signal::ILL)?;
         self.wait_for("a new shell", WINDOW_PATIENCE, |_| {
             children_of_self()
                 .iter()
@@ -464,7 +464,7 @@ impl Soak {
             self.crash_app(SETTINGS, Signal::ABORT)?;
         }
         if cycle % FILES_CRASH_EVERY == FILES_CRASH_EVERY - 1 {
-            self.crash_app(FILES, Signal::SEGV)?;
+            self.crash_app(FILES, Signal::ILL)?;
         }
         if cycle % SHELL_CRASH_EVERY == SHELL_CRASH_EVERY / 2 {
             self.crash_shell()?;

@@ -79,11 +79,10 @@ pub(crate) fn run<P: Program>(
     let mut cx = Cx::new(info, link, session, background, resume);
     let mut program = P::start(&mut cx, arguments)?;
     let asked = !background && reopen_saved_windows(&mut program, &mut cx);
-    if plain_launch && !asked && cx.windows.is_empty() {
+    if plain_launch && !asked && !cx.resume.has_main_window() {
         program.reopen(&mut cx);
     }
     if cx.windows.is_empty() && !background {
-        cx.resume.discard(&mut cx.link);
         return Ok(());
     }
     let menu = cx.session().cloned().and_then(|session| {
@@ -130,6 +129,7 @@ fn restore_saved_windows<P: Program>(program: &mut P, cx: &mut Cx<P>) {
             cx.link.leave_session(&name);
         }
     }
+    program.windows_restored(cx);
 }
 
 fn release_freed_memory() {
@@ -235,12 +235,7 @@ impl<P: Program> Runner<P> {
             true => restore_saved_windows(&mut self.program, &mut self.cx),
             false => self.cx.resume.forget_saved(&self.cx.link),
         }
-        let empty = self
-            .cx
-            .views
-            .iter()
-            .all(|(_, content)| matches!(content, Content::Prompt(_)));
-        if empty {
+        if !self.cx.resume.has_main_window() {
             self.program.reopen(&mut self.cx);
         }
         for window in prompts {

@@ -223,7 +223,9 @@ fn an_nv12_video_buffer_shows_its_colour() {
         let snapshot = renderer.snapshot(&server).expect("snapshot");
         seen = snapshot.rgba;
         if seen
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .any(|pixel| pixel[0] > 240 && pixel[1] < 20 && pixel[2] < 20)
         {
             return;
@@ -231,8 +233,10 @@ fn an_nv12_video_buffer_shows_its_colour() {
         thread::sleep(Duration::from_millis(20));
     }
     let brightest = seen
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .max_by_key(|pixel| pixel[0])
-        .map(<[u8]>::to_vec);
+        .map(|pixel| pixel.to_vec());
     panic!("no red in the frame, brightest {brightest:?}");
 }

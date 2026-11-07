@@ -304,6 +304,7 @@ pub enum SettingId {
     EthernetDns,
     Vpns,
     Language,
+    AppLanguages,
     Region,
     StoragePage,
     SoftwareUpdatePage,
@@ -395,6 +396,7 @@ pub enum List {
     Ethernet,
     Vpns,
     Languages,
+    AppLanguages,
     Regions,
     DefaultApps,
     Clipboard,
@@ -1744,6 +1746,14 @@ fn language_time_pane() -> Pane {
             section(
                 Some(L10N.tr("language")),
                 vec![list(SettingId::Language, "language", List::Languages)],
+            ),
+            section(
+                Some(L10N.tr("app-languages")),
+                vec![list(
+                    SettingId::AppLanguages,
+                    "app-languages",
+                    List::AppLanguages,
+                )],
             ),
             section(
                 Some(L10N.tr("formats")),

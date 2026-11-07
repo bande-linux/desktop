@@ -106,7 +106,9 @@ fn a_converted_frame_reaches_the_display_buffer() {
     let mut frame = renderer
         .render(&mut framebuffer, SIZE.into(), Transform::Normal)
         .unwrap();
-    frame.clear(Color32F::new(1.0, 0.0, 0.0, 1.0), &whole).unwrap();
+    frame
+        .clear(Color32F::new(1.0, 0.0, 0.0, 1.0), &whole)
+        .unwrap();
     drop(frame.finish().unwrap());
     drop(framebuffer);
     let converts = !renderer.device_info().software;

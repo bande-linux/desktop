@@ -109,7 +109,7 @@ when they reach the screen is Bande's own.
   `--drm-device`) through a libseat session and drives every connected connector on its own
   CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into
   dumb buffers that the renderer binds as dma-bufs: each frame is rendered into its own image and its
-  drawn regions copied out, by the GPU when the device is a real one that can import the buffer,
+  drawn regions copied out, by the GPU when the device is a real one that can import the buffer and the first frame read back through a mapping matches what the GPU copied (the buffer is marked first, so a copy that never lands is caught),
   otherwise (lavapipe and `kms_swrast`, or a refused import) through a mapping on the CPU; `--headless` keeps the offscreen output for CI and the bench. udev change
   events probe the connectors again, so plugging a display in or out takes effect without
   restarting the session. A connector that goes away is held as lost for three seconds before it

@@ -46,6 +46,7 @@ use bande_settings_panes::{
     AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
 };
 use bande_settings_panes::{PaneHit, search};
+use bande_status::brightness::{DisplayLevel, LevelRequest};
 
 pub(crate) const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
@@ -216,6 +217,7 @@ pub struct SettingsView {
     pub(crate) panes: Vec<Pane>,
     pub(crate) values: HashMap<SettingId, Value>,
     pub(crate) display_settings: BTreeMap<String, DisplaySettings>,
+    pub(crate) display_levels: Vec<DisplayLevel>,
     pub(crate) arrangements: Vec<Vec<Placement>>,
     pub(crate) displays: Vec<Display>,
     pub(crate) keep: Option<Keep>,
@@ -309,6 +311,7 @@ impl SettingsView {
             panes: panes(),
             values: HashMap::new(),
             display_settings: BTreeMap::new(),
+            display_levels: Vec::new(),
             arrangements: Vec::new(),
             displays: Vec::new(),
             keep: None,
@@ -616,6 +619,7 @@ impl SettingsView {
             | Update::Password(_)
             | Update::PictureChosen(..)
             | Update::AccountCreated(_) => (Some(PaneId::Users), &[SettingId::Accounts]),
+            Update::DisplayLevels(_) => (Some(PaneId::Displays), &[SettingId::Brightness]),
             Update::Passwords(..) | Update::RevealedPassword(..) => {
                 (Some(PaneId::Passwords), &[SettingId::SavedPasswords])
             }
@@ -643,6 +647,7 @@ impl SettingsView {
                 }
             }
             Update::Displays(displays) => self.display_settings = displays,
+            Update::DisplayLevels(levels) => self.display_levels = levels,
             Update::Arrangements(arrangements) => self.arrangements = arrangements,
             Update::Audio(snapshot) => self.apply_audio(snapshot),
             Update::Wifi(wifi) => {
@@ -754,7 +759,10 @@ impl SettingsView {
                 }
                 self.battery = battery;
             }
-            Update::CannotSleep => self.remove_setting(SettingId::SleepAfter),
+            Update::CannotSleep => {
+                bande_settings_panes::without_sleep(&mut self.panes);
+                self.availability_changed();
+            }
             Update::Storage(storage) => {
                 if storage.trash_items == 0 {
                     self.confirming_empty_trash = false;
@@ -1666,6 +1674,9 @@ impl SettingsView {
             self.password_command(PasswordCommand::Lock);
         }
         match pane {
+            PaneId::Displays => self
+                .commands
+                .push(Command::Brightness(LevelRequest::Refresh)),
             PaneId::Wifi => self.commands.push(Command::Network(NetworkCommand::Scan)),
             PaneId::Storage => self
                 .commands
@@ -1809,7 +1820,6 @@ impl SettingsView {
             (SettingId::ComputerName, Value::Text(name)) => {
                 Command::About(AboutCommand::Rename(name))
             }
-            (SettingId::Brightness, Value::Fraction(level)) => Command::Brightness(level),
             (id, value) => Command::Set(id, value),
         }
     }
@@ -2069,6 +2079,26 @@ impl SettingsView {
         self.commands.push(Command::Arrangement(placements));
     }
 
+    fn set_display_level(&mut self, identity: &str, level: f32) {
+        let Some(connector) = self
+            .displays
+            .iter()
+            .find(|display| display.identity == identity)
+            .map(|display| display.connector.clone())
+        else {
+            return;
+        };
+        if let Some(shown) = self
+            .display_levels
+            .iter_mut()
+            .find(|shown| shown.connector == connector)
+        {
+            shown.level = level;
+        }
+        self.commands
+            .push(Command::Brightness(LevelRequest::Set(connector, level)));
+    }
+
     fn change_display(&mut self, identity: String, id: SettingId, value: Value) {
         let mut display = self
             .display_settings
@@ -2078,6 +2108,10 @@ impl SettingsView {
         let previous = display;
         let mut confirm = false;
         match (id, value) {
+            (SettingId::Brightness, Value::Fraction(level)) => {
+                self.set_display_level(&identity, level);
+                return;
+            }
             (SettingId::DisplayUse, Value::Keyword(choice)) => {
                 self.use_display(&identity, &choice);
                 return;

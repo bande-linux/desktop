@@ -16,8 +16,8 @@ use std::time::{Duration, Instant};
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_graphics::{
     Appearance, Captured, CpuRenderer, Cursor, Event, PLACEMENTS_AFTER_HOLD, PLACEMENTS_AFTER_REST,
-    Point, Radius, Rect, Region, ResizeEdge, Scene, SurfaceId, TextSize, TextSystem, damage,
-    pixels, placed_surfaces,
+    Point, Rect, Region, ResizeEdge, Scene, SurfaceId, TextSize, TextSystem, damage, pixels,
+    placed_surfaces,
 };
 use bande_protocols::client::bande_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
@@ -176,6 +176,7 @@ pub enum WindowEvent {
     BrightnessKey {
         key: BrightnessKey,
         fine: bool,
+        output: String,
     },
     MediaKey(MediaKey),
     TogglePanel(Panel),
@@ -747,23 +748,17 @@ impl Window {
         }
     }
 
-    fn resize_radius(&self) -> Option<f32> {
+    fn resizes_from_band(&self) -> bool {
         let toplevel = self.state.toplevel;
-        if !self.is_resizable() || toplevel.maximized || toplevel.fullscreen {
-            None
-        } else {
-            Some(Radius::XL)
-        }
+        self.is_resizable() && !toplevel.maximized && !toplevel.fullscreen
     }
 
     fn resize_margin(&self) -> u32 {
-        let toplevel = self.state.toplevel;
-        let free = !(toplevel.maximized || toplevel.fullscreen);
         let transparent = match &self.gpu {
             Gpu::Ready(gpu) => gpu.transparent,
             Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => true,
         };
-        if self.is_resizable() && free && transparent {
+        if self.resizes_from_band() && transparent {
             RESIZE_MARGIN
         } else {
             0
@@ -775,7 +770,7 @@ impl Window {
         let title = self.title_height();
         Frame {
             margin: self.resize_margin() as f32,
-            resize_radius: self.resize_radius(),
+            resizes: self.resizes_from_band(),
             title: title as f32,
             inset: if title > 0 { SHEET_INSET as f32 } else { 0.0 },
             regions: self.chrome.as_ref().and_then(|chrome| chrome.regions),

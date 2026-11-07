@@ -1,17 +1,18 @@
 use std::time::Duration;
 
-use bande_design::{Color, Palette, TextRole};
+use bande_design::{Color, Palette, Radius, TextRole};
 
 use crate::{Item, Paragraph, Path, Point, Rect, Shape, TextStyle};
 
 pub const WINDOW_HEADER_HEIGHT: u32 = 48;
 pub const FRAME_HEADER_HEIGHT: u32 = 40;
 pub const RESIZE_MARGIN: u32 = 8;
-pub const RESIZE_INSIDE: f32 = 3.0;
+pub const RESIZE_WALL_BAND: f32 = 3.0;
 pub const PLACEMENTS_AFTER_REST: Duration = Duration::from_millis(800);
 pub const PLACEMENTS_AFTER_HOLD: Duration = Duration::from_millis(500);
 pub const HEADER_LEADING: f32 = window_controls_end(true) + TITLE_GAP;
-const RESIZE_CORNER_REACH: f32 = 24.0;
+const RESIZE_CORNER_MARGIN: f32 = 16.0;
+const RESIZE_CORNER_REACH: f32 = 32.0;
 const WELL_X: f32 = 12.0;
 const WELL_WIDTH: f32 = 66.0;
 const WELL_HEIGHT: f32 = 24.0;
@@ -114,15 +115,37 @@ pub enum ResizeEdge {
     BottomRight,
 }
 
-pub fn resize_zone(window: Rect, radius: f32, outside: f32, point: Point) -> Option<ResizeEdge> {
-    if !window.inset(-outside).contains(point)
-        || Shape::rounded(window, radius).distance(point) < -RESIZE_INSIDE
-    {
-        return None;
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct WalledSides {
+    pub left: bool,
+    pub right: bool,
+    pub bottom: bool,
+}
+
+pub fn resize_zone(window: Rect, point: Point) -> Option<ResizeEdge> {
+    let beside = (window.x - point.x).max(point.x - window.x - window.width);
+    let beyond = (window.y - point.y).max(point.y - window.y - window.height);
+    let margin = if beside > 0.0 && beyond > 0.0 {
+        RESIZE_CORNER_MARGIN
+    } else {
+        RESIZE_MARGIN as f32
+    };
+    let beyond_outline = Shape::rounded(window, Radius::XL).distance(point) >= 0.0;
+    (beside.max(beyond) < margin && beyond_outline).then(|| edge_at(window, point))
+}
+
+pub fn walled_resize_zone(window: Rect, walled: WalledSides, point: Point) -> Option<ResizeEdge> {
+    let within = |depth: f32| depth < RESIZE_WALL_BAND;
+    let on_wall = (walled.left && within(point.x - window.x))
+        || (walled.right && within(window.x + window.width - point.x))
+        || (walled.bottom && within(window.y + window.height - point.y));
+    (window.contains(point) && on_wall).then(|| edge_at(window, point))
+}
+
+fn edge_at(window: Rect, point: Point) -> ResizeEdge {
     let horizontal = side(point.x, window.x, window.width);
     let vertical = side(point.y, window.y, window.height);
-    Some(match (vertical, horizontal) {
+    match (vertical, horizontal) {
         (-1, -1) => ResizeEdge::TopLeft,
         (-1, 1) => ResizeEdge::TopRight,
         (1, -1) => ResizeEdge::BottomLeft,
@@ -131,7 +154,7 @@ pub fn resize_zone(window: Rect, radius: f32, outside: f32, point: Point) -> Opt
         (1, _) => ResizeEdge::Bottom,
         (_, -1) => ResizeEdge::Left,
         _ => ResizeEdge::Right,
-    })
+    }
 }
 
 fn side(at: f32, start: f32, length: f32) -> i8 {

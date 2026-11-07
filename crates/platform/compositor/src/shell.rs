@@ -149,7 +149,8 @@ impl State {
     }
 
     pub(crate) fn brightness_key(&mut self, key: bande_shell_v1::BrightnessKey, fine: bool) {
-        self.each_shell(|shell| shell.brightness_key(key, u32::from(fine)));
+        let output = self.screens[self.pointer_screen()].name();
+        self.each_shell(|shell| shell.brightness_key(key, u32::from(fine), output.clone()));
     }
 
     pub(crate) fn media_key(&mut self, key: bande_shell_v1::MediaKey) {

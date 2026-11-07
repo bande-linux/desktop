@@ -9,20 +9,11 @@ crash management, bande-desktop is quite fragile and when it runs out of ram or 
 the mac mini m2 still freezes sometimes when wake from sleep or unlock, investigate why this is and also how we can avoid freezes. The desktop has to be reliable and fail in different stages. For example macos NEVER completely fail and force a reboot. But perhaps a force quit of the desktop is needed as worst case (and that still works with mouse and keyboard!) bande-desktop should be equally good
 Status: started, branch gap-crash (the two notes above are merged into this gap). Kernel PSI/zram/lockup detectors, oomd and zram in the image, the session bus at the OOM floor, the compositor watchdog and opt-in reopen after a crash are built, and every failure mode now has a recovery ([session](../docs/architecture/session.md#crash-handling-and-supervision)): memory protection for the session, Relaunch for a hung shell, relaunch of a hung lock screen, a hang alarm for the login window, VT switching, renderer recovery after GPU loss, `TasksMax` for apps. Left: the owner installs `systemd-oomd` and the new kernel and tests under real memory pressure (checks in [open.md](open.md)); ramoops (panic logs kept across a reboot); why the mini still freezes on wake or unlock.
 
-Comebine DDC/CI brightness adjustment with normal laptop screen adjustment. Multiple displays connect gets an individual brightness bar.
-Status: started, branch gap-brightness.
-
-saving region format to English (Sweden) or Sweden (Sweden) doesnt work, i get "couldn't make this change"
-Status: started, branch gap-region.
-
 sometimes moving windows around is hard, like the terminal with two tabs. Dont change how the windows work but the problem is that tha "arrow" to drag out and make the window larger present itself not only on the "edge" and outward but also a few pixels inward. So the little space between the actual tabs and the window edge cant be grabbed, since it will go to the window size changer. Make the size changed only show itself on the edge of the window and a few pixel outward (like today) but not inward. Also windows have rounded corners which is not taken into account making it much harder to "grab" corners to expand both x and y axis at the same time.
 Status: started, branch gap-resize-edges.
 
 Package Installer is stuck on "Install", no matter what i do or how many times i press nothing happens.
 Status: started. Fixed on main: the polkit agent uses polkit's socket-activated helper (Debian's helper is no longer setuid, so every password request failed with no dialog), and the installer reports refusals. Left: the owner runs a real install after the next desktop release and `installer-v0.1.1`; Software still treats `NotAuthorized` as a silent stop.
-
-The shutdown button doesnt work. (right click Bande icon -> shutdown). Also the restart button.
-Status: started, branch gap-shutdown.
 
 ##CHECK THIS## cant write ~ in terminal?
 Status: started, branch gap-terminal-tilde.

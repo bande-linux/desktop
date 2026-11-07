@@ -107,7 +107,7 @@ impl Header {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Frame {
     pub(crate) margin: f32,
-    pub(crate) resize_radius: Option<f32>,
+    pub(crate) resizes: bool,
     pub(crate) title: f32,
     pub(crate) inset: f32,
     pub(crate) regions: Option<FrameRegions>,
@@ -173,9 +173,8 @@ impl Frame {
 
     pub(crate) fn zone_at(&self, point: Point) -> Zone {
         let window = self.window();
-        if let Some(edge) = self
-            .resize_radius
-            .and_then(|radius| resize_zone(window, radius, self.margin, point))
+        if self.resizes
+            && let Some(edge) = resize_zone(window, point)
         {
             return Zone::Resize(edge);
         }

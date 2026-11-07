@@ -595,6 +595,7 @@ const UNIT_INTERFACES: [&str; 2] = [
     "org.freedesktop.systemd1.Service",
 ];
 const OOM_KILL: &str = "oom-kill";
+const APP_STOP_TIMEOUT_USEC: u64 = 5_000_000;
 
 fn failure(status: ExitStatus, ran: Duration) -> Option<Failure> {
     if let Some(signal) = status.signal() {
@@ -611,6 +612,8 @@ fn place_in_scope(bus: &Connection, app_id: &str, pid: u32) -> zbus::Result<()> 
         ("PIDs", Value::from(vec![pid])),
         ("Slice", Value::from("app.slice")),
         ("CollectMode", Value::from("inactive-or-failed")),
+        ("PartOf", Value::from(vec!["graphical-session.target"])),
+        ("TimeoutStopUSec", Value::from(APP_STOP_TIMEOUT_USEC)),
     ];
     bus.call_method(
         Some(SYSTEMD),

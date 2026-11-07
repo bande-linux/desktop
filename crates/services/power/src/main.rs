@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use std::path::Path;
 
-use bande_power::backlight::{Backlight, KeyboardBacklight, SYSFS_BACKLIGHT, SYSFS_LEDS};
+use bande_power::backlight::{KeyboardBacklight, SYSFS_BACKLIGHT, SYSFS_LEDS};
 use bande_power::battery::{self, BatteryNotifier};
+use bande_power::brightness::{Lights, Options};
 use bande_power::controller::{self, IdleController};
 use bande_power::idle::{Assertion, Inhibitor};
 use bande_power::logind::{self, ManagerProxyBlocking, SleepGuard};
@@ -38,7 +39,11 @@ fn serve() -> Result<Services, Box<dyn Error>> {
         controller::logind_executor(
             ManagerProxyBlocking::new(&system)?,
             logind::own_session(&system)?,
-            Backlight::find(Path::new(SYSFS_BACKLIGHT)),
+            Lights::start(
+                &session,
+                logind::own_session(&system).ok(),
+                Options::system(Path::new(SYSFS_BACKLIGHT)),
+            )?,
             KeyboardBacklight::find(Path::new(SYSFS_LEDS)),
             PasswordPolicy::serve(&session)?,
         ),

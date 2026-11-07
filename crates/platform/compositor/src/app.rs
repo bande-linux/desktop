@@ -100,7 +100,7 @@ impl State {
         }
     }
 
-    fn app_owners(&self) -> Vec<(Client, String)> {
+    pub(crate) fn app_owners(&self) -> Vec<(Client, String)> {
         let mut owners: Vec<(Client, String)> = Vec::new();
         for window in self.windows.iter().rev() {
             let surface = window.toplevel.wl_surface();
@@ -282,7 +282,12 @@ impl State {
         if self.quitting.is_empty() {
             return;
         }
-        let owners = self.app_owners();
+        let windowless = self.windowless_apps();
+        let mut owners = self.app_owners();
+        owners.retain(|(client, _)| {
+            let without_window = windowless.iter().any(|(found, _)| found == client);
+            !self.watchdog.gave_up_on(&client.id(), without_window)
+        });
         let running = (
             owners
                 .first()

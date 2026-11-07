@@ -1,4 +1,6 @@
 use std::error::Error;
+use std::io;
+use std::os::fd::{AsFd, AsRawFd};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -19,7 +21,7 @@ use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{EventLoop, Interest, Mode as Trigger, PostAction};
 use smithay::reexports::drm::control::atomic::AtomicModeReq;
 use smithay::reexports::drm::control::{
-    AtomicCommitFlags, Device as ControlDevice, Mode, ModeTypeFlags, connector, crtc, property,
+    AtomicCommitFlags, Device as ControlDevice, Mode, ModeTypeFlags, connector, crtc, framebuffer, property,
 };
 use smithay::reexports::input::Libinput;
 use smithay::reexports::rustix::fs::OFlags;
@@ -39,6 +41,7 @@ pub type DrmBackendError = Box<dyn Error>;
 
 type OutputCompositor = DrmCompositor<DumbAllocator, ScanoutExporter, (), DrmDeviceFd>;
 
+const DRM_IOCTL_MODE_CLOSEFB: libc::c_ulong = 0xC008_64D0;
 const CURSOR_SIZE: (u32, u32) = (64, 64);
 const COLOR_FORMATS: [Fourcc; 2] = [Fourcc::Xrgb8888, Fourcc::Argb8888];
 
@@ -50,7 +53,8 @@ struct Head {
     scanned_out: bool,
     dark: bool,
     colour: Colour,
-    warmth: Option<f64>,
+    dim: f64,
+    tone: Option<(f64, f64)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -128,7 +132,7 @@ fn relink(device: &DrmDevice, head: &mut Head) {
     if let Err(error) = head.compositor.reset_state() {
         tracing::warn!("cannot reset {}: {error}", head.config.name);
     }
-    head.warmth = None;
+    head.tone = None;
 }
 
 fn refresh_of(mode: &Mode) -> Duration {
@@ -423,7 +427,8 @@ impl DrmBackend {
             scanned_out: false,
             dark: false,
             colour: Colour::Unknown,
-            warmth: None,
+            dim: 1.0,
+            tone: None,
         }))
     }
 
@@ -535,6 +540,17 @@ impl DrmBackend {
     }
 
     pub fn leave_on_screen(mut self) {
+        match self.device.resource_handles() {
+            Ok(resources) => {
+                for &framebuffer in resources.framebuffers() {
+                    if let Err(error) = close_framebuffer(&self.device, framebuffer) {
+                        tracing::warn!("the frame on screen ends with this process: {error}");
+                        break;
+                    }
+                }
+            }
+            Err(error) => tracing::warn!("the frame on screen ends with this process: {error}"),
+        }
         self.device.pause();
         for head in self.heads.drain(..) {
             std::mem::forget(head.compositor);
@@ -559,7 +575,7 @@ impl DrmBackend {
         };
         head.compositor.frame_submitted()?;
         if let Some(kelvin) = self.kelvin {
-            warm(&self.device, head, kelvin);
+            tint(&self.device, head, kelvin);
         }
         Ok(Some((
             head.config.name.clone(),
@@ -612,7 +628,7 @@ impl DrmBackend {
             if let Err(error) = head.compositor.reset_state() {
                 tracing::warn!("cannot reset {}: {error}", head.config.name);
             }
-            head.warmth = None;
+            head.tone = None;
             head.dark = false;
         }
         if let Some(libinput) = self.libinput.as_mut() {
@@ -621,6 +637,23 @@ impl DrmBackend {
                 .map_err(|()| "libinput cannot resume its devices")?;
         }
         Ok(())
+    }
+}
+
+fn close_framebuffer(device: &DrmDevice, framebuffer: framebuffer::Handle) -> io::Result<()> {
+    #[repr(C)]
+    struct CloseFramebuffer {
+        id: u32,
+        pad: u32,
+    }
+    let request = CloseFramebuffer {
+        id: framebuffer.into(),
+        pad: 0,
+    };
+    let fd = device.device_fd().as_fd().as_raw_fd();
+    match unsafe { libc::ioctl(fd, DRM_IOCTL_MODE_CLOSEFB, &request) } {
+        0 => Ok(()),
+        _ => Err(io::Error::last_os_error()),
     }
 }
 
@@ -654,34 +687,35 @@ fn set_matrix(
     crtc: crtc::Handle,
     property: property::Handle,
     kelvin: f64,
+    dim: f64,
 ) -> std::io::Result<()> {
-    let blob = device.create_property_blob(&crate::night::matrix(kelvin))?;
+    let blob = device.create_property_blob(&crate::night::matrix(kelvin, dim))?;
     let applied = device.set_property(crtc, property, blob.into());
     device.destroy_property_blob(blob.into())?;
     applied
 }
 
-fn warm(device: &DrmDevice, head: &mut Head, kelvin: f64) {
-    if head.warmth == Some(kelvin) {
+fn tint(device: &DrmDevice, head: &mut Head, kelvin: f64) {
+    if head.tone == Some((kelvin, head.dim)) {
         return;
     }
     let crtc = head.compositor.crtc();
     if head.colour == Colour::Unknown {
         head.colour = colour_of(device, crtc);
-        tracing::info!("{} warms through {:?}", head.config.name, head.colour);
+        tracing::info!("{} tints through {:?}", head.config.name, head.colour);
     }
     let applied = match head.colour {
         Colour::Ramp(size) => {
-            let [red, green, blue] = crate::night::ramp(size, kelvin);
+            let [red, green, blue] = crate::night::ramp(size, kelvin, head.dim);
             device.set_gamma(crtc, &red, &green, &blue)
         }
-        Colour::Matrix(property) => set_matrix(device, crtc, property, kelvin),
+        Colour::Matrix(property) => set_matrix(device, crtc, property, kelvin, head.dim),
         Colour::Unknown | Colour::Fixed => return,
     };
     match applied {
-        Ok(()) => head.warmth = Some(kelvin),
+        Ok(()) => head.tone = Some((kelvin, head.dim)),
         Err(error) => {
-            tracing::warn!("cannot warm {}: {error}", head.config.name);
+            tracing::warn!("cannot tint {}: {error}", head.config.name);
             head.colour = Colour::Fixed;
         }
     }
@@ -696,7 +730,36 @@ impl FrameOutput for DrmBackend {
             return;
         }
         for head in &mut self.heads {
-            warm(&self.device, head, kelvin);
+            tint(&self.device, head, kelvin);
+        }
+    }
+
+    fn can_dim(&mut self, output: &str) -> bool {
+        let device = &self.device;
+        self.heads
+            .iter_mut()
+            .find(|head| head.config.name == output)
+            .is_some_and(|head| {
+                if head.colour == Colour::Unknown {
+                    head.colour = colour_of(device, head.compositor.crtc());
+                }
+                head.colour != Colour::Fixed
+            })
+    }
+
+    fn set_dim(&mut self, output: &str, gain: f64) {
+        let kelvin = self.kelvin.unwrap_or(crate::night::NEUTRAL);
+        let active = self.session.is_active();
+        let device = &self.device;
+        if let Some(head) = self
+            .heads
+            .iter_mut()
+            .find(|head| head.config.name == output)
+        {
+            head.dim = gain;
+            if active {
+                tint(device, head, kelvin);
+            }
         }
     }
 
@@ -741,7 +804,7 @@ impl FrameOutput for DrmBackend {
             if let Err(error) = head.compositor.reset_state() {
                 tracing::warn!("cannot reset {}: {error}", head.config.name);
             }
-            head.warmth = None;
+            head.tone = None;
         }
         Ok(())
     }

@@ -92,7 +92,7 @@ pub fn clock_menu(quiet: bool, clock: &ClockApp, dates: &DateFormats, has_clock:
     Menu::new(items)
 }
 
-pub fn system_menu(user: &str, frontmost: Option<&str>) -> Menu {
+pub fn system_menu(user: &str, frontmost: Option<&str>, can_sleep: bool) -> Menu {
     let force_quit = item(&L10N.tr("force-quit"), &Command::ForceQuit);
     let force_quit = match frontmost {
         Some(app) => force_quit.shift_alternate(item(
@@ -101,14 +101,18 @@ pub fn system_menu(user: &str, frontmost: Option<&str>) -> Menu {
         )),
         None => force_quit,
     };
-    Menu::new(vec![
+    let mut items = vec![
         item(&L10N.tr("about"), &Command::About),
         MenuItem::separator(),
         item(&L10N.tr("system-settings"), &Command::Settings(None)),
         MenuItem::separator(),
         force_quit,
         MenuItem::separator(),
-        item(&L10N.tr("sleep"), &Command::Sleep),
+    ];
+    if can_sleep {
+        items.push(item(&L10N.tr("sleep"), &Command::Sleep));
+    }
+    items.extend([
         item(&L10N.tr("restart"), &Command::Restart),
         item(&L10N.tr("shut-down"), &Command::ShutDown),
         MenuItem::separator(),
@@ -118,7 +122,8 @@ pub fn system_menu(user: &str, frontmost: Option<&str>) -> Menu {
             &L10N.tr_args("log-out", [("user", user.to_owned().into())]),
             &Command::LogOut,
         ),
-    ])
+    ]);
+    Menu::new(items)
 }
 
 pub fn battery_menu(battery: &Battery, percentage_shown: bool) -> Menu {

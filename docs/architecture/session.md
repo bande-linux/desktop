@@ -59,6 +59,8 @@ graph LR
   Locks from `Super+L`, logind, sleep and the power button always ask for it. The computer
   sleeps with the display unless `suspend-after` is later or `"never"`, and only if logind
   says `CanSuspend` is `yes`: the `bande-power` package ships `AllowSuspend=no` (below).
+  A virtual machine never sleeps when idle, as GNOME's power plugin does: a sleeping guest looks
+  like a crash and loses its network until the host wakes it.
   The earlier of the screen saver and the display turning off starts the lock, and sleep never
   comes before the display turns off; the settings say so on their rows when a choice is overridden,
   and the sleep row only shows when logind's `CanSuspend` is `yes`.

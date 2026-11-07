@@ -33,10 +33,12 @@ Only these run in CI alone:
 ## The local gate
 
 Each change only has to compile: `desktop-check <worktree> -p <crate>` runs `cargo fmt` and
-`cargo check --all-targets`. Finished branches are queued with `desktop-enqueue <branch>`; the
-merge train (`desktop-train`) merges the queued branches onto `main`, runs `desktop-gate` on the
+`cargo check --all-targets` through the build queue, `build-run`, which runs anything heavy on the
+next free build machine (`~/bande-linux/builders`, a list; the mini is the last resort; a machine
+that goes away re-queues the job and never counts as a failure). Finished branches are queued
+with `desktop-enqueue <branch>`; the merge train (`desktop-train`) merges the queued branches onto `main`, runs `desktop-gate` on the
 batch and pushes `main` when it is green. `desktop-gate <worktree>` is `ci/release/verify.sh
-gate` under the build lock with the debs built with the `dev` profile, a few minutes; a batch
+gate` through the queue with the debs built with the `dev` profile, a few minutes; a batch
 that changes `[workspace.package] version` builds them with `dist`, as the release does. These
 scripts live in `~/bande-linux/bin` on the build machine, outside this repository. The tests and
 why they exist are in [`../quality/tests.md`](../quality/tests.md). A test bus lists no service

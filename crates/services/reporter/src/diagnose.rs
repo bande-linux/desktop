@@ -132,7 +132,7 @@ pub fn diagnose(
     fault.owner = Some(peer);
     fault.signature_text = Some(fault.time.to_string());
     if !description.is_empty() {
-        fault.detail_raw_description = Some(description.chars().take(DESCRIPTION_LIMIT).collect());
+        fault.description = Some(description.chars().take(DESCRIPTION_LIMIT).collect());
     }
     for (name, program, arguments) in SECTIONS {
         push_text(

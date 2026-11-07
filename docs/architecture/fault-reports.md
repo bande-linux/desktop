@@ -10,7 +10,7 @@
 - `outbox/<id>`: an empty marker for a report waiting to be sent.
 - `machine`: a random install id. It says nothing about the computer, and a reinstall replaces it.
 
-Kept: 30 days, at most 200 reports and 256 MiB, 16 MiB a report. Sent and rejected reports go first, then the oldest. With under 512 MiB free on the disk a report keeps its manifest and drops its attachments, and names them in `attachments_dropped`. A repeat of a signature within an hour, or within a day while the first is unsent, only adds to `occurrences`.
+Kept: 30 days, at most 200 reports and 256 MiB, 16 MiB a report. Sent and rejected reports go first, then the oldest. With under 512 MiB free on the disk a report keeps its manifest and drops its attachments, and names them in `attachments_dropped`. A repeat of a signature within an hour, or within a day while the first is unsent, only adds to `occurrences`; if the first was already sent, the manifest goes again without attachments so the server keeps count.
 
 ## Sending
 

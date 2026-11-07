@@ -43,7 +43,7 @@ pub struct Fault {
     pub time: Timestamp,
     pub boot: Option<String>,
     pub attachments: Vec<Attachment>,
-    pub detail_raw_description: Option<String>,
+    pub description: Option<String>,
 }
 
 impl Fault {
@@ -60,7 +60,7 @@ impl Fault {
             time: Timestamp::now(),
             boot: None,
             attachments: Vec::new(),
-            detail_raw_description: None,
+            description: None,
         }
     }
 
@@ -124,7 +124,7 @@ impl Fault {
             };
             manifest.insert(name, value);
         }
-        if let Some(description) = self.detail_raw_description.take() {
+        if let Some(description) = self.description.take() {
             manifest.insert("description".to_owned(), json!(description));
         }
         let journal =

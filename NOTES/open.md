@@ -28,16 +28,26 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - Notifications after the center moved to its own bus name: banners and center fill and clear,
   Do Not Disturb toggles, Settings ▸ Notifications lists apps, and `GetPresentation` works only
   on `org.bande.NotificationCenter`.
-- Power: displays off at the lock stage and after 60 s locked, wake on input, the power button,
-  an external display through standby and back (`drm.rs` relink may hit EBUSY).
+- Power: the resting lock screen (`Super+L`, then clock only; the first input shows the field; a
+  minute later it rests again), displays off at the lock stage and after 60 s locked, wake on
+  input, the power button, an external display through standby and back (`drm.rs` relink may hit
+  EBUSY).
 - Reopen after a real crash with `reopen-apps-after-crash #true`.
+- Stuck desktop: `Ctrl+Alt+Esc` opens Force Quit; `Shift+Ctrl+Alt+Esc` twice ends the session and the
+  login window comes back (`journalctl -u systemd-logind` says "Secure Attention Key", and
+  `-u bande-recovery` says it restarted the desktop); after a new login
+  `sysctl kernel.panic` says 10 and `systemctl show -p RuntimeWatchdogUSec` says 2min.
+- Panic logs on the mini: whether RAM survives its reboot is unknown. Test with one normal reboot:
+  `reserve_mem=2M:16384:oops ramoops.mem_name=oops ramoops.console_size=262144` in
+  `/etc/kernel/cmdline` and `ramoops` in `modules-load.d`; `/sys/fs/pstore` then has the previous
+  boot's console if it does. Ship it in the images only then.
 - Recovery on the mini: `Ctrl+Alt+Fn+F2` reaches a text console and `Ctrl+Alt+Fn+F7` comes back
   (also from the login window); `kill -STOP` of `bande-shell` shows "Taskbar & Desktop (Not
   Responding)" in Force Quit and Relaunch brings the bar back; `kill -STOP` of `bande-lock` while
   locked brings a new lock screen within about 15 s; after `apt install systemd-oomd` and a new
   login, `oomctl` lists `app.slice` and `systemctl show user.slice -p MemoryLow` says 640M. GPU
   loss recovery (a new Vulkan device after `VK_ERROR_DEVICE_LOST`) is untested on asahi: the
-  journal says "the GPU was lost; starting the renderer again" when it happens.
+  journal says "starting the renderer again" when it happens.
 - Footprint on the real GPU: shell and greeter memory, the greeter's unveil after sign-in, the
   shell's PipeWire clients with two displays.
 - Login: the greetd console frame before the greeter (`vt.global_cursor_default=0` or a greetd
@@ -61,7 +71,10 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - A click on the clock or Control Center while the launcher is open: open the panel too, or only
   close the launcher (today).
 - Several displays: banners on the main display or on the one with the active window.
-- Sleep: turn it back on after ten clean s2idle cycles, or wait for Asahi.
+- Sleep: ten clean cycles with `sudo ~/bande-linux/bin/s2idle-test.sh keyboard` (at least two of
+  them `desktop`; the script counts), then set `AllowSuspend=yes` in `crates/services/power/data/sleep.conf`,
+  unmask the targets on the mini and remove `suspend-after "never"` from its `config.kdl`. Or wait for
+  Asahi.
 - The lock screen ignores logind's `Unlock` (`loginctl unlock-session`): honour it or not.
 - Naming: the clash with Debian's `bande` DNS resolver packages; the `org.bande.*` domain.
 - Product: a welcome assistant; an audio player (Totem or Rhythmbox); which UI languages first.

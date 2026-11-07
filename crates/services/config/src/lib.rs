@@ -54,6 +54,8 @@ pub enum Appearance {
     Automatic,
 }
 
+pub use bande_design::Style;
+
 pub const ACCENTS: [(&str, Accent); 8] = [
     ("ultramarine", Accent::Ultramarine),
     ("teal", Accent::Teal),
@@ -809,6 +811,7 @@ impl Search {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub appearance: Appearance,
+    pub style: Style,
     pub accent: Accent,
     pub tinted_frame: bool,
     pub reopen_apps: bool,
@@ -846,6 +849,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             appearance: Appearance::Dark,
+            style: Style::default(),
             accent: Accent::default(),
             tinted_frame: false,
             reopen_apps: true,
@@ -993,6 +997,9 @@ impl Parser<'_> {
                         ],
                     )
                     .map(|appearance| config.appearance = appearance),
+                "style" => self
+                    .keyword(node, &Style::ALL.map(|style| (style.keyword(), style)))
+                    .map(|style| config.style = style),
                 "accent" => self
                     .keyword(node, &ACCENTS)
                     .map(|accent| config.accent = accent),

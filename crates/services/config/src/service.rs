@@ -18,8 +18,8 @@ use crate::{
     ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, Dragging, FocusSchedule,
     InputSource, LidOnPower, Loaded, NIGHT_LIGHT_WARMTH_RANGE, NightLight, NightSchedule,
     Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory, SecondaryClick,
-    Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE, accent_keyword,
-    is_wallpaper_path, read_system_input_sources,
+    Setting, Style, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE,
+    accent_keyword, is_wallpaper_path, read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
@@ -159,6 +159,9 @@ fn publish_changes(
     zbus::block_on(async {
         if before.appearance != after.appearance {
             let _ = guard.appearance_changed(emitter).await;
+        }
+        if before.style != after.style {
+            let _ = guard.style_changed(emitter).await;
         }
         if before.accent != after.accent {
             let _ = guard.accent_changed(emitter).await;
@@ -494,6 +497,17 @@ impl ConfigInterface {
 
 #[zbus::interface(name = "org.bande.Config")]
 impl ConfigInterface {
+    #[zbus(property)]
+    fn style(&self) -> String {
+        self.store.current().style.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_style(&self, value: String) -> zbus::fdo::Result<()> {
+        let style = keyword(&Style::ALL, |style| style.keyword(), &value)?;
+        self.write(&Setting::Style(style))
+    }
+
     #[zbus(property)]
     fn appearance(&self) -> String {
         self.store.current().appearance.keyword().to_owned()

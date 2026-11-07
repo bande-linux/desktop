@@ -11,6 +11,8 @@ use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
+use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1;
+use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1;
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
 use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
@@ -54,6 +56,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "zwp_linux_dmabuf_v1" if version >= 3 => {
                     state.dmabuf = Some(registry.bind(name, 3, handle, ()));
+                }
+                "ext_background_effect_manager_v1" => {
+                    state.background_effects = Some(registry.bind(name, 1, handle, ()));
                 }
                 "zwp_keyboard_shortcuts_inhibit_manager_v1" => {
                     state.capture.inhibit_manager = Some(registry.bind(name, 1, handle, ()));
@@ -270,6 +275,8 @@ impl Dispatch<WlBuffer, Arc<AtomicBool>> for State {
 }
 
 delegate_noop!(State: ignore WlCompositor);
+delegate_noop!(State: ignore ExtBackgroundEffectManagerV1);
+delegate_noop!(State: ignore ExtBackgroundEffectSurfaceV1);
 delegate_noop!(State: ignore WlShm);
 delegate_noop!(State: ignore WlShmPool);
 delegate_noop!(State: ignore WlRegion);

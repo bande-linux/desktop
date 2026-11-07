@@ -13,10 +13,10 @@ use bande_toolkit::ui::{
 };
 
 use crate::L10N;
-use crate::rail::{BAR_MARGIN, edge_band};
+use crate::rail::{cross_margin, edge_band};
 use bande_toolkit::{
-    Appearance, Color, Elevation, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme,
-    Shape, TextAlign, TextStyle, TextSystem,
+    Appearance, BarForm, Color, Elevation, Image, Item, Palette, Paragraph, Point, Rect, Scene,
+    Scheme, Shape, TextAlign, TextStyle, TextSystem,
 };
 
 const CROSS_PADDING: f32 = 8.0;
@@ -228,6 +228,7 @@ pub struct TaskbarState {
     edge: BarEdge,
     icon_size: f32,
     scheme: Scheme,
+    form: BarForm,
     reduce_motion: bool,
     slots: Vec<Slot>,
     trash: TrashIcons,
@@ -294,6 +295,7 @@ impl TaskbarState {
             edge,
             icon_size,
             scheme: Scheme::default(),
+            form: BarForm::Floating,
             reduce_motion: false,
             slots: Vec::new(),
             trash: TrashIcons::default(),
@@ -360,6 +362,7 @@ impl TaskbarState {
     }
 
     pub fn set_appearance(&mut self, appearance: Appearance) {
+        self.form = appearance.look().bar;
         self.scheme = appearance.scheme;
         self.reduce_motion = appearance.reduce_motion;
     }
@@ -652,12 +655,12 @@ impl TaskbarState {
         if self.hides() {
             return 0;
         }
-        (self.rail.thickness() + BAR_MARGIN).round() as i32
+        (self.rail.thickness() + cross_margin(self.form)).round() as i32
     }
 
     pub fn input_region(&self) -> Rect {
         let depth = if self.is_shown() {
-            self.rail.thickness() + BAR_MARGIN
+            self.rail.thickness() + cross_margin(self.form)
         } else {
             EDGE_STRIP
         };

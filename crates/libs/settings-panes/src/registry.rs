@@ -217,6 +217,7 @@ pub enum SettingId {
     SoundEffects,
     VolumeFeedback,
     Appearance,
+    Style,
     ScreenReader,
     Zoom,
     IncreaseContrast,
@@ -795,6 +796,18 @@ fn desktop_panes() -> Vec<Pane> {
                             (L10N.tr("appearance-light"), "light"),
                             (L10N.tr("appearance-dark"), "dark"),
                             (L10N.tr("appearance-automatic"), "automatic"),
+                        ])),
+                    )],
+                ),
+                section(
+                    None,
+                    vec![setting(
+                        SettingId::Style,
+                        L10N.tr("style"),
+                        L10N.tr("style-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("style-refined"), "refined"),
+                            (L10N.tr("style-wallpaper-lit"), "wallpaper-lit"),
                         ])),
                     )],
                 ),

@@ -27,7 +27,7 @@ use bande_quick_look::{QuickLookLink, Subject};
 use bande_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
 use bande_toolkit::ui::frame_time;
 use bande_toolkit::{
-    App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
+    App, BarForm, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
 use bande_volumes::{EjectFailure, eject, media_roots};
@@ -89,6 +89,7 @@ pub struct DesktopSurface {
     pictures: HashMap<PathBuf, (Option<SystemTime>, Option<Option<Image>>)>,
     layouts_file: Option<PathBuf>,
     bar: BarPlacement,
+    form: BarForm,
     bar_changes: Inbox<BarPlacement>,
     choice: Option<Choice>,
     choices: Inbox<Choice>,
@@ -354,7 +355,7 @@ impl DesktopSurface {
     fn area(&self, size: (u32, u32)) -> Bounds {
         let (width, height) = (size.0 as f32, size.1 as f32);
         let (bar_edge, icon_size) = self.bar;
-        let edge = bande_bar::rail::bar_zone(icon_size as f32);
+        let edge = bande_bar::rail::bar_zone(icon_size as f32, self.form);
         let (left, right, bottom, top) = match bar_edge {
             BarEdge::Left => (edge, 0.0, 0.0, 0.0),
             BarEdge::Right => (0.0, edge, 0.0, 0.0),
@@ -377,6 +378,10 @@ impl DesktopSurface {
             return;
         }
         self.bar = bar;
+        self.fit_to_bar();
+    }
+
+    fn fit_to_bar(&mut self) {
         if let Some((size, scale)) = self.viewport {
             self.view.set_viewport(
                 (size.0 as f32, size.1 as f32),
@@ -940,6 +945,11 @@ impl App for DesktopSurface {
             WindowEvent::AppearanceChanged(appearance) => {
                 self.scheme = appearance.scheme;
                 self.view.set_appearance(appearance);
+                let form = appearance.look().bar;
+                if form != self.form {
+                    self.form = form;
+                    self.fit_to_bar();
+                }
                 self.refresh_wallpaper(window);
             }
             _ => {}
@@ -1210,6 +1220,7 @@ impl DesktopSurface {
             pictures: HashMap::new(),
             layouts_file,
             bar: (config.bar.edge, config.bar.icon_size),
+            form: appearance.look().bar,
             bar_changes,
             choice: Some(configured_choice(&config.wallpaper)),
             choices,

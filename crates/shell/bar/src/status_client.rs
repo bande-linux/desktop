@@ -589,6 +589,7 @@ impl App for StatusClient {
             }
             WindowEvent::AppearanceChanged(appearance) => {
                 self.bar.set_palette(appearance.palette());
+                self.bar.set_form(appearance.look().bar);
                 window.request_redraw();
             }
             WindowEvent::Workspaces { count, active } => {

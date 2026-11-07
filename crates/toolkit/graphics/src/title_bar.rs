@@ -213,10 +213,13 @@ pub struct TitleBar<'a> {
 impl TitleBar<'_> {
     pub fn items(&self) -> Vec<Item> {
         let palette = self.palette;
-        let mut items = vec![Item::Fill {
-            shape: Shape::rect(Rect::new(0.0, 0.0, self.width, self.height)),
-            paint: palette.chassis.into(),
-        }];
+        let mut items = Vec::new();
+        if palette.frame.a == u8::MAX {
+            items.push(Item::Fill {
+                shape: Shape::rect(Rect::new(0.0, 0.0, self.width, self.height)),
+                paint: palette.frame.into(),
+            });
+        }
         let well = Rect::new(
             WELL_X,
             ((self.height - WELL_HEIGHT) / 2.0).round(),

@@ -440,6 +440,7 @@ impl State {
 impl Compositor {
     pub fn set_dark_appearance(&mut self, dark: bool) {
         self.state.decorations.scheme = if dark { Scheme::Dark } else { Scheme::Light };
+        self.state.refresh_materials();
         self.state.needs_redraw = true;
     }
 }

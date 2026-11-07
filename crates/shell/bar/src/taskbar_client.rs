@@ -1072,7 +1072,7 @@ impl Taskbar {
             icon_scale: window.scale(),
             reported: HashMap::new(),
             input: None,
-            zone: bar_zone(icon_size).round() as i32,
+            zone: bar_zone(icon_size, appearance.look().bar).round() as i32,
             menu: None,
             confirming: false,
             swallow_release: false,

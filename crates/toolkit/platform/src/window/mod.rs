@@ -31,6 +31,8 @@ use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_subcompositor::WlSubcompositor;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, EventQueue, Proxy};
+use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1;
+use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1;
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
@@ -267,6 +269,7 @@ pub(crate) struct State {
     pub(crate) shm: Option<WlShm>,
     pub(crate) subcompositor: Option<WlSubcompositor>,
     pub(crate) dmabuf: Option<wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1>,
+    pub(crate) background_effects: Option<ExtBackgroundEffectManagerV1>,
     pub(crate) wm_base: Option<XdgWmBase>,
     layer_shell: Option<ZwlrLayerShellV1>,
     pub(crate) activation: Option<XdgActivationV1>,
@@ -383,6 +386,8 @@ pub struct Window {
     shown_frame: Option<Frame>,
     planned: Option<FrameTime>,
     shown_opaque: Option<Opaque>,
+    shown_backdrop: Option<Rect>,
+    backdrop_effect: Option<ExtBackgroundEffectSurfaceV1>,
     pub(crate) externals: Vec<Weak<RefCell<External>>>,
     staged: bool,
     pub(crate) app_cursor: Cursor,
@@ -620,6 +625,8 @@ impl Window {
             shown_frame: None,
             planned: None,
             shown_opaque: None,
+            shown_backdrop: None,
+            backdrop_effect: None,
             externals: Vec::new(),
             staged: false,
             app_cursor: Cursor::Default,
@@ -1301,6 +1308,38 @@ impl Window {
         }
     }
 
+    pub fn set_backdrop(&mut self, area: Option<Rect>) {
+        if self.shown_backdrop == area {
+            return;
+        }
+        let handle = self.queue.handle();
+        let (Some(manager), Some(compositor)) =
+            (&self.state.background_effects, &self.state.compositor)
+        else {
+            return;
+        };
+        self.shown_backdrop = area;
+        let effect = self
+            .backdrop_effect
+            .get_or_insert_with(|| manager.get_background_effect(&self.surface, &handle, ()));
+        let region = area.map(|area| {
+            let region = compositor.create_region(&handle, ());
+            let left = area.x.floor();
+            let top = area.y.floor();
+            region.add(
+                left as i32,
+                top as i32,
+                ((area.x + area.width).ceil() - left) as i32,
+                ((area.y + area.height).ceil() - top) as i32,
+            );
+            region
+        });
+        effect.set_blur_region(region.as_ref());
+        if let Some(region) = region {
+            region.destroy();
+        }
+    }
+
     fn frame_surface(&mut self, frame: &Frame) {
         if self.shown_frame.as_ref() == Some(frame) {
             return;
@@ -1394,8 +1433,12 @@ impl Window {
             let sheet_opaque = scene.background.a == u8::MAX;
             let framed = self.framed(&frame, scene, frame_time.presentation);
             self.frame_surface(&frame);
-            let chassis = self.appearance.borrow().current().palette().chassis;
-            let opaque = (chassis.a == u8::MAX && sheet_opaque).then(|| frame.window());
+            let translucent = self.appearance.borrow().current().palette().frame.a != u8::MAX;
+            self.set_backdrop(translucent.then(|| frame.window()));
+            let opaque = sheet_opaque.then(|| match translucent {
+                true => frame.opaque_sheet(),
+                false => frame.window(),
+            });
             (framed, opaque)
         } else {
             let opaque = (scene.background.a == u8::MAX)

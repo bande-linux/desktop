@@ -5,7 +5,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
-use bande_config::{ACCENTS, Accent};
+use bande_config::{ACCENTS, Accent, Style};
 use bande_design::{Color, Scheme, Typeface};
 use bande_wallpaper::{Choice, Variant};
 use jiff::tz::TimeZone;
@@ -118,6 +118,7 @@ impl CursorSettings {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Look {
     scheme: ColorScheme,
+    style: Style,
     accent: Accent,
     tint: Option<Color>,
     increase_contrast: bool,
@@ -136,6 +137,8 @@ struct Look {
 trait Config {
     #[zbus(property)]
     fn appearance(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn style(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn accent(&self) -> zbus::Result<String>;
     #[zbus(property)]
@@ -254,6 +257,11 @@ impl Reader {
             .flatten();
         let look = Look {
             scheme: scheme.into(),
+            style: config
+                .style()
+                .ok()
+                .and_then(|keyword| Style::from_keyword(&keyword))
+                .unwrap_or_default(),
             accent: ACCENTS
                 .iter()
                 .find(|(keyword, _)| *keyword == accent)
@@ -303,6 +311,7 @@ fn namespaces(look: Look, cursor: &CursorSettings) -> Namespaces {
             BANDE_APPEARANCE,
             owned(vec![
                 ("frame-tint", Value::from(tint)),
+                ("style", Value::from(look.style.keyword())),
                 (
                     "reduce-transparency",
                     Value::from(u32::from(look.reduce_transparency)),

@@ -13,7 +13,7 @@ Bande should feel like a well-made instrument: a Braun radio or a Teenage Engine
 
 ## 3. Principles (and how they differ from macOS)
 
-1. **Solid, not glass.** Windows, the bar and menus are opaque, warm surfaces. Depth comes from *tone* (frame vs sheet) and one shadow. macOS (and Liquid Glass) builds identity on translucency; we build it on material honesty, legibility and speed. Blur appears only behind modal moments (§6).
+1. **Material is a choice, legibility is not.** Depth comes from *tone* (frame vs sheet), a lit edge and one shadow. Content always sits on an opaque sheet. What the frame and the bar are made of is the user's **style** (§6), independent of light and dark, and every style keeps the same text contrast.
 2. **One signal.** Exactly one chromatic colour carries meaning at a time: the accent marks *selected, focused, active, live*. Everything else is warm greys. Semantic red, amber and green appear only for status. App icons are the only place several hues meet.
 3. **Frame and sheet.** Every window is a *frame* (the chassis: title bar, toolbar, sidebar) holding an inset *sheet* (the content), whose radius is concentric with the window. You always see where the controls end and your work begins. macOS draws a flat white window with a translucent sidebar instead.
 4. **Exact edges.** Radii come from one concentric rule, spacing from a 4 pt scale, and every hairline lands on a device pixel. Nothing is "about 7".
@@ -126,7 +126,22 @@ Targets: body text Lc ≥ 90 in light; in dark Lc 75–90, because APCA gives Lc
 | 2 Overlay | `overlay` (menus, popovers, notifications), lighter than the window in dark, lit edge | 0/.5/.75 α .10 + 0/3/7 α .14 | 0/1/1 α .30 + 0/4/8 α .36 |
 | 3 Modal | alert/sheet card above a **scrim**: parent dims with black at 18 % (light) / 40 % (dark) | as frame | as frame |
 
-**Translucency policy:** none on windows, menus or the bar by default. Blur exists in exactly two places: (a) the scrim behind the launcher, overview and modal alerts gets a 24 pt backdrop blur at 60 % mix, so the eye is pulled forward; (b) Reduce Transparency is irrelevant because we are opaque, but an opt-in "Tinted chassis" mixes 6 % of the wallpaper's average colour into `chassis` (Mica-like, computed once per wallpaper change, no live blur). This also drops the per-frame blur work the Dock and menus do today.
+### Styles
+
+Settings ▸ Appearance ▸ Style, `style` in `config.kdl`. The tokens live in `crates/toolkit/design/src/look.rs`, the single source for every window and the shell, and a change applies live.
+
+| Style | Frame and bar | Menus, panels | Added power |
+|---|---|---|---|
+| **Refined Solid** (default) | opaque `chassis` | opaque `overlay` | none, the most efficient |
+| **Wallpaper-Lit** | `chassis` at 74 % over a blurred copy of the wallpaper, sampled at the surface's position; other windows never show through | opaque `overlay` | one small texture, made once per wallpaper |
+
+- **The material is only ever behind the frame.** The sheet is opaque and declared so, which also spares the compositor drawing under it.
+- **Readable over anything.** The backdrop's luminance is limited before the frame goes on it, to at most .16 in dark and at least .60 in light. That bound gives `ink` ≥ 7:1, `ink2` ≥ 4.5:1 and `ink3` ≥ 3:1 over any picture; a test in the design crate enumerates it.
+- **Wallpaper-Lit** keeps a 480 pixel wide picture per display, blurred and saturated 1.35× once on a worker thread, and makes it again only when the wallpaper, the scheme or the display changes. Nothing redraws at idle.
+- **Reduce Transparency and Increase Contrast** make every style solid.
+- **Third-party windows.** GTK and Qt apps draw their own frames, and server-side title bars use opaque `chassis`, so those stay solid in every style.
+
+**Blur** otherwise exists only behind the launcher, overview and modal alerts (a 24 pt backdrop blur at 60 % mix, so the eye is pulled forward). "Tinted chassis" is a separate opt-in that mixes 6 % of the wallpaper's average colour into `chassis`.
 
 **Inactive windows:** the header glyphs go to `ink3`, the window-control well loses its fill and becomes an outline, the selection turns from accent to `well`, the ambient shadow halves, and the sheet stays the same, so content stays readable.
 
@@ -246,8 +261,8 @@ A dry, short, *wooden-percussive* palette: soft-attack mallet and click tones un
 
 ## 13. The shell: the Taskbar
 
-The Taskbar is an edge-anchored bar, 64 pt at the default icon size plus its 8 pt margin, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
-- Bar surface = `chassis`, the same tone, radius (`radius.xl`), lit edge and shadow as a window, so bar and windows read as one family. It floats 8 pt from the screen edges, and the 8 pt counts as part of the bar for the pointer: a throw to the screen edge still lands on it. It is opaque; "Tinted chassis" applies here too.
+The Taskbar is an edge-anchored bar, 64 pt at the default icon size , plus its margins when floating, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
+- Bar surface = the same tone, material (§6), radius (`radius.xl`), lit edge and shadow as a window frame, so bar and windows read as one family. In every style it floats by default: 8 pt from the screen on all sides, and 8 pt from maximised and tiled windows, which is 2 × 8 pt added to the space it reserves. The 8 pt on the screen side counts as part of it for the pointer, so a throw to the screen edge still lands on it. Settings ▸ Taskbar turns floating off (`bar { floating #false }`): it then attaches to its screen edge, keeps 8 pt from the ends and rounds its inner corners, and reserves only its own thickness. "Tinted chassis" applies here too.
 - **Active app = a `focus` frame** around its icon: 4 pt outside it, a 1.5 pt `focus` line over a `focus` plate at 14 % (22 % hovered, 30 % pressed), radius concentric with the icon. It is the one `focus` shape on the bar and glides to the next active app on `quick` (a cross-fade under Reduce Motion). **Other running apps = a 3×3 `ink2` square** on the screen-edge side (the square motif; a dot would be macOS).
 - The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 16 panels).
 - The clock is Inter 15/600 tnum stacked "14 / 32".

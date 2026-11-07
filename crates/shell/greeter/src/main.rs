@@ -81,6 +81,7 @@ struct Greeter {
     powers: Vec<PowerAction>,
     devices: Option<Devices>,
     corner: (Option<Battery>, Option<Wifi>),
+    signing_in_after_unlock: bool,
 }
 
 impl Greeter {
@@ -214,7 +215,9 @@ impl Greeter {
         let Some(finished) = self.conversation.take() else {
             return;
         };
+        let automatic = std::mem::take(&mut self.signing_in_after_unlock);
         match finished.rejection {
+            Some(Rejection::WrongPassword) if automatic => {}
             None if finished.started => {
                 self.started = true;
                 tracing::info!("signed in; handing the screen to the session");
@@ -263,6 +266,21 @@ impl Greeter {
         }
         Ok(())
     }
+}
+
+const UNLOCK_PASSWORD: &str = "/run/bande-disk-encryption/for-login";
+
+fn take_unlock_password() -> Option<Zeroizing<String>> {
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(UNLOCK_PASSWORD)
+        .ok()?;
+    let mut password = Zeroizing::new(String::new());
+    let read = std::io::Read::read_to_string(&mut file, &mut password);
+    let _ = file.set_len(0);
+    read.ok()?;
+    (!password.is_empty()).then_some(password)
 }
 
 impl App for Greeter {
@@ -475,7 +493,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         powers,
         devices,
         corner: (None, None),
+        signing_in_after_unlock: false,
     };
+    if greeter.users.len() == 1
+        && let Some(password) = take_unlock_password()
+    {
+        greeter.signing_in_after_unlock = true;
+        greeter.sign_in(password);
+    }
     bande_toolkit::run(&mut window, &mut greeter)?;
     Ok(())
 }

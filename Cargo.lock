@@ -1027,6 +1027,7 @@ dependencies = [
  "bande-pdf",
  "bande-printers",
  "bande-test-bus",
+ "bande-test-wayland",
  "bande-xdg",
  "blocking",
  "ring",

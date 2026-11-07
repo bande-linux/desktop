@@ -95,7 +95,7 @@ when they reach the screen is Bande's own.
   that asks for server-side gets a normal title bar, and any other Firefox is left alone.
 - **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers, and NV12 for
   video (one dmabuf for both planes, BT.709 limited range, converted in the `video` shader; on a
-  real GPU its planes are sampled in place when stride and offsets are multiples of 16, and
+  real GPU that reports importing LINEAR NV12, its planes are sampled in place when stride and offsets are multiples of 16, and
   otherwise copied to two textures), with the
   LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche
   of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that

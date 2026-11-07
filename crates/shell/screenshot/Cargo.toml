@@ -13,7 +13,8 @@ blocking.workspace = true
 image.workspace = true
 jiff.workspace = true
 pipewire = { workspace = true, features = ["v0_3_34"] }
-rustix = { workspace = true, features = ["event", "fs", "process", "time"] }
+libc.workspace = true
+rustix = { workspace = true, features = ["event", "fs", "param", "process", "time"] }
 tracing.workspace = true
 bande-datetime.workspace = true
 bande-fs.workspace = true

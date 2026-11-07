@@ -16,7 +16,6 @@ growth or a weaker boundary than documented; **low** edge cases and hygiene.
 - medium: notify's `rule_for` remembers every new `app_name` and rewrites `notification-apps` each time.
 - medium: thumbnails decode without `Limits` (512 MiB each, three at once, abort in dist).
 - medium: a busy eject only logs (`volumes/eject.rs`); the user may pull a mounted drive.
-- medium: Settings' Variable refresh rate switch writes a key nothing reads.
 - medium: the desktop keeps the bar edge and icon size from when it was created (`desktop/client.rs`).
 - medium: a missing configured wallpaper never falls back to the default and a failed load is never retried (`wallpaper/choice.rs`).
 - medium: a keyboard layouts XML or read error gives an empty list with no log (`keyboard/layouts.rs`).

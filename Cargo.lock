@@ -563,6 +563,7 @@ dependencies = [
  "bande-datetime",
  "bande-edid",
  "bande-graphics",
+ "bande-inbox",
  "bande-keyboard",
  "bande-l10n",
  "bande-log",
@@ -571,6 +572,7 @@ dependencies = [
  "bande-spring",
  "bande-test-bus",
  "bande-test-wayland",
+ "bande-wallpaper",
  "bande-widgets",
  "bande-xdg",
  "jiff",
@@ -786,6 +788,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "xkbcommon",
  "zbus",
  "zeroize",
 ]

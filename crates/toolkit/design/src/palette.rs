@@ -182,6 +182,8 @@ pub struct Palette {
 }
 
 impl Palette {
+    pub const DIMMED_ALPHA: f32 = 0.5;
+
     pub fn for_scheme(scheme: Scheme) -> Self {
         Self::generate(scheme, Accent::default(), Contrast::default())
     }

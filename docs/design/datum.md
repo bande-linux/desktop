@@ -136,7 +136,7 @@ Settings ▸ Appearance ▸ Style, `style` in `config.kdl`. The tokens live in `
 | **Wallpaper-Lit** | `chassis` at 74 % over a blurred copy of the wallpaper, sampled at the surface's position; other windows never show through | opaque `overlay` | attached to its screen edge, rounded on the inner corners, 8 pt from the ends | one small texture, made once per wallpaper |
 
 - **The material is only ever behind the frame.** The sheet is opaque and declared so, which also spares the compositor drawing under it.
-- **Readable over anything.** The backdrop's luminance is limited before the frame goes on it, to at most .16 in dark and at least .50 in light. That bound gives `ink` ≥ 7:1, `ink2` ≥ 4.5:1 and `ink3` ≥ 3:1 over any picture; a test in the design crate enumerates it.
+- **Readable over anything.** The backdrop's luminance is limited before the frame goes on it, to at most .16 in dark and at least .60 in light. That bound gives `ink` ≥ 7:1, `ink2` ≥ 4.5:1 and `ink3` ≥ 3:1 over any picture; a test in the design crate enumerates it.
 - **Wallpaper-Lit** keeps a 480 pixel wide picture per display, blurred and saturated 1.35× once on a worker thread, and makes it again only when the wallpaper, the scheme or the display changes. Nothing redraws at idle.
 - **Reduce Transparency and Increase Contrast** make every style solid. The Taskbar's form stays what the style says.
 - **Third-party windows.** GTK and Qt apps draw their own frames, and server-side title bars use opaque `chassis`, so those stay solid in every style.

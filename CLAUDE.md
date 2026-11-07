@@ -16,7 +16,7 @@
 
 ## Factory Verification
 - **No panics**: No `.unwrap()` or `.expect()` in production code. Use proper error handling.
-- **Build first, test once**: each change only needs to compile (`desktop-check <worktree> -p <crate>`: fmt and `cargo check`). The full gate (`ci/release/verify.sh gate`, the same release checks `release.yml` runs: fmt, clippy `-D warnings`, the layering rules, the tests on the hermetic bus, the debs with check-debs, smoke and lintian) runs once per merge-train batch; see `docs/architecture/ci.md`.
+- **Build first, test once**: each change only needs to compile (`desktop-check <worktree> -p <crate>`: fmt and `cargo check`). Anything else heavy goes through the build queue: `build-run <worktree> cargo ...`, on whichever build machine is free (`build-run --here` to stay on the mini, for a benchmark or a binary you run next). The full gate (`ci/release/verify.sh gate`, the same release checks `release.yml` runs: fmt, clippy `-D warnings`, the layering rules, the tests on the hermetic bus, the debs with check-debs, smoke and lintian) runs once per merge-train batch; see `docs/architecture/ci.md`.
 
 ## Workflow
 - Trunk-based: `main` always builds. Each milestone is a short branch from `main`.

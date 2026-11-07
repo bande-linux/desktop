@@ -12,7 +12,7 @@ use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedObjectPath;
 use zbus::{MatchRule, Message, message};
 
-use crate::session::Ending;
+use crate::session::{Ending, Inhibitor, Refusal};
 use crate::status::{Battery, Bluetooth, Gadget, Power, Wifi};
 use crate::{Command, Update};
 
@@ -22,6 +22,7 @@ const SOURCES: [(Source, &str); 3] = [
     (Source::Bluetooth, "org.bluez"),
 ];
 const BUS: &str = "org.freedesktop.DBus";
+const COMPOSITOR_UNIT: &str = "bande-compositor.service";
 const DISPLAY_DEVICE: &str = "/org/freedesktop/UPower/devices/DisplayDevice";
 const UPOWER_CHARGING: u32 = 1;
 const UPOWER_FULL: u32 = 4;
@@ -75,6 +76,8 @@ trait LoginManager {
     fn can_power_off(&self) -> zbus::Result<String>;
 
     fn get_session(&self, session_id: &str) -> zbus::Result<OwnedObjectPath>;
+
+    fn list_inhibitors(&self) -> zbus::Result<Vec<(String, String, String, String, u32, u32)>>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,6 +85,16 @@ pub enum PowerAction {
     Sleep,
     Restart,
     ShutDown,
+}
+
+impl PowerAction {
+    pub fn ending(self) -> Option<Ending> {
+        match self {
+            Self::Sleep => None,
+            Self::Restart => Some(Ending::Restart),
+            Self::ShutDown => Some(Ending::ShutDown),
+        }
+    }
 }
 
 pub fn powers(system: &Connection) -> zbus::Result<Vec<PowerAction>> {
@@ -269,12 +282,59 @@ pub fn sleep(system: &Connection) -> zbus::Result<()> {
     Login::new(system)?.suspend(true)
 }
 
-pub fn end_session(system: &Connection, ending: Ending) -> zbus::Result<()> {
-    let login = Login::new(system)?;
+fn shutdown_inhibitors(login: &Login) -> zbus::Result<Vec<Inhibitor>> {
+    Ok(login
+        .list_inhibitors()?
+        .into_iter()
+        .filter(|(what, _, _, mode, _, _)| {
+            mode == "block" && what.split(':').any(|what| what == "shutdown")
+        })
+        .map(|(_, who, why, _, _, _)| Inhibitor { who, why })
+        .collect())
+}
+
+fn stop_session() -> zbus::Result<()> {
+    Connection::session()?.call_method(
+        Some("org.freedesktop.systemd1"),
+        "/org/freedesktop/systemd1",
+        Some("org.freedesktop.systemd1.Manager"),
+        "StopUnit",
+        &(COMPOSITOR_UNIT, "replace"),
+    )?;
+    Ok(())
+}
+
+fn turn_off(ending: Ending, insist: bool) -> zbus::Result<Result<(), Vec<Inhibitor>>> {
+    let system = Connection::system()?;
+    let login = Login::new(&system)?;
+    if !insist {
+        let inhibitors = shutdown_inhibitors(&login)?;
+        if !inhibitors.is_empty() {
+            return Ok(Err(inhibitors));
+        }
+    }
     match ending {
-        Ending::Restart => login.reboot(true),
-        Ending::ShutDown => login.power_off(true),
-        Ending::LogOut => own_session(system, "Terminate"),
+        Ending::Restart => login.reboot(true)?,
+        _ => login.power_off(true)?,
+    }
+    Ok(Ok(()))
+}
+
+pub fn end_session(ending: Ending, insist: bool) -> Result<(), Refusal> {
+    let requested = match ending {
+        Ending::LogOut => stop_session().map(Ok),
+        Ending::Restart | Ending::ShutDown => turn_off(ending, insist),
+    };
+    match requested {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(inhibitors)) => Err(Refusal::Inhibited(inhibitors)),
+        Err(error) => {
+            tracing::warn!("cannot end the session: {error}");
+            Err(Refusal::Failed(match error {
+                zbus::Error::MethodError(_, Some(reason), _) => reason,
+                error => error.to_string(),
+            }))
+        }
     }
 }
 

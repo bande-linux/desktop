@@ -142,9 +142,9 @@ writes a hex value, a corner radius or a font name of its own.
     window's control acts at once. The zoom glyph turns inward
     while the window is zoomed; with Alt held it shows + and Alt-click enters full screen. The
     hit cells cover the pill's full height and the close cell reaches the window's left edge.
-    Rounded corners (14 pt), the 55 % `edge` ring and the shadow pair are the compositor's, cut
-    at the window geometry (`set_window_geometry`), so every app looks alike; maximised and
-    full-screen windows are square. They act on release inside. A drag on the header or
+    Rounded corners (16 pt), the one pixel dark ring and the shadow pair are the compositor's, cut
+    at the window geometry (`set_window_geometry`), so every app looks alike; only full-screen
+    windows are square. They act on release inside. A drag on the header or
     the chassis around the sheet moves the window, a double click zooms, a right click opens
     the window menu. A band from the rounded outline to 8 pt outside resizes, corner
     cut-outs included, with corners reaching 32 pt along the edges and 16 pt out diagonally, the part

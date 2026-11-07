@@ -37,7 +37,7 @@ Bande should feel like a well-made instrument: a Braun radio or a Teenage Engine
 
 **Concentric rule:** `inner = max(outer − inset, 4)`. Examples: window 16 − sheet inset 6 = sheet 10; menu 10 − item inset 4 = item 6; segmented track 8 − 2 = pill 6. A child that stands alone (a button in an alert, 16 from the edge) falls back to its fixed token (6). This is Apple's own "concentric shape" concept, but our values are smaller and our corners are plain circular arcs, **not continuous squircles**. Arcs read crisper and more technical and are cheaper to draw.
 
-The compositor's window corners are 16. Maximised and tiled windows square their screen-touching corners (radius 0), and the sheet keeps its 10.
+The compositor's window corners are 16, on maximised and tiled windows too: a window is always rounded, with its shadow and lit edge, whichever style and however the Taskbar sits. Only true full screen, which has no window edges, is square.
 
 ### Hairlines
 - One hairline width: 1 device pixel at integer scales, snapped to the pixel grid at fractional scales (`width = 1/scale` logical, rounded to whole device pixels ≥ 1).

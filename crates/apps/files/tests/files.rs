@@ -236,7 +236,10 @@ fn dragging_a_column_header_reorders_the_columns_and_the_order_is_remembered() {
     files.handle(&Event::PointerUp(Pointer::at(modified)));
     assert_eq!(titles(&files), ["Name", "Kind", "Date Modified", "Size"]);
     assert_eq!(files.browser().sort().by, by_size.by);
-    assert_eq!(fs::read_to_string(&order).expect("saved"), "kind\nmodified\nsize\n");
+    assert_eq!(
+        fs::read_to_string(&order).expect("saved"),
+        "kind\nmodified\nsize\n"
+    );
 
     files.menu_action(&list_column_move_action(ListColumn::Kind, 1));
     let moved = ["Name", "Date Modified", "Kind", "Size"];

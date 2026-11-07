@@ -156,8 +156,21 @@ pub(crate) fn rule(name: &str) -> String {
     STATE.with_borrow(|state| state.rules.get(name).cloned().unwrap_or_default())
 }
 
-pub(crate) fn option(name: &str) -> bool {
-    rule(&format!("{name}-on")) == "true"
+pub(crate) fn rule_has(name: &str, character: char) -> bool {
+    STATE.with_borrow(|state| {
+        state
+            .rules
+            .get(name)
+            .is_some_and(|rule| rule.contains(character))
+    })
+}
+
+fn rule_is(name: &str, value: &str) -> bool {
+    STATE.with_borrow(|state| state.rules.get(name).is_some_and(|rule| rule == value))
+}
+
+pub(crate) fn option(key: &str) -> bool {
+    rule_is(key, "true")
 }
 
 pub(crate) fn replacement(word: &str) -> Option<String> {
@@ -222,7 +235,7 @@ fn eligible(word: &str) -> bool {
 }
 
 pub(crate) fn links(text: &str) -> Vec<Range<usize>> {
-    if rule("links-on") == "false" {
+    if rule_is("links-on", "false") {
         return Vec::new();
     }
     let mut found = Vec::new();
@@ -270,12 +283,12 @@ pub(crate) fn words(text: &str) -> Vec<Range<usize>> {
         }
         let mut word: Option<usize> = None;
         let mut has_digit = false;
-        let characters: Vec<(usize, char)> = body.char_indices().collect();
-        for (index, &(at, character)) in characters.iter().enumerate() {
+        let mut characters = body.char_indices().peekable();
+        while let Some((at, character)) = characters.next() {
             let joined = is_inner_joiner(character)
                 && word.is_some()
                 && characters
-                    .get(index + 1)
+                    .peek()
                     .is_some_and(|(_, next)| next.is_alphabetic());
             if character.is_alphabetic() || character.is_numeric() || joined {
                 has_digit |= character.is_numeric();

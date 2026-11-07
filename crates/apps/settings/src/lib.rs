@@ -30,6 +30,7 @@ mod privacy;
 mod privilege;
 mod security_status;
 mod services;
+mod sharing;
 mod software;
 mod state;
 mod storage;

@@ -4,12 +4,12 @@ use std::process::{Child, ExitCode};
 use std::time::{Duration, Instant};
 
 use bande_compositor::{
-    CLIPBOARD_DAEMON, Compositor, CursorTheme, DrmBackend, DrmNotifiers, FrameClock, FrameOutput,
-    FrameScheduler, GREETER, InputSettings, REFRESH, REVIEW, Renderer, SCREENSHOT,
-    SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
-    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
+    CLIPBOARD_DAEMON, Compositor, CursorTheme, DisplaysHandle, DrmBackend, DrmNotifiers,
+    FrameClock, FrameOutput, FrameScheduler, GREETER, InputSettings, REFRESH, REVIEW, Renderer,
+    SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep,
+    Sleep, export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
     follow_session, follow_shutdown, follow_sleep, notify_service_manager, serve_app_states,
-    serve_keyboard_monitor, user_config, watchdog_keepalive_interval,
+    serve_displays, serve_keyboard_monitor, user_config, watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, OBJECT_PATH};
 use bande_datetime::ClockChanges;
@@ -43,6 +43,17 @@ struct App<O> {
     started: Duration,
     shown: bool,
     buses: Buses,
+    displays: Option<DisplaysHandle>,
+}
+
+fn publish_displays<O: FrameOutput>(app: &mut App<O>) {
+    if let Some(displays) = &app.displays {
+        let output = &mut app.output;
+        displays.publish(
+            app.compositor
+                .connected_displays(&mut |name| output.can_dim(name)),
+        );
+    }
 }
 
 struct Buses {
@@ -142,6 +153,7 @@ fn run_headless(session: Session, started: Duration, buses: Buses) -> Result<(),
         started,
         shown: false,
         buses,
+        displays: None,
     };
     serve(&mut event_loop, app, session).map(drop)
 }
@@ -208,6 +220,7 @@ fn sync_heads(app: &mut App<DrmBackend>) {
         }
         tracing::info!("driving {name} at {:.2} Hz", 1.0 / refresh.as_secs_f64());
     }
+    publish_displays(app);
 }
 
 fn hotplug(app: &mut App<DrmBackend>) {
@@ -365,6 +378,7 @@ fn run_drm(
         started,
         shown: false,
         buses,
+        displays: None,
     };
     let input = app.output.input_backend()?;
     handle.insert_source(input, |event, _, app| {
@@ -500,7 +514,7 @@ fn follow<O: 'static, T: 'static>(
     Ok(())
 }
 
-fn follow_session_bus<O: 'static>(
+fn follow_session_bus<O: FrameOutput + 'static>(
     handle: &LoopHandle<'static, App<O>>,
     app: &mut App<O>,
     bus: &Connection,
@@ -524,6 +538,20 @@ fn follow_session_bus<O: 'static>(
         |sender| follow_alerts(bus, move || sender.send(()).is_ok()),
         |app, ()| app.compositor.flash_screen(),
     )?;
+    let (dims, dim_requests) = channel::channel();
+    match serve_displays(bus, dims) {
+        Ok(displays) => {
+            app.displays = Some(displays);
+            publish_displays(app);
+            handle.insert_source(dim_requests, |event, _, app| {
+                if let Event::Msg((connector, gain)) = event {
+                    let connector: String = connector;
+                    app.output.set_dim(&connector, gain);
+                }
+            })?;
+        }
+        Err(error) => tracing::warn!("displays cannot be dimmed: {error}"),
+    }
     match serve_keyboard_monitor(bus) {
         Ok(monitor) => app.compositor.monitor_keyboard(monitor),
         Err(error) => tracing::warn!("assistive technologies cannot watch the keyboard: {error}"),
@@ -554,7 +582,7 @@ fn note_running_apps<O>(app: &mut App<O>) {
     app.compositor.note_running_apps_in(running);
 }
 
-fn start_user_session<O: 'static>(
+fn start_user_session<O: FrameOutput + 'static>(
     event_loop: &mut EventLoop<'static, App<O>>,
     app: &mut App<O>,
 ) -> Result<Option<Child>, Box<dyn Error>> {

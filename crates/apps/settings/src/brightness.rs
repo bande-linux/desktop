@@ -1,37 +1,22 @@
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::Sender;
 
-use bande_settings_panes::{SettingId, Value};
-use bande_status::backlight::DisplayLight;
+use bande_settings_panes::SettingId;
+use bande_status::brightness::{LevelRequest, follow_levels, level_requests};
 use zbus::blocking::Connection;
 
 use crate::failure::failed;
-use crate::follow::{Update, Updates, spawn};
+use crate::follow::{Update, Updates};
 
-fn level_update(level: f32) -> Update {
-    Update::Values(vec![(SettingId::Brightness, Value::Fraction(level))])
-}
-
-pub fn follow_brightness(system: &Connection, updates: Updates) -> Option<Sender<f32>> {
-    let light = DisplayLight::find()?;
-    let follower = light.clone();
+pub fn follow_brightness(session: &Connection, updates: Updates) -> Option<Sender<LevelRequest>> {
     let changes = updates.clone();
-    spawn("brightness-follow", move || {
-        if let Err(error) = follower.follow(|level| changes.send(level_update(level))) {
-            tracing::warn!("cannot follow the brightness: {error}");
-        }
-    });
-    let (sender, receiver) = mpsc::channel::<f32>();
-    let system = system.clone();
-    spawn("brightness", move || {
-        while let Ok(first) = receiver.recv() {
-            let level = receiver.try_iter().last().unwrap_or(first);
-            if let Err(error) = light.set_level(&system, level) {
-                updates.send(failed(SettingId::Brightness, &error, "service-brightness"));
-                if let Some(level) = light.level() {
-                    updates.send(level_update(level));
-                }
-            }
-        }
-    });
-    Some(sender)
+    if let Err(error) = follow_levels(session, move |levels| {
+        changes.send(Update::DisplayLevels(levels))
+    }) {
+        tracing::warn!("cannot follow the brightness: {error}");
+    }
+    level_requests(session, move |error| {
+        updates.send(failed(SettingId::Brightness, &error, "service-brightness"));
+    })
+    .inspect_err(|error| tracing::warn!("cannot set the brightness: {error}"))
+    .ok()
 }

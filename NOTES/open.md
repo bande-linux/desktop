@@ -22,6 +22,10 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - After `rebuild-desktop` and a new login: Ctrl shortcuts everywhere and Super only for the
   system; taskbar icons of third-party apps; resize zones; snapping against the taskbar edge;
   sidebar selection.
+- Brightness on the mini: the Control Center and Settings bar and the brightness keys dim the
+  HDMI monitor, it stays dimmed after replugging, and idle dimming lowers it and restores it.
+- DDC/CI needs a machine with a DDC adapter (`ls /sys/class/drm/*/ddc`): real monitor follows the
+  bar and its own buttons show after reopening the panel.
 - Force Quit from the system menu with a stopped app (`kill -STOP`) marks it within 3 s and kills
   it with its helpers; it opens under real memory pressure; Orca reads it; Shift in the system
   menu shows Force Quit "*App*".
@@ -42,6 +46,8 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   shell's PipeWire clients with two displays.
 - Login: the greetd console frame before the greeter (`vt.global_cursor_default=0` or a greetd
   change), the bar flicker at login, time to desktop.
+- Apple hardware: DDC/CI through DCP's I2C in `appledrm` (external displays are dimmed by the
+  compositor until then; needs reverse engineering of the firmware's calls).
 - Apple hardware: Night Light gamma on the DCP; overlay planes and direct scanout; the
   `VK_KHR_external_semaphore_fd` release path and dma-buf modifiers on Honeykrisp; the GPU
   fence wait each frame; input-to-photon latency with a camera; swapping or moving the only

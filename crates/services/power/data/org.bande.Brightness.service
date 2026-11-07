@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.bande.Brightness
+Exec=/usr/bin/bande-power
+SystemdService=bande-power.service

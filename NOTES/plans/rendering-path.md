@@ -101,11 +101,6 @@ Implementing it would be a kernel fork with black flashes, with no benefit here.
 
 | # | Stage | Gain, measured | Risk | Blocker | Size |
 |---|---|---|---|---|---|
-<<<<<<< HEAD
-| 1 | GPU copy to the scanout buffer | 2.0 ms to 0.45 ms per full frame, CPU part gone | low | none | S |
-=======
-| 0 | Remove the VRR switch and key | no dead control | none | none | S |
->>>>>>> origin/main
 | 2 | Colour probe, then sRGB correct | every pixel on this monitor | low for the probe; **black screen** possible until booted | owner boot | S if DCP does it, M if shaders |
 | 3 | Sample NV12 without copying | 0.34-0.66 ms per video frame | medium | none | S-M |
 | 4 | Screen sharing over dmabuf | up to three full-frame CPU copies to none | low | none | M |

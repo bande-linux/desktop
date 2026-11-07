@@ -127,6 +127,7 @@ edge-top = Top
 lock-screen = Lock Screen
 lock-screen-keywords = auto lock, automatic lock, lock when idle, security, inactive, screen saver, screen timeout, password
 lock-screen-summary = Screen saver, display off, sleep and the password
+lock-screen-summary-no-sleep = Screen saver, display off and the password
 when-inactive = When inactive
 when-locked = When locked
 screen-saver-after = Start Screen Saver when inactive

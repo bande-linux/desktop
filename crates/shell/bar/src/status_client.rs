@@ -71,6 +71,8 @@ pub struct StatusClient {
     menu_loaded: bool,
     waiting_menus: Option<Rect>,
     user: String,
+    can_sleep: bool,
+    cannot_sleep: Inbox<()>,
     dates: DateFormats,
 }
 
@@ -351,7 +353,11 @@ impl StatusClient {
         };
         let status = self.bar.status().clone();
         let local = match slot {
-            Slot::BandeMenu => Some(system_menu(&self.user, self.frontmost_name().as_deref())),
+            Slot::BandeMenu => Some(system_menu(
+                &self.user,
+                self.frontmost_name().as_deref(),
+                self.can_sleep,
+            )),
             Slot::Battery => status
                 .battery
                 .as_ref()
@@ -607,13 +613,17 @@ impl App for StatusClient {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = vec![self.inbox.fd()];
+        let mut sources = vec![self.inbox.fd(), self.cannot_sleep.fd()];
         sources.extend(self.apps.fd());
         sources
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        if index > 0 {
+        if index == 1 {
+            self.can_sleep &= self.cannot_sleep.drain().is_empty();
+            return;
+        }
+        if index > 1 {
             self.apps.read();
             return;
         }
@@ -738,6 +748,8 @@ impl StatusClient {
             menu_loaded: false,
             waiting_menus: None,
             user: full_name(),
+            can_sleep: true,
+            cannot_sleep: bande_status::devices::hear_if_cannot_sleep()?,
             dates,
         })
     }

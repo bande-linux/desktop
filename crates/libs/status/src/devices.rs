@@ -3,7 +3,7 @@ use std::thread;
 use std::time::Duration;
 
 use bande_bluetooth::{Bluetooth as BlueZ, shown_change};
-use bande_inbox::Outbox;
+use bande_inbox::{Inbox, Outbox};
 use bande_network::{NetworkManager, set_strength, strength_signal};
 use serde::Deserialize;
 use zbus::blocking::fdo::DBusProxy;
@@ -124,6 +124,19 @@ pub fn powers(system: &Connection) -> zbus::Result<Vec<PowerAction>> {
 
 pub fn can_sleep(system: &Connection) -> bool {
     powers(system).is_ok_and(|powers| powers.contains(&PowerAction::Sleep))
+}
+
+pub fn hear_if_cannot_sleep() -> std::io::Result<Inbox<()>> {
+    let answer = Inbox::new()?;
+    let cannot_sleep = answer.outbox();
+    thread::Builder::new()
+        .name("can-sleep".to_owned())
+        .spawn(move || {
+            if !Connection::system().is_ok_and(|system| can_sleep(&system)) {
+                cannot_sleep.send(());
+            }
+        })?;
+    Ok(answer)
 }
 
 pub fn use_power(system: &Connection, power: PowerAction) -> zbus::Result<()> {

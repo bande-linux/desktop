@@ -4,6 +4,7 @@ use bande_protocols::server::bande_app_v1;
 use bande_spring::Spring;
 use smithay::backend::renderer::element::Id;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle};
 
@@ -14,13 +15,7 @@ use crate::state::{Compositor, State};
 const SHARED_EDGE_HOLD: Duration = Duration::from_millis(250);
 const EDGE_REACH: f64 = 1.0;
 const CORNER_REACH: i32 = 64;
-const TILED_STATES_SINCE: u32 = 2;
-pub(crate) const TILED: [xdg_toplevel::State; 4] = [
-    xdg_toplevel::State::TiledLeft,
-    xdg_toplevel::State::TiledRight,
-    xdg_toplevel::State::TiledTop,
-    xdg_toplevel::State::TiledBottom,
-];
+const WINDOW_TILED_SINCE: u32 = 7;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tile {
@@ -35,6 +30,14 @@ pub(crate) enum Tile {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Row {
     Whole,
+    Top,
+    Bottom,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Side {
+    Left,
+    Right,
     Top,
     Bottom,
 }
@@ -103,6 +106,62 @@ impl Tile {
         };
         Rectangle::new((x, y).into(), (width, height).into())
     }
+}
+
+fn right(rect: Rectangle<i32, Logical>) -> i32 {
+    rect.loc.x + rect.size.w
+}
+
+fn bottom(rect: Rectangle<i32, Logical>) -> i32 {
+    rect.loc.y + rect.size.h
+}
+
+fn shared_side(
+    (tile, ours): (Tile, Rectangle<i32, Logical>),
+    (their_tile, theirs): (Tile, Rectangle<i32, Logical>),
+) -> Option<Side> {
+    let within_height = theirs.loc.y >= ours.loc.y && bottom(theirs) <= bottom(ours);
+    let within_width = theirs.loc.x >= ours.loc.x && right(theirs) <= right(ours);
+    let same_column = tile.on_left() == their_tile.on_left();
+    if tile.on_left() && !their_tile.on_left() && within_height && theirs.loc.x == right(ours) {
+        Some(Side::Right)
+    } else if !tile.on_left()
+        && their_tile.on_left()
+        && within_height
+        && right(theirs) == ours.loc.x
+    {
+        Some(Side::Left)
+    } else if same_column
+        && tile.row() == Row::Top
+        && their_tile.row() == Row::Bottom
+        && within_width
+        && theirs.loc.y == bottom(ours)
+    {
+        Some(Side::Bottom)
+    } else if same_column
+        && tile.row() == Row::Bottom
+        && their_tile.row() == Row::Top
+        && within_width
+        && bottom(theirs) == ours.loc.y
+    {
+        Some(Side::Top)
+    } else {
+        None
+    }
+}
+
+fn moved_sides(
+    from: Rectangle<i32, Logical>,
+    to: Rectangle<i32, Logical>,
+) -> impl Iterator<Item = Side> {
+    [
+        (from.loc.x != to.loc.x, Side::Left),
+        (right(from) != right(to), Side::Right),
+        (from.loc.y != to.loc.y, Side::Top),
+        (bottom(from) != bottom(to), Side::Bottom),
+    ]
+    .into_iter()
+    .filter_map(|(moved, side)| moved.then_some(side))
 }
 
 fn placing(tile: Option<Tile>, zoomed: bool, direction: Direction) -> Option<Placing> {
@@ -181,11 +240,38 @@ impl State {
         }
     }
 
+    pub(crate) fn set_tile(&mut self, index: usize, tile: Option<(Tile, Rectangle<i32, Logical>)>) {
+        let window = &mut self.windows[index];
+        let changed = window.tile.is_some() != tile.is_some();
+        window.tile = tile;
+        if !changed {
+            return;
+        }
+        let toplevel = window.toplevel.xdg_toplevel().clone();
+        for app in self
+            .app_resources
+            .iter()
+            .filter(|app| app.client() == toplevel.client() && app.version() >= WINDOW_TILED_SINCE)
+        {
+            app.window_tiled(&toplevel, u32::from(tile.is_some()));
+        }
+    }
+
     pub(crate) fn tile_window(&mut self, index: usize, tile: Tile, spring: Spring) {
+        let target = tile.rect(self.usable_area(self.screen_of(&self.windows[index])));
+        self.tile_window_into(index, tile, target, spring);
+    }
+
+    pub(crate) fn tile_window_into(
+        &mut self,
+        index: usize,
+        tile: Tile,
+        target: Rectangle<i32, Logical>,
+        spring: Spring,
+    ) {
         if self.windows[index].fixed_size() {
             return;
         }
-        let target = tile.rect(self.usable_area(self.screen_of(&self.windows[index])));
         let window = &mut self.windows[index];
         if window.restore.is_none()
             && window.tile.is_none()
@@ -194,39 +280,44 @@ impl State {
         {
             window.restore = window.geometry();
         }
-        let tiled_states = window.toplevel.version() >= TILED_STATES_SINCE;
         window.toplevel.with_pending_state(|pending| {
             pending.states.unset(xdg_toplevel::State::Maximized);
             pending.states.unset(xdg_toplevel::State::Fullscreen);
-            if tiled_states {
-                for state in TILED {
-                    pending.states.set(state);
-                }
-            }
         });
         window.request_size(Some(target.size));
-        window.tile = Some((tile, target));
-        if let Some(serial) = window.configure() {
-            window.pending_location = Some((serial, target.loc));
-        }
+        window.move_with_next_configure(target.loc);
+        self.set_tile(index, Some((tile, target)));
         self.animate_window(index, spring, None);
     }
 
     pub(crate) fn untile(&mut self, index: usize) -> Option<Rectangle<i32, Logical>> {
+        self.windows[index].tile?;
+        self.set_tile(index, None);
         let window = &mut self.windows[index];
-        window.tile.take()?;
         let restore = window.restore.take();
-        window.toplevel.with_pending_state(|pending| {
-            for state in TILED {
-                pending.states.unset(state);
-            }
-        });
         window.request_size(restore.map(|restore| restore.size));
-        let serial = window.configure();
-        if let (Some(serial), Some(restore)) = (serial, restore) {
-            window.pending_location = Some((serial, restore.loc));
+        match restore {
+            Some(restore) => window.move_with_next_configure(restore.loc),
+            None => {
+                window.configure();
+            }
         }
         restore
+    }
+
+    pub(crate) fn end_tile_if_reshaped(&mut self, index: usize, from: Rectangle<i32, Logical>) {
+        let Some((_, rect)) = self.windows[index].tile else {
+            return;
+        };
+        let shared: Vec<Side> = self
+            .tiled_neighbors(index)
+            .into_iter()
+            .map(|(_, side)| side)
+            .collect();
+        if moved_sides(from, rect).any(|side| !shared.contains(&side)) {
+            self.set_tile(index, None);
+            self.windows[index].restore = None;
+        }
     }
 
     pub(crate) fn place_window(
@@ -294,52 +385,78 @@ impl State {
         }
     }
 
-    pub(crate) fn share_tiled_edge(&mut self, index: usize, rect: Rectangle<i32, Logical>) {
-        let Some((tile, old)) = self.windows[index].tile else {
-            return;
+    fn tiled_neighbors(&self, index: usize) -> Vec<(usize, Side)> {
+        let Some(ours) = self.windows[index].tile else {
+            return Vec::new();
         };
-        self.windows[index].tile = Some((tile, rect));
-        let right = |rect: Rectangle<i32, Logical>| rect.loc.x + rect.size.w;
-        let bottom = |rect: Rectangle<i32, Logical>| rect.loc.y + rect.size.h;
-        for neighbor in 0..self.windows.len() {
-            let Some((their_tile, theirs)) = self.windows[neighbor].tile else {
+        let screen = self.screen_of(&self.windows[index]);
+        self.windows
+            .iter()
+            .enumerate()
+            .filter(|(other, window)| {
+                *other != index && self.present(window) && self.screen_of(window) == screen
+            })
+            .filter_map(|(other, window)| Some((other, shared_side(ours, window.tile?)?)))
+            .collect()
+    }
+
+    pub(crate) fn share_tiled_edge(
+        &mut self,
+        index: usize,
+        mut rect: Rectangle<i32, Logical>,
+    ) -> Rectangle<i32, Logical> {
+        let Some((tile, old)) = self.windows[index].tile else {
+            return rect;
+        };
+        let neighbors = self.tiled_neighbors(index);
+        let dragged: Vec<Side> = moved_sides(old, rect).collect();
+        for (neighbor, side) in &neighbors {
+            let window = &self.windows[*neighbor];
+            let Some((_, theirs)) = window.tile.filter(|_| dragged.contains(side)) else {
                 continue;
             };
-            if neighbor == index
-                || !self.present(&self.windows[neighbor])
-                || self.screen_of(&self.windows[neighbor]) != self.screen_of(&self.windows[index])
-            {
-                continue;
-            }
-            let mut shared = theirs;
-            if tile.on_left() && !their_tile.on_left() && theirs.loc.x == right(old) {
-                shared.loc.x = right(rect);
-                shared.size.w = right(theirs) - right(rect);
-            } else if !tile.on_left() && their_tile.on_left() && right(theirs) == old.loc.x {
-                shared.size.w = rect.loc.x - theirs.loc.x;
-            } else if tile.on_left() == their_tile.on_left()
-                && tile.row() == Row::Top
-                && their_tile.row() == Row::Bottom
-                && theirs.loc.y == bottom(old)
-            {
-                shared.loc.y = bottom(rect);
-                shared.size.h = bottom(theirs) - bottom(rect);
-            } else if tile.on_left() == their_tile.on_left()
-                && tile.row() == Row::Bottom
-                && their_tile.row() == Row::Top
-                && bottom(theirs) == old.loc.y
-            {
-                shared.size.h = rect.loc.y - theirs.loc.y;
-            } else {
-                continue;
-            }
-            let window = &mut self.windows[neighbor];
-            window.tile = Some((their_tile, shared));
-            window.request_size(Some(shared.size));
-            if let Some(serial) = window.configure() {
-                window.pending_location = Some((serial, shared.loc));
+            let least = window.clamp_size((1, 1).into());
+            match side {
+                Side::Right => rect.size.w = rect.size.w.min(right(theirs) - least.w - rect.loc.x),
+                Side::Bottom => {
+                    rect.size.h = rect.size.h.min(bottom(theirs) - least.h - rect.loc.y)
+                }
+                Side::Left => {
+                    let beyond = (theirs.loc.x + least.w - rect.loc.x).max(0);
+                    rect.loc.x += beyond;
+                    rect.size.w -= beyond;
+                }
+                Side::Top => {
+                    let beyond = (theirs.loc.y + least.h - rect.loc.y).max(0);
+                    rect.loc.y += beyond;
+                    rect.size.h -= beyond;
+                }
             }
         }
+        self.windows[index].tile = Some((tile, rect));
+        for (neighbor, side) in neighbors {
+            let window = &mut self.windows[neighbor];
+            let Some((their_tile, theirs)) = window.tile.filter(|_| dragged.contains(&side)) else {
+                continue;
+            };
+            let mut shared = theirs;
+            match side {
+                Side::Right => {
+                    shared.loc.x = right(rect);
+                    shared.size.w = right(theirs) - right(rect);
+                }
+                Side::Left => shared.size.w = rect.loc.x - theirs.loc.x,
+                Side::Bottom => {
+                    shared.loc.y = bottom(rect);
+                    shared.size.h = bottom(theirs) - bottom(rect);
+                }
+                Side::Top => shared.size.h = rect.loc.y - theirs.loc.y,
+            }
+            window.tile = Some((their_tile, shared));
+            window.request_size(Some(shared.size));
+            window.move_with_next_configure(shared.loc);
+        }
+        rect
     }
 
     fn borders_another_screen(&self, (screen, snap): Target, pointer: Point<f64, Logical>) -> bool {

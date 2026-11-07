@@ -745,20 +745,53 @@ impl FrameOutput for DrmBackend {
         self.present(compositor, output)
     }
 
-    fn renew_lost_renderer(&mut self) -> Result<bool, DrmBackendError> {
-        if !self.renderer.is_lost() {
+    fn renew_failed_renderer(&mut self) -> Result<bool, DrmBackendError> {
+        if !self.renderer.needs_renewal() {
             return Ok(false);
         }
-        tracing::error!("the GPU was lost; starting the renderer again");
-        self.renderer = VulkanRenderer::new()?;
-        for head in &mut self.heads {
-            head.compositor.reset_buffers();
-        }
+        self.renew_renderer()?;
         Ok(true)
+    }
+
+    fn flip_missed(&mut self, output: &str) {
+        let Some(head) = self
+            .heads
+            .iter_mut()
+            .find(|head| head.config.name == output)
+        else {
+            return;
+        };
+        if let Err(error) = head.compositor.frame_submitted() {
+            tracing::warn!("cannot end the missed flip on {output}: {error}");
+        }
+    }
+
+    fn restart_display(&mut self) -> Result<(), DrmBackendError> {
+        self.renew_renderer()?;
+        for head in &mut self.heads {
+            if let Err(error) = head.compositor.reset_state() {
+                tracing::warn!("cannot reset {}: {error}", head.config.name);
+            }
+            head.warmth = None;
+        }
+        Ok(())
     }
 }
 
 impl DrmBackend {
+    fn renew_renderer(&mut self) -> Result<(), DrmBackendError> {
+        tracing::error!(
+            "starting the renderer again (lost: {}, holding {})",
+            self.renderer.is_lost(),
+            self.renderer.memory_use()
+        );
+        self.renderer = VulkanRenderer::new()?;
+        for head in &mut self.heads {
+            head.compositor.reset_buffers();
+        }
+        Ok(())
+    }
+
     fn present(
         &mut self,
         compositor: &mut Compositor,
@@ -768,17 +801,17 @@ impl DrmBackend {
             return Ok(Submission::Paused);
         }
         if compositor.holds_frames() {
-            return Ok(Submission::AtVblank);
+            return Ok(Submission::Unchanged);
         }
         let Some(settings) = compositor.output_settings(output) else {
-            return Ok(Submission::AtVblank);
+            return Ok(Submission::Unchanged);
         };
         let Some(index) = self
             .heads
             .iter()
             .position(|head| head.config.name == output)
         else {
-            return Ok(Submission::AtVblank);
+            return Ok(Submission::Unchanged);
         };
         let head = &mut self.heads[index];
         if !compositor.output_powered(output) {
@@ -810,11 +843,12 @@ impl DrmBackend {
             background(),
             FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
         )?;
+        self.renderer.finish_uploads()?;
         head.scanned_out = matches!(frame.primary_element, PrimaryPlaneElement::Element(_));
         let empty = frame.is_empty;
         compositor.copy_captures(&mut self.renderer, output);
         if empty {
-            return Ok(Submission::AtVblank);
+            return Ok(Submission::Unchanged);
         }
         head.compositor.queue_frame(())?;
         Ok(Submission::AwaitingFlip)

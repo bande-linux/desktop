@@ -45,6 +45,12 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn keep_running(&mut self, server: &mut Compositor, app_id: &str) {
+        let app: BandeAppV1 = self.bind("bande_app_v1", 2);
+        app.keep_running(app_id.to_owned());
+        self.exchange(server);
+    }
+
     pub fn set_app_id(&mut self, server: &mut Compositor, index: usize, app_id: &str) {
         self.windows[index].2.set_app_id(app_id.to_owned());
         self.exchange(server);

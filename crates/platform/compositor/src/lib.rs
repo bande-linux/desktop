@@ -68,7 +68,10 @@ pub use app_states::{AppStatesHandle, serve_app_states};
 pub use appearance::{SystemAppearance, follow_appearance};
 pub use assistive::follow_alerts;
 pub use bande_render::{DeviceInfo, RenderError};
-pub use clock::{FrameClock, FrameOutput, FrameScheduler, Poll, SAFETY_MARGIN, Submission, Vblank};
+pub use clock::{
+    FrameClock, FrameOutput, FrameRecovery, FrameScheduler, Poll, RecoveryStep, SAFETY_MARGIN,
+    Submission, Vblank,
+};
 pub use cursor::{
     ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,
 };
@@ -83,7 +86,9 @@ pub use keyboard_monitor::{
     KEYBOARD_MONITOR_NAME, KeyboardMonitorHandle, SCREEN_READER_NAME, serve_keyboard_monitor,
 };
 pub use keymap::KeyboardSettings;
-pub use logind::{SessionRequest, Sleep, follow_session, follow_shutdown, follow_sleep};
+pub use logind::{
+    SessionRequest, Sleep, follow_session, follow_shutdown, follow_sleep, sleep_on_request,
+};
 pub use night::NightTick;
 pub use pointing::PointerSettings;
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};

@@ -15,6 +15,7 @@ mod menu;
 mod pop_up_button;
 mod progress;
 mod radio_group;
+mod reorder;
 mod scroll;
 mod search_field;
 mod secure_field;
@@ -59,6 +60,7 @@ pub use menu::{
 pub use pop_up_button::PopUpButton;
 pub use progress::{LevelIndicator, PROGRESS_HEIGHT, ProgressBar, SPINNER_SIZE, Spinner};
 pub use radio_group::RadioGroup;
+pub use reorder::{Lifted, Reorder, ReorderSlot};
 pub use scroll::{ScrollExtent, ScrollState, ScrollView, Scrollbar, ScrollbarAction};
 pub use search_field::SearchField;
 pub use secure_field::SecureField;

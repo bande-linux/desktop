@@ -1,6 +1,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use bande_files::FilesSettings;
 use bande_fs::{Entry, Sort, list, sort};
 use bande_xdg::{MimeDatabase, file_uri, path_from_file_uri};
 use xdg_desktop_portal_bande::file_chooser::{Dialog, Filter, Mode, Pattern, Selection};
@@ -125,10 +126,16 @@ pub struct Chooser {
     sort: Sort,
     pub name: String,
     pub show_extensions: bool,
+    show_hidden: bool,
 }
 
 impl Chooser {
-    pub fn new(dialog: Dialog, mime: MimeDatabase, folder: PathBuf, show_extensions: bool) -> Self {
+    pub fn new(
+        dialog: Dialog,
+        mime: MimeDatabase,
+        folder: PathBuf,
+        settings: &FilesSettings,
+    ) -> Self {
         let filter = dialog
             .current_filter
             .as_ref()
@@ -142,7 +149,8 @@ impl Chooser {
             entries: Vec::new(),
             filter,
             sort: Sort::default(),
-            show_extensions,
+            show_extensions: settings.show_extensions,
+            show_hidden: settings.show_hidden,
         };
         if chooser.open(&folder).is_err() {
             chooser.folder = folder;
@@ -167,8 +175,18 @@ impl Chooser {
     }
 
     pub fn open(&mut self, folder: &Path) -> io::Result<()> {
-        self.entries = list(folder, false, self.sort)?;
+        self.entries = list(folder, self.show_hidden, self.sort)?;
         self.folder = folder.to_path_buf();
+        Ok(())
+    }
+
+    pub fn shows_hidden(&self) -> bool {
+        self.show_hidden
+    }
+
+    pub fn set_show_hidden(&mut self, show: bool) -> io::Result<()> {
+        self.entries = list(&self.folder, show, self.sort)?;
+        self.show_hidden = show;
         Ok(())
     }
 

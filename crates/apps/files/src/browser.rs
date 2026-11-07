@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use bande_fs::{
-    Entry, FolderChanges, Listing, Sort, Trash, compare, is_hidden, list, list_trash, merge, sort,
+    Entry, FolderChanges, Listing, Sort, Trash, compare, is_hidden, is_partial, list, list_trash,
+    merge, sort,
 };
 
 use crate::lister::{FIRST_CHUNK, Lister, Ticket};
@@ -131,8 +132,9 @@ impl Column {
         else {
             return;
         };
-        let old = self.entries.iter().position(|entry| entry.name == name);
-        let fresh = ((show_hidden || !is_hidden(&name)) && path.symlink_metadata().is_ok())
+        let old = self.entries.iter().position(|entry| entry.path == path);
+        let shown = !is_partial(&name) && (show_hidden || !is_hidden(&name));
+        let fresh = (shown && path.symlink_metadata().is_ok())
             .then(|| Entry::read(path.to_path_buf(), name));
         if let (Some(row), Some(entry)) = (old, &fresh)
             && self.entries[row] == *entry

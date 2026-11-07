@@ -509,7 +509,7 @@ impl Widget for Card {
             shape,
             paint: cx.palette.overlay.into(),
         });
-        items.extend(Item::rim(shape, &cx.palette));
+        items.push(Item::lit_edge(shape, &cx.palette));
         let glyph = Rect::new(
             self.frame.x + 20.0,
             self.frame.y + ((FIELD_ROW - GLYPH_SIZE) / 2.0).round(),

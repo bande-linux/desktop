@@ -222,6 +222,10 @@ fn actions(
         .collect()
 }
 
+pub fn own_executable() -> PathBuf {
+    PathBuf::from(format!("/proc/{}/exe", std::process::id()))
+}
+
 pub fn find_executable(program: &str) -> Option<PathBuf> {
     let executable = |path: &Path| {
         fs::metadata(path)

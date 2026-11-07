@@ -442,6 +442,7 @@ name = "bande-audio"
 version = "0.1.7"
 dependencies = [
  "pipewire",
+ "rustix 1.1.6",
  "serde_json",
  "tracing",
 ]

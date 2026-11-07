@@ -25,7 +25,7 @@ pub use autostart::{autostart_dir, opens_at_login, set_open_at_login};
 pub use dirs::{UserDir, user_dir};
 pub use entry::{
     CURRENT_DESKTOP, DesktopAction, DesktopEntry, Locale, applications, current_desktops,
-    data_dirs, find_executable, handlers,
+    data_dirs, find_executable, handlers, own_executable,
 };
 pub use file::replace_file;
 pub use icon::{FALLBACK_THEME, ICON_THEMES, find_icon};

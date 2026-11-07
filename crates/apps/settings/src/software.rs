@@ -33,6 +33,7 @@ const FRESH_SECONDS: u32 = 60 * 60;
 const REBOOT_REQUIRED: &str = "/run/reboot-required";
 const BOOT_ID: &str = "/proc/sys/kernel/random/boot_id";
 const RESTART_FILE: &str = "bande/restart-pending";
+const INSTALLING_FILE: &str = "bande-installing-updates";
 const INTERRUPTED: &str = "dpkg --configure -a";
 const IDLE_FOR: Duration = Duration::from_secs(5 * 60);
 
@@ -295,9 +296,55 @@ pub fn open_updates(system: &Connection, client: &Client) -> SoftwareState {
             logout: false,
             apps: Vec::new(),
         },
-        Ok(None) => check(client, Refresh::WhenStale),
+        Ok(None) => match check(client, Refresh::WhenStale) {
+            SoftwareState::UpToDate => installed_earlier(),
+            state => state,
+        },
         Err(error) => broken(Stage::Check, &error),
     }
+}
+
+fn installed_earlier() -> SoftwareState {
+    let stale = stale::look();
+    if !stale.logout && stale.apps.is_empty() {
+        return SoftwareState::UpToDate;
+    }
+    SoftwareState::Installed {
+        count: 0,
+        reboot: None,
+        logout: stale.logout,
+        apps: stale.apps,
+    }
+}
+
+fn hold_installing() -> Option<fs::File> {
+    let file = fs::File::create(runtime_dir()?.join(INSTALLING_FILE))
+        .inspect_err(|error| tracing::warn!("cannot mark updates as installing: {error}"))
+        .ok()?;
+    file.try_lock().ok()?;
+    Some(file)
+}
+
+fn settings_is_installing() -> bool {
+    runtime_dir()
+        .and_then(|directory| fs::File::create(directory.join(INSTALLING_FILE)).ok())
+        .is_some_and(|file| file.try_lock().is_err())
+}
+
+fn runtime_dir() -> Option<PathBuf> {
+    std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from)
+}
+
+pub fn finish_update(session: &Connection) -> bool {
+    stale::finish_in_session(session).logout && !settings_is_installing()
+}
+
+pub fn announce_log_out(session: &Connection) -> zbus::Result<Option<u32>> {
+    announce(
+        session,
+        &L10N.tr("log-out-to-finish"),
+        &L10N.tr("log-out-to-finish-hint"),
+    )
 }
 
 fn restart_file() -> Option<PathBuf> {
@@ -399,6 +446,7 @@ pub fn update(
     packages: &[Package],
     report: &dyn Fn(SoftwareState),
 ) -> SoftwareState {
+    let _installing = hold_installing();
     let (flatpaks, debian): (Vec<&Package>, Vec<&Package>) = packages
         .iter()
         .partition(|package| package.class == Class::Flatpak);
@@ -462,14 +510,14 @@ pub fn update(
     installed().unwrap_or_else(|(stage, error)| broken(stage, &error))
 }
 
-fn settle(session: &Connection, state: SoftwareState) -> SoftwareState {
+fn settle(state: SoftwareState) -> SoftwareState {
     let SoftwareState::Installed { count, reboot, .. } = state else {
         return state;
     };
     if reboot == Some(Reboot::Finish) {
         remember_restart();
     }
-    let stale = stale::finish_in_session(session);
+    let stale = stale::look();
     SoftwareState::Installed {
         count,
         reboot,
@@ -570,6 +618,9 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
             &L10N.tr("restart-to-finish"),
             &L10N.tr("restart-to-finish-hint"),
         );
+    }
+    if stale::look().logout {
+        return announce_log_out(session);
     }
     let client = Client::background(system);
     let SoftwareState::Available(packages) = check(&client, Refresh::Always) else {
@@ -685,7 +736,7 @@ fn update_automatically(
     } = sort_updates(client, packages, may_update_live(system));
     let installed = match now.is_empty() {
         true => None,
-        false => Some(settle(session, update(system, client, &now, &|_| {}))),
+        false => Some(settle(update(system, client, &now, &|_| {}))),
     };
     match installed {
         Some(SoftwareState::Failed { reason, .. }) => {
@@ -718,13 +769,8 @@ fn update_automatically(
     }
 }
 
-pub fn follow_software(
-    session: &Connection,
-    system: &Connection,
-    updates: Updates,
-) -> Sender<SoftwareCommand> {
+pub fn follow_software(system: &Connection, updates: Updates) -> Sender<SoftwareCommand> {
     let (sender, receiver) = mpsc::channel();
-    let session = session.clone();
     let system = system.clone();
     spawn("software", move || {
         let client = Client::new(&system);
@@ -745,7 +791,7 @@ pub fn follow_software(
                     let state = update(&system, &client, &packages, &|state| {
                         updates.send(Update::Software(state));
                     });
-                    settle(&session, state)
+                    settle(state)
                 }
                 SoftwareCommand::Repair => {
                     updates.send(Update::Software(SoftwareState::Installing {

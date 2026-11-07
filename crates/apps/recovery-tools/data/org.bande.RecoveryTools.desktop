@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Recovery
+Comment=Reinstall, restore and repair
+Icon=org.bande.RecoveryTools
+Exec=bande-recovery-tools
+StartupNotify=true
+NoDisplay=true
+Categories=System;

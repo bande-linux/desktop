@@ -1,0 +1,16 @@
+[package]
+name = "bande-media"
+description = "The protocol between Bande's media engine process and the apps that show its pictures"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+rustix = { workspace = true, features = ["net", "process"] }
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

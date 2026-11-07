@@ -15,7 +15,7 @@ use bande_config::{Config, Search, SearchCategory, config_path};
 use bande_content::{Preview, preview};
 use bande_fs::Entry;
 use bande_inbox::Inbox;
-use bande_search::{FileIndex, RecentlyUsed, Usage, recently_used_path, usage_path};
+use bande_search::{RecentlyUsed, SearchService, Usage, recently_used_path, usage_path};
 use bande_settings_panes::Pane;
 use bande_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use bande_toolkit::{
@@ -120,6 +120,7 @@ impl Catalog for Library {
         match (&hit.target, hit.kind) {
             (Target::App(app_id), _) => self.app_icon(app_id),
             (Target::Settings(_), _) => self.app_icon(SETTINGS_APP),
+            (Target::Item { app, .. }, _) => self.app_icon(app),
             (Target::Path(_), Kind::Folder) => {
                 let names = self.apps.borrow().icon_names(DIRECTORY);
                 self.named_icon(&names)
@@ -174,6 +175,9 @@ impl Previewer {
                         .file_name()
                         .map(|name| name.to_string_lossy().into_owned())
                         .unwrap_or_default();
+                    if bande_volumes::on_connected_volume(&path) {
+                        continue;
+                    }
                     let entry = Entry::read(path, name);
                     let mut content = preview(&entry, Image::from_rgba);
                     if let (Preview::Other { .. }, Some(cache)) = (&content, &cache)
@@ -203,7 +207,7 @@ pub struct LauncherShell {
     entries: Vec<DesktopEntry>,
     stamps: Vec<Option<SystemTime>>,
     icon_names: Rc<RefCell<HashMap<String, String>>>,
-    index: Option<FileIndex>,
+    index: Option<SearchService>,
     previewer: Option<Previewer>,
     clips: Option<Clips>,
     cannot_sleep: Option<Inbox<()>>,
@@ -254,15 +258,10 @@ impl LauncherShell {
         let recents = search.shows(SearchCategory::RecentDocuments);
         if !search.shows(SearchCategory::Documents) && !search.shows(SearchCategory::Folders) {
             self.index = None;
-        } else if let Some(index) = &self.index {
-            index.exclude(excluded.clone());
-        } else {
-            self.index = FileIndex::spawn(self.home.clone(), excluded.clone())
-                .inspect_err(|error| tracing::warn!("cannot index the home folder: {error}"))
+        } else if self.index.is_none() {
+            self.index = SearchService::connect()
+                .inspect_err(|error| tracing::warn!("cannot start searching files: {error}"))
                 .ok();
-            if let Some(index) = &self.index {
-                index.set_boosts(self.launcher.file_boosts());
-            }
         }
         self.launcher.set_search(search, excluded);
         recents
@@ -405,6 +404,15 @@ impl LauncherShell {
                     launch_with(&entry, std::slice::from_ref(path), token.as_deref())
                 })
             }
+            Target::Item { app, argument } => self
+                .entries
+                .iter()
+                .find(|entry| entry.app_id() == app)
+                .map(|entry| {
+                    let token = window.activation_token(app).ok();
+                    launch_with_arguments(entry, std::slice::from_ref(argument), token.as_deref())
+                        .map(|_| ())
+                }),
             Target::Settings(keyword) => self
                 .entries
                 .iter()
@@ -423,9 +431,6 @@ impl LauncherShell {
             Some(Ok(())) => {
                 if let Err(error) = self.launcher.record_use(target) {
                     tracing::warn!("cannot remember what was opened: {error}");
-                }
-                if let (Target::Path(_), Some(index)) = (target, &self.index) {
-                    index.set_boosts(self.launcher.file_boosts());
                 }
             }
             Some(Err(error)) => tracing::warn!("cannot open {target:?}: {error}"),
@@ -498,7 +503,7 @@ impl App for LauncherShell {
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         self.index
             .iter()
-            .map(FileIndex::fd)
+            .map(SearchService::fd)
             .chain(
                 self.previewer
                     .iter()
@@ -514,7 +519,7 @@ impl App for LauncherShell {
         if let Some(recently_used) = &mut self.recently_used {
             recently_used.take();
         }
-        if let Some(results) = self.index.as_mut().and_then(FileIndex::take) {
+        if let Some(results) = self.index.as_mut().and_then(SearchService::take) {
             self.launcher.set_files(results);
         }
         let previews = self

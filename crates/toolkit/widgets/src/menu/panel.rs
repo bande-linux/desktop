@@ -352,7 +352,7 @@ impl MenuPanel {
         let mut items = vec![
             Item::Fill {
                 shape: outline,
-                paint: palette.overlay.into(),
+                paint: palette.panel.into(),
             },
             Item::lit_edge(outline, palette),
         ];

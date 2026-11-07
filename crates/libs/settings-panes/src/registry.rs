@@ -37,6 +37,7 @@ pub enum PaneId {
     Mouse,
     Trackpad,
     Printers,
+    Sharing,
     Power,
     LockScreen,
     Users,
@@ -73,6 +74,7 @@ impl PaneId {
         (Self::Mouse, "mouse"),
         (Self::Trackpad, "trackpad"),
         (Self::Printers, "printers"),
+        (Self::Sharing, "sharing"),
         (Self::Power, "power"),
         (Self::LockScreen, "lock-screen"),
         (Self::Users, "users"),
@@ -93,7 +95,9 @@ impl PaneId {
 
     pub fn group(self) -> Option<Group> {
         match self {
-            Self::Wifi | Self::Bluetooth | Self::Network => Some(Group::Connections),
+            Self::Wifi | Self::Bluetooth | Self::Network | Self::Sharing => {
+                Some(Group::Connections)
+            }
             Self::Appearance
             | Self::Bar
             | Self::Notifications
@@ -143,6 +147,7 @@ impl PaneId {
             Self::Mouse => "input-mouse-symbolic",
             Self::Trackpad => "input-touchpad-symbolic",
             Self::Printers => "printer-symbolic",
+            Self::Sharing => "folder-publicshare-symbolic",
             Self::Power => "system-shutdown-symbolic",
             Self::LockScreen => "system-lock-screen-symbolic",
             Self::Users => "system-users-symbolic",
@@ -221,6 +226,7 @@ pub enum SettingId {
     SoundEffects,
     VolumeFeedback,
     Appearance,
+    Style,
     ScreenReader,
     Zoom,
     IncreaseContrast,
@@ -238,6 +244,7 @@ pub enum SettingId {
     BarEdge,
     BarIconSize,
     BarAutoHide,
+    BarFloating,
     DisplayUse,
     DisplayResolution,
     DisplayScale,
@@ -279,8 +286,8 @@ pub enum SettingId {
     Clock24Hour,
     LoginItems,
     ReopenApps,
-    ReopenAfterCrash,
     AutomaticUpdates,
+    UpdateCheckEvery,
     BatteryLevel,
     PowerMode,
     LowPowerOnBattery,
@@ -300,6 +307,8 @@ pub enum SettingId {
     CrashReportList,
     ShortcutsPage,
     ClipboardHistory,
+    KeyboardAccess,
+    SecurityStatus,
     DefaultApps,
     Brightness,
     NightLightPage,
@@ -320,6 +329,9 @@ pub enum SettingId {
     SearchRecentApps,
     SearchRecentDocuments,
     SearchDocuments,
+    SearchMail,
+    SearchEvents,
+    SearchContacts,
     SearchFolders,
     SearchSettings,
     SearchSystem,
@@ -328,6 +340,7 @@ pub enum SettingId {
     SearchExcluded,
     Printers,
     NearbyPrinters,
+    Sharing,
     Accounts,
     FullName,
     LockMessage,
@@ -352,6 +365,7 @@ pub enum List {
     Accounts,
     Printers,
     NearbyPrinters,
+    Sharing,
     KnownNetworks,
     Networks,
     PairedDevices,
@@ -378,6 +392,8 @@ pub enum List {
     Regions,
     DefaultApps,
     Clipboard,
+    KeyboardAccess,
+    SecurityStatus,
     SearchExcluded,
     Permissions(Permission),
     Passwords,
@@ -619,6 +635,23 @@ fn durations(choices: &[u64]) -> Vec<Choice> {
 
 pub const WITH_DISPLAY: &str = "with-display";
 
+const DAY: u64 = 24 * 60 * 60;
+
+fn update_check_choices() -> Vec<Choice> {
+    [
+        ("update-check-when-available", 0),
+        ("update-check-daily", DAY),
+        ("update-check-weekly", 7 * DAY),
+        ("update-check-monthly", 31 * DAY),
+    ]
+    .into_iter()
+    .map(|(label, seconds)| Choice {
+        label: L10N.tr(label),
+        value: Value::Seconds(seconds),
+    })
+    .collect()
+}
+
 fn password_choices() -> Vec<Choice> {
     PASSWORD_CHOICES
         .iter()
@@ -808,6 +841,19 @@ fn desktop_panes() -> Vec<Pane> {
                 section(
                     None,
                     vec![setting(
+                        SettingId::Style,
+                        L10N.tr("style"),
+                        L10N.tr("style-keywords"),
+                        Kind::Choices(keyword_choices(vec![
+                            (L10N.tr("style-refined"), "refined"),
+                            (L10N.tr("style-wallpaper-lit"), "wallpaper-lit"),
+                            (L10N.tr("style-glass"), "glass"),
+                        ])),
+                    )],
+                ),
+                section(
+                    None,
+                    vec![setting(
                         SettingId::Accent,
                         L10N.tr("accent"),
                         L10N.tr("accent-keywords"),
@@ -886,6 +932,7 @@ fn desktop_panes() -> Vec<Pane> {
                             high: L10N.tr("large"),
                         },
                     ),
+                    switch(SettingId::BarFloating, "bar-floating"),
                     switch(SettingId::BarAutoHide, "bar-auto-hide"),
                 ],
             )],
@@ -942,6 +989,9 @@ fn search_pane() -> Pane {
                     switch(SettingId::SearchRecentApps, "search-recent-apps"),
                     switch(SettingId::SearchRecentDocuments, "search-recent-documents"),
                     switch(SettingId::SearchDocuments, "search-documents"),
+                    switch(SettingId::SearchMail, "search-mail"),
+                    switch(SettingId::SearchEvents, "search-events"),
+                    switch(SettingId::SearchContacts, "search-contacts"),
                     switch(SettingId::SearchFolders, "search-folders"),
                     switch(SettingId::SearchSettings, "search-system-settings"),
                     switch(SettingId::SearchSystem, "search-system-actions"),
@@ -1025,6 +1075,13 @@ fn device_panes() -> Vec<Pane> {
         ),
         mouse_pane(),
         trackpad_pane(),
+        pane(
+            PaneId::Sharing,
+            vec![section(
+                None,
+                vec![list(SettingId::Sharing, "sharing-list", List::Sharing)],
+            )],
+        ),
         pane(
             PaneId::Printers,
             vec![
@@ -1418,6 +1475,14 @@ fn system_panes() -> Vec<Pane> {
             PaneId::PrivacySecurity,
             vec![
                 section(
+                    Some(L10N.tr("this-mac")),
+                    vec![list(
+                        SettingId::SecurityStatus,
+                        "this-mac",
+                        List::SecurityStatus,
+                    )],
+                ),
+                section(
                     Some(L10N.tr("app-permissions")),
                     vec![
                         page(SettingId::CameraPage, PaneId::Camera),
@@ -1426,6 +1491,14 @@ fn system_panes() -> Vec<Pane> {
                         page(SettingId::ScreenSharingPage, PaneId::ScreenSharing),
                         page(SettingId::LocationPage, PaneId::Location),
                     ],
+                ),
+                section(
+                    Some(L10N.tr("keyboard-access")),
+                    vec![list(
+                        SettingId::KeyboardAccess,
+                        "keyboard-access",
+                        List::KeyboardAccess,
+                    )],
                 ),
                 section(
                     Some(L10N.tr("clipboard")),
@@ -1461,8 +1534,6 @@ fn system_panes() -> Vec<Pane> {
                     vec![
                         switch(SettingId::ReopenApps, "reopen-at-login")
                             .described("reopen-at-login-description"),
-                        switch(SettingId::ReopenAfterCrash, "reopen-after-crash")
-                            .described("reopen-after-crash-description"),
                     ],
                 ),
             ],
@@ -1512,6 +1583,13 @@ fn system_panes() -> Vec<Pane> {
                         "software-updates",
                         List::SoftwareUpdates,
                     ),
+                    setting(
+                        SettingId::UpdateCheckEvery,
+                        L10N.tr("update-check-every"),
+                        L10N.tr("update-check-every-keywords"),
+                        choice(update_check_choices()),
+                    )
+                    .described("update-check-every-description"),
                     switch(SettingId::AutomaticUpdates, "automatic-updates")
                         .described("automatic-updates-description"),
                 ],

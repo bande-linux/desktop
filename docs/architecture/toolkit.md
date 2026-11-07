@@ -142,9 +142,9 @@ writes a hex value, a corner radius or a font name of its own.
     window's control acts at once. The zoom glyph turns inward
     while the window is zoomed; with Alt held it shows + and Alt-click enters full screen. The
     hit cells cover the pill's full height and the close cell reaches the window's left edge.
-    Rounded corners (14 pt), the 55 % `edge` ring and the shadow pair are the compositor's, cut
-    at the window geometry (`set_window_geometry`), so every app looks alike; maximised and
-    full-screen windows are square. They act on release inside. A drag on the header or
+    Rounded corners (16 pt), the one pixel dark ring and the shadow pair are the compositor's, cut
+    at the window geometry (`set_window_geometry`), so every app looks alike; only full-screen
+    windows are square. They act on release inside. A drag on the header or
     the chassis around the sheet moves the window, a double click zooms, a right click opens
     the window menu. A band from the rounded outline to 8 pt outside resizes, corner
     cut-outs included, with corners reaching 32 pt along the edges and 16 pt out diagonally, the part
@@ -345,7 +345,10 @@ writes a hex value, a corner radius or a font name of its own.
   region. `show_shm(fd, ShmLayout)` wraps the app's own memory in a `wl_shm` buffer without a
   copy, `show_dmabuf(&Dmabuf)` imports a dmabuf through `zwp_linux_dmabuf_v1` (`flipped` for
   bottom-up GL scanouts), and `damage(&[Region])` commits the changed rectangles of the current
-  buffer. A frame wakes neither the app's scene nor the window's renderer.
+  buffer. For a pool of buffers (video), `shm_buffer` and `dmabuf_buffer` make a reusable
+  `SurfaceBuffer` with a callback for `wl_buffer.release`, shown with `present`.
+  `set_idle_inhibited` holds a `zwp_idle_inhibitor_v1` on the surface for as long as it lives. A
+  frame wakes neither the app's scene nor the window's renderer.
   `ui::SurfaceView::new(surface.id(), label, on_input)` places it: it paints an
   `Item::Surface`, which the renderers draw as black letterboxing around a transparent hole
   (cut through the enclosing clips, so it keeps the sheet's rounded corners). The window puts

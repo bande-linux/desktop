@@ -133,6 +133,17 @@ impl Frame {
         )
     }
 
+    pub(crate) fn opaque_sheet(&self) -> Rect {
+        let sheet = self.sheet();
+        let corner = self.sheet_radius();
+        Rect::new(
+            self.margin + sheet.x + corner,
+            self.margin + sheet.y + corner,
+            (sheet.width - 2.0 * corner).max(0.0),
+            (sheet.height - 2.0 * corner).max(0.0),
+        )
+    }
+
     fn sheet_radius(&self) -> f32 {
         if self.inset > 0.0 {
             Radius::concentric(Radius::XL, self.inset)
@@ -407,7 +418,7 @@ impl Chrome {
     ) -> Scene {
         let mut items = vec![Item::Fill {
             shape: Shape::rect(Rect::new(0.0, 0.0, frame.width, frame.height)),
-            paint: palette.chassis.into(),
+            paint: palette.frame.into(),
         }];
         if frame.title > 0.0 {
             self.title_bar(frame, palette, look, now, &mut items);
@@ -437,7 +448,7 @@ impl Chrome {
             offset: Point::new(placed.x, placed.y),
             items: drawn,
         });
-        if frame.margin > 0.0 {
+        if !look.fullscreen {
             let outline = Rect::new(0.0, 0.0, frame.width, frame.height);
             items.push(Item::lit_edge(Shape::rounded(outline, Radius::XL), palette));
         }
@@ -526,4 +537,5 @@ impl Chrome {
 pub(crate) struct Look {
     pub(crate) active: bool,
     pub(crate) zoomed: bool,
+    pub(crate) fullscreen: bool,
 }

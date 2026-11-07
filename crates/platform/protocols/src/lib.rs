@@ -2,6 +2,7 @@ const _SHELL_PROTOCOL_SOURCE: &str = include_str!("../protocols/bande-shell-v1.x
 const _CAPTURE_PROTOCOL_SOURCE: &str = include_str!("../protocols/bande-capture-v1.xml");
 const _APPMENU_PROTOCOL_SOURCE: &str = include_str!("../protocols/kde-appmenu.xml");
 const _GTK_SHELL_PROTOCOL_SOURCE: &str = include_str!("../protocols/gtk-shell.xml");
+const _SESSION_PROTOCOL_SOURCE: &str = include_str!("../protocols/xdg-session-management-v1.xml");
 
 #[cfg(feature = "client")]
 pub mod client {
@@ -44,6 +45,23 @@ pub mod client {
         use self::__interfaces::*;
 
         wayland_scanner::generate_client_code!("protocols/kde-appmenu.xml");
+    }
+
+    pub use self::session_management::{
+        xdg_session_manager_v1, xdg_session_v1, xdg_toplevel_session_v1,
+    };
+
+    mod session_management {
+        use wayland_client;
+        use wayland_protocols::xdg::shell::client::*;
+
+        pub mod __interfaces {
+            use wayland_protocols::xdg::shell::client::__interfaces::*;
+            wayland_scanner::generate_interfaces!("protocols/xdg-session-management-v1.xml");
+        }
+        use self::__interfaces::*;
+
+        wayland_scanner::generate_client_code!("protocols/xdg-session-management-v1.xml");
     }
 }
 
@@ -103,5 +121,22 @@ pub mod server {
         use self::__interfaces::*;
 
         wayland_scanner::generate_server_code!("protocols/gtk-shell.xml");
+    }
+
+    pub use self::session_management::{
+        xdg_session_manager_v1, xdg_session_v1, xdg_toplevel_session_v1,
+    };
+
+    mod session_management {
+        use wayland_protocols::xdg::shell::server::*;
+        use wayland_server;
+
+        pub mod __interfaces {
+            use wayland_protocols::xdg::shell::server::__interfaces::*;
+            wayland_scanner::generate_interfaces!("protocols/xdg-session-management-v1.xml");
+        }
+        use self::__interfaces::*;
+
+        wayland_scanner::generate_server_code!("protocols/xdg-session-management-v1.xml");
     }
 }

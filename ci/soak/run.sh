@@ -1,10 +1,10 @@
 #!/bin/bash
 set -uo pipefail
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../.." || exit 2
 
 hours=4
 fuzz_seconds=600
-out=soak-out
+out="soak-out"
 while [ $# -gt 0 ]; do
     case $1 in
         --hours) hours=$2; shift ;;

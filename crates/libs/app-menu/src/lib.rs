@@ -168,6 +168,15 @@ pub fn edit_submenu(extra: Vec<Entry>) -> Entry {
     Entry::submenu(&L10N.tr("edit"), entries)
 }
 
+pub const PRINT: &str = "print";
+pub const PRINT_SHORTCUT: &str = "Ctrl+P";
+
+pub fn print_item(enabled: bool) -> Entry {
+    Entry::item(&L10N.tr("print"), PRINT)
+        .shortcut(PRINT_SHORTCUT)
+        .enabled(enabled)
+}
+
 pub fn settings(shortcut: &str) -> Entry {
     Entry::item(&L10N.tr("settings"), Standard::Settings.action()).shortcut(shortcut)
 }

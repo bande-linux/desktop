@@ -29,7 +29,8 @@ the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
 | `services/automount/tests/automount.rs` | A drive plugged in while the session is locked is mounted only after unlocking. |
 | `libs/fs/tests/trash.rs` | A volume Trash whose `files` folder is a planted link is not used. |
 | `libs/xdg/tests/xdg.rs` | `.desktop` Exec parsing (quoting, escapes, field codes, reserved characters); a `.desktop` file opened in Files runs only when installed or marked executable by its owner. |
-| `apps/files/tests/files.rs` | Files: a file goes to the Trash and is put back; a duplicate that cannot be written asks and leaves no copy. |
+| `apps/files/tests/files.rs` | Files: a file goes to the Trash and is put back; a duplicate that cannot be written asks and leaves no copy; Quit during a copy asks, then goes through when the copy ends. |
+| `libs/fs/tests/operations.rs` | File operations: Replace keeps the old item until the new one is complete; names that are not UTF-8 survive listing, copy and Keep Both; a move between disks finishes after Try Again; a stale partial is never listed. |
 | `libs/volumes/tests/eject.rs` | Regression (a VM died on eject): ejecting one volume of a removable USB ISO unmounts every volume of the drive and calls `Drive.Eject`, never `PowerOff`. |
 | `apps/settings/tests/updates.rs` | Settings: updates install at once through PackageKit (trusted only, simulated first) unless one needs a restart, which is prepared for the next boot. |
 | `apps/settings/tests/settings.rs` | Settings: a setting found by search and changed from the keyboard is written to `config.kdl` through `org.bande.Config`. |

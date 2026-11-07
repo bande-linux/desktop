@@ -35,6 +35,7 @@ use crate::printers::{PrinterCommand, PrintersState};
 use crate::privacy::focus_after_asking;
 use crate::privilege::Privilege;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
+use crate::sharing::{SharingCommand, SharingState};
 use crate::software::{Need, SoftwareCommand, SoftwareState};
 use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand};
@@ -108,11 +109,12 @@ pub(crate) enum Intent {
     CopyCrashReport(String),
     DeleteCrashReport(PathBuf),
     DefaultPrinter(String),
-    AddPrinter(bande_printers::NearbyPrinter),
+    Sharing(SharingCommand),
     PrinterAddress(String),
     AddPrinterAddress,
     InstallPrinting,
-    CancelJob(i32),
+    CancelJob(u32),
+    CancelQueuedJob(i32),
     PausePrinter((String, bool)),
     AskPassword(bool),
     PasswordEntry(usize, String),
@@ -134,6 +136,7 @@ pub(crate) enum Intent {
     Locale(LocaleCommand),
     DefaultApp(&'static str, String),
     Grant(Permission, String, bool),
+    KeyboardAccess(String, bool),
     Passwords(PasswordCommand),
     PasswordQuery(String),
     ChangePassword(Option<String>),
@@ -256,8 +259,9 @@ pub struct SettingsView {
     pub(crate) other: Option<Other>,
     pub(crate) wifi_manual: bool,
     pub(crate) printers: Option<PrintersState>,
-    pub(crate) nearby_printers: Option<Vec<bande_printers::NearbyPrinter>>,
-    pub(crate) adding: Option<String>,
+    pub(crate) sharing: Option<SharingState>,
+    pub(crate) installing_samba: bool,
+    pub(crate) adding_printer: bool,
     pub(crate) installing_printing: bool,
     pub(crate) printer_address: String,
     pub(crate) accounts: Option<Vec<Account>>,
@@ -268,6 +272,7 @@ pub struct SettingsView {
     pub(crate) password: Option<PasswordForm>,
     pub(crate) password_message: Option<String>,
     pub(crate) software: SoftwareState,
+    pub(crate) software_checked: Option<i64>,
     pub(crate) network: Option<NetworkState>,
     pub(crate) manual_ipv4: bool,
     pub(crate) locale: Option<LocaleState>,
@@ -282,6 +287,8 @@ pub struct SettingsView {
     pub(crate) refused: Vec<Privilege>,
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
     pub(crate) permissions: Grants,
+    pub(crate) keyboard_access: Vec<crate::consent::KeyboardAccess>,
+    pub(crate) security: crate::security_status::SecurityStatus,
     pub(crate) keychain: Keychain,
     stale: bool,
     rebuilt: bool,
@@ -351,8 +358,9 @@ impl SettingsView {
             other: None,
             wifi_manual: false,
             printers: None,
-            nearby_printers: None,
-            adding: None,
+            sharing: None,
+            installing_samba: false,
+            adding_printer: false,
             installing_printing: false,
             printer_address: String::new(),
             accounts: None,
@@ -363,6 +371,7 @@ impl SettingsView {
             password: None,
             password_message: None,
             software: SoftwareState::Unknown,
+            software_checked: None,
             network: None,
             manual_ipv4: false,
             locale: None,
@@ -377,6 +386,8 @@ impl SettingsView {
             refused: Vec::new(),
             default_apps: None,
             permissions: Vec::new(),
+            keyboard_access: Vec::new(),
+            security: crate::security_status::SecurityStatus::default(),
             keychain: Keychain::default(),
             stale: true,
             rebuilt: false,
@@ -613,12 +624,12 @@ impl SettingsView {
                 Some(PaneId::Storage),
                 &[SettingId::StorageUsage, SettingId::LargeFiles],
             ),
-            Update::Software(_) => (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates]),
+            Update::Software(_) | Update::SoftwareChecked(_) => {
+                (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates])
+            }
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
-            Update::Printers(_)
-            | Update::NearbyPrinters(_)
-            | Update::PrinterAdded(..)
-            | Update::PrintingInstalled => (
+            Update::Sharing(_) => (Some(PaneId::Sharing), &[SettingId::Sharing]),
+            Update::Printers(_) | Update::PrinterAdded(..) | Update::PrintingInstalled => (
                 Some(PaneId::Printers),
                 &[SettingId::Printers, SettingId::NearbyPrinters],
             ),
@@ -718,6 +729,7 @@ impl SettingsView {
             Update::Login(login) => self.login = Some(login),
             Update::NotificationApps(apps) => self.notification_apps = Some(apps),
             Update::Software(state) => self.software = state,
+            Update::SoftwareChecked(at) => self.software_checked = at,
             Update::Locale(locale) => self.locale = locale,
             Update::Pointing(devices) => self.set_pointing_devices(devices),
             Update::Network(network) => {
@@ -794,18 +806,20 @@ impl SettingsView {
             Update::Refused(refused) => self.refused = refused,
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
             Update::Permissions(permissions) => self.permissions = permissions,
+            Update::Sharing(state) => {
+                self.installing_samba = false;
+                self.sharing = Some(state);
+            }
+            Update::KeyboardAccess(access) => self.keyboard_access = access,
+            Update::Security(status) => self.security = status,
             Update::Printers(printers) => {
-                if let Some(Detail::Printer(name)) = &self.detail
-                    && !printers
-                        .printers
-                        .iter()
-                        .any(|printer| printer.name == *name)
+                if let Some(Detail::Printer(id)) = &self.detail
+                    && !printers.printers.iter().any(|printer| printer.id == *id)
                 {
                     self.detail = None;
                 }
                 self.printers = Some(printers);
             }
-            Update::NearbyPrinters(nearby) => self.nearby_printers = Some(nearby),
             Update::PrintingInstalled => self.installing_printing = false,
             Update::Accounts(accounts, managed) => self.take_accounts(accounts, managed),
             Update::PictureChosen(login, image) => self.picture_chosen(login, image),
@@ -814,16 +828,10 @@ impl SettingsView {
             Update::RevealedPassword(path, secret) => self.keychain.revealed = Some((path, secret)),
             Update::CopiedPassword(secret) => self.commands.push(Command::CopySecret(secret)),
             Update::Password(outcome) => self.password_changed(outcome),
-            Update::PrinterAdded(uri, added) => {
-                if self.adding.as_ref() == Some(&uri) {
-                    self.adding = None;
-                    if added
-                        && self
-                            .printer_address_target()
-                            .is_some_and(|target| target.uri == uri)
-                    {
-                        self.printer_address.clear();
-                    }
+            Update::PrinterAdded(added) => {
+                self.adding_printer = false;
+                if added {
+                    self.printer_address.clear();
                 }
             }
         }
@@ -924,6 +932,7 @@ impl SettingsView {
             | PaneId::ScreenSharing
             | PaneId::Apps
             | PaneId::Printers
+            | PaneId::Sharing
             | PaneId::Users
             | PaneId::Passwords
             | PaneId::Storage
@@ -1354,6 +1363,7 @@ impl SettingsView {
                     }
                 }
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
+                Intent::KeyboardAccess(line, on) => self.change_keyboard_access(line, on),
                 Intent::Passwords(command) => self.password_command(command),
                 Intent::PasswordQuery(query) => {
                     self.keychain.query = query;
@@ -1434,10 +1444,9 @@ impl SettingsView {
                     self.commands
                         .push(Command::Printers(PrinterCommand::SetDefault(name)));
                 }
-                Intent::AddPrinter(printer) => {
-                    self.adding = Some(printer.uri.clone());
-                    self.commands
-                        .push(Command::Printers(PrinterCommand::Add(printer)));
+                Intent::Sharing(command) => {
+                    self.installing_samba |= command == SharingCommand::InstallSamba;
+                    self.commands.push(Command::Sharing(command));
                 }
                 Intent::InstallPrinting => {
                     self.installing_printing = true;
@@ -1445,11 +1454,16 @@ impl SettingsView {
                         .push(Command::Printers(PrinterCommand::InstallPrinting));
                 }
                 Intent::AddPrinterAddress => {
-                    if let Some(printer) = self.printer_address_target() {
-                        self.adding = Some(printer.uri.clone());
+                    let address = self.printer_address.trim().to_owned();
+                    if !address.is_empty() {
+                        self.adding_printer = true;
                         self.commands
-                            .push(Command::Printers(PrinterCommand::Add(printer)));
+                            .push(Command::Printers(PrinterCommand::AddAddress(address)));
                     }
+                }
+                Intent::CancelQueuedJob(job) => {
+                    self.commands
+                        .push(Command::Printers(PrinterCommand::CancelQueued(job)));
                 }
                 Intent::CancelJob(job) => {
                     self.commands
@@ -1690,6 +1704,10 @@ impl SettingsView {
             .push(Command::Network(NetworkCommand::Join(network, password)));
     }
 
+    pub fn pane_keyword(&self) -> &'static str {
+        self.pane.keyword()
+    }
+
     pub fn select_pane(&mut self, pane: PaneId) {
         if pane == self.pane {
             return;
@@ -1761,6 +1779,7 @@ impl SettingsView {
             PaneId::Sound => Command::Audio(AudioCommand::Listen(on)),
             PaneId::Wifi | PaneId::Network => Command::Network(NetworkCommand::Watch(on)),
             PaneId::Printers => Command::Printers(PrinterCommand::Watch(on)),
+            PaneId::Sharing if on => Command::Sharing(SharingCommand::Read),
             _ => return,
         };
         self.commands.push(command);

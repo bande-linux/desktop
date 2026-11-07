@@ -1,3 +1,10 @@
+pub mod askpass;
+pub mod devices;
+pub mod discovery;
+pub mod health;
+pub mod mounts;
+mod mounts_bus;
+pub mod server;
 pub mod space;
 
 use std::collections::{HashMap, HashSet};
@@ -9,6 +16,7 @@ use bande_l10n::Localizer;
 use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
 use bande_volumes::udisks::{BLOCK, Change, FILESYSTEM, Objects, UDISKS, Udisks};
+use devices::Devices;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
@@ -117,14 +125,21 @@ pub struct Automounter {
     system: Connection,
     session: Connection,
     state: Shared,
+    devices: Mutex<Option<Devices>>,
 }
 
 impl Automounter {
+    pub fn follow_devices(&self, devices: Devices) {
+        devices.session_changed(lock(&self.state).unlocked);
+        *self.devices.lock().unwrap_or_else(PoisonError::into_inner) = Some(devices);
+    }
+
     pub fn start(system: &Connection, session: &Connection) -> zbus::Result<Arc<Self>> {
         let automounter = Arc::new(Self {
             system: system.clone(),
             session: session.clone(),
             state: Shared::default(),
+            devices: Mutex::new(None),
         });
         match follow_session(system) {
             Ok((login, changes)) => {
@@ -199,6 +214,14 @@ impl Automounter {
     }
 
     fn session_changed(&self, unlocked: bool) {
+        if let Some(devices) = self
+            .devices
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+        {
+            devices.session_changed(unlocked);
+        }
         let ready: Vec<OwnedObjectPath> = {
             let mut state = lock(&self.state);
             state.unlocked = unlocked;

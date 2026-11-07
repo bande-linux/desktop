@@ -2,10 +2,12 @@ mod access;
 mod account;
 mod app_chooser;
 mod launcher;
+mod print;
 
 use std::cell::Cell;
 use std::ffi::OsString;
 use std::io::Write;
+use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::rc::Rc;
@@ -13,21 +15,22 @@ use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use bande_app_settings::{Stored, settings_folder};
+use bande_content::pdf::protocol::WORKER_FLAG;
 use bande_file_chooser::{
     Chooser, ChooserView, Finished, Icons, L10N, initial_folder, remember, remembered_folder,
 };
 use bande_files::{FilesSettings, rows, sidebar_file, with_volumes};
 use bande_toolkit::ui::Alert;
 use bande_toolkit::{App, Image, Rect, Role, Scene, TextSystem, Window, WindowEvent};
-use bande_volumes::{media_roots, mounted_volumes};
+use bande_volumes::{media_roots, mounted_volumes, volume_icon};
 use bande_wallpaper::Fit;
 use bande_xdg::{
     Locale, MimeDatabase, UserDir, app_name, applications, config_home, current_desktops,
     data_dirs, replace_file, state_home, user_dir,
 };
 use xdg_desktop_portal_bande::dialog_process::{
-    ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, CREATE_LAUNCHER, SET_WALLPAPER, SHARE_ACCOUNT, encode,
-    parse, parse_access, parse_account, parse_app_chooser, parse_launcher,
+    ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, CREATE_LAUNCHER, PRINT, SET_WALLPAPER, SHARE_ACCOUNT,
+    encode, parse, parse_access, parse_account, parse_app_chooser, parse_launcher,
 };
 use xdg_desktop_portal_bande::file_chooser::{Dialog, Mode, Selection};
 
@@ -36,6 +39,7 @@ const WINDOW_SIZE: (u32, u32) = (820, 520);
 const UNAVAILABLE: u8 = 2;
 const PREVIEW_SIZE: f64 = 36.0;
 const SET: &str = "set";
+const WAYLAND_PARENT: &str = "wayland:";
 
 struct FileDialog {
     view: ChooserView,
@@ -70,6 +74,15 @@ impl App for FileDialog {
             self.chosen = Some(finished);
             window.close();
         }
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        self.view.listing_fd().into_iter().collect()
+    }
+
+    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+        self.view.listing_ready();
+        window.request_redraw();
     }
 
     fn deadline(&self) -> Option<Instant> {
@@ -175,10 +188,8 @@ fn run(dialog: Dialog) -> ExitCode {
     let chooser = Chooser::new(dialog.clone(), MimeDatabase::load(&dirs), folder, &settings);
     let bookmarks = read(config_home().map(|config| config.join("gtk-3.0/bookmarks")));
     let user = std::env::var("USER").unwrap_or_default();
-    let volumes = mounted_volumes(
-        &std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default(),
-        &media_roots(&user),
-    );
+    let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
+    let volumes = mounted_volumes(&mountinfo, &media_roots(&user));
     let layout = std::fs::read_to_string(sidebar_file(state_home().as_deref(), &home)).ok();
     let places = with_volumes(
         &rows(
@@ -188,6 +199,7 @@ fn run(dialog: Dialog) -> ExitCode {
             layout.as_deref(),
         ),
         &volumes,
+        |volume| volume_icon(&mountinfo, volume),
     );
     let mut window = match Window::open(Role::toplevel(&title(&dialog), APP_ID), WINDOW_SIZE) {
         Ok(window) => window,
@@ -196,6 +208,9 @@ fn run(dialog: Dialog) -> ExitCode {
             return ExitCode::from(UNAVAILABLE);
         }
     };
+    if let Some(handle) = dialog.parent_window.strip_prefix(WAYLAND_PARENT) {
+        window.attach_to(handle);
+    }
     let view = ChooserView::new(
         chooser,
         places,
@@ -274,6 +289,15 @@ fn main() -> ExitCode {
                 tracing::error!("{}", error.0);
                 ExitCode::from(UNAVAILABLE)
             }
+        };
+    }
+    if mode == PRINT {
+        return print::run(arguments);
+    }
+    if mode == WORKER_FLAG {
+        return match arguments.get(1) {
+            Some(path) => bande_content::pdf::worker::run(Path::new(path)),
+            None => ExitCode::from(UNAVAILABLE),
         };
     }
     if mode == CHOOSE_APP {

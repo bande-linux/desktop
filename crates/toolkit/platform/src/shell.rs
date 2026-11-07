@@ -25,7 +25,7 @@ pub(crate) const MENU_BUTTON_SINCE: u32 = 4;
 pub(crate) const PANEL_SINCE: u32 = 5;
 pub(crate) const PANEL_ORIGIN_SINCE: u32 = 6;
 pub(crate) const OFFER_PLACEMENTS_SINCE: u32 = 8;
-pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
+pub(crate) const SHELL_VERSION: u32 = 6;
 
 struct Toplevel {
     handle: ExtForeignToplevelHandleV1,
@@ -172,6 +172,11 @@ impl Window {
         self.flush()
     }
 
+    pub fn reopening_app(&mut self, app_id: &str) -> Result<(), WindowError> {
+        self.shell()?.reopening_app(app_id.to_owned());
+        self.flush()
+    }
+
     pub fn quit_all_apps(&mut self) -> Result<(), WindowError> {
         self.shell()?.quit_all_apps();
         self.flush()
@@ -238,6 +243,12 @@ impl Window {
 
     pub fn set_scrim(&mut self, opacity: f32) -> Result<(), WindowError> {
         self.shell()?.set_scrim(&self.surface, f64::from(opacity));
+        Ok(())
+    }
+
+    pub fn set_backdrop_opacity(&mut self, opacity: f32) -> Result<(), WindowError> {
+        self.shell()?
+            .set_backdrop_opacity(&self.surface, f64::from(opacity));
         Ok(())
     }
 

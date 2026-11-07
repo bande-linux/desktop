@@ -2,14 +2,14 @@ use std::os::fd::BorrowedFd;
 use std::time::Instant;
 
 use crate::L10N;
-use crate::rail::{BAR_MARGIN, bar_zone, edge_band, owns_node, surface_size};
+use crate::rail::{BAR_MARGIN, BarForm, bar_outline, bar_zone, edge_band, owns_node, surface_size};
 use crate::taskbar_client::anchor;
 use accesskit::{Node, NodeId, Role as AccessRole, TreeInfo, TreeUpdate};
 use bande_config::BarEdge;
 use bande_toolkit::ui::Event;
 use bande_toolkit::{
-    App, Item, KeyboardFocus, LayerKind, LayerOptions, Point, Rect, Role, Scene, Shape, Window,
-    WindowEvent,
+    App, Item, KeyboardFocus, LayerKind, LayerOptions, Point, Radius, Rect, Role, Scene, Shape,
+    Window, WindowEvent,
 };
 
 use crate::status_client::StatusClient;
@@ -20,12 +20,12 @@ const ROOT: NodeId = NodeId(1 << 41);
 const HIDDEN_SHADOW: f32 = 8.0;
 const UNREAD_SLIVER: (f32, f32) = (2.0, 24.0);
 
-pub fn bar_role(edge: BarEdge, icon_size: f32) -> (Role, (u32, u32)) {
+pub fn bar_role(edge: BarEdge, icon_size: f32, form: BarForm) -> (Role, (u32, u32)) {
     (
         Role::Layer(LayerOptions {
             layer: LayerKind::Top,
             anchor: anchor(edge),
-            exclusive_zone: bar_zone(icon_size).round() as i32,
+            exclusive_zone: bar_zone(icon_size, form).round() as i32,
             keyboard: KeyboardFocus::OnDemand,
             namespace: BAR_NAMESPACE.to_owned(),
         }),
@@ -37,6 +37,7 @@ pub struct BarClient {
     taskbar: Taskbar,
     status: StatusClient,
     status_open: bool,
+    rounded: bool,
 }
 
 fn pointer(event: &WindowEvent) -> bool {
@@ -59,6 +60,7 @@ impl BarClient {
             taskbar,
             status,
             status_open: false,
+            rounded: false,
         }
     }
 
@@ -89,11 +91,39 @@ impl BarClient {
     }
 }
 
+impl BarClient {
+    fn declare_backdrop(&mut self, window: &mut Window, revealed: f32) {
+        let translucent = window.appearance().palette().frame.a != u8::MAX;
+        let view = self.status.view_mut();
+        let edge = view.edge();
+        let outline = bar_outline(edge, view.bar_rect(), view.form()).rect;
+        let hidden = ((view.width() + BAR_MARGIN + HIDDEN_SHADOW) * (1.0 - revealed)).round();
+        let (dx, dy) = match edge {
+            BarEdge::Left => (-hidden, 0.0),
+            BarEdge::Right => (hidden, 0.0),
+            BarEdge::Top => (0.0, -hidden),
+            BarEdge::Bottom => (0.0, hidden),
+        };
+        let area = Rect::new(
+            outline.x + dx,
+            outline.y + dy,
+            outline.width,
+            outline.height,
+        );
+        if translucent && !self.rounded {
+            self.rounded = true;
+            let _ = window.set_corner_radius(Radius::XL as u32);
+        }
+        window.set_backdrop(translucent.then_some(area));
+    }
+}
+
 impl App for BarClient {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         let view = self.status.view_mut();
         view.set_icon_size(self.taskbar.icon_size());
+        view.set_form(self.taskbar.form());
         self.taskbar
             .set_rail(view.apps_region((width as f32, height as f32)));
         let mut scene = self.status.scene(window);
@@ -101,6 +131,7 @@ impl App for BarClient {
         scene.width = width;
         scene.items.extend(apps.items);
         let revealed = self.taskbar.revealed(Instant::now());
+        self.declare_backdrop(window, revealed);
         if revealed < 1.0 {
             let view = self.status.view_mut();
             let edge = view.edge();

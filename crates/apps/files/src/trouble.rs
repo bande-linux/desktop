@@ -36,7 +36,12 @@ pub(crate) fn failure_sentence(failure: &Failure) -> String {
         Problem::ReadOnly => L10N.tr("failure-read-only"),
         Problem::NoSpace => L10N.tr("failure-no-space"),
         Problem::NameTooLong => L10N.tr("failure-name-too-long"),
+        Problem::NameInvalid => L10N.tr("failure-name-invalid"),
+        Problem::TooLarge => L10N.tr("failure-too-large"),
         Problem::DeviceGone => L10N.tr("failure-device-gone"),
+        Problem::ServerGone => L10N.tr("failure-server-gone"),
+        Problem::DiskError => L10N.tr("failure-disk-error"),
+        Problem::Missing => L10N.tr("failure-missing"),
         Problem::Other => L10N.tr_args(
             "failure-other",
             [("error", failure.error.to_string().into())],
@@ -45,6 +50,9 @@ pub(crate) fn failure_sentence(failure: &Failure) -> String {
 }
 
 fn mount_point(path: &Path) -> PathBuf {
+    if let Some(volume) = bande_volumes::connected_volume_of(path) {
+        return volume;
+    }
     let device = |path: &Path| std::fs::metadata(path).map(|metadata| metadata.dev()).ok();
     let own = device(path);
     path.ancestors()
@@ -69,6 +77,11 @@ impl FilesView {
         let Some(failure) = &running.failure else {
             return;
         };
+        if failure.no_trash {
+            let (name, several) = (item_name(&failure.path), running.items > 1);
+            self.present_no_trash(&name, several);
+            return;
+        }
         let title = L10N.tr_args(
             "failure-title",
             [
@@ -98,9 +111,48 @@ impl FilesView {
         self.show_sheet(prompt, Sheet::Failure, cancel);
     }
 
+    fn present_no_trash(&mut self, name: &str, several: bool) {
+        let title = L10N.tr_args("no-trash-title", [("name", name.to_owned().into())]);
+        let mut prompt = Prompt::new(&title, &L10N.tr("no-trash-detail"), self.choice()).button(
+            &L10N.tr("stop"),
+            "stop",
+            Kind::Cancel,
+        );
+        if several {
+            prompt = prompt
+                .button(&L10N.tr("skip-all"), "skip-all", Kind::Other)
+                .button(&L10N.tr("delete-all"), "delete-all", Kind::Other);
+        }
+        prompt = prompt.button(&L10N.tr("skip"), "skip", Kind::Other).button(
+            &L10N.tr("delete"),
+            "delete",
+            Kind::Primary,
+        );
+        let cancel = prompt.cancel_button();
+        self.show_sheet(prompt, Sheet::Failure, cancel);
+    }
+
+    pub(crate) fn present_busy(&mut self, quitting: bool) {
+        let leave = match quitting {
+            true => "stop-and-quit",
+            false => "stop-and-close",
+        };
+        let prompt = Prompt::new(
+            &L10N.tr("busy-title"),
+            &L10N.tr("busy-detail"),
+            self.choice(),
+        )
+        .button(&L10N.tr(leave), "stop", Kind::Other)
+        .button(&L10N.tr("keep-running"), "keep", Kind::Cancel);
+        let cancel = prompt.cancel_button();
+        self.show_sheet(prompt, Sheet::Busy { quitting }, cancel);
+    }
+
     pub(crate) fn answer_failure(&mut self, action: &str) {
         let (resolution, apply_to_all) = match action {
             "retry" => (Resolution::Retry, false),
+            "delete" => (Resolution::Delete, false),
+            "delete-all" => (Resolution::Delete, true),
             "skip" => (Resolution::Skip, false),
             "skip-all" => (Resolution::Skip, true),
             _ => (Resolution::Stop, false),

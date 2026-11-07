@@ -18,8 +18,8 @@ use crate::{
     ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, Dragging, FocusSchedule,
     InputSource, LidOnPower, Loaded, NIGHT_LIGHT_WARMTH_RANGE, NightLight, NightSchedule,
     Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory, SecondaryClick,
-    Setting, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE, accent_keyword,
-    is_wallpaper_path, read_system_input_sources,
+    Setting, Style, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE,
+    accent_keyword, is_wallpaper_path, read_system_input_sources,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
@@ -160,6 +160,9 @@ fn publish_changes(
         if before.appearance != after.appearance {
             let _ = guard.appearance_changed(emitter).await;
         }
+        if before.style != after.style {
+            let _ = guard.style_changed(emitter).await;
+        }
         if before.accent != after.accent {
             let _ = guard.accent_changed(emitter).await;
         }
@@ -175,11 +178,11 @@ fn publish_changes(
         if before.reopen_apps != after.reopen_apps {
             let _ = guard.reopen_apps_changed(emitter).await;
         }
-        if before.reopen_apps_after_crash != after.reopen_apps_after_crash {
-            let _ = guard.reopen_apps_after_crash_changed(emitter).await;
-        }
         if before.automatic_updates != after.automatic_updates {
             let _ = guard.automatic_updates_changed(emitter).await;
+        }
+        if before.update_check_every != after.update_check_every {
+            let _ = guard.update_check_every_changed(emitter).await;
         }
         if before.clock != after.clock {
             let _ = guard.clock_format_changed(emitter).await;
@@ -232,6 +235,9 @@ fn publish_changes(
         }
         if before.bar.apps != after.bar.apps {
             let _ = guard.bar_apps_changed(emitter).await;
+        }
+        if before.bar.floating != after.bar.floating {
+            let _ = guard.bar_floating_changed(emitter).await;
         }
         if before.bar.auto_hide != after.bar.auto_hide {
             let _ = guard.bar_auto_hide_changed(emitter).await;
@@ -495,6 +501,17 @@ impl ConfigInterface {
 #[zbus::interface(name = "org.bande.Config")]
 impl ConfigInterface {
     #[zbus(property)]
+    fn style(&self) -> String {
+        self.store.current().style.keyword().to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_style(&self, value: String) -> zbus::fdo::Result<()> {
+        let style = keyword(&Style::ALL, |style| style.keyword(), &value)?;
+        self.write(&Setting::Style(style))
+    }
+
+    #[zbus(property)]
     fn appearance(&self) -> String {
         self.store.current().appearance.keyword().to_owned()
     }
@@ -564,16 +581,6 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_reopen_apps(&self, on: bool) -> zbus::fdo::Result<()> {
         self.write(&Setting::ReopenApps(on))
-    }
-
-    #[zbus(property)]
-    fn reopen_apps_after_crash(&self) -> bool {
-        self.store.current().reopen_apps_after_crash
-    }
-
-    #[zbus(property)]
-    fn set_reopen_apps_after_crash(&self, on: bool) -> zbus::fdo::Result<()> {
-        self.write(&Setting::ReopenAppsAfterCrash(on))
     }
 
     #[zbus(property)]
@@ -752,6 +759,16 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
+    fn bar_floating(&self) -> bool {
+        self.store.current().bar.floating
+    }
+
+    #[zbus(property)]
+    fn set_bar_floating(&self, floating: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::BarFloating(floating))
+    }
+
+    #[zbus(property)]
     fn bar_auto_hide(&self) -> bool {
         self.store.current().bar.auto_hide
     }
@@ -780,6 +797,16 @@ impl ConfigInterface {
     fn set_bar_edge(&self, value: String) -> zbus::fdo::Result<()> {
         let edge = keyword(&BarEdge::ALL, BarEdge::keyword, &value)?;
         self.write(&Setting::BarEdge(edge))
+    }
+
+    #[zbus(property)]
+    fn update_check_every(&self) -> u64 {
+        seconds_or_never(self.store.current().update_check_every)
+    }
+
+    #[zbus(property)]
+    fn set_update_check_every(&self, seconds: u64) -> zbus::fdo::Result<()> {
+        self.write(&Setting::UpdateCheckEvery(never_or_seconds(seconds)))
     }
 
     #[zbus(property)]

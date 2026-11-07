@@ -228,7 +228,7 @@ pub fn hit_menu(hit: &Hit, model: &Model) -> Menu {
             MenuItem::separator(),
             MenuItem::new(&L10N.tr("menu-copy-path"), COPY).shortcut("Ctrl+C"),
         ],
-        Target::App(_) | Target::Settings(_) | Target::Command(_) => {
+        Target::App(_) | Target::Settings(_) | Target::Command(_) | Target::Item { .. } => {
             vec![MenuItem::new(&L10N.tr("menu-open"), OPEN).shortcut("Return")]
         }
     };

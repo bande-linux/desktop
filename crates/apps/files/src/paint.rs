@@ -1,3 +1,4 @@
+use bande_volumes::{on_connected_volume, quick_is_dir};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -139,7 +140,10 @@ impl FilesView {
         }
         let target = entry
             .link
-            .then(|| std::fs::read_link(&entry.path).ok())
+            .then(|| match on_connected_volume(&entry.path) {
+                true => None,
+                false => std::fs::read_link(&entry.path).ok(),
+            })
             .flatten()
             .and_then(|target| Some(target.file_name()?.to_string_lossy().into_owned()));
         let names = self
@@ -699,7 +703,7 @@ impl FilesView {
                 {
                     continue;
                 }
-                let folder = walked.is_dir();
+                let folder = quick_is_dir(&walked);
                 let mut name = walked.file_name().map_or_else(
                     || "/".to_owned(),
                     |name| name.to_string_lossy().into_owned(),
@@ -809,8 +813,12 @@ impl FilesView {
         };
         let free = column
             .folder()
-            .and_then(|folder| rustix::fs::statvfs(folder).ok())
-            .map(|stats| stats.f_bavail * stats.f_frsize);
+            .and_then(|folder| match on_connected_volume(folder) {
+                true => self.connected_free(folder),
+                false => rustix::fs::statvfs(folder)
+                    .ok()
+                    .map(|stats| stats.f_bavail * stats.f_frsize),
+            });
         match free {
             Some(bytes) => L10N.tr_args(
                 "status-free",
@@ -1079,6 +1087,7 @@ impl FilesView {
                     facts.push((L10N.tr("info-permissions"), permissions(mode)));
                 }
                 if entry.link
+                    && !on_connected_volume(&entry.path)
                     && let Ok(target) = std::fs::read_link(&entry.path)
                 {
                     facts.push((L10N.tr("info-link"), target.display().to_string()));

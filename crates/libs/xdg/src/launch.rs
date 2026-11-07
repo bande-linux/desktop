@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::io;
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
@@ -116,21 +117,28 @@ fn split(exec: &str) -> Result<Vec<(String, bool)>, ExecError> {
 const SINGLE_FILE_CODES: [&str; 2] = ["%f", "%u"];
 const FILE_LIST_CODES: [&str; 2] = ["%F", "%U"];
 
-fn file_argument(code: &str, file: &Path) -> String {
+fn file_argument(code: &str, file: &Path) -> OsString {
     if code.eq_ignore_ascii_case("%u") {
-        file_uri(file)
+        file_uri(file).into()
     } else {
-        file.to_string_lossy().into_owned()
+        file.as_os_str().to_owned()
     }
+}
+
+fn text_only(command: Vec<OsString>) -> Vec<String> {
+    command
+        .into_iter()
+        .map(|argument| argument.to_string_lossy().into_owned())
+        .collect()
 }
 
 impl DesktopEntry {
     pub fn command(&self) -> Result<Vec<String>, ExecError> {
-        self.expand(&split(&self.exec)?, &[])
+        self.expand(&split(&self.exec)?, &[]).map(text_only)
     }
 
     pub fn action_command(&self, action: &DesktopAction) -> Result<Vec<String>, ExecError> {
-        self.expand(&split(&action.exec)?, &[])
+        self.expand(&split(&action.exec)?, &[]).map(text_only)
     }
 
     pub fn command_for_uri(&self, uri: &str) -> Result<Vec<String>, ExecError> {
@@ -141,7 +149,7 @@ impl DesktopEntry {
                 _ => (argument, quoted),
             })
             .collect();
-        self.expand(&arguments, &[])
+        self.expand(&arguments, &[]).map(text_only)
     }
 
     pub fn opens_files(&self) -> bool {
@@ -154,7 +162,7 @@ impl DesktopEntry {
         })
     }
 
-    pub fn commands_for(&self, files: &[PathBuf]) -> Result<Vec<Vec<String>>, ExecError> {
+    pub fn commands_for(&self, files: &[PathBuf]) -> Result<Vec<Vec<OsString>>, ExecError> {
         let arguments = split(&self.exec)?;
         let has = |codes: [&str; 2]| {
             arguments
@@ -177,11 +185,11 @@ impl DesktopEntry {
         &self,
         arguments: &[(String, bool)],
         files: &[PathBuf],
-    ) -> Result<Vec<String>, ExecError> {
-        let mut command = Vec::new();
+    ) -> Result<Vec<OsString>, ExecError> {
+        let mut command: Vec<OsString> = Vec::new();
         for (argument, quoted) in arguments {
             if *quoted {
-                command.push(argument.clone());
+                command.push(argument.into());
                 continue;
             }
             match argument.as_str() {
@@ -194,8 +202,8 @@ impl DesktopEntry {
                 "%d" | "%D" | "%n" | "%N" | "%v" | "%m" => {}
                 "%i" => {
                     if let Some(icon) = &self.icon {
-                        command.push("--icon".to_owned());
-                        command.push(icon.clone());
+                        command.push("--icon".into());
+                        command.push(icon.into());
                     }
                 }
                 _ => {
@@ -213,7 +221,7 @@ impl DesktopEntry {
                             _ => {}
                         }
                     }
-                    command.push(expanded);
+                    command.push(expanded.into());
                 }
             }
         }
@@ -221,7 +229,7 @@ impl DesktopEntry {
             return Err(ExecError::Empty);
         }
         if self.terminal {
-            command.splice(0..0, [TERMINAL.to_owned(), "-e".to_owned()]);
+            command.splice(0..0, [TERMINAL.into(), "-e".into()]);
         }
         Ok(command)
     }
@@ -326,7 +334,7 @@ pub fn launch_action(
 
 fn start(
     entry: &DesktopEntry,
-    command: &[String],
+    command: &[impl AsRef<OsStr>],
     activation_token: Option<&str>,
 ) -> Result<u32, LaunchError> {
     if entry.terminal && find_executable(TERMINAL).is_none() {
@@ -381,7 +389,7 @@ pub fn wait_for_exit(
 
 pub fn spawn_detached(
     app_id: &str,
-    command: &[String],
+    command: &[impl AsRef<OsStr>],
     working_directory: Option<&Path>,
     activation_token: Option<&str>,
 ) -> io::Result<u32> {
@@ -396,7 +404,9 @@ pub fn spawn_detached(
     if let Some(token) = activation_token {
         process.env(ACTIVATION_TOKEN, token);
     }
-    if let Some(directory) = working_directory {
+    if let Some(directory) =
+        working_directory.filter(|directory| !bande_volumes::on_connected_volume(directory))
+    {
         process.current_dir(directory);
     }
     unsafe {

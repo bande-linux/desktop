@@ -42,6 +42,7 @@ const VIDEO_SAMPLING_EXTENSIONS: [&CStr; 2] = [
     ash::ext::image_drm_format_modifier::NAME,
     ash::ext::queue_family_foreign::NAME,
 ];
+const VIDEO_FORMAT: vk::Format = vk::Format::G8_B8R8_2PLANE_420_UNORM;
 const TARGET_FORMATS: [vk::Format; 2] = [vk::Format::B8G8R8A8_UNORM, vk::Format::R8G8B8A8_UNORM];
 const TEXTURE_FOURCCS: [Fourcc; 3] = [Fourcc::Argb8888, Fourcc::Xrgb8888, Fourcc::Abgr8888];
 
@@ -408,6 +409,58 @@ fn text(name: Result<&CStr, std::ffi::FromBytesUntilNulError>) -> String {
         .unwrap_or_default()
 }
 
+fn samples_linear_nv12(instance: &ash::Instance, physical: vk::PhysicalDevice) -> bool {
+    let linear = u64::from(Modifier::Linear);
+    let mut list = vk::DrmFormatModifierPropertiesListEXT::default();
+    let mut properties = vk::FormatProperties2::default().push_next(&mut list);
+    unsafe {
+        instance.get_physical_device_format_properties2(physical, VIDEO_FORMAT, &mut properties);
+    }
+    let mut modifiers = vec![
+        vk::DrmFormatModifierPropertiesEXT::default();
+        list.drm_format_modifier_count as usize
+    ];
+    let mut list = vk::DrmFormatModifierPropertiesListEXT::default()
+        .drm_format_modifier_properties(&mut modifiers);
+    let mut properties = vk::FormatProperties2::default().push_next(&mut list);
+    unsafe {
+        instance.get_physical_device_format_properties2(physical, VIDEO_FORMAT, &mut properties);
+    }
+    let listed = modifiers.iter().any(|modifier| {
+        modifier.drm_format_modifier == linear
+            && modifier.drm_format_modifier_plane_count == 2
+            && modifier
+                .drm_format_modifier_tiling_features
+                .contains(vk::FormatFeatureFlags::SAMPLED_IMAGE)
+    });
+    if !listed {
+        return false;
+    }
+    let mut modifier_info = vk::PhysicalDeviceImageDrmFormatModifierInfoEXT::default()
+        .drm_format_modifier(linear)
+        .sharing_mode(vk::SharingMode::EXCLUSIVE);
+    let mut external_info = vk::PhysicalDeviceExternalImageFormatInfo::default()
+        .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
+    let info = vk::PhysicalDeviceImageFormatInfo2::default()
+        .format(VIDEO_FORMAT)
+        .ty(vk::ImageType::TYPE_2D)
+        .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
+        .usage(vk::ImageUsageFlags::SAMPLED)
+        .flags(vk::ImageCreateFlags::MUTABLE_FORMAT)
+        .push_next(&mut modifier_info)
+        .push_next(&mut external_info);
+    let mut external = vk::ExternalImageFormatProperties::default();
+    let mut result = vk::ImageFormatProperties2::default().push_next(&mut external);
+    let supported = unsafe {
+        instance.get_physical_device_image_format_properties2(physical, &info, &mut result)
+    };
+    supported.is_ok()
+        && external
+            .external_memory_properties
+            .external_memory_features
+            .contains(vk::ExternalMemoryFeatureFlags::IMPORTABLE)
+}
+
 fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
     let physicals = unsafe { instance.enumerate_physical_devices() }?;
     physicals
@@ -467,7 +520,8 @@ fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
                             extensions
                                 .iter()
                                 .any(|extension| extension.extension_name_as_c_str() == Ok(*wanted))
-                        }),
+                        })
+                        && samples_linear_nv12(instance, physical),
                     info,
                 },
             ))
@@ -929,7 +983,7 @@ impl VulkanRenderer {
                 &vk::ImageCreateInfo::default()
                     .flags(vk::ImageCreateFlags::MUTABLE_FORMAT)
                     .image_type(vk::ImageType::TYPE_2D)
-                    .format(vk::Format::G8_B8R8_2PLANE_420_UNORM)
+                    .format(VIDEO_FORMAT)
                     .extent(vk::Extent3D {
                         width: width.unsigned_abs(),
                         height: height.unsigned_abs(),

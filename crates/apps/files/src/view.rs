@@ -2003,7 +2003,7 @@ impl FilesView {
             .filter_map(Result::ok)
             .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
-            .filter(|name| !name.starts_with('.'))
+            .filter(|name| !bande_fs::is_hidden(name))
             .collect::<Vec<_>>();
         names.sort_by(|a, b| bande_fs::finder_order(a, b));
         names

@@ -2,6 +2,7 @@ mod cx;
 mod instance;
 mod menus;
 mod portal;
+mod print;
 mod runner;
 mod tabs;
 
@@ -18,8 +19,12 @@ use bande_toolkit::ui::Ui;
 use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 use bande_xdg::file_uri;
 
+pub use bande_pdf::{Block, Orientation, Page, PageItem, PageSetup, Paper, flow};
 pub use cx::{Cx, WindowId};
-pub use portal::{Filter, choose_file, choose_save_file};
+pub use portal::{Filter, choose_file, choose_save_file, parent_window};
+pub use print::{
+    Document, Layout, file_document, image_document, print, rich_document, text_document,
+};
 pub use tabs::{Detached, TabCarry, TabDrop, TabDropTarget, TabHost, move_tab};
 
 pub type Error = Box<dyn std::error::Error>;

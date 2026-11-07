@@ -43,13 +43,16 @@ lzma-rust2 = { version = "=0.23.0", default-features = false, features = ["std",
 md-5 = "=0.10.6"
 naga = { version = "=30.0.1", features = ["wgsl-in", "spv-out"] }
 oo7 = { version = "=0.7.0-beta", default-features = false, features = ["async-std", "native_crypto", "unstable"] }
+krilla = { version = "=0.8.2", default-features = false, features = ["raster-images"] }
 parley = { version = "=0.12.0", features = ["complex-scripts"] }
 pipewire = "=0.10.1"
 png = "=0.18.1"
 pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
+ring = "=0.17.14"
 resvg = { version = "=0.49.0", default-features = false }
 roxmltree = "=0.21.2"
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 rustix = { version = "=1.1.6", features = ["event", "param", "process"] }
 ruzstd = "=0.9.1"
 sevenz-rust2 = { version = "=0.24.2", default-features = false, features = ["aes256", "bzip2", "deflate", "ppmd"] }
@@ -101,6 +104,7 @@ bande-edid = { path = "crates/libs/edid" }
 bande-files = { path = "crates/apps/files" }
 bande-fs = { path = "crates/libs/fs" }
 bande-graphics = { path = "crates/toolkit/graphics" }
+bande-pdf = { path = "crates/toolkit/pdf" }
 bande-greeter = { path = "crates/shell/greeter" }
 bande-inbox = { path = "crates/libs/inbox" }
 bande-keyring = { path = "crates/libs/keyring" }
@@ -117,6 +121,7 @@ bande-quick-look = { path = "crates/libs/quick-look" }
 bande-packages = { path = "crates/libs/packages" }
 bande-notifications = { path = "crates/shell/notifications" }
 bande-notify = { path = "crates/services/notify" }
+bande-printd = { path = "crates/services/printd" }
 bande-polkit = { path = "crates/services/polkit" }
 bande-power = { path = "crates/services/power" }
 bande-recovery = { path = "crates/services/recovery" }

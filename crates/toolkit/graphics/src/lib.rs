@@ -27,11 +27,12 @@ pub use input::{
 pub use parley::FontData;
 pub use render::{DrawError, Snapshot, pixels};
 pub use scene::{
-    Blend, Image, Item, Paint, Path, Picture, Point, Rect, Scene, Shape, Stop, Transform,
+    Blend, Image, Item, Paint, Path, PathElement, Picture, Point, Rect, Scene, Shape, Stop,
+    Transform,
 };
 pub use surface::{PlacedSurface, SurfaceId, SurfaceScaling, placed_surfaces, surface_area};
 pub use text::{
-    Cut, GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextStyle, TextSystem, shortened,
+    Cut, GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextRun, TextStyle, TextSystem, shortened,
 };
 pub use title_bar::{
     ControlHover, FRAME_HEADER_HEIGHT, HEADER_LEADING, PLACEMENTS_AFTER_HOLD,

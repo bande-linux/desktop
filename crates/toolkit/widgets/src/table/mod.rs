@@ -6,7 +6,9 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role, SortDirection};
-use bande_graphics::{Color, Cut, Item, Paragraph, Point, Rect, Shape, TextRole, TextStyle};
+use bande_graphics::{
+    Color, Cut, Item, Palette, Paragraph, Point, Rect, Shape, TextRole, TextStyle,
+};
 
 pub use self::model::{Cell, Column, Row, Sort};
 use self::model::{Line, flatten};
@@ -1285,7 +1287,7 @@ impl Widget for Table {
                     text_x += self.indent(line);
                 }
                 if let Some(icon) = &cell.icon {
-                    rows.push(Item::Image {
+                    let image = Item::Image {
                         rect: Rect::new(
                             text_x,
                             y + (self.row_height() - ICON_SIZE) / 2.0,
@@ -1293,10 +1295,17 @@ impl Widget for Table {
                             ICON_SIZE,
                         ),
                         image: icon.clone(),
+                    };
+                    rows.push(match cell.dimmed {
+                        true => Item::Opacity {
+                            alpha: Palette::DIMMED_ALPHA,
+                            items: vec![image],
+                        },
+                        false => image,
                     });
                 }
                 text_x += self.icon_space(column, cell);
-                let key = self.text_key(cx, line, column, lit, &widths);
+                let key = self.text_key(cx, line, index, column, lit, &widths);
                 let Some(paragraph) = texts.get(&key) else {
                     continue;
                 };

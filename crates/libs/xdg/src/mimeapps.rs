@@ -146,12 +146,26 @@ impl MimeApps {
         found
     }
 
-    fn default_of<'a>(&self, mime: &str, handlers: &'a [DesktopEntry]) -> Option<&'a DesktopEntry> {
+    fn listed_default<'a>(
+        &self,
+        mime: &str,
+        handlers: &'a [DesktopEntry],
+    ) -> Option<&'a DesktopEntry> {
         self.lists
             .iter()
             .flat_map(|list| list.apps(DEFAULTS, mime))
             .find_map(|id| handlers.iter().find(|entry| entry.id == *id))
-            .or_else(|| self.associated(mime, handlers).into_iter().next())
+    }
+
+    fn default_of<'a>(&self, mime: &str, handlers: &'a [DesktopEntry]) -> Option<&'a DesktopEntry> {
+        self.listed_default(mime, handlers).or_else(|| {
+            let associated = self.associated(mime, handlers);
+            associated
+                .iter()
+                .find(|entry| !entry.no_display)
+                .or(associated.first())
+                .copied()
+        })
     }
 
     pub fn default_for<'a>(
@@ -169,13 +183,18 @@ impl MimeApps {
         ancestry: &[String],
         handlers: &'a [DesktopEntry],
     ) -> Vec<&'a DesktopEntry> {
-        let mut apps: Vec<&DesktopEntry> =
-            self.default_for(ancestry, handlers).into_iter().collect();
-        for entry in ancestry
+        let listed = ancestry
             .iter()
-            .flat_map(|mime| self.associated(mime, handlers))
-        {
-            if !apps.iter().any(|known| known.id == entry.id) {
+            .filter_map(|mime| self.listed_default(mime, handlers))
+            .collect::<Vec<_>>();
+        let mut apps: Vec<&DesktopEntry> = Vec::new();
+        for entry in self.default_for(ancestry, handlers).into_iter().chain(
+            ancestry
+                .iter()
+                .flat_map(|mime| self.associated(mime, handlers)),
+        ) {
+            let offered = !entry.no_display || listed.iter().any(|known| known.id == entry.id);
+            if offered && !apps.iter().any(|known| known.id == entry.id) {
                 apps.push(entry);
             }
         }

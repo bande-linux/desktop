@@ -15,9 +15,6 @@ Status: started, branch gap-brightness.
 saving region format to English (Sweden) or Sweden (Sweden) doesnt work, i get "couldn't make this change"
 Status: started, branch gap-region.
 
-screen lock under "Privacy & Security" seems to conflict with the options in Power. Either way these are related and should only be in one location not scattered out like this.
-Status: started, branch gap-lock-settings.
-
 not possible to adjust window size that has been "snapped" to either half the screen or a quarter. The snapping should just adjust the window into that shape and nothing else. Adjusting it from there on should be possible just like in macos.
 Status: started, branch gap-snap-resize.
 
@@ -30,29 +27,17 @@ Status: started, branch gap-taskbar-focus.
 In Files i want to be able to drag change coloumn order in the detailed list view. The dragging should be nice and smooth. (can we reuse such draging framework with other bande-native apps in the toolkit? are there more things we should (NOT COULD, SHOULD) share in the toolkit?)
 Status: started, branch gap-files-columns.
 
-In Files, there is no need to have the viewing options in the right click menu, since they are present with nice buttons. This type of right click bloat and general settings/menu bloat should be avoided. Applications should also not be allowed to alter the right click menu like in Windows/MacOS. (for example google drive will add an option to the right click menu everywhere in both those OSes without any consent. We should not allow that in Bande Desktop)
-Status: started, branch gap-context-menus.
-
 Package Installer is stuck on "Install", no matter what i do or how many times i press nothing happens.
-Status: started, branch gap-package-installer.
+Status: started. Fixed on main: the polkit agent uses polkit's socket-activated helper (Debian's helper is no longer setuid, so every password request failed with no dialog), and the installer reports refusals. Left: the owner runs a real install after the next desktop release and `installer-v0.1.1`; Software still treats `NotAuthorized` as a silent stop.
 
 The shutdown button doesnt work. (right click Bande icon -> shutdown). Also the restart button.
 Status: started, branch gap-shutdown.
-
-when showing hidden files i think the hidden files should be slightly "greyed out" or toned down so it is obvious which shown file/folder is normally hidden and which is not
-Status: started, branch gap-files-hidden.
 
 ##CHECK THIS## cant write ~ in terminal?
 Status: started, branch gap-terminal-tilde.
 
 super+space opening search popup
 Status: started, branch gap-search-shortcut.
-
-bande-browser icon is like a safari clone but we own our own design theme and should stick to that now clone apple.
-Status: started, branch gap-browser-icon.
-
-there is no point in having: Current releases on https://bande-linux.github.io if since they are not updated. I stripped down moreof the website because it contained alot of unneeded information. Remove this also.
-Status: started.
 
 Passwords (keyring) cant be unlocked from Settings->Passwords. When failing to unlock the text "Couldnt make this change" stick to the settings window in all tabs no matter what view i go to.
 Status: started, branch gap-passwords.

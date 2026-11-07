@@ -1,1 +1,1 @@
-SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ACTION=="add", TAG+="systemd", ENV{SYSTEMD_WANTS}+="bande-display-keeper@%k.service"
+SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_minor", KERNEL=="card[0-9]*", ACTION=="add", TAG+="systemd", ENV{SYSTEMD_WANTS}+="bande-display-keeper@%k.service"

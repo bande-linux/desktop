@@ -448,7 +448,7 @@ impl Chrome {
             offset: Point::new(placed.x, placed.y),
             items: drawn,
         });
-        if frame.margin > 0.0 {
+        if !look.fullscreen {
             let outline = Rect::new(0.0, 0.0, frame.width, frame.height);
             items.push(Item::lit_edge(Shape::rounded(outline, Radius::XL), palette));
         }
@@ -537,4 +537,5 @@ impl Chrome {
 pub(crate) struct Look {
     pub(crate) active: bool,
     pub(crate) zoomed: bool,
+    pub(crate) fullscreen: bool,
 }

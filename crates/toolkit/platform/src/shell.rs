@@ -246,6 +246,12 @@ impl Window {
         Ok(())
     }
 
+    pub fn set_backdrop_opacity(&mut self, opacity: f32) -> Result<(), WindowError> {
+        self.shell()?
+            .set_backdrop_opacity(&self.surface, f64::from(opacity));
+        Ok(())
+    }
+
     pub fn set_corner_radius(&mut self, radius: u32) -> Result<(), WindowError> {
         self.shell()?.set_corner_radius(&self.surface, radius);
         self.flush()

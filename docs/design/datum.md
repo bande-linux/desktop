@@ -37,7 +37,7 @@ Bande should feel like a well-made instrument: a Braun radio or a Teenage Engine
 
 **Concentric rule:** `inner = max(outer − inset, 4)`. Examples: window 16 − sheet inset 6 = sheet 10; menu 10 − item inset 4 = item 6; segmented track 8 − 2 = pill 6. A child that stands alone (a button in an alert, 16 from the edge) falls back to its fixed token (6). This is Apple's own "concentric shape" concept, but our values are smaller and our corners are plain circular arcs, **not continuous squircles**. Arcs read crisper and more technical and are cheaper to draw.
 
-The compositor's window corners are 16. Maximised and tiled windows square their screen-touching corners (radius 0), and the sheet keeps its 10.
+The compositor's window corners are 16, on maximised and tiled windows too: a window is always rounded, with its shadow and lit edge, whichever style and however the Taskbar sits. Only true full screen, which has no window edges, is square.
 
 ### Hairlines
 - One hairline width: 1 device pixel at integer scales, snapped to the pixel grid at fractional scales (`width = 1/scale` logical, rounded to whole device pixels ≥ 1).
@@ -134,14 +134,16 @@ Settings ▸ Appearance ▸ Style, `style` in `config.kdl`. The tokens live in `
 |---|---|---|---|
 | **Refined Solid** (default) | opaque `chassis` | opaque `overlay` | none, the most efficient |
 | **Wallpaper-Lit** | `chassis` at 74 % over a blurred copy of the wallpaper, sampled at the surface's position; other windows never show through | opaque `overlay` | one small texture, made once per wallpaper |
+| **Glass** | `chassis` at 68 % over live blur, three passes, saturated 1.35× | menus at 72 % `overlay`, Control Center and the notification list at 72 % `chassis`, over live blur; notification banners and the launcher card stay opaque, the launcher already has its blurred scrim | the blur is redone when what lies under it changes, never at idle |
 
 - **The material is only ever behind the frame.** The sheet is opaque and declared so, which also spares the compositor drawing under it.
 - **Readable over anything.** The backdrop's luminance is limited before the frame goes on it, to at most .16 in dark and at least .60 in light. That bound gives `ink` ≥ 7:1, `ink2` ≥ 4.5:1 and `ink3` ≥ 3:1 over any picture; a test in the design crate enumerates it.
+- **Glass** draws the blur only where a frame shows: the sheet is declared opaque and so culled, which means content changing inside a window does not redo the blur behind its frame unless the frame's own area changes.
 - **Wallpaper-Lit** keeps a 480 pixel wide picture per display, blurred and saturated 1.35× once on a worker thread, and makes it again only when the wallpaper, the scheme or the display changes. Nothing redraws at idle.
 - **Reduce Transparency and Increase Contrast** make every style solid.
 - **Third-party windows.** GTK and Qt apps draw their own frames, and server-side title bars use opaque `chassis`, so those stay solid in every style.
 
-**Blur** otherwise exists only behind the launcher, overview and modal alerts (a 24 pt backdrop blur at 60 % mix, so the eye is pulled forward). "Tinted chassis" is a separate opt-in that mixes 6 % of the wallpaper's average colour into `chassis`.
+**Blur** in the other styles exists only behind the launcher, overview and modal alerts (a 24 pt backdrop blur at 60 % mix, so the eye is pulled forward). "Tinted chassis" is a separate opt-in that mixes 6 % of the wallpaper's average colour into `chassis`.
 
 **Inactive windows:** the header glyphs go to `ink3`, the window-control well loses its fill and becomes an outline, the selection turns from accent to `well`, the ambient shadow halves, and the sheet stays the same, so content stays readable.
 

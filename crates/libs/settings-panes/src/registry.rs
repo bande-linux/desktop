@@ -840,6 +840,7 @@ fn desktop_panes() -> Vec<Pane> {
                         Kind::Choices(keyword_choices(vec![
                             (L10N.tr("style-refined"), "refined"),
                             (L10N.tr("style-wallpaper-lit"), "wallpaper-lit"),
+                            (L10N.tr("style-glass"), "glass"),
                         ])),
                     )],
                 ),

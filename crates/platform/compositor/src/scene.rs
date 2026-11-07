@@ -14,7 +14,7 @@ use smithay::backend::renderer::Texture;
 use smithay::wayland::compositor::get_role;
 use smithay::wayland::shell::xdg::XDG_POPUP_ROLE;
 
-use crate::effect::{blur_rects, corner_radius};
+use crate::effect::{backdrop_opacity, blur_rects, corner_radius, surface_opacity};
 use crate::element::SurfaceElement;
 use crate::material::MaterialTexture;
 use crate::motion::{Look, Motion};
@@ -22,7 +22,9 @@ use crate::state::OutputElement;
 use crate::state::mapped_size;
 use crate::tile::Preview;
 use crate::window::Window;
-use bande_graphics::{Color, Elevation, Palette, Radius, Scheme, window_edge_opacity};
+use bande_graphics::{
+    BackdropTone, Color, Elevation, Palette, Radius, Scheme, window_edge_opacity,
+};
 use bande_render::{
     Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
 };
@@ -480,16 +482,36 @@ pub struct BlurElement {
 
 impl BlurElement {
     pub(crate) fn new(id: Id, region: RoundedRect, scale: f64, alpha: f32) -> Self {
+        Self::toned(id, region, scale, alpha, None)
+    }
+
+    pub(crate) fn toned(
+        id: Id,
+        region: RoundedRect,
+        scale: f64,
+        alpha: f32,
+        tone: Option<BackdropTone>,
+    ) -> Self {
+        let tone = tone.map(|tone| {
+            [
+                tone.luminance,
+                if tone.floor { 1.0 } else { 0.0 },
+                tone.saturation,
+                0.0,
+            ]
+        });
         let blur = Blur {
             region,
             passes: BLUR_PASSES,
             offset: (BLUR_OFFSET * scale) as f32,
             alpha,
+            tone,
         };
         let mut hasher = DefaultHasher::new();
         for value in [
             region.components(),
             [region.radius, blur.offset, alpha, 0.0],
+            tone.unwrap_or_default(),
         ]
         .concat()
         {
@@ -562,7 +584,7 @@ pub(crate) fn scrim(renderer: &VulkanRenderer, scheme: Scheme) -> Option<[f32; 4
 
 #[derive(Clone)]
 pub(crate) enum Behind {
-    Live,
+    Live(Option<BackdropTone>),
     Fill([f32; 4]),
     Wallpaper {
         material: MaterialTexture,
@@ -577,7 +599,9 @@ fn behind(id: Id, region: RoundedRect, scale: f64, alpha: f32, source: &Behind) 
             region,
             color.map(|channel| channel * alpha),
         )),
-        Behind::Live => OutputElement::Blur(BlurElement::new(id, region, scale, alpha)),
+        Behind::Live(tone) => {
+            OutputElement::Blur(BlurElement::toned(id, region, scale, alpha, *tone))
+        }
         Behind::Wallpaper { material, screen } => {
             let area: Area = Rectangle::new(
                 (f64::from(region.x), f64::from(region.y)).into(),
@@ -626,6 +650,7 @@ pub(crate) fn surface_blurs(
         return Vec::new();
     };
     let bounds = Rectangle::new(location, size);
+    let alpha = backdrop_opacity(surface) * surface_opacity(surface);
     let popup = get_role(surface) == Some(XDG_POPUP_ROLE);
     let radius = if popup {
         f64::from(Radius::L)
@@ -641,7 +666,7 @@ pub(crate) fn surface_blurs(
                 false => placed.intersection(bounds)?,
             };
             let shape = rounded(rect.to_f64().to_physical(scale), radius * scale);
-            Some(behind(id, shape, scale, 1.0, source))
+            Some(behind(id, shape, scale, alpha, source))
         })
         .collect()
 }
@@ -1042,8 +1067,7 @@ pub(crate) fn window_elements(
     let area = real.to_physical(scale);
     let look = look.unwrap_or(Look::shown(real));
     let shown = look.rect.to_physical(scale);
-    let squared = fullscreen || window.has_state(xdg_toplevel::State::Maximized);
-    let radius = if squared {
+    let radius = if fullscreen {
         0.0
     } else {
         shaped_radius(area, shown, scale)
@@ -1072,7 +1096,7 @@ pub(crate) fn window_elements(
     let origin = window.surface_origin().to_f64();
     let reduced = scrim(renderer, shading.scheme).map(Behind::Fill);
     let source = match source {
-        Behind::Live => reduced.as_ref().unwrap_or(source),
+        Behind::Live(_) => reduced.as_ref().unwrap_or(source),
         _ => source,
     };
     let blurs = blur_rects(window.surface())

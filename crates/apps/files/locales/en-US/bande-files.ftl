@@ -352,3 +352,6 @@ server-waiting = Waiting for the server…
 server-not-responding = The server isn’t responding. Files here can’t be reached right now.
 server-disconnect = Disconnect
 sidebar-network = Network
+menu-share = Share
+menu-share-mail = Mail
+menu-share-to = Copy to { $place }

@@ -72,8 +72,10 @@ pub fn write(title: &str, pages: &[Page]) -> Result<Vec<u8>, Error> {
         .map_err(|error| Error(format!("{error:?}")))
 }
 
+type FontKey = (u64, u32, Vec<(u32, u32)>);
+
 #[derive(Default)]
-struct Fonts(HashMap<(u64, u32, Vec<(u32, u32)>), Option<Font>>);
+struct Fonts(HashMap<FontKey, Option<Font>>);
 
 impl Fonts {
     fn of(&mut self, run: &GlyphRun, variations: &[([u8; 4], f32)]) -> Option<Font> {
@@ -341,7 +343,7 @@ fn draw_image(surface: &mut Surface<'_>, rect: Rect, image: &Image) {
         return;
     };
     let mut rgba = image.premultiplied_rgba();
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0 {
         let alpha = u16::from(pixel[3]);
         if alpha != 0 && alpha != 255 {
             for channel in &mut pixel[..3] {
@@ -439,6 +441,15 @@ fn draw_text_run(
         text,
         &run.variations,
     );
+    for (rect, color) in &run.lines {
+        let shape = Shape::rect(Rect::new(
+            rect.x + origin.x,
+            rect.y + origin.y,
+            rect.width,
+            rect.height,
+        ));
+        fill_path(surface, shape_path(shape), &Paint::Solid(*color));
+    }
 }
 
 fn draw_lines(

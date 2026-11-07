@@ -430,6 +430,7 @@ pub struct TextRun {
     pub glyphs: GlyphRun,
     pub clusters: Vec<Range<usize>>,
     pub variations: Vec<([u8; 4], f32)>,
+    pub lines: Vec<(Rect, Color)>,
 }
 
 impl fmt::Debug for Paragraph {
@@ -535,6 +536,13 @@ impl Paragraph {
         }
     }
 
+    pub fn with_text(self, text: &str) -> Self {
+        Self {
+            text: Arc::from(text),
+            ..self
+        }
+    }
+
     pub fn text(&self) -> &str {
         &self.text
     }
@@ -558,6 +566,36 @@ impl Paragraph {
                     continue;
                 };
                 let run = glyph_run.run();
+                let mut decorations = Vec::new();
+                let metrics = run.font_metrics();
+                let style = glyph_run.style();
+                let baseline = glyph_run.baseline();
+                let across = |offset: f32, size: f32| {
+                    Rect::new(
+                        glyph_run.offset(),
+                        baseline - offset - size / 2.0,
+                        glyph_run.advance(),
+                        size,
+                    )
+                };
+                if let Some(underline) = &style.underline {
+                    decorations.push((
+                        across(
+                            underline.offset.unwrap_or(metrics.underline_offset),
+                            underline.size.unwrap_or(metrics.underline_size),
+                        ),
+                        underline.brush,
+                    ));
+                }
+                if let Some(strikethrough) = &style.strikethrough {
+                    decorations.push((
+                        across(
+                            strikethrough.offset.unwrap_or(metrics.strikethrough_offset),
+                            strikethrough.size.unwrap_or(metrics.strikethrough_size),
+                        ),
+                        strikethrough.brush,
+                    ));
+                }
                 let clusters = match has_text {
                     true => run
                         .visual_clusters()
@@ -591,6 +629,7 @@ impl Paragraph {
                         .iter()
                         .map(|(tag, value)| (tag.to_be_bytes(), *value))
                         .collect(),
+                    lines: decorations,
                 });
             }
         }

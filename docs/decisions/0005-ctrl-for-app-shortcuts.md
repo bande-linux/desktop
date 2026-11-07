@@ -38,7 +38,7 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
 - **Super is only for the system**, in GNOME and KDE's chords, and nothing an app does (close,
   quit, copy, paste, save, find, tabs) is on Super. The set is `SHORTCUTS` in
   `crates/libs/keyboard/src/shortcuts.rs`, the one table the compositor matches and Settings ▸
-  Keyboard lists. The owner cut it to: Search on a tap of Super or `Super+Space`; `Super+V`, `Super+.`, `Super+N`,
+  Keyboard lists. The owner cut it to: Search on a tap of Super; `Super+V`, `Super+.`, `Super+N`,
   `Super+S`, `Super+L`; `Alt+F4`, `Super+H`, `Super+arrows`, `Shift+Super+arrows`; `Alt+Tab`
   (the only switcher), `Ctrl+Alt+T` Terminal; `Ctrl+Super+Left/Right`, `Super+D`, the Mission
   Control key; `Print`, `Shift+Print`, `Shift+Super+S`; `Ctrl+Alt+F1…F12`; the zoom and screen

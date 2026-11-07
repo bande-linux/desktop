@@ -9,6 +9,7 @@ pub struct Column {
     pub numeric: bool,
     pub sortable: bool,
     pub flexible: bool,
+    pub movable: bool,
 }
 
 impl Column {
@@ -19,6 +20,7 @@ impl Column {
             numeric: false,
             sortable: true,
             flexible: false,
+            movable: false,
         }
     }
 
@@ -39,6 +41,13 @@ impl Column {
     pub fn flexible(self) -> Self {
         Self {
             flexible: true,
+            ..self
+        }
+    }
+
+    pub fn movable(self) -> Self {
+        Self {
+            movable: true,
             ..self
         }
     }

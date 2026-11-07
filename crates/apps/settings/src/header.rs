@@ -263,6 +263,7 @@ impl SettingsView {
             | PaneId::Microphone
             | PaneId::Screenshots
             | PaneId::ScreenSharing
+            | PaneId::Backup
             | PaneId::Location => None,
         };
         live.unwrap_or_else(|| pane.summary.clone())

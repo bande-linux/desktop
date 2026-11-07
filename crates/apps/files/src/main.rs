@@ -13,6 +13,7 @@ use bande_app::{
     TabHost, View, WindowId,
 };
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
+use bande_backup::client::{Browsing, CannotBrowse, open_browser};
 use bande_files::{
     BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, L10N, Location, Request, Row,
     SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT,
@@ -411,6 +412,7 @@ struct Files {
     search_excluded: Vec<PathBuf>,
     shows: Option<Inbox<ShowRequest>>,
     ejects: Option<Inbox<EjectFailure>>,
+    backups: Option<Inbox<Result<Browsing, CannotBrowse>>>,
     recent_folders: Vec<PathBuf>,
     history: Rc<RefCell<History>>,
     trash: Trash,
@@ -581,6 +583,31 @@ impl Files {
                 failures.send(failure);
             }
         });
+    }
+
+    fn open_backups(&self) {
+        let Some(outbox) = self.backups.as_ref().map(Inbox::outbox) else {
+            return;
+        };
+        let opening = std::thread::Builder::new()
+            .name("backups".to_owned())
+            .spawn(move || {
+                outbox.send(open_browser());
+            });
+        if let Err(error) = opening {
+            tracing::warn!("cannot open the backups: {error}");
+        }
+    }
+
+    fn follow_backups(&mut self, cx: &mut Cx<Self>) {
+        let outcomes = self.backups.as_mut().map(Inbox::drain).unwrap_or_default();
+        let shown = cx.focused().or_else(|| cx.windows().next());
+        for outcome in outcomes {
+            if let Some((window, pane)) = shown.and_then(|id| browser(cx, id)) {
+                pane.view.backups_opened(outcome);
+                window.request_redraw();
+            }
+        }
     }
 
     fn follow_ejects(&mut self, cx: &mut Cx<Self>) {
@@ -903,6 +930,7 @@ impl Files {
                     pane.view.drag_finished();
                 }
             }
+            Request::OpenBackups => self.open_backups(),
             Request::PasteFiles => {
                 if let Err(error) = window.paste_transfer() {
                     tracing::warn!("cannot paste: {error}");
@@ -991,6 +1019,9 @@ impl Program for Files {
             excluded,
             search_excluded: Vec::new(),
             shows,
+            backups: Inbox::new()
+                .inspect_err(|error| tracing::warn!("cannot wait for backups: {error}"))
+                .ok(),
             ejects: Inbox::new()
                 .inspect_err(|error| tracing::warn!("cannot report eject failures: {error}"))
                 .ok(),
@@ -1133,6 +1164,7 @@ impl Program for Files {
             .chain(self.excluded.iter().map(Inbox::fd))
             .chain(self.shows.iter().map(Inbox::fd))
             .chain(self.ejects.iter().map(Inbox::fd))
+            .chain(self.backups.iter().map(Inbox::fd))
             .collect()
     }
 
@@ -1149,8 +1181,10 @@ impl Program for Files {
             self.follow_excluded(cx);
         } else if index < shows {
             self.follow_shows(cx);
-        } else {
+        } else if index < shows + self.ejects.iter().count() {
             self.follow_ejects(cx);
+        } else {
+            self.follow_backups(cx);
         }
     }
 }

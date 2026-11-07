@@ -26,6 +26,7 @@ use bande_volumes::{EjectFailure, mounted_volumes};
 use bande_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
 use crate::L10N;
+use crate::backups::BackupBar;
 use crate::browser::{Browser, Location};
 use crate::controls::{Formats, Press, Signals};
 use crate::grid::Band;
@@ -170,6 +171,7 @@ pub enum Request {
         grab: Point,
     },
     PasteFiles,
+    OpenBackups,
     ShowMenu {
         menu: Menu,
         at: Point,
@@ -204,6 +206,7 @@ pub struct FilesView {
     pub(crate) drag_sources: Vec<PathBuf>,
     pub(crate) reordering: Option<Location>,
     pub(crate) status_bar: bool,
+    pub(crate) backups: Option<BackupBar>,
     status_bar_file: Option<PathBuf>,
     templates: Option<PathBuf>,
     pub(crate) drop: Option<crate::drag::Hover>,
@@ -346,6 +349,7 @@ impl FilesView {
             drag_sources: Vec::new(),
             reordering: None,
             status_bar: true,
+            backups: None,
             status_bar_file: None,
             templates: None,
             drop: None,
@@ -1023,18 +1027,22 @@ impl FilesView {
         let sheet = self.sheet_frame();
         let inspector = if self.inspector { INSPECTOR_WIDTH } else { 0.0 };
         let progress = self.visible_jobs() as f32 * PROGRESS_HEIGHT;
-        let search = if self.searching.is_some() {
-            SEARCH_HEIGHT
-        } else {
-            0.0
-        };
-        let top = sheet.y + self.tab_bar_height() + search;
+        let search = self.search_bar_height();
+        let top = sheet.y + self.tab_bar_height() + self.backup_bar_height() + search;
         Rect::new(
             sheet.x,
             top,
             (sheet.width - inspector).max(COLUMN_WIDTH),
             (sheet.y + sheet.height - self.status_bar_height() - progress - top).max(ROW_HEIGHT),
         )
+    }
+
+    pub(crate) fn search_bar_height(&self) -> f32 {
+        if self.searching.is_some() {
+            SEARCH_HEIGHT
+        } else {
+            0.0
+        }
     }
 
     pub(crate) fn status_bar_height(&self) -> f32 {

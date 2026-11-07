@@ -1,5 +1,6 @@
 mod about;
 mod arrangement;
+mod backup;
 mod battery;
 mod brightness;
 mod client;
@@ -69,6 +70,7 @@ pub use software::{
     check, follow_software, open_updates, update,
 };
 pub use state::{Answer, BluetoothState, Display, Joined, Mode, NetworkState, Question, WifiState};
+pub use backup::{BackupCommand, BackupUpdate};
 pub use storage::{Category, Storage, StorageCommand, Tally, categorize, tally};
 pub use time::{
     TimeCommand, TimeState, follow_time, parse_manual, zone_matches, zone_offset, zone_place,

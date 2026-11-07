@@ -1,0 +1,18 @@
+[Unit]
+Description=Bande backups
+After=local-fs.target dbus.service
+
+[Service]
+Type=dbus
+BusName=org.bande.Backup
+ExecStart=/usr/libexec/bande-backupd
+CacheDirectory=bande-backup
+CacheDirectoryMode=0700
+StateDirectory=bande-backup
+StateDirectoryMode=0700
+Nice=19
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+CPUWeight=20
+KillSignal=SIGINT
+TimeoutStopSec=45

@@ -31,6 +31,7 @@ pub const SHELL: &str = "/usr/bin/bande-shell";
 pub const GREETER: &str = "/usr/bin/bande-greeter";
 pub const REVIEW: &str = "/usr/bin/bande-review";
 const CONFIRM_ARGUMENT: &str = "--confirm";
+const REOPEN_ARGUMENT: [&str; 1] = ["--reopen-after-crash"];
 
 pub const SESSION_CLIENT_RESTART_THROTTLE: Duration = Duration::from_secs(10);
 const LOCK_SCREEN_RELAUNCH_AFTER: Duration = Duration::from_secs(10);
@@ -237,9 +238,16 @@ impl Compositor {
             .session_end_requested
             .take()
             .map(|ending| [CONFIRM_ARGUMENT, session_end_keyword(ending)]);
+        let question = match std::mem::take(&mut self.state.resume.ask_after_crash) {
+            true => Some(REOPEN_ARGUMENT.as_slice()),
+            false => None,
+        };
         self.keep_summoned(
             |compositor| &mut compositor.session_dialog,
-            confirm.as_ref().map(|arguments| arguments.as_slice()),
+            confirm
+                .as_ref()
+                .map(|arguments| arguments.as_slice())
+                .or(question),
             &mut upkeep,
         );
         self.keep_screen_reader();

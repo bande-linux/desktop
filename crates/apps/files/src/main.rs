@@ -9,17 +9,17 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use bande_app::{
-    Cx, Detached, Info, Keys, Kind, Menus, Program, Settings, TabCarry, TabDrop, TabDropTarget,
-    TabHost, View, WindowId,
+    Cx, Detached, Info, Keys, Kind, Menus, Program, Saved, Settings, TabCarry, TabDrop,
+    TabDropTarget, TabHost, View, WindowId,
 };
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_files::{
     BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, L10N, Location, Request, Row,
-    SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, ServerAnswer, ServerRequest, Show, ShowRequest,
-    SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file,
-    recent_folders_file as recent_folders_file_in, rows, serve_file_manager, settings_view,
-    sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks, with_place_shown,
-    without_bookmark,
+    SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, SavedTab, ServerAnswer, ServerRequest, Show,
+    ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, hidden_places,
+    list_columns_file, recent_folders_file as recent_folders_file_in, rows, serve_file_manager,
+    settings_view, sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks,
+    with_place_shown, without_bookmark,
 };
 use bande_fs::{History, Running, Trash};
 use bande_inbox::{Inbox, Outbox};
@@ -1164,6 +1164,12 @@ impl Files {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SavedWindow {
+    tabs: Vec<SavedTab>,
+    active: usize,
+}
+
 impl Program for Files {
     type View = Pane;
 
@@ -1229,12 +1235,11 @@ impl Program for Files {
             carrying: Rc::new(Cell::new(false)),
             carry: TabCarry::default(),
         };
-        match arguments.iter().any(|argument| argument == SERVICE_FLAG) {
-            true => files.wait_for_show(cx),
-            false => {
-                let directory = std::env::current_dir().ok();
-                files.open_window(cx, &arguments, directory.as_deref())?;
-            }
+        if arguments.iter().any(|argument| argument == SERVICE_FLAG) {
+            files.wait_for_show(cx);
+        } else if !arguments.is_empty() {
+            let directory = std::env::current_dir().ok();
+            files.open_window(cx, &arguments, directory.as_deref())?;
         }
         Ok(files)
     }
@@ -1272,6 +1277,13 @@ impl Program for Files {
             .strip_prefix(menu_bar::RECENT_FOLDER)
             .and_then(|index| index.parse::<usize>().ok())
             .and_then(|index| self.recent_folders.get(index).cloned());
+        if command == bande_app_menu::PRINT {
+            let printable = browser(cx, window).and_then(|(_, pane)| pane.view.printable());
+            if let Some((title, document)) = printable {
+                cx.print(&title, document);
+            }
+            return;
+        }
         let Some((shown, pane)) = browser(cx, window) else {
             return;
         };
@@ -1301,6 +1313,39 @@ impl Program for Files {
     fn reopen(&mut self, cx: &mut Cx<Self>) {
         if let Err(error) = self.open_window(cx, &[], None) {
             tracing::warn!("cannot open a window: {error}");
+        }
+    }
+
+    fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        let view = &cx.view(window)?.browser()?.view;
+        Saved::of(&SavedWindow {
+            tabs: view.saved_tabs(),
+            active: view.active_tab(),
+        })
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, saved: Saved) {
+        let Some(mut window) = saved.read::<SavedWindow>() else {
+            return;
+        };
+        let active = window
+            .tabs
+            .get(window.active)
+            .map(|tab| tab.location.clone());
+        window.tabs.retain(SavedTab::still_there);
+        let Some(first) = window.tabs.first() else {
+            return;
+        };
+        let active = active
+            .and_then(|active| window.tabs.iter().position(|tab| tab.location == active))
+            .unwrap_or(0);
+        let browser = Browser::open(first.location.clone(), self.trash.clone());
+        let opened = self.new_view(browser).and_then(|mut view| {
+            view.restore_tabs(&window.tabs, active);
+            self.open_view(cx, view, WINDOW_SIZE)
+        });
+        if let Err(error) = opened {
+            tracing::warn!("cannot reopen a window: {error}");
         }
     }
 

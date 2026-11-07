@@ -174,7 +174,7 @@ pub(crate) fn ask_correction(word: &str, sentence_start: bool) -> bool {
             send(SpellRequest::Correct(word.to_owned(), sentence_start));
         }
         true
-    });
+    })
 }
 
 pub(crate) fn correction(word: &str) -> Option<String> {

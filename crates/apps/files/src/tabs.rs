@@ -57,6 +57,7 @@ pub(crate) fn location_title(location: &Location) -> String {
     match location {
         Location::Trash => L10N.tr("trash"),
         Location::Recents => L10N.tr("recents"),
+        Location::Server(url) => url.clone(),
         Location::Search(folder) => L10N.tr_args(
             "search-title",
             [(

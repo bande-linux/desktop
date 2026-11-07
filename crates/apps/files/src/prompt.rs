@@ -92,6 +92,14 @@ impl Prompt {
         self
     }
 
+    pub(crate) fn primary_button(&self) -> Option<WidgetId> {
+        let first = self.first_button();
+        self.roles
+            .iter()
+            .position(|role| *role == Kind::Primary)
+            .map(|index| self.children[first + index].id())
+    }
+
     pub(crate) fn cancel_button(&self) -> Option<WidgetId> {
         let first = self.first_button();
         self.roles

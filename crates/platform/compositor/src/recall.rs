@@ -1,6 +1,8 @@
 use std::fs;
 use std::io;
 use std::path::PathBuf;
+use std::sync::mpsc::{self, Sender};
+use std::thread::{self, JoinHandle};
 
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::{self, XdgToplevel};
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -19,9 +21,53 @@ struct Remembered {
     frame: Rectangle<i32, Logical>,
 }
 
+struct FrameWriter {
+    latest: Option<Sender<String>>,
+    worker: Option<JoinHandle<()>>,
+}
+
+impl FrameWriter {
+    fn start(path: PathBuf) -> io::Result<Self> {
+        let (latest, written) = mpsc::channel::<String>();
+        let worker = thread::Builder::new()
+            .name("window memory".to_owned())
+            .spawn(move || {
+                while let Ok(first) = written.recv() {
+                    let text = written.try_iter().last().unwrap_or(first);
+                    if let Err(error) = bande_xdg::replace_file(&path, &text) {
+                        tracing::warn!("cannot remember where the window was: {error}");
+                    }
+                }
+            })?;
+        Ok(Self {
+            latest: Some(latest),
+            worker: Some(worker),
+        })
+    }
+
+    fn write(&self, text: String) {
+        if let Some(latest) = &self.latest
+            && latest.send(text).is_err()
+        {
+            tracing::warn!("cannot remember where the window was: the writer stopped");
+        }
+    }
+}
+
+impl Drop for FrameWriter {
+    fn drop(&mut self) {
+        self.latest = None;
+        if let Some(worker) = self.worker.take()
+            && worker.join().is_err()
+        {
+            tracing::warn!("the window memory writer stopped early");
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct Recall {
-    path: Option<PathBuf>,
+    writer: Option<FrameWriter>,
     frames: Vec<Remembered>,
 }
 
@@ -82,15 +128,6 @@ pub(crate) fn clamp_into(
     let x = frame.loc.x.clamp(area.loc.x, area.loc.x + area.size.w - w);
     let y = frame.loc.y.clamp(area.loc.y, area.loc.y + area.size.h - h);
     Rectangle::new((x, y).into(), (w, h).into())
-}
-
-impl Recall {
-    fn save(&self) -> io::Result<()> {
-        let Some(path) = &self.path else {
-            return Ok(());
-        };
-        bande_xdg::replace_file(path, format(&self.frames))
-    }
 }
 
 impl State {
@@ -174,7 +211,7 @@ impl State {
     }
 
     pub(crate) fn remember_frame(&mut self, index: usize) {
-        if self.recall.path.is_none() {
+        if self.recall.writer.is_none() {
             return;
         }
         let Some((app_id, tag)) = self.recallable(index) else {
@@ -202,8 +239,8 @@ impl State {
             tag,
             frame,
         });
-        if let Err(error) = self.recall.save() {
-            tracing::warn!("cannot remember where the window was: {error}");
+        if let Some(writer) = &self.recall.writer {
+            writer.write(format(&self.recall.frames));
         }
     }
 }
@@ -234,9 +271,9 @@ impl Compositor {
         let frames = fs::read_to_string(&path)
             .map(|text| parse(&text))
             .unwrap_or_default();
-        self.state.recall = Recall {
-            path: Some(path),
-            frames,
-        };
+        let writer = FrameWriter::start(path)
+            .inspect_err(|error| tracing::warn!("window positions are not remembered: {error}"))
+            .ok();
+        self.state.recall = Recall { writer, frames };
     }
 }

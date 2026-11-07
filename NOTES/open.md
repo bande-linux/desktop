@@ -85,7 +85,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - The lock screen ignores logind's `Unlock` (`loginctl unlock-session`): honour it or not.
 - Naming: the clash with Debian's `bande` DNS resolver packages; the `org.bande.*` domain.
 - Product: a welcome assistant; which UI languages first.
-- Files: tags; Connect to Server.
+- Files: tags.
 - Title-bar toolbars stay at 100 % at large text sizes.
 - The unused private `set_corner_radius` request: keep or remove.
 - Debian policy: make the greeter opt-in instead of taking over greetd.

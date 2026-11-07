@@ -20,6 +20,7 @@ mod privacy;
 mod prompt;
 mod quick_look;
 mod search;
+mod servers;
 mod settings;
 mod sidebar;
 mod tabs;
@@ -42,10 +43,11 @@ pub use open_with::OpenWith;
 pub use paint::permissions;
 pub use privacy::follow_search_excluded;
 pub use search::SEARCH_HEIGHT;
+pub use servers::{ServerAnswer, ServerRequest};
 pub use settings::{FilesSettings, SETTINGS_SIZE, StartFolder, settings_view};
 pub use sidebar::{
     BookmarkEdit, Place, PlaceKind, Row, SidebarEdit, favourites, hidden_places, layout_text, rows,
-    standard_places, volumes_hidden, with_bookmarks, with_place_shown, with_volumes,
+    standard_places, volumes_hidden, with_bookmarks, with_nearby, with_place_shown, with_volumes,
     without_bookmark,
 };
 pub use tabs::{CarriedTab, SavedTab, TAB_BAR_HEIGHT};

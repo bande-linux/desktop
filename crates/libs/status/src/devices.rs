@@ -122,6 +122,10 @@ pub fn powers(system: &Connection) -> zbus::Result<Vec<PowerAction>> {
         .collect())
 }
 
+pub fn can_sleep(system: &Connection) -> bool {
+    powers(system).is_ok_and(|powers| powers.contains(&PowerAction::Sleep))
+}
+
 pub fn use_power(system: &Connection, power: PowerAction) -> zbus::Result<()> {
     let login = Login::new(system)?;
     match power {

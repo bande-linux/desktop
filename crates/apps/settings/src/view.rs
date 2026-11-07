@@ -2202,9 +2202,6 @@ impl SettingsView {
             (SettingId::RefreshRate, Value::Number(hertz)) => {
                 display.refresh_rate = Some(f64::from(hertz));
             }
-            (SettingId::VariableRefreshRate, Value::Flag(on)) => {
-                display.variable_refresh_rate = on.then_some(true);
-            }
             _ => return,
         }
         if confirm && display != previous {

@@ -115,6 +115,7 @@ bande-indexer = { path = "crates/services/index" }
 bande-inbox = { path = "crates/libs/inbox" }
 bande-keyring = { path = "crates/libs/keyring" }
 bande-keyboard = { path = "crates/libs/keyboard" }
+bande-l10n-macros = { path = "crates/libs/l10n-macros" }
 bande-l10n = { path = "crates/libs/l10n" }
 bande-launcher = { path = "crates/shell/launcher" }
 bande-lock = { path = "crates/shell/lock" }

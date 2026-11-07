@@ -1,0 +1,14 @@
+play = Spela upp
+pause = Pausa
+timeline = Tidslinje
+volume = Volym
+mute = Ljud av
+unmute = Ljud på
+media-controls = Uppspelningsreglage
+unsupported-title = Den här filen kan inte spelas upp
+unsupported-detail = Bande saknar avkodare för filens format.
+unreadable-title = Den här filen kan inte öppnas
+unreadable-detail = Den kan ha flyttats, eller så har du inte behörighet att läsa den.
+failed-title = Uppspelningen stoppades
+failed-detail = Spelaren stötte på ett problem med den här filen.
+nothing-open = Öppna en ljud- eller videofil för att spela upp den.

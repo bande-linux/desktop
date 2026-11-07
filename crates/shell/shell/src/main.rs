@@ -37,6 +37,7 @@ fn main() -> ExitCode {
             Some(ending) => dialogs::run_confirmation(ending),
             None => Err(format!("unknown session ending {keyword}").into()),
         },
+        ["--reopen-after-crash"] => dialogs::run_reopen_question(),
         _ => shell::run(),
     };
     match result {

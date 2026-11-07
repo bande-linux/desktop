@@ -92,6 +92,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 
 ## Remaining work
 
+- Resume: Terminal brings back tabs and folders, not the scrollback text; no "Close windows when quitting" setting (Quit always closes them).
 - Files: ranked in [plans/files-depth.md](plans/files-depth.md).
 - Unmerged branches: `wip/l10n-ready` (strings into Fluent, an en-XA pseudo-locale),
   `wip/terminal-scopes` (a systemd scope per Terminal tab; apps repo now),

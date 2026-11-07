@@ -245,6 +245,9 @@ impl State {
         mapped: bool,
     ) {
         match (was_mapped, mapped) {
+            (false, true) if self.finish_resuming(surface) => {
+                self.sync_surface_outputs();
+            }
             (false, true)
                 if self.pending_activation.as_ref() == Some(surface)
                     || self.takes_focus_when_mapped(surface) =>

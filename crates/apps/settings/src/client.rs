@@ -43,10 +43,6 @@ pub trait Config {
     #[zbus(property)]
     fn set_reopen_apps(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
-    fn reopen_apps_after_crash(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_reopen_apps_after_crash(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
     fn automatic_updates(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_automatic_updates(&self, on: bool) -> zbus::Result<()>;
@@ -303,7 +299,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 74] = [
+pub const CONFIG_SETTINGS: [SettingId; 73] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -332,7 +328,6 @@ pub const CONFIG_SETTINGS: [SettingId; 74] = [
     SettingId::ReopenApps,
     SettingId::LockMessage,
     SettingId::ShowPreviews,
-    SettingId::ReopenAfterCrash,
     SettingId::AutomaticUpdates,
     SettingId::UpdateCheckEvery,
     SettingId::Wallpaper,
@@ -540,7 +535,6 @@ impl SettingsClient {
             SettingId::ReopenApps => Value::Flag(self.config.reopen_apps()?),
             SettingId::LockMessage => Value::Text(self.config.lock_message()?),
             SettingId::ShowPreviews => Value::Flag(self.config.show_previews()?),
-            SettingId::ReopenAfterCrash => Value::Flag(self.config.reopen_apps_after_crash()?),
             SettingId::AutomaticUpdates => Value::Flag(self.config.automatic_updates()?),
             SettingId::UpdateCheckEvery => Value::Seconds(self.config.update_check_every()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
@@ -634,9 +628,6 @@ impl SettingsClient {
             (SettingId::ReopenApps, Value::Flag(on)) => self.config.set_reopen_apps(*on),
             (SettingId::LockMessage, Value::Text(message)) => self.config.set_lock_message(message),
             (SettingId::ShowPreviews, Value::Flag(shown)) => self.config.set_show_previews(*shown),
-            (SettingId::ReopenAfterCrash, Value::Flag(on)) => {
-                self.config.set_reopen_apps_after_crash(*on)
-            }
             (SettingId::AutomaticUpdates, Value::Flag(on)) => {
                 self.config.set_automatic_updates(*on)
             }

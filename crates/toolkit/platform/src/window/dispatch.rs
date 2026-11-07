@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use bande_protocols::client::xdg_toplevel_session_v1::XdgToplevelSessionV1;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
 use wayland_client::protocol::wl_compositor::WlCompositor;
@@ -31,7 +32,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 };
 
 use super::{State, ToplevelState, WindowEvent};
-use crate::shell::{OFFER_PLACEMENTS_SINCE, OPEN_TERMINAL_SINCE};
+use crate::shell::{OFFER_PLACEMENTS_SINCE, SHELL_VERSION};
 
 impl Dispatch<WlRegistry, ()> for State {
     fn event(
@@ -127,7 +128,7 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "bande_shell_v1" => {
                     state.shell.protocol =
-                        Some(registry.bind(name, version.min(OPEN_TERMINAL_SINCE), handle, ()));
+                        Some(registry.bind(name, version.min(SHELL_VERSION), handle, ()));
                 }
                 "bande_app_v1" => {
                     state.shell.app =
@@ -314,6 +315,7 @@ delegate_noop!(State: ignore WlSurface);
 delegate_noop!(State: ignore ZwlrLayerShellV1);
 delegate_noop!(State: ignore XdgActivationV1);
 delegate_noop!(State: ignore XdgToplevelTagManagerV1);
+delegate_noop!(State: ignore XdgToplevelSessionV1);
 delegate_noop!(State: ignore ZxdgExporterV2);
 delegate_noop!(State: ignore ZxdgImporterV2);
 delegate_noop!(State: ignore ZxdgImportedV2);

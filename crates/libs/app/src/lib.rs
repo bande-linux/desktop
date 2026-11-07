@@ -3,6 +3,7 @@ mod instance;
 mod menus;
 mod portal;
 mod print;
+mod resume;
 mod runner;
 mod tabs;
 
@@ -25,6 +26,7 @@ pub use portal::{Filter, choose_file, choose_save_file, parent_window};
 pub use print::{
     Document, Layout, can_print, file_document, image_document, print, rich_document, text_document,
 };
+pub use resume::Saved;
 pub use tabs::{Detached, TabCarry, TabDrop, TabDropTarget, TabHost, move_tab};
 
 pub type Error = Box<dyn std::error::Error>;
@@ -162,6 +164,16 @@ pub trait Program: Sized + 'static {
     fn open(&mut self, _cx: &mut Cx<Self>, _arguments: Vec<String>, _directory: &Path) {}
 
     fn reopen(&mut self, cx: &mut Cx<Self>);
+
+    fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        (cx.kind(window) == Some(Kind::Main)).then(Saved::empty)
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, _saved: Saved) {
+        self.reopen(cx);
+    }
+
+    fn windows_restored(&mut self, _cx: &mut Cx<Self>) {}
 
     fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, _view: Self::View) {}
 

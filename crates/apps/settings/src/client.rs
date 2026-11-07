@@ -301,9 +301,6 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
             .get("rotation")
             .and_then(|value| u32::try_from(value).ok())
             .and_then(Rotation::from_degrees),
-        variable_refresh_rate: settings
-            .get("variable-refresh-rate")
-            .and_then(|value| bool::try_from(value).ok()),
     }
 }
 
@@ -457,9 +454,6 @@ impl SettingsClient {
         }
         if let Some(rotation) = display.rotation {
             settings.insert("rotation", rotation.degrees().into());
-        }
-        if let Some(enabled) = display.variable_refresh_rate {
-            settings.insert("variable-refresh-rate", enabled.into());
         }
         self.config.set_display(identity, settings)
     }

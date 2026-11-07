@@ -8,7 +8,7 @@ use icu_calendar::Gregorian;
 use icu_calendar::week::WeekInformation;
 use std::fmt;
 
-use icu_datetime::fieldsets::{DE, E, MD, MDE, T, YM, YMD};
+use icu_datetime::fieldsets::{DE, E, M, MD, MDE, T, YM, YMD};
 use icu_datetime::input::{Date, DateTime, Time};
 use icu_datetime::parts::MONTH;
 use icu_datetime::{DateTimeFormatterPreferences, FixedCalendarDateTimeFormatter};
@@ -140,6 +140,15 @@ impl DateFormats {
             .unwrap_or_else(|| first.strftime("%B %Y").to_string())
     }
 
+    pub fn month_name(&self, month: i8) -> String {
+        let day = jiff::civil::date(2000, month, 1);
+        FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, M::long())
+            .ok()
+            .zip(gregorian(day))
+            .map(|(formatter, date)| formatter.format(&date).to_string())
+            .unwrap_or_else(|| day.strftime("%B").to_string())
+    }
+
     pub fn short_weekday(&self, day: jiff::civil::Date) -> String {
         FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(self.preferences, E::short())
             .ok()
@@ -249,6 +258,19 @@ impl DateFormats {
             .zip(date_of(at))
             .map(|(formatter, date)| formatter.format(&date).to_string())
             .unwrap_or_else(|| at.strftime("%A %-d %B").to_string())
+    }
+
+    pub fn date_time(&self, at: &Zoned, with_year: bool) -> String {
+        let (time, period) = self.time(at);
+        let period = period
+            .map(|period| format!(" {period}"))
+            .unwrap_or_default();
+        format!("{}, {time}{period}", self.date(at, with_year))
+    }
+
+    pub fn clock_time(&self, at: &Zoned) -> String {
+        let (time, period) = self.time(at);
+        period.map_or(time.clone(), |period| format!("{time} {period}"))
     }
 
     pub fn date(&self, at: &Zoned, with_year: bool) -> String {

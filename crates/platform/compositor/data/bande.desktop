@@ -1,6 +1,7 @@
 [Desktop Entry]
 Name=Bande
 Comment=The Bande desktop
+Comment[sv]=Skrivbordet Bande
 Exec=bande-session
 TryExec=bande-session
 Type=Application

@@ -814,8 +814,15 @@ impl Dispatch<WlDataDevice, ()> for State {
     ) {
         match event {
             wl_data_device::Event::Selection { id } => {
+                let foreign = id.as_ref().is_some_and(|offer| {
+                    let types = offered_types(offer);
+                    !types.contains(&own_type()) && !types.iter().any(|mime| mime == PASSWORD_HINT)
+                });
                 if let Some(previous) = std::mem::replace(&mut state.clipboard.selection, id) {
                     previous.destroy();
+                }
+                if foreign {
+                    state.events.push(WindowEvent::ClipboardChanged);
                 }
             }
             wl_data_device::Event::Enter {

@@ -201,6 +201,17 @@ def clocks():
     return tile(*hue_field(255, 0.46, 0.12), body)
 
 
+def browser():
+    top, bottom = hue_field(170, 0.44, 0.09)
+    lattice = ('M20 9.5C16 14.7 16 33.3 20 38.5M28 9.5C32 14.7 32 33.3 28 38.5'
+               'M9.5 19.5C14.7 17.5 33.3 17.5 38.5 19.5M9.5 28.5C14.7 30.5 33.3 30.5 38.5 28.5')
+    body = (rect(9.5, 9.5, 29, 29, 7.5, PAPER)
+            + '<clipPath id="sheet"><rect x="9.5" y="9.5" width="29" height="29" rx="7.5"/></clipPath>'
+            + f'<g clip-path="url(#sheet)">{stroke(lattice, bottom, 2.6)}</g>'
+            + rect(21.3, 21.3, 5.4, 5.4, 0.7, EMBER))
+    return tile(top, bottom, body)
+
+
 ICONS = {
     'org.bande.Files': files,
     'org.bande.Terminal': terminal,
@@ -222,6 +233,7 @@ ICONS = {
     'org.gnome.Showtime': video_player,
     'org.gnome.Calculator': calculator,
     'org.bande.Clock': clocks,
+    'org.bande.Browser': browser,
 }
 
 HICOLOR = {

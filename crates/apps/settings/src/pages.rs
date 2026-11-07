@@ -81,9 +81,6 @@ fn display_value(
                 .map(|rate| rate.round() as u32)
                 .or_else(|| display.current.map(|mode| mode.hertz()))?,
         ),
-        SettingId::VariableRefreshRate => {
-            Value::Flag(output.variable_refresh_rate.unwrap_or(false))
-        }
         SettingId::DisplayResolution => {
             let (width, height) = output.resolution.or_else(|| {
                 let mode = display.current?;
@@ -418,9 +415,6 @@ impl SettingsView {
         scope: Option<&Display>,
         matched: Option<&SettingHit>,
     ) -> Option<Box<dyn Widget>> {
-        if setting.id == SettingId::VariableRefreshRate && !scope?.variable_refresh_capable() {
-            return None;
-        }
         let (control, focus) = match self.allowed(setting.id) {
             true => self.control(setting, scope)?,
             false => {
@@ -829,7 +823,7 @@ impl SettingsView {
         if sources == login {
             return muted_row(&L10N.tr("login-layouts-same"));
         }
-        let button = (!self.refused.contains(&Privilege::Keyboard)).then(|| {
+        let button = (!self.refused.contains(&Privilege::Locale)).then(|| {
             let codes = sources.to_vec();
             let mut send = intent(&self.intents, Intent::Locale);
             boxed(Button::new(&L10N.tr("use-at-login"), move || {

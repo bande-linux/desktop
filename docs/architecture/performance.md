@@ -37,6 +37,7 @@ reach a running session.
   repainted. `bande-toolkit-bench` measures the toolkit sample (`crates/testing/sample`).
 - **Files at 100 000 items:** `bande-files-bench` drives `FilesView` in-process over a folder of
   100 000 files and prints UI-thread time per step.
+- **Flips on the real display:** while something on the screen changes, record DCP's swaps for ten seconds and read them with `bande-flip-report`, which needs no rate: `sudo perf record -o /tmp/flip.data -a -e dcp:iomfb_swap_submit,dcp:iomfb_swap_complete -- sleep 10`, then `sudo perf script -i /tmp/flip.data | bande-flip-report`. It prints the fitted refresh, swaps that missed their flip, gaps between flips in refreshes, and misses by time left before the flip. Nothing restarts. The simulator in `clock.rs`'s tests drives the same logic against a display with a commit cut-off in the gate.
 - **Wake-ups by hand:** sum `voluntary_ctxt_switches` over `/proc/<pid>/task/*/status` twice
   and divide by the interval; the threads' `comm` shows which one wakes. `bande-idle` counts the
   same. Leave out `nonvoluntary_ctxt_switches`: they are preemptions of a running thread, and

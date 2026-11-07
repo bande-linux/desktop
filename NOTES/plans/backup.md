@@ -75,10 +75,8 @@ Measured behaviours the design rests on:
   disk, restores one onto a mounted new root, keeping the new root's fstab, crypttab and boot files.
   `fix-first-run` calls it.
 
-## Stages
-1. Service and engine, tested on a VM with real USB unplug.
-2. Settings pane and alerts.
-3. Files.
-4. Recovery restore, btrfs snapshot source.
-5. Later: network location (restic's sftp and rest), erase a blank disk, a list of excluded folders,
-   hourly local btrfs snapshots of home while the disk is away.
+## Left to do
+Service, Settings, alerts, Files and the restore tool are built. Still open:
+- `fix-first-run` calls `bande-backup-restore` from Recovery and adds the package to the image.
+- A network location (restic's sftp and rest), erasing a blank disk, a list of excluded folders,
+  hourly local btrfs snapshots of home while the disk is away.

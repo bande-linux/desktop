@@ -460,7 +460,7 @@ impl Soak {
     }
 
     fn crashes(&mut self, cycle: u64) -> Result<(), Box<dyn Error>> {
-        if cycle % SETTINGS_CRASH_EVERY == 0 {
+        if cycle.is_multiple_of(SETTINGS_CRASH_EVERY) {
             self.crash_app(SETTINGS, Signal::ABORT)?;
         }
         if cycle % FILES_CRASH_EVERY == FILES_CRASH_EVERY - 1 {

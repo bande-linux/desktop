@@ -231,7 +231,18 @@ struct Imported {
     size: u64,
 }
 
-struct Export {
+enum Export {
+    OnDevice(DeviceExport),
+    Mapped(MappedExport),
+}
+
+struct DeviceExport {
+    imported: Imported,
+    offset: u64,
+    row_texels: u32,
+}
+
+struct MappedExport {
     fd: OwnedFd,
     mapping: *mut u8,
     length: usize,
@@ -239,7 +250,7 @@ struct Export {
     stride: usize,
 }
 
-impl Drop for Export {
+impl Drop for MappedExport {
     fn drop(&mut self) {
         let _ = unsafe { mm::munmap(self.mapping.cast(), self.length) };
     }
@@ -300,6 +311,8 @@ pub struct VulkanRenderer {
     push_descriptor: ash::khr::push_descriptor::Device,
     external_memory_fd: ash::khr::external_memory_fd::Device,
     queue: vk::Queue,
+    queue_family: u32,
+    output_on_device: bool,
     memory: vk::PhysicalDeviceMemoryProperties,
     info: DeviceInfo,
     reduced_effects: bool,
@@ -368,6 +381,7 @@ impl Program {
 struct Chosen {
     physical: vk::PhysicalDevice,
     family: u32,
+    output_on_device: bool,
     info: DeviceInfo,
 }
 
@@ -421,6 +435,11 @@ fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
                 Chosen {
                     physical,
                     family: u32::try_from(family).ok()?,
+                    output_on_device: matches!(
+                        properties.device_type,
+                        vk::PhysicalDeviceType::INTEGRATED_GPU
+                            | vk::PhysicalDeviceType::DISCRETE_GPU
+                    ),
                     info,
                 },
             ))
@@ -504,6 +523,8 @@ impl VulkanRenderer {
             push_descriptor: ash::khr::push_descriptor::Device::new(&instance, &device),
             external_memory_fd: ash::khr::external_memory_fd::Device::new(&instance, &device),
             queue: unsafe { device.get_device_queue(chosen.family, 0) },
+            queue_family: chosen.family,
+            output_on_device: chosen.output_on_device,
             memory: unsafe { instance.get_physical_device_memory_properties(chosen.physical) },
             reduced_effects: chosen.info.software,
             info: chosen.info,
@@ -1138,7 +1159,14 @@ impl VulkanRenderer {
 
     fn forget_target(&mut self, id: u64) {
         if let Some(removed) = self.targets.remove(&id) {
-            self.destroy_image(&removed.image);
+            self.destroy_target(&removed);
+        }
+    }
+
+    fn destroy_target(&self, target: &Target) {
+        self.destroy_image(&target.image);
+        if let Some(Export::OnDevice(export)) = &target.export {
+            self.destroy_imported(&export.imported);
         }
     }
 
@@ -1399,9 +1427,35 @@ impl VulkanRenderer {
         self.submit_and_wait()
     }
 
-    fn dmabuf_export(&self, dmabuf: &Dmabuf) -> Result<Export, RenderError> {
+    fn device_export(&self, dmabuf: &Dmabuf) -> Result<DeviceExport, RenderError> {
         let layout = import::single_plane_layout(dmabuf)?;
+        let imported = self.import_dmabuf_memory(layout.fd, vk::BufferUsageFlags::TRANSFER_DST)?;
+        if layout.end(dmabuf.size()) > imported.size {
+            self.destroy_imported(&imported);
+            return Err(RenderError::BufferOutOfBounds);
+        }
+        Ok(DeviceExport {
+            imported,
+            offset: u64::from(layout.offset),
+            row_texels: layout.stride / BYTES_PER_PIXEL as u32,
+        })
+    }
+
+    fn dmabuf_export(&self, dmabuf: &Dmabuf) -> Result<Export, RenderError> {
         target_format(dmabuf.format().code).ok_or(RenderError::UnsupportedFormat)?;
+        if self.output_on_device {
+            match self.device_export(dmabuf) {
+                Ok(export) => return Ok(Export::OnDevice(export)),
+                Err(error) => {
+                    tracing::warn!("copying frames on the CPU: {error}");
+                }
+            }
+        }
+        self.mapped_export(dmabuf).map(Export::Mapped)
+    }
+
+    fn mapped_export(&self, dmabuf: &Dmabuf) -> Result<MappedExport, RenderError> {
+        let layout = import::single_plane_layout(dmabuf)?;
         let fd = layout.fd.try_clone_to_owned()?;
         let length = usize::try_from(File::from(fd.try_clone()?).seek(SeekFrom::End(0))?)
             .map_err(|_| RenderError::BufferOutOfBounds)?;
@@ -1421,7 +1475,7 @@ impl VulkanRenderer {
             )
         }
         .map_err(std::io::Error::from)?;
-        Ok(Export {
+        Ok(MappedExport {
             fd,
             mapping: mapping.cast(),
             length,
@@ -1563,7 +1617,7 @@ impl Drop for VulkanRenderer {
             self.destroy_image(&texture.image);
         }
         for (_, target) in std::mem::take(&mut self.targets) {
-            self.destroy_image(&target.image);
+            self.destroy_target(&target);
         }
         for staging in std::mem::take(&mut self.staging) {
             self.destroy_staging(&staging);

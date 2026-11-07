@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use std::collections::HashMap;
 use std::fs;
 use std::process::{Command, Stdio};
 use std::thread::sleep;
@@ -19,7 +20,11 @@ fn a_made_up_language_needs_only_data_and_learned_words_reach_clients() {
     fs::create_dir_all(&text).unwrap();
     fs::write(hunspell.join("xq_XQ.aff"), "SET UTF-8\nTRY abdiklmnoruz\n").unwrap();
     fs::write(hunspell.join("xq_XQ.dic"), "2\nzorblak\nmindu\n").unwrap();
-    fs::write(text.join("xq"), "dictionary = xq_XQ\n").unwrap();
+    fs::write(
+        text.join("xq"),
+        "dictionary = xq_XQ\nquote-open = «\nautocorrect = true\n",
+    )
+    .unwrap();
     let mut service = Command::new(env!("CARGO_BIN_EXE_bande-spell"))
         .env("DBUS_SESSION_BUS_ADDRESS", address)
         .env("HOME", &root)
@@ -48,6 +53,9 @@ fn a_made_up_language_needs_only_data_and_learned_words_reach_clients() {
         }
     };
     assert_eq!(verdicts, [true, false]);
+    let (rules, _): (HashMap<String, String>, HashMap<String, String>) =
+        proxy.call("Rules", &()).unwrap();
+    assert_eq!(rules["quote-open"], "«");
     let changes = proxy.receive_signal("Changed").unwrap();
     let _: () = proxy.call("Learn", &("zorbalk",)).unwrap();
     assert!(changes.into_iter().next().is_some());

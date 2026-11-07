@@ -927,7 +927,8 @@ pub fn show(request: &PrintRequest) -> ExitCode {
     let pages_signals = Rc::clone(&signals);
     let pages = TextField::new(&L10N.tr("pages-all"), "", move |text| {
         push(&pages_signals, Signal::Pages(text.to_owned()));
-    });
+    })
+    .without_text_checking();
     let paper_popup = PopUpButton::new(
         &L10N.tr("paper-label"),
         &Paper::ALL

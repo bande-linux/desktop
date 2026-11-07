@@ -22,6 +22,7 @@ zbus.workspace = true
 
 [dev-dependencies]
 bande-compositor.workspace = true
+bande-config.workspace = true
 bande-test-bus.workspace = true
 bande-test-wayland.workspace = true
 smithay.workspace = true

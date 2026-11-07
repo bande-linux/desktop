@@ -46,16 +46,20 @@ impl Table {
         &self,
         cx: &Context,
         line: &Line,
+        index: usize,
         column: usize,
         lit: bool,
         widths: &[f32],
     ) -> TextKey {
         let cell = &line.cells[column];
+        let selected = self.selected.get(index).copied().unwrap_or(false);
         let color = match (lit, cell.tint, cell.label, cell.muted) {
             (true, _, _, _) => cx.palette.on_accent,
             (false, Some(tint), _, _) => tint,
             (false, None, true, _) => cx.palette.ink3,
+            (false, None, false, true) if cell.dimmed && !selected => cx.palette.ink3,
             (false, None, false, true) => cx.palette.ink2,
+            (false, None, false, false) if cell.dimmed => cx.palette.ink2,
             (false, None, false, false) => cx.palette.ink,
         };
         let indent = if column == 0 { self.indent(line) } else { 0.0 };
@@ -104,7 +108,7 @@ impl Table {
                 continue;
             };
             for column in 0..line.cells.len().min(self.columns.len()) {
-                let key = self.text_key(cx, line, column, lit, &widths);
+                let key = self.text_key(cx, line, index, column, lit, &widths);
                 if texts.contains_key(&key) {
                     continue;
                 }

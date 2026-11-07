@@ -1,0 +1,15 @@
+[Unit]
+Description=Finish encrypting the disk
+After=local-fs.target
+Before=greetd.service
+
+[Service]
+Type=exec
+ExecStartPre=/usr/libexec/bande-disk-encryption hand-to-login
+ExecStart=/usr/libexec/bande-disk-encryption resume
+OOMScoreAdjust=-1000
+Nice=19
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

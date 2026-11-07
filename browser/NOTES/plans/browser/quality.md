@@ -70,8 +70,7 @@ compositor and finds its heading and a link over AT-SPI.
 
 ## CI and verification
 
-- Builds and checks run on the mini. Heavy builds go under `gentle` with the 6 GB cap; Rust-only
-  dependencies keep that within reach.
+- Builds and checks go through the build queue (`build-run`), on a free build machine.
 - GitHub CI runs only for release tags (`web-vX.Y.Z` in the web repo, `browser-vX.Y.Z` here) and
   on dispatch.
 - The WPT, html5lib-tests and test262 runs and the fuzzers run on the mini; the tag CI also runs

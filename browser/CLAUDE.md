@@ -17,7 +17,7 @@
 
 ## Factory Verification
 - **No panics**: No `.unwrap()` or `.expect()` in production code. Untrusted input (HTML, CSS, JS, images, fonts, network data) never panics or allocates without a bound.
-- **Build first, test once**: each change only needs to compile (fmt and `cargo check`). The full gate (fmt, workspace clippy `-D warnings`, tests) runs once on `main` when a batch of work has merged, and `main` fixes whatever it finds then.
+- **Build first, test once**: each change only needs to compile (fmt and `cargo check`, through the build queue: `build-run <worktree> cargo ...`, on whichever build machine is free; `build-run --here` to stay on the mini, for a benchmark or a binary you run next). The full gate (fmt, workspace clippy `-D warnings`, tests) runs once on `main` when a batch of work has merged, and `main` fixes whatever it finds then.
 
 ## Workflow
 - Trunk-based: `main` always builds. Each milestone is a short branch from `main`, merged when it compiles and its gate passes. Never force-push.

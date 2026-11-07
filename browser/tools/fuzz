@@ -4,15 +4,17 @@ set -euo pipefail
 minutes=${1:-10}
 root=$(cd "$(dirname "$0")/.." && pwd)
 cache=${WEB_FUZZ:-${XDG_CACHE_HOME:-$HOME/.cache}/bande-web/fuzz}
-lock=${BUILD_LOCK:-$HOME/bande-linux/kbuild.lock}
-gentle=${GENTLE:-$HOME/bande-linux/bin/gentle}
+if [ -z "${BUILD_RUN_JOB:-}" ] && [ -x "$HOME/bande-linux/bin/build-run" ]; then
+    mkdir -p "$cache"
+    BUILD_EXTRA_DIRS=$cache BUILD_FETCH=$cache exec "$HOME/bande-linux/bin/build-run" "$root" tools/fuzz "$@"
+fi
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$root/target}/fuzz
 
 targets=()
 for manifest in "$root"/crates/*/fuzz/Cargo.toml; do
     [ -e "$manifest" ] || continue
     dir=$(dirname "$manifest")
-    (cd "$dir" && flock "$lock" "$gentle" cargo fuzz build --sanitizer none)
+    (cd "$dir" && cargo fuzz build --sanitizer none)
     for target in $(cd "$dir" && cargo fuzz list); do
         targets+=("$dir:$target")
     done
@@ -32,7 +34,7 @@ for entry in "${targets[@]}"; do
     store=$cache/$crate/$target
     mkdir -p "$store/corpus" "$store/artifacts"
     echo "fuzzing $crate/$target for ${seconds}s"
-    if ! (cd "$dir" && "$gentle" cargo fuzz run --sanitizer none "$target" "$store/corpus" -- \
+    if ! (cd "$dir" && cargo fuzz run --sanitizer none "$target" "$store/corpus" -- \
         -max_total_time="$seconds" -artifact_prefix="$store/artifacts/" -print_final_stats=1); then
         failed+=("$crate/$target")
     fi

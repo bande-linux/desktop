@@ -780,6 +780,24 @@ what the one before could not save. What happens for each:
   `SIGQUIT` first and wait up to 8 s and 5 s, so a hang leaves a stack too. Settings ▸ General ▸ About ▸ Crash Reports
   lists them, with Copy and Delete. Symbols are in [packaging](packaging.md).
 
+## Backups
+
+Time Machine's behaviour on a Debian engine; the choice is in `NOTES/plans/backup.md` while that is open.
+`crates/services/backup` builds three programs. `bande-backupd` is a system service
+(`org.bande.Backup`), root because a whole-system restore needs every file. It runs `restic` as a child
+and talks to it through exit codes and `--json`. A timer that exists once a disk is chosen, a udev rule
+for a new disk or mains power, and D-Bus start it; it exits after a minute with nothing to do.
+`bande-backup-alerts` is a session service that turns the service's `problem` into one notification.
+`bande-backup-restore` is for the recovery environment, without a bus.
+
+A repository is `BandeBackups/<machine-id>` on any filesystem, on any drive but the startup one. Two restic
+keys open it: a random one in `/var/lib/bande-backup/key` that runs the backups, and the password the person
+chose, for restoring when the machine is gone. The disk is mounted under `/run/bande-backup` only during work.
+
+Settings ▸ Backup holds the choice of disk and the status. Files browses `restic mount` at
+`/run/bande-backup-browse/versions/<time>`, read-only, with each file's old owner and mode enforced by
+the kernel, and restores by copying as the person. Nothing privileged runs on their behalf.
+
 ## Updates
 
 Packages come from Bande's signed APT repository ([packaging](packaging.md)). Settings ▸

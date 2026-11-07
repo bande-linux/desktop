@@ -229,13 +229,14 @@ pub(crate) fn links(text: &str) -> Vec<Range<usize>> {
             .trim_end()
             .trim_start_matches(['(', '<', '[', '"'])
             .trim_end_matches(['.', ',', ';', ':', '!', '?', ')', '>', ']', '"']);
-        let is_web = body.starts_with("http://")
-            || body.starts_with("https://")
-            || body.starts_with("www.");
+        let is_web =
+            body.starts_with("http://") || body.starts_with("https://") || body.starts_with("www.");
         let is_mail = body.split_once('@').is_some_and(|(name, host)| {
             !name.is_empty() && host.contains('.') && !host.ends_with('.')
         });
-        if (is_web || is_mail) && let Some(at) = chunk.find(body) {
+        if (is_web || is_mail)
+            && let Some(at) = chunk.find(body)
+        {
             found.push(start + at..start + at + body.len());
         }
     }

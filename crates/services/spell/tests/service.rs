@@ -20,7 +20,11 @@ fn a_made_up_language_needs_only_data_and_learned_words_reach_clients() {
     fs::create_dir_all(&text).unwrap();
     fs::write(hunspell.join("xq_XQ.aff"), "SET UTF-8\nTRY abdiklmnoruz\n").unwrap();
     fs::write(hunspell.join("xq_XQ.dic"), "2\nzorblak\nmindu\n").unwrap();
-    fs::write(text.join("xq"), "dictionary = xq_XQ\nquote-open = «\nautocorrect = true\n").unwrap();
+    fs::write(
+        text.join("xq"),
+        "dictionary = xq_XQ\nquote-open = «\nautocorrect = true\n",
+    )
+    .unwrap();
     let mut service = Command::new(env!("CARGO_BIN_EXE_bande-spell"))
         .env("DBUS_SESSION_BUS_ADDRESS", address)
         .env("HOME", &root)

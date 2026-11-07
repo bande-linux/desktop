@@ -84,9 +84,10 @@ fn utf16(bytes: &[u8]) -> Option<String> {
         [0xfe, 0xff] => false,
         _ => return None,
     };
-    let units = bytes.get(2..)?.chunks_exact(2).map(|pair| match little {
-        true => u16::from_le_bytes([pair[0], pair[1]]),
-        false => u16::from_be_bytes([pair[0], pair[1]]),
+    let (pairs, _) = bytes.get(2..)?.as_chunks::<2>();
+    let units = pairs.iter().map(|pair| match little {
+        true => u16::from_le_bytes(*pair),
+        false => u16::from_be_bytes(*pair),
     });
     Some(
         char::decode_utf16(units)

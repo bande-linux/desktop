@@ -2,7 +2,7 @@ use std::os::fd::BorrowedFd;
 use std::time::Instant;
 
 use crate::L10N;
-use crate::rail::{bar_width, edge_band, owns_node, surface_size};
+use crate::rail::{BAR_MARGIN, bar_zone, edge_band, owns_node, surface_size};
 use crate::taskbar_client::anchor;
 use accesskit::{Node, NodeId, Role as AccessRole, TreeInfo, TreeUpdate};
 use bande_config::BarEdge;
@@ -25,7 +25,7 @@ pub fn bar_role(edge: BarEdge, icon_size: f32) -> (Role, (u32, u32)) {
         Role::Layer(LayerOptions {
             layer: LayerKind::Top,
             anchor: anchor(edge),
-            exclusive_zone: bar_width(icon_size).round() as i32,
+            exclusive_zone: bar_zone(icon_size).round() as i32,
             keyboard: KeyboardFocus::OnDemand,
             namespace: BAR_NAMESPACE.to_owned(),
         }),
@@ -104,7 +104,7 @@ impl App for BarClient {
         if revealed < 1.0 {
             let view = self.status.view_mut();
             let edge = view.edge();
-            let hidden = ((view.width() + HIDDEN_SHADOW) * (1.0 - revealed)).round();
+            let hidden = ((view.width() + BAR_MARGIN + HIDDEN_SHADOW) * (1.0 - revealed)).round();
             let offset = match edge {
                 BarEdge::Left => Point::new(-hidden, 0.0),
                 BarEdge::Right => Point::new(hidden, 0.0),

@@ -2,15 +2,17 @@ use std::error::Error;
 use std::io;
 use std::os::fd::{AsFd, AsRawFd};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::allocator::dumb::DumbAllocator;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::gbm::GbmDevice;
-use smithay::backend::drm::compositor::{DrmCompositor, FrameFlags, PrimaryPlaneElement};
+use smithay::backend::drm::compositor::{
+    DrmCompositor, FrameError, FrameFlags, PrimaryPlaneElement,
+};
 use smithay::backend::drm::{
-    DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmEventMetadata, DrmEventTime, DrmNode,
+    DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmError, DrmEventMetadata, DrmEventTime, DrmNode,
 };
 use smithay::backend::libinput::{LibinputInputBackend, LibinputSessionInterface};
 use smithay::backend::renderer::ImportDma;
@@ -55,6 +57,10 @@ struct Head {
     colour: Colour,
     dim: f64,
     tone: Option<(f64, f64)>,
+    lost_at: Option<Instant>,
+    relink_wanted: bool,
+    flip_pending: bool,
+    refused: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -87,25 +93,29 @@ pub struct DrmNotifiers {
 pub struct HeadChanges {
     pub connected: Vec<OutputConfig>,
     pub disconnected: Vec<String>,
-    pub relinked: Vec<String>,
+    pub refitted: Vec<OutputConfig>,
+    pub returned: Vec<String>,
+    pub look_again_in: Option<Duration>,
 }
 
 const LINK_STATUS: &[u8] = b"link-status";
 const LINK_GOOD: u64 = 0;
 const LINK_BAD: u64 = 1;
+const DISPLAY_GRACE: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Rescanned {
     Kept,
-    Relink,
+    Lost(Duration),
     Gone,
 }
 
-fn rescanned(present: bool, another_display: bool, link: Option<u64>) -> Rescanned {
-    match (present && !another_display, link) {
-        (false, _) => Rescanned::Gone,
-        (true, Some(LINK_BAD)) => Rescanned::Relink,
-        (true, _) => Rescanned::Kept,
+fn rescanned(present: bool, another_display: bool, lost_for: Duration) -> Rescanned {
+    match (present, another_display) {
+        (true, false) => Rescanned::Kept,
+        (true, true) => Rescanned::Gone,
+        (false, _) if lost_for >= DISPLAY_GRACE => Rescanned::Gone,
+        (false, _) => Rescanned::Lost(DISPLAY_GRACE - lost_for),
     }
 }
 
@@ -118,6 +128,7 @@ fn link_status(device: &DrmDevice, handle: connector::Handle) -> Option<(propert
 }
 
 fn relink(device: &DrmDevice, head: &mut Head) {
+    head.relink_wanted = false;
     if let Some((property, _)) = link_status(device, head.connector) {
         let mut request = AtomicModeReq::new();
         request.add_property(
@@ -221,6 +232,81 @@ fn head_config(device: &DrmDevice, info: &connector::Info, modes: &[Mode]) -> Ou
     }
 }
 
+fn modes_in_trial_order(modes: &[Mode], wanted: Mode) -> Vec<Mode> {
+    let same_size = |mode: &&Mode| mode.size() == wanted.size();
+    modes
+        .iter()
+        .filter(|mode| **mode == wanted)
+        .chain(
+            modes
+                .iter()
+                .filter(same_size)
+                .filter(|mode| **mode != wanted),
+        )
+        .chain(modes.iter().filter(|mode| mode.size() != wanted.size()))
+        .copied()
+        .collect()
+}
+
+fn first_working_mode(head: &mut Head, modes: &[Mode], wanted: Mode) -> Option<Mode> {
+    modes_in_trial_order(modes, wanted)
+        .into_iter()
+        .find(|mode| head.compositor.use_mode(*mode).is_ok())
+}
+
+fn adopt_modes(head: &mut Head, modes: Vec<Mode>) {
+    head.config.modes = modes.iter().map(output_mode).collect();
+    head.modes = modes;
+    head.refused = false;
+}
+
+fn wait_for_replug(head: &mut Head) {
+    tracing::warn!(
+        "{} accepts none of its modes; waiting for it to change",
+        head.config.name
+    );
+    head.refused = true;
+}
+
+fn settle_modes(head: &mut Head, modes: Vec<Mode>, changes: &mut HeadChanges) {
+    let wanted = head.compositor.pending_mode();
+    if first_working_mode(head, &modes, wanted).is_none() {
+        wait_for_replug(head);
+        return;
+    }
+    adopt_modes(head, modes);
+    changes.refitted.push(head.config.clone());
+}
+
+fn refuse_mode(head: &mut Head, refused: Mode, compositor: &mut Compositor) {
+    tracing::warn!(
+        "{} refused {}x{}; trying its other modes",
+        head.config.name,
+        refused.size().0,
+        refused.size().1
+    );
+    let modes: Vec<Mode> = head
+        .modes
+        .iter()
+        .filter(|mode| **mode != refused)
+        .copied()
+        .collect();
+    if first_working_mode(head, &modes, refused).is_none() {
+        wait_for_replug(head);
+        return;
+    }
+    adopt_modes(head, modes);
+    compositor.refit_output(head.config.clone());
+}
+
+fn after_refusal(head: &Head) -> Submission {
+    if head.refused {
+        Submission::Paused
+    } else {
+        Submission::Unchanged
+    }
+}
+
 fn cards() -> Result<Vec<PathBuf>, DrmBackendError> {
     let mut cards: Vec<PathBuf> = std::fs::read_dir("/dev/dri")?
         .filter_map(Result::ok)
@@ -261,7 +347,7 @@ fn connected(device: &DrmDevice) -> Result<Vec<connector::Info>, DrmBackendError
     Ok(resources
         .connectors()
         .iter()
-        .filter_map(|&handle| device.get_connector(handle, false).ok())
+        .filter_map(|&handle| device.get_connector(handle, true).ok())
         .filter(|info| info.state() == connector::State::Connected && !info.modes().is_empty())
         .collect())
 }
@@ -429,36 +515,50 @@ impl DrmBackend {
             colour: Colour::Unknown,
             dim: 1.0,
             tone: None,
+            lost_at: None,
+            relink_wanted: false,
+            flip_pending: false,
+            refused: false,
         }))
     }
 
     pub fn rescan(&mut self) -> Result<HeadChanges, DrmBackendError> {
-        let present = connected(&self.device)?;
         let mut changes = HeadChanges::default();
+        if !self.session.is_active() {
+            return Ok(changes);
+        }
+        let present = connected(&self.device)?;
         let mut index = 0;
         while index < self.heads.len() {
             let head = &self.heads[index];
             let info = present.iter().find(|info| info.handle() == head.connector);
+            let lost_for = head.lost_at.map_or(Duration::ZERO, |at| at.elapsed());
             let decision = rescanned(
                 info.is_some(),
                 info.is_some_and(|info| {
                     shows_another_display(&head.config, edid_of(&self.device, info.handle()))
                 }),
-                link_status(&self.device, head.connector).map(|(_, value)| value),
+                lost_for,
             );
             match decision {
                 Rescanned::Kept => {
+                    let link = link_status(&self.device, head.connector).map(|(_, value)| value);
+                    let modes = info.map(sorted_modes).unwrap_or_default();
+                    let head = &mut self.heads[index];
+                    head.relink_wanted |= link == Some(LINK_BAD);
+                    if head.lost_at.take().is_some() || head.relink_wanted {
+                        tracing::info!("{} came back", head.config.name);
+                        changes.returned.push(head.config.name.clone());
+                    }
+                    if modes != head.modes || head.refused {
+                        settle_modes(head, modes, &mut changes);
+                    }
                     index += 1;
                     continue;
                 }
-                Rescanned::Relink => {
-                    tracing::info!(
-                        "the link to {} broke; setting its mode again",
-                        head.config.name
-                    );
-                    let head = &mut self.heads[index];
-                    relink(&self.device, head);
-                    changes.relinked.push(head.config.name.clone());
+                Rescanned::Lost(left) => {
+                    self.heads[index].lost_at.get_or_insert_with(Instant::now);
+                    changes.look_again_in = Some(left);
                     index += 1;
                     continue;
                 }
@@ -517,11 +617,29 @@ impl DrmBackend {
         Ok(true)
     }
 
-    pub fn refresh(&self, name: &str) -> Option<Duration> {
+    pub fn refuse_output_mode(
+        &mut self,
+        name: &str,
+        refused: OutputMode,
+        compositor: &mut Compositor,
+    ) {
+        let Some(head) = self.head(name) else {
+            return;
+        };
+        if let Some(mode) = head
+            .modes
+            .iter()
+            .find(|mode| output_mode(mode) == refused)
+            .copied()
+        {
+            refuse_mode(head, mode, compositor);
+        }
+    }
+
+    pub fn relink_wanted(&self, name: &str) -> bool {
         self.heads
             .iter()
-            .find(|head| head.config.name == name)
-            .map(|head| refresh_of(&head.compositor.pending_mode()))
+            .any(|head| head.config.name == name && head.relink_wanted)
     }
 
     pub fn device_fd(&self) -> DrmDeviceFd {
@@ -573,6 +691,7 @@ impl DrmBackend {
         else {
             return Ok(None);
         };
+        head.flip_pending = false;
         head.compositor.frame_submitted()?;
         if let Some(kelvin) = self.kelvin {
             tint(&self.device, head, kelvin);
@@ -630,6 +749,7 @@ impl DrmBackend {
             }
             head.tone = None;
             head.dark = false;
+            head.flip_pending = false;
         }
         if let Some(libinput) = self.libinput.as_mut() {
             libinput
@@ -785,6 +905,13 @@ impl FrameOutput for DrmBackend {
         Ok(true)
     }
 
+    fn refresh(&self, output: &str) -> Option<Duration> {
+        self.heads
+            .iter()
+            .find(|head| head.config.name == output)
+            .map(|head| refresh_of(&head.compositor.pending_mode()))
+    }
+
     fn flip_missed(&mut self, output: &str) {
         let Some(head) = self
             .heads
@@ -793,6 +920,7 @@ impl FrameOutput for DrmBackend {
         else {
             return;
         };
+        head.flip_pending = false;
         if let Err(error) = head.compositor.frame_submitted() {
             tracing::warn!("cannot end the missed flip on {output}: {error}");
         }
@@ -805,6 +933,7 @@ impl FrameOutput for DrmBackend {
                 tracing::warn!("cannot reset {}: {error}", head.config.name);
             }
             head.tone = None;
+            head.flip_pending = false;
         }
         Ok(())
     }
@@ -843,22 +972,43 @@ impl DrmBackend {
             .iter()
             .position(|head| head.config.name == output)
         else {
-            return Ok(Submission::Unchanged);
+            return Ok(Submission::Paused);
         };
         let head = &mut self.heads[index];
+        if head.lost_at.is_some() || head.refused {
+            return Ok(Submission::Paused);
+        }
         if !compositor.output_powered(output) {
             if !head.dark {
                 head.compositor.clear()?;
                 head.dark = true;
+                head.flip_pending = false;
             }
             return Ok(Submission::Paused);
         }
         if head.dark
             && link_status(&self.device, head.connector).map(|(_, value)| value) == Some(LINK_BAD)
         {
-            relink(&self.device, head);
+            head.relink_wanted = true;
         }
         head.dark = false;
+        if head.relink_wanted {
+            if head.flip_pending {
+                return Ok(Submission::AwaitingFlip);
+            }
+            relink(&self.device, head);
+        }
+        if output_mode(&head.compositor.pending_mode()) != settings.mode
+            && let Some(mode) = head
+                .modes
+                .iter()
+                .find(|mode| output_mode(mode) == settings.mode)
+                .copied()
+            && head.compositor.use_mode(mode).is_err()
+        {
+            refuse_mode(head, mode, compositor);
+            return Ok(after_refusal(head));
+        }
         head.compositor
             .set_output_mode_source(OutputModeSource::Static {
                 size: settings.mode.size,
@@ -882,7 +1032,17 @@ impl DrmBackend {
         if empty {
             return Ok(Submission::Unchanged);
         }
-        head.compositor.queue_frame(())?;
-        Ok(Submission::AwaitingFlip)
+        match head.compositor.queue_frame(()) {
+            Ok(()) => {
+                head.flip_pending = true;
+                Ok(Submission::AwaitingFlip)
+            }
+            Err(FrameError::DrmError(DrmError::TestFailed(_))) => {
+                let refused = head.compositor.pending_mode();
+                refuse_mode(head, refused, compositor);
+                Ok(after_refusal(head))
+            }
+            Err(error) => Err(error.into()),
+        }
     }
 }

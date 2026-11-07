@@ -35,7 +35,7 @@ pub fn inspect(path: &Path) -> Option<Inspected> {
         StatxFlags::BASIC_STATS | StatxFlags::MNT_ID,
     )
     .ok()?;
-    let kind = FileType::from_raw_mode(u32::from(stat.stx_mode).into());
+    let kind = FileType::from_raw_mode(u32::from(stat.stx_mode));
     Some(Inspected {
         folder: kind == FileType::Directory,
         regular: kind == FileType::RegularFile,

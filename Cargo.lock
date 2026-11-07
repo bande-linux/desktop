@@ -409,7 +409,6 @@ dependencies = [
  "bande-app-menu",
  "bande-bus",
  "bande-compositor",
- "bande-config",
  "bande-inbox",
  "bande-log",
  "bande-test-bus",
@@ -418,7 +417,6 @@ dependencies = [
  "bande-xdg",
  "libc",
  "rustix 1.1.6",
- "smithay",
  "tracing",
  "zbus",
 ]
@@ -702,8 +700,6 @@ dependencies = [
  "bande-quick-look",
  "bande-search",
  "bande-sound",
- "bande-test-bus",
- "bande-test-wayland",
  "bande-thumbnails",
  "bande-toolkit",
  "bande-volumes",
@@ -877,6 +873,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-media"
+version = "0.1.7"
+dependencies = [
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bande-media-view"
+version = "0.1.7"
+dependencies = [
+ "accesskit",
+ "bande-content",
+ "bande-l10n",
+ "bande-media",
+ "bande-toolkit",
+ "tracing",
+]
+
+[[package]]
 name = "bande-network"
 version = "0.1.7"
 dependencies = [
@@ -950,10 +967,8 @@ dependencies = [
  "bande-log",
  "bande-notify",
  "bande-sound",
- "bande-test-bus",
  "bande-xdg",
  "rustix 1.1.6",
- "tempfile",
  "tracing",
  "wayland-client",
  "wayland-protocols",
@@ -989,6 +1004,7 @@ dependencies = [
  "bande-fs",
  "bande-inbox",
  "bande-l10n",
+ "bande-media-view",
  "bande-toolkit",
  "bande-xdg",
  "parley",
@@ -1276,13 +1292,11 @@ name = "bande-toolkit"
 version = "0.1.7"
 dependencies = [
  "accesskit",
- "bande-compositor",
  "bande-graphics",
  "bande-test-bus",
  "bande-test-wayland",
  "bande-toolkit-platform",
  "bande-widgets",
- "smithay",
  "zbus",
 ]
 

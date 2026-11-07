@@ -31,8 +31,6 @@ zbus.workspace = true
 
 [dev-dependencies]
 rustix = { workspace = true, features = ["process"] }
-bande-test-bus.workspace = true
-bande-test-wayland.workspace = true
 tempfile.workspace = true
 
 [package.metadata.deb]

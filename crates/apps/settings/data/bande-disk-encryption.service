@@ -1,0 +1,13 @@
+[Unit]
+Description=Finish encrypting the disk
+ConditionPathExists=/dev/mapper/bande-root
+
+[Service]
+Type=exec
+ExecStart=/usr/libexec/bande-disk-encryption resume
+OOMScoreAdjust=-1000
+Nice=19
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

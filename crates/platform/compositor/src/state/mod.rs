@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use std::io;
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -54,6 +55,7 @@ use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::session::{LockScreen, SessionClient, SessionRole, Summoned};
 use crate::tile::{Preview, SnapDrag};
 use crate::window::Window;
+use smithay::reexports::wayland_protocols::wp::text_input::zv3::server::zwp_text_input_v3::ZwpTextInputV3;
 
 mod compose;
 mod focus;
@@ -79,6 +81,10 @@ pub struct State {
     pub(crate) display_handle: DisplayHandle,
     pub(crate) globals: Globals,
     pub(crate) blockers: smithay::reexports::calloop::LoopHandle<'static, State>,
+    pub(crate) consent_file: PathBuf,
+    pub(crate) consent_watch: Option<smithay::reexports::calloop::RegistrationToken>,
+    pub(crate) consenting: Vec<(Client, crate::trust::Access)>,
+    pub(crate) secret_text_inputs: Vec<ZwpTextInputV3>,
     pub(crate) screens: Vec<Screen>,
     pub(crate) departed: Vec<crate::displays::Departed>,
     pub(crate) display_config: bande_config::Config,
@@ -225,6 +231,10 @@ impl Compositor {
             display_handle: handle.clone(),
             globals,
             blockers: fences.handle(),
+            consent_file: crate::trust::default_consent_file(),
+            consent_watch: None,
+            consenting: Vec::new(),
+            secret_text_inputs: Vec::new(),
             screens: vec![screen],
             departed: Vec::new(),
             display_config: bande_config::Config::default(),
@@ -339,6 +349,7 @@ impl Compositor {
             })
             .map_err(|error| io::Error::other(error.error))?;
         state.force_quit.take_actions(actions);
+        state.watch_consents();
         Ok(Self {
             display,
             fences,
@@ -351,11 +362,20 @@ impl Compositor {
     }
 
     pub fn insert_client(&mut self, stream: UnixStream) -> io::Result<Client> {
+        let process = crate::force_quit::Process::of_peer(&stream);
         let state = ClientState {
-            process: crate::force_quit::Process::of_peer(&stream),
+            claimant: process
+                .as_ref()
+                .and_then(|process| crate::trust::verified_program(process.pid())),
+            process,
             ..ClientState::default()
         };
         self.display.handle().insert_client(stream, Arc::new(state))
+    }
+
+    pub fn set_consent_file(&mut self, path: PathBuf) {
+        self.state.consent_file = path;
+        self.state.watch_consents();
     }
 
     pub(crate) fn display_handle(&self) -> DisplayHandle {
@@ -526,6 +546,8 @@ impl Compositor {
 pub(crate) struct ClientState {
     pub(crate) compositor_state: CompositorClientState,
     pub(crate) role: Option<SessionRole>,
+    pub(crate) claimant: Option<crate::trust::Claimant>,
+    pub(crate) sandboxed: bool,
     pub(crate) departed: AtomicBool,
     pub(crate) process: Option<crate::force_quit::Process>,
 }

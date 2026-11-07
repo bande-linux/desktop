@@ -1,0 +1,158 @@
+#!/bin/sh
+set -eu
+
+mapper=bande-root
+provisional=bande-provisional
+token_id=0
+work=/run/bande-disk-encryption
+progress=$work/progress
+stash=$work/unlocked-with
+
+device() {
+    cryptsetup status "$mapper" 2>/dev/null | sed -n 's/^ *device: *//p'
+}
+
+reencrypt_pending() {
+    cryptsetup luksDump "$1" | grep -q 'online-reencrypt'
+}
+
+token() {
+    cryptsetup token export --token-id "$token_id" "$1" 2>/dev/null || true
+}
+
+volume_digests() {
+    cryptsetup luksDump --dump-json-metadata "$1" | grep -o '"digest":"[^"]*"'
+}
+
+rewrite_happened() {
+    known=$(token "$1")
+    volume_digests "$1" | while IFS= read -r digest; do
+        case $known in *"$digest"*) ;; *) echo new ;; esac
+    done | grep -q new
+}
+
+finish_rewrite() {
+    ! rewrite_happened "$1" || cryptsetup token remove --token-id "$token_id" "$1"
+}
+
+status() {
+    disk=$(device)
+    if [ -z "$disk" ]; then
+        echo none
+    elif reencrypt_pending "$disk"; then
+        done=$(sed -n 's/.*"device_bytes":"\([0-9]*\)".*/\1/p' "$progress" 2>/dev/null | tail -n1)
+        size=$(sed -n 's/.*"device_size":"\([0-9]*\)".*/\1/p' "$progress" 2>/dev/null | tail -n1)
+        if [ -n "${done:-}" ] && [ -n "${size:-}" ] && [ "$size" -gt 0 ]; then
+            echo "encrypting $((done * 100 / size))"
+        else
+            echo "encrypting 0"
+        fi
+    elif token "$disk" | grep -q "\"$provisional\""; then
+        echo off
+    else
+        echo on
+    fi
+}
+
+new_recovery_key() {
+    head -c 20 /dev/urandom | basenc --base32 | tr -d '=' | cut -c1-30 | sed 's/.\{5\}/&-/g; s/-$//'
+}
+
+opens() {
+    cryptsetup open --test-passphrase --key-file "$2" "$1" 2>/dev/null
+}
+
+active_slots() {
+    cryptsetup luksDump "$1" | sed -n 's/^  \([0-9]*\): luks2.*/\1/p'
+}
+
+opens_slot() {
+    cryptsetup open --test-passphrase --key-slot "$2" --key-file "$3" "$1" 2>/dev/null
+}
+
+set_passphrase() {
+    disk=$(device)
+    [ -n "$disk" ] || { echo "no encrypted root" >&2; exit 1; }
+    token "$disk" | grep -q "\"$provisional\"" || { echo "the disk password is already set" >&2; exit 1; }
+    token "$disk" | grep -q '"reencrypt": *true' && rewrite=yes || rewrite=no
+
+    install -d -m 700 "$work"
+    old=$work/provisional
+    new=$work/passphrase
+    recovery=$work/recovery
+    trap 'rm -f "$old" "$new" "$recovery"' EXIT
+    umask 077
+    IFS= read -r passphrase
+    [ -n "$passphrase" ] || { echo "an empty password" >&2; exit 1; }
+    printf %s "$passphrase" >"$new"
+    printf %s "$provisional" >"$old"
+    key=$(new_recovery_key)
+    printf %s "$key" >"$recovery"
+
+    if ! opens "$disk" "$new"; then
+        cryptsetup luksAddKey -q --pbkdf argon2id --key-file "$old" "$disk" "$new"
+    fi
+    for slot in $(active_slots "$disk"); do
+        if ! opens_slot "$disk" "$slot" "$new"; then
+            cryptsetup luksKillSlot -q --key-file "$new" "$disk" "$slot"
+        fi
+    done
+    cryptsetup luksAddKey -q --pbkdf argon2id --key-file "$new" "$disk" "$recovery"
+
+    if [ "$rewrite" = yes ]; then
+        printf '{"type":"%s","keyslots":[],"reencrypt":true,%s}' "$provisional" "$(volume_digests "$disk" | head -n1)" |
+            cryptsetup token import --token-id "$token_id" --token-replace "$disk"
+        for slot in $(active_slots "$disk"); do
+            if opens_slot "$disk" "$slot" "$new"; then
+                printf '%s\n' "$passphrase"
+            else
+                printf '%s\n' "$key"
+            fi
+        done | cryptsetup reencrypt --init-only --batch-mode --pbkdf argon2id "$disk"
+        cp "$new" "$stash"
+        systemctl start --no-block bande-disk-encryption.service
+    else
+        cryptsetup token remove --token-id "$token_id" "$disk"
+    fi
+    echo "$key"
+}
+
+resume() {
+    disk=$(device)
+    [ -n "$disk" ] || exit 0
+    if ! reencrypt_pending "$disk"; then
+        ! token "$disk" | grep -q "\"$provisional\"" || finish_rewrite "$disk"
+        exit 0
+    fi
+    install -d -m 700 "$work"
+    cryptsetup reencrypt --resume-only --key-file "$stash" --active-name "$mapper" --batch-mode \
+            --progress-json --progress-frequency 5 "$disk" >"$progress"
+    rm -f "$progress" "$stash"
+    finish_rewrite "$disk"
+}
+
+change_passphrase() {
+    disk=$(device)
+    [ -n "$disk" ] || exit 0
+    install -d -m 700 "$work"
+    umask 077
+    current=$work/current
+    replacement=$work/replacement
+    trap 'rm -f "$current" "$replacement"' EXIT
+    IFS= read -r old
+    IFS= read -r new
+    printf %s "$old" >"$current"
+    printf %s "$new" >"$replacement"
+    cryptsetup luksChangeKey -q --pbkdf argon2id --key-file "$current" "$disk" "$replacement"
+}
+
+case ${1:-} in
+status) status ;;
+set-passphrase) set_passphrase ;;
+change-passphrase) change_passphrase ;;
+resume) resume ;;
+*)
+    echo "usage: bande-disk-encryption status|set-passphrase|change-passphrase|resume" >&2
+    exit 2
+    ;;
+esac

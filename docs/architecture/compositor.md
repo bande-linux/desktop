@@ -303,6 +303,35 @@ when they reach the screen is Bande's own.
   and restarts them (see [behaviour](behaviour.md)); `bande-compositor --greeter` runs only
   the greeter ([session](session.md#display-manager-and-greeter)).
 
+## Who may do what
+
+A client is a **session client** (started on a socket pair with a role: `Shell`, `LockScreen`,
+`ClipboardDaemon`), **sandboxed** (arrived through a `wp_security_context_v1` listener, named by its
+app id) or a **program** (`/proc/<pid>/exe`, believed only if it sits under `/usr`, is root-owned and
+not writable by others, is the same inode in the compositor's mount namespace, and is no
+interpreter). Anything else cannot be granted. Sandboxed clients never see layer shell, output
+management, output power, the idle notifier or the security context manager.
+
+Reading keys (`zwp_input_method_v2`) and typing (`zwp_virtual_keyboard_v1`) need the person's consent,
+as Input Monitoring on macOS. `/var/lib/bande/consent/<uid>` lists it, one `read-keys|type-keys
+program|sandboxed <name>` a line; only `bande-consent` writes it, through polkit with the password
+each time, so no program can grant itself. Without consent `get_input_method` answers `unavailable`
+and `create_virtual_keyboard` the protocol's `unauthorized`. The first refusal records the identity
+in `$XDG_STATE_HOME/bande/consent-asked` and sends a notification that opens Privacy & Security; there
+the person turns it on, effective at the program's next start. Turning it off disconnects the program
+at once (the compositor follows the directory with inotify).
+
+A consented input method gets keys only while a text field is active and not one with the `password`
+or `pin` purpose: otherwise the compositor drops its grab before delivering the key, and conforming
+input methods grab again on the next `activate`. Toolkit password fields never enable text input.
+
+While locked: keyboard grabs are dropped, virtual keyboards reach nothing, input methods cannot
+commit text, and their candidate popups are not shown.
+
+This is a real boundary for sandboxed clients. For an unsandboxed program running as the same user
+it only raises the bar: such a program can change the person's shell startup files and be inside the
+next session.
+
 ## Wayland protocol matrix
 
 Priority: **P0** is needed for a daily-driver desktop, **P1** for full parity, **P2** later.
@@ -319,14 +348,15 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wlr-layer-shell-unstable-v1` | Taskbar, notifications, overlays | P0 | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | P0 | implemented |
 | `wp_presentation` | Presentation timing, VSync | P0 | implemented |
-| `ext-session-lock-v1` | Screen locking | P0 | implemented |
+| `ext-session-lock-v1` | Screen locking | P0 | implemented, `bande-lock` only |
 | `wl_data_device_manager` | Clipboard and drag and drop | P0 | implemented |
 | `zwp_primary_selection_v1` | Middle-click paste | P0 | implemented |
 | `ext-data-control-v1` | Clipboard daemon access | P0 | implemented, trusted connection only |
 | `ext-idle-notify-v1` / `idle-inhibit-v1` | Idle transitions, video playback | P0 | implemented |
 | `xdg_activation_v1` | Focus-stealing prevention | P0 | implemented |
 | `ext-foreign-toplevel-list-v1` | Window list for the taskbar | P0 | implemented, shell clients only |
-| `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented, open to every client outside the lock screen |
+| `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented; reading and typing keys need consent (see below) |
+| `wp_security_context_v1` | Names sandboxed clients; each is refused every privileged protocol below | P1 | implemented, not offered to sandboxed clients |
 | `zxdg_decoration_manager_v1` | Decoration negotiation (server-side unless the client asks for client-side) | P1 | implemented |
 | `org_kde_kwin_appmenu_manager` | Where a third-party window's dbusmenu lives, for the menu button in our title bar | P1 | implemented |
 | `gtk_shell1` / `gtk_surface1` | Version 1 with only the `global_menu_bar` capability, as Mutter offers it: a GTK 3 or GTK 4 `GtkApplicationWindow` stops drawing its menu bar and gives its `org.gtk.Menus` menu bar, `org.gtk.Actions` paths and unique bus name with `set_dbus_properties`, which becomes the window's menu address; windows without a menu bar send none and are unchanged. Version 1 keeps GTK's own edge constraints and title-bar gestures | P1 | implemented |

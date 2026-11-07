@@ -241,6 +241,10 @@ impl Context {
         self.clipboard = Some(ClipboardRequest::Copy(text.to_owned()));
     }
 
+    pub fn request_paste(&mut self) {
+        self.clipboard = Some(ClipboardRequest::Paste);
+    }
+
     pub fn start_text_drag(&mut self, text: String) {
         self.drag = Some(text);
     }

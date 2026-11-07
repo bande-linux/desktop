@@ -42,6 +42,5 @@ pub use trash::{Trash, TrashDir, TrashItem};
 pub use undo::{Action, History, Step};
 pub use watch::{FolderChanges, FolderWatch};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-fs.ftl");
-
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-fs")));

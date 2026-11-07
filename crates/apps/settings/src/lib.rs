@@ -82,7 +82,5 @@ pub use time::{
 pub use view::SettingsView;
 pub use widgets::{bucket_levels, sidebar_width};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-settings.ftl");
-
-pub const TRANSLATIONS: [(&str, &str); 1] = [("en-US", ENGLISH)];
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&TRANSLATIONS));
+pub const TRANSLATIONS: &[(&str, &str)] = bande_l10n::translations!("bande-settings");
+pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(TRANSLATIONS));

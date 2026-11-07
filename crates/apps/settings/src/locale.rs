@@ -5,14 +5,17 @@ use std::sync::{Arc, OnceLock};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
-use crate::failure::{failed, unexpected};
+use crate::L10N;
+use crate::failure::{detail, explained, explained_with, failed};
 use crate::follow::{Update, Updates, spawn};
-use bande_settings_panes::SettingId;
+use bande_settings_panes::{PaneId, SettingId};
 
 const LOCALE: &str = "org.freedesktop.locale1";
 const LOCALE_PATH: &str = "/org/freedesktop/locale1";
 const LOCALE_SOURCES: &str = "/usr/share/i18n/locales";
 const SUPPORTED: &str = "/usr/share/i18n/SUPPORTED";
+const REFUSED_LOCALE: &str = "InvalidArgs";
+const DEFAULT_LOCALE: &str = "C.UTF-8";
 pub const REGION_CATEGORIES: [&str; 5] = [
     "LC_TIME",
     "LC_NUMERIC",
@@ -57,7 +60,7 @@ pub struct LocaleState {
     pub available: Vec<AvailableLocale>,
     pub language: String,
     pub region: Option<String>,
-    pub pending: bool,
+    pub pending: Option<SettingId>,
     pub login_sources: Vec<String>,
 }
 
@@ -96,11 +99,27 @@ fn base(code: &str) -> &str {
     code.split(['.', '@']).next().unwrap_or(code)
 }
 
+pub(crate) fn same_locale(a: &str, b: &str) -> bool {
+    let key = |code: &str| {
+        let (name, modifier) = code.split_once('@').unwrap_or((code, ""));
+        format!("{}@{modifier}", base(name)).to_lowercase()
+    };
+    key(a) == key(b)
+}
+
+pub(crate) fn locale_label(available: &[AvailableLocale], code: &str) -> String {
+    if same_locale(code, DEFAULT_LOCALE) {
+        return L10N.tr("locale-default");
+    }
+    available
+        .iter()
+        .find(|locale| same_locale(&locale.code, code))
+        .map_or_else(|| code.to_owned(), |locale| locale.name.clone())
+}
+
 fn available_locale(entry: &str, sources: &Path) -> AvailableLocale {
-    let (locale, modifier) = entry
-        .split_once('@')
-        .map_or((entry, None), |(locale, modifier)| (locale, Some(modifier)));
-    let territory = base(locale);
+    let modifier = entry.split_once('@').map(|(_, modifier)| modifier);
+    let territory = base(entry);
     let source = modifier.map_or_else(
         || territory.to_owned(),
         |modifier| format!("{territory}@{modifier}"),
@@ -110,10 +129,7 @@ fn available_locale(entry: &str, sources: &Path) -> AvailableLocale {
         &std::fs::read_to_string(sources.join(&source)).unwrap_or_default(),
     );
     AvailableLocale {
-        code: modifier.map_or_else(
-            || format!("{territory}.UTF-8"),
-            |modifier| format!("{territory}.UTF-8@{modifier}"),
-        ),
+        code: entry.to_owned(),
         name: match modifier {
             Some(modifier) if name != source => format!("{name}, {modifier}"),
             _ => name,
@@ -170,33 +186,63 @@ pub fn x11_keyboard(codes: &[String]) -> (String, String) {
     (layouts.join(","), variants.join(","))
 }
 
-pub fn parse_assignments(assignments: &[String]) -> (String, Option<String>) {
-    let value = |name: &str| {
-        assignments
-            .iter()
-            .find_map(|assignment| assignment.strip_prefix(name)?.strip_prefix('='))
-            .map(str::to_owned)
-    };
-    (
-        value("LANG").unwrap_or_default(),
-        value(REGION_CATEGORIES[0]),
-    )
+fn assigned<'a>(assignments: &'a [String], name: &str) -> Option<&'a str> {
+    assignments
+        .iter()
+        .find_map(|assignment| assignment.strip_prefix(name)?.strip_prefix('='))
+        .filter(|value| !value.is_empty())
 }
 
-pub fn assignments(language: &str, region: Option<&str>) -> Vec<String> {
-    let mut assignments = vec![format!("LANG={language}")];
-    let short = base(language);
-    if let Some((tongue, _)) = short.split_once('_') {
-        assignments.push(format!("LANGUAGE={short}:{tongue}"));
+pub fn parse_assignments(assignments: &[String]) -> (String, Option<String>) {
+    let language = assigned(assignments, "LANG").unwrap_or(DEFAULT_LOCALE);
+    let region = assigned(assignments, REGION_CATEGORIES[0])
+        .filter(|region| !same_locale(region, language))
+        .map(str::to_owned);
+    (language.to_owned(), region)
+}
+
+pub fn assignments(current: &[String], language: &str, region: Option<&str>) -> Vec<String> {
+    let mut wanted = vec![format!("LANG={language}")];
+    let (current_language, _) = parse_assignments(current);
+    if assigned(current, "LANGUAGE").is_some() && !same_locale(&current_language, language) {
+        wanted.push(format!("LANGUAGE={}", language.replacen(".UTF-8", "", 1)));
     }
-    if let Some(region) = region.filter(|region| *region != language) {
-        assignments.extend(
+    let region = region.filter(|region| !same_locale(region, language));
+    if region.is_some()
+        || REGION_CATEGORIES
+            .iter()
+            .any(|category| assigned(current, category).is_some())
+    {
+        let formats = region.unwrap_or(language);
+        wanted.extend(
             REGION_CATEGORIES
                 .iter()
-                .map(|category| format!("{category}={region}")),
+                .map(|category| format!("{category}={formats}")),
         );
     }
-    assignments
+    wanted
+}
+
+fn change_failure(error: &zbus::Error, code: &str, available: &[AvailableLocale]) -> String {
+    let name = locale_label(available, code);
+    explained_with(error, "service-locale", |kind| {
+        if kind == REFUSED_LOCALE {
+            L10N.tr_args("locale-unavailable", [("name", name.clone().into())])
+        } else {
+            L10N.tr_args(
+                "locale-not-set-up",
+                [
+                    ("name", name.clone().into()),
+                    (
+                        "reason",
+                        detail(error)
+                            .unwrap_or_else(|| L10N.tr("couldnt-change"))
+                            .into(),
+                    ),
+                ],
+            )
+        }
+    })
 }
 
 fn read(locale: &LocaleProxyBlocking<'_>, available: &[AvailableLocale]) -> Option<LocaleState> {
@@ -205,7 +251,7 @@ fn read(locale: &LocaleProxyBlocking<'_>, available: &[AvailableLocale]) -> Opti
         available: available.to_vec(),
         language,
         region,
-        pending: false,
+        pending: None,
         login_sources: login_codes(
             &locale.x11_layout().unwrap_or_default(),
             &locale.x11_variant().unwrap_or_default(),
@@ -266,35 +312,41 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 }
                 continue;
             }
+            let available = supported.get_or_init(read_supported);
+            let (setting, chosen) = match command {
+                LocaleCommand::Language(language) => (SettingId::Language, Some(language)),
+                LocaleCommand::Region(region) => (SettingId::Region, region),
+                LocaleCommand::LoginKeyboard(_) => continue,
+            };
             let current = match locale.locale() {
                 Ok(current) => current,
                 Err(error) => {
-                    updates.send(unexpected(error));
+                    updates.send(Update::PaneFailed(
+                        PaneId::LanguageTime,
+                        explained(&error, "service-locale", "locale-read-failed"),
+                    ));
+                    updates.send(Update::Locale(read(&locale, available)));
                     continue;
                 }
             };
             let (language, region) = parse_assignments(&current);
-            let (setting, mut wanted) = match command {
-                LocaleCommand::Language(language) => (
-                    SettingId::Language,
-                    assignments(&language, region.as_deref()),
-                ),
-                LocaleCommand::Region(region) => {
-                    (SettingId::Region, assignments(&language, region.as_deref()))
-                }
-                LocaleCommand::LoginKeyboard(_) => continue,
+            let wanted = if setting == SettingId::Language {
+                assignments(
+                    &current,
+                    chosen.as_deref().unwrap_or(&language),
+                    region.as_deref(),
+                )
+            } else {
+                assignments(&current, &language, chosen.as_deref())
             };
-            wanted.extend(current.into_iter().filter(|assignment| {
-                let name = assignment.split_once('=').map_or("", |(name, _)| name);
-                name != "LANG" && name != "LANGUAGE" && !REGION_CATEGORIES.contains(&name)
-            }));
             if let Err(error) = locale.set_locale(wanted, true) {
-                updates.send(failed(setting, &error, "service-locale"));
-                updates.send(Update::Locale(read(
-                    &locale,
-                    supported.get_or_init(read_supported),
-                )));
+                let code = chosen.as_deref().unwrap_or(&language);
+                updates.send(Update::Failed(
+                    setting,
+                    change_failure(&error, code, available),
+                ));
             }
+            updates.send(Update::Locale(read(&locale, available)));
         }
     });
     sender

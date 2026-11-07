@@ -39,6 +39,7 @@ impl Kind {
 
 pub enum Reply {
     Cancel,
+    Gone,
     Allow(Secret),
     Always(Secret),
     CreateNew,
@@ -140,7 +141,7 @@ impl Dialog {
             .read_line(&mut line)
             .await;
         if !matches!(read, Ok(count) if count > 0) {
-            return Reply::Cancel;
+            return Reply::Gone;
         }
         let text = line.strip_suffix('\n').unwrap_or(&line);
         let (verb, password) = text.split_once('\t').unwrap_or((text, ""));

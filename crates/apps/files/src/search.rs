@@ -101,7 +101,7 @@ fn covered(root: &Path, folder: &Path) -> bool {
     folder.strip_prefix(root).is_ok_and(|inside| {
         inside
             .components()
-            .all(|part| !part.as_os_str().to_string_lossy().starts_with('.'))
+            .all(|part| !bande_fs::is_hidden(&part.as_os_str().to_string_lossy()))
     })
 }
 

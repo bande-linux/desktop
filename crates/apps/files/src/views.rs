@@ -147,6 +147,10 @@ impl ListColumn {
         }
     }
 
+    fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|column| column.name() == name)
+    }
+
     pub fn sort(self) -> SortBy {
         match self {
             Self::Modified => SortBy::Modified,
@@ -161,10 +165,16 @@ pub fn load_list_columns(file: &Path) -> Vec<ListColumn> {
     let Ok(text) = fs::read_to_string(file) else {
         return ListColumn::DEFAULT.to_vec();
     };
-    ListColumn::ALL
-        .into_iter()
-        .filter(|column| text.lines().any(|line| line.trim() == column.name()))
-        .collect()
+    let mut columns = Vec::new();
+    for column in text
+        .lines()
+        .filter_map(|line| ListColumn::parse(line.trim()))
+    {
+        if !columns.contains(&column) {
+            columns.push(column);
+        }
+    }
+    columns
 }
 
 pub fn save_list_columns(file: &Path, columns: &[ListColumn]) -> io::Result<()> {

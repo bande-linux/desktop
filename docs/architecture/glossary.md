@@ -9,11 +9,11 @@ Bande follows them. "In code" is what the code calls the part today.
 | Bande menu | The logo at the start of the bar (top, or left on a horizontal bar): a click opens Search, a right click the Bande menu (About This Computer, System Settings…, Force Quit…, Sleep, Restart…, Shut Down…, Lock Screen, Log Out) | Apple menu | `Slot::BandeMenu`, `Slot::Search`, `Symbol::Logo`, `system_menu` |
 | Menu button | The ⋮ right of a window's close, minimise and zoom controls, in Bande apps' title bars and in the compositor's bar of third-party windows that export menus; it opens the App menu below it | the app's menus in the menu bar | `WindowControl::Menu`, `MenuButton`, `show_app_menu` |
 | App menu | The cascade the menu button opens: the "Type to search" field, the app row, then File, Edit, View… | application menu and the app's menus | `menus::cascade` |
-| Search | The centred card on a tap of Super or Super+Space: apps, settings, files, calculator; also Clipboard History (Super+V) and Emoji & Symbols (Super+.) | Spotlight | crate `bande-launcher`, `Action::ShowLauncher` |
+| Search | The centred card on a tap of Super: apps, settings, files, calculator; also Clipboard History (Super+V) and Emoji & Symbols (Super+.) | Spotlight | crate `bande-launcher`, `Action::ShowLauncher` |
 | Taskbar icons | The app icons of the Taskbar: kept apps, a hairline, running apps, then the Trash; there is no separate Dock | Dock | `Taskbar`, `TaskbarLayout` |
 | Kept apps / running apps | The two groups of the Taskbar icons: apps kept in the Taskbar, and running apps that are not | Keep in Dock / recent apps | `kept`, `running` |
-| Active bar | The accent bar at the edge beside the active app's icon while it has a window | none (the Dock marks no active app) | `ACTIVE_BAR` |
-| Running dot | The small grey square beside an app that runs but is not active, and beside the active app while it has no window | indicator for open apps | `RUNNING_DOT` |
+| Focus frame | The accent frame around the icon of the active app, with or without windows | none (the Dock marks no active app) | `paint_frame`, `framed` |
+| Running dot | The small grey square beside an app that runs but is not active | indicator for open apps | `RUNNING_DOT` |
 | Badge, progress, attention ring | A count, a progress bar, or a pulsing orange ring on an app's icon | badge, bounce | `LauncherEntry`, `attention` |
 | Icon menu | The menu on an app icon's right click: windows, Open, actions, Keep in Taskbar, Hide, Quit | Dock menu | taskbar menus |
 | More apps | The "+N" cell when the icons do not fit | none | `more`, `more-apps` |

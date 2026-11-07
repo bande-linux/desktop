@@ -880,6 +880,25 @@ impl Dispatch<WlKeyboard, ()> for State {
                     {
                         input.repeat = None;
                     }
+                    let was_composing = input.compose.is_composing();
+                    if pressed && let Some(step) = input.compose_step(keycode) {
+                        let delivers = step.deliver_key;
+                        if was_composing || !step.preedit.is_empty() {
+                            state.events.push(WindowEvent::Input(Event::Preedit {
+                                text: step.preedit,
+                                cursor: None,
+                            }));
+                        }
+                        if !step.text.is_empty() {
+                            state
+                                .events
+                                .push(WindowEvent::Input(Event::Commit(step.text)));
+                        }
+                        if !delivers {
+                            input.repeat = None;
+                            return;
+                        }
+                    }
                     if let Some(detail) = input.key_detail_event(keycode, pressed, false) {
                         state.events.push(WindowEvent::KeyDetail(detail));
                     }

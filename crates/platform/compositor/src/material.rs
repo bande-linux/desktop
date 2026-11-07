@@ -66,6 +66,7 @@ pub(crate) struct MaterialTexture {
     pub(crate) commit: u64,
 }
 
+#[derive(Default)]
 pub(crate) struct Materials {
     style: Style,
     increased_contrast: bool,
@@ -76,22 +77,6 @@ pub(crate) struct Materials {
     pending: Vec<MaterialPicture>,
     textures: HashMap<String, MaterialTexture>,
     uploads: u64,
-}
-
-impl Default for Materials {
-    fn default() -> Self {
-        Self {
-            style: Style::default(),
-            increased_contrast: false,
-            choice: None,
-            worker: None,
-            generation: 0,
-            wanted: HashMap::new(),
-            pending: Vec::new(),
-            textures: HashMap::new(),
-            uploads: 0,
-        }
-    }
 }
 
 impl State {

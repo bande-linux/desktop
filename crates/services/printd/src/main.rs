@@ -20,9 +20,8 @@ use zbus::fdo::RequestNameFlags;
 use crate::queue::Spool;
 use crate::service::Service;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-printd.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-printd")));
 
 pub const CUPS_MEDIA: [&str; 3] = [
     "iso_a4_210x297mm",

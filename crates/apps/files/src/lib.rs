@@ -1,4 +1,5 @@
 mod access;
+mod backups;
 mod batch_rename;
 mod browser;
 mod context;
@@ -33,6 +34,7 @@ use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
+pub use backups::backups_installed;
 pub use batch_rename::{BatchRename, RuleKind};
 pub use browser::{Browser, Column, Location, RowEdit};
 pub use controls::{list_column_action, list_column_move_action, list_column_title};
@@ -59,6 +61,5 @@ pub use views::{
     recent_folders_file, sidebar_file, status_bar_file, views_file,
 };
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-files.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-files")));

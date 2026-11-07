@@ -493,7 +493,14 @@ impl Worker {
         });
     }
 
-    fn ask_about(&mut self, failure: Failure) -> Result<Answer, Halt> {
+    fn ask_about(&mut self, mut failure: Failure) -> Result<Answer, Halt> {
+        let staged_on_server = self
+            .stage
+            .as_ref()
+            .is_some_and(|stage| bande_volumes::on_connected_volume(&stage.path));
+        if staged_on_server && failure.error.raw_os_error() == Some(Errno::IO.raw_os_error()) {
+            failure.error = io::Error::from(Errno::HOSTDOWN);
+        }
         self.send(Report::Failure(failure));
         let answer = self.answers.recv().map_err(|_| Halt::Cancelled)?;
         self.check()?;

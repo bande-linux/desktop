@@ -27,3 +27,6 @@ step-format = Formatting
 step-copy = Copying the system
 step-boot = Setting up startup
 step-done = Finished. Restart to use your computer.
+backup-password = Backup password
+backup-password-title = Enter the Backup's Password
+step-restore = Restoring your backup

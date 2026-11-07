@@ -14,6 +14,8 @@ pub enum Command {
     OpenWithOther,
     QuickLook,
     Info,
+    BrowseBackups,
+    RestoreFromBackup,
     Rename,
     Duplicate,
     MakeAlias,
@@ -81,6 +83,8 @@ const ACTIONS: &[(&str, Command)] = &[
     ("show-in-enclosing-folder", Command::ShowInEnclosingFolder),
     ("trash", Command::Trash),
     ("put-back", Command::PutBack),
+    ("browse-backups", Command::BrowseBackups),
+    ("restore-from-backup", Command::RestoreFromBackup),
     ("delete-immediately", Command::DeleteImmediately),
     ("new-folder", Command::NewFolder),
     ("paste", Command::Paste),
@@ -165,6 +169,8 @@ pub struct Selection {
     pub count: usize,
     pub name: String,
     pub trashed: bool,
+    pub in_backup: bool,
+    pub can_browse_backups: bool,
     pub away: bool,
     pub folders: bool,
     pub files: bool,
@@ -177,6 +183,18 @@ pub struct Selection {
 pub fn items_menu(selection: &Selection) -> Menu {
     let count = selection.count;
     let mut items = Vec::new();
+    if selection.in_backup {
+        items.push(item(
+            "menu-restore-from-backup",
+            &Command::RestoreFromBackup,
+        ));
+        items.push(MenuItem::separator());
+        items.push(item("open", &Command::Open).shortcut("Ctrl+O"));
+        items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
+        items.push(item("menu-copy", &Command::Copy).shortcut("Ctrl+C"));
+        items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
+        return Menu::new(items);
+    }
     if selection.trashed {
         items.push(item("menu-put-back", &Command::PutBack));
         items.push(
@@ -212,6 +230,9 @@ pub fn items_menu(selection: &Selection) -> Menu {
     items.push(MenuItem::separator());
     items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
     items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
+    if selection.can_browse_backups && count == 1 {
+        items.push(item("menu-browse-backups", &Command::BrowseBackups));
+    }
     if selection.away {
         items.push(item(
             "menu-show-in-enclosing-folder",
@@ -292,6 +313,7 @@ pub struct Folder {
     pub trash_empty: bool,
     pub paste: bool,
     pub terminal: bool,
+    pub can_browse_backups: bool,
 }
 
 pub fn folder_menu(folder: Folder) -> Menu {
@@ -305,6 +327,9 @@ pub fn folder_menu(folder: Folder) -> Menu {
                 .enabled(folder.paste),
         ]
     };
+    if folder.can_browse_backups && !folder.trash {
+        items.push(item("menu-browse-backups", &Command::BrowseBackups));
+    }
     if !folder.trash && !folder.templates.is_empty() {
         let documents = folder
             .templates

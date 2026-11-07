@@ -17,7 +17,7 @@ const EDGE_REACH: f64 = 1.0;
 const CORNER_REACH: i32 = 64;
 const WINDOW_TILED_SINCE: u32 = 7;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Tile {
     Left,
     Right,

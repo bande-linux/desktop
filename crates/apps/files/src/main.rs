@@ -9,21 +9,21 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use bande_app::{
-    Cx, Detached, Info, Keys, Kind, Menus, Program, Settings, TabCarry, TabDrop, TabDropTarget,
-    TabHost, View, WindowId,
+    Cx, Detached, Info, Keys, Kind, Menus, Program, Saved, Settings, TabCarry, TabDrop,
+    TabDropTarget, TabHost, View, WindowId,
 };
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_backup::client::{Browsing, CannotBrowse, open_browser};
 use bande_files::{
     BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, L10N, Location, Request, Row,
-    SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT,
-    ViewMemory, follow_search_excluded, hidden_places, list_columns_file,
-    recent_folders_file as recent_folders_file_in, rows, serve_file_manager, settings_view,
-    sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks, with_place_shown,
-    without_bookmark,
+    SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, SavedTab, ServerAnswer, ServerRequest, Show,
+    ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, follow_search_excluded, hidden_places,
+    list_columns_file, recent_folders_file as recent_folders_file_in, rows, serve_file_manager,
+    settings_view, sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks,
+    with_place_shown, without_bookmark,
 };
-use bande_fs::{History, Trash};
-use bande_inbox::Inbox;
+use bande_fs::{History, Running, Trash};
+use bande_inbox::{Inbox, Outbox};
 use bande_quick_look::{Action, Panel, QuickLookLink, remembered_size, serve_worker};
 use bande_search::{recently_used_path, usage_path};
 use bande_thumbnails::Thumbnails;
@@ -32,12 +32,16 @@ use bande_toolkit::{
     Appearance, Color, DragAction, DragEvent, FrameRegions, MenuPlacement, Point, Rect, Scene,
     TextSystem, Transfer, Window, WindowEvent,
 };
-use bande_volumes::{EjectFailure, eject, media_roots};
+use bande_volumes::{
+    EjectFailure, MOUNTS_INTERFACE, MOUNTS_PATH, MOUNTS_SERVICE, eject, follow_mounts, media_roots,
+};
 use bande_xdg::{
     Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
     launch_with_arguments, path_from_file_uri, replace_file, spawn_detached, state_home, user_dir,
 };
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use zbus::blocking::{Connection, MessageIterator};
+use zbus::{MatchRule, message};
 
 const APP_ID: &str = "org.bande.Files";
 const WINDOW_SIZE: (u32, u32) = (1040, 620);
@@ -308,8 +312,8 @@ impl View for QuickLookPane {
         self.panel.sources()
     }
 
-    fn source_ready(&mut self, _window: &mut Window, index: usize) -> bool {
-        self.panel.source_ready(index)
+    fn source_ready(&mut self, window: &mut Window, index: usize) -> bool {
+        self.panel.source_ready(window, index)
     }
 
     fn deadline(&self) -> Option<Instant> {
@@ -403,7 +407,21 @@ impl View for BrowserPane {
     }
 }
 
+enum Leaving {
+    Quit,
+    Close(WindowId),
+}
+
+fn browser_windows(cx: &mut Cx<Files>) -> Vec<WindowId> {
+    let windows = cx.windows().collect::<Vec<_>>();
+    windows
+        .into_iter()
+        .filter(|window| browser(cx, *window).is_some())
+        .collect()
+}
+
 struct Files {
+    leaving: Option<Leaving>,
     home: PathBuf,
     settings: FilesSettings,
     settings_watch: Option<SettingsWatch>,
@@ -413,6 +431,10 @@ struct Files {
     shows: Option<Inbox<ShowRequest>>,
     ejects: Option<Inbox<EjectFailure>>,
     backups: Option<Inbox<Result<Browsing, CannotBrowse>>>,
+    servers: Option<Inbox<ServerAnswer>>,
+    mounts: Option<Inbox<()>>,
+    nearby_inbox: Option<Inbox<Vec<(String, String)>>>,
+    nearby: Vec<(String, String)>,
     recent_folders: Vec<PathBuf>,
     history: Rc<RefCell<History>>,
     trash: Trash,
@@ -585,6 +607,129 @@ impl Files {
         });
     }
 
+    fn ask_server(&self, token: u64, request: ServerRequest) {
+        let answers = self.servers.as_ref().map(Inbox::outbox);
+        let work = move || {
+            let reply = Connection::session().and_then(|session| {
+                session
+                    .call_method(
+                        Some(MOUNTS_SERVICE),
+                        MOUNTS_PATH,
+                        Some(MOUNTS_INTERFACE),
+                        "Connect",
+                        &(
+                            &request.url,
+                            &request.user,
+                            &request.password,
+                            request.remember,
+                            request.reconnect,
+                            &request.trusted_key,
+                        ),
+                    )?
+                    .body()
+                    .deserialize::<(String, Vec<String>)>()
+            });
+            let (status, details) = reply.unwrap_or_else(|error| {
+                tracing::warn!("cannot connect to the server: {error}");
+                ("failed".to_owned(), vec![error.to_string()])
+            });
+            if let Some(answers) = answers {
+                answers.send(ServerAnswer {
+                    token,
+                    request,
+                    status,
+                    details,
+                });
+            }
+        };
+        if let Err(error) = std::thread::Builder::new()
+            .name("connect".to_owned())
+            .spawn(work)
+        {
+            tracing::warn!("cannot start connecting: {error}");
+        }
+    }
+
+    fn install_server_tools(&self, token: u64, request: ServerRequest, packages: Vec<String>) {
+        let answers = self.servers.as_ref().map(Inbox::outbox);
+        let work = move || {
+            let installed = Connection::session().and_then(|session| {
+                session.call_method(
+                    Some(MOUNTS_SERVICE),
+                    MOUNTS_PATH,
+                    Some(MOUNTS_INTERFACE),
+                    "Install",
+                    &(&packages,),
+                )
+            });
+            let (status, details) = match installed {
+                Ok(_) => ("installed".to_owned(), Vec::new()),
+                Err(error) => ("failed".to_owned(), vec![error.to_string()]),
+            };
+            if let Some(answers) = answers {
+                answers.send(ServerAnswer {
+                    token,
+                    request,
+                    status,
+                    details,
+                });
+            }
+        };
+        if let Err(error) = std::thread::Builder::new()
+            .name("install".to_owned())
+            .spawn(work)
+        {
+            tracing::warn!("cannot start installing: {error}");
+        }
+    }
+
+    fn follow_servers(&mut self, cx: &mut Cx<Self>) {
+        let answers = self.servers.as_mut().map(Inbox::drain).unwrap_or_default();
+        let shown = cx.focused().or_else(|| cx.windows().next());
+        for answer in answers {
+            if answer.status == "installed" {
+                self.ask_server(answer.token, answer.request);
+                continue;
+            }
+            if let Some((window, pane)) = shown.and_then(|id| browser(cx, id)) {
+                pane.view.server_answered(answer);
+                window.request_redraw();
+            }
+        }
+    }
+
+    fn follow_mounts(&mut self, cx: &mut Cx<Self>) {
+        if let Some(mounts) = self.mounts.as_mut() {
+            mounts.drain();
+        }
+        let windows: Vec<_> = cx.windows().collect();
+        for id in windows {
+            if let Some((window, pane)) = browser(cx, id) {
+                pane.view.refresh_volumes();
+                window.request_redraw();
+            }
+        }
+    }
+
+    fn follow_nearby(&mut self, cx: &mut Cx<Self>) {
+        let Some(list) = self
+            .nearby_inbox
+            .as_mut()
+            .map(Inbox::drain)
+            .and_then(|mut lists| lists.pop())
+        else {
+            return;
+        };
+        self.nearby.clone_from(&list);
+        let windows: Vec<_> = cx.windows().collect();
+        for id in windows {
+            if let Some((window, pane)) = browser(cx, id) {
+                pane.view.set_nearby(list.clone());
+                window.request_redraw();
+            }
+        }
+    }
+
     fn open_backups(&self) {
         let Some(outbox) = self.backups.as_ref().map(Inbox::outbox) else {
             return;
@@ -678,7 +823,7 @@ impl Files {
             directory,
         );
         let reveal = match &location {
-            Location::Folder(path) if select || !path.is_dir() => {
+            Location::Folder(path) if select || !bande_volumes::quick_is_dir(path) => {
                 let mut paths = vec![path.clone()];
                 paths.extend(targets.filter_map(|target| {
                     match start_location(Some(target), Location::Recents, directory) {
@@ -779,6 +924,7 @@ impl Files {
         }
         view.set_search_excluded(self.search_excluded.clone());
         view.set_media(media_roots(&std::env::var("USER").unwrap_or_default()));
+        view.set_nearby(self.nearby.clone());
         view.set_quick_look(Rc::clone(&self.quick_look));
         Ok(view)
     }
@@ -877,6 +1023,40 @@ impl Files {
         }
     }
 
+    fn hand_over_operations(&mut self, cx: &mut Cx<Self>, operations: Vec<Running>) {
+        if operations.is_empty() {
+            return;
+        }
+        let heir = browser_windows(cx).into_iter().next();
+        if let Some((shown, pane)) = heir.and_then(|window| browser(cx, window)) {
+            pane.view.adopt_operations(operations);
+            shown.request_redraw();
+        }
+    }
+
+    fn stop_operations(&mut self, cx: &mut Cx<Self>) {
+        for window in browser_windows(cx) {
+            if let Some((shown, pane)) = browser(cx, window) {
+                pane.view.stop_operations();
+                shown.request_redraw();
+            }
+        }
+    }
+
+    fn leave_when_idle(&mut self, cx: &mut Cx<Self>) {
+        let busy = browser_windows(cx)
+            .into_iter()
+            .any(|window| browser(cx, window).is_some_and(|(_, pane)| pane.view.busy()));
+        if busy {
+            return;
+        }
+        match self.leaving.take() {
+            Some(Leaving::Quit) => cx.quit(),
+            Some(Leaving::Close(window)) => cx.close(window),
+            None => {}
+        }
+    }
+
     fn serve(&mut self, cx: &mut Cx<Self>, id: WindowId, request: Request) {
         if let Request::ShowQuickLook = request {
             self.show_quick_look(cx);
@@ -897,6 +1077,33 @@ impl Files {
             self.tab_drop(cx, id, drop);
             return;
         }
+        match request {
+            Request::StopAndLeave { quitting } => {
+                self.leaving = Some(match quitting {
+                    true => Leaving::Quit,
+                    false => Leaving::Close(id),
+                });
+                self.stop_operations(cx);
+                self.leave_when_idle(cx);
+                return;
+            }
+            Request::Leave { quitting } => {
+                match quitting {
+                    true => {
+                        if self.should_quit(cx) {
+                            cx.quit();
+                        }
+                    }
+                    false => cx.close(id),
+                }
+                return;
+            }
+            Request::OperationsDone => {
+                self.leave_when_idle(cx);
+                return;
+            }
+            _ => {}
+        }
         let Some((window, pane)) = browser(cx, id) else {
             return;
         };
@@ -909,9 +1116,12 @@ impl Files {
             }
             Request::Compress { app, files } => {
                 let token = window.activation_token(app.app_id()).ok();
-                let arguments: Vec<String> = std::iter::once(COMPRESS_FLAG.to_owned())
-                    .chain(files.iter().map(|file| file.to_string_lossy().into_owned()))
-                    .collect();
+                let arguments: Vec<String> =
+                    std::iter::once(COMPRESS_FLAG.to_owned())
+                        .chain(files.iter().map(|file| {
+                            file.to_str().map_or_else(|| file_uri(file), str::to_owned)
+                        }))
+                        .collect();
                 if let Err(error) = launch_with_arguments(&app, &arguments, token.as_deref()) {
                     tracing::warn!("cannot compress with {}: {error}", app.id);
                 }
@@ -946,10 +1156,19 @@ impl Files {
                     tracing::warn!("cannot show the menu: {error}");
                 }
             }
+            Request::ConnectServer { token, request } => self.ask_server(token, request),
+            Request::InstallServerTools {
+                token,
+                request,
+                packages,
+            } => self.install_server_tools(token, request, packages),
             Request::Eject(volume) => self.eject(volume, false),
             Request::ForceEject(volume) => self.eject(volume, true),
             Request::NewWindow
             | Request::ShowQuickLook
+            | Request::StopAndLeave { .. }
+            | Request::Leave { .. }
+            | Request::OperationsDone
             | Request::DetachTab { .. }
             | Request::TabDrop(_) => {}
             Request::OpenTerminal(folder) => open_terminal(window, &folder),
@@ -971,6 +1190,12 @@ impl Files {
             }),
         }
     }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SavedWindow {
+    tabs: Vec<SavedTab>,
+    active: usize,
 }
 
 impl Program for Files {
@@ -1012,6 +1237,7 @@ impl Program for Files {
             .map(PathBuf::from)
             .collect();
         let mut files = Self {
+            leaving: None,
             home,
             settings,
             settings_watch,
@@ -1019,6 +1245,12 @@ impl Program for Files {
             excluded,
             search_excluded: Vec::new(),
             shows,
+            servers: Inbox::new()
+                .inspect_err(|error| tracing::warn!("cannot follow connections: {error}"))
+                .ok(),
+            mounts: mount_changes(),
+            nearby_inbox: nearby_changes(),
+            nearby: Vec::new(),
             backups: Inbox::new()
                 .inspect_err(|error| tracing::warn!("cannot wait for backups: {error}"))
                 .ok(),
@@ -1033,12 +1265,11 @@ impl Program for Files {
             carrying: Rc::new(Cell::new(false)),
             carry: TabCarry::default(),
         };
-        match arguments.iter().any(|argument| argument == SERVICE_FLAG) {
-            true => files.wait_for_show(cx),
-            false => {
-                let directory = std::env::current_dir().ok();
-                files.open_window(cx, &arguments, directory.as_deref())?;
-            }
+        if arguments.iter().any(|argument| argument == SERVICE_FLAG) {
+            files.wait_for_show(cx);
+        } else if !arguments.is_empty() {
+            let directory = std::env::current_dir().ok();
+            files.open_window(cx, &arguments, directory.as_deref())?;
         }
         Ok(files)
     }
@@ -1076,6 +1307,13 @@ impl Program for Files {
             .strip_prefix(menu_bar::RECENT_FOLDER)
             .and_then(|index| index.parse::<usize>().ok())
             .and_then(|index| self.recent_folders.get(index).cloned());
+        if command == bande_app_menu::PRINT {
+            let printable = browser(cx, window).and_then(|(_, pane)| pane.view.printable());
+            if let Some((title, document)) = printable {
+                cx.print(&title, document);
+            }
+            return;
+        }
         let Some((shown, pane)) = browser(cx, window) else {
             return;
         };
@@ -1108,6 +1346,39 @@ impl Program for Files {
         }
     }
 
+    fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        let view = &cx.view(window)?.browser()?.view;
+        Saved::of(&SavedWindow {
+            tabs: view.saved_tabs(),
+            active: view.active_tab(),
+        })
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, saved: Saved) {
+        let Some(mut window) = saved.read::<SavedWindow>() else {
+            return;
+        };
+        let active = window
+            .tabs
+            .get(window.active)
+            .map(|tab| tab.location.clone());
+        window.tabs.retain(SavedTab::still_there);
+        let Some(first) = window.tabs.first() else {
+            return;
+        };
+        let active = active
+            .and_then(|active| window.tabs.iter().position(|tab| tab.location == active))
+            .unwrap_or(0);
+        let browser = Browser::open(first.location.clone(), self.trash.clone());
+        let opened = self.new_view(browser).and_then(|mut view| {
+            view.restore_tabs(&window.tabs, active);
+            self.open_view(cx, view, WINDOW_SIZE)
+        });
+        if let Err(error) = opened {
+            tracing::warn!("cannot reopen a window: {error}");
+        }
+    }
+
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
         self.copy_from_quick_look(cx);
         let requests = browser(cx, window)
@@ -1132,19 +1403,45 @@ impl Program for Files {
         cx.refresh_menus();
     }
 
-    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, _view: Pane) {
+    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, view: Pane) {
         if self.panel == Some(window) {
             self.panel = None;
             if self.quick_look.borrow().is_open() {
                 self.show_quick_look(cx);
             }
         }
+        if let Pane::Browser(mut closed) = view {
+            self.hand_over_operations(cx, closed.view.take_operations());
+        }
         self.remember_recent_folders();
     }
 
-    fn should_close(&mut self, _cx: &mut Cx<Self>, _window: WindowId) -> bool {
+    fn should_close(&mut self, cx: &mut Cx<Self>, window: WindowId) -> bool {
         self.remember_recent_folders();
-        true
+        let busy = browser(cx, window).is_some_and(|(_, pane)| pane.view.busy());
+        if !busy || browser_windows(cx).into_iter().any(|other| other != window) {
+            return true;
+        }
+        if let Some((shown, pane)) = browser(cx, window) {
+            pane.view.ask_before_leaving(false);
+            shown.request_redraw();
+        }
+        false
+    }
+
+    fn should_quit(&mut self, cx: &mut Cx<Self>) -> bool {
+        self.remember_recent_folders();
+        let busy = browser_windows(cx)
+            .into_iter()
+            .find(|window| browser(cx, *window).is_some_and(|(_, pane)| pane.view.busy()));
+        let Some(window) = busy else {
+            return true;
+        };
+        if let Some((shown, pane)) = browser(cx, window) {
+            pane.view.ask_before_leaving(true);
+            shown.request_redraw();
+        }
+        false
     }
 
     fn close_tab(&mut self, cx: &mut Cx<Self>, window: WindowId) -> bool {
@@ -1164,6 +1461,9 @@ impl Program for Files {
             .chain(self.excluded.iter().map(Inbox::fd))
             .chain(self.shows.iter().map(Inbox::fd))
             .chain(self.ejects.iter().map(Inbox::fd))
+            .chain(self.servers.iter().map(Inbox::fd))
+            .chain(self.mounts.iter().map(Inbox::fd))
+            .chain(self.nearby_inbox.iter().map(Inbox::fd))
             .chain(self.backups.iter().map(Inbox::fd))
             .collect()
     }
@@ -1173,6 +1473,10 @@ impl Program for Files {
         let sidebar = settings + self.sidebar_watch.iter().count();
         let excluded = sidebar + self.excluded.iter().count();
         let shows = excluded + self.shows.iter().count();
+        let ejects = shows + self.ejects.iter().count();
+        let servers = ejects + self.servers.iter().count();
+        let mounts = servers + self.mounts.iter().count();
+        let nearby = mounts + self.nearby_inbox.iter().count();
         if index < settings {
             self.follow_settings(cx);
         } else if index < sidebar {
@@ -1181,12 +1485,77 @@ impl Program for Files {
             self.follow_excluded(cx);
         } else if index < shows {
             self.follow_shows(cx);
-        } else if index < shows + self.ejects.iter().count() {
+        } else if index < ejects {
             self.follow_ejects(cx);
+        } else if index < servers {
+            self.follow_servers(cx);
+        } else if index < mounts {
+            self.follow_mounts(cx);
+        } else if index < nearby {
+            self.follow_nearby(cx);
         } else {
             self.follow_backups(cx);
         }
     }
+}
+
+fn nearby_list(session: &Connection) -> Vec<(String, String)> {
+    session
+        .call_method(
+            Some(MOUNTS_SERVICE),
+            MOUNTS_PATH,
+            Some(MOUNTS_INTERFACE),
+            "Nearby",
+            &(),
+        )
+        .and_then(|reply| reply.body().deserialize())
+        .unwrap_or_default()
+}
+
+fn follow_nearby_servers(outbox: Outbox<Vec<(String, String)>>) -> zbus::Result<()> {
+    let session = Connection::session()?;
+    let rule = MatchRule::builder()
+        .msg_type(message::Type::Signal)
+        .interface(MOUNTS_INTERFACE)?
+        .member("NearbyChanged")?
+        .build();
+    let changes = MessageIterator::for_match_rule(rule, &session, None)?;
+    outbox.send(nearby_list(&session));
+    for _ in changes {
+        outbox.send(nearby_list(&session));
+    }
+    Ok(())
+}
+
+fn nearby_changes() -> Option<Inbox<Vec<(String, String)>>> {
+    let inbox = Inbox::new()
+        .inspect_err(|error| tracing::warn!("cannot follow nearby servers: {error}"))
+        .ok()?;
+    let outbox = inbox.outbox();
+    let spawned = std::thread::Builder::new()
+        .name("nearby servers".to_owned())
+        .spawn(move || {
+            if let Err(error) = follow_nearby_servers(outbox) {
+                tracing::warn!("cannot follow nearby servers: {error}");
+            }
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot follow nearby servers: {error}");
+    }
+    Some(inbox)
+}
+
+fn mount_changes() -> Option<Inbox<()>> {
+    let inbox = Inbox::new()
+        .inspect_err(|error| tracing::warn!("cannot follow mounts: {error}"))
+        .ok()?;
+    let outbox = inbox.outbox();
+    if let Err(error) = follow_mounts(move || {
+        outbox.send(());
+    }) {
+        tracing::warn!("cannot follow mounts: {error}");
+    }
+    Some(inbox)
 }
 
 const INFO_FLAG: &str = "--info";

@@ -54,3 +54,4 @@ refusal-wrong-password = The password is incorrect.
 refusal-outside = The archive tries to put an item outside the folder it expands into.
 refusal-bomb = The archive expands to more than a thousand times its size, as a decompression bomb does.
 refusal-too-large = There isn’t enough free space for the expanded items.
+no-links = This disk can’t store links.

@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use crate::L10N;
 use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
-use crate::rail::{bar_width, surface_size};
+use crate::rail::{bar_zone, surface_size};
 use crate::taskbar::{
     MenuTarget, Shared, TaskbarAction, TaskbarApp, TaskbarLayout, TaskbarState, scene, taskbar_ui,
 };
@@ -1072,7 +1072,7 @@ impl Taskbar {
             icon_scale: window.scale(),
             reported: HashMap::new(),
             input: None,
-            zone: bar_width(icon_size).round() as i32,
+            zone: bar_zone(icon_size).round() as i32,
             menu: None,
             confirming: false,
             swallow_release: false,

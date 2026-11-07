@@ -175,11 +175,11 @@ fn publish_changes(
         if before.reopen_apps != after.reopen_apps {
             let _ = guard.reopen_apps_changed(emitter).await;
         }
-        if before.reopen_apps_after_crash != after.reopen_apps_after_crash {
-            let _ = guard.reopen_apps_after_crash_changed(emitter).await;
-        }
         if before.automatic_updates != after.automatic_updates {
             let _ = guard.automatic_updates_changed(emitter).await;
+        }
+        if before.update_check_every != after.update_check_every {
+            let _ = guard.update_check_every_changed(emitter).await;
         }
         if before.clock != after.clock {
             let _ = guard.clock_format_changed(emitter).await;
@@ -567,16 +567,6 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
-    fn reopen_apps_after_crash(&self) -> bool {
-        self.store.current().reopen_apps_after_crash
-    }
-
-    #[zbus(property)]
-    fn set_reopen_apps_after_crash(&self, on: bool) -> zbus::fdo::Result<()> {
-        self.write(&Setting::ReopenAppsAfterCrash(on))
-    }
-
-    #[zbus(property)]
     fn automatic_updates(&self) -> bool {
         self.store.current().automatic_updates
     }
@@ -780,6 +770,16 @@ impl ConfigInterface {
     fn set_bar_edge(&self, value: String) -> zbus::fdo::Result<()> {
         let edge = keyword(&BarEdge::ALL, BarEdge::keyword, &value)?;
         self.write(&Setting::BarEdge(edge))
+    }
+
+    #[zbus(property)]
+    fn update_check_every(&self) -> u64 {
+        seconds_or_never(self.store.current().update_check_every)
+    }
+
+    #[zbus(property)]
+    fn set_update_check_every(&self, seconds: u64) -> zbus::fdo::Result<()> {
+        self.write(&Setting::UpdateCheckEvery(never_or_seconds(seconds)))
     }
 
     #[zbus(property)]

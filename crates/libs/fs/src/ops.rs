@@ -1,7 +1,9 @@
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, FileTimes, Metadata, OpenOptions};
 use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::fs::{OpenOptionsExt, symlink};
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, symlink};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -10,19 +12,26 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_xdg::sync_folder;
+use rustix::fs::{XattrFlags, fgetxattr, flistxattr, fsetxattr, fstatfs};
 use rustix::io::Errno;
 
 mod archive;
 
 pub use archive::{Contents, Format, Refusal, archive_contents, archive_path, can_extract};
 
+use crate::L10N;
 use crate::listing::same_volume;
 use crate::naming::{alias_name, duplicate_name, keep_both_name, untitled_folder};
-
+use crate::partial::{Anchor, partial_path};
 use crate::trash::{Trash, TrashItem, erase, forget, remove_all, restore_to};
 
 const CHUNK: u64 = 8 * 1024 * 1024;
+const FLUSH_EVERY: u64 = 64 * 1024 * 1024;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
+const FAT_FILE_LIMIT: u64 = 0xFFFF_FFFF;
+const FAT_MAGIC: i32 = 0x4d44;
+const USER_ATTRIBUTES: &[u8] = b"user.";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Change {
@@ -77,6 +86,7 @@ pub enum Resolution {
     Replace,
     Skip,
     Retry,
+    Delete,
     Stop,
 }
 
@@ -105,6 +115,7 @@ pub struct Progress {
 pub struct Failure {
     pub path: PathBuf,
     pub error: io::Error,
+    pub no_trash: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,7 +124,11 @@ pub enum Problem {
     ReadOnly,
     NoSpace,
     NameTooLong,
+    NameInvalid,
+    TooLarge,
     DeviceGone,
+    DiskError,
+    Missing,
     Other,
 }
 
@@ -128,18 +143,34 @@ impl Failure {
             Problem::NoSpace
         } else if errno(Errno::NAMETOOLONG) {
             Problem::NameTooLong
-        } else if errno(Errno::NODEV) || errno(Errno::NXIO) || errno(Errno::NOTCONN) {
+        } else if errno(Errno::INVAL) || errno(Errno::ILSEQ) {
+            Problem::NameInvalid
+        } else if errno(Errno::FBIG) {
+            Problem::TooLarge
+        } else if errno(Errno::NODEV)
+            || errno(Errno::NXIO)
+            || errno(Errno::NOTCONN)
+            || errno(Errno::STALE)
+            || errno(Errno::SHUTDOWN)
+        {
             Problem::DeviceGone
+        } else if errno(Errno::IO) {
+            Problem::DiskError
+        } else if errno(Errno::NOENT) {
+            Problem::Missing
         } else {
             Problem::Other
         }
     }
 
     pub fn retryable(&self) -> bool {
-        !matches!(
-            self.error.kind(),
-            io::ErrorKind::InvalidInput | io::ErrorKind::AlreadyExists | io::ErrorKind::Unsupported
-        )
+        !matches!(self.problem(), Problem::NameInvalid | Problem::TooLarge)
+            && !matches!(
+                self.error.kind(),
+                io::ErrorKind::InvalidInput
+                    | io::ErrorKind::AlreadyExists
+                    | io::ErrorKind::Unsupported
+            )
     }
 }
 
@@ -192,10 +223,12 @@ impl Job {
             last_progress: None,
             remembered: None,
             outcome: Outcome::default(),
-            made: None,
+            stage: None,
+            unflushed: 0,
             asks,
             skip_failures: false,
-            troubles: 0,
+            delete_without_trash: false,
+            skipped: 0,
         };
         thread::Builder::new()
             .name("file operation".to_owned())
@@ -257,13 +290,34 @@ struct Worker {
     last_progress: Option<Instant>,
     remembered: Option<Resolution>,
     outcome: Outcome,
-    made: Option<PathBuf>,
+    stage: Option<Stage>,
+    unflushed: u64,
     asks: bool,
     skip_failures: bool,
-    troubles: usize,
+    delete_without_trash: bool,
+    skipped: usize,
 }
 
-fn name_of(path: &Path) -> io::Result<&std::ffi::OsStr> {
+struct Stage {
+    path: PathBuf,
+    anchor: Option<Anchor>,
+}
+
+struct Landing {
+    target: PathBuf,
+    replaces: bool,
+}
+
+impl Landing {
+    fn free(target: PathBuf) -> Self {
+        Self {
+            target,
+            replaces: false,
+        }
+    }
+}
+
+fn name_of(path: &Path) -> io::Result<&OsStr> {
     path.file_name()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the item has no name"))
 }
@@ -300,8 +354,62 @@ fn keep_metadata(file: &File, metadata: &Metadata) -> io::Result<()> {
     file.set_times(times)
 }
 
+fn copy_attributes(from: &File, to: &File) {
+    let mut names = vec![0; 64 * 1024];
+    let Ok(listed) = flistxattr(from, &mut names) else {
+        return;
+    };
+    let mut value = vec![0; 64 * 1024];
+    for name in names[..listed].split(|byte| *byte == 0) {
+        if name.starts_with(USER_ATTRIBUTES)
+            && let name = OsStr::from_bytes(name)
+            && let Ok(length) = fgetxattr(from, name, &mut value)
+        {
+            let _ = fsetxattr(to, name, &value[..length], XattrFlags::empty());
+        }
+    }
+}
+
+fn beyond_format_limit(output: &File, length: u64) -> bool {
+    length > FAT_FILE_LIMIT && fstatfs(output).is_ok_and(|stats| stats.f_type == FAT_MAGIC.into())
+}
+
 fn crosses_devices(error: &io::Error) -> bool {
     error.kind() == io::ErrorKind::CrossesDevices
+}
+
+fn crosses_volumes(from: &Path, to: &Path) -> bool {
+    let folder = to.parent().unwrap_or(Path::new("/"));
+    match (fs::symlink_metadata(from), fs::metadata(folder)) {
+        (Ok(from), Ok(folder)) => from.dev() != folder.dev(),
+        _ => false,
+    }
+}
+
+fn same_item(a: &Path, b: &Path) -> bool {
+    match (fs::symlink_metadata(a), fs::symlink_metadata(b)) {
+        (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
+        _ => false,
+    }
+}
+
+fn folder_contains(folder: &Path, inner: &Path) -> bool {
+    if !fs::symlink_metadata(folder).is_ok_and(|metadata| metadata.is_dir()) {
+        return false;
+    }
+    match (fs::canonicalize(folder), fs::canonicalize(inner)) {
+        (Ok(folder), Ok(inner)) => inner.starts_with(folder),
+        _ => inner.starts_with(folder),
+    }
+}
+
+fn link_refused(error: io::Error) -> io::Error {
+    match error.raw_os_error().map(Errno::from_raw_os_error) {
+        Some(Errno::PERM | Errno::NOTSUP) => {
+            io::Error::new(io::ErrorKind::Unsupported, L10N.tr("no-links"))
+        }
+        _ => error,
+    }
 }
 
 fn taken(error: &io::Error) -> bool {
@@ -328,12 +436,6 @@ pub(crate) fn claim<T>(
             result => return result.map(|made| (path, made)),
         }
     }
-}
-
-enum Placed {
-    Done,
-    Taken,
-    Failed,
 }
 
 impl Worker {
@@ -363,11 +465,19 @@ impl Worker {
     }
 
     fn fail(&mut self, path: &Path, error: io::Error) {
-        self.troubles += 1;
+        self.skipped += 1;
         self.outcome.failures.push(Failure {
             path: path.to_path_buf(),
             error,
+            no_trash: false,
         });
+    }
+
+    fn ask_about(&mut self, failure: Failure) -> Result<Answer, Halt> {
+        self.send(Report::Failure(failure));
+        let answer = self.answers.recv().map_err(|_| Halt::Cancelled)?;
+        self.check()?;
+        Ok(answer)
     }
 
     fn trouble(&mut self, path: &Path, error: io::Error) -> Result<bool, Halt> {
@@ -375,20 +485,20 @@ impl Worker {
             self.fail(path, error);
             return Ok(false);
         }
-        self.troubles += 1;
         if self.skip_failures {
+            self.skipped += 1;
             return Ok(false);
         }
-        self.send(Report::Failure(Failure {
+        let answer = self.ask_about(Failure {
             path: path.to_path_buf(),
             error,
-        }));
-        let answer = self.answers.recv().map_err(|_| Halt::Cancelled)?;
-        self.check()?;
+            no_trash: false,
+        })?;
         match answer.resolution {
             Resolution::Retry => Ok(true),
             Resolution::Stop => Err(Halt::Stopped),
             _ => {
+                self.skipped += 1;
                 self.skip_failures = answer.apply_to_all;
                 Ok(false)
             }
@@ -565,17 +675,60 @@ impl Worker {
         Ok(())
     }
 
-    fn put_in_trash(&mut self, path: &Path) -> Result<Option<TrashItem>, Halt> {
-        let item = self.attempt(path, |worker| worker.trash.put(path))?;
-        if let Some(item) = &item {
-            self.outcome.changes.push(Change::Trashed(item.clone()));
-        }
-        Ok(item)
+    fn delete_instead(&mut self, path: &Path) -> Result<bool, Halt> {
+        Ok(self.attempt(path, |_| remove_all(path))?.is_some())
     }
 
-    fn resolve(&mut self, source: &Path, target: PathBuf) -> Result<Option<PathBuf>, Halt> {
+    fn put_in_trash(&mut self, path: &Path) -> Result<bool, Halt> {
+        loop {
+            let error = match self.trash.put(path) {
+                Ok(item) => {
+                    self.outcome.changes.push(Change::Trashed(item));
+                    return Ok(true);
+                }
+                Err(error) => error,
+            };
+            let no_trash = self.asks
+                && error.raw_os_error() != Some(Errno::ROFS.raw_os_error())
+                && path.symlink_metadata().is_ok()
+                && (crosses_devices(&error) || !self.trash.available_for(path));
+            if !no_trash {
+                return match self.trouble(path, error)? {
+                    true => continue,
+                    false => Ok(false),
+                };
+            }
+            if self.delete_without_trash {
+                return self.delete_instead(path);
+            }
+            if self.skip_failures {
+                self.skipped += 1;
+                return Ok(false);
+            }
+            let answer = self.ask_about(Failure {
+                path: path.to_path_buf(),
+                error,
+                no_trash,
+            })?;
+            match answer.resolution {
+                Resolution::Delete => {
+                    self.delete_without_trash = answer.apply_to_all;
+                    return self.delete_instead(path);
+                }
+                Resolution::Retry => {}
+                Resolution::Stop => return Err(Halt::Stopped),
+                _ => {
+                    self.skipped += 1;
+                    self.skip_failures = answer.apply_to_all;
+                    return Ok(false);
+                }
+            }
+        }
+    }
+
+    fn resolve(&mut self, source: &Path, target: PathBuf) -> Result<Option<Landing>, Halt> {
         if target.symlink_metadata().is_err() {
-            return Ok(Some(target));
+            return Ok(Some(Landing::free(target)));
         }
         let resolution = self.ask(Conflict {
             source: source.to_path_buf(),
@@ -584,11 +737,12 @@ impl Worker {
         match resolution {
             Resolution::KeepBoth => {
                 let folder = target.parent().unwrap_or(Path::new("/"));
-                let name = target
-                    .file_name()
-                    .map(|name| name.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                Ok(Some(keep_both_name(folder, &name, source.is_dir())))
+                let name = target.file_name().unwrap_or_default();
+                Ok(Some(Landing::free(keep_both_name(
+                    folder,
+                    name,
+                    source.is_dir(),
+                ))))
             }
             Resolution::Replace => {
                 if source.starts_with(&target) {
@@ -601,10 +755,12 @@ impl Worker {
                     )?;
                     return Ok(None);
                 }
-                Ok(self.put_in_trash(&target)?.map(|_| target))
+                Ok(Some(Landing {
+                    target,
+                    replaces: true,
+                }))
             }
-            Resolution::Skip | Resolution::Retry => Ok(None),
-
+            Resolution::Skip | Resolution::Retry | Resolution::Delete => Ok(None),
             Resolution::Stop => Err(Halt::Stopped),
         }
     }
@@ -612,13 +768,13 @@ impl Worker {
     fn copy_into(&mut self, source: &Path, destination: &Path) -> Result<(), Halt> {
         self.check()?;
         let name = match name_of(source) {
-            Ok(name) => name.to_string_lossy().into_owned(),
+            Ok(name) => name.to_os_string(),
             Err(error) => {
                 self.trouble(source, error)?;
                 return Ok(());
             }
         };
-        if destination.starts_with(source) {
+        if folder_contains(source, destination) {
             self.trouble(
                 source,
                 io::Error::new(
@@ -629,62 +785,158 @@ impl Worker {
             return Ok(());
         }
         let target = destination.join(&name);
-        if target == source {
-            let is_dir = source.is_dir();
-            let target = duplicate_name(destination, &name, is_dir);
-            return self.copy_item(source, target, |_, _| {
-                Ok(Some(duplicate_name(destination, &name, is_dir)))
-            });
+        if same_item(source, &target) {
+            return self.copy_duplicate(source, destination, &name);
         }
         match self.resolve(source, target)? {
-            Some(target) => self.copy_item(source, target, |worker, target| {
+            Some(landing) => self.copy_item(source, landing, |worker, target| {
                 worker.resolve(source, target)
             }),
             None => Ok(()),
         }
     }
 
-    fn copy_made(&mut self, source: &Path, target: &Path) -> Result<Placed, Halt> {
-        self.made = None;
-        self.copy_tree(source, target)
+    fn copy_duplicate(
+        &mut self,
+        source: &Path,
+        folder: &Path,
+        name: &OsString,
+    ) -> Result<(), Halt> {
+        let is_dir = source.is_dir();
+        let landing = Landing::free(duplicate_name(folder, name, is_dir));
+        self.copy_item(source, landing, |_, _| {
+            Ok(Some(Landing::free(duplicate_name(folder, name, is_dir))))
+        })
     }
 
-    fn discard_made(&mut self, target: &Path) {
-        if self.made.take().as_deref() == Some(target) {
-            let _ = remove_all(target);
+    fn discard_stage(&mut self) {
+        if let Some(stage) = self.stage.take() {
+            let _ = remove_all(&stage.path);
         }
     }
 
-    fn mark_made(&mut self, target: &Path) {
-        self.made.get_or_insert_with(|| target.to_path_buf());
+    fn anchor_stage(&mut self, target: &Path, anchor: impl FnOnce() -> io::Result<Anchor>) {
+        if let Some(stage) = &mut self.stage
+            && stage.path == target
+        {
+            stage.anchor = anchor().ok();
+        }
+    }
+
+    fn flush_stage(&mut self, written: u64) -> io::Result<()> {
+        self.unflushed += written;
+        if self.unflushed < FLUSH_EVERY {
+            return Ok(());
+        }
+        self.unflushed = 0;
+        match self.stage.as_ref().and_then(|stage| stage.anchor.as_ref()) {
+            Some(anchor) => anchor.flush(),
+            None => Ok(()),
+        }
+    }
+
+    fn stage_copy(&mut self, source: &Path, folder: &Path, whole: bool) -> Result<bool, Halt> {
+        let (items_done, bytes_done) = (self.progress.items_done, self.progress.bytes_done);
+        loop {
+            let path = partial_path(folder);
+            self.stage = Some(Stage {
+                path: path.clone(),
+                anchor: None,
+            });
+            self.unflushed = 0;
+            let skipped = self.skipped;
+            let placed = match self.copy_tree(source, &path) {
+                Ok(placed) => placed,
+                Err(halt) => {
+                    self.discard_stage();
+                    return Err(halt);
+                }
+            };
+            if !placed || (whole && self.skipped > skipped) {
+                self.discard_stage();
+                return Ok(false);
+            }
+            let settled = self
+                .stage
+                .as_ref()
+                .and_then(|stage| stage.anchor.as_ref())
+                .map_or(Ok(()), Anchor::settle);
+            let Err(error) = settled else {
+                return Ok(true);
+            };
+            self.discard_stage();
+            self.progress.items_done = items_done;
+            self.progress.bytes_done = bytes_done;
+            if !self.trouble(source, error)? {
+                return Ok(false);
+            }
+        }
+    }
+
+    fn land(
+        &mut self,
+        landing: Landing,
+        elsewhere: impl FnMut(&mut Self, PathBuf) -> Result<Option<Landing>, Halt>,
+    ) -> Result<Option<(PathBuf, io::Result<()>)>, Halt> {
+        let landed = self.land_stage(landing, elsewhere);
+        if matches!(landed, Ok(Some(_))) {
+            self.stage = None;
+        } else {
+            self.discard_stage();
+        }
+        landed
+    }
+
+    fn land_stage(
+        &mut self,
+        mut landing: Landing,
+        mut elsewhere: impl FnMut(&mut Self, PathBuf) -> Result<Option<Landing>, Halt>,
+    ) -> Result<Option<(PathBuf, io::Result<()>)>, Halt> {
+        let Some(staged) = self.stage.as_ref().map(|stage| stage.path.clone()) else {
+            return Ok(None);
+        };
+        loop {
+            self.check()?;
+            if landing.replaces && !self.put_in_trash(&landing.target)? {
+                return Ok(None);
+            }
+            landing.replaces = false;
+            match rename_new(&staged, &landing.target) {
+                Ok(()) => {
+                    let folder = landing.target.parent().unwrap_or(Path::new("/"));
+                    let settled = sync_folder(folder);
+                    return Ok(Some((landing.target, settled)));
+                }
+                Err(error) if taken(&error) => match elsewhere(self, landing.target)? {
+                    Some(next) => landing = next,
+                    None => return Ok(None),
+                },
+                Err(error) => {
+                    if !self.trouble(&landing.target, error)? {
+                        return Ok(None);
+                    }
+                }
+            }
+        }
     }
 
     fn copy_item(
         &mut self,
         source: &Path,
-        mut target: PathBuf,
-        mut elsewhere: impl FnMut(&mut Self, PathBuf) -> Result<Option<PathBuf>, Halt>,
+        landing: Landing,
+        elsewhere: impl FnMut(&mut Self, PathBuf) -> Result<Option<Landing>, Halt>,
     ) -> Result<(), Halt> {
-        loop {
-            match self.copy_made(source, &target) {
-                Ok(Placed::Taken) => match elsewhere(self, target)? {
-                    Some(next) => target = next,
-                    None => return Ok(()),
-                },
-                Ok(_) => {
-                    if self.made.as_deref() == Some(target.as_path())
-                        && target.symlink_metadata().is_ok()
-                    {
-                        self.outcome.changes.push(Change::Created(target));
-                    }
-                    return Ok(());
-                }
-                Err(halt) => {
-                    self.discard_made(&target);
-                    return Err(halt);
-                }
+        let folder = landing.target.parent().unwrap_or(Path::new("/"));
+        if !self.stage_copy(source, folder, false)? {
+            return Ok(());
+        }
+        if let Some((target, settled)) = self.land(landing, elsewhere)? {
+            self.outcome.changes.push(Change::Created(target.clone()));
+            if let Err(error) = settled {
+                self.trouble(&target, error)?;
             }
         }
+        Ok(())
     }
 
     fn duplicate(&mut self, source: &Path) -> Result<(), Halt> {
@@ -696,25 +948,16 @@ impl Worker {
             )?;
             return Ok(());
         };
-        let name = name.to_string_lossy().into_owned();
-        let is_dir = source.is_dir();
-        let target = duplicate_name(folder, &name, is_dir);
-        self.copy_item(source, target, |_, _| {
-            Ok(Some(duplicate_name(folder, &name, is_dir)))
-        })
+        self.copy_duplicate(source, folder, &name.to_os_string())
     }
 
-    fn copy_tree(&mut self, source: &Path, target: &Path) -> Result<Placed, Halt> {
+    fn copy_tree(&mut self, source: &Path, target: &Path) -> Result<bool, Halt> {
         self.check()?;
         self.progress.current = Some(source.to_path_buf());
-        let mut placed = Placed::Done;
+        let mut placed = true;
         while let Err(error) = self.copy_entry(source, target)? {
-            if taken(&error) && self.made.as_deref().is_none_or(|made| made == target) {
-                self.made = None;
-                return Ok(Placed::Taken);
-            }
             if !self.trouble(source, error)? {
-                placed = Placed::Failed;
+                placed = false;
                 break;
             }
         }
@@ -730,11 +973,7 @@ impl Worker {
         };
         let file_type = metadata.file_type();
         Ok(if file_type.is_symlink() {
-            let linked = fs::read_link(source).and_then(|link| symlink(link, target));
-            if linked.is_ok() {
-                self.mark_made(target);
-            }
-            linked
+            fs::read_link(source).and_then(|link| symlink(link, target).map_err(link_refused))
         } else if file_type.is_dir() {
             self.copy_folder(source, target, &metadata)?
         } else if file_type.is_file() {
@@ -753,23 +992,29 @@ impl Worker {
         target: &Path,
         metadata: &Metadata,
     ) -> Result<io::Result<()>, Halt> {
-        let children = match fs::read_dir(source) {
-            Ok(entries) => entries
-                .filter_map(Result::ok)
-                .map(|entry| entry.file_name())
-                .collect::<Vec<_>>(),
+        let listed = fs::read_dir(source).and_then(|entries| {
+            entries
+                .map(|entry| entry.map(|entry| entry.file_name()))
+                .collect::<io::Result<Vec<_>>>()
+        });
+        let mut children = match listed {
+            Ok(children) => children,
             Err(error) => return Ok(Err(error)),
         };
         if let Err(error) = fs::create_dir(target) {
             return Ok(Err(error));
         }
-        self.mark_made(target);
-        let mut children = children;
+        self.anchor_stage(target, || Anchor::folder(target));
         children.sort();
         for child in children {
             self.copy_tree(&source.join(&child), &target.join(&child))?;
         }
-        let _ = File::open(target).and_then(|folder| keep_metadata(&folder, metadata));
+        if let Ok(folder) = File::open(target) {
+            if let Ok(original) = File::open(source) {
+                copy_attributes(&original, &folder);
+            }
+            let _ = keep_metadata(&folder, metadata);
+        }
         Ok(Ok(()))
     }
 
@@ -791,76 +1036,94 @@ impl Worker {
             Ok(files) => files,
             Err(error) => return Ok(Err(error)),
         };
-        self.mark_made(target);
+        if beyond_format_limit(&output, metadata.len()) {
+            drop(output);
+            let _ = fs::remove_file(target);
+            return Ok(Err(io::Error::from(Errno::FBIG)));
+        }
+        self.anchor_stage(target, || Anchor::file(&output));
+        let mut written = 0;
         loop {
             if self.check().is_err() {
                 drop(output);
                 let _ = fs::remove_file(target);
                 return Err(Halt::Cancelled);
             }
-            match io::copy(&mut (&input).take(CHUNK), &mut output) {
+            let chunk = io::copy(&mut (&input).take(CHUNK), &mut output);
+            let chunk = chunk.and_then(|copied| self.flush_stage(copied).map(|()| copied));
+            match chunk {
                 Ok(0) => break,
                 Ok(copied) => {
+                    written += copied;
                     self.progress.bytes_done += copied;
                     self.report_progress(false);
                 }
                 Err(error) => {
+                    self.progress.bytes_done -= written;
                     drop(output);
                     let _ = fs::remove_file(target);
                     return Ok(Err(error));
                 }
             }
         }
+        copy_attributes(&input, &output);
         let _ = keep_metadata(&output, metadata);
         Ok(Ok(()))
     }
 
-    fn relocate(&mut self, from: &Path, mut to: PathBuf) -> Result<Option<PathBuf>, Halt> {
+    fn relocate(&mut self, from: &Path, mut landing: Landing) -> Result<Option<Change>, Halt> {
+        if crosses_volumes(from, &landing.target) {
+            return self.copy_across(from, landing);
+        }
         loop {
-            let placed = match rename_new(from, &to) {
-                Ok(()) => Placed::Done,
-                Err(error) if crosses_devices(&error) => self.copy_across(from, &to)?,
-                Err(error) if taken(&error) => Placed::Taken,
-                Err(error) => match self.trouble(from, error)? {
-                    true => continue,
-                    false => Placed::Failed,
-                },
-            };
-            match placed {
-                Placed::Done => return Ok(Some(to)),
-                Placed::Failed => return Ok(None),
-                Placed::Taken => match self.resolve(from, to)? {
-                    Some(next) => to = next,
+            if landing.replaces && !self.put_in_trash(&landing.target)? {
+                return Ok(None);
+            }
+            landing.replaces = false;
+            match rename_new(from, &landing.target) {
+                Ok(()) => {
+                    return Ok(Some(Change::Moved {
+                        from: from.to_path_buf(),
+                        to: landing.target,
+                    }));
+                }
+                Err(error) if crosses_devices(&error) => return self.copy_across(from, landing),
+                Err(error) if taken(&error) => match self.resolve(from, landing.target)? {
+                    Some(next) => landing = next,
                     None => return Ok(None),
                 },
+                Err(error) => {
+                    if !self.trouble(from, error)? {
+                        return Ok(None);
+                    }
+                }
             }
         }
     }
 
-    fn copy_across(&mut self, from: &Path, to: &Path) -> Result<Placed, Halt> {
+    fn copy_across(&mut self, from: &Path, landing: Landing) -> Result<Option<Change>, Halt> {
         let (items, bytes) = tree_size(from);
         self.progress.items_total += items;
         self.progress.bytes_total += bytes;
-        let troubles = self.troubles;
-        match self.copy_made(from, to) {
-            Err(halt) => {
-                self.discard_made(to);
-                Err(halt)
-            }
-            Ok(Placed::Taken) => {
-                self.progress.items_total -= items;
-                self.progress.bytes_total -= bytes;
-                Ok(Placed::Taken)
-            }
-            Ok(_) if self.troubles > troubles => {
-                self.discard_made(to);
-                Ok(Placed::Failed)
-            }
-            Ok(_) => {
-                self.attempt(from, |_| remove_all(from))?;
-                Ok(Placed::Done)
-            }
+        let folder = landing.target.parent().unwrap_or(Path::new("/"));
+        if !self.stage_copy(from, folder, true)? {
+            return Ok(None);
         }
+        let landed = self.land(landing, |worker, target| worker.resolve(from, target))?;
+        let Some((to, settled)) = landed else {
+            return Ok(None);
+        };
+        if let Err(error) = settled {
+            self.trouble(from, error)?;
+            return Ok(Some(Change::Created(to)));
+        }
+        Ok(Some(match self.attempt(from, |_| remove_all(from))? {
+            Some(()) => Change::Moved {
+                from: from.to_path_buf(),
+                to,
+            },
+            None => Change::Created(to),
+        }))
     }
 
     fn move_into(&mut self, source: &Path, destination: &Path) -> Result<(), Halt> {
@@ -873,11 +1136,11 @@ impl Worker {
             }
         };
         let target = destination.join(&name);
-        if target == source {
+        if same_item(source, &target) {
             self.step(source);
             return Ok(());
         }
-        if destination.starts_with(source) {
+        if folder_contains(source, destination) {
             self.trouble(
                 source,
                 io::Error::new(
@@ -887,13 +1150,10 @@ impl Worker {
             )?;
             return Ok(());
         }
-        if let Some(target) = self.resolve(source, target)?
-            && let Some(to) = self.relocate(source, target)?
+        if let Some(landing) = self.resolve(source, target)?
+            && let Some(change) = self.relocate(source, landing)?
         {
-            self.outcome.changes.push(Change::Moved {
-                from: source.to_path_buf(),
-                to,
-            });
+            self.outcome.changes.push(change);
         }
         self.step(source);
         Ok(())
@@ -901,38 +1161,58 @@ impl Worker {
 
     fn restore(&mut self, item: &TrashItem) -> Result<(), Halt> {
         self.check()?;
-        let Some(target) = self.resolve(&item.path(), item.original.clone())? else {
+        let Some(landing) = self.resolve(&item.path(), item.original.clone())? else {
             return Ok(());
         };
-        self.put_back(item, target)
+        self.put_back(item, landing)
     }
 
-    fn put_back(&mut self, item: &TrashItem, mut target: PathBuf) -> Result<(), Halt> {
+    fn put_back(&mut self, item: &TrashItem, mut landing: Landing) -> Result<(), Halt> {
         let placed = loop {
-            match restore_to(item, &target) {
-                Ok(()) => break target,
+            if crosses_volumes(&item.path(), &landing.target) {
+                break self.put_back_across(item, landing)?;
+            }
+            if landing.replaces && !self.put_in_trash(&landing.target)? {
+                return Ok(());
+            }
+            landing.replaces = false;
+            match restore_to(item, &landing.target) {
+                Ok(()) => break Some(landing.target),
                 Err(error) if crosses_devices(&error) => {
-                    let Some(placed) = self.relocate(&item.path(), target)? else {
-                        return Ok(());
-                    };
-                    if let Err(error) = forget(item) {
-                        self.fail(&placed, error);
-                    }
-                    break placed;
+                    break self.put_back_across(item, landing)?;
                 }
-                Err(error) if taken(&error) => match self.resolve(&item.path(), target)? {
-                    Some(next) => target = next,
+                Err(error) if taken(&error) => match self.resolve(&item.path(), landing.target)? {
+                    Some(next) => landing = next,
                     None => return Ok(()),
                 },
                 Err(error) => {
-                    if !self.trouble(&target, error)? {
+                    if !self.trouble(&landing.target, error)? {
                         return Ok(());
                     }
                 }
             }
         };
-        self.outcome.changes.push(Change::Created(placed));
+        if let Some(placed) = placed {
+            self.outcome.changes.push(Change::Created(placed));
+        }
         Ok(())
+    }
+
+    fn put_back_across(
+        &mut self,
+        item: &TrashItem,
+        landing: Landing,
+    ) -> Result<Option<PathBuf>, Halt> {
+        Ok(match self.copy_across(&item.path(), landing)? {
+            Some(Change::Moved { to, .. }) => {
+                if let Err(error) = forget(item) {
+                    self.fail(&to, error);
+                }
+                Some(to)
+            }
+            Some(Change::Created(to)) => Some(to),
+            _ => None,
+        })
     }
 
     fn revert(&mut self, change: &Change) -> Result<(), Halt> {
@@ -944,16 +1224,13 @@ impl Worker {
             Change::Moved { from, to } => {
                 if from.symlink_metadata().is_ok() {
                     self.trouble(from, io::Error::from(Errno::EXIST))?;
-                } else if let Some(back) = self.relocate(to, from.clone())? {
-                    self.outcome.changes.push(Change::Moved {
-                        from: to.clone(),
-                        to: back,
-                    });
+                } else if let Some(back) = self.relocate(to, Landing::free(from.clone()))? {
+                    self.outcome.changes.push(back);
                 }
                 self.step(from);
             }
             Change::Trashed(item) => {
-                self.put_back(item, item.original.clone())?;
+                self.put_back(item, Landing::free(item.original.clone()))?;
                 self.step(&item.original);
             }
         }
@@ -981,16 +1258,12 @@ pub fn rename(path: &Path, new_name: &str) -> Result<Option<Change>, RenameError
         return Err(RenameError::Reserved);
     }
     let target = path.with_file_name(new_name);
-    if target == path {
+    let unchanged = path
+        .file_name()
+        .is_some_and(|name| name.to_string_lossy() == new_name);
+    if target == path || unchanged {
         return Ok(None);
     }
-    let same_item = |a: &Path, b: &Path| {
-        use std::os::unix::fs::MetadataExt;
-        match (fs::symlink_metadata(a), fs::symlink_metadata(b)) {
-            (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
-            _ => false,
-        }
-    };
     match rename_new(path, &target) {
         Ok(()) => {}
         Err(error) if taken(&error) && same_item(path, &target) => {
@@ -1007,21 +1280,21 @@ pub fn rename(path: &Path, new_name: &str) -> Result<Option<Change>, RenameError
 
 pub fn make_alias(path: &Path) -> io::Result<Change> {
     let folder = path.parent().ok_or(io::ErrorKind::InvalidInput)?;
-    let name = name_of(path)?.to_string_lossy().into_owned();
-    let (alias, ()) = claim(|| alias_name(folder, &name), |alias| symlink(path, alias))?;
+    let name = name_of(path)?;
+    let (alias, ()) = claim(|| alias_name(folder, name), |alias| symlink(path, alias))?;
     Ok(Change::Created(alias))
 }
 
 pub fn new_document(parent: &Path, template: &Path) -> io::Result<Change> {
-    let name = name_of(template)?.to_string_lossy().into_owned();
-    let mut first = Some(parent.join(&name));
+    let name = name_of(template)?;
+    let mut first = Some(parent.join(name));
     let mut input = File::open(template)?;
     let permissions = input.metadata()?.permissions();
     let (path, ()) = claim(
         || {
             first
                 .take()
-                .unwrap_or_else(|| keep_both_name(parent, &name, false))
+                .unwrap_or_else(|| keep_both_name(parent, name, false))
         },
         |path| {
             let mut output = File::create_new(path)?;

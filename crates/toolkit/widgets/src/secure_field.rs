@@ -17,6 +17,8 @@ const BODY_FONT: f32 = 13.0;
 const GO_INSET: f32 = 4.0;
 const GO_STROKE: f32 = 1.5;
 
+type OnEdit = Box<dyn FnMut(&str)>;
+
 pub struct SecureField {
     id: WidgetId,
     placeholder: String,
@@ -24,6 +26,7 @@ pub struct SecureField {
     scale: f32,
     secret: Zeroizing<String>,
     on_submit: Box<dyn FnMut(&str)>,
+    on_edit: Option<OnEdit>,
     bullets: Option<Paragraph>,
     placeholder_paragraph: Option<Paragraph>,
     go_button: bool,
@@ -39,11 +42,17 @@ impl SecureField {
             scale: 1.0,
             secret: Zeroizing::default(),
             on_submit: Box::new(on_submit),
+            on_edit: None,
             bullets: None,
             placeholder_paragraph: None,
             go_button: false,
             frame: Rect::default(),
         }
+    }
+
+    pub fn on_edit(mut self, on_edit: impl FnMut(&str) + 'static) -> Self {
+        self.on_edit = Some(Box::new(on_edit));
+        self
     }
 
     pub fn with_go_button(mut self) -> Self {
@@ -263,6 +272,9 @@ impl Widget for SecureField {
             }
             Key::Space if !modifiers.control && !modifiers.alt => push(&mut self.secret, ' '),
             _ => return false,
+        }
+        if let Some(on_edit) = &mut self.on_edit {
+            on_edit(&self.secret);
         }
         true
     }

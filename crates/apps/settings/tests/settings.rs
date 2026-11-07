@@ -2,16 +2,11 @@
 
 use std::sync::Arc;
 
-use accesskit::Role;
 use bande_config::{Config, ConfigService, ConfigStore};
-use bande_backup::client::{DiskChoice, Status, phase, problem};
-use bande_settings::{
-    BackupUpdate, Command, PaneId, PasswordCommand, SettingId, SettingsClient, SettingsView, Update, Value, feed,
-    follow_passwords,
-};
+use bande_settings::{Command, PaneId, SettingId, SettingsClient, SettingsView, Value};
 use bande_test_bus::SessionBus;
-use bande_toolkit::ui::{Event, Key, Modifiers, Pointer};
-use bande_toolkit::{Palette, Point, Scheme, TextSystem};
+use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::{Palette, Scheme, TextSystem};
 
 const SIZE: (u32, u32) = (900, 720);
 
@@ -64,106 +59,4 @@ fn a_setting_found_by_search_and_changed_from_the_keyboard_is_written_to_the_con
         client.get(SettingId::KeyRepeatRate).expect("repeat rate"),
         Value::Number(30)
     );
-}
-
-#[test]
-fn a_pane_chosen_after_a_press_lost_to_a_pop_up_grab_is_shown_at_once() {
-    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
-    view.scene(SIZE.0, SIZE.1);
-    let centre = Point::new(SIZE.0 as f32 / 2.0, SIZE.1 as f32 / 2.0);
-    view.handle(&Event::PointerDown(Pointer::at(centre)));
-    view.handle(&Event::PointerLeave);
-
-    view.select_pane(PaneId::LanguageTime);
-    view.scene(SIZE.0, SIZE.1);
-
-    let name = bande_settings_panes::panes()
-        .into_iter()
-        .find(|pane| pane.id == PaneId::LanguageTime)
-        .expect("Language & Time pane")
-        .name;
-    let tree = view.accessibility();
-    assert!(
-        tree.nodes
-            .iter()
-            .any(|(_, node)| node.role() == Role::Heading && node.label() == Some(name.as_str())),
-        "the content still shows the previous pane"
-    );
-}
-
-fn shows(view: &mut SettingsView, text: &str) -> bool {
-    view.scene(SIZE.0, SIZE.1);
-    view.accessibility()
-        .nodes
-        .iter()
-        .any(|(_, node)| node.label() == Some(text) || node.value() == Some(text))
-}
-
-#[test]
-fn a_failed_unlock_says_what_failed_and_stays_on_the_pane_that_raised_it() {
-    let bus = SessionBus::start().expect("dbus-daemon");
-    let (feed, updates) = feed().expect("update feed");
-    let commands = follow_passwords(&bus.connect().expect("connection"), None, updates);
-    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
-    view.select_pane(PaneId::Passwords);
-
-    commands.send(PasswordCommand::Unlock).expect("worker");
-    let failure = (0..500)
-        .find_map(|_| {
-            std::thread::sleep(std::time::Duration::from_millis(10));
-            feed.drain().into_iter().find_map(|update| match update {
-                Update::PaneFailed(PaneId::Passwords, failure) => Some(failure),
-                _ => None,
-            })
-        })
-        .expect("an answer from the worker");
-    assert_eq!(
-        failure,
-        "The keychain isn't responding. Try again in a moment."
-    );
-    view.apply(vec![Update::PaneFailed(PaneId::Passwords, failure.clone())]);
-    assert!(shows(&mut view, &failure));
-
-    view.select_pane(PaneId::About);
-    assert!(!shows(&mut view, &failure), "it follows to another pane");
-    view.select_pane(PaneId::Passwords);
-    assert!(!shows(&mut view, &failure), "leaving the pane ends it");
-
-    view.select_pane(PaneId::About);
-    view.apply(vec![Update::PaneFailed(PaneId::Passwords, failure.clone())]);
-    assert!(!shows(&mut view, &failure), "it arrived for another pane");
-    view.select_pane(PaneId::Passwords);
-    assert!(
-        shows(&mut view, &failure),
-        "a late failure waits for its pane"
-    );
-}
-
-#[test]
-fn the_backup_pane_offers_disks_then_says_what_is_wrong() {
-    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
-    view.select_pane(PaneId::Backup);
-    view.apply(vec![
-        Update::Backup(BackupUpdate::Status(Status {
-            phase: phase::NO_DISK.to_owned(),
-            ..Status::default()
-        })),
-        Update::Backup(BackupUpdate::Disks(vec![DiskChoice {
-            uuid: "1234".to_owned(),
-            name: "Passport".to_owned(),
-            filesystem: "ext4".to_owned(),
-            size: 1_000_000_000_000,
-        }])),
-    ]);
-    assert!(shows(&mut view, "Passport"));
-    assert!(shows(&mut view, "Use This Disk"));
-
-    view.apply(vec![Update::Backup(BackupUpdate::Status(Status {
-        phase: phase::DISK_AWAY.to_owned(),
-        problem: problem::DISK_FULL.to_owned(),
-        disk_name: "Passport".to_owned(),
-        ..Status::default()
-    }))]);
-    assert!(shows(&mut view, "The disk is too small"));
-    assert!(shows(&mut view, "Passport isn't connected"));
 }

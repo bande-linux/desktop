@@ -1,0 +1,8 @@
+[Unit]
+Description=Bande print service
+
+[Service]
+Type=dbus
+BusName=org.bande.Print
+ExecStart=/usr/bin/bande-printd
+Restart=on-failure

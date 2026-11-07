@@ -17,8 +17,8 @@ pub enum Setting {
     Accent(Accent),
     TintedFrame(bool),
     ReopenApps(bool),
-    ReopenAppsAfterCrash(bool),
     AutomaticUpdates(bool),
+    UpdateCheckEvery(Option<Duration>),
     LockMessage(String),
     ShowPreviews(bool),
     Clock(ClockFormat),
@@ -108,17 +108,17 @@ impl Setting {
                 "lock-message",
                 (!message.is_empty()).then(|| message.clone().into()),
             ),
-            Self::ReopenAppsAfterCrash(on) => set(
-                &mut document,
-                None,
-                "reopen-apps-after-crash",
-                on.then_some(KdlValue::Bool(true)),
-            ),
             Self::AutomaticUpdates(on) => set(
                 &mut document,
                 None,
                 "automatic-updates",
                 on.then_some(KdlValue::Bool(true)),
+            ),
+            Self::UpdateCheckEvery(every) => set(
+                &mut document,
+                None,
+                "update-check-every",
+                every.map(|every| duration(every).into()),
             ),
             Self::Clock(format) => set(
                 &mut document,

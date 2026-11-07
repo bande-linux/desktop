@@ -104,8 +104,8 @@ fn is_btrfs(point: &Path, mounts: &str) -> bool {
 
 fn snapshot_of(source: &Path) -> PathBuf {
     let snapshots = Path::new(SNAPSHOTS);
-    let shared = fs::read_to_string("/proc/self/mounts")
-        .is_ok_and(|mounts| is_btrfs(snapshots, &mounts));
+    let shared =
+        fs::read_to_string("/proc/self/mounts").is_ok_and(|mounts| is_btrfs(snapshots, &mounts));
     if shared {
         let name = source.to_string_lossy().replace('/', "-");
         snapshots.join("home").join(format!("backup{name}"))

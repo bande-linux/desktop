@@ -1,0 +1,50 @@
+[package]
+name = "bande-printd"
+description = "Bande print service: finds network printers and sends documents to them, without CUPS"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+bande-bus.workspace = true
+bande-content.workspace = true
+bande-l10n.workspace = true
+bande-log.workspace = true
+bande-notify.workspace = true
+bande-printers.workspace = true
+bande-xdg.workspace = true
+blocking.workspace = true
+ring.workspace = true
+rustix = { workspace = true, features = ["event", "net", "time"] }
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+bande-graphics.workspace = true
+bande-pdf.workspace = true
+bande-test-bus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "misc"
+depends = "$auto, default-dbus-session-bus | dbus-session-bus"
+extended-description = """\
+Serves org.bande.Print on the session bus: finds AirPrint and IPP Everywhere \
+printers on the network with its own mDNS browser, keeps a queue of documents \
+for each user and sends them over IPP, with CUPS queues too where CUPS is \
+installed. It starts when asked and exits when nothing is left to do."""
+assets = [
+    ["target/release/bande-printd", "usr/bin/", "755"],
+    ["data/org.bande.Print.service", "usr/share/dbus-1/services/", "644"],
+    ["data/bande-printd.service", "usr/lib/systemd/user/", "644"],
+    ["data/bande-print-resume.service", "usr/lib/systemd/user/", "644"],
+]
+maintainer-scripts = "debian/"
+
+[lints]
+workspace = true

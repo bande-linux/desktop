@@ -15,38 +15,53 @@ use std::sync::mpsc::{self, Sender};
 use std::time::Duration;
 
 use bande_graphics::Modifiers;
-use bande_xdg::{remember_running_apps, write_running_apps};
+use bande_xdg::{remember_running_apps, running_apps_contents};
 use smithay::utils::Rectangle;
 use smithay::wayland::xdg_activation::XdgActivationTokenData;
 
 use crate::shell::{is_shell, toplevel_names};
 use crate::state::{Compositor, State};
 
-const RUNNING_APPS_PAUSE: Duration = Duration::from_secs(1);
+const SESSION_ENDING_SINCE: u32 = 9;
+const STATE_WRITE_PAUSE: Duration = Duration::from_secs(1);
+
+pub(crate) struct StateWriter(Sender<String>);
+
+impl StateWriter {
+    pub(crate) fn start(file: PathBuf) -> io::Result<Self> {
+        let (sender, receiver) = mpsc::channel::<String>();
+        std::thread::Builder::new()
+            .name("state-writer".to_owned())
+            .spawn(move || {
+                while let Ok(mut contents) = receiver.recv() {
+                    while let Ok(newer) = receiver.try_recv() {
+                        contents = newer;
+                    }
+                    if let Err(error) = bande_xdg::replace_file(&file, &contents) {
+                        tracing::warn!("cannot write {}: {error}", file.display());
+                    }
+                    std::thread::sleep(STATE_WRITE_PAUSE);
+                }
+            })?;
+        Ok(Self(sender))
+    }
+
+    pub(crate) fn write(&self, contents: String) {
+        if self.0.send(contents).is_err() {
+            tracing::warn!("the state writer has stopped");
+        }
+    }
+}
 
 pub(crate) struct RunningApps {
-    sender: Sender<Vec<String>>,
+    writer: StateWriter,
     written: Vec<String>,
 }
 
 impl RunningApps {
     fn start(file: PathBuf) -> io::Result<Self> {
-        let (sender, receiver) = mpsc::channel::<Vec<String>>();
-        std::thread::Builder::new()
-            .name("running-apps".to_owned())
-            .spawn(move || {
-                while let Ok(mut apps) = receiver.recv() {
-                    while let Ok(newer) = receiver.try_recv() {
-                        apps = newer;
-                    }
-                    if let Err(error) = write_running_apps(&file, &apps) {
-                        tracing::warn!("cannot note the running apps: {error}");
-                    }
-                    std::thread::sleep(RUNNING_APPS_PAUSE);
-                }
-            })?;
         Ok(Self {
-            sender,
+            writer: StateWriter::start(file)?,
             written: Vec::new(),
         })
     }
@@ -57,22 +72,15 @@ impl State {
         if !std::mem::take(&mut self.apps_changed) || self.running_apps.is_none() {
             return;
         }
-        let mut apps: Vec<String> = Vec::new();
-        for (_, app_id) in self.app_owners() {
-            if !app_id.is_empty() && !apps.contains(&app_id) {
-                apps.push(app_id);
-            }
-        }
+        let apps = self.apps_with_windows();
         let Some(running) = self.running_apps.as_mut() else {
             return;
         };
         if running.written == apps {
             return;
         }
-        running.written = apps.clone();
-        if running.sender.send(apps).is_err() {
-            self.running_apps = None;
-        }
+        running.writer.write(running_apps_contents(&apps));
+        running.written = apps;
     }
 
     pub(crate) fn quit_app(&mut self, owner: Option<Client>) {
@@ -98,6 +106,20 @@ impl State {
         } else {
             bound.into_iter().for_each(BandeAppV1::quit_requested);
         }
+    }
+
+    fn apps_with_windows(&self) -> Vec<String> {
+        let windowless = self.windowless_apps();
+        let mut apps: Vec<String> = Vec::new();
+        for (owner, app_id) in self.app_owners() {
+            if !app_id.is_empty()
+                && !apps.contains(&app_id)
+                && !windowless.iter().any(|(client, _)| *client == owner)
+            {
+                apps.push(app_id);
+            }
+        }
+        apps
     }
 
     pub(crate) fn app_owners(&self) -> Vec<(Client, String)> {
@@ -254,11 +276,7 @@ impl State {
         let Some(file) = self.reopen_file.clone() else {
             return;
         };
-        let running: Vec<String> = self
-            .app_owners()
-            .into_iter()
-            .map(|(_, app_id)| app_id)
-            .collect();
+        let running = self.apps_with_windows();
         let remembered = std::thread::Builder::new()
             .name("reopen".to_owned())
             .spawn(move || {
@@ -272,6 +290,14 @@ impl State {
 
     pub(crate) fn quit_all_apps(&mut self, requester: BandeShellV1) {
         for (owner, _) in self.app_owners() {
+            for app in self
+                .app_resources
+                .iter()
+                .filter(|app| app.client().as_ref() == Some(&owner))
+                .filter(|app| app.version() >= SESSION_ENDING_SINCE)
+            {
+                app.session_ending();
+            }
             self.quit_app(Some(owner));
         }
         self.quitting.push((requester, None));
@@ -317,6 +343,7 @@ impl Compositor {
     }
 
     pub fn shutting_down(&mut self, delay: OwnedFd) {
+        self.state.resume.freeze();
         let remembered = self
             .state
             .reopen_file

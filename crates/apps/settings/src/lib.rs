@@ -44,6 +44,7 @@ use std::sync::LazyLock;
 use bande_l10n::Localizer;
 
 pub use about::{About, AboutCommand, chip_name, memory_bytes, static_hostname, system_version};
+pub use backup::{BackupCommand, BackupUpdate};
 pub use bande_settings_panes::{PaneId, SettingId, Value};
 pub use battery::{BatteryCommand, BatteryState, Charge, charge_of, follow_battery};
 pub use client::{CONFIG_SETTINGS, SettingsClient};
@@ -70,7 +71,6 @@ pub use software::{
     check, follow_software, open_updates, update,
 };
 pub use state::{Answer, BluetoothState, Display, Joined, Mode, NetworkState, Question, WifiState};
-pub use backup::{BackupCommand, BackupUpdate};
 pub use storage::{Category, Storage, StorageCommand, Tally, categorize, tally};
 pub use time::{
     TimeCommand, TimeState, follow_time, parse_manual, zone_matches, zone_offset, zone_place,

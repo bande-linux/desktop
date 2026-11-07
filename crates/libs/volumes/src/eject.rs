@@ -6,9 +6,13 @@ use std::thread;
 use zbus::blocking::Connection;
 use zbus::zvariant::{ObjectPath, Value};
 
+use crate::mounts::is_connected;
 use crate::udisks::{BLOCK, DRIVE, ENCRYPTED, FILESYSTEM, LOOP, Objects, PARTITION, UDISKS};
 
 const BUSY: &str = "org.freedesktop.UDisks2.Error.DeviceBusy";
+pub const MOUNTS_SERVICE: &str = "org.bande.Mounts";
+pub const MOUNTS_PATH: &str = "/org/bande/Mounts";
+pub const MOUNTS_INTERFACE: &str = "org.bande.Mounts";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EjectFailure {
@@ -150,14 +154,39 @@ fn eject_all(
     Ok(())
 }
 
+fn disconnect(mount_point: PathBuf, failed: &impl Fn(EjectFailure)) {
+    let answer = Connection::session().and_then(|session| {
+        session.call_method(
+            Some(MOUNTS_SERVICE),
+            MOUNTS_PATH,
+            Some(MOUNTS_INTERFACE),
+            "Disconnect",
+            &(mount_point.to_string_lossy().as_ref(),),
+        )
+    });
+    if let Err(error) = answer {
+        tracing::warn!("cannot disconnect {}: {error}", mount_point.display());
+        failed(failure(mount_point, &error));
+    }
+}
+
 pub fn eject(
     mount_points: Vec<PathBuf>,
     force: bool,
     failed: impl Fn(EjectFailure) + Send + 'static,
 ) {
     let work = move || {
-        let first = mount_points.first().cloned().unwrap_or_default();
-        if let Err(error) = eject_all(mount_points, force, &failed) {
+        let (connected, disks): (Vec<_>, Vec<_>) = mount_points
+            .into_iter()
+            .partition(|point| is_connected(point));
+        for point in connected {
+            disconnect(point, &failed);
+        }
+        if disks.is_empty() {
+            return;
+        }
+        let first = disks.first().cloned().unwrap_or_default();
+        if let Err(error) = eject_all(disks, force, &failed) {
             tracing::warn!("cannot eject: {error}");
             failed(failure(first, &error));
         }

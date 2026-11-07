@@ -11,7 +11,7 @@ use bande_app::TabDrop;
 use bande_content::Preview;
 use bande_fs::{
     Action, Answer, Change, Entry, ExtensionChange, Finished, FolderChanges, FolderWatch, Format,
-    History, Operations, Purpose, RenameError, Resolution, Sort, Step, Task, TrashItem,
+    History, Operations, Purpose, RenameError, Resolution, Running, Sort, Step, Task, TrashItem,
     archive_path, can_extract,
 };
 use bande_quick_look::QuickLookLink;
@@ -109,6 +109,9 @@ pub enum Sheet {
     EmptyTrash,
     Failure,
     NoSpace,
+    Busy {
+        quitting: bool,
+    },
     DeleteImmediately {
         paths: Vec<PathBuf>,
         items: Vec<TrashItem>,
@@ -181,6 +184,13 @@ pub enum Request {
         packages: Vec<String>,
     },
     ShowQuickLook,
+    StopAndLeave {
+        quitting: bool,
+    },
+    Leave {
+        quitting: bool,
+    },
+    OperationsDone,
     DetachTab {
         index: usize,
         grab: Point,
@@ -799,17 +809,48 @@ impl FilesView {
                     true
                 }
                 None => {
-                    if self.sheet.is_none() {
-                        if self.operations.conflict().is_some() {
-                            self.present_conflict();
-                        } else if self.operations.failure().is_some() {
-                            self.present_failure();
-                        }
-                    }
+                    self.present_waiting_question();
                     true
                 }
             },
         }
+    }
+
+    fn present_waiting_question(&mut self) {
+        if self.sheet.is_none() {
+            if self.operations.conflict().is_some() {
+                self.present_conflict();
+            } else if self.operations.failure().is_some() {
+                self.present_failure();
+            }
+        }
+    }
+
+    pub fn busy(&self) -> bool {
+        !self.operations.running().is_empty()
+    }
+
+    pub fn stop_operations(&mut self) {
+        for index in 0..self.operations.running().len() {
+            self.operations.cancel(index);
+        }
+    }
+
+    pub fn take_operations(&mut self) -> Vec<Running> {
+        self.operations.take_running()
+    }
+
+    pub fn adopt_operations(&mut self, running: Vec<Running>) {
+        self.operations.adopt(running);
+        self.present_waiting_question();
+    }
+
+    pub fn ask_before_leaving(&mut self, quitting: bool) {
+        if matches!(self.sheet, Some(Sheet::Conflict { .. } | Sheet::Failure)) {
+            return;
+        }
+        self.dismiss_sheet();
+        self.present_busy(quitting);
     }
 
     pub fn deadline(&self) -> Option<Instant> {
@@ -1492,6 +1533,13 @@ impl FilesView {
                 self.answer_failure(action);
                 if self.operations.failure().is_some() {
                     self.present_failure();
+                }
+            }
+            Sheet::Busy { quitting } => {
+                if action == "stop" {
+                    self.requests.push(Request::StopAndLeave { quitting });
+                } else {
+                    self.present_waiting_question();
                 }
             }
             Sheet::GoTo(typed) if action == "go" => self.go_to(&typed),
@@ -2347,6 +2395,13 @@ impl FilesView {
             && self.operations.failure().is_none()
         {
             self.dismiss_sheet();
+        }
+        if !self.busy() {
+            if let Some(Sheet::Busy { quitting }) = self.sheet {
+                self.dismiss_sheet();
+                self.requests.push(Request::Leave { quitting });
+            }
+            self.requests.push(Request::OperationsDone);
         }
         if let Some(shortfall) = &outcome.shortfall
             && self.sheet.is_none()

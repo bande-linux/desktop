@@ -1308,6 +1308,7 @@ impl FilesView {
             Sheet::Conflict { .. }
             | Sheet::Failure
             | Sheet::NoSpace
+            | Sheet::Busy { .. }
             | Sheet::GoTo(_)
             | Sheet::ConnectServer { .. }
             | Sheet::ServerPassword(_)

@@ -286,3 +286,45 @@ impl FakeUdisks {
         Ok(calls)
     }
 }
+
+#[derive(Clone, Default)]
+struct SystemdManager(Arc<Mutex<Vec<String>>>);
+
+#[zbus::interface(name = "org.freedesktop.systemd1.Manager")]
+impl SystemdManager {
+    fn stop_unit(&self, name: String, _mode: String) -> zbus::fdo::Result<OwnedObjectPath> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(name);
+        OwnedObjectPath::try_from("/org/freedesktop/systemd1/job/1")
+            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))
+    }
+}
+
+pub struct FakeSystemd {
+    _daemon: Connection,
+    manager: SystemdManager,
+}
+
+impl FakeSystemd {
+    pub fn start(bus: &SessionBus) -> zbus::Result<Self> {
+        let manager = SystemdManager::default();
+        let daemon = zbus::blocking::connection::Builder::address(bus.address())?
+            .name("org.freedesktop.systemd1")?
+            .serve_at("/org/freedesktop/systemd1", manager.clone())?
+            .build()?;
+        Ok(Self {
+            _daemon: daemon,
+            manager,
+        })
+    }
+
+    pub fn stopped(&self) -> Vec<String> {
+        self.manager
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+}

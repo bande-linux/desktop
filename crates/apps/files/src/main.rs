@@ -1128,6 +1128,27 @@ impl Files {
                     tracing::warn!("cannot show the menu: {error}");
                 }
             }
+            Request::ForgetServer(url) => {
+                let forgotten = std::thread::Builder::new()
+                    .name("forget server".to_owned())
+                    .spawn(move || {
+                        let called = Connection::session().and_then(|session| {
+                            session.call_method(
+                                Some(MOUNTS_SERVICE),
+                                MOUNTS_PATH,
+                                Some(MOUNTS_INTERFACE),
+                                "Forget",
+                                &(&url,),
+                            )
+                        });
+                        if let Err(error) = called {
+                            tracing::warn!("cannot forget {url}: {error}");
+                        }
+                    });
+                if let Err(error) = forgotten {
+                    tracing::warn!("cannot forget a server: {error}");
+                }
+            }
             Request::Compose { app, arguments } => {
                 let token = window.activation_token(app.app_id()).ok();
                 if let Err(error) = launch_with_arguments(&app, &arguments, token.as_deref()) {

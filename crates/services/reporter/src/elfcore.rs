@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::io::{self, Read, Write};
 
 use serde_json::{Value, json};
@@ -9,6 +10,9 @@ const PT_LOAD: u32 = 1;
 const PT_NOTE: u32 = 4;
 const NT_PRSTATUS: u32 = 1;
 const NT_SIGINFO: u32 = 0x5349_4749;
+const NT_FILE: u32 = 0x4649_4c45;
+const NT_GNU_BUILD_ID: u32 = 3;
+const FILE_HEADER_LIMIT: usize = 64 * 1024;
 const PRSTATUS_PID: usize = 32;
 const PRSTATUS_REGS: usize = 112;
 const SIGINFO_CODE: usize = 8;
@@ -31,6 +35,7 @@ pub struct CoreFacts {
     pub registers: Vec<u64>,
     pub signal_code: Option<i32>,
     pub fault_address: Option<u64>,
+    pub mapped_files: Vec<String>,
     stack_pointers: Vec<u64>,
     notes: Vec<u8>,
 }
@@ -84,10 +89,64 @@ fn parse_notes(notes: &[u8], facts: &mut CoreFacts) {
                 facts.signal_code = u32_at(descriptor, SIGINFO_CODE).map(|code| code as i32);
                 facts.fault_address = u64_at(descriptor, SIGINFO_ADDRESS);
             }
+            NT_FILE => facts.mapped_files = parse_file_note(descriptor),
             _ => {}
         }
         at = data + size.next_multiple_of(4);
     }
+}
+
+fn parse_file_note(descriptor: &[u8]) -> Vec<String> {
+    let count = u64_at(descriptor, 0).unwrap_or(0) as usize;
+    let names = 16 + count.saturating_mul(24);
+    let mut files: Vec<String> = descriptor
+        .get(names..)
+        .unwrap_or_default()
+        .split(|byte| *byte == 0)
+        .filter_map(|name| std::str::from_utf8(name).ok())
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect();
+    files.sort();
+    files.dedup();
+    files
+}
+
+pub fn build_id_of_file(path: &str) -> Option<String> {
+    let file = File::open(path).ok()?;
+    let mut bytes = vec![0; FILE_HEADER_LIMIT];
+    let read = read_exact_or_short(&mut file.take(FILE_HEADER_LIMIT as u64), &mut bytes).ok()?;
+    bytes.truncate(read);
+    if bytes.get(..4)? != b"\x7fELF" {
+        return None;
+    }
+    let segments = parse_segments(&bytes, bytes.get(u64_at(&bytes, 32)? as usize..)?);
+    segments
+        .iter()
+        .filter(|segment| segment.kind == PT_NOTE)
+        .find_map(|segment| {
+            let notes = bytes
+                .get(segment.offset as usize..(segment.offset + segment.file_size) as usize)?;
+            let mut at = 0;
+            while let (Some(name_size), Some(size), Some(kind)) = (
+                u32_at(notes, at),
+                u32_at(notes, at + 4),
+                u32_at(notes, at + 8),
+            ) {
+                let data = at + 12 + (name_size as usize).next_multiple_of(4);
+                let descriptor = notes.get(data..data + size as usize)?;
+                if kind == NT_GNU_BUILD_ID {
+                    return Some(
+                        descriptor
+                            .iter()
+                            .map(|byte| format!("{byte:02x}"))
+                            .collect(),
+                    );
+                }
+                at = data + (size as usize).next_multiple_of(4);
+            }
+            None
+        })
 }
 
 fn read_exact_or_short(reader: &mut impl Read, buffer: &mut [u8]) -> io::Result<usize> {

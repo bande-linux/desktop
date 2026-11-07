@@ -84,7 +84,7 @@ fn a_frame_reaches_the_display_buffer() {
             .unwrap();
         frame.clear(colour, &whole).unwrap();
         drop(frame.finish().unwrap());
-        drop(framebuffer);
+
         assert_eq!(
             pixel(&mut memory, 100, 50),
             expected,
@@ -110,7 +110,7 @@ fn a_converted_frame_reaches_the_display_buffer() {
         .clear(Color32F::new(1.0, 0.0, 0.0, 1.0), &whole)
         .unwrap();
     drop(frame.finish().unwrap());
-    drop(framebuffer);
+
     let converts = !renderer.device_info().software;
     let expected = if converts { [0, 255, 0] } else { [255, 0, 0] };
     assert_eq!(pixel(&mut memory, 100, 50), expected);

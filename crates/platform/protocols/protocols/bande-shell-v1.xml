@@ -173,6 +173,15 @@
       <arg name="app_id" type="string"/>
     </event>
 
+    <request name="set_backdrop_opacity" since="6">
+      <description summary="fade the background effect of a surface">
+        How much of the surface's background effect shows, from 0 to 1, for a
+        panel that fades in and out. 1 is the default.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="opacity" type="fixed"/>
+    </request>
+
     <request name="set_corner_radius">
       <description summary="round the background effect of a surface">
         Rounds each blur region the surface set through

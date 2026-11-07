@@ -42,6 +42,8 @@ pub enum Command {
     QuickLookFullScreen,
     MoveHere,
     EjectCurrent,
+    ShareMail,
+    ShareTo(std::path::PathBuf),
     GoTo(Destination),
     EmptyTrash,
     OpenPlaceInNewTab,
@@ -58,6 +60,7 @@ pub enum Destination {
     Recents,
 }
 
+const SHARE_TO: &str = "share-to:";
 const OPEN_WITH: &str = "open-with:";
 const NEW_DOCUMENT: &str = "new-document:";
 
@@ -109,6 +112,7 @@ const ACTIONS: &[(&str, Command)] = &[
     ("quick-look-full-screen", Command::QuickLookFullScreen),
     ("move-here", Command::MoveHere),
     ("eject-current", Command::EjectCurrent),
+    ("share-mail", Command::ShareMail),
     ("go:desktop", Command::GoTo(Destination::Desktop)),
     ("go:documents", Command::GoTo(Destination::Documents)),
     ("go:downloads", Command::GoTo(Destination::Downloads)),
@@ -136,6 +140,9 @@ pub fn group_action(group: Option<GroupBy>) -> &'static str {
 pub fn command(action: &str) -> Option<Command> {
     if let Some(id) = action.strip_prefix(OPEN_WITH) {
         return Some(Command::OpenWith(id.to_owned()));
+    }
+    if let Some(path) = action.strip_prefix(SHARE_TO) {
+        return Some(Command::ShareTo(path.into()));
     }
     if let Some(name) = action.strip_prefix(NEW_DOCUMENT) {
         return Some(Command::NewDocument(name.to_owned()));
@@ -169,6 +176,8 @@ pub struct Selection {
     pub files: bool,
     pub terminal: bool,
     pub apps: Vec<OpenWithChoice>,
+    pub mail: bool,
+    pub places: Vec<std::path::PathBuf>,
 }
 
 pub fn items_menu(selection: &Selection) -> Menu {
@@ -228,6 +237,26 @@ pub fn items_menu(selection: &Selection) -> Menu {
         items.push(item(
             "menu-show-in-enclosing-folder",
             &Command::ShowInEnclosingFolder,
+        ));
+    }
+    let mut targets = Vec::new();
+    if selection.mail {
+        targets.push(item("menu-share-mail", &Command::ShareMail));
+    }
+    targets.extend(selection.places.iter().map(|place| {
+        let name = place.file_name().unwrap_or_default().to_string_lossy();
+        MenuItem::new(
+            &L10N.tr_args(
+                "menu-share-to",
+                [("place", name.as_ref().to_owned().into())],
+            ),
+            &format!("{SHARE_TO}{}", place.display()),
+        )
+    }));
+    if !targets.is_empty() {
+        items.push(MenuItem::submenu(
+            &L10N.tr("menu-share"),
+            Menu::new(targets),
         ));
     }
     items.push(MenuItem::separator());

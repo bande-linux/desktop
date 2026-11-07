@@ -22,9 +22,13 @@ video keeps the display awake. A codec that crashes takes down neither Files nor
   decode gets a small package of its `v4l2codecs` and `videoparsersbad` plugins, Apple only.
 
 ## Stages
-1. Playback: engine, Player, MPRIS, media keys, keep awake; frames as XRGB in shared memory.
-2. Quick Look in Files.
-3. Efficient frames: NV12 dmabufs (`udmabuf` for software decode) sampled by the compositor without a
-   copy, with `color-representation-v1`.
-4. Hardware decode: AVD driver in the kernel build, `avd-fw` packaged, the plugin package. Browser
-   decode needs VA-API or a Firefox V4L2-request path and is separate.
+1. Done: engine, Player, MPRIS, media keys, keep awake, Quick Look.
+2. Done: NV12 dmabufs (`udmabuf` for software decode, BT.709 with the engine converting anything
+   else), copied to textures by the GPU and converted by the compositor's `video` shader. XRGB in
+   shared memory is the fallback. Sampling the dmabuf without the copy is the next saving.
+3. Hardware decode, on the kernel repo's `fix-media` branch, not merged: AVD driver in the kernel
+   build, `avd-fw` packaged, a small package of the `v4l2codecs` and `videoparsersbad` plugins. It
+   needs a test boot on the mini. Browser decode needs VA-API or a Firefox V4L2-request path and is
+   separate.
+4. MPEG-TS and MPEG-PS demuxers live in plugins-bad too: such files report as unsupported until they
+   join that small package.

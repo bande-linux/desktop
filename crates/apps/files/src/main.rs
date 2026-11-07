@@ -17,10 +17,10 @@ use bande_backup::client::{Browsing, CannotBrowse, open_browser};
 use bande_files::{
     BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, L10N, Location, Request, Row,
     SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, SavedTab, ServerAnswer, ServerRequest, Show,
-    ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, follow_search_excluded, hidden_places,
-    list_columns_file, recent_folders_file as recent_folders_file_in, rows, serve_file_manager,
-    settings_view, sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks,
-    with_place_shown, without_bookmark,
+    ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file,
+    recent_folders_file as recent_folders_file_in, rows, serve_file_manager, settings_view,
+    sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks, with_place_shown,
+    without_bookmark,
 };
 use bande_fs::{History, Running, Trash};
 use bande_inbox::{Inbox, Outbox};
@@ -1156,6 +1156,12 @@ impl Files {
                     tracing::warn!("cannot show the menu: {error}");
                 }
             }
+            Request::Compose { app, arguments } => {
+                let token = window.activation_token(app.app_id()).ok();
+                if let Err(error) = launch_with_arguments(&app, &arguments, token.as_deref()) {
+                    tracing::warn!("cannot write the mail with {}: {error}", app.id);
+                }
+            }
             Request::ConnectServer { token, request } => self.ask_server(token, request),
             Request::InstallServerTools {
                 token,
@@ -1217,7 +1223,8 @@ impl Program for Files {
             .inspect_err(|error| tracing::warn!("cannot follow the Search privacy list: {error}"))
             .ok();
         if let Some(inbox) = &excluded {
-            follow_search_excluded(home.clone(), inbox.outbox());
+            let folders = inbox.outbox();
+            bande_search::follow_policy(home.clone(), move |policy| folders.send(policy.excluded));
         }
         let sidebar_watch = layout_file(&home)
             .parent()

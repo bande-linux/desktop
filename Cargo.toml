@@ -49,6 +49,7 @@ pipewire = "=0.10.1"
 png = "=0.18.1"
 pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
+quick-xml = "=0.41.0"
 ring = "=0.17.14"
 resvg = { version = "=0.49.0", default-features = false }
 roxmltree = "=0.21.2"
@@ -60,6 +61,7 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 skrifa = "=0.44.0"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
+tantivy = { version = "=0.25.0", default-features = false, features = ["mmap", "lz4-compression"] }
 tar = "=0.4.46"
 tempfile = "=3.27.0"
 tracing = "=0.1.44"
@@ -107,6 +109,7 @@ bande-fs = { path = "crates/libs/fs" }
 bande-graphics = { path = "crates/toolkit/graphics" }
 bande-pdf = { path = "crates/toolkit/pdf" }
 bande-greeter = { path = "crates/shell/greeter" }
+bande-indexer = { path = "crates/services/index" }
 bande-inbox = { path = "crates/libs/inbox" }
 bande-keyring = { path = "crates/libs/keyring" }
 bande-keyboard = { path = "crates/libs/keyboard" }

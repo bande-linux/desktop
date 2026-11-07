@@ -264,6 +264,7 @@ impl SettingsView {
             | PaneId::Screenshots
             | PaneId::ScreenSharing
             | PaneId::Backup
+            | PaneId::Sharing
             | PaneId::Location => None,
         };
         live.unwrap_or_else(|| pane.summary.clone())

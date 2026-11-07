@@ -21,6 +21,7 @@ use crate::backup::{BackupCommand, BackupUpdate, follow_backup};
 use crate::battery::{BatteryCommand, BatteryState, follow_battery};
 use crate::brightness::follow_brightness;
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
+use crate::consent::{KeyboardAccess, follow_keyboard_access};
 use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
 use crate::failure::{explained, pane_failed, sentence};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
@@ -33,9 +34,11 @@ use crate::pointing::{PointingDevices, UDEV_DATA, follow_pointing};
 use crate::printers::{PrinterCommand, PrintersState, follow_printers};
 use crate::privacy::clear_clipboard;
 use crate::privilege::{Privilege, follow_privileges};
+use crate::security_status::{SecurityStatus, follow_security_status};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
 };
+use crate::sharing::{SharingCommand, SharingState, follow_sharing};
 use crate::software::{SoftwareCommand, SoftwareState, follow_software};
 use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand, follow_storage};
@@ -82,7 +85,10 @@ pub enum Update {
     Refused(Vec<Privilege>),
     DefaultApps(Vec<DefaultApp>),
     Permissions(Grants),
+    KeyboardAccess(Vec<KeyboardAccess>),
+    Security(SecurityStatus),
     Printers(PrintersState),
+    Sharing(SharingState),
     PrinterAdded(bool),
     PrintingInstalled,
     Accounts(Vec<Account>, bool),
@@ -115,7 +121,9 @@ pub enum Command {
     Locale(LocaleCommand),
     DefaultApp(DefaultAppCommand),
     Permission(PermissionCommand),
+    KeyboardAccess(String, bool),
     Printers(PrinterCommand),
+    Sharing(SharingCommand),
     Users(UsersCommand),
     Brightness(LevelRequest),
     Reveal(PathBuf),
@@ -362,11 +370,14 @@ pub struct Services {
     locale: Option<Sender<LocaleCommand>>,
     default_apps: Sender<DefaultAppCommand>,
     permissions: Sender<PermissionCommand>,
+    keyboard_access: Sender<(String, bool)>,
     passwords: Sender<PasswordCommand>,
     brightness: Option<Sender<LevelRequest>>,
     printers: Option<Sender<PrinterCommand>>,
+    sharing: Sender<SharingCommand>,
     users: Sender<UsersCommand>,
     _pointing: Option<FolderWatch>,
+    _security: Option<FolderWatch>,
 }
 
 impl Services {
@@ -400,9 +411,12 @@ impl Services {
             locale: system.map(|system| follow_locale(system, updates.clone())),
             default_apps: follow_default_apps(updates.clone()),
             permissions: follow_permissions(session, updates.clone()),
+            keyboard_access: follow_keyboard_access(updates.clone()),
+            _security: follow_security_status(system, updates.clone()),
             passwords: follow_passwords(session, system, updates.clone()),
             brightness: follow_brightness(session, updates.clone()),
             printers: system.map(|system| follow_printers(system, updates.clone())),
+            sharing: follow_sharing(Some(session.clone()), system.cloned(), updates.clone()),
             users: follow_users(session, system, updates.clone()),
             _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
                 .inspect_err(|error| tracing::warn!("cannot watch {UDEV_DATA}: {error}"))
@@ -446,8 +460,10 @@ impl Services {
             Command::Login(command) => self.login.send(command).is_ok(),
             Command::DefaultApp(command) => self.default_apps.send(command).is_ok(),
             Command::Permission(command) => self.permissions.send(command).is_ok(),
+            Command::KeyboardAccess(line, on) => self.keyboard_access.send((line, on)).is_ok(),
             Command::Passwords(command) => self.passwords.send(command).is_ok(),
             Command::Users(command) => self.users.send(command).is_ok(),
+            Command::Sharing(command) => self.sharing.send(command).is_ok(),
             Command::Printers(command) => self
                 .printers
                 .as_ref()

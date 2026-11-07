@@ -21,6 +21,7 @@ use crate::state::{ClientState, Compositor};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionRole {
     ClipboardDaemon,
+    LockScreen,
     Shell,
 }
 
@@ -221,7 +222,7 @@ impl Compositor {
         let mut command = Command::new(&executable);
         command.env(OUTPUT_VARIABLE, self.state.main_screen().name());
         match self
-            .spawn_session_command(command, SessionRole::Shell)
+            .spawn_session_command(command, SessionRole::LockScreen)
             .map(|(child, _)| child)
         {
             Ok(child) => self.lock_screen.child = Some(child),
@@ -306,7 +307,9 @@ impl Compositor {
         command.envs(desktop_environment());
         command.envs(cursor_environment(self.cursor_theme()));
         match (&self.socket_name, role) {
-            (Some(name), SessionRole::Shell) => command.env("WAYLAND_DISPLAY", name),
+            (Some(name), SessionRole::Shell | SessionRole::LockScreen) => {
+                command.env("WAYLAND_DISPLAY", name)
+            }
             _ => command.env_remove("WAYLAND_DISPLAY"),
         };
         unsafe {

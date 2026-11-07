@@ -175,6 +175,10 @@ const ARCHIVE_UTILITY_DESKTOP_ID: &str = "org.bande.ArchiveUtility.desktop";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
+    Compose {
+        app: Box<DesktopEntry>,
+        arguments: Vec<String>,
+    },
     ConnectServer {
         token: u64,
         request: ServerRequest,
@@ -288,7 +292,7 @@ pub struct FilesView {
     pub(crate) menu_place: Option<usize>,
     pub(crate) hidden_places: Vec<Location>,
     volumes_shown: bool,
-    mounted: Vec<PathBuf>,
+    pub(crate) mounted: Vec<PathBuf>,
     media: Vec<PathBuf>,
     pub(crate) server_token: u64,
     nearby: Vec<(String, String)>,

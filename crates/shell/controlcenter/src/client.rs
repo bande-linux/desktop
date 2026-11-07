@@ -25,8 +25,8 @@ use bande_status::session::full_name;
 use bande_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
 use bande_toolkit::{
     App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
-    MenuPlacement, Palette, Panel, Point, Rect, Role, Scene, SessionEnd, TextSystem, VolumeKey,
-    Window, WindowEvent,
+    MenuPlacement, Palette, Panel, Point, Radius, Rect, Role, Scene, SessionEnd, TextSystem,
+    VolumeKey, Window, WindowEvent,
 };
 use bande_xdg::{
     DesktopEntry, ICON_THEMES, applications, current_desktops, data_dirs, find_icon,
@@ -849,6 +849,7 @@ impl App for ControlCenter {
         let now = Instant::now();
         let (shown, _) = self.shown.value_at(now);
         let palette = self.palette;
+        let mut backdrop = None;
         let items = match &mut self.mode {
             Mode::Panel {
                 ui,
@@ -859,6 +860,7 @@ impl App for ControlCenter {
                     (width as f32, height as f32),
                     (PANEL_WIDTH, *panel_height),
                 );
+                backdrop = Some(rect);
                 panel_items(ui, &palette, rect)
             }
             Mode::Hud(shown_hud, _) => {
@@ -871,6 +873,14 @@ impl App for ControlCenter {
             Mode::Hidden => Vec::new(),
         };
         let lift = slide_from(self.anchor, SLIDE * (1.0 - shown));
+        let translucent = palette.panel.a != u8::MAX;
+        window.set_backdrop(backdrop.filter(|_| translucent).map(|rect: Rect| {
+            Rect::new(rect.x + lift.x, rect.y + lift.y, rect.width, rect.height)
+        }));
+        if translucent {
+            let _ = window.set_corner_radius(Radius::XL as u32);
+            let _ = window.set_backdrop_opacity(shown.clamp(0.0, 1.0));
+        }
         scene(
             width,
             height,

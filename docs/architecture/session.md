@@ -426,12 +426,12 @@ made again.
 - `bande-session` also sets `ELECTRON_OZONE_PLATFORM_HINT=auto` (unless already set), so
   Electron apps that do not yet default to Wayland run natively instead of failing for want of
   an X server, and `QT_QPA_PLATFORMTHEME` as described under the portal.
-- `bande-session` takes the language and formats from `/etc/locale.conf` and replaces those in
+- `bande-session` takes the language and formats from `/etc/locale.conf`, then `~/.config/locale.conf` (each person's own choice, written by Settings), and replaces those in
   the user manager and in D-Bus activation. greetd and a lingering user manager keep what they had
   when they started, so without this a choice in Settings would only arrive after a restart.
   The login window does the same each time it starts: greetd runs `bande-greeter-session`, which
   reads that file before starting `bande-compositor --greeter`.
-- Settings ▸ Language & Region sets `LANG` and the five format categories (`LC_TIME`,
+- Settings ▸ Language & Region writes the person's file and, for an administrator, the system default the login window uses. It sets `LANG` and the five format categories (`LC_TIME`,
   `LC_NUMERIC`, `LC_MONETARY`, `LC_MEASUREMENT`, `LC_PAPER`) through `bande-locale-helper` under
   `pkexec` (`org.bande.locale-helper`, no prompt for active `sudo` members). Debian forbids
   localed's `SetLocale` and `SetX11Keyboard` even to root, so localed is only read, each time
@@ -442,6 +442,11 @@ made again.
   The same helper writes the login keyboard: `layout(variant)` codes checked against xkb's
   `evdev.lst`, written to `/etc/default/keyboard` (`/etc/vconsole.conf` is Debian's symlink to it),
   then a udev `change` for input devices and `setupcon --force --save` for the console.
+- Settings ▸ Language & Region ▸ Apps gives an app its own language, kept as `<app id>=<code>` lines
+  in `$XDG_CONFIG_HOME/bande/app-languages`. `spawn_detached` reads that file and sets `LANGUAGE` for
+  the app it starts, so it applies at the app's next start. It keeps the session's value in
+  `BANDE_SESSION_LANGUAGE` and restores it for any other app that app launches. `bande-l10n` and
+  gettext honour `LANGUAGE` under every locale except plain `C`/`POSIX`.
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
   `bande-config`, `bande-power`, `bande-sound`, `bande-tray`, `bande-indexer`, `bande-automount`,
   `bande-polkit-agent`. `bande-notify`, `bande-spell` (spelling; exits after a minute idle) and

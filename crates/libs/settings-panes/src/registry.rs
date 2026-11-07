@@ -57,7 +57,7 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 32] = [
+    const KEYWORDS: [(Self, &'static str); 33] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),

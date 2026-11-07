@@ -725,8 +725,9 @@ what the one before could not save. What happens for each:
   over the old one (`bande_xdg::replace_file`, `bande-config`), so a failed write leaves the old
   file whole.
 - **After a crash**: the compositor keeps the open apps in `$XDG_STATE_HOME/bande/running`; a
-  session that ended without a clean log out leaves it, and the next session reopens those apps
-  only with `reopen-apps-after-crash #true`. An app that crashes posts "<App> quit unexpectedly"
+  session that ended without a clean log out leaves it, and the next session asks "Reopen your
+  apps?" before anything starts (`bande-shell --reopen-after-crash`, summoned by the compositor;
+  the list stays until answered). An app that crashes posts "<App> quit unexpectedly"
   ([behaviour](behaviour.md)). Core dumps go to `systemd-coredump` where it is installed.
 
 ## Updates

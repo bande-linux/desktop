@@ -6,19 +6,20 @@ use std::time::{Duration, Instant};
 
 use crate::L10N;
 use crate::status_client::report;
+use bande_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use bande_inbox::Inbox;
 use bande_status::devices::end_session;
 use bande_status::session::{
     Effect, Ending, Facts, Refusal, SessionEnding, Stage, facts, quitting_apps, try_again,
 };
-use bande_toolkit::ui::{Alert, Event, Form, FormLine, Key, Label, Size, Ui};
+use bande_toolkit::ui::{Alert, CheckState, Checkbox, Event, Form, FormLine, Key, Label, Size, Ui};
 use bande_toolkit::{
     App, Appearance, Image, Item, Palette, Point, Rect, Role, Scene, Sizing, TextAlign, TextStyle,
     TextSystem, Window, WindowEvent,
 };
 use bande_xdg::{
-    Locale, applications, current_desktops, data_dirs, find_app, find_icon, reopen_file,
-    take_apps_to_reopen,
+    Locale, applications, crashed_apps_file, current_desktops, data_dirs, find_app, find_icon,
+    forget_saved_windows, listed_apps, reopen_file, reopen_listed_apps, take_apps_to_reopen,
 };
 
 pub const DIALOGS: &str = "org.bande.MenuBar";
@@ -51,6 +52,7 @@ const CONFIRM: &str = "confirm";
 fn confirmation_ui(
     session: &SessionEnding,
     choice: &Rc<Cell<Choice>>,
+    reopen: &Rc<Cell<bool>>,
     appearance: Appearance,
     now: Instant,
 ) -> Ui {
@@ -69,6 +71,14 @@ fn confirmation_ui(
             &ending.countdown(session.left(now) + Duration::from_millis(999)),
             on_choice,
         )
+        .accessory({
+            let reopen = Rc::clone(reopen);
+            let state = match reopen.get() {
+                true => CheckState::Checked,
+                false => CheckState::Unchecked,
+            };
+            Checkbox::new(&L10N.tr("reopen-windows"), state, move |on| reopen.set(on))
+        })
         .primary(&ending.button(), CONFIRM)
         .cancel(&cancel, CANCEL),
         Stage::Quitting { .. } => {
@@ -113,12 +123,19 @@ struct Confirmation {
     ui: Ui,
     size: (u32, u32),
     choice: Rc<Cell<Choice>>,
+    reopen: Rc<Cell<bool>>,
     answers: Inbox<Refusal>,
 }
 
 impl Confirmation {
     fn rebuild(&mut self, window: &mut Window, now: Instant) {
-        self.ui = confirmation_ui(&self.session, &self.choice, window.appearance(), now);
+        self.ui = confirmation_ui(
+            &self.session,
+            &self.choice,
+            &self.reopen,
+            window.appearance(),
+            now,
+        );
         let size = fitted(&mut self.ui);
         if size != self.size {
             self.size = size;
@@ -165,6 +182,7 @@ impl Confirmation {
                 window.close();
             }
             Choice::Confirm => {
+                remember_reopen_choice(self.reopen.get());
                 let effect = self.session.confirm(now);
                 self.apply(window, effect, now);
             }
@@ -243,7 +261,8 @@ pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>
     let now = Instant::now();
     let session = SessionEnding::new(ending, now);
     let choice = Rc::new(Cell::new(Choice::Undecided));
-    let mut ui = confirmation_ui(&session, &choice, Appearance::default(), now);
+    let reopen = Rc::new(Cell::new(reopens_windows()));
+    let mut ui = confirmation_ui(&session, &choice, &reopen, Appearance::default(), now);
     let size = fitted(&mut ui);
     let mut window = Window::open(Role::dialog(&ending.button(), DIALOGS), size)?;
     report("keep the dialog in front", window.set_keep_on_top(true));
@@ -252,10 +271,149 @@ pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>
         session,
         size,
         choice,
+        reopen,
         answers: Inbox::new()?,
     };
     confirmation.rebuild(&mut window, now);
     bande_toolkit::run(&mut window, &mut confirmation)?;
+    Ok(())
+}
+
+fn reopens_windows() -> bool {
+    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from);
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+    config_path(config_home.as_deref(), home.as_deref())
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|source| Config::load(&source).ok())
+        .is_none_or(|(config, _)| config.reopen_apps)
+}
+
+fn remember_reopen_choice(on: bool) {
+    let remembered = bande_bus::session().and_then(|session| {
+        session.call_method(
+            Some(BUS_NAME),
+            OBJECT_PATH,
+            Some("org.freedesktop.DBus.Properties"),
+            "Set",
+            &(
+                "org.bande.Config",
+                "ReopenApps",
+                zbus::zvariant::Value::from(on),
+            ),
+        )
+    });
+    if let Err(error) = remembered {
+        tracing::warn!("cannot remember whether to reopen the windows: {error}");
+    }
+}
+
+fn reopen_question_ui(
+    apps: &[String],
+    answer: &Rc<Cell<Option<bool>>>,
+    appearance: Appearance,
+) -> Ui {
+    let names: Vec<String> = apps.iter().map(|app| app_name(app)).collect();
+    let answer = Rc::clone(answer);
+    let alert = Alert::new(
+        &L10N.tr("reopen-question"),
+        &L10N.tr_args("reopen-explanation", [("apps", names.join(", ").into())]),
+        move |action: &str| answer.set(Some(action == CONFIRM)),
+    )
+    .primary(&L10N.tr("reopen-button"), CONFIRM)
+    .cancel(&L10N.tr("do-not-reopen-button"), CANCEL);
+    let mut ui = Ui::new(
+        Box::new(alert),
+        bande_toolkit::ui::Context::new(TextSystem::new(), appearance.palette()),
+    );
+    ui.set_appearance(appearance);
+    ui
+}
+
+struct ReopenQuestion {
+    ui: Ui,
+    size: (u32, u32),
+    apps: Vec<String>,
+    answer: Rc<Cell<Option<bool>>>,
+}
+
+impl ReopenQuestion {
+    fn answered(&mut self, window: &mut Window) {
+        let Some(reopen) = self.answer.take() else {
+            return;
+        };
+        match reopen {
+            true => reopen_listed_apps(&self.apps, |app| {
+                report("place the reopened windows", window.reopening_app(app));
+            }),
+            false => forget_saved_windows(&self.apps),
+        }
+        if let Some(file) = crashed_apps_file() {
+            take_apps_to_reopen(&file);
+        }
+        window.close();
+    }
+}
+
+impl App for ReopenQuestion {
+    fn scene(&mut self, _window: &mut Window) -> Scene {
+        alert_scene(&mut self.ui, self.size)
+    }
+
+    fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        match event {
+            WindowEvent::Input(Event::Key {
+                key: Key::Escape, ..
+            }) => self.answer.set(Some(false)),
+            WindowEvent::Input(Event::Key {
+                key: Key::Enter, ..
+            }) => self.answer.set(Some(true)),
+            WindowEvent::Input(input) => {
+                if self.ui.handle(&input) {
+                    window.request_redraw();
+                }
+            }
+            WindowEvent::Accessibility(request) => {
+                if self.ui.perform(&request) {
+                    window.request_redraw();
+                }
+            }
+            WindowEvent::AppearanceChanged(appearance) => {
+                self.ui.set_appearance(appearance);
+                window.request_redraw();
+            }
+            _ => {}
+        }
+        self.answered(window);
+    }
+
+    fn should_close(&mut self, _window: &mut Window) -> bool {
+        false
+    }
+
+    fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
+        Some(self.ui.accessibility())
+    }
+}
+
+pub fn run_reopen_question() -> Result<(), Box<dyn std::error::Error>> {
+    let apps = crashed_apps_file()
+        .map(|file| listed_apps(&file))
+        .unwrap_or_default();
+    if apps.is_empty() {
+        return Ok(());
+    }
+    let answer = Rc::new(Cell::new(None));
+    let mut ui = reopen_question_ui(&apps, &answer, Appearance::default());
+    let size = fitted(&mut ui);
+    let mut window = Window::open(Role::dialog(&L10N.tr("reopen-question"), DIALOGS), size)?;
+    report("keep the dialog in front", window.set_keep_on_top(true));
+    let mut question = ReopenQuestion {
+        ui,
+        size,
+        apps,
+        answer,
+    };
+    bande_toolkit::run(&mut window, &mut question)?;
     Ok(())
 }
 

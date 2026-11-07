@@ -26,6 +26,7 @@ pub(crate) const PANEL_SINCE: u32 = 5;
 pub(crate) const PANEL_ORIGIN_SINCE: u32 = 6;
 pub(crate) const OFFER_PLACEMENTS_SINCE: u32 = 8;
 pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
+pub(crate) const SHELL_VERSION: u32 = 6;
 
 struct Toplevel {
     handle: ExtForeignToplevelHandleV1,
@@ -169,6 +170,11 @@ impl Window {
 
     pub fn confirm_session_end(&mut self, ending: SessionEnd) -> Result<(), WindowError> {
         self.shell()?.confirm_session_end(ending);
+        self.flush()
+    }
+
+    pub fn reopening_app(&mut self, app_id: &str) -> Result<(), WindowError> {
+        self.shell()?.reopening_app(app_id.to_owned());
         self.flush()
     }
 

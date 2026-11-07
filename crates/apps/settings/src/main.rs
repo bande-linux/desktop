@@ -4,7 +4,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::Entry;
 use bande_settings::{
     Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView,
@@ -216,9 +216,12 @@ impl Program for Settings {
         let services = Services::start(&session, system.as_ref(), &updates);
         services.send(Command::Software(SoftwareCommand::Open));
         let displays = Displays::connect();
-        let main = open_main(cx, None, &arguments, displays.as_ref())?;
+        let main = match arguments.is_empty() {
+            true => None,
+            false => Some(open_main(cx, None, &arguments, displays.as_ref())?),
+        };
         Ok(Self {
-            main: Some(main),
+            main,
             parked: None,
             feed,
             displays,
@@ -282,6 +285,21 @@ impl Program for Settings {
             Err(error) => tracing::warn!("cannot open the settings: {error}"),
         }
         self.send_commands(cx);
+    }
+
+    fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        (self.main == Some(window))
+            .then(|| cx.view(window))?
+            .and_then(|Pane(view)| Saved::of(&view.pane.keyword()))
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, saved: Saved) {
+        self.reopen(cx);
+        if let Some(keyword) = saved.read::<String>()
+            && let Some(view) = settings_view(cx, self.main, &mut self.parked)
+        {
+            select_pane(view, &keyword);
+        }
     }
 
     fn window_closed(&mut self, _cx: &mut Cx<Self>, window: WindowId, mut view: Pane) {

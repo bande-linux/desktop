@@ -13,6 +13,7 @@ use std::rc::{Rc, Weak};
 use std::sync::mpsc::TryRecvError;
 use std::time::{Duration, Instant};
 
+use crate::app_connection::WindowInSession;
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_graphics::{
     Appearance, Captured, CpuRenderer, Cursor, Event, PLACEMENTS_AFTER_HOLD, PLACEMENTS_AFTER_REST,
@@ -80,21 +81,25 @@ pub enum Role {
         title: String,
         app_id: String,
         tag: String,
+        session: Option<WindowInSession>,
     },
     Dialog {
         title: String,
         app_id: String,
         tag: String,
+        session: Option<WindowInSession>,
     },
     Utility {
         title: String,
         app_id: String,
         tag: String,
+        session: Option<WindowInSession>,
     },
     Panel {
         title: String,
         app_id: String,
         tag: String,
+        session: Option<WindowInSession>,
     },
     Layer(LayerOptions),
     Lock,
@@ -106,6 +111,7 @@ impl Role {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
             tag: String::new(),
+            session: None,
         }
     }
 
@@ -114,6 +120,7 @@ impl Role {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
             tag: String::new(),
+            session: None,
         }
     }
 
@@ -122,6 +129,7 @@ impl Role {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
             tag: String::new(),
+            session: None,
         }
     }
 
@@ -130,6 +138,7 @@ impl Role {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
             tag: String::new(),
+            session: None,
         }
     }
 
@@ -140,6 +149,17 @@ impl Role {
         | Self::Panel { tag, .. } = &mut self
         {
             *tag = window_tag.to_owned();
+        }
+        self
+    }
+
+    pub fn in_session(mut self, window: Option<WindowInSession>) -> Self {
+        if let Self::Toplevel { session, .. }
+        | Self::Dialog { session, .. }
+        | Self::Utility { session, .. }
+        | Self::Panel { session, .. } = &mut self
+        {
+            *session = window;
         }
         self
     }
@@ -484,10 +504,30 @@ impl Window {
             Role::Toplevel { .. } | Role::Layer(_) | Role::Lock => (true, false),
         };
         let role = match role {
-            Role::Toplevel { title, app_id, tag }
-            | Role::Dialog { title, app_id, tag }
-            | Role::Utility { title, app_id, tag }
-            | Role::Panel { title, app_id, tag } => {
+            Role::Toplevel {
+                title,
+                app_id,
+                tag,
+                session,
+            }
+            | Role::Dialog {
+                title,
+                app_id,
+                tag,
+                session,
+            }
+            | Role::Utility {
+                title,
+                app_id,
+                tag,
+                session,
+            }
+            | Role::Panel {
+                title,
+                app_id,
+                tag,
+                session,
+            } => {
                 let wm_base = state
                     .wm_base
                     .clone()
@@ -510,6 +550,18 @@ impl Window {
                         manager.set_toplevel_tag(&toplevel, tag);
                     }
                     manager.destroy();
+                }
+                if let Some(window) = session {
+                    match window.restoring {
+                        true => {
+                            window
+                                .session
+                                .restore_toplevel(&toplevel, window.name, &handle, ())
+                        }
+                        false => window
+                            .session
+                            .add_toplevel(&toplevel, window.name, &handle, ()),
+                    };
                 }
                 if fixed {
                     let (width, height) = match titled {

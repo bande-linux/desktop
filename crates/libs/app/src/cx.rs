@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use bande_toolkit::{AppConnection, Appearance, Role, Window, WindowError};
 use zbus::blocking::Connection;
 
+use crate::resume::Resume;
 use crate::{Info, Kind, Program, View};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -11,20 +12,21 @@ pub struct WindowId(u32);
 pub(crate) enum Content<V> {
     App(V),
     Settings(Box<dyn View>),
+    Prompt(Box<dyn View>),
 }
 
 impl<V: View> Content<V> {
     pub(crate) fn view(&mut self) -> &mut dyn View {
         match self {
             Self::App(view) => view,
-            Self::Settings(view) => view.as_mut(),
+            Self::Settings(view) | Self::Prompt(view) => view.as_mut(),
         }
     }
 
     pub(crate) fn view_ref(&self) -> &dyn View {
         match self {
             Self::App(view) => view,
-            Self::Settings(view) => view.as_ref(),
+            Self::Settings(view) | Self::Prompt(view) => view.as_ref(),
         }
     }
 }
@@ -41,6 +43,7 @@ pub struct Cx<P: Program> {
     pub(crate) menus_changed: bool,
     session: Option<Connection>,
     background: bool,
+    pub(crate) resume: Resume,
 }
 
 impl<P: Program> Cx<P> {
@@ -49,6 +52,7 @@ impl<P: Program> Cx<P> {
         link: AppConnection,
         session: Option<Connection>,
         background: bool,
+        resume: Resume,
     ) -> Self {
         Self {
             info,
@@ -62,7 +66,20 @@ impl<P: Program> Cx<P> {
             menus_changed: false,
             session,
             background,
+            resume,
         }
+    }
+
+    pub fn session_ending(&self) -> bool {
+        self.resume.session_ending
+    }
+
+    pub fn kind(&self, window: WindowId) -> Option<Kind> {
+        self.resume.kind(window)
+    }
+
+    pub fn state_changed(&mut self) {
+        self.resume.touch();
     }
 
     pub fn launched_in_background(&self) -> bool {
@@ -94,7 +111,8 @@ impl<P: Program> Cx<P> {
             Kind::Utility(_) => Role::utility(title, self.info.id),
             Kind::Panel(_) => Role::panel(title, self.info.id),
         }
-        .tagged(kind.tag());
+        .tagged(kind.tag())
+        .in_session(self.resume.next_window(&self.link, kind));
         self.link.keep_running();
         let mut window = match self.windows.first() {
             Some(beside) => beside.open_beside(role, size)?,
@@ -104,6 +122,7 @@ impl<P: Program> Cx<P> {
         window.set_menu_button(!panel);
         let id = WindowId(self.next);
         self.next += 1;
+        self.resume.opened(id, kind);
         let content = content(window.appearance());
         self.windows.push(window);
         self.views.push((id, content));
@@ -196,14 +215,14 @@ impl<P: Program> Cx<P> {
         let index = self.index(window)?;
         match &mut self.views[index].1 {
             Content::App(view) => Some((&mut self.windows[index], view)),
-            Content::Settings(_) => None,
+            Content::Settings(_) | Content::Prompt(_) => None,
         }
     }
 
     pub fn view(&self, window: WindowId) -> Option<&P::View> {
         match &self.views[self.index(window)?].1 {
             Content::App(view) => Some(view),
-            Content::Settings(_) => None,
+            Content::Settings(_) | Content::Prompt(_) => None,
         }
     }
 

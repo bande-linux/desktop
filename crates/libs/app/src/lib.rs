@@ -2,6 +2,7 @@ mod cx;
 mod instance;
 mod menus;
 mod portal;
+mod resume;
 mod runner;
 mod tabs;
 
@@ -19,6 +20,7 @@ use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 
 pub use cx::{Cx, WindowId};
 pub use portal::{Filter, choose_file, choose_save_file};
+pub use resume::Saved;
 pub use tabs::{Detached, TabCarry, TabDrop, TabDropTarget, TabHost, move_tab};
 
 pub type Error = Box<dyn std::error::Error>;
@@ -156,6 +158,14 @@ pub trait Program: Sized + 'static {
     fn open(&mut self, _cx: &mut Cx<Self>, _arguments: Vec<String>, _directory: &Path) {}
 
     fn reopen(&mut self, cx: &mut Cx<Self>);
+
+    fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        (cx.kind(window) == Some(Kind::Main)).then(Saved::empty)
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, _saved: Saved) {
+        self.reopen(cx);
+    }
 
     fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, _view: Self::View) {}
 

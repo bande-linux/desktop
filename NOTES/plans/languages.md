@@ -30,7 +30,7 @@ Audit gap 17. Plan only; nothing here is built yet. Screen readers and X11 are o
 
 ## Translations
 
-**Compiled in, in each package.** `bande_l10n::translations!("domain")` includes `locales/<lang>/<domain>.ftl` for every language in one table. Only the requested language is parsed, at start. A library's strings travel with the binary that links it, so an app pinned to an older toolkit always has matching strings, and the login window needs no file access. All languages stay under about 8 MB across the suite. This replaces the earlier files in `/usr/share`, which ran into ownership trouble for strings in statically linked libraries.
+**Compiled in, in each package.** `bande_l10n::translations!("domain")` includes every `locales/<lang>/<domain>.ftl` it finds at compile time, so a language is a directory and no code names one; `ci/l10n-complete` lists the languages the check holds complete. Only the requested language is parsed, at start. A library's strings travel with the binary that links it, so an app pinned to an older toolkit always has matching strings, and the login window needs no file access. All languages stay under about 8 MB across the suite. This replaces the earlier files in `/usr/share`, which ran into ownership trouble for strings in statically linked libraries.
 
 **Source layout.** `locales/sv/` next to `locales/en-US/` in each crate, so a string and its translations move together.
 
@@ -163,7 +163,7 @@ Layer is the toolkit `editor` unless said, so every `TextField` and `TextView` g
 - Only one suggestion, one edit away, and nothing when the word has capitals inside, digits or a dot; never in fields that opt out of spelling.
 - Corrected at word end. The word gets a thin underline until the next edit elsewhere; Backspace right after restores the original and types nothing else; the menu has "Change Back to …". Changing back twice learns the word.
 
-Evidence still needed: compounds are where a valid new word can be rejected. On 38 words, spellbook accepted every valid compound and put the right word first for all 10 misspellings. That is too small. Gate: over a real Swedish text corpus, at most 1 wrong change per 1,000 correct words. On by default in English; in Swedish on only if the gate passes, otherwise suggestions only.
+Evidence still needed: compounds are where a valid new word can be rejected. On 38 words, spellbook accepted every valid compound and put the right word first for all 10 misspellings. That is too small. Gate: over a real Swedish text corpus, at most 1 wrong change per 1,000 correct words. On by default in English; in Swedish on only if the gate passes, otherwise suggestions only. Result: over 160,518 words of Swedish Wikipedia featured articles (CC BY-SA 4.0), 5.04 wrong changes per 1,000, mostly names; the gate fails, so `autocorrect = false` in the Swedish data file and Swedish stays suggestions only. Measure with `crates/services/spell/examples/autocorrect_gate.rs`.
 
 ## Research: Look Up
 

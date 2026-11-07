@@ -16,6 +16,7 @@ How it grows to AppKit depth is decided in
   tokens. No Wayland.
 - `bande-widgets` (`crates/toolkit/widgets`): the widget tree and widgets, on graphics only,
   so widget tests need no compositor.
+- **Text checking.** `TextField` and `TextView` ask `bande-spell` (`org.bande.Spell`) through the platform's client thread; nothing runs until text is visible or typed, and an absent service changes nothing. Red underlines, autocorrect, smart quotes and the other text features live in `editor`; `without_text_checking()` opts a field out, and a monospace `TextView` is out. Language rules are data in `usr/share/bande/text/<tag>`, English as fallback, and Swedish emoji names in `usr/share/bande/emoji/<tag>.tsv`.
 - `bande-toolkit-platform` (`crates/toolkit/platform`): Wayland windows and roles, seat input,
   clipboard, text input, capture, the run loop, accessibility publication and appearance.
 - `bande-toolkit` (`crates/toolkit/toolkit`): the facade apps depend on; `ui` is
@@ -368,6 +369,12 @@ writes a hex value, a corner radius or a font name of its own.
   shows for 3 s; leaving the window, losing the lock or a sheet appearing releases too, and held
   keys are sent up first. Widgets ask through `Context::capture_input`/`release_input`;
   `Window::capture_input`/`release_input` do it for apps without `Ui`.
+  `Window::set_cursor_image(CursorImage)` gives the window a cursor from premultiplied ARGB pixels
+  (a guest's hardware cursor, one buffer pixel per device pixel); `SurfaceView::set_cursor` with
+  `Cursor::Image` or `Cursor::Hidden` shows it, or nothing, while the pointer is over the view.
+- **Clipboard changes.** `WindowEvent::ClipboardChanged` says something another window copied became
+  the selection, so a guest can be offered it. It stays silent for the window's own copies and for
+  anything marked as a password.
 
 Since `wayland-backend` is built with `client_system`, every Wayland client in a workspace
 build, `bande-test-wayland` included, goes through libwayland.

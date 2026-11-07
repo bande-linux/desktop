@@ -139,6 +139,8 @@ pub enum Cursor {
     ResizeTopRight,
     ResizeBottomLeft,
     ResizeBottomRight,
+    Hidden,
+    Image,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

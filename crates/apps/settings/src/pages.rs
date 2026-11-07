@@ -81,9 +81,6 @@ fn display_value(
                 .map(|rate| rate.round() as u32)
                 .or_else(|| display.current.map(|mode| mode.hertz()))?,
         ),
-        SettingId::VariableRefreshRate => {
-            Value::Flag(output.variable_refresh_rate.unwrap_or(false))
-        }
         SettingId::DisplayResolution => {
             let (width, height) = output.resolution.or_else(|| {
                 let mode = display.current?;
@@ -327,9 +324,12 @@ impl SettingsView {
                 };
                 let text = self.drafts.get(&id).cloned().or(saved)?;
                 let mut draft = intent(&self.intents, move |text: String| Intent::Draft(id, text));
-                boxed(TextField::new(&setting.label, &text, move |text: &str| {
-                    draft(text.to_owned())
-                }))
+                boxed(
+                    TextField::new(&setting.label, &text, move |text: &str| {
+                        draft(text.to_owned())
+                    })
+                    .without_text_checking(),
+                )
             }
             Kind::Resolutions => {
                 let sizes = scope?.resolutions();
@@ -418,9 +418,6 @@ impl SettingsView {
         scope: Option<&Display>,
         matched: Option<&SettingHit>,
     ) -> Option<Box<dyn Widget>> {
-        if setting.id == SettingId::VariableRefreshRate && !scope?.variable_refresh_capable() {
-            return None;
-        }
         let (control, focus) = match self.allowed(setting.id) {
             true => self.control(setting, scope)?,
             false => {
@@ -739,6 +736,7 @@ impl SettingsView {
             List::DefaultApps => self.default_app_rows(),
             List::Clipboard => self.clipboard_rows(),
             List::KeyboardAccess => self.keyboard_access_rows(),
+            List::Spelling => self.spelling_rows(),
             List::SecurityStatus => self.security_status_rows(),
             List::SearchExcluded => self.excluded_rows(),
             List::Permissions(permission) => self.permission_rows(permission),
@@ -829,7 +827,7 @@ impl SettingsView {
         if sources == login {
             return muted_row(&L10N.tr("login-layouts-same"));
         }
-        let button = (!self.refused.contains(&Privilege::Keyboard)).then(|| {
+        let button = (!self.refused.contains(&Privilege::Locale)).then(|| {
             let codes = sources.to_vec();
             let mut send = intent(&self.intents, Intent::Locale);
             boxed(Button::new(&L10N.tr("use-at-login"), move || {

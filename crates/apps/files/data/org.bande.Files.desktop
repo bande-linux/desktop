@@ -1,17 +1,22 @@
 [Desktop Entry]
 Type=Application
 Name=Files
+Name[sv]=Filer
 GenericName=File Manager
+GenericName[sv]=Filhanterare
 Comment=Browse your folders and files
+Comment[sv]=Bläddra bland dina mappar och filer
 Icon=org.bande.Files
 Exec=bande-files %U
 StartupNotify=true
 MimeType=inode/directory;
 Categories=System;FileTools;FileManager;
 Keywords=folder;finder;browse;directory;
+Keywords[sv]=mapp;filer;bläddra;katalog;utforskare;
 Actions=new-window;
 
 [Desktop Action new-window]
 Name=New Window
+Name[sv]=Nytt fönster
 Exec=bande-files --new-window
 StartupNotify=true

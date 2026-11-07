@@ -111,8 +111,9 @@ After each dpkg run, `restart-services` (`DPkg::Post-Invoke` in
 `/etc/apt/apt.conf.d/50bande-restart-services`) try-restarts every `system.slice` service whose
 processes map a replaced `/usr` or `/opt` executable or library, as needrestart did, except the
 login managers, the buses, logind, getty, `user@`, polkit, PackageKit, networking, Bluetooth and
-container managers; it does nothing in a chroot or without systemd. Settings handles the
-session's own processes ([Software Update](session.md)).
+container managers; it does nothing in a chroot or without systemd. It then touches
+`/run/bande-desktop/packages-installed`, which makes each logged-in user's
+`bande-update-finish.path` deal with the session's own processes ([Software Update](session.md)).
 
 No package depends on an X server, XWayland or an X session; the `install` jobs check that none
 comes along.

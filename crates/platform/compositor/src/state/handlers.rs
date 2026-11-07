@@ -358,7 +358,9 @@ impl SeatHandler for State {
 
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
         let client = focused.and_then(|surface| self.display_handle.get_client(surface.id()).ok());
+        set_data_device_focus(&self.display_handle, seat, None);
         set_data_device_focus(&self.display_handle, seat, client.clone());
+        set_primary_focus(&self.display_handle, seat, None);
         set_primary_focus(&self.display_handle, seat, client);
         if let Some(rect) = focused
             .and_then(|surface| self.window_index(surface))

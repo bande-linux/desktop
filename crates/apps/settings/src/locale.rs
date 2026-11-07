@@ -1,19 +1,21 @@
+use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, OnceLock};
 
 use zbus::blocking::Connection;
-use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::L10N;
-use crate::failure::{detail, explained, explained_with, failed};
+use crate::failure::explained;
 use crate::follow::{Update, Updates, spawn};
 use bande_settings_panes::{PaneId, SettingId};
 
 pub use bande_l10n::system::{AvailableLocale, base, read_supported, supported_locales};
 
-const LOCALE: &str = "org.freedesktop.locale1";
-const LOCALE_PATH: &str = "/org/freedesktop/locale1";
-const REFUSED_LOCALE: &str = "InvalidArgs";
+const HELPER: &str = "/usr/libexec/bande-locale-helper";
+const PKEXEC: &str = "/usr/bin/pkexec";
+const HELPER_REFUSED_VALUE: i32 = 2;
+const PKEXEC_DISMISSED: i32 = 126;
+const PKEXEC_NOT_AUTHORIZED: i32 = 127;
 const DEFAULT_LOCALE: &str = "C.UTF-8";
 pub const REGION_CATEGORIES: [&str; 5] = [
     "LC_TIME",
@@ -31,21 +33,10 @@ pub const REGION_CATEGORIES: [&str; 5] = [
 trait Locale {
     #[zbus(property)]
     fn locale(&self) -> zbus::Result<Vec<String>>;
-    fn set_locale(&self, locale: Vec<String>, interactive: bool) -> zbus::Result<()>;
     #[zbus(property, name = "X11Layout")]
     fn x11_layout(&self) -> zbus::Result<String>;
     #[zbus(property, name = "X11Variant")]
     fn x11_variant(&self) -> zbus::Result<String>;
-    #[zbus(name = "SetX11Keyboard")]
-    fn set_x11_keyboard(
-        &self,
-        layout: &str,
-        model: &str,
-        variant: &str,
-        options: &str,
-        convert: bool,
-        interactive: bool,
-    ) -> zbus::Result<()>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -66,6 +57,7 @@ impl LocaleState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocaleCommand {
+    Read,
     Language(String),
     Region(Option<String>),
     LoginKeyboard(Vec<String>),
@@ -89,7 +81,7 @@ pub(crate) fn locale_label(available: &[AvailableLocale], code: &str) -> String 
         .map_or_else(|| code.to_owned(), |locale| locale.name.clone())
 }
 
-pub fn login_codes(layouts: &str, variants: &str) -> Vec<String> {
+fn login_codes(layouts: &str, variants: &str) -> Vec<String> {
     let mut variants = variants.split(',').map(str::trim);
     layouts
         .split(',')
@@ -104,18 +96,6 @@ pub fn login_codes(layouts: &str, variants: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn x11_keyboard(codes: &[String]) -> (String, String) {
-    let (layouts, variants): (Vec<&str>, Vec<&str>) = codes
-        .iter()
-        .map(|code| {
-            code.strip_suffix(')')
-                .and_then(|code| code.split_once('('))
-                .unwrap_or((code, ""))
-        })
-        .unzip();
-    (layouts.join(","), variants.join(","))
-}
-
 fn assigned<'a>(assignments: &'a [String], name: &str) -> Option<&'a str> {
     assignments
         .iter()
@@ -123,7 +103,7 @@ fn assigned<'a>(assignments: &'a [String], name: &str) -> Option<&'a str> {
         .filter(|value| !value.is_empty())
 }
 
-pub fn parse_assignments(assignments: &[String]) -> (String, Option<String>) {
+fn parse_assignments(assignments: &[String]) -> (String, Option<String>) {
     let language = assigned(assignments, "LANG").unwrap_or(DEFAULT_LOCALE);
     let region = assigned(assignments, REGION_CATEGORIES[0])
         .filter(|region| !same_locale(region, language))
@@ -131,48 +111,72 @@ pub fn parse_assignments(assignments: &[String]) -> (String, Option<String>) {
     (language.to_owned(), region)
 }
 
-pub fn assignments(current: &[String], language: &str, region: Option<&str>) -> Vec<String> {
+fn assignments(current: &[String], language: &str, region: Option<&str>) -> Vec<String> {
     let mut wanted = vec![format!("LANG={language}")];
     let (current_language, _) = parse_assignments(current);
     if assigned(current, "LANGUAGE").is_some() && !same_locale(&current_language, language) {
         wanted.push(format!("LANGUAGE={}", language.replacen(".UTF-8", "", 1)));
     }
-    let region = region.filter(|region| !same_locale(region, language));
-    if region.is_some()
-        || REGION_CATEGORIES
+    let formats = region
+        .filter(|region| !same_locale(region, language))
+        .unwrap_or_default();
+    wanted.extend(
+        REGION_CATEGORIES
             .iter()
-            .any(|category| assigned(current, category).is_some())
-    {
-        let formats = region.unwrap_or(language);
-        wanted.extend(
-            REGION_CATEGORIES
-                .iter()
-                .map(|category| format!("{category}={formats}")),
-        );
-    }
+            .map(|category| format!("{category}={formats}")),
+    );
     wanted
 }
 
-fn change_failure(error: &zbus::Error, code: &str, available: &[AvailableLocale]) -> String {
+enum HelperFailure {
+    NotAllowed,
+    UnknownValue,
+    Failed(String),
+}
+
+fn run_helper(arguments: &[String]) -> Result<(), HelperFailure> {
+    let output = Command::new(PKEXEC)
+        .arg(HELPER)
+        .args(arguments)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| HelperFailure::Failed(error.to_string()))?;
+    match output.status.code() {
+        Some(0) => Ok(()),
+        Some(PKEXEC_DISMISSED | PKEXEC_NOT_AUTHORIZED) => Err(HelperFailure::NotAllowed),
+        Some(HELPER_REFUSED_VALUE) => Err(HelperFailure::UnknownValue),
+        _ => Err(HelperFailure::Failed(
+            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        )),
+    }
+}
+
+fn change_failure(failure: HelperFailure, code: &str, available: &[AvailableLocale]) -> String {
     let name = locale_label(available, code);
-    explained_with(error, "service-locale", |kind| {
-        if kind == REFUSED_LOCALE {
-            L10N.tr_args("locale-unavailable", [("name", name.clone().into())])
-        } else {
+    match failure {
+        HelperFailure::NotAllowed => L10N.tr("administrator-only"),
+        HelperFailure::UnknownValue => L10N.tr_args("locale-unavailable", [("name", name.into())]),
+        HelperFailure::Failed(reason) => {
+            tracing::warn!("locale helper: {reason}");
             L10N.tr_args(
                 "locale-not-set-up",
-                [
-                    ("name", name.clone().into()),
-                    (
-                        "reason",
-                        detail(error)
-                            .unwrap_or_else(|| L10N.tr("couldnt-change"))
-                            .into(),
-                    ),
-                ],
+                [("name", name.into()), ("reason", reason.into())],
             )
         }
-    })
+    }
+}
+
+fn keyboard_failure(failure: HelperFailure) -> String {
+    match failure {
+        HelperFailure::NotAllowed => L10N.tr("administrator-only"),
+        HelperFailure::UnknownValue => L10N.tr("couldnt-change"),
+        HelperFailure::Failed(reason) => {
+            tracing::warn!("locale helper: {reason}");
+            L10N.tr("couldnt-change")
+        }
+    }
 }
 
 fn read(locale: &LocaleProxyBlocking<'_>, available: &[AvailableLocale]) -> Option<LocaleState> {
@@ -196,28 +200,15 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
     let supported: Arc<OnceLock<Vec<AvailableLocale>>> = Arc::default();
     let cached = Arc::clone(&supported);
     spawn("locale", move || {
-        let follow = || -> zbus::Result<()> {
-            let available = cached.get_or_init(read_supported);
-            let locale = LocaleProxyBlocking::builder(&reader)
-                .cache_properties(zbus::proxy::CacheProperties::No)
-                .build()?;
-            let changes = PropertiesProxy::builder(&reader)
-                .destination(LOCALE)?
-                .path(LOCALE_PATH)?
-                .build()?
-                .receive_properties_changed()?;
-            if !feed.send(Update::Locale(read(&locale, available))) {
-                return Ok(());
+        let available = cached.get_or_init(read_supported);
+        match LocaleProxyBlocking::builder(&reader)
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()
+        {
+            Ok(locale) => {
+                feed.send(Update::Locale(read(&locale, available)));
             }
-            for _ in changes {
-                if !feed.send(Update::Locale(read(&locale, available))) {
-                    break;
-                }
-            }
-            Ok(())
-        };
-        if let Err(error) = follow() {
-            tracing::warn!("cannot follow localed: {error}");
+            Err(error) => tracing::warn!("cannot read localed: {error}"),
         }
     });
     let system = system.clone();
@@ -229,24 +220,27 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             return;
         };
         for command in receiver {
-            if let LocaleCommand::LoginKeyboard(codes) = &command {
-                let (layouts, variants) = x11_keyboard(codes);
-                if let Err(error) =
-                    locale.set_x11_keyboard(&layouts, "", &variants, "", false, true)
-                {
-                    updates.send(failed(SettingId::InputSources, &error, "service-locale"));
-                    updates.send(Update::Locale(read(
-                        &locale,
-                        supported.get_or_init(read_supported),
-                    )));
-                }
+            let available = supported.get_or_init(read_supported);
+            if command == LocaleCommand::Read {
+                updates.send(Update::Locale(read(&locale, available)));
                 continue;
             }
-            let available = supported.get_or_init(read_supported);
+            if let LocaleCommand::LoginKeyboard(codes) = &command {
+                let mut arguments = vec!["keyboard".to_owned()];
+                arguments.extend_from_slice(codes);
+                if let Err(failure) = run_helper(&arguments) {
+                    updates.send(Update::Failed(
+                        SettingId::InputSources,
+                        keyboard_failure(failure),
+                    ));
+                }
+                updates.send(Update::Locale(read(&locale, available)));
+                continue;
+            }
             let (setting, chosen) = match command {
                 LocaleCommand::Language(language) => (SettingId::Language, Some(language)),
                 LocaleCommand::Region(region) => (SettingId::Region, region),
-                LocaleCommand::LoginKeyboard(_) => continue,
+                LocaleCommand::Read | LocaleCommand::LoginKeyboard(_) => continue,
             };
             let current = match locale.locale() {
                 Ok(current) => current,
@@ -269,11 +263,13 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             } else {
                 assignments(&current, &language, chosen.as_deref())
             };
-            if let Err(error) = locale.set_locale(wanted, true) {
+            let mut arguments = vec!["locale".to_owned()];
+            arguments.extend(wanted);
+            if let Err(failure) = run_helper(&arguments) {
                 let code = chosen.as_deref().unwrap_or(&language);
                 updates.send(Update::Failed(
                     setting,
-                    change_failure(&error, code, available),
+                    change_failure(failure, code, available),
                 ));
             }
             updates.send(Update::Locale(read(&locale, available)));

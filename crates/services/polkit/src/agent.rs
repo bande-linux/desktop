@@ -110,14 +110,14 @@ impl Agent {
         system: &Connection,
         subject: Subject,
         locale: &str,
-        helper: PathBuf,
+        helper_socket: PathBuf,
         conversation: Arc<dyn Conversation>,
     ) -> zbus::Result<Self> {
         system.object_server().at(
             OBJECT_PATH,
             AuthenticationAgent {
                 conversation,
-                helper,
+                helper_socket,
                 running: Arc::default(),
             },
         )?;
@@ -222,18 +222,19 @@ fn lock(running: &Shared) -> MutexGuard<'_, Running> {
 fn converse(
     conversation: &dyn Conversation,
     request: &Request,
-    helper: &std::path::Path,
+    helper_socket: &std::path::Path,
     cookie: &str,
     running: &Shared,
 ) -> Result<Outcome, AgentError> {
     let failed = |error: std::io::Error| AgentError::Failed(error.to_string());
     let mut user = request.user.clone();
     'helper: loop {
-        let mut session = HelperSession::start(helper, &user, cookie).map_err(failed)?;
+        let mut session = HelperSession::start(helper_socket, &user, cookie).map_err(failed)?;
+        let canceller = session.canceller().map_err(failed)?;
         {
             let mut running = lock(running);
             match running.sessions.get_mut(cookie) {
-                Some((_, slot)) => *slot = Some(session.canceller()),
+                Some((_, slot)) => *slot = Some(canceller),
                 None => return Ok(Outcome::Cancelled),
             }
         }
@@ -277,7 +278,14 @@ fn converse(
                     conversation.notice(request, Notice::WrongPassword);
                     break;
                 }
-                None => return Ok(Outcome::Cancelled),
+                None => {
+                    if !lock(running).sessions.contains_key(cookie) {
+                        return Ok(Outcome::Cancelled);
+                    }
+                    return Err(AgentError::Failed(
+                        "the helper stopped before it finished".to_owned(),
+                    ));
+                }
             }
         }
     }
@@ -303,7 +311,7 @@ async fn from_polkitd(
 
 struct AuthenticationAgent {
     conversation: Arc<dyn Conversation>,
-    helper: PathBuf,
+    helper_socket: PathBuf,
     running: Shared,
 }
 
@@ -338,15 +346,22 @@ impl AuthenticationAgent {
             .sessions
             .insert(cookie.clone(), (request.clone(), None));
         let conversation = Arc::clone(&self.conversation);
-        let helper = self.helper.clone();
+        let helper_socket = self.helper_socket.clone();
         let running = Arc::clone(&self.running);
         let outcome = blocking::unblock(move || {
-            let outcome = converse(conversation.as_ref(), &request, &helper, &cookie, &running);
+            let outcome = converse(
+                conversation.as_ref(),
+                &request,
+                &helper_socket,
+                &cookie,
+                &running,
+            );
             lock(&running).sessions.remove(&cookie);
             conversation.close(&request);
             outcome
         })
-        .await?;
+        .await
+        .inspect_err(|error| tracing::error!("cannot authenticate: {error}"))?;
         match outcome {
             Outcome::Authorized => Ok(()),
             Outcome::Cancelled => Err(AgentError::Cancelled(

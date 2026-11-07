@@ -49,7 +49,6 @@ use crate::clock::Vblank;
 use crate::cursor::{self, Cursor, CursorTheme};
 use crate::element::SurfaceElement;
 use crate::frame_callbacks::LatchedCallback;
-use crate::frame_callbacks::LatchedCallback;
 use crate::lock::Lock;
 use crate::motion::IconRect;
 use crate::scene::{BlurElement, Closing, FillElement, PieceElement, ShadowElement, WindowElement};

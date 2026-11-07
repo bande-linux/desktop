@@ -101,6 +101,7 @@ pub(crate) struct NodeState {
     pub app: Option<App>,
     pub sense: Option<Sense>,
     pub camera: bool,
+    pub running: bool,
     pub(crate) device: Option<(u32, i32)>,
 }
 
@@ -371,6 +372,12 @@ impl Graph {
         let listener = node
             .add_listener_local()
             .info(move |info| {
+                if info.change_mask().contains(NodeChangeMask::STATE) {
+                    let running = matches!(info.state(), pw::node::NodeState::Running);
+                    info_shared.update(|state| {
+                        state.nodes.entry(id).or_default().running = running;
+                    });
+                }
                 if !info.change_mask().contains(NodeChangeMask::PROPS) {
                     return;
                 }

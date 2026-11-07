@@ -103,7 +103,20 @@ cp "$repo"/search/2c4b8834-030c-4097-a887-c7506689095c* services/settings/dumps/
 find browser/locales/en-US toolkit/locales/en-US dom/locales/en-US -type f \( -name '*.ftl' -o -name '*.properties' -o -name '*.dtd' \) \
     -exec sed -i -E '/^\s*(#|<!--)/! s/\bFirefox\b/Browser/g' {} +
 cat "$repo/theme/bande.css" >> browser/themes/linux/browser.css
+cp "$repo/l10n/languages" debian/bande-languages
+sed -i 's/^L10N_LANGS = .*/L10N_LANGS = $(shell cat debian\/bande-languages)/' debian/upstream.mk
+sed -i 's/^         @browser@ (>= ${source:Version}), @browser@ (<< ${source:Version}.1~)$/         @browser@ (= ${source:Version})\nEnhances: @browser@/' debian/l10n/browser-l10n.control.in
+grep -q '^Enhances: @browser@$' debian/l10n/browser-l10n.control.in
+for lang in $(cat "$repo/l10n/languages"); do
+    find "l10n-$lang" -type f \( -name '*.ftl' -o -name '*.properties' -o -name '*.dtd' \) \
+        -exec sed -i -E '/^\s*(#|<!--)/! s/\bFirefox\b/Browser/g' {} +
+done
 python3 "$repo/scripts/fetch-tracking-lists.py" .
+python3 "$repo/scripts/gut.py" . browser/components/asrouter browser/components/ipprotection \
+    toolkit/components/ipprotection browser/components/genai browser/components/aiwindow \
+    browser/components/reportbrokensite toolkit/components/reportbrokensite browser/components/messagepreview
+cp "$repo"/theme/pages/* browser/base/content/
+cat "$repo/theme/preferences.css" >> browser/themes/shared/preferences/preferences.css
 
 find browser toolkit -type f \( -iname '*fox*.svg' -o -name 'kit-*.svg' -o -name 'kit.svg' \) -not -path '*/test*' \
     -exec sh -c 'echo "$0" > "$1"' "$blank" {} \;

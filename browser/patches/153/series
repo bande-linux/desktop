@@ -26,3 +26,6 @@ bande/ship-tracking-lists.patch
 bande/drm-on-request.patch
 bande/version-name.patch
 bande/no-default-browser-prompt.patch
+bande/new-tab-page.patch
+bande/menu-button-in-row.patch
+bande/about-pages.patch

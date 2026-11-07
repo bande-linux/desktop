@@ -93,6 +93,9 @@ pref("browser.search.serpEventTelemetryCategorization.enabled", false, locked);
 pref("browser.search.region", "US");
 pref("browser.region.update.enabled", false, locked);
 pref("browser.region.network.url", "", locked);
+// The new tab page is our own, in the browser; the built-in add-on is gone
+pref("browser.newtabpage.enabled", false, locked);
+pref("browser.startup.homepage", "about:newtab");
 // Default-browser prompts
 pref("browser.shell.checkDefaultBrowser", false, locked);
 pref("browser.shell.didSkipDefaultBrowserCheckOnFirstRun", true);

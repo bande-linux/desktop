@@ -70,7 +70,7 @@ menuitem, menu { border-radius: 6px; min-height: 28px; }
    WELL_X 12. Fullscreen has no well, so Firefox's restore button is the mouse way out. */
 #main-window {
   --bande-row-height: 48px;
-  --bande-well-gap: 90px;
+  --bande-well-gap: 84px;
 }
 #tabbrowser-tabs {
   --tab-min-height: 28px !important;
@@ -108,3 +108,10 @@ menuitem, menu { border-radius: 6px; min-height: 28px; }
 #TabsToolbar .titlebar-spacer[type="post-tabs"] { display: flex !important; }
 :root[inFullscreen] #TabsToolbar .titlebar-spacer[type="post-tabs"],
 :root[inFullscreen] #TabsToolbar .titlebar-spacer[type="pre-tabs"] { display: none !important; }
+
+/* The app menu is the ⋮ button beside the well, as in Bande's own apps. */
+#PanelUI-button { margin: 0 !important; padding: 0 !important; align-self: center; }
+#PanelUI-menu-button {
+  list-style-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="3.5" r="1.25" fill="context-fill"/><circle cx="8" cy="8" r="1.25" fill="context-fill"/><circle cx="8" cy="12.5" r="1.25" fill="context-fill"/></svg>') !important;
+  --toolbarbutton-border-radius: 12px;
+}

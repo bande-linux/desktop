@@ -1,0 +1,68 @@
+Our own new tab page in place of the built-in add-on
+
+--- a/browser/components/newtab/AboutNewTabRedirector.sys.mjs
++++ b/browser/components/newtab/AboutNewTabRedirector.sys.mjs
+@@ -636,8 +636,18 @@
+  * implementation of nsIAboutModule for the process type.
+  */
+ export function AboutNewTabRedirectorStub() {
+-  if (Services.appinfo.processType === Services.appinfo.PROCESS_TYPE_DEFAULT) {
+-    return new AboutNewTabRedirectorParent();
+-  }
+-  return new AboutNewTabRedirectorChild();
++  return {
++    newChannel(uri, loadInfo) {
++      const channel = Services.io.newChannelFromURIWithLoadInfo(
++        Services.io.newURI("chrome://browser/content/bande-newtab.html"),
++        loadInfo
++      );
++      channel.originalURI = uri;
++      return channel;
++    },
++    getURIFlags() {
++      return Ci.nsIAboutModule.ALLOW_SCRIPT;
++    },
++    QueryInterface: ChromeUtils.generateQI(["nsIAboutModule"]),
++  };
+ }
+--- a/browser/base/jar.mn
++++ b/browser/base/jar.mn
+@@ -48,6 +48,10 @@
+         content/browser/browser-init.js                     (content/browser-init.js)
+         content/browser/bande-search-choice.xhtml           (content/bande-search-choice.xhtml)
+         content/browser/bande-search-choice.js              (content/bande-search-choice.js)
++        content/browser/bande-newtab.html  (content/bande-newtab.html)
++        content/browser/bande-newtab.css  (content/bande-newtab.css)
++        content/browser/bande-newtab.mjs  (content/bande-newtab.mjs)
++        content/browser/bande-rights.html  (content/bande-rights.html)
+         content/browser/browser-main.js                     (content/browser-main.js)
+         content/browser/browser-menubar.js                  (content/browser-menubar.js)
+         content/browser/browser-pageActions.js              (content/browser-pageActions.js)
+--- a/browser/components/BrowserComponents.manifest
++++ b/browser/components/BrowserComponents.manifest
+@@ -9,7 +9,6 @@
+ 
+ category app-startup nsBrowserGlue @mozilla.org/browser/browserglue;1 application={ec8030f7-c20a-464f-9b0e-13a3a9e97384} application={aa3c5121-dab2-40e2-81ca-7ea25febc110}
+ 
+-category first-startup-new-profile resource:///modules/AboutNewTabResourceMapping.sys.mjs AboutNewTabResourceMapping.firstStartupNewProfile
+ 
+ # Browser global components initializing before UI startup
+ category browser-before-ui-startup resource:///modules/sessionstore/SessionStore.sys.mjs SessionStore.init
+@@ -96,7 +95,6 @@
+ 
+ # App startup consumers
+ 
+-category browser-first-window-ready resource:///modules/AboutNewTab.sys.mjs AboutNewTab.init
+ category browser-first-window-ready resource:///modules/ContentCrashHandlers.sys.mjs TabCrashHandler.init
+ category browser-first-window-ready resource:///modules/ProcessHangMonitor.sys.mjs ProcessHangMonitor.init
+ category browser-first-window-ready resource://gre/modules/PageThumbs.sys.mjs PageThumbs.init
+--- a/browser/extensions/moz.build
++++ b/browser/extensions/moz.build
+@@ -7,7 +7,6 @@
+     "webcompat",
+     "pictureinpicture",
+     "search-detection",
+-    "newtab",
+ ]
+ 
+ JAR_MANIFESTS += ["jar.mn"]

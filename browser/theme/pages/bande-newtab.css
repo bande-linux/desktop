@@ -1,0 +1,25 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+:root {
+  --sheet: #FCFBF9;
+  --well: #E2DFDB;
+  --ink: #201E1A;
+  --ink2: #5B5752;
+  @media (prefers-color-scheme: dark) {
+    --sheet: #272A30;
+    --well: #31343A;
+    --ink: #E4E6EA;
+    --ink2: #B9BEC6;
+  }
+}
+html, body { height: 100%; margin: 0; background: var(--sheet); color: var(--ink); font: 13px Inter, sans-serif; }
+main { max-width: 640px; margin: 0 auto; padding-top: 18vh; text-align: center; }
+#clock { margin: 0; font: 700 48px Manrope, Inter, sans-serif; font-variant-numeric: tabular-nums; }
+#date { margin: 4px 0 32px; color: var(--ink2); font-size: 15px; }
+#sites { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 0; margin: 0; list-style: none; }
+#sites a { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 4px; border-radius: 8px; color: inherit; text-decoration: none; }
+#sites a:hover, #sites a:focus-visible { background: var(--well); outline: none; }
+#sites img { width: 32px; height: 32px; }
+#sites span { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#empty { color: var(--ink2); }

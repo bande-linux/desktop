@@ -1,0 +1,53 @@
+about:rights is ours; about:telemetry and about:glean are gone
+
+--- a/browser/components/about/AboutRedirector.cpp
++++ b/browser/components/about/AboutRedirector.cpp
+@@ -93,9 +93,8 @@
+     {"profiling",
+      "chrome://devtools/content/performance-new/aboutprofiling/index.html",
+      nsIAboutModule::ALLOW_SCRIPT | nsIAboutModule::IS_SECURE_CHROME_UI},
+-    {"rights", "https://www.mozilla.org/about/legal/terms/firefox/",
+-     nsIAboutModule::URI_SAFE_FOR_UNTRUSTED_CONTENT |
+-         nsIAboutModule::URI_MUST_LOAD_IN_CHILD},
++    {"rights", "chrome://browser/content/bande-rights.html",
++     nsIAboutModule::IS_SECURE_CHROME_UI},
+     {"robots", "chrome://browser/content/aboutRobots.xhtml",
+      nsIAboutModule::URI_SAFE_FOR_UNTRUSTED_CONTENT |
+          nsIAboutModule::ALLOW_SCRIPT},
+--- a/docshell/base/nsAboutRedirector.cpp
++++ b/docshell/base/nsAboutRedirector.cpp
+@@ -212,15 +212,6 @@
+     {"windows-messages", "chrome://global/content/aboutWindowsMessages.html",
+      nsIAboutModule::ALLOW_SCRIPT},
+ #endif
+-#ifndef MOZ_GLEAN_ANDROID
+-    {"glean", "chrome://global/content/aboutGlean.html",
+-#  if !defined(NIGHTLY_BUILD) && defined(MOZILLA_OFFICIAL)
+-     nsIAboutModule::HIDE_FROM_ABOUTABOUT |
+-#  endif
+-         nsIAboutModule::ALLOW_SCRIPT},
+-#endif
+-    {"telemetry", "chrome://global/content/aboutTelemetry.xhtml",
+-     nsIAboutModule::ALLOW_SCRIPT | nsIAboutModule::IS_SECURE_CHROME_UI},
+ #ifndef MOZ_WIDGET_ANDROID
+     {"translations",
+      "chrome://global/content/translations/about-translations.html",
+--- a/docshell/build/components.conf
++++ b/docshell/build/components.conf
+@@ -28,7 +28,6 @@
+     'serviceworkers',
+     'srcdoc',
+     'support',
+-    'telemetry',
+     'url-classifier',
+     'webrtc',
+ ]
+@@ -48,8 +47,6 @@
+ if buildconfig.substs['MOZ_WIDGET_TOOLKIT'] == 'windows':
+     about_pages.append('third-party')
+     about_pages.append('windows-messages')
+-if not defined('MOZ_GLEAN_ANDROID'):
+-    about_pages.append('glean')
+ if buildconfig.substs['MOZ_WIDGET_TOOLKIT'] != 'android' and buildconfig.substs['MOZ_WIDGET_TOOLKIT'] != 'windows':
+     about_pages.append('webauthn')
+ if defined('NIGHTLY_BUILD'):

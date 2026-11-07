@@ -13,7 +13,7 @@ mod title_bar;
 
 pub use bande_design::{
     Accent, Appearance, Color, Contrast, ControlSize, Elevation, Palette, Radius, Scheme, Shadow,
-    Spacing, TextRole, TextSize, Typeface, grown_line,
+    Spacing, TextRole, TextSize, Typeface, grown_line, window_edge_opacity,
 };
 pub use cpu::CpuRenderer;
 pub use damage::{Region, damage};
@@ -36,6 +36,6 @@ pub use text::{
 pub use title_bar::{
     ControlHover, FRAME_HEADER_HEIGHT, HEADER_LEADING, PLACEMENTS_AFTER_HOLD,
     PLACEMENTS_AFTER_REST, RESIZE_MARGIN, RESIZE_WALL_BAND, ResizeEdge, TitleBar,
-    WINDOW_HEADER_HEIGHT, WalledSides, WindowControl, menu_button_area, resize_zone, title_style,
-    walled_resize_zone,
+    WINDOW_HEADER_HEIGHT, WalledSides, WindowControl, WindowControls, menu_button_area,
+    resize_zone, title_style, walled_resize_zone, window_controls_end,
 };

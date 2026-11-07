@@ -32,6 +32,7 @@ use wayland_client::protocol::wl_subcompositor::WlSubcompositor;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, EventQueue, Proxy};
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
+use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
 use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1;
 use wayland_protocols::xdg::foreign::zv2::client::zxdg_exporter_v2::ZxdgExporterV2;
@@ -273,6 +274,7 @@ pub(crate) struct State {
     pub(crate) wm_base: Option<XdgWmBase>,
     layer_shell: Option<ZwlrLayerShellV1>,
     pub(crate) activation: Option<XdgActivationV1>,
+    pub(crate) idle_inhibit_manager: Option<ZwpIdleInhibitManagerV1>,
     toplevel_tag: Option<XdgToplevelTagManagerV1>,
     exporter: Option<ZxdgExporterV2>,
     importer: Option<ZxdgImporterV2>,

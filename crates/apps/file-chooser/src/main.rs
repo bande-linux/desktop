@@ -21,7 +21,7 @@ use bande_file_chooser::{
 use bande_files::{FilesSettings, rows, sidebar_file, with_volumes};
 use bande_toolkit::ui::Alert;
 use bande_toolkit::{App, Image, Rect, Role, Scene, TextSystem, Window, WindowEvent};
-use bande_volumes::{media_roots, mounted_volumes};
+use bande_volumes::{media_roots, mounted_volumes, volume_icon};
 use bande_wallpaper::Fit;
 use bande_xdg::{
     Locale, MimeDatabase, UserDir, app_name, applications, config_home, current_desktops,
@@ -178,10 +178,8 @@ fn run(dialog: Dialog) -> ExitCode {
     let chooser = Chooser::new(dialog.clone(), MimeDatabase::load(&dirs), folder, &settings);
     let bookmarks = read(config_home().map(|config| config.join("gtk-3.0/bookmarks")));
     let user = std::env::var("USER").unwrap_or_default();
-    let volumes = mounted_volumes(
-        &std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default(),
-        &media_roots(&user),
-    );
+    let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
+    let volumes = mounted_volumes(&mountinfo, &media_roots(&user));
     let layout = std::fs::read_to_string(sidebar_file(state_home().as_deref(), &home)).ok();
     let places = with_volumes(
         &rows(
@@ -191,6 +189,7 @@ fn run(dialog: Dialog) -> ExitCode {
             layout.as_deref(),
         ),
         &volumes,
+        |volume| volume_icon(&mountinfo, volume),
     );
     let mut window = match Window::open(Role::toplevel(&title(&dialog), APP_ID), WINDOW_SIZE) {
         Ok(window) => window,

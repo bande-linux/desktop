@@ -92,6 +92,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   system's `default` cursor theme as the fallback; `bande-settings` adds AccountsService (Users), PackageKit
   (Software Update), power-profiles-daemon (Power) and depends on `locales`, so localed can
   generate any language picked in Settings;
+- `bande-player` (apps repo) is the one package linking GStreamer: its engine process plays for Player and Quick Look; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
 - `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc` and the H.264 and VP8 encoders
   for screen recording;
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on

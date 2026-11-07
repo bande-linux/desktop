@@ -48,9 +48,6 @@ Status: started, branch gap-terminal-tilde.
 super+space opening search popup
 Status: started, branch gap-search-shortcut.
 
-bande-browser icon is like a safari clone but we own our own design theme and should stick to that now clone apple.
-Status: started, branch gap-browser-icon.
-
 Passwords (keyring) cant be unlocked from Settings->Passwords. When failing to unlock the text "Couldnt make this change" stick to the settings window in all tabs no matter what view i go to.
 Status: started, branch gap-passwords.
 

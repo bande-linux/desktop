@@ -34,6 +34,7 @@ use wayland_client::{Connection, EventQueue, Proxy};
 use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1;
 use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1;
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
+use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
@@ -273,6 +274,7 @@ pub(crate) struct State {
     pub(crate) wm_base: Option<XdgWmBase>,
     layer_shell: Option<ZwlrLayerShellV1>,
     pub(crate) activation: Option<XdgActivationV1>,
+    pub(crate) idle_inhibit_manager: Option<ZwpIdleInhibitManagerV1>,
     toplevel_tag: Option<XdgToplevelTagManagerV1>,
     pub(crate) toplevel_drag: Option<wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1>,
     pub(crate) seat: Option<WlSeat>,

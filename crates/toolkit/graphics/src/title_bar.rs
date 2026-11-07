@@ -89,7 +89,7 @@ pub fn menu_button_area(height: f32) -> Rect {
     menu_well(height)
 }
 
-const fn window_controls_end(menu: bool) -> f32 {
+pub const fn window_controls_end(menu: bool) -> f32 {
     match menu {
         true => WELL_X + WELL_WIDTH + MENU_GAP + WELL_HEIGHT,
         false => WELL_X + WELL_WIDTH,
@@ -198,8 +198,42 @@ impl ControlHover {
 
 pub struct TitleBar<'a> {
     pub width: f32,
-    pub height: f32,
     pub title: Paragraph,
+    pub controls: WindowControls<'a>,
+}
+
+impl TitleBar<'_> {
+    pub fn items(&self) -> Vec<Item> {
+        let height = self.controls.height;
+        let mut items = Vec::new();
+        let frame = self.controls.palette.frame;
+        if frame.a == u8::MAX {
+            items.push(Item::Fill {
+                shape: Shape::rect(Rect::new(0.0, 0.0, self.width, height)),
+                paint: frame.into(),
+            });
+        }
+        items.extend(self.controls.items());
+        let title_x = window_controls_end(self.controls.menu_open.is_some()) + TITLE_GAP;
+        let available = Rect::new(
+            title_x,
+            0.0,
+            (self.width - title_x - TRAILING_INSET).max(0.0),
+            height,
+        );
+        items.push(Item::Clip {
+            shape: Shape::rect(available),
+            items: vec![Item::Text {
+                origin: Point::new(title_x, ((height - self.title.height()) / 2.0).round()),
+                paragraph: self.title.clone(),
+            }],
+        });
+        items
+    }
+}
+
+pub struct WindowControls<'a> {
+    pub height: f32,
     pub palette: &'a Palette,
     pub active: bool,
     pub hover: ControlHover,
@@ -210,16 +244,9 @@ pub struct TitleBar<'a> {
     pub menu_open: Option<bool>,
 }
 
-impl TitleBar<'_> {
+impl WindowControls<'_> {
     pub fn items(&self) -> Vec<Item> {
-        let palette = self.palette;
         let mut items = Vec::new();
-        if palette.frame.a == u8::MAX {
-            items.push(Item::Fill {
-                shape: Shape::rect(Rect::new(0.0, 0.0, self.width, self.height)),
-                paint: palette.frame.into(),
-            });
-        }
         let well = Rect::new(
             WELL_X,
             ((self.height - WELL_HEIGHT) / 2.0).round(),
@@ -234,20 +261,6 @@ impl TitleBar<'_> {
             self.well(menu_well(self.height), &mut items);
             self.control(WindowControl::Menu, &mut items);
         }
-        let title_x = window_controls_end(self.menu_open.is_some()) + TITLE_GAP;
-        let available = Rect::new(
-            title_x,
-            0.0,
-            (self.width - title_x - TRAILING_INSET).max(0.0),
-            self.height,
-        );
-        items.push(Item::Clip {
-            shape: Shape::rect(available),
-            items: vec![Item::Text {
-                origin: Point::new(title_x, ((self.height - self.title.height()) / 2.0).round()),
-                paragraph: self.title.clone(),
-            }],
-        });
         items
     }
 

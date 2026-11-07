@@ -17,6 +17,7 @@ use accesskit::TreeUpdate;
 use bande_app_menu::Entry;
 use bande_toolkit::ui::Ui;
 use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
+use bande_xdg::file_uri;
 
 pub use cx::{Cx, WindowId};
 pub use portal::{Filter, choose_file, choose_save_file};
@@ -205,6 +206,13 @@ pub trait Program: Sized + 'static {
     }
 }
 
+fn argument_text(argument: OsString) -> String {
+    argument.into_string().unwrap_or_else(|path| {
+        let path = Path::new(&path);
+        file_uri(&std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf()))
+    })
+}
+
 pub fn run<P: Program>(info: &'static Info) -> ExitCode {
     let arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
     if arguments == [VERSION_FLAG] {
@@ -212,17 +220,7 @@ pub fn run<P: Program>(info: &'static Info) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     bande_log::init(info.package);
-    let arguments = match arguments
-        .into_iter()
-        .map(OsString::into_string)
-        .collect::<Result<Vec<_>, _>>()
-    {
-        Ok(arguments) => arguments,
-        Err(argument) => {
-            tracing::error!("the argument {} is not UTF-8", argument.display());
-            return ExitCode::FAILURE;
-        }
-    };
+    let arguments = arguments.into_iter().map(argument_text).collect();
     match runner::run::<P>(info, arguments, None) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

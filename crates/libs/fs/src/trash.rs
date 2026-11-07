@@ -4,15 +4,17 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::os::fd::OwnedFd;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
 use bande_xdg::{percent_decode, percent_encode};
 use jiff::civil::DateTime;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::fs::{
-    AtFlags, CWD, Dir, FileType, Mode, OFlags, StatxFlags, openat, statat, statx, unlinkat,
+    AtFlags, CWD, Dir, FileType, Mode, OFlags, StatxFlags, chmodat, fchmod, fstat, openat, statat,
+    statx, unlinkat,
 };
+use rustix::io::Errno;
 
 use crate::ops::rename_new;
 
@@ -132,11 +134,14 @@ impl TrashDir {
             .map_or_else(|| original.to_path_buf(), Path::to_path_buf)
     }
 
-    fn original_path(&self, stored: PathBuf) -> PathBuf {
-        match &self.topdir {
-            Some(topdir) if stored.is_relative() => topdir.join(stored),
-            _ => stored,
-        }
+    fn original_path(&self, stored: PathBuf) -> Option<PathBuf> {
+        let Some(topdir) = &self.topdir else {
+            return Some(stored);
+        };
+        stored
+            .components()
+            .all(|part| matches!(part, Component::Normal(_)))
+            .then(|| topdir.join(stored))
     }
 
     fn reserve(&self, original: &Path, deleted: DateTime) -> io::Result<(OsString, PathBuf)> {
@@ -162,7 +167,10 @@ impl TrashDir {
             }
             match OpenOptions::new().write(true).create_new(true).open(&info) {
                 Ok(mut file) => {
-                    if let Err(error) = file.write_all(contents.as_bytes()) {
+                    if let Err(error) = file
+                        .write_all(contents.as_bytes())
+                        .and_then(|()| file.sync_data())
+                    {
                         let _ = fs::remove_file(&info);
                         return Err(error);
                     }
@@ -216,7 +224,7 @@ impl TrashDir {
                 self.files().join(&id).symlink_metadata().ok()?;
                 Some(TrashItem {
                     trash: self.clone(),
-                    original: self.original_path(stored),
+                    original: self.original_path(stored)?,
                     id,
                     deleted,
                 })
@@ -284,15 +292,25 @@ fn crossing_mounts() -> io::Error {
     )
 }
 
+fn open_tree(parent: &OwnedFd, name: &OsStr) -> rustix::io::Result<OwnedFd> {
+    let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
+    match openat(parent, name, flags, Mode::empty()) {
+        Err(Errno::ACCESS) => {
+            chmodat(parent, name, Mode::RWXU, AtFlags::empty())?;
+            openat(parent, name, flags, Mode::empty())
+        }
+        opened => opened,
+    }
+}
+
 fn remove_tree(parent: &OwnedFd, name: &OsStr, mount: MountKey) -> io::Result<()> {
-    let directory = openat(
-        parent,
-        name,
-        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-        Mode::empty(),
-    )?;
+    let directory = open_tree(parent, name)?;
     if mount_of(&directory)? != mount {
         return Err(crossing_mounts());
+    }
+    let status = fstat(&directory)?;
+    if status.st_mode & 0o300 != 0o300 {
+        let _ = fchmod(&directory, Mode::RWXU);
     }
     for entry in Dir::read_from(&directory)? {
         let entry = entry?;
@@ -455,6 +473,10 @@ impl Trash {
         TrashDir::for_volume(&topdir(path)?, self.uid)
     }
 
+    pub(crate) fn available_for(&self, path: &Path) -> bool {
+        std::path::absolute(path).is_ok_and(|path| self.dir_for(&path).is_ok())
+    }
+
     pub fn put(&self, path: &Path) -> io::Result<TrashItem> {
         if self.contains(path) {
             return Err(io::Error::new(
@@ -501,7 +523,21 @@ impl Trash {
 
     pub fn is_empty(&self) -> bool {
         self.dirs().iter().all(|dir| {
-            fs::read_dir(dir.info_dir()).map_or(true, |mut entries| entries.next().is_none())
+            fs::read_dir(dir.info_dir()).map_or(true, |mut entries| {
+                !entries.any(|entry| {
+                    entry.is_ok_and(|entry| {
+                        let name = entry.file_name();
+                        name.as_bytes()
+                            .strip_suffix(INFO_SUFFIX.as_bytes())
+                            .is_some_and(|id| {
+                                dir.files()
+                                    .join(OsStr::from_bytes(id))
+                                    .symlink_metadata()
+                                    .is_ok()
+                            })
+                    })
+                })
+            })
         })
     }
 

@@ -46,6 +46,7 @@ struct App<O> {
     shown: bool,
     buses: Buses,
     displays: Option<DisplaysHandle>,
+    loop_handle: LoopHandle<'static, App<O>>,
 }
 
 fn publish_displays<O: FrameOutput>(app: &mut App<O>) {
@@ -156,6 +157,7 @@ fn run_headless(session: Session, started: Duration, buses: Buses) -> Result<(),
         shown: false,
         buses,
         displays: None,
+        loop_handle: event_loop.handle(),
     };
     serve(&mut event_loop, app, session).map(drop)
 }
@@ -200,6 +202,8 @@ fn sync_heads(app: &mut App<DrmBackend>) {
             && let Err(error) = app.output.use_mode(name, settings.mode)
         {
             tracing::warn!("cannot change the mode of {name}: {error}");
+            app.output
+                .refuse_output_mode(name, settings.mode, &mut app.compositor);
         }
     }
     app.schedulers.retain(|scheduler| {
@@ -208,11 +212,15 @@ fn sync_heads(app: &mut App<DrmBackend>) {
             .is_some_and(|output| outputs.iter().any(|name| name == output))
     });
     for name in &outputs {
-        let refresh = app.output.refresh(name).unwrap_or(REFRESH);
         let current = app
             .schedulers
             .iter()
             .position(|scheduler| scheduler.output() == Some(name));
+        let refresh = match (app.output.refresh(name), current) {
+            (Some(refresh), _) => refresh,
+            (None, Some(_)) => continue,
+            (None, None) => REFRESH,
+        };
         match current {
             Some(index) if app.schedulers[index].clock().refresh() == refresh => continue,
             Some(index) => {
@@ -236,19 +244,35 @@ fn hotplug(app: &mut App<DrmBackend>) {
                 tracing::info!("{name} was disconnected");
                 app.compositor.remove_output(name);
             }
+            let mut back = changes.returned;
             for output in changes.connected {
                 tracing::info!("{} was connected", output.name);
+                back.push(output.name.clone());
                 app.compositor.add_output(output);
+            }
+            for output in changes.refitted {
+                back.push(output.name.clone());
+                app.compositor.refit_output(output);
             }
             sync_heads(app);
             app.schedulers
                 .iter_mut()
                 .filter(|scheduler| {
-                    scheduler.output().is_some_and(|name| {
-                        changes.relinked.iter().any(|relinked| relinked == name)
-                    })
+                    scheduler
+                        .output()
+                        .is_some_and(|name| back.iter().any(|known| known == name))
                 })
                 .for_each(FrameScheduler::resume);
+            if let Some(left) = changes.look_again_in
+                && let Err(error) =
+                    app.loop_handle
+                        .insert_source(Timer::from_duration(left), |_, (), app| {
+                            hotplug(app);
+                            TimeoutAction::Drop
+                        })
+            {
+                tracing::warn!("cannot look at a lost display again: {error}");
+            }
         }
         Err(error) => tracing::warn!("cannot look for displays: {error}"),
     }
@@ -274,13 +298,20 @@ fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<
         let App {
             compositor,
             schedulers,
+            output,
             ..
         } = app;
         match schedulers
             .iter_mut()
             .find(|scheduler| scheduler.output() == Some(name.as_str()))
         {
-            Some(scheduler) => Ok(scheduler.flipped(vblank, compositor)?),
+            Some(scheduler) => {
+                scheduler.flipped(vblank, compositor)?;
+                if output.relink_wanted(&name) {
+                    scheduler.resume();
+                }
+                Ok(())
+            }
             None => Ok(()),
         }
     });
@@ -385,6 +416,7 @@ fn run_drm(
         shown: false,
         buses,
         displays: None,
+        loop_handle: event_loop.handle(),
     };
     let input = app.output.input_backend()?;
     handle.insert_source(input, |event, _, app| {
@@ -744,6 +776,9 @@ where
         };
         for (executable, error) in &upkeep.failures {
             app.compositor.report_start_failure(executable, error);
+        }
+        if app.compositor.take_outputs_refitted() {
+            publish_displays(&mut app);
         }
         let App {
             compositor,

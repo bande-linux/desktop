@@ -30,7 +30,7 @@ use bande_toolkit::{
     App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
-use bande_volumes::{EjectFailure, eject, media_roots};
+use bande_volumes::{EjectFailure, eject, follow_mounts, media_roots};
 use bande_wallpaper::{
     Choice, Fit, Picture, RenderError, Variant, choose, follow, render, render_cached,
 };
@@ -1194,6 +1194,14 @@ impl DesktopSurface {
             )?),
             false => None,
         };
+        if let Some(lister) = &lister {
+            let lister = lister.clone();
+            if let Err(error) = follow_mounts(move || {
+                let _ = lister.send(());
+            }) {
+                tracing::warn!("cannot follow mounts: {error}");
+            }
+        }
         let mut surface = DesktopSurface {
             view: DesktopView::new(appearance, layouts, text),
             paste_moves: false,

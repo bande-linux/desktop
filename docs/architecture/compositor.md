@@ -188,9 +188,14 @@ when they reach the screen is Bande's own.
   with another display, where the pointer must rest 250 ms so a window can still be dragged
   across. Releasing over a shown preview springs the window into it. `Super+Left/Right` tile halves,
   `Up/Down` on a half give its top or bottom quarter and on a quarter go back to the half,
-  `Up` zooms a free window and `Down` returns a zoomed one. Tiles get xdg-shell's tiled states
-  (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share
-  resizes both; dragging a tiled window away gives back its earlier size under the pointer.
+  `Up` zooms a free window and `Down` returns a zoomed one. A tile is only a shape, as on macOS:
+  no gaps, but the window keeps its rounded corners, shadow and resize edges, and gets no
+  xdg-shell tiled states, since clients drop their resize edges for those (GTK) and would have
+  none to offer. `bande_app_v1.window_tiled` tells toolkit apps instead. Dragging the edge two
+  neighbouring tiles share resizes both, down to the neighbour's minimum size, and both stay
+  tiled; resizing any other edge makes the window an ordinary window of that size. Dragging a
+  tiled window away gives back its earlier size under the pointer; one that became ordinary
+  keeps its size. Filling the other half fills what the tile next to it leaves free.
 - **Drag and drop.** The compositor draws the drag icon a client passes to `start_drag` at the
   pointer, offset by the icon's attach offset, below the pointer. Holding Ctrl makes a
   drop a copy and Shift a move (as in GTK and KDE), when source and destination offer it; otherwise the
@@ -330,5 +335,5 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | implemented |
 | `zwlr_output_power_management_v1` | Display power for idle and lock | P1 | implemented |
 | `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, `show_app_menu` to open an app's menus below a window's menu button, `active_menus` (version 4) with the key window's menu address, `open_terminal` (version 5) for `Ctrl+Alt+T`; workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
-| `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 7) for the Move & Resize menu on a toolkit window's zoom control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button | P0 | implemented, every client |
+| `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 8) for the Move & Resize menu on a toolkit window's zoom control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button | P0 | implemented, every client |
 | `ext-background-effect-v1` | Blur behind the launcher's scrim (the overview's scrim and blur are the compositor's own) | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

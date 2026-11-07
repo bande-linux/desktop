@@ -20,7 +20,6 @@ use crate::menu_button::menu_address;
 use crate::scene::{CORNER_RADIUS, Piece};
 use crate::shell::toplevel_names;
 use crate::state::{Compositor, Placed, State};
-use crate::tile::TILED;
 use crate::window::Window;
 
 const BTN_LEFT: u32 = 0x110;
@@ -123,9 +122,6 @@ fn resize_band(window: &Window, frame: Rect, point: bande_graphics::Point) -> Op
         || window.has_state(xdg_toplevel::State::Fullscreen)
     {
         return None;
-    }
-    if TILED.into_iter().any(|state| window.has_state(state)) {
-        return resize_zone(frame, 0.0, 0.0, point);
     }
     resize_zone(frame, CORNER_RADIUS as f32, RESIZE_MARGIN as f32, point)
 }

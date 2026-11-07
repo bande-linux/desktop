@@ -201,15 +201,7 @@ impl Dispatch<XdgToplevel, ()> for State {
                     fullscreen: states.contains(&xdg_toplevel::State::Fullscreen),
                     activated: states.contains(&xdg_toplevel::State::Activated),
                     suspended: states.contains(&xdg_toplevel::State::Suspended),
-                    tiled: states.iter().any(|state| {
-                        matches!(
-                            state,
-                            xdg_toplevel::State::TiledLeft
-                                | xdg_toplevel::State::TiledRight
-                                | xdg_toplevel::State::TiledTop
-                                | xdg_toplevel::State::TiledBottom
-                        )
-                    }),
+                    tiled: previous.tiled,
                 };
                 if state.toplevel != previous {
                     state

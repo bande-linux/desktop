@@ -28,13 +28,13 @@ use zeroize::Zeroizing;
 
 use crate::L10N;
 use crate::crypt::crypted;
-use crate::failure::sentence;
+use crate::failure::{explained, not_responding};
 use crate::follow::{Command, Update, Updates, spawn};
 use crate::pages::{FIELD_SIZE, Widgets, boxed, muted_row};
 use crate::pictures::choose_picture;
 use crate::services::{SETTLE, signals};
 use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
-use crate::widgets::{Avatar, Caption, Card, Header, PictureCrop, Row, Text, Tone};
+use crate::widgets::{Avatar, Card, Header, PictureCrop, Row, Text, Tone};
 
 const PASSWD: &str = "/usr/bin/passwd";
 const STEP: Duration = Duration::from_secs(15);
@@ -280,7 +280,8 @@ fn logged_in(system: &Connection) -> zbus::Result<Vec<u32>> {
 }
 
 fn refuse_logged_in(system: &Connection, uid: u32) -> Result<(), String> {
-    let users = logged_in(system).map_err(|error| sentence(&error, "service-login"))?;
+    let users = logged_in(system)
+        .map_err(|error| explained(&error, "service-login", "account-change-failed"))?;
     if !users.contains(&uid) {
         return Ok(());
     }
@@ -530,7 +531,7 @@ fn set_picture(system: &Connection, login: &str, encoded: &[u8]) -> Result<(), S
     let file = tempfile_in(&folder, encoded).map_err(|error| error.to_string())?;
     let result = account(system, login)
         .and_then(|user| user.set_icon_file(&file.to_string_lossy()))
-        .map_err(|error| sentence(&error, "service-accounts"));
+        .map_err(|error| explained(&error, "service-accounts", "account-change-failed"));
     if let Err(error) = std::fs::remove_file(&file) {
         tracing::warn!("cannot remove {}: {error}", file.display());
     }
@@ -550,7 +551,8 @@ fn tempfile_in(folder: &Path, contents: &[u8]) -> io::Result<PathBuf> {
 }
 
 fn create(system: &Connection, new: &NewAccount) -> Result<(), String> {
-    let refused = |error: zbus::Error| sentence(&error, "service-accounts");
+    let refused =
+        |error: zbus::Error| explained(&error, "service-accounts", "account-change-failed");
     let crypted = crypted(&new.password)?;
     let kind = if new.admin { ADMINISTRATOR } else { STANDARD };
     let path = Accounts::new(system)
@@ -644,7 +646,9 @@ pub fn follow_users(
                             }
                         }
                         Ok(None) => Ok(()),
-                        Err(error) => Err(sentence(&error, "service-files")),
+                        Err(error) => {
+                            Err(explained(&error, "service-files", "picture-choose-failed"))
+                        }
                     }
                 }
                 UsersCommand::SavePicture(login, crop) => match (&system, chosen.take()) {
@@ -655,7 +659,9 @@ pub fn follow_users(
                 UsersCommand::Rename(login, name) => system.as_ref().map_or(Ok(()), |system| {
                     account(system, &login)
                         .and_then(|user| user.set_real_name(name.trim()))
-                        .map_err(|error| sentence(&error, "service-accounts"))
+                        .map_err(|error| {
+                            explained(&error, "service-accounts", "account-change-failed")
+                        })
                 }),
                 UsersCommand::Administrator(login, on) => {
                     system.as_ref().map_or(Ok(()), |system| {
@@ -663,12 +669,14 @@ pub fn follow_users(
                             .and_then(|user| {
                                 user.set_account_type(if on { ADMINISTRATOR } else { STANDARD })
                             })
-                            .map_err(|error| sentence(&error, "service-accounts"))
+                            .map_err(|error| {
+                                explained(&error, "service-accounts", "account-change-failed")
+                            })
                     })
                 }
                 UsersCommand::Create(new) => {
                     let created = system.as_ref().map_or_else(
-                        || Err(L10N.tr("couldnt-change")),
+                        || Err(not_responding("service-accounts")),
                         |system| create(system, &new),
                     );
                     updates.send(Update::AccountCreated(created.clone().err()));
@@ -679,13 +687,15 @@ pub fn follow_users(
                         refuse_logged_in(system, uid)?;
                         Accounts::new(system)
                             .and_then(|accounts| accounts.delete_user(i64::from(uid), remove_files))
-                            .map_err(|error| sentence(&error, "service-accounts"))
+                            .map_err(|error| {
+                                explained(&error, "service-accounts", "account-change-failed")
+                            })
                     })
                 }
             };
             match result {
                 Err(message) if !message.is_empty() => {
-                    if !updates.send(Update::Failed(None, message)) {
+                    if !updates.send(Update::PaneFailed(PaneId::Users, message)) {
                         break;
                     }
                 }
@@ -931,9 +941,6 @@ impl SettingsView {
         } else if managed {
             page.push(boxed(Card::new(vec![self.delete_account_row(&account)])));
         }
-        if let Some(message) = &self.message {
-            page.push(boxed(Caption::new(Text::new(message, Tone::Muted))));
-        }
         Some(page)
     }
 
@@ -1099,7 +1106,7 @@ impl SettingsView {
                 .insert(SettingId::FullName, Value::Text(account.full_name.clone()));
         }
         self.drafts.remove(&SettingId::FullName);
-        self.message = None;
+        self.clear_failure();
         self.password = None;
         self.password_message = None;
         self.picture_edit = None;
@@ -1118,7 +1125,7 @@ impl SettingsView {
 
     pub(crate) fn choose_account_picture(&mut self) {
         if let Some(login) = self.shown_account() {
-            self.message = None;
+            self.clear_failure();
             self.commands
                 .push(Command::Users(UsersCommand::ChoosePicture(login)));
         }
@@ -1164,7 +1171,7 @@ impl SettingsView {
     }
 
     pub(crate) fn set_administrator(&mut self, login: String, on: bool) {
-        self.message = None;
+        self.clear_failure();
         self.commands
             .push(Command::Users(UsersCommand::Administrator(login, on)));
     }
@@ -1183,7 +1190,7 @@ impl SettingsView {
 
     pub(crate) fn delete_account(&mut self, uid: u32, remove_files: bool) {
         self.deleting_account = false;
-        self.message = None;
+        self.clear_failure();
         self.commands
             .push(Command::Users(UsersCommand::Delete(uid, remove_files)));
     }
@@ -1438,7 +1445,7 @@ impl SettingsView {
             }
             PasswordOutcome::Failed(reason) => {
                 tracing::warn!("passwd: {reason}");
-                (L10N.tr("couldnt-change"), 0)
+                (L10N.tr("password-change-failed"), 0)
             }
         };
         form.error = Some(error);

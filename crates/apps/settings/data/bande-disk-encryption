@@ -27,6 +27,7 @@ volume_digests() {
 
 rewrite_happened() {
     known=$(token "$1")
+    case $known in *'"digest"'*) ;; *) return 1 ;; esac
     volume_digests "$1" | while IFS= read -r digest; do
         case $known in *"$digest"*) ;; *) echo new ;; esac
     done | grep -q new

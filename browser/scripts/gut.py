@@ -10,8 +10,8 @@ STUB_HEAD = """/* This Source Code Form is subject to the terms of the Mozilla P
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// Removed in Bande's Browser. Getters read as nothing, questions answer no, and everything else
-// does nothing and resolves at once.
+// Removed in Bande's Browser. Getters and lookups give nothing, questions answer no, option
+// handlers pass the arguments through, and everything else does nothing and resolves at once.
 const getters = new Set(GETTERS);
 const nothing = new Proxy(function () {}, {
   get(target, key) {
@@ -20,6 +20,12 @@ const nothing = new Proxy(function () {}, {
     }
     if (/^(is|has|can|should|was|needs|supports)[A-Z]/.test(key)) {
       return () => false;
+    }
+    if (/^(get|find|lookup)[A-Z]/.test(key)) {
+      return () => undefined;
+    }
+    if (/^handle\w*Options$/.test(key)) {
+      return options => options?.args ?? null;
     }
     return nothing;
   },

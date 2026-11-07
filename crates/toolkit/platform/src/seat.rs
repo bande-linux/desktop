@@ -34,6 +34,26 @@ struct Keymap {
     state: xkb::State,
 }
 
+impl Keymap {
+    fn has_unshifted_or_shifted_key(&self, text: &str) -> bool {
+        let mut characters = text.chars();
+        let (Some(character), None) = (characters.next(), characters.next()) else {
+            return false;
+        };
+        let wanted = xkb::utf32_to_keysym(character as u32);
+        let layout = self.state.serialize_layout(xkb::STATE_LAYOUT_EFFECTIVE);
+        let mut found = false;
+        self.keymap.key_for_each(|keymap, keycode| {
+            found |= (0..2).any(|level| {
+                keymap
+                    .key_get_syms_by_level(keycode, layout, level)
+                    .contains(&wanted)
+            });
+        });
+        found
+    }
+}
+
 const MIN_REPEAT_INTERVAL: Duration = Duration::from_millis(1);
 
 struct Repeat {
@@ -234,7 +254,8 @@ impl Input {
     }
 
     fn compose_step(&mut self, keycode: Keycode) -> Option<Step> {
-        let keysym = self.keymap.as_ref()?.state.key_get_one_sym(keycode);
+        let keymap = self.keymap.as_ref()?;
+        let keysym = keymap.state.key_get_one_sym(keycode);
         let shortcut = self.modifiers.control || self.modifiers.alt || self.modifiers.logo;
         let abandons = matches!(key_for(keysym), Some(Key::Backspace | Key::Escape));
         if self.compose.is_composing() && (shortcut || abandons) {
@@ -245,7 +266,10 @@ impl Input {
                 deliver_key: shortcut,
             });
         }
-        (!shortcut).then(|| self.compose.feed(keysym))
+        (!shortcut).then(|| {
+            self.compose
+                .feed(keysym, &|text| keymap.has_unshifted_or_shifted_key(text))
+        })
     }
 
     fn update_modifiers(&mut self) -> bool {

@@ -280,7 +280,8 @@ writes a hex value, a corner radius or a font name of its own.
   the Compose key work in every window without an input method: the seat follows xkbcommon's
   Compose table of the session's locale (read at the first dead key) and reports the pending accent
   as `Event::Preedit` and the result as ordinary `Key::Character` events, so every field, password
-  entry and terminal gets it. As on macOS, a dead key and Space type the accent itself, a key that
+  entry and terminal gets it. As on macOS, a dead key and Space type the accent itself (on a layout with no key of its own for
+  `'` or `"`, such as US International, that character instead), a key that
   cannot combine types the accent and then that key (`~` then `/` is `~/`), and Backspace or Escape
   abandon the accent. Shortcuts with Ctrl, Alt or Super never compose. Text is
   published to screen readers as text runs with the caret and selection, which they can also

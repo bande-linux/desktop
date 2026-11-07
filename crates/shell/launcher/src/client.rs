@@ -175,6 +175,9 @@ impl Previewer {
                         .file_name()
                         .map(|name| name.to_string_lossy().into_owned())
                         .unwrap_or_default();
+                    if bande_volumes::on_connected_volume(&path) {
+                        continue;
+                    }
                     let entry = Entry::read(path, name);
                     let mut content = preview(&entry, Image::from_rgba);
                     if let (Preview::Other { .. }, Some(cache)) = (&content, &cache)

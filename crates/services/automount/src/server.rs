@@ -4,6 +4,7 @@ pub enum Protocol {
     Sftp,
     Dav,
     Davs,
+    Nfs,
 }
 
 impl Protocol {
@@ -13,6 +14,7 @@ impl Protocol {
             Self::Sftp => "sftp",
             Self::Dav => "dav",
             Self::Davs => "davs",
+            Self::Nfs => "nfs",
         }
     }
 }
@@ -86,6 +88,7 @@ impl Server {
             "sftp" | "ssh" => Protocol::Sftp,
             "dav" | "http" | "webdav" => Protocol::Dav,
             "davs" | "https" | "webdavs" => Protocol::Davs,
+            "nfs" => Protocol::Nfs,
             _ => return None,
         };
         let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
@@ -137,7 +140,7 @@ impl Server {
     pub fn volume_name(&self) -> String {
         let name = match self.protocol {
             Protocol::Smb => self.path.first(),
-            Protocol::Sftp | Protocol::Dav | Protocol::Davs => self.path.last(),
+            Protocol::Sftp | Protocol::Dav | Protocol::Davs | Protocol::Nfs => self.path.last(),
         };
         name.cloned()
             .unwrap_or_else(|| self.host.clone())
@@ -154,14 +157,14 @@ impl Server {
     pub fn inner_path(&self) -> &[String] {
         match self.protocol {
             Protocol::Smb => self.path.get(1..).unwrap_or_default(),
-            Protocol::Sftp | Protocol::Dav | Protocol::Davs => &[],
+            Protocol::Sftp | Protocol::Dav | Protocol::Davs | Protocol::Nfs => &[],
         }
     }
 
     pub fn dav_url(&self) -> String {
         let scheme = match self.protocol {
             Protocol::Davs => "https",
-            Protocol::Smb | Protocol::Sftp | Protocol::Dav => "http",
+            Protocol::Smb | Protocol::Sftp | Protocol::Dav | Protocol::Nfs => "http",
         };
         let address = match self.port {
             Some(port) => format!("{}:{port}", self.host),
@@ -173,6 +176,20 @@ impl Server {
             .map(|segment| format!("/{}", percent_encode(segment)))
             .collect();
         format!("{scheme}://{address}{path}/")
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port.unwrap_or(match self.protocol {
+            Protocol::Smb => 445,
+            Protocol::Sftp => 22,
+            Protocol::Dav => 80,
+            Protocol::Davs => 443,
+            Protocol::Nfs => 2049,
+        })
+    }
+
+    pub fn nfs_source(&self) -> String {
+        format!("{}:/{}", self.host, self.path.join("/"))
     }
 
     pub fn sftp_source(&self) -> String {
@@ -207,6 +224,9 @@ mod tests {
         let dav = Server::parse("https://cloud.example/remote.php/dav").unwrap();
         assert_eq!(dav.dav_url(), "https://cloud.example/remote.php/dav/");
         assert_eq!(dav.volume_name(), "dav");
+        let nfs = Server::parse("nfs://nas/srv/media").unwrap();
+        assert_eq!(nfs.nfs_source(), "nas:/srv/media");
+        assert_eq!(nfs.volume_name(), "media");
     }
 
     #[test]

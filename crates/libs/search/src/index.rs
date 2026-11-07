@@ -251,6 +251,9 @@ impl Worker {
     }
 
     fn watch(&mut self, folder: &Path) {
+        if bande_volumes::on_connected_volume(folder) {
+            return;
+        }
         if let Some(watcher) = &self.watcher
             && let Err(error) = watcher.watch(folder)
         {

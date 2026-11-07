@@ -476,6 +476,10 @@ impl MimeDatabase {
     }
 
     pub fn for_path(&self, path: &Path) -> String {
+        if bande_volumes::on_connected_volume(path) {
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            return self.for_name(&name).unwrap_or(OCTET_STREAM).to_owned();
+        }
         let file_type = fs::metadata(path).map(|metadata| metadata.file_type());
         if let Ok(file_type) = file_type {
             let special = if file_type.is_dir() {

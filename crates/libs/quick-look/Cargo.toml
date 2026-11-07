@@ -8,6 +8,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+bande-volumes.workspace = true
 accesskit.workspace = true
 parley.workspace = true
 tracing.workspace = true

@@ -333,7 +333,7 @@ graph LR
   the pam-auth-update profile `bande-secrets`: `auth` keeps the typed password in PAM data,
   `session` hands it to the daemon over `/run/user/<uid>/bande-secrets/pam` (the module checks
   the socket belongs to the user, the daemon takes messages only from root) and waits for the
-  answer, and `password` passes the old and new passwords so
+  answer (a failed send is logged through `pam_syslog`, never the password), and `password` passes the old and new passwords so
   `passwd` and Users & Groups re-encrypt the login keychain, only when the old password opens
   it. The lock screen runs `auth` only,
   so it unlocks nothing; as on macOS the login keychain stays unlocked while the screen is

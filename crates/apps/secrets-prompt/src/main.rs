@@ -383,18 +383,18 @@ fn main() -> ExitCode {
     if set_dumpable_behavior(DumpableBehavior::NotDumpable).is_err() {
         return ExitCode::FAILURE;
     }
+    let Some(request) = request() else {
+        tracing::error!(
+            "usage: {NAMESPACE} --unlock|--allow|--create|--update-login|--network|--reveal, with the request on standard input"
+        );
+        return ExitCode::FAILURE;
+    };
     let stdin = std::io::stdin();
     let nonblocking = fcntl_getfl(stdin.as_fd())
         .and_then(|flags| fcntl_setfl(stdin.as_fd(), flags | OFlags::NONBLOCK));
     if nonblocking.is_err() {
         return ExitCode::FAILURE;
     }
-    let Some(request) = request() else {
-        tracing::error!(
-            "usage: {NAMESPACE} --unlock|--allow|--create|--update-login --keychain NAME [--app ID] [--item LABEL]..."
-        );
-        return ExitCode::FAILURE;
-    };
     match show(request) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

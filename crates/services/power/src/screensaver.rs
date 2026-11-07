@@ -11,6 +11,8 @@ use zbus::names::BusName;
 pub const BUS_NAME: &str = "org.freedesktop.ScreenSaver";
 pub const OBJECT_PATHS: [&str; 2] = ["/org/freedesktop/ScreenSaver", "/ScreenSaver"];
 
+const KEEP_AWAKE_PATH: &str = "/org/bande/Power";
+
 type Hold = Box<dyn Fn(&str, &str) -> Option<OwnedFd> + Send + Sync>;
 type Report = Box<dyn Fn(bool) + Send + Sync>;
 
@@ -51,6 +53,58 @@ impl Registry {
         (self.report)(!inhibitors.active.is_empty());
         outcome
     }
+
+    async fn add(
+        &self,
+        header: &Header<'_>,
+        connection: &zbus::Connection,
+        held: Option<OwnedFd>,
+    ) -> zbus::fdo::Result<u32> {
+        let owner = sender(header)?;
+        let cookie = self.change(|inhibitors| {
+            let cookie = inhibitors.fresh_cookie();
+            inhibitors.active.insert(
+                cookie,
+                Inhibitor {
+                    owner: owner.clone(),
+                    _held: held,
+                },
+            );
+            cookie
+        });
+        let present = zbus::fdo::DBusProxy::new(connection)
+            .await?
+            .name_has_owner(BusName::try_from(owner.as_str()).map_err(zbus::Error::from)?)
+            .await?;
+        if !present {
+            self.change(|inhibitors| {
+                inhibitors.active.remove(&cookie);
+            });
+        }
+        Ok(cookie)
+    }
+
+    fn remove(&self, cookie: u32, header: &Header<'_>) -> zbus::fdo::Result<()> {
+        let caller = sender(header)?;
+        self.change(|inhibitors| {
+            if inhibitors
+                .active
+                .get(&cookie)
+                .is_some_and(|inhibitor| inhibitor.owner == caller)
+            {
+                inhibitors.active.remove(&cookie);
+            }
+        });
+        Ok(())
+    }
+
+    fn release_owner(&self, owner: &str) {
+        self.change(|inhibitors| {
+            inhibitors
+                .active
+                .retain(|_, inhibitor| inhibitor.owner != owner)
+        });
+    }
 }
 
 pub struct InhibitionService {
@@ -62,13 +116,18 @@ impl InhibitionService {
         connection: &Connection,
         hold: impl Fn(&str, &str) -> Option<OwnedFd> + Send + Sync + 'static,
         inhibited: impl Fn(bool) + Send + Sync + 'static,
+        kept_awake: impl Fn(bool) + Send + Sync + 'static,
     ) -> zbus::Result<Self> {
         let registry = Arc::new(Registry {
             inhibitors: Mutex::default(),
             report: Box::new(inhibited),
         });
+        let awake = Arc::new(Registry {
+            inhibitors: Mutex::default(),
+            report: Box::new(kept_awake),
+        });
         let owners = DBusProxy::new(connection)?.receive_name_owner_changed()?;
-        let released = Arc::clone(&registry);
+        let released = [Arc::clone(&registry), Arc::clone(&awake)];
         thread::spawn(move || {
             for change in owners {
                 let Ok(arguments) = change.args() else {
@@ -76,11 +135,9 @@ impl InhibitionService {
                 };
                 if arguments.new_owner().is_none() {
                     let gone = arguments.name().as_str();
-                    released.change(|inhibitors| {
-                        inhibitors
-                            .active
-                            .retain(|_, inhibitor| inhibitor.owner != gone)
-                    });
+                    for registry in &released {
+                        registry.release_owner(gone);
+                    }
                 }
             }
         });
@@ -94,6 +151,9 @@ impl InhibitionService {
                 },
             )?;
         }
+        connection
+            .object_server()
+            .at(KEEP_AWAKE_PATH, KeepAwake { registry: awake })?;
         connection.request_name(BUS_NAME)?;
         Ok(Self {
             _connection: connection.clone(),
@@ -122,42 +182,33 @@ impl ScreenSaver {
         #[zbus(header)] header: Header<'_>,
         #[zbus(connection)] connection: &zbus::Connection,
     ) -> zbus::fdo::Result<u32> {
-        let owner = sender(&header)?;
         let held = (self.hold)(&application_name, &reason_for_inhibit);
-        let cookie = self.registry.change(|inhibitors| {
-            let cookie = inhibitors.fresh_cookie();
-            inhibitors.active.insert(
-                cookie,
-                Inhibitor {
-                    owner: owner.clone(),
-                    _held: held,
-                },
-            );
-            cookie
-        });
-        let present = zbus::fdo::DBusProxy::new(connection)
-            .await?
-            .name_has_owner(BusName::try_from(owner.as_str()).map_err(zbus::Error::from)?)
-            .await?;
-        if !present {
-            self.registry.change(|inhibitors| {
-                inhibitors.active.remove(&cookie);
-            });
-        }
-        Ok(cookie)
+        self.registry.add(&header, connection, held).await
     }
 
     fn un_inhibit(&self, cookie: u32, #[zbus(header)] header: Header<'_>) -> zbus::fdo::Result<()> {
-        let caller = sender(&header)?;
-        self.registry.change(|inhibitors| {
-            if inhibitors
-                .active
-                .get(&cookie)
-                .is_some_and(|inhibitor| inhibitor.owner == caller)
-            {
-                inhibitors.active.remove(&cookie);
-            }
-        });
-        Ok(())
+        self.registry.remove(cookie, &header)
+    }
+}
+
+struct KeepAwake {
+    registry: Arc<Registry>,
+}
+
+#[zbus::interface(name = "org.bande.Power.KeepAwake")]
+impl KeepAwake {
+    async fn hold(
+        &self,
+        application: String,
+        reason: String,
+        #[zbus(header)] header: Header<'_>,
+        #[zbus(connection)] connection: &zbus::Connection,
+    ) -> zbus::fdo::Result<u32> {
+        tracing::info!("{application} keeps the computer awake: {reason}");
+        self.registry.add(&header, connection, None).await
+    }
+
+    fn release(&self, cookie: u32, #[zbus(header)] header: Header<'_>) -> zbus::fdo::Result<()> {
+        self.registry.remove(cookie, &header)
     }
 }

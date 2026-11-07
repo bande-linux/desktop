@@ -15,14 +15,8 @@ Status: started, branch gap-brightness.
 saving region format to English (Sweden) or Sweden (Sweden) doesnt work, i get "couldn't make this change"
 Status: started, branch gap-region.
 
-not possible to adjust window size that has been "snapped" to either half the screen or a quarter. The snapping should just adjust the window into that shape and nothing else. Adjusting it from there on should be possible just like in macos.
-Status: started, branch gap-snap-resize.
-
 sometimes moving windows around is hard, like the terminal with two tabs. Dont change how the windows work but the problem is that tha "arrow" to drag out and make the window larger present itself not only on the "edge" and outward but also a few pixels inward. So the little space between the actual tabs and the window edge cant be grabbed, since it will go to the window size changer. Make the size changed only show itself on the edge of the window and a few pixel outward (like today) but not inward. Also windows have rounded corners which is not taken into account making it much harder to "grab" corners to expand both x and y axis at the same time.
 Status: started, branch gap-resize-edges.
-
-bring back taskbar application "focus" but change it this way. For applications that are open/closed but still in focus. Since we removed the "focus icon" it is not possible to see which app is in focus now if i X a window. For example, i X Text Editor, it is still in focus but it is impossible to see. So Ctrl + Q will close it. Keep the small open indicator for open apps but change the focused app to be highlighted with a nice modern "border". Make sure it is nice looking and doesnt cause any other issues. This "focus frame" will swap to which ever app is in focus. Other "open" apps will have the normal dot indicator, and the focused app will have the highlighted frame.
-Status: started, branch gap-taskbar-focus.
 
 In Files i want to be able to drag change coloumn order in the detailed list view. The dragging should be nice and smooth. (can we reuse such draging framework with other bande-native apps in the toolkit? are there more things we should (NOT COULD, SHOULD) share in the toolkit?)
 Status: started, branch gap-files-columns.
@@ -38,9 +32,6 @@ Status: started, branch gap-terminal-tilde.
 
 super+space opening search popup
 Status: started, branch gap-search-shortcut.
-
-Passwords (keyring) cant be unlocked from Settings->Passwords. When failing to unlock the text "Couldnt make this change" stick to the settings window in all tabs no matter what view i go to.
-Status: started, branch gap-passwords.
 
 hover over the buttons (close, minimize, maxmimize) in any bande-app only works for close, the maximize gets a weird submeny popup like right click? Review this and make sure that all bande apps are solved and using the same module in the toolkit for this. At the same time also go over the topbar of windows for the toolkit as well and improve it. For example on macos hovering buttons will get a backfill, generally they look nicer, you can grab the window by any "free space" (where there are no buttons or text)
 Status: started, branch gap-titlebar.

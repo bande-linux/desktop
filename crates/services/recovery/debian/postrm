@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+if [ -d /run/systemd/system ] ; then
+	systemctl --system daemon-reload >/dev/null || true
+fi
+if [ "$1" = "remove" ] && [ -x "/usr/bin/deb-systemd-helper" ] ; then
+	deb-systemd-helper mask bande-recovery.service >/dev/null || true
+fi
+if [ "$1" = "purge" ] && [ -x "/usr/bin/deb-systemd-helper" ] ; then
+	deb-systemd-helper purge bande-recovery.service >/dev/null || true
+	deb-systemd-helper unmask bande-recovery.service >/dev/null || true
+fi

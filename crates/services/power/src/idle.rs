@@ -29,7 +29,7 @@ impl Policy {
             .map(|rest| rest + self.require_password_after)
     }
 
-    fn suspend_after(&self) -> Option<Duration> {
+    pub fn computer_sleeps_after(&self) -> Option<Duration> {
         self.suspend_after.map(|suspend| {
             self.display_off_after
                 .map_or(suspend, |off| suspend.max(off))
@@ -54,12 +54,21 @@ pub enum Command {
     DisplayOff,
     DisplayOn,
     Suspend,
+    IdleHint(bool),
     RestartIdleTimers,
+    RestartSleepTimer,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Inhibitor {
     ScreenSaver,
+    Logind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Assertion {
+    Streams,
+    Applications,
     Logind,
 }
 
@@ -73,6 +82,9 @@ pub struct IdleMachine {
     locked_when_idle: bool,
     password_required: bool,
     inhibitors: Vec<Inhibitor>,
+    assertions: Vec<Assertion>,
+    sleep_overdue: bool,
+    idle_hint: bool,
 }
 
 impl IdleMachine {
@@ -86,7 +98,14 @@ impl IdleMachine {
             locked_when_idle: false,
             password_required: true,
             inhibitors: Vec::new(),
+            assertions: Vec::new(),
+            sleep_overdue: false,
+            idle_hint: false,
         }
+    }
+
+    pub fn computer_sleeps_after(&self) -> Option<Duration> {
+        self.policy.computer_sleeps_after()
     }
 
     pub fn thresholds(&self) -> Vec<Duration> {
@@ -96,7 +115,7 @@ impl IdleMachine {
             self.policy.rest_after(),
             self.policy.password_after(),
             self.policy.display_off_after,
-            self.policy.suspend_after(),
+            self.policy.computer_sleeps_after(),
         ]
         .into_iter()
         .flatten()
@@ -119,6 +138,8 @@ impl IdleMachine {
         }
         if self.stage < Stage::Resting && reached(self.policy.rest_after()) {
             self.stage = Stage::Resting;
+            self.idle_hint = true;
+            commands.push(Command::IdleHint(true));
             if !self.locked {
                 self.locked = true;
                 self.locked_when_idle = true;
@@ -140,16 +161,33 @@ impl IdleMachine {
             self.display_off = true;
             commands.push(Command::DisplayOff);
         }
-        if self.stage < Stage::Suspended && reached(self.policy.suspend_after()) {
-            self.stage = Stage::Suspended;
-            commands.push(Command::Suspend);
+        if self.stage < Stage::Suspended && reached(self.policy.computer_sleeps_after()) {
+            if self.assertions.is_empty() {
+                self.stage = Stage::Suspended;
+                self.sleep_overdue = false;
+                commands.push(Command::Suspend);
+            } else {
+                self.sleep_overdue = true;
+            }
         }
         commands
     }
 
     pub fn resumed(&mut self) -> Vec<Command> {
         self.stage = Stage::Active;
+        self.sleep_overdue = false;
         self.undim()
+    }
+
+    pub fn set_asserted(&mut self, assertion: Assertion, held: bool) -> Vec<Command> {
+        self.assertions.retain(|kind| *kind != assertion);
+        if held {
+            self.assertions.push(assertion);
+        }
+        if self.assertions.is_empty() && std::mem::take(&mut self.sleep_overdue) {
+            return vec![Command::RestartSleepTimer];
+        }
+        Vec::new()
     }
 
     pub fn set_inhibited(&mut self, inhibitor: Inhibitor, held: bool) -> Vec<Command> {
@@ -169,6 +207,7 @@ impl IdleMachine {
             return self.undim();
         }
         self.stage = Stage::Active;
+        self.sleep_overdue = false;
         vec![Command::RestartIdleTimers]
     }
 
@@ -189,6 +228,7 @@ impl IdleMachine {
             return Vec::new();
         }
         self.policy = policy;
+        self.sleep_overdue = false;
         vec![Command::RestartIdleTimers]
     }
 
@@ -199,6 +239,9 @@ impl IdleMachine {
         }
         if std::mem::take(&mut self.display_off) {
             commands.push(Command::DisplayOn);
+        }
+        if std::mem::take(&mut self.idle_hint) {
+            commands.push(Command::IdleHint(false));
         }
         commands
     }

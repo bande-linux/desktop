@@ -132,6 +132,41 @@ fn only_the_screen_reader_may_grab_the_keyboard_and_it_lets_go_when_it_leaves() 
 }
 
 #[test]
+fn a_covered_window_that_keeps_drawing_does_not_exhaust_the_gpu_memory() {
+    let mut server = headless(560, 520);
+    let mut renderer = Renderer::new().expect("Vulkan renderer");
+    let mut behind = TestClient::window(&mut server, "org.example.Behind");
+    let large = RED.repeat(1000 * 1000);
+    let cover = ShmImage {
+        width: 1000,
+        height: 1000,
+        stride: 4000,
+        format: Format::Xrgb8888,
+        bytes: &large,
+    };
+    let mut front = TestClient::connect(&mut server);
+    front.show_window(&mut server, &cover);
+    roundtrip(&mut server, &mut [&mut behind, &mut front]);
+    renderer.render(&mut server).expect("first frame");
+    let frame = RED.repeat(64 * 64);
+    let image = ShmImage {
+        width: 64,
+        height: 64,
+        stride: 256,
+        format: Format::Xrgb8888,
+        bytes: &frame,
+    };
+    for _ in 0..2000 {
+        behind.commit_buffer(0, &image, (0, 0, 64, 64));
+        roundtrip(&mut server, &mut [&mut behind, &mut front]);
+        let shown = renderer.render(&mut server).expect("frame");
+        assert_eq!(shown.repainted_pixels, 0, "the window is not covered");
+    }
+    let (_, staging) = renderer.memory_use().staging;
+    assert!(staging <= 8 << 20, "{staging} bytes are waiting to upload");
+}
+
+#[test]
 fn a_hung_app_is_force_quit_from_the_keyboard() {
     if act_as_separate_app() {
         return;
@@ -144,7 +179,7 @@ fn a_hung_app_is_force_quit_from_the_keyboard() {
     let mut editor = TestClient::window(&mut server, "org.example.Editor");
     roundtrip(&mut server, &mut [&mut editor]);
 
-    bar.show_force_quit(&mut server);
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTALT, KEY_ESC]);
     let start = Duration::from_secs(10);
     server.watchdog_tick(start);
     roundtrip(&mut server, &mut [&mut editor]);

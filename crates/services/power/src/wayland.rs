@@ -70,6 +70,15 @@ impl Watcher {
             .collect()
     }
 
+    fn watch_sleep(&self, queue: &EventQueue<Self>) -> Option<ExtIdleNotificationV1> {
+        let (Some(notifier), Some(seat)) = (&self.notifier, &self.seat) else {
+            return None;
+        };
+        let threshold = self.controller.computer_sleeps_after()?;
+        let millis = u32::try_from(threshold.as_millis()).unwrap_or(u32::MAX);
+        Some(notifier.get_idle_notification(millis, seat, &queue.handle(), threshold))
+    }
+
     fn power_outputs(&self, mode: Mode, queue: &EventQueue<Self>) {
         let Some(power) = &self.power else {
             return;
@@ -119,6 +128,7 @@ fn follow(
     commands: &mut UnixStream,
 ) -> Result<(), WatchError> {
     let mut notifications = watcher.watch(queue);
+    let mut sleep_timer: Option<ExtIdleNotificationV1> = None;
     loop {
         queue.dispatch_pending(watcher).map_err(wayland)?;
         queue.flush().map_err(wayland)?;
@@ -161,11 +171,17 @@ fn follow(
                 match command {
                     WaylandCommand::DisplayOff => watcher.power_outputs(Mode::Off, queue),
                     WaylandCommand::DisplayOn => watcher.power_outputs(Mode::On, queue),
+                    WaylandCommand::RestartSleepTimer => {
+                        if let Some(timer) = sleep_timer.take() {
+                            timer.destroy();
+                        }
+                        sleep_timer = watcher.watch_sleep(queue);
+                    }
                     WaylandCommand::RestartIdleTimers => {}
                 }
             }
             if received.contains(&WaylandCommand::RestartIdleTimers) {
-                for notification in notifications.drain(..) {
+                for notification in notifications.drain(..).chain(sleep_timer.take()) {
                     notification.destroy();
                 }
                 notifications = watcher.watch(queue);

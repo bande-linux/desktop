@@ -910,6 +910,7 @@ dependencies = [
 name = "bande-power"
 version = "0.1.7"
 dependencies = [
+ "bande-audio",
  "bande-bus",
  "bande-l10n",
  "bande-log",
@@ -955,6 +956,15 @@ dependencies = [
  "bande-xdg",
  "parley",
  "tracing",
+]
+
+[[package]]
+name = "bande-recovery"
+version = "0.1.7"
+dependencies = [
+ "bande-log",
+ "tracing",
+ "zbus",
 ]
 
 [[package]]

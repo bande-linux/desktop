@@ -78,10 +78,10 @@ fn exchange(server: &mut Compositor) {
 
 fuzz_target!(|data: &[u8]| {
     SERVER.with_borrow_mut(|slot| {
-        let Some(server) = slot.as_mut().or_else(|| {
+        if slot.is_none() {
             *slot = Compositor::new((1280, 720).into()).ok();
-            slot.as_mut()
-        }) else {
+        }
+        let Some(server) = slot.as_mut() else {
             return;
         };
         let Ok((mut client, server_end)) = UnixStream::pair() else {

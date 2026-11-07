@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use bande_compositor::{
     Compositor, FrameClock, FrameOutput, FrameScheduler, OutputConfig, REFRESH, RenderError,
-    Renderer, SHELL, SessionRole, Submission,
+    Renderer, SessionRole, Submission,
 };
 use rustix::process::{Pid, Signal, kill_process};
 use smithay::utils::{Point, Size};
@@ -178,7 +178,7 @@ impl Soak {
         let (states, lock_states) = mpsc::channel();
         server.report_lock_states(states);
         server.set_lock_screen(&binaries.join("bande-lock"));
-        server.start_session_client(&binaries.join(SHELL), SessionRole::Shell)?;
+        server.start_session_client(&binaries.join("bande-shell"), SessionRole::Shell)?;
         let mut services = Vec::new();
         for service in ["bande-config", "bande-notify"] {
             services.push(Command::new(binaries.join(service)).spawn()?);

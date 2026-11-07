@@ -32,8 +32,9 @@ out=$(realpath "$out")
 export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json
 export CARGO_PROFILE_RELEASE_DEBUG=line-tables-only
 started=$(date '+%Y-%m-%d %H:%M:%S')
-cargo build --release --locked -p bande-bench --bin bande-soak \
-    -p bande-shell -p bande-lock -p bande-files -p bande-settings -p bande-notify -p bande-config || exit 2
+cargo build --release --locked -p bande-bench --bin bande-soak || exit 2
+cargo build --release --locked -p bande-shell -p bande-lock -p bande-files -p bande-settings \
+    -p bande-notify -p bande-config || exit 2
 target=${CARGO_TARGET_DIR:-target}/release
 
 timeout --kill-after=60 --signal=ABRT "$(awk "BEGIN { print int($hours * 3600 + 1800) }")" \

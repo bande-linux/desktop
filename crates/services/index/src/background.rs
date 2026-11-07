@@ -7,7 +7,7 @@ use bande_search::{CACHE_TAG, Stamp, is_excluded, skipped_name};
 use bande_watch::FolderWatch;
 use rustix::fs::{AtFlags, CWD, FileType, StatxFlags, statx};
 use tantivy::schema::TantivyDocument;
-use tantivy::{Index, IndexWriter, Term, doc};
+use tantivy::{Index, IndexReader, IndexWriter, Term, doc};
 
 use crate::import::{MAX_TEXT, open_quietly, text_of};
 use crate::store::{Entry, Fields, entry_document};
@@ -15,6 +15,7 @@ use crate::store::{Entry, Fields, entry_document};
 const WRITER_MEMORY: usize = 32_000_000;
 const COMMIT_EVERY_BYTES: usize = 128 << 20;
 const ENCRYPTED_ATTRIBUTE: u64 = 0x800;
+const KEEP_PRIORITY_VARIABLE: &str = "BANDE_INDEXER_KEEP_PRIORITY";
 const IDLE_IO_CLASS: i32 = 3;
 const IO_CLASS_SHIFT: i32 = 13;
 const IO_WHO_THREAD: i32 = 1;
@@ -130,6 +131,7 @@ pub enum Reply {
 
 pub struct Background {
     pub index: Index,
+    pub reader: IndexReader,
     pub fields: Fields,
     pub root_mount: Option<u64>,
     pub watcher: Option<Arc<FolderWatch>>,
@@ -139,6 +141,9 @@ pub struct Background {
 }
 
 fn lower_own_priority() {
+    if std::env::var_os(KEEP_PRIORITY_VARIABLE).is_some() {
+        return;
+    }
     let parameter = libc::sched_param { sched_priority: 0 };
     let scheduled = unsafe { libc::sched_setscheduler(0, libc::SCHED_IDLE, &raw const parameter) };
     let io = unsafe {
@@ -202,10 +207,12 @@ impl Background {
             }
             Job::Commit => {
                 self.commit();
+                self.reload();
                 Reply::Committed
             }
             Job::Purge => {
                 self.purge();
+                self.reload();
                 Reply::Committed
             }
             Job::Rest => {
@@ -215,9 +222,16 @@ impl Background {
                 {
                     tracing::warn!("cannot finish merging the search index: {error}");
                 }
+                self.reload();
                 unsafe { libc::malloc_trim(0) };
                 Reply::Committed
             }
+        }
+    }
+
+    fn reload(&self) {
+        if let Err(error) = self.reader.reload() {
+            tracing::warn!("cannot reopen the search index: {error}");
         }
     }
 

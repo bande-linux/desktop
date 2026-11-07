@@ -119,8 +119,13 @@ impl Tree {
                 };
             }
         }
+        let mut linked = vec![false; tree.nodes.len()];
         for entry in &entries {
-            tree.link(entry.id, entry.parent);
+            if let Some(seen) = linked.get_mut(entry.id as usize)
+                && !std::mem::replace(seen, true)
+            {
+                tree.link(entry.id, entry.parent);
+            }
         }
         let reachable = tree.subtree(ROOT);
         let mut kept = vec![false; tree.nodes.len()];
@@ -309,7 +314,11 @@ impl Tree {
     }
 
     pub fn relocate(&mut self, id: u32, parent: u32, name: &str) -> Option<()> {
+        self.node(id)?;
         self.node(parent)?;
+        if std::iter::successors(Some(parent), |&at| self.parent(at)).any(|at| at == id) {
+            return None;
+        }
         let (name, folded) = self.named(name)?;
         self.unlink(id);
         self.link(id, parent);

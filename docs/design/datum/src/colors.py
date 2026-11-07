@@ -25,10 +25,10 @@ def apca(txt,bg):
 H=80
 HD=262
 T={}
-light=dict(chassis=(0.938,0.005),sheet=(0.988,0.0025),overlay=(1.0,0),well=(0.905,0.007),
+light=dict(chassis=(0.955,0.004),sheet=(0.995,0.001),overlay=(1.0,0),well=(0.905,0.007),
  ink=(0.235,0.008),ink2=(0.46,0.010),ink3=(0.60,0.010),hairline=(0.86,0.008),edge=(0.78,0.008))
-dark=dict(chassis=(0.255,0.013),sheet=(0.285,0.012),overlay=(0.335,0.011),well=(0.325,0.012),
- ink=(0.925,0.006),ink2=(0.80,0.012),ink3=(0.655,0.012),hairline=(0.365,0.012),rim=(0.42,0.012),
+dark=dict(chassis=(0.285,0.008),sheet=(0.245,0.008),overlay=(0.33,0.008),well=(0.37,0.008),
+ ink=(0.925,0.006),ink2=(0.80,0.012),ink3=(0.655,0.012),hairline=(0.40,0.008),
  edge=(0.47,0.012),deep=(0.215,0.015))
 for name,sch,hue in (('light',light,H),('dark',dark,HD)):
     for k,(L,C) in sch.items(): T[name+'.'+k]=oklch(L,C,hue)

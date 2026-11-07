@@ -18,12 +18,12 @@ Parity is the floor: colour correct everywhere, video through the display engine
 
 ### Target numbers
 
-"Today" is what we know. Nothing marked unmeasured may be quoted as a result. macOS figures for this monitor do not exist yet. Item B measures them with the same rig, and until then the targets stand on Apple's model only.
+"Today" is what we know. Nothing marked unmeasured may be quoted as a result. macOS figures for this monitor do not exist yet. Item B measures them with the same phone test, and until then the targets stand on Apple's model only.
 
 | Metric | Today | Target | macOS reference | Measured by |
 |---|---|---|---|---|
-| Mouse motion to photon, pointer, mid-screen, 120 Hz, 1 kHz mouse | unmeasured; about 16 mean **[computed]**: 0.5 USB + 4.2 wait + 1 render + 2.4 DCP + 4.2 scanout + about 3 monitor; 8.3 more on each missed swap | p50 ≤ 15 ms, p99 ≤ 21 ms | unmeasured; run rig | rig (B4) |
-| Key to photon, Terminal glyph, mid-screen | unmeasured | p50 ≤ 20 ms, p99 ≤ 28 ms | model 25 ms + input + panel **[Apple]**; old 60 Hz measurements of 29-45 ms for terminals, 35 ms for Sublime ([Harris](https://dev.to/lkhrs/measuring-terminal-latency-26m7), [Hume](https://thume.ca/2020/05/20/making-a-latency-tester/)), not comparable hardware | rig |
+| Mouse motion to photon, pointer, mid-screen, 120 Hz, 1 kHz mouse | unmeasured; about 16 mean **[computed]**: 0.5 USB + 4.2 wait + 1 render + 2.4 DCP + 4.2 scanout + about 3 monitor; 8.3 more on each missed swap | p50 ≤ 15 ms, p99 ≤ 21 ms | unmeasured; same phone test | model + phone (B4) |
+| Key to photon, Terminal glyph, mid-screen | unmeasured | p50 ≤ 20 ms, p99 ≤ 28 ms | model 25 ms + input + panel **[Apple]**; old 60 Hz measurements of 29-45 ms for terminals, 35 ms for Sublime ([Harris](https://dev.to/lkhrs/measuring-terminal-latency-26m7), [Hume](https://thume.ca/2020/05/20/making-a-latency-tester/)), not comparable hardware | phone, model |
 | Key to flip, software only | unmeasured | p50 ≤ 10 ms, p99 ≤ 16.7 ms | none | trace |
 | Client commit to flip | ≤ 1 refresh by design; **22 % of swaps miss** on the real display **[ran]** | p99 ≤ 8.33 ms | 2 refreshes **[Apple]** | trace |
 | Compositor CPU per frame, typical | 1.3-2.0 ms p50 headless, includes the GPU wait (audit, 2928x1818) | p99 ≤ 1 ms, thread never blocked on GPU | none | trace |
@@ -76,7 +76,7 @@ Also **[code]**:
 
 The owner ran B1 while moving two windows: 667 swaps in 9.5 s, `dcp:iomfb_swap_submit` to `swap_complete` **[ran]**.
 
-**`swap_complete` is locked to the display.** The callbacks fit a grid of 8.3342 ms (119.988 Hz, as the mode timing predicts), residual p50 −0.03 ms, p99 +1.07 ms. The driver calls this the arrival of a callback with "unknown slack" after the flip **[code]**. Slack is unknown but a constant, so this grid is good enough to schedule by. It is not yet a photon time; the rig gives that.
+**`swap_complete` is locked to the display.** The callbacks fit a grid of 8.3342 ms (119.988 Hz, as the mode timing predicts), residual p50 −0.03 ms, p99 +1.07 ms. The driver calls this the arrival of a callback with "unknown slack" after the flip **[code]**. Slack is unknown but a constant, so this grid is good enough to schedule by. It is not yet a photon time; the phone test calibrates that.
 
 **There is a sharp cut-off.** Time from `swap_submit` to the next grid point, and how many swaps missed it:
 
@@ -236,12 +236,12 @@ Results stay **outside the repo** (`~/bande-linux/bench-results/`), per the no-m
 
 ### B4. Real-display numbers
 
-Three levels:
-- **Trace on the owner's session:** agents may start it once the owner agrees (no visible effect).
-- **Phone:** rendering-path.md's owner step 3, ten minutes, ±2 ms at best per press.
-- **Rig, recommended:** Hume's design. A small USB board (RP2040, about €10) appears as keyboard and mouse at 1 kHz, a photodiode (about €5) sits on the screen in a corner of a test window. It sends an event, times to light change, 1000 samples. Sub-millisecond, automatic, no judgement. A little `bande-latency-client` flips its area on key or pointer; the same page runs in a browser on macOS. This is the only way to get a real macOS comparison on this monitor and port. Firmware and capture script live in a small `ci/bench/rig/`.
+No purchases, and nothing depends on special hardware. Two levels that add up:
 
-The rig needs the owner to place it, and on macOS to boot it for one run. What it measures: pointer (by a cursor passing over the sensor's area), key to glyph, click to menu, at 60 and 120 Hz.
+- **Trace-based model, automatic.** Input event time to flip comes from the trace; the flip's place on the grid and `bande-flip-report` give the rest of what we control. Photon time adds half a scanout at mid-screen (half a refresh, from the mode) and the monitor's constant delay, taken from the phone below. It's repeatable and can run on any commit, once the owner agrees to trace.
+- **Phone at 240 fps, with a visible key press, on Bande and on macOS.** Frame the key and the screen; count frames from the key bottoming out to the glyph, 4.2 ms each. Ten presses in Terminal at 120 Hz; the same with a mouse button and a menu. Ten minutes. Good to ±2-4 ms per press and about ±1 ms on the mean of ten, and it includes the keyboard's own delay, so it compares only against the same run on macOS: a browser page or Terminal on the same monitor and port. A macOS boot once is fine by the owner, later. The phone also calibrates the model's constant.
+
+A photodiode rig would be sharper but is not planned: the owner isn't buying one now.
 
 ### B5. Power
 
@@ -513,7 +513,7 @@ Ten per update today (plan path). **Feel:** only power and CPU. **Design:** coun
 - **Position sampled for the latch:** when samples are coarser than a frame, render at `presentation − 1 sample period` on the line through the last two. Clients and hit-testing keep real events, so nothing logical moves.
 - **Prediction:** extrapolate only when acceleration is low, capped at one sample, and off by default until bench and the owner's hand agree. It's the one thing that can feel wrong: overshoot on stops.
 - **Scroll:** toolkit samples finger scroll at `frame_time.presentation` from a short filter of deltas, not one per event. Momentum is closed-form already.
-- **Ballistics:** libinput's curve differs from macOS's. A `custom` accel table fitted from a macOS mouse trace is a small, separate job, needing the rig's mouse mode.
+- **Ballistics:** libinput's curve differs from macOS's. A `custom` accel table is a small, separate job, fitted by feel against macOS.
 
 **Risk:** added lag up to one sample. **Measure:** offline on a recorded trace: frame-to-frame displacement RMS against latency. **Size:** S-M.
 
@@ -693,8 +693,8 @@ Batch them: E1 and G share a boot; 7 and 8a tags share another. All through `pat
 ## What the owner needs to do
 
 1. **Done: the DCP trace** (B1). Again after each scheduler stage, the same gesture for ten seconds; agents can run it if they're allowed that root command without asking each time.
-2. **Later: buy the rig** (under €20) and place the sensor; or a phone at 240 fps. Without a rig, there's no comparison with macOS, only with ourselves.
-3. **One macOS boot, once the rig works:** an hour for latency and filming animations on this monitor. Optional, but it's the only real macOS comparison.
+2. **Later: the phone test,** ten minutes at 240 fps with a visible key press.
+3. **One macOS boot, later:** the same phone test and filming animations on this monitor. It's the only real macOS comparison.
 4. **Test boots,** at their pace, batched: E1 + G first; G decides if a GPU hog can ever be beaten.
 5. **Yes or no on uAPI:** plane colour property, plane order. Asked when reached.
 6. **Eye tests:** colour switching, Glass after half-size blur, prediction by hand, HDR.
@@ -704,4 +704,4 @@ Batch them: E1 and G share a boot; 7 and 8a tags share another. All through `pat
 - Apple: [Understanding hitches](https://developer.apple.com/documentation/xcode/understanding-hitches-in-your-app), [Explore UI animation hitches](https://developer.apple.com/videos/play/tech-talks/10855/), [ProMotion displays](https://developer.apple.com/documentation/quartzcore/optimizing-iphone-and-ipad-apps-to-support-promotion-displays), [CAMetalDisplayLink](https://developer.apple.com/documentation/quartzcore/cametaldisplaylink), [Adaptive Sync](https://support.apple.com/102144), [Mac mini power](https://support.apple.com/en-us/103253)
 - Asahi: [6.19](https://asahilinux.org/2026/02/progress-report-6-19/), [7.0](https://asahilinux.org/2026/04/progress-report-7-0/), [7.1](https://asahilinux.org/2026/06/progress-report-7-1/)
 - Others: [Hugl on KWin's scheduling](https://planet.kde.org/xavers-blog-2024-06-24-fixing-kwins-performance-on-old-hardware), [KWin frame statistics](https://invent.kde.org/plasma/kwin/-/merge_requests/5975), [triple buffering debrief](https://discourse.ubuntu.com/t/triple-buffering-a-debrief/56314), [Dynamic triple buffering in GNOME 48](https://www.phoronix.com/news/GNOME-48-Triple-Buffering), [fifo-v1](https://wayland.app/protocols/fifo-v1), [commit-timing-v1](https://wayland.app/protocols/commit-timing-v1)
-- Latency: [Hume's tester](https://thume.ca/2020/05/20/making-a-latency-tester/), [Harris on terminals](https://dev.to/lkhrs/measuring-terminal-latency-26m7)
+- Latency reference numbers: [Hume](https://thume.ca/2020/05/20/making-a-latency-tester/), [Harris on terminals](https://dev.to/lkhrs/measuring-terminal-latency-26m7)

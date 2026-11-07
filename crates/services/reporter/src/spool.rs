@@ -205,6 +205,9 @@ impl Spool {
     ) -> io::Result<String> {
         if let Some(existing) = self.repeat_of(manifest.get("signature")) {
             self.count_repeat(&existing)?;
+            if automatic && existing.status == Status::Sent {
+                self.queue(&existing.id)?;
+            }
             return Ok(existing.id);
         }
         let id = self.fill_manifest(&mut manifest)?;

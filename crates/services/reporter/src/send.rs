@@ -15,7 +15,7 @@ use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use serde_json::{Value, json};
 
 use crate::config::Config;
-use crate::spool::{MANIFEST, STATE, Stored};
+use crate::spool::{MANIFEST, STATE, Status, Stored};
 
 const SYSTEM_ROOTS: &str = "/etc/ssl/certs/ca-certificates.crt";
 const PATH: &str = "/v1/reports";

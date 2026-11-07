@@ -25,7 +25,8 @@ better.
 
 - **Every object is right-clickable.** Windows, title bars, taskbar icons, desktop, files, text,
   taskbar items, notifications. The context menu lists what can be done to that object, most
-  common first.
+  common first. It is short: what a visible control already does, how a window is viewed and what
+  is rarely useful stay out, and [no application adds to it](../architecture/behaviour.md).
 - **Every action is keyboard-reachable.** Every menu item, every control, every list. Shortcuts
   are shown in menus. Ctrl runs app shortcuts and Super the system (see the [keyboard model](../architecture/overview.md#keyboard-model)).
 - **Every pointer state is visible.** Hover, press, drag-over and disabled each look different,

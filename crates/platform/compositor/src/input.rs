@@ -78,6 +78,7 @@ fn media_key(keysym: u32) -> Option<MediaKey> {
 fn pressed_key(keysym: u32, unshifted: Option<u32>) -> Option<Key> {
     let base = unshifted.unwrap_or(keysym);
     let key = match base {
+        keysyms::KEY_space => Key::Space,
         keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab => Key::Tab,
         keysyms::KEY_Print => Key::Print,
         keysyms::KEY_F1..=keysyms::KEY_F12 => {

@@ -1,0 +1,20 @@
+[Unit]
+Description=Hold the picture on %i between sessions
+DefaultDependencies=no
+BindsTo=dev-dri-%i.device
+After=dev-dri-%i.device
+Before=greetd.service
+
+[Service]
+ExecStart=/usr/libexec/bande-display-keeper %i
+User=_greetd
+SupplementaryGroups=video
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=none
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native

@@ -3,13 +3,14 @@ use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
 use std::thread;
+use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use bande_datetime::{DateFormats, MinuteTimer};
 use bande_keyboard::Layouts;
 use bande_lock::{
     BackdropSource, Devices, Inbox, LockScreen, Look, PAM_SERVICE, PICTURE_PIXELS, User, Variant,
-    authenticate, current_user, load_backdrop, load_picture,
+    authenticate, current_user, is_user_action, load_backdrop, load_picture,
 };
 use bande_toolkit::ui::frame_time;
 use bande_toolkit::{
@@ -69,7 +70,7 @@ impl Locker {
 
     fn check(&mut self, password: Zeroizing<String>) {
         let Ok(mut sender) = self.verdict_sender.try_clone() else {
-            self.screen.reject(frame_time().on_screen());
+            self.screen.reject_password(frame_time().on_screen());
             return;
         };
         let login = self.user.login.clone();
@@ -107,9 +108,13 @@ impl App for Locker {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        if matches!(event, WindowEvent::Input(_)) && !self.password_required() {
+        let acted = matches!(&event, WindowEvent::Input(input) if is_user_action(input));
+        if acted && !self.password_required() {
             self.unlock(window);
             return;
+        }
+        if acted && self.screen.wake(frame_time().on_screen()) {
+            window.request_redraw();
         }
         let changed = match event {
             WindowEvent::Input(input) => self.screen.handle(&input),
@@ -194,7 +199,17 @@ impl App for Locker {
         if verdict[0] == ACCEPTED {
             self.unlock(window);
         } else {
-            self.screen.reject(frame_time().on_screen());
+            self.screen.reject_password(frame_time().on_screen());
+            window.request_redraw();
+        }
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.screen.rest_deadline()
+    }
+
+    fn tick(&mut self, window: &mut Window, now: Instant) {
+        if self.screen.rest_if_idle(now) {
             window.request_redraw();
         }
     }
@@ -262,6 +277,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         unlocked: false,
     };
     locker.screen.set_note(&config_text("LockMessage"));
+    locker.screen.start_resting();
     bande_toolkit::run(&mut window, &mut locker).map_err(|error: WindowError| error.into())
 }
 

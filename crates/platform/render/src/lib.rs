@@ -348,6 +348,7 @@ enum Program {
     Shadow,
     BlurDown,
     BlurUp,
+    BlurTone,
 }
 
 impl Program {
@@ -359,6 +360,7 @@ impl Program {
             Self::Shadow => c"shadow",
             Self::BlurDown => c"blur_down",
             Self::BlurUp => c"blur_up",
+            Self::BlurTone => c"blur_tone",
         }
     }
 }
@@ -618,6 +620,7 @@ impl VulkanRenderer {
                 Program::Shadow,
                 Program::BlurDown,
                 Program::BlurUp,
+                Program::BlurTone,
             ] {
                 let pipeline = self.create_pipeline(format, program)?;
                 self.pipelines.insert((format, program), pipeline);

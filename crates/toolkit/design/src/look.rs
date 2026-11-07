@@ -5,12 +5,14 @@ pub enum Style {
     #[default]
     Refined,
     WallpaperLit,
+    Glass,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Material {
     Opaque,
     Wallpaper,
+    Live,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -23,14 +25,18 @@ pub struct Look {
 const LIT_FRAME_OPACITY: f32 = 0.74;
 const BACKDROP_CEILING: f64 = 0.16;
 const BACKDROP_FLOOR: f64 = 0.60;
+const GLASS_FRAME_OPACITY: f32 = 0.68;
+const GLASS_PANEL_OPACITY: f32 = 0.72;
+pub const BACKDROP_SATURATION: f32 = 1.35;
 
 impl Style {
-    pub const ALL: [Self; 2] = [Self::Refined, Self::WallpaperLit];
+    pub const ALL: [Self; 3] = [Self::Refined, Self::WallpaperLit, Self::Glass];
 
     pub const fn keyword(self) -> &'static str {
         match self {
             Self::Refined => "refined",
             Self::WallpaperLit => "wallpaper-lit",
+            Self::Glass => "glass",
         }
     }
 
@@ -47,6 +53,11 @@ impl Style {
                 material: Material::Wallpaper,
                 frame_opacity: LIT_FRAME_OPACITY,
                 panel_opacity: 1.0,
+            },
+            Self::Glass => Look {
+                material: Material::Live,
+                frame_opacity: GLASS_FRAME_OPACITY,
+                panel_opacity: GLASS_PANEL_OPACITY,
             },
         }
     }
@@ -95,6 +106,28 @@ pub fn limit_backdrop(color: [u8; 3], scheme: Scheme) -> [u8; 3] {
     limited.map(to_encoded)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BackdropTone {
+    pub luminance: f32,
+    pub floor: bool,
+    pub saturation: f32,
+}
+
+pub fn backdrop_tone(scheme: Scheme) -> BackdropTone {
+    match scheme {
+        Scheme::Dark => BackdropTone {
+            luminance: BACKDROP_CEILING as f32,
+            floor: false,
+            saturation: BACKDROP_SATURATION,
+        },
+        Scheme::Light => BackdropTone {
+            luminance: BACKDROP_FLOOR as f32,
+            floor: true,
+            saturation: BACKDROP_SATURATION,
+        },
+    }
+}
+
 pub fn over_backdrop(frame: Color, backdrop: [u8; 3]) -> Color {
     let opacity = f32::from(frame.a) / 255.0;
     let mix = |top: u8, bottom: u8| {
@@ -139,6 +172,16 @@ mod tests {
                             assert!(
                                 wcag(palette.ink3, frame) >= 3.0,
                                 "{style:?} {scheme:?} ink3"
+                            );
+                            let panel =
+                                over_backdrop(palette.panel, limit_backdrop([r, g, b], scheme));
+                            assert!(
+                                wcag(palette.ink, panel) >= 7.0,
+                                "{style:?} {scheme:?} panel"
+                            );
+                            assert!(
+                                wcag(palette.ink2, panel) >= 4.5,
+                                "{style:?} {scheme:?} panel"
                             );
                         }
                     }

@@ -124,6 +124,36 @@ fn sample_at(uv: vec2<f32>) -> vec4<f32> {
     return textureSampleLevel(surface, filtered, uv, 0.0);
 }
 
+fn to_linear(encoded: vec3<f32>) -> vec3<f32> {
+    return pow(encoded, vec3<f32>(2.2));
+}
+
+fn to_encoded(linear: vec3<f32>) -> vec3<f32> {
+    return pow(max(linear, vec3<f32>(0.0)), vec3<f32>(1.0 / 2.2));
+}
+
+@fragment
+fn blur_tone(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let dimensions = vec2<f32>(textureDimensions(surface));
+    let local = (position.xy - quad.origin) / quad.size;
+    let source = quad.source_origin + local.x * quad.source_across + local.y * quad.source_down;
+    let texel = textureSampleLevel(surface, filtered, source / dimensions, 0.0);
+    let weights = vec3<f32>(0.2126, 0.7152, 0.0722);
+    let encoded_luma = dot(texel.rgb, weights);
+    let saturated = clamp(mix(vec3<f32>(encoded_luma), texel.rgb, quad.color.z), vec3<f32>(0.0), vec3<f32>(1.0));
+    var linear = to_linear(saturated);
+    let luminance = dot(linear, weights);
+    if quad.color.y > 0.5 {
+        if luminance < quad.color.x {
+            linear = mix(linear, vec3<f32>(1.0), (quad.color.x - luminance) / (1.0 - luminance));
+        }
+    } else if luminance > quad.color.x {
+        linear = linear * quad.color.x / luminance;
+    }
+    let toned = vec4<f32>(to_encoded(linear), 1.0);
+    return toned * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius);
+}
+
 @fragment
 fn blur_down(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let uv = position.xy / quad.size;

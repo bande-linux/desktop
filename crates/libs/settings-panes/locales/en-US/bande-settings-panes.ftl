@@ -114,6 +114,7 @@ style = Style
 style-keywords = glass, blur, translucent, solid, transparent, material, look, taskbar
 style-refined = Refined Solid
 style-wallpaper-lit = Wallpaper-Lit
+style-glass = Glass
 accent = Accent colour
 accent-keywords = accent, highlight, selection, color, colour, folders, tint
 accent-ultramarine = Ultramarine

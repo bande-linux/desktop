@@ -1355,6 +1355,7 @@ impl Window {
         let look = Look {
             active: toplevel.activated,
             zoomed: toplevel.maximized || toplevel.fullscreen,
+            fullscreen: toplevel.fullscreen,
         };
         match &mut self.chrome {
             Some(chrome) => {

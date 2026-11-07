@@ -142,6 +142,8 @@ Bande is a Wayland-only desktop by design:
 - **Not built**: An `xwayland-satellite` bridge (or Smithay's `xwayland`/`xwm` features) is
   deliberately not built. Apps are expected to run natively on Wayland (GTK, Qt, Firefox,
   Chromium, SDL and winit all do).
+- **Compose tables**: `bande-desktop` depends on Debian's `libx11-data`, which is text files and no
+  library: the Compose tables xkbcommon reads for dead keys are packaged there.
 - **Why**: Every frame, input event and protocol path stays on one modern stack with one
   security model, and nothing in the latency budget pays for X11 translation.
 

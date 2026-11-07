@@ -751,7 +751,10 @@ mod tests {
             },
             None,
         );
-        assert_eq!(frames_after_late_wakes(clock, Duration::from_micros(30))?, 1);
+        assert_eq!(
+            frames_after_late_wakes(clock, Duration::from_micros(30))?,
+            1
+        );
         Ok(())
     }
 

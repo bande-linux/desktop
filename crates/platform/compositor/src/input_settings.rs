@@ -94,6 +94,25 @@ pub fn follow_input_settings(
     Ok(())
 }
 
+pub fn follow_system_keyboard(
+    system: &Connection,
+    mut publish: impl FnMut(InputSettings) -> bool + Send + 'static,
+) -> zbus::Result<()> {
+    let changes = PropertiesProxy::builder(system)
+        .destination("org.freedesktop.locale1")?
+        .path("/org/freedesktop/locale1")?
+        .build()?
+        .receive_properties_changed()?;
+    thread::spawn(move || {
+        for _ in changes {
+            if !publish(InputSettings::system()) {
+                return;
+            }
+        }
+    });
+    Ok(())
+}
+
 impl Compositor {
     pub fn apply_input_settings(&mut self, settings: InputSettings) {
         self.apply_pointer_settings(settings.pointer);

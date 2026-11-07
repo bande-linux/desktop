@@ -127,10 +127,8 @@ impl Store {
         })
     }
 
-    pub fn reload(&self) {
-        if let Err(error) = self.reader.reload() {
-            tracing::warn!("cannot reopen the search index: {error}");
-        }
+    pub fn reader(&self) -> IndexReader {
+        self.reader.clone()
     }
 
     pub fn entries(&self) -> tantivy::Result<Vec<Restored>> {

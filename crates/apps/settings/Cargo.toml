@@ -23,7 +23,6 @@ bande-audio.workspace = true
 bande-bluetooth.workspace = true
 bande-config.workspace = true
 bande-backup.workspace = true
-bande-bus.workspace = true
 bande-datetime.workspace = true
 bande-fs.workspace = true
 bande-keyboard.workspace = true

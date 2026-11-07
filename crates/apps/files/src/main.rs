@@ -21,7 +21,7 @@ use bande_files::{
     sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks, with_place_shown,
     without_bookmark,
 };
-use bande_fs::{History, Trash};
+use bande_fs::{History, Running, Trash};
 use bande_inbox::Inbox;
 use bande_quick_look::{Action, Panel, QuickLookLink, remembered_size, serve_worker};
 use bande_search::{recently_used_path, usage_path};
@@ -402,7 +402,21 @@ impl View for BrowserPane {
     }
 }
 
+enum Leaving {
+    Quit,
+    Close(WindowId),
+}
+
+fn browser_windows(cx: &mut Cx<Files>) -> Vec<WindowId> {
+    let windows = cx.windows().collect::<Vec<_>>();
+    windows
+        .into_iter()
+        .filter(|window| browser(cx, *window).is_some())
+        .collect()
+}
+
 struct Files {
+    leaving: Option<Leaving>,
     home: PathBuf,
     settings: FilesSettings,
     settings_watch: Option<SettingsWatch>,
@@ -850,6 +864,40 @@ impl Files {
         }
     }
 
+    fn hand_over_operations(&mut self, cx: &mut Cx<Self>, operations: Vec<Running>) {
+        if operations.is_empty() {
+            return;
+        }
+        let heir = browser_windows(cx).into_iter().next();
+        if let Some((shown, pane)) = heir.and_then(|window| browser(cx, window)) {
+            pane.view.adopt_operations(operations);
+            shown.request_redraw();
+        }
+    }
+
+    fn stop_operations(&mut self, cx: &mut Cx<Self>) {
+        for window in browser_windows(cx) {
+            if let Some((shown, pane)) = browser(cx, window) {
+                pane.view.stop_operations();
+                shown.request_redraw();
+            }
+        }
+    }
+
+    fn leave_when_idle(&mut self, cx: &mut Cx<Self>) {
+        let busy = browser_windows(cx)
+            .into_iter()
+            .any(|window| browser(cx, window).is_some_and(|(_, pane)| pane.view.busy()));
+        if busy {
+            return;
+        }
+        match self.leaving.take() {
+            Some(Leaving::Quit) => cx.quit(),
+            Some(Leaving::Close(window)) => cx.close(window),
+            None => {}
+        }
+    }
+
     fn serve(&mut self, cx: &mut Cx<Self>, id: WindowId, request: Request) {
         if let Request::ShowQuickLook = request {
             self.show_quick_look(cx);
@@ -870,6 +918,33 @@ impl Files {
             self.tab_drop(cx, id, drop);
             return;
         }
+        match request {
+            Request::StopAndLeave { quitting } => {
+                self.leaving = Some(match quitting {
+                    true => Leaving::Quit,
+                    false => Leaving::Close(id),
+                });
+                self.stop_operations(cx);
+                self.leave_when_idle(cx);
+                return;
+            }
+            Request::Leave { quitting } => {
+                match quitting {
+                    true => {
+                        if self.should_quit(cx) {
+                            cx.quit();
+                        }
+                    }
+                    false => cx.close(id),
+                }
+                return;
+            }
+            Request::OperationsDone => {
+                self.leave_when_idle(cx);
+                return;
+            }
+            _ => {}
+        }
         let Some((window, pane)) = browser(cx, id) else {
             return;
         };
@@ -882,9 +957,12 @@ impl Files {
             }
             Request::Compress { app, files } => {
                 let token = window.activation_token(app.app_id()).ok();
-                let arguments: Vec<String> = std::iter::once(COMPRESS_FLAG.to_owned())
-                    .chain(files.iter().map(|file| file.to_string_lossy().into_owned()))
-                    .collect();
+                let arguments: Vec<String> =
+                    std::iter::once(COMPRESS_FLAG.to_owned())
+                        .chain(files.iter().map(|file| {
+                            file.to_str().map_or_else(|| file_uri(file), str::to_owned)
+                        }))
+                        .collect();
                 if let Err(error) = launch_with_arguments(&app, &arguments, token.as_deref()) {
                     tracing::warn!("cannot compress with {}: {error}", app.id);
                 }
@@ -922,6 +1000,9 @@ impl Files {
             Request::ForceEject(volume) => self.eject(volume, true),
             Request::NewWindow
             | Request::ShowQuickLook
+            | Request::StopAndLeave { .. }
+            | Request::Leave { .. }
+            | Request::OperationsDone
             | Request::DetachTab { .. }
             | Request::TabDrop(_) => {}
             Request::OpenTerminal(folder) => open_terminal(window, &folder),
@@ -984,6 +1065,7 @@ impl Program for Files {
             .map(PathBuf::from)
             .collect();
         let mut files = Self {
+            leaving: None,
             home,
             settings,
             settings_watch,
@@ -1101,19 +1183,45 @@ impl Program for Files {
         cx.refresh_menus();
     }
 
-    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, _view: Pane) {
+    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, view: Pane) {
         if self.panel == Some(window) {
             self.panel = None;
             if self.quick_look.borrow().is_open() {
                 self.show_quick_look(cx);
             }
         }
+        if let Pane::Browser(mut closed) = view {
+            self.hand_over_operations(cx, closed.view.take_operations());
+        }
         self.remember_recent_folders();
     }
 
-    fn should_close(&mut self, _cx: &mut Cx<Self>, _window: WindowId) -> bool {
+    fn should_close(&mut self, cx: &mut Cx<Self>, window: WindowId) -> bool {
         self.remember_recent_folders();
-        true
+        let busy = browser(cx, window).is_some_and(|(_, pane)| pane.view.busy());
+        if !busy || browser_windows(cx).into_iter().any(|other| other != window) {
+            return true;
+        }
+        if let Some((shown, pane)) = browser(cx, window) {
+            pane.view.ask_before_leaving(false);
+            shown.request_redraw();
+        }
+        false
+    }
+
+    fn should_quit(&mut self, cx: &mut Cx<Self>) -> bool {
+        self.remember_recent_folders();
+        let busy = browser_windows(cx)
+            .into_iter()
+            .find(|window| browser(cx, *window).is_some_and(|(_, pane)| pane.view.busy()));
+        let Some(window) = busy else {
+            return true;
+        };
+        if let Some((shown, pane)) = browser(cx, window) {
+            pane.view.ask_before_leaving(true);
+            shown.request_redraw();
+        }
+        false
     }
 
     fn close_tab(&mut self, cx: &mut Cx<Self>, window: WindowId) -> bool {

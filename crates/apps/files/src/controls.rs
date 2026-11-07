@@ -1293,6 +1293,7 @@ impl FilesView {
             Sheet::Conflict { .. }
             | Sheet::Failure
             | Sheet::NoSpace
+            | Sheet::Busy { .. }
             | Sheet::GoTo(_)
             | Sheet::OpenWith(_)
             | Sheet::Rename(_) => {

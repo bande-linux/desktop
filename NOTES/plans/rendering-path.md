@@ -105,7 +105,6 @@ Implementing it would be a kernel fork with black flashes, with no benefit here.
 | 0 | Remove the VRR switch and key | no dead control | none | none | S |
 | 1 | GPU copy to the scanout buffer | 2.0 ms to 0.45 ms per full frame, CPU part gone | low | none | S |
 | 2 | Colour probe, then sRGB correct | every pixel on this monitor | low for the probe; **black screen** possible until booted | owner boot | S if DCP does it, M if shaders |
-| 3 | Sample NV12 without copying | 0.34-0.66 ms per video frame | medium | none | S-M |
 | 4 | Screen sharing over dmabuf | up to three full-frame CPU copies to none | low | none | M |
 | 5 | Sample LINEAR dmabufs, then tiled and compressed | 0.56 ms per full window, 4 bytes/px per window, 20 % on client render | medium, **tearing** | stage 6 for Firefox-grade sync | M-L |
 | 6 | Stop blocking on the GPU | compositor thread free during GPU work (0.5-8 ms a frame) | medium, **freeze** if a fence never signals | none | M |
@@ -115,11 +114,19 @@ Implementing it would be a kernel fork with black flashes, with no benefit here.
 
 1. **Output copy.** On a real GPU `Bind<Dmabuf>` imports the dumb buffer as a Vulkan buffer and records one image-to-buffer copy; the mapping and memcpy stay only for lavapipe. A failed import falls back to the old path. The swapchain never writes a buffer being scanned out, so this adds no tearing. Chosen over rendering straight into the buffer: that saves only another 0.37 ms, renders slower into LINEAR, and blur needs a readable target.
 2. **Colour.** First the owner step below. One kernel commit sets `BG_SRGB` for RGB surfaces on external displays, for one test boot. If DCP converts, keep it. If not, add the shader matrix from EDID primaries, which also serves displays DCP cannot help.
-3. **NV12.** Import once per buffer, sample directly, keep the copy for the CPU renderer. Release a buffer only after the flip that replaced it. The media engine's pool must have enough buffers; today's copy hid that. Hardware decode on `fix-media` feeds this directly, and is what makes stage 8 worth measuring.
 4. **Capture.** `ext-image-copy-capture` offers dmabufs; the compositor copies with the GPU; `cast.rs` negotiates `SPA_DATA_DmaBuf` and keeps MemFd as the fallback. No display risk, since only capture changes.
 5. **Direct window textures.** The trap: sampling a client's buffer means the client must not write until release, and the compositor must wait for its fence. Without that, windows tear. Closing animations and stretch-on-resize must hold the buffer. Verify `linux-drm-syncobj-v1` on Apple first. Tiled buffers cannot use a plane, so feedback must stay per surface: LINEAR for what is on a plane, compressed for the rest, or the shell loses plane 2. Firefox then gets the same import path.
 6. **Asynchronous frames.** Export a `sync_file`, wait in the event loop, record render time at fence signal. Stage 1 removes the CPU copy that today forces the wait. A fence that never signals must go through the existing GPU-loss recovery.
 7. **Tagged content.** Per-surface description, conversion in shaders or DCP's per-surface fields; 10-bit composition removes banding under Glass. DCP lists no 10-bit RGB mode for this monitor at 2560x1440@120 (only 8-bit RGB, or 12-bit YCbCr), so at 120 Hz the link stays 8-bit and the gain there needs checking.
+
+NV12: video dmabufs are imported once per buffer as a two-plane image and sampled in place, with a foreign-queue acquire barrier per attached buffer. Fences were already waited for at commit. A buffer may be released at the commit that replaces it, because the GPU wait still ends each frame; stage 6 must hold it until the flip. A failed import turns sampling off and copies.
+
+| Video, whole frame composed, real renderer | Frame median | CPU | Power |
+|---|---|---|---|
+| 1080p at 30 fps | 0.98 to 0.82 ms | 0.55 to 0.47 % | no change above noise |
+| 4K at 60 fps | 1.90 to 1.27 ms | 0.9 to 0.8 % | no change above noise |
+
+Same pixels before and after. Against the frame budgets of 8.33 ms (120 Hz) and 6.94 ms (144 Hz), the video path was never close; the gain is GPU time and the surface texture's memory (3 MB at 1080p, 12 MB at 4K).
 
 ### Left for the owner's optimisation pass
 

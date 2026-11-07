@@ -94,8 +94,9 @@ when they reach the screen is Bande's own.
   move request. Full screen removes the well. The rule is the app id plus client-side, so a build
   that asks for server-side gets a normal title bar, and any other Firefox is left alone.
 - **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers, and NV12 for
-  video (one dmabuf for both planes, BT.709 limited range; its planes are copied to two textures
-  and converted in the `video` shader), with the
+  video (one dmabuf for both planes, BT.709 limited range, converted in the `video` shader; on a
+  real GPU its planes are sampled in place when stride and offsets are multiples of 16, and
+  otherwise copied to two textures), with the
   LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche
   of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that
   `DrmCompositor` can scan them out. A dma-buf is imported once as a Vulkan buffer and its

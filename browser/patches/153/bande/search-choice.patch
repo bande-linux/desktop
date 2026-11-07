@@ -1,0 +1,105 @@
+Ask for a search engine on first launch: no default until the user picks one
+
+--- a/browser/base/content/bande-search-choice.js
++++ b/browser/base/content/bande-search-choice.js
+@@ -0,0 +1,26 @@
++/* This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
++
++"use strict";
++
++window.addEventListener("DOMContentLoaded", async () => {
++  document.getElementById("none").addEventListener("click", () => window.close());
++  const list = document.getElementById("engines");
++  for (const engine of await Services.search.getVisibleEngines()) {
++    if (engine.id.startsWith("wikipedia")) {
++      continue;
++    }
++    const button = document.createElement("button");
++    button.textContent = engine.name;
++    button.addEventListener("click", async () => {
++      await Services.search.setDefault(
++        engine,
++        Ci.nsISearchService.CHANGE_REASON_USER
++      );
++      Services.prefs.setBoolPref("keyword.enabled", true);
++      window.close();
++    });
++    list.append(button);
++  }
++});
+--- a/browser/base/content/bande-search-choice.xhtml
++++ b/browser/base/content/bande-search-choice.xhtml
+@@ -0,0 +1,23 @@
++<?xml version="1.0"?>
++<!-- This Source Code Form is subject to the terms of the Mozilla Public
++   - License, v. 2.0. If a copy of the MPL was not distributed with this
++   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
++<html xmlns="http://www.w3.org/1999/xhtml" style="width: 28em">
++  <head>
++    <title>Choose a search engine</title>
++    <link rel="stylesheet" href="chrome://global/skin/global.css" />
++    <script src="chrome://browser/content/bande-search-choice.js" />
++    <style>
++      body { margin: 16px; display: flex; flex-direction: column; gap: 8px; }
++      h1 { font-size: 15px; margin: 0; }
++      p { margin: 0 0 8px; }
++      button { min-height: 28px; text-align: start; }
++    </style>
++  </head>
++  <body>
++    <h1>Choose a search engine</h1>
++    <p>Words typed in the address bar go to the engine you pick. You can change this in Settings.</p>
++    <div id="engines" style="display: contents"></div>
++    <button id="none">Don't use a search engine for now</button>
++  </body>
++</html>
+--- a/browser/base/content/browser-init.js
++++ b/browser/base/content/browser-init.js
+@@ -473,6 +473,25 @@
+     this._boundDelayedStartup = null;
+   },
+ 
++  _bandeSearchChoice() {
++    const observer = (_subject, _topic, data) => {
++      if (data == "engine-default") {
++        Services.prefs.setBoolPref("keyword.enabled", true);
++        Services.prefs.setBoolPref("bande.search.asked", true);
++      }
++    };
++    Services.obs.addObserver(observer, "browser-search-engine-modified");
++    window.addEventListener(
++      "unload",
++      () => Services.obs.removeObserver(observer, "browser-search-engine-modified"),
++      { once: true }
++    );
++    if (!Services.prefs.getBoolPref("bande.search.asked", false)) {
++      Services.prefs.setBoolPref("bande.search.asked", true);
++      window.gDialogBox.open("chrome://browser/content/bande-search-choice.xhtml");
++    }
++  },
++
+   _delayedStartup() {
+     Glean.browserTimings.startupTimeline.delayedStartupStarted.set(
+       Services.telemetry.msSinceProcessStart()
+@@ -804,6 +823,8 @@
+       document.documentElement.setAttribute("sessionrestored", "true");
+     });
+ 
++    this._bandeSearchChoice();
++
+     this.delayedStartupFinished = true;
+     _resolveDelayedStartup();
+     Services.obs.notifyObservers(window, "browser-delayed-startup-finished");
+--- a/browser/base/jar.mn
++++ b/browser/base/jar.mn
+@@ -46,6 +46,8 @@
+         content/browser/browser-fullScreenAndPointerLock.js (content/browser-fullScreenAndPointerLock.js)
+         content/browser/browser-gestureSupport.js           (content/browser-gestureSupport.js)
+         content/browser/browser-init.js                     (content/browser-init.js)
++        content/browser/bande-search-choice.xhtml           (content/bande-search-choice.xhtml)
++        content/browser/bande-search-choice.js              (content/bande-search-choice.js)
+         content/browser/browser-main.js                     (content/browser-main.js)
+         content/browser/browser-menubar.js                  (content/browser-menubar.js)
+         content/browser/browser-pageActions.js              (content/browser-pageActions.js)

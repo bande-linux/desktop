@@ -1,6 +1,6 @@
 use bande_compositor::SessionRole;
 use bande_protocols::client::bande_app_v1::{BandeAppV1, Workspace};
-use bande_protocols::client::bande_shell_v1::{self, BandeShellV1};
+use bande_protocols::client::bande_shell_v1::{self, BandeShellV1, SessionEnd};
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop, event_created_child};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1;
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::{
@@ -31,6 +31,12 @@ impl TestClient {
 
     pub fn shell_events(&self) -> &[String] {
         &self.globals.shell_events
+    }
+
+    pub fn confirm_session_end(&mut self, server: &mut Compositor, ending: SessionEnd) {
+        let shell: BandeShellV1 = self.bind("bande_shell_v1", 1);
+        shell.confirm_session_end(ending);
+        self.exchange(server);
     }
 
     pub fn show_force_quit(&mut self, server: &mut Compositor) {

@@ -15,6 +15,7 @@ use crate::state::{Compositor, State};
 pub const UNRESPONSIVE_AFTER: Duration = Duration::from_secs(3);
 pub(crate) const PING_SINCE: u32 = 2;
 const PING_INTERVAL: Duration = Duration::from_secs(1);
+const QUIT_PATIENCE: Duration = Duration::from_secs(10);
 
 #[derive(PartialEq)]
 enum Pinged {
@@ -39,6 +40,7 @@ struct Ping {
     sent: Duration,
     pending: bool,
     unresponsive: bool,
+    given_up: bool,
 }
 
 #[derive(Default)]
@@ -46,6 +48,8 @@ pub(crate) struct Watchdog {
     pings: Vec<Ping>,
     interacted: bool,
     everyone: bool,
+    quit_asked: Option<Duration>,
+    quit_patience_over: bool,
 }
 
 impl Watchdog {
@@ -61,6 +65,14 @@ impl Watchdog {
         self.pings
             .iter()
             .any(|ping| ping.unresponsive && &ping.owner == owner)
+    }
+
+    pub(crate) fn gave_up_on(&self, owner: &ClientId, windowless: bool) -> bool {
+        (windowless && self.quit_patience_over)
+            || self
+                .pings
+                .iter()
+                .any(|ping| ping.given_up && &ping.owner == owner)
     }
 
     pub(crate) fn has_unresponsive(&self) -> bool {
@@ -126,6 +138,7 @@ impl State {
             return;
         };
         ping.pending = false;
+        ping.given_up = false;
         if std::mem::take(&mut ping.unresponsive) {
             announce(
                 &self.shell_resources,
@@ -191,6 +204,7 @@ impl State {
                 sent: now,
                 pending: true,
                 unresponsive: false,
+                given_up: false,
             });
         }
         for shell in self
@@ -218,6 +232,7 @@ impl State {
                 sent: now,
                 pending: true,
                 unresponsive: false,
+                given_up: false,
             });
         }
     }
@@ -235,6 +250,8 @@ impl State {
             }
             alive && !quiet
         });
+        let waiting_for_apps = !self.quitting.is_empty() && !self.app_owners().is_empty();
+        self.watchdog.everyone |= waiting_for_apps;
         self.ping_clients(now);
         let shells = &self.shell_resources;
         let controls = &self.app_control_resources;
@@ -244,7 +261,16 @@ impl State {
                 announce(shells, controls, ping, false);
                 changed = true;
             }
+            ping.given_up =
+                waiting_for_apps && ping.unresponsive && now >= ping.sent + QUIT_PATIENCE;
         }
+        self.watchdog.quit_asked =
+            waiting_for_apps.then(|| self.watchdog.quit_asked.unwrap_or(now));
+        self.watchdog.quit_patience_over = self
+            .watchdog
+            .quit_asked
+            .is_some_and(|asked| now >= asked + QUIT_PATIENCE);
+        self.announce_apps_running();
         if changed {
             self.needs_redraw = true;
         }
@@ -256,6 +282,9 @@ impl State {
             .iter()
             .filter(|ping| ping.pending && !ping.unresponsive)
             .map(|ping| ping.sent + UNRESPONSIVE_AFTER)
+            .min()
+            .into_iter()
+            .chain(waiting_for_apps.then_some(now + PING_INTERVAL))
             .min()
     }
 }

@@ -26,6 +26,7 @@ the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
 | `libs/app/tests/app.rs` | App framework: a second launch reaches the running instance, the app keeps running without windows, launching again reopens a window, F11 enters and leaves full screen, Ctrl+Q quits. |
 | `services/portal/tests/screenshot.rs` | A stored screenshot permission is trusted only from the xdg-desktop-portal frontend; any other caller makes the user be asked. |
 | `services/notify/tests/center.rs` | A notification shows as a banner and moves to the center; the center is served only under its own bus name, not through `org.freedesktop.Notifications`. |
+| `shell/shell/tests/session_end.rs` | The real confirmation dialog against a fake logind and systemd: a confirmed Shut Down really reaches `PowerOff` (the dialog once exited before the call left) and the dialog stays; a hung app does not stop Restart; an inhibitor stops the call and is shown; Log Out stops the compositor service. |
 | `libs/xdg/tests/xdg.rs` `exec_lines_follow_…` | `.desktop` Exec parsing: quoting, escapes, field codes and reserved characters. |
 | `libs/xdg/tests/xdg.rs` `a_launcher_file_runs_only_…` | A `.desktop` file opened in Files runs only when installed or marked executable by its owner. |
 | `libs/status/src/memory.rs` `pressure_trigger_waits_for_a_stall` | The memory pressure trigger stays quiet without a stall (it once woke the status service in a busy loop). |
@@ -46,6 +47,7 @@ the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
 | `shell/launcher/tests/launcher.rs` | Launcher: typing ranks apps, arrows and Return open the choice. |
 | `shell/lock/tests/lock.rs` | Lock screen: a password is submitted once and a rejected one is cleared for another try; a resting lock wakes on the first input, keeps a typed letter and rests again with the field cleared. |
 | `services/power/tests/idle.rs` | A running stream holds back sleep but not the display off, and sleep follows its end. |
+| `toolkit/toolkit/tests/window_edges.rs` | Window edges: a drag from the first pixel inside the outline, above a tab too, moves the window; just outside and in the rounded cut-outs it resizes, diagonally for the whole generous corner zone; a side resting on the screen edge resizes from 3 pt inside. |
 | `toolkit/toolkit/tests/accessibility.rs` | Toolkit: a screen reader finds a button over AT-SPI in a window on the headless compositor and presses it. |
 
 ## Support

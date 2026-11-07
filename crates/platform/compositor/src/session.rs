@@ -120,6 +120,10 @@ impl Compositor {
         self.spawn_session_client(executable, SessionRole::Shell)
     }
 
+    pub fn set_session_dialog(&mut self, executable: &Path) {
+        self.session_dialog = Summoned::new(&executable.to_string_lossy());
+    }
+
     pub fn set_lock_screen(&mut self, executable: &Path) {
         self.lock_screen.executable = executable.to_path_buf();
     }

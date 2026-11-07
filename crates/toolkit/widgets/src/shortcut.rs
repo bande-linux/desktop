@@ -2,31 +2,32 @@ use accesskit::{Node, Role};
 use bande_graphics::{Item, Paragraph, Point, Rect, TextAlign, TextStyle, TextSystem};
 
 use super::{Context, Event, Key, Modifiers, Size, Widget, WidgetId};
+use crate::L10N;
 
 const MODIFIER_NAMES: [(&[&str], &str); 4] = [
-    (&["Shift"], "Shift"),
-    (&["Ctrl", "Control"], "Ctrl"),
-    (&["Alt", "Option"], "Alt"),
-    (&["Super", "Logo", "Meta"], "Super"),
+    (&["Shift"], "key-shift"),
+    (&["Ctrl", "Control"], "key-ctrl"),
+    (&["Alt", "Option"], "key-alt"),
+    (&["Super", "Logo", "Meta"], "key-super"),
 ];
 
 const KEY_NAMES: [(&[&str], &str, Key); 16] = [
-    (&["Left"], "←", Key::Left),
-    (&["Right"], "→", Key::Right),
-    (&["Up"], "↑", Key::Up),
-    (&["Down"], "↓", Key::Down),
-    (&["Backspace"], "Backspace", Key::Backspace),
-    (&["Delete", "Del"], "Delete", Key::Delete),
-    (&["Enter", "Return"], "Enter", Key::Enter),
-    (&["Tab"], "Tab", Key::Tab),
-    (&["Escape", "Esc"], "Esc", Key::Escape),
-    (&["Space"], "Space", Key::Space),
-    (&["Home"], "Home", Key::Home),
-    (&["End"], "End", Key::End),
-    (&["PageUp", "PgUp"], "Page Up", Key::PageUp),
-    (&["PageDown", "PgDn"], "Page Down", Key::PageDown),
-    (&["Insert"], "Insert", Key::Insert),
-    (&["Menu"], "Menu", Key::Menu),
+    (&["Left"], "key-left", Key::Left),
+    (&["Right"], "key-right", Key::Right),
+    (&["Up"], "key-up", Key::Up),
+    (&["Down"], "key-down", Key::Down),
+    (&["Backspace"], "key-backspace", Key::Backspace),
+    (&["Delete", "Del"], "key-delete", Key::Delete),
+    (&["Enter", "Return"], "key-enter", Key::Enter),
+    (&["Tab"], "key-tab", Key::Tab),
+    (&["Escape", "Esc"], "key-escape", Key::Escape),
+    (&["Space"], "key-space", Key::Space),
+    (&["Home"], "key-home", Key::Home),
+    (&["End"], "key-end", Key::End),
+    (&["PageUp", "PgUp"], "key-page-up", Key::PageUp),
+    (&["PageDown", "PgDn"], "key-page-down", Key::PageDown),
+    (&["Insert"], "key-insert", Key::Insert),
+    (&["Menu"], "key-menu", Key::Menu),
 ];
 
 const BODY_SIZE: f32 = 13.0;
@@ -49,7 +50,7 @@ fn key_name(key: &str) -> Option<&'static (&'static [&'static str], &'static str
 pub fn shortcut_label(shortcut: &str) -> String {
     let (modifiers, key) = split(shortcut);
     let key = match key_name(key) {
-        Some((_, label, _)) => (*label).to_owned(),
+        Some((_, id, _)) => L10N.tr(id),
         None if key.chars().count() == 1 => key.chars().flat_map(char::to_uppercase).collect(),
         None => key.to_owned(),
     };
@@ -60,8 +61,8 @@ pub fn shortcut_label(shortcut: &str) -> String {
                 .iter()
                 .any(|modifier| names.iter().any(|name| name.eq_ignore_ascii_case(modifier)))
         })
-        .map(|(_, label)| *label)
-        .chain([key.as_str()])
+        .map(|(_, id)| L10N.tr(id))
+        .chain([key])
         .collect::<Vec<_>>()
         .join("+")
 }
@@ -73,11 +74,11 @@ pub fn parse_shortcut(shortcut: &str) -> Option<(Key, Modifiers)> {
         let held = MODIFIER_NAMES
             .iter()
             .find(|(names, _)| names.iter().any(|known| known.eq_ignore_ascii_case(name)))
-            .map(|(_, label)| *label)?;
+            .map(|(_, id)| *id)?;
         match held {
-            "Shift" => modifiers.shift = true,
-            "Ctrl" => modifiers.control = true,
-            "Alt" => modifiers.alt = true,
+            "key-shift" => modifiers.shift = true,
+            "key-ctrl" => modifiers.control = true,
+            "key-alt" => modifiers.alt = true,
             _ => modifiers.logo = true,
         }
     }

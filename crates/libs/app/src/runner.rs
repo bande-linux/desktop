@@ -16,7 +16,8 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use crate::cx::Content;
 use crate::instance::{self, Claim, Instance, Request};
 use crate::menus::assemble;
-use crate::{Cx, Error, Info, Program, WindowId};
+use crate::resume::{ReopenPrompt, Resume};
+use crate::{Cx, Error, Info, Program, Saved, WindowId};
 
 #[derive(Debug, Clone, Copy)]
 enum Source {
@@ -71,9 +72,17 @@ pub(crate) fn run<P: Program>(
         Some(display) => AppConnection::connect_on(display, info.id)?,
         None => AppConnection::connect(info.id)?,
     };
-    let mut cx = Cx::new(info, link, session, background);
-    let program = P::start(&mut cx, arguments)?;
-    if cx.windows().next().is_none() && !background {
+    let plain_launch = arguments.is_empty() && !background;
+    let mut resume = Resume::load(info.id);
+    let mut link = link;
+    resume.join(&mut link);
+    let mut cx = Cx::new(info, link, session, background, resume);
+    let mut program = P::start(&mut cx, arguments)?;
+    let asked = !background && reopen_saved_windows(&mut program, &mut cx);
+    if plain_launch && !asked && !cx.resume.has_main_window() {
+        program.reopen(&mut cx);
+    }
+    if cx.windows.is_empty() && !background {
         return Ok(());
     }
     let menu = cx.session().cloned().and_then(|session| {
@@ -93,6 +102,34 @@ pub(crate) fn run<P: Program>(
         sources: RefCell::new(Vec::new()),
     };
     runner.run()
+}
+
+fn reopen_saved_windows<P: Program>(program: &mut P, cx: &mut Cx<P>) -> bool {
+    if cx.resume.died_while_reopening() {
+        match ReopenPrompt::open(cx) {
+            Ok(()) => return true,
+            Err(error) => tracing::warn!("cannot ask about reopening the windows: {error}"),
+        }
+        cx.resume.forget_saved(&cx.link);
+        return false;
+    }
+    restore_saved_windows(program, cx);
+    false
+}
+
+fn restore_saved_windows<P: Program>(program: &mut P, cx: &mut Cx<P>) {
+    for window in cx.resume.begin_reopening() {
+        let name = window.name.clone();
+        cx.resume.opening = Some(name.clone());
+        match window.state {
+            Some(state) => program.restore_window(cx, Saved(state)),
+            None => cx.open_settings(),
+        }
+        if cx.resume.opening.take().is_some() {
+            cx.link.leave_session(&name);
+        }
+    }
+    program.windows_restored(cx);
 }
 
 fn release_freed_memory() {
@@ -115,10 +152,12 @@ impl<P: Program> Runner<P> {
             if !self.cx.windows.is_empty() {
                 bande_toolkit::run_surfaces(self)?;
             }
-            if self.cx.quitting && P::runs_in_background() {
+            self.reap_closed();
+            if self.cx.quitting && !self.cx.resume.session_ending && P::runs_in_background() {
                 self.run_in_background();
             }
             if self.cx.quitting || !self.cx.link.keeps_running() {
+                self.leave();
                 return Ok(());
             }
             if self.cx.windows.is_empty() {
@@ -132,14 +171,76 @@ impl<P: Program> Runner<P> {
 
     fn run_in_background(&mut self) {
         let shown: Vec<WindowId> = self.cx.views.iter().map(|(window, _)| *window).collect();
+        self.cx.quitting = false;
         for window in shown {
             self.cx.close(window);
         }
+        self.reap_closed();
+        self.cx.link.run_in_background();
+    }
+
+    fn reap_closed(&mut self) {
+        let leaving = self.cx.quitting;
         for (window, view) in self.cx.remove_closed() {
             self.program.window_closed(&mut self.cx, window, view);
+            if !leaving {
+                self.cx.resume.window_closed(&self.cx.link, window);
+            }
         }
-        self.cx.link.run_in_background();
-        self.cx.quitting = false;
+    }
+
+    fn leave(&mut self) {
+        if self.cx.resume.session_ending {
+            self.save_windows();
+            self.cx.resume.finish_writing();
+        } else {
+            self.cx.resume.discard(&mut self.cx.link);
+        }
+        if let Err(error) = self.cx.link.flush() {
+            tracing::warn!("cannot say goodbye to the compositor: {error}");
+        }
+    }
+
+    fn save_windows(&mut self) {
+        let mut windows = Vec::new();
+        for ((window, content), shown) in self.cx.views.iter().zip(&self.cx.windows) {
+            if shown.is_closed() {
+                continue;
+            }
+            let state = match content {
+                Content::App(_) => match self.program.save_window(&self.cx, *window) {
+                    Some(saved) => Some(saved.0),
+                    None => continue,
+                },
+                Content::Settings(_) => None,
+                Content::Prompt(_) => continue,
+            };
+            windows.push((*window, state));
+        }
+        self.cx.resume.write(windows);
+    }
+
+    fn answer_prompt(&mut self) {
+        let Some(answer) = self.cx.resume.take_answer() else {
+            return;
+        };
+        let prompts: Vec<WindowId> = self
+            .cx
+            .views
+            .iter()
+            .filter(|(_, content)| matches!(content, Content::Prompt(_)))
+            .map(|(window, _)| *window)
+            .collect();
+        match answer {
+            true => restore_saved_windows(&mut self.program, &mut self.cx),
+            false => self.cx.resume.forget_saved(&self.cx.link),
+        }
+        if !self.cx.resume.has_main_window() {
+            self.program.reopen(&mut self.cx);
+        }
+        for window in prompts {
+            self.cx.close(window);
+        }
     }
 
     fn wait_without_windows(&mut self) -> Result<(), WindowError> {
@@ -178,6 +279,7 @@ impl<P: Program> Runner<P> {
     }
 
     fn serve_requests(&mut self, requests: Vec<AppRequest>) {
+        let mut session_ending = false;
         for request in requests {
             match request {
                 AppRequest::Reopen(token) => self.activated(Request {
@@ -186,7 +288,11 @@ impl<P: Program> Runner<P> {
                     token: Some(token),
                 }),
                 AppRequest::Key(input) => self.key_without_window(&input),
-                AppRequest::Quit => self.quit(),
+                AppRequest::SessionEnding => session_ending = true,
+                AppRequest::Quit => {
+                    self.cx.resume.session_ending = std::mem::take(&mut session_ending);
+                    self.quit();
+                }
             }
         }
         self.publish_menus();
@@ -214,7 +320,7 @@ impl<P: Program> Runner<P> {
     fn is_settings(&self, window: WindowId) -> bool {
         self.cx
             .index(window)
-            .is_some_and(|index| matches!(self.cx.views[index].1, Content::Settings(_)))
+            .is_some_and(|index| !matches!(self.cx.views[index].1, Content::App(_)))
     }
 
     fn close(&mut self, window: WindowId) {
@@ -243,6 +349,7 @@ impl<P: Program> Runner<P> {
     }
 
     fn perform(&mut self, window: Option<WindowId>, action: &str) {
+        self.cx.resume.touch();
         if let Some(shortcut) = action.strip_prefix(KEY_ACTION) {
             if let Some(window) = window {
                 self.press(window, shortcut);
@@ -266,6 +373,7 @@ impl<P: Program> Runner<P> {
                 None => Ok(()),
             },
             (Standard::Quit, _) => {
+                self.cx.resume.session_ending = false;
                 self.quit();
                 Ok(())
             }
@@ -297,12 +405,14 @@ impl<P: Program> Runner<P> {
             self.cx.windows[index].request_redraw();
             self.changed(index, window);
         }
+        self.answer_prompt();
         handled
     }
 
     fn changed(&mut self, index: usize, window: WindowId) {
         if matches!(self.cx.views[index].1, Content::App(_)) {
             self.program.changed(&mut self.cx, window);
+            self.cx.resume.touch();
         }
     }
 
@@ -340,6 +450,7 @@ impl<P: Program> Runner<P> {
     }
 
     fn activated(&mut self, request: Request) {
+        self.cx.resume.touch();
         let newest = self.cx.views.last().map(|(id, _)| *id);
         if !request.arguments.is_empty() {
             let directory = request.directory.as_deref().unwrap_or(Path::new("/"));
@@ -466,7 +577,10 @@ impl<P: Program> Surfaces for Runner<P> {
                     self.activated(request);
                 }
             }
-            Some(Source::Program(index)) => self.program.source_ready(&mut self.cx, index),
+            Some(Source::Program(index)) => {
+                self.program.source_ready(&mut self.cx, index);
+                self.cx.resume.touch();
+            }
             Some(Source::View(window, source)) => {
                 if let Some(index) = self.cx.index(window)
                     && self.cx.views[index]
@@ -491,10 +605,15 @@ impl<P: Program> Surfaces for Runner<P> {
             .filter(|(_, window)| !window.is_closed())
             .filter_map(|((_, content), _)| content.view_ref().deadline())
             .chain(self.program.deadline())
+            .chain(self.cx.resume.deadline())
             .min()
     }
 
     fn tick(&mut self, now: Instant) {
+        if self.cx.resume.save_due(now) {
+            self.save_windows();
+        }
+        self.cx.resume.reopened_safely(now);
         if self
             .program
             .deadline()
@@ -545,9 +664,7 @@ impl<P: Program> Surfaces for Runner<P> {
             Ok(requests) => self.serve_requests(requests),
             Err(error) => tracing::warn!("cannot read the app's requests: {error}"),
         }
-        for (window, view) in self.cx.remove_closed() {
-            self.program.window_closed(&mut self.cx, window, view);
-        }
+        self.reap_closed();
         self.publish_menus();
         self.cx.quitting || self.cx.windows.is_empty()
     }

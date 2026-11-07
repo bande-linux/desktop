@@ -817,7 +817,6 @@ pub struct Config {
     pub accent: Accent,
     pub tinted_frame: bool,
     pub reopen_apps: bool,
-    pub reopen_apps_after_crash: bool,
     pub automatic_updates: bool,
     pub update_check_every: Option<Duration>,
     pub lock_message: String,
@@ -856,7 +855,6 @@ impl Default for Config {
             accent: Accent::default(),
             tinted_frame: false,
             reopen_apps: true,
-            reopen_apps_after_crash: false,
             automatic_updates: false,
             update_check_every: None,
             lock_message: String::new(),
@@ -1013,9 +1011,6 @@ impl Parser<'_> {
                     .map(|message| config.lock_message = message),
                 "show-previews" => self.flag(node).map(|shown| config.show_previews = shown),
                 "reopen-apps" => self.flag(node).map(|reopen| config.reopen_apps = reopen),
-                "reopen-apps-after-crash" => self
-                    .flag(node)
-                    .map(|reopen| config.reopen_apps_after_crash = reopen),
                 "automatic-updates" => self
                     .flag(node)
                     .map(|automatic| config.automatic_updates = automatic),

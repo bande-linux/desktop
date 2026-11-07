@@ -1,0 +1,32 @@
+[package]
+name = "bande-recovery"
+description = "Bande desktop recovery: restarts a stuck desktop from the keyboard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+tracing.workspace = true
+bande-log.workspace = true
+zbus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "misc"
+depends = "$auto, systemd (>= 257), init-system-helpers (>= 1.66)"
+extended-description = """\
+The last way out of a stuck desktop. Pressing Ctrl+Alt+Shift+Esc twice within \
+five seconds ends the graphical session on the active seat, however stuck its \
+compositor is, and the login window comes back with keyboard and mouse working. \
+It follows logind's Secure Attention Key signal, so nothing in the session has \
+to be alive for it to work, and it never sees any other key."""
+maintainer-scripts = "debian/"
+assets = [
+    ["target/release/bande-recovery", "usr/libexec/", "755"],
+    ["data/bande-recovery.service", "usr/lib/systemd/system/", "644"],
+]
+
+[lints]
+workspace = true

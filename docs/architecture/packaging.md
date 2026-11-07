@@ -14,7 +14,7 @@ profiles. Sizes are in [performance.md](performance.md).
 ## Packages
 
 - **Per crate** (`cargo deb`, one build per architecture; the list is `ci/release/packages`): `bande-compositor`, the session services
-  (`bande-config`, `bande-notify`, `bande-power`, `bande-sound`, `bande-clipboard`, `bande-tray`,
+  (`bande-config`, `bande-notify`, `bande-power`, `bande-recovery`, `bande-sound`, `bande-clipboard`, `bande-tray`,
   `bande-automount`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,

@@ -1,0 +1,20 @@
+[Unit]
+Description=Bande desktop recovery
+Documentation=man:logind.conf(5)
+After=systemd-logind.service
+
+[Service]
+ExecStart=/usr/libexec/bande-recovery
+Restart=always
+RestartSec=1s
+OOMScoreAdjust=-900
+MemoryMin=16M
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/sys/fs/cgroup
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

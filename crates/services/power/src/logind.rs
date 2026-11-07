@@ -3,7 +3,7 @@ use std::thread;
 use std::time::Duration;
 
 pub use bande_bus::logind::{
-    ManagerProxyBlocking, SessionProxyBlocking, follow_idle_blocked, follow_locked_hint, inhibit,
+    ManagerProxyBlocking, SessionProxyBlocking, follow_blocked, follow_locked_hint, inhibit,
     own_session,
 };
 use zbus::blocking::Connection;

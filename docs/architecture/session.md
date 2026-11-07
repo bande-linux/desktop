@@ -549,6 +549,23 @@ Bande uses `greetd` for the privileged part of login and keeps its own UI unpriv
 3. **Handover**: after authentication, `greetd` opens the PAM session through `pam_systemd.so`
    and starts the user's session, which runs `bande-compositor`.
 
+### First run and recovery
+
+While `/var/lib/bande/setup-pending` exists, `bande-compositor --greeter` runs `bande-setup` in place
+of `bande-greeter`, in the same role and as the same unprivileged user. It asks for language,
+keyboard, account and password (default: the same password encrypts the disk, then the recovery
+key is shown once), Wi-Fi, appearance and automatic updates, in that order so that no secret reaches
+the disk before encryption has started. The steps needing root go through `pkexec` to
+`/usr/libexec/bande-first-run` in the image, which a polkit rule allows `_greetd` only while the
+file exists. The last step removes it and signs in over greetd's IPC, so finishing goes straight to
+the desktop.
+
+Recovery boots the image's read-only system partition with `boot=bande-live`: squashfs below, tmpfs
+above. greetd there starts an ordinary session for a `recovery` user with no password, with
+`bande-recovery-tools` open; this user gets polkit's yes only while `/run/bande-live/device` exists,
+so the name means nothing on an installed system. The USB installer is this same system. See
+`images/README.md` for the image and the engine.
+
 ### From power-on to the desktop
 
 The picture never goes black between stages; each one leaves the last on screen until the next has
@@ -757,8 +774,7 @@ timer (also 3 minutes after login) reminds about it, about a prepared offline up
 notification when updates are waiting. Offline results are read once after the restart; Settings
 refreshes the cache when it is older than an hour. An apt "dpkg was interrupted" failure shows
 "Finish Installing", which runs PackageKit's `RepairSystem`. While dpkg runs, packagekitd holds
-a logind `shutdown:idle` block inhibitor (not sleep), and Settings shows only the progress. There
-is no first-run assistant yet.
+a logind `shutdown:idle` block inhibitor (not sleep), and Settings shows only the progress.
 
 Per-user Flatpak apps are a fourth class, dormant by default: no Bande package depends on or
 recommends `flatpak`, and every Flatpak path treats a missing `flatpak` command as no Flatpak

@@ -605,6 +605,17 @@ start `bande-session` (the wrapper the `bande.desktop` session entry runs, which
 Wayland session; the greeter then exits, its compositor with it, releasing the seat and VT
 before greetd runs the session. When the session ends greetd starts the greeter again.
 
+**Ending the session.** Log Out stops `bande-compositor.service` in the user's manager (never
+logind's `Session.Terminate`, which would leave the compositor holding the seat while greetd
+starts the greeter, and refuse the next login where the manager outlives the session, as with
+lingering). `BindsTo` then stops `graphical-session.target` and everything `PartOf` it, including
+the scopes of the apps Bande launched (`TimeoutStopSec=5s` before `SIGKILL`, so a hung app holds
+up neither a log out nor a shutdown); `systemctl --wait` in `bande-session` returns and the
+session closes. If something else ends the login scope (`loginctl terminate-session`),
+`bande-session` traps the signal and stops the service before it exits. Restart and Shut Down call
+logind's `Reboot` and `PowerOff`; the confirmation stays open until the request has an answer,
+and shows a refusal.
+
 **Installation.** `/etc/greetd/config.toml` is greetd's conffile and stays untouched. The
 `bande-greeter` package ships its configuration as
 `/usr/share/bande-greeter/greetd-config.toml` and a drop-in,

@@ -142,9 +142,11 @@ writes a hex value, a corner radius or a font name of its own.
     at the window geometry (`set_window_geometry`), so every app looks alike; maximised and
     full-screen windows are square. They act on release inside. A drag on the header or
     the chassis around the sheet moves the window, a double click zooms, a right click opens
-    the window menu. A band from 8 pt outside to 3 pt inside the rounded outline resizes,
-    with corners reaching 24 pt along the edges, and the pointer shows the direction. Tiled
-    windows have the same band, maximised and full-screen windows have none, and full screen hides the header and the inset.
+    the window menu. A band from the rounded outline to 8 pt outside resizes, corner
+    cut-outs included, with corners reaching 32 pt along the edges and 16 pt out diagonally, the part
+    beyond the 8 pt margin being the compositor's, and the pointer shows the direction; nothing inside the outline resizes, so the free space around tabs moves the
+    window. Tiled windows have the same band, a side with no room outside gets its band from
+    the compositor, maximised and full-screen windows have none, and full screen hides the header and the inset.
     `Window::size` and pointer positions are in the content's coordinates: by default the
     content is the sheet and the app draws only into it (clipped to its rounded shape, on the
     `Scene`'s background). An app with a sidebar or toolbar on the frame calls
@@ -280,7 +282,8 @@ writes a hex value, a corner radius or a font name of its own.
   the Compose key work in every window without an input method: the seat follows xkbcommon's
   Compose table of the session's locale (read at the first dead key) and reports the pending accent
   as `Event::Preedit` and the result as ordinary `Key::Character` events, so every field, password
-  entry and terminal gets it. As on macOS, a dead key and Space type the accent itself, a key that
+  entry and terminal gets it. As on macOS, a dead key and Space type the accent itself (on a layout with no key of its own for
+  `'` or `"`, such as US International, that character instead), a key that
   cannot combine types the accent and then that key (`~` then `/` is `~/`), and Backspace or Escape
   abandon the accent. Shortcuts with Ctrl, Alt or Super never compose. Text is
   published to screen readers as text runs with the caret and selection, which they can also

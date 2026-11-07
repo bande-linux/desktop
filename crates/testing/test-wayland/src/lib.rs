@@ -16,7 +16,7 @@ use std::io::Write;
 use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
 
-use bande_compositor::Compositor;
+pub use bande_compositor::Compositor;
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_output::Transform;

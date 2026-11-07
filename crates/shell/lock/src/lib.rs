@@ -87,14 +87,6 @@ enum PowerPress {
     Confirm,
 }
 
-fn ending_of(action: PowerAction) -> Option<Ending> {
-    match action {
-        PowerAction::Sleep => None,
-        PowerAction::Restart => Some(Ending::Restart),
-        PowerAction::ShutDown => Some(Ending::ShutDown),
-    }
-}
-
 pub fn boot_mark_pixels(pixel_height: u32) -> u32 {
     match pixel_height >= LARGE_DISPLAY_LINES {
         true => BOOT_MARK_PIXELS.1,
@@ -846,7 +838,7 @@ impl LockScreen {
             (model.powers.clone(), model.asking)
         };
         let mut titles = Vec::new();
-        let row: Vec<Button> = match asking.and_then(ending_of) {
+        let row: Vec<Button> = match asking.and_then(PowerAction::ending) {
             Some(ending) => vec![
                 self.power_button(&L10N.tr("cancel"), PowerPress::Cancel)
                     .cancel(),
@@ -858,8 +850,9 @@ impl LockScreen {
                 powers
                     .into_iter()
                     .map(|power| {
-                        let title =
-                            ending_of(power).map_or_else(|| L10N.tr("sleep"), Ending::button);
+                        let title = power
+                            .ending()
+                            .map_or_else(|| L10N.tr("sleep"), Ending::button);
                         titles.push(title.clone());
                         self.power_symbol(power, &title, ink)
                     })
@@ -887,7 +880,7 @@ impl LockScreen {
     fn ask_power(&mut self, asking: Option<PowerAction>) {
         let mut model = self.model.borrow_mut();
         model.asking = asking;
-        model.message = asking.and_then(ending_of).map(Ending::question);
+        model.message = asking.and_then(PowerAction::ending).map(Ending::question);
         drop(model);
         self.show_power_row();
     }

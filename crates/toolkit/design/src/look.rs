@@ -29,7 +29,7 @@ pub struct Look {
 
 const LIT_FRAME_OPACITY: f32 = 0.74;
 const BACKDROP_CEILING: f64 = 0.16;
-const BACKDROP_FLOOR: f64 = 0.50;
+const BACKDROP_FLOOR: f64 = 0.60;
 
 impl Style {
     pub const ALL: [Self; 2] = [Self::Refined, Self::WallpaperLit];

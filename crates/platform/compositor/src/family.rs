@@ -1,11 +1,13 @@
 use bande_spring::Spring;
 use smithay::delegate_xdg_dialog;
+use smithay::delegate_xdg_foreign;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle};
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::shell::xdg::dialog::XdgDialogHandler;
 use smithay::wayland::shell::xdg::{ToplevelSurface, XdgToplevelSurfaceData};
+use smithay::wayland::xdg_foreign::{XdgForeignHandler, XdgForeignState};
 
 use crate::motion::Look;
 use crate::recall::clamp_into;
@@ -269,3 +271,11 @@ impl XdgDialogHandler for State {
 }
 
 delegate_xdg_dialog!(State);
+
+impl XdgForeignHandler for State {
+    fn xdg_foreign_state(&mut self) -> &mut XdgForeignState {
+        &mut self.globals.foreign_state
+    }
+}
+
+delegate_xdg_foreign!(State);

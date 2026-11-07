@@ -10,6 +10,7 @@ pub mod file_chooser;
 pub mod gtk;
 pub mod inhibit;
 pub mod notification;
+pub mod print;
 pub mod request;
 pub mod screencast;
 pub mod screenshot;

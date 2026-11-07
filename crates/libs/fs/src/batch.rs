@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::listing::is_hidden;
 use crate::naming::split_extension;
 use crate::ops::{Change, rename_new};
 
@@ -96,7 +97,7 @@ pub fn plan_renames(
     for (position, item) in items.iter().enumerate() {
         let old = name_of(&item.path);
         let name = new_name(&old, item.folder, rule, position);
-        if name.is_empty() || (name.starts_with('.') && !old.starts_with('.')) {
+        if name.is_empty() || (is_hidden(&name) && !is_hidden(&old)) {
             return Err(BatchProblem::Empty);
         }
         if name.contains('/') {

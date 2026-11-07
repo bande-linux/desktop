@@ -87,7 +87,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - Footprint: the typed property follower; the bar's own desktop-entry parsing; worker threads
   and timeouts for the remaining blocking D-Bus calls (Control Center setters, tray).
 - Text size: menus at 200 % and long labels; Activity Monitor's CPU-core strip (apps repo).
-- A Super tap or `Ctrl+Alt+T` pressed before the shell connects is lost.
+- A Super tap, `Super+Space` or `Ctrl+Alt+T` pressed before the shell connects is lost.
 - The low-memory dialog has no test hook: it shows only on a real PSI stall with memory nearly
   exhausted, so a headless walk cannot open it.
 - Mail's Settings window (apps repo) has no title or menu button, unlike the other apps'.

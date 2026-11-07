@@ -294,7 +294,7 @@ when they reach the screen is Bande's own.
   names and icons come from desktop entries through `bande-xdg`, cached, and reread at most
   every 30 s while an app is unknown. `access.rs` publishes the card through AccessKit (a
   window holding a list box whose selected option has the focus) only while it shows.
-  `recall.rs` keeps the window memory file, `assist.rs` the free-half panel, which reuses the
+  `recall.rs` keeps the window memory file (written by its own thread, the latest state winning and flushed at exit, so a slow disk never holds a frame), `assist.rs` the free-half panel, which reuses the
   overview's `arrange` and the switcher's thumbnails.
 - **Force Quit** (`force_quit/`): the compositor's own window, so it opens when the shell or
   the focused app hangs; [behaviour](behaviour.md) has the rules. Apps are killed through a

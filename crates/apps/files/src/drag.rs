@@ -224,7 +224,7 @@ impl FilesView {
         match location {
             Location::Folder(folder) => Some(Target::Folder(folder.clone())),
             Location::Trash => Some(Target::Trash),
-            Location::Recents | Location::Search(_) => None,
+            Location::Recents | Location::Search(_) | Location::Server(_) => None,
         }
     }
 
@@ -275,8 +275,11 @@ impl FilesView {
     }
 
     fn drop_target(&self, at: Point) -> Option<(Target, Rect, Option<Spring>)> {
-        let folders =
-            !self.drag_sources.is_empty() && self.drag_sources.iter().all(|source| source.is_dir());
+        let folders = !self.drag_sources.is_empty()
+            && self
+                .drag_sources
+                .iter()
+                .all(|source| bande_volumes::quick_is_dir(source));
         if folders && let Some((target, line)) = self.sidebar_gap(at) {
             return Some((target, line, None));
         }
@@ -313,7 +316,7 @@ impl FilesView {
                     Some(Spring::Tab(*index)),
                 ))
             }
-            Hit::Segment(path) if path.is_dir() => Some((
+            Hit::Segment(path) if bande_volumes::quick_is_dir(path) => Some((
                 Target::Folder(path.clone()),
                 *rect,
                 Some(Spring::Go(Location::Folder(path.clone()))),

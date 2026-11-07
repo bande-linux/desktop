@@ -53,6 +53,10 @@ pub(crate) enum Signal {
     ColumnOrder(Vec<usize>),
     Search(String),
     GoTo(String),
+    Server(crate::servers::ServerField),
+    SheetDefault,
+    TryConnectionAgain,
+    DisconnectCurrent,
     ApplyToAll(bool),
     Drag(Point),
     IconSize(f64),
@@ -357,6 +361,7 @@ impl FilesView {
             Some(self.toolbar.search),
             self.size_slider,
             self.search_home_button,
+            self.trouble_buttons,
         ]
         .into_iter()
         .flatten()
@@ -649,6 +654,14 @@ impl FilesView {
                     Signal::GoTo(text) => {
                         if let Some(Sheet::GoTo(typed)) = &mut self.sheet {
                             *typed = text;
+                        }
+                    }
+                    Signal::Server(field) => self.server_field(field),
+                    Signal::TryConnectionAgain => self.browser.reload(),
+                    Signal::DisconnectCurrent => self.disconnect_current(),
+                    Signal::SheetDefault => {
+                        if let Some(primary) = self.sheet_primary.take() {
+                            self.ui.perform(&request(Action::Click, primary.into()));
                         }
                     }
                     Signal::Drag(at) => {
@@ -1127,6 +1140,7 @@ impl FilesView {
             )
         });
         let search_home = self.search_home_frame(self.empty_area());
+        let trouble = self.trouble_frame(self.empty_area());
         let table_id = self.table;
         if let Some(host) = self.host_mut() {
             host.set_frame(table_id, table);
@@ -1135,6 +1149,7 @@ impl FilesView {
                 .chain(rename)
                 .chain(slider)
                 .chain(search_home)
+                .chain(trouble)
             {
                 host.set_frame(id, frame);
             }
@@ -1293,7 +1308,15 @@ impl FilesView {
             Sheet::Conflict { .. }
             | Sheet::Failure
             | Sheet::NoSpace
+            | Sheet::Busy { .. }
             | Sheet::GoTo(_)
+            | Sheet::ConnectServer { .. }
+            | Sheet::ServerPassword(_)
+            | Sheet::ServerShares { .. }
+            | Sheet::ServerHostKey { .. }
+            | Sheet::ServerInstall { .. }
+            | Sheet::ServerFailed(_)
+            | Sheet::ServerBusy
             | Sheet::OpenWith(_)
             | Sheet::Rename(_) => {
                 return;
@@ -1350,8 +1373,9 @@ impl FilesView {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
         let describe = |path: &Path| {
-            std::fs::symlink_metadata(path)
-                .ok()
+            (!bande_volumes::on_connected_volume(path))
+                .then(|| std::fs::symlink_metadata(path).ok())
+                .flatten()
                 .map(|metadata| {
                     let modified = metadata.modified().map(format_date).unwrap_or_default();
                     match metadata.is_dir() {

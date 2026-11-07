@@ -271,7 +271,7 @@
     <request name="show_launcher">
       <description summary="open the launcher">
         Sent by the bar when its Bande mark is clicked. The compositor sends
-        show_launcher to the shell clients, as tapping Super does.
+        show_launcher to the shell clients, as tapping Super or Super+Space does.
       </description>
     </request>
 

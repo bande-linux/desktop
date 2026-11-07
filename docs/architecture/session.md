@@ -702,7 +702,7 @@ what the one before could not save. What happens for each:
 
 - **An app hangs**: Force Quit (in the compositor, opened with `Ctrl+Alt+Esc`, from the system
   menu, a Taskbar icon's menu or Search; the pointer lock of an app is released while it is open) marks it Not Responding after a 3 s
-  `xdg_wm_base` ping and kills its whole scope ([behaviour](behaviour.md)).
+  `xdg_wm_base` ping and kills its whole scope, after `SIGQUIT` if it is not responding, so its stack is kept ([behaviour](behaviour.md)).
 - **The shell crashes or hangs**: the compositor restarts the shell clients and the clipboard
   daemon it started when they exit, at most once every 10 seconds. A crash of the shell takes
   the bar, the desktop, Control Center and the launcher away for a moment but never the session
@@ -765,7 +765,38 @@ what the one before could not save. What happens for each:
   session that ended without a clean log out leaves it, and the next session asks "Reopen your
   apps?" before anything starts (`bande-shell --reopen-after-crash`, summoned by the compositor;
   the list stays until answered). An app that crashes posts "<App> quit unexpectedly"
-  ([behaviour](behaviour.md)). Core dumps go to `systemd-coredump` where it is installed.
+  ([behaviour](behaviour.md)).
+- **The record**: every failure leaves one dated text report, which stays on this computer unless [sending](fault-reports.md) is switched on, and Settings shows which applies.
+  `bande-desktop` depends on `systemd-coredump` (`coredump.conf.d/50-bande.conf`: up to 8 GB a dump,
+  2 GB in all, 4 GB of disk kept free; `DefaultLimitCORE=infinity` for both managers, since the soft limit is
+  otherwise 0 and no dump is stored; dumps go after two weeks). The programs that hold passwords
+  (`bande-lock`, `bande-greeter`, `bande-polkit`, `bande-secrets`, `bande-clipboard`) are not dumpable, so
+  only their panic text is recorded. `bande-crash-reports@.service` is a oneshot with no network, started
+  when each `systemd-coredump@` finishes, at boot and at each login, so nothing runs between failures. From a cursor into the
+  journal it writes reports of crashes (with the stack trace, panic text and the user's last log lines),
+  failed Bande services, a kernel panic that `systemd-pstore` saved and a boot that never reached
+  `shutdown.target`. They go to `/var/lib/bande/crash-reports/<uid>/`, owned by that user, or `system/` for
+  the `sudo` group, newest 200 each. Force Quit of a not-responding app and the keyboard's last resort send
+  `SIGQUIT` first and wait up to 8 s and 5 s, so a hang leaves a stack too. Settings ▸ General ▸ About ▸ Crash Reports
+  lists them, with Copy and Delete. Symbols are in [packaging](packaging.md).
+
+## Backups
+
+Time Machine's behaviour on a Debian engine; the choice is in `NOTES/plans/backup.md` while that is open.
+`crates/services/backup` builds three programs. `bande-backupd` is a system service
+(`org.bande.Backup`), root because a whole-system restore needs every file. It runs `restic` as a child
+and talks to it through exit codes and `--json`. A timer that exists once a disk is chosen, a udev rule
+for a new disk or mains power, and D-Bus start it; it exits after a minute with nothing to do.
+`bande-backup-alerts` is a session service that turns the service's `problem` into one notification.
+`bande-backup-restore` is for the recovery environment, without a bus.
+
+A repository is `BandeBackups/<machine-id>` on any filesystem, on any drive but the startup one. Two restic
+keys open it: a random one in `/var/lib/bande-backup/key` that runs the backups, and the password the person
+chose, for restoring when the machine is gone. The disk is mounted under `/run/bande-backup` only during work.
+
+Settings ▸ Backup holds the choice of disk and the status. Files browses `restic mount` at
+`/run/bande-backup-browse/versions/<time>`, read-only, with each file's old owner and mode enforced by
+the kernel, and restores by copying as the person. Nothing privileged runs on their behalf.
 
 ## Updates
 

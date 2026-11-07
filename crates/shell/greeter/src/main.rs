@@ -26,6 +26,7 @@ use bande_toolkit::{
     App, Appearance, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem,
     Window, WindowEvent,
 };
+use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use zeroize::Zeroizing;
 
 struct Conversation {
@@ -429,6 +430,7 @@ impl App for Greeter {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
+    set_dumpable_behavior(DumpableBehavior::NotDumpable)?;
     let users = login_users(&std::fs::read_to_string("/etc/passwd")?);
     let last_user = last_user_file(
         std::env::var_os("XDG_STATE_HOME")

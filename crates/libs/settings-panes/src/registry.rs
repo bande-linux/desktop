@@ -53,10 +53,12 @@ pub enum PaneId {
     About,
     Storage,
     SoftwareUpdate,
+    Backup,
+    CrashReports,
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 32] = [
+    const KEYWORDS: [(Self, &'static str); 34] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -89,6 +91,8 @@ impl PaneId {
         (Self::About, "about"),
         (Self::Storage, "storage"),
         (Self::SoftwareUpdate, "software-update"),
+        (Self::Backup, "backup"),
+        (Self::CrashReports, "crash-reports"),
     ];
 
     pub fn group(self) -> Option<Group> {
@@ -114,6 +118,7 @@ impl PaneId {
             | Self::PrivacySecurity
             | Self::Apps
             | Self::LanguageTime
+            | Self::Backup
             | Self::About => Some(Group::System),
             Self::KeyboardShortcuts
             | Self::NightLight
@@ -123,7 +128,8 @@ impl PaneId {
             | Self::ScreenSharing
             | Self::Location
             | Self::Storage
-            | Self::SoftwareUpdate => None,
+            | Self::SoftwareUpdate
+            | Self::CrashReports => None,
         }
     }
 
@@ -159,7 +165,9 @@ impl PaneId {
             Self::LanguageTime => "preferences-system-symbolic",
             Self::About => "computer-symbolic",
             Self::Storage => "drive-harddisk-symbolic",
+            Self::Backup => "document-open-recent-symbolic",
             Self::SoftwareUpdate => "view-refresh-symbolic",
+            Self::CrashReports => "dialog-warning-symbolic",
         }
     }
 
@@ -179,7 +187,7 @@ impl PaneId {
 
     pub fn parent(self) -> Option<Self> {
         match self {
-            Self::Storage | Self::SoftwareUpdate => Some(Self::About),
+            Self::Storage | Self::SoftwareUpdate | Self::CrashReports => Some(Self::About),
             Self::KeyboardShortcuts => Some(Self::Keyboard),
             Self::NightLight => Some(Self::Displays),
             Self::Camera
@@ -290,6 +298,7 @@ pub enum SettingId {
     LidOnPower,
     AppNotifications,
     SoftwareUpdates,
+    BackupStatus,
     Ethernet,
     EthernetAddress,
     EthernetRouter,
@@ -299,6 +308,8 @@ pub enum SettingId {
     Region,
     StoragePage,
     SoftwareUpdatePage,
+    CrashReportsPage,
+    CrashReportList,
     ShortcutsPage,
     ClipboardHistory,
     KeyboardAccess,
@@ -372,7 +383,9 @@ pub enum List {
     Shortcuts,
     About,
     Storage,
+    CrashReports,
     LargeFiles,
+    Backup,
     Clock,
     TimeZones,
     LoginItems,
@@ -1537,7 +1550,25 @@ fn system_panes() -> Vec<Pane> {
         permission_pane(Permission::ScreenSharing),
         permission_pane(Permission::Location),
         language_time_pane(),
+        pane(
+            PaneId::Backup,
+            vec![section(
+                None,
+                vec![list(SettingId::BackupStatus, "backup-status", List::Backup)],
+            )],
+        ),
         about_pane(),
+        pane(
+            PaneId::CrashReports,
+            vec![section(
+                None,
+                vec![list(
+                    SettingId::CrashReportList,
+                    "crash-report-list",
+                    List::CrashReports,
+                )],
+            )],
+        ),
         pane(
             PaneId::Storage,
             vec![
@@ -1758,6 +1789,7 @@ fn about_pane() -> Pane {
                 vec![
                     page(SettingId::StoragePage, PaneId::Storage),
                     page(SettingId::SoftwareUpdatePage, PaneId::SoftwareUpdate),
+                    page(SettingId::CrashReportsPage, PaneId::CrashReports),
                 ],
             ),
         ],

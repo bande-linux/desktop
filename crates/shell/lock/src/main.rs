@@ -17,6 +17,7 @@ use bande_toolkit::ui::frame_time;
 use bande_toolkit::{
     App, Image, Role, Scene, Scheme, TextSystem, Window, WindowError, WindowEvent,
 };
+use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use zeroize::Zeroizing;
 
 const ACCEPTED: u8 = 1;
@@ -277,6 +278,7 @@ fn config_text(property: &str) -> String {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
+    set_dumpable_behavior(DumpableBehavior::NotDumpable)?;
     let user = current_user()?;
     let picture = load_picture(user.login.clone(), PICTURE_PIXELS)
         .inspect_err(|error| tracing::warn!("cannot load the account picture: {error}"))

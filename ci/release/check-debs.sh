@@ -60,7 +60,7 @@ test -s "$root/usr/share/icons/hicolor/scalable/apps/org.bande.Files.svg"
 root=$(extract bande-settings)
 grep -qx 'Exec=bande-settings' "$root/usr/share/applications/org.bande.Settings.desktop"
 root=$(extract bande-greeter)
-grep -qx 'command = "/usr/bin/bande-compositor --greeter"' "$root/usr/share/bande-greeter/greetd-config.toml"
+grep -qx 'command = "/usr/libexec/bande-greeter-session"' "$root/usr/share/bande-greeter/greetd-config.toml"
 field bande-greeter Depends | grep -qF 'greetd (>= 0.10.3-6)'
 root=$(extract bande-lock)
 grep -qx '@include common-auth' "$root/etc/pam.d/bande-lock"

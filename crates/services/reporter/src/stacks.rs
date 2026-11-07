@@ -1,5 +1,6 @@
 use serde_json::{Value, json};
 
+use crate::elfcore::build_id_of_file;
 use crate::signature::Frame;
 
 #[derive(Default)]
@@ -76,6 +77,30 @@ fn parse_coredump_frame(line: &str) -> Option<ParsedFrame> {
         module: base_name(module).to_owned(),
         offset: u64::from_str_radix(offset.trim_start_matches("0x"), 16).ok()?,
     })
+}
+
+const SYSTEM_FOLDERS: [&str; 3] = ["/usr/", "/lib/", "/lib64/"];
+
+impl Stacks {
+    pub fn add_mapped_files(&mut self, files: &[String]) {
+        for file in files {
+            if !SYSTEM_FOLDERS.iter().any(|folder| file.starts_with(folder)) {
+                continue;
+            }
+            let Some(build_id) = build_id_of_file(file) else {
+                continue;
+            };
+            let name = base_name(file).to_owned();
+            match self.images.iter_mut().find(|image| image.name == name) {
+                Some(image) => image.build_id = Some(build_id),
+                None => self.images.push(Image {
+                    name,
+                    build_id: Some(build_id),
+                    package: None,
+                }),
+            }
+        }
+    }
 }
 
 pub fn parse_coredump(message: &str, crashed_tid: Option<u64>) -> Stacks {

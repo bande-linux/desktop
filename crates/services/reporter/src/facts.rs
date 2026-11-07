@@ -133,7 +133,7 @@ pub fn boot_id() -> String {
 
 pub fn boot_id_of(boot: &str) -> String {
     let offset: i32 = boot.parse().unwrap_or(0);
-    command_text("journalctl", &["--list-boots", "--no-pager", "--no-legend"])
+    command_text("journalctl", &["--list-boots", "--no-pager"])
         .lines()
         .find_map(|line| {
             let mut words = line.split_whitespace();

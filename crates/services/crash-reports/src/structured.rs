@@ -52,7 +52,13 @@ fn hang_already_reported(spool: &Spool, program: &str, time: Timestamp) -> bool 
 }
 
 fn crash(entry: &Entry, spool: &Spool, config: &Config) -> Result<(), Box<dyn Error>> {
-    let program = entry.field("COREDUMP_COMM").unwrap_or_default();
+    let program = entry
+        .field("COREDUMP_EXE")
+        .as_deref()
+        .and_then(|path| path.rsplit('/').next())
+        .map(str::to_owned)
+        .or_else(|| entry.field("COREDUMP_COMM"))
+        .unwrap_or_default();
     let pid = entry.field("COREDUMP_PID").unwrap_or_default();
     let signal = entry.field("COREDUMP_SIGNAL_NAME").unwrap_or_default();
     let time = entry
@@ -71,9 +77,6 @@ fn crash(entry: &Entry, spool: &Spool, config: &Config) -> Result<(), Box<dyn Er
     fault.pid = Some(pid.clone());
     fault.program = Some(program);
     fault.detail.insert("signal".to_owned(), json!(signal));
-    fault
-        .detail
-        .insert("packages_in_core".to_owned(), json!(entry.field("COREDUMP_PACKAGE_JSON")));
     fault.detail.insert(
         "unit".to_owned(),
         json!(
@@ -88,6 +91,7 @@ fn crash(entry: &Entry, spool: &Spool, config: &Config) -> Result<(), Box<dyn Er
     }
     let message = entry.field("MESSAGE").unwrap_or_default();
     let mut crashed_tid = None;
+    let mut mapped_files = Vec::new();
     if let Ok(mut dump) = Command::new("coredumpctl")
         .args(["dump", "--quiet", &pid])
         .stdin(Stdio::null())
@@ -98,7 +102,13 @@ fn crash(entry: &Entry, spool: &Spool, config: &Config) -> Result<(), Box<dyn Er
         if let Some(core) = dump.stdout.take() {
             match read_core(core, config.stack_memory) {
                 Ok((facts, slice)) => {
-                    crashed_tid = facts.crashed_tid;
+                    let sent_by_another = facts.signal_code.is_some_and(|code| code <= 0);
+                    crashed_tid = if sent_by_another {
+                        pid.parse().ok()
+                    } else {
+                        facts.crashed_tid
+                    };
+                    mapped_files.clone_from(&facts.mapped_files);
                     fault
                         .detail
                         .insert("registers".to_owned(), facts.registers_json());
@@ -127,6 +137,7 @@ fn crash(entry: &Entry, spool: &Spool, config: &Config) -> Result<(), Box<dyn Er
         }
     }
     fault.stacks = parse_coredump(&message, crashed_tid);
+    fault.stacks.add_mapped_files(&mapped_files);
     fault.signature_text = Some(signal);
     fault.store(spool, config, Path::new(SPOOL))?;
     Ok(())

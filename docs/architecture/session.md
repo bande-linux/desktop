@@ -766,7 +766,7 @@ what the one before could not save. What happens for each:
   apps?" before anything starts (`bande-shell --reopen-after-crash`, summoned by the compositor;
   the list stays until answered). An app that crashes posts "<App> quit unexpectedly"
   ([behaviour](behaviour.md)).
-- **The record**: every failure leaves one dated text report, which stays on this computer.
+- **The record**: every failure leaves one dated text report, which stays on this computer unless [sending](fault-reports.md) is switched on, and Settings shows which applies.
   `bande-desktop` depends on `systemd-coredump` (`coredump.conf.d/50-bande.conf`: up to 8 GB a dump,
   2 GB in all, 4 GB of disk kept free; `DefaultLimitCORE=infinity` for both managers, since the soft limit is
   otherwise 0 and no dump is stored; dumps go after two weeks). The programs that hold passwords

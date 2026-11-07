@@ -48,6 +48,7 @@ use bande_render::VulkanRenderer;
 use crate::clock::Vblank;
 use crate::cursor::{self, Cursor, CursorTheme};
 use crate::element::SurfaceElement;
+use crate::frame_callbacks::LatchedCallback;
 use crate::lock::Lock;
 use crate::motion::IconRect;
 use crate::scene::{BlurElement, Closing, FillElement, PieceElement, ShadowElement, WindowElement};
@@ -472,7 +473,7 @@ impl Compositor {
                 &root,
                 (),
                 |_, _, _| TraversalAction::DoChildren(()),
-                |_, states, _| {
+                |surface, states, _| {
                     latched.latched_feedback.append(
                         &mut states
                             .cached_state
@@ -480,12 +481,17 @@ impl Compositor {
                             .current()
                             .callbacks,
                     );
-                    latched.latched_frame_callbacks.append(
+                    let callbacks = std::mem::take(
                         &mut states
                             .cached_state
                             .get::<SurfaceAttributes>()
                             .current()
                             .frame_callbacks,
+                    );
+                    latched.latched_frame_callbacks.extend(
+                        callbacks
+                            .into_iter()
+                            .map(|callback| LatchedCallback::of(callback, surface, states)),
                     );
                     latched
                         .latched_releases
@@ -516,9 +522,13 @@ impl Compositor {
         presented.latched_releases.clear();
         let millis = (vblank.time.as_millis() % (1 << 32)) as u32;
         for callback in presented.latched_frame_callbacks.drain(..) {
-            callback.done(millis);
+            callback.send(millis);
         }
         self.state.confirm_lock(screen);
+        self.display.flush_clients()
+    }
+
+    pub(crate) fn flush_clients(&mut self) -> io::Result<()> {
         self.display.flush_clients()
     }
 

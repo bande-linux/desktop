@@ -644,6 +644,7 @@ fn run(assets: &Assets, wrong_before: bool) -> io::Result<String> {
     open_new_keyboards(&mut keyboards);
     let watch = watch_devices();
     let _console = Console::take();
+    screen.clear(0, 0, screen.width, screen.height);
     screen.mark();
     let (texts, scale) = if screen.large {
         (&assets.large, 2)

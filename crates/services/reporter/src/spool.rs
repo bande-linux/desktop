@@ -249,14 +249,22 @@ impl Spool {
     }
 
     pub fn waiting(&self) -> io::Result<Vec<String>> {
-        let mut waiting: Vec<(SystemTime, String)> = fs::read_dir(self.outbox())?
-            .flatten()
-            .filter_map(|entry| {
-                let name = entry.file_name().into_string().ok()?;
-                is_plain_name(&name).then_some(())?;
-                Some((entry.metadata().ok()?.modified().ok()?, name))
-            })
-            .collect();
+        let mut waiting: Vec<(SystemTime, String)> = Vec::new();
+        for entry in fs::read_dir(self.outbox())?.flatten() {
+            let name = entry.file_name();
+            match name.to_str().filter(|name| is_plain_name(name)) {
+                Some(name) => {
+                    if let Ok(modified) = entry.metadata().and_then(|metadata| metadata.modified()) {
+                        waiting.push((modified, name.to_owned()));
+                    }
+                }
+                None => {
+                    if let Err(error) = fs::remove_file(entry.path()) {
+                        tracing::warn!("cannot remove a stray file from the outbox: {error}");
+                    }
+                }
+            }
+        }
         waiting.sort();
         Ok(waiting.into_iter().map(|(_, name)| name).collect())
     }
@@ -326,6 +334,9 @@ impl Spool {
 
     pub fn settle(&self, id: &str, status: Status) -> io::Result<()> {
         let path = self.report_path(id)?;
+        if !path.is_dir() {
+            return self.unqueue(id);
+        }
         let mut state = Self::read_state(&path);
         let name = match status {
             Status::Sent => "sent",

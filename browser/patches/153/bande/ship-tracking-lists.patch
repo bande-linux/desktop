@@ -2,7 +2,16 @@ Read the Tracking Protection lists from the build instead of downloading them
 
 --- a/toolkit/components/url-classifier/UrlClassifierRemoteSettingsService.sys.mjs
 +++ b/toolkit/components/url-classifier/UrlClassifierRemoteSettingsService.sys.mjs
-@@ -75,7 +75,6 @@
+@@ -2,6 +2,8 @@
+  * License, v. 2.0. If a copy of the MPL was not distributed with this
+  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+ 
++Cu.importGlobalProperties(["fetch"]);
++
+ const lazy = {};
+ ChromeUtils.defineESModuleGetters(lazy, {
+   RemoteSettings: "resource://services-settings/remote-settings.sys.mjs",
+@@ -75,7 +77,6 @@
    async _getLists(aRequest, aListener) {
      await this.lazyInit();
  
@@ -10,7 +19,7 @@ Read the Tracking Protection lists from the build instead of downloading them
      let payload = "n:" + SBRS_UPDATE_MINIMUM_DELAY + "\n";
  
      let requests = this._parseRequest(aRequest);
-@@ -96,7 +95,10 @@
+@@ -96,7 +97,10 @@
        try {
          // SafeBrowsing maintains its own files, so we can remove the downloaded
          // files after SafeBrowsing processes the data.

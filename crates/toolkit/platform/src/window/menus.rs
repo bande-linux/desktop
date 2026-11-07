@@ -152,6 +152,7 @@ impl Window {
         };
         let parent = match &self.role {
             ShellSurface::Toplevel(xdg_surface, _) => Parent::Toplevel(xdg_surface.clone()),
+            ShellSurface::Popup(xdg_surface, _) => Parent::Popup(xdg_surface.clone()),
             ShellSurface::Layer(layer) => Parent::Layer(layer.clone()),
             ShellSurface::Lock(_) => {
                 return Err(WindowError::Missing("a surface that takes popups"));

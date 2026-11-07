@@ -37,6 +37,6 @@ pub use popup::MenuPlacement;
 pub use run::{App, Surfaces, Wait, run, run_surfaces, step_surfaces};
 pub use shell::{Anchor, AppWindow};
 pub use window::{
-    ACTIVATION_TOKEN_VARIABLE, Edges, FramePath, KeyDetail, KeyboardFocus, LayerKind, LayerOptions,
-    RENDERER_VARIABLE, Role, Sizing, ToplevelState, Window, WindowError, WindowEvent,
+    ACTIVATION_TOKEN_VARIABLE, Edges, FramePath, HostedPopup, KeyDetail, KeyboardFocus, LayerKind,
+    LayerOptions, RENDERER_VARIABLE, Role, Sizing, ToplevelState, Window, WindowError, WindowEvent,
 };

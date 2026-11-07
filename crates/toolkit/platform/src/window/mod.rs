@@ -43,6 +43,7 @@ use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActiva
 use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1;
 use wayland_protocols::xdg::foreign::zv2::client::zxdg_exporter_v2::ZxdgExporterV2;
 use wayland_protocols::xdg::foreign::zv2::client::zxdg_importer_v2::ZxdgImporterV2;
+use wayland_protocols::xdg::shell::client::xdg_popup::XdgPopup;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
@@ -54,6 +55,7 @@ pub use self::error::WindowError;
 pub use self::gpu::RENDERER_VARIABLE;
 use self::gpu::{Gpu, start_gpu};
 use self::hosted::Backdrop;
+pub use self::hosted::HostedPopup;
 pub use self::layer::{Edges, KeyboardFocus, LayerKind, LayerOptions};
 use self::layer::{anchor_of, keyboard_interactivity, layer_of};
 pub(crate) use self::shm::{ShmTarget, Target};
@@ -117,6 +119,7 @@ pub enum Role {
         tag: String,
         session: Option<WindowInSession>,
     },
+    HostedPopup(HostedPopup),
     Layer(LayerOptions),
     Lock,
 }
@@ -272,6 +275,8 @@ pub enum WindowEvent {
     Accessibility(ActionRequest),
     KeyDetail(KeyDetail),
     HostedResized((u32, u32)),
+    HostedMoved((i32, i32)),
+    PopupDismissed,
 
     AppearanceChanged(Appearance),
 }
@@ -429,13 +434,14 @@ impl State {
 
 enum ShellSurface {
     Toplevel(XdgSurface, XdgToplevel),
+    Popup(XdgSurface, XdgPopup),
     Layer(ZwlrLayerSurfaceV1),
     Lock(Locked),
 }
 
 fn for_role(role: &ShellSurface, appearance: Appearance) -> Appearance {
     match role {
-        ShellSurface::Toplevel(..) => appearance,
+        ShellSurface::Toplevel(..) | ShellSurface::Popup(..) => appearance,
         ShellSurface::Layer(_) | ShellSurface::Lock(_) => Appearance {
             text_size: TextSize::DEFAULT,
             ..appearance
@@ -575,14 +581,16 @@ impl Window {
         }
         let mut chrome = None;
         let panel = matches!(role, Role::Panel { .. });
-        let hosted = matches!(role, Role::Hosted { .. });
+        let hosted = matches!(role, Role::Hosted { .. } | Role::HostedPopup(_));
         let (titled, fixed) = match &role {
             Role::Dialog { .. } => (false, true),
             Role::Utility { .. } => (true, true),
             Role::Panel { .. } => (false, false),
-            Role::Toplevel { .. } | Role::Hosted { .. } | Role::Layer(_) | Role::Lock => {
-                (true, false)
-            }
+            Role::Toplevel { .. }
+            | Role::Hosted { .. }
+            | Role::HostedPopup(_)
+            | Role::Layer(_)
+            | Role::Lock => (true, false),
         };
         let role = match role {
             Role::Toplevel {
@@ -692,6 +700,23 @@ impl Window {
                 layer_surface.set_exclusive_zone(options.exclusive_zone);
                 layer_surface.set_keyboard_interactivity(keyboard_interactivity(options.keyboard));
                 ShellSurface::Layer(layer_surface)
+            }
+            Role::HostedPopup(placement) => {
+                let wm_base = state
+                    .wm_base
+                    .clone()
+                    .ok_or(WindowError::Missing("xdg_wm_base"))?;
+                let xdg_surface = wm_base.get_xdg_surface(&surface, &handle, ());
+                let positioner = placement.positioner(&wm_base, &handle, size);
+                let popup =
+                    xdg_surface.get_popup(Some(&placement.parent), &positioner, &handle, ());
+                positioner.destroy();
+                if placement.grab
+                    && let (Some(seat), Some(serial)) = (&state.seat, placement.serial)
+                {
+                    popup.grab(seat, serial);
+                }
+                ShellSurface::Popup(xdg_surface, popup)
             }
             Role::Lock => ShellSurface::Lock(Locked::lock(&mut state, &mut queue, &surface)?),
         };
@@ -1746,6 +1771,10 @@ impl Drop for Window {
         match &self.role {
             ShellSurface::Toplevel(xdg_surface, toplevel) => {
                 toplevel.destroy();
+                xdg_surface.destroy();
+            }
+            ShellSurface::Popup(xdg_surface, popup) => {
+                popup.destroy();
                 xdg_surface.destroy();
             }
             ShellSurface::Layer(layer_surface) => layer_surface.destroy(),

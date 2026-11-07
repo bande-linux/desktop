@@ -89,7 +89,9 @@ fn typed(layout: &str, variant: Option<&str>, script: &[&[u32]]) -> String {
         .expect("window");
         let text = Rc::new(RefCell::new(String::new()));
         let written = text.clone();
-        let field = TextField::new("", "", move |value| *written.borrow_mut() = value.to_owned());
+        let field = TextField::new("", "", move |value| {
+            *written.borrow_mut() = value.to_owned()
+        });
         let id = field.id();
         let mut ui = Ui::new(
             Box::new(field),
@@ -107,7 +109,7 @@ fn typed(layout: &str, variant: Option<&str>, script: &[&[u32]]) -> String {
 
     let mut frames = Frames::start();
     frames.run_until(&mut server, || has_focus.try_recv().is_ok());
-    for keys in script.iter().chain([&[KEY_ENTER].as_slice()].iter()) {
+    for keys in script.iter().copied().chain([[KEY_ENTER].as_slice()]) {
         chord(&mut server, keys);
         server.dispatch().expect("server dispatch");
     }

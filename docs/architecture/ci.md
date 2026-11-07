@@ -110,6 +110,16 @@ and saved only from runs on `main`, whose caches every branch and tag can read. 
 the .NET, Android and GHC installations they mount, and `build-debs.sh` builds the `dist`
 profile two crates at a time (`DIST_BUILD_JOBS`), so the fat-LTO links stay within memory.
 
+## The update test
+
+`ci/upgrade-test/run.sh <old-debs> <new-debs>` boots a throwaway Debian VM with QEMU and KVM, logs a
+user in on a headless compositor at the old version and upgrades with apt while it runs. The new
+build must take over the session services and ask for a logout, while the shell and lock screen,
+killed after the update, come back as the old build and stay up. The shell must reconnect after
+PipeWire restarts, and new Settings must run on the old compositor. It needs `qemu-system`,
+`mtools` and `/dev/kvm`, so it runs by hand on a build machine before a release (`BUILD_NO_MINI=1
+build-run <worktree> ci/upgrade-test/run.sh ...`); compare the new debs with the previous release's.
+
 ## Releasing
 
 1. Bump `[workspace.package] version` in `Cargo.toml` in a commit "Release X.Y.Z" and queue it

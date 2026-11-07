@@ -353,6 +353,19 @@ impl Dispatch<BandeAppV1, ()> for State {
             } if toplevel.client() == resource.client() => {
                 state.place_window(&toplevel, placement);
             }
+            bande_app_v1::Request::OfferPlacements {
+                toplevel,
+                offer: WEnum::Value(offer),
+            } if toplevel.client() == resource.client() => {
+                if let Some(surface) = state
+                    .windows
+                    .iter()
+                    .find(|window| window.toplevel.xdg_toplevel() == &toplevel)
+                    .map(|window| window.surface().clone())
+                {
+                    state.offer_placements(&surface, offer);
+                }
+            }
             bande_app_v1::Request::SetKeepOnTop { toplevel, keep }
                 if toplevel.client() == resource.client() =>
             {

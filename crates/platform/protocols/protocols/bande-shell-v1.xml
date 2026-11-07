@@ -551,7 +551,7 @@
     </event>
   </interface>
 
-  <interface name="bande_app_v1" version="6">
+  <interface name="bande_app_v1" version="7">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -713,6 +713,22 @@
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
       <arg name="seat" type="object" interface="wl_seat"/>
       <arg name="serial" type="uint"/>
+    </request>
+
+    <enum name="offer" since="7">
+      <entry name="resting" value="0" summary="the pointer rests on the control; the menu leaves with the pointer and takes no input from the window"/>
+      <entry name="held" value="1" summary="the button is held on the control; the menu takes the press like any menu"/>
+    </enum>
+
+    <request name="offer_placements" since="7">
+      <description summary="offer Move and Resize below a toplevel's zoom control">
+        Opens the compositor's Move and Resize menu below the zoom control of
+        the toolkit's title bar. Ignored unless the pointer is on that control,
+        the window can be resized and is not in full screen, and no window
+        menu is open.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="offer" type="uint" enum="offer"/>
     </request>
 
     <request name="set_panel" since="5">

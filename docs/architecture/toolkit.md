@@ -133,9 +133,13 @@ writes a hex value, a corner radius or a font name of its own.
     the title flush left after them in Manrope 15/20 bold (no separator line), and the content
     is a `sheet` inset 6 pt left, right and bottom, rounded 8 (concentric with the window's 14),
     with a `hairline` edge in dark mode. The controls are one 66×24 pill (`well`) with ×, − and
-    corner brackets always visible in `ink2`; over the pill they turn `ink`, and the close cell
-    alone gets a red disc with a white ×. A press shows an `ink` disc at 12 %. In inactive
-    windows the pill is a `hairline` outline with `ink3` glyphs. The zoom glyph turns inward
+    corner brackets in `ink2`, and the menu button its own 24×24 `well` beside it. Each control
+    is its own button with the same 18 pt disc: pointing at one fades in a backfill of `ink` at
+    12 % and turns its glyph `ink` (the close control a `danger` disc with an `on_danger` ×), and
+    a press deepens it to 22 % (`danger` darkened by 15 %). A disabled zoom (fixed-size windows)
+    has a faded glyph and no hover or press. In inactive windows the wells are a `hairline`
+    outline with `ink3` glyphs; hover and press work the same, since a click on an inactive
+    window's control acts at once. The zoom glyph turns inward
     while the window is zoomed; with Alt held it shows + and Alt-click enters full screen. The
     hit cells cover the pill's full height and the close cell reaches the window's left edge.
     Rounded corners (14 pt), the 55 % `edge` ring and the shadow pair are the compositor's, cut
@@ -155,7 +159,9 @@ writes a hex value, a corner radius or a font name of its own.
     content then also covers the header (`Window::header_height` is 0 in full screen), the
     toolkit draws the title at `title_x` (clipped before the next item), presses on `items`
     (content coordinates) go to the app, and the rest of the header still moves, zooms and
-    opens the window menu. The header and its buttons are published to screen readers above the app's tree. Server-side frames
+    opens the window menu. The first item starts at `HEADER_LEADING`, the same place a plain
+    title starts. A strip or toolbar in a row below the header names its free space with
+    `Window::set_move_areas` (content coordinates), which then behaves as the header does. The header and its buttons are published to screen readers above the app's tree. Server-side frames
     for third-party apps (`compositor/src/frame.rs`) draw the same header and pill from
     `title_bar.rs`, 40 pt high, and redraw when Alt is pressed or released so the zoom glyph
     follows it.
@@ -298,7 +304,7 @@ writes a hex value, a corner radius or a font name of its own.
   Reduce Motion (`reduced-motion` of `org.freedesktop.appearance`, in
   `Appearance::reduce_motion`, applied by `Ui::set_appearance`) every spring but `FADE` jumps
   to its target, so movement is gone and fades stay. Switches slide their knob and blend their
-  track; the window controls' symbols fade in.
+  track; the window controls' backfills fade in.
 - **Accessibility.** Every widget produces an AccessKit node: role, label or value, bounds,
   toggled state or numeric range, and its actions. `Ui::accessibility` returns the `TreeUpdate`
   with the focus, and `Ui::perform` carries out Focus, Click, SetValue, Increment, Decrement,

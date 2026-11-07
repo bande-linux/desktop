@@ -436,7 +436,7 @@ impl Compositor {
         };
         if !pointer.is_grabbed() {
             let pointed = target.as_ref().and_then(Target::frame);
-            state.point_at_frame(location, pointed, under.is_some());
+            state.point_at_frame(pointed, under.is_some());
             let under_client = under
                 .as_ref()
                 .and_then(|(surface, _)| surface.client())
@@ -665,7 +665,10 @@ impl State {
                     state.held_shortcut_keys.push(evdev_code);
                     return FilterResult::Intercept(Some(Shortcut::CancelGrab));
                 }
-                if state.window_menus.is_open() && !modifiers.logo && !sym.is_modifier_key() {
+                if state.window_menus.takes_key(sym.raw())
+                    && !modifiers.logo
+                    && !sym.is_modifier_key()
+                {
                     state.held_shortcut_keys.push(evdev_code);
                     return FilterResult::Intercept(Some(Shortcut::MenuKey(
                         sym.raw(),

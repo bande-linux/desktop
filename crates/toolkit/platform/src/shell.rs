@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bande_protocols::client::bande_app_control_v1::{self, BandeAppControlV1};
-use bande_protocols::client::bande_app_v1::{self, BandeAppV1, Placement};
+use bande_protocols::client::bande_app_v1::{self, BandeAppV1, Offer, Placement};
 use bande_protocols::client::bande_shell_v1::{self, BandeShellV1, SessionEnd};
 use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_created_child};
@@ -24,6 +24,7 @@ pub(crate) const END_SESSION_SINCE: u32 = 3;
 pub(crate) const MENU_BUTTON_SINCE: u32 = 4;
 pub(crate) const PANEL_SINCE: u32 = 5;
 pub(crate) const PANEL_ORIGIN_SINCE: u32 = 6;
+pub(crate) const OFFER_PLACEMENTS_SINCE: u32 = 7;
 pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
 
 struct Toplevel {
@@ -341,6 +342,14 @@ impl Window {
 
     pub(crate) fn place(&mut self, placement: Placement) -> Result<(), WindowError> {
         self.app()?.place_window(self.toplevel()?, placement);
+        self.flush()
+    }
+
+    pub(crate) fn request_placements(&mut self, offer: Offer) -> Result<(), WindowError> {
+        let app = self.app()?;
+        if app.version() >= OFFER_PLACEMENTS_SINCE {
+            app.offer_placements(self.toplevel()?, offer);
+        }
         self.flush()
     }
 

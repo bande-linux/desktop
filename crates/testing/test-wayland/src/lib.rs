@@ -13,8 +13,9 @@ mod separate;
 mod shell;
 mod toplevel;
 
+use std::fs::File;
 use std::io::Write;
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 
 pub use bande_compositor::Compositor;
@@ -25,6 +26,10 @@ use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, delegate_noop};
+use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_buffer_params_v1::{
+    Flags, ZwpLinuxBufferParamsV1,
+};
+use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
 use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::{self, XdgWmBase};
@@ -72,6 +77,17 @@ struct Globals {
     lock: lock::SessionLock,
     input_method: ime::InputMethod,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct Nv12Frame {
+    pub width: u32,
+    pub height: u32,
+    pub luma: u8,
+    pub blue_difference: u8,
+    pub red_difference: u8,
+}
+
+const NV12_PAGE: usize = 64 * 1024;
 
 pub struct TestClient {
     connection: Connection,
@@ -152,6 +168,60 @@ impl TestClient {
         surface.attach(Some(&buffer), 0, 0);
         surface.damage_buffer(x, y, width, height);
         surface.commit();
+    }
+
+    pub fn show_nv12(&mut self, server: &mut Compositor, nv12: &Nv12Frame) -> bool {
+        let Ok(device) = File::options().read(true).write(true).open("/dev/udmabuf") else {
+            return false;
+        };
+        let (width, height) = (nv12.width as usize, nv12.height as usize);
+        let luma = width * height;
+        let size = (luma + luma / 2).next_multiple_of(NV12_PAGE);
+        let name = c"bande-test-nv12";
+        let memory = unsafe {
+            libc::memfd_create(name.as_ptr(), libc::MFD_ALLOW_SEALING | libc::MFD_CLOEXEC)
+        };
+        assert!(memory >= 0, "memfd");
+        let mut file = File::from(unsafe { OwnedFd::from_raw_fd(memory) });
+        file.set_len(size as u64).expect("memfd size");
+        let mut bytes = vec![nv12.luma; luma];
+        bytes.extend([nv12.blue_difference, nv12.red_difference].repeat(luma / 4));
+        file.write_all(&bytes).expect("memfd write");
+        assert_eq!(
+            unsafe { libc::fcntl(memory, libc::F_ADD_SEALS, libc::F_SEAL_SHRINK) },
+            0
+        );
+        let request = [memory as u32, 1, 0, 0, size as u32, 0];
+        let dmabuf = unsafe { libc::ioctl(device.as_raw_fd(), 0x4018_7542, request.as_ptr()) };
+        assert!(dmabuf >= 0, "udmabuf");
+        let dmabuf = unsafe { OwnedFd::from_raw_fd(dmabuf) };
+        let qh = self.queue.handle();
+        let manager: ZwpLinuxDmabufV1 = self.bind("zwp_linux_dmabuf_v1", 3);
+        let params = manager.create_params(&qh, ());
+        params.add(dmabuf.as_fd(), 0, 0, nv12.width, 0, 0);
+        params.add(dmabuf.as_fd(), 1, luma as u32, nv12.width, 0, 0);
+        let buffer = params.create_immed(
+            nv12.width as i32,
+            nv12.height as i32,
+            u32::from_le_bytes(*b"NV12"),
+            Flags::empty(),
+            &qh,
+            (),
+        );
+        let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
+        let surface = compositor.create_surface(&qh, ());
+        let wm_base = self.globals.wm_base.as_ref().expect("xdg_wm_base");
+        let xdg_surface = wm_base.get_xdg_surface(&surface, &qh, ());
+        let toplevel = xdg_surface.get_toplevel(&qh, ());
+        self.globals.configured = false;
+        surface.commit();
+        self.exchange(server);
+        surface.attach(Some(&buffer), 0, 0);
+        surface.damage_buffer(0, 0, nv12.width as i32, nv12.height as i32);
+        surface.commit();
+        self.exchange(server);
+        self.windows.push((surface, xdg_surface, toplevel));
+        true
     }
 
     pub(crate) fn shm_buffer(&self, image: &ShmImage) -> WlBuffer {
@@ -249,6 +319,8 @@ impl Dispatch<XdgSurface, ()> for Globals {
     }
 }
 
+delegate_noop!(Globals: ignore ZwpLinuxDmabufV1);
+delegate_noop!(Globals: ignore ZwpLinuxBufferParamsV1);
 delegate_noop!(Globals: WlCompositor);
 delegate_noop!(Globals: WlShmPool);
 delegate_noop!(Globals: ignore WlShm);

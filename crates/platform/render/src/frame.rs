@@ -385,6 +385,25 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         }
     }
 
+    fn push_chroma(&mut self, view: vk::ImageView) {
+        let image_info = vk::DescriptorImageInfo::default()
+            .image_view(view)
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+        let write = vk::WriteDescriptorSet::default()
+            .dst_binding(2)
+            .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+            .image_info(slice::from_ref(&image_info));
+        unsafe {
+            self.renderer.push_descriptor.cmd_push_descriptor_set(
+                self.renderer.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.renderer.pipeline_layout,
+                0,
+                slice::from_ref(&write),
+            );
+        }
+    }
+
     fn push_texture(&mut self, view: vk::ImageView) {
         let image_info = vk::DescriptorImageInfo::default()
             .image_view(view)
@@ -668,7 +687,21 @@ impl Frame for VulkanFrame<'_, '_> {
         if rects.is_empty() {
             return Ok(());
         }
-        self.bind(Program::Texture)?;
+        let chroma = texture.chroma.as_ref().and_then(|chroma| {
+            self.renderer
+                .textures
+                .get(&chroma.id)
+                .filter(|image| image.readable)
+                .map(|image| image.image.view)
+        });
+        match (texture.chroma.is_some(), chroma) {
+            (true, None) => return Ok(()),
+            (true, Some(chroma)) => {
+                self.bind(Program::Video)?;
+                self.push_chroma(chroma);
+            }
+            (false, _) => self.bind(Program::Texture)?,
+        }
         self.push_texture(view);
         self.draw(
             &Quad {

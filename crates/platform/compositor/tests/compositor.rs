@@ -12,7 +12,7 @@ use bande_test_wayland::keys::{
     BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_LEFTALT, KEY_LEFTCTRL,
 };
 use bande_test_wayland::{
-    BLUE, ConstraintAdjustment, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
+    BLUE, ConstraintAdjustment, Nv12Frame, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
     act_as_separate_app, chord, headless, roundtrip,
 };
 use wayland_client::protocol::wl_shm::Format;
@@ -199,4 +199,40 @@ fn a_hung_app_is_force_quit_from_the_keyboard() {
             .iter()
             .all(|(key, _)| ![KEY_ESC, KEY_DOWN, KEY_ENTER].contains(key))
     );
+}
+
+#[test]
+fn an_nv12_video_buffer_shows_its_colour() {
+    let mut server = headless(400, 300);
+    let mut renderer = bande_compositor::Renderer::new().expect("Vulkan renderer");
+    let mut client = TestClient::connect(&mut server);
+    let red = Nv12Frame {
+        width: 128,
+        height: 96,
+        luma: 63,
+        blue_difference: 102,
+        red_difference: 240,
+    };
+    if !client.show_nv12(&mut server, &red) {
+        return;
+    }
+    let mut seen = Vec::new();
+    for _ in 0..50 {
+        renderer.render(&mut server).expect("render");
+        client.exchange(&mut server);
+        let snapshot = renderer.snapshot(&server).expect("snapshot");
+        seen = snapshot.rgba;
+        if seen
+            .chunks_exact(4)
+            .any(|pixel| pixel[0] > 240 && pixel[1] < 20 && pixel[2] < 20)
+        {
+            return;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    let brightest = seen
+        .chunks_exact(4)
+        .max_by_key(|pixel| pixel[0])
+        .map(<[u8]>::to_vec);
+    panic!("no red in the frame, brightest {brightest:?}");
 }

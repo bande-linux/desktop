@@ -150,9 +150,9 @@ fn serve(requests: &Receiver<SpellRequest>, replier: &Replier) {
                 let (connection, replier) = (connection.clone(), replier.clone());
                 thread::spawn(move || suggest(connection, word, replier));
             }
-            SpellRequest::Correct(word) => {
+            SpellRequest::Correct(word, sentence_start) => {
                 let found = proxy
-                    .call::<_, _, String>("Correction", &(&word,))
+                    .call::<_, _, String>("Correction", &(&word, sentence_start))
                     .unwrap_or_default();
                 replier.send(SpellReply::Corrected(word, found));
             }

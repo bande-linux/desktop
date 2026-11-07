@@ -550,6 +550,21 @@ password-delete-ellipsis = Delete…
 password-delete = Delete
 password-delete-question = Delete “{ $name }”?
 password-delete-warning = The app that saved it will ask for the password again.
+no-crash-reports = Nothing has crashed
+crash-report-title = { $program }: { $kind }
+crash-report-count = { $count ->
+    [0] None
+    [one] One report
+   *[other] { $count } reports
+}
+crash-report-copy = Copy
+crash-report-delete = Delete
+crash-report-delete-failed = The report could not be deleted.
+crash-kind-crash = Crash
+crash-kind-not-responding = Not responding
+crash-kind-failed = Failed to run
+crash-kind-kernel-panic = Kernel panic
+crash-kind-unexpected-restart = Restart without a clean shutdown
 sharing-remote-login = Remote Login
 sharing-remote-login-detail = Others with an account on this computer can sign in with SSH
 sharing-file-sharing = File Sharing

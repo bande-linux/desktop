@@ -1,0 +1,53 @@
+[package]
+name = "bande-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+bande-compositor = { path = "../crates/platform/compositor" }
+bande-config = { path = "../crates/services/config" }
+bande-content = { path = "../crates/libs/content" }
+bande-edid = { path = "../crates/libs/edid" }
+bande-polkit = { path = "../crates/services/polkit" }
+bande-secrets = { path = "../crates/services/secrets" }
+bande-xdg = { path = "../crates/libs/xdg" }
+
+[[bin]]
+name = "wayland_wire"
+path = "fuzz_targets/wayland_wire.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "file_preview"
+path = "fuzz_targets/file_preview.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "text_formats"
+path = "fuzz_targets/text_formats.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "config_files"
+path = "fuzz_targets/config_files.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "privileged_lines"
+path = "fuzz_targets/privileged_lines.rs"
+test = false
+doc = false
+
+[profile.release]
+debug = "line-tables-only"

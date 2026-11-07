@@ -340,7 +340,7 @@ impl Group {
                 DateGroup::PreviousWeek => "group-previous-week",
                 DateGroup::PreviousMonth => "group-previous-month",
                 DateGroup::Month(Reverse(month)) => {
-                    return jiff::civil::date(2000, month, 1).strftime("%B").to_string();
+                    return crate::DATES.month_name(month);
                 }
                 DateGroup::Year(Reverse(year)) => return year.to_string(),
                 DateGroup::Undated => "group-undated",

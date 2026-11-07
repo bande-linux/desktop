@@ -50,6 +50,12 @@ impl Block {
     }
 }
 
+pub struct PrintedBlock {
+    pub indent: f32,
+    pub marker: Option<Paragraph>,
+    pub paragraph: Paragraph,
+}
+
 pub(super) fn bounds(rect: parley::BoundingBox) -> Rect {
     Rect::new(
         rect.x0 as f32,
@@ -218,6 +224,22 @@ impl Editor {
         };
         layout.align(alignment, AlignmentOptions::default());
         layout
+    }
+
+    pub(crate) fn print_blocks(&self, text: &mut TextSystem) -> Vec<PrintedBlock> {
+        (0..self.blocks.len())
+            .map(|paragraph| PrintedBlock {
+                indent: self.left(paragraph),
+                marker: self.marker(text, paragraph),
+                paragraph: self.build_with_text(text, paragraph),
+            })
+            .collect()
+    }
+
+    fn build_with_text(&self, text: &mut TextSystem, paragraph: usize) -> Paragraph {
+        let shaped = self.build(text, paragraph);
+        let content = self.layout_text(paragraph).replace('\t', " ");
+        shaped.with_text(&content)
     }
 
     fn build(&self, text: &mut TextSystem, paragraph: usize) -> Paragraph {

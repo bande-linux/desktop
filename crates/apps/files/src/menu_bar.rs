@@ -199,6 +199,7 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 Entry::separator(),
                 submenu("menu-recent-folders", recent_entries(recent_folders)),
                 shortcut("menu-go-to-folder", "Ctrl+L"),
+                shortcut("menu-connect-to-server", "Ctrl+K"),
             ],
         ),
     ];

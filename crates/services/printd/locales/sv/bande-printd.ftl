@@ -1,0 +1,16 @@
+app-name = Utskrift
+job-failed = ”{ $title }” skrevs inte ut
+job-lost = Dokumentet försvann innan det hann skickas.
+printer-gone = Skrivaren är inte längre känd.
+printer-identity-changed = Skrivarens identitet har ändrats, så dokumentet skickades inte. Om skrivaren har bytts ut eller återställts tar du bort den i Inställningar ▸ Skrivare och försöker igen.
+printer-unreachable = Väntar på att skrivaren ska komma tillbaka
+printer-busy = Skrivaren är upptagen
+printer-cannot-take-document = Skrivaren kan inte ta emot den här typen av dokument.
+trouble-media-empty = Skrivaren har slut på papper.
+trouble-media-needed = Skrivaren behöver papper.
+trouble-media-jam = Papperet har fastnat.
+trouble-toner-empty = Skrivaren har slut på toner.
+trouble-marker-supply-empty = Skrivaren har slut på bläck.
+trouble-door-open = En lucka på skrivaren är öppen.
+trouble-cover-open = Skrivarens lock är öppet.
+trouble-paused = Skrivaren är pausad.

@@ -5,6 +5,7 @@ mod listing;
 mod naming;
 mod operations;
 mod ops;
+mod partial;
 mod permissions;
 mod trash;
 mod undo;
@@ -35,6 +36,7 @@ pub use ops::{
     RenameError, Report, Resolution, Shortfall, Task, archive_contents, archive_path, can_extract,
     make_alias, new_document, new_folder, rename,
 };
+pub use partial::is_partial;
 pub use permissions::{Access, Class, access, runnable, set_mode, with_access, with_runnable};
 pub use trash::{Trash, TrashDir, TrashItem};
 pub use undo::{Action, History, Step};

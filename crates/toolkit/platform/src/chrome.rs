@@ -1,8 +1,8 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use bande_graphics::{
     Color, ControlHover, Cut, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene,
-    Shape, TextAlign, TextStyle, TextSystem, TitleBar, menu_button_area, past_drag_slop,
-    resize_zone, shortened, title_style,
+    Shape, TextAlign, TextStyle, TextSystem, TitleBar, WindowControls, menu_button_area,
+    past_drag_slop, resize_zone, shortened, title_style,
 };
 
 use std::time::Instant;
@@ -490,21 +490,23 @@ impl Chrome {
         items.extend(
             TitleBar {
                 width: frame.width,
-                height: frame.title,
                 title,
-                palette,
-                active: look.active,
-                hover: ControlHover {
-                    close,
-                    minimize,
-                    zoom,
-                    menu,
+                controls: WindowControls {
+                    height: frame.title,
+                    palette,
+                    active: look.active,
+                    hover: ControlHover {
+                        close,
+                        minimize,
+                        zoom,
+                        menu,
+                    },
+                    pressed: self.pressed.filter(|_| self.pressed_inside),
+                    zoomed: look.zoomed,
+                    zoomable: !self.fixed,
+                    alternate: self.alternate && look.active,
+                    menu_open: frame.menu_button().map(|_| self.menu_open),
                 },
-                pressed: self.pressed.filter(|_| self.pressed_inside),
-                zoomed: look.zoomed,
-                zoomable: !self.fixed,
-                alternate: self.alternate && look.active,
-                menu_open: frame.menu_button().map(|_| self.menu_open),
             }
             .items(),
         );

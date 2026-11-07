@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::os::fd::OwnedFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -17,6 +16,9 @@ pub const RUNNING: u32 = 1;
 
 const SCREENSAVER: &str = "org.freedesktop.ScreenSaver";
 const SCREENSAVER_PATH: &str = "/org/freedesktop/ScreenSaver";
+const POWER: &str = "org.bande.Power";
+const POWER_PATH: &str = "/org/bande/Power";
+const KEEP_AWAKE: &str = "org.bande.Power.KeepAwake";
 const INTERFACE: &str = "org.freedesktop.impl.portal.Inhibit";
 
 type Options = HashMap<String, OwnedValue>;
@@ -29,7 +31,6 @@ fn lock(monitors: &Monitors) -> MutexGuard<'_, HashSet<OwnedObjectPath>> {
 #[derive(Clone)]
 pub struct Inhibit {
     session: zbus::Connection,
-    system: Option<zbus::Connection>,
     locked: Arc<AtomicBool>,
     monitors: Monitors,
 }
@@ -57,7 +58,6 @@ impl Inhibit {
     ) -> zbus::Result<()> {
         let inhibit = Self {
             session: session.inner().clone(),
-            system: system.map(|system| system.inner().clone()),
             locked: Arc::default(),
             monitors: Monitors::default(),
         };
@@ -107,20 +107,19 @@ impl Inhibit {
             .ok()
     }
 
-    async fn hold_sleep(&self, app: &str, reason: &str) -> Option<OwnedFd> {
-        let system = self.system.as_ref()?;
-        let reply = system
+    async fn keep_awake(&self, app: &str, reason: &str) -> Option<u32> {
+        let reply = self
+            .session
             .call_method(
-                Some("org.freedesktop.login1"),
-                "/org/freedesktop/login1",
-                Some("org.freedesktop.login1.Manager"),
-                "Inhibit",
-                &("sleep", app, reason, "block"),
+                Some(POWER),
+                POWER_PATH,
+                Some(KEEP_AWAKE),
+                "Hold",
+                &(app, reason),
             )
             .await
-            .and_then(|reply| reply.body().deserialize::<zbus::zvariant::OwnedFd>());
+            .and_then(|reply| reply.body().deserialize::<u32>());
         reply
-            .map(OwnedFd::from)
             .inspect_err(|error| {
                 tracing::warn!("cannot keep the computer awake for {app}: {error}")
             })
@@ -132,7 +131,7 @@ struct Inhibition {
     session: zbus::Connection,
     path: OwnedObjectPath,
     cookie: Option<u32>,
-    _sleep: Option<OwnedFd>,
+    awake: Option<u32>,
 }
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Request")]
@@ -146,6 +145,18 @@ impl Inhibition {
                     SCREENSAVER_PATH,
                     Some(SCREENSAVER),
                     "UnInhibit",
+                    &cookie,
+                )
+                .await;
+        }
+        if let Some(cookie) = self.awake {
+            let _ = self
+                .session
+                .call_method(
+                    Some(POWER),
+                    POWER_PATH,
+                    Some(KEEP_AWAKE),
+                    "Release",
                     &cookie,
                 )
                 .await;
@@ -197,9 +208,9 @@ impl Inhibit {
             0 => None,
             _ => self.hold_idle(&app, &reason).await,
         };
-        let sleep = match flags & SUSPEND {
+        let awake = match flags & SUSPEND {
             0 => None,
-            _ => self.hold_sleep(&app, &reason).await,
+            _ => self.keep_awake(&app, &reason).await,
         };
         server
             .at(
@@ -208,7 +219,7 @@ impl Inhibit {
                     session: self.session.clone(),
                     path: OwnedObjectPath::from(handle.to_owned()),
                     cookie,
-                    _sleep: sleep,
+                    awake,
                 },
             )
             .await?;

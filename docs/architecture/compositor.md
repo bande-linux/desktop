@@ -67,6 +67,7 @@ when they reach the screen is Bande's own.
   | Papers (libadwaita) | KDE manager, no decoration | none | its own |
   | Firefox ESR, title bar on (`browser.tabs.inTitlebar` 0) | KDE | server | ours |
   | Firefox ESR, default (tabs in the title bar) | KDE | client | its own |
+  | Bande's Browser (`org.bande.Browser`, tabs in the title bar) | KDE | client | its own row, our control well over it |
   | VS Code 1.144, `window.titleBarStyle` `custom` (default) | `xdg-decoration` | client | its own |
   | VS Code 1.144, `native` | `xdg-decoration` | server | ours, menus in a row below |
   | Claude Desktop main window | `xdg-decoration` | client | its own |
@@ -85,6 +86,13 @@ when they reach the screen is Bande's own.
   no room outside, so the compositor takes a 3 pt band inside it before any client
   (`walled_resize_zone`); a top side there has none, and a press on it moves the window. A
   window never opens with its title bar above the top of the screen.
+- **Controls over the Browser's own row.** A client-side window of `org.bande.Browser` keeps its
+  tabs in its top row and has no title bar of ours; the compositor draws only the control well
+  (`WindowControls` in `bande-graphics`) over the first 78 pt of a 48 pt row, in front of the
+  client's surfaces and behind its popups, and takes the presses there with the same code as a
+  title bar. Everything else in the row is the client's, so free tab-row space stays its own
+  move request. Full screen removes the well. The rule is the app id plus client-side, so a build
+  that asks for server-side gets a normal title bar, and any other Firefox is left alone.
 - **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers with the
   LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche
   of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that

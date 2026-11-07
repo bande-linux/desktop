@@ -182,7 +182,7 @@ impl Casting {
         let source = source_of(id)?;
         let stream = self.next_stream.fetch_add(1, Ordering::Relaxed);
         let (cast, started) = Cast::new(&L10N.tr("stream-name")).ok()?;
-        self.engine.stream(stream, source, cursor, cast.sink());
+        self.engine.stream(stream, source, cursor, cast.pool());
         let Some(started) = Cast::started(&started) else {
             self.engine.stop(stream);
             return None;

@@ -1,5 +1,8 @@
 use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque};
+use std::fs::File;
 use std::io;
+use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -12,22 +15,32 @@ use pw::spa;
 use pw::spa::param::ParamType;
 use pw::spa::param::format::{FormatProperties, MediaSubtype, MediaType};
 use pw::spa::param::video::{VideoFormat, VideoInfoRaw};
-use pw::spa::pod::{ChoiceValue, Object, Pod, Property, Value};
+use pw::spa::pod::{ChoiceValue, Object, Pod, Property, PropertyFlags, Value};
 use pw::spa::utils::{Choice, ChoiceEnum, ChoiceFlags, Fraction, Rectangle, SpaTypes};
 use pw::stream::{StreamFlags, StreamListener, StreamRc, StreamState};
-
-use crate::engine::FrameSink;
+use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, memfd_create};
 
 const BYTES_PER_PIXEL: u32 = 4;
+const STRIDE_ALIGNMENT: u32 = 64;
 const MOST_FRAMES_PER_SECOND: u32 = 60;
 const BUFFERS: i32 = 4;
 const START_TIMEOUT: Duration = Duration::from_secs(5);
 const RETRY: Duration = Duration::from_millis(50);
+const UDMABUF_DEVICE: &str = "/dev/udmabuf";
+const UDMABUF_CREATE: libc::c_ulong = 0x4018_7542;
+const UDMABUF_CLOEXEC: u32 = 1;
 
-type Picture = (u32, u32, Vec<u8>);
+#[repr(C)]
+struct UdmabufCreate {
+    memfd: u32,
+    flags: u32,
+    offset: u64,
+    size: u64,
+}
 
 enum Message {
-    Picture,
+    Size(u32, u32),
+    Present(u32),
     Stop,
 }
 
@@ -38,43 +51,98 @@ pub struct Started {
     pub height: u32,
 }
 
-pub struct Cast {
+pub struct SharedBuffer {
+    pub slot: u32,
+    pub memory: File,
+    pub dmabuf: Option<OwnedFd>,
+    pub width: u32,
+    pub height: u32,
+    pub stride: u32,
+}
+
+#[derive(Default)]
+pub struct PoolChanges {
+    pub added: Vec<SharedBuffer>,
+    pub removed: Vec<u32>,
+    pub restarted: bool,
+}
+
+#[derive(Default)]
+struct Shelf {
+    changes: PoolChanges,
+    free: VecDeque<u32>,
+}
+
+type Notify = Box<dyn Fn() + Send>;
+
+#[derive(Clone)]
+pub struct CastPool {
     messages: pw::channel::Sender<Message>,
-    latest: Arc<Mutex<Option<Picture>>>,
+    shelf: Arc<Mutex<Shelf>>,
+    notify: Arc<Mutex<Option<Notify>>>,
+}
+
+impl CastPool {
+    pub fn on_change(&self, notify: Notify) {
+        *self.notify.lock().unwrap_or_else(PoisonError::into_inner) = Some(notify);
+    }
+
+    pub fn set_size(&self, width: u32, height: u32) {
+        let _ = self.messages.send(Message::Size(width, height));
+    }
+
+    pub fn present(&self, slot: u32) {
+        let _ = self.messages.send(Message::Present(slot));
+    }
+
+    pub fn changes(&self) -> PoolChanges {
+        std::mem::take(&mut lock(&self.shelf).changes)
+    }
+
+    pub fn next_free(&self) -> Option<u32> {
+        lock(&self.shelf).free.pop_front()
+    }
+
+    pub fn give_back(&self, slot: u32) {
+        lock(&self.shelf).free.push_front(slot);
+    }
+
+    fn changed(&self) {
+        if let Some(notify) = &*self.notify.lock().unwrap_or_else(PoisonError::into_inner) {
+            notify();
+        }
+    }
+}
+
+fn lock(shelf: &Mutex<Shelf>) -> std::sync::MutexGuard<'_, Shelf> {
+    shelf.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+pub struct Cast {
+    pool: CastPool,
 }
 
 impl Cast {
     pub fn new(name: &str) -> io::Result<(Self, mpsc::Receiver<Started>)> {
         let (messages, receiver) = pw::channel::channel();
         let (started, started_receiver) = mpsc::channel();
-        let latest = Arc::new(Mutex::new(None));
-        let pictures = Arc::clone(&latest);
+        let pool = CastPool {
+            messages,
+            shelf: Arc::default(),
+            notify: Arc::default(),
+        };
+        let served = pool.clone();
         let name = name.to_owned();
         thread::Builder::new().name("cast".into()).spawn(move || {
-            if let Err(error) = serve(&name, receiver, pictures, started) {
+            if let Err(error) = serve(&name, receiver, served, started) {
                 tracing::warn!("cannot share the screen through PipeWire: {error}");
             }
         })?;
-        Ok((Self { messages, latest }, started_receiver))
+        Ok((Self { pool }, started_receiver))
     }
 
-    pub fn sink(&self) -> FrameSink {
-        let messages = self.messages.clone();
-        let latest = Arc::clone(&self.latest);
-        Box::new(move |width, height, bgra| {
-            let mut slot = latest.lock().unwrap_or_else(PoisonError::into_inner);
-            let woken = slot.is_some();
-            match slot.as_mut() {
-                Some((w, h, pixels)) if (*w, *h) == (width, height) => {
-                    pixels.copy_from_slice(bgra);
-                }
-                _ => *slot = Some((width, height, bgra.to_vec())),
-            }
-            drop(slot);
-            if !woken {
-                let _ = messages.send(Message::Picture);
-            }
-        })
+    pub fn pool(&self) -> CastPool {
+        self.pool.clone()
     }
 
     pub fn started(receiver: &mpsc::Receiver<Started>) -> Option<Started> {
@@ -84,7 +152,7 @@ impl Cast {
 
 impl Drop for Cast {
     fn drop(&mut self) {
-        let _ = self.messages.send(Message::Stop);
+        let _ = self.pool.messages.send(Message::Stop);
     }
 }
 
@@ -97,21 +165,17 @@ fn pod_bytes(object: Object) -> Option<Vec<u8>> {
     .map(|(cursor, _)| cursor.into_inner())
 }
 
-fn format(width: u32, height: u32) -> Object {
-    spa::pod::object!(
+fn stride_of(width: u32) -> u32 {
+    (width * BYTES_PER_PIXEL).next_multiple_of(STRIDE_ALIGNMENT)
+}
+
+fn format(width: u32, height: u32, dmabuf: bool) -> Object {
+    let mut object = spa::pod::object!(
         SpaTypes::ObjectParamFormat,
         ParamType::EnumFormat,
         spa::pod::property!(FormatProperties::MediaType, Id, MediaType::Video),
         spa::pod::property!(FormatProperties::MediaSubtype, Id, MediaSubtype::Raw),
-        spa::pod::property!(
-            FormatProperties::VideoFormat,
-            Choice,
-            Enum,
-            Id,
-            VideoFormat::BGRx,
-            VideoFormat::BGRx,
-            VideoFormat::BGRA
-        ),
+        spa::pod::property!(FormatProperties::VideoFormat, Id, VideoFormat::BGRA),
         spa::pod::property!(
             FormatProperties::VideoSize,
             Rectangle,
@@ -137,11 +201,37 @@ fn format(width: u32, height: u32) -> Object {
                 denom: 1
             }
         ),
-    )
+    );
+    if dmabuf {
+        object.properties.push(Property {
+            key: FormatProperties::VideoModifier.as_raw(),
+            flags: PropertyFlags::MANDATORY,
+            value: Value::Long(0),
+        });
+    }
+    object
 }
 
-fn buffers(width: u32, height: u32) -> Object {
-    let stride = width * BYTES_PER_PIXEL;
+fn formats(width: u32, height: u32) -> Vec<Vec<u8>> {
+    let dmabuf_possible = File::options()
+        .read(true)
+        .write(true)
+        .open(UDMABUF_DEVICE)
+        .is_ok();
+    dmabuf_possible
+        .then(|| format(width, height, true))
+        .into_iter()
+        .chain([format(width, height, false)])
+        .filter_map(pod_bytes)
+        .collect()
+}
+
+fn buffers(width: u32, height: u32, dmabuf: bool) -> Object {
+    let stride = stride_of(width);
+    let kind = match dmabuf {
+        true => spa::sys::SPA_DATA_DmaBuf,
+        false => spa::sys::SPA_DATA_MemFd,
+    };
     let int = |key: u32, value: i32| Property::new(key, Value::Int(value));
     Object {
         type_: SpaTypes::ObjectParamBuffers.as_raw(),
@@ -167,10 +257,7 @@ fn buffers(width: u32, height: u32) -> Object {
                 spa::sys::SPA_PARAM_BUFFERS_stride,
                 i32::try_from(stride).unwrap_or(i32::MAX),
             ),
-            int(
-                spa::sys::SPA_PARAM_BUFFERS_dataType,
-                (1 << spa::sys::SPA_DATA_MemFd) | (1 << spa::sys::SPA_DATA_MemPtr),
-            ),
+            int(spa::sys::SPA_PARAM_BUFFERS_dataType, 1 << kind),
         ],
     }
 }
@@ -192,41 +279,64 @@ fn header() -> Object {
     }
 }
 
+fn udmabuf_of(memory: &File, length: u64) -> io::Result<OwnedFd> {
+    let device = File::options()
+        .read(true)
+        .write(true)
+        .open(UDMABUF_DEVICE)?;
+    let request = UdmabufCreate {
+        memfd: memory.as_raw_fd() as u32,
+        flags: UDMABUF_CLOEXEC,
+        offset: 0,
+        size: length,
+    };
+    let fd = unsafe { libc::ioctl(device.as_raw_fd(), UDMABUF_CREATE as _, &request) };
+    if fd < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+}
+
+fn shared_memory(length: u64) -> io::Result<(File, Option<OwnedFd>)> {
+    let page = rustix::param::page_size() as u64;
+    let rounded = length.next_multiple_of(page);
+    let memory = File::from(memfd_create(
+        "bande-cast",
+        MemfdFlags::CLOEXEC | MemfdFlags::ALLOW_SEALING,
+    )?);
+    memory.set_len(rounded)?;
+    fcntl_add_seals(memory.as_fd(), SealFlags::SHRINK)?;
+    let dmabuf = udmabuf_of(&memory, rounded)
+        .inspect_err(|error| tracing::debug!("no dmabuf for the screen cast: {error}"))
+        .ok();
+    Ok((memory, dmabuf))
+}
+
+struct Slot {
+    buffer: *mut pw::sys::pw_buffer,
+    _memory: File,
+    _dmabuf: Option<OwnedFd>,
+}
+
 struct Producer {
     stream: Option<StreamRc>,
     listener: Option<StreamListener<()>>,
     size: (u32, u32),
+    dmabuf: bool,
     started: Option<Sender<Started>>,
-    latest: Arc<Mutex<Option<Picture>>>,
-    pending: Option<Picture>,
-    last: Option<Picture>,
+    pool: CastPool,
+    slots: HashMap<u32, Slot>,
+    next_slot: u32,
+    ready: Vec<u32>,
+    has_streamed: bool,
 }
 
 impl Producer {
-    fn take_latest(&mut self) {
-        if let Some(picture) = self
-            .latest
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()
-        {
-            self.pending = Some(picture);
-        }
-    }
-}
-
-fn wake(producer: &Rc<RefCell<Producer>>) {
-    let stream = producer.try_borrow().ok().and_then(|shared| {
-        shared
-            .pending
-            .as_ref()
-            .and(shared.stream.clone())
-            .filter(|stream| stream.state() == StreamState::Streaming)
-    });
-    if let Some(stream) = stream
-        && let Err(error) = stream.trigger_process()
-    {
-        tracing::warn!("cannot hand a frame to PipeWire: {error}");
+    fn slot_of(&self, buffer: *mut pw::sys::pw_buffer) -> Option<u32> {
+        self.slots
+            .iter()
+            .find(|(_, slot)| slot.buffer == buffer)
+            .map(|(id, _)| *id)
     }
 }
 
@@ -237,73 +347,159 @@ fn presentation_time() -> i64 {
         .saturating_add(now.tv_nsec)
 }
 
-fn fill(stream: &StreamRc, pixels: &[u8], stride: u32) -> bool {
-    let raw = stream.as_raw_ptr();
+fn add_buffer(producer: &Rc<RefCell<Producer>>, buffer: *mut pw::sys::pw_buffer) {
+    let Ok(mut shared) = producer.try_borrow_mut() else {
+        return;
+    };
+    let (width, height) = shared.size;
+    let stride = stride_of(width);
+    let length = u64::from(stride) * u64::from(height);
+    let (memory, dmabuf) = match shared_memory(length) {
+        Ok(allocated) => allocated,
+        Err(error) => {
+            tracing::warn!("cannot allocate a screen cast buffer: {error}");
+            return;
+        }
+    };
+    let fd = match (shared.dmabuf, &dmabuf) {
+        (true, Some(dmabuf)) => dmabuf.as_raw_fd(),
+        _ => memory.as_raw_fd(),
+    };
+    let kind = match shared.dmabuf {
+        true => spa::sys::SPA_DATA_DmaBuf,
+        false => spa::sys::SPA_DATA_MemFd,
+    };
     unsafe {
-        let buffer = pw::sys::pw_stream_dequeue_buffer(raw);
-        if buffer.is_null() {
-            return false;
-        }
         let spa = (*buffer).buffer;
-        if !spa.is_null() && (*spa).n_datas > 0 && !(*spa).datas.is_null() {
-            let data = &mut *(*spa).datas;
-            if !data.data.is_null() && !data.chunk.is_null() {
-                let length = (data.maxsize as usize).min(pixels.len());
-                std::ptr::copy_nonoverlapping(pixels.as_ptr(), data.data.cast::<u8>(), length);
-                let chunk = &mut *data.chunk;
-                chunk.offset = 0;
-                chunk.stride = i32::try_from(stride).unwrap_or(i32::MAX);
-                chunk.size = u32::try_from(length).unwrap_or(u32::MAX);
-            }
-            for index in 0..(*spa).n_metas as usize {
-                let meta = &*(*spa).metas.add(index);
-                if meta.type_ == spa::sys::SPA_META_Header
-                    && meta.size as usize >= std::mem::size_of::<spa::sys::spa_meta_header>()
-                    && !meta.data.is_null()
-                {
-                    let header = &mut *meta.data.cast::<spa::sys::spa_meta_header>();
-                    header.flags = 0;
-                    header.offset = 0;
-                    header.pts = presentation_time();
-                    header.dts_offset = 0;
-                    header.seq = header.seq.wrapping_add(1);
-                }
-            }
+        if spa.is_null() || (*spa).n_datas == 0 || (*spa).datas.is_null() {
+            return;
         }
-        pw::sys::pw_stream_queue_buffer(raw, buffer);
+        let data = &mut *(*spa).datas;
+        data.type_ = kind;
+        data.flags = spa::sys::SPA_DATA_FLAG_READWRITE;
+        data.fd = i64::from(fd);
+        data.mapoffset = 0;
+        data.maxsize = u32::try_from(length).unwrap_or(u32::MAX);
+        data.data = std::ptr::null_mut();
     }
-    true
+    let slot = shared.next_slot;
+    shared.next_slot += 1;
+    let handed = (
+        memory.try_clone(),
+        dmabuf.as_ref().map(OwnedFd::try_clone).transpose(),
+    );
+    let (Ok(handed_memory), Ok(handed_dmabuf)) = handed else {
+        return;
+    };
+    shared.slots.insert(
+        slot,
+        Slot {
+            buffer,
+            _memory: memory,
+            _dmabuf: dmabuf,
+        },
+    );
+    lock(&shared.pool.shelf).changes.added.push(SharedBuffer {
+        slot,
+        memory: handed_memory,
+        dmabuf: handed_dmabuf,
+        width,
+        height,
+        stride,
+    });
+    shared.pool.changed();
 }
 
-fn push(producer: &Rc<RefCell<Producer>>) {
+fn remove_buffer(producer: &Rc<RefCell<Producer>>, buffer: *mut pw::sys::pw_buffer) {
+    let Ok(mut shared) = producer.try_borrow_mut() else {
+        return;
+    };
+    let Some(slot) = shared.slot_of(buffer) else {
+        return;
+    };
+    shared.slots.remove(&slot);
+    shared.ready.retain(|ready| *ready != slot);
+    {
+        let mut shelf = lock(&shared.pool.shelf);
+        shelf.free.retain(|free| *free != slot);
+        shelf.changes.removed.push(slot);
+    }
+    shared.pool.changed();
+}
+
+fn describe(buffer: *mut pw::sys::pw_buffer, stride: u32, length: u32) {
+    unsafe {
+        let spa = (*buffer).buffer;
+        if spa.is_null() || (*spa).n_datas == 0 || (*spa).datas.is_null() {
+            return;
+        }
+        let data = &mut *(*spa).datas;
+        if !data.chunk.is_null() {
+            let chunk = &mut *data.chunk;
+            chunk.offset = 0;
+            chunk.stride = i32::try_from(stride).unwrap_or(i32::MAX);
+            chunk.size = length;
+        }
+        for index in 0..(*spa).n_metas as usize {
+            let meta = &*(*spa).metas.add(index);
+            if meta.type_ == spa::sys::SPA_META_Header
+                && meta.size as usize >= std::mem::size_of::<spa::sys::spa_meta_header>()
+                && !meta.data.is_null()
+            {
+                let header = &mut *meta.data.cast::<spa::sys::spa_meta_header>();
+                header.flags = 0;
+                header.offset = 0;
+                header.pts = presentation_time();
+                header.dts_offset = 0;
+                header.seq = header.seq.wrapping_add(1);
+            }
+        }
+    }
+}
+
+fn process(producer: &Rc<RefCell<Producer>>) {
     let Ok(mut shared) = producer.try_borrow_mut() else {
         return;
     };
     let Some(stream) = shared.stream.clone() else {
         return;
     };
-    if stream.state() != StreamState::Streaming {
-        return;
-    }
-    let size = shared.size;
-    let Some((width, height, pixels)) = shared.pending.take() else {
-        return;
-    };
-    drop(shared);
-    let keep = |picture: Picture| {
-        if let Ok(mut shared) = producer.try_borrow_mut() {
-            shared.pending.get_or_insert(picture);
+    let raw = stream.as_raw_ptr();
+    let stride = stride_of(shared.size.0);
+    let length = stride * shared.size.1;
+    for slot in std::mem::take(&mut shared.ready) {
+        if let Some(entry) = shared.slots.get(&slot) {
+            describe(entry.buffer, stride, length);
+            unsafe { pw::sys::pw_stream_queue_buffer(raw, entry.buffer) };
         }
-    };
-    if (width, height) != size {
-        return keep((width, height, pixels));
     }
-    let stride = width * BYTES_PER_PIXEL;
-    if !fill(&stream, &pixels, stride) {
-        return keep((width, height, pixels));
+    let mut freed = false;
+    loop {
+        let buffer = unsafe { pw::sys::pw_stream_dequeue_buffer(raw) };
+        if buffer.is_null() {
+            break;
+        }
+        if let Some(slot) = shared.slot_of(buffer) {
+            lock(&shared.pool.shelf).free.push_back(slot);
+            freed = true;
+        }
     }
-    if let Ok(mut shared) = producer.try_borrow_mut() {
-        shared.last = Some((width, height, pixels));
+    if freed {
+        shared.pool.changed();
+    }
+}
+
+fn wake(producer: &Rc<RefCell<Producer>>) {
+    let stream = producer.try_borrow().ok().and_then(|shared| {
+        shared
+            .stream
+            .clone()
+            .filter(|stream| stream.state() == StreamState::Streaming)
+    });
+    if let Some(stream) = stream
+        && let Err(error) = stream.trigger_process()
+    {
+        tracing::warn!("cannot hand a frame to PipeWire: {error}");
     }
 }
 
@@ -328,6 +524,8 @@ fn connect(
     let changed = Rc::downgrade(producer);
     let negotiated = Rc::downgrade(producer);
     let processed = Rc::downgrade(producer);
+    let added = Rc::downgrade(producer);
+    let removed = Rc::downgrade(producer);
     let listener = stream
         .add_local_listener_with_user_data(())
         .state_changed(move |stream, _, _, state| {
@@ -349,9 +547,10 @@ fn connect(
             }
             if state == StreamState::Streaming {
                 if let Ok(mut shared) = producer.try_borrow_mut()
-                    && shared.pending.is_none()
+                    && std::mem::replace(&mut shared.has_streamed, true)
                 {
-                    shared.pending = shared.last.clone();
+                    lock(&shared.pool.shelf).changes.restarted = true;
+                    shared.pool.changed();
                 }
                 wake(&producer);
             }
@@ -368,10 +567,12 @@ fn connect(
                 return;
             }
             let size = info.size();
+            let dmabuf = info.flags().bits() & spa::sys::SPA_VIDEO_FLAG_MODIFIER != 0;
             if let Ok(mut shared) = producer.try_borrow_mut() {
                 shared.size = (size.width, size.height);
+                shared.dmabuf = dmabuf;
             }
-            let bytes: Vec<Vec<u8>> = [buffers(size.width, size.height), header()]
+            let bytes: Vec<Vec<u8>> = [buffers(size.width, size.height, dmabuf), header()]
                 .into_iter()
                 .filter_map(pod_bytes)
                 .collect();
@@ -384,9 +585,19 @@ fn connect(
             }
             wake(&producer);
         })
+        .add_buffer(move |_, _, buffer| {
+            if let Some(producer) = added.upgrade() {
+                add_buffer(&producer, buffer);
+            }
+        })
+        .remove_buffer(move |_, _, buffer| {
+            if let Some(producer) = removed.upgrade() {
+                remove_buffer(&producer, buffer);
+            }
+        })
         .process(move |_, _| {
             if let Some(producer) = processed.upgrade() {
-                push(&producer);
+                process(&producer);
             }
         })
         .register()?;
@@ -396,12 +607,15 @@ fn connect(
         shared.stream = Some(stream.clone());
         shared.listener = Some(listener);
     }
-    let bytes = pod_bytes(format(width, height)).ok_or(pw::Error::CreationFailed)?;
-    let mut params = [Pod::from_bytes(&bytes).ok_or(pw::Error::CreationFailed)?];
+    let bytes = formats(width, height);
+    let mut params: Vec<&Pod> = bytes
+        .iter()
+        .filter_map(|bytes| Pod::from_bytes(bytes))
+        .collect();
     stream.connect(
         spa::utils::Direction::Output,
         None,
-        StreamFlags::DRIVER | StreamFlags::MAP_BUFFERS,
+        StreamFlags::DRIVER | StreamFlags::ALLOC_BUFFERS,
         &mut params,
     )
 }
@@ -412,13 +626,15 @@ fn resize(producer: &Rc<RefCell<Producer>>, size: (u32, u32)) {
         shared.size = size;
         shared.stream.clone()
     };
-    let (Some(stream), Some(bytes)) = (stream, pod_bytes(format(size.0, size.1))) else {
+    let Some(stream) = stream else {
         return;
     };
-    let Some(pod) = Pod::from_bytes(&bytes) else {
-        return;
-    };
-    if let Err(error) = stream.update_params(&mut [pod]) {
+    let bytes = formats(size.0, size.1);
+    let mut params: Vec<&Pod> = bytes
+        .iter()
+        .filter_map(|bytes| Pod::from_bytes(bytes))
+        .collect();
+    if let Err(error) = stream.update_params(&mut params) {
         tracing::warn!("cannot resize the screen cast: {error}");
     }
 }
@@ -426,7 +642,7 @@ fn resize(producer: &Rc<RefCell<Producer>>, size: (u32, u32)) {
 fn serve(
     name: &str,
     messages: pw::channel::Receiver<Message>,
-    latest: Arc<Mutex<Option<Picture>>>,
+    pool: CastPool,
     started: Sender<Started>,
 ) -> Result<(), pw::Error> {
     pw::init();
@@ -437,26 +653,21 @@ fn serve(
         stream: None,
         listener: None,
         size: (0, 0),
+        dmabuf: false,
         started: Some(started),
-        latest,
-        pending: None,
-        last: None,
+        pool,
+        slots: HashMap::new(),
+        next_slot: 0,
+        ready: Vec::new(),
+        has_streamed: false,
     }));
     let quit = main_loop.clone();
     let fed = Rc::clone(&producer);
     let name = name.to_owned();
     let _messages = messages.attach(main_loop.loop_(), move |message| match message {
         Message::Stop => quit.quit(),
-        Message::Picture => {
-            fed.borrow_mut().take_latest();
-            let size = fed
-                .borrow()
-                .pending
-                .as_ref()
-                .map(|(width, height, _)| (*width, *height));
-            let Some(size) = size else {
-                return;
-            };
+        Message::Size(width, height) => {
+            let size = (width, height);
             let streaming = fed.borrow().stream.is_some();
             if !streaming {
                 if let Err(error) = connect(&core, &name, &fed, size) {
@@ -466,11 +677,21 @@ fn serve(
             } else if fed.borrow().size != size {
                 resize(&fed, size);
             }
+        }
+        Message::Present(slot) => {
+            fed.borrow_mut().ready.push(slot);
             wake(&fed);
         }
     });
     let retried = Rc::clone(&producer);
-    let retry = main_loop.loop_().add_timer(move |_| wake(&retried));
+    let retry = main_loop.loop_().add_timer(move |_| {
+        let waiting = retried
+            .try_borrow()
+            .is_ok_and(|shared| lock(&shared.pool.shelf).free.is_empty());
+        if waiting {
+            wake(&retried);
+        }
+    });
     let _ = retry.update_timer(Some(RETRY), Some(RETRY));
     main_loop.run();
     let mut producer = producer.borrow_mut();

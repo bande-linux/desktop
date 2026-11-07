@@ -102,15 +102,17 @@ Implementing it would be a kernel fork with black flashes, with no benefit here.
 | # | Stage | Gain, measured | Risk | Blocker | Size |
 |---|---|---|---|---|---|
 | 2 | Colour probe, then sRGB correct | every pixel on this monitor | low for the probe; **black screen** possible until booted | owner boot | S if DCP does it, M if shaders |
-| 4 | Screen sharing over dmabuf | up to three full-frame CPU copies to none | low | none | M |
 | 5 | Sample LINEAR dmabufs, then tiled and compressed | 0.56 ms per full window, 4 bytes/px per window, 20 % on client render | medium, **tearing** | stage 6 for Firefox-grade sync | M-L |
 | 6 | Stop blocking on the GPU | compositor thread free during GPU work (0.5-8 ms a frame) | medium, **freeze** if a fence never signals | none | M |
 | 7 | `wp_color_management_v1`, P3, 10-bit | Firefox and players show P3 correctly | low to medium | stage 2; Smithay has no support, the XML is in `wayland-protocols` | M-L |
 | 8 | Windowed video on a plane | KWin's ~1 W on a laptop; not separable here | **high: firmware crash, black screen** | kernel plane change, stage 3 | M |
 | 9 | HDR | PQ on HDR monitors | high | kernel project, stage 7 | L |
 
-2. **Colour.** First the owner step below. One kernel commit sets `BG_SRGB` for RGB surfaces on external displays, for one test boot. If DCP converts, keep it. If not, add the shader matrix from EDID primaries, which also serves displays DCP cannot help.
-4. **Capture.** `ext-image-copy-capture` offers dmabufs; the compositor copies with the GPU; `cast.rs` negotiates `SPA_DATA_DmaBuf` and keeps MemFd as the fallback. No display risk, since only capture changes.
+2. **Colour.** First the owner step below. The kernel repo's `probe-dcp-srgb` branch has a test patch: `appledrm.srgb_surfaces`, off by default and writable at run time, tags RGB surfaces `BG_SRGB`. If DCP converts, make that the default for external displays and it costs nothing, overlays included. If it doesn't, the fallback is:
+   - Read the primaries from EDID, per display. A display whose primaries are within tolerance of sRGB, or one without colour data, gets no conversion and keeps today's path.
+   - Replace the output copy with a damage-limited draw of the composed image into the display buffer imported as a LINEAR render target (proved working). Its shader decodes sRGB, applies the 3x3 matrix to the display's primaries and encodes again. One place in the pass that writes the final target; stage 7 replaces it with per-surface colour.
+   - While converting, client buffers cannot go straight to a plane, as they would skip the shader: no direct scanout and no overlays on that display, as in KWin.
+   - Cost, from the measurements here: LINEAR target 0.51 ms for a full frame instead of the copy's 0.45 ms, plus the shader's power functions, estimated at under 1 ms and to be measured.
 5. **Direct window textures.** The trap: sampling a client's buffer means the client must not write until release, and the compositor must wait for its fence. Without that, windows tear. Closing animations and stretch-on-resize must hold the buffer. Verify `linux-drm-syncobj-v1` on Apple first. Tiled buffers cannot use a plane, so feedback must stay per surface: LINEAR for what is on a plane, compressed for the rest, or the shell loses plane 2. Firefox then gets the same import path.
 6. **Asynchronous frames.** Export a `sync_file`, wait in the event loop, record render time at fence signal. Stage 1 removes the CPU copy that today forces the wait. A fence that never signals must go through the existing GPU-loss recovery.
 7. **Tagged content.** Per-surface description, conversion in shaders or DCP's per-surface fields; 10-bit composition removes banding under Glass. DCP lists no 10-bit RGB mode for this monitor at 2560x1440@120 (only 8-bit RGB, or 12-bit YCbCr), so at 120 Hz the link stays 8-bit and the gain there needs checking.
@@ -136,6 +138,16 @@ NV12: video dmabufs are imported once per buffer as a two-plane image and sample
 | 4K at 60 fps | 1.90 to 1.27 ms | 0.9 to 0.8 % | no change above noise |
 
 Same pixels before and after. Against the frame budgets of 8.33 ms (120 Hz) and 6.94 ms (144 Hz), the video path was never close; the gain is GPU time and the surface texture's memory (3 MB at 1080p, 12 MB at 4K).
+
+Screen sharing: one shared memory per PipeWire buffer, seen by the compositor as a dmabuf and by the consumer as a dmabuf or memfd, whichever it negotiated. The compositor's GPU copy fills it, and the screenshot process copies nothing. It offers `wl_shm` on the same memory when the compositor offers no dmabuf or refuses one, and memfd only when `/dev/udmabuf` can't be opened. Sharing stays capped at 60 frames per second, a stream limit independent of the display's rate. Screenshots keep shared memory.
+
+| Private headless compositor on the M2, whole 2880x1800 screen, a vkcube changing it, display at 120 Hz | Frames per second | Compositor | Screenshot process |
+|---|---|---|---|
+| Before, memfd consumer | about 26 | 12-15 % of a core | 17-22 % |
+| After, memfd consumer | 60 | 8 % | 0.7 % |
+| After, dmabuf consumer | 60 | 7 % | 0.6 % |
+
+The frame rate rose because the pacing timer now counts from the request rather than from the finished frame. A consumer reconnecting gets a fresh frame at once. On lavapipe it falls back to `wl_shm` on the same memory and still delivers correct frames. A window resized mid-share was not exercised.
 
 ### Left for the owner's optimisation pass
 

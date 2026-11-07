@@ -83,7 +83,8 @@ pub fn volume_icon(mountinfo: &str, point: &Path) -> &'static str {
         .map(|mount| mount.fs_type);
     match fs_type.as_deref() {
         Some("fuse.gphotofs") => "camera-photo",
-        Some(kind) if kind.contains("mtpfs") => "phone",
+        Some("fuse.sshfs" | "fuse") => "folder-remote",
+        Some(kind) if kind.starts_with("fuse.") => "phone",
         _ => "folder-remote",
     }
 }

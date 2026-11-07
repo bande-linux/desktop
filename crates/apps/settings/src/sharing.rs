@@ -20,6 +20,7 @@ const SAMBA: &str = "samba";
 const SMBD: &str = "/usr/sbin/smbd";
 const SSHD: &str = "/usr/sbin/sshd";
 const NET: &str = "/usr/bin/net";
+const SAMBA_CONFIG: &str = "/etc/samba/bande-smb.conf";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Share {
@@ -74,7 +75,7 @@ fn parse_shares(listing: &str) -> Vec<Share> {
 
 fn read_shares() -> Vec<Share> {
     Command::new(NET)
-        .args(["usershare", "info"])
+        .args(["-s", SAMBA_CONFIG, "usershare", "info"])
         .env("LC_ALL", "C")
         .stdin(Stdio::null())
         .stderr(Stdio::null())

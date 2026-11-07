@@ -1,11 +1,18 @@
 use std::fs;
 use std::io::Read;
+use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, ExitCode, Stdio};
 
 const DNSSD_FOLDER: &str = "/etc/systemd/dnssd";
 const DNSSD_FILE: &str = "/etc/systemd/dnssd/bande-file-sharing.dnssd";
 const DNSSD: &str = "[Service]\nName=%H\nType=_smb._tcp\nPort=445\n";
 const SHARE_GROUP: &str = "sambashare";
+const SAMBA_CONFIG: &str = "/etc/samba/bande-smb.conf";
+const SAMBA_SETTINGS: &str = "[global]\nserver role = standalone server\nmap to guest = never\nserver min protocol = SMB2\nload printers = no\ndisable spoolss = yes\nusershare max shares = 100\nusershare allow guests = no\nusershare owner only = yes\n";
+const USERSHARES: &str = "/var/lib/samba/usershares";
+const SMBD_DROP_IN_FOLDER: &str = "/etc/systemd/system/smbd.service.d";
+const SMBD_DROP_IN: &str = "/etc/systemd/system/smbd.service.d/bande.conf";
+const SMBD_START: &str = "[Service]\nExecStart=\nExecStart=/usr/sbin/smbd --foreground --no-process-group -s /etc/samba/bande-smb.conf\n";
 
 fn fail(message: &str) -> ExitCode {
     eprintln!("{message}");
@@ -28,20 +35,38 @@ fn systemctl(arguments: &[&str]) -> ExitCode {
     run(Command::new("/usr/bin/systemctl").args(arguments))
 }
 
+fn remove_if_present(path: &str) -> std::io::Result<()> {
+    match fs::remove_file(path) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    }
+}
+
+fn write_samba_setup() -> std::io::Result<()> {
+    fs::create_dir_all(DNSSD_FOLDER)?;
+    fs::write(DNSSD_FILE, DNSSD)?;
+    fs::write(SAMBA_CONFIG, SAMBA_SETTINGS)?;
+    fs::set_permissions(USERSHARES, fs::Permissions::from_mode(0o1775))?;
+    fs::create_dir_all(SMBD_DROP_IN_FOLDER)?;
+    fs::write(SMBD_DROP_IN, SMBD_START)
+}
+
 fn file_sharing(on: bool) -> ExitCode {
-    let announced = match on {
-        true => fs::create_dir_all(DNSSD_FOLDER).and_then(|()| fs::write(DNSSD_FILE, DNSSD)),
-        false => match fs::remove_file(DNSSD_FILE) {
-            Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
-            _ => Ok(()),
-        },
+    let changed = match on {
+        true => write_samba_setup(),
+        false => remove_if_present(DNSSD_FILE),
     };
-    if let Err(error) = announced {
-        return fail(&format!("cannot change the announcement: {error}"));
+    if let Err(error) = changed {
+        return fail(&format!("cannot change the setup: {error}"));
     }
     systemctl(&["try-reload-or-restart", "systemd-resolved.service"]);
     match on {
-        true => systemctl(&["enable", "--now", "smbd.service"]),
+        true => {
+            systemctl(&["daemon-reload"]);
+            systemctl(&["disable", "--now", "nmbd.service"]);
+            systemctl(&["enable", "smbd.service"]);
+            systemctl(&["restart", "smbd.service"])
+        }
         false => systemctl(&["disable", "--now", "smbd.service", "nmbd.service"]),
     }
 }
@@ -79,7 +104,7 @@ fn set_password(uid: u32) -> ExitCode {
         return fail("bad password");
     }
     let child = Command::new("/usr/bin/smbpasswd")
-        .args(["-s", "-a", &user])
+        .args(["-c", SAMBA_CONFIG, "-s", "-a", &user])
         .env_clear()
         .env("LC_ALL", "C")
         .stdin(Stdio::piped())
@@ -122,7 +147,7 @@ fn as_user(uid: u32, arguments: &[&str]) -> ExitCode {
             "--",
         ])
         .arg("/usr/bin/net")
-        .args(["usershare"])
+        .args(["-s", SAMBA_CONFIG, "usershare"])
         .args(arguments);
     run(&mut command)
 }

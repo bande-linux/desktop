@@ -53,6 +53,15 @@ impl PopUpButton {
         }
     }
 
+    pub fn set_choices(&mut self, choices: &[impl AsRef<str>], selected: usize) {
+        self.choices = choices
+            .iter()
+            .map(|choice| choice.as_ref().to_owned())
+            .collect();
+        self.selected = selected;
+        self.paragraphs.clear();
+    }
+
     pub fn selected(&self) -> usize {
         self.selected
     }

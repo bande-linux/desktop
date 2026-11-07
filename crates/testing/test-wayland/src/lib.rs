@@ -6,6 +6,7 @@ pub use separate::{SeparateApp, act_as_separate_app};
 pub use toplevel::PopupRequest;
 pub use wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment;
 mod drive;
+mod foreign;
 mod ime;
 pub mod keys;
 mod lock;
@@ -72,6 +73,7 @@ struct Globals {
     toplevels: toplevel::Toplevels,
     lock: lock::SessionLock,
     input_method: ime::InputMethod,
+    exported_handle: Option<String>,
 }
 
 pub struct TestClient {
@@ -122,12 +124,22 @@ impl TestClient {
     }
 
     pub fn show_window(&mut self, server: &mut Compositor, image: &ShmImage) {
+        self.show_window_with(server, image, |_| {});
+    }
+
+    fn show_window_with(
+        &mut self,
+        server: &mut Compositor,
+        image: &ShmImage,
+        prepare: impl FnOnce(&WlSurface),
+    ) {
         let qh = self.queue.handle();
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");
         let surface = compositor.create_surface(&qh, ());
         let wm_base = self.globals.wm_base.as_ref().expect("xdg_wm_base");
         let xdg_surface = wm_base.get_xdg_surface(&surface, &qh, ());
         let toplevel = xdg_surface.get_toplevel(&qh, ());
+        prepare(&surface);
         self.globals.configured = false;
         surface.commit();
         self.exchange(server);

@@ -34,6 +34,9 @@ use wayland_client::{Connection, EventQueue, Proxy};
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
+use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_exporter_v2::ZxdgExporterV2;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_importer_v2::ZxdgImporterV2;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
@@ -273,6 +276,10 @@ pub(crate) struct State {
     pub(crate) activation: Option<XdgActivationV1>,
     pub(crate) idle_inhibit_manager: Option<ZwpIdleInhibitManagerV1>,
     toplevel_tag: Option<XdgToplevelTagManagerV1>,
+    exporter: Option<ZxdgExporterV2>,
+    importer: Option<ZxdgImporterV2>,
+    dialogs: Option<XdgWmDialogV1>,
+    exported_handle: Option<String>,
     pub(crate) toplevel_drag: Option<wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1>,
     pub(crate) seat: Option<WlSeat>,
     pub(crate) data_device_manager: Option<WlDataDeviceManager>,
@@ -328,6 +335,15 @@ impl State {
         }
         if let Some(manager) = self.toplevel_drag.take() {
             manager.destroy();
+        }
+        if let Some(exporter) = self.exporter.take() {
+            exporter.destroy();
+        }
+        if let Some(importer) = self.importer.take() {
+            importer.destroy();
+        }
+        if let Some(dialogs) = self.dialogs.take() {
+            dialogs.destroy();
         }
         if let Some(wm_base) = self.wm_base.take() {
             wm_base.destroy();
@@ -783,6 +799,32 @@ impl Window {
             menu: self.chrome.as_ref().is_some_and(|chrome| chrome.menu),
             width: width as f32,
             height: height as f32,
+        }
+    }
+
+    pub fn export(&mut self) {
+        if let Some(exporter) = self.state.exporter.as_ref() {
+            exporter.export_toplevel(&self.surface, &self.queue.handle(), ());
+        }
+    }
+
+    pub fn exported_handle(&self) -> Option<&str> {
+        self.state.exported_handle.as_deref()
+    }
+
+    pub fn attach_to(&mut self, parent_handle: &str) {
+        let ShellSurface::Toplevel(_, toplevel) = &self.role else {
+            return;
+        };
+        if let Some(importer) = self.state.importer.as_ref() {
+            let imported =
+                importer.import_toplevel(parent_handle.to_owned(), &self.queue.handle(), ());
+            imported.set_parent_of(&self.surface);
+        }
+        if let Some(dialogs) = self.state.dialogs.as_ref() {
+            dialogs
+                .get_xdg_dialog(toplevel, &self.queue.handle(), ())
+                .set_modal();
         }
     }
 

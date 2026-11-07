@@ -1,0 +1,9 @@
+[Unit]
+Description=Notice when packages were installed during this session
+PartOf=graphical-session.target
+
+[Path]
+PathChanged=/run/bande-desktop/packages-installed
+
+[Install]
+WantedBy=bande-session.target

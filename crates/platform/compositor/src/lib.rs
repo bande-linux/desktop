@@ -110,7 +110,6 @@ pub use state::{Compositor, OutputElement, REFRESH, ScanoutDevice};
 pub use watchdog::UNRESPONSIVE_AFTER;
 pub use window::Window;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-compositor.ftl");
-
-static L10N: std::sync::LazyLock<bande_l10n::Localizer> =
-    std::sync::LazyLock::new(|| bande_l10n::Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: std::sync::LazyLock<bande_l10n::Localizer> = std::sync::LazyLock::new(|| {
+    bande_l10n::Localizer::new(bande_l10n::translations!("bande-compositor"))
+});

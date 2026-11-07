@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Recovery</name>
   <summary>Reinstall, restore and repair</summary>
+  <summary xml:lang="sv">Installera om, återställ och reparera</summary>
   <description>
     <p>Install or reinstall Bande while keeping your files, go back to a previous version, restore from a backup, and open Disks and Terminal.</p>
   </description>

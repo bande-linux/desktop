@@ -71,8 +71,8 @@ pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };
 pub use software::{
-    Need, Package, Reboot, Refresh, SoftwareCommand, SoftwareState, UpdateNotice, announce_updates,
-    check, follow_software, open_updates, update,
+    Need, Package, Reboot, Refresh, SoftwareCommand, SoftwareState, UpdateNotice, announce_log_out,
+    announce_updates, check, finish_update, follow_software, open_updates, update,
 };
 pub use state::{Answer, BluetoothState, Display, Joined, Mode, NetworkState, Question, WifiState};
 pub use storage::{Category, Storage, StorageCommand, Tally, categorize, tally};
@@ -82,7 +82,5 @@ pub use time::{
 pub use view::SettingsView;
 pub use widgets::{bucket_levels, sidebar_width};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-settings.ftl");
-
-pub const TRANSLATIONS: [(&str, &str); 1] = [("en-US", ENGLISH)];
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&TRANSLATIONS));
+pub const TRANSLATIONS: &[(&str, &str)] = bande_l10n::translations!("bande-settings");
+pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(TRANSLATIONS));

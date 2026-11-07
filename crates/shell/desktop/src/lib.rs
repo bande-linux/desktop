@@ -23,6 +23,5 @@ pub use places::{Layouts, format_layouts, layouts_path, parse_layouts, save_layo
 pub use quick_look::{QuickLookSurface, quick_look_role};
 pub use view::{Artwork, DesktopView, Request, fitted_label};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-desktop-surface.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-desktop-surface")));

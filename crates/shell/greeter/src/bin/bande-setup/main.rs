@@ -26,7 +26,6 @@ use bande_toolkit::{
 };
 use zeroize::Zeroizing;
 
-const ENGLISH: &str = include_str!("../../../locales/en-US/bande-setup.ftl");
 const HELPER: &str = "/usr/libexec/bande-first-run";
 const SHELL: &str = "/bin/sh";
 const CARD_WIDTH: f32 = 560.0;
@@ -35,7 +34,8 @@ const LIST_HEIGHT: f32 = 300.0;
 const FIELD_FONT: f32 = 13.0;
 const SCAN_TIME: Duration = Duration::from_secs(6);
 
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-setup")));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {

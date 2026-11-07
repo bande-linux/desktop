@@ -396,6 +396,25 @@ graph LR
   `bande-secrets-prompt` processes (`crates/apps/secrets-prompt`, installed by `bande-secrets`
   next to the daemon in `/usr/libexec`), so the daemon never links the toolkit; the daemon is not dumpable and has no core limit.
 
+### Updates during a session
+
+The compositor and its private helpers are one build for the life of a session. At start the
+compositor opens `bande-shell`, `bande-lock`, `bande-clipboard` and `bande-screenshot`, keeps the
+files open and starts them through `/proc/self/fd/N`, so a helper relaunched after an update is the
+build the session began with; dpkg replaces by rename, so the kernel keeps the old file until the
+compositor exits. A helper running itself again uses `bande_xdg::own_executable()`, never the path.
+
+What does mix across versions is a contract: apps and services are new while the compositor is
+old. `bande_app_v1` and the other protocols only grow, with `since` on every addition and clients
+checking `version()`; `ci/release/check-protocols.py` compares them with the last release in lint.
+`bande_shell_v1` is exempt, since only `Shell`-role clients see it and those are held builds.
+`org.bande.*` D-Bus interfaces only grow, and a client treats a missing property as its default.
+
+`bande-audio` reconnects on its own: `Audio::start` keeps one thread connecting and serving, and
+while PipeWire is away waits on inotify for its socket, with a few short retries after each change.
+`Snapshot.connected` says whether sound is there, and `connection` changes when a meter must be
+made again.
+
 ### Session startup
 
 - Before starting any shell client, the compositor exports its environment to systemd user
@@ -420,7 +439,7 @@ graph LR
   a colon, so a stale list is replaced by one name.
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
   `bande-config`, `bande-power`, `bande-sound`, `bande-tray`, `bande-indexer`, `bande-automount`,
-  `bande-polkit-agent`. `bande-notify` and
+  `bande-polkit-agent`. `bande-notify`, `bande-spell` (spelling; exits after a minute idle) and
   the portal backend are started by D-Bus activation, and `bande-clipboard` and the shell
   clients by the compositor ([behaviour](behaviour.md)): `bande-shell`, one process for the
   desktop, the bar, the notifications, Control Center and the launcher of every display, and
@@ -533,6 +552,7 @@ graph TD
             OWN3["org.bande.Clipboard (bande-clipboard)"]
             OWN4["org.bande.Screenshot (bande-screenshot)"]
             OWN5["org.bande.Sound (bande-sound)"]
+            OWN6["org.bande.Spell (bande-spell)"]
         end
     end
 ```
@@ -828,11 +848,16 @@ asks for a password through the polkit agent unless polkit grants `system-update
 it to active sudo members), then the offline set is downloaded and triggered.
 `bande-desktop`'s apt hook (`/usr/libexec/bande-desktop/restart-services`) restarts the
 system services an update replaced, never the login manager, the buses, logind, getty,
-`user@`, polkit, PackageKit or networking ([packaging](packaging.md#runtime-stack)). Settings then looks at the user's own processes that map a deleted
-`/usr` or `/opt` executable or library and groups them by cgroup: services in `session.slice`
-restart through the user manager's `TryRestartUnit`; the compositor's service, the session bus or the
-login scope ask "Log out to finish updating the desktop" (Log Out / Later); apps in `app.slice`
-are listed as "Quit and reopen … to use the new versions", Settings itself left out. A restart is
+`user@`, polkit, PackageKit or networking ([packaging](packaging.md#runtime-stack)), and touches
+`/run/bande-desktop/packages-installed`. So after any apt run, from Settings or Terminal,
+`bande-update-finish.path` in each logged-in user's manager runs `bande-settings --finish-update`.
+It reloads the user's units and looks at the user's own processes that map a deleted `/usr` or
+`/opt` executable or library, grouped by cgroup: services in `session.slice` restart through the
+user manager's `TryRestartUnit`; if the compositor's service, the session bus or the login scope
+remain, it posts "Log out to finish updating the desktop", unless Settings is installing and shows
+it itself. Software Update shows the same state whenever it opens with nothing to install (Log Out
+/ Later); apps in `app.slice` are listed as "Quit and reopen … to use the new versions", Settings
+itself left out. A restart is
 always the user's: Restart Now / Later, Log Out / Later; Restart Now and Log Out ask for it through
 `bande_app_v1.end_session`, the Bande menu's confirmation, so every app is asked to quit first. A pending restart is remembered with the
 boot id in `$XDG_STATE_HOME/bande/restart-pending` (or `/run/reboot-required`), and the daily user

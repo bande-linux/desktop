@@ -15,7 +15,7 @@ use crate::element::SurfaceElement;
 use crate::motion::{Look, Motion};
 use crate::state::OutputElement;
 use crate::state::mapped_size;
-use crate::tile::{Preview, TILED};
+use crate::tile::Preview;
 use crate::window::Window;
 use bande_graphics::{Color, Elevation, Palette, Radius, Scheme};
 use bande_render::{
@@ -987,9 +987,7 @@ pub(crate) fn window_elements(
     let area = real.to_physical(scale);
     let look = look.unwrap_or(Look::shown(real));
     let shown = look.rect.to_physical(scale);
-    let squared = fullscreen
-        || window.has_state(xdg_toplevel::State::Maximized)
-        || TILED.into_iter().any(|state| window.has_state(state));
+    let squared = fullscreen || window.has_state(xdg_toplevel::State::Maximized);
     let radius = if squared {
         0.0
     } else {

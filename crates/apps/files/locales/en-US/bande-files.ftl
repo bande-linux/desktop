@@ -15,6 +15,11 @@ column-modified = Date Modified
 column-created = Date Created
 column-size = Size
 column-kind = Kind
+column-move-left = Move Left
+column-move-right = Move Right
+menu-columns = Columns
+menu-move-column-left = Move { $column } Left
+menu-move-column-right = Move { $column } Right
 item-count = { $count ->
     [one] { $count } item
    *[other] { $count } items

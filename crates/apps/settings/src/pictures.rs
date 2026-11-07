@@ -5,10 +5,10 @@ use bande_app::choose_file;
 use bande_wallpaper::{Fit, Picture, render};
 use zbus::blocking::Connection;
 
-use crate::failure::unexpected;
+use crate::failure::pane_failed;
 use crate::follow::{Update, Updates, spawn};
 use crate::{L10N, SettingsClient};
-use bande_settings_panes::{SettingId, Value as SettingValue};
+use bande_settings_panes::{PaneId, SettingId, Value as SettingValue};
 
 pub const THUMBNAIL_SIZE: (u32, u32) = (288, 180);
 const IMAGE_TYPES: [&str; 5] = [
@@ -145,7 +145,11 @@ pub fn follow_pictures(
                         match choose_picture(&session, &L10N.tr("choose-picture"), &IMAGE_TYPES) {
                             Ok(chosen) => chosen,
                             Err(error) => {
-                                updates.send(unexpected(error));
+                                updates.send(pane_failed(
+                                    PaneId::Appearance,
+                                    "picture-choose-failed",
+                                    error,
+                                ));
                                 continue;
                             }
                         };
@@ -162,7 +166,11 @@ pub fn follow_pictures(
                         .map_err(Clone::clone)
                         .and_then(|client| client.set(SettingId::Wallpaper, &value));
                     if let Err(error) = result {
-                        updates.send(unexpected(error));
+                        updates.send(pane_failed(
+                            PaneId::Appearance,
+                            "wallpaper-set-failed",
+                            error,
+                        ));
                     }
                 }
             }

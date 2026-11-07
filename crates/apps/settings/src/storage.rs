@@ -5,7 +5,9 @@ use std::sync::mpsc::{self, Sender};
 
 use bande_fs::Trash;
 
-use crate::failure::unexpected;
+use bande_settings_panes::PaneId;
+
+use crate::failure::pane_failed;
 use crate::follow::{Update, Updates, spawn};
 
 const BLOCK: u64 = 512;
@@ -157,7 +159,7 @@ pub fn follow_storage(updates: Updates) -> Sender<StorageCommand> {
             if commands.contains(&StorageCommand::EmptyTrash)
                 && let Err(error) = trash.empty()
             {
-                updates.send(unexpected(error));
+                updates.send(pane_failed(PaneId::Storage, "trash-empty-failed", error));
             }
             measure(&home, &trash, &updates);
         }

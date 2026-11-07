@@ -139,12 +139,12 @@ writes a hex value, a corner radius or a font name of its own.
     while the window is zoomed; with Alt held it shows + and Alt-click enters full screen. The
     hit cells cover the pill's full height and the close cell reaches the window's left edge.
     Rounded corners (14 pt), the 55 % `edge` ring and the shadow pair are the compositor's, cut
-    at the window geometry (`set_window_geometry`), so every app looks alike; maximised, tiled
-    and full-screen windows are square. They act on release inside. A drag on the header or
+    at the window geometry (`set_window_geometry`), so every app looks alike; maximised and
+    full-screen windows are square. They act on release inside. A drag on the header or
     the chassis around the sheet moves the window, a double click zooms, a right click opens
     the window menu. A band from 8 pt outside to 3 pt inside the rounded outline resizes,
     with corners reaching 24 pt along the edges, and the pointer shows the direction. Tiled
-    windows keep only the inside 3 pt, maximised and full-screen windows have no band, and full screen hides the header and the inset.
+    windows have the same band, maximised and full-screen windows have none, and full screen hides the header and the inset.
     `Window::size` and pointer positions are in the content's coordinates: by default the
     content is the sheet and the app draws only into it (clipped to its rounded shape, on the
     `Scene`'s background). An app with a sidebar or toolbar on the frame calls
@@ -230,7 +230,13 @@ writes a hex value, a corner radius or a font name of its own.
   `ink` over a `hairline`, one row tall) above the rows that start each group, as Files' Use
   Groups does, and level 2 heading nodes before those rows so screen readers announce each
   group; a selection run never spans a heading. `Row::dimmed` tones a row down one ink step
-  with its icons at `Palette::DIMMED_ALPHA`, for normally hidden files. Scroll bars are macOS overlay scrollers
+  with its icons at `Palette::DIMMED_ALPHA`, for normally hidden files. `Column::movable`
+  columns can be dragged along the header: the whole column lifts and follows the pointer,
+  neighbours slide aside on `standard`, Escape puts it back, and a click without a drag still
+  sorts (on release). The first column never moves. Column and `Sort` indices keep the app's
+  order, so moving needs no new rows: the app stores what `Table::on_column_order` reports and
+  restores it with `set_column_order`; `Table::move_column` is the menu and keyboard way. The
+  slide itself is `Reorder`, which `TabStrip` also uses and a hand-drawn list can too. Scroll bars are macOS overlay scrollers
   (`Scrollbar`, also usable on its own by views that scroll themselves, such as Terminal): a
   6 pt `ink3` knob shown while scrolling or when the pointer is in the right 14 pt, widening to
   10 pt over a faint lane on hover; drag the knob, click the lane to page; it fades 0.9 s

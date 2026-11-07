@@ -87,7 +87,9 @@ when they reach the screen is Bande's own.
   of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that
   `DrmCompositor` can scan them out. A dma-buf is imported once as a Vulkan buffer and its
   damaged rows are copied into the surface's texture, so any stride works on drivers without
-  `VK_EXT_image_drm_format_modifier`. Explicit sync (`linux-drm-syncobj-v1`) is built but not
+  `VK_EXT_image_drm_format_modifier`. Uploads are submitted with the frame, or on their own when
+  no frame is rendered (a covered window that keeps drawing, direct scanout), so pending staging
+  memory cannot pile up. Explicit sync (`linux-drm-syncobj-v1`) is built but not
   yet verified on Apple hardware.
 - **DRM backend.** `bande-compositor` opens the first card with a connected connector (or
   `--drm-device`) through a libseat session and drives every connected connector on its own
@@ -188,9 +190,14 @@ when they reach the screen is Bande's own.
   with another display, where the pointer must rest 250 ms so a window can still be dragged
   across. Releasing over a shown preview springs the window into it. `Super+Left/Right` tile halves,
   `Up/Down` on a half give its top or bottom quarter and on a quarter go back to the half,
-  `Up` zooms a free window and `Down` returns a zoomed one. Tiles get xdg-shell's tiled states
-  (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share
-  resizes both; dragging a tiled window away gives back its earlier size under the pointer.
+  `Up` zooms a free window and `Down` returns a zoomed one. A tile is only a shape, as on macOS:
+  no gaps, but the window keeps its rounded corners, shadow and resize edges, and gets no
+  xdg-shell tiled states, since clients drop their resize edges for those (GTK) and would have
+  none to offer. `bande_app_v1.window_tiled` tells toolkit apps instead. Dragging the edge two
+  neighbouring tiles share resizes both, down to the neighbour's minimum size, and both stay
+  tiled; resizing any other edge makes the window an ordinary window of that size. Dragging a
+  tiled window away gives back its earlier size under the pointer; one that became ordinary
+  keeps its size. Filling the other half fills what the tile next to it leaves free.
 - **Drag and drop.** The compositor draws the drag icon a client passes to `start_drag` at the
   pointer, offset by the icon's attach offset, below the pointer. Holding Ctrl makes a
   drop a copy and Shift a move (as in GTK and KDE), when source and destination offer it; otherwise the

@@ -49,12 +49,16 @@ graph LR
 - Idle, as in macOS's Lock Screen settings ([`config.kdl`](overview.md#configuration) `idle`,
   Settings ▸ Lock Screen): the backlight dims 10 s before the screen saver or the
   display turning off, whichever comes first (default 5 and 10 min). The screen saver is the lock
-  screen itself, its clock and date over the blurred desktop picture, covering the desktop
-  through `ext-session-lock`, as macOS hands its saver over to the lock screen. "Require
+  screen itself, resting: its clock and date over the blurred desktop picture and nothing
+  else, covering the desktop through `ext-session-lock`, as macOS hands its saver over to the
+  lock screen. Every lock starts resting; the first key, click, scroll or movement, or waking
+  from sleep, fades in the picture, name and password field (a typed letter lands in the
+  field), and a minute without input clears the field and rests again. "Require
   password after screen saver begins or display is turned off" (default immediately) is a grace
   period: until it passes, any key, click or movement dismisses the saver without a password.
   Locks from `Super+L`, logind, sleep and the power button always ask for it. The computer
-  sleeps with the display unless `suspend-after` is later or `"never"`.
+  sleeps with the display unless `suspend-after` is later or `"never"`, and only if logind
+  says `CanSuspend` is `yes`: the `bande-power` package ships `AllowSuspend=no` (below).
   The earlier of the screen saver and the display turning off starts the lock, and sleep never
   comes before the display turns off; the settings say so on their rows when a choice is overridden,
   and the sleep row only shows when logind's `CanSuspend` is `yes`.
@@ -64,18 +68,30 @@ graph LR
   | Path | Used by | Bande |
   |---|---|---|
   | `org.freedesktop.ScreenSaver.Inhibit` | Firefox (first choice), Chromium/Electron (after GNOME's) | `bande-power`, held until `UnInhibit` or the caller leaves the bus |
-  | `org.freedesktop.portal.Inhibit`, idle flag | sandboxed apps | the GTK backend forwards it to `org.freedesktop.ScreenSaver`; the suspend flag is dropped |
+  | `org.freedesktop.portal.Inhibit`, idle flag | sandboxed apps | `xdg-desktop-portal-bande` forwards it to `org.freedesktop.ScreenSaver` |
   | logind `idle` block inhibitor (`systemd-inhibit --what=idle`) | scripts, `caffeinate`-style tools | `bande-power` follows logind's `BlockInhibited` |
   | `zwp_idle_inhibitor_v1` on a surface | mpv, Chromium (on the focused window), Firefox (last resort) | the compositor, while the surface's window is on screen, covered or not and focused or not; not while minimised, as in KWin and sway |
 
-  Audio alone keeps nothing on (Firefox and Chromium take a suspend-only lock for it, as macOS
-  keeps the system but not the display awake), and neither do CPU load, builds nor
-  MPRIS. Idle time restarts when the last inhibitor ends, so a finished film does not lock the
-  screen at once.
+  Audio alone keeps the computer but not the display awake, as on macOS, and neither CPU load,
+  builds nor MPRIS keep anything awake. Idle time restarts when the last inhibitor ends, so a
+  finished film does not lock the screen at once.
+- Keeping the computer awake only holds back idle sleep. Nothing stops Sleep in a menu, the
+  power button or the lid, as macOS's `PreventUserIdleSystemSleep` does not, so these are not
+  logind `sleep` block inhibitors (those would turn an explicit Sleep into an administrator
+  prompt and hide it from the menus). The paths are any app's running PipeWire stream (output,
+  microphone or camera; not a paused one, the system's own filters or Bande's event sounds,
+  through `bande-audio`), the portal's suspend flag (`org.bande.Power.KeepAwake`, `Hold` and
+  `Release`, freed when the caller leaves the bus) and someone else's logind `sleep` block
+  inhibitor. When the last one ends, the computer sleeps after a full `suspend-after` more.
+- Sleep is off until s2idle survives ten clean cycles on the mini
+  (`~/bande-linux/bin/s2idle-test.sh`, which overrides the switch for its own cycles). The one
+  switch is the line `AllowSuspend=no` in `crates/services/power/data/sleep.conf`: `CanSuspend`
+  then answers `na`, so Sleep leaves the menus and idle stays awake. Changing it to `yes` brings
+  all of it back, including the power button: logind's press always locks, and the compositor
+  asks for `Suspend` on a press shorter than the five-second hold when `CanSuspend` is `yes`.
 - Implemented in `crates/shell/lock`: date, time, the user's picture (AccountsService's
   `IconFile`, read off the UI thread; the initial on the accent colour without one) and name
-  and a secure field that stays hidden until the first input (the screen saver's resting look) and
-  returns after 30 s without input; the first key already goes into it. PAM
+  and a secure field. PAM
   (`/etc/pam.d/bande-lock`) runs off the UI thread with a progress row if it takes longer than
   200 ms, and a rejected password clears and shakes the field and says so. `Super+L` and logind's `Lock` signal start it; the compositor sets
   logind's `LockedHint`.
@@ -90,8 +106,8 @@ graph LR
   in `systemd-inhibit --list` as macOS lists power assertions. Battery alerts follow UPower's
   `WarningLevel` of the display device: a "Low Battery" notification at `Low`, replaced by a
   critical one that stays on screen at `Critical` or `Action`, closed when the level clears.
-  The idle state machine (`bande_power::idle`) maps idle time to dim, saver (lock), password
-  required, display off and suspend, skips locking an already locked session, turns the display
+  The idle state machine (`bande_power::idle`) maps idle time to dim, saver (lock, and logind's
+  `IdleHint` until the next input), password required, display off and suspend, skips locking an already locked session, turns the display
   off after 60 s on a lock it did not start, undims on activity without unlocking, and restarts the
   idle timers when an inhibitor ends; `IdleController` runs it in the service with the policy of
   `org.bande.Config` (followed as it changes), the session's `LockedHint`, and logind's
@@ -157,8 +173,8 @@ graph LR
   default `x-scheme-handler/mailto` app with the app's activation token.
 - `org.freedesktop.impl.portal.Inhibit`: the idle flag takes an `org.freedesktop.ScreenSaver`
   inhibitor from `bande-power` (so the idle chain and its logind idle lock see it), named
-  after the app and its reason; the suspend flag takes a logind `sleep` block inhibitor;
-  closing the request releases both. Logout and user switch are not inhibited (Bande's
+  after the app and its reason; the suspend flag holds off idle sleep through
+  `org.bande.Power.KeepAwake`; closing the request releases both. Logout and user switch are not inhibited (Bande's
   Log Out asks running apps to quit instead). Monitors report `screensaver-active` from the
   session's `LockedHint` as it changes and `session-state` running; there is no query-end.
 - `org.freedesktop.impl.portal.Notification` (version 2): posts to
@@ -338,9 +354,11 @@ graph LR
   files are not read.
 - `libpam-bande-secrets` (`crates/services/secrets-pam`) adds `pam_bande_secrets.so` through
   the pam-auth-update profile `bande-secrets`: `auth` keeps the typed password in PAM data,
-  `session` hands it to the daemon over `/run/user/<uid>/bande-secrets/pam` (peer uid checked
-  on both ends) and waits for the answer, and `password` passes the old and new passwords so
-  `passwd` and Users & Groups re-encrypt the login keychain. The lock screen runs `auth` only,
+  `session` hands it to the daemon over `/run/user/<uid>/bande-secrets/pam` (the module checks
+  the socket belongs to the user, the daemon takes messages only from root) and waits for the
+  answer (a failed send is logged through `pam_syslog`, never the password), and `password` passes the old and new passwords so
+  `passwd` and Users & Groups re-encrypt the login keychain, only when the old password opens
+  it. The lock screen runs `auth` only,
   so it unlocks nothing; as on macOS the login keychain stays unlocked while the screen is
   locked. When the login password does not open the keychain, the next unlock offers to update
   its password or start a new one (the old file is kept).
@@ -367,6 +385,17 @@ graph LR
 - `bande-session` also sets `ELECTRON_OZONE_PLATFORM_HINT=auto` (unless already set), so
   Electron apps that do not yet default to Wayland run natively instead of failing for want of
   an X server, and `QT_QPA_PLATFORMTHEME` as described under the portal.
+- `bande-session` takes the language and formats from `/etc/locale.conf` and replaces those in
+  the user manager and in D-Bus activation. greetd and a lingering user manager keep what they had
+  when they started, so without this a choice in Settings would only arrive after a restart.
+  The login window itself still follows the language greetd started with.
+- Settings ▸ Language & Region sets `LANG` and the five format categories (`LC_TIME`,
+  `LC_NUMERIC`, `LC_MONETARY`, `LC_MEASUREMENT`, `LC_PAPER`) through localed `SetLocale`. Its
+  choices are the UTF-8 entries of `/usr/share/i18n/SUPPORTED`, named exactly as written there,
+  because that is what localed matches before running `locale-gen` once per changed variable.
+  localed merges rather than replaces: anything left out stays, so "Same as language" sends
+  the formats equal to `LANG`, and localed drops those. It also refuses a `LANGUAGE` holding
+  a colon, so a stale list is replaced by one name.
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
   `bande-config`, `bande-power`, `bande-sound`, `bande-tray`, `bande-automount`,
   `bande-polkit-agent`. `bande-notify` and
@@ -600,10 +629,11 @@ prompts (they are answered in the secure field), and an accessibility menu.
 
 ## Crash handling and supervision
 
-Every failure is meant to end in a working desktop without a reboot. What happens for each:
+Every failure is meant to end in a working desktop without a reboot, each stage only taking down
+what the one before could not save. What happens for each:
 
-- **An app hangs**: Force Quit (in the compositor, opened from the system menu, a Taskbar
-  icon's menu or Search; the pointer lock of an app is released while it is open) marks it Not Responding after a 3 s
+- **An app hangs**: Force Quit (in the compositor, opened with `Ctrl+Alt+Esc`, from the system
+  menu, a Taskbar icon's menu or Search; the pointer lock of an app is released while it is open) marks it Not Responding after a 3 s
   `xdg_wm_base` ping and kills its whole scope ([behaviour](behaviour.md)).
 - **The shell crashes or hangs**: the compositor restarts the shell clients and the clipboard
   daemon it started when they exit, at most once every 10 seconds. A crash of the shell takes
@@ -613,6 +643,20 @@ Every failure is meant to end in a working desktop without a reboot. What happen
   Responding)" with Relaunch, as macOS lists the Finder; Relaunch kills it and the supervisor
   starts it again. The lock screen is supervised too: the session stays locked if it dies, and
   one that has not answered a ping for 10 s while locked is killed and started again.
+- **Frames stop reaching the display** while the compositor itself runs: a failed frame is retried
+  four times a second (one log line per distinct error) and a page flip that does not arrive
+  within a second is written off with `frame_submitted`, so a lost flip event cannot hold the
+  output. After 3 s without a frame on every display the compositor starts a new renderer and
+  resets the DRM state of each display; apps keep running. After 15 s it exits, which ends the
+  session as a crash does. The login window has no work to lose: when it cannot reach the display
+  for 15 s on a computer up for over 5 minutes it asks logind to restart the computer.
+- **The desktop is stuck and the keyboard is all that is left**: pressing `Shift+Ctrl+Alt+Esc`
+  twice within 5 s restarts the desktop, whatever state the session is in. It is logind's Secure
+  Attention Key (`logind.conf(5)`), which logind reads from the keyboard itself and signals on the
+  system bus. `bande-recovery`, a small root service with no other input, counts the presses and
+  ends the active graphical session through its cgroup (`cgroup.kill` of the compositor service)
+  and `KillSession`; the login window comes back. It leaves text console sessions alone. The first
+  press also opens Force Quit when the compositor can still draw, which names the second press.
 - **The compositor crashes or hangs**: `bande-compositor.service` has `WatchdogSec=20s` and the
   compositor's event loop pings it, so a hung compositor is aborted (then killed after
   `TimeoutAbortSec=10s`); a crash or abort ends the session and greetd shows the login window,
@@ -622,11 +666,12 @@ Every failure is meant to end in a working desktop without a reboot. What happen
   greetd starts it again. `Ctrl+Alt+F1`…`F12` switch virtual terminals through logind
   (libseat) while the compositor runs, for a text console login when the screen is wrong; with
   the compositor hung the kernel ignores them until the watchdog has ended it.
-- **The GPU is lost or reset**: a `VK_ERROR_DEVICE_LOST` from a frame marks the renderer lost;
-  the DRM backend drops it, creates a new Vulkan device and repaints every display. Textures
-  are keyed by the renderer's context, so everything is uploaded again; apps keep running. If no
-  new device can be created, the compositor exits (back to the login window). A GPU that hangs
-  without reporting blocks the frame's fence wait, and the watchdog ends the compositor.
+- **The GPU is lost, hangs or its memory runs out**: a `VK_ERROR_DEVICE_LOST`, a frame whose fence
+  has not signalled after 5 s, or `VK_ERROR_OUT_OF_DEVICE_MEMORY` (at most once per 10 s) makes
+  the backend drop the renderer, create a new Vulkan device and repaint every display. The log
+  line says what the renderer held, by kind. A hung device is abandoned rather than waited for.
+  Textures are keyed by the renderer's context, so everything is uploaded again; apps keep
+  running. If no new device can be created, the compositor exits (back to the login window).
 - **Memory runs out**: zram, the low-memory window, systemd-oomd on `app.slice` and the
   notification of a closed app ([decision 0004](../decisions/0004-memory-pressure.md)). The
   compositor (with the shell and every client it starts) and the session bus, PipeWire,
@@ -638,6 +683,10 @@ Every failure is meant to end in a working desktop without a reboot. What happen
   `-tray`, `-polkit-agent`, `-automount`, `-notify`, the portal backend) has
   `Restart=on-failure` with systemd's start limit (5 in 10 s), runs in `session.slice` and is
   restarted by D-Bus activation on the next call after that.
+- **The kernel fails**: a panic, an oops, or a CPU stuck past the lockup detectors restarts the
+  computer after 10 s (`50-bande-recovery.conf` in `sysctl.d`), and systemd feeds the hardware
+  watchdog (`RuntimeWatchdogSec=2min`), so a kernel that stops scheduling restarts it too, as
+  macOS's watchdog does. Neither needs the power button.
 - **Too many processes**: each app scope gets the user manager's default `TasksMax` (15 % of
   the kernel's limit) and `app.slice` together 25 %, under logind's 33 % for the user, so a
   fork bomb in an app leaves room for the session.

@@ -1,9 +1,14 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::io::{Read, Write};
+use std::os::unix::fs::PermissionsExt;
+use std::os::unix::net::UnixStream;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use bande_secrets::service::{Daemon, SERVICE_PATH, WireSecret, collection_path};
+use bande_secrets::pam;
+use bande_secrets::service::{Daemon, SERVICE_PATH, WireSecret, collection_path, item_path};
 use bande_secrets::store::{CREATOR, Keychain};
 use bande_test_bus::SessionBus;
 use oo7::{Key, Secret, crypto};
@@ -11,6 +16,10 @@ use zbus::blocking::Connection;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
 const SERVICE: &str = "org.freedesktop.Secret.Service";
+const EXTENSION: &str = "org.bande.Secrets";
+const ITEM: &str = "org.freedesktop.Secret.Item";
+const PROMPT: &str = "org.freedesktop.Secret.Prompt";
+const PASSWORD: &str = "correct horse";
 
 fn call<R: serde::de::DeserializeOwned + zbus::zvariant::Type>(
     client: &Connection,
@@ -146,11 +155,7 @@ fn another_apps_item_opens_only_with_the_keychain_password() {
         "#!/bin/sh\nwhile read -r line && [ -n \"$line\" ]; do :; done\nprintf 'allow\\twrong\\n'\nread -r verdict\n[ \"$verdict\" = wrong ] && printf 'allow\\tcorrect horse\\n'\nread -r verdict\n",
     )
     .unwrap();
-    std::fs::set_permissions(
-        &prompter,
-        std::os::unix::fs::PermissionsExt::from_mode(0o755),
-    )
-    .unwrap();
+    std::fs::set_permissions(&prompter, std::fs::Permissions::from_mode(0o755)).unwrap();
     let (_daemon, _connection) = async_io::block_on(async {
         let daemon = Daemon::new(Keychain::load(home.path().to_path_buf()).await, prompter);
         let connection = zbus::connection::Builder::address(bus.address())
@@ -208,4 +213,218 @@ fn another_apps_item_opens_only_with_the_keychain_password() {
         &(&session,),
     );
     assert_eq!(value, b"wifi-secret");
+}
+
+fn prompter(home: &Path, script: &str) -> PathBuf {
+    let path = home.join("prompter");
+    std::fs::write(
+        &path,
+        format!(
+            "#!/bin/sh\necho shown >> '{}/shown'\nwhile read -r line && [ -n \"$line\" ]; do :; done\n{script}\n",
+            home.display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path
+}
+
+fn times_shown(home: &Path) -> usize {
+    std::fs::read_to_string(home.join("shown"))
+        .map(|shown| shown.lines().count())
+        .unwrap_or_default()
+}
+
+fn another_apps_item(home: &Path) -> OwnedObjectPath {
+    async_io::block_on(async {
+        let daemon = Daemon::new(
+            Keychain::load(home.to_path_buf()).await,
+            PathBuf::from("/nonexistent"),
+        );
+        assert!(daemon.login(Secret::text(PASSWORD)).await);
+        daemon
+            .store_internal(
+                "Home Wi-Fi",
+                HashMap::from([("network".to_owned(), "home".to_owned())]),
+                Secret::text("wifi-secret"),
+            )
+            .await;
+    });
+    item_path("login", 1)
+}
+
+fn serve(bus: &SessionBus, home: &Path, prompter: PathBuf) -> (Arc<Daemon>, zbus::Connection) {
+    async_io::block_on(async {
+        let daemon = Daemon::new(Keychain::load(home.to_path_buf()).await, prompter);
+        let connection = zbus::connection::Builder::address(bus.address())
+            .unwrap()
+            .build()
+            .await
+            .unwrap();
+        daemon.serve(&connection).await.unwrap();
+        (daemon, connection)
+    })
+}
+
+fn reveal(client: &Connection) -> (bool, OwnedValue) {
+    let prompt: OwnedObjectPath = call(client, SERVICE_PATH, EXTENSION, "Reveal", &());
+    let proxy =
+        zbus::blocking::Proxy::new(client, "org.freedesktop.secrets", prompt, PROMPT).unwrap();
+    let mut completed = proxy.receive_signal("Completed").unwrap();
+    proxy.call_method("Prompt", &("")).unwrap();
+    completed.next().unwrap().body().deserialize().unwrap()
+}
+
+fn plain_session(client: &Connection) -> OwnedObjectPath {
+    let (_, session): (OwnedValue, OwnedObjectPath) = call(
+        client,
+        SERVICE_PATH,
+        SERVICE,
+        "OpenSession",
+        &("plain", Value::from("")),
+    );
+    session
+}
+
+fn read_secret(
+    client: &Connection,
+    item: &OwnedObjectPath,
+    session: &OwnedObjectPath,
+) -> zbus::Result<Vec<u8>> {
+    let reply = client.call_method(
+        Some("org.freedesktop.secrets"),
+        item.as_str(),
+        Some(ITEM),
+        "GetSecret",
+        &(session,),
+    )?;
+    let (_, _, value, _): WireSecret = reply.body().deserialize()?;
+    Ok(value)
+}
+
+fn collection_locked(client: &Connection) -> bool {
+    let locked: OwnedValue = call(
+        client,
+        collection_path("login").as_str(),
+        "org.freedesktop.DBus.Properties",
+        "Get",
+        &("org.freedesktop.Secret.Collection", "Locked"),
+    );
+    bool::try_from(locked).unwrap()
+}
+
+#[test]
+fn settings_unlocks_a_locked_keychain_with_one_prompt_and_reads_only_until_it_locks() {
+    let bus = SessionBus::start().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let item = another_apps_item(home.path());
+    let script = "printf 'allow\\twrong\\n'\nread -r verdict\n[ \"$verdict\" = wrong ] && printf 'allow\\tcorrect horse\\n'\nread -r verdict";
+    let (_daemon, _connection) = serve(&bus, home.path(), prompter(home.path(), script));
+    let client = bus.connect().unwrap();
+    assert!(collection_locked(&client));
+
+    let (dismissed, _) = reveal(&client);
+
+    assert!(!dismissed, "the right password after a wrong one unlocks");
+    assert!(!collection_locked(&client));
+    assert_eq!(times_shown(home.path()), 1, "one password prompt, not two");
+    let session = plain_session(&client);
+    assert_eq!(
+        read_secret(&client, &item, &session).unwrap(),
+        b"wifi-secret"
+    );
+
+    let () = call(&client, SERVICE_PATH, EXTENSION, "Conceal", &());
+    assert!(
+        read_secret(&client, &item, &session).is_err(),
+        "locking the pane ends this process's access to another app's item"
+    );
+    assert!(
+        !collection_locked(&client),
+        "the keychain itself stays unlocked"
+    );
+}
+
+#[test]
+fn an_unlock_that_is_cancelled_or_cannot_be_asked_opens_nothing() {
+    let bus = SessionBus::start().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let item = another_apps_item(home.path());
+    let _cancelling = serve(
+        &bus,
+        home.path(),
+        prompter(home.path(), "printf 'cancel\\n'"),
+    );
+    let client = bus.connect().unwrap();
+
+    let (dismissed, result) = reveal(&client);
+    assert!(dismissed);
+    assert!(
+        String::try_from(result).is_err(),
+        "cancelling is no failure"
+    );
+    assert!(collection_locked(&client));
+    assert!(read_secret(&client, &item, &plain_session(&client)).is_err());
+
+    let bus = SessionBus::start().unwrap();
+    let _unable = serve(&bus, home.path(), PathBuf::from("/nonexistent"));
+    let client = bus.connect().unwrap();
+    let (dismissed, result) = reveal(&client);
+    assert!(dismissed);
+    assert!(
+        String::try_from(result).is_ok(),
+        "a prompt that cannot appear is reported, not taken for a cancel"
+    );
+    assert!(collection_locked(&client));
+}
+
+#[test]
+fn only_root_can_pass_a_login_password_and_a_wrong_old_password_changes_nothing() {
+    let bus = SessionBus::start().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    another_apps_item(home.path());
+    let (daemon, connection) = serve(&bus, home.path(), PathBuf::from("/nonexistent"));
+    let socket = home.path().join("pam");
+    let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+    connection
+        .executor()
+        .spawn(
+            {
+                let (daemon, connection) = (daemon.clone(), connection.clone());
+                async move {
+                    let _ = pam::serve(daemon, connection, listener).await;
+                }
+            },
+            "login socket",
+        )
+        .detach();
+
+    let mut stream = UnixStream::connect(&socket).unwrap();
+    let password = PASSWORD.as_bytes();
+    let mut message = vec![1];
+    message.extend_from_slice(&(password.len() as u32).to_le_bytes());
+    message.extend_from_slice(password);
+    let _ = stream.write_all(&message);
+    let _ = stream.shutdown(std::net::Shutdown::Write);
+    let mut answer = Vec::new();
+    let _ = stream.read_to_end(&mut answer);
+    assert!(answer.is_empty(), "an ordinary process gets no answer");
+    let client = bus.connect().unwrap();
+    assert!(collection_locked(&client));
+
+    async_io::block_on(async {
+        assert!(daemon.login(Secret::text(PASSWORD)).await);
+        assert!(
+            !daemon
+                .change_login(Secret::text("a guess"), Secret::text("attacker"))
+                .await,
+            "an open keychain still needs its old password"
+        );
+        let restarted = Daemon::new(
+            Keychain::load(home.path().to_path_buf()).await,
+            PathBuf::from("/nonexistent"),
+        );
+        assert!(!restarted.login(Secret::text("attacker")).await);
+        assert!(restarted.login(Secret::text(PASSWORD)).await);
+    });
 }

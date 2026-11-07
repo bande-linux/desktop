@@ -12,6 +12,7 @@ use std::os::fd::{AsRawFd, BorrowedFd, IntoRawFd, OwnedFd};
 use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use ash::vk;
 use smithay::backend::allocator::dmabuf::{Dmabuf, WeakDmabuf};
@@ -30,6 +31,8 @@ pub use rect::{Rect, disjoint};
 const SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.spv"));
 const BYTES_PER_PIXEL: usize = 4;
 const MIN_STAGING_BYTES: usize = 4 << 20;
+const GPU_HANG_NANOS: u64 = 5_000_000_000;
+const MIN_RENDERER_LIFETIME: Duration = Duration::from_secs(10);
 const REQUIRED_EXTENSIONS: [&CStr; 3] = [
     ash::khr::push_descriptor::NAME,
     ash::khr::external_memory_fd::NAME,
@@ -89,7 +92,10 @@ impl std::error::Error for RenderError {}
 
 impl RenderError {
     pub fn is_device_lost(&self) -> bool {
-        matches!(self, Self::Vulkan(vk::Result::ERROR_DEVICE_LOST))
+        matches!(
+            self,
+            Self::Vulkan(vk::Result::ERROR_DEVICE_LOST | vk::Result::TIMEOUT)
+        )
     }
 }
 
@@ -261,6 +267,32 @@ struct PendingCopy {
     rect: Rect,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct MemoryUse {
+    pub textures: (usize, u64),
+    pub targets: (usize, u64),
+    pub imports: (usize, u64),
+    pub staging: (usize, u64),
+    pub blur_levels: (usize, u64),
+    pub heap_size: u64,
+}
+
+impl fmt::Display for MemoryUse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const MEBIBYTE: u64 = 1 << 20;
+        for (name, (count, bytes)) in [
+            ("textures", self.textures),
+            ("targets", self.targets),
+            ("imports", self.imports),
+            ("staging", self.staging),
+            ("blur levels", self.blur_levels),
+        ] {
+            write!(f, "{count} {name} {} MiB, ", bytes / MEBIBYTE)?;
+        }
+        write!(f, "of a {} MiB heap", self.heap_size / MEBIBYTE)
+    }
+}
+
 pub struct VulkanRenderer {
     instance: ash::Instance,
     device: ash::Device,
@@ -292,6 +324,8 @@ pub struct VulkanRenderer {
     counters: Counters,
     blur_chains: HashMap<(i32, i32, vk::Format, u32), frame::BlurChain>,
     lost: AtomicBool,
+    exhausted: AtomicBool,
+    created: Instant,
     _entry: ash::Entry,
 }
 
@@ -489,6 +523,8 @@ impl VulkanRenderer {
             counters: Counters::default(),
             blur_chains: HashMap::new(),
             lost: AtomicBool::new(false),
+            exhausted: AtomicBool::new(false),
+            created: Instant::now(),
             instance,
             device,
             _entry: entry,
@@ -802,6 +838,14 @@ impl VulkanRenderer {
         }
     }
 
+    fn allocate(&self, info: &vk::MemoryAllocateInfo) -> Result<vk::DeviceMemory, vk::Result> {
+        unsafe { self.device.allocate_memory(info, None) }.inspect_err(|error| {
+            if *error == vk::Result::ERROR_OUT_OF_DEVICE_MEMORY {
+                self.exhausted.store(true, Ordering::Relaxed);
+            }
+        })
+    }
+
     fn bind_image_memory(&self, image: &mut Image) -> Result<(), RenderError> {
         let requirements = unsafe { self.device.get_image_memory_requirements(image.image) };
         let kind = self
@@ -815,14 +859,11 @@ impl VulkanRenderer {
                     vk::MemoryPropertyFlags::empty(),
                 )
             })?;
-        image.memory = unsafe {
-            self.device.allocate_memory(
-                &vk::MemoryAllocateInfo::default()
-                    .allocation_size(requirements.size)
-                    .memory_type_index(kind),
-                None,
-            )
-        }?;
+        image.memory = self.allocate(
+            &vk::MemoryAllocateInfo::default()
+                .allocation_size(requirements.size)
+                .memory_type_index(kind),
+        )?;
         unsafe { self.device.bind_image_memory(image.image, image.memory, 0) }?;
         Ok(())
     }
@@ -897,14 +938,11 @@ impl VulkanRenderer {
             requirements.memory_type_bits,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )?;
-        staging.memory = unsafe {
-            self.device.allocate_memory(
-                &vk::MemoryAllocateInfo::default()
-                    .allocation_size(requirements.size)
-                    .memory_type_index(kind),
-                None,
-            )
-        }?;
+        staging.memory = self.allocate(
+            &vk::MemoryAllocateInfo::default()
+                .allocation_size(requirements.size)
+                .memory_type_index(kind),
+        )?;
         unsafe {
             self.device
                 .bind_buffer_memory(staging.buffer, staging.memory, 0)?;
@@ -1020,15 +1058,12 @@ impl VulkanRenderer {
         let mut import = vk::ImportMemoryFdInfoKHR::default()
             .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
             .fd(fd);
-        let memory = unsafe {
-            self.device.allocate_memory(
-                &vk::MemoryAllocateInfo::default()
-                    .allocation_size(size)
-                    .memory_type_index(kind)
-                    .push_next(&mut import),
-                None,
-            )
-        };
+        let memory = self.allocate(
+            &vk::MemoryAllocateInfo::default()
+                .allocation_size(size)
+                .memory_type_index(kind)
+                .push_next(&mut import),
+        );
         let memory = match memory {
             Ok(memory) => memory,
             Err(error) => {
@@ -1136,6 +1171,56 @@ impl VulkanRenderer {
         self.lost.load(Ordering::Relaxed)
     }
 
+    pub fn needs_renewal(&self) -> bool {
+        self.is_lost()
+            || (self.exhausted.load(Ordering::Relaxed)
+                && self.created.elapsed() >= MIN_RENDERER_LIFETIME)
+    }
+
+    pub fn memory_use(&self) -> MemoryUse {
+        let image_bytes = |image: &Image| {
+            u64::from(image.width.unsigned_abs())
+                * u64::from(image.height.unsigned_abs())
+                * BYTES_PER_PIXEL as u64
+        };
+        let levels = self
+            .blur_chains
+            .values()
+            .flat_map(|chain| chain.levels.iter());
+        MemoryUse {
+            textures: (
+                self.textures.len(),
+                self.textures
+                    .values()
+                    .map(|texture| image_bytes(&texture.image))
+                    .sum(),
+            ),
+            targets: (
+                self.targets.len(),
+                self.targets
+                    .values()
+                    .map(|target| image_bytes(&target.image))
+                    .sum(),
+            ),
+            imports: (
+                self.imports.len(),
+                self.imports.values().map(|imported| imported.size).sum(),
+            ),
+            staging: (
+                self.staging.len(),
+                self.staging
+                    .iter()
+                    .map(|staging| staging.capacity as u64)
+                    .sum(),
+            ),
+            blur_levels: (levels.clone().count(), levels.map(image_bytes).sum()),
+            heap_size: self.memory.memory_heaps[..self.memory.memory_heap_count as usize]
+                .iter()
+                .map(|heap| heap.size)
+                .sum(),
+        }
+    }
+
     fn submit_and_wait(&self) -> Result<(), RenderError> {
         let submit =
             vk::SubmitInfo::default().command_buffers(slice::from_ref(&self.command_buffer));
@@ -1144,15 +1229,27 @@ impl VulkanRenderer {
                 .queue_submit(self.queue, slice::from_ref(&submit), self.fence)
                 .and_then(|()| {
                     self.device
-                        .wait_for_fences(slice::from_ref(&self.fence), true, u64::MAX)
+                        .wait_for_fences(slice::from_ref(&self.fence), true, GPU_HANG_NANOS)
                 })
                 .and_then(|()| self.device.reset_fences(slice::from_ref(&self.fence)))
         }
         .inspect_err(|error| {
-            if *error == vk::Result::ERROR_DEVICE_LOST {
+            if matches!(*error, vk::Result::ERROR_DEVICE_LOST | vk::Result::TIMEOUT) {
                 self.lost.store(true, Ordering::Relaxed);
             }
         })?;
+        Ok(())
+    }
+
+    pub fn finish_uploads(&mut self) -> Result<(), RenderError> {
+        if self.copies.is_empty() {
+            return Ok(());
+        }
+        self.begin_commands()?;
+        self.record_copies();
+        unsafe { self.device.end_command_buffer(self.command_buffer) }?;
+        self.submit_and_wait()?;
+        self.recycle_staging();
         Ok(())
     }
 
@@ -1442,6 +1539,9 @@ impl Bind<Dmabuf> for VulkanRenderer {
 
 impl Drop for VulkanRenderer {
     fn drop(&mut self) {
+        if self.is_lost() {
+            return;
+        }
         unsafe {
             let _ = self.device.device_wait_idle();
         }

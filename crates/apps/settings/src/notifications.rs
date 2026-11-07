@@ -8,7 +8,7 @@ use bande_toolkit::TextRole;
 use bande_toolkit::ui::{Label, SegmentedControl, Toggle, Widget, WidgetId};
 
 use crate::L10N;
-use crate::failure::unexpected;
+use crate::failure::pane_failed;
 use crate::follow::{Update, Updates, spawn};
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::view::{Anchor, Intent, Intents, SettingsView, intent};
@@ -69,7 +69,11 @@ pub fn follow_app_notifications(
                     app.sound,
                 )
             {
-                updates.send(unexpected(error));
+                updates.send(pane_failed(
+                    PaneId::Notifications,
+                    "notification-change-failed",
+                    error,
+                ));
             }
             match read(&rules) {
                 Ok(apps) => {

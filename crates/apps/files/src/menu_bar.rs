@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use bande_app::Menus;
 use bande_app_menu::{Entry, key_item};
-use bande_files::{FilesView, GROUPS, L10N, group_action};
+use bande_files::{
+    FilesView, GROUPS, L10N, ListColumn, group_action, list_column_action, list_column_move_action,
+    list_column_title,
+};
 use bande_fs::SortBy;
 
 fn shortcut(message: &str, keys: &str) -> Entry {
@@ -69,6 +72,39 @@ fn sort_entries(view: &FilesView) -> Vec<Entry> {
     .collect()
 }
 
+fn column_entries(view: &FilesView) -> Vec<Entry> {
+    let shown = view.list_columns();
+    let mut entries = ListColumn::ALL
+        .into_iter()
+        .map(|column| {
+            Entry::item(&list_column_title(column), &list_column_action(column))
+                .radio(shown.contains(&column))
+        })
+        .collect::<Vec<_>>();
+    if shown.len() > 1 {
+        entries.push(Entry::separator());
+    }
+    let moved = |column: ListColumn, by: isize, message: &str| {
+        Entry::item(
+            &L10N.tr_args(message, [("column", list_column_title(column).into())]),
+            &list_column_move_action(column, by),
+        )
+    };
+    entries.extend(
+        shown
+            .iter()
+            .skip(1)
+            .map(|column| moved(*column, -1, "menu-move-column-left")),
+    );
+    entries.extend(
+        shown
+            .iter()
+            .take(shown.len().saturating_sub(1))
+            .map(|column| moved(*column, 1, "menu-move-column-right")),
+    );
+    entries
+}
+
 pub fn windowless_menus() -> Menus {
     Menus {
         menus: vec![submenu(
@@ -131,6 +167,7 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                     .radio(view.browser().groups().is_some()),
                 submenu("menu-group-by", group_entries(view)),
                 submenu("menu-sort-by", sort_entries(view)),
+                submenu("menu-columns", column_entries(view)),
                 Entry::separator(),
                 shortcut("menu-bigger-icons", "Ctrl+="),
                 shortcut("menu-smaller-icons", "Ctrl+-"),

@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use bande_graphics::{
-    Color, DOUBLE_CLICK_INTERVAL, MenuButton, Palette, RESIZE_MARGIN, RESIZE_WALL_BAND, Rect,
-    ResizeEdge, Scene, Scheme, TextAlign, TitleBar, WalledSides, WindowControl, resize_zone,
-    title_style, walled_resize_zone, window_controls_area,
+    Color, DOUBLE_CLICK_INTERVAL, MenuButton, Palette, RESIZE_WALL_BAND, Rect, ResizeEdge, Scene,
+    Scheme, TextAlign, TitleBar, WalledSides, WindowControl, resize_zone, title_style,
+    walled_resize_zone, window_controls_area,
 };
 use bande_render::{VulkanRenderer, VulkanTexture};
 use smithay::backend::allocator::Fourcc;
@@ -126,7 +126,7 @@ fn resizable(window: &Window) -> bool {
 
 fn resize_band(window: &Window, frame: Rect, point: bande_graphics::Point) -> Option<ResizeEdge> {
     resizable(window)
-        .then(|| resize_zone(frame, RESIZE_MARGIN as f32, point))
+        .then(|| resize_zone(frame, point))
         .flatten()
 }
 

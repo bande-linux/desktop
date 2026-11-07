@@ -142,6 +142,10 @@ fn the_free_space_inside_a_window_edge_moves_it_and_only_outside_the_outline_res
     assert_eq!(desk.drag_from(width * 0.8, -0.5), top);
     assert_eq!(desk.drag_from(0.5, 0.5), top_left, "in the rounded cut-out");
     assert_eq!(desk.drag_from(-5.0, -5.0), top_left);
+    assert_eq!(desk.drag_from(-14.0, -14.0), top_left, "out diagonally");
+    assert_eq!(desk.drag_from(30.0, -1.0), top_left, "along the top");
+    assert_eq!(desk.drag_from(-1.0, 30.0), top_left, "along the side");
+    assert_eq!(desk.drag_from(34.0, -1.0), top, "past the corner");
     assert_eq!(desk.drag_from(width + 2.0, height + 2.0), bottom_right);
 
     let room = 900 - desk.window().1 - desk.window().3;

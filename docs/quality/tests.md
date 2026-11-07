@@ -46,7 +46,7 @@ the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
 | `shell/launcher/tests/launcher.rs` | Launcher: typing ranks apps, arrows and Return open the choice. |
 | `shell/lock/tests/lock.rs` | Lock screen: a password is submitted once and a rejected one is cleared for another try; a resting lock wakes on the first input, keeps a typed letter and rests again with the field cleared. |
 | `services/power/tests/idle.rs` | A running stream holds back sleep but not the display off, and sleep follows its end. |
-| `toolkit/toolkit/tests/window_edges.rs` | Window edges: a drag from the first pixel inside the outline, above a tab too, moves the window; just outside and in the rounded cut-outs it resizes, diagonally at corners; a side resting on the screen edge resizes from 3 pt inside. |
+| `toolkit/toolkit/tests/window_edges.rs` | Window edges: a drag from the first pixel inside the outline, above a tab too, moves the window; just outside and in the rounded cut-outs it resizes, diagonally for the whole generous corner zone; a side resting on the screen edge resizes from 3 pt inside. |
 | `toolkit/toolkit/tests/accessibility.rs` | Toolkit: a screen reader finds a button over AT-SPI in a window on the headless compositor and presses it. |
 
 ## Support

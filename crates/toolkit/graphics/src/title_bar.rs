@@ -6,7 +6,8 @@ pub const WINDOW_HEADER_HEIGHT: u32 = 48;
 pub const FRAME_HEADER_HEIGHT: u32 = 40;
 pub const RESIZE_MARGIN: u32 = 8;
 pub const RESIZE_WALL_BAND: f32 = 3.0;
-const RESIZE_CORNER_REACH: f32 = 24.0;
+const RESIZE_CORNER_MARGIN: f32 = 16.0;
+const RESIZE_CORNER_REACH: f32 = 32.0;
 const WELL_X: f32 = 12.0;
 const WELL_WIDTH: f32 = 66.0;
 const WELL_HEIGHT: f32 = 24.0;
@@ -118,9 +119,16 @@ pub struct WalledSides {
     pub bottom: bool,
 }
 
-pub fn resize_zone(window: Rect, outside: f32, point: Point) -> Option<ResizeEdge> {
+pub fn resize_zone(window: Rect, point: Point) -> Option<ResizeEdge> {
+    let beside = (window.x - point.x).max(point.x - window.x - window.width);
+    let beyond = (window.y - point.y).max(point.y - window.y - window.height);
+    let margin = if beside > 0.0 && beyond > 0.0 {
+        RESIZE_CORNER_MARGIN
+    } else {
+        RESIZE_MARGIN as f32
+    };
     let beyond_outline = Shape::rounded(window, Radius::XL).distance(point) >= 0.0;
-    (window.inset(-outside).contains(point) && beyond_outline).then(|| edge_at(window, point))
+    (beside.max(beyond) < margin && beyond_outline).then(|| edge_at(window, point))
 }
 
 pub fn walled_resize_zone(window: Rect, walled: WalledSides, point: Point) -> Option<ResizeEdge> {

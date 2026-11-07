@@ -27,7 +27,7 @@ pub struct FrameClock {
 }
 
 enum Timing {
-    Measured(FramePacing),
+    Measured(Box<FramePacing>),
     Classic(ClassicClock),
 }
 
@@ -110,7 +110,7 @@ impl FrameClock {
 
     fn measured(origin: Duration, refresh: Duration) -> Self {
         Self {
-            timing: Timing::Measured(FramePacing::new(origin, refresh)),
+            timing: Timing::Measured(Box::new(FramePacing::new(origin, refresh))),
         }
     }
 
@@ -128,7 +128,7 @@ impl FrameClock {
     fn retimed(&self, origin: Duration, refresh: Duration) -> Self {
         match &self.timing {
             Timing::Measured(pacing) => Self {
-                timing: Timing::Measured(pacing.retimed(origin, refresh)),
+                timing: Timing::Measured(Box::new(pacing.retimed(origin, refresh))),
             },
             Timing::Classic(_) => Self::classic(origin, refresh),
         }

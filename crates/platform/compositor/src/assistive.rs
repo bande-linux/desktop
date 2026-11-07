@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use bande_config::{Accessibility, BUS_NAME, OBJECT_PATH, SCREEN_READER};
-use bande_graphics::{Material, Palette};
+use bande_graphics::{Material, Palette, backdrop_tone};
 use bande_render::VulkanRenderer;
 use bande_spring::{Animated, Spring};
 use rustix::process::{Pid, Signal, kill_process};
@@ -147,8 +147,14 @@ impl State {
         if self.assistive.settings.reduce_transparency {
             return self.solid_behind();
         }
-        if self.material() != Material::Wallpaper {
-            return scrim(renderer, self.decorations.scheme).map_or(Behind::Live, Behind::Fill);
+        match self.material() {
+            Material::Live if renderer.reduced_effects() => return self.solid_behind(),
+            Material::Live => return Behind::Live(Some(backdrop_tone(self.decorations.scheme))),
+            Material::Opaque => {
+                return scrim(renderer, self.decorations.scheme)
+                    .map_or(Behind::Live(None), Behind::Fill);
+            }
+            Material::Wallpaper => {}
         }
         let screen = &self.screens[screen];
         let Some(material) = self.material_texture(&screen.name()) else {

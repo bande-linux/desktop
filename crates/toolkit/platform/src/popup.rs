@@ -11,6 +11,7 @@ use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
+use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1;
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 use wayland_protocols::xdg::shell::client::xdg_popup::{self, XdgPopup};
 use wayland_protocols::xdg::shell::client::xdg_positioner::{
@@ -161,6 +162,8 @@ struct Popup {
     toward: Option<Point>,
     opacity: Animated,
     slide: Animated,
+    backdrop: Option<ExtBackgroundEffectSurfaceV1>,
+    shown_backdrop: Option<(f32, f32)>,
 }
 
 struct Frame<'a> {
@@ -170,6 +173,39 @@ struct Frame<'a> {
 }
 
 impl Popup {
+    fn declare_backdrop(
+        &mut self,
+        state: &State,
+        handle: &QueueHandle<State>,
+        size: Option<(f32, f32)>,
+    ) {
+        if self.shown_backdrop == size {
+            return;
+        }
+        let (Some(manager), Some(compositor)) = (&state.background_effects, &state.compositor)
+        else {
+            return;
+        };
+        self.shown_backdrop = size;
+        let effect = self
+            .backdrop
+            .get_or_insert_with(|| manager.get_background_effect(&self.surface, handle, ()));
+        let region = size.map(|(width, height)| {
+            let region = compositor.create_region(handle, ());
+            region.add(
+                MENU_SHADOW_MARGIN.round() as i32,
+                MENU_SHADOW_MARGIN.round() as i32,
+                width.round() as i32,
+                height.round() as i32,
+            );
+            region
+        });
+        effect.set_blur_region(region.as_ref());
+        if let Some(region) = region {
+            region.destroy();
+        }
+    }
+
     fn destroy(mut self) {
         self.popup.destroy();
         self.xdg_surface.destroy();
@@ -530,6 +566,9 @@ impl Menus {
                 scrolled: panel.scroll_offset(),
                 height: panel.size().height,
             };
+            let translucent = palette.panel.a != u8::MAX;
+            let size = panel.size();
+            popup.declare_backdrop(state, handle, translucent.then_some((size.width, size.height)));
             popup.paint(look, cpu, || panel.scene(&palette, show_highlight))?;
             popup.present(&frame, flashing)?;
         }
@@ -672,6 +711,8 @@ fn create(
         presented: None,
         toward: None,
         opacity: Animated::new(0.0),
+        backdrop: None,
+        shown_backdrop: None,
         slide: Animated::points(SLIDE),
     })
 }

@@ -16,6 +16,7 @@ pub struct Blur {
     pub passes: u32,
     pub offset: f32,
     pub alpha: f32,
+    pub tone: Option<[f32; 4]>,
 }
 
 pub(crate) struct BlurChain {
@@ -105,10 +106,14 @@ impl VulkanFrame<'_, '_> {
             self.filter(Program::BlurUp, levels[pass + 1], levels[pass], blur.offset)?;
         }
         self.resume();
-        self.bind(Program::Texture)?;
+        self.bind(match blur.tone {
+            Some(_) => Program::BlurTone,
+            None => Program::Texture,
+        })?;
         self.push_texture(levels[0].1);
         self.draw(
             &Quad {
+                color: blur.tone.unwrap_or_default(),
                 destination: source,
                 sampling: Sampling::upright(Rectangle::from_size(
                     (f64::from(source.width), f64::from(source.height)).into(),

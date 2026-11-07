@@ -21,6 +21,7 @@ use crate::session::SessionRole;
 use crate::state::{ClientState, State};
 
 pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
+pub(crate) const BACKDROP_OPACITY_SINCE: u32 = 6;
 const INSERT_PATIENCE: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
@@ -521,6 +522,10 @@ impl Dispatch<BandeShellV1, ()> for State {
             }
             bande_shell_v1::Request::SetCornerRadius { surface, radius } => {
                 crate::effect::set_corner_radius(&surface, radius);
+                state.needs_redraw = true;
+            }
+            bande_shell_v1::Request::SetBackdropOpacity { surface, opacity } => {
+                crate::effect::set_backdrop_opacity(&surface, opacity);
                 state.needs_redraw = true;
             }
             bande_shell_v1::Request::ShowWindows { app_id } => {

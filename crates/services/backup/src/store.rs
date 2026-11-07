@@ -24,7 +24,6 @@ pub struct ChosenDisk {
 #[serde(default)]
 pub struct State {
     pub disk: Option<ChosenDisk>,
-    pub excluded: Vec<PathBuf>,
     pub on_battery: bool,
     pub chosen_at: u64,
     pub last_success: u64,

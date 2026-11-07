@@ -95,11 +95,22 @@ impl Service {
         self.shared.status()
     }
 
-    async fn disks(&self) -> fdo::Result<Vec<DiskChoice>> {
+    async fn disks(
+        &self,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> fdo::Result<Vec<DiskChoice>> {
+        authorize(connection, &header, CONTROL).await?;
         usable_disks_off_the_bus().await
     }
 
-    async fn has_backups(&self, uuid: String) -> fdo::Result<bool> {
+    async fn has_backups(
+        &self,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: Header<'_>,
+        uuid: String,
+    ) -> fdo::Result<bool> {
+        authorize(connection, &header, CONTROL).await?;
         let choice = disk_with(&uuid).await?;
         blocking::unblock(move || disk::peek(&choice.uuid, &choice.filesystem))
             .await

@@ -139,10 +139,15 @@ wait_until "the lock screen that came back is the session's own build" 5 is_buil
 check "the held lock screen keeps its process name" [ "$(cat "/proc/$(pid_of bande-lock)/comm")" = bande-lock ]
 
 say "PipeWire restarts"
-has_shell_client() { as_user pw-dump Client 2>/dev/null | grep -q '"application.process.binary": "bande-shell"'; }
-wait_until "the shell is connected to PipeWire" 30 has_shell_client
+connected_to_pipewire() { as_user pw-dump 2>/dev/null | grep -q "\"application.process.id\": $(pid_of "$1")\b"; }
+for client in bande-shell bande-power bande-sound; do
+    wait_until "$client is connected to PipeWire" 30 connected_to_pipewire "$client"
+done
 as_user systemctl --user restart pipewire.service
-wait_until "the shell reconnects to PipeWire" 30 has_shell_client
+sleep 2
+for client in bande-shell bande-power bande-sound; do
+    wait_until "$client reconnects to PipeWire" 30 connected_to_pipewire "$client"
+done
 
 say "a new app runs on the old compositor"
 as_user env DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \

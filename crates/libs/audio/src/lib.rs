@@ -1,15 +1,18 @@
 mod graph;
 mod level;
+mod reconnect;
 mod stream;
 
 use std::fmt;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, Mutex, MutexGuard, mpsc};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use graph::{Change, Command, Shared, State};
 pub use level::{Level, VolumeKey, meter_level};
 use pipewire as pw;
+use reconnect::Link;
 pub use stream::EFFECT_RATE;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -81,6 +84,7 @@ pub struct Capture {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Snapshot {
     pub generation: u64,
+    pub connection: u64,
     pub connected: bool,
     pub outputs: Vec<Device>,
     pub inputs: Vec<Device>,
@@ -154,6 +158,7 @@ impl Snapshot {
         apps.sort_by_key(|app| app.name.to_lowercase());
         Self {
             generation: state.generation,
+            connection: state.connection,
             connected: state.connected,
             outputs,
             inputs,
@@ -220,7 +225,7 @@ fn capturing(state: &State) -> Vec<Capture> {
 
 pub struct Audio {
     shared: Arc<Shared>,
-    commands: pw::channel::Sender<Command>,
+    link: Arc<Mutex<Link>>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -245,23 +250,34 @@ impl Drop for Meter {
 static NEXT_METER: AtomicU64 = AtomicU64::new(1);
 
 impl Audio {
-    pub fn connect() -> Result<Self, Error> {
+    pub fn start() -> Result<Self, Error> {
         let shared = Arc::new(Shared::default());
-        let (commands, receiver) = pw::channel::channel();
-        let (ready, started) = mpsc::channel();
+        let link = Arc::new(Mutex::new(Link::new()?));
         let graph = Arc::clone(&shared);
-        let sender = commands.clone();
+        let linked = Arc::clone(&link);
         let thread = std::thread::Builder::new()
             .name("pipewire".into())
-            .spawn(move || graph::run(graph, receiver, sender, ready))
+            .spawn(move || reconnect::keep_connected(&graph, &linked))
             .map_err(|error| Error::PipeWire(error.to_string()))?;
-        let audio = Self {
+        Ok(Self {
             shared,
-            commands,
+            link,
             thread: Some(thread),
-        };
-        started.recv().map_err(|_| Error::Disconnected)??;
-        Ok(audio)
+        })
+    }
+
+    pub fn wait_connected(&self, patience: Duration) -> bool {
+        let state = self.shared.lock();
+        let (state, _) = self
+            .shared
+            .changed
+            .wait_timeout_while(state, patience, |state| !state.connected)
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        state.connected
+    }
+
+    fn link(&self) -> MutexGuard<'_, Link> {
+        reconnect::locked(&self.link)
     }
 
     pub fn snapshot(&self) -> Snapshot {
@@ -280,9 +296,16 @@ impl Audio {
         Snapshot::of(&state)
     }
 
+    fn commands(&self) -> Result<pw::channel::Sender<Command>, Error> {
+        if !self.shared.lock().connected {
+            return Err(Error::Disconnected);
+        }
+        self.link().commands().ok_or(Error::Disconnected)
+    }
+
     fn send(&self, command: impl FnOnce(graph::Reply) -> Command) -> Result<(), Error> {
         let (done, outcome) = mpsc::channel();
-        self.commands
+        self.commands()?
             .send(command(done))
             .map_err(|_| Error::Disconnected)?;
         outcome.recv().map_err(|_| Error::Disconnected)?
@@ -296,10 +319,8 @@ impl Audio {
         })
     }
 
-    pub fn follow_jacks(&self) -> Result<(), Error> {
-        self.commands
-            .send(Command::FollowJacks)
-            .map_err(|_| Error::Disconnected)
+    pub fn follow_jacks(&self) {
+        self.shared.follow_jacks.store(true, Ordering::Relaxed);
     }
 
     fn change(&self, id: u32, change: Change) -> Result<(), Error> {
@@ -339,17 +360,14 @@ impl Audio {
     pub fn meter(&self, device: &Device) -> Result<Meter, Error> {
         let id = NEXT_METER.fetch_add(1, Ordering::Relaxed);
         let peak = Arc::new(AtomicU32::new(0));
+        let commands = self.commands()?;
         self.send(|done| Command::Meter {
             id,
             device: device.name.clone(),
             peak: Arc::clone(&peak),
             done,
         })?;
-        Ok(Meter {
-            id,
-            peak,
-            commands: self.commands.clone(),
-        })
+        Ok(Meter { id, peak, commands })
     }
 
     pub fn press(&self, key: VolumeKey, fine: bool) -> Result<Level, Error> {
@@ -363,7 +381,8 @@ impl Audio {
 
 impl Drop for Audio {
     fn drop(&mut self) {
-        let _ = self.commands.send(Command::Quit);
+        self.shared.stopping.store(true, Ordering::SeqCst);
+        self.link().stop();
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }

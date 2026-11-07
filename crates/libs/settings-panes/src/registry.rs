@@ -1044,14 +1044,12 @@ fn displays_pane() -> Pane {
         vec![
             section(
                 None,
-                vec![
-                    level(SettingId::Brightness, "brightness"),
-                    page(SettingId::NightLightPage, PaneId::NightLight),
-                ],
+                vec![page(SettingId::NightLightPage, PaneId::NightLight)],
             ),
             section(
                 None,
                 vec![
+                    level(SettingId::Brightness, "brightness"),
                     setting(
                         SettingId::DisplayUse,
                         L10N.tr("display-use"),
@@ -1562,6 +1560,19 @@ fn power_pane() -> Pane {
             ),
         ],
     )
+}
+
+pub fn without_sleep(panes: &mut [Pane]) {
+    for pane in panes {
+        for section in &mut pane.sections {
+            section
+                .settings
+                .retain(|setting| setting.id != SettingId::SleepAfter);
+        }
+        if pane.id == PaneId::LockScreen {
+            pane.summary = L10N.tr("lock-screen-summary-no-sleep");
+        }
+    }
 }
 
 fn lock_screen_pane() -> Pane {

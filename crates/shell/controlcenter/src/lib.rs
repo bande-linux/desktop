@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use bande_audio::{Level, VolumeKey};
 use bande_l10n::Localizer;
+use bande_status::brightness::DisplayLevel;
 use bande_toolkit::ui::{
     Axis, Context, LevelIndicator, Menu, MenuItem, PopUpButton, Size, Slider, Stack, Ui, Widget,
 };
@@ -86,7 +87,7 @@ pub struct Status {
     pub volume: Option<f32>,
     pub outputs: Vec<Choice>,
     pub output: Option<String>,
-    pub brightness: Option<f32>,
+    pub brightness: Vec<DisplayLevel>,
     pub keyboard_brightness: Option<f32>,
     pub inputs: Vec<Choice>,
     pub input: Option<String>,
@@ -111,7 +112,7 @@ pub enum Change {
     Bluetooth(bool),
     DoNotDisturb(bool),
     Volume(f32),
-    Brightness(f32),
+    Brightness(String, f32),
     KeyboardBrightness(f32),
     ChooseNetwork,
     Output(String),
@@ -151,7 +152,7 @@ fn slider(
     label: &str,
     value: f32,
     changes: &Changes,
-    change: fn(f32) -> Change,
+    change: impl Fn(f32) -> Change + 'static,
 ) -> Vec<Box<dyn Widget>> {
     let changes = Rc::clone(changes);
     vec![
@@ -268,12 +269,13 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
     }
     controls.extend(tiles(status, changes));
     let mut brightness = Vec::new();
-    if let Some(level) = status.brightness {
+    for light in &status.brightness {
+        let connector = light.connector.clone();
         brightness.extend(slider(
-            &L10N.tr("display"),
-            level,
+            &display_title(light, &status.brightness),
+            light.level,
             changes,
-            Change::Brightness,
+            move |level| Change::Brightness(connector.clone(), level),
         ));
     }
     if let Some(level) = status.keyboard_brightness {
@@ -354,32 +356,39 @@ pub fn chooser_menu(choices: &[(String, String, bool)]) -> Menu {
     )
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+pub fn display_title(light: &DisplayLevel, all: &[DisplayLevel]) -> String {
+    match all.len() {
+        0 | 1 => L10N.tr("display"),
+        _ => light.name.clone(),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Hud {
     Volume(Level),
-    Display(f32),
+    Display(String, f32),
     Keyboard(f32),
 }
 
 impl Hud {
-    fn title(self) -> String {
+    fn title(&self) -> String {
         match self {
             Self::Volume(Level { muted: true, .. }) => L10N.tr("sound-muted"),
             Self::Volume(_) => L10N.tr("sound"),
-            Self::Display(_) => L10N.tr("display"),
+            Self::Display(title, _) => title.clone(),
             Self::Keyboard(_) => L10N.tr("keyboard-brightness"),
         }
     }
 
-    fn level(self) -> f32 {
+    fn level(&self) -> f32 {
         match self {
             Self::Volume(Level { muted: true, .. }) => 0.0,
             Self::Volume(level) => level.volume,
-            Self::Display(level) | Self::Keyboard(level) => level,
+            Self::Display(_, level) | Self::Keyboard(level) => *level,
         }
     }
 
-    pub fn segment_fills(self) -> [f32; SEGMENTS] {
+    pub fn segment_fills(&self) -> [f32; SEGMENTS] {
         let filled = self.level().clamp(0.0, 1.0) * SEGMENTS as f32;
         std::array::from_fn(|index| (filled - index as f32).clamp(0.0, 1.0))
     }
@@ -421,7 +430,7 @@ pub fn panel_items(ui: &mut Ui, palette: &Palette, rect: Rect) -> Vec<Item> {
     items
 }
 
-pub fn hud(hud: Hud, palette: &Palette, text: &mut TextSystem) -> Vec<Item> {
+pub fn hud(hud: &Hud, palette: &Palette, text: &mut TextSystem) -> Vec<Item> {
     let (width, height) = HUD_SIZE;
     let inset = Spacing::L as f32;
     let title = text.paragraph(

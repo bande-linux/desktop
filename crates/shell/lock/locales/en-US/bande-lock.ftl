@@ -1,8 +1,10 @@
 locked = Locked. { $name }
 enter-password = Enter Password
-input-source = { $name } · ⌥⌘Space switches
+input-source = Input source { $name }
 user-position = User { $index } of { $count }. Up and Down choose another.
 battery-percent = { $percent }%
 battery-level = Battery { $percent }%
 sleep = Sleep
 cancel = Cancel
+wrong-password = Incorrect password. Try again.
+checking = Checking the password

@@ -77,10 +77,14 @@ fn sequence_text(table: &Table, first: Keysym, second: Keysym) -> Option<String>
         .flatten()
 }
 
-fn spacing_accent(table: &Table, dead: Keysym) -> String {
-    sequence_text(table, dead, dead)
-        .or_else(|| sequence_text(table, dead, Keysym::new(keysyms::KEY_space)))
-        .unwrap_or_default()
+fn spacing_accent(table: &Table, dead: Keysym, has_own_key: &dyn Fn(&str) -> bool) -> String {
+    let doubled = sequence_text(table, dead, dead);
+    let with_space = sequence_text(table, dead, Keysym::new(keysyms::KEY_space));
+    match (doubled, with_space) {
+        (Some(accent), Some(character)) if has_own_key(&character) => accent,
+        (_, Some(character)) => character,
+        (accent, None) => accent.unwrap_or_default(),
+    }
 }
 
 impl Compose {
@@ -95,7 +99,7 @@ impl Compose {
         }
     }
 
-    pub(crate) fn feed(&mut self, keysym: Keysym) -> Step {
+    pub(crate) fn feed(&mut self, keysym: Keysym, has_own_key: &dyn Fn(&str) -> bool) -> Step {
         if self.pending.is_empty() && !starts_sequence(keysym) {
             return Step::key_with(String::new());
         }
@@ -107,7 +111,7 @@ impl Compose {
         };
         if state.feed(keysym) == FeedResult::Ignored {
             let mut step = Step::key_with(String::new());
-            step.preedit = self.shown();
+            step.preedit = self.shown(has_own_key);
             return step;
         }
         match state.status() {
@@ -116,12 +120,12 @@ impl Compose {
                 self.pending.push(keysym);
                 Step {
                     text: String::new(),
-                    preedit: self.shown(),
+                    preedit: self.shown(has_own_key),
                     deliver_key: false,
                 }
             }
             Status::Composed => {
-                let text = self.composed(keysym);
+                let text = self.composed(keysym, has_own_key);
                 self.cancel();
                 Step {
                     text,
@@ -130,29 +134,29 @@ impl Compose {
                 }
             }
             Status::Cancelled => {
-                let accents = self.pending_accents();
+                let accents = self.pending_accents(has_own_key);
                 self.cancel();
-                let mut step = self.feed(keysym);
+                let mut step = self.feed(keysym, has_own_key);
                 step.text.insert_str(0, &accents);
                 step
             }
         }
     }
 
-    fn composed(&self, last: Keysym) -> String {
+    fn composed(&self, last: Keysym, has_own_key: &dyn Fn(&str) -> bool) -> String {
         let Some(state) = &self.state else {
             return String::new();
         };
         let table = state.compose_table();
         match self.pending[..] {
             [dead] if is_dead(dead) && last.raw() == keysyms::KEY_space => {
-                spacing_accent(&table, dead)
+                spacing_accent(&table, dead, has_own_key)
             }
             _ => composed_text(state).unwrap_or_default(),
         }
     }
 
-    fn pending_accents(&self) -> String {
+    fn pending_accents(&self, has_own_key: &dyn Fn(&str) -> bool) -> String {
         let Some(state) = &self.state else {
             return String::new();
         };
@@ -160,11 +164,11 @@ impl Compose {
         self.pending
             .iter()
             .filter(|keysym| is_dead(**keysym))
-            .map(|dead| spacing_accent(&table, *dead))
+            .map(|dead| spacing_accent(&table, *dead, has_own_key))
             .collect()
     }
 
-    fn shown(&self) -> String {
+    fn shown(&self, has_own_key: &dyn Fn(&str) -> bool) -> String {
         let Some(state) = &self.state else {
             return String::new();
         };
@@ -173,7 +177,7 @@ impl Compose {
             .iter()
             .map(|keysym| match keysym.raw() {
                 keysyms::KEY_Multi_key => COMPOSE_KEY_MARK.to_owned(),
-                _ if is_dead(*keysym) => spacing_accent(&table, *keysym),
+                _ if is_dead(*keysym) => spacing_accent(&table, *keysym, has_own_key),
                 _ => char::from_u32(xkb::keysym_to_utf32(*keysym))
                     .map(String::from)
                     .unwrap_or_default(),

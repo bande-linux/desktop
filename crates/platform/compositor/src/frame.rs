@@ -1,8 +1,9 @@
 use std::time::Duration;
 
 use bande_graphics::{
-    Color, ControlHover, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_MARGIN, Rect, ResizeEdge, Scene,
-    Scheme, TextAlign, TitleBar, WindowControl, resize_zone, title_style,
+    Color, ControlHover, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_WALL_BAND, Rect, ResizeEdge, Scene,
+    Scheme, TextAlign, TitleBar, WalledSides, WindowControl, resize_zone, title_style,
+    walled_resize_zone,
 };
 use bande_render::{VulkanRenderer, VulkanTexture};
 use smithay::backend::allocator::Fourcc;
@@ -17,7 +18,7 @@ use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle
 
 use crate::label::Labels;
 use crate::menu_button::menu_address;
-use crate::scene::{CORNER_RADIUS, Piece};
+use crate::scene::Piece;
 use crate::shell::toplevel_names;
 use crate::state::{Compositor, Placed, State};
 use crate::window::Window;
@@ -117,13 +118,16 @@ fn outer_band(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
     resize_band(window, frame, point).map(Zone::Resize)
 }
 
+fn resizable(window: &Window) -> bool {
+    !window.has_state(xdg_toplevel::State::Maximized)
+        && !window.has_state(xdg_toplevel::State::Fullscreen)
+        && !window.fixed_size()
+}
+
 fn resize_band(window: &Window, frame: Rect, point: bande_graphics::Point) -> Option<ResizeEdge> {
-    if window.has_state(xdg_toplevel::State::Maximized)
-        || window.has_state(xdg_toplevel::State::Fullscreen)
-    {
-        return None;
-    }
-    resize_zone(frame, CORNER_RADIUS as f32, RESIZE_MARGIN as f32, point)
+    resizable(window)
+        .then(|| resize_zone(frame, point))
+        .flatten()
 }
 
 fn local_point(
@@ -181,6 +185,22 @@ fn surface_at(
 }
 
 impl State {
+    fn walled_band(&self, window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
+        if !resizable(window) {
+            return None;
+        }
+        let rect = window.geometry()?;
+        let usable = self.usable_area(self.screen_of(window));
+        let no_room = |room: i32| (room as f32) < RESIZE_WALL_BAND;
+        let walled = WalledSides {
+            left: no_room(rect.loc.x - usable.loc.x),
+            right: no_room(usable.loc.x + usable.size.w - rect.loc.x - rect.size.w),
+            bottom: no_room(usable.loc.y + usable.size.h - rect.loc.y - rect.size.h),
+        };
+        let frame = Rect::new(0.0, 0.0, rect.size.w as f32, rect.size.h as f32);
+        walled_resize_zone(frame, walled, local_point(rect, location)).map(Zone::Resize)
+    }
+
     pub(crate) fn pointer_target(&self, location: Point<f64, Logical>) -> Option<Target> {
         let screen = self.screen_at(location)?;
         let dragged = self.dragged_window().map(|(surface, _)| surface);
@@ -189,7 +209,9 @@ impl State {
             .find_map(|placed| match placed {
                 Placed::Surface(surface, origin) => surface_at(&surface, origin, location),
                 Placed::Window(_, window) if Some(window.surface()) == dragged.as_ref() => None,
-                Placed::Window(_, window) => zone_at(window, location)
+                Placed::Window(_, window) => self
+                    .walled_band(window, location)
+                    .or_else(|| zone_at(window, location))
                     .map(|zone| Target::Frame(window.surface().clone(), zone))
                     .or_else(|| surface_at(window.surface(), window.surface_origin(), location))
                     .or_else(|| {

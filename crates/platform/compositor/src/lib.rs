@@ -15,6 +15,7 @@ mod clock;
 mod constraint;
 mod cursor;
 mod decoration;
+mod display_bus;
 mod displays;
 mod drag;
 mod drm;
@@ -75,6 +76,7 @@ pub use clock::{
 pub use cursor::{
     ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,
 };
+pub use display_bus::{DisplaysHandle, serve_displays};
 pub use drm::{DrmBackend, DrmBackendError, DrmNotifiers, HeadChanges};
 pub use element::{ScreenElement, SurfaceElement};
 pub use environment::{
@@ -92,6 +94,7 @@ pub use logind::{
 pub use night::NightTick;
 pub use pointing::PointerSettings;
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};
+pub use reveal::Awaited;
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
 pub use session::{
     CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, REVIEW, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE,

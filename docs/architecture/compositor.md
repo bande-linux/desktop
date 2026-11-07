@@ -77,10 +77,13 @@ when they reach the screen is Bande's own.
   animations. The window's geometry includes the bar, so placement, zoom and tiling size the
   app to what is left below it. Dragging the bar moves the window (with snapping), a double
   click zooms, the buttons close, minimise and zoom (a press that slides off does nothing, as
-  in AppKit), and a band from 8 pt outside to 3 pt inside the rounded outline resizes it with the
-  matching cursor (`resize_zone` in `bande-graphics`, shared with the toolkit). A floating
-  client-side window gets the outside 8 pt too wherever its own input region leaves the
-  point to the compositor. A
+  in AppKit), and a band from the rounded outline to 8 pt outside resizes it with the matching
+  cursor, the corner cut-outs included, and a corner resizes both ways for 32 pt along each edge
+  and 16 pt out diagonally (`resize_zone` in `bande-graphics`, shared with the toolkit); nothing inside the outline resizes, so the bar's top pixel moves the window. A
+  floating client-side window gets the outside band too wherever its own input region leaves
+  the point to the compositor. A left, right or bottom side against the usable area's limit has
+  no room outside, so the compositor takes a 3 pt band inside it before any client
+  (`walled_resize_zone`); a top side there has none, and a press on it moves the window. A
   window never opens with its title bar above the top of the screen.
 - **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers with the
   LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche

@@ -195,10 +195,12 @@
       <description summary="the user pressed a brightness key">
         Sent for the display and keyboard brightness keys, with or without
         Super and also while the session is locked, as volume_key is. Fine is 1
-        when Option and Shift are held, for quarter steps.
+        when Option and Shift are held, for quarter steps. Output is the connector
+        name of the display under the pointer, the one the display keys act on.
       </description>
       <arg name="key" type="uint" enum="brightness_key"/>
       <arg name="fine" type="uint"/>
+      <arg name="output" type="string"/>
     </event>
 
     <event name="workspaces">
@@ -433,7 +435,9 @@
       <description summary="an app still holds a window">
         Sent after quit_all_apps and again whenever the answer changes: how
         many apps still hold a window, and the app id of the frontmost of
-        them. A count of 0 means every app has closed its windows.
+        them. A count of 0 means every app has closed its windows, or that
+        the compositor gave up on those left: a window that has not answered
+        pings and an app without a window are given ten seconds.
       </description>
       <arg name="app_id" type="string"/>
       <arg name="count" type="uint"/>

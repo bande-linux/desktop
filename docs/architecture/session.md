@@ -47,7 +47,7 @@ graph LR
 - **Crash resilience**: if the lock screen crashes, the session stays locked; the compositor
   draws a blank frame and a new locker may take over the lock.
 - Idle, as in macOS's Lock Screen settings ([`config.kdl`](overview.md#configuration) `idle`,
-  Settings ▸ Lock Screen): the backlight dims 10 s before the screen saver or the
+  Settings ▸ Lock Screen): the displays dim 10 s before the screen saver or the
   display turning off, whichever comes first (default 5 and 10 min). The screen saver is the lock
   screen itself, resting: its clock and date over the blurred desktop picture and nothing
   else, covering the desktop through `ext-session-lock`, as macOS hands its saver over to the
@@ -91,8 +91,9 @@ graph LR
   asks for `Suspend` on a press shorter than the five-second hold when `CanSuspend` is `yes`.
 - Implemented in `crates/shell/lock`: date, time, the user's picture (AccountsService's
   `IconFile`, read off the UI thread; the initial on the accent colour without one) and name
-  and a secure field; PAM (`/etc/pam.d/bande-lock`) runs off the UI thread, and a rejected password clears
-  and shakes the field. `Super+L` and logind's `Lock` signal start it; the compositor sets
+  and a secure field. PAM
+  (`/etc/pam.d/bande-lock`) runs off the UI thread with a progress row if it takes longer than
+  200 ms, and a rejected password clears and shakes the field and says so. `Super+L` and logind's `Lock` signal start it; the compositor sets
   logind's `LockedHint`.
 - Implemented in `crates/services/power` (`bande-power`, a session service): before the
   computer sleeps, the session is locked through logind (`Session.Lock`) while a `delay` sleep
@@ -117,9 +118,26 @@ graph LR
   Idle time comes from the compositor's `ext-idle-notify-v1`, one notification per policy
   threshold, sent as soon as it is due. The compositor follows `Lock` on the session's own
   logind object path (from `GetSession("auto")`; logind never signals on `session/auto`).
-  Dimming sets the preferred backlight (`firmware`, then `platform`, then `raw`) to
-  a quarter of its level through logind's `Session.SetBrightness` and restores it on activity;
-  displays without a backlight do not dim.
+  Dimming lowers every display: the backlight to a quarter of its level, every other display
+  by the compositor's colour transform (no DDC write), and restores them on activity.
+- **Display brightness**: `bande-power` owns one model for all displays, `org.bande.Brightness`
+  (`Displays`: connector, name and level per display; `SetLevel`; `Refresh`), so Settings and
+  Control Center show one bar per connected display and never block on hardware. The displays
+  come from the compositor's `org.bande.Displays` (`Connected`, `SetDim`). Each has its own
+  worker thread, idle until asked, and one of three controls:
+  the backlight through logind's `Session.SetBrightness` for an internal panel (`eDP`, `LVDS`,
+  `DSI`); VCP 0x10 over DDC/CI when the monitor answers; otherwise the compositor's CRTC gamma
+  ramp or CTM, multiplied with night light, down to a fifth so the screen never goes black.
+  DDC is native (`ddc.rs`, `/dev/i2c-N` from the connector's `ddc` link or `i2c-N` child):
+  bars move at once, writes go to the monitor at most every 250 ms with the last level always
+  sent and unchanged values skipped, because a monitor's memory wears and its bus is slow.
+  A monitor keeps its own level: it is read on connect and when a brightness view opens, never
+  written on connect. A plugged-in monitor is asked again after 1, 3 and 8 s, since many answer
+  late; one that never answers, or stops answering, is dimmed by the compositor instead, and its
+  level is kept per display in `$XDG_STATE_HOME/bande/brightness`. Access: `bande-power` ships
+  `i2c-dev` in `modules-load.d` and a udev rule giving the active session `uaccess` to I2C
+  adapters of PCI display controllers only, never other buses. Apple's `appledrm` exposes no
+  DDC adapter, so external displays on a Mac use the compositor control.
 
 ### XDG desktop portal backend (`xdg-desktop-portal-bande`)
 
@@ -332,9 +350,10 @@ graph LR
   as apps, and Asahi's `hide-parent` hides the raw speaker node from clients. Settings ▸ Sound
   shows a Left–Right balance for a stereo (FL, FR) output, set through its channel volumes.
 - The display and keyboard brightness keys go the same way (`brightness_key`, also while
-  locked): Control Center moves the display backlight or the `kbd_backlight` LED one of 16
-  steps (a quarter step with Option and Shift) through logind's `Session.SetBrightness` and
-  shows the level in the same HUD as the volume, a quarter step filling a quarter segment.
+  locked): Control Center moves the display under the pointer (through `org.bande.Brightness`)
+  or the `kbd_backlight` LED (through logind) one of 16 steps (a quarter step with Option and
+  Shift) and shows the level in the same HUD as the volume, a quarter step filling a quarter
+  segment. With several displays the HUD names the display.
 
 ### Accessibility
 
@@ -522,10 +541,50 @@ Bande uses `greetd` for the privileged part of login and keeps its own UI unpriv
    PAM.
 2. **The greeter**: `bande-greeter` is an unprivileged client. It runs as greetd's greeter
    user (`_greetd` on Debian), talks to `greetd` over its JSON IPC socket, and shows the login
-   UI: the user with their picture (as on the lock screen), password field, wallpaper, and
-   later accessibility and power menus.
+   UI, the same screen as the lock (`bande_lock::LockScreen`): date and time, the user's picture
+   and name, password field, the blurred wallpaper, battery, Wi-Fi and input source in the corner,
+   and Sleep, Restart and Shut Down below.
 3. **Handover**: after authentication, `greetd` opens the PAM session through `pam_systemd.so`
    and starts the user's session, which runs `bande-compositor`.
+
+### From power-on to the desktop
+
+The picture never goes black between stages; each one leaves the last on screen until the next has
+something to show.
+
+| Stage | What shows | How |
+|---|---|---|
+| bootloader, U-Boot | the mark, centred on black | the bootloader's logos; U-Boot's console is silent (`silent=1`) until an EFI program starts, or until no boot entry is found, when it lists what it scanned |
+| systemd-boot, kernel | the mark | `timeout 0`; the kernel's console logo (`logo_bande_clut224.ppm`, `fbcon=logo-count:1 fbcon=logo-pos:center`) on the firmware framebuffer, drawn under `quiet` thanks to our kernel patch `fbcon: Draw the logo under quiet`; `quiet` also silences the EFI stub |
+| `apple-drm` binds | the mark again after the display comes up | `bande-display-keeper@<card>` draws it into the console's framebuffer (the kernel's own logo is only drawn during boot and never for a module) |
+| login window | black with the mark, cross-fading to the login window | the compositor holds frames until the greeter is mapped; the greeter draws the same mark and opens once the desktop picture is decoded |
+| session | the picture the login window ended on, then the bar and icons fade in | below |
+
+Plymouth was the alternative: its graphical plugins are in `plymouth-themes`, which brings Pango,
+Cairo, fontconfig and fonts into the initramfs, it needs root to quit after the first frame, and
+it would add a third owner of the display during boot. The console path needs none of this, and
+shows text by itself: the mark sits in the console's own framebuffer, so anything the kernel or
+systemd prints (a failing boot, the emergency shell) appears over it.
+
+Diagnostics stay one key away: holding Space at power-on opens systemd-boot's menu, where each
+kernel has a "(boot messages)" entry without `quiet` (`95-bande-boot-messages.install`);
+`Ctrl+Alt+F2` reaches a text console at any time, and when greetd gives up
+`bande-console-fallback.service` brings the console to the front.
+
+**Keeping a frame through the handover.** Three parts of the kernel would otherwise clear the
+screen when one compositor ends and the next has not drawn: closing the last reference to a
+framebuffer turns its plane off (`drm_fb_release`), closing the last file of the device restores
+the console's framebuffer (`drm_lastclose`), and logind and greetd setting the VT back to `KD_TEXT`
+makes the console repaint. So a compositor leaving the screen closes its framebuffers with
+`DRM_IOCTL_MODE_CLOSEFB`, which leaves them on their planes;
+`bande-display-keeper@<card>` (started by udev per card, unprivileged, asleep in `pause()`) keeps
+the device open with no master; and `fbcon=vc:1-6` leaves VT 7, greetd's, without a console. The
+next compositor takes the master and its first commit replaces the frame, without a modeset when
+the mode is the same. This was checked under QEMU with virtio-gpu; on a system without the kernel
+argument, the keeper or a kernel of at least 6.8, the same steps work with a black gap.
+
+Unlocking is one compositor and needs none of this: the last lock frame stays over the desktop and
+fades out, so input reaches the desktop at once.
 
 Implemented in `crates/shell/greeter`: greetd's IPC inside `bande-compositor --greeter`,
 which runs only the greeter and exits with it. The conversation runs on the greeter's event
@@ -535,7 +594,7 @@ placeholder and takes the next answer; PAM's information and error messages stay
 field until the next attempt or Escape, which also clears the field and cancels a pending
 further prompt. A refused password shakes the field (the `shake` spring) and says so; other
 failures show PAM's or greetd's reason. The field shows a Caps Lock sign while Caps Lock is on
-(`WindowEvent::CapsLock` from the toolkit), and the active keyboard layout under the field when
+(`WindowEvent::CapsLock` from the toolkit), and the active keyboard layout in the top corner when
 the system has several. The greeter compositor applies the system's input settings, so the
 layouts are those localed keeps in `/etc/vconsole.conf` (`XKBLAYOUT`, `XKBVARIANT`), or of
 `/etc/default/keyboard` when that has none; Settings > Keyboard offers "Use at Login Screen",
@@ -545,6 +604,17 @@ start `bande-session` (the wrapper the `bande.desktop` session entry runs, which
 `XDG_CURRENT_DESKTOP=Bande` and `XDG_SESSION_DESKTOP=bande`, so `pam_systemd` registers a
 Wayland session; the greeter then exits, its compositor with it, releasing the seat and VT
 before greetd runs the session. When the session ends greetd starts the greeter again.
+
+**Ending the session.** Log Out stops `bande-compositor.service` in the user's manager (never
+logind's `Session.Terminate`, which would leave the compositor holding the seat while greetd
+starts the greeter, and refuse the next login where the manager outlives the session, as with
+lingering). `BindsTo` then stops `graphical-session.target` and everything `PartOf` it, including
+the scopes of the apps Bande launched (`TimeoutStopSec=5s` before `SIGKILL`, so a hung app holds
+up neither a log out nor a shutdown); `systemctl --wait` in `bande-session` returns and the
+session closes. If something else ends the login scope (`loginctl terminate-session`),
+`bande-session` traps the signal and stops the service before it exits. Restart and Shut Down call
+logind's `Reboot` and `PowerOff`; the confirmation stays open until the request has an answer,
+and shows a refusal.
 
 **Installation.** `/etc/greetd/config.toml` is greetd's conffile and stays untouched. The
 `bande-greeter` package ships its configuration as
@@ -583,7 +653,7 @@ mode 0640 is readable by its owner and the login window alone. The greeter opens
 and within the size limit, then decodes it through `/proc/self/fd`, so the file it checked is
 the file it shows; anything else falls back to the bundled default. Also not done: a user picker (Up/Down switches users
 for now), choosing among several sessions, a visible (non-secret) field for PAM's visible
-prompts (they are answered in the secure field), and power and accessibility menus.
+prompts (they are answered in the secure field), and an accessibility menu.
 
 
 ## Crash handling and supervision

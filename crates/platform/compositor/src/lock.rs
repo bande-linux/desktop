@@ -1,3 +1,5 @@
+use bande_render::VulkanRenderer;
+use bande_spring::Spring;
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -7,6 +9,8 @@ use smithay::wayland::session_lock::{
     LockSurface, SessionLockHandler, SessionLockManagerState, SessionLocker,
 };
 
+use crate::motion::{Look, Motion};
+use crate::scene::{Closing, Drawn, drawn_screen};
 use crate::state::{State, mapped_size};
 
 pub(crate) struct Lock {
@@ -17,6 +21,7 @@ pub(crate) struct Lock {
     latched: Vec<String>,
     presented: Vec<String>,
     reported: bool,
+    frames: Vec<(String, Drawn)>,
 }
 
 impl Lock {
@@ -56,6 +61,41 @@ impl State {
         self.lock_surface_on(0).filter(mapped).or_else(|| {
             (1..self.screens.len()).find_map(|screen| self.lock_surface_on(screen).filter(mapped))
         })
+    }
+
+    pub(crate) fn remember_lock_frame(&mut self, renderer: &mut VulkanRenderer, screen: usize) {
+        let Some(surface) = self
+            .lock_surface_on(screen)
+            .filter(|surface| mapped_size(surface).is_some())
+            .cloned()
+        else {
+            return;
+        };
+        let rect = self.screen_rect(screen).to_f64();
+        let drawn = drawn_screen(
+            &surface,
+            renderer,
+            rect,
+            self.render_scale(screen),
+            self.decorations.scheme,
+        );
+        let name = self.screens[screen].name();
+        if let Some(lock) = &mut self.lock {
+            lock.frames.retain(|(output, _)| *output != name);
+            lock.frames.push((name, drawn));
+        }
+    }
+
+    fn fade_lock_frames(&mut self, frames: Vec<(String, Drawn)>) {
+        let spring = match self.reduce_motion {
+            true => Spring::FADE,
+            false => Spring::STANDARD,
+        };
+        for (output, drawn) in frames {
+            let from = drawn.look;
+            let motion = Motion::new(spring, from, Look::hidden(from.rect));
+            self.closing.push(Closing::covering(drawn, motion, output));
+        }
     }
 
     pub(crate) fn lock_shown(&self) -> bool {
@@ -228,6 +268,7 @@ impl SessionLockHandler for State {
             latched: Vec::new(),
             presented: Vec::new(),
             reported: false,
+            frames: Vec::new(),
         });
         self.set_keyboard_focus(None);
         self.needs_redraw = true;
@@ -241,6 +282,7 @@ impl SessionLockHandler for State {
         };
         self.report_lock_state(false);
         self.needs_redraw = true;
+        self.fade_lock_frames(lock.frames);
         self.suspend_unseen_windows();
         let previous = lock.previous.filter(|previous| {
             self.windows

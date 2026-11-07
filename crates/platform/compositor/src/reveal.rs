@@ -10,6 +10,14 @@ use smithay::wayland::shell::wlr_layer::Layer;
 use crate::motion::{BAR_NAMESPACE, SETTLED_ALPHA};
 use crate::state::{Compositor, State, is_mapped};
 
+const LOGIN_WINDOW_NAMESPACE: &str = "greeter";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Awaited {
+    Shell,
+    LoginWindow,
+}
+
 #[derive(Default)]
 pub(crate) enum Reveal {
     #[default]
@@ -17,6 +25,7 @@ pub(crate) enum Reveal {
     Holding {
         since: Duration,
         deadline: Duration,
+        ready: Awaited,
     },
     Fading {
         opacity: Animated<Duration>,
@@ -42,6 +51,18 @@ fn opaque_over(surface: &WlSurface, size: Size<i32, Logical>) -> bool {
 }
 
 impl State {
+    fn login_window_ready(&self) -> bool {
+        self.screens
+            .iter()
+            .filter(|screen| screen.mirror.is_none())
+            .all(|screen| {
+                let map = layer_map_for_output(&screen.output);
+                map.layers().any(|layer| {
+                    layer.namespace() == LOGIN_WINDOW_NAMESPACE && is_mapped(layer.wl_surface())
+                })
+            })
+    }
+
     fn shell_ready(&self) -> bool {
         self.screens
             .iter()
@@ -59,6 +80,13 @@ impl State {
                 });
                 wallpaper && bar
             })
+    }
+
+    fn show_login_window(&mut self, now: Duration, since: Duration) {
+        let waited = now.saturating_sub(since).as_millis();
+        tracing::info!("the login window is shown {waited} ms after the compositor started");
+        self.reveal = Reveal::Shown;
+        self.needs_redraw = true;
     }
 
     fn begin_reveal(&mut self, now: Duration, since: Duration, ready: bool) {
@@ -106,8 +134,12 @@ impl State {
 }
 
 impl Compositor {
-    pub fn hold_until_shell_ready(&mut self, since: Duration, deadline: Duration) {
-        self.state.reveal = Reveal::Holding { since, deadline };
+    pub fn hold_frames_until(&mut self, ready: Awaited, since: Duration, deadline: Duration) {
+        self.state.reveal = Reveal::Holding {
+            since,
+            deadline,
+            ready,
+        };
     }
 
     pub fn holds_frames(&self) -> bool {
@@ -115,14 +147,25 @@ impl Compositor {
     }
 
     pub fn reveal_wake(&mut self, now: Duration) -> Option<Duration> {
-        let Reveal::Holding { since, deadline } = self.state.reveal else {
+        let Reveal::Holding {
+            since,
+            deadline,
+            ready: awaited,
+        } = self.state.reveal
+        else {
             return None;
         };
-        let ready = self.state.shell_ready();
+        let ready = match awaited {
+            Awaited::Shell => self.state.shell_ready(),
+            Awaited::LoginWindow => self.state.login_window_ready(),
+        };
         if !ready && now < deadline {
             return Some(deadline);
         }
-        self.state.begin_reveal(now, since, ready);
+        match awaited {
+            Awaited::Shell => self.state.begin_reveal(now, since, ready),
+            Awaited::LoginWindow => self.state.show_login_window(now, since),
+        }
         None
     }
 }

@@ -34,6 +34,10 @@ impl Label {
         }
     }
 
+    pub fn set_text(&mut self, text: &str) {
+        text.clone_into(&mut self.text);
+    }
+
     pub fn secondary(self) -> Self {
         Self {
             secondary: true,

@@ -25,7 +25,6 @@ const INSTALLED_ROOT: &str = "/dev/disk/by-label/BANDE-ROOT";
 const WINDOW_SIZE: (u32, u32) = (620, 640);
 const FIELD_FONT: f32 = 13.0;
 const LIST_HEIGHT: f32 = 240.0;
-const BACKUP_TOOL: &str = "bande-backup-restore";
 
 static L10N: LazyLock<Localizer> = LazyLock::new(|| {
     Localizer::new(&[(
@@ -53,6 +52,9 @@ enum Intent {
     Submit,
     Version(String),
     Launch(&'static str),
+    ChooseBackup,
+    Backup(String),
+    SubmitBackup,
     Restart,
 }
 
@@ -68,16 +70,26 @@ enum Page {
     Disks,
     Password(Purpose),
     Versions,
+    Backups,
+    BackupPassword,
     Working(String),
-    Finished,
+    Finished(Option<String>),
     Failed(String),
 }
 
 enum Reply {
     Step(String),
-    Finished,
+    Finished(Option<String>),
     Failed(String),
     Versions(Vec<(String, String)>),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct Backup {
+    uuid: String,
+    filesystem: String,
+    machine: String,
+    name: String,
 }
 
 #[derive(Deserialize)]
@@ -143,12 +155,14 @@ fn run_engine(arguments: Vec<String>, input: Option<Zeroizing<String>>, outbox: 
     }
     let mut versions = Vec::new();
     let mut failure = None;
+    let mut warning = None;
     if let Some(stdout) = child.stdout.take() {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             match line.split_once(' ') {
                 Some(("step", step)) => {
                     outbox.send(Reply::Step(step.to_owned()));
                 }
+                Some(("warning", message)) => warning = Some(message.to_owned()),
                 Some(("error", message)) => failure = Some(message.to_owned()),
                 Some(("version", version)) => {
                     let mut fields = version.split('\t');
@@ -164,7 +178,7 @@ fn run_engine(arguments: Vec<String>, input: Option<Zeroizing<String>>, outbox: 
     let succeeded = child.wait().is_ok_and(|status| status.success());
     outbox.send(match (succeeded, failure) {
         (true, _) if !versions.is_empty() => Reply::Versions(versions),
-        (true, _) => Reply::Finished,
+        (true, _) => Reply::Finished(warning),
         (false, failure) => Reply::Failed(failure.unwrap_or_else(|| "failed".to_owned())),
     });
 }
@@ -175,6 +189,16 @@ fn needs_password() -> bool {
         .args([ENGINE, "needs-password"])
         .output()
         .is_ok_and(|output| output.stdout.trim_ascii() != b"none")
+}
+
+fn list_backups() -> Vec<Backup> {
+    Command::new("pkexec")
+        .env("SHELL", "/bin/bash")
+        .args([ENGINE, "backups"])
+        .output()
+        .ok()
+        .and_then(|output| serde_json::from_slice(&output.stdout).ok())
+        .unwrap_or_default()
 }
 
 fn command_of(purpose: Purpose) -> &'static str {
@@ -193,7 +217,10 @@ struct Tools {
     disk: Option<String>,
     versions: Vec<(String, String)>,
     password: Option<WidgetId>,
+    disk_password: Option<WidgetId>,
     secret: Zeroizing<String>,
+    backups: Vec<Backup>,
+    backup: Option<Backup>,
 }
 
 fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
@@ -260,7 +287,7 @@ impl Tools {
                     rows.push(self.row(
                         &L10N.tr("backup"),
                         &L10N.tr("backup-detail"),
-                        Intent::Launch(BACKUP_TOOL),
+                        Intent::ChooseBackup,
                     ));
                 }
                 rows.push(self.row(
@@ -323,9 +350,53 @@ impl Tools {
                 self.list(&self.versions.clone(), Intent::Version),
                 boxed(self.button(&L10N.tr("back"), Intent::Home)),
             ],
+            Page::Backups => {
+                let rows: Vec<(String, String)> = self
+                    .backups
+                    .iter()
+                    .map(|backup| (backup.uuid.clone(), backup.name.clone()))
+                    .collect();
+                vec![
+                    boxed(Label::heading(&L10N.tr("backup"))),
+                    self.list(&rows, Intent::Backup),
+                    boxed(self.button(&L10N.tr("back"), Intent::Home)),
+                ]
+            }
+            Page::BackupPassword => {
+                let intents = Rc::clone(&self.intents);
+                let field = SecureField::new(&L10N.tr("backup-password"), FIELD_FONT, move |_| {
+                    intents.borrow_mut().push(Intent::SubmitBackup);
+                });
+                self.password = Some(field.id());
+                let mut rows = vec![
+                    boxed(Label::heading(&L10N.tr("backup-password-title"))),
+                    boxed(field),
+                ];
+                if needs_password() {
+                    let disk = SecureField::new(&L10N.tr("password"), FIELD_FONT, |_| {});
+                    self.disk_password = Some(disk.id());
+                    rows.push(boxed(disk));
+                } else {
+                    self.disk_password = None;
+                }
+                rows.push(boxed(Stack::new(
+                    Axis::Horizontal,
+                    Spacing::S as f32,
+                    0.0,
+                    vec![
+                        boxed(self.button(&L10N.tr("back"), Intent::Home)),
+                        boxed(
+                            self.button(&L10N.tr("continue"), Intent::SubmitBackup)
+                                .primary(),
+                        ),
+                    ],
+                )));
+                rows
+            }
             Page::Working(step) => vec![boxed(Label::heading(&L10N.tr(&format!("step-{step}"))))],
-            Page::Finished => vec![
+            Page::Finished(warning) => vec![
                 boxed(Label::heading(&L10N.tr("step-done"))),
+                boxed(Label::new(warning.as_deref().unwrap_or_default())),
                 boxed(self.button(&L10N.tr("restart"), Intent::Restart).primary()),
             ],
             Page::Failed(message) => vec![
@@ -333,6 +404,14 @@ impl Tools {
                 boxed(self.button(&L10N.tr("back"), Intent::Home)),
             ],
         }
+    }
+
+    fn secret_of(&self, field: Option<WidgetId>) -> Option<Zeroizing<String>> {
+        field.and_then(|id| {
+            self.ui
+                .widget_ref::<SecureField>(id)
+                .map(|field| Zeroizing::new(field.secret().to_owned()))
+        })
     }
 
     fn present(&mut self) {
@@ -380,12 +459,7 @@ impl Tools {
                     }
                 }
                 Intent::Submit => {
-                    let secret = self.password.and_then(|id| {
-                        self.ui
-                            .widget_ref::<SecureField>(id)
-                            .map(|field| Zeroizing::new(field.secret().to_owned()))
-                    });
-                    let Some(secret) = secret else {
+                    let Some(secret) = self.secret_of(self.password) else {
                         continue;
                     };
                     self.secret = secret.clone();
@@ -395,6 +469,36 @@ impl Tools {
                 }
                 Intent::Version(id) => {
                     self.engine(vec!["restore".to_owned(), id], Some(self.secret.clone()));
+                }
+                Intent::ChooseBackup => {
+                    self.backups = list_backups();
+                    self.page = Page::Backups;
+                }
+                Intent::Backup(uuid) => {
+                    self.backup = self
+                        .backups
+                        .iter()
+                        .find(|backup| backup.uuid == uuid)
+                        .cloned();
+                    self.page = Page::BackupPassword;
+                }
+                Intent::SubmitBackup => {
+                    let (Some(backup), Some(secret)) =
+                        (self.backup.clone(), self.secret_of(self.password))
+                    else {
+                        continue;
+                    };
+                    let disk = self.secret_of(self.disk_password).unwrap_or_default();
+                    let input = Zeroizing::new(format!("{}\n{}", disk.as_str(), secret.as_str()));
+                    self.engine(
+                        vec![
+                            "restore-backup".to_owned(),
+                            backup.uuid,
+                            backup.filesystem,
+                            backup.machine,
+                        ],
+                        Some(input),
+                    );
                 }
                 Intent::Launch(program) => {
                     if let Err(error) = spawn_detached("", &[program.to_owned()], None, None) {
@@ -422,7 +526,7 @@ impl Tools {
             self.page = match reply {
                 Reply::Step(step) if step == "done" => continue,
                 Reply::Step(step) => Page::Working(step),
-                Reply::Finished => Page::Finished,
+                Reply::Finished(warning) => Page::Finished(warning),
                 Reply::Failed(message) => Page::Failed(message),
                 Reply::Versions(versions) => {
                     self.versions = versions;

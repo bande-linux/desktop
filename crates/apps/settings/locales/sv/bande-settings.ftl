@@ -1,4 +1,6 @@
 spelling-check = Kontrollera stavning
+spelling-get-dictionary = Hämta ordlista
+spelling-missing-dictionary = Ordlistan { $name } passar din region men är inte installerad.
 spelling-learned-none = Inga inlärda ord än.
 spelling-autocorrect = Rätta stavning automatiskt
 spelling-capitalise = Inled meningar med stor bokstav

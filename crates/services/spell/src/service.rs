@@ -24,6 +24,8 @@ pub struct Engine {
     system_language: Option<String>,
     input_languages: Vec<String>,
     loaded: HashMap<String, Dictionary>,
+    variants: HashMap<String, Dictionary>,
+    preferred: Vec<String>,
     common: HashMap<String, HashSet<String>>,
 }
 
@@ -42,17 +44,59 @@ impl Engine {
         };
         let mut active = Vec::new();
         for language in wanted {
-            let region = self
-                .region
-                .as_deref()
-                .filter(|_| self.system_language.as_deref() == Some(language_of(&language)));
-            if let Some(name) = best_for(&language, region, &everything)
+            if let Some(name) = best_for(&language, self.region_for(&language), &everything)
                 && !active.contains(&name)
             {
                 active.push(name);
             }
         }
         active
+    }
+
+    fn region_for(&self, language: &str) -> Option<&str> {
+        self.preferred
+            .iter()
+            .filter(|code| language_of(code) == language_of(language))
+            .find_map(|code| code.split_once('_').map(|(_, region)| region))
+            .or(self.region.as_deref())
+    }
+
+    pub fn missing(&self) -> Vec<String> {
+        let everything = installed();
+        let mut missing = Vec::new();
+        for name in self.active() {
+            let language = language_of(&name).to_owned();
+            if let Some(region) = self.region_for(&language) {
+                let wanted = format!("{language}_{region}");
+                if !everything.contains_key(&wanted) && !missing.contains(&wanted) {
+                    missing.push(wanted);
+                }
+            }
+        }
+        missing
+    }
+
+    fn valid_in_a_variant(&mut self, word: &str) -> bool {
+        let active = self.active();
+        let languages: Vec<&str> = active.iter().map(|name| language_of(name)).collect();
+        for (name, path) in installed() {
+            if active.contains(&name) || !languages.contains(&language_of(&name)) {
+                continue;
+            }
+            if !self.variants.contains_key(&name)
+                && let Some(dictionary) = load(&path)
+            {
+                self.variants.insert(name.clone(), dictionary);
+            }
+            if self
+                .variants
+                .get(&name)
+                .is_some_and(|dictionary| dictionary.check(word))
+            {
+                return true;
+            }
+        }
+        false
     }
 
     fn dictionaries(&mut self) -> Vec<&Dictionary> {
@@ -114,6 +158,7 @@ impl Engine {
             || !correctable(word)
             || (capitalised && !sentence_start)
             || self.check(&[word.to_owned()]) == [true]
+            || self.valid_in_a_variant(word)
         {
             return String::new();
         }
@@ -318,6 +363,10 @@ impl Spell {
         )
     }
 
+    fn missing_dictionaries(&self) -> Vec<String> {
+        self.engine().missing()
+    }
+
     async fn set_languages(
         &self,
         languages: Vec<String>,
@@ -390,6 +439,13 @@ impl Engine {
             system_language,
             input_languages: input_languages(&config),
             loaded: HashMap::new(),
+            variants: HashMap::new(),
+            preferred: std::env::var("LANGUAGE")
+                .unwrap_or_default()
+                .split(':')
+                .filter(|code| code.contains('_'))
+                .map(|code| code.split(['.', '@']).next().unwrap_or(code).to_owned())
+                .collect(),
             common: HashMap::new(),
         })
     }

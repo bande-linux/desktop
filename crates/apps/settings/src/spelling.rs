@@ -30,6 +30,7 @@ pub struct SpellingState {
     active: Vec<String>,
     available: Vec<String>,
     learned: Vec<String>,
+    missing: Vec<String>,
     replacements: BTreeMap<String, String>,
 }
 
@@ -52,11 +53,16 @@ fn read(proxy: &Proxy<'_>) -> zbus::Result<SpellingState> {
         active,
         available,
         learned: proxy.call("LearnedWords", &())?,
+        missing: proxy
+            .call::<_, _, Vec<String>>("MissingDictionaries", &())?
+            .into_iter()
+            .filter(|name| dictionary_package(name).is_some())
+            .collect(),
         replacements,
     })
 }
 
-fn get_dictionary(locale: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn package_names(locale: &str) -> Vec<String> {
     let code = locale.split(['.', '@']).next().unwrap_or(locale);
     let mut parts = code.split('_');
     let language = parts.next().unwrap_or(code).to_lowercase();
@@ -64,6 +70,24 @@ fn get_dictionary(locale: &str) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(region) = parts.next() {
         names.insert(0, format!("hunspell-{language}-{}", region.to_lowercase()));
     }
+    names
+}
+
+fn dictionary_package(name: &str) -> Option<String> {
+    let system = bande_bus::system().ok()?;
+    let packages = bande_packages::Client::new(&system);
+    let names = package_names(name);
+    let exact = names.first()?;
+    packages
+        .resolve(std::slice::from_ref(exact))
+        .ok()?
+        .into_iter()
+        .next()
+        .map(|package| package.id)
+}
+
+fn get_dictionary(locale: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let names = package_names(locale);
     let system = bande_bus::system()?;
     let packages = bande_packages::Client::new(&system);
     let found = packages.resolve(&names)?;
@@ -180,6 +204,26 @@ impl SettingsView {
             rows.push(boxed(Row::new(
                 Text::new(dictionary, Tone::Primary),
                 Some(toggle),
+            )));
+        }
+        for name in &state.missing {
+            let wanted = name.clone();
+            let mut act = intent(&self.intents, move |()| {
+                Intent::Spelling(SpellingCommand::GetDictionary(wanted.clone()))
+            });
+            let button = boxed(Button::new(
+                &L10N.tr("spelling-get-dictionary"),
+                move || act(()),
+            ));
+            rows.push(boxed(Row::new(
+                Text::new(
+                    &L10N.tr_args(
+                        "spelling-missing-dictionary",
+                        [("name", name.clone().into())],
+                    ),
+                    Tone::Primary,
+                ),
+                Some(button),
             )));
         }
         if state.learned.is_empty() {

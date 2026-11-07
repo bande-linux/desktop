@@ -5,6 +5,7 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Files</name>
   <summary>Browse your folders and files</summary>
+  <summary xml:lang="sv">Bläddra bland dina mappar och filer</summary>
   <description>
     <p>Find, open and organise your files in icon, list and column views, with tabs, Quick Look, search and the Trash.</p>
   </description>

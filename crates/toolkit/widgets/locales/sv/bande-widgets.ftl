@@ -1,0 +1,11 @@
+undo = Ångra
+redo = Gör om
+cut = Klipp ut
+copy = Kopiera
+paste = Klistra in
+select-all = Markera allt
+emoji-and-symbols = Emojier och symboler…
+clear-search = Rensa
+show-choices = Visa alternativ
+caps-lock-on = Caps Lock är på
+release-capture = Tryck på { $chord } för att släppa

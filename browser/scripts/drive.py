@@ -11,7 +11,7 @@ import time
 class Browser:
     def __init__(self, binary, prefs=None, xpi=None, env=None):
         self.profile = tempfile.mkdtemp(prefix="browser-profile")
-        lines = ['user_pref("marionette.port", 2828);']
+        lines = ['user_pref("marionette.port", 2828);', 'user_pref("remote.prefs.recommended", false);']
         for name, value in (prefs or {}).items():
             lines.append(f"user_pref({json.dumps(name)}, {json.dumps(value)});")
         with open(os.path.join(self.profile, "user.js"), "w") as out:

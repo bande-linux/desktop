@@ -66,13 +66,14 @@ s = open(install).read()
 s = s.replace('debian/@browser@.desktop usr/share/applications\n', 'debian/org.bande.Browser.desktop usr/share/applications\ndebian/org.bande.Browser.metainfo.xml usr/share/metainfo\ndebian/org.bande.Browser.svg usr/share/icons/hicolor/scalable/apps\n')
 s = s.replace('debian/@browser@-symbolic.svg usr/share/icons/hicolor/symbolic/apps\n', '')
 s = s.replace('usr/lib/@browser@/pingsender\n', '')
+s = s.replace('debian/vendor.js usr/share/@browser@/browser/defaults/preferences\n', 'debian/00-bande.js usr/share/@browser@/browser/defaults/preferences\n')
 open(install, 'w').write(s)
 PY
 sed -i "s/^%define RAW_DESCRIPTION .*/%define RAW_DESCRIPTION Bande's web browser, based on Mozilla Firefox source code/" debian/control.in
 sed -i 's/^Depends: ${shlibs:Depends},/Depends: bande-compositor (>= 0.1.8), ${shlibs:Depends},/' debian/control.in
 rm -f debian/google.key debian/mls.key debian/browser.desktop.in debian/browser-symbolic.svg.in
 sed -i 's/^stamps\/dh_install:: debian\/noinstall debian\/$($(PRODUCT))-symbolic.svg/stamps\/dh_install:: debian\/noinstall/' debian/rules
-cp "$repo/prefs/bande.js" debian/vendor.js
+cp "$repo/prefs/bande.js" debian/00-bande.js
 cp "$repo/branding/org.bande.Browser.desktop" "$repo/branding/org.bande.Browser.metainfo.xml" "$repo/branding/org.bande.Browser.svg" debian/
 
 b=browser/branding/bande

@@ -12,7 +12,7 @@ use crate::partial::{is_partial, sweep};
 
 use crate::trash::{Trash, TrashItem};
 
-use crate::L10N;
+use crate::{DATES, L10N};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -361,7 +361,7 @@ pub fn list_date(time: SystemTime, now: SystemTime, zone: &jiff::tz::TimeZone) -
         return String::new();
     };
     let (time, now) = (time.to_zoned(zone.clone()), now.to_zoned(zone.clone()));
-    let clock = time.strftime("%H:%M").to_string();
+    let clock = DATES.clock_time(&time);
     let day = time.date();
     if day == now.date() {
         L10N.tr_args("date-today", [("time", clock.into())])
@@ -372,9 +372,9 @@ pub fn list_date(time: SystemTime, now: SystemTime, zone: &jiff::tz::TimeZone) -
     {
         L10N.tr_args("date-yesterday", [("time", clock.into())])
     } else if day.year() == now.date().year() {
-        time.strftime("%-d %b, %H:%M").to_string()
+        DATES.date_time(&time, false)
     } else {
-        time.strftime("%-d %b %Y, %H:%M").to_string()
+        DATES.date_time(&time, true)
     }
 }
 
@@ -419,11 +419,12 @@ impl Recency {
 
 pub fn format_date(time: SystemTime) -> String {
     jiff::Timestamp::try_from(time)
-        .map(|timestamp| {
-            timestamp
-                .to_zoned(bande_datetime::local_zone())
-                .strftime("%-d %b %Y, %H:%M")
-                .to_string()
-        })
+        .map(|timestamp| DATES.date_time(&timestamp.to_zoned(bande_datetime::local_zone()), true))
+        .unwrap_or_default()
+}
+
+pub fn format_civil_date(time: jiff::civil::DateTime) -> String {
+    time.to_zoned(bande_datetime::local_zone())
+        .map(|time| DATES.date_time(&time, true))
         .unwrap_or_default()
 }

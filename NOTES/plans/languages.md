@@ -30,7 +30,7 @@ Audit gap 17. Plan only; nothing here is built yet. Screen readers and X11 are o
 
 ## Translations
 
-**Compiled in, in each package.** `bande_l10n::translations!("domain")` includes `locales/<lang>/<domain>.ftl` for every language in one table. Only the requested language is parsed, at start. A library's strings travel with the binary that links it, so an app pinned to an older toolkit always has matching strings, and the login window needs no file access. All languages stay under about 8 MB across the suite. This replaces the earlier files in `/usr/share`, which ran into ownership trouble for strings in statically linked libraries.
+**Compiled in, in each package.** `bande_l10n::translations!("domain")` includes every `locales/<lang>/<domain>.ftl` it finds at compile time, so a language is a directory and no code names one; `ci/l10n-complete` lists the languages the check holds complete. Only the requested language is parsed, at start. A library's strings travel with the binary that links it, so an app pinned to an older toolkit always has matching strings, and the login window needs no file access. All languages stay under about 8 MB across the suite. This replaces the earlier files in `/usr/share`, which ran into ownership trouble for strings in statically linked libraries.
 
 **Source layout.** `locales/sv/` next to `locales/en-US/` in each crate, so a string and its translations move together.
 

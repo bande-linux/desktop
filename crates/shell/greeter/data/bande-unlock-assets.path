@@ -1,0 +1,10 @@
+[Unit]
+Description=Follow the system keyboard and language for the disk unlock prompt
+
+[Path]
+PathChanged=/etc/default/keyboard
+PathChanged=/etc/vconsole.conf
+PathChanged=/etc/default/locale
+
+[Install]
+WantedBy=multi-user.target

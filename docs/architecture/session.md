@@ -72,7 +72,7 @@ graph LR
   | `org.freedesktop.ScreenSaver.Inhibit` | Firefox (first choice), Chromium/Electron (after GNOME's) | `bande-power`, held until `UnInhibit` or the caller leaves the bus |
   | `org.freedesktop.portal.Inhibit`, idle flag | sandboxed apps | `xdg-desktop-portal-bande` forwards it to `org.freedesktop.ScreenSaver` |
   | logind `idle` block inhibitor (`systemd-inhibit --what=idle`) | scripts, `caffeinate`-style tools | `bande-power` follows logind's `BlockInhibited` |
-  | `zwp_idle_inhibitor_v1` on a surface | mpv, Chromium (on the focused window), Firefox (last resort) | the compositor, while the surface's window is on screen, covered or not and focused or not; not while minimised, as in KWin and sway |
+  | `zwp_idle_inhibitor_v1` on a surface | Player and Quick Look (on the video's surface), mpv, Chromium (on the focused window), Firefox (last resort) | the compositor, while the surface's window is on screen, covered or not and focused or not; not while minimised, as in KWin and sway |
 
   Audio alone keeps the computer but not the display awake, as on macOS, and neither CPU load,
   builds nor MPRIS keep anything awake. Idle time restarts when the last inhibitor ends, so a
@@ -172,7 +172,9 @@ graph LR
   as in Files, `Alt+Up` and `Alt+Down` to move up and into folders, and the last folder
   remembered per app in
   `$XDG_STATE_HOME/bande/file-chooser-folders`. Choices are answered with their initial
-  values, and the dialog is not yet parented to the app window (xdg-foreign).
+  values. The dialog comes up attached to the asking window: `parent_window`'s
+  `wayland:` handle (`zxdg_exporter_v2`, which `bande-app` exports for every window) goes to
+  `xdg_toplevel` by `zxdg_importer_v2` and the dialog is modal through `xdg_dialog_v1`.
 - `org.freedesktop.impl.portal.Access`: the permission questions behind the Screenshot,
   Wallpaper, Camera, Location and Background portals (the frontend exports none of these
   without it). `bande-file-chooser --access` shows an alert with the frontend's title, subtitle
@@ -255,7 +257,7 @@ graph LR
   `ScreenCastBackend` traits. `bande-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Bande`)
   sends every interface to Bande, including `Secret`: only for calls from
   `xdg-desktop-portal` itself, it hands a sandboxed app the 64-byte key it keeps in the
-  keychain under `app_id`; no GTK or GNOME backend is used. Not implemented: Print (Bande has no print dialog), GlobalShortcuts, InputCapture,
+  keychain under `app_id`; no GTK or GNOME backend is used. `Print` (`PreparePrint` shows the Bande print dialog and remembers the choice under a token; `Print` with that token goes straight to `bande-printd`, without one it shows the dialog with the app's PDF as the preview). Not implemented: GlobalShortcuts, InputCapture,
   RemoteDesktop, Clipboard and Usb; Lockdown is the frontend's own default (nothing locked
   down).
 - **Capture lives in the screenshot tool.** The portal process has no Wayland connection: its
@@ -725,8 +727,9 @@ what the one before could not save. What happens for each:
   over the old one (`bande_xdg::replace_file`, `bande-config`), so a failed write leaves the old
   file whole.
 - **After a crash**: the compositor keeps the open apps in `$XDG_STATE_HOME/bande/running`; a
-  session that ended without a clean log out leaves it, and the next session reopens those apps
-  only with `reopen-apps-after-crash #true`. An app that crashes posts "<App> quit unexpectedly"
+  session that ended without a clean log out leaves it, and the next session asks "Reopen your
+  apps?" before anything starts (`bande-shell --reopen-after-crash`, summoned by the compositor;
+  the list stays until answered). An app that crashes posts "<App> quit unexpectedly"
   ([behaviour](behaviour.md)). Core dumps go to `systemd-coredump` where it is installed.
 
 ## Backups
@@ -750,6 +753,20 @@ the kernel, and restores by copying as the person. Nothing privileged runs on th
 ## Updates
 
 Packages come from Bande's signed APT repository ([packaging](packaging.md)). Settings ▸
+On a new install's btrfs layout (`/run/bande/versions` exists) system updates are versions of the
+system: `bande-system prepare`, started through `bande-system-prepare.service`, installs them on a
+copy that boots at the next restart, and a boot that never shows the login window falls back by
+itself. Settings lists the versions under Previous Versions and restores one through
+`bande-system-restore@<id>.service`. Without that layout the offline path below applies. The
+compositor sends `READY=1` to `/run/bande/login-ready` when it first shows the login window or the
+desktop; `bande-boot-health.service` waits for it on a counted boot. `NOTES/plans/update-safety.md`
+has the design.
+
+How often it checks is `update-check-every` in `config.kdl` (Settings: When available, Every day,
+Every 7 days, Every 31 days; unset is When available). With an interval, the daily timer and an
+opened pane fetch nothing until that long has passed since PackageKit's last refresh, and Check Now
+always fetches. Security updates follow the same interval.
+
 Software Update checks through PackageKit (`bande-packages`) and classifies each update by name
 and by PackageKit's `GetUpdateDetail` restart answer. **Offline** (installed at the next restart):
 `libc6`, `systemd`, `libsystemd0`, `udev`, `dbus*`, the running kernel's own packages

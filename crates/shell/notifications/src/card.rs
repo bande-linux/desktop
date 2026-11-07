@@ -463,5 +463,5 @@ pub(crate) fn surface_with_edge(
         shape,
         paint: fill.into(),
     });
-    items.extend(Item::rim(shape, palette));
+    items.push(Item::lit_edge(shape, palette));
 }

@@ -11,7 +11,7 @@ use bande_app::TabDrop;
 use bande_content::Preview;
 use bande_fs::{
     Action, Answer, Change, Entry, ExtensionChange, Finished, FolderChanges, FolderWatch, Format,
-    History, Operations, Purpose, RenameError, Resolution, Sort, Step, Task, TrashItem,
+    History, Operations, Purpose, RenameError, Resolution, Running, Sort, Step, Task, TrashItem,
     archive_path, can_extract,
 };
 use bande_quick_look::QuickLookLink;
@@ -22,7 +22,12 @@ use bande_toolkit::ui::{
     PointerButton, Scroll, ScrollState, Slider, TabStrip, TypeSelect, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem};
-use bande_volumes::{EjectFailure, mounted_volumes};
+use bande_volumes::{
+    EjectFailure, SavedServer, mounted_volumes, on_connected_volume, quick_is_dir, volume_icon,
+};
+
+use crate::servers::ServerRequest;
+use crate::sidebar::with_nearby;
 use bande_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
 use crate::L10N;
@@ -105,6 +110,9 @@ pub enum Sheet {
     EmptyTrash,
     Failure,
     NoSpace,
+    Busy {
+        quitting: bool,
+    },
     DeleteImmediately {
         paths: Vec<PathBuf>,
         items: Vec<TrashItem>,
@@ -120,6 +128,26 @@ pub enum Sheet {
         change: ExtensionChange,
     },
     GoTo(String),
+    ConnectServer {
+        request: ServerRequest,
+        saved: Vec<SavedServer>,
+    },
+    ServerPassword(ServerRequest),
+    ServerShares {
+        request: ServerRequest,
+        shares: Vec<String>,
+        chosen: usize,
+    },
+    ServerHostKey {
+        request: ServerRequest,
+        key: String,
+    },
+    ServerInstall {
+        request: ServerRequest,
+        packages: Vec<String>,
+    },
+    ServerFailed(ServerRequest),
+    ServerBusy,
     OpenWith(crate::open_with::OpenWith),
     Rename(crate::batch_rename::BatchRename),
 }
@@ -147,7 +175,23 @@ const ARCHIVE_UTILITY_DESKTOP_ID: &str = "org.bande.ArchiveUtility.desktop";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
+    ConnectServer {
+        token: u64,
+        request: ServerRequest,
+    },
+    InstallServerTools {
+        token: u64,
+        request: ServerRequest,
+        packages: Vec<String>,
+    },
     ShowQuickLook,
+    StopAndLeave {
+        quitting: bool,
+    },
+    Leave {
+        quitting: bool,
+    },
+    OperationsDone,
     DetachTab {
         index: usize,
         grab: Point,
@@ -236,6 +280,7 @@ pub struct FilesView {
     pub(crate) searching: Option<Searching>,
     pub(crate) index: Option<Index>,
     pub(crate) search_home_button: Option<WidgetId>,
+    pub(crate) trouble_buttons: Option<WidgetId>,
     pub(crate) toolbar: Toolbar,
     pub(crate) sheet_inset: f32,
     recents: Option<(PathBuf, PathBuf)>,
@@ -245,6 +290,9 @@ pub struct FilesView {
     volumes_shown: bool,
     mounted: Vec<PathBuf>,
     media: Vec<PathBuf>,
+    pub(crate) server_token: u64,
+    nearby: Vec<(String, String)>,
+    pub(crate) sheet_primary: Option<WidgetId>,
     pub(crate) favourites: Vec<Row>,
     watch: FolderWatch,
     pub(crate) loader: Loader,
@@ -309,7 +357,7 @@ fn pasted_paths(text: &str) -> Vec<PathBuf> {
             path_from_file_uri(line)
                 .or_else(|| Path::new(line).is_absolute().then(|| PathBuf::from(line)))
         })
-        .filter(|path| path.symlink_metadata().is_ok())
+        .filter(|path| on_connected_volume(path) || path.symlink_metadata().is_ok())
         .collect()
 }
 
@@ -379,6 +427,7 @@ impl FilesView {
             searching: None,
             index: None,
             search_home_button: None,
+            trouble_buttons: None,
             toolbar: Toolbar::default(),
             sheet_inset: SHEET_INSET as f32,
             recents: None,
@@ -388,6 +437,9 @@ impl FilesView {
             volumes_shown: true,
             mounted: Vec::new(),
             media: Vec::new(),
+            server_token: 0,
+            nearby: Vec::new(),
+            sheet_primary: None,
             favourites: Vec::new(),
             watch: FolderWatch::new()?,
             loader: Loader::new()?,
@@ -456,10 +508,18 @@ impl FilesView {
             })
             .cloned()
             .collect::<Vec<_>>();
-        with_volumes(sidebar, &shown)
+        let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
+        let rows = with_volumes(sidebar, &shown, |volume| volume_icon(&mountinfo, volume));
+        with_nearby(&rows, &self.nearby)
     }
 
-    fn refresh_volumes(&mut self) {
+    pub fn set_nearby(&mut self, nearby: Vec<(String, String)>) {
+        self.nearby = nearby;
+        self.sidebar = self.with_volumes(&self.favourites, &self.mounted);
+        self.menu_place = None;
+    }
+
+    pub fn refresh_volumes(&mut self) {
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
         let volumes = mounted_volumes(&mountinfo, &self.media);
         if volumes == self.mounted {
@@ -478,16 +538,11 @@ impl FilesView {
     }
 
     fn watched(&self) -> Vec<PathBuf> {
-        let mut folders = self.browser.watched();
-        folders.extend(
-            self.media
-                .iter()
-                .flat_map(|root| [Some(root.as_path()), root.parent()])
-                .flatten()
-                .filter(|folder| folder.is_dir())
-                .map(Path::to_path_buf),
-        );
-        folders
+        self.browser
+            .watched()
+            .into_iter()
+            .filter(|folder| !on_connected_volume(folder))
+            .collect()
     }
 
     pub(crate) fn eject_current(&mut self) {
@@ -581,9 +636,9 @@ impl FilesView {
             self.apps.kind_for_name(&entry.name, entry.is_folder())
         });
         let created = entry.as_ref().and_then(|entry| {
-            let born = std::fs::metadata(&entry.path)
-                .and_then(|metadata| metadata.created())
-                .ok();
+            let born = (!on_connected_volume(&entry.path))
+                .then(|| std::fs::metadata(&entry.path).and_then(|metadata| metadata.created()))
+                .and_then(Result::ok);
             created_at(born, entry.modified)
         });
         self.column_preview = Some(ColumnPreview {
@@ -758,17 +813,48 @@ impl FilesView {
                     true
                 }
                 None => {
-                    if self.sheet.is_none() {
-                        if self.operations.conflict().is_some() {
-                            self.present_conflict();
-                        } else if self.operations.failure().is_some() {
-                            self.present_failure();
-                        }
-                    }
+                    self.present_waiting_question();
                     true
                 }
             },
         }
+    }
+
+    fn present_waiting_question(&mut self) {
+        if self.sheet.is_none() {
+            if self.operations.conflict().is_some() {
+                self.present_conflict();
+            } else if self.operations.failure().is_some() {
+                self.present_failure();
+            }
+        }
+    }
+
+    pub fn busy(&self) -> bool {
+        !self.operations.running().is_empty()
+    }
+
+    pub fn stop_operations(&mut self) {
+        for index in 0..self.operations.running().len() {
+            self.operations.cancel(index);
+        }
+    }
+
+    pub fn take_operations(&mut self) -> Vec<Running> {
+        self.operations.take_running()
+    }
+
+    pub fn adopt_operations(&mut self, running: Vec<Running>) {
+        self.operations.adopt(running);
+        self.present_waiting_question();
+    }
+
+    pub fn ask_before_leaving(&mut self, quitting: bool) {
+        if matches!(self.sheet, Some(Sheet::Conflict { .. } | Sheet::Failure)) {
+            return;
+        }
+        self.dismiss_sheet();
+        self.present_busy(quitting);
     }
 
     pub fn deadline(&self) -> Option<Instant> {
@@ -822,21 +908,11 @@ impl FilesView {
     }
 
     fn apply_changes(&mut self, changes: &FolderChanges) {
-        let folders = changes
-            .folders
-            .iter()
-            .map(PathBuf::as_path)
-            .chain(changes.entries.iter().filter_map(|path| path.parent()));
-        if folders
-            .into_iter()
-            .any(|path| self.media.iter().any(|root| root.starts_with(path)))
-        {
-            self.refresh_volumes();
-        }
         let editing = self.rename.as_ref().map(|rename| rename.path.clone());
         self.trash_full = !self.browser.trash().is_empty();
         self.browser.apply(changes);
         if let Some(path) = editing
+            && !on_connected_volume(&path)
             && path.symlink_metadata().is_err()
         {
             self.cancel_rename();
@@ -927,6 +1003,7 @@ impl FilesView {
         }
         self.keep_selection_visible();
         self.sync_search_home();
+        self.sync_connection_trouble();
         self.sync_table();
     }
 
@@ -938,7 +1015,9 @@ impl FilesView {
             .cloned()
             .collect::<Vec<_>>();
         let metadata = match entries.as_slice() {
-            [entry] if entry.trashed.is_none() => std::fs::symlink_metadata(&entry.path).ok(),
+            [entry] if entry.trashed.is_none() && !on_connected_volume(&entry.path) => {
+                std::fs::symlink_metadata(&entry.path).ok()
+            }
             _ => None,
         };
         let mode = metadata.as_ref().map(|metadata| metadata.mode());
@@ -1314,7 +1393,7 @@ impl FilesView {
                 }
             }
             Hit::Segment(path) => {
-                if path.is_dir() {
+                if quick_is_dir(&path) {
                     self.go(Location::Folder(path));
                 } else {
                     self.browser.reveal(&path);
@@ -1377,7 +1456,7 @@ impl FilesView {
                 Some(Row::Place(place)) => place.location.clone(),
                 _ => return false,
             },
-            Hit::Segment(path) if path.is_dir() => Location::Folder(path),
+            Hit::Segment(path) if quick_is_dir(&path) => Location::Folder(path),
             _ => return false,
         };
         self.open_tab(location);
@@ -1385,6 +1464,10 @@ impl FilesView {
     }
 
     pub fn go(&mut self, location: Location) {
+        if let Location::Server(url) = location {
+            self.connect_to(url);
+            return;
+        }
         self.commit_rename();
         self.end_search();
         self.browser.go(location);
@@ -1460,7 +1543,21 @@ impl FilesView {
                     self.present_failure();
                 }
             }
+            Sheet::Busy { quitting } => {
+                if action == "stop" {
+                    self.requests.push(Request::StopAndLeave { quitting });
+                } else {
+                    self.present_waiting_question();
+                }
+            }
             Sheet::GoTo(typed) if action == "go" => self.go_to(&typed),
+            sheet @ (Sheet::ConnectServer { .. }
+            | Sheet::ServerPassword(_)
+            | Sheet::ServerShares { .. }
+            | Sheet::ServerHostKey { .. }
+            | Sheet::ServerInstall { .. }
+            | Sheet::ServerFailed(_)
+            | Sheet::ServerBusy) => self.server_choice(sheet, action),
             Sheet::OpenWith(open_with) if action == "open" => self.open_with_chosen_app(open_with),
             Sheet::Rename(state) if action == "rename" => self.apply_batch_rename(state),
             Sheet::EmptyTrash if action == "confirm" => self.empty_trash(),
@@ -1490,7 +1587,7 @@ impl FilesView {
     fn go_to(&mut self, typed: &str) {
         let folder = self.browser.current_folder().unwrap_or_else(home);
         let path = bande_fs::typed_location(typed, &home(), &folder);
-        if path.is_dir() {
+        if quick_is_dir(&path) {
             self.go(Location::Folder(path));
         } else if path.symlink_metadata().is_ok() {
             self.commit_rename();
@@ -1627,6 +1724,7 @@ impl FilesView {
             Key::Character('z' | 'Z') if command => self.undo(),
             Key::Character('n' | 'N') if command && shift => self.new_folder(),
             Key::Character('l' | 'L') if command && !shift => self.ask_go_to(),
+            Key::Character('k' | 'K') if command && !shift => self.ask_connect(),
             Key::Character('1') if command => self.set_mode(ViewMode::Icons),
             Key::Character('2') if command => self.set_mode(ViewMode::List),
             Key::Character('=' | '+') if command => self.grow_icons(true),
@@ -2131,6 +2229,10 @@ impl FilesView {
         if sources.is_empty() || self.browser.trash().contains(&sources[0]) {
             return;
         }
+        if sources.iter().any(|path| on_connected_volume(path)) {
+            self.confirm_delete();
+            return;
+        }
         self.start(Task::Trash { sources }, Purpose::Do(Action::Trash));
     }
 
@@ -2301,6 +2403,13 @@ impl FilesView {
             && self.operations.failure().is_none()
         {
             self.dismiss_sheet();
+        }
+        if !self.busy() {
+            if let Some(Sheet::Busy { quitting }) = self.sheet {
+                self.dismiss_sheet();
+                self.requests.push(Request::Leave { quitting });
+            }
+            self.requests.push(Request::OperationsDone);
         }
         if let Some(shortfall) = &outcome.shortfall
             && self.sheet.is_none()

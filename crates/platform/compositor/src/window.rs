@@ -37,6 +37,9 @@ pub struct Window {
     pub(crate) workspace: u64,
     pub(crate) recalled: Option<Point<i32, Logical>>,
     pub(crate) tag: String,
+    pub(crate) membership: Option<crate::resume::Membership>,
+    pub(crate) resumed: Option<crate::resume::Resumed>,
+    pub(crate) resume_rank: Option<usize>,
     pub(crate) parent_anchor: Option<Point<i32, Logical>>,
     pub(crate) keep_on_top: bool,
     pub(crate) panel: bool,
@@ -56,6 +59,8 @@ const TOP: u32 = 1;
 const BOTTOM: u32 = 2;
 const LEFT: u32 = 4;
 const RIGHT: u32 = 8;
+
+const CONTROLS_OVER_CONTENT_APP: &str = "org.bande.Browser";
 
 fn title_bar_height(mode: Option<DecorationMode>, fullscreen: bool) -> i32 {
     if mode == Some(DecorationMode::ServerSide) && !fullscreen {
@@ -118,6 +123,9 @@ impl Window {
             tile: None,
             workspace,
             recalled: None,
+            membership: None,
+            resumed: None,
+            resume_rank: None,
             tag: String::new(),
             parent_anchor: None,
             keep_on_top: false,
@@ -192,6 +200,20 @@ impl Window {
             current.decoration_mode,
             current.states.contains(xdg_toplevel::State::Fullscreen),
         )
+    }
+
+    pub(crate) fn controls_over_content_height(&self) -> i32 {
+        let current = self.toplevel.current_state();
+        let client_side = current.decoration_mode != Some(DecorationMode::ServerSide);
+        let fullscreen = current.states.contains(xdg_toplevel::State::Fullscreen);
+        if client_side
+            && !fullscreen
+            && crate::shell::toplevel_names(self.surface()).1 == CONTROLS_OVER_CONTENT_APP
+        {
+            bande_graphics::WINDOW_HEADER_HEIGHT as i32
+        } else {
+            0
+        }
     }
 
     pub(crate) fn content_location(&self) -> Point<i32, Logical> {
@@ -329,7 +351,9 @@ impl State {
                 let bar = title_bar_height(state.decoration_mode, false);
                 state.bounds = Some((area.size.w, area.size.h - bar).into());
             });
-            self.recall_frame(index);
+            if !self.resume_placement(index) {
+                self.recall_frame(index);
+            }
             self.windows[index].toplevel.send_configure();
             return;
         }
@@ -483,7 +507,7 @@ impl State {
         })
     }
 
-    fn place(
+    pub(crate) fn place(
         &mut self,
         index: usize,
         state: xdg_toplevel::State,

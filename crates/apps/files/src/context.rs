@@ -143,6 +143,25 @@ impl FilesView {
         })
     }
 
+    fn single_file(&self) -> Option<PathBuf> {
+        match self.browser.selected_paths().as_slice() {
+            [path] if path.is_file() => Some(path.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn can_print(&self) -> bool {
+        self.single_file()
+            .is_some_and(|path| bande_app::can_print(&self.apps.mime_for(&path)))
+    }
+
+    pub fn printable(&self) -> Option<(String, bande_app::Document)> {
+        let path = self.single_file()?;
+        let document = bande_app::file_document(&path, &self.apps.mime_for(&path))?;
+        let title = path.file_name()?.to_string_lossy().into_owned();
+        Some((title, document))
+    }
+
     pub fn terminal_installed(&self) -> bool {
         self.apps.find(TERMINAL_DESKTOP_ID).is_some()
     }

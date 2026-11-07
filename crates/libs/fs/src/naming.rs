@@ -1,6 +1,10 @@
+use std::ffi::{OsStr, OsString};
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
 
 use crate::L10N;
+
+const NAME_MARK: &str = "\u{F0000}";
 
 pub(crate) fn split_extension(name: &str, is_dir: bool) -> (&str, &str) {
     match name.rfind('.') {
@@ -9,7 +13,18 @@ pub(crate) fn split_extension(name: &str, is_dir: bool) -> (&str, &str) {
     }
 }
 
-fn free(folder: &Path, names: impl IntoIterator<Item = String>) -> PathBuf {
+fn split_os_extension(name: &OsStr, is_dir: bool) -> (&OsStr, &OsStr) {
+    let bytes = name.as_bytes();
+    match bytes.iter().rposition(|byte| *byte == b'.') {
+        Some(dot) if dot > 0 && !is_dir => (
+            OsStr::from_bytes(&bytes[..dot]),
+            OsStr::from_bytes(&bytes[dot..]),
+        ),
+        _ => (name, OsStr::new("")),
+    }
+}
+
+fn free(folder: &Path, names: impl IntoIterator<Item = OsString>) -> PathBuf {
     names
         .into_iter()
         .map(|name| folder.join(name))
@@ -17,29 +32,61 @@ fn free(folder: &Path, names: impl IntoIterator<Item = String>) -> PathBuf {
         .unwrap_or_else(|| folder.to_path_buf())
 }
 
-fn numbered(stem: &str) -> (&str, u64) {
-    stem.rsplit_once(' ')
-        .and_then(|(base, number)| {
+fn numbered(stem: &OsStr) -> (&OsStr, u64) {
+    let bytes = stem.as_bytes();
+    bytes
+        .iter()
+        .rposition(|byte| *byte == b' ')
+        .and_then(|space| {
+            let number = std::str::from_utf8(&bytes[space + 1..]).ok()?;
             let parsed = number.parse::<u64>().ok()?;
-            (!base.is_empty() && !number.starts_with('0') && parsed >= 2).then_some((base, parsed))
+            (space > 0 && !number.starts_with('0') && parsed >= 2)
+                .then_some((OsStr::from_bytes(&bytes[..space]), parsed))
         })
         .unwrap_or((stem, 1))
 }
 
-pub fn duplicate_name(folder: &Path, name: &str, is_dir: bool) -> PathBuf {
-    let (stem, extension) = split_extension(name, is_dir);
-    let first = L10N.tr_args("copy-name", [("name", stem.into())]);
+fn joined(parts: &[&OsStr]) -> OsString {
+    parts.iter().fold(OsString::new(), |mut name, part| {
+        name.push(part);
+        name
+    })
+}
+
+fn with_name(template: &str, name: &OsStr) -> OsString {
+    let template = template.as_bytes();
+    let mark = NAME_MARK.as_bytes();
+    let mut filled = Vec::with_capacity(template.len() + name.len());
+    let mut rest = template;
+    while !rest.is_empty() {
+        if let Some(after) = rest.strip_prefix(mark) {
+            filled.extend_from_slice(name.as_bytes());
+            rest = after;
+        } else {
+            filled.push(rest[0]);
+            rest = &rest[1..];
+        }
+    }
+    OsString::from_vec(filled)
+}
+
+pub fn duplicate_name(folder: &Path, name: impl AsRef<OsStr>, is_dir: bool) -> PathBuf {
+    let (stem, extension) = split_os_extension(name.as_ref(), is_dir);
+    let first = L10N.tr_args("copy-name", [("name", NAME_MARK.into())]);
     let later = (2u64..).map(|number| {
         L10N.tr_args(
             "copy-name-numbered",
-            [("name", stem.into()), ("number", number.to_string().into())],
+            [
+                ("name", NAME_MARK.into()),
+                ("number", number.to_string().into()),
+            ],
         )
     });
     free(
         folder,
         std::iter::once(first)
             .chain(later)
-            .map(|candidate| format!("{candidate}{extension}")),
+            .map(|candidate| joined(&[&with_name(&candidate, stem), extension])),
     )
 }
 
@@ -110,23 +157,31 @@ impl ExtensionChange {
     }
 }
 
-pub fn alias_name(folder: &Path, name: &str) -> PathBuf {
-    let first = L10N.tr_args("alias-name", [("name", name.into())]);
+pub fn alias_name(folder: &Path, name: &OsStr) -> PathBuf {
+    let first = L10N.tr_args("alias-name", [("name", NAME_MARK.into())]);
     let later = (2u64..).map(|number| {
         L10N.tr_args(
             "alias-name-numbered",
-            [("name", name.into()), ("number", number.to_string().into())],
+            [
+                ("name", NAME_MARK.into()),
+                ("number", number.to_string().into()),
+            ],
         )
     });
-    free(folder, std::iter::once(first).chain(later))
+    free(
+        folder,
+        std::iter::once(first)
+            .chain(later)
+            .map(|candidate| with_name(&candidate, name)),
+    )
 }
 
-pub fn keep_both_name(folder: &Path, name: &str, is_dir: bool) -> PathBuf {
-    let (stem, extension) = split_extension(name, is_dir);
+pub fn keep_both_name(folder: &Path, name: impl AsRef<OsStr>, is_dir: bool) -> PathBuf {
+    let (stem, extension) = split_os_extension(name.as_ref(), is_dir);
     let (base, number) = numbered(stem);
     free(
         folder,
-        (number + 1..).map(|number| format!("{base} {number}{extension}")),
+        (number + 1..).map(|number| joined(&[base, OsStr::new(&format!(" {number}")), extension])),
     )
 }
 
@@ -134,7 +189,9 @@ pub fn untitled_folder(folder: &Path) -> PathBuf {
     let name = L10N.tr("untitled-folder");
     free(
         folder,
-        std::iter::once(name.clone()).chain((2u64..).map(|number| format!("{name} {number}"))),
+        std::iter::once(name.clone())
+            .chain((2u64..).map(|number| format!("{name} {number}")))
+            .map(OsString::from),
     )
 }
 

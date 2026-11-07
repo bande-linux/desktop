@@ -49,15 +49,22 @@ Delete each line when it ships; delete the file when the list is empty.
 - Changes: Undo/Redo shared by all windows; Make Alias (a symlink, Kind “Alias”);
   spring-loaded folders (a setting with its delay); Ctrl/Shift drag modifiers; Compress and
   Extract; New Document templates; Open in Terminal.
-- Trouble: per-item failure alerts (Skip, Try Again, Skip All, Stop); a no-space check before
-  copying; empty-folder and no-permission messages; an eject alert with Force Eject (Files
-  and desktop).
+- Trouble: per-item failure alerts (Skip, Try Again, Skip All, Stop) that name the reason (permission,
+  read-only, full, too large for the disk's format, a name the disk refuses, disconnected or damaged); a no-space check
+  before copying; a disk with no usable Trash offers Delete, as the Finder does; empty-folder and
+  no-permission messages; an eject alert with Force Eject (Files and desktop).
+- Safe copies: an item being copied, moved between disks, compressed or extracted is written under a hidden
+  `.bande-partial-*` name, never listed, synced to the disk and only then renamed to its real name, so an
+  interrupted one never looks complete (a crash leaves it to be removed the next time the folder is
+  listed; a lock tells it from a running copy). A move deletes its source only after that. Replace keeps the old item until
+  the new one is complete, then puts it in the Trash. Data is flushed every 64 MiB, so progress is
+  honest and a pulled disk fails early. Names need not be UTF-8. Extended attributes (`user.*`) are copied.
+  Closing a window hands its running operations to another window; closing the last one, Quit or Log Out asks first.
 - Trash with Put Back, Empty, 30-day purge and per-volume `.Trash-uid`; external disks in the
   sidebar and, by a setting, on the desktop.
 
 ## Open, ranked
 
 1. Gallery: Finder's preview pane metadata beside it (today the inspector shows it).
-2. Owner decisions: tags (colour labels in xattrs, a Tags settings tab), Connect to Server
-   (GVfs-free SMB/SFTP mounts).
+2. Owner decisions: tags (colour labels in xattrs, a Tags settings tab).
 3. Content search (file contents, not only names).

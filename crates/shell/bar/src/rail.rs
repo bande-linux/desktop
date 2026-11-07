@@ -8,8 +8,8 @@ use bande_status::status::{Battery, Capture, Sense, Status, speaker_waves, wifi_
 use bande_status::unread::ClockMark;
 use bande_toolkit::ui::PointerButton;
 use bande_toolkit::{
-    Color, DisplayEdge, Image, Item, MenuPlacement, Palette, Paragraph, Point, Rect, Scene, Shape,
-    TextAlign, TextSize, TextStyle, TextSystem,
+    Color, DisplayEdge, Elevation, Image, Item, MenuPlacement, Palette, Paragraph, Point, Radius,
+    Rect, Scene, Shape, TextAlign, TextSize, TextStyle, TextSystem,
 };
 use bande_xdg::{ICON_THEMES, find_icon};
 use jiff::Zoned;
@@ -19,6 +19,7 @@ use crate::symbols::{Symbol, Symbols, snap};
 use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA, vertical};
 
 const EDGE_PADDING: f32 = 24.0;
+pub const BAR_MARGIN: f32 = 8.0;
 const LABEL_ROOM: f32 = 280.0;
 const MARK_CELL: f32 = 52.0;
 const MARK_SIZE: f32 = 22.0;
@@ -67,8 +68,12 @@ pub fn bar_width(icon_size: f32) -> f32 {
     icon_size + EDGE_PADDING
 }
 
+pub fn bar_zone(icon_size: f32) -> f32 {
+    bar_width(icon_size) + BAR_MARGIN
+}
+
 pub fn surface_size(edge: BarEdge, icon_size: f32) -> (u32, u32) {
-    let depth = (bar_width(icon_size) + LABEL_ROOM).ceil() as u32;
+    let depth = (bar_zone(icon_size) + LABEL_ROOM).ceil() as u32;
     match vertical(edge) {
         true => (depth, 0),
         false => (0, depth),
@@ -82,6 +87,17 @@ pub fn edge_band(edge: BarEdge, size: (f32, f32), depth: f32) -> Rect {
         BarEdge::Right => Rect::new(width - depth, 0.0, depth, height),
         BarEdge::Top => Rect::new(0.0, 0.0, width, depth),
         BarEdge::Bottom => Rect::new(0.0, height - depth, width, depth),
+    }
+}
+
+pub fn floating_band(edge: BarEdge, size: (f32, f32), depth: f32) -> Rect {
+    let (width, height) = size;
+    let along = (width - 2.0 * BAR_MARGIN, height - 2.0 * BAR_MARGIN);
+    match edge {
+        BarEdge::Left => Rect::new(BAR_MARGIN, BAR_MARGIN, depth, along.1),
+        BarEdge::Right => Rect::new(width - depth - BAR_MARGIN, BAR_MARGIN, depth, along.1),
+        BarEdge::Top => Rect::new(BAR_MARGIN, BAR_MARGIN, along.0, depth),
+        BarEdge::Bottom => Rect::new(BAR_MARGIN, height - depth - BAR_MARGIN, along.0, depth),
     }
 }
 
@@ -314,7 +330,7 @@ impl TaskbarView {
 
     fn layout(&self, size: (f32, f32)) -> (Vec<(Slot, Rect)>, AppsRegion, Vec<Rect>) {
         let thick = self.width;
-        let bar = edge_band(self.edge, size, thick);
+        let bar = floating_band(self.edge, size, thick);
         let vertical = vertical(self.edge);
         let (origin, length) = match vertical {
             true => (bar.y, bar.height),
@@ -480,22 +496,13 @@ impl TaskbarView {
         self.bar = bar;
         let palette = self.palette;
         let ink = palette.ink;
-        let inner_edge = match self.edge {
-            BarEdge::Left => Rect::new(bar.x + bar.width - 1.0, bar.y, 1.0, bar.height),
-            BarEdge::Right => Rect::new(bar.x, bar.y, 1.0, bar.height),
-            BarEdge::Top => Rect::new(bar.x, bar.y + bar.height - 1.0, bar.width, 1.0),
-            BarEdge::Bottom => Rect::new(bar.x, bar.y, bar.width, 1.0),
-        };
-        let mut items = vec![
-            Item::Fill {
-                shape: Shape::rect(bar),
-                paint: palette.chassis.into(),
-            },
-            Item::Fill {
-                shape: Shape::rect(inner_edge),
-                paint: palette.edge.into(),
-            },
-        ];
+        let outline = Shape::rounded(bar, Radius::XL);
+        let mut items = Item::shadows(outline, Elevation::Frame, palette.scheme, true).to_vec();
+        items.push(Item::Fill {
+            shape: outline,
+            paint: palette.chassis.into(),
+        });
+        items.push(Item::lit_edge(outline, &palette));
         for hairline in hairlines {
             items.push(Item::Fill {
                 shape: Shape::rect(hairline),

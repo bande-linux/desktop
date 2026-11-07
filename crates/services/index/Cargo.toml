@@ -1,0 +1,46 @@
+[package]
+name = "bande-indexer"
+description = "Bande search index: file contents, mail, calendar and contacts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+libc.workspace = true
+rustix = { workspace = true, features = ["fs", "process"] }
+tantivy.workspace = true
+tracing.workspace = true
+bande-bus.workspace = true
+bande-config.workspace = true
+bande-content.workspace = true
+bande-log.workspace = true
+bande-search.workspace = true
+bande-watch.workspace = true
+bande-xdg.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+bande-test-bus.workspace = true
+tempfile.workspace = true
+zip.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "misc"
+depends = "$auto, default-dbus-session-bus | dbus-session-bus, init-system-helpers (>= 1.66)"
+extended-description = """\
+Keeps a private on-disk index of the names and contents of the documents in \
+the home folder, and of the mail, events and contacts apps give it, and \
+answers searches from Search and Files. Runs in the background at idle \
+priority and is woken only by changes."""
+maintainer-scripts = "debian/"
+assets = [
+    ["target/release/bande-indexer", "usr/bin/", "755"],
+    ["data/bande-indexer.service", "usr/lib/systemd/user/", "644"],
+    ["data/org.bande.Search.service", "usr/share/dbus-1/services/", "644"],
+]
+
+[lints]
+workspace = true

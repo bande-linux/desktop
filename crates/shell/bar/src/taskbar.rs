@@ -13,7 +13,7 @@ use bande_toolkit::ui::{
 };
 
 use crate::L10N;
-use crate::rail::edge_band;
+use crate::rail::{BAR_MARGIN, edge_band};
 use bande_toolkit::{
     Appearance, Color, Elevation, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme,
     Shape, TextAlign, TextStyle, TextSystem,
@@ -652,12 +652,12 @@ impl TaskbarState {
         if self.hides() {
             return 0;
         }
-        self.rail.thickness().round() as i32
+        (self.rail.thickness() + BAR_MARGIN).round() as i32
     }
 
     pub fn input_region(&self) -> Rect {
         let depth = if self.is_shown() {
-            self.rail.thickness()
+            self.rail.thickness() + BAR_MARGIN
         } else {
             EDGE_STRIP
         };

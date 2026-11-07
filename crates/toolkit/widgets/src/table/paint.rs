@@ -13,6 +13,8 @@ use crate::{Animated, Context, Spring};
 const SELECTION_INSET: (f32, f32) = (4.0, 1.0);
 const ICON_GAP: f32 = 6.0;
 const TEXT_SIZE: f32 = 13.0;
+const FLOATING_SHADOW: f32 = 0.18;
+const FLOATING_BLUR: f32 = 8.0;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) struct TextKey {
@@ -155,43 +157,12 @@ impl Table {
             shape: Shape::rect(header),
             paint: cx.palette.sheet.into(),
         });
-        for (column, ((x, width), paragraph)) in self
-            .column_edges()
-            .into_iter()
-            .zip(&self.titles)
-            .enumerate()
-        {
-            let sorted = self.sort.filter(|sort| sort.column == column);
-            let paragraph = paragraph.clone();
-            let text_x = match self.columns[column].numeric {
-                true => x + width - CELL_PADDING - paragraph.width(),
-                false => x + CELL_PADDING,
-            };
-            let text_y = self.frame.y + ((self.header_bar() - paragraph.height()) / 2.0).round();
-            if let Some(sort) = sorted {
-                let arrow_x = match self.columns[column].numeric {
-                    true => text_x - 10.0,
-                    false => text_x + paragraph.width() + 6.0,
-                };
-                let middle = self.frame.y + self.header_bar() / 2.0;
-                let (tip, base) = if sort.ascending {
-                    (-2.0, 2.0)
-                } else {
-                    (2.0, -2.0)
-                };
-                for side in [-1.0, 1.0] {
-                    items.push(Item::Line {
-                        from: Point::new(arrow_x + 2.5, middle + tip),
-                        to: Point::new(arrow_x + 2.5 + side * 3.0, middle + base),
-                        width: 1.5,
-                        paint: cx.palette.ink2.into(),
-                    });
-                }
+        let shifts = self.column_shifts(cx);
+        let floating = self.floating_column(cx);
+        for (column, (x, width)) in self.column_edges().into_iter().enumerate() {
+            if Some(column) != floating {
+                self.paint_title(cx, column, x + shifts[column], width, items);
             }
-            items.push(Item::Text {
-                origin: Point::new(text_x, text_y),
-                paragraph,
-            });
         }
         items.push(Item::Line {
             from: Point::new(self.frame.x, self.frame.y + self.header_bar() - 0.5),
@@ -201,6 +172,150 @@ impl Table {
             ),
             width: 1.0,
             paint: cx.palette.hairline.into(),
+        });
+    }
+
+    fn paint_title(&self, cx: &Context, column: usize, x: f32, width: f32, items: &mut Vec<Item>) {
+        let Some(paragraph) = self.titles.get(column).cloned() else {
+            return;
+        };
+        let text_x = match self.columns[column].numeric {
+            true => x + width - CELL_PADDING - paragraph.width(),
+            false => x + CELL_PADDING,
+        };
+        let text_y = self.frame.y + ((self.header_bar() - paragraph.height()) / 2.0).round();
+        if let Some(sort) = self.sort.filter(|sort| sort.column == column) {
+            let arrow_x = match self.columns[column].numeric {
+                true => text_x - 10.0,
+                false => text_x + paragraph.width() + 6.0,
+            };
+            let middle = self.frame.y + self.header_bar() / 2.0;
+            let (tip, base) = if sort.ascending {
+                (-2.0, 2.0)
+            } else {
+                (2.0, -2.0)
+            };
+            for side in [-1.0, 1.0] {
+                items.push(Item::Line {
+                    from: Point::new(arrow_x + 2.5, middle + tip),
+                    to: Point::new(arrow_x + 2.5 + side * 3.0, middle + base),
+                    width: 1.5,
+                    paint: cx.palette.ink2.into(),
+                });
+            }
+        }
+        items.push(Item::Text {
+            origin: Point::new(text_x, text_y),
+            paragraph,
+        });
+    }
+
+    pub(super) fn paint_cell(
+        &self,
+        cx: &Context,
+        shared: (&HashMap<TextKey, Paragraph>, &[f32]),
+        line: &Line,
+        column: usize,
+        (x, y, lit): (f32, f32, bool),
+        items: &mut Vec<Item>,
+    ) {
+        let (texts, widths) = shared;
+        let cell = &line.cells[column];
+        let mut text_x = x + CELL_PADDING;
+        if column == 0 {
+            text_x += self.indent(line);
+        }
+        if let Some(icon) = &cell.icon {
+            items.push(Item::Image {
+                rect: Rect::new(
+                    text_x,
+                    y + (self.row_height() - ICON_SIZE) / 2.0,
+                    ICON_SIZE,
+                    ICON_SIZE,
+                ),
+                image: icon.clone(),
+            });
+        }
+        text_x += self.icon_space(column, cell);
+        let key = self.text_key(cx, line, column, lit, widths);
+        let Some(paragraph) = texts.get(&key) else {
+            return;
+        };
+        if self.columns[column].numeric {
+            text_x = x + widths[column] - CELL_PADDING - paragraph.width();
+        }
+        items.push(Item::Text {
+            origin: Point::new(
+                text_x,
+                y + ((self.row_height() - paragraph.height()) / 2.0).round(),
+            ),
+            paragraph: paragraph.clone(),
+        });
+    }
+
+    pub(super) fn paint_floating_column(
+        &self,
+        cx: &Context,
+        column: usize,
+        (x, width): (f32, f32),
+        shift: f32,
+        items: &mut Vec<Item>,
+    ) {
+        let x = x + shift;
+        let rise = cx.sample(&self.rise);
+        let body = self.body();
+        let whole = Rect::new(x, self.frame.y, width, self.frame.height);
+        let underline = self.frame.y + self.header_bar() - 0.5;
+        let mut floating = vec![
+            Item::Shadow {
+                shape: Shape::rect(whole),
+                offset: Point::new(0.0, 2.0),
+                blur_radius: FLOATING_BLUR,
+                color: Color::BLACK.with_opacity(FLOATING_SHADOW * rise),
+            },
+            Item::Fill {
+                shape: Shape::rect(whole),
+                paint: cx.palette.sheet.into(),
+            },
+        ];
+        self.paint_title(cx, column, x, width, &mut floating);
+        floating.push(Item::Line {
+            from: Point::new(x, underline),
+            to: Point::new(x + width, underline),
+            width: 1.0,
+            paint: cx.palette.hairline.into(),
+        });
+        let focused = cx.is_focused(self.id);
+        let offset = self.scroll.offset(cx);
+        let (first, last) = self.visible_rows(cx);
+        let widths = self.widths();
+        let texts = self.texts.borrow();
+        let mut rows = Vec::new();
+        self.paint_selection(cx, body, offset, focused, &mut rows);
+        self.paint_headings(cx, body, offset, first, last, &mut rows);
+        for index in first..last {
+            let Some(line) = self.line(index).filter(|line| column < line.cells.len()) else {
+                continue;
+            };
+            let y = body.y + self.row_top(index) - offset;
+            let lit = focused && !self.sidebar && self.lit(cx, index);
+            self.paint_cell(cx, (&texts, &widths), line, column, (x, y, lit), &mut rows);
+        }
+        floating.push(Item::Clip {
+            shape: Shape::rect(Rect::new(x, body.y, width, body.height)),
+            items: rows,
+        });
+        for edge in [x + 0.5, x + width - 0.5] {
+            floating.push(Item::Line {
+                from: Point::new(edge, self.frame.y),
+                to: Point::new(edge, self.frame.y + self.frame.height),
+                width: 1.0,
+                paint: cx.palette.hairline.with_opacity(rise).into(),
+            });
+        }
+        items.push(Item::Clip {
+            shape: Shape::rect(self.frame),
+            items: floating,
         });
     }
 

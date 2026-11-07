@@ -1,0 +1,73 @@
+Translation is off until turned on in Settings; only then may Remote Settings fetch, and only its models
+
+--- a/services/settings/Utils.sys.mjs
++++ b/services/settings/Utils.sys.mjs
+@@ -91,12 +91,6 @@
+   false
+ );
+ 
+-ChromeUtils.defineLazyGetter(lazy, "allowedCollections", () =>
+-  Services.prefs
+-    .getStringPref("bande.services.settings.allowedCollections", "")
+-    .split(",")
+-);
+-
+ ChromeUtils.defineLazyGetter(lazy, "allowedCollectionsFromDump", () =>
+   Services.prefs
+     .getStringPref("bande.services.settings.allowedCollectionsFromDump", "")
+@@ -111,11 +105,15 @@
+ 
+ export var Utils = {
+   get SERVER_URL() {
+-    return "data:,";
++    return Services.prefs.getBoolPref("browser.translations.enable", false)
++      ? AppConstants.REMOTE_SETTINGS_SERVER_URLS[0]
++      : "data:,";
+   },
+ 
+   get allowedCollections() {
+-    return lazy.allowedCollections;
++    return Services.prefs.getBoolPref("browser.translations.enable", false)
++      ? ["main/translations-models-v2", "main/translations-wasm-v2"]
++      : [];
+   },
+ 
+   get allowedCollectionsFromDump() {
+--- a/browser/components/preferences/config/languages.mjs
++++ b/browser/components/preferences/config/languages.mjs
+@@ -811,6 +811,11 @@
+ );
+ 
+ Preferences.addSetting({
++  id: "enableTranslations",
++  pref: "browser.translations.enable",
++});
++
++Preferences.addSetting({
+   id: "offerTranslations",
+   pref: "browser.translations.automaticallyPopup",
+   deps: ["aiControlDefault", "aiControlTranslations"],
+@@ -940,6 +945,10 @@
+     headingLevel: 2,
+     items: [
+       {
++        id: "enableTranslations",
++        l10nId: "bande-translations-enable",
++      },
++      {
+         id: "offerTranslations",
+         l10nId: "settings-translations-offer-to-translate-label",
+       },
+--- a/browser/locales/en-US/browser/preferences/preferences.ftl
++++ b/browser/locales/en-US/browser/preferences/preferences.ftl
+@@ -503,6 +503,10 @@
+     .aria-label = Translations
+     .description = Translate pages or selected text. To protect your privacy, translations stay on your device.
+ 
++bande-translations-enable =
++    .label = Turn on translation
++    .description = Translation runs on this computer. Turning it on downloads the language models you use from Mozilla. Until then nothing is downloaded.
++
+ settings-translations-offer-to-translate-label =
+     .label = Offer full page translation
+ 

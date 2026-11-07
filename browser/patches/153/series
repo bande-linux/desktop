@@ -19,3 +19,6 @@ bande/disconnect-startup.patch
 bande/no-remote-settings.patch
 bande/no-custom-titlebars.patch
 bande/window-drag-threshold.patch
+bande/push-for-sync.patch
+bande/translation-setting.patch
+bande/no-google.patch

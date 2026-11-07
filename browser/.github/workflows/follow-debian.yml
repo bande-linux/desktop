@@ -1,0 +1,130 @@
+name: follow-debian
+run-name: "${{ github.event_name == 'schedule' && 'Every 6 hours: follow Debian firefox-esr' || (inputs.debian_version != '' && format('Test build of Debian firefox-esr {0}', inputs.debian_version) || 'Build Debian firefox-esr') }}"
+
+on:
+  schedule:
+    - cron: '37 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even if the archive already serves this version
+        type: boolean
+        default: false
+      debian_version:
+        description: Test-build this Debian firefox-esr version instead of unstable's; never published
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    outputs:
+      debian: ${{ steps.versions.outputs.debian }}
+      version: ${{ steps.versions.outputs.version }}
+      build: ${{ steps.versions.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Compare Debian with the archive
+        id: versions
+        env:
+          FORCE: ${{ inputs.force }}
+          TEST_VERSION: ${{ inputs.debian_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          debian=${TEST_VERSION:-$(scripts/debian-version.sh)}
+          version=$(scripts/version.sh "$debian")
+          published=$(scripts/published.sh || true)
+          built=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=bande-version-$version" \
+            --jq '[.artifacts[] | select(.expired | not)] | length')
+          build=true
+          if [ -z "$TEST_VERSION" ] && [ "$FORCE" != true ] && { [ "$published" = "$version" ] || [ "$built" -gt 0 ]; }; then
+            build=false
+          fi
+          echo "Debian: firefox-esr $debian; ours: $version; published: ${published:-none}; built: $built; build: $build"
+          {
+            echo "debian=$debian"
+            echo "version=$version"
+            echo "build=$build"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - arch: amd64
+            runner: ubuntu-24.04
+    name: build (${{ matrix.arch }})
+    concurrency:
+      group: follow-debian-${{ matrix.arch }}-${{ inputs.debian_version || 'unstable' }}
+      cancel-in-progress: false
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 350
+    env:
+      DEBIAN_VERSION: ${{ needs.check.outputs.debian }}
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache /usr/local/share/boost
+          df -h /
+
+      - name: Start the Debian testing container
+        run: |
+          mkdir -p "$RUNNER_TEMP/work" "$RUNNER_TEMP/out"
+          docker run -d --privileged --name build -v "$PWD:/repo" -v "$RUNNER_TEMP/work:/work" -v "$RUNNER_TEMP/out:/out" \
+            debian:testing sleep infinity
+
+      - name: Fetch Debian's source
+        run: docker exec build /repo/scripts/build.sh fetch "$DEBIAN_VERSION" /work
+
+      - name: Prepare it with our patches
+        id: prepare
+        run: |
+          set +e
+          docker exec build sh -c '/repo/scripts/prepare.sh /work/firefox-esr-*/ "$0"' "$VERSION"
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          [ $rc = 0 ] || [ $rc = 3 ]
+
+      - name: Say a patch needs refreshing
+        if: steps.prepare.outputs.rc == '3'
+        run: |
+          echo "::error::A patch no longer applies to firefox-esr $DEBIAN_VERSION; run scripts/refresh-prompt.md. Nothing is published."
+          exit 1
+
+      - name: Build
+        run: docker exec -e BROWSER_JOBS=4 build /repo/scripts/build.sh compile "$VERSION" /work /out
+
+      - name: Prove a fresh profile stays silent
+        run: docker exec build sh -c '/repo/scripts/check-package.sh /out/bande-browser_*.deb'
+
+      - name: Name the version
+        run: echo "$VERSION" > "$RUNNER_TEMP/version"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bande-debs-${{ matrix.arch }}
+          path: ${{ runner.temp }}/out/*.deb
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        if: inputs.debian_version == '' && matrix.arch == 'arm64'
+        with:
+          name: bande-version-${{ needs.check.outputs.version }}
+          path: ${{ runner.temp }}/version

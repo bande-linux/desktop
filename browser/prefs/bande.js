@@ -102,10 +102,10 @@ pref("media.gmp-manager.updateEnabled", false, locked);
 pref("media.gmp-manager.url", "", locked);
 pref("media.gmp-gmpopenh264.enabled", false);
 pref("media.gmp-widevinecdm.enabled", false);
+pref("media.gmp-widevinecdm.visible", false);
 pref("media.gmp-provider.enabled", false);
 pref("media.eme.enabled", false);
-// Remote settings: nothing fetched, only the data shipped in each update
-pref("bande.services.settings.allowedCollections", "", locked);
+// Remote settings: nothing fetched, only the data shipped in each update; translation, once on, fetches its models
 pref("bande.services.settings.allowedCollectionsFromDump", "security-state/*,main/content-classifier-lists,main/change-password-urls,main/webcompat-interventions,main/addons-data-leak-blocker-domains,main/mfcdm-origins-list,main/url-classifier-exceptions,main/ml-model-allow-deny-list,main/third-party-cookie-blocking-exempt-urls,main/backup-common-passwords-list,main/bounce-tracking-protection-exceptions,main/fingerprinting-protection-overrides,main/password-rules,main/websites-with-shared-credential-backends,main/password-recipes,main/partitioning-exempt-urls,blocklists/addons-bloomfilters,main/tracking-protection-lists,main/anti-tracking-url-decoration,main/hijack-blocklists,main/fxmonitor-breaches,main/language-dictionaries,blocklists/gfx,blocklists/addons,blocklists/plugins,main/moz-essential-domain-fallbacks,main/url-parser-default-unknown-schemes-interventions,main/urlbar-persisted-search-terms,main/devtools-devices,main/devtools-compatibility-browsers,main/ms-images,main/tippytop,main/search-config-icons,main/search-config-v2,main/search-config-overrides-v2,main/search-default-override-allowlist,main/translations-models-v2,main/translations-wasm-v2", locked);
 pref("security.remote_settings.crlite_filters.enabled", false);
 pref("security.remote_settings.intermediates.enabled", false);
@@ -116,13 +116,10 @@ pref("browser.safebrowsing.blockedURIs.enabled", false, locked);
 pref("browser.safebrowsing.downloads.enabled", false, locked);
 pref("browser.safebrowsing.downloads.remote.enabled", false, locked);
 pref("browser.safebrowsing.downloads.remote.url", "", locked);
-pref("browser.safebrowsing.provider.google.updateURL", "", locked);
-pref("browser.safebrowsing.provider.google.gethashURL", "", locked);
-pref("browser.safebrowsing.provider.google4.updateURL", "", locked);
-pref("browser.safebrowsing.provider.google4.gethashURL", "", locked);
 pref("browser.safebrowsing.provider.mozilla.updateURL", "", locked);
 pref("browser.safebrowsing.provider.mozilla.gethashURL", "", locked);
 // Unsolicited network checks and speculation
+// Sites may not use push; the connection opens only for a signed-in account
 pref("dom.push.enabled", false);
 pref("dom.push.connection.enabled", false);
 pref("network.captive-portal-service.enabled", false, locked);
@@ -153,6 +150,11 @@ pref("browser.discovery.enabled", false, locked);
 pref("extensions.webcompat-reporter.enabled", false, locked);
 pref("extensions.unsignedScopes", 12);
 pref("extensions.autoDisableScopes", 3);
+// Translation: off until turned on in Settings
+pref("browser.translations.enable", false);
+pref("browser.translations.select.enable", false);
+pref("browser.translations.quickAction.enabled", false);
+pref("browser.ai.control.translations", "available", locked);
 // AI features
 pref("browser.ml.enable", false, locked);
 pref("browser.ml.chat.enabled", false, locked);
@@ -166,7 +168,6 @@ pref("extensions.ml.enabled", false, locked);
 pref("pdfjs.enableAltText", false);
 pref("pdfjs.enableGuessAltText", false);
 // Accounts: stay out of the way until asked for
-pref("identity.fxaccounts.enabled", false);
 pref("identity.fxaccounts.toolbar.enabled", false);
 // Debian
 pref("distribution.searchplugins.defaultLocale", "en-US");

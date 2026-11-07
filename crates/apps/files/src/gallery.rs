@@ -136,7 +136,7 @@ impl FilesView {
         let frame = self.gallery_name_frame();
         let name = self.shown_name(entry).to_owned();
         let shown = self.fitted_name(&name, 13.0, frame.width, 1);
-        let ink = self.palette.ink;
+        let ink = self.entry_ink(entry);
         let paragraph = self.text().paragraph(
             &shown,
             TextStyle::role(TextRole::BodyStrong, ink),
@@ -194,10 +194,11 @@ impl FilesView {
                 None => self.entry_icon(entry, (THUMB * 2.0) as u32),
             };
             if let Some(image) = picture {
-                shown.push(Item::Image {
-                    rect: fitted(thumb, &image),
+                shown.push(crate::paint::entry_picture(
+                    entry,
+                    fitted(thumb, &image),
                     image,
-                });
+                ));
             }
             self.hits.push((
                 well,

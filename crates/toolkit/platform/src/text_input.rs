@@ -50,6 +50,7 @@ fn preedit_cursor(text: &str, begin: i32, end: i32) -> Option<(usize, usize)> {
 
 impl Window {
     pub(crate) fn reset_text_input(&mut self) {
+        self.state.input.compose.cancel();
         let input = &mut self.state.text_input;
         let Some(text_input) = &input.text_input else {
             return;

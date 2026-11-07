@@ -1044,14 +1044,12 @@ fn displays_pane() -> Pane {
         vec![
             section(
                 None,
-                vec![
-                    level(SettingId::Brightness, "brightness"),
-                    page(SettingId::NightLightPage, PaneId::NightLight),
-                ],
+                vec![page(SettingId::NightLightPage, PaneId::NightLight)],
             ),
             section(
                 None,
                 vec![
+                    level(SettingId::Brightness, "brightness"),
                     setting(
                         SettingId::DisplayUse,
                         L10N.tr("display-use"),

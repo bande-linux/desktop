@@ -7,7 +7,7 @@ use jiff::{Timestamp, Zoned};
 
 use crate::state::Compositor;
 
-const NEUTRAL: f64 = 6500.0;
+pub(crate) const NEUTRAL: f64 = 6500.0;
 const LEAST_WARM: f64 = 5000.0;
 const MOST_WARM: f64 = 2700.0;
 const SCHEDULED_FADE: Duration = Duration::from_secs(60);
@@ -48,17 +48,17 @@ fn gains(kelvin: f64) -> [f64; 3] {
     [0, 1, 2].map(|channel| (warm[channel] / neutral[channel]).min(1.0))
 }
 
-pub(crate) fn matrix(kelvin: f64) -> [u64; 9] {
+pub(crate) fn matrix(kelvin: f64, dim: f64) -> [u64; 9] {
     let [red, green, blue] =
-        gains(kelvin).map(|gain| (gain * f64::from(1u32 << 31) * 2.0).round() as u64);
+        gains(kelvin).map(|gain| (gain * dim * f64::from(1u32 << 31) * 2.0).round() as u64);
     [red, 0, 0, 0, green, 0, 0, 0, blue]
 }
 
-pub(crate) fn ramp(size: usize, kelvin: f64) -> [Vec<u16>; 3] {
+pub(crate) fn ramp(size: usize, kelvin: f64, dim: f64) -> [Vec<u16>; 3] {
     let last = size.saturating_sub(1).max(1) as f64;
     gains(kelvin).map(|gain| {
         (0..size)
-            .map(|step| (step as f64 / last * gain * f64::from(u16::MAX)).round() as u16)
+            .map(|step| (step as f64 / last * gain * dim * f64::from(u16::MAX)).round() as u16)
             .collect()
     })
 }

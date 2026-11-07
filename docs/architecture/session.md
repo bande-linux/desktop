@@ -47,7 +47,7 @@ graph LR
 - **Crash resilience**: if the lock screen crashes, the session stays locked; the compositor
   draws a blank frame and a new locker may take over the lock.
 - Idle, as in macOS's Lock Screen settings ([`config.kdl`](overview.md#configuration) `idle`,
-  Settings ▸ Lock Screen): the backlight dims 10 s before the screen saver or the
+  Settings ▸ Lock Screen): the displays dim 10 s before the screen saver or the
   display turning off, whichever comes first (default 5 and 10 min). The screen saver is the lock
   screen itself, resting: its clock and date over the blurred desktop picture and nothing
   else, covering the desktop through `ext-session-lock`, as macOS hands its saver over to the
@@ -118,9 +118,26 @@ graph LR
   Idle time comes from the compositor's `ext-idle-notify-v1`, one notification per policy
   threshold, sent as soon as it is due. The compositor follows `Lock` on the session's own
   logind object path (from `GetSession("auto")`; logind never signals on `session/auto`).
-  Dimming sets the preferred backlight (`firmware`, then `platform`, then `raw`) to
-  a quarter of its level through logind's `Session.SetBrightness` and restores it on activity;
-  displays without a backlight do not dim.
+  Dimming lowers every display: the backlight to a quarter of its level, every other display
+  by the compositor's colour transform (no DDC write), and restores them on activity.
+- **Display brightness**: `bande-power` owns one model for all displays, `org.bande.Brightness`
+  (`Displays`: connector, name and level per display; `SetLevel`; `Refresh`), so Settings and
+  Control Center show one bar per connected display and never block on hardware. The displays
+  come from the compositor's `org.bande.Displays` (`Connected`, `SetDim`). Each has its own
+  worker thread, idle until asked, and one of three controls:
+  the backlight through logind's `Session.SetBrightness` for an internal panel (`eDP`, `LVDS`,
+  `DSI`); VCP 0x10 over DDC/CI when the monitor answers; otherwise the compositor's CRTC gamma
+  ramp or CTM, multiplied with night light, down to a fifth so the screen never goes black.
+  DDC is native (`ddc.rs`, `/dev/i2c-N` from the connector's `ddc` link or `i2c-N` child):
+  bars move at once, writes go to the monitor at most every 250 ms with the last level always
+  sent and unchanged values skipped, because a monitor's memory wears and its bus is slow.
+  A monitor keeps its own level: it is read on connect and when a brightness view opens, never
+  written on connect. A plugged-in monitor is asked again after 1, 3 and 8 s, since many answer
+  late; one that never answers, or stops answering, is dimmed by the compositor instead, and its
+  level is kept per display in `$XDG_STATE_HOME/bande/brightness`. Access: `bande-power` ships
+  `i2c-dev` in `modules-load.d` and a udev rule giving the active session `uaccess` to I2C
+  adapters of PCI display controllers only, never other buses. Apple's `appledrm` exposes no
+  DDC adapter, so external displays on a Mac use the compositor control.
 
 ### XDG desktop portal backend (`xdg-desktop-portal-bande`)
 
@@ -333,9 +350,10 @@ graph LR
   as apps, and Asahi's `hide-parent` hides the raw speaker node from clients. Settings ▸ Sound
   shows a Left–Right balance for a stereo (FL, FR) output, set through its channel volumes.
 - The display and keyboard brightness keys go the same way (`brightness_key`, also while
-  locked): Control Center moves the display backlight or the `kbd_backlight` LED one of 16
-  steps (a quarter step with Option and Shift) through logind's `Session.SetBrightness` and
-  shows the level in the same HUD as the volume, a quarter step filling a quarter segment.
+  locked): Control Center moves the display under the pointer (through `org.bande.Brightness`)
+  or the `kbd_backlight` LED (through logind) one of 16 steps (a quarter step with Option and
+  Shift) and shows the level in the same HUD as the volume, a quarter step filling a quarter
+  segment. With several displays the HUD names the display.
 
 ### Accessibility
 

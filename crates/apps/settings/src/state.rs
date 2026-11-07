@@ -86,17 +86,13 @@ impl Display {
     }
 
     pub fn name(&self) -> String {
-        let make = self.make.trim();
-        let model = self.model.trim();
-        match (make.is_empty(), model.is_empty()) {
-            (_, true) if !self.identity.is_empty() => self.identity.clone(),
-            (_, true) => self.connector.clone(),
-            (true, false) => model.to_owned(),
-            (false, false) if model.to_lowercase().contains(&make.to_lowercase()) => {
-                model.to_owned()
+        bande_edid::display_name(&self.make, &self.model).unwrap_or_else(|| {
+            if self.identity.is_empty() {
+                self.connector.clone()
+            } else {
+                self.identity.clone()
             }
-            (false, false) => format!("{make} {model}"),
-        }
+        })
     }
 
     pub fn logical_size(&self) -> (i32, i32) {

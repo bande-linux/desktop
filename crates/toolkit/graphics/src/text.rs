@@ -414,6 +414,7 @@ impl TextSystem {
         layout.align(alignment, AlignmentOptions::default());
         Paragraph {
             layout: Arc::new(layout),
+            text: Arc::from(text.as_ref()),
         }
     }
 }
@@ -421,6 +422,15 @@ impl TextSystem {
 #[derive(Clone)]
 pub struct Paragraph {
     layout: Arc<Layout<Color>>,
+    text: Arc<str>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TextRun {
+    pub glyphs: GlyphRun,
+    pub clusters: Vec<Range<usize>>,
+    pub variations: Vec<([u8; 4], f32)>,
+    pub lines: Vec<(Rect, Color)>,
 }
 
 impl fmt::Debug for Paragraph {
@@ -505,6 +515,14 @@ impl GlyphRun {
         self.font.data.id()
     }
 
+    pub fn font_id(&self) -> u64 {
+        self.font.data.id()
+    }
+
+    pub fn font_blob(&self) -> impl AsRef<[u8]> + Send + Sync + 'static {
+        self.font.data.clone()
+    }
+
     pub fn variation_coords(&self) -> &[i16] {
         &self.coords
     }
@@ -514,7 +532,108 @@ impl Paragraph {
     pub fn from_layout(layout: Layout<Color>) -> Self {
         Self {
             layout: Arc::new(layout),
+            text: Arc::from(""),
         }
+    }
+
+    pub fn with_text(self, text: &str) -> Self {
+        Self {
+            text: Arc::from(text),
+            ..self
+        }
+    }
+
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    pub fn line_extents(&self) -> Vec<(f32, f32)> {
+        self.layout
+            .lines()
+            .map(|line| {
+                let metrics = line.metrics();
+                (metrics.block_min_coord, metrics.block_max_coord)
+            })
+            .collect()
+    }
+
+    pub fn text_runs(&self, lines: Range<usize>) -> Vec<TextRun> {
+        let has_text = !self.text.is_empty();
+        let mut runs = Vec::new();
+        for line in self.layout.lines().skip(lines.start).take(lines.len()) {
+            for item in line.items() {
+                let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
+                    continue;
+                };
+                let run = glyph_run.run();
+                let mut decorations = Vec::new();
+                let metrics = run.font_metrics();
+                let style = glyph_run.style();
+                let baseline = glyph_run.baseline();
+                let across = |offset: f32, size: f32| {
+                    Rect::new(
+                        glyph_run.offset(),
+                        baseline - offset - size / 2.0,
+                        glyph_run.advance(),
+                        size,
+                    )
+                };
+                if let Some(underline) = &style.underline {
+                    decorations.push((
+                        across(
+                            underline.offset.unwrap_or(metrics.underline_offset),
+                            underline.size.unwrap_or(metrics.underline_size),
+                        ),
+                        underline.brush,
+                    ));
+                }
+                if let Some(strikethrough) = &style.strikethrough {
+                    decorations.push((
+                        across(
+                            strikethrough.offset.unwrap_or(metrics.strikethrough_offset),
+                            strikethrough.size.unwrap_or(metrics.strikethrough_size),
+                        ),
+                        strikethrough.brush,
+                    ));
+                }
+                let clusters = match has_text {
+                    true => run
+                        .visual_clusters()
+                        .flat_map(|cluster| {
+                            let range = cluster.text_range();
+                            cluster.glyphs().map(move |_| range.clone())
+                        })
+                        .collect(),
+                    false => Vec::new(),
+                };
+                runs.push(TextRun {
+                    glyphs: GlyphRun {
+                        font: run.font().clone(),
+                        size: run.font_size(),
+                        color: glyph_run.style().brush,
+                        skew_degrees: run.synthesis().skew(),
+                        coords: Vec::new(),
+                        glyphs: glyph_run
+                            .positioned_glyphs()
+                            .map(|glyph| PositionedGlyph {
+                                id: glyph.id,
+                                x: glyph.x,
+                                y: glyph.y,
+                            })
+                            .collect(),
+                    },
+                    clusters,
+                    variations: run
+                        .synthesis()
+                        .variation_settings()
+                        .iter()
+                        .map(|(tag, value)| (tag.to_be_bytes(), *value))
+                        .collect(),
+                    lines: decorations,
+                });
+            }
+        }
+        runs
     }
 
     pub fn layout(&self) -> &Layout<Color> {

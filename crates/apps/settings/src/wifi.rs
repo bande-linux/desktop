@@ -220,7 +220,8 @@ impl SettingsView {
         let mut rename = intent(&self.intents, Intent::OtherName);
         let field = TextField::new(&L10N.tr("network-name"), &other.name, move |text| {
             rename(text.to_owned())
-        });
+        })
+        .without_text_checking();
         self.anchors
             .push((Anchor::Setting(SettingId::OtherNetwork, None), field.id()));
         let mut rows = vec![boxed(Row::new(

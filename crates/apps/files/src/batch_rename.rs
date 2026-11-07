@@ -352,9 +352,12 @@ impl Widget for RenameSheet {
 impl FilesView {
     fn rename_field(&self, field: RenameField, text: &str) -> Box<dyn Widget> {
         let send = sender(&self.signals);
-        Box::new(TextField::new("", text, move |text| {
-            send(Signal::RenameField(field, text.to_owned()));
-        }))
+        Box::new(
+            TextField::new("", text, move |text| {
+                send(Signal::RenameField(field, text.to_owned()));
+            })
+            .without_text_checking(),
+        )
     }
 
     fn rename_choice(

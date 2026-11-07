@@ -3,13 +3,15 @@ use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
 use std::thread;
+use std::time::Instant;
 
 use accesskit::TreeUpdate;
+use bande_bus::logind::ManagerProxyBlocking;
 use bande_datetime::{DateFormats, MinuteTimer};
 use bande_keyboard::Layouts;
 use bande_lock::{
     BackdropSource, Devices, Inbox, LockScreen, Look, PAM_SERVICE, PICTURE_PIXELS, User, Variant,
-    authenticate, current_user, load_backdrop, load_picture,
+    authenticate, current_user, is_deliberate, load_backdrop, load_picture,
 };
 use bande_toolkit::ui::frame_time;
 use bande_toolkit::{
@@ -48,6 +50,7 @@ struct Locker {
     picture: Option<Inbox<Image>>,
     devices: Option<Devices>,
     layouts: Layouts,
+    wakes: Option<Inbox<()>>,
     power: Option<PowerProxyBlocking<'static>>,
     unlocked: bool,
 }
@@ -107,13 +110,25 @@ impl App for Locker {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
-        if matches!(event, WindowEvent::Input(_)) && !self.password_required() {
-            self.unlock(window);
-            return;
+        if let WindowEvent::Input(input) = &event
+            && is_deliberate(input)
+        {
+            if !self.password_required() {
+                self.unlock(window);
+                return;
+            }
+            if !self.screen.wake_on(input, Instant::now()) {
+                window.request_redraw();
+                return;
+            }
         }
         let changed = match event {
             WindowEvent::Input(input) => self.screen.handle(&input),
-            WindowEvent::Accessibility(request) => self.screen.perform(&request),
+            WindowEvent::Accessibility(request) => {
+                self.screen.wake(Instant::now());
+                window.request_redraw();
+                self.screen.perform(&request)
+            }
             WindowEvent::AppearanceChanged(appearance) => {
                 self.screen.set_appearance(appearance);
                 false
@@ -141,6 +156,7 @@ impl App for Locker {
         sources.extend(self.devices.as_ref().map(Devices::fd));
         sources.extend(self.backdrop.as_ref().map(Inbox::fd));
         sources.extend(self.picture.as_ref().map(Inbox::fd));
+        sources.extend(self.wakes.as_ref().map(Inbox::fd));
         sources
     }
 
@@ -176,6 +192,15 @@ impl App for Locker {
             }
             return;
         }
+        let wakes_at = picture_at + usize::from(self.picture.is_some());
+        if index == wakes_at
+            && let Some(wakes) = self.wakes.as_mut()
+        {
+            wakes.drain();
+            self.screen.wake(Instant::now());
+            window.request_redraw();
+            return;
+        }
         if index == picture_at {
             if let Some(picture) = self
                 .picture
@@ -199,6 +224,16 @@ impl App for Locker {
         }
     }
 
+    fn deadline(&self) -> Option<Instant> {
+        self.screen.rests_at()
+    }
+
+    fn tick(&mut self, window: &mut Window, now: Instant) {
+        if self.screen.rest_when_due(now) {
+            window.request_redraw();
+        }
+    }
+
     fn animating(&self) -> bool {
         self.screen.is_animating()
     }
@@ -210,6 +245,20 @@ impl App for Locker {
     fn accessibility(&self) -> Option<TreeUpdate> {
         Some(self.screen.accessibility())
     }
+}
+
+fn follow_wakes(system: &zbus::blocking::Connection) -> zbus::Result<Inbox<()>> {
+    let inbox = Inbox::new().map_err(|error| zbus::Error::InputOutput(error.into()))?;
+    let outbox = inbox.outbox();
+    let signals = ManagerProxyBlocking::new(system)?.receive_prepare_for_sleep()?;
+    thread::spawn(move || {
+        for signal in signals {
+            if signal.args().is_ok_and(|arguments| !*arguments.start()) && !outbox.send(()) {
+                return;
+            }
+        }
+    });
+    Ok(inbox)
 }
 
 fn config_text(property: &str) -> String {
@@ -234,6 +283,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .ok();
     let (verdicts, verdict_sender) = UnixStream::pair()?;
     let mut window = Window::open(Role::Lock, (0, 0))?;
+    let system = bande_bus::system()
+        .inspect_err(|error| tracing::warn!("no system bus: {error}"))
+        .ok();
     let mut locker = Locker {
         screen: LockScreen::new(
             &user,
@@ -249,12 +301,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         backdrop: None,
         backdrop_requested: false,
         picture,
-        devices: bande_bus::system()
-            .inspect_err(|error| tracing::warn!("no system bus: {error}"))
-            .ok()
-            .as_ref()
-            .and_then(Devices::follow),
+        devices: system.as_ref().and_then(Devices::follow),
         layouts: Layouts::load(),
+        wakes: system.as_ref().and_then(|system| {
+            follow_wakes(system)
+                .inspect_err(|error| tracing::warn!("cannot follow waking: {error}"))
+                .ok()
+        }),
         power: bande_bus::session()
             .and_then(|session| PowerProxyBlocking::new(&session))
             .inspect_err(|error| tracing::warn!("the password is always required: {error}"))
@@ -262,6 +315,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         unlocked: false,
     };
     locker.screen.set_note(&config_text("LockMessage"));
+    locker.screen.start_resting();
     bande_toolkit::run(&mut window, &mut locker).map_err(|error: WindowError| error.into())
 }
 

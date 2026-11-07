@@ -1,0 +1,158 @@
+Index: firefox-esr-153.6.0esr/toolkit/components/extensions/NativeManifests.sys.mjs
+===================================================================
+--- firefox-esr-153.6.0esr.orig/toolkit/components/extensions/NativeManifests.sys.mjs
++++ firefox-esr-153.6.0esr/toolkit/components/extensions/NativeManifests.sys.mjs
+@@ -37,6 +37,8 @@ export var NativeManifests = {
+         let dirs = [
+           Services.dirsvc.get("XREUserNativeManifests", Ci.nsIFile).path,
+           Services.dirsvc.get("XRESysNativeManifests", Ci.nsIFile).path,
++          Services.dirsvc.get("XREMozUserNativeManifests", Ci.nsIFile).path,
++          Services.dirsvc.get("XREMozSysNativeManifests", Ci.nsIFile).path,
+         ];
+         this._lookup = (type, name, context) =>
+           this._tryPaths(type, name, dirs, context);
+Index: firefox-esr-153.6.0esr/toolkit/xre/nsXREDirProvider.cpp
+===================================================================
+--- firefox-esr-153.6.0esr.orig/toolkit/xre/nsXREDirProvider.cpp
++++ firefox-esr-153.6.0esr/toolkit/xre/nsXREDirProvider.cpp
+@@ -332,23 +332,25 @@ nsresult nsXREDirProvider::GetBackground
+  * On Linux this is /usr/{lib,lib64}/mozilla
+  *   (for 32- and 64-bit systems respsectively)
+  */
+-static nsresult GetSystemParentDirectory(nsIFile** aFile) {
++static nsresult GetSystemParentDirectory(nsIFile** aFile,
++					 nsCString aName = "bande-browser"_ns) {
+   nsresult rv;
+   nsCOMPtr<nsIFile> localDir;
+ #  if defined(XP_MACOSX)
+   rv = GetOSXFolderType(kOnSystemDisk, kApplicationSupportFolderType,
+                         getter_AddRefs(localDir));
+   if (NS_SUCCEEDED(rv)) {
+-    rv = localDir->AppendNative("Mozilla"_ns);
++    rv = localDir->AppendNative(aName);
+   }
+ #  else
+-  constexpr auto dirname =
++  ToLowerCase(aName);
++  nsCString dirname =
+ #    ifdef HAVE_USR_LIB64_DIR
+-      "/usr/lib64/mozilla"_ns
++      "/usr/lib64/"_ns + aName
+ #    elif defined(__OpenBSD__) || defined(__FreeBSD__)
+-      "/usr/local/lib/mozilla"_ns
++      "/usr/local/lib/"_ns + aName
+ #    else
+-      "/usr/lib/mozilla"_ns
++      "/usr/lib/"_ns + aName
+ #    endif
+       ;
+   rv = NS_NewNativeLocalFile(dirname, getter_AddRefs(localDir));
+@@ -416,12 +418,22 @@ nsXREDirProvider::GetFile(const char* aP
+ #if defined(XP_UNIX) || defined(XP_MACOSX)
+   else if (!strcmp(aProperty, XRE_SYS_NATIVE_MANIFESTS)) {
+     rv = ::GetSystemParentDirectory(getter_AddRefs(file));
++  } else if (!strcmp(aProperty, XRE_MOZ_SYS_NATIVE_MANIFESTS)) {
++    rv = ::GetSystemParentDirectory(getter_AddRefs(file), "Mozilla"_ns);
+   } else if (!strcmp(aProperty, XRE_USER_NATIVE_MANIFESTS)) {
+     // Keep forcing the legacy path for compatibility
+     rv = GetUserDataDirectoryHome(getter_AddRefs(file), /* aLocal */ false,
+                                   /* aForceLegacy */ true);
+     NS_ENSURE_SUCCESS(rv, rv);
+ #  if defined(XP_MACOSX)
++    rv = file->AppendNative("bande-browser"_ns);
++#  else   // defined(XP_MACOSX)
++    rv = file->AppendNative(".bande-browser"_ns);
++#  endif  // defined(XP_MACOSX)
++  } else if (!strcmp(aProperty, XRE_MOZ_USER_NATIVE_MANIFESTS)) {
++    rv = GetUserDataDirectoryHome(getter_AddRefs(file), false, true);
++    NS_ENSURE_SUCCESS(rv, rv);
++#  if defined(XP_MACOSX)
+     rv = file->AppendNative("Mozilla"_ns);
+ #  else   // defined(XP_MACOSX)
+     rv = file->AppendNative(".mozilla"_ns);
+@@ -454,9 +466,9 @@ nsXREDirProvider::GetFile(const char* aP
+   else if (!strcmp(aProperty, XRE_SYS_SHARE_EXTENSION_PARENT_DIR)) {
+ #  ifdef ENABLE_SYSTEM_EXTENSION_DIRS
+ #    if defined(__OpenBSD__) || defined(__FreeBSD__)
+-    static const char* const sysLExtDir = "/usr/local/share/mozilla/extensions";
++    static const char* const sysLExtDir = "/usr/local/share/bande-browser/extensions";
+ #    else
+-    static const char* const sysLExtDir = "/usr/share/mozilla/extensions";
++    static const char* const sysLExtDir = "/usr/share/bande-browser/extensions";
+ #    endif
+     rv = NS_NewNativeLocalFile(nsDependentCString(sysLExtDir),
+                                getter_AddRefs(file));
+@@ -980,13 +992,7 @@ nsresult nsXREDirProvider::GetUpdateRoot
+   }
+   appDirPath = Substring(appDirPath, 1, dotIndex - 1);
+ 
+-  bool hasVendor = GetAppVendor() && strlen(GetAppVendor()) != 0;
+-  if (hasVendor || GetAppName()) {
+-    if (NS_FAILED(localDir->AppendNative(
+-            nsDependentCString(hasVendor ? GetAppVendor() : GetAppName())))) {
+-      return NS_ERROR_FAILURE;
+-    }
+-  } else if (NS_FAILED(localDir->AppendNative("Mozilla"_ns))) {
++  if (NS_FAILED(localDir->AppendNative("bande-browser"_ns))) {
+     return NS_ERROR_FAILURE;
+   }
+ 
+@@ -1284,7 +1290,7 @@ nsresult nsXREDirProvider::AppendSysUser
+ 
+ #if defined(XP_MACOSX) || defined(XP_WIN)
+ 
+-  static const char* const sXR = "Mozilla";
++  static const char* const sXR = "bande-browser";
+   rv = aFile->AppendNative(nsDependentCString(sXR));
+   NS_ENSURE_SUCCESS(rv, rv);
+ 
+@@ -1294,7 +1300,7 @@ nsresult nsXREDirProvider::AppendSysUser
+ 
+ #elif defined(XP_UNIX)
+ 
+-  static const char* const sXR = ".mozilla";
++  static const char* const sXR = ".bande-browser";
+   rv = aFile->AppendNative(nsDependentCString(sXR));
+   NS_ENSURE_SUCCESS(rv, rv);
+ 
+@@ -1582,10 +1588,6 @@ nsresult nsXREDirProvider::AppendProfile
+   if (!profile.IsEmpty()) {
+     rv = AppendProfileString(aFile, profile.get());
+   } else {
+-    if (!vendor.IsEmpty()) {
+-      rv = aFile->AppendNative(vendor);
+-      NS_ENSURE_SUCCESS(rv, rv);
+-    }
+     rv = aFile->AppendNative(appName);
+   }
+   NS_ENSURE_SUCCESS(rv, rv);
+@@ -1623,16 +1625,6 @@ nsresult nsXREDirProvider::AppendProfile
+ 
+     rv = AppendProfileString(aFile, folder.get());
+   } else {
+-    if (!vendor.IsEmpty()) {
+-      folder.Append(vendor);
+-      ToLowerCase(folder);
+-
+-      rv = aFile->AppendNative(folder);
+-      NS_ENSURE_SUCCESS(rv, rv);
+-
+-      folder.Truncate();
+-    }
+-
+     // This can be the case in tests.
+     if (!appName.IsEmpty()) {
+       folder.Append(appName);
+Index: firefox-esr-153.6.0esr/xpcom/build/nsXULAppAPI.h
+===================================================================
+--- firefox-esr-153.6.0esr.orig/xpcom/build/nsXULAppAPI.h
++++ firefox-esr-153.6.0esr/xpcom/build/nsXULAppAPI.h
+@@ -113,6 +113,8 @@ struct BootstrapConfig;
+  */
+ #  define XRE_SYS_NATIVE_MANIFESTS "XRESysNativeManifests"
+ #  define XRE_USER_NATIVE_MANIFESTS "XREUserNativeManifests"
++#  define XRE_MOZ_SYS_NATIVE_MANIFESTS "XREMozSysNativeManifests"
++#  define XRE_MOZ_USER_NATIVE_MANIFESTS "XREMozUserNativeManifests"
+ #endif
+ 
+ /**

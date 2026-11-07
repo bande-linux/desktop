@@ -1,0 +1,13 @@
+Index: firefox-esr-153.6.0esr/toolkit/moz.configure
+===================================================================
+--- firefox-esr-153.6.0esr.orig/toolkit/moz.configure
++++ firefox-esr-153.6.0esr/toolkit/moz.configure
+@@ -27,7 +27,7 @@ project_flag(
+ 
+ project_flag(
+     env="MOZ_APP_UA_NAME",
+-    default="",
++    default="Firefox",
+     nargs=1,
+     help="Application name in the User Agent string",
+ )

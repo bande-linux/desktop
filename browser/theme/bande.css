@@ -1,0 +1,118 @@
+/* Bande's Datum tokens over Firefox's chrome variables. Appended to browser/themes/linux/browser.css. */
+:root {
+  --bande-chassis: #ECEAE7;
+  --bande-sheet: #FCFBF9;
+  --bande-overlay: #FFFFFF;
+  --bande-well: #E2DFDB;
+  --bande-hairline: #D4D0CB;
+  --bande-edge: #BAB7B2;
+  --bande-ink: #201E1A;
+  --bande-ink2: #5B5752;
+  --bande-ink3: #83807A;
+  --bande-accent: AccentColor;
+  --bande-danger: #D42F34;
+  @media (prefers-color-scheme: dark) {
+    --bande-chassis: #1F2329;
+    --bande-sheet: #272A30;
+    --bande-overlay: #34373C;
+    --bande-well: #31343A;
+    --bande-hairline: #3B3F45;
+    --bande-edge: #575B62;
+    --bande-ink: #E4E6EA;
+    --bande-ink2: #B9BEC6;
+    --bande-ink3: #8D9198;
+    --bande-danger: #CF4040;
+  }
+  --toolbox-bgcolor: var(--bande-chassis);
+  --toolbox-bgcolor-inactive: var(--bande-chassis);
+  --toolbox-textcolor: var(--bande-ink);
+  --toolbox-textcolor-inactive: var(--bande-ink3);
+  --toolbar-bgcolor: var(--bande-chassis);
+  --toolbar-color: var(--bande-ink);
+  --toolbarbutton-icon-fill: var(--bande-ink2);
+  --toolbarbutton-border-radius: 6px;
+  --chrome-content-separator-color: transparent;
+  --toolbarseparator-color: var(--bande-hairline);
+  --urlbar-box-bgcolor: var(--bande-well);
+  --urlbar-box-focus-bgcolor: var(--bande-sheet);
+  --urlbar-box-hover-bgcolor: var(--bande-well);
+  --urlbar-box-text-color: var(--bande-ink);
+  --toolbar-field-background-color: var(--bande-well);
+  --toolbar-field-focus-background-color: var(--bande-sheet);
+  --toolbar-field-color: var(--bande-ink);
+  --toolbar-field-focus-color: var(--bande-ink);
+  --toolbar-field-border-color: transparent;
+  --focus-outline-color: var(--bande-accent);
+  --tab-selected-bgcolor: var(--bande-sheet);
+  --tab-selected-textcolor: var(--bande-ink);
+  --tab-hover-background-color: var(--bande-well);
+  --tab-border-radius: 8px;
+  --arrowpanel-background: var(--bande-overlay);
+  --arrowpanel-color: var(--bande-ink);
+  --arrowpanel-border-color: var(--bande-hairline);
+  --arrowpanel-border-radius: 10px;
+  --panel-background: var(--bande-overlay);
+  --panel-color: var(--bande-ink);
+  --font-family-system: Inter, sans-serif;
+}
+
+#navigator-toolbox { border-bottom: none; }
+#main-window { font-family: Inter, sans-serif; }
+#urlbar-background, #searchbar { border-radius: 8px; }
+.tab-label { font-size: 13px; }
+menupopup, panel { --panel-border-radius: 10px; }
+menuitem, menu { border-radius: 6px; min-height: 28px; }
+
+.titlebar-buttonbox-container { order: -1; }
+.titlebar-buttonbox {
+  align-self: center;
+  margin-inline: 12px 16px;
+  width: 66px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--bande-well);
+  justify-content: center;
+}
+:root:-moz-window-inactive .titlebar-buttonbox {
+  background: transparent;
+  outline: 1px solid var(--bande-hairline);
+  outline-offset: -1px;
+}
+.titlebar-button {
+  width: 21px;
+  height: 24px;
+  padding: 0 !important;
+  color: var(--bande-ink2);
+  justify-content: center;
+  :root:-moz-window-inactive & { color: var(--bande-ink3); }
+  > .toolbarbutton-icon {
+    width: 16px !important;
+    height: 16px !important;
+    background-color: transparent !important;
+    background-size: 16px !important;
+    background-image: var(--bande-glyph) !important;
+    -moz-context-properties: stroke;
+    stroke: currentColor;
+    transition: background-color 120ms ease;
+  }
+  &:hover:active > .toolbarbutton-icon { background-color: color-mix(in srgb, var(--bande-ink) 12%, transparent) !important; }
+}
+.titlebar-buttonbox:hover .titlebar-button { color: var(--bande-ink); }
+.titlebar-close {
+  order: 0 !important;
+  --bande-glyph: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>');
+  &:hover { color: white !important; }
+  &:hover > .toolbarbutton-icon { background-color: var(--bande-danger) !important; }
+}
+.titlebar-min {
+  order: 1 !important;
+  --bande-glyph: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M4 8h8" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>');
+}
+.titlebar-max {
+  order: 2 !important;
+  --bande-glyph: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M4.5 8V4.5H8M11.5 8v3.5H8" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>');
+}
+.titlebar-restore {
+  order: 2 !important;
+  --bande-glyph: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M7.5 3.5V7.5H3.5M8.5 12.5V8.5H12.5" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>');
+}

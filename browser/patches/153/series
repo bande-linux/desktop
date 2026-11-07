@@ -1,0 +1,16 @@
+librewolf/moz-configure.patch
+librewolf/firefox-in-ua.patch
+librewolf/disable-data-reporting-at-compile-time.patch
+librewolf/remove-pingsender.patch
+librewolf/remove-openai.patch
+librewolf/rs-blocker.patch
+librewolf/xdg-dir.patch
+librewolf/mozilla_dirs.patch
+librewolf/extensions-setUninstallURL.patch
+librewolf/vendor-name.patch
+librewolf/link-preview.patch
+librewolf/newtab-fix.patch
+librewolf/remove-cfrprefs.patch
+librewolf/remove-organization-policy-banner.patch
+librewolf/firefox-view.patch
+librewolf/hide-finish-setup-bookmark.patch

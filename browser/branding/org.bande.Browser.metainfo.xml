@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Browser</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MPL-2.0</project_license>
+  <name>Browser</name>
+  <summary>Browse the web</summary>
+  <description>
+    <p>Bande's web browser, based on Mozilla Firefox source code, with telemetry, ads and sponsored content removed.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Browser.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/web</url>
+</component>

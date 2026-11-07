@@ -1,0 +1,13 @@
+Index: firefox-esr-153.6.0esr/browser/components/preferences/preferences.js
+===================================================================
+--- firefox-esr-153.6.0esr.orig/browser/components/preferences/preferences.js
++++ firefox-esr-153.6.0esr/browser/components/preferences/preferences.js
+@@ -590,8 +590,6 @@ function init_all() {
+     gotoPref(event.target.view);
+   });
+ 
+-  maybeDisplayPoliciesNotice();
+-
+   window.addEventListener("hashchange", onHashChange);
+   window.addEventListener("beforeunload", onBeforeunload);
+ 

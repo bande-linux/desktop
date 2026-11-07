@@ -178,6 +178,29 @@ fn a_hung_app_is_force_quit_from_the_keyboard() {
 }
 
 #[test]
+fn an_app_that_closed_its_last_window_stays_active_until_the_desktop_is_clicked() {
+    let (mut server, mut editor) = focused_app();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.listen_as_shell(&mut server);
+    editor.keep_running(&mut server, "org.example.Editor");
+    editor.unmap_window(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+    let active = |shell: &TestClient| {
+        shell
+            .shell_events()
+            .iter()
+            .rfind(|sent| sent.starts_with("ActiveApp"))
+            .cloned()
+            .unwrap_or_default()
+    };
+    assert!(active(&shell).contains("org.example.Editor"));
+    server.press_button(BTN_LEFT, true, 0);
+    server.press_button(BTN_LEFT, false, 0);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+    assert!(!active(&shell).contains("org.example.Editor"));
+}
+
+#[test]
 fn super_tap_and_super_space_open_search_and_ctrl_alt_t_opens_terminal() {
     let (mut server, mut editor) = focused_app();
     let mut shell = TestClient::connect_as_shell(&mut server);

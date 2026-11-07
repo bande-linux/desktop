@@ -3,7 +3,8 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::os::fd::OwnedFd;
-use std::path::PathBuf;
+use std::os::unix::net::UnixListener;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
@@ -15,6 +16,8 @@ use bande_pdf::{Page, PageSetup, write};
 use bande_printers::ipp::{ENUM, INTEGER, JOB, KEYWORD, MIME_TYPE, NAME, PRINTER, Request};
 use bande_printers::{JobOptions, PrintClient};
 use bande_test_bus::SessionBus;
+use bande_test_wayland::keys::KEY_ENTER;
+use bande_test_wayland::{Frames, chord, headless};
 
 const PRINT_JOB: u16 = 0x0002;
 const GET_JOB: u16 = 0x0009;
@@ -260,4 +263,58 @@ fn text_on_a_toolkit_page_stays_text_in_the_pdf() {
         thread::sleep(Duration::from_millis(20));
     }
     assert!(text.contains("Printed text"), "found {text:?}");
+}
+
+#[test]
+fn pressing_return_in_the_print_dialog_sends_the_document_to_the_printer() {
+    let bus = SessionBus::start().unwrap();
+    let (port, received) = fake_printer(&["application/pdf"]);
+    let daemon = start_daemon(&bus, "bande-printd-dialog");
+    let connection = bus.connect().unwrap();
+    let client = PrintClient::new(&connection).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while let Err(error) = client.add_address(&format!("ipp://127.0.0.1:{port}/ipp/print")) {
+        assert!(Instant::now() < deadline, "{error}");
+        thread::sleep(Duration::from_millis(50));
+    }
+    let document = daemon._home.0.join("document.pdf");
+    std::fs::write(&document, document_bytes()).unwrap();
+    let socket = daemon._home.0.join("wayland");
+    let listener = UnixListener::bind(&socket).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let dialog = Path::new(env!("CARGO_BIN_EXE_bande-printd")).with_file_name("bande-file-chooser");
+    let mut dialog = Command::new(dialog)
+        .args([
+            "--print",
+            "--app-id",
+            "org.example.App",
+            "--title",
+            "Test",
+            "--document",
+        ])
+        .arg(&document)
+        .env("DBUS_SESSION_BUS_ADDRESS", bus.address())
+        .env("WAYLAND_DISPLAY", &socket)
+        .env("XDG_RUNTIME_DIR", &daemon._home.0)
+        .spawn()
+        .expect("the dialog is built with the workspace");
+    let mut server = headless(1200, 900);
+    let mut frames = Frames::start();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let body = loop {
+        assert!(Instant::now() < deadline, "the document never arrived");
+        if let Ok((stream, _)) = listener.accept() {
+            stream.set_nonblocking(false).unwrap();
+            server.insert_client(stream).unwrap();
+        }
+        let until = Instant::now() + Duration::from_millis(300);
+        frames.run_until(&mut server, || Instant::now() > until);
+        chord(&mut server, &[KEY_ENTER]);
+        if let Ok(body) = received.try_recv() {
+            break body;
+        }
+    };
+    assert!(contains(&body, b"%PDF-"));
+    let _ = dialog.kill();
+    let _ = dialog.wait();
 }

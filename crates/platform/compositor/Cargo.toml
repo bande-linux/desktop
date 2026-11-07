@@ -22,12 +22,14 @@ bande-config.workspace = true
 bande-datetime.workspace = true
 bande-edid.workspace = true
 bande-graphics.workspace = true
+bande-inbox.workspace = true
 bande-keyboard.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
 bande-protocols = { workspace = true, features = ["server"] }
 bande-render.workspace = true
 bande-spring.workspace = true
+bande-wallpaper.workspace = true
 bande-widgets.workspace = true
 bande-xdg.workspace = true
 zbus.workspace = true

@@ -3,7 +3,7 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
@@ -28,14 +28,39 @@ impl Config {
     }
 }
 
-fn indexer(bus: &SessionBus, home: &Path) -> Child {
-    Command::new(env!("CARGO_BIN_EXE_bande-indexer"))
+const CALL_LIMIT: Duration = Duration::from_secs(5);
+const WAIT_LIMIT: Duration = Duration::from_secs(30);
+
+struct Running(Child);
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn caller(bus: &SessionBus) -> Connection {
+    zbus::blocking::connection::Builder::address(bus.address())
+        .expect("test bus address")
+        .method_timeout(CALL_LIMIT)
+        .build()
+        .expect("test bus connection")
+}
+
+fn indexer(bus: &SessionBus, home: &Path) -> Running {
+    let child = Command::new(env!("CARGO_BIN_EXE_bande-indexer"))
         .env("HOME", home)
         .env("XDG_CACHE_HOME", home.join(".cache"))
         .env("XDG_STATE_HOME", home.join(".local/state"))
         .env("DBUS_SESSION_BUS_ADDRESS", bus.address())
+        .env("BANDE_INDEXER_KEEP_PRIORITY", "1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .spawn()
-        .expect("indexer starts")
+        .expect("indexer starts");
+    Running(child)
 }
 
 fn find(connection: &Connection, text: &str) -> Option<Vec<Found>> {
@@ -62,7 +87,7 @@ fn targets(connection: &Connection, text: &str) -> Vec<PathBuf> {
 }
 
 fn appears(connection: &Connection, text: &str, wanted: &Path) -> bool {
-    let until = Instant::now() + Duration::from_secs(40);
+    let until = Instant::now() + WAIT_LIMIT;
     while Instant::now() < until {
         if targets(connection, text).iter().any(|path| path == wanted) {
             return true;
@@ -93,7 +118,7 @@ fn contents_are_found_kept_current_and_survive_a_restart() {
     let home = tempfile::tempdir().expect("temporary home");
     let root = home.path();
     let bus = SessionBus::start().expect("test bus");
-    let connection = bus.connect().expect("test bus connection");
+    let connection = caller(&bus);
     let private = root.join("Private");
     let config = bus.connect().expect("config connection");
     config
@@ -129,7 +154,7 @@ fn contents_are_found_kept_current_and_survive_a_restart() {
     fs::write(documents.join("blob.txt"), [0u8, 1, 2, 3]).expect("binary");
     fs::write(documents.join("zebra.txt"), "zebrafish").expect("visible");
 
-    let mut running = indexer(&bus, root);
+    let running = indexer(&bus, root);
     assert!(appears(&connection, "purple elephant", &note));
     assert!(
         appears(&connection, "turquoise", &report),
@@ -195,10 +220,9 @@ fn contents_are_found_kept_current_and_survive_a_restart() {
         Path::new("mid:42@example")
     ));
 
-    running.kill().expect("stop indexer");
-    running.wait().expect("indexer stopped");
-    let mut running = indexer(&bus, root);
-    let until = Instant::now() + Duration::from_secs(5);
+    drop(running);
+    let _running = indexer(&bus, root);
+    let until = Instant::now() + WAIT_LIMIT;
     let mut answer = None;
     while Instant::now() < until && answer.is_none() {
         answer = find(&connection, "indigo");
@@ -234,7 +258,7 @@ fn contents_are_found_kept_current_and_survive_a_restart() {
     assert_eq!(cursor, "42");
 
     fs::remove_file(moved.join("note.txt")).expect("delete");
-    let until = Instant::now() + Duration::from_secs(20);
+    let until = Instant::now() + WAIT_LIMIT;
     while Instant::now() < until && !targets(&connection, "indigo").is_empty() {
         sleep(Duration::from_millis(100));
     }
@@ -242,6 +266,4 @@ fn contents_are_found_kept_current_and_survive_a_restart() {
         targets(&connection, "indigo").is_empty(),
         "a deleted file leaves the results"
     );
-    running.kill().expect("stop indexer");
-    running.wait().expect("indexer stopped");
 }

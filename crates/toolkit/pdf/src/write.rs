@@ -544,7 +544,7 @@ fn draw(surface: &mut Surface<'_>, fonts: &mut Fonts, item: &Item) {
         Item::Image { rect, image } => draw_image(surface, *rect, image),
         Item::Tiles { rect, tile, image } => draw_tiles(surface, *rect, *tile, image),
         Item::Picture(picture) => draw_all(surface, fonts, picture.items()),
-        Item::Shadow { .. } | Item::Surface { .. } => {}
+        Item::Shadow { .. } | Item::CastShadow { .. } | Item::Surface { .. } => {}
     }
 }
 

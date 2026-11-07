@@ -183,14 +183,14 @@ All user configuration of the desktop is one human-readable [KDL](https://kdl.de
 to it, and it can be edited by hand while the session runs. Apps keep their own settings in one
 small `key = value` file each next to it (`files.conf`, `terminal.conf`).
 
-- **Schema** (`crates/services/config`, KDL 2.0): top-level `appearance`, `accent`,
+- **Schema** (`crates/services/config`, KDL 2.0): top-level `appearance`, `style`, `accent`,
   `tinted-frame`, `clock`, `reopen-apps`, `automatic-updates`, `lock-message`, `show-previews`, and the sections
   `accessibility`, `bar`, `idle`, `keyboard`, `trackpad`, `mouse`, `power`, `sound`, `wallpaper`,
   `night-light`, `do-not-disturb`, `search`, `display "<name>"` (one per display, named by EDID maker, model and serial) and
   `arrangement` (one per set of displays). Every setting is optional and has a default.
   ```kdl
   appearance "dark"             // "dark" (default) | "light" | "automatic"
-  bar { edge "left"; size 40; auto-hide #false }   // edge "left" | "bottom" | "right" | "top"
+  bar { edge "left"; size 40; auto-hide #false; floating #true }   // edge "left" | "bottom" | "right" | "top"
   idle { screen-saver-after "5m"; display-off-after "10m"; require-password-after "immediately" }   // or "never"; suspend-after follows the display unless set
   keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape" }
   trackpad { tap-to-click #true; natural-scrolling #true }

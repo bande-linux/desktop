@@ -145,8 +145,9 @@ impl Greeter {
         for (look, image) in drawn {
             match look {
                 Look::Blurred => {
-                    self.screen
-                        .set_backdrop(image.clone(), frame_time().on_screen());
+                    let now = frame_time().on_screen();
+                    self.screen.set_backdrop(image.clone(), now);
+                    self.screen.begin_opening(now);
                     self.wallpaper = Some(image);
                 }
                 Look::Sharp => self.screen.set_wallpaper(image),
@@ -227,12 +228,12 @@ impl Greeter {
             None => self.screen.ask(None),
             Some(rejection) => {
                 self.screen.ask(None);
-                self.screen.reject(frame_time().on_screen());
                 match rejection {
                     Rejection::WrongPassword => {
-                        self.screen.set_message(Some(L10N.tr("wrong-password")));
+                        self.screen.reject_password(frame_time().on_screen());
                     }
                     Rejection::Failed(reason) => {
+                        self.screen.reject(frame_time().on_screen());
                         tracing::info!("not signed in: {reason}");
                         if !finished.explained {
                             self.screen.set_message(Some(reason));
@@ -270,7 +271,11 @@ impl App for Greeter {
         if self.backdrop_size.is_none() && width > 0 && height > 0 {
             self.backdrop_size = Some((width, height));
             self.backdrop = self.request_backdrop((width, height), vec![Look::Blurred]);
+            if self.backdrop.is_none() {
+                self.screen.begin_opening(frame_time().on_screen());
+            }
         }
+        self.screen.prepare_opening(height, window.scale());
         self.screen.advance(frame_time().presentation);
         self.screen.scene(width, height)
     }
@@ -380,7 +385,16 @@ impl App for Greeter {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.finished().then(Instant::now)
+        self.finished()
+            .then(Instant::now)
+            .or_else(|| self.screen.opening_deadline())
+    }
+
+    fn tick(&mut self, window: &mut Window, now: Instant) {
+        if self.screen.opening_deadline().is_some_and(|due| now >= due) {
+            self.screen.begin_opening(now);
+            window.request_redraw();
+        }
     }
 
     fn animating(&self) -> bool {
@@ -425,6 +439,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         })
         .unwrap_or_default();
     screen.offer_power(&powers);
+    screen.open_from_boot_mark(Instant::now());
     let picture = login_picture(Path::new(LOGIN_PICTURES), chosen.uid).map(Arc::new);
     let mut window = Window::open(
         Role::Layer(LayerOptions {

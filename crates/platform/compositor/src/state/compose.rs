@@ -127,6 +127,7 @@ impl Compositor {
         self.state.prepare_window_menu(screen);
         self.state.prepare_force_quit(screen);
         let (elements, drawn, icon) = self.compose(renderer, screen, true);
+        self.state.remember_lock_frame(renderer, screen);
         if self.state.pointer_screen() == screen {
             self.state.remember_drag_icon(icon);
         }
@@ -490,6 +491,12 @@ impl State {
             screen,
         };
         let mut placed = Vec::with_capacity(2 * (visible.len() + map.layers().count()) + 2);
+        placed.extend(
+            self.closing
+                .iter()
+                .filter(|closing| rendered && closing.covering && closing.output == name)
+                .map(Placed::Closing),
+        );
         layers.push(&mut placed, Layer::Overlay);
         push_windows(&mut placed, &visible, Band::Leaving);
         push_windows(&mut placed, &visible, Band::Front);
@@ -500,7 +507,7 @@ impl State {
         placed.extend(
             self.closing
                 .iter()
-                .filter(|closing| rendered && closing.output == name)
+                .filter(|closing| rendered && !closing.covering && closing.output == name)
                 .map(Placed::Closing),
         );
         push_windows(&mut placed, &visible, Band::OnTop);

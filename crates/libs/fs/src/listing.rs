@@ -8,6 +8,7 @@ use std::str::Chars;
 use std::time::{Duration, SystemTime};
 
 use crate::group::{GroupBy, group_of};
+use crate::partial::{is_partial, sweep};
 
 use crate::trash::{Trash, TrashItem};
 
@@ -169,20 +170,24 @@ pub fn merge(entries: &mut Vec<Entry>, chunk: Vec<Entry>, order: Sort) -> Vec<us
 
 #[derive(Debug)]
 pub struct Listing {
-    folder: PathBuf,
     names: fs::ReadDir,
     show_hidden: bool,
     done: bool,
+    failure: Option<io::ErrorKind>,
 }
 
 impl Listing {
     pub fn open(folder: &Path, show_hidden: bool) -> io::Result<Self> {
         Ok(Self {
-            folder: folder.to_path_buf(),
             names: fs::read_dir(folder)?,
             show_hidden,
             done: false,
+            failure: None,
         })
+    }
+
+    pub fn failure(&self) -> Option<io::ErrorKind> {
+        self.failure
     }
 
     pub fn is_done(&self) -> bool {
@@ -196,12 +201,19 @@ impl Listing {
                 self.done = true;
                 break;
             };
-            let Ok(found) = found else {
-                continue;
+            let found = match found {
+                Ok(found) => found,
+                Err(error) => {
+                    self.failure = Some(error.kind());
+                    self.done = true;
+                    break;
+                }
             };
             let name = found.file_name().to_string_lossy().into_owned();
-            if self.show_hidden || !is_hidden(&name) {
-                entries.push(Entry::read(self.folder.join(&name), name));
+            if is_partial(&name) {
+                sweep(found.path());
+            } else if self.show_hidden || !is_hidden(&name) {
+                entries.push(Entry::read(found.path(), name));
             }
         }
         entries

@@ -17,7 +17,6 @@ growth or a weaker boundary than documented; **low** edge cases and hygiene.
 - medium: `wlr-output-management` `SetMode` accepts another head's mode and a failed `use_mode` is silent (`management.rs`).
 - medium: toolkit paste and drop reads have no size cap, timeout or expiry (`platform/src/clipboard.rs`).
 - medium: notify's `rule_for` remembers every new `app_name` and rewrites `notification-apps` each time.
-- medium: `fs/listing.rs` builds paths from the lossy UTF-8 name, so non-UTF-8 names cannot be opened, copied or trashed; a volume `.trashinfo` `Path=` may be absolute or hold `..` (low).
 - medium: thumbnails decode without `Limits` (512 MiB each, three at once, abort in dist).
 - medium: a busy eject only logs (`volumes/eject.rs`); the user may pull a mounted drive.
 - medium: Settings' Variable refresh rate switch writes a key nothing reads.

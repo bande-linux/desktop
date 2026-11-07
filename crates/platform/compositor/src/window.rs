@@ -698,14 +698,18 @@ impl State {
             return false;
         };
         let window = &mut self.windows[index];
-        if window.has_state(xdg_toplevel::State::Maximized)
-            || window.has_state(xdg_toplevel::State::Fullscreen)
-        {
+        if window.has_state(xdg_toplevel::State::Fullscreen) {
             return false;
         }
         let Some(initial) = window.geometry() else {
             return false;
         };
+        if window.has_state(xdg_toplevel::State::Maximized) {
+            window.restore = None;
+            window.toplevel.with_pending_state(|pending| {
+                pending.states.unset(xdg_toplevel::State::Maximized);
+            });
+        }
         window.resize = Some(Resize {
             edges,
             initial,

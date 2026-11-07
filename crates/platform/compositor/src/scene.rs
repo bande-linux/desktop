@@ -1067,8 +1067,7 @@ pub(crate) fn window_elements(
     let area = real.to_physical(scale);
     let look = look.unwrap_or(Look::shown(real));
     let shown = look.rect.to_physical(scale);
-    let squared = fullscreen || window.has_state(xdg_toplevel::State::Maximized);
-    let radius = if squared {
+    let radius = if fullscreen {
         0.0
     } else {
         shaped_radius(area, shown, scale)

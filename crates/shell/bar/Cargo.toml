@@ -12,6 +12,7 @@ accesskit.workspace = true
 jiff.workspace = true
 tracing.workspace = true
 bande-bluetooth.workspace = true
+bande-bus.workspace = true
 bande-config.workspace = true
 bande-datetime.workspace = true
 bande-taskbar-model.workspace = true

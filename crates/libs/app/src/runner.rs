@@ -279,6 +279,7 @@ impl<P: Program> Runner<P> {
     }
 
     fn serve_requests(&mut self, requests: Vec<AppRequest>) {
+        let mut session_ending = false;
         for request in requests {
             match request {
                 AppRequest::Reopen(token) => self.activated(Request {
@@ -287,8 +288,11 @@ impl<P: Program> Runner<P> {
                     token: Some(token),
                 }),
                 AppRequest::Key(input) => self.key_without_window(&input),
-                AppRequest::SessionEnding => self.cx.resume.session_ending = true,
-                AppRequest::Quit => self.quit(),
+                AppRequest::SessionEnding => session_ending = true,
+                AppRequest::Quit => {
+                    self.cx.resume.session_ending = std::mem::take(&mut session_ending);
+                    self.quit();
+                }
             }
         }
         self.publish_menus();
@@ -341,8 +345,6 @@ impl<P: Program> Runner<P> {
     fn quit(&mut self) {
         if self.program.should_quit(&mut self.cx) {
             self.cx.quit();
-        } else {
-            self.cx.resume.session_ending = false;
         }
     }
 
@@ -371,6 +373,7 @@ impl<P: Program> Runner<P> {
                 None => Ok(()),
             },
             (Standard::Quit, _) => {
+                self.cx.resume.session_ending = false;
                 self.quit();
                 Ok(())
             }

@@ -13,6 +13,8 @@ use std::rc::{Rc, Weak};
 use std::sync::mpsc::TryRecvError;
 use std::time::{Duration, Instant};
 
+use bande_protocols::client::xdg_toplevel_session_v1::XdgToplevelSessionV1;
+
 use crate::app_connection::WindowInSession;
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_graphics::{
@@ -291,6 +293,7 @@ pub(crate) struct State {
     layer_shell: Option<ZwlrLayerShellV1>,
     pub(crate) activation: Option<XdgActivationV1>,
     toplevel_tag: Option<XdgToplevelTagManagerV1>,
+    toplevel_session: Option<XdgToplevelSessionV1>,
     pub(crate) toplevel_drag: Option<wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1>,
     pub(crate) seat: Option<WlSeat>,
     pub(crate) data_device_manager: Option<WlDataDeviceManager>,
@@ -319,6 +322,9 @@ pub(crate) struct State {
 
 impl State {
     fn release(&mut self) {
+        if let Some(session) = self.toplevel_session.take() {
+            session.destroy();
+        }
         self.capture.release();
         if let Some(subcompositor) = self.subcompositor.take() {
             subcompositor.destroy();
@@ -551,18 +557,14 @@ impl Window {
                     }
                     manager.destroy();
                 }
-                if let Some(window) = session {
-                    match window.restoring {
-                        true => {
-                            window
-                                .session
-                                .restore_toplevel(&toplevel, window.name, &handle, ())
-                        }
-                        false => window
-                            .session
-                            .add_toplevel(&toplevel, window.name, &handle, ()),
-                    };
-                }
+                state.toplevel_session = session.map(|window| match window.restoring {
+                    true => window
+                        .session
+                        .restore_toplevel(&toplevel, window.name, &handle, ()),
+                    false => window
+                        .session
+                        .add_toplevel(&toplevel, window.name, &handle, ()),
+                });
                 if fixed {
                     let (width, height) = match titled {
                         true => (

@@ -39,6 +39,7 @@ pub(crate) fn failure_sentence(failure: &Failure) -> String {
         Problem::NameInvalid => L10N.tr("failure-name-invalid"),
         Problem::TooLarge => L10N.tr("failure-too-large"),
         Problem::DeviceGone => L10N.tr("failure-device-gone"),
+        Problem::ServerGone => L10N.tr("failure-server-gone"),
         Problem::DiskError => L10N.tr("failure-disk-error"),
         Problem::Missing => L10N.tr("failure-missing"),
         Problem::Other => L10N.tr_args(

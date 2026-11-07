@@ -232,17 +232,20 @@ struct TextureImage {
     imported: bool,
 }
 
+#[derive(Clone, Copy)]
 struct Imported {
     buffer: vk::Buffer,
     memory: vk::DeviceMemory,
     size: u64,
 }
 
-enum Export {
-    OnDevice(DeviceExport),
-    Mapped(MappedExport),
+struct Export {
+    mapped: MappedExport,
+    device: Option<DeviceExport>,
+    trusted: bool,
 }
 
+#[derive(Clone, Copy)]
 struct DeviceExport {
     imported: Imported,
     offset: u64,
@@ -1404,8 +1407,8 @@ impl VulkanRenderer {
 
     fn destroy_target(&self, target: &Target) {
         self.destroy_image(&target.image);
-        if let Some(Export::OnDevice(export)) = &target.export {
-            self.destroy_imported(&export.imported);
+        if let Some(device) = target.export.as_ref().and_then(|export| export.device) {
+            self.destroy_imported(&device.imported);
         }
     }
 
@@ -1684,15 +1687,20 @@ impl VulkanRenderer {
 
     fn dmabuf_export(&self, dmabuf: &Dmabuf) -> Result<Export, RenderError> {
         target_format(dmabuf.format().code).ok_or(RenderError::UnsupportedFormat)?;
-        if self.output_on_device {
-            match self.device_export(dmabuf) {
-                Ok(export) => return Ok(Export::OnDevice(export)),
-                Err(error) => {
-                    tracing::warn!("copying frames on the CPU: {error}");
-                }
-            }
-        }
-        self.mapped_export(dmabuf).map(Export::Mapped)
+        let mapped = self.mapped_export(dmabuf)?;
+        let device = self
+            .output_on_device
+            .then(|| self.device_export(dmabuf))
+            .and_then(|exported| {
+                exported
+                    .inspect_err(|error| tracing::warn!("copying frames on the CPU: {error}"))
+                    .ok()
+            });
+        Ok(Export {
+            mapped,
+            device,
+            trusted: false,
+        })
     }
 
     fn mapped_export(&self, dmabuf: &Dmabuf) -> Result<MappedExport, RenderError> {

@@ -191,12 +191,8 @@ impl Taskbar {
         self.running = running;
     }
 
-    fn show_active(&self, window: &Window) {
-        let shown = self
-            .active
-            .as_deref()
-            .filter(|app_id| !window.is_windowless(app_id))
-            .map(|app_id| self.identity(app_id));
+    fn show_active(&self) {
+        let shown = self.active.as_deref().map(|app_id| self.identity(app_id));
         self.state.borrow_mut().set_active(shown.as_deref());
     }
 
@@ -909,7 +905,7 @@ impl App for Taskbar {
                 let running = &self.running;
                 self.unresponsive.retain(|app_id| running.contains(app_id));
                 self.sync();
-                self.show_active(window);
+                self.show_active();
                 window.request_redraw();
             }
             WindowEvent::MenuAction(action) => {
@@ -923,7 +919,7 @@ impl App for Taskbar {
             WindowEvent::ActiveApp(app_id) => {
                 self.state.borrow_mut().activated(&self.identity(&app_id));
                 self.active = (!app_id.is_empty()).then_some(app_id);
-                self.show_active(window);
+                self.show_active();
                 window.request_redraw();
             }
             WindowEvent::AppResponding {

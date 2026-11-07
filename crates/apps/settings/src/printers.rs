@@ -111,7 +111,7 @@ fn sentence(error: &bande_printers::Error) -> String {
     match error {
         bande_printers::Error::NotAllowed => L10N.tr("printer-forbidden"),
         bande_printers::Error::Refused(_, message) if !message.is_empty() => message.clone(),
-        _ => L10N.tr("couldnt-change"),
+        _ => L10N.tr("printer-change-failed"),
     }
 }
 
@@ -229,7 +229,7 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
                 }
             };
             if let Err(message) = result {
-                updates.send(Update::Failed(None, message));
+                updates.send(Update::PaneFailed(PaneId::Printers, message));
             }
             let _ = changed.send(());
         }
@@ -581,9 +581,6 @@ impl SettingsView {
             )));
         }
         page.push(boxed(Card::new(actions)));
-        if let Some(message) = &self.message {
-            page.push(boxed(Caption::new(Text::new(message, Tone::Muted))));
-        }
         Some(page)
     }
 

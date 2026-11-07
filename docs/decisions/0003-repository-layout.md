@@ -79,7 +79,7 @@ Rules:
 7. **No panics.** `[workspace.lints]` denies `unwrap`, `expect` and `panic` outside tests.
 8. **Logging.** Through `tracing`, to the journal, set up by `libs/log`.
 9. **Localization.** Every user-visible string goes through Fluent (`libs/l10n`), with
-   `locales/en-US/*.ftl` in each crate.
+   `locales/<lang>/*.ftl` in each crate, compiled in by `bande_l10n::translations!`.
 10. **Appearance.** Dark mode and the accent colour are followed by the toolkit itself, from the
     portal's `org.freedesktop.appearance` settings, not by each app.
 

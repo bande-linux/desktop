@@ -28,9 +28,8 @@ pub use crate::command::Command;
 use crate::dbusmenu::Node;
 use crate::tray::TrayItem;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-status.ftl");
-
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-status")));
 
 #[derive(Debug, Clone)]
 pub enum Update {

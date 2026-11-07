@@ -15,14 +15,14 @@ use bande_app::{
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_files::{
     BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, L10N, Location, Request, Row,
-    SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT,
-    ViewMemory, follow_search_excluded, hidden_places, list_columns_file,
-    recent_folders_file as recent_folders_file_in, rows, serve_file_manager, settings_view,
-    sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks, with_place_shown,
-    without_bookmark,
+    SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, ServerAnswer, ServerRequest, Show, ShowRequest,
+    SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, follow_search_excluded, hidden_places,
+    list_columns_file, recent_folders_file as recent_folders_file_in, rows, serve_file_manager,
+    settings_view, sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks,
+    with_place_shown, without_bookmark,
 };
 use bande_fs::{History, Trash};
-use bande_inbox::Inbox;
+use bande_inbox::{Inbox, Outbox};
 use bande_quick_look::{Action, Panel, QuickLookLink, remembered_size, serve_worker};
 use bande_search::{recently_used_path, usage_path};
 use bande_thumbnails::Thumbnails;
@@ -31,12 +31,16 @@ use bande_toolkit::{
     Appearance, Color, DragAction, DragEvent, FrameRegions, MenuPlacement, Point, Rect, Scene,
     TextSystem, Transfer, Window, WindowEvent,
 };
-use bande_volumes::{EjectFailure, eject, media_roots};
+use bande_volumes::{
+    EjectFailure, MOUNTS_INTERFACE, MOUNTS_PATH, MOUNTS_SERVICE, eject, follow_mounts, media_roots,
+};
 use bande_xdg::{
     Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
     launch_with_arguments, path_from_file_uri, replace_file, spawn_detached, state_home, user_dir,
 };
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use zbus::blocking::{Connection, MessageIterator};
+use zbus::{MatchRule, message};
 
 const APP_ID: &str = "org.bande.Files";
 const WINDOW_SIZE: (u32, u32) = (1040, 620);
@@ -411,6 +415,10 @@ struct Files {
     search_excluded: Vec<PathBuf>,
     shows: Option<Inbox<ShowRequest>>,
     ejects: Option<Inbox<EjectFailure>>,
+    servers: Option<Inbox<ServerAnswer>>,
+    mounts: Option<Inbox<()>>,
+    nearby_inbox: Option<Inbox<Vec<(String, String)>>>,
+    nearby: Vec<(String, String)>,
     recent_folders: Vec<PathBuf>,
     history: Rc<RefCell<History>>,
     trash: Trash,
@@ -583,6 +591,130 @@ impl Files {
         });
     }
 
+    fn ask_server(&self, token: u64, request: ServerRequest) {
+        let answers = self.servers.as_ref().map(Inbox::outbox);
+        let work = move || {
+            let reply = Connection::session().and_then(|session| {
+                session
+                    .call_method(
+                        Some(MOUNTS_SERVICE),
+                        MOUNTS_PATH,
+                        Some(MOUNTS_INTERFACE),
+                        "Connect",
+                        &(
+                            &request.url,
+                            &request.user,
+                            &request.password,
+                            request.remember,
+                            request.reconnect,
+                            &request.trusted_key,
+                        ),
+                    )?
+                    .body()
+                    .deserialize::<(String, Vec<String>)>()
+                    .map_err(zbus::Error::from)
+            });
+            let (status, details) = reply.unwrap_or_else(|error| {
+                tracing::warn!("cannot connect to the server: {error}");
+                ("failed".to_owned(), vec![error.to_string()])
+            });
+            if let Some(answers) = answers {
+                answers.send(ServerAnswer {
+                    token,
+                    request,
+                    status,
+                    details,
+                });
+            }
+        };
+        if let Err(error) = std::thread::Builder::new()
+            .name("connect".to_owned())
+            .spawn(work)
+        {
+            tracing::warn!("cannot start connecting: {error}");
+        }
+    }
+
+    fn install_server_tools(&self, token: u64, request: ServerRequest, packages: Vec<String>) {
+        let answers = self.servers.as_ref().map(Inbox::outbox);
+        let work = move || {
+            let installed = Connection::session().and_then(|session| {
+                session.call_method(
+                    Some(MOUNTS_SERVICE),
+                    MOUNTS_PATH,
+                    Some(MOUNTS_INTERFACE),
+                    "Install",
+                    &(&packages,),
+                )
+            });
+            let (status, details) = match installed {
+                Ok(_) => ("installed".to_owned(), Vec::new()),
+                Err(error) => ("failed".to_owned(), vec![error.to_string()]),
+            };
+            if let Some(answers) = answers {
+                answers.send(ServerAnswer {
+                    token,
+                    request,
+                    status,
+                    details,
+                });
+            }
+        };
+        if let Err(error) = std::thread::Builder::new()
+            .name("install".to_owned())
+            .spawn(work)
+        {
+            tracing::warn!("cannot start installing: {error}");
+        }
+    }
+
+    fn follow_servers(&mut self, cx: &mut Cx<Self>) {
+        let answers = self.servers.as_mut().map(Inbox::drain).unwrap_or_default();
+        let shown = cx.focused().or_else(|| cx.windows().next());
+        for answer in answers {
+            if answer.status == "installed" {
+                self.ask_server(answer.token, answer.request);
+                continue;
+            }
+            if let Some((window, pane)) = shown.and_then(|id| browser(cx, id)) {
+                pane.view.server_answered(answer);
+                window.request_redraw();
+            }
+        }
+    }
+
+    fn follow_mounts(&mut self, cx: &mut Cx<Self>) {
+        if let Some(mounts) = self.mounts.as_mut() {
+            mounts.drain();
+        }
+        let windows: Vec<_> = cx.windows().collect();
+        for id in windows {
+            if let Some((window, pane)) = browser(cx, id) {
+                pane.view.refresh_volumes();
+                window.request_redraw();
+            }
+        }
+    }
+
+    fn follow_nearby(&mut self, cx: &mut Cx<Self>) {
+        let Some(list) = self
+            .nearby_inbox
+            .as_mut()
+            .map(Inbox::drain)
+            .and_then(|mut lists| lists.pop())
+        else {
+            return;
+        };
+        self.nearby.clone_from(&list);
+        let windows: Vec<_> = cx.windows().collect();
+        for id in windows {
+            if let Some((window, pane)) = browser(cx, id) {
+                pane.view.set_nearby(list.clone());
+                window.request_redraw();
+            }
+        }
+    }
+
     fn follow_ejects(&mut self, cx: &mut Cx<Self>) {
         let failures = self.ejects.as_mut().map(Inbox::drain).unwrap_or_default();
         let shown = cx.focused().or_else(|| cx.windows().next());
@@ -651,7 +783,7 @@ impl Files {
             directory,
         );
         let reveal = match &location {
-            Location::Folder(path) if select || !path.is_dir() => {
+            Location::Folder(path) if select || !bande_volumes::quick_is_dir(path) => {
                 let mut paths = vec![path.clone()];
                 paths.extend(targets.filter_map(|target| {
                     match start_location(Some(target), Location::Recents, directory) {
@@ -752,6 +884,7 @@ impl Files {
         }
         view.set_search_excluded(self.search_excluded.clone());
         view.set_media(media_roots(&std::env::var("USER").unwrap_or_default()));
+        view.set_nearby(self.nearby.clone());
         view.set_quick_look(Rc::clone(&self.quick_look));
         Ok(view)
     }
@@ -918,6 +1051,12 @@ impl Files {
                     tracing::warn!("cannot show the menu: {error}");
                 }
             }
+            Request::ConnectServer { token, request } => self.ask_server(token, request),
+            Request::InstallServerTools {
+                token,
+                request,
+                packages,
+            } => self.install_server_tools(token, request, packages),
             Request::Eject(volume) => self.eject(volume, false),
             Request::ForceEject(volume) => self.eject(volume, true),
             Request::NewWindow
@@ -991,6 +1130,12 @@ impl Program for Files {
             excluded,
             search_excluded: Vec::new(),
             shows,
+            servers: Inbox::new()
+                .inspect_err(|error| tracing::warn!("cannot follow connections: {error}"))
+                .ok(),
+            mounts: mount_changes(),
+            nearby_inbox: nearby_changes(),
+            nearby: Vec::new(),
             ejects: Inbox::new()
                 .inspect_err(|error| tracing::warn!("cannot report eject failures: {error}"))
                 .ok(),
@@ -1133,6 +1278,9 @@ impl Program for Files {
             .chain(self.excluded.iter().map(Inbox::fd))
             .chain(self.shows.iter().map(Inbox::fd))
             .chain(self.ejects.iter().map(Inbox::fd))
+            .chain(self.servers.iter().map(Inbox::fd))
+            .chain(self.mounts.iter().map(Inbox::fd))
+            .chain(self.nearby_inbox.iter().map(Inbox::fd))
             .collect()
     }
 
@@ -1141,6 +1289,9 @@ impl Program for Files {
         let sidebar = settings + self.sidebar_watch.iter().count();
         let excluded = sidebar + self.excluded.iter().count();
         let shows = excluded + self.shows.iter().count();
+        let ejects = shows + self.ejects.iter().count();
+        let servers = ejects + self.servers.iter().count();
+        let mounts = servers + self.mounts.iter().count();
         if index < settings {
             self.follow_settings(cx);
         } else if index < sidebar {
@@ -1149,10 +1300,75 @@ impl Program for Files {
             self.follow_excluded(cx);
         } else if index < shows {
             self.follow_shows(cx);
-        } else {
+        } else if index < ejects {
             self.follow_ejects(cx);
+        } else if index < servers {
+            self.follow_servers(cx);
+        } else if index < mounts {
+            self.follow_mounts(cx);
+        } else {
+            self.follow_nearby(cx);
         }
     }
+}
+
+fn nearby_list(session: &Connection) -> Vec<(String, String)> {
+    session
+        .call_method(
+            Some(MOUNTS_SERVICE),
+            MOUNTS_PATH,
+            Some(MOUNTS_INTERFACE),
+            "Nearby",
+            &(),
+        )
+        .and_then(|reply| reply.body().deserialize().map_err(zbus::Error::from))
+        .unwrap_or_default()
+}
+
+fn follow_nearby_servers(outbox: Outbox<Vec<(String, String)>>) -> zbus::Result<()> {
+    let session = Connection::session()?;
+    let rule = MatchRule::builder()
+        .msg_type(message::Type::Signal)
+        .interface(MOUNTS_INTERFACE)?
+        .member("NearbyChanged")?
+        .build();
+    let changes = MessageIterator::for_match_rule(rule, &session, None)?;
+    outbox.send(nearby_list(&session));
+    for _ in changes {
+        outbox.send(nearby_list(&session));
+    }
+    Ok(())
+}
+
+fn nearby_changes() -> Option<Inbox<Vec<(String, String)>>> {
+    let inbox = Inbox::new()
+        .inspect_err(|error| tracing::warn!("cannot follow nearby servers: {error}"))
+        .ok()?;
+    let outbox = inbox.outbox();
+    let spawned = std::thread::Builder::new()
+        .name("nearby servers".to_owned())
+        .spawn(move || {
+            if let Err(error) = follow_nearby_servers(outbox) {
+                tracing::warn!("cannot follow nearby servers: {error}");
+            }
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot follow nearby servers: {error}");
+    }
+    Some(inbox)
+}
+
+fn mount_changes() -> Option<Inbox<()>> {
+    let inbox = Inbox::new()
+        .inspect_err(|error| tracing::warn!("cannot follow mounts: {error}"))
+        .ok()?;
+    let outbox = inbox.outbox();
+    if let Err(error) = follow_mounts(move || {
+        outbox.send(());
+    }) {
+        tracing::warn!("cannot follow mounts: {error}");
+    }
+    Some(inbox)
 }
 
 const INFO_FLAG: &str = "--info";

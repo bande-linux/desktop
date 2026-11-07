@@ -21,11 +21,7 @@ use crate::session::SessionRole;
 use crate::state::{ClientState, State};
 
 pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
-<<<<<<< HEAD
-pub(crate) const BACKDROP_OPACITY_SINCE: u32 = 6;
-=======
 pub(crate) const SHELL_VERSION: u32 = 6;
->>>>>>> gap-look-lit
 const INSERT_PATIENCE: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]

@@ -216,14 +216,9 @@ impl Compositor {
         crate::menu_button::create_globals(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-<<<<<<< HEAD
-        handle.create_global::<State, BandeShellV1, ()>(crate::shell::BACKDROP_OPACITY_SINCE, ());
-        handle.create_global::<State, BandeAppV1, ()>(8, ());
-=======
         handle.create_global::<State, BandeShellV1, ()>(crate::shell::SHELL_VERSION, ());
         handle.create_global::<State, BandeAppV1, ()>(9, ());
         crate::resume::create_global(&handle);
->>>>>>> gap-look-lit
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());

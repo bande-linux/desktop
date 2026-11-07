@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const PHASE_GAIN: f64 = 1.0 / 16.0;
 const PERIOD_GAIN: f64 = 1.0 / 256.0;
@@ -28,6 +28,10 @@ const RELIEF_SHARE: f64 = 0.125;
 const WINDOW_FRAMES: u32 = 128;
 const WINDOW_MISSES: u32 = 6;
 const REANCHOR_AFTER_SLOTS: f64 = 64.0;
+
+const CLIENT_GUARD: Duration = Duration::from_micros(500);
+const CLIENT_SAMPLES_BEFORE_DELAY: usize = 8;
+const CLIENT_BACK_OFF: Duration = Duration::from_secs(1);
 
 fn share(period: Duration, of: f64) -> Duration {
     period.mul_f64(of)
@@ -336,5 +340,38 @@ impl FramePacing {
             self.window_misses = 0;
         }
         (sequence, time)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ClientPace {
+    sent_at: Option<Instant>,
+    delayed: bool,
+    costs: Samples,
+    back_off_until: Option<Instant>,
+}
+
+impl ClientPace {
+    pub(crate) fn committed(&mut self, now: Instant) {
+        if let Some(sent) = self.sent_at.take() {
+            self.costs.push(now.saturating_duration_since(sent));
+        }
+    }
+
+    pub(crate) fn latched(&mut self, now: Instant) {
+        if self.delayed && self.sent_at.is_some() {
+            self.back_off_until = Some(now + CLIENT_BACK_OFF);
+        }
+    }
+
+    pub(crate) fn sent(&mut self, now: Instant, delayed: bool) {
+        self.sent_at = Some(now);
+        self.delayed = delayed;
+    }
+
+    pub(crate) fn time_needed(&self, now: Instant) -> Option<Duration> {
+        let backing_off = self.back_off_until.is_some_and(|until| now < until);
+        (!backing_off && self.costs.filled >= CLIENT_SAMPLES_BEFORE_DELAY)
+            .then(|| self.costs.percentile(PERCENTILE) + CLIENT_GUARD)
     }
 }

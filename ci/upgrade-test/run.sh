@@ -61,7 +61,7 @@ boot() {
     qemu-img create -q -f qcow2 -F qcow2 -b "$cache/$image" "$scratch/disk.qcow2" 12G
     "${qemu[@]}" -enable-kvm -smp "3" -m "4G" -nographic \
         -serial "file:${UPGRADE_TEST_SERIAL:-/dev/null}" -monitor none -pidfile "$scratch/qemu.pid" \
-        -drive "file=$scratch/disk.qcow2,if=virtio" \
+        -drive "file=$scratch/disk.qcow2,if=virtio,cache=unsafe" \
         -drive "file=$scratch/seed.img,if=virtio,format=raw,readonly=on" \
         -nic "user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:$port-:22" &
     local vm=$!

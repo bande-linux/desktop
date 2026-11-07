@@ -11,7 +11,6 @@ growth or a weaker boundary than documented; **low** edge cases and hygiene.
 - critical: any client (Flatpak included) can bind `zwp_input_method_v2` and read every key, and `zwp_virtual_keyboard_v1` types into the focused surface, the lock surface included (`state/globals.rs` filters `|_| true`); needs `wp_security_context_v1` to refuse these globals, layer-shell overlay, output management and output power to sandboxed clients, and virtual-keyboard keys dropped while locked.
 - high: Control Center still runs `scan`, `networks`, `sign_in_page` and the Wi-Fi, Bluetooth and Do Not Disturb setters on the shell's UI thread (bounded by the 25 s bus timeout); tray/dbusmenu calls in `status/tray.rs` and `low_memory.rs` `force_quit` too.
 - high: notification, MPRIS and tray images are decoded on the shell's UI thread (capped at 16 MiB); decode on a worker.
-- high: the last display is never removed and a reconnect on the same connector keeps the old config (`displays.rs`); the lock's password field can land on a dead output. Needs the mini.
 - medium: any shell-role client can unlock the session with a second `ext_session_lock_v1` (`lock.rs`); give bande-lock its own role.
 - medium: `org.bande.Clipboard` serves the history to any session-bus caller; restrict to the shell and Settings.
 - medium: the clipboard daemon reads offers one MIME at a time with no total deadline or MIME cap, and `pipe()` EMFILE ends it (`clipboard/src/main.rs`); undecodable and `.partial` history files are never deleted.
@@ -51,7 +50,6 @@ growth or a weaker boundary than documented; **low** edge cases and hygiene.
 
 ## Compositor
 
-- medium (hardware): `drm.rs` `relink` commits `link-status = GOOD` outside `DrmCompositor` and can fail with EBUSY while a flip is pending; check with an external display through standby.
 - low: `force_quit_due` rebuilds the app list every loop iteration while Force Quit is open.
 - low: a second button pressed inside Force Quit replaces `held`, so the first release goes to the window below.
 

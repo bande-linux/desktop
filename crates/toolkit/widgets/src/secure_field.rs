@@ -17,6 +17,8 @@ const BODY_FONT: f32 = 13.0;
 const GO_INSET: f32 = 4.0;
 const GO_STROKE: f32 = 1.5;
 
+type OnEdit = Box<dyn FnMut(&str)>;
+
 pub struct SecureField {
     id: WidgetId,
     placeholder: String,
@@ -24,7 +26,7 @@ pub struct SecureField {
     scale: f32,
     secret: Zeroizing<String>,
     on_submit: Box<dyn FnMut(&str)>,
-    on_edit: Option<Box<dyn FnMut(&str)>>,
+    on_edit: Option<OnEdit>,
     bullets: Option<Paragraph>,
     placeholder_paragraph: Option<Paragraph>,
     go_button: bool,

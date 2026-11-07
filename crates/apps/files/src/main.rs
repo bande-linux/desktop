@@ -626,7 +626,6 @@ impl Files {
                     )?
                     .body()
                     .deserialize::<(String, Vec<String>)>()
-                    .map_err(zbus::Error::from)
             });
             let (status, details) = reply.unwrap_or_else(|error| {
                 tracing::warn!("cannot connect to the server: {error}");
@@ -1429,7 +1428,7 @@ fn nearby_list(session: &Connection) -> Vec<(String, String)> {
             "Nearby",
             &(),
         )
-        .and_then(|reply| reply.body().deserialize().map_err(zbus::Error::from))
+        .and_then(|reply| reply.body().deserialize())
         .unwrap_or_default()
 }
 

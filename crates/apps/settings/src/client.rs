@@ -141,6 +141,10 @@ pub trait Config {
     #[zbus(property)]
     fn set_bar_icon_size(&self, size: u32) -> zbus::Result<()>;
     #[zbus(property)]
+    fn bar_floating(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_bar_floating(&self, floating: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn bar_auto_hide(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_bar_auto_hide(&self, auto_hide: bool) -> zbus::Result<()>;
@@ -307,7 +311,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 74] = [
+pub const CONFIG_SETTINGS: [SettingId; 76] = [
     SettingId::Appearance,
     SettingId::Style,
     SettingId::Clock24Hour,
@@ -344,6 +348,7 @@ pub const CONFIG_SETTINGS: [SettingId; 74] = [
     SettingId::WallpaperFit,
     SettingId::BarIconSize,
     SettingId::BarAutoHide,
+    SettingId::BarFloating,
     SettingId::BarEdge,
     SettingId::ScreenSaverAfter,
     SettingId::DisplayOffAfter,
@@ -563,6 +568,7 @@ impl SettingsClient {
             SettingId::WallpaperFit => Value::Keyword(self.config.wallpaper_fit()?),
             SettingId::BarIconSize => Value::Number(self.config.bar_icon_size()?),
             SettingId::BarAutoHide => Value::Flag(self.config.bar_auto_hide()?),
+            SettingId::BarFloating => Value::Flag(self.config.bar_floating()?),
             SettingId::BarEdge => Value::Keyword(self.config.bar_edge()?),
             SettingId::ScreenSaverAfter => Value::Seconds(self.config.idle_screen_saver_after()?),
             SettingId::DisplayOffAfter => Value::Seconds(self.config.idle_display_off_after()?),
@@ -713,6 +719,9 @@ impl SettingsClient {
                 self.config.set_wallpaper_fit(keyword)
             }
             (SettingId::BarIconSize, Value::Number(size)) => self.config.set_bar_icon_size(*size),
+            (SettingId::BarFloating, Value::Flag(floating)) => {
+                self.config.set_bar_floating(*floating)
+            }
             (SettingId::BarAutoHide, Value::Flag(auto_hide)) => {
                 self.config.set_bar_auto_hide(*auto_hide)
             }

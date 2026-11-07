@@ -130,15 +130,15 @@ Targets: body text Lc ≥ 90 in light; in dark Lc 75–90, because APCA gives Lc
 
 Settings ▸ Appearance ▸ Style, `style` in `config.kdl`. The tokens live in `crates/toolkit/design/src/look.rs`, the single source for every window and the shell, and a change applies live.
 
-| Style | Frame and bar | Menus, panels | Taskbar | Added power |
-|---|---|---|---|---|
-| **Refined Solid** (default) | opaque `chassis` | opaque `overlay` | floats 8 pt from the screen edges | none, the most efficient |
-| **Wallpaper-Lit** | `chassis` at 74 % over a blurred copy of the wallpaper, sampled at the surface's position; other windows never show through | opaque `overlay` | attached to its screen edge, rounded on the inner corners, 8 pt from the ends | one small texture, made once per wallpaper |
+| Style | Frame and bar | Menus, panels | Added power |
+|---|---|---|---|
+| **Refined Solid** (default) | opaque `chassis` | opaque `overlay` | none, the most efficient |
+| **Wallpaper-Lit** | `chassis` at 74 % over a blurred copy of the wallpaper, sampled at the surface's position; other windows never show through | opaque `overlay` | one small texture, made once per wallpaper |
 
 - **The material is only ever behind the frame.** The sheet is opaque and declared so, which also spares the compositor drawing under it.
 - **Readable over anything.** The backdrop's luminance is limited before the frame goes on it, to at most .16 in dark and at least .60 in light. That bound gives `ink` ≥ 7:1, `ink2` ≥ 4.5:1 and `ink3` ≥ 3:1 over any picture; a test in the design crate enumerates it.
 - **Wallpaper-Lit** keeps a 480 pixel wide picture per display, blurred and saturated 1.35× once on a worker thread, and makes it again only when the wallpaper, the scheme or the display changes. Nothing redraws at idle.
-- **Reduce Transparency and Increase Contrast** make every style solid. The Taskbar's form stays what the style says.
+- **Reduce Transparency and Increase Contrast** make every style solid.
 - **Third-party windows.** GTK and Qt apps draw their own frames, and server-side title bars use opaque `chassis`, so those stay solid in every style.
 
 **Blur** otherwise exists only behind the launcher, overview and modal alerts (a 24 pt backdrop blur at 60 % mix, so the eye is pulled forward). "Tinted chassis" is a separate opt-in that mixes 6 % of the wallpaper's average colour into `chassis`.
@@ -261,8 +261,8 @@ A dry, short, *wooden-percussive* palette: soft-attack mallet and click tones un
 
 ## 13. The shell: the Taskbar
 
-The Taskbar is an edge-anchored bar, 64 pt at the default icon size , plus its 8 pt margin when floating, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
-- Bar surface = the same tone, material, radius (`radius.xl`), lit edge and shadow as a window frame, so bar and windows read as one family. By style (§6) it floats 8 pt from the screen edges or attaches to its edge with rounded inner corners; a floating bar's 8 pt counts as part of it for the pointer, so a throw to the screen edge still lands on it. "Tinted chassis" applies here too.
+The Taskbar is an edge-anchored bar, 64 pt at the default icon size , plus its margins when floating, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
+- Bar surface = the same tone, material (§6), radius (`radius.xl`), lit edge and shadow as a window frame, so bar and windows read as one family. In every style it floats by default: 8 pt from the screen on all sides, and 8 pt from maximised and tiled windows, which is 2 × 8 pt added to the space it reserves. The 8 pt on the screen side counts as part of it for the pointer, so a throw to the screen edge still lands on it. Settings ▸ Taskbar turns floating off (`bar { floating #false }`): it then attaches to its screen edge, keeps 8 pt from the ends and rounds its inner corners, and reserves only its own thickness. "Tinted chassis" applies here too.
 - **Active app = a `focus` frame** around its icon: 4 pt outside it, a 1.5 pt `focus` line over a `focus` plate at 14 % (22 % hovered, 30 % pressed), radius concentric with the icon. It is the one `focus` shape on the bar and glides to the next active app on `quick` (a cross-fade under Reduce Motion). **Other running apps = a 3×3 `ink2` square** on the screen-edge side (the square motif; a dot would be macOS).
 - The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 16 panels).
 - The clock is Inter 15/600 tnum stacked "14 / 32".

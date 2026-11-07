@@ -31,6 +31,7 @@ pub enum Setting {
     BarEdge(BarEdge),
     BarApps(Vec<String>),
     BarAutoHide(bool),
+    BarFloating(bool),
     BarIconSize(u32),
     IdleScreenSaverAfter(Option<Duration>),
     IdleDisplayOffAfter(Option<Duration>),
@@ -171,6 +172,12 @@ impl Setting {
                 Some("bar"),
                 "auto-hide",
                 auto_hide.then_some(KdlValue::Bool(true)),
+            ),
+            Self::BarFloating(floating) => set(
+                &mut document,
+                Some("bar"),
+                "floating",
+                (!floating).then_some(KdlValue::Bool(false)),
             ),
             Self::BarIconSize(size) => set(
                 &mut document,

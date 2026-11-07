@@ -165,12 +165,12 @@ pref("identity.fxaccounts.toolbar.enabled", false);
 // Debian
 pref("distribution.searchplugins.defaultLocale", "en-US");
 pref("spellchecker.dictionary_path", "/usr/share/hunspell");
-// Bande: portal seams, title bar and window controls in the tab strip
+// Bande: portal seams; the compositor draws the title bar and window controls
 pref("widget.use-xdg-desktop-portal.file-picker", 1);
 pref("widget.use-xdg-desktop-portal.mime-handler", 1);
 pref("widget.use-xdg-desktop-portal.settings", 1);
 pref("widget.use-xdg-desktop-portal.open-uri", 1);
-pref("browser.tabs.inTitlebar", 1);
+pref("browser.tabs.inTitlebar", 0);
 pref("browser.compactmode.show", true);
 pref("signon.management.page.breach-alerts.enabled", false, locked);
 pref("signon.rememberSignons", true);

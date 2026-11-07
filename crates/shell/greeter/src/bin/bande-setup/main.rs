@@ -164,6 +164,18 @@ fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
     Box::new(widget)
 }
 
+fn switch(title: &str, on: bool, on_change: impl FnMut(bool) + 'static) -> Box<dyn Widget> {
+    boxed(Stack::new(
+        Axis::Horizontal,
+        Spacing::S as f32,
+        0.0,
+        vec![
+            boxed(Toggle::new(title, on, on_change)),
+            boxed(Label::new(title)),
+        ],
+    ))
+}
+
 impl Assistant {
     fn intent(&self, intent: Intent) -> impl FnMut() + 'static {
         let intents = Rc::clone(&self.intents);
@@ -234,11 +246,11 @@ impl Assistant {
                 ];
                 if self.can_encrypt {
                     let intents = Rc::clone(&self.intents);
-                    rows.push(boxed(Toggle::new(
+                    rows.push(switch(
                         &L10N.tr("encrypt-disk"),
                         self.answers.encrypt,
                         move |on| intents.borrow_mut().push(Intent::EncryptDisk(on)),
-                    )));
+                    ));
                     rows.push(boxed(
                         Label::new(&L10N.tr("encrypt-disk-detail")).secondary(),
                     ));
@@ -284,11 +296,11 @@ impl Assistant {
                 let intents = Rc::clone(&self.intents);
                 vec![
                     boxed(Label::new(&L10N.tr("privacy-detail"))),
-                    boxed(Toggle::new(
+                    switch(
                         &L10N.tr("automatic-updates"),
                         self.answers.automatic_updates,
                         move |on| intents.borrow_mut().push(Intent::AutomaticUpdates(on)),
-                    )),
+                    ),
                 ]
             }
             Page::Finishing => vec![boxed(Label::new(&L10N.tr("finishing")).secondary())],

@@ -48,7 +48,7 @@ writes a hex value, a corner radius or a font name of its own.
   | `overlay` | menus, popovers, notifications, field fills in light mode |
   | `well` | control fills, the window-control pill, unfocused selection |
   | `hairline` | separators, the dark sheet edge |
-  | `edge` | window and control outlines (≥ 1.9:1, ≥ 3:1 with Increase Contrast) |
+  | `edge` | control outlines (≥ 1.9:1, ≥ 3:1 with Increase Contrast) |
   | `ink`, `ink2`, `ink3` | primary, secondary and tertiary text and glyphs |
   | `accent`, `accent_text`, `on_accent`, `accent_soft`, `focus` | the one signal colour: selection, focus, links; `on_accent` is white or dark ink, whichever reads better (dark in dark mode) |
   | `danger`, `warning`, `success` | status only |

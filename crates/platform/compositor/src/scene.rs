@@ -17,13 +17,12 @@ use crate::state::OutputElement;
 use crate::state::mapped_size;
 use crate::tile::Preview;
 use crate::window::Window;
-use bande_graphics::{Color, Elevation, Palette, Radius, Scheme};
+use bande_graphics::{Color, Elevation, Palette, Radius, Scheme, window_edge_opacity};
 use bande_render::{
     Blur, RenderError, RoundedRect, Shadow, VulkanFrame, VulkanRenderer, VulkanTexture,
 };
 
 pub(crate) const CORNER_RADIUS: f64 = Radius::XL as f64;
-const EDGE_OPACITY: f32 = 0.55;
 const EDGE_SOFTNESS: f32 = 0.35;
 
 #[derive(Debug, Clone)]
@@ -73,10 +72,8 @@ pub(crate) fn cast_shadows(
             },
         ))
     };
-    let edge = Palette::for_scheme(shading.scheme).edge;
-    let opacity = EDGE_OPACITY * alpha;
-    let channel = |value: u8| f32::from(value) / 255.0 * opacity;
-    let line = scale.max(1.0).round() as f32;
+    let opacity = window_edge_opacity(shading.scheme) * alpha;
+    let line = 1.0;
     let ring = OutputElement::Shadow(ShadowElement::new(
         casting.edge.clone(),
         Shadow {
@@ -89,7 +86,7 @@ pub(crate) fn cast_shadows(
             },
             window,
             blur: EDGE_SOFTNESS,
-            color: [channel(edge.r), channel(edge.g), channel(edge.b), opacity],
+            color: [0.0, 0.0, 0.0, opacity],
         },
     ));
     [

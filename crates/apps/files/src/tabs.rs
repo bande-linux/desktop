@@ -97,6 +97,7 @@ impl SavedTab {
         match &self.location {
             Location::Folder(folder) => folder.is_dir(),
             Location::Trash | Location::Recents | Location::Search(_) => true,
+            Location::Server(_) => false,
         }
     }
 }

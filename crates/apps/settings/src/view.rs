@@ -132,6 +132,7 @@ pub(crate) enum Intent {
     Locale(LocaleCommand),
     DefaultApp(&'static str, String),
     Grant(Permission, String, bool),
+    KeyboardAccess(String, bool),
     Passwords(PasswordCommand),
     PasswordQuery(String),
     ChangePassword(Option<String>),
@@ -280,6 +281,8 @@ pub struct SettingsView {
     pub(crate) refused: Vec<Privilege>,
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
     pub(crate) permissions: Grants,
+    pub(crate) keyboard_access: Vec<crate::consent::KeyboardAccess>,
+    pub(crate) security: crate::security_status::SecurityStatus,
     pub(crate) keychain: Keychain,
     stale: bool,
     rebuilt: bool,
@@ -376,6 +379,8 @@ impl SettingsView {
             refused: Vec::new(),
             default_apps: None,
             permissions: Vec::new(),
+            keyboard_access: Vec::new(),
+            security: crate::security_status::SecurityStatus::default(),
             keychain: Keychain::default(),
             stale: true,
             rebuilt: false,
@@ -794,6 +799,8 @@ impl SettingsView {
                 self.installing_samba = false;
                 self.sharing = Some(state);
             }
+            Update::KeyboardAccess(access) => self.keyboard_access = access,
+            Update::Security(status) => self.security = status,
             Update::Printers(printers) => {
                 if let Some(Detail::Printer(id)) = &self.detail
                     && !printers.printers.iter().any(|printer| printer.id == *id)
@@ -1343,6 +1350,7 @@ impl SettingsView {
                     }
                 }
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
+                Intent::KeyboardAccess(line, on) => self.change_keyboard_access(line, on),
                 Intent::Passwords(command) => self.password_command(command),
                 Intent::PasswordQuery(query) => {
                     self.keychain.query = query;

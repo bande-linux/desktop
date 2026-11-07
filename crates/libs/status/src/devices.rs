@@ -5,11 +5,12 @@ use std::time::Duration;
 use bande_bluetooth::{Bluetooth as BlueZ, shown_change};
 use bande_inbox::Outbox;
 use bande_network::{NetworkManager, set_strength, strength_signal};
+use serde::Deserialize;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::names::BusName;
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::zvariant::{OwnedObjectPath, Type};
 use zbus::{MatchRule, Message, message};
 
 use crate::session::{Ending, Inhibitor, Refusal};
@@ -55,6 +56,16 @@ trait UPowerDevice {
     fn time_to_full(&self) -> zbus::Result<i64>;
 }
 
+#[derive(Deserialize, Type)]
+struct LogindInhibitor {
+    what: String,
+    who: String,
+    why: String,
+    mode: String,
+    _uid: u32,
+    _pid: u32,
+}
+
 #[zbus::proxy(
     interface = "org.freedesktop.login1.Manager",
     default_service = "org.freedesktop.login1",
@@ -77,7 +88,7 @@ trait LoginManager {
 
     fn get_session(&self, session_id: &str) -> zbus::Result<OwnedObjectPath>;
 
-    fn list_inhibitors(&self) -> zbus::Result<Vec<(String, String, String, String, u32, u32)>>;
+    fn list_inhibitors(&self) -> zbus::Result<Vec<LogindInhibitor>>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -286,10 +297,11 @@ fn shutdown_inhibitors(login: &Login) -> zbus::Result<Vec<Inhibitor>> {
     Ok(login
         .list_inhibitors()?
         .into_iter()
-        .filter(|(what, _, _, mode, _, _)| {
-            mode == "block" && what.split(':').any(|what| what == "shutdown")
+        .filter(|held| held.mode == "block" && held.what.split(':').any(|what| what == "shutdown"))
+        .map(|held| Inhibitor {
+            who: held.who,
+            why: held.why,
         })
-        .map(|(_, who, why, _, _, _)| Inhibitor { who, why })
         .collect())
 }
 

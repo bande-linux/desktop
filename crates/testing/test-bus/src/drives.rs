@@ -13,6 +13,8 @@ const LOGIN1: &str = "org.freedesktop.login1";
 const SESSION: &str = "org.freedesktop.login1.Session";
 const SESSION_PATH: &str = "/org/freedesktop/login1/session/_31";
 
+type InhibitorRow = (String, String, String, String, u32, u32);
+
 #[derive(Default)]
 struct Power {
     ended: Vec<&'static str>,
@@ -38,7 +40,7 @@ impl Manager {
         self.power().ended.push("reboot");
     }
 
-    fn list_inhibitors(&self) -> Vec<(String, String, String, String, u32, u32)> {
+    fn list_inhibitors(&self) -> Vec<InhibitorRow> {
         self.power()
             .inhibitors
             .iter()

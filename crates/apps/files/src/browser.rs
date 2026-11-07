@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use bande_fs::{
     Entry, FolderChanges, Listing, Sort, Trash, compare, is_hidden, list, list_trash, merge, sort,
 };
+use bande_volumes::on_connected_volume;
 
 use crate::lister::{FIRST_CHUNK, Lister, Ticket};
 
@@ -16,6 +17,7 @@ pub enum Location {
     Trash,
     Recents,
     Search(PathBuf),
+    Server(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -29,6 +31,8 @@ pub struct Column {
     pub edits: Vec<RowEdit>,
     pub depths: Vec<u8>,
     pub denied: bool,
+    pub unavailable: bool,
+    replacing: bool,
     listing: Option<Ticket>,
     awaited: Vec<PathBuf>,
 }
@@ -70,6 +74,8 @@ impl Column {
             edits: Vec::new(),
             depths: Vec::new(),
             denied: contents.denied,
+            unavailable: false,
+            replacing: false,
             location,
             entries: contents.entries,
             selected: None,
@@ -132,6 +138,9 @@ impl Column {
             return;
         };
         let old = self.entries.iter().position(|entry| entry.name == name);
+        if bande_volumes::on_connected_volume(path) {
+            return;
+        }
         let fresh = ((show_hidden || !is_hidden(&name)) && path.symlink_metadata().is_ok())
             .then(|| Entry::read(path.to_path_buf(), name));
         if let (Some(row), Some(entry)) = (old, &fresh)
@@ -277,7 +286,7 @@ pub struct Browser {
 fn entries(paths: &[PathBuf]) -> Vec<Entry> {
     paths
         .iter()
-        .filter(|path| path.symlink_metadata().is_ok())
+        .filter(|path| !on_connected_volume(path) && path.symlink_metadata().is_ok())
         .filter_map(|path| {
             let name = path.file_name()?.to_string_lossy().into_owned();
             Some(Entry::read(path.clone(), name))
@@ -315,6 +324,7 @@ impl Browser {
             Location::Folder(folder) => self.read_folder(folder),
             Location::Trash => Contents::listed(list_trash(&self.trash, self.order())),
             Location::Recents => Contents::listed(entries(&self.recents)),
+            Location::Server(_) => Contents::listed(Vec::new()),
             Location::Search(_) => {
                 let mut found = entries(&self.found);
                 sort(&mut found, self.order());
@@ -324,6 +334,20 @@ impl Browser {
     }
 
     fn read_folder(&mut self, folder: &Path) -> Contents {
+        if on_connected_volume(folder) {
+            let (hidden, order) = (self.show_hidden, self.order());
+            let listing = self.lister.as_mut().and_then(|lister| {
+                lister
+                    .open_on_its_own_thread(folder.to_path_buf(), hidden, order)
+                    .inspect_err(|error| tracing::warn!("cannot list {folder:?}: {error}"))
+                    .ok()
+            });
+            return Contents {
+                entries: Vec::new(),
+                listing,
+                denied: false,
+            };
+        }
         let mut listing = match Listing::open(folder, self.show_hidden) {
             Ok(listing) => listing,
             Err(error) => {
@@ -372,6 +396,18 @@ impl Browser {
             };
             let column = &mut self.columns[index];
             changed = true;
+            match listed.failed {
+                Some(io::ErrorKind::PermissionDenied) => column.denied = true,
+                Some(_) => column.unavailable = true,
+                None => column.unavailable = false,
+            }
+            if std::mem::take(&mut column.replacing) {
+                column.awaited = column.selection().iter().map(|e| e.path.clone()).collect();
+                column.entries.clear();
+                column.marked.clear();
+                column.selected = None;
+                column.anchor = None;
+            }
             if column.merge(listed.entries, order) {
                 selected = true;
                 if self.active <= index {
@@ -504,7 +540,10 @@ impl Browser {
     }
 
     fn nests(&self) -> bool {
-        self.nesting && self.single && !self.expanded.is_empty()
+        self.nesting
+            && self.single
+            && !self.expanded.is_empty()
+            && !self.columns[0].folder().is_some_and(on_connected_volume)
     }
 
     fn nest_into(
@@ -945,7 +984,7 @@ impl Browser {
             .flat_map(|column| match &column.location {
                 Location::Folder(folder) => vec![folder.clone()],
                 Location::Trash => self.trash_info_dirs(),
-                Location::Recents | Location::Search(_) => Vec::new(),
+                Location::Recents | Location::Search(_) | Location::Server(_) => Vec::new(),
             })
             .collect::<Vec<_>>();
         watched.extend(self.open_subfolders());
@@ -968,6 +1007,17 @@ impl Browser {
     }
 
     fn reload_column(&mut self, index: usize) {
+        if let Some(folder) = self.columns[index]
+            .folder()
+            .filter(|folder| on_connected_volume(folder))
+            .map(Path::to_path_buf)
+        {
+            let listing = self.read_folder(&folder).listing;
+            let column = &mut self.columns[index];
+            column.listing = listing;
+            column.replacing = !column.entries.is_empty();
+            return;
+        }
         let column = &self.columns[index];
         let selected_path = column.selected_entry().map(|entry| entry.path.clone());
         let marked_paths = column
@@ -1163,6 +1213,7 @@ impl Browser {
         self.reload_where(|location| match location {
             Location::Folder(folder) => changed.contains(folder),
             Location::Trash => trash_changed,
+            Location::Server(_) => false,
             Location::Recents | Location::Search(_) => true,
         });
     }

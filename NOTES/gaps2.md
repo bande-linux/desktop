@@ -33,9 +33,6 @@ Status: started. Fixed on main: the polkit agent uses polkit's socket-activated 
 The shutdown button doesnt work. (right click Bande icon -> shutdown). Also the restart button.
 Status: started, branch gap-shutdown.
 
-when showing hidden files i think the hidden files should be slightly "greyed out" or toned down so it is obvious which shown file/folder is normally hidden and which is not
-Status: started, branch gap-files-hidden.
-
 ##CHECK THIS## cant write ~ in terminal?
 Status: started, branch gap-terminal-tilde.
 

@@ -9,8 +9,8 @@ use smithay::utils::{Buffer as BufferCoords, Physical, Rectangle, Transform};
 use smithay::reexports::rustix::ioctl;
 
 use crate::{
-    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, Export, Program, Rect, RenderError, TRANSFER_SOURCE,
-    VulkanFramebuffer, VulkanRenderer, VulkanTexture, barrier, disjoint,
+    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DeviceExport, Export, MappedExport, Program, Rect,
+    RenderError, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer, VulkanTexture, barrier, disjoint,
 };
 
 mod blur;
@@ -476,13 +476,15 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 .cmd_end_rendering(self.renderer.command_buffer)
         };
         let drawn = disjoint(std::mem::take(&mut self.drawn), self.bounds);
-        let exported = self
+        let export = self
             .renderer
             .targets
             .get(&self.target)
-            .is_some_and(|target| target.export.is_some());
+            .and_then(|target| target.export.as_ref());
         let mut readbacks = Vec::new();
-        if exported {
+        if let Some(Export::OnDevice(device)) = export {
+            self.record_output_copy(device, &drawn);
+        } else if export.is_some() {
             for rect in drawn {
                 let bytes = rect.area() as usize * BYTES_PER_PIXEL;
                 let (index, offset) = self.renderer.reserve(bytes)?;
@@ -507,6 +509,73 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             target.rendered = true;
         }
         written
+    }
+
+    fn record_output_copy(&self, export: &DeviceExport, drawn: &[Rect]) {
+        if drawn.is_empty() {
+            return;
+        }
+        let device = &self.renderer.device;
+        let commands = self.renderer.command_buffer;
+        let family = self.renderer.queue_family;
+        let buffer = export.imported.buffer;
+        let row_bytes = u64::from(export.row_texels) * BYTES_PER_PIXEL as u64;
+        let regions: Vec<_> = drawn
+            .iter()
+            .map(|rect| {
+                vk::BufferImageCopy::default()
+                    .buffer_offset(
+                        export.offset
+                            + u64::from(rect.y.unsigned_abs()) * row_bytes
+                            + u64::from(rect.x.unsigned_abs()) * BYTES_PER_PIXEL as u64,
+                    )
+                    .buffer_row_length(export.row_texels)
+                    .image_subresource(COLOR_LAYERS)
+                    .image_offset(vk::Offset3D {
+                        x: rect.x,
+                        y: rect.y,
+                        z: 0,
+                    })
+                    .image_extent(vk::Extent3D {
+                        width: rect.width.unsigned_abs(),
+                        height: rect.height.unsigned_abs(),
+                        depth: 1,
+                    })
+            })
+            .collect();
+        let acquire = vk::BufferMemoryBarrier2::default()
+            .src_queue_family_index(vk::QUEUE_FAMILY_EXTERNAL)
+            .dst_queue_family_index(family)
+            .dst_stage_mask(vk::PipelineStageFlags2::COPY)
+            .dst_access_mask(vk::AccessFlags2::TRANSFER_WRITE)
+            .buffer(buffer)
+            .size(vk::WHOLE_SIZE);
+        let release = vk::BufferMemoryBarrier2::default()
+            .src_stage_mask(vk::PipelineStageFlags2::COPY)
+            .src_access_mask(vk::AccessFlags2::TRANSFER_WRITE)
+            .src_queue_family_index(family)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_EXTERNAL)
+            .buffer(buffer)
+            .size(vk::WHOLE_SIZE);
+        barrier(device, commands, self.image, ATTACHMENT, TRANSFER_SOURCE);
+        unsafe {
+            device.cmd_pipeline_barrier2(
+                commands,
+                &vk::DependencyInfo::default().buffer_memory_barriers(slice::from_ref(&acquire)),
+            );
+            device.cmd_copy_image_to_buffer(
+                commands,
+                self.image,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                buffer,
+                &regions,
+            );
+            device.cmd_pipeline_barrier2(
+                commands,
+                &vk::DependencyInfo::default().buffer_memory_barriers(slice::from_ref(&release)),
+            );
+        }
+        barrier(device, commands, self.image, TRANSFER_SOURCE, ATTACHMENT);
     }
 
     fn record_readbacks(&self, readbacks: &[Readback]) {
@@ -564,6 +633,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         else {
             return Ok(());
         };
+        let Export::Mapped(export) = export else {
+            return Ok(());
+        };
         if readbacks.is_empty() {
             return Ok(());
         }
@@ -573,7 +645,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         copied
     }
 
-    fn copy_readbacks(&self, export: &Export, readbacks: &[Readback]) -> Result<(), RenderError> {
+    fn copy_readbacks(&self, export: &MappedExport, readbacks: &[Readback]) -> Result<(), RenderError> {
         for readback in readbacks {
             let rect = readback.rect;
             let row_bytes = rect.width.unsigned_abs() as usize * BYTES_PER_PIXEL;
@@ -608,7 +680,7 @@ const DMA_BUF_SYNC_WRITE: u64 = 2;
 const DMA_BUF_SYNC_START: u64 = DMA_BUF_SYNC_WRITE;
 const DMA_BUF_SYNC_END: u64 = 4 | DMA_BUF_SYNC_WRITE;
 
-fn dma_buf_sync(export: &Export, flags: u64) -> Result<(), RenderError> {
+fn dma_buf_sync(export: &MappedExport, flags: u64) -> Result<(), RenderError> {
     const SYNC: ioctl::Opcode = ioctl::opcode::write::<u64>(b'b', 0);
     let request = unsafe { ioctl::Setter::<SYNC, u64>::new(flags) };
     unsafe { ioctl::ioctl(&export.fd, request) }.map_err(std::io::Error::from)?;

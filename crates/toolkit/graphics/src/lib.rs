@@ -33,7 +33,7 @@ pub use text::{
     Cut, GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextStyle, TextSystem, shortened,
 };
 pub use title_bar::{
-    FRAME_HEADER_HEIGHT, MenuButton, RESIZE_MARGIN, ResizeEdge, TitleBar, WINDOW_HEADER_HEIGHT,
-    WindowControl, menu_button_area, resize_zone, title_style, window_controls_area,
-    window_controls_end,
+    FRAME_HEADER_HEIGHT, MenuButton, RESIZE_MARGIN, RESIZE_WALL_BAND, ResizeEdge, TitleBar,
+    WINDOW_HEADER_HEIGHT, WalledSides, WindowControl, menu_button_area, resize_zone, title_style,
+    walled_resize_zone, window_controls_area, window_controls_end,
 };

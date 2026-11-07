@@ -8,7 +8,7 @@ use bande_compositor::{
     FrameClock, FrameOutput, FrameRecovery, FrameScheduler, GREETER, InputSettings, REFRESH,
     REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SETUP,
     SETUP_PENDING, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
-    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
+    export_session_environment, follow_alerts, follow_appearance, follow_input_settings, follow_system_keyboard,
     follow_session, follow_shutdown, follow_sleep, notify_service_manager, serve_app_states,
     serve_displays, serve_keyboard_monitor, sleep_on_request, user_config,
     watchdog_keepalive_interval,
@@ -698,6 +698,19 @@ where
         Session::Greeter => {
             end_greeter_when_hung(&event_loop.handle())?;
             app.compositor.apply_input_settings(InputSettings::system());
+            match bande_bus::system() {
+                Ok(system) => follow(
+                    &event_loop.handle(),
+                    "the system keyboard",
+                    |sender| {
+                        follow_system_keyboard(&system, move |settings| {
+                            sender.send(settings).is_ok()
+                        })
+                    },
+                    |app, settings| app.compositor.apply_input_settings(settings),
+                )?,
+                Err(error) => tracing::warn!("no system bus: {error}"),
+            }
             app.compositor.hold_frames_until(
                 Awaited::LoginWindow,
                 app.started,

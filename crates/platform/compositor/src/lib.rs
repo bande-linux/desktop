@@ -83,7 +83,7 @@ pub use environment::{
     export_session_environment, notify_service_manager, watchdog_keepalive_interval,
 };
 pub use gesture::Gesture;
-pub use input_settings::{InputSettings, follow_input_settings, user_config};
+pub use input_settings::{InputSettings, follow_input_settings, follow_system_keyboard, user_config};
 pub use keyboard_monitor::{
     KEYBOARD_MONITOR_NAME, KeyboardMonitorHandle, SCREEN_READER_NAME, serve_keyboard_monitor,
 };

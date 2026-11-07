@@ -60,6 +60,7 @@ const BATTERY_SLOT: f32 = 27.0;
 const PERCENT_GAP: f32 = 4.0;
 const POWER_BOTTOM: f32 = 48.0;
 const POWER_GAP: f32 = 12.0;
+pub const RESTS_AFTER: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PowerPress {
@@ -126,6 +127,9 @@ struct Model {
     power_press: Option<PowerPress>,
     wallpaper: Option<Image>,
     content_shown: Animated,
+    identity_shown: Animated,
+    resting: bool,
+    rests_at: Option<Instant>,
 }
 
 type Shared = Rc<RefCell<Model>>;
@@ -352,7 +356,7 @@ impl Widget for LockView {
 
 impl LockView {
     fn paint_content(&self, cx: &Context, items: &mut Vec<Item>) {
-        let Some([date, time, initial, name]) = &self.paragraphs else {
+        let Some([date, time, _, _]) = &self.paragraphs else {
             return;
         };
         let centre = self.frame.x + self.frame.width / 2.0;
@@ -365,6 +369,40 @@ impl LockView {
             origin: centred(time, centre, top + date.height()),
             paragraph: time.clone(),
         });
+        if let Some(note) = &self.note {
+            let row = self.row.iter().map(|size| size.height).fold(0.0, f32::max);
+            let bottom = self.frame.y + self.frame.height - POWER_BOTTOM - row - GAP * 2.0;
+            items.push(Item::Text {
+                origin: Point::new(
+                    (centre - MESSAGE_WIDTH / 2.0).round(),
+                    (bottom - note.height()).round(),
+                ),
+                paragraph: note.clone(),
+            });
+        }
+        let (shown, _) = {
+            let model = self.model.borrow();
+            model.identity_shown.value_at(model.now)
+        };
+        if shown <= 0.0 {
+            return;
+        }
+        let mut identity = Vec::new();
+        self.paint_identity(cx, &mut identity);
+        match shown >= 1.0 {
+            true => items.extend(identity),
+            false => items.push(Item::Opacity {
+                alpha: shown,
+                items: identity,
+            }),
+        }
+    }
+
+    fn paint_identity(&self, cx: &Context, items: &mut Vec<Item>) {
+        let Some([_, _, initial, name]) = &self.paragraphs else {
+            return;
+        };
+        let centre = self.frame.x + self.frame.width / 2.0;
         let avatar = self.avatar();
         if let Some(picture) = self.model.borrow().picture.clone() {
             items.push(Item::Clip {
@@ -438,17 +476,6 @@ impl LockView {
                 paragraph: source.clone(),
             });
         }
-        if let Some(note) = &self.note {
-            let row = self.row.iter().map(|size| size.height).fold(0.0, f32::max);
-            let bottom = self.frame.y + self.frame.height - POWER_BOTTOM - row - GAP * 2.0;
-            items.push(Item::Text {
-                origin: Point::new(
-                    (centre - MESSAGE_WIDTH / 2.0).round(),
-                    (bottom - note.height()).round(),
-                ),
-                paragraph: note.clone(),
-            });
-        }
     }
 
     fn paint_status(&self, cx: &Context, items: &mut Vec<Item>) {
@@ -513,6 +540,28 @@ impl LockView {
     }
 }
 
+pub fn is_deliberate(event: &Event) -> bool {
+    matches!(
+        event,
+        Event::PointerDown(_)
+            | Event::PointerMove(_)
+            | Event::Scroll(_)
+            | Event::Key { .. }
+            | Event::Commit(_)
+    )
+}
+
+fn types_into_the_field(event: &Event) -> bool {
+    match event {
+        Event::Key {
+            key: Key::Character(character),
+            modifiers,
+        } => !modifiers.control && !modifiers.alt && !modifiers.logo && !character.is_control(),
+        Event::Commit(_) => true,
+        _ => false,
+    }
+}
+
 pub struct LockScreen {
     model: Shared,
     ui: Ui,
@@ -560,6 +609,9 @@ impl LockScreen {
             power_press: None,
             wallpaper: None,
             content_shown: Animated::new(1.0),
+            identity_shown: Animated::new(1.0),
+            resting: false,
+            rests_at: None,
         }));
         let submitted = model.clone();
         let field = SecureField::new(&L10N.tr("enter-password"), FIELD_FONT, move |password| {
@@ -741,6 +793,56 @@ impl LockScreen {
         model.time = time;
     }
 
+    pub fn start_resting(&mut self) {
+        let mut model = self.model.borrow_mut();
+        model.resting = true;
+        model.identity_shown = Animated::new(0.0);
+    }
+
+    pub fn is_resting(&self) -> bool {
+        self.model.borrow().resting
+    }
+
+    pub fn rests_at(&self) -> Option<Instant> {
+        self.model.borrow().rests_at
+    }
+
+    pub fn rest_when_due(&mut self, now: Instant) -> bool {
+        let mut model = self.model.borrow_mut();
+        if model.rests_at.is_none_or(|at| now < at) {
+            return false;
+        }
+        if model.checking {
+            model.rests_at = Some(now + RESTS_AFTER);
+            return false;
+        }
+        model.rests_at = None;
+        model.resting = true;
+        model.message = None;
+        model
+            .identity_shown
+            .animate_at(now, false, 0.0, Spring::FADE);
+        drop(model);
+        self.clear_field();
+        true
+    }
+
+    pub fn wake(&mut self, now: Instant) {
+        let mut model = self.model.borrow_mut();
+        model.rests_at = Some(now + RESTS_AFTER);
+        if std::mem::take(&mut model.resting) {
+            model
+                .identity_shown
+                .animate_at(now, false, 1.0, Spring::FADE);
+        }
+    }
+
+    pub fn wake_on(&mut self, event: &Event, now: Instant) -> bool {
+        let resting = self.is_resting();
+        self.wake(now);
+        !resting || types_into_the_field(event)
+    }
+
     pub fn handle(&mut self, event: &Event) -> bool {
         if self.model.borrow().checking {
             return false;
@@ -818,6 +920,7 @@ impl LockScreen {
     pub fn is_animating(&self) -> bool {
         let model = self.model.borrow();
         model.backdrop_shown.value_at(model.now).1
+            || model.identity_shown.value_at(model.now).1
             || model.content_shown.value_at(model.now).1
             || model
                 .shake_from

@@ -909,6 +909,7 @@ dependencies = [
 name = "bande-power"
 version = "0.1.7"
 dependencies = [
+ "bande-audio",
  "bande-bus",
  "bande-l10n",
  "bande-log",

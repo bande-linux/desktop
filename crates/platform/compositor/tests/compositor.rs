@@ -201,7 +201,7 @@ fn an_app_that_closed_its_last_window_stays_active_until_the_desktop_is_clicked(
 }
 
 #[test]
-fn tapping_super_opens_search_and_ctrl_alt_t_opens_terminal() {
+fn super_tap_and_super_space_open_search_and_ctrl_alt_t_opens_terminal() {
     let (mut server, mut editor) = focused_app();
     let mut shell = TestClient::connect_as_shell(&mut server);
     shell.listen_as_shell(&mut server);
@@ -212,13 +212,22 @@ fn tapping_super_opens_search_and_ctrl_alt_t_opens_terminal() {
             .filter(|sent| sent.starts_with(event))
             .count()
     };
-    chord(&mut server, &[KEY_LEFTMETA, KEY_SPACE]);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFTALT, KEY_SPACE]);
     roundtrip(&mut server, &mut [&mut shell, &mut editor]);
     assert_eq!(opened(&shell, "ShowLauncher"), 0);
     assert!(editor.keys().contains(&(KEY_SPACE, true)));
-    chord(&mut server, &[KEY_LEFTMETA]);
+    let keys_before = editor.keys().len();
+    chord(&mut server, &[KEY_LEFTMETA, KEY_SPACE]);
     roundtrip(&mut server, &mut [&mut shell, &mut editor]);
     assert_eq!(opened(&shell, "ShowLauncher"), 1);
+    assert!(
+        editor.keys()[keys_before..]
+            .iter()
+            .all(|(key, _)| *key != KEY_SPACE)
+    );
+    chord(&mut server, &[KEY_LEFTMETA]);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+    assert_eq!(opened(&shell, "ShowLauncher"), 2);
     chord(&mut server, &[KEY_LEFTCTRL, KEY_LEFTALT, KEY_T]);
     roundtrip(&mut server, &mut [&mut shell, &mut editor]);
     assert_eq!(opened(&shell, "OpenTerminal"), 1);

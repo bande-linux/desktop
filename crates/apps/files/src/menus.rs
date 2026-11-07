@@ -1,8 +1,8 @@
 use bande_fs::{GroupBy, SortBy};
 use bande_toolkit::ui::{Menu, MenuItem};
+use bande_xdg::OpenWithChoice;
 
 use crate::L10N;
-use crate::views::ViewMode;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -42,7 +42,6 @@ pub enum Command {
     EjectCurrent,
     GoTo(Destination),
     EmptyTrash,
-    OpenPlace,
     OpenPlaceInNewTab,
     RemoveFromSidebar,
     RestoreSidebar,
@@ -111,7 +110,6 @@ const ACTIONS: &[(&str, Command)] = &[
     ("go:downloads", Command::GoTo(Destination::Downloads)),
     ("go:recents", Command::GoTo(Destination::Recents)),
     ("empty-trash", Command::EmptyTrash),
-    ("open-place", Command::OpenPlace),
     ("remove-from-sidebar", Command::RemoveFromSidebar),
     ("restore-sidebar", Command::RestoreSidebar),
     ("eject", Command::Eject),
@@ -130,13 +128,6 @@ pub const GROUPS: [(Option<GroupBy>, &str); 7] = [
 pub fn group_action(group: Option<GroupBy>) -> &'static str {
     action(&Command::Group(group))
 }
-
-const SORTS: [(SortBy, &str); 4] = [
-    (SortBy::Name, "column-name"),
-    (SortBy::Kind, "column-kind"),
-    (SortBy::Modified, "column-modified"),
-    (SortBy::Size, "column-size"),
-];
 
 pub fn command(action: &str) -> Option<Command> {
     if let Some(id) = action.strip_prefix(OPEN_WITH) {
@@ -163,12 +154,6 @@ fn item(message: &str, command: &Command) -> MenuItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct App {
-    pub id: String,
-    pub name: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selection {
     pub count: usize,
     pub name: String,
@@ -177,7 +162,7 @@ pub struct Selection {
     pub folders: bool,
     pub files: bool,
     pub terminal: bool,
-    pub apps: Vec<App>,
+    pub apps: Vec<OpenWithChoice>,
 }
 
 pub fn items_menu(selection: &Selection) -> Menu {
@@ -231,7 +216,6 @@ pub fn items_menu(selection: &Selection) -> Menu {
     };
     items.push(MenuItem::new(&rename, action(&Command::Rename)).shortcut("F2"));
     items.push(item("menu-duplicate", &Command::Duplicate));
-    items.push(item("menu-make-alias", &Command::MakeAlias));
     let compress = match count {
         1 => L10N.tr_args("menu-compress", [("name", selection.name.clone().into())]),
         _ => L10N.tr_args("menu-compress-items", [("count", count.into())]),
@@ -277,10 +261,6 @@ pub struct Folder {
     pub templates: Vec<String>,
     pub trash: bool,
     pub trash_empty: bool,
-    pub sort: SortBy,
-    pub group: Option<GroupBy>,
-    pub mode: ViewMode,
-    pub hidden_shown: bool,
     pub paste: bool,
     pub terminal: bool,
 }
@@ -307,49 +287,11 @@ pub fn folder_menu(folder: Folder) -> Menu {
             MenuItem::submenu(&L10N.tr("menu-new-document"), Menu::new(documents)),
         );
     }
+    items.push(MenuItem::separator());
     items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
     if !folder.trash && folder.terminal {
         items.push(item("menu-open-in-terminal", &Command::OpenInTerminal));
     }
-    let sorts = SORTS
-        .iter()
-        .map(|(by, message)| item(message, &Command::Sort(*by)).checked(*by == folder.sort))
-        .collect();
-    let groups = GROUPS
-        .iter()
-        .map(|(group, message)| {
-            item(message, &Command::Group(*group)).checked(*group == folder.group)
-        })
-        .collect();
-    items.push(MenuItem::separator());
-    items.push(item("menu-use-groups", &Command::UseGroups).checked(folder.group.is_some()));
-    items.push(MenuItem::submenu(
-        &L10N.tr("menu-group-by"),
-        Menu::new(groups),
-    ));
-    items.push(MenuItem::submenu(
-        &L10N.tr("menu-sort-by"),
-        Menu::new(sorts),
-    ));
-    items.push(MenuItem::separator());
-    for (message, command, keys, mode) in [
-        ("menu-as-icons", Command::Icons, "Ctrl+1", ViewMode::Icons),
-        ("menu-as-list", Command::List, "Ctrl+2", ViewMode::List),
-        ("menu-as-columns", Command::Columns, "", ViewMode::Columns),
-        ("menu-as-gallery", Command::Gallery, "", ViewMode::Gallery),
-    ] {
-        let entry = item(message, &command).checked(folder.mode == mode);
-        items.push(match keys {
-            "" => entry,
-            keys => entry.shortcut(keys),
-        });
-    }
-    let hidden = if folder.hidden_shown {
-        "menu-hide-hidden-files"
-    } else {
-        "menu-show-hidden-files"
-    };
-    items.push(item(hidden, &Command::ToggleHidden).shortcut("Ctrl+H"));
     Menu::new(items)
 }
 
@@ -361,10 +303,7 @@ pub enum Place {
 }
 
 pub fn place_menu(place: Place) -> Menu {
-    let mut items = vec![
-        item("open", &Command::OpenPlace),
-        item("menu-open-in-new-tab", &Command::OpenPlaceInNewTab),
-    ];
+    let mut items = vec![item("menu-open-in-new-tab", &Command::OpenPlaceInNewTab)];
     match place {
         Place::Folder => {}
         Place::Volume => {

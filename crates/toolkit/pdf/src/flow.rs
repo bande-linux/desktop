@@ -1,12 +1,15 @@
-use bande_graphics::{Paragraph, Point};
+use bande_graphics::{Item, Paragraph, Point};
 
 use crate::page::{Page, PageItem, PageSetup};
 
 const SMALLEST_WIDOW: usize = 2;
+const MARKER_GAP: f32 = 6.0;
 
 #[derive(Debug, Clone)]
 pub struct Block {
     pub paragraph: Paragraph,
+    pub marker: Option<Paragraph>,
+    pub indent: f32,
     pub space_after: f32,
 }
 
@@ -41,8 +44,20 @@ pub fn flow(blocks: &[Block], setup: &PageSetup) -> Vec<Page> {
             };
             if kept > 0 {
                 let last_page = pages.len() - 1;
-                pages[last_page].items.push(PageItem::Lines {
-                    origin: Point::new(area.x, cursor - top_of_slice),
+                let page = &mut pages[last_page];
+                if first == 0
+                    && let Some(marker) = &block.marker
+                {
+                    page.items.push(PageItem::Scene(Item::Text {
+                        origin: Point::new(
+                            area.x + block.indent - MARKER_GAP - marker.width(),
+                            cursor,
+                        ),
+                        paragraph: marker.clone(),
+                    }));
+                }
+                page.items.push(PageItem::Lines {
+                    origin: Point::new(area.x + block.indent, cursor - top_of_slice),
                     paragraph: block.paragraph.clone(),
                     lines: first..first + kept,
                 });

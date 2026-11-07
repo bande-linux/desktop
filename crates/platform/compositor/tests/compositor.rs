@@ -402,10 +402,16 @@ fn another_process_dialog_opens_over_the_window_it_is_attached_to() {
     let (parent_x, _, parent_width, _) = frame_of(&server, "org.example.Editor");
     let (x, _, width, _) = frame_of(&server, "org.bande.FileChooser");
     assert_eq!(x + width / 2, parent_x + parent_width / 2);
-    let mut plain = TestClient::window(&mut server, "org.example.Other");
-    roundtrip(&mut server, &mut [&mut plain]);
-    let (other_x, _, other_width, _) = frame_of(&server, "org.example.Other");
-    assert_ne!(other_x + other_width / 2, parent_x + parent_width / 2);
+    app.minimize_window(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut app, &mut dialogs]);
+    assert!(
+        server
+            .windows()
+            .iter()
+            .find(|window| window.app_id() == "org.bande.FileChooser")
+            .unwrap()
+            .is_minimized()
+    );
 }
 
 fn take_configured_sizes(server: &mut Compositor, clients: &mut [&mut TestClient]) {

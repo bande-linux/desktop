@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use bande_pdf::{Block, Orientation, Page, PageSetup, Paper, flow, write};
+use bande_toolkit::ui::{RichText, TextView};
 use bande_toolkit::{Color, Image, Item, Rect, TextAlign, TextStyle, TextSystem, Typeface};
 
 const DIALOG_PROGRAM: &str = "/usr/libexec/bande-file-chooser";
@@ -28,9 +29,28 @@ pub fn text_document(text: String, monospace: bool) -> Document {
             .lines()
             .map(|line| Block {
                 paragraph: system.paragraph(line, style, Some(width), TextAlign::Start),
+                marker: None,
+                indent: 0.0,
                 space_after: 0.0,
             })
             .collect();
+        flow(&blocks, setup)
+    }))
+}
+
+pub fn rich_document(rich: RichText, monospace: bool) -> Document {
+    Document::Pages(Box::new(move |setup, system| {
+        let width = setup.content().width;
+        let blocks: Vec<Block> =
+            TextView::printed_blocks(&rich, system, BODY_SIZE, width, monospace)
+                .into_iter()
+                .map(|block| Block {
+                    paragraph: block.paragraph,
+                    marker: block.marker,
+                    indent: block.indent,
+                    space_after: 0.0,
+                })
+                .collect();
         flow(&blocks, setup)
     }))
 }

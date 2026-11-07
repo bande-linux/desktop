@@ -19,6 +19,11 @@ impl TestClient {
             .expect("the compositor names the exported window")
     }
 
+    pub fn minimize_window(&mut self, server: &mut Compositor, index: usize) {
+        self.windows[index].2.set_minimized();
+        self.exchange(server);
+    }
+
     pub fn show_window_attached_to(
         &mut self,
         server: &mut Compositor,

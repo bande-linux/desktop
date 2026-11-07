@@ -117,8 +117,8 @@ user in on a headless compositor at the old version and upgrades with apt while 
 build must take over the session services and ask for a logout, while the shell and lock screen,
 killed after the update, come back as the old build and stay up. The shell must reconnect after
 PipeWire restarts, and new Settings must run on the old compositor. It needs `qemu-system`,
-`genisoimage` and `/dev/kvm`, so it runs by hand on a build machine before a release; compare the
-new debs with the previous release's.
+`mtools` and `/dev/kvm`, so it runs by hand on a build machine before a release (`BUILD_NO_MINI=1
+build-run <worktree> ci/upgrade-test/run.sh ...`); compare the new debs with the previous release's.
 
 ## Releasing
 

@@ -21,6 +21,14 @@ pub(super) struct Corrected {
 
 const WORD_ENDERS: &str = ".,;:!?)";
 
+fn mentions(text: &str, word: &str) -> bool {
+    !word.is_empty()
+        && text
+            .as_bytes()
+            .windows(word.len())
+            .any(|window| window.eq_ignore_ascii_case(word.as_bytes()))
+}
+
 impl Editor {
     fn apply_step(&mut self, start: Position, end: Position, text: &str) {
         let caret = self.selection.focus;
@@ -54,17 +62,16 @@ impl Editor {
 
     fn at_sentence_start(&self, start: Position) -> bool {
         let before = self.blocks[start.paragraph].text[..start.offset].trim_end();
-        let enders = spelling::rule("sentence-enders");
         before.is_empty()
             || (before.len() < start.offset
                 && before
                     .chars()
                     .last()
-                    .is_some_and(|last| enders.contains(last)))
+                    .is_some_and(|last| spelling::rule_has("sentence-enders", last)))
     }
 
     fn straighten(&mut self, typed: char) {
-        if !spelling::option("smart-quotes") {
+        if !spelling::option("smart-quotes-on") {
             return;
         }
         let caret = self.selection.focus;
@@ -74,7 +81,7 @@ impl Editor {
         let text = &self.blocks[caret.paragraph].text[..typed_at];
         let start = Position::new(caret.paragraph, typed_at);
         let opening = text.chars().last().is_none_or(|last| {
-            last.is_whitespace() || "([{".contains(last) || spelling::rule("dash").contains(last)
+            last.is_whitespace() || "([{".contains(last) || spelling::rule_has("dash", last)
         });
         let key = match (typed, opening) {
             ('"', true) => "quote-open",
@@ -99,14 +106,14 @@ impl Editor {
     fn double_space(&mut self) {
         let caret = self.selection.focus;
         let text = &self.blocks[caret.paragraph].text[..caret.offset];
-        let period = spelling::rule("double-space");
-        if !spelling::option("double-space") || period.is_empty() {
+        if !spelling::option("double-space-on") {
             return;
         }
         let Some(before) = text.strip_suffix("  ") else {
             return;
         };
-        if before.chars().last().is_some_and(char::is_alphanumeric) {
+        let period = spelling::rule("double-space");
+        if !period.is_empty() && before.chars().last().is_some_and(char::is_alphanumeric) {
             let start = Position::new(caret.paragraph, before.len());
             self.apply_step(start, caret, &format!("{period} "));
         }
@@ -136,7 +143,7 @@ impl Editor {
             return;
         }
         let sentence_start = self.at_sentence_start(start);
-        let capitalised = spelling::option("capitalise") && sentence_start;
+        let capitalised = spelling::option("capitalise-on") && sentence_start;
         if capitalised && word.chars().next().is_some_and(char::is_lowercase) {
             let mut characters = word.chars();
             let upper: String = characters
@@ -165,7 +172,8 @@ impl Editor {
         sentence_start: bool,
     ) {
         let elsewhere = self.blocks.iter().enumerate().any(|(paragraph, block)| {
-            spelling::words(&block.text).into_iter().any(|range| {
+            mentions(&block.text, &word)
+                && spelling::words(&block.text).into_iter().any(|range| {
                 block.text[range.clone()].eq_ignore_ascii_case(&word)
                     && !(paragraph == start.paragraph && range.start == start.offset)
             })

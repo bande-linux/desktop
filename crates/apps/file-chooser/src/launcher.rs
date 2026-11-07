@@ -44,11 +44,12 @@ pub fn confirm(launcher: &Launcher) -> ExitCode {
         };
         let typed = Rc::clone(&name);
         let mut parts: Vec<Box<dyn Widget>> = vec![match launcher.editable_name {
-            true => Box::new(TextField::new(
-                &L10N.tr("name-placeholder"),
-                &launcher.name,
-                move |text| *typed.borrow_mut() = text.to_owned(),
-            )),
+            true => Box::new(
+                TextField::new(&L10N.tr("name-placeholder"), &launcher.name, move |text| {
+                    *typed.borrow_mut() = text.to_owned()
+                })
+                .without_text_checking(),
+            ),
             false => Box::new(Label::new(&launcher.name)),
         }];
         if let Some(target) = &launcher.target {

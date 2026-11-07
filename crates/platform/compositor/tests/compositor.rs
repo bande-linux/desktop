@@ -12,6 +12,7 @@ use bande_test_wayland::{
     BLUE, ConstraintAdjustment, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
     act_as_separate_app, chord, headless, roundtrip,
 };
+use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use wayland_client::protocol::wl_output::Transform;
 use wayland_client::protocol::wl_shm::Format;
 
@@ -23,9 +24,11 @@ const KEY_ENTER: u32 = 28;
 const KEY_LEFTCTRL: u32 = 29;
 const KEY_LEFTALT: u32 = 56;
 const KEY_LEFTMETA: u32 = 125;
+const KEY_LEFT: u32 = 105;
 const KEY_RIGHT: u32 = 106;
 const KEY_DOWN: u32 = 108;
 const BTN_LEFT: u32 = 0x110;
+const BTN_RIGHT: u32 = 0x111;
 const MONITOR: &str = "org.freedesktop.a11y.KeyboardMonitor";
 const MONITOR_PATH: &str = "/org/freedesktop/a11y/Manager";
 
@@ -178,6 +181,29 @@ fn a_hung_app_is_force_quit_from_the_keyboard() {
 }
 
 #[test]
+fn an_app_that_closed_its_last_window_stays_active_until_the_desktop_is_clicked() {
+    let (mut server, mut editor) = focused_app();
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.listen_as_shell(&mut server);
+    editor.keep_running(&mut server, "org.example.Editor");
+    editor.unmap_window(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+    let active = |shell: &TestClient| {
+        shell
+            .shell_events()
+            .iter()
+            .rfind(|sent| sent.starts_with("ActiveApp"))
+            .cloned()
+            .unwrap_or_default()
+    };
+    assert!(active(&shell).contains("org.example.Editor"));
+    server.press_button(BTN_LEFT, true, 0);
+    server.press_button(BTN_LEFT, false, 0);
+    roundtrip(&mut server, &mut [&mut shell, &mut editor]);
+    assert!(!active(&shell).contains("org.example.Editor"));
+}
+
+#[test]
 fn tapping_super_opens_search_and_ctrl_alt_t_opens_terminal() {
     let (mut server, mut editor) = focused_app();
     let mut shell = TestClient::connect_as_shell(&mut server);
@@ -302,4 +328,92 @@ fn a_window_that_resizes_itself_keeps_its_top_left_and_is_remembered_at_its_new_
     std::fs::remove_file(memory).ok();
     assert_eq!(app.configured_size(0), Some((120, 80)));
     assert_eq!(server.windows()[0].geometry().unwrap().loc, top_left);
+}
+
+fn take_configured_sizes(server: &mut Compositor, clients: &mut [&mut TestClient]) {
+    roundtrip(server, clients);
+    for client in clients.iter_mut() {
+        let (width, height) = client.configured_size(0).unwrap();
+        let pixels = RED.repeat((width * height) as usize);
+        let image = ShmImage {
+            width,
+            height,
+            stride: width * 4,
+            format: Format::Xrgb8888,
+            bytes: &pixels,
+        };
+        client.commit_buffer(0, &image, (0, 0, width, height));
+    }
+    roundtrip(server, clients);
+}
+
+fn drag(server: &mut Compositor, button: u32, from: (f64, f64), to: (f64, f64)) {
+    server.move_pointer_to(from.into(), 1);
+    server.press_button(button, true, 2);
+    server.move_pointer_to(to.into(), 3);
+    server.press_button(button, false, 4);
+}
+
+fn frame_of(server: &Compositor, app_id: &str) -> (i32, i32, i32, i32) {
+    let window = server
+        .windows()
+        .iter()
+        .find(|window| window.app_id() == app_id)
+        .unwrap();
+    let rect = window.geometry().unwrap();
+    (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h)
+}
+
+fn tiled(server: &Compositor, app_id: &str) -> bool {
+    server
+        .windows()
+        .iter()
+        .any(|window| window.app_id() == app_id && window.tile().is_some())
+}
+
+#[test]
+fn a_snapped_window_only_takes_the_shape_and_then_resizes_and_moves_like_any_window() {
+    const LEFT: &str = "org.example.Left";
+    const RIGHT: &str = "org.example.Right";
+    let mut server = headless(1000, 800);
+    let mut left = TestClient::window(&mut server, LEFT);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_RIGHT]);
+    take_configured_sizes(&mut server, &mut [&mut left]);
+    assert_eq!(frame_of(&server, LEFT), (500, 0, 500, 800));
+    assert!(
+        !server.windows()[0].has_state(xdg_toplevel::State::TiledRight),
+        "clients drop their resize edges in a tiled state"
+    );
+    chord(&mut server, &[KEY_LEFTMETA, KEY_LEFT]);
+    take_configured_sizes(&mut server, &mut [&mut left]);
+    assert_eq!(frame_of(&server, LEFT), (0, 0, 500, 800));
+
+    let mut right = TestClient::window(&mut server, RIGHT);
+    let unsnapped = frame_of(&server, RIGHT);
+    chord(&mut server, &[KEY_LEFTMETA, KEY_RIGHT]);
+    take_configured_sizes(&mut server, &mut [&mut left, &mut right]);
+    assert_eq!(frame_of(&server, RIGHT), (500, 0, 500, 800));
+
+    drag(&mut server, BTN_LEFT, (497.0, 400.0), (397.0, 400.0));
+    take_configured_sizes(&mut server, &mut [&mut left, &mut right]);
+    assert_eq!(frame_of(&server, LEFT), (0, 0, 400, 800));
+    assert_eq!(frame_of(&server, RIGHT), (400, 0, 600, 800));
+    assert!(tiled(&server, LEFT) && tiled(&server, RIGHT));
+
+    server.key(KEY_LEFTMETA, true, 0);
+    drag(&mut server, BTN_RIGHT, (200.0, 700.0), (200.0, 600.0));
+    take_configured_sizes(&mut server, &mut [&mut left, &mut right]);
+    assert_eq!(frame_of(&server, LEFT), (0, 0, 400, 700));
+    assert!(!tiled(&server, LEFT) && tiled(&server, RIGHT));
+
+    drag(&mut server, BTN_LEFT, (200.0, 300.0), (300.0, 350.0));
+    take_configured_sizes(&mut server, &mut [&mut left, &mut right]);
+    assert_eq!(frame_of(&server, LEFT), (100, 50, 400, 700));
+
+    drag(&mut server, BTN_LEFT, (800.0, 300.0), (800.0, 350.0));
+    server.key(KEY_LEFTMETA, false, 5);
+    take_configured_sizes(&mut server, &mut [&mut left, &mut right]);
+    let (_, _, width, height) = frame_of(&server, RIGHT);
+    assert_eq!((width, height), (unsnapped.2, unsnapped.3));
+    assert!(!tiled(&server, RIGHT));
 }

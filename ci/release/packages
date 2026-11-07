@@ -9,6 +9,7 @@ bande-sound
 xdg-desktop-portal-bande
 bande-file-chooser
 bande-tray
+bande-indexer
 bande-automount
 bande-polkit
 bande-secrets

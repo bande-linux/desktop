@@ -306,6 +306,7 @@ impl PreviewPane {
                     L10N.tr("hint-clip-copy")
                 }
                 Kind::Folder | Kind::Document => L10N.tr("hint-file"),
+                Kind::Mail | Kind::Event | Kind::Contact => L10N.tr("hint-item"),
             }
         };
         let color = if key.copied {

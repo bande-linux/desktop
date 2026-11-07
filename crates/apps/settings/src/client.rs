@@ -307,7 +307,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 75] = [
+pub const CONFIG_SETTINGS: [SettingId; 78] = [
     SettingId::Appearance,
     SettingId::Style,
     SettingId::Clock24Hour,
@@ -382,6 +382,9 @@ pub const CONFIG_SETTINGS: [SettingId; 75] = [
     SettingId::SearchSystem,
     SettingId::SearchCalculator,
     SettingId::SearchConversion,
+    SettingId::SearchMail,
+    SettingId::SearchEvents,
+    SettingId::SearchContacts,
     SettingId::SearchExcluded,
 ];
 
@@ -396,6 +399,9 @@ fn search_category(id: SettingId) -> Option<SearchCategory> {
         SettingId::SearchSystem => SearchCategory::System,
         SettingId::SearchCalculator => SearchCategory::Calculator,
         SettingId::SearchConversion => SearchCategory::Conversion,
+        SettingId::SearchMail => SearchCategory::Mail,
+        SettingId::SearchEvents => SearchCategory::Events,
+        SettingId::SearchContacts => SearchCategory::Contacts,
         _ => return None,
     })
 }

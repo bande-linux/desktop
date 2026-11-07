@@ -1,0 +1,18 @@
+[Unit]
+Description=Bande search index
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Slice=background.slice
+Type=dbus
+BusName=org.bande.Search
+ExecStart=/usr/bin/bande-indexer
+Restart=on-failure
+CPUWeight=20
+IOWeight=20
+MemoryHigh=512M
+OOMScoreAdjust=500
+
+[Install]
+WantedBy=bande-session.target

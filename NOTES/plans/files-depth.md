@@ -67,4 +67,3 @@ Delete each line when it ships; delete the file when the list is empty.
 
 1. Gallery: Finder's preview pane metadata beside it (today the inspector shows it).
 2. Owner decisions: tags (colour labels in xattrs, a Tags settings tab).
-3. Content search (file contents, not only names).

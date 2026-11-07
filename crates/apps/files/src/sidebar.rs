@@ -10,6 +10,7 @@ pub enum PlaceKind {
     Standard,
     Bookmark,
     Volume,
+    Server,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -185,6 +186,7 @@ fn defaults(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Ve
 fn token(location: &Location) -> Option<String> {
     match location {
         Location::Recents => Some(RECENTS.to_owned()),
+        Location::Server(_) => None,
         Location::Trash => Some(TRASH.to_owned()),
         Location::Folder(path) => Some(file_uri(path)),
         Location::Search(_) => None,
@@ -239,6 +241,23 @@ pub fn rows(
     if !hidden.contains(&Location::Trash) {
         rows.push(Row::Place(trash()));
     }
+    rows
+}
+
+pub fn with_nearby(rows: &[Row], nearby: &[(String, String)]) -> Vec<Row> {
+    let mut rows = rows.to_vec();
+    if nearby.is_empty() {
+        return rows;
+    }
+    rows.push(Row::Heading(L10N.tr("sidebar-network")));
+    rows.extend(nearby.iter().map(|(name, url)| {
+        Row::Place(Place {
+            name: name.clone(),
+            location: Location::Server(url.clone()),
+            icon: "network-workgroup",
+            kind: PlaceKind::Server,
+        })
+    }));
     rows
 }
 
@@ -304,7 +323,11 @@ pub fn with_bookmarks(bookmarks: &str, folders: &[PathBuf], before: Option<&Path
     kept.into_iter().map(|line| format!("{line}\n")).collect()
 }
 
-pub fn with_volumes(rows: &[Row], volumes: &[PathBuf]) -> Vec<Row> {
+pub fn with_volumes(
+    rows: &[Row],
+    volumes: &[PathBuf],
+    icon: impl Fn(&Path) -> &'static str,
+) -> Vec<Row> {
     let mut rows = rows
         .iter()
         .filter(|row| !matches!(row, Row::Place(place) if place.kind == PlaceKind::Volume))
@@ -320,7 +343,7 @@ pub fn with_volumes(rows: &[Row], volumes: &[PathBuf]) -> Vec<Row> {
             Row::Place(Place {
                 name: folder_name(volume),
                 location: Location::Folder(volume.clone()),
-                icon: "drive-removable-media",
+                icon: icon(volume),
                 kind: PlaceKind::Volume,
             })
         }),

@@ -56,10 +56,10 @@ LAN) that phones and other computers already run. Its own stage, last.
 
 ## Stages
 
-1. Connect to Server: helper, service, dialog, keychain, sidebar, eject, reconnect at login.
-2. Files never blocks on a mount; "not responding" state with Try Again and Disconnect.
-3. Phones and cameras.
-4. Discovery in the sidebar.
+Connect to Server, not blocking on mounts, phones and cameras, and discovery have shipped.
+
 5. Settings ▸ Sharing.
 6. Share menu.
 7. Nearby transfer (LocalSend protocol).
+
+Windows PCs announce through WS-Discovery, not mDNS, so they do not appear under Network yet; `smb://name` works.

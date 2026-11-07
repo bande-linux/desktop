@@ -496,6 +496,9 @@ impl Trash {
             return dirs;
         }
         for topdir in mount_points() {
+            if bande_volumes::on_connected_volume(&topdir) {
+                continue;
+            }
             let shared = topdir.join(".Trash");
             let shared_is_dir =
                 fs::symlink_metadata(&shared).is_ok_and(|metadata| metadata.is_dir());

@@ -16,7 +16,7 @@ const PKEXEC: &str = "/usr/bin/pkexec";
 const HELPER_REFUSED_VALUE: i32 = 2;
 const PKEXEC_DISMISSED: i32 = 126;
 const PKEXEC_NOT_AUTHORIZED: i32 = 127;
-const DEFAULT_LOCALE: &str = "C.UTF-8";
+pub(crate) const DEFAULT_LOCALE: &str = "C.UTF-8";
 pub const REGION_CATEGORIES: [&str; 5] = [
     "LC_TIME",
     "LC_NUMERIC",

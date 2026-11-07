@@ -107,7 +107,7 @@ fn requested_languages(var: impl Fn(&str) -> Option<String>) -> Vec<LanguageIden
     else {
         return Vec::new();
     };
-    if matches!(locale.as_str(), "C" | "POSIX") || locale.starts_with("C.") {
+    if matches!(locale.as_str(), "C" | "POSIX") {
         return Vec::new();
     }
     let preferred = var("LANGUAGE").unwrap_or_default();

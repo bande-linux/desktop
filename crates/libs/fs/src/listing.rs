@@ -173,6 +173,7 @@ pub struct Listing {
     names: fs::ReadDir,
     show_hidden: bool,
     done: bool,
+    failure: Option<io::ErrorKind>,
 }
 
 impl Listing {
@@ -182,7 +183,12 @@ impl Listing {
             names: fs::read_dir(folder)?,
             show_hidden,
             done: false,
+            failure: None,
         })
+    }
+
+    pub fn failure(&self) -> Option<io::ErrorKind> {
+        self.failure
     }
 
     pub fn is_done(&self) -> bool {
@@ -196,8 +202,13 @@ impl Listing {
                 self.done = true;
                 break;
             };
-            let Ok(found) = found else {
-                continue;
+            let found = match found {
+                Ok(found) => found,
+                Err(error) => {
+                    self.failure = Some(error.kind());
+                    self.done = true;
+                    break;
+                }
             };
             let name = found.file_name().to_string_lossy().into_owned();
             if self.show_hidden || !is_hidden(&name) {

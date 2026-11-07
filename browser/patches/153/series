@@ -25,3 +25,4 @@ bande/no-google.patch
 bande/ship-tracking-lists.patch
 bande/drm-on-request.patch
 bande/version-name.patch
+bande/no-default-browser-prompt.patch

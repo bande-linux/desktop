@@ -1,0 +1,12 @@
+Remove the default-browser prompt from Settings
+
+--- a/browser/components/preferences/main.inc.xhtml
++++ b/browser/components/preferences/main.inc.xhtml
+@@ -22,7 +22,6 @@
+ </hbox>
+ 
+ <!-- Default browser -->
+-<html:setting-group groupid="defaultBrowser" data-category="paneGeneral" hidden="true" />
+ 
+ <!-- Startup -->
+ <html:setting-group id="startupGroup" groupid="startup" data-category="paneGeneral" hidden="true"/>

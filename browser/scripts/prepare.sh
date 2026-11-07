@@ -100,5 +100,10 @@ find browser/locales/en-US toolkit/locales/en-US dom/locales/en-US -type f \( -n
 cat "$repo/theme/bande.css" >> browser/themes/linux/browser.css
 python3 "$repo/scripts/fetch-tracking-lists.py" .
 
+find browser toolkit -type f \( -iname '*fox*.svg' -o -name 'kit-*.svg' -o -name 'kit.svg' \) -not -path '*/test*' \
+    -exec sh -c 'echo "$0" > "$1"' "$blank" {} \;
+cp "$svg" browser/themes/shared/sidebar/firefox.svg
+cp "$svg" browser/themes/shared/icons/window-firefox.svg
+
 debian/rules debian/control
 grep -q '^Source: bande-browser$' debian/control

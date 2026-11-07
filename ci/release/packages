@@ -5,6 +5,7 @@ bande-config
 bande-power
 bande-printd
 bande-recovery
+bande-reporter
 bande-sound
 xdg-desktop-portal-bande
 bande-file-chooser

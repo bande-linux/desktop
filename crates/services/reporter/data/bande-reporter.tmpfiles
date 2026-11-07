@@ -1,0 +1,3 @@
+d /var/lib/bande/reports 0700 root root -
+d /var/lib/bande/reports/reports 0700 root root -
+d /var/lib/bande/reports/outbox 0700 root root -

@@ -94,19 +94,20 @@ impl Recall {
 }
 
 impl State {
+    pub(crate) fn screen_identity(&self, screen: usize) -> String {
+        let screen = &self.screens[screen];
+        let identity = screen.config.identity();
+        if identity.is_empty() {
+            screen.name()
+        } else {
+            identity
+        }
+    }
+
     fn display_set(&self) -> String {
-        let mut identities: Vec<String> = self
-            .screens
-            .iter()
-            .filter(|screen| screen.mirror.is_none())
-            .map(|screen| {
-                let identity = screen.config.identity();
-                if identity.is_empty() {
-                    screen.name()
-                } else {
-                    identity
-                }
-            })
+        let mut identities: Vec<String> = (0..self.screens.len())
+            .filter(|screen| self.screens[*screen].mirror.is_none())
+            .map(|screen| self.screen_identity(screen))
             .collect();
         identities.sort();
         identities.join(" + ")

@@ -26,6 +26,10 @@ fn private_bus() -> SessionBus {
     let bus = SessionBus::start().expect("private session bus");
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
+        std::env::set_var(
+            "XDG_STATE_HOME",
+            std::env::temp_dir().join("bande-app-state"),
+        );
     }
     bus
 }

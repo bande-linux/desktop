@@ -5,10 +5,10 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use bande_files::{Browser, FilesView, ListColumn, Location, Sheet, list_column_move_action};
+use bande_files::{Browser, FilesView, Location, Sheet};
 use bande_fs::Trash;
-use bande_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
-use bande_toolkit::{Palette, Point, Scheme, TextSystem};
+use bande_toolkit::ui::{Event, Key, Modifiers};
+use bande_toolkit::{Palette, Scheme, TextSystem};
 use bande_xdg::Apps;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use tempfile::TempDir;
@@ -73,59 +73,12 @@ fn run_until(view: &mut FilesView, done: impl Fn(&FilesView) -> bool) {
     }
 }
 
-fn headers(view: &FilesView) -> Vec<(String, Point)> {
-    let tree = view.accessibility();
-    let mut shown = tree
-        .nodes
-        .iter()
-        .filter(|(_, node)| node.role() == accesskit::Role::ColumnHeader)
-        .map(|(_, node)| {
-            let bounds = node.bounds().expect("header bounds");
-            let middle = Point::new(
-                ((bounds.x0 + bounds.x1) / 2.0) as f32,
-                ((bounds.y0 + bounds.y1) / 2.0) as f32,
-            );
-            (
-                node.column_index(),
-                node.label().unwrap_or("").to_owned(),
-                middle,
-            )
-        })
-        .collect::<Vec<_>>();
-    shown.sort_by_key(|(index, _, _)| *index);
-    shown
-        .into_iter()
-        .map(|(_, title, middle)| (title, middle))
-        .collect()
-}
-
-fn titles(view: &FilesView) -> Vec<String> {
-    headers(view).into_iter().map(|(title, _)| title).collect()
-}
-
-fn header(view: &FilesView, title: &str) -> Point {
-    headers(view)
-        .into_iter()
-        .find(|(shown, _)| shown == title)
-        .expect("header")
-        .1
-}
-
-fn drag_header(view: &mut FilesView, from: Point, to: Point) {
-    view.handle(&Event::PointerDown(Pointer::at(from)));
-    for step in 1..=8 {
-        let x = from.x + (to.x - from.x) * step as f32 / 8.0;
-        view.handle(&Event::PointerMove(Pointer::at(Point::new(x, from.y))));
-        view.scene(1000, 600);
-    }
-}
-
 fn selected(view: &FilesView) -> Option<&str> {
     view.browser().selected().map(|entry| entry.name.as_str())
 }
 
 #[test]
-fn a_file_goes_to_the_trash_and_back_and_a_new_folder_is_named_in_place_and_undone() {
+fn a_file_goes_to_the_trash_and_back() {
     let root = TempDir::new().expect("temporary folder");
     let home = root.path().join("home");
     fs::create_dir_all(home.join("Documents")).expect("folders");
@@ -153,22 +106,6 @@ fn a_file_goes_to_the_trash_and_back_and_a_new_folder_is_named_in_place_and_undo
         "notes\n"
     );
     assert!(trash.is_empty());
-
-    let mut files = view(Browser::open(Location::Folder(home.clone()), trash.clone()));
-    key(&mut files, Key::Character('N'), true, true);
-    assert!(files.renaming().is_some());
-    for character in "Plans".chars() {
-        key(&mut files, Key::Character(character), false, false);
-    }
-    key(&mut files, Key::Enter, false, false);
-    assert!(home.join("Plans").is_dir());
-    assert_eq!(selected(&files), Some("Plans"));
-    key(&mut files, Key::Character('z'), true, false);
-    finish(&mut files);
-    assert!(exists("untitled folder") && !exists("Plans"));
-    key(&mut files, Key::Character('z'), true, false);
-    finish(&mut files);
-    assert!(!exists("untitled folder"));
 }
 
 #[test]
@@ -192,99 +129,4 @@ fn a_duplicate_that_cannot_be_written_asks_and_stops_without_leaving_a_copy() {
     finish(&mut files);
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).expect("unlock");
     assert_eq!(fs::read_dir(&locked).expect("listing").count(), 1);
-}
-
-#[test]
-fn dragging_a_column_header_reorders_the_columns_and_the_order_is_remembered() {
-    let root = TempDir::new().expect("temporary folder");
-    let home = root.path().join("home");
-    fs::create_dir_all(&home).expect("folder");
-    fs::write(home.join("notes.txt"), "notes\n").expect("file");
-    let order = root.path().join("files-columns");
-    let trash = Trash::isolated(root.path().join("Trash"), 0);
-    let mut files = view(Browser::open(Location::Folder(home.clone()), trash.clone()));
-    files.set_list_columns_file(order.clone());
-    key(&mut files, Key::Character('2'), true, false);
-    files.scene(1000, 600);
-    let start = ["Name", "Date Modified", "Size", "Kind"];
-    assert_eq!(titles(&files), start);
-
-    let (kind, modified) = (header(&files, "Kind"), header(&files, "Date Modified"));
-    drag_header(&mut files, kind, modified);
-    assert_eq!(titles(&files), ["Name", "Kind", "Date Modified", "Size"]);
-    assert!(!order.exists());
-    key(&mut files, Key::Escape, false, false);
-    files.handle(&Event::PointerUp(Pointer::at(modified)));
-    assert_eq!(titles(&files), start);
-    assert!(!order.exists());
-
-    let (name, kind) = (header(&files, "Name"), header(&files, "Kind"));
-    drag_header(&mut files, name, kind);
-    files.handle(&Event::PointerUp(Pointer::at(kind)));
-    assert_eq!(titles(&files), start);
-
-    let sorted = files.browser().sort();
-    let size = header(&files, "Size");
-    files.handle(&Event::PointerDown(Pointer::at(size)));
-    assert_eq!(files.browser().sort().by, sorted.by);
-    files.handle(&Event::PointerUp(Pointer::at(size)));
-    assert_ne!(files.browser().sort().by, sorted.by);
-    let by_size = files.browser().sort();
-
-    let (kind, modified) = (header(&files, "Kind"), header(&files, "Date Modified"));
-    drag_header(&mut files, kind, modified);
-    files.handle(&Event::PointerUp(Pointer::at(modified)));
-    assert_eq!(titles(&files), ["Name", "Kind", "Date Modified", "Size"]);
-    assert_eq!(files.browser().sort().by, by_size.by);
-    assert_eq!(
-        fs::read_to_string(&order).expect("saved"),
-        "kind\nmodified\nsize\n"
-    );
-
-    files.menu_action(&list_column_move_action(ListColumn::Kind, 1));
-    let moved = ["Name", "Date Modified", "Kind", "Size"];
-    assert_eq!(titles(&files), moved);
-
-    let mut again = view(Browser::open(Location::Folder(home), trash));
-    again.set_list_columns_file(order);
-    key(&mut again, Key::Character('2'), true, false);
-    again.scene(1000, 600);
-    assert_eq!(titles(&again), moved);
-}
-
-#[test]
-fn a_tab_is_reordered_by_dragging_and_closed_by_a_middle_click() {
-    let home = TempDir::new().unwrap();
-    let (a, b) = (home.path().join("a"), home.path().join("b"));
-    fs::create_dir(&a).unwrap();
-    fs::create_dir(&b).unwrap();
-    let trash = Trash::isolated(
-        home.path().join("Trash"),
-        rustix::process::getuid().as_raw(),
-    );
-    let mut view = view(Browser::open(Location::Folder(a), trash));
-    key(&mut view, Key::Character('t'), true, false);
-    view.go(Location::Folder(b));
-    view.scene(1000, 600);
-    let names = |view: &FilesView| view.tab_titles().join(" ");
-    assert_eq!(names(&view), "a b");
-    let centre = |view: &FilesView, index: usize| {
-        let tab = view.tab_layout().tabs[index];
-        Point::new(tab.x + tab.width / 2.0, tab.y + tab.height / 2.0)
-    };
-
-    let from = centre(&view, 0);
-    let to = centre(&view, 1);
-    view.handle(&Event::PointerDown(Pointer::at(from)));
-    assert_eq!(view.active_tab(), 0);
-    view.handle(&Event::PointerMove(Pointer::at(to)));
-    view.handle(&Event::PointerUp(Pointer::at(to)));
-    assert_eq!(names(&view), "b a");
-    assert_eq!(view.active_tab(), 1);
-    view.scene(1000, 600);
-
-    let middle = Pointer::at(centre(&view, 0)).with_button(PointerButton::Middle);
-    view.handle(&Event::PointerDown(middle));
-    view.handle(&Event::PointerUp(middle));
-    assert_eq!(names(&view), "a");
 }

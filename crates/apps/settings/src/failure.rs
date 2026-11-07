@@ -36,15 +36,32 @@ pub(crate) fn not_responding(service: &str) -> String {
     L10N.tr_args("not-responding", [("service", L10N.tr(service).into())])
 }
 
-pub(crate) fn explained(error: &zbus::Error, service: &str, otherwise: &str) -> String {
+pub(crate) fn detail(error: &zbus::Error) -> Option<String> {
+    match error {
+        zbus::Error::MethodError(_, description, _) => description.clone(),
+        zbus::Error::FDO(error) => error.description().map(str::to_owned),
+        _ => None,
+    }
+}
+
+pub(crate) fn explained_with(
+    error: &zbus::Error,
+    service: &str,
+    otherwise: impl FnOnce(&str) -> String,
+) -> String {
     tracing::warn!("{service}: {error}");
-    if REFUSED.contains(&kind(error).as_str()) {
+    let kind = kind(error);
+    if REFUSED.contains(&kind.as_str()) {
         L10N.tr("administrator-only")
     } else if unresponsive(error) {
         not_responding(service)
     } else {
-        L10N.tr(otherwise)
+        otherwise(&kind)
     }
+}
+
+pub(crate) fn explained(error: &zbus::Error, service: &str, otherwise: &str) -> String {
+    explained_with(error, service, |_| L10N.tr(otherwise))
 }
 
 pub fn sentence(error: &zbus::Error, service: &str) -> String {

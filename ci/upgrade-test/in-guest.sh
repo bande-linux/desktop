@@ -52,6 +52,8 @@ is_build() {
 }
 
 say "install the old version"
+echo force-unsafe-io > /etc/dpkg/dpkg.cfg.d/upgrade-test
+echo 'man-db man-db/auto-update boolean false' | debconf-set-selections
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
     mesa-vulkan-drivers pipewire-bin dbus-user-session polkitd > /dev/null

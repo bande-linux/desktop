@@ -27,6 +27,7 @@ use zeroize::Zeroizing;
 
 const ENGLISH: &str = include_str!("../../../locales/en-US/bande-setup.ftl");
 const HELPER: &str = "/usr/libexec/bande-first-run";
+const SHELL: &str = "/bin/sh";
 const CARD_WIDTH: f32 = 560.0;
 const CARD_HEIGHT: f32 = 560.0;
 const LIST_HEIGHT: f32 = 300.0;
@@ -71,6 +72,7 @@ enum Reply {
 
 fn helper(arguments: &[&str], input: Option<&str>) -> Result<String, String> {
     let mut child = Command::new("pkexec")
+        .env("SHELL", SHELL)
         .arg(HELPER)
         .args(arguments)
         .stdin(Stdio::piped())
@@ -588,7 +590,7 @@ impl Assistant {
             }
             Reply::Failed(error) => {
                 tracing::warn!("setup step failed: {error}");
-                self.message = Some(error);
+                self.message = Some(L10N.tr("step-failed"));
                 if self.page == Page::Finishing {
                     self.page = Page::Privacy;
                 }

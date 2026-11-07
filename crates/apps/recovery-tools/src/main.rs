@@ -120,6 +120,7 @@ fn disks() -> Vec<(String, String)> {
 
 fn run_engine(arguments: Vec<String>, input: Option<Zeroizing<String>>, outbox: Outbox<Reply>) {
     let mut child = match Command::new("pkexec")
+        .env("SHELL", "/bin/bash")
         .arg(ENGINE)
         .args(&arguments)
         .stdin(Stdio::piped())

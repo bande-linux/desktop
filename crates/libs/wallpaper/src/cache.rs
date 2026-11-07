@@ -11,6 +11,9 @@ const KEPT: usize = 4;
 const EXTENSION: &str = "rgba";
 
 fn entry(cache: &Path, path: &Path, fit: Fit, size: (u32, u32)) -> Option<PathBuf> {
+    if bande_volumes::leads_to_connected_volume(path) {
+        return None;
+    }
     let metadata = fs::metadata(path).ok()?;
     let mut hasher = DefaultHasher::new();
     (path, metadata.len(), metadata.modified().ok()?, fit, size).hash(&mut hasher);

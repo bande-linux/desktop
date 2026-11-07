@@ -265,6 +265,7 @@ impl SettingsView {
             | PaneId::Microphone
             | PaneId::Screenshots
             | PaneId::ScreenSharing
+            | PaneId::Backup
             | PaneId::Sharing
             | PaneId::Location => None,
         };

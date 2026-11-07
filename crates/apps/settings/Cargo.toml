@@ -23,6 +23,7 @@ bande-app-menu.workspace = true
 bande-audio.workspace = true
 bande-bluetooth.workspace = true
 bande-config.workspace = true
+bande-backup.workspace = true
 bande-datetime.workspace = true
 bande-fs.workspace = true
 bande-keyboard.workspace = true
@@ -37,6 +38,7 @@ bande-sound.workspace = true
 bande-edid.workspace = true
 bande-status.workspace = true
 bande-toolkit.workspace = true
+bande-volumes.workspace = true
 bande-wallpaper.workspace = true
 bande-watch.workspace = true
 bande-xdg.workspace = true
@@ -80,6 +82,9 @@ assets = [
     ["data/org.bande.Settings.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["data/bande-update-check.service", "usr/lib/systemd/user/", "644"],
     ["data/bande-update-check.timer", "usr/lib/systemd/user/", "644"],
+    ["data/bande-went-back.service", "usr/lib/systemd/user/", "644"],
+    ["data/bande-update-finish.path", "usr/lib/systemd/user/", "644"],
+    ["data/bande-update-finish.service", "usr/lib/systemd/user/", "644"],
     ["data/50-bande-settings.rules", "usr/share/polkit-1/rules.d/", "644"],
     ["target/release/bande-sharing-helper", "usr/libexec/", "755"],
     ["data/org.bande.sharing-helper.policy", "usr/share/polkit-1/actions/", "644"],

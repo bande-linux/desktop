@@ -758,12 +758,10 @@ impl DesktopSurface {
     }
 
     fn ask(&mut self, arguments: &[String], then: Confirmed) {
-        let spawned = std::env::current_exe().and_then(|program| {
-            Command::new(program)
-                .args(arguments)
-                .stdout(Stdio::piped())
-                .spawn()
-        });
+        let spawned = Command::new(bande_xdg::own_executable())
+            .args(arguments)
+            .stdout(Stdio::piped())
+            .spawn();
         match spawned {
             Ok(mut child) => match child.stdout.take() {
                 Some(answer) => {
@@ -1245,14 +1243,12 @@ fn ask_to_force_eject(failure: EjectFailure) {
         || failure.mount_point.display().to_string(),
         |name| name.to_string_lossy().into_owned(),
     );
-    let asked = std::env::current_exe().and_then(|program| {
-        Command::new(program)
-            .arg(EJECT_FAILED_FLAG)
-            .arg(&name)
-            .arg(if failure.busy { BUSY } else { "" })
-            .arg(&failure.message)
-            .output()
-    });
+    let asked = Command::new(bande_xdg::own_executable())
+        .arg(EJECT_FAILED_FLAG)
+        .arg(&name)
+        .arg(if failure.busy { BUSY } else { "" })
+        .arg(&failure.message)
+        .output();
     match asked {
         Ok(output) if String::from_utf8_lossy(&output.stdout).trim() == FORCE_EJECT => {
             eject(vec![failure.mount_point], true, |_| {});

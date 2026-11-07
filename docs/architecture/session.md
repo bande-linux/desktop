@@ -396,6 +396,25 @@ graph LR
   `bande-secrets-prompt` processes (`crates/apps/secrets-prompt`, installed by `bande-secrets`
   next to the daemon in `/usr/libexec`), so the daemon never links the toolkit; the daemon is not dumpable and has no core limit.
 
+### Updates during a session
+
+The compositor and its private helpers are one build for the life of a session. At start the
+compositor opens `bande-shell`, `bande-lock`, `bande-clipboard` and `bande-screenshot`, keeps the
+files open and starts them through `/proc/self/fd/N`, so a helper relaunched after an update is the
+build the session began with; dpkg replaces by rename, so the kernel keeps the old file until the
+compositor exits. A helper running itself again uses `bande_xdg::own_executable()`, never the path.
+
+What does mix across versions is a contract: apps and services are new while the compositor is
+old. `bande_app_v1` and the other protocols only grow, with `since` on every addition and clients
+checking `version()`; `ci/release/check-protocols.py` compares them with the last release in lint.
+`bande_shell_v1` is exempt, since only `Shell`-role clients see it and those are held builds.
+`org.bande.*` D-Bus interfaces only grow, and a client treats a missing property as its default.
+
+`bande-audio` reconnects on its own: `Audio::start` keeps one thread connecting and serving, and
+while PipeWire is away waits on inotify for its socket, with a few short retries after each change.
+`Snapshot.connected` says whether sound is there, and `connection` changes when a meter must be
+made again.
+
 ### Session startup
 
 - Before starting any shell client, the compositor exports its environment to systemd user
@@ -773,6 +792,24 @@ what the one before could not save. What happens for each:
   only their panic text is recorded. Force Quit of a not-responding app and the keyboard's last resort send
   `SIGQUIT` first and wait up to 8 s and 5 s, so a hang leaves a stack too. Symbols are in [packaging](packaging.md).
 
+## Backups
+
+Time Machine's behaviour on a Debian engine; the choice is in `NOTES/plans/backup.md` while that is open.
+`crates/services/backup` builds three programs. `bande-backupd` is a system service
+(`org.bande.Backup`), root because a whole-system restore needs every file. It runs `restic` as a child
+and talks to it through exit codes and `--json`. A timer that exists once a disk is chosen, a udev rule
+for a new disk or mains power, and D-Bus start it; it exits after a minute with nothing to do.
+`bande-backup-alerts` is a session service that turns the service's `problem` into one notification.
+`bande-backup-restore` is for the recovery environment, without a bus.
+
+A repository is `BandeBackups/<machine-id>` on any filesystem, on any drive but the startup one. Two restic
+keys open it: a random one in `/var/lib/bande-backup/key` that runs the backups, and the password the person
+chose, for restoring when the machine is gone. The disk is mounted under `/run/bande-backup` only during work.
+
+Settings ▸ Backup holds the choice of disk and the status. Files browses `restic mount` at
+`/run/bande-backup-browse/versions/<time>`, read-only, with each file's old owner and mode enforced by
+the kernel, and restores by copying as the person. Nothing privileged runs on their behalf.
+
 ## Updates
 
 Packages come from Bande's signed APT repository ([packaging](packaging.md)). Settings ▸
@@ -803,11 +840,16 @@ asks for a password through the polkit agent unless polkit grants `system-update
 it to active sudo members), then the offline set is downloaded and triggered.
 `bande-desktop`'s apt hook (`/usr/libexec/bande-desktop/restart-services`) restarts the
 system services an update replaced, never the login manager, the buses, logind, getty,
-`user@`, polkit, PackageKit or networking ([packaging](packaging.md#runtime-stack)). Settings then looks at the user's own processes that map a deleted
-`/usr` or `/opt` executable or library and groups them by cgroup: services in `session.slice`
-restart through the user manager's `TryRestartUnit`; the compositor's service, the session bus or the
-login scope ask "Log out to finish updating the desktop" (Log Out / Later); apps in `app.slice`
-are listed as "Quit and reopen … to use the new versions", Settings itself left out. A restart is
+`user@`, polkit, PackageKit or networking ([packaging](packaging.md#runtime-stack)), and touches
+`/run/bande-desktop/packages-installed`. So after any apt run, from Settings or Terminal,
+`bande-update-finish.path` in each logged-in user's manager runs `bande-settings --finish-update`.
+It reloads the user's units and looks at the user's own processes that map a deleted `/usr` or
+`/opt` executable or library, grouped by cgroup: services in `session.slice` restart through the
+user manager's `TryRestartUnit`; if the compositor's service, the session bus or the login scope
+remain, it posts "Log out to finish updating the desktop", unless Settings is installing and shows
+it itself. Software Update shows the same state whenever it opens with nothing to install (Log Out
+/ Later); apps in `app.slice` are listed as "Quit and reopen … to use the new versions", Settings
+itself left out. A restart is
 always the user's: Restart Now / Later, Log Out / Later; Restart Now and Log Out ask for it through
 `bande_app_v1.end_session`, the Bande menu's confirmation, so every app is asked to quit first. A pending restart is remembered with the
 boot id in `$XDG_STATE_HOME/bande/restart-pending` (or `/run/reboot-required`), and the daily user

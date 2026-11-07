@@ -3,6 +3,7 @@ use bande_toolkit::Point;
 use bande_toolkit::ui::Menu;
 use bande_xdg::UserDir;
 
+use crate::backups::backups_installed;
 use crate::browser::Location;
 use std::path::PathBuf;
 
@@ -129,6 +130,8 @@ impl FilesView {
                 .map(|entry| entry.name.clone())
                 .unwrap_or_default(),
             trashed,
+            in_backup: self.in_backup(),
+            can_browse_backups: backups_installed() && !trashed && !self.in_backup(),
             away: self.searching.is_some() || *self.browser.root() == Location::Recents,
             files: !selection.is_empty() && only_files && !trashed,
             folders: !selection.is_empty()
@@ -182,6 +185,7 @@ impl FilesView {
             trash_empty: !self.trash_full,
             paste: self.clipboard_files,
             terminal: self.terminal_installed(),
+            can_browse_backups: backups_installed() && !self.in_backup(),
         })
     }
 
@@ -241,6 +245,8 @@ impl FilesView {
             Command::AddToSidebar => self.add_to_sidebar(),
             Command::Cut => self.copy_selection(true),
             Command::ShowInEnclosingFolder => self.show_in_enclosing_folder(),
+            Command::BrowseBackups => self.browse_backups(),
+            Command::RestoreFromBackup => self.restore_from_backup(),
             Command::Trash | Command::PutBack => self.trash_or_put_back(),
             Command::DeleteImmediately => self.confirm_delete(),
             Command::NewFolder => self.new_folder(),

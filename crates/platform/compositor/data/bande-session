@@ -20,6 +20,12 @@ if [ -r /etc/locale.conf ]; then
     . /etc/locale.conf
     set +a
 fi
+user_locale="${XDG_CONFIG_HOME:-$HOME/.config}/locale.conf"
+if [ -r "$user_locale" ]; then
+    set -a
+    . "$user_locale"
+    set +a
+fi
 
 systemctl --user reset-failed
 systemctl --user unset-environment $locale_variables

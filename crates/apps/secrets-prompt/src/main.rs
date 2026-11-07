@@ -19,11 +19,11 @@ use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use zeroize::Zeroizing;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-secrets-prompt.ftl");
 const NAMESPACE: &str = "bande-secrets-prompt";
 const FIELD_FONT: f32 = 13.0;
 
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-secrets-prompt")));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {

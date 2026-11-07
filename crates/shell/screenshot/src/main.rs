@@ -943,16 +943,21 @@ impl Screenshots {
     fn open_shot(&self, window: &mut Window, path: &Path, video: bool) {
         if video {
             let token = window.activation_token("").ok();
-            if let Err(error) = bande_xdg::open(&path.to_string_lossy(), token.as_deref()) {
-                tracing::warn!("cannot open {}: {error}", path.display());
+            let path = path.to_path_buf();
+            let spawned = std::thread::Builder::new()
+                .name("open recording".to_owned())
+                .spawn(move || {
+                    if let Err(error) = bande_xdg::open(&path.to_string_lossy(), token.as_deref()) {
+                        tracing::warn!("cannot open {}: {error}", path.display());
+                    }
+                });
+            if let Err(error) = spawned {
+                tracing::warn!("cannot open a recording: {error}");
             }
             return;
         }
-        let Ok(program) = std::env::current_exe() else {
-            return;
-        };
         let command = [
-            program.to_string_lossy().into_owned(),
+            bande_xdg::own_executable().to_string_lossy().into_owned(),
             MARKUP_FLAG.to_owned(),
             path.to_string_lossy().into_owned(),
         ];

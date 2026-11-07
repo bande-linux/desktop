@@ -110,6 +110,16 @@ and saved only from runs on `main`, whose caches every branch and tag can read. 
 the .NET, Android and GHC installations they mount, and `build-debs.sh` builds the `dist`
 profile two crates at a time (`DIST_BUILD_JOBS`), so the fat-LTO links stay within memory.
 
+## The update test
+
+`ci/upgrade-test/run.sh <old-debs> <new-debs>` boots a throwaway Debian VM with QEMU and KVM, logs a
+user in on a headless compositor at the old version and upgrades with apt while it runs. The new
+build must take over the session services and ask for a logout, while the shell and lock screen,
+killed after the update, come back as the old build and stay up. The shell must reconnect after
+PipeWire restarts, and new Settings must run on the old compositor. It needs `qemu-system`,
+`mtools` and `/dev/kvm`, so it runs by hand on a build machine before a release (`BUILD_NO_MINI=1
+build-run <worktree> ci/upgrade-test/run.sh ...`); compare the new debs with the previous release's.
+
 ## Releasing
 
 1. Bump `[workspace.package] version` in `Cargo.toml` in a commit "Release X.Y.Z" and queue it
@@ -137,8 +147,8 @@ Apps in bande-linux/apps are released the same way with `<app>-vX.Y.Z` tags in t
 `ci/soak/run.sh` (`--hours`, `--fuzz-seconds`, `--out`) is what proves stability, and runs on a build machine,
 never as a gate. `bande-soak` (`crates/testing/bench`, not a test) runs the compositor in-process on
 lavapipe with the real shell, lock screen, Files and Settings and cycles through window churn, the overview
-and launcher, a second display with scale changes, lock and unlock (the machine's PAM file for `bande-lock`
-permits any password; the script refuses a machine with the desktop installed), memory pressure and
+and launcher, a second display with scale changes, lock and unlock (for the run, the machine's PAM file for `bande-lock`
+permits any password; the script runs only on a machine with `~/bande-linux/builder-ok`), memory pressure and
 killed apps and shells. After each cycle it samples memory, file descriptors, threads, renderer memory and
 frame times, and flags growth over the second half, a stall over 5 s or a client not answering for 30 s. Lavapipe's GPU
 memory is process memory, so GPU growth shows as RSS; a leak only in Asahi's driver cannot show here. Results go

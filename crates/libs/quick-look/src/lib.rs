@@ -23,9 +23,8 @@ use crate::loader::Loader;
 pub use panel::{Link, Panel, QuickLookLink};
 pub use worker::serve_worker;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-quick-look.ftl");
-
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-quick-look")));
 
 const SIZE_FILE: &str = "bande/quick-look-size";
 const DEFAULT_SIZE: (f32, f32) = (720.0, 540.0);

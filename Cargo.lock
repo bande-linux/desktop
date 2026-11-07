@@ -1168,6 +1168,7 @@ dependencies = [
  "bande-power",
  "bande-xdg",
  "rustix 1.1.6",
+ "serde",
  "tracing",
  "zbus",
 ]

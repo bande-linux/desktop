@@ -6,7 +6,7 @@ use bande_toolkit::{App, TextSystem, Window};
 use zbus::blocking::Connection;
 
 use crate::bar_client::{BarClient, bar_role};
-use crate::rail::TaskbarView;
+use crate::rail::{BarForm, TaskbarView};
 use crate::status_client::StatusClient;
 use crate::taskbar_client::Taskbar;
 
@@ -46,7 +46,8 @@ pub fn open(
     };
     let bar = &config.bar;
     let icon_size = bar.icon_size as f32;
-    let (role, size) = bar_role(bar.edge, icon_size);
+    let form = BarForm::from_floating(bar.floating);
+    let (role, size) = bar_role(bar.edge, icon_size, form);
     let window = open_window(role, size)?;
     let taskbar = Taskbar::new(
         &window,
@@ -56,7 +57,6 @@ pub fn open(
         services.session,
         homes,
     )?;
-    let form = window.appearance().look().bar;
     let mut view = TaskbarView::new(
         window.appearance().palette(),
         text.sharing_fonts(),

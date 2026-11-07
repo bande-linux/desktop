@@ -600,6 +600,7 @@ pub struct Bar {
     pub edge: BarEdge,
     pub apps: Vec<String>,
     pub auto_hide: bool,
+    pub floating: bool,
     pub icon_size: u32,
 }
 
@@ -609,6 +610,7 @@ impl Default for Bar {
             edge: BarEdge::Left,
             apps: DEFAULT_BAR_APPS.map(str::to_owned).to_vec(),
             auto_hide: false,
+            floating: true,
             icon_size: DEFAULT_BAR_ICON_SIZE,
         }
     }
@@ -1226,6 +1228,7 @@ impl Parser<'_> {
                 }
                 "apps" => bar.apps = self.app_ids(child)?,
                 "auto-hide" => bar.auto_hide = self.flag(child)?,
+                "floating" => bar.floating = self.flag(child)?,
                 "size" => bar.icon_size = self.integer_in(child, BAR_ICON_SIZE_RANGE)?,
                 _ => return Err(self.unknown_child("bar", child)),
             }

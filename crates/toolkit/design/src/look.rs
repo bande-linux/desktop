@@ -13,16 +13,9 @@ pub enum Material {
     Wallpaper,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum BarForm {
-    Floating,
-    Attached,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Look {
     pub material: Material,
-    pub bar: BarForm,
     pub frame_opacity: f32,
     pub panel_opacity: f32,
 }
@@ -49,15 +42,9 @@ impl Style {
 
     pub const fn look(self) -> Look {
         match self {
-            Self::Refined => Look {
-                material: Material::Opaque,
-                bar: BarForm::Floating,
-                frame_opacity: 1.0,
-                panel_opacity: 1.0,
-            },
+            Self::Refined => Look::SOLID,
             Self::WallpaperLit => Look {
                 material: Material::Wallpaper,
-                bar: BarForm::Attached,
                 frame_opacity: LIT_FRAME_OPACITY,
                 panel_opacity: 1.0,
             },
@@ -66,14 +53,11 @@ impl Style {
 }
 
 impl Look {
-    pub const fn solid(self) -> Self {
-        Self {
-            material: Material::Opaque,
-            frame_opacity: 1.0,
-            panel_opacity: 1.0,
-            ..self
-        }
-    }
+    pub const SOLID: Self = Self {
+        material: Material::Opaque,
+        frame_opacity: 1.0,
+        panel_opacity: 1.0,
+    };
 }
 
 fn to_linear(channel: u8) -> f64 {

@@ -239,6 +239,9 @@ fn publish_changes(
         if before.bar.apps != after.bar.apps {
             let _ = guard.bar_apps_changed(emitter).await;
         }
+        if before.bar.floating != after.bar.floating {
+            let _ = guard.bar_floating_changed(emitter).await;
+        }
         if before.bar.auto_hide != after.bar.auto_hide {
             let _ = guard.bar_auto_hide_changed(emitter).await;
         }
@@ -766,6 +769,16 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_bar_apps(&self, apps: Vec<String>) -> zbus::fdo::Result<()> {
         self.write(&Setting::BarApps(apps))
+    }
+
+    #[zbus(property)]
+    fn bar_floating(&self) -> bool {
+        self.store.current().bar.floating
+    }
+
+    #[zbus(property)]
+    fn set_bar_floating(&self, floating: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::BarFloating(floating))
     }
 
     #[zbus(property)]

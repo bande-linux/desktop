@@ -69,6 +69,7 @@ s = s.replace('usr/lib/@browser@/pingsender\n', '')
 open(install, 'w').write(s)
 PY
 sed -i "s/^%define RAW_DESCRIPTION .*/%define RAW_DESCRIPTION Bande's web browser, based on Mozilla Firefox source code/" debian/control.in
+sed -i 's/^Depends: ${shlibs:Depends},/Depends: bande-compositor (>= 0.1.8), ${shlibs:Depends},/' debian/control.in
 rm -f debian/google.key debian/mls.key debian/browser.desktop.in debian/browser-symbolic.svg.in
 sed -i 's/^stamps\/dh_install:: debian\/noinstall debian\/$($(PRODUCT))-symbolic.svg/stamps\/dh_install:: debian\/noinstall/' debian/rules
 cp "$repo/prefs/bande.js" debian/vendor.js

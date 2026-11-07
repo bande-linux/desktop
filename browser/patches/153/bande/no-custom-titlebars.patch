@@ -1,0 +1,22 @@
+Only the main browser window draws its own title bar: the compositor puts its control well over it
+
+--- firefox-esr-153.6.0esr.orig/browser/base/content/webrtcIndicator.xhtml
++++ firefox-esr-153.6.0esr/browser/base/content/webrtcIndicator.xhtml
+@@ -10,7 +10,6 @@
+   xmlns:xul="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+   id="webrtcIndicator"
+   windowtype="Browser:WebRTCGlobalIndicator"
+-  customtitlebar="true"
+ >
+   <head>
+     <meta http-equiv="Content-Security-Policy" content="default-src chrome:" />
+--- firefox-esr-153.6.0esr.orig/toolkit/components/pictureinpicture/content/player.xhtml
++++ firefox-esr-153.6.0esr/toolkit/components/pictureinpicture/content/player.xhtml
+@@ -7,7 +7,6 @@
+       xmlns:xul="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+       windowtype="Toolkit:PictureInPicture"
+       macnativefullscreen="true"
+-      customtitlebar="true"
+       scrolling="false"
+       >
+   <head>

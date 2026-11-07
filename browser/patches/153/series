@@ -16,3 +16,6 @@ librewolf/firefox-view.patch
 librewolf/hide-finish-setup-bookmark.patch
 bande/search-choice.patch
 bande/disconnect-startup.patch
+bande/no-remote-settings.patch
+bande/no-custom-titlebars.patch
+bande/window-drag-threshold.patch

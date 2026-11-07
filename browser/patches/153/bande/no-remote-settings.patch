@@ -1,0 +1,27 @@
+Remove Remote Settings fetching: only the data shipped in each update is used
+
+--- firefox-esr-153.6.0esr.orig/services/settings/Utils.sys.mjs
++++ firefox-esr-153.6.0esr/services/settings/Utils.sys.mjs
+@@ -111,10 +111,7 @@ const _cdnURLs = {};
+ 
+ export var Utils = {
+   get SERVER_URL() {
+-    return lazy.allowServerURL
+-      ? // eslint-disable-next-line mozilla/valid-lazy
+-        lazy.gServerURL
+-      : AppConstants.REMOTE_SETTINGS_SERVER_URLS[0];
++    return "data:,";
+   },
+ 
+   get allowedCollections() {
+--- firefox-esr-153.6.0esr.orig/services/settings/remote-settings.sys.mjs
++++ firefox-esr-153.6.0esr/services/settings/remote-settings.sys.mjs
+@@ -352,7 +352,7 @@ function remoteSettingsFunction() {
+     full = false,
+     // eslint-disable-next-line complexity
+   } = {}) => {
+-    if (lazy.Utils.shouldSkipRemoteActivity) {
++    if (lazy.Utils.SERVER_URL) {
+       return;
+     }
+     // When running in full mode, we ignore last polling status.

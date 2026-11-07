@@ -32,6 +32,14 @@ patch no longer applies, leaving quilt at it.
 In the prepared tree, `export QUILT_PATCHES=debian/patches QUILT_PC=.pc`, then `quilt` as usual:
 `quilt pop <patch>`, edit, `quilt refresh`, and copy it back from `debian/patches/bande/`.
 
+## Upgrading to a new ESR
+
+- Re-check the `customtitlebar` uses (`grep -rl customtitlebar= browser toolkit --include=*.xhtml`, not tests).
+  Only `browser.xhtml` may keep one: the compositor draws its control well over every client-side
+  `org.bande.Browser` window, so any other window that draws its own title bar would get the well
+  on top of it. `patches/<esr>/bande/no-custom-titlebars.patch` removes the known two.
+- Re-run the network capture and go through what the new ESR added.
+
 ## Licence
 
 Patches, branding text and anything from Firefox or LibreWolf: MPL 2.0. Our own scripts:

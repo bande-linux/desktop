@@ -1,0 +1,19 @@
+Start moving a window from its title bar after 1 px, so it does not trail the pointer
+
+--- firefox-esr-153.6.0esr.orig/widget/gtk/nsWindow.cpp
++++ firefox-esr-153.6.0esr/widget/gtk/nsWindow.cpp
+@@ -5565,10 +5565,10 @@ static bool is_drag_threshold_exceeded(G
+     return false;
+   }
+ 
+-  const int32_t pixelThresholdX =
+-      LookAndFeel::GetInt(LookAndFeel::IntID::DragThresholdX, 5);
+-  const int32_t pixelThresholdY =
+-      LookAndFeel::GetInt(LookAndFeel::IntID::DragThresholdY, 5);
++  // The compositor moves the window from where the pointer is when the move
++  // starts, so any threshold is how far the window trails the pointer.
++  const int32_t pixelThresholdX = 1;
++  const int32_t pixelThresholdY = 1;
+ 
+   gdouble lastX, lastY, currentX, currentY;
+   gdk_event_get_root_coords(lastEvent, &lastX, &lastY);

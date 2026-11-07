@@ -63,3 +63,29 @@
 menupopup, panel { --panel-border-radius: 10px; }
 menuitem, menu { border-radius: 6px; min-height: 28px; }
 #TabsToolbar, #nav-bar, #PersonalToolbar, #navigator-toolbox { background: var(--bande-chassis) !important; color: var(--bande-ink) !important; }
+
+/* Tabs and Bande's window controls in one row. The compositor draws the real control well over the
+   first 78 px of a client-side org.bande.Browser window and takes the clicks there (WindowControls
+   in title_bar.rs, frame.rs). The numbers copy title_bar.rs: WINDOW_HEADER_HEIGHT 48, well end 78,
+   WELL_X 12. Fullscreen has no well, so Firefox's restore button is the mouse way out. */
+#main-window {
+  --bande-row-height: 48px;
+  --bande-well-gap: 90px;
+}
+#tabbrowser-tabs {
+  --tab-min-height: 28px !important;
+  --tab-block-margin: 10px !important;
+}
+#tabbrowser-tabs[orient="horizontal"]::before { display: none !important; }
+:root:not([inFullscreen]) .titlebar-buttonbox-container,
+#firefox-view-button { display: none !important; }
+:root[inFullscreen] .titlebar-min,
+:root[inFullscreen] .titlebar-close { display: none !important; }
+#TabsToolbar { min-height: var(--bande-row-height) !important; }
+#TabsToolbar .titlebar-spacer[type="pre-tabs"] {
+  display: flex !important;
+  width: var(--bande-well-gap) !important;
+}
+#TabsToolbar .titlebar-spacer[type="post-tabs"] { display: flex !important; }
+:root[inFullscreen] #TabsToolbar .titlebar-spacer[type="post-tabs"],
+:root[inFullscreen] #TabsToolbar .titlebar-spacer[type="pre-tabs"] { display: none !important; }

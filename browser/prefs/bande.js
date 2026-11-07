@@ -105,7 +105,6 @@ pref("media.gmp-widevinecdm.enabled", false);
 pref("media.gmp-provider.enabled", false);
 pref("media.eme.enabled", false);
 // Remote settings: nothing fetched, only the data shipped in each update
-pref("services.settings.server", "data:,", locked);
 pref("bande.services.settings.allowedCollections", "", locked);
 pref("bande.services.settings.allowedCollectionsFromDump", "security-state/*,main/content-classifier-lists,main/change-password-urls,main/webcompat-interventions,main/addons-data-leak-blocker-domains,main/mfcdm-origins-list,main/url-classifier-exceptions,main/ml-model-allow-deny-list,main/third-party-cookie-blocking-exempt-urls,main/backup-common-passwords-list,main/bounce-tracking-protection-exceptions,main/fingerprinting-protection-overrides,main/password-rules,main/websites-with-shared-credential-backends,main/password-recipes,main/partitioning-exempt-urls,blocklists/addons-bloomfilters,main/tracking-protection-lists,main/anti-tracking-url-decoration,main/hijack-blocklists,main/fxmonitor-breaches,main/language-dictionaries,blocklists/gfx,blocklists/addons,blocklists/plugins,main/moz-essential-domain-fallbacks,main/url-parser-default-unknown-schemes-interventions,main/urlbar-persisted-search-terms,main/devtools-devices,main/devtools-compatibility-browsers,main/ms-images,main/tippytop,main/search-config-icons,main/search-config-v2,main/search-config-overrides-v2,main/search-default-override-allowlist,main/translations-models-v2,main/translations-wasm-v2", locked);
 pref("security.remote_settings.crlite_filters.enabled", false);
@@ -172,12 +171,12 @@ pref("identity.fxaccounts.toolbar.enabled", false);
 // Debian
 pref("distribution.searchplugins.defaultLocale", "en-US");
 pref("spellchecker.dictionary_path", "/usr/share/hunspell");
-// Bande: portal seams; the compositor draws the title bar and window controls
+// Bande: portal seams; tabs share the row with the control well the compositor draws
 pref("widget.use-xdg-desktop-portal.file-picker", 1);
 pref("widget.use-xdg-desktop-portal.mime-handler", 1);
 pref("widget.use-xdg-desktop-portal.settings", 1);
 pref("widget.use-xdg-desktop-portal.open-uri", 1);
-pref("browser.tabs.inTitlebar", 0);
+pref("browser.tabs.inTitlebar", 1);
 pref("browser.compactmode.show", true);
 pref("signon.management.page.breach-alerts.enabled", false, locked);
 pref("signon.rememberSignons", true);

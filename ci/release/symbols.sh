@@ -8,7 +8,7 @@ root=$scratch/root
 mkdir -p "$root/DEBIAN" "$out"
 
 while IFS= read -r binary; do
-    readelf --section-headers "$binary" | grep -q '\.debug_' || continue
+    readelf --wide --section-headers "$binary" | grep -q '\.debug_line' || continue
     id=$(readelf --notes "$binary" | sed -n 's/.*Build ID: //p')
     [ -n "$id" ] || { echo "$binary has no build id" >&2; exit 1; }
     debug=$root/usr/lib/debug/.build-id/${id:0:2}/${id:2}.debug

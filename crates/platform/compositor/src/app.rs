@@ -544,6 +544,10 @@ impl GlobalDispatch<BandeAppControlV1, ()> for State {
         state.announce_unresponsive(None, Some(&control));
         state.app_control_resources.push(control);
     }
+
+    fn can_view(client: Client, _global_data: &()) -> bool {
+        !crate::trust::is_sandboxed(&client)
+    }
 }
 
 impl Dispatch<BandeAppControlV1, ()> for State {

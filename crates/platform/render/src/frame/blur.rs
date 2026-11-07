@@ -24,7 +24,7 @@ pub(crate) struct BlurChain {
     pub(crate) used: bool,
 }
 
-const SAMPLED: Usage = (
+pub(super) const SAMPLED: Usage = (
     vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
     vk::PipelineStageFlags2::FRAGMENT_SHADER,
     vk::AccessFlags2::SHADER_SAMPLED_READ,
@@ -36,13 +36,13 @@ const COPY_DESTINATION: Usage = (
     vk::AccessFlags2::TRANSFER_WRITE,
 );
 
-const DISCARDED: Usage = (
+pub(super) const DISCARDED: Usage = (
     vk::ImageLayout::UNDEFINED,
     vk::PipelineStageFlags2::TOP_OF_PIPE,
     vk::AccessFlags2::NONE,
 );
 
-const DRAWN: Usage = (
+pub(super) const DRAWN: Usage = (
     vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
     vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
     vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,

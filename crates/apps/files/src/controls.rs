@@ -1187,6 +1187,7 @@ impl FilesView {
             .map(str::to_owned);
         self.cancel_rename();
         let mut field = TextField::new("", &shown, |_| {})
+            .without_text_checking()
             .in_place(NAME_SIZE)
             .padding(FIELD_INSET);
         field.select(match hidden_extension {
@@ -1362,7 +1363,8 @@ impl FilesView {
         let send = sender(&self.signals);
         let mut field = TextField::new("", &current, move |text| {
             send(Signal::GoTo(text.to_owned()));
-        });
+        })
+        .without_text_checking();
         field.select(0..current.len());
         let prompt = Prompt::new(&L10N.tr("go-to-title"), "", self.choice())
             .accessory(field)

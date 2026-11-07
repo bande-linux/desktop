@@ -30,11 +30,34 @@ const VENDORS: [(&str, &str); 24] = [
     ("XMI", "Xiaomi"),
 ];
 
+const SRGB_DEFAULT: u8 = 1 << 2;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Primaries {
+    pub red: (u16, u16),
+    pub green: (u16, u16),
+    pub blue: (u16, u16),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Edid {
     pub make: String,
     pub model: String,
     pub serial: String,
+    pub primaries: Primaries,
+    pub default_is_srgb: bool,
+}
+
+fn primaries(block: &[u8]) -> Primaries {
+    let coordinate = |high: usize, low: u8, shift: u8| {
+        (u16::from(block[high]) << 2) | u16::from((low >> shift) & 3)
+    };
+    let (first, second) = (block[25], block[26]);
+    Primaries {
+        red: (coordinate(27, first, 6), coordinate(28, first, 4)),
+        green: (coordinate(29, first, 2), coordinate(30, first, 0)),
+        blue: (coordinate(31, second, 6), coordinate(32, second, 4)),
+    }
 }
 
 fn descriptor_text(block: &[u8], kind: u8) -> Option<String> {
@@ -75,6 +98,8 @@ pub fn parse(block: &[u8]) -> Option<Edid> {
         make,
         model,
         serial,
+        primaries: primaries(block),
+        default_is_srgb: block[24] & SRGB_DEFAULT != 0,
     })
 }
 

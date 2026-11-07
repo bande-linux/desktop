@@ -748,7 +748,8 @@ impl SettingsView {
             &L10N.tr("full-name-placeholder"),
             &form.full_name,
             move |text| name(text.to_owned()),
-        );
+        )
+        .without_text_checking();
         self.anchors
             .push((Anchor::Item(NEW_NAME.to_owned()), field.id()));
         rows.push(boxed(Row::new(
@@ -760,7 +761,8 @@ impl SettingsView {
             &L10N.tr("account-name-placeholder"),
             &form.login,
             move |text| login(text.to_owned()),
-        );
+        )
+        .without_text_checking();
         self.anchors
             .push((Anchor::Item(NEW_LOGIN.to_owned()), field.id()));
         rows.push(boxed(

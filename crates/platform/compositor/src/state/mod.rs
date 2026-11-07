@@ -48,6 +48,7 @@ use bande_render::VulkanRenderer;
 use crate::clock::Vblank;
 use crate::cursor::{self, Cursor, CursorTheme};
 use crate::element::SurfaceElement;
+use crate::frame_callbacks::LatchedCallback;
 use crate::lock::Lock;
 use crate::motion::IconRect;
 use crate::scene::{BlurElement, Closing, FillElement, PieceElement, ShadowElement, WindowElement};
@@ -174,6 +175,7 @@ pub struct State {
     pub(crate) input_sources: crate::keymap::InputSources,
     pub(crate) pointing: crate::pointing::Pointing,
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
+    pub(crate) render_device: Option<u64>,
     pub(crate) decorations: crate::frame::Decorations,
     pub(crate) window_menus: crate::window_menu::WindowMenus,
     pub(crate) alerts: crate::alert::Alerts,
@@ -208,6 +210,7 @@ impl Compositor {
             scale: 1.0,
             transform: Transform::Normal,
             position: Point::default(),
+            match_colours: true,
         };
         let display = Display::new().map_err(io::Error::other)?;
         let fences = smithay::reexports::calloop::EventLoop::try_new().map_err(io::Error::other)?;
@@ -331,6 +334,7 @@ impl Compositor {
             input_sources: crate::keymap::InputSources::default(),
             pointing: crate::pointing::Pointing::default(),
             pending_captures: Vec::new(),
+            render_device: None,
             decorations: crate::frame::Decorations::default(),
             window_menus: crate::window_menu::WindowMenus::default(),
             alerts: crate::alert::Alerts::default(),
@@ -432,9 +436,9 @@ impl Compositor {
         }
     }
 
-    pub fn present_on(&mut self, output: &str, vblank: Vblank) -> io::Result<()> {
+    pub fn present_on(&mut self, output: &str, vblank: Vblank, flipped: bool) -> io::Result<()> {
         match self.state.screen_named(output) {
-            Some(screen) => self.present_screen(screen, vblank),
+            Some(screen) => self.present_screen(screen, vblank, flipped),
             None => Ok(()),
         }
     }
@@ -472,7 +476,7 @@ impl Compositor {
                 &root,
                 (),
                 |_, _, _| TraversalAction::DoChildren(()),
-                |_, states, _| {
+                |surface, states, _| {
                     latched.latched_feedback.append(
                         &mut states
                             .cached_state
@@ -480,12 +484,17 @@ impl Compositor {
                             .current()
                             .callbacks,
                     );
-                    latched.latched_frame_callbacks.append(
+                    let callbacks = std::mem::take(
                         &mut states
                             .cached_state
                             .get::<SurfaceAttributes>()
                             .current()
                             .frame_callbacks,
+                    );
+                    latched.latched_frame_callbacks.extend(
+                        callbacks
+                            .into_iter()
+                            .map(|callback| LatchedCallback::of(callback, surface, states)),
                     );
                     latched
                         .latched_releases
@@ -496,24 +505,33 @@ impl Compositor {
         }
     }
 
-    fn present_screen(&mut self, screen: usize, vblank: Vblank) -> io::Result<()> {
+    fn present_screen(&mut self, screen: usize, vblank: Vblank, flipped: bool) -> io::Result<()> {
         let presented = &mut self.state.screens[screen];
         let refresh = presented.refresh();
+        let kind = if flipped {
+            Kind::Vsync | Kind::HwCompletion
+        } else {
+            Kind::Vsync
+        };
         for feedback in presented.latched_feedback.drain(..) {
             feedback.presented(
                 &presented.output,
                 vblank.time,
                 Refresh::fixed(refresh),
                 vblank.sequence,
-                Kind::Vsync,
+                kind,
             );
         }
         presented.latched_releases.clear();
         let millis = (vblank.time.as_millis() % (1 << 32)) as u32;
         for callback in presented.latched_frame_callbacks.drain(..) {
-            callback.done(millis);
+            callback.send(millis);
         }
         self.state.confirm_lock(screen);
+        self.display.flush_clients()
+    }
+
+    pub(crate) fn flush_clients(&mut self) -> io::Result<()> {
         self.display.flush_clients()
     }
 

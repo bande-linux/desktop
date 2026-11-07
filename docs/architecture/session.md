@@ -384,6 +384,17 @@ graph LR
 - `bande-session` also sets `ELECTRON_OZONE_PLATFORM_HINT=auto` (unless already set), so
   Electron apps that do not yet default to Wayland run natively instead of failing for want of
   an X server, and `QT_QPA_PLATFORMTHEME` as described under the portal.
+- `bande-session` takes the language and formats from `/etc/locale.conf` and replaces those in
+  the user manager and in D-Bus activation. greetd and a lingering user manager keep what they had
+  when they started, so without this a choice in Settings would only arrive after a restart.
+  The login window itself still follows the language greetd started with.
+- Settings ▸ Language & Region sets `LANG` and the five format categories (`LC_TIME`,
+  `LC_NUMERIC`, `LC_MONETARY`, `LC_MEASUREMENT`, `LC_PAPER`) through localed `SetLocale`. Its
+  choices are the UTF-8 entries of `/usr/share/i18n/SUPPORTED`, named exactly as written there,
+  because that is what localed matches before running `locale-gen` once per changed variable.
+  localed merges rather than replaces: anything left out stays, so "Same as language" sends
+  the formats equal to `LANG`, and localed drops those. It also refuses a `LANGUAGE` holding
+  a colon, so a stale list is replaced by one name.
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
   `bande-config`, `bande-power`, `bande-sound`, `bande-tray`, `bande-automount`,
   `bande-polkit-agent`. `bande-notify` and

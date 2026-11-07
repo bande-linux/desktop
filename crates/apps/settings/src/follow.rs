@@ -10,6 +10,7 @@ use std::thread;
 use bande_app::choose_file;
 use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
 use bande_keyboard::Layouts;
+use bande_status::devices::{PowerAction, powers};
 use bande_toolkit::SessionEnd;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -64,6 +65,7 @@ pub enum Update {
     Time(Option<TimeState>),
     Login(LoginItems),
     Battery(Option<BatteryState>),
+    CannotSleep,
     NotificationApps(Vec<AppNotifications>),
     Software(SoftwareState),
     Locale(Option<LocaleState>),
@@ -169,6 +171,15 @@ pub fn spawn(name: &str, work: impl FnOnce() + Send + 'static) {
     if let Err(error) = thread::Builder::new().name(name.to_owned()).spawn(work) {
         tracing::warn!("cannot start the {name} thread: {error}");
     }
+}
+
+fn hide_sleep_if_unavailable(system: &Connection, updates: Updates) {
+    let system = system.clone();
+    spawn("can-sleep", move || {
+        if !powers(&system).is_ok_and(|powers| powers.contains(&PowerAction::Sleep)) {
+            updates.send(Update::CannotSleep);
+        }
+    });
 }
 
 fn follow_properties(
@@ -362,6 +373,7 @@ impl Services {
         });
         if let Some(system) = system {
             follow_privileges(system, updates.clone());
+            hide_sleep_if_unavailable(system, updates.clone());
         }
         Self {
             connection: session.clone(),

@@ -439,10 +439,12 @@ impl SettingsView {
     }
 
     pub fn hide_screen_reader(&mut self) {
+        self.remove_setting(SettingId::ScreenReader);
+    }
+
+    fn remove_setting(&mut self, id: SettingId) {
         for section in self.panes.iter_mut().flat_map(|pane| &mut pane.sections) {
-            section
-                .settings
-                .retain(|setting| setting.id != SettingId::ScreenReader);
+            section.settings.retain(|setting| setting.id != id);
         }
         self.availability_changed();
     }
@@ -752,6 +754,7 @@ impl SettingsView {
                 }
                 self.battery = battery;
             }
+            Update::CannotSleep => self.remove_setting(SettingId::SleepAfter),
             Update::Storage(storage) => {
                 if storage.trash_items == 0 {
                     self.confirming_empty_trash = false;
@@ -895,6 +898,7 @@ impl SettingsView {
             | PaneId::Keyboard
             | PaneId::KeyboardShortcuts
             | PaneId::Power
+            | PaneId::LockScreen
             | PaneId::PrivacySecurity
             | PaneId::Camera
             | PaneId::Screenshots

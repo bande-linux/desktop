@@ -1094,6 +1094,7 @@ dependencies = [
  "bande-wallpaper",
  "bande-watch",
  "bande-xdg",
+ "futures-lite",
  "image",
  "jiff",
  "libc",

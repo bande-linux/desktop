@@ -93,7 +93,10 @@ when they reach the screen is Bande's own.
   title bar. Everything else in the row is the client's, so free tab-row space stays its own
   move request. Full screen removes the well. The rule is the app id plus client-side, so a build
   that asks for server-side gets a normal title bar, and any other Firefox is left alone.
-- **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers with the
+- **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers, and NV12 for
+  video (one dmabuf for both planes, BT.709 limited range, converted in the `video` shader; on a
+  real GPU that reports importing LINEAR NV12, its planes are sampled in place when stride and offsets are multiples of 16, and
+  otherwise copied to two textures), with the
   LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche
   of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that
   `DrmCompositor` can scan them out. A dma-buf is imported once as a Vulkan buffer and its
@@ -104,9 +107,10 @@ when they reach the screen is Bande's own.
   yet verified on Apple hardware.
 - **DRM backend.** `bande-compositor` opens the first card with a connected connector (or
   `--drm-device`) through a libseat session and drives every connected connector on its own
-  CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into GBM
-  buffers that the renderer binds as dma-bufs (copied out from its own image, so lavapipe and
-  `kms_swrast` work); `--headless` keeps the offscreen output for CI and the bench. udev change
+  CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into
+  dumb buffers that the renderer binds as dma-bufs: each frame is rendered into its own image and its
+  drawn regions copied out, by the GPU when the device is a real one that can import the buffer,
+  otherwise (lavapipe and `kms_swrast`, or a refused import) through a mapping on the CPU; `--headless` keeps the offscreen output for CI and the bench. udev change
   events probe the connectors again, so plugging a display in or out takes effect without
   restarting the session. A connector that goes away is held as lost for three seconds before it
   counts as gone, so a monitor's own hotplug pulse (many pulse it about 0.6 s after waking, which
@@ -163,24 +167,19 @@ when they reach the screen is Bande's own.
   the keyboard, Space picks a display and the arrows put it on that side of the main display.
   The main display carries a white bar along its top. Each display then offers Use as (Main
   display, Extended, Mirror), Resolution (up to four sizes of its native shape), Size of text
-  and controls, Refresh rate, Rotation and Variable refresh rate. Every change is written to
+  and controls, Refresh rate, Rotation and Match colours to this display. Every change is written to
   `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
   settings?" with Keep and Revert and comes back by itself after 15 s, as macOS does.
 
-- **Frame pacing.** Frames are paced by a vblank clock (virtual at 120 Hz in the headless
-  backend; on DRM re-anchored to each page flip at the mode's refresh, advertised as the
-  `wl_output` mode). A commit is latched into the frame whose deadline it arrives before: the
-  vblank minus the longest time from deadline to finished render over the last 16 frames
-  (capped at one refresh, so a vblank is always reachable), minus 1 ms. The longest rather than
-  a percentile is deliberate: heavier content, such as the overview opening, then misses at
-  most one vblank instead of several while a percentile catches up, and on a loaded machine
-  wake-up jitter is what makes frames late. When a wake-up is so late that the typical render
-  time (a moving average) no longer fits before the planned vblank, the frame is drawn at once
-  for the next vblank it can reach, with animations sampled for that vblank, so it is not shown
-  one refresh stale and the scheduler does not sleep (and risk waking late) again. Frame callbacks and `wp_presentation` feedback (vblank time, refresh, sequence, `vsync`)
-  are taken when the frame is latched and sent at its vblank (on DRM, at the page-flip event
-  with its time and sequence); a superseded commit's feedback is discarded, and a render that
-  overruns its vblank is presented at the next one.
+- **Colour.** A display whose EDID gives primaries more than 0.02 from sRGB's, and does not say
+  its default colour space is sRGB, has its frames converted from sRGB to its own primaries
+  (D65 white kept, sRGB transfer both ways) by a shader that writes the damaged regions to a
+  scratch image the GPU then copies to the display buffer. While a display converts, nothing is
+  scanned out directly or put on a plane, as a client buffer would skip the conversion. "Match
+  colours to this display" (on by default, `match-colours false` in the display's settings) turns
+  it off for a display whose EDID is wrong or that is set to its own sRGB mode. A CPU renderer does
+  not convert.
+- **Frame pacing.** Each output has its own scheduler (`clock.rs`) and measured timing (`pacing.rs`); no rate is assumed beyond the mode's. The vblank grid is estimated from page-flip times alone: phase and period follow a slow filter, an error over an eighth of a refresh is an outlier, eight in a row or a long idle re-anchor it, and it owns the sequence number. A frame starts at its slot minus a budget and a commit lead. The budget is the 95th percentile of the last 64 renders or the longest of the last 4 if that is more (so a spike is forgotten in 4 frames while heavier content is priced at once), plus the 99th percentile of how late the timer woke us, plus a pad that grows when a commit comes too late for its slot and decays while none do. The commit lead is how long before its slot a commit must return, learned from which vblank each flip really landed on: it starts at 35 % of a refresh on the first real flip, comes down until the first miss, rises when a commit with time to spare still misses (a driver like Apple's DCP drops anything under about 2.3 ms before the flip to the next refresh), and is lowered slowly afterwards to follow changes. A wake-up past the start time still goes if its typical render fits before the lead, and otherwise takes the next slot. When over 5 % of 128 frames miss, the pad rises. Without flips (headless) the lead stays 0. A timer wake dispatches every ready source first, so input right up to the latch counts, and no timer runs without a wanted frame or a frame callback. `BANDE_FRAME_TIMING=classic` restores the former rule (the longest of the last 16 frames plus 1 ms). Frame callbacks are taken when a frame is latched and go out once it is committed, so a client gets the time up to the next frame's start, not what is left after the flip. A client whose time from callback to commit is known (its 95th percentile over at least 8 frames, `frame_callbacks.rs`) gets its callback that long plus 0.5 ms before the next frame starts, so it reads the latest input and its frame is shown at once; a client that misses the latch this way goes back to the early callback for a second. No timer exists unless a callback is waiting. `wp_presentation` feedback (estimated vblank time, refresh, sequence, `vsync`, on DRM also `hw_completion`) is sent at the page-flip event, or the vblank on headless; a superseded commit's feedback is discarded, and a render that overruns its vblank is presented at the next one.
 - **Window motion.** Every window state change is animated by springs on x, y, width, height
   and opacity, sampled at the frame's vblank (`Compositor::animate_on`, called by each output's
   scheduler before it latches a frame). Animations are closed-form springs, so every display
@@ -293,7 +292,7 @@ when they reach the screen is Bande's own.
   names and icons come from desktop entries through `bande-xdg`, cached, and reread at most
   every 30 s while an app is unknown. `access.rs` publishes the card through AccessKit (a
   window holding a list box whose selected option has the focus) only while it shows.
-  `recall.rs` keeps the window memory file, `assist.rs` the free-half panel, which reuses the
+  `recall.rs` keeps the window memory file (written by its own thread, the latest state winning and flushed at exit, so a slow disk never holds a frame), `assist.rs` the free-half panel, which reuses the
   overview's `arrange` and the switcher's thumbnails.
 - **Force Quit** (`force_quit/`): the compositor's own window, so it opens when the shell or
   the focused app hangs; [behaviour](behaviour.md) has the rules. Apps are killed through a
@@ -316,6 +315,35 @@ when they reach the screen is Bande's own.
   and restarts them (see [behaviour](behaviour.md)); `bande-compositor --greeter` runs only
   the greeter ([session](session.md#display-manager-and-greeter)).
 
+## Who may do what
+
+A client is a **session client** (started on a socket pair with a role: `Shell`, `LockScreen`,
+`ClipboardDaemon`), **sandboxed** (arrived through a `wp_security_context_v1` listener, named by its
+app id) or a **program** (`/proc/<pid>/exe`, believed only if it sits under `/usr`, is root-owned and
+not writable by others, is the same inode in the compositor's mount namespace, and is no
+interpreter). Anything else cannot be granted. Sandboxed clients never see layer shell, output
+management, output power, the idle notifier or the security context manager.
+
+Reading keys (`zwp_input_method_v2`) and typing (`zwp_virtual_keyboard_v1`) need the person's consent,
+as Input Monitoring on macOS. `/var/lib/bande/consent/<uid>` lists it, one `read-keys|type-keys
+program|sandboxed <name>` a line; only `bande-consent` writes it, through polkit with the password
+each time, so no program can grant itself. Without consent `get_input_method` answers `unavailable`
+and `create_virtual_keyboard` the protocol's `unauthorized`. The first refusal records the identity
+in `$XDG_STATE_HOME/bande/consent-asked` and sends a notification that opens Privacy & Security; there
+the person turns it on, effective at the program's next start. Turning it off disconnects the program
+at once (the compositor follows the directory with inotify).
+
+A consented input method gets keys only while a text field is active and not one with the `password`
+or `pin` purpose: otherwise the compositor drops its grab before delivering the key, and conforming
+input methods grab again on the next `activate`. Toolkit password fields never enable text input.
+
+While locked: keyboard grabs are dropped, virtual keyboards reach nothing, input methods cannot
+commit text, and their candidate popups are not shown.
+
+This is a real boundary for sandboxed clients. For an unsandboxed program running as the same user
+it only raises the bar: such a program can change the person's shell startup files and be inside the
+next session.
+
 ## Wayland protocol matrix
 
 Priority: **P0** is needed for a daily-driver desktop, **P1** for full parity, **P2** later.
@@ -332,20 +360,22 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wlr-layer-shell-unstable-v1` | Taskbar, notifications, overlays | P0 | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | P0 | implemented |
 | `wp_presentation` | Presentation timing, VSync | P0 | implemented |
-| `ext-session-lock-v1` | Screen locking | P0 | implemented |
+| `ext-session-lock-v1` | Screen locking | P0 | implemented, `bande-lock` only |
 | `wl_data_device_manager` | Clipboard and drag and drop | P0 | implemented |
 | `zwp_primary_selection_v1` | Middle-click paste | P0 | implemented |
 | `ext-data-control-v1` | Clipboard daemon access | P0 | implemented, trusted connection only |
 | `ext-idle-notify-v1` / `idle-inhibit-v1` | Idle transitions, video playback | P0 | implemented |
 | `xdg_activation_v1` | Focus-stealing prevention | P0 | implemented |
 | `ext-foreign-toplevel-list-v1` | Window list for the taskbar | P0 | implemented, shell clients only |
-| `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented, open to every client outside the lock screen |
+| `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented; reading and typing keys need consent (see below) |
+| `wp_security_context_v1` | Names sandboxed clients; each is refused every privileged protocol below | P1 | implemented, not offered to sandboxed clients |
+| `zxdg_exporter_v2` / `zxdg_importer_v2` | Attach another process's dialog to its app window (portal dialogs) | P1 | implemented |
 | `zxdg_decoration_manager_v1` | Decoration negotiation (server-side unless the client asks for client-side) | P1 | implemented |
 | `org_kde_kwin_appmenu_manager` | Where a third-party window's dbusmenu lives, for the menu button in our title bar | P1 | implemented |
 | `gtk_shell1` / `gtk_surface1` | Version 1 with only the `global_menu_bar` capability, as Mutter offers it: a GTK 3 or GTK 4 `GtkApplicationWindow` stops drawing its menu bar and gives its `org.gtk.Menus` menu bar, `org.gtk.Actions` paths and unique bus name with `set_dbus_properties`, which becomes the window's menu address; windows without a menu bar send none and are unchanged. Version 1 keeps GTK's own edge constraints and title-bar gestures | P1 | implemented |
 | `org_kde_kwin_server_decoration_manager` | Decoration negotiation for GTK 3 and GTK 4 (default server-side, client-side for header-bar windows) | P1 | implemented |
 | `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | implemented (v4; enabled heads only, no custom modes) |
-| `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimised), shm buffers; a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
+| `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimised), shm buffers and LINEAR ARGB8888 dmabufs (copied by the GPU, offered when the renderer knows its render node); a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
 | `bande_capture_v1` (own, `bande-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Print | P1 | implemented, shell clients only |
 | `wp_cursor_shape_v1` | Cursor shapes from the theme | P1 | implemented |
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | implemented |
@@ -354,4 +384,4 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwlr_output_power_management_v1` | Display power for idle and lock | P1 | implemented |
 | `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Control Center, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, `show_app_menu` to open an app's menus below a window's menu button, `active_menus` (version 4) with the key window's menu address, `open_terminal` (version 5) for `Ctrl+Alt+T`; workspaces, the workspace of each window and `show_windows` for the overview and App Exposé | P0 | implemented, shell clients only |
 | `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 8) for the Move & Resize menu on a toolkit window's zoom control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button | P0 | implemented, every client |
-| `ext-background-effect-v1` | Blur behind the launcher's scrim (the overview's scrim and blur are the compositor's own) | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |
+| `ext-background-effect-v1` | Blur behind the launcher's scrim (the overview's scrim and blur are the compositor's own), and the backdrop of window frames, the Taskbar and menus: the [style](../design/datum.md#styles) decides what fills it (`material.rs` for the wallpaper copy) | P1 | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

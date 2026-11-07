@@ -13,6 +13,7 @@ use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
 use smithay::utils::{Logical, Rectangle};
+use smithay::wayland::alpha_modifier::AlphaModifierSurfaceCachedState;
 use smithay::wayland::compositor::{RectangleKind, get_region_attributes, with_states};
 
 use crate::state::State;
@@ -26,6 +27,7 @@ struct BlurRegion {
     current: Rects,
     ids: Vec<Id>,
     radius: u32,
+    opacity: Option<f32>,
 }
 
 fn with_region<T>(surface: &WlSurface, f: impl FnOnce(&mut BlurRegion) -> T) -> T {
@@ -57,6 +59,27 @@ fn rects_of(region: &WlRegion) -> Rects {
 
 pub(crate) fn set_corner_radius(surface: &WlSurface, radius: u32) {
     with_region(surface, |region| region.radius = radius);
+}
+
+pub(crate) fn set_backdrop_opacity(surface: &WlSurface, opacity: f64) {
+    with_region(surface, |region| {
+        region.opacity = Some(opacity.clamp(0.0, 1.0) as f32);
+    });
+}
+
+pub(crate) fn backdrop_opacity(surface: &WlSurface) -> f32 {
+    with_region(surface, |region| region.opacity.unwrap_or(1.0))
+}
+
+pub(crate) fn surface_opacity(surface: &WlSurface) -> f32 {
+    with_states(surface, |states| {
+        states
+            .cached_state
+            .get::<AlphaModifierSurfaceCachedState>()
+            .current()
+            .multiplier_f32()
+            .unwrap_or(1.0)
+    })
 }
 
 pub(crate) fn corner_radius(surface: &WlSurface) -> f64 {

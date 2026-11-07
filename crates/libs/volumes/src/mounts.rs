@@ -1,10 +1,167 @@
+use std::fs::File;
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex, Once, PoisonError};
+
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
+
+const SYSTEM_MOUNTS: &str = "/run/bande/volumes";
+
+pub fn user_mounts_root() -> Option<PathBuf> {
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR")?;
+    Some(Path::new(&runtime).join("bande/volumes"))
+}
+
+pub fn system_mounts_root(uid: u32) -> PathBuf {
+    Path::new(SYSTEM_MOUNTS).join(uid.to_string())
+}
+
+pub fn connected_roots() -> Vec<PathBuf> {
+    let uid = rustix::process::getuid().as_raw();
+    user_mounts_root()
+        .into_iter()
+        .chain([system_mounts_root(uid)])
+        .collect()
+}
+
+const NETWORK_TYPES: [&str; 7] = ["nfs", "nfs4", "cifs", "smb3", "fuse.sshfs", "9p", "ceph"];
+
+struct Watched {
+    table: Option<File>,
+    roots: Vec<PathBuf>,
+}
+
+static WATCHED: LazyLock<Mutex<Watched>> = LazyLock::new(|| {
+    Mutex::new(Watched {
+        table: File::open("/proc/self/mountinfo").ok(),
+        roots: Vec::new(),
+    })
+});
+static FIRST_READ: Once = Once::new();
+
+fn is_network_mount(mount: &Mounted) -> bool {
+    NETWORK_TYPES.contains(&mount.fs_type.as_str())
+        || (mount.fs_type == "fuse" && mount.source.starts_with("http"))
+}
+
+fn read_roots() -> Vec<PathBuf> {
+    let table = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
+    connected_roots()
+        .into_iter()
+        .chain(
+            mounted(&table)
+                .filter(is_network_mount)
+                .map(|mount| mount.point),
+        )
+        .collect()
+}
+
+fn network_roots() -> Vec<PathBuf> {
+    let mut watched = WATCHED.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut changed = false;
+    FIRST_READ.call_once(|| changed = true);
+    if let Some(table) = &watched.table {
+        let mut polled = [PollFd::new(table, PollFlags::PRI)];
+        let zero = Timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        changed |= matches!(poll(&mut polled, Some(&zero)), Ok(ready) if ready > 0);
+    }
+    if changed {
+        watched.roots = read_roots();
+    }
+    watched.roots.clone()
+}
+
+pub fn on_connected_volume(path: &Path) -> bool {
+    network_roots().iter().any(|root| path.starts_with(root))
+}
+
+pub fn quick_is_dir(path: &Path) -> bool {
+    on_connected_volume(path) || path.is_dir()
+}
+
+pub fn connected_volume_of(path: &Path) -> Option<PathBuf> {
+    let roots = network_roots();
+    let user_roots = connected_roots();
+    roots
+        .iter()
+        .filter(|root| path.starts_with(root))
+        .max_by_key(|root| root.as_os_str().len())
+        .and_then(|root| match user_roots.contains(root) {
+            true => {
+                let name = path.strip_prefix(root).ok()?.components().next()?;
+                Some(root.join(name))
+            }
+            false => Some(root.clone()),
+        })
+}
+
+pub fn leads_to_connected_volume(path: &Path) -> bool {
+    if on_connected_volume(path) {
+        return true;
+    }
+    let mut walked = PathBuf::new();
+    for component in path.components() {
+        walked.push(component);
+        if let Ok(target) = std::fs::read_link(&walked) {
+            let resolved = walked.parent().unwrap_or(Path::new("/")).join(target);
+            if on_connected_volume(&resolved) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+pub fn is_connected(point: &Path) -> bool {
+    connected_roots()
+        .iter()
+        .any(|root| point.parent() == Some(root.as_path()))
+}
 
 pub fn media_roots(user: &str) -> Vec<PathBuf> {
-    vec![
+    let mut roots = vec![
         Path::new("/run/media").join(user),
         Path::new("/media").join(user),
-    ]
+    ];
+    roots.extend(connected_roots());
+    roots
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mounted {
+    pub point: PathBuf,
+    pub fs_type: String,
+    pub source: String,
+}
+
+pub fn mounted(mountinfo: &str) -> impl Iterator<Item = Mounted> + '_ {
+    mountinfo.lines().filter_map(|line| {
+        let point = line.split(' ').nth(4)?;
+        let (_, tail) = line.split_once(" - ")?;
+        let mut tail = tail.split(' ');
+        Some(Mounted {
+            point: PathBuf::from(unescape(point)),
+            fs_type: tail.next()?.to_owned(),
+            source: unescape(tail.next()?),
+        })
+    })
+}
+
+pub fn volume_icon(mountinfo: &str, point: &Path) -> &'static str {
+    if !is_connected(point) {
+        return "drive-removable-media";
+    }
+    let fs_type = mounted(mountinfo)
+        .find(|mount| mount.point == point)
+        .map(|mount| mount.fs_type);
+    match fs_type.as_deref() {
+        Some("fuse.gphotofs") => "camera-photo",
+        Some("fuse.sshfs" | "fuse") => "folder-remote",
+        Some(kind) if kind.starts_with("fuse.") => "phone",
+        _ => "folder-remote",
+    }
 }
 
 fn unescape(field: &str) -> String {
@@ -45,4 +202,74 @@ pub fn mounted_volumes(mountinfo: &str, roots: &[PathBuf]) -> Vec<PathBuf> {
     volumes.sort();
     volumes.dedup();
     volumes
+}
+
+pub fn follow_mounts(changed: impl Fn() + Send + 'static) -> std::io::Result<()> {
+    let table = std::fs::File::open("/proc/self/mountinfo")?;
+    std::thread::Builder::new()
+        .name("mount table".to_owned())
+        .spawn(move || {
+            let mut watched = [PollFd::new(&table, PollFlags::PRI)];
+            while poll(&mut watched, None).is_ok() {
+                changed();
+            }
+        })?;
+    Ok(())
+}
+
+fn saved_file() -> Option<PathBuf> {
+    let state = std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".local/state")))?;
+    Some(state.join("bande/servers"))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedServer {
+    pub url: String,
+    pub user: String,
+    pub reconnect: bool,
+}
+
+pub fn load_saved_servers() -> Vec<SavedServer> {
+    let text = saved_file()
+        .and_then(|file| std::fs::read_to_string(file).ok())
+        .unwrap_or_default();
+    text.lines()
+        .filter_map(|line| {
+            let mut fields = line.split('\t');
+            let reconnect = fields.next()? == "1";
+            let url = fields.next()?.to_owned();
+            let user = fields.next().unwrap_or_default().to_owned();
+            Some(SavedServer {
+                url,
+                user,
+                reconnect,
+            })
+        })
+        .collect()
+}
+
+pub fn store_saved_servers(saved: &[SavedServer]) {
+    let Some(file) = saved_file() else {
+        return;
+    };
+    let text: String = saved
+        .iter()
+        .map(|entry| {
+            let flag = u8::from(entry.reconnect);
+            format!("{flag}\t{}\t{}\n", entry.url, entry.user)
+        })
+        .collect();
+    let written = file
+        .parent()
+        .map_or(Ok(()), std::fs::create_dir_all)
+        .and_then(|()| {
+            let scratch = file.with_extension("new");
+            std::fs::write(&scratch, text)?;
+            std::fs::rename(scratch, &file)
+        });
+    if let Err(error) = written {
+        tracing::warn!("cannot save the server list: {error}");
+    }
 }

@@ -9,8 +9,24 @@ use tracing_subscriber::util::SubscriberInitExt;
 const FILTER_VARIABLE: &str = "RUST_LOG";
 const PANIC_TARGET: &str = "panic";
 
+fn name_process(identifier: &str) {
+    if let Ok(name) = std::ffi::CString::new(identifier)
+        && let Err(error) = rustix::thread::set_name(&name)
+    {
+        eprintln!("cannot name the process {identifier}: {error}");
+    }
+}
+
 pub fn init(identifier: &str) {
-    let filter = targets(std::env::var(FILTER_VARIABLE).ok().as_deref());
+    init_quieting(identifier, &[]);
+}
+
+pub fn init_quieting(identifier: &str, chatty: &[&str]) {
+    name_process(identifier);
+    let filter = chatty.iter().fold(
+        targets(std::env::var(FILTER_VARIABLE).ok().as_deref()),
+        |filter, target| filter.with_target(*target, LevelFilter::WARN),
+    );
     let journal = tracing_journald::layer()
         .ok()
         .map(|journal| journal.with_syslog_identifier(identifier.to_owned()));

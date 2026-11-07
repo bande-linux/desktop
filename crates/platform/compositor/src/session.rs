@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::fs::File;
 use std::io;
 use std::os::fd::{AsRawFd, BorrowedFd, OwnedFd};
 use std::os::unix::net::UnixStream;
@@ -21,6 +22,7 @@ use crate::state::{ClientState, Compositor};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionRole {
     ClipboardDaemon,
+    LockScreen,
     Shell,
 }
 
@@ -29,14 +31,47 @@ pub const LOCK_SCREEN: &str = "/usr/bin/bande-lock";
 pub const SCREENSHOT: &str = "/usr/bin/bande-screenshot";
 pub const SHELL: &str = "/usr/bin/bande-shell";
 pub const GREETER: &str = "/usr/bin/bande-greeter";
+pub const SETUP: &str = "/usr/bin/bande-setup";
+pub const SETUP_PENDING: &str = "/var/lib/bande/setup-pending";
 pub const REVIEW: &str = "/usr/bin/bande-review";
 const CONFIRM_ARGUMENT: &str = "--confirm";
+const REOPEN_ARGUMENT: [&str; 1] = ["--reopen-after-crash"];
 
 pub const SESSION_CLIENT_RESTART_THROTTLE: Duration = Duration::from_secs(10);
 const LOCK_SCREEN_RELAUNCH_AFTER: Duration = Duration::from_secs(10);
 
+#[derive(Clone)]
+pub(crate) struct Helper {
+    path: PathBuf,
+    build: Option<Arc<File>>,
+}
+
+impl Helper {
+    pub(crate) fn hold(path: &Path) -> Self {
+        let build = File::open(path)
+            .inspect_err(|error| tracing::warn!("cannot hold {}: {error}", path.display()))
+            .ok()
+            .map(Arc::new);
+        Self {
+            path: path.to_path_buf(),
+            build,
+        }
+    }
+
+    fn command(&self) -> Command {
+        match &self.build {
+            Some(build) => {
+                let mut command = Command::new(format!("/proc/self/fd/{}", build.as_raw_fd()));
+                command.arg0(&self.path);
+                command
+            }
+            None => Command::new(&self.path),
+        }
+    }
+}
+
 pub(crate) struct SessionClient {
-    executable: PathBuf,
+    helper: Helper,
     role: SessionRole,
     child: Option<Child>,
     last_restart: Option<Instant>,
@@ -45,20 +80,20 @@ pub(crate) struct SessionClient {
 pub const OUTPUT_VARIABLE: &str = "BANDE_OUTPUT";
 
 pub(crate) struct LockScreen {
-    executable: PathBuf,
+    helper: Helper,
     child: Option<Child>,
     started: Option<Instant>,
 }
 
 pub(crate) struct Summoned {
-    executable: PathBuf,
+    helper: Helper,
     running: Option<(Child, Client)>,
 }
 
 impl Summoned {
-    pub(crate) fn new(executable: &str) -> Self {
+    pub(crate) fn new(executable: &Path) -> Self {
         Self {
-            executable: PathBuf::from(executable),
+            helper: Helper::hold(executable),
             running: None,
         }
     }
@@ -75,7 +110,7 @@ fn session_end_keyword(ending: SessionEnd) -> &'static str {
 impl LockScreen {
     pub(crate) fn new() -> Self {
         Self {
-            executable: PathBuf::from(LOCK_SCREEN),
+            helper: Helper::hold(Path::new(LOCK_SCREEN)),
             child: None,
             started: None,
         }
@@ -106,9 +141,10 @@ impl Compositor {
     }
 
     pub fn start_session_client(&mut self, executable: &Path, role: SessionRole) -> io::Result<()> {
-        let child = self.spawn_session_client(executable, role)?;
+        let helper = Helper::hold(executable);
+        let child = self.spawn_session_client(&helper, role)?;
         self.session_clients.push(SessionClient {
-            executable: executable.to_path_buf(),
+            helper,
             role,
             child: Some(child),
             last_restart: None,
@@ -117,15 +153,15 @@ impl Compositor {
     }
 
     pub fn spawn_shell_client(&mut self, executable: &Path) -> io::Result<Child> {
-        self.spawn_session_client(executable, SessionRole::Shell)
+        self.spawn_session_client(&Helper::hold(executable), SessionRole::Shell)
     }
 
     pub fn set_session_dialog(&mut self, executable: &Path) {
-        self.session_dialog = Summoned::new(&executable.to_string_lossy());
+        self.session_dialog = Summoned::new(executable);
     }
 
     pub fn set_lock_screen(&mut self, executable: &Path) {
-        self.lock_screen.executable = executable.to_path_buf();
+        self.lock_screen.helper = Helper::hold(executable);
     }
 
     pub fn request_lock_screen(&mut self) {
@@ -156,12 +192,12 @@ impl Compositor {
             self.state.focus_client(id);
             return;
         }
-        let executable = summoned(self).executable.clone();
-        let mut command = Command::new(&executable);
+        let helper = summoned(self).helper.clone();
+        let mut command = helper.command();
         command.args(arguments);
-        match self.spawn_session_command(command, SessionRole::Shell) {
+        match self.spawn_session_command(command, &helper.path, SessionRole::Shell) {
             Ok(running) => summoned(self).running = Some(running),
-            Err(error) => upkeep.failures.push((executable, error)),
+            Err(error) => upkeep.failures.push((helper.path, error)),
         }
     }
 
@@ -197,7 +233,7 @@ impl Compositor {
                 Err(error) => {
                     upkeep
                         .failures
-                        .push((self.lock_screen.executable.clone(), error));
+                        .push((self.lock_screen.helper.path.clone(), error));
                     return;
                 }
             }
@@ -216,16 +252,15 @@ impl Compositor {
         }
         self.state.lock_screen_requested = false;
         self.lock_screen.started = Some(Instant::now());
-        let executable = self.lock_screen.executable.clone();
-        let mut command = Command::new(&executable);
+        let helper = self.lock_screen.helper.clone();
+        let mut command = helper.command();
         command.env(OUTPUT_VARIABLE, self.state.main_screen().name());
         match self
-            .spawn_session_command(command, SessionRole::Shell)
+            .spawn_session_command(command, &helper.path, SessionRole::LockScreen)
             .map(|(child, _)| child)
         {
             Ok(child) => self.lock_screen.child = Some(child),
-
-            Err(error) => upkeep.failures.push((executable, error)),
+            Err(error) => upkeep.failures.push((helper.path, error)),
         }
     }
 
@@ -237,9 +272,16 @@ impl Compositor {
             .session_end_requested
             .take()
             .map(|ending| [CONFIRM_ARGUMENT, session_end_keyword(ending)]);
+        let question = match std::mem::take(&mut self.state.resume.ask_after_crash) {
+            true => Some(REOPEN_ARGUMENT.as_slice()),
+            false => None,
+        };
         self.keep_summoned(
             |compositor| &mut compositor.session_dialog,
-            confirm.as_ref().map(|arguments| arguments.as_slice()),
+            confirm
+                .as_ref()
+                .map(|arguments| arguments.as_slice())
+                .or(question),
             &mut upkeep,
         );
         self.keep_screen_reader();
@@ -251,7 +293,7 @@ impl Compositor {
                     Ok(None) => continue,
                     Ok(Some(_)) => client.child = None,
                     Err(error) => {
-                        upkeep.failures.push((client.executable.clone(), error));
+                        upkeep.failures.push((client.helper.path.clone(), error));
                         continue;
                     }
                 }
@@ -264,11 +306,11 @@ impl Compositor {
                 continue;
             }
             client.last_restart = Some(Instant::now());
-            let (executable, role) = (client.executable.clone(), client.role);
-            match self.spawn_session_client(&executable, role) {
+            let (helper, role) = (client.helper.clone(), client.role);
+            match self.spawn_session_client(&helper, role) {
                 Ok(child) => self.session_clients[index].child = Some(child),
                 Err(error) => {
-                    upkeep.failures.push((executable, error));
+                    upkeep.failures.push((helper.path, error));
                     let wait = SESSION_CLIENT_RESTART_THROTTLE;
                     upkeep.retry_in = Some(upkeep.retry_in.map_or(wait, |retry| retry.min(wait)));
                 }
@@ -277,9 +319,9 @@ impl Compositor {
         upkeep
     }
 
-    fn spawn_session_client(&mut self, executable: &Path, role: SessionRole) -> io::Result<Child> {
-        let (child, client) = self.spawn_session_command(Command::new(executable), role)?;
-        if executable == Path::new(SHELL) {
+    fn spawn_session_client(&mut self, helper: &Helper, role: SessionRole) -> io::Result<Child> {
+        let (child, client) = self.spawn_session_command(helper.command(), &helper.path, role)?;
+        if helper.path == Path::new(SHELL) {
             self.state.desktop_shell = Some(client);
         }
         Ok(child)
@@ -288,6 +330,7 @@ impl Compositor {
     fn spawn_session_command(
         &mut self,
         mut command: Command,
+        executable: &Path,
         role: SessionRole,
     ) -> io::Result<(Child, Client)> {
         let (compositor_end, client_end) = UnixStream::pair()?;
@@ -298,7 +341,9 @@ impl Compositor {
         command.envs(desktop_environment());
         command.envs(cursor_environment(self.cursor_theme()));
         match (&self.socket_name, role) {
-            (Some(name), SessionRole::Shell) => command.env("WAYLAND_DISPLAY", name),
+            (Some(name), SessionRole::Shell | SessionRole::LockScreen) => {
+                command.env("WAYLAND_DISPLAY", name)
+            }
             _ => command.env_remove("WAYLAND_DISPLAY"),
         };
         unsafe {
@@ -307,14 +352,13 @@ impl Compositor {
                     .map_err(io::Error::from)
             });
         }
-        let executable = PathBuf::from(command.get_program());
         let mut child = command.spawn()?;
         if let Err(error) = self.wake_when_exited(&child) {
             let _ = child.kill();
             let _ = child.wait();
             return Err(error);
         }
-        self.state.clear_alert(&executable);
+        self.state.clear_alert(executable);
         Ok((child, client))
     }
 

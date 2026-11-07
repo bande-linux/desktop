@@ -229,6 +229,7 @@ fn deliver(app: &mut impl Surfaces) -> Result<bool, WindowError> {
 struct Readiness {
     wayland: bool,
     appearance: bool,
+    spelling: bool,
     accessibility: Vec<usize>,
     pastes: Vec<(usize, usize)>,
     sources: Vec<usize>,
@@ -263,6 +264,10 @@ fn wait(
     for fd in &sources {
         fds.push(PollFd::new(fd, SOURCE_EVENTS));
     }
+    let spelling = crate::spelling::fd();
+    if let Some(fd) = &spelling {
+        fds.push(PollFd::new(fd, PollFlags::IN));
+    }
     let timeout = deadline.map(|deadline| {
         let wait = deadline.saturating_duration_since(Instant::now());
         Timespec {
@@ -276,6 +281,7 @@ fn wait(
     }
     let ready = |at: usize| !fds[at].revents().is_empty();
     let mut readiness = Readiness {
+        spelling: spelling.is_some() && ready(fds.len() - 1),
         wayland: ready(0),
         appearance: ready(1),
         accessibility: (0..count).filter(|at| ready(2 + at)).collect(),
@@ -397,6 +403,16 @@ pub fn step_surfaces(app: &mut impl Surfaces, blocking: Wait) -> Result<bool, Wi
                 let appearance = app.windows()[index].for_role(appearance);
                 app.event(index, WindowEvent::AppearanceChanged(appearance));
             }
+        }
+    }
+    if readiness.spelling {
+        crate::spelling::deliver();
+        for surface in surfaces(app) {
+            let Some(index) = position(app, &surface) else {
+                continue;
+            };
+            app.windows_mut()[index].request_redraw();
+            app.event(index, WindowEvent::SpellingAnswered);
         }
     }
     for (index, paste) in readiness.pastes.into_iter().rev() {

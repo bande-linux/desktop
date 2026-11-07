@@ -43,10 +43,6 @@ pub trait Config {
     #[zbus(property)]
     fn set_reopen_apps(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
-    fn reopen_apps_after_crash(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_reopen_apps_after_crash(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
     fn automatic_updates(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_automatic_updates(&self, on: bool) -> zbus::Result<()>;
@@ -64,6 +60,10 @@ pub trait Config {
     fn low_power_on_battery(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_low_power_on_battery(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn style(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_style(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
     fn lid_on_power(&self) -> zbus::Result<String>;
     #[zbus(property)]
@@ -136,6 +136,10 @@ pub trait Config {
     fn bar_icon_size(&self) -> zbus::Result<u32>;
     #[zbus(property)]
     fn set_bar_icon_size(&self, size: u32) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn bar_floating(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_bar_floating(&self, floating: bool) -> zbus::Result<()>;
     #[zbus(property)]
     fn bar_auto_hide(&self) -> zbus::Result<bool>;
     #[zbus(property)]
@@ -297,14 +301,15 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
             .get("rotation")
             .and_then(|value| u32::try_from(value).ok())
             .and_then(Rotation::from_degrees),
-        variable_refresh_rate: settings
-            .get("variable-refresh-rate")
+        match_colours: settings
+            .get("match-colours")
             .and_then(|value| bool::try_from(value).ok()),
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 74] = [
+pub const CONFIG_SETTINGS: [SettingId; 78] = [
     SettingId::Appearance,
+    SettingId::Style,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
     SettingId::LidOnPower,
@@ -332,13 +337,13 @@ pub const CONFIG_SETTINGS: [SettingId; 74] = [
     SettingId::ReopenApps,
     SettingId::LockMessage,
     SettingId::ShowPreviews,
-    SettingId::ReopenAfterCrash,
     SettingId::AutomaticUpdates,
     SettingId::UpdateCheckEvery,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
     SettingId::BarIconSize,
     SettingId::BarAutoHide,
+    SettingId::BarFloating,
     SettingId::BarEdge,
     SettingId::ScreenSaverAfter,
     SettingId::DisplayOffAfter,
@@ -377,6 +382,9 @@ pub const CONFIG_SETTINGS: [SettingId; 74] = [
     SettingId::SearchSystem,
     SettingId::SearchCalculator,
     SettingId::SearchConversion,
+    SettingId::SearchMail,
+    SettingId::SearchEvents,
+    SettingId::SearchContacts,
     SettingId::SearchExcluded,
 ];
 
@@ -391,6 +399,9 @@ fn search_category(id: SettingId) -> Option<SearchCategory> {
         SettingId::SearchSystem => SearchCategory::System,
         SettingId::SearchCalculator => SearchCategory::Calculator,
         SettingId::SearchConversion => SearchCategory::Conversion,
+        SettingId::SearchMail => SearchCategory::Mail,
+        SettingId::SearchEvents => SearchCategory::Events,
+        SettingId::SearchContacts => SearchCategory::Contacts,
         _ => return None,
     })
 }
@@ -447,8 +458,8 @@ impl SettingsClient {
         if let Some(rotation) = display.rotation {
             settings.insert("rotation", rotation.degrees().into());
         }
-        if let Some(enabled) = display.variable_refresh_rate {
-            settings.insert("variable-refresh-rate", enabled.into());
+        if let Some(enabled) = display.match_colours {
+            settings.insert("match-colours", enabled.into());
         }
         self.config.set_display(identity, settings)
     }
@@ -525,6 +536,7 @@ impl SettingsClient {
             SettingId::TextSize => Value::Number(self.config.text_size()?),
             SettingId::DoNotDisturb => Value::Flag(self.notifications.do_not_disturb()?),
             SettingId::Appearance => Value::Keyword(self.config.appearance()?),
+            SettingId::Style => Value::Keyword(self.config.style()?),
             SettingId::ScreenReader => Value::Flag(self.config.screen_reader()?),
             SettingId::Zoom => Value::Flag(self.config.zoom()? > 1.0),
             SettingId::IncreaseContrast => Value::Flag(self.config.increase_contrast()?),
@@ -540,7 +552,6 @@ impl SettingsClient {
             SettingId::ReopenApps => Value::Flag(self.config.reopen_apps()?),
             SettingId::LockMessage => Value::Text(self.config.lock_message()?),
             SettingId::ShowPreviews => Value::Flag(self.config.show_previews()?),
-            SettingId::ReopenAfterCrash => Value::Flag(self.config.reopen_apps_after_crash()?),
             SettingId::AutomaticUpdates => Value::Flag(self.config.automatic_updates()?),
             SettingId::UpdateCheckEvery => Value::Seconds(self.config.update_check_every()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
@@ -557,6 +568,7 @@ impl SettingsClient {
             SettingId::WallpaperFit => Value::Keyword(self.config.wallpaper_fit()?),
             SettingId::BarIconSize => Value::Number(self.config.bar_icon_size()?),
             SettingId::BarAutoHide => Value::Flag(self.config.bar_auto_hide()?),
+            SettingId::BarFloating => Value::Flag(self.config.bar_floating()?),
             SettingId::BarEdge => Value::Keyword(self.config.bar_edge()?),
             SettingId::ScreenSaverAfter => Value::Seconds(self.config.idle_screen_saver_after()?),
             SettingId::DisplayOffAfter => Value::Seconds(self.config.idle_display_off_after()?),
@@ -629,14 +641,12 @@ impl SettingsClient {
                 self.config.set_search_excluded(paths.clone())
             }
             (SettingId::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
+            (SettingId::Style, Value::Keyword(keyword)) => self.config.set_style(keyword),
             (SettingId::Accent, Value::Keyword(keyword)) => self.config.set_accent(keyword),
             (SettingId::TintedFrame, Value::Flag(tinted)) => self.config.set_tinted_frame(*tinted),
             (SettingId::ReopenApps, Value::Flag(on)) => self.config.set_reopen_apps(*on),
             (SettingId::LockMessage, Value::Text(message)) => self.config.set_lock_message(message),
             (SettingId::ShowPreviews, Value::Flag(shown)) => self.config.set_show_previews(*shown),
-            (SettingId::ReopenAfterCrash, Value::Flag(on)) => {
-                self.config.set_reopen_apps_after_crash(*on)
-            }
             (SettingId::AutomaticUpdates, Value::Flag(on)) => {
                 self.config.set_automatic_updates(*on)
             }
@@ -706,6 +716,9 @@ impl SettingsClient {
                 self.config.set_wallpaper_fit(keyword)
             }
             (SettingId::BarIconSize, Value::Number(size)) => self.config.set_bar_icon_size(*size),
+            (SettingId::BarFloating, Value::Flag(floating)) => {
+                self.config.set_bar_floating(*floating)
+            }
             (SettingId::BarAutoHide, Value::Flag(auto_hide)) => {
                 self.config.set_bar_auto_hide(*auto_hide)
             }

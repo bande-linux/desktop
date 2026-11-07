@@ -18,6 +18,7 @@ var<immediate> quad: Quad;
 
 @group(0) @binding(0) var surface: texture_2d<f32>;
 @group(0) @binding(1) var filtered: sampler;
+@group(0) @binding(2) var chroma: texture_2d<f32>;
 
 @vertex
 fn vertex(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
@@ -93,6 +94,21 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
 }
 
 @fragment
+fn video(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let local = (position.xy - quad.origin) / quad.size;
+    let source = quad.source_origin + local.x * quad.source_across + local.y * quad.source_down;
+    let uv = source / vec2<f32>(textureDimensions(surface));
+    let luma = (textureSampleLevel(surface, filtered, uv, 0.0).r - 16.0 / 255.0) * 255.0 / 219.0;
+    let difference = (textureSampleLevel(chroma, filtered, uv, 0.0).rg - vec2<f32>(128.0 / 255.0)) * 255.0 / 224.0;
+    let rgb = vec3<f32>(
+        luma + 1.5748 * difference.y,
+        luma - 0.1873 * difference.x - 0.4681 * difference.y,
+        luma + 1.8556 * difference.x,
+    );
+    return vec4<f32>(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0) * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius);
+}
+
+@fragment
 fn solid(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     return quad.color * coverage(position.xy, quad.clip, quad.clip_radius);
 }
@@ -106,6 +122,61 @@ fn shadow(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
 
 fn sample_at(uv: vec2<f32>) -> vec4<f32> {
     return textureSampleLevel(surface, filtered, uv, 0.0);
+}
+
+fn to_linear(encoded: vec3<f32>) -> vec3<f32> {
+    return pow(encoded, vec3<f32>(2.2));
+}
+
+fn to_encoded(linear: vec3<f32>) -> vec3<f32> {
+    return pow(max(linear, vec3<f32>(0.0)), vec3<f32>(1.0 / 2.2));
+}
+
+@fragment
+fn blur_tone(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let dimensions = vec2<f32>(textureDimensions(surface));
+    let local = (position.xy - quad.origin) / quad.size;
+    let source = quad.source_origin + local.x * quad.source_across + local.y * quad.source_down;
+    let texel = textureSampleLevel(surface, filtered, source / dimensions, 0.0);
+    let weights = vec3<f32>(0.2126, 0.7152, 0.0722);
+    let encoded_luma = dot(texel.rgb, weights);
+    let saturated = clamp(mix(vec3<f32>(encoded_luma), texel.rgb, quad.color.z), vec3<f32>(0.0), vec3<f32>(1.0));
+    var linear = to_linear(saturated);
+    let luminance = dot(linear, weights);
+    if quad.color.y > 0.5 {
+        if luminance < quad.color.x {
+            linear = mix(linear, vec3<f32>(1.0), (quad.color.x - luminance) / (1.0 - luminance));
+        }
+    } else if luminance > quad.color.x {
+        linear = linear * quad.color.x / luminance;
+    }
+    let toned = vec4<f32>(to_encoded(linear), 1.0);
+    return toned * quad.alpha * coverage(position.xy, quad.clip, quad.clip_radius);
+}
+
+fn srgb_decode(encoded: vec3<f32>) -> vec3<f32> {
+    let low = encoded / 12.92;
+    let high = pow((encoded + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+    return select(high, low, encoded <= vec3<f32>(0.04045));
+}
+
+fn srgb_encode(linear: vec3<f32>) -> vec3<f32> {
+    let clamped = clamp(linear, vec3<f32>(0.0), vec3<f32>(1.0));
+    let low = clamped * 12.92;
+    let high = 1.055 * pow(clamped, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055);
+    return select(high, low, clamped <= vec3<f32>(0.0031308));
+}
+
+@fragment
+fn display_colour(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let texel = textureLoad(surface, vec2<i32>(position.xy), 0);
+    let linear = srgb_decode(texel.rgb);
+    let converted = vec3<f32>(
+        dot(quad.color.xyz, linear),
+        dot(quad.clip.xyz, linear),
+        dot(quad.caster.xyz, linear),
+    );
+    return vec4<f32>(srgb_encode(converted), 1.0);
 }
 
 @fragment

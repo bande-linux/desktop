@@ -1,3 +1,5 @@
+pub mod system;
+
 use std::collections::HashSet;
 use std::sync::Mutex;
 
@@ -7,6 +9,8 @@ use unic_langid::LanguageIdentifier;
 
 const FALLBACK: &str = "en-US";
 const LOCALE_VARIABLES: [&str; 3] = ["LC_ALL", "LC_MESSAGES", "LANG"];
+
+pub use bande_l10n_macros::translations;
 
 pub struct Localizer {
     bundles: Vec<FluentBundle<FluentResource>>,
@@ -87,6 +91,9 @@ fn bundle(language: LanguageIdentifier, source: &str) -> FluentBundle<FluentReso
         });
     let mut bundle = FluentBundle::new_concurrent(vec![language]);
     bundle.set_use_isolating(false);
+    if let Err(error) = bundle.add_builtins() {
+        tracing::warn!("cannot add the Fluent functions: {error}");
+    }
     if let Err(errors) = bundle.add_resource(resource) {
         tracing::warn!("errors in the translation: {errors:?}");
     }
@@ -100,7 +107,7 @@ fn requested_languages(var: impl Fn(&str) -> Option<String>) -> Vec<LanguageIden
     else {
         return Vec::new();
     };
-    if matches!(locale.as_str(), "C" | "POSIX") || locale.starts_with("C.") {
+    if matches!(locale.as_str(), "C" | "POSIX") {
         return Vec::new();
     }
     let preferred = var("LANGUAGE").unwrap_or_default();
@@ -131,4 +138,17 @@ fn bundle_order(requested: &[LanguageIdentifier], available: &[LanguageIdentifie
     let mut order = Vec::from_iter(chosen);
     order.extend(fallback.filter(|index| chosen != Some(*index)));
     order
+}
+
+#[cfg(test)]
+mod pack_tests {
+    use super::*;
+
+    #[test]
+    fn a_language_is_a_directory_and_nothing_else() {
+        let requested = ["qaa".parse().unwrap_or_default()];
+        let found = Localizer::negotiated(crate::translations!("fixture"), &requested);
+        assert_eq!(found.tr("greeting"), "Qa");
+        assert_eq!(found.tr("only-english"), "Only English");
+    }
 }

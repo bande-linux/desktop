@@ -64,7 +64,7 @@ corners. Missing: Mission Control options (group windows by app, switch to a
 space with open windows), "click wallpaper to reveal desktop", default web browser lives in
 Apps already.
 
-**Displays.** Has: brightness, resolution, scaling, refresh rate, rotation, variable refresh,
+**Displays.** Has: brightness, resolution, scaling, refresh rate, rotation,
 arrangement with a revert countdown, mirroring, Night Light (Night Shift) with schedule and
 warmth. Missing: colour profile, HDR (blocked on the kernel), "optimise for" on mirroring.
 

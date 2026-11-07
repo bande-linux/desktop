@@ -8,15 +8,17 @@ use bande_fs::{
     Entry, FolderChanges, Listing, Sort, Trash, compare, is_hidden, is_partial, list, list_trash,
     merge, sort,
 };
+use bande_volumes::{leads_to_connected_volume, on_connected_volume};
 
 use crate::lister::{FIRST_CHUNK, Lister, Ticket};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Location {
     Folder(PathBuf),
     Trash,
     Recents,
     Search(PathBuf),
+    Server(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,6 +32,8 @@ pub struct Column {
     pub edits: Vec<RowEdit>,
     pub depths: Vec<u8>,
     pub denied: bool,
+    pub unavailable: bool,
+    incoming: Option<Vec<Entry>>,
     listing: Option<Ticket>,
     awaited: Vec<PathBuf>,
 }
@@ -71,6 +75,8 @@ impl Column {
             edits: Vec::new(),
             depths: Vec::new(),
             denied: contents.denied,
+            unavailable: false,
+            incoming: None,
             location,
             entries: contents.entries,
             selected: None,
@@ -132,6 +138,9 @@ impl Column {
         else {
             return;
         };
+        if on_connected_volume(path) {
+            return;
+        }
         let old = self.entries.iter().position(|entry| entry.path == path);
         let shown = !is_partial(&name) && (show_hidden || !is_hidden(&name));
         let fresh = (shown && path.symlink_metadata().is_ok())
@@ -191,6 +200,23 @@ impl Column {
         self.selected = self.selected.and_then(to);
         self.anchor = self.anchor.and_then(to);
         self.replaced();
+    }
+
+    fn refreshed(&mut self, mut fresh: Vec<Entry>, order: Sort) {
+        sort(&mut fresh, order);
+        if fresh == self.entries {
+            return;
+        }
+        self.awaited = self
+            .selection()
+            .iter()
+            .map(|entry| entry.path.clone())
+            .collect();
+        self.entries.clear();
+        self.marked.clear();
+        self.selected = None;
+        self.anchor = None;
+        self.merge(fresh, order);
     }
 
     fn merge(&mut self, chunk: Vec<Entry>, sort: Sort) -> bool {
@@ -279,7 +305,7 @@ pub struct Browser {
 fn entries(paths: &[PathBuf]) -> Vec<Entry> {
     paths
         .iter()
-        .filter(|path| path.symlink_metadata().is_ok())
+        .filter(|path| !on_connected_volume(path) && path.symlink_metadata().is_ok())
         .filter_map(|path| {
             let name = path.file_name()?.to_string_lossy().into_owned();
             Some(Entry::read(path.clone(), name))
@@ -317,6 +343,7 @@ impl Browser {
             Location::Folder(folder) => self.read_folder(folder),
             Location::Trash => Contents::listed(list_trash(&self.trash, self.order())),
             Location::Recents => Contents::listed(entries(&self.recents)),
+            Location::Server(_) => Contents::listed(Vec::new()),
             Location::Search(_) => {
                 let mut found = entries(&self.found);
                 sort(&mut found, self.order());
@@ -326,6 +353,20 @@ impl Browser {
     }
 
     fn read_folder(&mut self, folder: &Path) -> Contents {
+        if leads_to_connected_volume(folder) {
+            let (hidden, order) = (self.show_hidden, self.order());
+            let listing = self.lister.as_mut().and_then(|lister| {
+                lister
+                    .open_on_its_own_thread(folder.to_path_buf(), hidden, order)
+                    .inspect_err(|error| tracing::warn!("cannot list {folder:?}: {error}"))
+                    .ok()
+            });
+            return Contents {
+                entries: Vec::new(),
+                listing,
+                denied: false,
+            };
+        }
         let mut listing = match Listing::open(folder, self.show_hidden) {
             Ok(listing) => listing,
             Err(error) => {
@@ -374,6 +415,23 @@ impl Browser {
             };
             let column = &mut self.columns[index];
             changed = true;
+            match listed.failed {
+                Some(io::ErrorKind::PermissionDenied) => column.denied = true,
+                Some(_) => column.unavailable = true,
+                None => column.unavailable = false,
+            }
+            if let Some(incoming) = &mut column.incoming {
+                incoming.extend(listed.entries);
+                if listed.done {
+                    column.listing = None;
+                    if let Some(fresh) = column.incoming.take()
+                        && listed.failed.is_none()
+                    {
+                        column.refreshed(fresh, order);
+                    }
+                }
+                continue;
+            }
             if column.merge(listed.entries, order) {
                 selected = true;
                 if self.active <= index {
@@ -506,7 +564,10 @@ impl Browser {
     }
 
     fn nests(&self) -> bool {
-        self.nesting && self.single && !self.expanded.is_empty()
+        self.nesting
+            && self.single
+            && !self.expanded.is_empty()
+            && !self.columns[0].folder().is_some_and(on_connected_volume)
     }
 
     fn nest_into(
@@ -947,7 +1008,7 @@ impl Browser {
             .flat_map(|column| match &column.location {
                 Location::Folder(folder) => vec![folder.clone()],
                 Location::Trash => self.trash_info_dirs(),
-                Location::Recents | Location::Search(_) => Vec::new(),
+                Location::Recents | Location::Search(_) | Location::Server(_) => Vec::new(),
             })
             .collect::<Vec<_>>();
         watched.extend(self.open_subfolders());
@@ -970,6 +1031,20 @@ impl Browser {
     }
 
     fn reload_column(&mut self, index: usize) {
+        if let Some(folder) = self.columns[index]
+            .folder()
+            .filter(|folder| leads_to_connected_volume(folder))
+            .map(Path::to_path_buf)
+        {
+            if self.columns[index].listing.is_some() {
+                return;
+            }
+            let listing = self.read_folder(&folder).listing;
+            let column = &mut self.columns[index];
+            column.listing = listing;
+            column.incoming = (!column.entries.is_empty()).then(Vec::new);
+            return;
+        }
         let column = &self.columns[index];
         let selected_path = column.selected_entry().map(|entry| entry.path.clone());
         let marked_paths = column
@@ -1165,8 +1240,15 @@ impl Browser {
         self.reload_where(|location| match location {
             Location::Folder(folder) => changed.contains(folder),
             Location::Trash => trash_changed,
+            Location::Server(_) => false,
             Location::Recents | Location::Search(_) => true,
         });
+    }
+
+    pub fn reload_connected(&mut self) {
+        self.reload_where(
+            |location| matches!(location, Location::Folder(folder) if on_connected_volume(folder)),
+        );
     }
 
     pub fn reload(&mut self) {

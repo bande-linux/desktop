@@ -126,6 +126,8 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 shortcut("menu-open", "Ctrl+O"),
                 Entry::separator(),
                 shortcut("menu-get-info", "Ctrl+I"),
+                Entry::item(&L10N.tr("menu-browse-backups"), "browse-backups")
+                    .enabled(bande_files::backups_installed()),
                 shortcut("menu-rename", "F2"),
                 Entry::item(&L10N.tr("menu-duplicate"), "duplicate"),
                 Entry::item(&L10N.tr("menu-make-alias"), "make-alias"),
@@ -139,6 +141,8 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 Entry::separator(),
                 plain("menu-eject", "eject-current"),
                 shortcut("menu-find", "Ctrl+F"),
+                Entry::separator(),
+                bande_app_menu::print_item(view.can_print()),
             ],
         ),
         submenu(
@@ -199,6 +203,7 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 Entry::separator(),
                 submenu("menu-recent-folders", recent_entries(recent_folders)),
                 shortcut("menu-go-to-folder", "Ctrl+L"),
+                shortcut("menu-connect-to-server", "Ctrl+K"),
             ],
         ),
     ];

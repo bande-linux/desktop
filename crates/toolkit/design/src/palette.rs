@@ -1,4 +1,4 @@
-use crate::{Color, TextSize};
+use crate::{Color, Look, Style, TextSize};
 
 const LIGHT_NEUTRAL_HUE: f64 = 80.0;
 const DARK_NEUTRAL_HUE: f64 = 262.0;
@@ -174,6 +174,8 @@ impl Highlight {
 pub struct Palette {
     pub scheme: Scheme,
     pub chassis: Color,
+    pub frame: Color,
+    pub panel: Color,
     pub sheet: Color,
     pub overlay: Color,
     pub well: Color,
@@ -275,6 +277,8 @@ impl Palette {
             scheme,
             contrast,
             chassis,
+            frame: chassis,
+            panel: overlay,
             sheet,
             overlay,
             well,
@@ -307,6 +311,10 @@ impl Palette {
         }
     }
 
+    pub fn on_panel(&self, tone: Color) -> Color {
+        tone.with_opacity(f32::from(self.panel.a) / f32::from(u8::MAX))
+    }
+
     pub fn sidebar_selection(&self, window_active: bool, focused: bool) -> Color {
         match (window_active, focused) {
             (false, _) => self.well.mix(self.chassis, 0.5),
@@ -324,6 +332,8 @@ pub struct Appearance {
     pub reduce_motion: bool,
     pub frame_tint: Option<Color>,
     pub text_size: TextSize,
+    pub style: Style,
+    pub reduce_transparency: bool,
 }
 
 const FRAME_TINT: f32 = 0.06;
@@ -334,6 +344,17 @@ impl Appearance {
         if let Some(tint) = self.frame_tint {
             palette.chassis = palette.chassis.mix(tint, FRAME_TINT);
         }
+        let look = self.look();
+        palette.frame = palette.chassis.with_opacity(look.frame_opacity);
+        palette.panel = palette.overlay.with_opacity(look.panel_opacity);
         palette
+    }
+
+    pub fn look(self) -> Look {
+        if self.reduce_transparency || self.contrast == Contrast::Increased {
+            Look::SOLID
+        } else {
+            self.style.look()
+        }
     }
 }

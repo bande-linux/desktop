@@ -1,10 +1,13 @@
 use std::cell::RefCell;
+use std::fs::File;
 use std::io;
-use std::os::fd::BorrowedFd;
+use std::os::fd::{AsFd, BorrowedFd};
+use std::os::unix::fs::FileExt;
 use std::rc::{Rc, Weak};
 use std::sync::Mutex;
 
 use bande_graphics::{Rect, Region, SurfaceId};
+use rustix::fs::{MemfdFlags, memfd_create};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_output::Transform;
@@ -18,7 +21,9 @@ use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibitor_v1::Zwp
 use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_buffer_params_v1::{
     Flags, ZwpLinuxBufferParamsV1,
 };
-use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
+use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::{
+    self, ZwpLinuxDmabufV1,
+};
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 
 use crate::window::{State, Window, WindowError};
@@ -73,6 +78,31 @@ impl HeldBuffer {
 impl Drop for HeldBuffer {
     fn drop(&mut self) {
         self.buffer.destroy();
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CursorImage<'a> {
+    pub width: u32,
+    pub height: u32,
+    pub hotspot: (u32, u32),
+    pub pixels: &'a [u8],
+}
+
+pub(crate) struct ImageCursor {
+    pub(crate) surface: WlSurface,
+    viewport: WpViewport,
+    buffer: Option<WlBuffer>,
+    pub(crate) hotspot: (i32, i32),
+}
+
+impl Drop for ImageCursor {
+    fn drop(&mut self) {
+        if let Some(buffer) = self.buffer.take() {
+            buffer.destroy();
+        }
+        self.viewport.destroy();
+        self.surface.destroy();
     }
 }
 
@@ -186,6 +216,82 @@ impl Window {
         self.externals.push(Rc::downgrade(&shared));
         self.stage();
         Ok(ExternalSurface { shared })
+    }
+
+    pub fn set_cursor_image(&mut self, image: CursorImage<'_>) -> Result<(), WindowError> {
+        let stride = u64::from(image.width) * 4;
+        let length = stride * u64::from(image.height);
+        if image.width == 0 || image.height == 0 || image.pixels.len() as u64 != length {
+            return Err(WindowError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "the cursor image has the wrong size",
+            )));
+        }
+        let handle = self.queue.handle();
+        let state = &mut self.state;
+        let shm = state.shm.as_ref().ok_or(WindowError::Missing("wl_shm"))?;
+        let memory =
+            File::from(memfd_create("bande-cursor", MemfdFlags::CLOEXEC).map_err(io::Error::from)?);
+        memory.write_all_at(image.pixels, 0)?;
+        let pool = shm.create_pool(
+            memory.as_fd(),
+            whole(image.pixels.len() as u32),
+            &handle,
+            (),
+        );
+        let buffer = pool.create_buffer(
+            0,
+            whole(image.width),
+            whole(image.height),
+            whole(image.width * 4),
+            wl_shm::Format::Argb8888,
+            &handle,
+            ExternalBuffer::default(),
+        );
+        pool.destroy();
+        let scale = state.scaling.scale();
+        let logical = |pixels: u32| ((f64::from(pixels) / scale).round() as i32).max(1);
+        let mut cursor = match state.input.take_cursor_image() {
+            Some(cursor) => cursor,
+            None => {
+                let compositor = state
+                    .compositor
+                    .as_ref()
+                    .ok_or(WindowError::Missing("wl_compositor"))?;
+                let viewporter = state
+                    .scaling
+                    .viewporter
+                    .as_ref()
+                    .ok_or(WindowError::Missing("wp_viewporter"))?;
+                let surface = compositor.create_surface(&handle, ());
+                let viewport = viewporter.get_viewport(&surface, &handle, ());
+                ImageCursor {
+                    surface,
+                    viewport,
+                    buffer: None,
+                    hotspot: (0, 0),
+                }
+            }
+        };
+        cursor
+            .viewport
+            .set_destination(logical(image.width), logical(image.height));
+        cursor.surface.attach(Some(&buffer), 0, 0);
+        cursor.surface.damage_buffer(0, 0, i32::MAX, i32::MAX);
+        cursor.surface.commit();
+        if let Some(previous) = cursor.buffer.replace(buffer) {
+            previous.destroy();
+        }
+        cursor.hotspot = (
+            (f64::from(image.hotspot.0) / scale).round() as i32,
+            (f64::from(image.hotspot.1) / scale).round() as i32,
+        );
+        state.input.show_cursor_image(cursor);
+        self.flush()
+    }
+
+    pub fn supports_dmabuf(&self, fourcc: u32, modifier: u64) -> bool {
+        self.state.dmabuf_formats.contains(&(fourcc, modifier))
     }
 
     pub(crate) fn place_externals(&mut self, placed: &[(SurfaceId, Rect)], below: bool) {
@@ -456,7 +562,27 @@ impl Dispatch<WlBuffer, ExternalBuffer> for State {
     }
 }
 
+impl Dispatch<ZwpLinuxDmabufV1, ()> for State {
+    fn event(
+        state: &mut Self,
+        _: &ZwpLinuxDmabufV1,
+        event: zwp_linux_dmabuf_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let zwp_linux_dmabuf_v1::Event::Modifier {
+            format,
+            modifier_hi,
+            modifier_lo,
+        } = event
+        {
+            let modifier = u64::from(modifier_hi) << 32 | u64::from(modifier_lo);
+            state.dmabuf_formats.push((format, modifier));
+        }
+    }
+}
+
 delegate_noop!(State: ignore WlSubcompositor);
 delegate_noop!(State: ignore WlSubsurface);
-delegate_noop!(State: ignore ZwpLinuxDmabufV1);
 delegate_noop!(State: ignore ZwpLinuxBufferParamsV1);

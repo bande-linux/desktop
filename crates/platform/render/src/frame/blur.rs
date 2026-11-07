@@ -16,6 +16,7 @@ pub struct Blur {
     pub passes: u32,
     pub offset: f32,
     pub alpha: f32,
+    pub tone: Option<[f32; 4]>,
 }
 
 pub(crate) struct BlurChain {
@@ -23,7 +24,7 @@ pub(crate) struct BlurChain {
     pub(crate) used: bool,
 }
 
-const SAMPLED: Usage = (
+pub(super) const SAMPLED: Usage = (
     vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
     vk::PipelineStageFlags2::FRAGMENT_SHADER,
     vk::AccessFlags2::SHADER_SAMPLED_READ,
@@ -35,13 +36,13 @@ const COPY_DESTINATION: Usage = (
     vk::AccessFlags2::TRANSFER_WRITE,
 );
 
-const DISCARDED: Usage = (
+pub(super) const DISCARDED: Usage = (
     vk::ImageLayout::UNDEFINED,
     vk::PipelineStageFlags2::TOP_OF_PIPE,
     vk::AccessFlags2::NONE,
 );
 
-const DRAWN: Usage = (
+pub(super) const DRAWN: Usage = (
     vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
     vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
     vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
@@ -105,10 +106,14 @@ impl VulkanFrame<'_, '_> {
             self.filter(Program::BlurUp, levels[pass + 1], levels[pass], blur.offset)?;
         }
         self.resume();
-        self.bind(Program::Texture)?;
+        self.bind(match blur.tone {
+            Some(_) => Program::BlurTone,
+            None => Program::Texture,
+        })?;
         self.push_texture(levels[0].1);
         self.draw(
             &Quad {
+                color: blur.tone.unwrap_or_default(),
                 destination: source,
                 sampling: Sampling::upright(Rectangle::from_size(
                     (f64::from(source.width), f64::from(source.height)).into(),

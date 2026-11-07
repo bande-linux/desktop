@@ -27,9 +27,8 @@ pub use client::{ControlCenter, role};
 use media::{Command, Player};
 pub use now_playing::clock;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-controlcenter.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-controlcenter")));
 
 pub const HUD_SIZE: (f32, f32) = (232.0, 64.0);
 pub const PANEL_WIDTH: f32 = 344.0;
@@ -414,7 +413,7 @@ pub fn card(palette: &Palette, rect: Rect, items: &mut Vec<Item>) {
     ));
     items.push(Item::Fill {
         shape,
-        paint: palette.chassis.into(),
+        paint: palette.on_panel(palette.chassis).into(),
     });
     items.push(Item::lit_edge(shape, palette));
 }

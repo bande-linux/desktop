@@ -53,6 +53,10 @@ pub(crate) enum Signal {
     ColumnOrder(Vec<usize>),
     Search(String),
     GoTo(String),
+    Server(crate::servers::ServerField),
+    SheetDefault,
+    TryConnectionAgain,
+    DisconnectCurrent,
     ApplyToAll(bool),
     Drag(Point),
     IconSize(f64),
@@ -60,6 +64,9 @@ pub(crate) enum Signal {
     Scope(bool),
     Back,
     Forward,
+    BackupStep(bool),
+    BackupRestore,
+    BackupDone,
     Expand(Vec<String>, bool, bool),
     Runnable(bool),
     SearchKind(usize),
@@ -357,6 +364,7 @@ impl FilesView {
             Some(self.toolbar.search),
             self.size_slider,
             self.search_home_button,
+            self.trouble_buttons,
         ]
         .into_iter()
         .flatten()
@@ -623,6 +631,9 @@ impl FilesView {
                     Signal::ColumnOrder(order) => self.table_order_chosen(&order),
                     Signal::Search(text) => self.search_changed(&text),
                     Signal::View(index) => self.view_chosen(index),
+                    Signal::BackupStep(older) => self.step_backup(older),
+                    Signal::BackupRestore => self.restore_from_backup(),
+                    Signal::BackupDone => self.leave_backups(),
                     Signal::Back => self.back(),
                     Signal::Runnable(on) => self.set_runnable(on),
                     Signal::SearchKind(index) => self.set_search_kind(index),
@@ -649,6 +660,14 @@ impl FilesView {
                     Signal::GoTo(text) => {
                         if let Some(Sheet::GoTo(typed)) = &mut self.sheet {
                             *typed = text;
+                        }
+                    }
+                    Signal::Server(field) => self.server_field(field),
+                    Signal::TryConnectionAgain => self.browser.reload(),
+                    Signal::DisconnectCurrent => self.disconnect_current(),
+                    Signal::SheetDefault => {
+                        if let Some(primary) = self.sheet_primary.take() {
+                            self.ui.perform(&request(Action::Click, primary.into()));
                         }
                     }
                     Signal::Drag(at) => {
@@ -1108,7 +1127,11 @@ impl FilesView {
             true => content,
             false => Rect::default(),
         };
-        let search = self.toolbar_frames().into_iter().chain(self.scope_frames());
+        let search = self
+            .toolbar_frames()
+            .into_iter()
+            .chain(self.scope_frames())
+            .chain(self.backup_bar_frames());
         let rename = self
             .rename
             .as_ref()
@@ -1127,6 +1150,7 @@ impl FilesView {
             )
         });
         let search_home = self.search_home_frame(self.empty_area());
+        let trouble = self.trouble_frame(self.empty_area());
         let table_id = self.table;
         if let Some(host) = self.host_mut() {
             host.set_frame(table_id, table);
@@ -1135,6 +1159,7 @@ impl FilesView {
                 .chain(rename)
                 .chain(slider)
                 .chain(search_home)
+                .chain(trouble)
             {
                 host.set_frame(id, frame);
             }
@@ -1159,6 +1184,7 @@ impl FilesView {
             .map(str::to_owned);
         self.cancel_rename();
         let mut field = TextField::new("", &shown, |_| {})
+            .without_text_checking()
             .in_place(NAME_SIZE)
             .padding(FIELD_INSET);
         field.select(match hidden_extension {
@@ -1295,6 +1321,13 @@ impl FilesView {
             | Sheet::NoSpace
             | Sheet::Busy { .. }
             | Sheet::GoTo(_)
+            | Sheet::ConnectServer { .. }
+            | Sheet::ServerPassword(_)
+            | Sheet::ServerShares { .. }
+            | Sheet::ServerHostKey { .. }
+            | Sheet::ServerInstall { .. }
+            | Sheet::ServerFailed(_)
+            | Sheet::ServerBusy
             | Sheet::OpenWith(_)
             | Sheet::Rename(_) => {
                 return;
@@ -1327,7 +1360,8 @@ impl FilesView {
         let send = sender(&self.signals);
         let mut field = TextField::new("", &current, move |text| {
             send(Signal::GoTo(text.to_owned()));
-        });
+        })
+        .without_text_checking();
         field.select(0..current.len());
         let prompt = Prompt::new(&L10N.tr("go-to-title"), "", self.choice())
             .accessory(field)
@@ -1351,8 +1385,9 @@ impl FilesView {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
         let describe = |path: &Path| {
-            std::fs::symlink_metadata(path)
-                .ok()
+            (!bande_volumes::on_connected_volume(path))
+                .then(|| std::fs::symlink_metadata(path).ok())
+                .flatten()
                 .map(|metadata| {
                     let modified = metadata.modified().map(format_date).unwrap_or_default();
                     match metadata.is_dir() {

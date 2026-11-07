@@ -18,9 +18,9 @@ pub const REDO: &str = "Shift+Ctrl+Z";
 pub const REDO_ALIAS: &str = "Ctrl+Y";
 pub const FULL_SCREEN: &str = "F11";
 const ROOT: i32 = 0;
-const ENGLISH: &str = include_str!("../locales/en-US/bande-app-menu.ftl");
 
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-app-menu")));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Standard {
@@ -166,6 +166,15 @@ pub fn edit_submenu(extra: Vec<Entry>) -> Entry {
         entries.extend(extra);
     }
     Entry::submenu(&L10N.tr("edit"), entries)
+}
+
+pub const PRINT: &str = "print";
+pub const PRINT_SHORTCUT: &str = "Ctrl+P";
+
+pub fn print_item(enabled: bool) -> Entry {
+    Entry::item(&L10N.tr("print"), PRINT)
+        .shortcut(PRINT_SHORTCUT)
+        .enabled(enabled)
 }
 
 pub fn settings(shortcut: &str) -> Entry {

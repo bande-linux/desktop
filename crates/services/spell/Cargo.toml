@@ -1,0 +1,35 @@
+[package]
+name = "bande-spell"
+description = "Bande spelling service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+spellbook.workspace = true
+tracing.workspace = true
+bande-bus.workspace = true
+bande-config.workspace = true
+bande-l10n.workspace = true
+bande-log.workspace = true
+zbus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "misc"
+depends = "$auto, default-dbus-session-bus | dbus-session-bus, hunspell-en-us"
+extended-description = """\
+Serves spell checking, learned words and text replacements to Bande apps \
+as org.bande.Spell on the session bus. Started by D-Bus activation when \
+text is first checked; holds one copy of each dictionary and exits when \
+idle. Dictionaries are Debian's hunspell packages."""
+assets = [
+    ["target/release/bande-spell", "usr/libexec/", "755"],
+    ["data/org.bande.Spell.service", "usr/share/dbus-1/services/", "644"],
+    ["data/text/*", "usr/share/bande/text/", "644"],
+]
+
+[lints]
+workspace = true

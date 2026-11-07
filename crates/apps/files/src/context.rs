@@ -3,6 +3,7 @@ use bande_toolkit::Point;
 use bande_toolkit::ui::Menu;
 use bande_xdg::UserDir;
 
+use crate::backups::backups_installed;
 use crate::browser::Location;
 use std::path::PathBuf;
 
@@ -129,6 +130,8 @@ impl FilesView {
                 .map(|entry| entry.name.clone())
                 .unwrap_or_default(),
             trashed,
+            in_backup: self.in_backup(),
+            can_browse_backups: backups_installed() && !trashed && !self.in_backup(),
             away: self.searching.is_some() || *self.browser.root() == Location::Recents,
             files: !selection.is_empty() && only_files && !trashed,
             folders: !selection.is_empty()
@@ -137,7 +140,38 @@ impl FilesView {
                     .all(|entry| entry.is_folder() && entry.trashed.is_none()),
             terminal: self.terminal_installed(),
             apps,
+            mail: only_files && !trashed && self.mail_app().is_some(),
+            places: match trashed {
+                true => Vec::new(),
+                false => self
+                    .mounted
+                    .iter()
+                    .filter(|place| !selection.iter().any(|entry| entry.path.starts_with(place)))
+                    .cloned()
+                    .collect(),
+            },
         })
+    }
+
+    fn single_file(&self) -> Option<PathBuf> {
+        match self.browser.selected_paths().as_slice() {
+            [path] if !bande_volumes::on_connected_volume(path) && path.is_file() => {
+                Some(path.clone())
+            }
+            _ => None,
+        }
+    }
+
+    pub fn can_print(&self) -> bool {
+        self.single_file()
+            .is_some_and(|path| bande_app::can_print(&self.apps.mime_for(&path)))
+    }
+
+    pub fn printable(&self) -> Option<(String, bande_app::Document)> {
+        let path = self.single_file()?;
+        let document = bande_app::file_document(&path, &self.apps.mime_for(&path))?;
+        let title = path.file_name()?.to_string_lossy().into_owned();
+        Some((title, document))
     }
 
     pub fn terminal_installed(&self) -> bool {
@@ -151,6 +185,7 @@ impl FilesView {
             trash_empty: !self.trash_full,
             paste: self.clipboard_files,
             terminal: self.terminal_installed(),
+            can_browse_backups: backups_installed() && !self.in_backup(),
         })
     }
 
@@ -203,11 +238,15 @@ impl FilesView {
             Command::Duplicate => self.duplicate(),
             Command::MakeAlias => self.make_alias(),
             Command::Compress => self.compress(),
+            Command::ShareMail => self.share_by_mail(),
+            Command::ShareTo(place) => self.share_to(place),
             Command::Copy => self.copy_selection(false),
             Command::CopyPath => self.copy_paths(),
             Command::AddToSidebar => self.add_to_sidebar(),
             Command::Cut => self.copy_selection(true),
             Command::ShowInEnclosingFolder => self.show_in_enclosing_folder(),
+            Command::BrowseBackups => self.browse_backups(),
+            Command::RestoreFromBackup => self.restore_from_backup(),
             Command::Trash | Command::PutBack => self.trash_or_put_back(),
             Command::DeleteImmediately => self.confirm_delete(),
             Command::NewFolder => self.new_folder(),
@@ -309,6 +348,10 @@ impl FilesView {
         let Some(Row::Place(place)) = self.sidebar.get(index).cloned() else {
             return;
         };
+        if let Location::Server(url) = &place.location {
+            self.requests.push(Request::ForgetServer(url.clone()));
+            return;
+        }
         let mut places = self.favourite_places();
         places.retain(|known| known.location != place.location);
         let mut hidden = self.hidden_places.clone();

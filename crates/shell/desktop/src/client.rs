@@ -30,7 +30,7 @@ use bande_toolkit::{
     App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
 };
-use bande_volumes::{EjectFailure, eject, media_roots};
+use bande_volumes::{EjectFailure, eject, follow_mounts, media_roots};
 use bande_wallpaper::{
     Choice, Fit, Picture, RenderError, Variant, choose, follow, render, render_cached,
 };
@@ -353,8 +353,11 @@ impl DesktopSurface {
 
     fn area(&self, size: (u32, u32)) -> Bounds {
         let (width, height) = (size.0 as f32, size.1 as f32);
-        let (bar_edge, icon_size) = self.bar;
-        let edge = bande_bar::rail::bar_zone(icon_size as f32);
+        let (bar_edge, icon_size, floating) = self.bar;
+        let edge = bande_bar::rail::bar_zone(
+            icon_size as f32,
+            bande_bar::rail::BarForm::from_floating(floating),
+        );
         let (left, right, bottom, top) = match bar_edge {
             BarEdge::Left => (edge, 0.0, 0.0, 0.0),
             BarEdge::Right => (0.0, edge, 0.0, 0.0),
@@ -755,12 +758,10 @@ impl DesktopSurface {
     }
 
     fn ask(&mut self, arguments: &[String], then: Confirmed) {
-        let spawned = std::env::current_exe().and_then(|program| {
-            Command::new(program)
-                .args(arguments)
-                .stdout(Stdio::piped())
-                .spawn()
-        });
+        let spawned = Command::new(bande_xdg::own_executable())
+            .args(arguments)
+            .stdout(Stdio::piped())
+            .spawn();
         match spawned {
             Ok(mut child) => match child.stdout.take() {
                 Some(answer) => {
@@ -1093,7 +1094,7 @@ fn desktop_folder(home: &Path) -> PathBuf {
     folder
 }
 
-type BarPlacement = (BarEdge, u32);
+type BarPlacement = (BarEdge, u32, bool);
 
 fn follow_bar_placement(placements: Outbox<BarPlacement>) {
     let work = move || {
@@ -1113,7 +1114,8 @@ fn follow_bar_placement(placements: Outbox<BarPlacement>) {
             let read = || -> zbus::Result<Option<BarPlacement>> {
                 let edge = config.get_property::<String>("BarEdge")?;
                 let size = config.get_property::<u32>("BarIconSize")?;
-                Ok(BarEdge::from_keyword(&edge).map(|edge| (edge, size)))
+                let floating = config.get_property::<bool>("BarFloating")?;
+                Ok(BarEdge::from_keyword(&edge).map(|edge| (edge, size, floating)))
             };
             let mut last = None;
             for _ in std::iter::once(()).chain(changes.map(drop)) {
@@ -1190,6 +1192,14 @@ impl DesktopSurface {
             )?),
             false => None,
         };
+        if let Some(lister) = &lister {
+            let lister = lister.clone();
+            if let Err(error) = follow_mounts(move || {
+                let _ = lister.send(());
+            }) {
+                tracing::warn!("cannot follow mounts: {error}");
+            }
+        }
         let mut surface = DesktopSurface {
             view: DesktopView::new(appearance, layouts, text),
             paste_moves: false,
@@ -1209,7 +1219,7 @@ impl DesktopSurface {
             shown: Shown::default(),
             pictures: HashMap::new(),
             layouts_file,
-            bar: (config.bar.edge, config.bar.icon_size),
+            bar: (config.bar.edge, config.bar.icon_size, config.bar.floating),
             bar_changes,
             choice: Some(configured_choice(&config.wallpaper)),
             choices,
@@ -1233,14 +1243,12 @@ fn ask_to_force_eject(failure: EjectFailure) {
         || failure.mount_point.display().to_string(),
         |name| name.to_string_lossy().into_owned(),
     );
-    let asked = std::env::current_exe().and_then(|program| {
-        Command::new(program)
-            .arg(EJECT_FAILED_FLAG)
-            .arg(&name)
-            .arg(if failure.busy { BUSY } else { "" })
-            .arg(&failure.message)
-            .output()
-    });
+    let asked = Command::new(bande_xdg::own_executable())
+        .arg(EJECT_FAILED_FLAG)
+        .arg(&name)
+        .arg(if failure.busy { BUSY } else { "" })
+        .arg(&failure.message)
+        .output();
     match asked {
         Ok(output) if String::from_utf8_lossy(&output.stdout).trim() == FORCE_EJECT => {
             eject(vec![failure.mount_point], true, |_| {});

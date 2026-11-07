@@ -11,11 +11,12 @@ assistant, `fix-update-safety` the btrfs layout inside the LUKS volume, `fix-bac
 | 2 | Someone at a locked Mac, or a program acting while it is locked | virtual keyboard types into the lock field; input method can feed it | nothing but the lock client's own wl_keyboard reaches the lock surface; `bande-lock` gets its own role | yes |
 | 3 | A sandboxed app (Flatpak) | reads every key, types anywhere, reconfigures displays, overlays the screen | `wp_security_context_v1`; privileged protocols refused unless consented | yes |
 | 4 | Others on the network | SSH with password login is on in the image; LLMNR answers | SSH off until asked for (Remote Login, key or password chosen there); LLMNR off; firewall below | yes |
-| 5 | A hostile unsandboxed program of the user's | everything the user can reach | raises the bar only: the same gates, consent kept where the user cannot write, `yama.ptrace_scope=1`, private session-bus services restricted | **no** |
+| 5 | A hostile unsandboxed program of the user's | everything the user can reach | raises the bar only: the same gates, consent kept where the user cannot write, `yama.ptrace_scope=1` | **no** |
 | 6 | Whoever tampers with updates | | apt signatures, audited below | yes |
 | 7 | Evil maid: changes the unencrypted boot files while the Mac is away | the passphrase on next boot | none. The chain after Apple's firmware is unsigned and the SEP is out of reach. Stated in the pane | not covered |
 
-Row 5 stays honest. A program running as you can edit your `~/.profile` and be inside your next
+Clipboard history over the session bus stays open to unsandboxed callers: its files are readable by
+the same user anyway, and a sandbox never reaches that bus. Row 5 stays honest. A program running as you can edit your `~/.profile` and be inside your next
 session; Linux has no SIP. Nothing in Settings may claim otherwise. Sandboxes and root-owned consent
 are what we have; macOS-level containment of unsandboxed apps is not reachable.
 
@@ -37,9 +38,12 @@ Who a client is, decided once when it connects:
 | Screen capture | `ext-image-copy-capture`, `bande_capture_v1` | shell role; everyone else through the ScreenCast portal, which asks |
 | Clipboard history | `ext-data-control` | clipboard daemon role |
 | Global shortcuts | none offered yet: no portal backend, no protocol | nobody |
-| Overlays | `wlr-layer-shell` | session clients and Bande's own programs |
-| Displays, idle | `wlr-output-management`, output power, idle notifier | session clients and Bande's own programs |
+| Overlays, displays, idle, quitting other apps | `wlr-layer-shell`, `wlr-output-management`, output power, idle notifier, `bande_app_control_v1` | everyone but sandboxed clients |
 | Lock | `ext-session-lock` | lock role only |
+
+Overlays, displays and idle stay open to unsandboxed programs: a native program can draw a full-screen
+window anyway, and Settings, the polkit agent and alerts need them, so narrowing further protects little
+and breaks running anything from a build tree.
 
 **Consent as on macOS:** the global stays visible, so an asking program learns the answer. Refused,
 `get_input_method` gets the protocol's `unavailable` and `create_virtual_keyboard` the protocol's
@@ -67,9 +71,9 @@ shakes the field. Forgot it: "Use recovery key".
 btrfs inside. Kernel and initrd on the ESP, unencrypted, so rollbacks and boot counting are unaffected:
 snapshot entries change `rootflags` only.
 
-**Mac image** (macOS cannot run cryptsetup). `root.img` is LUKS2 with a well-known empty key and a
+**Mac image** (macOS cannot run cryptsetup). `root.img` is LUKS2 with the well-known passphrase `bande-provisional` (cheap KDF) and a
 header token `bande-provisional`. Grow first, then at first run the helper adds the user's slot,
-removes the empty one and reencrypts online in the background, because every image shares one volume
+removes the provisional one and reencrypts online in the background, because every image shares one volume
 key until then. A resume service continues it across reboots. USB install: fresh volume key at
 install, no reencrypt.
 
@@ -110,24 +114,26 @@ The mini stays plain ext4 and is not reinstalled.
 - **Sandboxing.** Flatpak is the sandbox; the portal already asks. Native apps run unsandboxed and the
   pane says so. AppArmor profiles for a few exposed native parsers are the realistic extra, later and
   only if a profile survives real use. `systemd` hardening for the services we own costs little.
-- **Signed updates, audit:** apt's `InRelease` signatures with `Signed-By` from
-  `bande-archive-keyring`, `Valid-Until` on our archive. Open: firmware and kernel payload paths.
-- **Firewall.** With SSH off and LLMNR off, only mDNS listens by default, so a firewall protects mostly
-  what the person starts later (a dev server on a café network). Justified, cheap with nftables: inbound
-  default deny except established, ICMP, mDNS, DHCP; on by default; a switch in the pane; Remote Login
-  opens its own port. Decided after the ports of `fix-devices` and file sharing are known.
+- **Signed updates, audit:** apt verifies `InRelease` against the pinned `Signed-By` keyring, insecure
+  repositories are refused, and our archive sets `Valid-Until`. Kernel and firmware arrive as apt
+  packages. The gap: the Mac installer takes the image over HTTPS with no signature of its own
+  (`fix-first-run`).
+- **Firewall: no default.** With SSH off and LLMNR off only mDNS listens, so a default-deny ruleset
+  protects nothing that is on by default, and it silently breaks what a person starts on purpose (file
+  sharing, a dev server). macOS also ships its firewall off. Revisit if anything listens by default.
 
 ## Privacy & Security pane
 
 Real state only, read from the system: disk (Off, Encrypting N%, On, and whether a recovery key
 exists), Input Monitoring and Typing with who is allowed and who asked, screen recording and camera
-grants from the portal, Remote Login, firewall, update signature state, and one honest paragraph on
+grants from the portal, Remote Login, and one honest paragraph on
 what native apps can reach.
 
 ## Stages
 
-1. Input method and virtual keyboard gate, lock role, security context, secure input.
-2. Consent store, helper, notification, pane.
-3. Remaining gates: overlays, displays, idle; clipboard history; ptrace scope; SSH and LLMNR defaults.
-4. Disk: helper, keyscript, `bande-unlock`, proven in QEMU, with first-run and update-safety.
-5. One password; firewall; signed-update audit results in the pane.
+1. Done: input method and virtual keyboard gate, lock role, security context, secure input.
+2. Done: consent store, helper, notification, pane.
+3. Done: real state in the pane, ptrace scope, LLMNR off; SSH is not in the image.
+4. Built, not proven end to end: disk helper, keyscript, `bande-unlock`. Left: boot an encrypted image in
+   QEMU with `fix-first-run`, power cut during reencrypt, Mac hardware (framebuffer, keyboard, modules).
+5. Built, not proven end to end: one password through the greeter and PAM.

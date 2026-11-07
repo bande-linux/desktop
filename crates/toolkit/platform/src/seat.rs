@@ -16,6 +16,7 @@ use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1:
 use xkbcommon::xkb::{self, Keycode, Keysym, keysyms};
 
 use crate::compose::{Compose, Step};
+use crate::external::ImageCursor;
 use crate::window::{KeyDetail, State, Window, WindowEvent};
 
 const BTN_LEFT: u32 = 0x110;
@@ -125,10 +126,12 @@ pub(crate) struct Input {
     raw_keys: bool,
     key_detail: bool,
     cursor_hidden: bool,
+    cursor_image: Option<ImageCursor>,
 }
 
 impl Input {
     pub(crate) fn release(&mut self) {
+        self.cursor_image = None;
         if let Some(device) = self.cursor_device.take() {
             device.destroy();
         }
@@ -190,7 +193,7 @@ fn button_for(code: u32) -> Option<PointerButton> {
 
 fn shape_for(cursor: Cursor) -> Shape {
     match cursor {
-        Cursor::Default => Shape::Default,
+        Cursor::Default | Cursor::Hidden | Cursor::Image => Shape::Default,
         Cursor::Pointer => Shape::Pointer,
         Cursor::Text => Shape::Text,
         Cursor::Crosshair => Shape::Crosshair,
@@ -305,20 +308,50 @@ impl Input {
     }
 
     fn show_cursor(&mut self) {
-        if self.cursor_hidden {
-            if let (Some(pointer), Some(serial)) = (&self.pointer, self.enter_serial) {
+        if self.cursor_hidden || self.cursor == Cursor::Hidden {
+            if self.shown_cursor != Some(Cursor::Hidden)
+                && let (Some(pointer), Some(serial)) = (&self.pointer, self.enter_serial)
+            {
                 pointer.set_cursor(serial, None, 0, 0);
+                self.shown_cursor = Some(Cursor::Hidden);
             }
             return;
         }
-        let (Some(device), Some(serial)) = (&self.cursor_device, self.enter_serial) else {
+        let Some(serial) = self.enter_serial else {
             return;
         };
         if self.shown_cursor == Some(self.cursor) {
             return;
         }
-        device.set_shape(serial, shape_for(self.cursor));
+        match (self.cursor, &self.cursor_image, &self.pointer) {
+            (Cursor::Image, Some(image), Some(pointer)) => {
+                pointer.set_cursor(
+                    serial,
+                    Some(&image.surface),
+                    image.hotspot.0,
+                    image.hotspot.1,
+                );
+            }
+            _ => {
+                let Some(device) = &self.cursor_device else {
+                    return;
+                };
+                device.set_shape(serial, shape_for(self.cursor));
+            }
+        }
         self.shown_cursor = Some(self.cursor);
+    }
+
+    pub(crate) fn show_cursor_image(&mut self, image: ImageCursor) {
+        self.cursor_image = Some(image);
+        if self.cursor == Cursor::Image {
+            self.shown_cursor = None;
+            self.show_cursor();
+        }
+    }
+
+    pub(crate) fn take_cursor_image(&mut self) -> Option<ImageCursor> {
+        self.cursor_image.take()
     }
 
     pub(crate) fn set_cursor(&mut self, cursor: Cursor) {

@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use std::io;
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -47,6 +48,7 @@ use bande_render::VulkanRenderer;
 use crate::clock::Vblank;
 use crate::cursor::{self, Cursor, CursorTheme};
 use crate::element::SurfaceElement;
+use crate::frame_callbacks::LatchedCallback;
 use crate::lock::Lock;
 use crate::motion::IconRect;
 use crate::scene::{BlurElement, Closing, FillElement, PieceElement, ShadowElement, WindowElement};
@@ -54,6 +56,7 @@ use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::session::{LockScreen, SessionClient, SessionRole, Summoned};
 use crate::tile::{Preview, SnapDrag};
 use crate::window::Window;
+use smithay::reexports::wayland_protocols::wp::text_input::zv3::server::zwp_text_input_v3::ZwpTextInputV3;
 
 mod compose;
 mod focus;
@@ -79,6 +82,10 @@ pub struct State {
     pub(crate) display_handle: DisplayHandle,
     pub(crate) globals: Globals,
     pub(crate) blockers: smithay::reexports::calloop::LoopHandle<'static, State>,
+    pub(crate) consent_file: PathBuf,
+    pub(crate) consent_watch: Option<smithay::reexports::calloop::RegistrationToken>,
+    pub(crate) consenting: Vec<(Client, crate::trust::Access)>,
+    pub(crate) secret_text_inputs: Vec<ZwpTextInputV3>,
     pub(crate) screens: Vec<Screen>,
     pub(crate) departed: Vec<crate::displays::Departed>,
     pub(crate) outputs_refitted: bool,
@@ -120,6 +127,7 @@ pub struct State {
     pub(crate) switcher: crate::switcher::Switcher,
     pub(crate) assist: crate::assist::Assist,
     pub(crate) recall: crate::recall::Recall,
+    pub(crate) resume: crate::resume::Resume,
     pub(crate) reopen_file: Option<std::path::PathBuf>,
     pub(crate) running_apps: Option<crate::app::RunningApps>,
     pub(crate) apps_changed: bool,
@@ -146,6 +154,7 @@ pub struct State {
     pub(crate) reduce_motion: bool,
     pub(crate) zoom: crate::zoom::Zoom,
     pub(crate) assistive: crate::assistive::Assistive,
+    pub(crate) materials: crate::material::Materials,
     pub(crate) keys: crate::access_keys::AccessKeys,
     pub(crate) keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor,
     pub(crate) app_states: crate::app_states::AppStates,
@@ -166,6 +175,7 @@ pub struct State {
     pub(crate) input_sources: crate::keymap::InputSources,
     pub(crate) pointing: crate::pointing::Pointing,
     pub(crate) pending_captures: Vec<crate::capture::PendingCapture>,
+    pub(crate) render_device: Option<u64>,
     pub(crate) decorations: crate::frame::Decorations,
     pub(crate) window_menus: crate::window_menu::WindowMenus,
     pub(crate) alerts: crate::alert::Alerts,
@@ -200,6 +210,7 @@ impl Compositor {
             scale: 1.0,
             transform: Transform::Normal,
             position: Point::default(),
+            match_colours: true,
         };
         let display = Display::new().map_err(io::Error::other)?;
         let fences = smithay::reexports::calloop::EventLoop::try_new().map_err(io::Error::other)?;
@@ -214,8 +225,9 @@ impl Compositor {
         crate::menu_button::create_globals(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, BandeShellV1, ()>(crate::shell::OPEN_TERMINAL_SINCE, ());
-        handle.create_global::<State, BandeAppV1, ()>(8, ());
+        handle.create_global::<State, BandeShellV1, ()>(crate::shell::SHELL_VERSION, ());
+        handle.create_global::<State, BandeAppV1, ()>(9, ());
+        crate::resume::create_global(&handle);
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
@@ -226,6 +238,10 @@ impl Compositor {
             display_handle: handle.clone(),
             globals,
             blockers: fences.handle(),
+            consent_file: crate::trust::default_consent_file(),
+            consent_watch: None,
+            consenting: Vec::new(),
+            secret_text_inputs: Vec::new(),
             screens: vec![screen],
             departed: Vec::new(),
             outputs_refitted: false,
@@ -267,6 +283,7 @@ impl Compositor {
             switcher: crate::switcher::Switcher::default(),
             assist: crate::assist::Assist::default(),
             recall: crate::recall::Recall::default(),
+            resume: crate::resume::Resume::default(),
             reopen_file: None,
             running_apps: None,
             apps_changed: false,
@@ -293,6 +310,7 @@ impl Compositor {
             reduce_motion: false,
             zoom: crate::zoom::Zoom::default(),
             assistive: crate::assistive::Assistive::default(),
+            materials: crate::material::Materials::default(),
             keys: crate::access_keys::AccessKeys::default(),
             keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor::default(),
             app_states: crate::app_states::AppStates::default(),
@@ -316,6 +334,7 @@ impl Compositor {
             input_sources: crate::keymap::InputSources::default(),
             pointing: crate::pointing::Pointing::default(),
             pending_captures: Vec::new(),
+            render_device: None,
             decorations: crate::frame::Decorations::default(),
             window_menus: crate::window_menu::WindowMenus::default(),
             alerts: crate::alert::Alerts::default(),
@@ -341,23 +360,33 @@ impl Compositor {
             })
             .map_err(|error| io::Error::other(error.error))?;
         state.force_quit.take_actions(actions);
+        state.watch_consents();
         Ok(Self {
             display,
             fences,
             state,
             session_clients: Vec::new(),
             lock_screen: LockScreen::new(),
-            session_dialog: Summoned::new(crate::session::SHELL),
+            session_dialog: Summoned::new(std::path::Path::new(crate::session::SHELL)),
             socket_name: None,
         })
     }
 
     pub fn insert_client(&mut self, stream: UnixStream) -> io::Result<Client> {
+        let process = crate::force_quit::Process::of_peer(&stream);
         let state = ClientState {
-            process: crate::force_quit::Process::of_peer(&stream),
+            claimant: process
+                .as_ref()
+                .and_then(|process| crate::trust::verified_program(process.pid())),
+            process,
             ..ClientState::default()
         };
         self.display.handle().insert_client(stream, Arc::new(state))
+    }
+
+    pub fn set_consent_file(&mut self, path: PathBuf) {
+        self.state.consent_file = path;
+        self.state.watch_consents();
     }
 
     pub(crate) fn display_handle(&self) -> DisplayHandle {
@@ -372,6 +401,7 @@ impl Compositor {
         self.state.announce_windowless_apps();
         self.state.announce_apps_running();
         self.state.note_running_apps();
+        self.state.note_window_sessions();
         self.state.note_app_states();
         self.state.popups.cleanup();
         self.state.end_orphaned_drag();
@@ -400,14 +430,15 @@ impl Compositor {
     }
 
     pub fn latch_on(&mut self, output: &str) {
+        self.state.note_window_sessions();
         if let Some(screen) = self.state.screen_named(output) {
             self.latch_screen(screen);
         }
     }
 
-    pub fn present_on(&mut self, output: &str, vblank: Vblank) -> io::Result<()> {
+    pub fn present_on(&mut self, output: &str, vblank: Vblank, flipped: bool) -> io::Result<()> {
         match self.state.screen_named(output) {
-            Some(screen) => self.present_screen(screen, vblank),
+            Some(screen) => self.present_screen(screen, vblank, flipped),
             None => Ok(()),
         }
     }
@@ -445,7 +476,7 @@ impl Compositor {
                 &root,
                 (),
                 |_, _, _| TraversalAction::DoChildren(()),
-                |_, states, _| {
+                |surface, states, _| {
                     latched.latched_feedback.append(
                         &mut states
                             .cached_state
@@ -453,12 +484,17 @@ impl Compositor {
                             .current()
                             .callbacks,
                     );
-                    latched.latched_frame_callbacks.append(
+                    let callbacks = std::mem::take(
                         &mut states
                             .cached_state
                             .get::<SurfaceAttributes>()
                             .current()
                             .frame_callbacks,
+                    );
+                    latched.latched_frame_callbacks.extend(
+                        callbacks
+                            .into_iter()
+                            .map(|callback| LatchedCallback::of(callback, surface, states)),
                     );
                     latched
                         .latched_releases
@@ -469,24 +505,33 @@ impl Compositor {
         }
     }
 
-    fn present_screen(&mut self, screen: usize, vblank: Vblank) -> io::Result<()> {
+    fn present_screen(&mut self, screen: usize, vblank: Vblank, flipped: bool) -> io::Result<()> {
         let presented = &mut self.state.screens[screen];
         let refresh = presented.refresh();
+        let kind = if flipped {
+            Kind::Vsync | Kind::HwCompletion
+        } else {
+            Kind::Vsync
+        };
         for feedback in presented.latched_feedback.drain(..) {
             feedback.presented(
                 &presented.output,
                 vblank.time,
                 Refresh::fixed(refresh),
                 vblank.sequence,
-                Kind::Vsync,
+                kind,
             );
         }
         presented.latched_releases.clear();
         let millis = (vblank.time.as_millis() % (1 << 32)) as u32;
         for callback in presented.latched_frame_callbacks.drain(..) {
-            callback.done(millis);
+            callback.send(millis);
         }
         self.state.confirm_lock(screen);
+        self.display.flush_clients()
+    }
+
+    pub(crate) fn flush_clients(&mut self) -> io::Result<()> {
         self.display.flush_clients()
     }
 
@@ -501,6 +546,10 @@ impl Compositor {
             ..self.state.main_screen().settings
         };
         self.configure_output(&name, settings);
+    }
+
+    pub fn unresponsive_clients(&self) -> usize {
+        self.state.watchdog.unresponsive()
     }
 
     pub fn windows(&self) -> &[Window] {
@@ -528,6 +577,8 @@ impl Compositor {
 pub(crate) struct ClientState {
     pub(crate) compositor_state: CompositorClientState,
     pub(crate) role: Option<SessionRole>,
+    pub(crate) claimant: Option<crate::trust::Claimant>,
+    pub(crate) sandboxed: bool,
     pub(crate) departed: AtomicBool,
     pub(crate) process: Option<crate::force_quit::Process>,
 }

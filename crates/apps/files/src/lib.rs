@@ -1,4 +1,5 @@
 mod access;
+mod backups;
 mod batch_rename;
 mod browser;
 mod context;
@@ -16,10 +17,10 @@ mod loader;
 mod menus;
 mod open_with;
 mod paint;
-mod privacy;
 mod prompt;
 mod quick_look;
 mod search;
+mod servers;
 mod settings;
 mod sidebar;
 mod tabs;
@@ -33,6 +34,7 @@ use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
+pub use backups::backups_installed;
 pub use batch_rename::{BatchRename, RuleKind};
 pub use browser::{Browser, Column, Location, RowEdit};
 pub use controls::{list_column_action, list_column_move_action, list_column_title};
@@ -40,15 +42,15 @@ pub use file_manager::{Show, ShowRequest, serve_file_manager};
 pub use menus::{GROUPS, group_action};
 pub use open_with::OpenWith;
 pub use paint::permissions;
-pub use privacy::follow_search_excluded;
 pub use search::SEARCH_HEIGHT;
+pub use servers::{ServerAnswer, ServerRequest, ServersSeen};
 pub use settings::{FilesSettings, SETTINGS_SIZE, StartFolder, settings_view};
 pub use sidebar::{
     BookmarkEdit, Place, PlaceKind, Row, SidebarEdit, favourites, hidden_places, layout_text, rows,
-    standard_places, volumes_hidden, with_bookmarks, with_place_shown, with_volumes,
+    standard_places, volumes_hidden, with_bookmarks, with_nearby, with_place_shown, with_volumes,
     without_bookmark,
 };
-pub use tabs::{CarriedTab, TAB_BAR_HEIGHT};
+pub use tabs::{CarriedTab, SavedTab, TAB_BAR_HEIGHT};
 pub use toolbar::TOOLBAR_HEIGHT;
 pub use view::{
     COLUMN_WIDTH, ColumnPreview, FilesView, Hit, Info, PATH_BAR_HEIGHT, PREVIEW_WIDTH, ROW_HEIGHT,
@@ -59,6 +61,5 @@ pub use views::{
     recent_folders_file, sidebar_file, status_bar_file, views_file,
 };
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-files.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-files")));

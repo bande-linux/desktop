@@ -57,6 +57,7 @@ pub(crate) fn location_title(location: &Location) -> String {
     match location {
         Location::Trash => L10N.tr("trash"),
         Location::Recents => L10N.tr("recents"),
+        Location::Server(url) => url.clone(),
         Location::Search(folder) => L10N.tr_args(
             "search-title",
             [(
@@ -68,6 +69,36 @@ pub(crate) fn location_title(location: &Location) -> String {
             || folder.display().to_string(),
             |name| name.to_string_lossy().into_owned(),
         ),
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SavedTab {
+    pub location: Location,
+    mode: ViewMode,
+    icon_size: u32,
+    selected: Vec<PathBuf>,
+}
+
+impl SavedTab {
+    fn of(browser: &Browser, mode: ViewMode, icon_size: u32) -> Self {
+        Self {
+            location: match browser.current_location() {
+                Location::Search(folder) => Location::Folder(folder),
+                location => location,
+            },
+            mode,
+            icon_size,
+            selected: browser.selected_paths(),
+        }
+    }
+
+    pub fn still_there(&self) -> bool {
+        match &self.location {
+            Location::Folder(folder) => bande_volumes::quick_is_dir(folder),
+            Location::Trash | Location::Recents | Location::Search(_) => true,
+            Location::Server(_) => false,
+        }
     }
 }
 
@@ -127,6 +158,33 @@ impl FilesView {
         self.active_tab += 1;
         self.tabs.insert(self.active_tab, TabSlot::shown());
         self.show_tab();
+    }
+
+    pub fn saved_tabs(&self) -> Vec<SavedTab> {
+        self.tabs
+            .iter()
+            .map(|slot| match &slot.parked {
+                Some(tab) => SavedTab::of(&tab.browser, tab.mode, tab.icon_size),
+                None => SavedTab::of(&self.browser, self.mode, self.icon_size),
+            })
+            .collect()
+    }
+
+    pub fn restore_tabs(&mut self, saved: &[SavedTab], active: usize) {
+        if let Some(first) = saved.first() {
+            self.restore_tab_view(first);
+        }
+        for tab in saved.iter().skip(1) {
+            self.open_tab(tab.location.clone());
+            self.restore_tab_view(tab);
+        }
+        self.select_tab(active);
+    }
+
+    fn restore_tab_view(&mut self, tab: &SavedTab) {
+        self.set_mode(tab.mode);
+        self.set_icon_size(tab.icon_size);
+        self.browser.reveal_all(&tab.selected);
     }
 
     pub(crate) fn select_tab(&mut self, index: usize) {

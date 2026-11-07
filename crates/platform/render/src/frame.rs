@@ -9,8 +9,9 @@ use smithay::utils::{Buffer as BufferCoords, Physical, Rectangle, Transform};
 use smithay::reexports::rustix::ioctl;
 
 use crate::{
-    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, Export, Program, Rect, RenderError, TRANSFER_SOURCE,
-    VulkanFramebuffer, VulkanRenderer, VulkanTexture, barrier, disjoint,
+    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DeviceExport, Export, MappedExport, Program, Rect,
+    RenderError, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer, VulkanTexture, barrier,
+    disjoint,
 };
 
 mod blur;
@@ -385,6 +386,25 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         }
     }
 
+    fn push_chroma(&mut self, view: vk::ImageView) {
+        let image_info = vk::DescriptorImageInfo::default()
+            .image_view(view)
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+        let write = vk::WriteDescriptorSet::default()
+            .dst_binding(2)
+            .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+            .image_info(slice::from_ref(&image_info));
+        unsafe {
+            self.renderer.push_descriptor.cmd_push_descriptor_set(
+                self.renderer.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.renderer.pipeline_layout,
+                0,
+                slice::from_ref(&write),
+            );
+        }
+    }
+
     fn push_texture(&mut self, view: vk::ImageView) {
         let image_info = vk::DescriptorImageInfo::default()
             .image_view(view)
@@ -457,13 +477,16 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 .cmd_end_rendering(self.renderer.command_buffer)
         };
         let drawn = disjoint(std::mem::take(&mut self.drawn), self.bounds);
-        let exported = self
+        let export = self
             .renderer
             .targets
             .get(&self.target)
-            .is_some_and(|target| target.export.is_some());
+            .and_then(|target| target.export.as_ref());
         let mut readbacks = Vec::new();
-        if exported {
+        if let Some(Export::OnDevice(device)) = export {
+            let device = *device;
+            self.record_output(&device, &drawn);
+        } else if export.is_some() {
             for rect in drawn {
                 let bytes = rect.area() as usize * BYTES_PER_PIXEL;
                 let (index, offset) = self.renderer.reserve(bytes)?;
@@ -488,6 +511,164 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             target.rendered = true;
         }
         written
+    }
+
+    fn record_output(&mut self, export: &DeviceExport, drawn: &[Rect]) {
+        if drawn.is_empty() {
+            return;
+        }
+        let Some(colour) = self.renderer.output_colour else {
+            self.record_output_copy(export, self.image, drawn);
+            barrier(
+                &self.renderer.device,
+                self.renderer.command_buffer,
+                self.image,
+                TRANSFER_SOURCE,
+                ATTACHMENT,
+            );
+            return;
+        };
+        match self.convert_output(colour, drawn) {
+            Ok(scratch) => {
+                self.record_output_copy(export, scratch, drawn);
+                barrier(
+                    &self.renderer.device,
+                    self.renderer.command_buffer,
+                    self.image,
+                    blur::SAMPLED,
+                    ATTACHMENT,
+                );
+            }
+            Err(error) => {
+                tracing::warn!("showing colours unconverted: {error}");
+                self.renderer.output_colour = None;
+                self.record_output_copy(export, self.image, drawn);
+                barrier(
+                    &self.renderer.device,
+                    self.renderer.command_buffer,
+                    self.image,
+                    TRANSFER_SOURCE,
+                    ATTACHMENT,
+                );
+            }
+        }
+    }
+
+    fn convert_output(
+        &mut self,
+        colour: crate::OutputColour,
+        drawn: &[Rect],
+    ) -> Result<vk::Image, RenderError> {
+        let key = (self.bounds.width, self.bounds.height, self.format);
+        if !self.renderer.colour_scratch.contains_key(&key) {
+            let scratch = self.renderer.create_image(
+                self.bounds.width,
+                self.bounds.height,
+                self.format,
+                vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
+                vk::ComponentSwizzle::IDENTITY,
+            )?;
+            self.renderer.colour_scratch.insert(key, scratch);
+        }
+        let scratch = self
+            .renderer
+            .colour_scratch
+            .get(&key)
+            .map(|scratch| (scratch.image, scratch.view))
+            .ok_or(RenderError::ForeignResource)?;
+        self.bound = None;
+        self.bind(Program::DisplayColour)?;
+        let device = &self.renderer.device;
+        let commands = self.renderer.command_buffer;
+        barrier(device, commands, self.image, ATTACHMENT, blur::SAMPLED);
+        barrier(device, commands, scratch.0, blur::DISCARDED, blur::DRAWN);
+        self.begin_rendering(scratch.1, self.bounds, vk::AttachmentLoadOp::DONT_CARE);
+        self.push_texture(self.target_view);
+        let row = |values: [f32; 3]| RoundedRect {
+            x: values[0],
+            y: values[1],
+            width: values[2],
+            ..RoundedRect::default()
+        };
+        self.draw_quad(
+            &Quad {
+                color: [colour[0][0], colour[0][1], colour[0][2], 0.0],
+                destination: self.bounds,
+                clip: row(colour[1]),
+                caster: row(colour[2]),
+                ..Quad::default()
+            },
+            drawn,
+        );
+        let device = &self.renderer.device;
+        unsafe { device.cmd_end_rendering(commands) };
+        barrier(device, commands, scratch.0, blur::DRAWN, TRANSFER_SOURCE);
+        Ok(scratch.0)
+    }
+
+    fn record_output_copy(&self, export: &DeviceExport, source: vk::Image, drawn: &[Rect]) {
+        let device = &self.renderer.device;
+        let commands = self.renderer.command_buffer;
+        let family = self.renderer.queue_family;
+        let buffer = export.imported.buffer;
+        let row_bytes = u64::from(export.row_texels) * BYTES_PER_PIXEL as u64;
+        let regions: Vec<_> = drawn
+            .iter()
+            .map(|rect| {
+                vk::BufferImageCopy::default()
+                    .buffer_offset(
+                        export.offset
+                            + u64::from(rect.y.unsigned_abs()) * row_bytes
+                            + u64::from(rect.x.unsigned_abs()) * BYTES_PER_PIXEL as u64,
+                    )
+                    .buffer_row_length(export.row_texels)
+                    .image_subresource(COLOR_LAYERS)
+                    .image_offset(vk::Offset3D {
+                        x: rect.x,
+                        y: rect.y,
+                        z: 0,
+                    })
+                    .image_extent(vk::Extent3D {
+                        width: rect.width.unsigned_abs(),
+                        height: rect.height.unsigned_abs(),
+                        depth: 1,
+                    })
+            })
+            .collect();
+        let acquire = vk::BufferMemoryBarrier2::default()
+            .src_queue_family_index(vk::QUEUE_FAMILY_EXTERNAL)
+            .dst_queue_family_index(family)
+            .dst_stage_mask(vk::PipelineStageFlags2::COPY)
+            .dst_access_mask(vk::AccessFlags2::TRANSFER_WRITE)
+            .buffer(buffer)
+            .size(vk::WHOLE_SIZE);
+        let release = vk::BufferMemoryBarrier2::default()
+            .src_stage_mask(vk::PipelineStageFlags2::COPY)
+            .src_access_mask(vk::AccessFlags2::TRANSFER_WRITE)
+            .src_queue_family_index(family)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_EXTERNAL)
+            .buffer(buffer)
+            .size(vk::WHOLE_SIZE);
+        if source == self.image {
+            barrier(device, commands, self.image, ATTACHMENT, TRANSFER_SOURCE);
+        }
+        unsafe {
+            device.cmd_pipeline_barrier2(
+                commands,
+                &vk::DependencyInfo::default().buffer_memory_barriers(slice::from_ref(&acquire)),
+            );
+            device.cmd_copy_image_to_buffer(
+                commands,
+                source,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                buffer,
+                &regions,
+            );
+            device.cmd_pipeline_barrier2(
+                commands,
+                &vk::DependencyInfo::default().buffer_memory_barriers(slice::from_ref(&release)),
+            );
+        }
     }
 
     fn record_readbacks(&self, readbacks: &[Readback]) {
@@ -545,6 +726,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         else {
             return Ok(());
         };
+        let Export::Mapped(export) = export else {
+            return Ok(());
+        };
         if readbacks.is_empty() {
             return Ok(());
         }
@@ -554,7 +738,11 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         copied
     }
 
-    fn copy_readbacks(&self, export: &Export, readbacks: &[Readback]) -> Result<(), RenderError> {
+    fn copy_readbacks(
+        &self,
+        export: &MappedExport,
+        readbacks: &[Readback],
+    ) -> Result<(), RenderError> {
         for readback in readbacks {
             let rect = readback.rect;
             let row_bytes = rect.width.unsigned_abs() as usize * BYTES_PER_PIXEL;
@@ -589,7 +777,7 @@ const DMA_BUF_SYNC_WRITE: u64 = 2;
 const DMA_BUF_SYNC_START: u64 = DMA_BUF_SYNC_WRITE;
 const DMA_BUF_SYNC_END: u64 = 4 | DMA_BUF_SYNC_WRITE;
 
-fn dma_buf_sync(export: &Export, flags: u64) -> Result<(), RenderError> {
+fn dma_buf_sync(export: &MappedExport, flags: u64) -> Result<(), RenderError> {
     const SYNC: ioctl::Opcode = ioctl::opcode::write::<u64>(b'b', 0);
     let request = unsafe { ioctl::Setter::<SYNC, u64>::new(flags) };
     unsafe { ioctl::ioctl(&export.fd, request) }.map_err(std::io::Error::from)?;
@@ -668,7 +856,21 @@ impl Frame for VulkanFrame<'_, '_> {
         if rects.is_empty() {
             return Ok(());
         }
-        self.bind(Program::Texture)?;
+        let chroma = texture.chroma.as_ref().and_then(|chroma| {
+            self.renderer
+                .textures
+                .get(&chroma.id)
+                .filter(|image| image.readable)
+                .map(|image| image.image.view)
+        });
+        match (texture.chroma.is_some(), chroma) {
+            (true, None) => return Ok(()),
+            (true, Some(chroma)) => {
+                self.bind(Program::Video)?;
+                self.push_chroma(chroma);
+            }
+            (false, _) => self.bind(Program::Texture)?,
+        }
         self.push_texture(view);
         self.draw(
             &Quad {

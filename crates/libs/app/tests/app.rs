@@ -104,6 +104,10 @@ fn a_second_launch_reaches_the_running_app_which_outlives_its_windows_until_quit
     let bus = SessionBus::start().expect("private session bus");
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
+        std::env::set_var(
+            "XDG_STATE_HOME",
+            std::env::temp_dir().join("bande-app-state"),
+        );
     }
     let (sender, asked) = mpsc::channel();
     *ASKED.lock().unwrap_or_else(PoisonError::into_inner) = Some(sender);

@@ -38,6 +38,10 @@ service="$root/usr/share/dbus-1/services/org.bande.Notify.service"
 grep -qx 'Name=org.freedesktop.Notifications' "$service"
 test -x "$root$(sed -n 's/^Exec=//p' "$service")"
 
+echo "== the spelling service's package"
+contains bande-spell usr/libexec/bande-spell
+contains bande-spell usr/share/dbus-1/services/org.bande.Spell.service
+
 echo "== the clipboard daemon's package"
 contains bande-clipboard usr/bin/bande-clipboard
 field bande-compositor Recommends | grep -qw bande-clipboard
@@ -56,7 +60,7 @@ test -s "$root/usr/share/icons/hicolor/scalable/apps/org.bande.Files.svg"
 root=$(extract bande-settings)
 grep -qx 'Exec=bande-settings' "$root/usr/share/applications/org.bande.Settings.desktop"
 root=$(extract bande-greeter)
-grep -qx 'command = "/usr/bin/bande-compositor --greeter"' "$root/usr/share/bande-greeter/greetd-config.toml"
+grep -qx 'command = "/usr/libexec/bande-greeter-session"' "$root/usr/share/bande-greeter/greetd-config.toml"
 field bande-greeter Depends | grep -qF 'greetd (>= 0.10.3-6)'
 root=$(extract bande-lock)
 grep -qx '@include common-auth' "$root/etc/pam.d/bande-lock"
@@ -66,7 +70,8 @@ echo "== the session services' user units and D-Bus activation"
 for entry in bande-config:org.bande.Config:org.bande.Config \
     bande-power:org.bande.Power:org.freedesktop.ScreenSaver \
     bande-sound:org.bande.Sound:org.bande.Sound \
-    bande-tray:org.bande.Tray:org.kde.StatusNotifierWatcher; do
+    bande-tray:org.bande.Tray:org.kde.StatusNotifierWatcher \
+    bande-indexer:org.bande.Search:org.bande.Search; do
     IFS=: read -r package file name <<< "$entry"
     root=$(extract "$package")
     service="$root/usr/share/dbus-1/services/$file.service"

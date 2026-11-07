@@ -8,6 +8,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+serde.workspace = true
 accesskit.workspace = true
 bande-app.workspace = true
 rustix = { workspace = true, features = ["event", "fs", "process"] }
@@ -17,6 +18,8 @@ bande-app-settings.workspace = true
 bande-config.workspace = true
 bande-content.workspace = true
 bande-fs.workspace = true
+bande-backup.workspace = true
+bande-datetime.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true
 bande-quick-look.workspace = true

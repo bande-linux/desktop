@@ -1,3 +1,4 @@
+use bande_volumes::on_connected_volume;
 use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
@@ -13,7 +14,7 @@ use bande_toolkit::Image;
 
 #[derive(Debug)]
 enum Request {
-    Preview(Entry),
+    Preview(Box<Entry>),
     FolderSize(PathBuf),
 }
 
@@ -39,6 +40,44 @@ pub struct Loader {
     wake: UnixStream,
 }
 
+fn load_one(
+    asked: u64,
+    request: Request,
+    latest: &AtomicU64,
+    sender: &Sender<Loaded>,
+    mut signal: &UnixStream,
+) -> bool {
+    let current = || latest.load(Ordering::Relaxed) == asked;
+    let loaded = match request {
+        Request::Preview(entry) => {
+            let preview = preview(&entry, Image::from_rgba);
+            let pixels = match preview {
+                Preview::Image(_) => image_size(&entry.path),
+                _ => None,
+            };
+            Some(Loaded::Preview {
+                path: entry.path.clone(),
+                preview,
+                pixels,
+            })
+        }
+        Request::FolderSize(folder) => {
+            tree_size(&folder, &current).map(|(items, bytes)| Loaded::FolderSize {
+                folder,
+                items,
+                bytes,
+            })
+        }
+    };
+    if let Some(loaded) = loaded {
+        if sender.send(loaded).is_err() {
+            return false;
+        }
+        let _ = signal.write(&[1]);
+    }
+    true
+}
+
 impl Loader {
     pub fn new() -> io::Result<Self> {
         let (wake, signal) = UnixStream::pair()?;
@@ -52,36 +91,30 @@ impl Loader {
             .name("preview loader".to_owned())
             .spawn(move || {
                 for (asked, request) in receiver {
-                    let current = || latest.load(Ordering::Relaxed) == asked;
-                    if !current() {
+                    if latest.load(Ordering::Relaxed) != asked {
                         continue;
                     }
-                    let loaded = match request {
-                        Request::Preview(entry) => {
-                            let preview = preview(&entry, Image::from_rgba);
-                            let pixels = match preview {
-                                Preview::Image(_) => image_size(&entry.path),
-                                _ => None,
-                            };
-                            Some(Loaded::Preview {
-                                path: entry.path,
-                                preview,
-                                pixels,
-                            })
-                        }
-                        Request::FolderSize(folder) => {
-                            tree_size(&folder, &current).map(|(items, bytes)| Loaded::FolderSize {
-                                folder,
-                                items,
-                                bytes,
-                            })
-                        }
+                    let on_server = match &request {
+                        Request::Preview(entry) => on_connected_volume(&entry.path),
+                        Request::FolderSize(folder) => on_connected_volume(folder),
                     };
-                    if let Some(loaded) = loaded {
-                        if sender.send(loaded).is_err() {
+                    if !on_server {
+                        if !load_one(asked, request, &latest, &sender, &signal) {
                             return;
                         }
-                        let _ = (&signal).write(&[1]);
+                        continue;
+                    }
+                    let (latest, sender) = (Arc::clone(&latest), sender.clone());
+                    let Ok(signal) = signal.try_clone() else {
+                        continue;
+                    };
+                    let spawned = thread::Builder::new()
+                        .name("preview on a server".to_owned())
+                        .spawn(move || {
+                            load_one(asked, request, &latest, &sender, &signal);
+                        });
+                    if let Err(error) = spawned {
+                        tracing::warn!("cannot preview a file on a server: {error}");
                     }
                 }
             })?;
@@ -103,7 +136,9 @@ impl Loader {
 
     pub fn preview(&self, entry: Entry) {
         let generation = self.generation.load(Ordering::Relaxed);
-        let _ = self.requests.send((generation, Request::Preview(entry)));
+        let _ = self
+            .requests
+            .send((generation, Request::Preview(Box::new(entry))));
     }
 
     pub fn folder_size(&self, folder: PathBuf) {

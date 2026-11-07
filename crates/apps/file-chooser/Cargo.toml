@@ -11,6 +11,10 @@ repository.workspace = true
 accesskit.workspace = true
 tracing.workspace = true
 bande-app-settings.workspace = true
+bande-content.workspace = true
+bande-inbox.workspace = true
+bande-pdf = { workspace = true, features = ["pages"] }
+bande-printers.workspace = true
 bande-files.workspace = true
 bande-fs.workspace = true
 bande-l10n.workspace = true
@@ -20,6 +24,12 @@ bande-volumes.workspace = true
 bande-wallpaper.workspace = true
 bande-xdg.workspace = true
 xdg-desktop-portal-bande.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+bande-graphics.workspace = true
+bande-test-bus.workspace = true
+bande-test-wayland.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"

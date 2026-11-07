@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, Read, Seek};
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -15,6 +15,8 @@ use bande_toolkit::{
     Dmabuf, DmabufPlane, ExternalSurface, Image, ShmLayout, SurfaceBuffer, Window, WindowError,
 };
 
+const NV12: u32 = u32::from_le_bytes(*b"NV12");
+const LINEAR: u64 = 0;
 const POSITION_REFRESH: Duration = Duration::from_millis(500);
 const ART_LIMIT: u64 = 32 * 1024 * 1024;
 
@@ -36,6 +38,8 @@ pub struct Session {
     failure: Option<FailureKind>,
     next_refresh: Option<Instant>,
     play_when_ready: bool,
+    configured: bool,
+    waiting: Option<PathBuf>,
 }
 
 fn plain_text(markup: &str) -> String {
@@ -100,6 +104,8 @@ impl Session {
             failure: None,
             next_refresh: None,
             play_when_ready: false,
+            configured: false,
+            waiting: None,
         }
     }
 
@@ -118,7 +124,10 @@ impl Session {
         self.next_refresh = None;
         self.showing_frame = false;
         self.play_when_ready = play;
-        self.send(Command::Open(path.to_owned()));
+        match self.configured {
+            true => self.send(Command::Open(path.to_owned())),
+            false => self.waiting = Some(path.to_owned()),
+        }
         if self.rate != 1.0 {
             self.send(Command::SetRate(self.rate));
         }
@@ -311,6 +320,16 @@ impl Session {
 
     fn apply(&mut self, window: &mut Window, event: Event, fds: Vec<OwnedFd>) -> bool {
         match event {
+            Event::Ready => {
+                self.send(Command::Configure {
+                    nv12_dmabuf: window.supports_dmabuf(NV12, LINEAR),
+                });
+                self.configured = true;
+                if let Some(path) = self.waiting.take() {
+                    self.send(Command::Open(path));
+                }
+                false
+            }
             Event::Info(info) => {
                 self.info = *info;
                 self.update_inhibit();

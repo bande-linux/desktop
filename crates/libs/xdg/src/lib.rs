@@ -1,3 +1,4 @@
+mod app_languages;
 mod apps;
 mod autostart;
 mod dirs;
@@ -16,16 +17,16 @@ use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-xdg.ftl");
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-xdg")));
 
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
-
+pub use app_languages::{app_language, app_languages, set_app_language};
 pub use apps::{Apps, FileTypes, OpenWithChoice};
 pub use autostart::{autostart_dir, opens_at_login, set_open_at_login};
 pub use dirs::{UserDir, user_dir};
 pub use entry::{
     CURRENT_DESKTOP, DesktopAction, DesktopEntry, Locale, applications, current_desktops,
-    data_dirs, find_executable, handlers,
+    data_dirs, find_executable, handlers, own_code_replaced, own_executable, runs_replaced_code,
 };
 pub use file::{replace_file, sync_folder};
 pub use icon::{FALLBACK_THEME, ICON_THEMES, find_icon};
@@ -43,8 +44,9 @@ pub use mimeapps::{
     state_home,
 };
 pub use reopen::{
-    apps_to_reopen, crashed_apps_file, remember_apps, remember_running_apps, reopen_file,
-    running_apps_file, set_aside_apps_of_unclean_end, take_apps_to_reopen, write_running_apps,
+    crashed_apps_file, forget_saved_windows, listed_apps, remember_running_apps, reopen_file,
+    reopen_listed_apps, running_apps_contents, running_apps_file, set_aside_apps_of_unclean_end,
+    take_apps_to_reopen,
 };
 pub use units::unit_app_ids;
 pub use uri::{file_uri, path_from_file_uri, percent_decode, percent_encode};

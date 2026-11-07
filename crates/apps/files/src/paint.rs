@@ -1,8 +1,9 @@
+use bande_volumes::{on_connected_volume, quick_is_dir};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use bande_content::Preview;
-use bande_fs::{Entry, Purpose, format_date, format_size, is_hidden};
+use bande_fs::{Entry, Purpose, format_civil_date, format_date, format_size, is_hidden};
 use bande_thumbnails::ThumbnailSize;
 use bande_toolkit::ui::{
     BUTTON_HEIGHT as CONTROL_HEIGHT, CHECKBOX_SIZE, SWITCH_SIZE, Size, TEXT_FIELD_HEIGHT, WidgetId,
@@ -139,7 +140,10 @@ impl FilesView {
         }
         let target = entry
             .link
-            .then(|| std::fs::read_link(&entry.path).ok())
+            .then(|| match on_connected_volume(&entry.path) {
+                true => None,
+                false => std::fs::read_link(&entry.path).ok(),
+            })
             .flatten()
             .and_then(|target| Some(target.file_name()?.to_string_lossy().into_owned()));
         let names = self
@@ -169,6 +173,7 @@ impl FilesView {
         self.headings.clear();
         self.layout_controls();
         self.refresh_navigation();
+        self.notice_left_backups();
         if self.mode == ViewMode::List {
             self.ui.layout(Size::new(width as f32, height as f32));
             self.fill_table();
@@ -185,6 +190,7 @@ impl FilesView {
         self.paint_columns(&mut content);
         self.learn_kinds();
         self.paint_scope_bar(&mut content);
+        self.paint_backup_bar(&mut content);
         self.paint_tab_bar(&mut content);
         self.paint_path_bar(&mut content);
         content.extend(inspector);
@@ -699,7 +705,7 @@ impl FilesView {
                 {
                     continue;
                 }
-                let folder = walked.is_dir();
+                let folder = quick_is_dir(&walked);
                 let mut name = walked.file_name().map_or_else(
                     || "/".to_owned(),
                     |name| name.to_string_lossy().into_owned(),
@@ -809,8 +815,12 @@ impl FilesView {
         };
         let free = column
             .folder()
-            .and_then(|folder| rustix::fs::statvfs(folder).ok())
-            .map(|stats| stats.f_bavail * stats.f_frsize);
+            .and_then(|folder| match on_connected_volume(folder) {
+                true => self.connected_free(folder),
+                false => rustix::fs::statvfs(folder)
+                    .ok()
+                    .map(|stats| stats.f_bavail * stats.f_frsize),
+            });
         match free {
             Some(bytes) => L10N.tr_args(
                 "status-free",
@@ -1066,10 +1076,7 @@ impl FilesView {
                 if let Some(item) = &entry.trashed
                     && let Some(deleted) = item.deleted
                 {
-                    facts.push((
-                        L10N.tr("info-deleted"),
-                        deleted.strftime("%-d %b %Y, %H:%M").to_string(),
-                    ));
+                    facts.push((L10N.tr("info-deleted"), format_civil_date(deleted)));
                 }
                 let editable = self
                     .inspector_controls
@@ -1079,6 +1086,7 @@ impl FilesView {
                     facts.push((L10N.tr("info-permissions"), permissions(mode)));
                 }
                 if entry.link
+                    && !on_connected_volume(&entry.path)
                     && let Ok(target) = std::fs::read_link(&entry.path)
                 {
                     facts.push((L10N.tr("info-link"), target.display().to_string()));

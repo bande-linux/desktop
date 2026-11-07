@@ -23,6 +23,7 @@ use zbus::zvariant::{OwnedValue, Value};
 use zbus::{MatchRule, message};
 
 use crate::L10N;
+use crate::app_languages::app_language;
 use crate::apps::Apps;
 use crate::entry::{
     DesktopAction, DesktopEntry, Locale, applications, current_desktops, data_dirs, find_executable,
@@ -36,6 +37,8 @@ pub const TERMINAL: &str = "bande-terminal";
 pub const TERMINAL_APP_ID: &str = "org.bande.Terminal";
 pub const ACTIVATION_TOKEN: &str = "XDG_ACTIVATION_TOKEN";
 const APP_OOM_SCORE: &[u8] = b"200";
+const LANGUAGE: &str = "LANGUAGE";
+const SESSION_LANGUAGE: &str = "BANDE_SESSION_LANGUAGE";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecError {
@@ -387,6 +390,30 @@ pub fn wait_for_exit(
     }
 }
 
+fn set_language(process: &mut Command, app_id: &str) {
+    if app_id.is_empty() {
+        return;
+    }
+    let session = std::env::var_os(SESSION_LANGUAGE);
+    match (app_language(app_id), session) {
+        (Some(code), session) => {
+            let session = session.or_else(|| std::env::var_os(LANGUAGE));
+            process
+                .env(SESSION_LANGUAGE, session.unwrap_or_default())
+                .env(LANGUAGE, code);
+        }
+        (None, Some(session)) => {
+            process.env_remove(SESSION_LANGUAGE);
+            if session.is_empty() {
+                process.env_remove(LANGUAGE);
+            } else {
+                process.env(LANGUAGE, session);
+            }
+        }
+        (None, None) => {}
+    }
+}
+
 pub fn spawn_detached(
     app_id: &str,
     command: &[impl AsRef<OsStr>],
@@ -401,10 +428,13 @@ pub fn spawn_detached(
         .args(arguments)
         .stdin(Stdio::null())
         .env_remove(ACTIVATION_TOKEN);
+    set_language(&mut process, app_id);
     if let Some(token) = activation_token {
         process.env(ACTIVATION_TOKEN, token);
     }
-    if let Some(directory) = working_directory {
+    if let Some(directory) =
+        working_directory.filter(|directory| !bande_volumes::on_connected_volume(directory))
+    {
         process.current_dir(directory);
     }
     unsafe {

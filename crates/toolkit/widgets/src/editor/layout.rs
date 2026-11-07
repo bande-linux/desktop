@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::ops::Range;
 
 use bande_graphics::{Color, Paragraph, Point, Rect, TextAlign, TextStyle, TextSystem};
@@ -18,12 +19,19 @@ const AVERAGE_ADVANCE: f32 = 0.55;
 const KEPT_LAYOUTS: usize = 1024;
 const TAB_SPACES: f32 = 4.0;
 
+pub(super) struct Misspelled {
+    pub(super) generation: u64,
+    pub(super) skipped: Option<usize>,
+    pub(super) ranges: Vec<Range<usize>>,
+}
+
 pub(super) struct Block {
     pub(super) text: String,
     pub(super) layout: Option<Paragraph>,
     pub(super) runs: Runs,
     pub(super) paragraph: ParagraphAttributes,
     pub(super) marker: Option<Paragraph>,
+    pub(super) misspelled: RefCell<Option<Misspelled>>,
     height: Option<f32>,
     used: u64,
 }
@@ -40,6 +48,7 @@ impl Block {
             runs,
             paragraph,
             marker: None,
+            misspelled: RefCell::new(None),
             height: None,
             used: 0,
         }
@@ -48,6 +57,12 @@ impl Block {
     pub(super) fn forget_height(&mut self) {
         self.height = None;
     }
+}
+
+pub struct PrintedBlock {
+    pub indent: f32,
+    pub marker: Option<Paragraph>,
+    pub paragraph: Paragraph,
 }
 
 pub(super) fn bounds(rect: parley::BoundingBox) -> Rect {
@@ -220,6 +235,22 @@ impl Editor {
         layout
     }
 
+    pub(crate) fn print_blocks(&self, text: &mut TextSystem) -> Vec<PrintedBlock> {
+        (0..self.blocks.len())
+            .map(|paragraph| PrintedBlock {
+                indent: self.left(paragraph),
+                marker: self.marker(text, paragraph),
+                paragraph: self.build_with_text(text, paragraph),
+            })
+            .collect()
+    }
+
+    fn build_with_text(&self, text: &mut TextSystem, paragraph: usize) -> Paragraph {
+        let shaped = self.build(text, paragraph);
+        let content = self.layout_text(paragraph).replace('\t', " ");
+        shaped.with_text(&content)
+    }
+
     fn build(&self, text: &mut TextSystem, paragraph: usize) -> Paragraph {
         let content = self.layout_text(paragraph);
         if !content.contains('\t') {
@@ -266,6 +297,7 @@ impl Editor {
             }
             block.height = Some(height);
             block.layout = Some(built);
+            block.misspelled = RefCell::new(None);
             block.marker = marker;
             self.laid_out += 1;
         }

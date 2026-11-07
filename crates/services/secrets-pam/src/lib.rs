@@ -1,10 +1,12 @@
 #![allow(clippy::missing_safety_doc)]
 
 use std::ffi::{CStr, c_char, c_int, c_void};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::Shutdown;
 use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
+use std::os::unix::process::CommandExt;
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use zeroize::Zeroizing;
@@ -57,6 +59,9 @@ struct Failure {
     priority: c_int,
     text: &'static CStr,
 }
+
+const DISK_ENCRYPTION: &str = "/usr/libexec/bande-disk-encryption";
+const ROOT_PATH: &str = "/usr/sbin:/usr/bin:/sbin:/bin";
 
 const fn warning(text: &'static CStr) -> Failure {
     Failure {
@@ -247,6 +252,32 @@ pub extern "C" fn pam_sm_close_session(
     PAM_IGNORE
 }
 
+fn change_disk_password(old: &[u8], new: &[u8]) -> Result<(), Failure> {
+    let failed = warning(c"the disk password did not change with the login password");
+    let mut helper = Command::new(DISK_ENCRYPTION)
+        .arg("change-passphrase")
+        .uid(0)
+        .gid(0)
+        .env_clear()
+        .env("PATH", ROOT_PATH)
+        .current_dir("/")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| warning(c"the disk password helper did not start"))?;
+    if let Some(mut input) = helper.stdin.take() {
+        let lines = Zeroizing::new([old, b"\n", new, b"\n"].concat());
+        input
+            .write_all(&lines)
+            .map_err(|_| warning(c"the disk password helper did not read the password"))?;
+    }
+    match helper.wait() {
+        Ok(status) if status.success() => Ok(()),
+        _ => Err(failed),
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pam_sm_chauthtok(
     handle: *mut PamHandle,
@@ -265,5 +296,6 @@ pub unsafe extern "C" fn pam_sm_chauthtok(
     if let Some(uid) = unsafe { user_id(handle) } {
         unsafe { report(handle, send(uid, &message(CHANGE, &[&old, &new]))) };
     }
+    unsafe { report(handle, change_disk_password(&old, &new)) };
     PAM_SUCCESS
 }

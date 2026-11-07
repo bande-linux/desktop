@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>Bande</vendor>
+  <action id="org.bande.consent.change">
+    <description>Change which programs may read or type your keystrokes</description>
+    <description xml:lang="sv">Ändra vilka program som får läsa eller skriva dina tangenttryckningar</description>
+    <message>Enter your password to change which programs may read or type your keystrokes.</message>
+    <message xml:lang="sv">Ange ditt lösenord för att ändra vilka program som får läsa eller skriva dina tangenttryckningar.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/bande-consent</annotate>
+  </action>
+</policyconfig>

@@ -14,6 +14,8 @@ pub enum Command {
     OpenWithOther,
     QuickLook,
     Info,
+    BrowseBackups,
+    RestoreFromBackup,
     Rename,
     Duplicate,
     MakeAlias,
@@ -40,6 +42,8 @@ pub enum Command {
     QuickLookFullScreen,
     MoveHere,
     EjectCurrent,
+    ShareMail,
+    ShareTo(std::path::PathBuf),
     GoTo(Destination),
     EmptyTrash,
     OpenPlaceInNewTab,
@@ -56,6 +60,7 @@ pub enum Destination {
     Recents,
 }
 
+const SHARE_TO: &str = "share-to:";
 const OPEN_WITH: &str = "open-with:";
 const NEW_DOCUMENT: &str = "new-document:";
 
@@ -78,6 +83,8 @@ const ACTIONS: &[(&str, Command)] = &[
     ("show-in-enclosing-folder", Command::ShowInEnclosingFolder),
     ("trash", Command::Trash),
     ("put-back", Command::PutBack),
+    ("browse-backups", Command::BrowseBackups),
+    ("restore-from-backup", Command::RestoreFromBackup),
     ("delete-immediately", Command::DeleteImmediately),
     ("new-folder", Command::NewFolder),
     ("paste", Command::Paste),
@@ -105,6 +112,7 @@ const ACTIONS: &[(&str, Command)] = &[
     ("quick-look-full-screen", Command::QuickLookFullScreen),
     ("move-here", Command::MoveHere),
     ("eject-current", Command::EjectCurrent),
+    ("share-mail", Command::ShareMail),
     ("go:desktop", Command::GoTo(Destination::Desktop)),
     ("go:documents", Command::GoTo(Destination::Documents)),
     ("go:downloads", Command::GoTo(Destination::Downloads)),
@@ -133,6 +141,9 @@ pub fn command(action: &str) -> Option<Command> {
     if let Some(id) = action.strip_prefix(OPEN_WITH) {
         return Some(Command::OpenWith(id.to_owned()));
     }
+    if let Some(path) = action.strip_prefix(SHARE_TO) {
+        return Some(Command::ShareTo(path.into()));
+    }
     if let Some(name) = action.strip_prefix(NEW_DOCUMENT) {
         return Some(Command::NewDocument(name.to_owned()));
     }
@@ -158,16 +169,32 @@ pub struct Selection {
     pub count: usize,
     pub name: String,
     pub trashed: bool,
+    pub in_backup: bool,
+    pub can_browse_backups: bool,
     pub away: bool,
     pub folders: bool,
     pub files: bool,
     pub terminal: bool,
     pub apps: Vec<OpenWithChoice>,
+    pub mail: bool,
+    pub places: Vec<std::path::PathBuf>,
 }
 
 pub fn items_menu(selection: &Selection) -> Menu {
     let count = selection.count;
     let mut items = Vec::new();
+    if selection.in_backup {
+        items.push(item(
+            "menu-restore-from-backup",
+            &Command::RestoreFromBackup,
+        ));
+        items.push(MenuItem::separator());
+        items.push(item("open", &Command::Open).shortcut("Ctrl+O"));
+        items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
+        items.push(item("menu-copy", &Command::Copy).shortcut("Ctrl+C"));
+        items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
+        return Menu::new(items);
+    }
     if selection.trashed {
         items.push(item("menu-put-back", &Command::PutBack));
         items.push(
@@ -203,10 +230,33 @@ pub fn items_menu(selection: &Selection) -> Menu {
     items.push(MenuItem::separator());
     items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
     items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
+    if selection.can_browse_backups && count == 1 {
+        items.push(item("menu-browse-backups", &Command::BrowseBackups));
+    }
     if selection.away {
         items.push(item(
             "menu-show-in-enclosing-folder",
             &Command::ShowInEnclosingFolder,
+        ));
+    }
+    let mut targets = Vec::new();
+    if selection.mail {
+        targets.push(item("menu-share-mail", &Command::ShareMail));
+    }
+    targets.extend(selection.places.iter().map(|place| {
+        let name = place.file_name().unwrap_or_default().to_string_lossy();
+        MenuItem::new(
+            &L10N.tr_args(
+                "menu-share-to",
+                [("place", name.as_ref().to_owned().into())],
+            ),
+            &format!("{SHARE_TO}{}", place.display()),
+        )
+    }));
+    if !targets.is_empty() {
+        items.push(MenuItem::submenu(
+            &L10N.tr("menu-share"),
+            Menu::new(targets),
         ));
     }
     items.push(MenuItem::separator());
@@ -263,6 +313,7 @@ pub struct Folder {
     pub trash_empty: bool,
     pub paste: bool,
     pub terminal: bool,
+    pub can_browse_backups: bool,
 }
 
 pub fn folder_menu(folder: Folder) -> Menu {
@@ -276,6 +327,9 @@ pub fn folder_menu(folder: Folder) -> Menu {
                 .enabled(folder.paste),
         ]
     };
+    if folder.can_browse_backups && !folder.trash {
+        items.push(item("menu-browse-backups", &Command::BrowseBackups));
+    }
     if !folder.trash && !folder.templates.is_empty() {
         let documents = folder
             .templates

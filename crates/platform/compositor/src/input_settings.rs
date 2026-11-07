@@ -1,15 +1,18 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread;
 
 use bande_config::{
     Accessibility, BUS_NAME, Config, OBJECT_PATH, config_path, read_system_input_sources,
 };
+use bande_watch::{Changes, FolderWatch};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::keymap::KeyboardSettings;
 use crate::pointing::PointerSettings;
 use crate::state::Compositor;
+
+const SYSTEM_KEYBOARD_FOLDER: &str = "/etc/default";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct InputSettings {
@@ -92,6 +95,16 @@ pub fn follow_input_settings(
         }
     });
     Ok(())
+}
+
+pub fn follow_system_keyboard(
+    mut publish: impl FnMut(InputSettings) -> bool + Send + 'static,
+) -> std::io::Result<FolderWatch> {
+    let watch = FolderWatch::spawn(Changes::Any, move |_| {
+        publish(InputSettings::system());
+    })?;
+    watch.watch(Path::new(SYSTEM_KEYBOARD_FOLDER))?;
+    Ok(watch)
 }
 
 impl Compositor {

@@ -6,15 +6,17 @@ use std::time::{Duration, Instant};
 use bande_compositor::{
     Awaited, CLIPBOARD_DAEMON, Compositor, CursorTheme, DisplaysHandle, DrmBackend, DrmNotifiers,
     FrameClock, FrameOutput, FrameRecovery, FrameScheduler, GREETER, InputSettings, REFRESH,
-    REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
-    SessionRequest, SessionRole, SessionUpkeep, Sleep, export_session_environment, follow_alerts,
-    follow_appearance, follow_input_settings, follow_session, follow_shutdown, follow_sleep,
-    notify_service_manager, serve_app_states, serve_displays, serve_keyboard_monitor,
-    sleep_on_request, user_config, watchdog_keepalive_interval,
+    REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SETUP,
+    SETUP_PENDING, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
+    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
+    follow_session, follow_shutdown, follow_sleep, follow_system_keyboard, notify_service_manager,
+    render_material, serve_app_states, serve_displays, serve_keyboard_monitor, sleep_on_request,
+    user_config, watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, OBJECT_PATH};
 use bande_datetime::ClockChanges;
 use bande_datetime::timedate::zone_changes;
+use bande_inbox::Inbox;
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
 use smithay::backend::udev::{UdevBackend, UdevEvent};
 use smithay::reexports::calloop::channel::{self, Event};
@@ -84,9 +86,14 @@ struct Greeter {
 
 impl Greeter {
     fn start(compositor: &mut Compositor) -> Self {
+        let program = if Path::new(SETUP_PENDING).exists() {
+            SETUP
+        } else {
+            GREETER
+        };
         let child = compositor
-            .spawn_shell_client(Path::new(GREETER))
-            .inspect_err(|error| compositor.report_start_failure(Path::new(GREETER), error))
+            .spawn_shell_client(Path::new(program))
+            .inspect_err(|error| compositor.report_start_failure(Path::new(program), error))
             .ok();
         Self {
             child,
@@ -164,6 +171,10 @@ fn run_headless(session: Session, started: Duration, buses: Buses) -> Result<(),
 
 fn window_memory() -> Option<PathBuf> {
     bande_xdg::state_home().map(|state| state.join("bande/windows"))
+}
+
+fn window_sessions() -> Option<PathBuf> {
+    bande_xdg::state_home().map(|state| state.join("bande/window-sessions"))
 }
 
 fn follow_display_settings(
@@ -424,6 +435,9 @@ fn run_drm(
     sync_heads(&mut app);
     if matches!(session, Session::User) {
         note_running_apps(&mut app);
+        if let Some(path) = window_sessions() {
+            app.compositor.remember_sessions_in(path);
+        }
     }
     let App {
         compositor, output, ..
@@ -586,6 +600,39 @@ fn follow_session_bus<O: FrameOutput + 'static>(
             app.compositor.set_reduce_motion(look.reduce_motion);
             app.compositor.set_dark_appearance(look.dark);
             app.compositor.set_text_size(look.text_size);
+            app.compositor
+                .set_style(look.style, look.increased_contrast);
+        },
+    )?;
+    let (materials, finished) = channel::channel();
+    handle.insert_source(finished, |event, _, app: &mut App<O>| {
+        if let Event::Msg(picture) = event {
+            app.compositor.finish_material(picture);
+        }
+    })?;
+    app.compositor.set_material_worker(move |request| {
+        let materials = materials.clone();
+        let spawned = std::thread::Builder::new()
+            .name("wallpaper material".to_owned())
+            .spawn(move || {
+                if let Some(picture) = render_material(&request) {
+                    let _ = materials.send(picture);
+                }
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot start making the wallpaper material: {error}");
+        }
+    });
+    let mut choices = Inbox::new()?;
+    let choices_ready = choices.fd().try_clone_to_owned()?;
+    bande_wallpaper::follow(choices.outbox());
+    handle.insert_source(
+        Generic::new(choices_ready, Interest::READ, Mode::Level),
+        move |_, _, app: &mut App<O>| {
+            for choice in choices.drain() {
+                app.compositor.set_wallpaper_choice(choice);
+            }
+            Ok(PostAction::Continue)
         },
     )?;
     follow(
@@ -634,6 +681,9 @@ fn note_running_apps<O>(app: &mut App<O>) {
     };
     if let Err(error) = bande_xdg::set_aside_apps_of_unclean_end(&running, &reopen, &crashed) {
         tracing::warn!("cannot set aside the apps of the last session: {error}");
+    }
+    if !bande_xdg::listed_apps(&crashed).is_empty() {
+        app.compositor.ask_about_reopening_after_crash();
     }
     app.compositor.note_running_apps_in(running);
 }
@@ -712,6 +762,7 @@ where
             Err(error) => tracing::warn!("the power button cannot sleep: {error}"),
         }
     }
+    let mut keyboard_watch = None;
     let (mut greeter, mut review) = match session {
         Session::User => {
             app.compositor.hold_frames_until(
@@ -724,6 +775,18 @@ where
         Session::Greeter => {
             end_greeter_when_hung(&event_loop.handle())?;
             app.compositor.apply_input_settings(InputSettings::system());
+            let (sender, changes) = channel::channel();
+            event_loop
+                .handle()
+                .insert_source(changes, |event, _, app: &mut App<O>| {
+                    if let Event::Msg(settings) = event {
+                        app.compositor.apply_input_settings(settings);
+                    }
+                })
+                .map_err(|error| error.to_string())?;
+            keyboard_watch = follow_system_keyboard(move |settings| sender.send(settings).is_ok())
+                .inspect_err(|error| tracing::warn!("cannot follow the keyboard: {error}"))
+                .ok();
             app.compositor.hold_frames_until(
                 Awaited::LoginWindow,
                 app.started,
@@ -732,6 +795,7 @@ where
             (Some(Greeter::start(&mut app.compositor)), None)
         }
     };
+    let _keyboard_watch = keyboard_watch.take();
     let mut timeout = None;
     let mut recovery = FrameRecovery::default();
     let mut frame_error = None;

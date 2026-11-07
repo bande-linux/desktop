@@ -1,9 +1,11 @@
 use accesskit::{ActionRequest, Node, Role};
 
 use super::control::paint_field;
-use super::editor::{Editor, ParagraphAttributes, RichText, TextAttributes};
+use super::editor::{Editor, ParagraphAttributes, PrintedBlock, RichText, TextAttributes};
 use super::{Context, Cursor, DragAction, Event, Menu, Parts, ScrollState, Size, Widget, WidgetId};
-use bande_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, Typeface};
+use bande_graphics::{
+    Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem, Typeface,
+};
 
 const FONT_SIZE: f32 = 13.0;
 const HORIZONTAL_PADDING: f32 = 8.0;
@@ -31,6 +33,7 @@ impl TextView {
     pub fn new(placeholder: &str, text: &str, on_change: impl FnMut(&str) + 'static) -> Self {
         let mut editor = Editor::new(text, FONT_SIZE, true);
         editor.select(0..0);
+        editor.set_spelling(true);
         Self {
             id: WidgetId::next(),
             placeholder: placeholder.to_owned(),
@@ -51,6 +54,11 @@ impl TextView {
             on_change: None,
             ..Self::new("", text, |_| {})
         }
+    }
+
+    pub fn without_text_checking(mut self) -> Self {
+        self.editor.set_spelling(false);
+        self
     }
 
     pub fn read_only(mut self) -> Self {
@@ -81,6 +89,7 @@ impl TextView {
     }
 
     pub fn set_font(&mut self, monospace: bool, size: f32) {
+        self.editor.set_spelling(!monospace);
         let typeface = match monospace {
             true => Typeface::Monospace,
             false => Typeface::Interface,
@@ -95,6 +104,16 @@ impl TextView {
     pub fn insert(&mut self, text: &str) {
         self.editor.insert(text);
         self.editor.reveal_selection();
+    }
+
+    pub fn printed_blocks(
+        rich: &RichText,
+        text: &mut TextSystem,
+        font_size: f32,
+        width: f32,
+        monospace: bool,
+    ) -> Vec<PrintedBlock> {
+        Editor::for_print(rich, font_size, width, monospace).print_blocks(text)
     }
 
     pub fn rich_text(&self) -> RichText {
@@ -342,8 +361,14 @@ impl Widget for TextView {
         true
     }
 
-    fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
-        Some(self.editor.menu())
+    fn spelling_answered(&mut self) {
+        let revision = self.editor.revision();
+        self.editor.spelling_answered();
+        self.changed(revision);
+    }
+
+    fn context_menu(&mut self, cx: &mut Context, _point: Point) -> Option<Menu> {
+        Some(self.editor.context_menu(cx))
     }
 
     fn menu_action(&mut self, cx: &mut Context, action: &str) -> bool {

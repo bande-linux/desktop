@@ -8,18 +8,14 @@ growth or a weaker boundary than documented; **low** edge cases and hygiene.
 
 ## Workspace
 
-- critical: any client (Flatpak included) can bind `zwp_input_method_v2` and read every key, and `zwp_virtual_keyboard_v1` types into the focused surface, the lock surface included (`state/globals.rs` filters `|_| true`); needs `wp_security_context_v1` to refuse these globals, layer-shell overlay, output management and output power to sandboxed clients, and virtual-keyboard keys dropped while locked.
 - high: Control Center still runs `scan`, `networks`, `sign_in_page` and the Wi-Fi, Bluetooth and Do Not Disturb setters on the shell's UI thread (bounded by the 25 s bus timeout); tray/dbusmenu calls in `status/tray.rs` and `low_memory.rs` `force_quit` too.
 - high: notification, MPRIS and tray images are decoded on the shell's UI thread (capped at 16 MiB); decode on a worker.
-- medium: any shell-role client can unlock the session with a second `ext_session_lock_v1` (`lock.rs`); give bande-lock its own role.
-- medium: `org.bande.Clipboard` serves the history to any session-bus caller; restrict to the shell and Settings.
 - medium: the clipboard daemon reads offers one MIME at a time with no total deadline or MIME cap, and `pipe()` EMFILE ends it (`clipboard/src/main.rs`); undecodable and `.partial` history files are never deleted.
 - medium: `wlr-output-management` `SetMode` accepts another head's mode and a failed `use_mode` is silent (`management.rs`).
 - medium: toolkit paste and drop reads have no size cap, timeout or expiry (`platform/src/clipboard.rs`).
 - medium: notify's `rule_for` remembers every new `app_name` and rewrites `notification-apps` each time.
 - medium: thumbnails decode without `Limits` (512 MiB each, three at once, abort in dist).
 - medium: a busy eject only logs (`volumes/eject.rs`); the user may pull a mounted drive.
-- medium: Settings' Variable refresh rate switch writes a key nothing reads.
 - medium: the desktop keeps the bar edge and icon size from when it was created (`desktop/client.rs`).
 - medium: a missing configured wallpaper never falls back to the default and a failed load is never retried (`wallpaper/choice.rs`).
 - medium: a keyboard layouts XML or read error gives an empty list with no log (`keyboard/layouts.rs`).

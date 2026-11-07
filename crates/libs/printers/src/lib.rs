@@ -1,15 +1,17 @@
-mod ipp;
+mod client;
+pub mod ipp;
 mod mechanism;
-mod nearby;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub use client::{
+    BUS_NAME, Capabilities, JobInfo, JobOptions, Kind, OBJECT_PATH, PrintClient, PrinterInfo,
+};
 pub use ipp::{Error, Result};
 pub use mechanism::{Mechanism, mechanism_available};
-pub use nearby::{NearbyPrinter, browse};
 
-use ipp::{Group, KEYWORD, PRINTER, Request, URI};
+use ipp::{Group, KEYWORD, NAME, PRINTER, Request, URI};
 
 const SOCKET: &str = "/run/cups/cups.sock";
 const LPADMIN: &str = "/usr/sbin/lpadmin";
@@ -29,6 +31,7 @@ const JOB_HELD: i32 = 4;
 const JOB_PROCESSING: i32 = 5;
 const JOB_STOPPED: i32 = 6;
 const NAME_LIMIT: usize = 127;
+const PRINT_JOB: u16 = 0x0002;
 const PRINTER_ATTRIBUTES: [&str; 10] = [
     "printer-name",
     "printer-info",
@@ -124,7 +127,7 @@ pub struct Job {
     pub state: JobState,
 }
 
-fn user() -> String {
+pub fn user() -> String {
     let uid = rustix::process::getuid().as_raw().to_string();
     std::fs::read_to_string("/etc/passwd")
         .ok()
@@ -160,6 +163,14 @@ pub fn queue_name(title: &str) -> String {
     } else {
         name
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NearbyPrinter {
+    pub name: String,
+    pub model: String,
+    pub location: String,
+    pub uri: String,
 }
 
 pub struct Cups {
@@ -297,6 +308,31 @@ impl Cups {
             .string(URI, "printer-uri", &format!("{LOCAL}/"))
             .integer(ipp::INTEGER, "job-id", job);
         self.send(&mut request, "/jobs/").map(drop)
+    }
+
+    pub fn print(
+        &self,
+        name: &str,
+        title: &str,
+        options: &JobOptions,
+        document: &[u8],
+    ) -> Result<()> {
+        let mut request = self.printer_request(PRINT_JOB, name);
+        request.string(NAME, "job-name", title).string(
+            ipp::MIME_TYPE,
+            "document-format",
+            "application/pdf",
+        );
+        request.begin_group(ipp::JOB);
+        options.write_to(&mut request);
+        request
+            .send_with(
+                &self.socket,
+                &format!("/printers/{name}"),
+                &self.user,
+                document,
+            )
+            .map(drop)
     }
 
     pub fn add(&self, printer: &NearbyPrinter) -> std::io::Result<String> {

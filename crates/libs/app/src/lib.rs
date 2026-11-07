@@ -2,6 +2,8 @@ mod cx;
 mod instance;
 mod menus;
 mod portal;
+mod print;
+mod resume;
 mod runner;
 mod tabs;
 
@@ -18,8 +20,13 @@ use bande_toolkit::ui::Ui;
 use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 use bande_xdg::file_uri;
 
+pub use bande_pdf::{Block, Orientation, Page, PageItem, PageSetup, Paper, flow};
 pub use cx::{Cx, WindowId};
-pub use portal::{Filter, choose_file, choose_save_file};
+pub use portal::{Filter, choose_file, choose_save_file, parent_window};
+pub use print::{
+    Document, Layout, can_print, file_document, image_document, print, rich_document, text_document,
+};
+pub use resume::Saved;
 pub use tabs::{Detached, TabCarry, TabDrop, TabDropTarget, TabHost, move_tab};
 
 pub type Error = Box<dyn std::error::Error>;
@@ -79,6 +86,10 @@ pub trait View {
     fn set_appearance(&mut self, appearance: Appearance);
 
     fn set_active(&mut self, _active: bool) {}
+
+    fn keys(&self) -> Option<Keys> {
+        None
+    }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         Vec::new()
@@ -157,6 +168,16 @@ pub trait Program: Sized + 'static {
     fn open(&mut self, _cx: &mut Cx<Self>, _arguments: Vec<String>, _directory: &Path) {}
 
     fn reopen(&mut self, cx: &mut Cx<Self>);
+
+    fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        (cx.kind(window) == Some(Kind::Main)).then(Saved::empty)
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, _saved: Saved) {
+        self.reopen(cx);
+    }
+
+    fn windows_restored(&mut self, _cx: &mut Cx<Self>) {}
 
     fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, _view: Self::View) {}
 

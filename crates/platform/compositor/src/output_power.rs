@@ -126,6 +126,10 @@ impl GlobalDispatch<ZwlrOutputPowerManagerV1, ()> for State {
     ) {
         data_init.init(resource, ());
     }
+
+    fn can_view(client: Client, _global_data: &()) -> bool {
+        !crate::trust::is_sandboxed(&client)
+    }
 }
 
 impl Dispatch<ZwlrOutputPowerManagerV1, ()> for State {

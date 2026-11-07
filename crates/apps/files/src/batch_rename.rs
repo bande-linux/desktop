@@ -14,6 +14,7 @@ use bande_toolkit::{Item, Paragraph, Point, Rect, TextAlign, TextRole, TextStyle
 
 use crate::L10N;
 use crate::controls::{Signal, sender};
+use crate::servers::ServerDone;
 use crate::view::{FilesView, Sheet};
 
 const WIDTH: f32 = 460.0;
@@ -351,9 +352,12 @@ impl Widget for RenameSheet {
 impl FilesView {
     fn rename_field(&self, field: RenameField, text: &str) -> Box<dyn Widget> {
         let send = sender(&self.signals);
-        Box::new(TextField::new("", text, move |text| {
-            send(Signal::RenameField(field, text.to_owned()));
-        }))
+        Box::new(
+            TextField::new("", text, move |text| {
+                send(Signal::RenameField(field, text.to_owned()));
+            })
+            .without_text_checking(),
+        )
     }
 
     fn rename_choice(
@@ -583,6 +587,16 @@ impl FilesView {
             Ok(plan) => plan,
             Err(_) => return,
         };
+        if plan
+            .iter()
+            .any(|(from, _)| bande_volumes::on_connected_volume(from))
+        {
+            self.on_server(move || {
+                let (changes, error) = rename_all(&plan);
+                ServerDone::Changed(Action::Rename, changes, error)
+            });
+            return;
+        }
         let renamed = plan
             .iter()
             .map(|(_, to)| to.clone())

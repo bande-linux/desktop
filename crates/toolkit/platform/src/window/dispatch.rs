@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use bande_protocols::client::xdg_toplevel_session_v1::XdgToplevelSessionV1;
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_callback::{self, WlCallback};
 use wayland_client::protocol::wl_compositor::WlCompositor;
@@ -11,10 +12,18 @@ use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
+use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1;
+use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1;
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1;
 use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1;
 use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibitor_v1::ZwpIdleInhibitorV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
+use wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1;
+use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_exported_v2::{self, ZxdgExportedV2};
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_exporter_v2::ZxdgExporterV2;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_imported_v2::ZxdgImportedV2;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_importer_v2::ZxdgImporterV2;
 use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
 use wayland_protocols::xdg::shell::client::xdg_wm_base::{self, XdgWmBase};
@@ -25,7 +34,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 };
 
 use super::{State, ToplevelState, WindowEvent};
-use crate::shell::{OFFER_PLACEMENTS_SINCE, OPEN_TERMINAL_SINCE};
+use crate::shell::{OFFER_PLACEMENTS_SINCE, SHELL_VERSION};
 
 impl Dispatch<WlRegistry, ()> for State {
     fn event(
@@ -57,6 +66,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 "zwp_linux_dmabuf_v1" if version >= 3 => {
                     state.dmabuf = Some(registry.bind(name, 3, handle, ()));
                 }
+                "ext_background_effect_manager_v1" => {
+                    state.background_effects = Some(registry.bind(name, 1, handle, ()));
+                }
                 "zwp_idle_inhibit_manager_v1" => {
                     state.idle_inhibit_manager = Some(registry.bind(name, 1, handle, ()));
                 }
@@ -80,6 +92,15 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "xdg_toplevel_tag_manager_v1" => {
                     state.toplevel_tag = Some(registry.bind(name, 1, handle, ()));
+                }
+                "zxdg_exporter_v2" => {
+                    state.exporter = Some(registry.bind(name, 1, handle, ()));
+                }
+                "zxdg_importer_v2" => {
+                    state.importer = Some(registry.bind(name, 1, handle, ()));
+                }
+                "xdg_wm_dialog_v1" => {
+                    state.dialogs = Some(registry.bind(name, 1, handle, ()));
                 }
                 "xdg_toplevel_drag_manager_v1" => {
                     state.toplevel_drag = Some(registry.bind(name, 1, handle, ()));
@@ -112,7 +133,7 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "bande_shell_v1" => {
                     state.shell.protocol =
-                        Some(registry.bind(name, version.min(OPEN_TERMINAL_SINCE), handle, ()));
+                        Some(registry.bind(name, version.min(SHELL_VERSION), handle, ()));
                 }
                 "bande_app_v1" => {
                     state.shell.app =
@@ -220,6 +241,21 @@ impl Dispatch<XdgToplevel, ()> for State {
     }
 }
 
+impl Dispatch<ZxdgExportedV2, ()> for State {
+    fn event(
+        state: &mut Self,
+        _: &ZxdgExportedV2,
+        event: zxdg_exported_v2::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let zxdg_exported_v2::Event::Handle { handle } = event {
+            state.exported_handle = Some(handle);
+        }
+    }
+}
+
 impl Dispatch<ZwlrLayerSurfaceV1, ()> for State {
     fn event(
         state: &mut Self,
@@ -277,6 +313,8 @@ impl Dispatch<WlBuffer, Arc<AtomicBool>> for State {
 delegate_noop!(State: ignore ZwpIdleInhibitManagerV1);
 delegate_noop!(State: ignore ZwpIdleInhibitorV1);
 delegate_noop!(State: ignore WlCompositor);
+delegate_noop!(State: ignore ExtBackgroundEffectManagerV1);
+delegate_noop!(State: ignore ExtBackgroundEffectSurfaceV1);
 delegate_noop!(State: ignore WlShm);
 delegate_noop!(State: ignore WlShmPool);
 delegate_noop!(State: ignore WlRegion);
@@ -284,6 +322,12 @@ delegate_noop!(State: ignore WlSurface);
 delegate_noop!(State: ignore ZwlrLayerShellV1);
 delegate_noop!(State: ignore XdgActivationV1);
 delegate_noop!(State: ignore XdgToplevelTagManagerV1);
+delegate_noop!(State: ignore XdgToplevelSessionV1);
+delegate_noop!(State: ignore ZxdgExporterV2);
+delegate_noop!(State: ignore ZxdgImporterV2);
+delegate_noop!(State: ignore ZxdgImportedV2);
+delegate_noop!(State: ignore XdgWmDialogV1);
+delegate_noop!(State: ignore XdgDialogV1);
 delegate_noop!(State: ignore wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1);
 delegate_noop!(State: ignore wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_v1::XdgToplevelDragV1);
 delegate_noop!(State: ignore WlDataDeviceManager);

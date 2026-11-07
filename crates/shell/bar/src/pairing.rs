@@ -107,10 +107,7 @@ pub struct PairingDialogs {
 impl PairingDialogs {
     fn open(&self, question: &Question) -> Option<()> {
         self.dismiss();
-        let program = std::env::current_exe()
-            .inspect_err(|error| tracing::warn!("cannot find the shell to ask: {error}"))
-            .ok()?;
-        let child = Command::new(program)
+        let child = Command::new(bande_xdg::own_executable())
             .arg(PAIR_FLAG)
             .args(question.arguments())
             .stdin(Stdio::null())
@@ -279,7 +276,8 @@ impl Dialog {
             let typed = Rc::clone(&pin);
             let input = TextField::new(&L10N.tr("pair-pin"), "", move |text| {
                 *typed.borrow_mut() = text.to_owned();
-            });
+            })
+            .without_text_checking();
             field = Some(input.id());
             alert = alert.accessory(input);
         }

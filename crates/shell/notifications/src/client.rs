@@ -12,12 +12,12 @@ use bande_inbox::{Inbox, Outbox};
 use bande_notify::client::NotificationCenter;
 use bande_notify::{BUS_NAME, Picture, Presentation};
 use bande_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Rect, Role, Scene,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Radius, Rect, Role, Scene,
     TextSystem, Window, WindowEvent,
 };
 use bande_xdg::{
-    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_app, find_icon, launch,
-    path_from_file_uri, running_app,
+    DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_app,
+    find_icon, launch, path_from_file_uri, running_app,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
@@ -63,7 +63,7 @@ fn image_named(name: &str, directories: &[PathBuf]) -> Option<Image> {
     } else if name.starts_with("file:") {
         path_from_file_uri(name)
     } else {
-        find_icon(name, ICON_PIXELS, &[], directories)
+        find_icon(name, ICON_PIXELS, &ICON_THEMES, directories)
     };
     path.and_then(|path| Image::load(&path, ICON_PIXELS))
 }
@@ -214,6 +214,11 @@ impl App for Notifications {
         if !self.screen.visible(now) && !self.screen.animating(now) {
             self.hide_pending = true;
         }
+        let backdrop = self.screen.backdrop(now);
+        if backdrop.is_some() {
+            let _ = window.set_corner_radius(Radius::XL as u32);
+        }
+        window.set_backdrop(backdrop);
         self.screen.scene(now)
     }
 

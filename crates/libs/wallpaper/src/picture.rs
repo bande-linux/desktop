@@ -10,6 +10,8 @@ use resvg::{tiny_skia, usvg};
 use crate::choice::Fit;
 
 const BACKDROP_REDUCTION: u32 = 10;
+const MATERIAL_BLUR: f32 = 18.0;
+const MATERIAL_SATURATION: f32 = 1.35;
 const BACKDROP_BLUR: f32 = 7.0;
 const BACKDROP_BRIGHTNESS: f32 = 0.62;
 const BACKDROP_SATURATION: f32 = 0.8;
@@ -171,6 +173,9 @@ fn picture(image: RgbaImage) -> Picture {
 
 fn rendered(path: &Path, fit: Fit, width: u32, height: u32) -> Result<RgbaImage, RenderError> {
     let target = (width.max(1), height.max(1));
+    if bande_volumes::leads_to_connected_volume(path) {
+        return Err(RenderError::Read(std::io::ErrorKind::Unsupported.into()));
+    }
     let bytes = fs::read(path).map_err(RenderError::Read)?;
     let content = if path.extension().is_some_and(|extension| extension == "svg") {
         drawing(&bytes, fit, target)?
@@ -182,6 +187,29 @@ fn rendered(path: &Path, fit: Fit, width: u32, height: u32) -> Result<RgbaImage,
 
 pub fn render(path: &Path, fit: Fit, width: u32, height: u32) -> Result<Picture, RenderError> {
     rendered(path, fit, width, height).map(picture)
+}
+
+pub fn material(
+    path: &Path,
+    fit: Fit,
+    width: u32,
+    height: u32,
+    limit: impl Fn([u8; 3]) -> [u8; 3],
+) -> Result<Picture, RenderError> {
+    let small = rendered(path, fit, width, height)?;
+    let mut blurred = imageops::fast_blur(&small, MATERIAL_BLUR);
+    for pixel in blurred.pixels_mut() {
+        let [red, green, blue, _] = pixel.0.map(f32::from);
+        let luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+        let saturated = [red, green, blue].map(|channel| {
+            (luma + (channel - luma) * MATERIAL_SATURATION)
+                .round()
+                .clamp(0.0, 255.0) as u8
+        });
+        let [red, green, blue] = limit(saturated);
+        pixel.0 = [red, green, blue, 255];
+    }
+    Ok(picture(blurred))
 }
 
 pub fn backdrop(path: &Path, fit: Fit, width: u32, height: u32) -> Result<Picture, RenderError> {

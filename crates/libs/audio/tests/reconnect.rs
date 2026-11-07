@@ -53,6 +53,10 @@ fn wait_for(audio: &Audio, connected: bool) {
 
 #[test]
 fn sound_comes_back_after_pipewire_restarts_or_starts_late() {
+    if bande_xdg::find_executable("pipewire").is_none() {
+        eprintln!("skipped: no pipewire daemon here");
+        return;
+    }
     let directory = Path::new("/tmp").join(format!("bande-audio-{}", std::process::id()));
     fs::create_dir_all(&directory).unwrap();
     unsafe {

@@ -63,10 +63,8 @@ One Cargo workspace with one lock. Dependencies run only downward in this list.
   web-net's `Fetcher::clear` (cookies and cache by time and site) in that session.
   `Command::SiteData { view, session }` is answered to that view with `Outcome::SiteData`; the list
   travels in a sealed memfd, and comes back empty if the network process dies first.
-- **The webRequest hook** is in the network process too. With interception on, each request pauses
-  before it starts (the `onBeforeRequest` stage) and the host gets `Outcome::Paused` for the view
-  that made it; `Command::Resume` continues, cancels or redirects it. A timerfd armed only while
-  something is paused continues a request after 10 s.
+- **The webRequest hook** is in the network process too, with a decision socket straight to each
+  extension; `extensions.md` has the design.
 - **One renderer per tab and site** runs HTML, style, layout, paint and image decoding (AVIF
   included). The site is the scheme plus the registrable domain, from `web_net::Site`, which reads
   Debian's public suffix list (the `publicsuffix` package). Without the list, a site is the full
@@ -89,7 +87,7 @@ One Cargo workspace with one lock. Dependencies run only downward in this list.
   `Outcome::Crashed`.
 - **The media process** (phase 4) demuxes and decodes into NV12 dmabufs (`media.md`).
 - **The CDM process** (phase 4, per site) hosts Widevine once licensed.
-- **The extension process** (phase 4, one per extension) runs the extension's pages.
+- **The extension process** (one per extension) runs the extension's pages (`extensions.md`).
 - **The GPU process** (phase 4) runs WebGL and WebGPU through wgpu and hands frames over as
   dmabuf, so untrusted shaders never run in the app.
 
@@ -108,7 +106,6 @@ environment, the control socket on stdin and the renderer's network socket on st
 **Gaps:**
 - Font files cross into the app as bytes and are parsed there. Glyph outlines (D1) remove that.
 - Image pixels are copied once into the app's `Arc`s and the app keeps them for the load.
-- Only the `onBeforeRequest` stage exists.
 
 **Measured** (release, the mini, Debian's fonts):
 - An idle renderer is 1.7 MB anonymous and 8.4 MB resident (the rest is shared files). It starts,

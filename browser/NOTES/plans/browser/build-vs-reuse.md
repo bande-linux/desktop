@@ -41,7 +41,8 @@ are our estimates for a first complete version, in lines of Rust.
 | rustix, landlock, seccompiler | thin system-call layers; the policy is ours. Landlock and seccomp-bpf are what Chromium, Firefox and bubblewrap build on, and both crates are maintained by those kernel features' own communities (landlock by its kernel maintainers, seccompiler by Firecracker), so we own the rules but not the BPF assembler or the ABI compatibility code |
 | libc | the syscall numbers (`SYS_*`) per architecture for the seccomp allowlist; seccompiler already depends on it |
 | rusqlite | history, bookmarks, and the storage under IndexedDB, as Firefox does |
-| serde_json (tools only) | the conformance runner reads the suites' JSON test files; never linked into the engine |
+| serde_json | the conformance runner's JSON test files, and extension manifests and rule files at install; never linked into a renderer |
+| rustls-webpki, aws-lc-rs directly, regex | add-on signature checks and package hashes; declarativeNetRequest's `regexFilter` (`extensions.md`) |
 | wasmtime (Cranelift) | WebAssembly in phase 4 until our JS engine has its own WASM tier (WASM GC must share the JS heap) |
 
 Not used: Stylo, taffy, Blitz, html5ever, cssparser, parley, usvg, tokio, reqwest, serde for IPC.

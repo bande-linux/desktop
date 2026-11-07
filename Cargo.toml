@@ -90,6 +90,7 @@ bande-app-menu = { path = "crates/libs/app-menu" }
 bande-app-settings = { path = "crates/libs/app-settings" }
 bande-audio = { path = "crates/libs/audio" }
 bande-automount = { path = "crates/services/automount" }
+bande-backup = { path = "crates/services/backup" }
 bande-bar = { path = "crates/shell/bar" }
 bande-bench = { path = "crates/testing/bench" }
 bande-bluetooth = { path = "crates/libs/bluetooth" }

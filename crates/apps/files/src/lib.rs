@@ -1,4 +1,5 @@
 mod access;
+mod backups;
 mod batch_rename;
 mod browser;
 mod context;
@@ -33,6 +34,7 @@ use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
+pub use backups::backups_installed;
 pub use batch_rename::{BatchRename, RuleKind};
 pub use browser::{Browser, Column, Location, RowEdit};
 pub use controls::{list_column_action, list_column_move_action, list_column_title};

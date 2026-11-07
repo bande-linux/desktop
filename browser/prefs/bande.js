@@ -54,6 +54,7 @@ pref("browser.newtabpage.activity-stream.asrouter.providers.whats-new-panel", "n
 pref("browser.newtabpage.activity-stream.asrouter.userprefs.cfr.addons", false, locked);
 pref("browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features", false, locked);
 pref("browser.topsites.contile.enabled", false, locked);
+pref("browser.newtabpage.activity-stream.default.sites", "", locked);
 pref("browser.topsites.useRemoteSetting", false, locked);
 pref("browser.urlbar.sponsoredTopSites", false, locked);
 pref("browser.vpn_promo.enabled", false, locked);

@@ -125,7 +125,7 @@ jobs:
           docker exec build sh -c '/repo/scripts/prepare.sh /work/firefox-esr-*/ "$0"' "$VERSION"
 
       - name: Build
-        run: docker exec -e BROWSER_JOBS=4 build /repo/scripts/build.sh compile "$VERSION" /work /out
+        run: docker exec -e BROWSER_JOBS=3 build /repo/scripts/build.sh compile "$VERSION" /work /out
 
       - name: Prove a fresh profile stays silent
         run: docker exec build sh -c '/repo/scripts/check-package.sh /out/bande-browser_*.deb'

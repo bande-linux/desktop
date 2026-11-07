@@ -169,6 +169,21 @@ fn run_engine(arguments: Vec<String>, input: Option<Zeroizing<String>>, outbox: 
     });
 }
 
+fn needs_password() -> bool {
+    Command::new("pkexec")
+        .env("SHELL", "/bin/bash")
+        .args([ENGINE, "needs-password"])
+        .output()
+        .is_ok_and(|output| output.stdout.trim_ascii() != b"none")
+}
+
+fn command_of(purpose: Purpose) -> &'static str {
+    match purpose {
+        Purpose::Reinstall => "reinstall",
+        Purpose::Versions => "versions",
+    }
+}
+
 struct Tools {
     ui: Ui,
     intents: Rc<RefCell<Vec<Intent>>>,
@@ -357,7 +372,13 @@ impl Tools {
                     };
                     self.engine(vec!["install".to_owned(), disk], None);
                 }
-                Intent::AskPassword(purpose) => self.page = Page::Password(purpose),
+                Intent::AskPassword(purpose) => {
+                    if needs_password() {
+                        self.page = Page::Password(purpose);
+                    } else {
+                        self.engine(vec![command_of(purpose).to_owned()], None);
+                    }
+                }
                 Intent::Submit => {
                     let secret = self.password.and_then(|id| {
                         self.ui
@@ -368,11 +389,9 @@ impl Tools {
                         continue;
                     };
                     self.secret = secret.clone();
-                    let command = match self.page {
-                        Page::Password(Purpose::Versions) => "versions",
-                        _ => "reinstall",
-                    };
-                    self.engine(vec![command.to_owned()], Some(secret));
+                    if let Page::Password(purpose) = self.page {
+                        self.engine(vec![command_of(purpose).to_owned()], Some(secret));
+                    }
                 }
                 Intent::Version(id) => {
                     self.engine(vec!["restore".to_owned(), id], Some(self.secret.clone()));

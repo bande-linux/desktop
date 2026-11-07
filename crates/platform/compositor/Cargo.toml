@@ -18,6 +18,7 @@ serde_json.workspace = true
 smithay = { workspace = true, features = ["backend_drm", "backend_gbm", "backend_libinput", "backend_session_libseat", "backend_udev", "desktop"] }
 tracing.workspace = true
 bande-bus.workspace = true
+bande-watch.workspace = true
 bande-config.workspace = true
 bande-datetime.workspace = true
 bande-edid.workspace = true

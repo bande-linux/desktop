@@ -6,4 +6,5 @@ quote-close = ”
 apostrophe-open = ’
 apostrophe-close = ’
 dash = –
-autocorrect = false
+autocorrect = true
+autocorrect-min-length = 4

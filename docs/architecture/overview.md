@@ -156,7 +156,7 @@ own apps and third-party apps use the same keys, so the compositor translates no
 | Modifier | Role | Examples |
 | :--- | :--- | :--- |
 | **`Ctrl`** | Shortcuts inside apps and text fields | `Ctrl+C` (copy), `Ctrl+V` (paste), `Ctrl+X` (cut), `Ctrl+Z` (undo), `Ctrl+W` (close window), `Ctrl+Q` (quit), `Ctrl+F` (find), `Ctrl+click` (toggle an item in a selection) |
-| **`Super`** | The system only, never an app action | a tap of `Super` (Search), `Super+arrows` (tiling), `Super+H` (minimize), `Super+L` (lock), `Super+D` (desktop), `Super+V` (clipboard history), `Super+.` (emoji), `Super+N` and `Super+S` (notifications, Control Center), `Ctrl+Super+Left/Right` (workspaces), Super+drag (move a window) |
+| **`Super`** | The system only, never an app action | a tap of `Super` or `Super+Space` (Search), `Super+arrows` (tiling), `Super+H` (minimize), `Super+L` (lock), `Super+D` (desktop), `Super+V` (clipboard history), `Super+.` (emoji), `Super+N` and `Super+S` (notifications, Control Center), `Ctrl+Super+Left/Right` (workspaces), Super+drag (move a window) |
 | **`Alt`** | Navigation in apps, alternate actions | `Alt+Left/Right` (back and forward), `Alt+Up` (enclosing folder), `Alt+F4` (close window), `Alt+Tab` (switcher), `Alt+Click` (toggle disclosure) |
 | **`Shift`** | Reversal, extending a selection, the second set of commands | `Shift+Ctrl+Z` (redo), `Shift+Ctrl+N` (new folder), Terminal's `Shift+Ctrl+C/V`, `Shift+Drag` (move) |
 

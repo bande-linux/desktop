@@ -239,7 +239,9 @@ fn an_nv12_video_buffer_shows_its_colour() {
         .max_by_key(|pixel| pixel[0])
         .map(|pixel| pixel.to_vec());
     panic!("no red in the frame, brightest {brightest:?}");
+}
 
+#[test]
 fn another_process_dialog_opens_over_the_window_it_is_attached_to() {
     let mut server = headless(1200, 900);
     let bytes = RED.repeat(600 * 500);

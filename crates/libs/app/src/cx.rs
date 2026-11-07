@@ -102,6 +102,7 @@ impl<P: Program> Cx<P> {
         };
         let panel = matches!(kind, Kind::Panel(_));
         window.set_menu_button(!panel);
+        window.export();
         let id = WindowId(self.next);
         self.next += 1;
         let content = content(window.appearance());
@@ -121,6 +122,10 @@ impl<P: Program> Cx<P> {
             self.windows[index].close();
             self.menus_changed = true;
         }
+    }
+
+    pub fn print(&self, title: &str, document: crate::Document) {
+        crate::print(title, self.info.id, document);
     }
 
     pub fn open_settings(&mut self) {

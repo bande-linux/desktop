@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use bande_design::{Color, Palette, TextRole};
 
 use crate::{Item, Paragraph, Path, Point, Rect, Shape, TextStyle};
@@ -6,6 +8,9 @@ pub const WINDOW_HEADER_HEIGHT: u32 = 48;
 pub const FRAME_HEADER_HEIGHT: u32 = 40;
 pub const RESIZE_MARGIN: u32 = 8;
 pub const RESIZE_INSIDE: f32 = 3.0;
+pub const PLACEMENTS_AFTER_REST: Duration = Duration::from_millis(800);
+pub const PLACEMENTS_AFTER_HOLD: Duration = Duration::from_millis(500);
+pub const HEADER_LEADING: f32 = window_controls_end(true) + TITLE_GAP;
 const RESIZE_CORNER_REACH: f32 = 24.0;
 const WELL_X: f32 = 12.0;
 const WELL_WIDTH: f32 = 66.0;
@@ -19,8 +24,10 @@ const FIRST_GLYPH: f32 = 12.0;
 const TITLE_GAP: f32 = 16.0;
 const TRAILING_INSET: f32 = 12.0;
 const GLYPH_STROKE: f32 = 1.5;
-const DISC_RADIUS: f32 = 8.0;
-const PRESSED_OPACITY: f32 = 0.12;
+const DISC_RADIUS: f32 = 9.0;
+const HOVER_OPACITY: f32 = 0.12;
+const PRESSED_OPACITY: f32 = 0.22;
+const PRESSED_SHADE: f32 = 0.15;
 const DISABLED_OPACITY: f32 = 0.45;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -77,15 +84,11 @@ fn menu_well(height: f32) -> Rect {
     )
 }
 
-pub fn window_controls_area(height: f32) -> Rect {
-    Rect::new(0.0, 0.0, WELL_X + WELL_WIDTH, height)
-}
-
 pub fn menu_button_area(height: f32) -> Rect {
     menu_well(height)
 }
 
-pub const fn window_controls_end(menu: bool) -> f32 {
+const fn window_controls_end(menu: bool) -> f32 {
     match menu {
         true => WELL_X + WELL_WIDTH + MENU_GAP + WELL_HEIGHT,
         false => WELL_X + WELL_WIDTH,
@@ -141,25 +144,47 @@ fn side(at: f32, start: f32, length: f32) -> i8 {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct ControlHover {
+    pub close: f32,
+    pub minimize: f32,
+    pub zoom: f32,
+    pub menu: f32,
+}
+
+impl ControlHover {
+    pub fn only(control: Option<WindowControl>) -> Self {
+        let level = |this: WindowControl| if control == Some(this) { 1.0 } else { 0.0 };
+        Self {
+            close: level(WindowControl::Close),
+            minimize: level(WindowControl::Minimize),
+            zoom: level(WindowControl::Zoom),
+            menu: level(WindowControl::Menu),
+        }
+    }
+
+    fn of(self, control: WindowControl) -> f32 {
+        match control {
+            WindowControl::Close => self.close,
+            WindowControl::Minimize => self.minimize,
+            WindowControl::Zoom => self.zoom,
+            WindowControl::Menu => self.menu,
+        }
+    }
+}
+
 pub struct TitleBar<'a> {
     pub width: f32,
     pub height: f32,
     pub title: Paragraph,
     pub palette: &'a Palette,
     pub active: bool,
-    pub hover: f32,
-    pub close_hover: f32,
+    pub hover: ControlHover,
     pub pressed: Option<WindowControl>,
     pub zoomed: bool,
     pub zoomable: bool,
     pub alternate: bool,
-    pub menu: Option<MenuButton>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct MenuButton {
-    pub hover: f32,
-    pub open: bool,
+    pub menu_open: Option<bool>,
 }
 
 impl TitleBar<'_> {
@@ -176,23 +201,14 @@ impl TitleBar<'_> {
             WELL_HEIGHT,
         );
         self.well(well, &mut items);
-        let rest = if self.active {
-            palette.ink2
-        } else {
-            palette.ink3
-        };
-        let glyph = rest.mix(palette.ink, self.hover);
         for control in WindowControl::ALL {
-            let glyph = match control {
-                WindowControl::Zoom if !self.zoomable => rest.with_opacity(DISABLED_OPACITY),
-                _ => glyph,
-            };
-            self.control(control, glyph, &mut items);
+            self.control(control, &mut items);
         }
-        if let Some(menu) = self.menu {
-            self.menu_button(menu, rest, &mut items);
+        if self.menu_open.is_some() {
+            self.well(menu_well(self.height), &mut items);
+            self.control(WindowControl::Menu, &mut items);
         }
-        let title_x = window_controls_end(self.menu.is_some()) + TITLE_GAP;
+        let title_x = window_controls_end(self.menu_open.is_some()) + TITLE_GAP;
         let available = Rect::new(
             title_x,
             0.0,
@@ -225,35 +241,17 @@ impl TitleBar<'_> {
         });
     }
 
-    fn menu_button(&self, menu: MenuButton, rest: Color, items: &mut Vec<Item>) {
-        let well = menu_well(self.height);
-        self.well(well, items);
-        if menu.open || self.pressed == Some(WindowControl::Menu) {
-            items.push(Item::Fill {
-                shape: Shape::rounded(well, WELL_HEIGHT / 2.0),
-                paint: self.palette.ink.with_opacity(PRESSED_OPACITY).into(),
-            });
-        }
-        let glyph = rest.mix(self.palette.ink, if menu.open { 1.0 } else { menu.hover });
-        let centre = WindowControl::Menu.centre(self.height);
-        for step in [-1.0, 0.0, 1.0] {
-            let y = centre.y + step * MENU_DOT_PITCH;
-            items.push(Item::Fill {
-                shape: Shape::rounded(
-                    Rect::new(
-                        centre.x - MENU_DOT,
-                        y - MENU_DOT,
-                        2.0 * MENU_DOT,
-                        2.0 * MENU_DOT,
-                    ),
-                    MENU_DOT,
-                ),
-                paint: glyph.into(),
-            });
-        }
+    fn enabled(&self, control: WindowControl) -> bool {
+        control != WindowControl::Zoom || self.zoomable
     }
 
-    fn control(&self, control: WindowControl, glyph: Color, items: &mut Vec<Item>) {
+    fn held(&self, control: WindowControl) -> bool {
+        self.pressed == Some(control)
+            || (control == WindowControl::Menu && self.menu_open == Some(true))
+    }
+
+    fn control(&self, control: WindowControl, items: &mut Vec<Item>) {
+        let palette = self.palette;
         let centre = control.centre(self.height);
         let disc = Shape::rounded(
             Rect::new(
@@ -264,21 +262,35 @@ impl TitleBar<'_> {
             ),
             DISC_RADIUS,
         );
-        let glyph = if control == WindowControl::Close && self.close_hover > 0.0 {
-            items.push(Item::Fill {
-                shape: disc,
-                paint: self.palette.danger.with_opacity(self.close_hover).into(),
-            });
-            glyph.mix(Color::WHITE, self.close_hover)
+        let rest = if self.active {
+            palette.ink2
         } else {
-            glyph
+            palette.ink3
         };
-        if self.pressed == Some(control) && (control != WindowControl::Zoom || self.zoomable) {
+        let enabled = self.enabled(control);
+        let held = enabled && self.held(control);
+        let hover = match (enabled, held) {
+            (false, _) => 0.0,
+            (true, true) => 1.0,
+            (true, false) => self.hover.of(control),
+        };
+        let backfill = match (control, held) {
+            (WindowControl::Close, true) => palette.danger.mix(Color::BLACK, PRESSED_SHADE),
+            (WindowControl::Close, false) => palette.danger.with_opacity(hover),
+            (_, true) => palette.ink.with_opacity(PRESSED_OPACITY),
+            (_, false) => palette.ink.with_opacity(HOVER_OPACITY * hover),
+        };
+        if hover > 0.0 {
             items.push(Item::Fill {
                 shape: disc,
-                paint: self.palette.ink.with_opacity(PRESSED_OPACITY).into(),
+                paint: backfill.into(),
             });
         }
+        let glyph = match (control, enabled) {
+            (WindowControl::Close, _) => rest.mix(palette.on_danger, hover),
+            (_, true) => rest.mix(palette.ink, hover),
+            (_, false) => rest.with_opacity(DISABLED_OPACITY),
+        };
         let at = |x: f32, y: f32| Point::new(centre.x + x, centre.y + y);
         let stroke = |path: Path| Item::StrokePath {
             path,
@@ -321,7 +333,23 @@ impl TitleBar<'_> {
                     at(1.0, 4.5),
                 ])));
             }
-            WindowControl::Menu => {}
+            WindowControl::Menu => {
+                for step in [-1.0, 0.0, 1.0] {
+                    let y = centre.y + step * MENU_DOT_PITCH;
+                    items.push(Item::Fill {
+                        shape: Shape::rounded(
+                            Rect::new(
+                                centre.x - MENU_DOT,
+                                y - MENU_DOT,
+                                2.0 * MENU_DOT,
+                                2.0 * MENU_DOT,
+                            ),
+                            MENU_DOT,
+                        ),
+                        paint: glyph.into(),
+                    });
+                }
+            }
         }
     }
 }

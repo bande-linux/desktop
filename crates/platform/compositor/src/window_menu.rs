@@ -1,11 +1,16 @@
 use std::time::{Duration, Instant};
 
-use bande_graphics::{Key, Modifiers, Palette, Scheme, TextSize, TextSystem, WindowControl};
+use bande_graphics::{
+    Key, Modifiers, PLACEMENTS_AFTER_HOLD, PLACEMENTS_AFTER_REST, Palette, Scheme, TextSize,
+    TextSystem, WINDOW_HEADER_HEIGHT, WindowControl,
+};
 use bande_keyboard::{Action, Key as BoundKey, keys_for, keys_of};
-use bande_protocols::server::bande_app_v1::Placement;
+use bande_protocols::server::bande_app_v1::{Offer, Placement};
 use bande_render::VulkanRenderer;
 use bande_spring::Spring;
-use bande_widgets::{MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker};
+use bande_widgets::{
+    MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker, placement_layout,
+};
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::element::memory::{
     MemoryRenderBuffer, MemoryRenderBufferRenderElement,
@@ -26,7 +31,7 @@ use crate::label::Labels;
 use crate::motion::{Look, Motion, Tick};
 use crate::state::{Compositor, OutputElement, State};
 
-const TILING_MENU_AFTER: Duration = Duration::from_millis(500);
+const RESTING_MENU_STAYS: Duration = Duration::from_millis(300);
 const BELOW_GAP: i32 = 4;
 const SUBMENU_OVERLAP: i32 = 2;
 const SUBMENU_LIFT: i32 = -4;
@@ -57,6 +62,29 @@ struct Open {
     tracker: MenuTracker,
     panels: Vec<Panel>,
     closing: bool,
+    resting: Option<Resting>,
+}
+
+struct Resting {
+    control: Frame,
+    left_at: Option<Instant>,
+}
+
+#[derive(Clone)]
+struct ZoomWait {
+    surface: WlSurface,
+    since: Instant,
+    held: bool,
+}
+
+impl ZoomWait {
+    fn deadline(&self) -> Instant {
+        self.since
+            + match self.held {
+                true => PLACEMENTS_AFTER_HOLD,
+                false => PLACEMENTS_AFTER_REST,
+            }
+    }
 }
 
 #[derive(Default)]
@@ -65,7 +93,8 @@ pub(crate) struct WindowMenus {
     labels: Option<Labels>,
     text_size: TextSize,
     on_zoom: Option<WlSurface>,
-    rest: Option<(WlSurface, Instant)>,
+    zoom_settled: bool,
+    zoom_wait: Option<ZoomWait>,
 }
 
 impl WindowMenus {
@@ -75,6 +104,12 @@ impl WindowMenus {
 
     pub(crate) fn is_open(&self) -> bool {
         self.open.as_ref().is_some_and(|open| !open.closing)
+    }
+
+    pub(crate) fn takes_key(&self, keysym: u32) -> bool {
+        self.open.as_ref().is_some_and(|open| {
+            !open.closing && (open.resting.is_none() || keysym == keysyms::KEY_Escape)
+        })
     }
 
     pub(crate) fn is_animating(&self) -> bool {
@@ -223,7 +258,11 @@ impl State {
         let window = &self.windows[index];
         let zoomed = window.has_state(xdg_toplevel::State::Maximized);
         let resizable = !window.fixed_size();
-        let tile = |key: &str| item(L10N.tr(key), key).enabled(resizable);
+        let tile = |key: &str| {
+            item(L10N.tr(key), key)
+                .layout(placement_layout(key))
+                .enabled(resizable)
+        };
         let mut items = vec![
             tile("place-left")
                 .shortcut(&keys_for(Action::TileWindow, BoundKey::Left).unwrap_or_default()),
@@ -235,7 +274,7 @@ impl State {
             tile("place-bottom-left"),
             tile("place-bottom-right"),
             MenuItem::separator(),
-            item(L10N.tr("place-fill"), "place-fill").enabled(!zoomed && resizable),
+            tile("place-fill").enabled(!zoomed && resizable),
         ];
         let displays = self
             .screens
@@ -337,22 +376,62 @@ impl State {
         self.open_window_menu(surface, at);
     }
 
-    fn open_tiling_menu(&mut self, index: usize) {
-        let window = &self.windows[index];
-        let Some(geometry) = window.geometry() else {
+    fn open_tiling_menu(&mut self, index: usize, held: bool) {
+        let Some(control) = self.zoom_control_of(index) else {
             return;
         };
-        let control = WindowControl::Zoom.area(window.title_bar_height() as f32);
-        let below = Rectangle {
-            loc: (
-                geometry.loc.x + control.x.round() as i32,
-                geometry.loc.y + control.y.round() as i32,
-            )
-                .into(),
-            size: (control.width.round() as i32, control.height.round() as i32).into(),
-        };
+        let below = control.to_i32_round();
+        let hovered = self.windows[index].frame.hovered;
         let menu = Menu::new(self.tiling_items(index));
         self.open_menu(index, menu, Anchored::Below(below), false);
+        if held {
+            return;
+        }
+        self.windows[index].frame.hovered = hovered;
+        if let Some(open) = self.window_menus.open.as_mut() {
+            open.resting = Some(Resting {
+                control,
+                left_at: None,
+            });
+        }
+    }
+
+    fn zoom_control_of(&self, index: usize) -> Option<Frame> {
+        let window = &self.windows[index];
+        let geometry = window.geometry()?;
+        let bar = match window.title_bar_height() {
+            0 => WINDOW_HEADER_HEIGHT as f32,
+            bar => bar as f32,
+        };
+        let control = WindowControl::Zoom.area(bar);
+        Some(Rectangle {
+            loc: (
+                f64::from(geometry.loc.x) + f64::from(control.x),
+                f64::from(geometry.loc.y) + f64::from(control.y),
+            )
+                .into(),
+            size: (f64::from(control.width), f64::from(control.height)).into(),
+        })
+    }
+
+    pub(crate) fn offer_placements(&mut self, surface: &WlSurface, offer: Offer) {
+        let Some(index) = self.window_index(surface) else {
+            return;
+        };
+        let window = &self.windows[index];
+        if self.window_menus.is_open()
+            || window.fixed_size()
+            || window.has_state(xdg_toplevel::State::Fullscreen)
+            || !self
+                .zoom_control_of(index)
+                .is_some_and(|control| control.contains(self.pointer_location))
+            || self
+                .surface_under(self.pointer_location)
+                .is_none_or(|(under, _)| self.toplevel_of(&under).as_ref() != Some(surface))
+        {
+            return;
+        }
+        self.open_tiling_menu(index, offer == Offer::Held);
     }
 
     fn open_menu(&mut self, index: usize, menu: Menu, anchored: Anchored, from_keyboard: bool) {
@@ -384,9 +463,10 @@ impl State {
                 painted: None,
             }],
             closing: false,
+            resting: None,
         });
-        self.window_menus.rest = None;
-        self.window_menus.on_zoom = None;
+        self.window_menus.zoom_wait = None;
+        self.window_menus.zoom_settled = true;
         for window in &mut self.windows {
             window.frame.hovered = None;
             window.frame.pressed = None;
@@ -542,26 +622,33 @@ impl State {
     }
 
     pub(crate) fn window_menu_pointer(&mut self, location: Point<f64, Logical>) -> bool {
-        if !self.window_menus.is_open() {
-            return false;
-        }
         let now = Instant::now();
-        let outcome = match (self.panel_under(location), self.window_menus.open.as_mut()) {
-            (Some((level, point)), Some(open)) => open.tracker.pointer_move(level, point, now),
-            (None, Some(open)) => {
+        let under = self.panel_under(location);
+        let Some(open) = self.window_menus.open.as_mut().filter(|open| !open.closing) else {
+            return false;
+        };
+        let outcome = match under {
+            Some((level, point)) => open.tracker.pointer_move(level, point, now),
+            None => {
                 let deepest = open.panels.len().saturating_sub(1);
                 open.tracker
                     .pointer_move(deepest, bande_graphics::Point::new(-1.0, -1.0), now)
             }
-            (_, None) => MenuOutcome::Nothing,
         };
+        let passes_through = under.is_none() && open.resting.is_some();
+        if let Some(resting) = &mut open.resting {
+            resting.left_at = match under.is_some() || resting.control.contains(location) {
+                true => None,
+                false => resting.left_at.or(Some(now)),
+            };
+        }
         self.apply_menu_outcome(outcome, false);
-        true
+        !passes_through
     }
 
     pub(crate) fn window_menu_button(&mut self, button: u32, pressed: bool) -> bool {
         if !pressed {
-            self.window_menus.rest = None;
+            self.window_menus.zoom_wait = None;
         }
         if !self.window_menus.is_open() {
             return false;
@@ -573,6 +660,12 @@ impl State {
         let Some(open) = self.window_menus.open.as_mut() else {
             return false;
         };
+        if under.is_none() && open.resting.is_some() {
+            if pressed {
+                self.dismiss_window_menu();
+            }
+            return false;
+        }
         let outcome = match (under, pressed) {
             (Some((level, point)), true) => open.tracker.pointer_press(level, point),
             (Some((level, point)), false) => {
@@ -605,35 +698,56 @@ impl State {
     }
 
     pub(crate) fn rest_on_zoom(&mut self, on_zoom: Option<WlSurface>) {
-        if self.window_menus.on_zoom != on_zoom {
-            self.window_menus.rest = on_zoom.clone().map(|surface| (surface, Instant::now()));
-            self.window_menus.on_zoom = on_zoom;
+        let menus = &mut self.window_menus;
+        let still_held = menus
+            .zoom_wait
+            .as_ref()
+            .is_some_and(|wait| wait.held && on_zoom.as_ref() == Some(&wait.surface));
+        if still_held {
+            return;
         }
+        menus.zoom_settled &= menus.on_zoom == on_zoom;
+        menus.on_zoom.clone_from(&on_zoom);
+        menus.zoom_wait = on_zoom
+            .filter(|_| !menus.zoom_settled)
+            .map(|surface| ZoomWait {
+                surface,
+                since: Instant::now(),
+                held: false,
+            });
     }
 
     pub(crate) fn press_zoom(&mut self, surface: &WlSurface) {
-        self.window_menus.rest = Some((surface.clone(), Instant::now()));
+        self.window_menus.zoom_settled = true;
+        self.window_menus.zoom_wait = Some(ZoomWait {
+            surface: surface.clone(),
+            since: Instant::now(),
+            held: true,
+        });
     }
 
     fn offer_tiling_menu(&mut self, now: Instant) {
-        let Some((surface, since)) = self.window_menus.rest.clone() else {
+        let Some(wait) = self
+            .window_menus
+            .zoom_wait
+            .clone()
+            .filter(|wait| wait.deadline() <= now)
+        else {
             return;
         };
-        if now < since + TILING_MENU_AFTER {
-            return;
-        }
-        self.window_menus.rest = None;
-        let Some(index) = self.window_index(&surface) else {
+        self.window_menus.zoom_wait = None;
+        self.window_menus.zoom_settled = true;
+        let Some(index) = self.window_index(&wait.surface) else {
             return;
         };
         let frame = &self.windows[index].frame;
         let on_zoom = frame.pressed == Some(WindowControl::Zoom)
-            || frame.hovered == Some(Some(WindowControl::Zoom));
+            || frame.hovered == Some(WindowControl::Zoom);
         if on_zoom
             && !self.window_menus.is_open()
             && !self.windows[index].has_state(xdg_toplevel::State::Fullscreen)
         {
-            self.open_tiling_menu(index);
+            self.open_tiling_menu(index, wait.held);
         }
     }
 
@@ -641,7 +755,13 @@ impl State {
         let gone = self.window_menus.open.as_ref().is_some_and(|open| {
             !open.closing && (self.window_index(&open.window).is_none() || self.is_locked())
         });
-        if gone {
+        let left = self
+            .window_menus
+            .open
+            .as_ref()
+            .and_then(|open| open.resting.as_ref()?.left_at)
+            .map(|left_at| left_at + RESTING_MENU_STAYS);
+        if gone || left.is_some_and(|due| due <= now) {
             self.dismiss_window_menu();
         }
         self.offer_tiling_menu(now);
@@ -655,12 +775,9 @@ impl State {
             .as_ref()
             .filter(|open| !open.closing)
             .and_then(|open| open.tracker.deadline());
-        let rest = self
-            .window_menus
-            .rest
-            .as_ref()
-            .map(|(_, since)| *since + TILING_MENU_AFTER);
-        menu.into_iter().chain(rest).min()
+        let wait = self.window_menus.zoom_wait.as_ref().map(ZoomWait::deadline);
+        let left = left.filter(|_| self.window_menus.is_open());
+        menu.into_iter().chain(wait).chain(left).min()
     }
 
     pub(crate) fn animate_window_menu(&mut self, tick: Tick) {

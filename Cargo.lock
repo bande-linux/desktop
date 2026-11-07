@@ -1215,11 +1215,13 @@ name = "bande-toolkit"
 version = "0.1.7"
 dependencies = [
  "accesskit",
+ "bande-compositor",
  "bande-graphics",
  "bande-test-bus",
  "bande-test-wayland",
  "bande-toolkit-platform",
  "bande-widgets",
+ "smithay",
  "zbus",
 ]
 

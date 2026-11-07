@@ -154,12 +154,10 @@ impl Failure {
         ]
         .into_iter()
         .any(errno)
-        {
-            Problem::ServerGone
-        } else if self
-            .error
-            .raw_os_error()
-            .is_some_and(|code| KERNEL_RESTART_CODES.contains(&code))
+            || self
+                .error
+                .raw_os_error()
+                .is_some_and(|code| KERNEL_RESTART_CODES.contains(&code))
         {
             Problem::ServerGone
         } else if errno(Errno::ROFS) {

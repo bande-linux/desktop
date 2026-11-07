@@ -2,6 +2,7 @@
 
 use std::fs;
 use std::os::unix::net::UnixListener;
+use std::path::Path;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
@@ -12,6 +13,11 @@ use bande_test_wayland::{Compositor, Frames, chord, headless};
 const BTN_LEFT: u32 = 0x110;
 const KEY_LEFTCTRL: u32 = 29;
 const KEY_T: u32 = 20;
+const KEY_C: u32 = 46;
+const KEY_V: u32 = 47;
+const KEY_Q: u32 = 16;
+const KEY_DOWN: u32 = 108;
+const COPY_SIZE: u64 = 256 * 1024 * 1024;
 
 struct Desk {
     server: Compositor,
@@ -89,35 +95,71 @@ impl Drop for Desk {
     }
 }
 
-#[test]
-fn a_tab_torn_off_floats_in_its_own_window_and_comes_back_over_the_toolbar() {
-    let home = tempfile::tempdir().unwrap();
-    for folder in [".config", ".cache", ".local/share", ".local/state", "run"] {
-        fs::create_dir_all(home.path().join(folder)).unwrap();
+fn open_files(home: &Path, folder: &Path, bus: &SessionBus) -> Desk {
+    for place in [".config", ".cache", ".local/share", ".local/state", "run"] {
+        fs::create_dir_all(home.join(place)).unwrap();
     }
-    let socket = home.path().join("wayland");
+    let socket = home.join("wayland");
     let listener = UnixListener::bind(&socket).unwrap();
     listener.set_nonblocking(true).unwrap();
-    let bus = SessionBus::start().unwrap();
     let files = Command::new(env!("CARGO_BIN_EXE_bande-files"))
-        .arg(home.path())
-        .env("HOME", home.path())
-        .env("XDG_CONFIG_HOME", home.path().join(".config"))
-        .env("XDG_CACHE_HOME", home.path().join(".cache"))
-        .env("XDG_DATA_HOME", home.path().join(".local/share"))
-        .env("XDG_STATE_HOME", home.path().join(".local/state"))
-        .env("XDG_RUNTIME_DIR", home.path().join("run"))
+        .arg(folder)
+        .env("HOME", home)
+        .env("XDG_CONFIG_HOME", home.join(".config"))
+        .env("XDG_CACHE_HOME", home.join(".cache"))
+        .env("XDG_DATA_HOME", home.join(".local/share"))
+        .env("XDG_STATE_HOME", home.join(".local/state"))
+        .env("XDG_RUNTIME_DIR", home.join("run"))
         .env("WAYLAND_DISPLAY", &socket)
         .env("DBUS_SESSION_BUS_ADDRESS", bus.address())
         .spawn()
         .unwrap();
-    let mut desk = Desk {
+    Desk {
         server: headless(1800, 1200),
         frames: Frames::start(),
         listener,
         files,
         time: 1000,
-    };
+    }
+}
+
+#[test]
+fn quit_during_a_copy_waits_for_the_copy_instead_of_cutting_it_off() {
+    let home = tempfile::tempdir().unwrap();
+    let folder = home.path().join("work");
+    fs::create_dir(&folder).unwrap();
+    let big = fs::File::create(folder.join("big.bin")).unwrap();
+    big.set_len(COPY_SIZE).unwrap();
+    let bus = SessionBus::start().unwrap();
+    let mut desk = open_files(home.path(), &folder, &bus);
+    desk.windows(1);
+    desk.settle(500);
+    chord(&mut desk.server, &[KEY_DOWN]);
+    desk.settle(200);
+    chord(&mut desk.server, &[KEY_LEFTCTRL, KEY_C]);
+    desk.settle(500);
+    chord(&mut desk.server, &[KEY_LEFTCTRL, KEY_V]);
+    desk.run_until("the copy to start", |_| {
+        fs::read_dir(&folder).unwrap().count() == 2
+    });
+    chord(&mut desk.server, &[KEY_LEFTCTRL, KEY_Q]);
+    let copy = folder.join("big copy.bin");
+    desk.run_until("the copy to finish", |_| {
+        fs::metadata(&copy).is_ok_and(|copy| copy.len() == COPY_SIZE)
+    });
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while desk.files.try_wait().unwrap().is_none() {
+        assert!(Instant::now() < deadline, "Files did not quit");
+        desk.settle(50);
+    }
+    assert_eq!(fs::read_dir(&folder).unwrap().count(), 2);
+}
+
+#[test]
+fn a_tab_torn_off_floats_in_its_own_window_and_comes_back_over_the_toolbar() {
+    let home = tempfile::tempdir().unwrap();
+    let bus = SessionBus::start().unwrap();
+    let mut desk = open_files(home.path(), home.path(), &bus);
     desk.windows(1);
     desk.settle(500);
     chord(&mut desk.server, &[KEY_LEFTCTRL, KEY_T]);

@@ -1,3 +1,5 @@
+use bande_graphics::Rect;
+
 const MAX_FOUND: usize = 12;
 const PATH_SEPARATOR: &str = " › ";
 
@@ -106,6 +108,21 @@ pub struct MenuItem {
     pub separator: bool,
     pub alternate: Option<Box<MenuItem>>,
     pub shift_alternate: Option<Box<MenuItem>>,
+    pub layout: Option<Rect>,
+}
+
+pub fn placement_layout(action: &str) -> Option<Rect> {
+    let half = 0.5;
+    Some(match action {
+        "place-left" => Rect::new(0.0, 0.0, half, 1.0),
+        "place-right" => Rect::new(half, 0.0, half, 1.0),
+        "place-top-left" => Rect::new(0.0, 0.0, half, half),
+        "place-top-right" => Rect::new(half, 0.0, half, half),
+        "place-bottom-left" => Rect::new(0.0, half, half, half),
+        "place-bottom-right" => Rect::new(half, half, half, half),
+        "place-fill" => Rect::new(0.0, 0.0, 1.0, 1.0),
+        _ => return None,
+    })
 }
 
 impl MenuItem {
@@ -121,6 +138,7 @@ impl MenuItem {
             separator: false,
             alternate: None,
             shift_alternate: None,
+            layout: None,
         }
     }
 
@@ -144,6 +162,10 @@ impl MenuItem {
             shortcut: Some(shortcut.to_owned()),
             ..self
         }
+    }
+
+    pub fn layout(self, layout: Option<Rect>) -> Self {
+        Self { layout, ..self }
     }
 
     pub fn enabled(self, enabled: bool) -> Self {

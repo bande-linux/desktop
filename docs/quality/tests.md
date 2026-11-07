@@ -30,6 +30,7 @@ the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
 | `libs/xdg/tests/xdg.rs` `exec_lines_follow_…` | `.desktop` Exec parsing: quoting, escapes, field codes and reserved characters. |
 | `libs/xdg/tests/xdg.rs` `a_launcher_file_runs_only_…` | A `.desktop` file opened in Files runs only when installed or marked executable by its owner. |
 | `libs/status/src/memory.rs` `pressure_trigger_waits_for_a_stall` | The memory pressure trigger stays quiet without a stall (it once woke the status service in a busy loop). |
+| `toolkit/toolkit/tests/title_bar.rs` | A pointer resting on a toolkit window's zoom control is offered Move & Resize, which leaves with the pointer and does not get in the way of a click that zooms; a double-click on free title bar space or an app's move area zooms. |
 | `toolkit/widgets/tests/capture.rs` | A press cut short by a sheet is released (the stuck press). |
 | `libs/fs/tests/trash.rs` | A volume Trash whose `files` folder is a planted link is not used. |
 | `services/automount/tests/automount.rs` | A drive plugged in while the session is locked is mounted only after unlocking. |

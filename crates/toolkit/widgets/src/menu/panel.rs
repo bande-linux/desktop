@@ -29,6 +29,10 @@ const SCROLL_ZONE: f32 = 20.0;
 const FEWEST_ROWS: f32 = 3.0;
 const CHEVRON_HALF_WIDTH: f32 = 4.0;
 const CHEVRON_RISE: f32 = 2.0;
+const LAYOUT_X: f32 = 8.0;
+const LAYOUT_WIDTH: f32 = 14.0;
+const LAYOUT_HEIGHT: f32 = 11.0;
+const LAYOUT_RADIUS: f32 = 2.5;
 
 pub(super) struct Row {
     top: f32,
@@ -469,6 +473,9 @@ impl MenuPanel {
                     paint: mark.into(),
                 });
             }
+            if let Some(layout) = item.layout {
+                paint_layout(layout, centre, mark, &mut items);
+            }
             if item.submenu.is_some() {
                 items.push(Item::StrokePath {
                     path: Path::through(&[
@@ -586,6 +593,32 @@ impl MenuPanel {
         }
         nodes
     }
+}
+
+fn paint_layout(layout: Rect, centre: f32, color: Color, items: &mut Vec<Item>) {
+    let screen = Rect::new(
+        LAYOUT_X,
+        (centre - LAYOUT_HEIGHT / 2.0).round(),
+        LAYOUT_WIDTH,
+        LAYOUT_HEIGHT,
+    );
+    items.push(Item::Clip {
+        shape: Shape::rounded(screen, LAYOUT_RADIUS),
+        items: vec![Item::Fill {
+            shape: Shape::rect(Rect::new(
+                screen.x + layout.x * screen.width,
+                screen.y + layout.y * screen.height,
+                layout.width * screen.width,
+                layout.height * screen.height,
+            )),
+            paint: color.into(),
+        }],
+    });
+    items.push(Item::Stroke {
+        shape: Shape::rounded(screen.inset(0.5), LAYOUT_RADIUS - 0.5),
+        width: 1.0,
+        paint: color.into(),
+    });
 }
 
 pub(super) fn magnifier(centre: Point, color: Color, items: &mut Vec<Item>) {

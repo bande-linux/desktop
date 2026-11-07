@@ -811,6 +811,16 @@ impl Model {
         }
     }
 
+    pub fn cannot_sleep(&mut self, panes: Vec<PaneInfo>) {
+        self.panes = panes.into_iter().map(IndexedPane::new).collect();
+        self.commands
+            .retain(|indexed| indexed.command != SystemCommand::Sleep);
+        if self.mode == Mode::Search {
+            let keep = self.selection().map(|hit| hit.target.clone());
+            self.rebuild(keep);
+        }
+    }
+
     pub fn set_clips(&mut self, clips: Vec<Clip>) {
         self.clips = clips;
         if self.mode == Mode::Clipboard {

@@ -1,8 +1,8 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use bande_graphics::{
-    Color, Cut, Item, MenuButton, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene,
+    Color, ControlHover, Cut, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene,
     Shape, TextAlign, TextStyle, TextSystem, TitleBar, menu_button_area, past_drag_slop,
-    resize_zone, shortened, title_style, window_controls_area,
+    resize_zone, shortened, title_style,
 };
 
 use std::time::Instant;
@@ -64,6 +64,12 @@ pub(crate) enum Zone {
 pub(crate) enum TabDrag {
     Pressed(Point),
     Reordering,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ZoomWait {
+    pub(crate) since: Instant,
+    pub(crate) held: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -202,9 +208,10 @@ pub(crate) struct Chrome {
     pub(crate) fixed: bool,
     text: Option<TextSystem>,
     title_paragraph: Option<(String, Color, Paragraph)>,
-    hovered: Option<Option<Control>>,
-    hover: Animated,
+    hovered: Option<Control>,
     close_hover: Animated,
+    minimize_hover: Animated,
+    zoom_hover: Animated,
     menu_hover: Animated,
     pub(crate) menu: bool,
     pub(crate) menu_open: bool,
@@ -219,7 +226,9 @@ pub(crate) struct Chrome {
     pub(crate) content_buttons: usize,
     pub(crate) tab_drag: Option<TabDrag>,
     pub(crate) detachable_tabs: bool,
-    pub(crate) zoom_rest: Option<Instant>,
+    pub(crate) zoom_wait: Option<ZoomWait>,
+    pub(crate) zoom_settled: bool,
+    pub(crate) move_areas: Vec<Rect>,
 }
 
 impl Chrome {
@@ -246,8 +255,15 @@ impl Chrome {
             {
                 Zone::Content
             }
+            _ if zone == Zone::Content && self.is_move_area(frame, local) => Zone::TitleBar,
             _ => zone,
         }
+    }
+
+    fn is_move_area(&self, frame: &Frame, local: Point) -> bool {
+        let content = frame.content();
+        let point = Point::new(local.x - content.x, local.y - content.y);
+        self.move_areas.iter().any(|area| area.contains(point))
     }
 
     pub(crate) fn tab_at(&self, frame: &Frame, point: Point) -> bool {
@@ -335,36 +351,36 @@ impl Chrome {
         now: Instant,
         reduce_motion: bool,
     ) -> bool {
-        let menu = frame.menu_button().map(|_| Control::Menu.area(frame.title));
         let hovered = point
-            .map(|point| Point::new(point.x - frame.margin, point.y - frame.margin))
-            .filter(|local| {
-                window_controls_area(frame.title).contains(*local)
-                    || menu.is_some_and(|area| area.contains(*local))
+            .map(|point| self.zone_at(frame, point))
+            .and_then(|zone| match zone {
+                Zone::Control(control) => Some(control),
+                _ => None,
             })
-            .map(|local| Control::at(local, frame.title, menu.is_some()));
+            .filter(|control| *control != Control::Zoom || !self.fixed);
         if hovered == self.hovered {
             return false;
         }
         self.hovered = hovered;
-        self.zoom_rest = (hovered == Some(Some(Control::Zoom)) && !self.fixed).then_some(now);
-        let level = |on: bool| if on { 1.0 } else { 0.0 };
-        let on_menu = hovered == Some(Some(Control::Menu));
-        self.hover.animate_at(
-            now,
-            reduce_motion,
-            level(hovered.is_some() && !on_menu),
-            Spring::FADE,
-        );
-        self.menu_hover
-            .animate_at(now, reduce_motion, level(on_menu), Spring::FADE);
-        self.close_hover.animate_at(
-            now,
-            reduce_motion,
-            level(hovered == Some(Some(Control::Close))),
-            Spring::FADE,
-        );
+        let level = |control: Control| f32::from(u8::from(hovered == Some(control)));
+        for (animated, control) in [
+            (&mut self.close_hover, Control::Close),
+            (&mut self.minimize_hover, Control::Minimize),
+            (&mut self.zoom_hover, Control::Zoom),
+            (&mut self.menu_hover, Control::Menu),
+        ] {
+            animated.animate_at(now, reduce_motion, level(control), Spring::FADE);
+        }
         true
+    }
+
+    pub(crate) fn rest_on_zoom(&mut self, now: Instant) {
+        let on_zoom = self.hovered == Some(Control::Zoom);
+        self.zoom_settled &= on_zoom;
+        self.zoom_wait = (on_zoom && !self.zoom_settled).then_some(ZoomWait {
+            since: now,
+            held: false,
+        });
     }
 
     fn title(&mut self, style: TextStyle) -> Paragraph {
@@ -465,10 +481,11 @@ impl Chrome {
             }
             None => (title, None),
         };
-        let (hover, hovering) = self.hover.value_at(now);
-        let (close_hover, closing) = self.close_hover.value_at(now);
-        let (menu_hover, menu_fading) = self.menu_hover.value_at(now);
-        self.animating = hovering || closing || menu_fading;
+        let (close, closing) = self.close_hover.value_at(now);
+        let (minimize, minimizing) = self.minimize_hover.value_at(now);
+        let (zoom, zooming) = self.zoom_hover.value_at(now);
+        let (menu, menu_fading) = self.menu_hover.value_at(now);
+        self.animating = closing || minimizing || zooming || menu_fading;
         items.extend(
             TitleBar {
                 width: frame.width,
@@ -476,16 +493,17 @@ impl Chrome {
                 title,
                 palette,
                 active: look.active,
-                hover,
-                close_hover,
+                hover: ControlHover {
+                    close,
+                    minimize,
+                    zoom,
+                    menu,
+                },
                 pressed: self.pressed.filter(|_| self.pressed_inside),
                 zoomed: look.zoomed,
                 zoomable: !self.fixed,
                 alternate: self.alternate && look.active,
-                menu: frame.menu_button().map(|_| MenuButton {
-                    hover: menu_hover,
-                    open: self.menu_open,
-                }),
+                menu_open: frame.menu_button().map(|_| self.menu_open),
             }
             .items(),
         );

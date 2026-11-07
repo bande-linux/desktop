@@ -15,8 +15,9 @@ use std::time::{Duration, Instant};
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_graphics::{
-    Appearance, Captured, CpuRenderer, Cursor, Event, Point, Rect, Region, ResizeEdge, Scene,
-    SurfaceId, TextSize, TextSystem, damage, pixels, placed_surfaces,
+    Appearance, Captured, CpuRenderer, Cursor, Event, PLACEMENTS_AFTER_HOLD, PLACEMENTS_AFTER_REST,
+    Point, Rect, Region, ResizeEdge, Scene, SurfaceId, TextSize, TextSystem, damage, pixels,
+    placed_surfaces,
 };
 use bande_protocols::client::bande_shell_v1::{
     BrightnessKey, Edge as DisplayEdge, LauncherMode, MediaKey, Panel, VolumeKey,
@@ -65,7 +66,6 @@ use crate::text_input::TextInput;
 pub const ACTIVATION_TOKEN_VARIABLE: &str = "XDG_ACTIVATION_TOKEN";
 const TITLE_BYTES_LIMIT: usize = 1024;
 const RELEASE_HIDDEN_AFTER: Duration = Duration::from_secs(30);
-const TILING_MENU_AFTER: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FramePath {
@@ -657,6 +657,12 @@ impl Window {
         }
     }
 
+    pub fn set_move_areas(&mut self, areas: Vec<Rect>) {
+        if let Some(chrome) = &mut self.chrome {
+            chrome.move_areas = areas;
+        }
+    }
+
     pub fn set_detachable_tabs(&mut self, detachable: bool) {
         if let Some(chrome) = &mut self.chrome {
             chrome.detachable_tabs = detachable;
@@ -1132,15 +1138,19 @@ impl Window {
             .chain(self.ui_deadline)
             .chain(self.release_deadline())
             .chain(self.drag_deadline())
-            .chain(self.tiling_menu_deadline())
+            .chain(self.placements_deadline())
             .min()
     }
 
-    fn tiling_menu_deadline(&self) -> Option<Instant> {
-        self.chrome
-            .as_ref()
-            .and_then(|chrome| chrome.zoom_rest)
-            .map(|since| since + TILING_MENU_AFTER)
+    fn placements_deadline(&self) -> Option<Instant> {
+        let wait = self.chrome.as_ref()?.zoom_wait?;
+        Some(
+            wait.since
+                + match wait.held {
+                    true => PLACEMENTS_AFTER_HOLD,
+                    false => PLACEMENTS_AFTER_REST,
+                },
+        )
     }
 
     fn release_deadline(&self) -> Option<Instant> {
@@ -1176,20 +1186,10 @@ impl Window {
         self.serve_menus(self.frame_time());
         self.abandon_unfinished_drag(now);
         if self
-            .tiling_menu_deadline()
+            .placements_deadline()
             .is_some_and(|deadline| deadline <= now)
         {
-            let offered = self.offers_tiling_menu();
-            if let Some(chrome) = &mut self.chrome {
-                chrome.zoom_rest = None;
-                if offered {
-                    chrome.pressed = None;
-                    self.needs_redraw = true;
-                }
-            }
-            if offered && self.open_tiling_menu().is_err() {
-                self.needs_redraw = true;
-            }
+            self.offer_placements();
         }
         if self.ui_deadline.is_some_and(|deadline| deadline <= now) {
             self.ui_deadline = None;

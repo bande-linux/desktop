@@ -759,7 +759,10 @@ impl SettingsView {
                 }
                 self.battery = battery;
             }
-            Update::CannotSleep => self.remove_setting(SettingId::SleepAfter),
+            Update::CannotSleep => {
+                bande_settings_panes::without_sleep(&mut self.panes);
+                self.availability_changed();
+            }
             Update::Storage(storage) => {
                 if storage.trash_items == 0 {
                     self.confirming_empty_trash = false;

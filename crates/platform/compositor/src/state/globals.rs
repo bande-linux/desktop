@@ -16,6 +16,7 @@ use smithay::wayland::pointer_constraints::PointerConstraintsState;
 use smithay::wayland::pointer_gestures::PointerGesturesState;
 use smithay::wayland::presentation::PresentationState;
 use smithay::wayland::relative_pointer::RelativePointerManagerState;
+use smithay::wayland::security_context::SecurityContextState;
 use smithay::wayland::selection::data_device::DataDeviceState;
 use smithay::wayland::selection::ext_data_control::DataControlState;
 use smithay::wayland::selection::primary_selection::PrimarySelectionState;
@@ -26,6 +27,7 @@ use smithay::reexports::wayland_protocols_misc::server_decoration::server::org_k
 use smithay::wayland::shell::kde::decoration::KdeDecorationState;
 use smithay::wayland::shell::xdg::decoration::XdgDecorationState;
 use smithay::wayland::shell::xdg::dialog::XdgDialogState;
+use smithay::wayland::xdg_foreign::XdgForeignState;
 use smithay::wayland::shm::ShmState;
 use smithay::wayland::text_input::TextInputManagerState;
 use smithay::wayland::viewporter::ViewporterState;
@@ -35,7 +37,7 @@ use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagManager;
 
 use super::{ClientState, ScanoutDevice, State};
 use crate::session::SessionRole;
-use crate::shell;
+use crate::{shell, trust};
 
 const MONOTONIC: u32 = 1;
 
@@ -60,6 +62,7 @@ pub(crate) struct Globals {
     _decoration_state: XdgDecorationState,
     pub(crate) kde_decoration_state: KdeDecorationState,
     _dialog_state: XdgDialogState,
+    pub(crate) foreign_state: XdgForeignState,
     _toplevel_tag: XdgToplevelTagManager,
     _cursor_shape_state: CursorShapeManagerState,
     _pointer_gestures_state: PointerGesturesState,
@@ -73,6 +76,7 @@ pub(crate) struct Globals {
     _pointer_constraints_state: PointerConstraintsState,
     _relative_pointer_state: RelativePointerManagerState,
     pub(crate) session_lock_state: SessionLockManagerState,
+    _security_context_state: SecurityContextState,
 }
 
 impl Globals {
@@ -116,13 +120,16 @@ impl Globals {
             shm_state: ShmState::new::<State>(handle, []),
             _output_manager_state: OutputManagerState::new(),
             _presentation_state: PresentationState::new::<State>(handle, MONOTONIC),
-            layer_shell_state: WlrLayerShellState::new::<State>(handle),
+            layer_shell_state: WlrLayerShellState::new_with_filter::<State, _>(handle, |client| {
+                !trust::is_sandboxed(client)
+            }),
             activation_state: XdgActivationState::new::<State>(handle),
             _viewporter_state: ViewporterState::new::<State>(handle),
             _fractional_scale_state: FractionalScaleManagerState::new::<State>(handle),
             _decoration_state: XdgDecorationState::new::<State>(handle),
             kde_decoration_state: KdeDecorationState::new::<State>(handle, KdeDefaultMode::Server),
             _dialog_state: XdgDialogState::new::<State>(handle),
+            foreign_state: XdgForeignState::new::<State>(handle),
             _toplevel_tag: XdgToplevelTagManager::new::<State>(handle),
             _cursor_shape_state: CursorShapeManagerState::new::<State>(handle),
             _pointer_gestures_state: PointerGesturesState::new::<State>(handle),
@@ -138,7 +145,13 @@ impl Globals {
             shortcuts_inhibit_state: KeyboardShortcutsInhibitState::new::<State>(handle),
             _pointer_constraints_state: PointerConstraintsState::new::<State>(handle),
             _relative_pointer_state: RelativePointerManagerState::new::<State>(handle),
-            session_lock_state: SessionLockManagerState::new::<State, _>(handle, shell::is_shell),
+            session_lock_state: SessionLockManagerState::new::<State, _>(
+                handle,
+                trust::is_lock_screen,
+            ),
+            _security_context_state: SecurityContextState::new::<State, _>(handle, |client| {
+                !trust::is_sandboxed(client)
+            }),
         }
     }
 }

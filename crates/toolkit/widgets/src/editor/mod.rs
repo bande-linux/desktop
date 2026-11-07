@@ -16,6 +16,7 @@ use bande_graphics::{
 use parley::{Affinity, Cursor, Selection as Span};
 
 use self::history::{Edit, EditKind, History, Restyle};
+pub use self::layout::PrintedBlock;
 use self::layout::{Block, bounds};
 pub use self::rich::{Alignment, ListMarker, ParagraphAttributes, RichText, TextAttributes};
 use self::rich::{Fragment, attributes_at, cut, joined, normalize};
@@ -280,6 +281,16 @@ impl Editor {
             block.paragraph = rich.paragraphs.get(index).copied().unwrap_or_default();
         }
         self.invalidate();
+    }
+
+    pub(crate) fn for_print(rich: &RichText, font_size: f32, width: f32, monospace: bool) -> Self {
+        let mut editor = Self::new("", font_size, true);
+        editor.set_rich_text(rich);
+        editor.set_width(Some(width));
+        if monospace {
+            editor.typeface = Some(Typeface::Monospace);
+        }
+        editor
     }
 
     pub(crate) fn rich_text(&self) -> RichText {

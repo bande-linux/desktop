@@ -76,6 +76,19 @@ saver-after-display-off = The display turns off first, so the screen saver doesn
 sleep-before-display-off = The computer stays awake until the display turns off.
 never-locks-when-inactive = The screen saver and the display are both set to Never, so the screen locks only when you lock it or the computer sleeps.
 clipboard-history = Clipboard history
+disk-encryption = Disk encryption
+disk-encryption-plain = Off. Anyone with this computer can read your files. Turning it on needs a new install.
+disk-encryption-off = Off. Anyone with this computer can read your files.
+disk-encryption-encrypting = Encrypting, { $percent }% done. Your files are not fully protected until this finishes.
+disk-encryption-on = On. Your files can only be read with your password or recovery key.
+remote-login = Remote Login
+remote-login-on = On. Others on your network can try to sign in over SSH.
+remote-login-off = Off.
+native-apps = Apps you install
+native-apps-reach = Apps from Flatpak are sandboxed. Other programs run with your full access to your files, and nothing here can contain them, so only run programs you trust.
+keyboard-access-reads = { $program } can read what you type in text fields
+keyboard-access-types = { $program } can type for you
+keyboard-access-none = No program has asked to read or type your keystrokes. Password fields and the lock screen stay private either way.
 clipboard-history-hint = What you copied earlier, ready to paste again
 clear-clipboard-ellipsis = Clear History…
 clear-clipboard-question = Clear the clipboard history?
@@ -291,6 +304,20 @@ restart-to-install = { $count ->
    *[other] Restart to install { $count } updates
 }
 installs-on-restart = Updates install while the computer restarts
+update-ready-hint = The update is ready. If it can't start, your computer goes back to this version by itself
+update-went-back = The update couldn't start
+update-went-back-hint = Your computer went back to the previous version. Your files are as you left them
+last-checked = Last checked { $date }
+previous-versions = Previous Versions
+previous-versions-hint = Bring back an earlier system. Your files, accounts, passwords and Wi-Fi networks stay as they are now
+version-changed = { $count ->
+    [one] 1 update: { $names }
+   *[other] { $count } updates: { $names }
+}
+version-kept = Copy kept before a change
+version-failed = This version couldn't start
+version-running = Running now
+version-restore = Restore
 updates-were-installed = { $count ->
     [one] 1 update was installed
    *[other] { $count } updates were installed
@@ -421,11 +448,10 @@ printers-with-default = { $count ->
     [one] “{ $name }” is the default printer
    *[other] { $count } printers · “{ $name }” is the default
 }
-no-printers-hint = No printers yet. Add one below.
+no-printers-hint = No printers on this network yet. They appear here as soon as they are found.
 printer-no-default = None
 default-printer = Default printer
 looking-for-printers = Looking for printers on this network…
-no-nearby-printers = No other printers found on this network
 printer-adding = Adding…
 printer-add = Add
 printer-address = Add by address
@@ -434,7 +460,6 @@ printer-address-detail = For a printer that does not show up: its IP address or 
 printer-kind = Kind
 printer-location = Location
 printer-uri = Address
-printer-queue = Queue name
 print-queue = Print Queue
 no-jobs = No documents waiting
 job-number = Document { $id }
@@ -448,10 +473,8 @@ remove-ellipsis = Remove…
 printer-remove-hint = Remove this printer
 printer-remove-question = Remove “{ $name }”?
 printer-remove-warning = Documents waiting for it are cancelled. You can add it again later.
-printers-unavailable = Printing support is not installed
-printers-unavailable-hint = Install it to add printers and print.
-printing-support = Printing support
-printing-install-detail = The CUPS print system, from the Debian archive
+printing-support = Support for USB and older printers
+printing-install-detail = Network printers need nothing more. USB printers and printers that need a driver use the CUPS print system, from the Debian archive
 printing-installing = Installing…
 printing-install = Install
 printing-install-failed = Couldn't install printing support.

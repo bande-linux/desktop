@@ -1,5 +1,4 @@
 use bande_compositor::SessionRole;
-use bande_protocols::client::bande_app_v1::{BandeAppV1, Workspace};
 use bande_protocols::client::bande_shell_v1::{self, BandeShellV1, SessionEnd};
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop, event_created_child};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1;
@@ -18,6 +17,14 @@ impl TestClient {
         Self::from_socket(server, client_end)
     }
 
+    pub fn connect_as_lock_screen(server: &mut Compositor) -> Self {
+        let (client_end, server_end) = std::os::unix::net::UnixStream::pair().expect("socket pair");
+        server
+            .insert_session_client(server_end, SessionRole::LockScreen)
+            .expect("insert lock screen");
+        Self::from_socket(server, client_end)
+    }
+
     pub fn join_shell(&mut self, server: &mut Compositor) {
         let _: BandeShellV1 = self.bind("bande_shell_v1", 1);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);
@@ -29,31 +36,9 @@ impl TestClient {
         self.exchange(server);
     }
 
-    pub fn shell_events(&self) -> &[String] {
-        &self.globals.shell_events
-    }
-
     pub fn confirm_session_end(&mut self, server: &mut Compositor, ending: SessionEnd) {
         let shell: BandeShellV1 = self.bind("bande_shell_v1", 1);
         shell.confirm_session_end(ending);
-        self.exchange(server);
-    }
-
-    pub fn show_force_quit(&mut self, server: &mut Compositor) {
-        let shell: BandeShellV1 = self.bind("bande_shell_v1", 1);
-        shell.show_force_quit();
-        self.exchange(server);
-    }
-
-    pub fn move_to_next_workspace(&mut self, server: &mut Compositor, index: usize) {
-        let app: BandeAppV1 = self.bind("bande_app_v1", 1);
-        app.move_to_workspace(&self.windows[index].2, Workspace::Next);
-        self.exchange(server);
-    }
-
-    pub fn keep_running(&mut self, server: &mut Compositor, app_id: &str) {
-        let app: BandeAppV1 = self.bind("bande_app_v1", 2);
-        app.keep_running(app_id.to_owned());
         self.exchange(server);
     }
 
@@ -63,21 +48,19 @@ impl TestClient {
     }
 }
 
-delegate_noop!(Globals: ignore BandeAppV1);
 delegate_noop!(Globals: ignore ExtForeignToplevelHandleV1);
 
 impl Dispatch<BandeShellV1, ()> for Globals {
     fn event(
-        globals: &mut Self,
+        _: &mut Self,
         shell: &BandeShellV1,
         event: bande_shell_v1::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        match event {
-            bande_shell_v1::Event::Ping { serial } => shell.pong(serial),
-            event => globals.shell_events.push(format!("{event:?}")),
+        if let bande_shell_v1::Event::Ping { serial } = event {
+            shell.pong(serial);
         }
     }
 }

@@ -21,6 +21,7 @@ use crate::session::SessionRole;
 use crate::state::{ClientState, State};
 
 pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
+pub(crate) const SHELL_VERSION: u32 = 6;
 const INSERT_PATIENCE: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
@@ -41,7 +42,11 @@ pub(crate) struct PendingInsert {
 pub(crate) fn is_shell(client: &Client) -> bool {
     client
         .get_data::<ClientState>()
-        .is_some_and(|state| state.role == Some(SessionRole::Shell))
+        .is_some_and(|state| plays_shell(state.role))
+}
+
+fn plays_shell(role: Option<SessionRole>) -> bool {
+    matches!(role, Some(SessionRole::Shell | SessionRole::LockScreen))
 }
 
 pub(crate) fn is_shell_client(display: &DisplayHandle, id: &ClientId) -> bool {
@@ -51,7 +56,7 @@ pub(crate) fn is_shell_client(display: &DisplayHandle, id: &ClientId) -> bool {
         .ok()
         .and_then(|data| {
             data.downcast_ref::<ClientState>()
-                .map(|state| state.role == Some(SessionRole::Shell))
+                .map(|state| plays_shell(state.role))
         })
         .unwrap_or(false)
 }
@@ -511,6 +516,7 @@ impl Dispatch<BandeShellV1, ()> for State {
             }
             bande_shell_v1::Request::QuitApp { app_id } => state.quit_app_named(&app_id),
             bande_shell_v1::Request::ForceQuitApp { app_id } => state.force_quit_app(&app_id),
+            bande_shell_v1::Request::ReopeningApp { app_id } => state.note_app_reopening(app_id),
             bande_shell_v1::Request::ShowForceQuit => state.open_force_quit(),
             bande_shell_v1::Request::ActivateWindow { identifier } => {
                 state.activate_window(&identifier);

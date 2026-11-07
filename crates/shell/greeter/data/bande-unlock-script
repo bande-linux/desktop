@@ -1,0 +1,28 @@
+#!/bin/sh
+device=${CRYPTTAB_SOURCE:-}
+if cryptsetup token export --token-id 0 "$device" 2>/dev/null | grep -q '"bande-provisional"' &&
+    printf bande-provisional | cryptsetup open --test-passphrase --key-file - "$device" 2>/dev/null; then
+    printf bande-provisional
+    exit 0
+fi
+
+assets=/run/bande-unlock.assets
+if [ ! -f "$assets" ]; then
+    mkdir -p /run/bande-esp
+    for partition in $(blkid -t TYPE=vfat -o device 2>/dev/null); do
+        if mount -t vfat -o ro "$partition" /run/bande-esp 2>/dev/null; then
+            found=no
+            if [ -f /run/bande-esp/bande/unlock.assets ]; then
+                cp /run/bande-esp/bande/unlock.assets "$assets"
+                found=yes
+            fi
+            umount /run/bande-esp
+            [ "$found" = no ] || break
+        fi
+    done
+fi
+
+if /usr/libexec/bande-unlock "$assets"; then
+    exit 0
+fi
+exec /lib/cryptsetup/askpass "Password: "

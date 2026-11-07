@@ -1,0 +1,9 @@
+[Unit]
+Description=Prepare the disk unlock prompt
+RequiresMountsFor=/boot/efi
+ConditionPathIsDirectory=/boot/efi/bande
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/locale
+ExecStart=/usr/libexec/bande-unlock-assets /boot/efi/bande/unlock.assets

@@ -135,6 +135,10 @@ pub trait FrameOutput {
         Ok(false)
     }
 
+    fn refresh(&self, _output: &str) -> Option<Duration> {
+        None
+    }
+
     fn flip_missed(&mut self, _output: &str) {}
 
     fn restart_display(&mut self) -> Result<(), Self::Error> {
@@ -270,6 +274,11 @@ impl FrameScheduler {
                     })?;
                     now = clock();
                     self.clock.record_render(deadline, started, now);
+                    if let Some(refresh) = output.refresh(&name)
+                        && refresh != self.clock.refresh()
+                    {
+                        self.clock = FrameClock::new(now, refresh);
+                    }
                     let next_vblank = if now <= vblank.time {
                         vblank
                     } else {

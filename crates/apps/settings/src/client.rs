@@ -43,13 +43,15 @@ pub trait Config {
     #[zbus(property)]
     fn set_reopen_apps(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
-    fn reopen_apps_after_crash(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_reopen_apps_after_crash(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
     fn automatic_updates(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_automatic_updates(&self, on: bool) -> zbus::Result<()>;
+
+    #[zbus(property)]
+    fn update_check_every(&self) -> zbus::Result<u64>;
+
+    #[zbus(property)]
+    fn set_update_check_every(&self, seconds: u64) -> zbus::Result<()>;
     #[zbus(property)]
     fn clock_format(&self) -> zbus::Result<String>;
     #[zbus(property)]
@@ -297,7 +299,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 73] = [
+pub const CONFIG_SETTINGS: [SettingId; 76] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
@@ -326,8 +328,8 @@ pub const CONFIG_SETTINGS: [SettingId; 73] = [
     SettingId::ReopenApps,
     SettingId::LockMessage,
     SettingId::ShowPreviews,
-    SettingId::ReopenAfterCrash,
     SettingId::AutomaticUpdates,
+    SettingId::UpdateCheckEvery,
     SettingId::Wallpaper,
     SettingId::WallpaperFit,
     SettingId::BarIconSize,
@@ -370,6 +372,9 @@ pub const CONFIG_SETTINGS: [SettingId; 73] = [
     SettingId::SearchSystem,
     SettingId::SearchCalculator,
     SettingId::SearchConversion,
+    SettingId::SearchMail,
+    SettingId::SearchEvents,
+    SettingId::SearchContacts,
     SettingId::SearchExcluded,
 ];
 
@@ -384,6 +389,9 @@ fn search_category(id: SettingId) -> Option<SearchCategory> {
         SettingId::SearchSystem => SearchCategory::System,
         SettingId::SearchCalculator => SearchCategory::Calculator,
         SettingId::SearchConversion => SearchCategory::Conversion,
+        SettingId::SearchMail => SearchCategory::Mail,
+        SettingId::SearchEvents => SearchCategory::Events,
+        SettingId::SearchContacts => SearchCategory::Contacts,
         _ => return None,
     })
 }
@@ -533,8 +541,8 @@ impl SettingsClient {
             SettingId::ReopenApps => Value::Flag(self.config.reopen_apps()?),
             SettingId::LockMessage => Value::Text(self.config.lock_message()?),
             SettingId::ShowPreviews => Value::Flag(self.config.show_previews()?),
-            SettingId::ReopenAfterCrash => Value::Flag(self.config.reopen_apps_after_crash()?),
             SettingId::AutomaticUpdates => Value::Flag(self.config.automatic_updates()?),
+            SettingId::UpdateCheckEvery => Value::Seconds(self.config.update_check_every()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
             SettingId::Clock24Hour => Value::Flag(match self.config.clock_format()?.as_str() {
@@ -626,9 +634,6 @@ impl SettingsClient {
             (SettingId::ReopenApps, Value::Flag(on)) => self.config.set_reopen_apps(*on),
             (SettingId::LockMessage, Value::Text(message)) => self.config.set_lock_message(message),
             (SettingId::ShowPreviews, Value::Flag(shown)) => self.config.set_show_previews(*shown),
-            (SettingId::ReopenAfterCrash, Value::Flag(on)) => {
-                self.config.set_reopen_apps_after_crash(*on)
-            }
             (SettingId::AutomaticUpdates, Value::Flag(on)) => {
                 self.config.set_automatic_updates(*on)
             }
@@ -702,6 +707,9 @@ impl SettingsClient {
                 self.config.set_bar_auto_hide(*auto_hide)
             }
 
+            (SettingId::UpdateCheckEvery, Value::Seconds(seconds)) => {
+                self.config.set_update_check_every(*seconds)
+            }
             (SettingId::ScreenSaverAfter, Value::Seconds(seconds)) => {
                 self.config.set_idle_screen_saver_after(*seconds)
             }

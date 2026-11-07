@@ -11,6 +11,7 @@ repository.workspace = true
 accesskit.workspace = true
 tracing.workspace = true
 bande-app-menu.workspace = true
+bande-pdf.workspace = true
 bande-inbox.workspace = true
 bande-bus.workspace = true
 bande-log.workspace = true
@@ -18,14 +19,15 @@ bande-toolkit.workspace = true
 bande-xdg.workspace = true
 libc.workspace = true
 rustix.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+bande-l10n.workspace = true
 zbus.workspace = true
 
 [dev-dependencies]
 bande-compositor.workspace = true
-bande-config.workspace = true
 bande-test-bus.workspace = true
 bande-test-wayland.workspace = true
-smithay.workspace = true
 
 [lints]
 workspace = true

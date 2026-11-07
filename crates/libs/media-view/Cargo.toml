@@ -1,0 +1,19 @@
+[package]
+name = "bande-media-view"
+description = "Plays media from Bande's media engine in a window: the picture, the transport controls and the keys, shared by Player and Quick Look"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+accesskit.workspace = true
+tracing.workspace = true
+bande-content.workspace = true
+bande-l10n.workspace = true
+bande-media.workspace = true
+bande-toolkit.workspace = true
+
+[lints]
+workspace = true

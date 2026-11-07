@@ -67,6 +67,7 @@ when they reach the screen is Bande's own.
   | Papers (libadwaita) | KDE manager, no decoration | none | its own |
   | Firefox ESR, title bar on (`browser.tabs.inTitlebar` 0) | KDE | server | ours |
   | Firefox ESR, default (tabs in the title bar) | KDE | client | its own |
+  | Bande's Browser (`org.bande.Browser`, tabs in the title bar) | KDE | client | its own row, our control well over it |
   | VS Code 1.144, `window.titleBarStyle` `custom` (default) | `xdg-decoration` | client | its own |
   | VS Code 1.144, `native` | `xdg-decoration` | server | ours, menus in a row below |
   | Claude Desktop main window | `xdg-decoration` | client | its own |
@@ -85,6 +86,13 @@ when they reach the screen is Bande's own.
   no room outside, so the compositor takes a 3 pt band inside it before any client
   (`walled_resize_zone`); a top side there has none, and a press on it moves the window. A
   window never opens with its title bar above the top of the screen.
+- **Controls over the Browser's own row.** A client-side window of `org.bande.Browser` keeps its
+  tabs in its top row and has no title bar of ours; the compositor draws only the control well
+  (`WindowControls` in `bande-graphics`) over the first 78 pt of a 48 pt row, in front of the
+  client's surfaces and behind its popups, and takes the presses there with the same code as a
+  title bar. Everything else in the row is the client's, so free tab-row space stays its own
+  move request. Full screen removes the well. The rule is the app id plus client-side, so a build
+  that asks for server-side gets a normal title bar, and any other Firefox is left alone.
 - **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers with the
   LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche
   of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that
@@ -99,8 +107,13 @@ when they reach the screen is Bande's own.
   CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into GBM
   buffers that the renderer binds as dma-bufs (copied out from its own image, so lavapipe and
   `kms_swrast` work); `--headless` keeps the offscreen output for CI and the bench. udev change
-  events rescan the connectors, so plugging a display in or out takes effect without restarting
-  the session. A display is named by its EDID (maker from the PNP id, model and serial from the
+  events probe the connectors again, so plugging a display in or out takes effect without
+  restarting the session. A connector that goes away is held as lost for three seconds before it
+  counts as gone, so a monitor's own hotplug pulse (many pulse it about 0.6 s after waking, which
+  makes the kernel mark the link bad and costs a second mode-set) moves nothing. A mode is tested
+  with the driver before it is used. A refused mode falls back to the next that passes, nearest
+  size first, without touching the saved settings; with none left the display waits for the next
+  change event. The link is set good again in the frame path, after any pending flip. A display is named by its EDID (maker from the PNP id, model and serial from the
   descriptors, falling back to the product code and serial number; two displays with the same
   name are told apart by their connector). A fullscreen opaque dma-buf window is put on the
   primary plane without composition.
@@ -126,7 +139,7 @@ when they reach the screen is Bande's own.
   neighbouring display in that direction keeping its relative place (shrunk only when it does
   not fit), which it reaches with the opening spring; a window with our title bar keeps it
   across displays and the app is sized to what is left below it. When a display's scale or
-  resolution changes the pointer keeps its relative place on it. When a display goes away its shown
+  resolution changes the pointer keeps its relative place on it. The last display is parked, not removed: nothing moves, no frames are drawn, it counts as off and the display bus does not list it; the same display picks up where it was, and another one replaces it the way any display replaces a departed one. When a display goes away its shown
   workspace's windows join the main display's shown workspace and its other workspaces join the
   main display's row, each window keeping its relative place; when it returns, those windows
   and workspaces go back to it, at the place they had. `wlr-output-management-v1` lists the
@@ -280,7 +293,7 @@ when they reach the screen is Bande's own.
   names and icons come from desktop entries through `bande-xdg`, cached, and reread at most
   every 30 s while an app is unknown. `access.rs` publishes the card through AccessKit (a
   window holding a list box whose selected option has the focus) only while it shows.
-  `recall.rs` keeps the window memory file, `assist.rs` the free-half panel, which reuses the
+  `recall.rs` keeps the window memory file (written by its own thread, the latest state winning and flushed at exit, so a slow disk never holds a frame), `assist.rs` the free-half panel, which reuses the
   overview's `arrange` and the switcher's thumbnails.
 - **Force Quit** (`force_quit/`): the compositor's own window, so it opens when the shell or
   the focused app hangs; [behaviour](behaviour.md) has the rules. Apps are killed through a
@@ -303,6 +316,35 @@ when they reach the screen is Bande's own.
   and restarts them (see [behaviour](behaviour.md)); `bande-compositor --greeter` runs only
   the greeter ([session](session.md#display-manager-and-greeter)).
 
+## Who may do what
+
+A client is a **session client** (started on a socket pair with a role: `Shell`, `LockScreen`,
+`ClipboardDaemon`), **sandboxed** (arrived through a `wp_security_context_v1` listener, named by its
+app id) or a **program** (`/proc/<pid>/exe`, believed only if it sits under `/usr`, is root-owned and
+not writable by others, is the same inode in the compositor's mount namespace, and is no
+interpreter). Anything else cannot be granted. Sandboxed clients never see layer shell, output
+management, output power, the idle notifier or the security context manager.
+
+Reading keys (`zwp_input_method_v2`) and typing (`zwp_virtual_keyboard_v1`) need the person's consent,
+as Input Monitoring on macOS. `/var/lib/bande/consent/<uid>` lists it, one `read-keys|type-keys
+program|sandboxed <name>` a line; only `bande-consent` writes it, through polkit with the password
+each time, so no program can grant itself. Without consent `get_input_method` answers `unavailable`
+and `create_virtual_keyboard` the protocol's `unauthorized`. The first refusal records the identity
+in `$XDG_STATE_HOME/bande/consent-asked` and sends a notification that opens Privacy & Security; there
+the person turns it on, effective at the program's next start. Turning it off disconnects the program
+at once (the compositor follows the directory with inotify).
+
+A consented input method gets keys only while a text field is active and not one with the `password`
+or `pin` purpose: otherwise the compositor drops its grab before delivering the key, and conforming
+input methods grab again on the next `activate`. Toolkit password fields never enable text input.
+
+While locked: keyboard grabs are dropped, virtual keyboards reach nothing, input methods cannot
+commit text, and their candidate popups are not shown.
+
+This is a real boundary for sandboxed clients. For an unsandboxed program running as the same user
+it only raises the bar: such a program can change the person's shell startup files and be inside the
+next session.
+
 ## Wayland protocol matrix
 
 Priority: **P0** is needed for a daily-driver desktop, **P1** for full parity, **P2** later.
@@ -319,14 +361,16 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wlr-layer-shell-unstable-v1` | Taskbar, notifications, overlays | P0 | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | P0 | implemented |
 | `wp_presentation` | Presentation timing, VSync | P0 | implemented |
-| `ext-session-lock-v1` | Screen locking | P0 | implemented |
+| `ext-session-lock-v1` | Screen locking | P0 | implemented, `bande-lock` only |
 | `wl_data_device_manager` | Clipboard and drag and drop | P0 | implemented |
 | `zwp_primary_selection_v1` | Middle-click paste | P0 | implemented |
 | `ext-data-control-v1` | Clipboard daemon access | P0 | implemented, trusted connection only |
 | `ext-idle-notify-v1` / `idle-inhibit-v1` | Idle transitions, video playback | P0 | implemented |
 | `xdg_activation_v1` | Focus-stealing prevention | P0 | implemented |
 | `ext-foreign-toplevel-list-v1` | Window list for the taskbar | P0 | implemented, shell clients only |
-| `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented, open to every client outside the lock screen |
+| `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented; reading and typing keys need consent (see below) |
+| `wp_security_context_v1` | Names sandboxed clients; each is refused every privileged protocol below | P1 | implemented, not offered to sandboxed clients |
+| `zxdg_exporter_v2` / `zxdg_importer_v2` | Attach another process's dialog to its app window (portal dialogs) | P1 | implemented |
 | `zxdg_decoration_manager_v1` | Decoration negotiation (server-side unless the client asks for client-side) | P1 | implemented |
 | `org_kde_kwin_appmenu_manager` | Where a third-party window's dbusmenu lives, for the menu button in our title bar | P1 | implemented |
 | `gtk_shell1` / `gtk_surface1` | Version 1 with only the `global_menu_bar` capability, as Mutter offers it: a GTK 3 or GTK 4 `GtkApplicationWindow` stops drawing its menu bar and gives its `org.gtk.Menus` menu bar, `org.gtk.Actions` paths and unique bus name with `set_dbus_properties`, which becomes the window's menu address; windows without a menu bar send none and are unchanged. Version 1 keeps GTK's own edge constraints and title-bar gestures | P1 | implemented |

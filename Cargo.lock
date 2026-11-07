@@ -1367,6 +1367,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-spell"
+version = "0.1.7"
+dependencies = [
+ "bande-bus",
+ "bande-config",
+ "bande-l10n",
+ "bande-log",
+ "spellbook",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
 name = "bande-spring"
 version = "0.1.7"
 
@@ -5412,6 +5425,16 @@ dependencies = [
  "wayland-protocols-wlr",
  "wayland-server",
  "xkbcommon",
+]
+
+[[package]]
+name = "spellbook"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d204abcbdf8e88729306a8d0ca01a79d8a49969fe1f84696909d6dbc4321c1a"
+dependencies = [
+ "foldhash 0.2.0",
+ "hashbrown 0.17.1",
 ]
 
 [[package]]

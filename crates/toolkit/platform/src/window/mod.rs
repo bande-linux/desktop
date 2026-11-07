@@ -204,6 +204,10 @@ pub enum WindowEvent {
     MenuClosed,
     Pasted(String),
     PastedTransfer(Transfer),
+    PastedData {
+        mime: String,
+        bytes: Vec<u8>,
+    },
     ClipboardChanged,
     Drag(DragEvent),
     ShowLauncher,

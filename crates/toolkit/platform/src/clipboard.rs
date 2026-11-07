@@ -39,6 +39,7 @@ pub struct Transfer {
     pub cut: bool,
     pub png: Vec<u8>,
     pub concealed: bool,
+    pub data: Vec<(String, Vec<u8>)>,
 }
 
 impl Transfer {
@@ -49,6 +50,7 @@ impl Transfer {
             cut: false,
             png: Vec::new(),
             concealed: false,
+            data: Vec::new(),
         }
     }
 
@@ -59,6 +61,7 @@ impl Transfer {
             cut: false,
             png: Vec::new(),
             concealed: false,
+            data: Vec::new(),
         }
     }
 
@@ -77,7 +80,29 @@ impl Transfer {
         Self { png, ..self }
     }
 
+    pub fn with_data(mut self, mime: &str, bytes: Vec<u8>) -> Self {
+        self.data.push((mime.to_owned(), bytes));
+        self
+    }
+
+    fn types(&self) -> Vec<String> {
+        let mut types: Vec<String> = self.data.iter().map(|(mime, _)| mime.clone()).collect();
+        if !self.png.is_empty() {
+            types.push(PNG.to_owned());
+        }
+        if !self.uris.is_empty() {
+            types.extend([GNOME_FILES, URI_LIST].map(str::to_owned));
+        }
+        if !self.text.is_empty() {
+            types.extend(TEXT_TYPES.map(str::to_owned));
+        }
+        types
+    }
+
     fn offer(&self, source: &WlDataSource) {
+        for (mime, _) in &self.data {
+            source.offer(mime.clone());
+        }
         if !self.png.is_empty() {
             source.offer(PNG.to_owned());
         }
@@ -95,6 +120,9 @@ impl Transfer {
     }
 
     fn bytes(&self, mime: &str) -> Vec<u8> {
+        if let Some((_, bytes)) = self.data.iter().find(|(offered, _)| offered == mime) {
+            return bytes.clone();
+        }
         match mime {
             GNOME_FILES => {
                 let verb = if self.cut { "cut" } else { "copy" };
@@ -117,7 +145,7 @@ impl Transfer {
     }
 
     fn is_empty(&self) -> bool {
-        self.text.is_empty() && self.uris.is_empty() && self.png.is_empty()
+        self.text.is_empty() && self.uris.is_empty() && self.png.is_empty() && self.data.is_empty()
     }
 
     fn parse(mime: &str, bytes: &[u8]) -> Self {
@@ -205,6 +233,7 @@ pub(crate) enum Purpose {
     Hover {
         offer: WlDataOffer,
     },
+    PasteData,
 }
 
 struct Reading {
@@ -369,6 +398,38 @@ impl Window {
             .selection
             .as_ref()
             .is_some_and(|offer| offered_types(offer).iter().any(|mime| mime == URI_LIST))
+    }
+
+    pub fn clipboard_types(&self) -> Vec<String> {
+        let Some(offer) = &self.state.clipboard.selection else {
+            return Vec::new();
+        };
+        let types = offered_types(offer);
+        match (types.contains(&own_type()), &self.state.clipboard.copied) {
+            (true, Some((_, copied))) => copied.types(),
+            _ => types,
+        }
+    }
+
+    pub fn paste_data(&mut self, mime: &str) -> Result<(), WindowError> {
+        let Some(offer) = self.state.clipboard.selection.clone() else {
+            self.state.events.push(WindowEvent::PastedData {
+                mime: mime.to_owned(),
+                bytes: Vec::new(),
+            });
+            return Ok(());
+        };
+        if offered_types(&offer).contains(&own_type())
+            && let Some((_, copied)) = &self.state.clipboard.copied
+        {
+            let bytes = copied.bytes(mime);
+            self.state.events.push(WindowEvent::PastedData {
+                mime: mime.to_owned(),
+                bytes,
+            });
+            return Ok(());
+        }
+        self.read_offer(&offer, mime.to_owned(), Purpose::PasteData)
     }
 
     pub fn paste(&mut self) -> Result<(), WindowError> {
@@ -590,6 +651,13 @@ impl Window {
             return;
         }
         let reading = self.state.clipboard.readings.remove(index);
+        if matches!(reading.purpose, Purpose::PasteData) {
+            self.state.events.push(WindowEvent::PastedData {
+                mime: reading.mime,
+                bytes: reading.bytes,
+            });
+            return;
+        }
         let transfer = Transfer::parse(&reading.mime, &reading.bytes);
         match reading.purpose {
             Purpose::Paste { transfer: whole } => {
@@ -606,6 +674,7 @@ impl Window {
                 }
             }
             Purpose::Hover { offer } => self.announce(&offer, transfer.uris),
+            Purpose::PasteData => {}
         }
     }
 

@@ -7,14 +7,19 @@ something is its own binary package, built with `cargo deb` from the crate's
 `ci/deb/version.sh`. How CI builds, checks and publishes them is in [ci.md](ci.md).
 
 Packages are built with the `dist` profile (`cargo deb --profile dist`): fat LTO, one codegen
-unit, `panic = "abort"` and stripped symbols. Every build links with packed relative relocations
+unit, `panic = "abort"`, and `ci/release/symbols.sh` splits the symbols: each binary keeps only a
+small compressed table of function names (`.gnu_debugdata`, as Fedora does), so a crash report has a
+stack trace with names on every computer and with nothing to install or fetch. The line tables go
+to `bande-debug-symbols` (paths by build id under `/usr/lib/debug`), which CI keeps as an artifact of the
+run and does not publish: it is about as big as all the packages together. Install it to have
+`coredumpctl debug` show files and lines. Every build links with packed relative relocations
 (`.cargo/config.toml`, [decision 0006](../decisions/0006-separate-gui-binaries.md)). Development and test builds keep the default
 profiles. Sizes are in [performance.md](performance.md).
 
 ## Packages
 
 - **Per crate** (`cargo deb`, one build per architecture; the list is `ci/release/packages`): `bande-compositor`, the session services
-  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-recovery`, `bande-sound`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
+  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-recovery`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
   `bande-automount`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,

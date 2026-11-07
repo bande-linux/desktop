@@ -61,6 +61,10 @@ impl Watchdog {
         self.everyone = true;
     }
 
+    pub(crate) fn unresponsive(&self) -> usize {
+        self.pings.iter().filter(|ping| ping.unresponsive).count()
+    }
+
     pub(crate) fn is_unresponsive(&self, owner: &ClientId) -> bool {
         self.pings
             .iter()

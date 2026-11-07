@@ -431,7 +431,9 @@ pub fn html(text: &str) -> Vec<Block> {
             rest = rest.find("-->").map_or("", |end| &rest[end + 3..]);
             continue;
         }
-        let close = rest.find('>').unwrap_or(rest.len() - 1);
+        let Some(close) = rest.find('>') else {
+            break;
+        };
         let tag = rest[1..close].trim().to_ascii_lowercase();
         rest = &rest[close + 1..];
         let ending = tag.starts_with('/');

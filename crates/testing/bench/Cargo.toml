@@ -9,7 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-rustix = { workspace = true, features = ["event"] }
+rustix = { workspace = true, features = ["event", "process"] }
 smithay.workspace = true
 tempfile.workspace = true
 tracing.workspace = true

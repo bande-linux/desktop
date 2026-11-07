@@ -723,6 +723,7 @@ impl SettingsView {
             List::Shortcuts => Vec::new(),
             List::About => self.about_rows(),
             List::Storage => self.storage_rows(),
+            List::CrashReports => self.crash_report_rows(),
             List::LargeFiles => self.large_file_rows(),
             List::Clock => self.clock_rows(),
             List::TimeZones => self.zone_rows(),
@@ -1233,6 +1234,11 @@ impl SettingsView {
             && let Some(network) = self.network_page()
         {
             return self.page(network);
+        }
+        if pane.id == PaneId::CrashReports
+            && let Some(report) = self.crash_report_page()
+        {
+            return self.page(report);
         }
         if pane.id == PaneId::Printers
             && let Some(printer) = self.printer_page()

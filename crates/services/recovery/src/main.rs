@@ -2,11 +2,17 @@ use std::error::Error;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open, pidfd_send_signal};
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedObjectPath;
 
 const SECOND_PRESS_WITHIN: Duration = Duration::from_secs(5);
 const SIGKILL: i32 = 9;
+const DUMP_PATIENCE: Timespec = Timespec {
+    tv_sec: 5,
+    tv_nsec: 0,
+};
 
 #[zbus::proxy(
     interface = "org.freedesktop.login1.Manager",
@@ -44,10 +50,25 @@ trait Session {
     fn user(&self) -> zbus::Result<(u32, OwnedObjectPath)>;
 }
 
-fn compositor_cgroup_kill(uid: u32) -> String {
+fn compositor_cgroup(uid: u32) -> String {
     format!(
-        "/sys/fs/cgroup/user.slice/user-{uid}.slice/user@{uid}.service/session.slice/bande-compositor.service/cgroup.kill"
+        "/sys/fs/cgroup/user.slice/user-{uid}.slice/user@{uid}.service/session.slice/bande-compositor.service"
     )
+}
+
+fn dump_compositor(cgroup: &str) -> Result<(), Box<dyn Error>> {
+    let processes = std::fs::read_to_string(format!("{cgroup}/cgroup.procs"))?;
+    let pid = processes
+        .lines()
+        .next()
+        .and_then(|pid| pid.parse().ok())
+        .and_then(Pid::from_raw)
+        .ok_or("the compositor service has no process")?;
+    let pidfd = pidfd_open(pid, PidfdFlags::empty())?;
+    pidfd_send_signal(&pidfd, Signal::QUIT)?;
+    let mut fds = [PollFd::new(&pidfd, PollFlags::IN)];
+    poll(&mut fds, Some(&DUMP_PATIENCE))?;
+    Ok(())
 }
 
 fn is_graphical(kind: &str, class: &str) -> bool {
@@ -69,7 +90,11 @@ fn restart_desktop(system: &Connection, seat: OwnedObjectPath) -> zbus::Result<(
     }
     let (uid, _) = session.user()?;
     tracing::warn!("restarting the desktop: ending session {id}");
-    if let Err(error) = std::fs::write(compositor_cgroup_kill(uid), "1")
+    let cgroup = compositor_cgroup(uid);
+    if let Err(error) = dump_compositor(&cgroup) {
+        tracing::debug!("cannot save the state of the compositor: {error}");
+    }
+    if let Err(error) = std::fs::write(format!("{cgroup}/cgroup.kill"), "1")
         && error.kind() != std::io::ErrorKind::NotFound
     {
         tracing::warn!("cannot end the compositor service: {error}");

@@ -21,9 +21,8 @@ use std::sync::LazyLock;
 
 use bande_l10n::Localizer;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-toolkit-platform.ftl");
-
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-toolkit-platform")));
 
 pub use app_connection::{AppConnection, AppRequest, WindowInSession};
 pub use bande_graphics::ResizeEdge;

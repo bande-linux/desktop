@@ -10,6 +10,5 @@ pub use shortcuts::{
     Action, Area, Key, Modifiers, SHORTCUTS, Shortcut, bound, keys_for, keys_of, shortcuts_in,
 };
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-keyboard.ftl");
-
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-keyboard")));

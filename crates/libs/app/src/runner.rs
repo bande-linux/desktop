@@ -190,7 +190,7 @@ impl<P: Program> Runner<P> {
     }
 
     fn leave(&mut self) {
-        if self.cx.resume.session_ending {
+        if self.cx.resume.session_ending || bande_xdg::own_code_replaced() {
             self.save_windows();
             self.cx.resume.finish_writing();
         } else {

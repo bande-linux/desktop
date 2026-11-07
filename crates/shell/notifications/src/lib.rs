@@ -33,9 +33,8 @@ fn until_midnight() -> Option<Duration> {
     Duration::try_from(wall.duration_until(&midnight)).ok()
 }
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-notifications.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-notifications")));
 
 pub const BANNER_WIDTH: f32 = 344.0;
 pub const CENTER_WIDTH: f32 = 368.0;

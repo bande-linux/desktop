@@ -235,7 +235,8 @@ writes a hex value, a corner radius or a font name of its own.
   glides to its new rows on `quick`. `Table::set_headings` adds group headings (semibold
   `ink` over a `hairline`, one row tall) above the rows that start each group, as Files' Use
   Groups does, and level 2 heading nodes before those rows so screen readers announce each
-  group; a selection run never spans a heading. Scroll bars are macOS overlay scrollers
+  group; a selection run never spans a heading. `Row::dimmed` tones a row down one ink step
+  with its icons at `Palette::DIMMED_ALPHA`, for normally hidden files. Scroll bars are macOS overlay scrollers
   (`Scrollbar`, also usable on its own by views that scroll themselves, such as Terminal): a
   6 pt `ink3` knob shown while scrolling or when the pointer is in the right 14 pt, widening to
   10 pt over a faint lane on hover; drag the knob, click the lane to page; it fades 0.9 s

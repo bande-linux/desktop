@@ -1154,7 +1154,6 @@ impl DesktopView {
                 return;
             }
             Command::NewFolder => Request::NewFolder,
-            Command::DesktopInfo | Command::ShowDesktopFolder => Request::OpenDesktopFolder,
             Command::ChangeWallpaper => Request::ChangeWallpaper,
             Command::Open => Request::Open(selected),
             Command::QuickLook => Request::QuickLook,

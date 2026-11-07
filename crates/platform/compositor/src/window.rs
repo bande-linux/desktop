@@ -57,6 +57,8 @@ const BOTTOM: u32 = 2;
 const LEFT: u32 = 4;
 const RIGHT: u32 = 8;
 
+const CONTROLS_OVER_CONTENT_APP: &str = "org.bande.Browser";
+
 fn title_bar_height(mode: Option<DecorationMode>, fullscreen: bool) -> i32 {
     if mode == Some(DecorationMode::ServerSide) && !fullscreen {
         bande_graphics::FRAME_HEADER_HEIGHT as i32
@@ -192,6 +194,20 @@ impl Window {
             current.decoration_mode,
             current.states.contains(xdg_toplevel::State::Fullscreen),
         )
+    }
+
+    pub(crate) fn controls_over_content_height(&self) -> i32 {
+        let current = self.toplevel.current_state();
+        let client_side = current.decoration_mode != Some(DecorationMode::ServerSide);
+        let fullscreen = current.states.contains(xdg_toplevel::State::Fullscreen);
+        if client_side
+            && !fullscreen
+            && crate::shell::toplevel_names(self.surface()).1 == CONTROLS_OVER_CONTENT_APP
+        {
+            bande_graphics::WINDOW_HEADER_HEIGHT as i32
+        } else {
+            0
+        }
     }
 
     pub(crate) fn content_location(&self) -> Point<i32, Logical> {

@@ -21,13 +21,20 @@ pub enum Elevation {
     Overlay,
 }
 
+pub const fn window_edge_opacity(scheme: Scheme) -> f32 {
+    match scheme {
+        Scheme::Light => 0.10,
+        Scheme::Dark => 0.55,
+    }
+}
+
 impl Elevation {
     pub fn shadows(self, scheme: Scheme, active: bool) -> [Shadow; 2] {
         let [key, ambient] = match (self, scheme) {
-            (Self::Frame, Scheme::Light) => [shadow(1.0, 1.0, 0.10), shadow(12.0, 16.0, 0.22)],
-            (Self::Overlay, Scheme::Light) => [shadow(1.0, 0.75, 0.14), shadow(6.0, 9.0, 0.18)],
-            (Self::Frame, Scheme::Dark) => [shadow(1.0, 1.0, 0.40), shadow(14.0, 18.0, 0.45)],
-            (Self::Overlay, Scheme::Dark) => [shadow(1.0, 0.75, 0.35), shadow(6.0, 9.0, 0.40)],
+            (Self::Frame, Scheme::Light) => [shadow(0.5, 1.0, 0.10), shadow(6.0, 12.0, 0.14)],
+            (Self::Overlay, Scheme::Light) => [shadow(0.5, 0.75, 0.10), shadow(3.0, 7.0, 0.14)],
+            (Self::Frame, Scheme::Dark) => [shadow(1.0, 1.5, 0.30), shadow(8.0, 14.0, 0.42)],
+            (Self::Overlay, Scheme::Dark) => [shadow(1.0, 1.0, 0.30), shadow(4.0, 8.0, 0.36)],
         };
         let ambient = if active {
             ambient

@@ -176,6 +176,7 @@ pub enum WindowEvent {
     BrightnessKey {
         key: BrightnessKey,
         fine: bool,
+        output: String,
     },
     MediaKey(MediaKey),
     TogglePanel(Panel),

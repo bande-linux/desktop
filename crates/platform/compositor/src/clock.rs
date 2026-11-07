@@ -123,6 +123,12 @@ pub trait FrameOutput {
 
     fn set_color_temperature(&mut self, _kelvin: f64) {}
 
+    fn can_dim(&mut self, _output: &str) -> bool {
+        false
+    }
+
+    fn set_dim(&mut self, _output: &str, _gain: f64) {}
+
     fn switch_virtual_terminal(&mut self, _number: i32) {}
 
     fn renew_failed_renderer(&mut self) -> Result<bool, Self::Error> {

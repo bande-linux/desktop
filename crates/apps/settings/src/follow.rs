@@ -42,6 +42,7 @@ use crate::time::{TimeCommand, TimeState, follow_time};
 use crate::users::{Account, PasswordOutcome, UsersCommand, follow_users};
 use bande_network::import_vpn;
 use bande_settings_panes::{PaneId, SettingId, Value};
+use bande_status::brightness::{DisplayLevel, LevelRequest};
 use bande_watch::FolderWatch;
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
@@ -51,6 +52,7 @@ const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
 pub enum Update {
     Values(Vec<(SettingId, Value)>),
     Displays(BTreeMap<String, DisplaySettings>),
+    DisplayLevels(Vec<DisplayLevel>),
     Arrangements(Vec<Vec<Placement>>),
     Audio(Option<bande_audio::Snapshot>),
     Wifi(Option<WifiState>),
@@ -112,7 +114,7 @@ pub enum Command {
     Permission(PermissionCommand),
     Printers(PrinterCommand),
     Users(UsersCommand),
-    Brightness(f32),
+    Brightness(LevelRequest),
     Reveal(PathBuf),
     EndSession(SessionEnd),
     ImportVpn,
@@ -357,7 +359,7 @@ pub struct Services {
     default_apps: Sender<DefaultAppCommand>,
     permissions: Sender<PermissionCommand>,
     passwords: Sender<PasswordCommand>,
-    brightness: Option<Sender<f32>>,
+    brightness: Option<Sender<LevelRequest>>,
     printers: Option<Sender<PrinterCommand>>,
     users: Sender<UsersCommand>,
     _pointing: Option<FolderWatch>,
@@ -394,7 +396,7 @@ impl Services {
             default_apps: follow_default_apps(updates.clone()),
             permissions: follow_permissions(session, updates.clone()),
             passwords: follow_passwords(session, system, updates.clone()),
-            brightness: system.and_then(|system| follow_brightness(system, updates.clone())),
+            brightness: follow_brightness(session, updates.clone()),
             printers: system.map(|system| follow_printers(system, updates.clone())),
             users: follow_users(session, system, updates.clone()),
             _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
@@ -441,10 +443,10 @@ impl Services {
                 .printers
                 .as_ref()
                 .is_some_and(|printers| printers.send(command).is_ok()),
-            Command::Brightness(level) => self
+            Command::Brightness(request) => self
                 .brightness
                 .as_ref()
-                .is_some_and(|brightness| brightness.send(level).is_ok()),
+                .is_some_and(|brightness| brightness.send(request).is_ok()),
             Command::Notifications(command) => self.notifications.send(command).is_ok(),
             Command::Locale(command) => self
                 .locale

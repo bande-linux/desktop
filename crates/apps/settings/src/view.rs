@@ -1573,9 +1573,12 @@ impl SettingsView {
             match &command {
                 LocaleCommand::Language(language) => {
                     language.clone_into(&mut locale.language);
-                    locale.pending = true;
+                    locale.pending = Some(SettingId::Language);
                 }
-                LocaleCommand::Region(region) => locale.region.clone_from(region),
+                LocaleCommand::Region(region) => {
+                    locale.region.clone_from(region);
+                    locale.pending = Some(SettingId::Region);
+                }
                 LocaleCommand::LoginKeyboard(codes) => locale.login_sources.clone_from(codes),
             }
         }

@@ -15,7 +15,7 @@ use crate::frame::Frame;
 use crate::motion::{Look, Motion};
 use crate::scene::{Casting, Drawn};
 use crate::state::State;
-use crate::tile::{TILED, Tile};
+use crate::tile::Tile;
 
 pub struct Window {
     pub(crate) toplevel: ToplevelSurface,
@@ -288,6 +288,16 @@ impl Window {
             .then(|| self.toplevel.send_pending_configure())
             .flatten()
     }
+
+    pub(crate) fn move_with_next_configure(&mut self, location: Point<i32, Logical>) {
+        if let Some(serial) = self.configure() {
+            self.pending_location = Some((serial, location));
+        } else if let Some((_, at)) = &mut self.pending_location {
+            *at = location;
+        } else {
+            self.location = location;
+        }
+    }
 }
 
 impl State {
@@ -499,9 +509,6 @@ impl State {
             }
             match target {
                 Some(_) => {
-                    for tiled in TILED {
-                        pending.states.unset(tiled);
-                    }
                     pending.states.set(state);
                 }
                 None => {
@@ -510,9 +517,6 @@ impl State {
             }
         });
         window.request_size(target.or(window.restore).map(|rect| rect.size));
-        if target.is_some() {
-            window.tile = None;
-        }
         let location = target.or(window.restore).map(|rect| rect.loc);
         if target.is_none() {
             window.restore = None;
@@ -521,6 +525,9 @@ impl State {
             && let Some(location) = location
         {
             window.pending_location = Some((serial, location));
+        }
+        if target.is_some() {
+            self.set_tile(index, None);
         }
         self.animate_window(index, Spring::STANDARD, None);
     }
@@ -696,10 +703,11 @@ impl State {
             return;
         };
         let size = window.clamp_size(resize.size_for(delta));
-        window.request_size(Some(size));
-        window.configure();
         let rect = Rectangle::new(resize.location_for(size), size);
-        self.share_tiled_edge(index, rect);
+        let rect = self.share_tiled_edge(index, rect);
+        let window = &self.windows[index];
+        window.request_size(Some(rect.size));
+        window.configure();
     }
 
     pub(crate) fn end_resize(&mut self, surface: &WlSurface) {
@@ -707,13 +715,17 @@ impl State {
             return;
         };
         let window = &mut self.windows[index];
-        if let Some(resize) = &mut window.resize {
+        let started_at = window.resize.as_mut().map(|resize| {
             resize.active = false;
-        }
+            resize.initial
+        });
         window.toplevel.with_pending_state(|pending| {
             pending.states.unset(xdg_toplevel::State::Resizing);
         });
         window.configure();
+        if let Some(started_at) = started_at {
+            self.end_tile_if_reshaped(index, started_at);
+        }
     }
 
     pub(crate) fn move_window_to(&mut self, surface: &WlSurface, location: Point<i32, Logical>) {

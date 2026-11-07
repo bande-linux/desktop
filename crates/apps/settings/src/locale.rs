@@ -6,9 +6,9 @@ use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::L10N;
-use crate::failure::{detail, failed, sentence_or};
+use crate::failure::{detail, explained, explained_with, failed};
 use crate::follow::{Update, Updates, spawn};
-use bande_settings_panes::SettingId;
+use bande_settings_panes::{PaneId, SettingId};
 
 const LOCALE: &str = "org.freedesktop.locale1";
 const LOCALE_PATH: &str = "/org/freedesktop/locale1";
@@ -225,7 +225,7 @@ pub fn assignments(current: &[String], language: &str, region: Option<&str>) -> 
 
 fn change_failure(error: &zbus::Error, code: &str, available: &[AvailableLocale]) -> String {
     let name = locale_label(available, code);
-    sentence_or(error, "service-locale", |kind| {
+    explained_with(error, "service-locale", |kind| {
         if kind == REFUSED_LOCALE {
             L10N.tr_args("locale-unavailable", [("name", name.clone().into())])
         } else {
@@ -321,7 +321,11 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             let current = match locale.locale() {
                 Ok(current) => current,
                 Err(error) => {
-                    updates.send(failed(setting, &error, "service-locale"));
+                    updates.send(Update::PaneFailed(
+                        PaneId::LanguageTime,
+                        explained(&error, "service-locale", "locale-read-failed"),
+                    ));
+                    updates.send(Update::Locale(read(&locale, available)));
                     continue;
                 }
             };
@@ -338,7 +342,7 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             if let Err(error) = locale.set_locale(wanted, true) {
                 let code = chosen.as_deref().unwrap_or(&language);
                 updates.send(Update::Failed(
-                    Some(setting),
+                    setting,
                     change_failure(&error, code, available),
                 ));
             }

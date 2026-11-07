@@ -139,12 +139,12 @@ writes a hex value, a corner radius or a font name of its own.
     while the window is zoomed; with Alt held it shows + and Alt-click enters full screen. The
     hit cells cover the pill's full height and the close cell reaches the window's left edge.
     Rounded corners (14 pt), the 55 % `edge` ring and the shadow pair are the compositor's, cut
-    at the window geometry (`set_window_geometry`), so every app looks alike; maximised, tiled
-    and full-screen windows are square. They act on release inside. A drag on the header or
+    at the window geometry (`set_window_geometry`), so every app looks alike; maximised and
+    full-screen windows are square. They act on release inside. A drag on the header or
     the chassis around the sheet moves the window, a double click zooms, a right click opens
     the window menu. A band from 8 pt outside to 3 pt inside the rounded outline resizes,
     with corners reaching 24 pt along the edges, and the pointer shows the direction. Tiled
-    windows keep only the inside 3 pt, maximised and full-screen windows have no band, and full screen hides the header and the inset.
+    windows have the same band, maximised and full-screen windows have none, and full screen hides the header and the inset.
     `Window::size` and pointer positions are in the content's coordinates: by default the
     content is the sheet and the app draws only into it (clipped to its rounded shape, on the
     `Scene`'s background). An app with a sidebar or toolbar on the frame calls

@@ -5,7 +5,9 @@ use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};
 
-use crate::failure::unexpected;
+use bande_settings_panes::SettingId;
+
+use crate::failure::failed;
 use crate::follow::{Update, Updates, spawn};
 
 const DISPLAY_DEVICE: &str = "/org/freedesktop/UPower/devices/DisplayDevice";
@@ -162,7 +164,7 @@ pub fn follow_battery(system: &Connection, updates: Updates) -> Sender<BatteryCo
         for command in receiver {
             let BatteryCommand::Profile(profile) = command;
             if let Err(error) = profiles.set_active_profile(&profile) {
-                updates.send(unexpected(error));
+                updates.send(failed(SettingId::PowerMode, &error, "service-power"));
                 updates.send(Update::Battery(read(&system)));
             }
         }

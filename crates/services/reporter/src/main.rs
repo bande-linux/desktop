@@ -65,6 +65,9 @@ fn attempt(spool: &Spool, config: &Config, waiting: &[String], retry: Duration) 
 fn settle(spool: &Spool, id: &str, status: Status) {
     if let Err(error) = spool.settle(id, status) {
         tracing::warn!("cannot record the state of report {id}: {error}");
+        if let Err(error) = spool.delete(id) {
+            tracing::warn!("cannot take report {id} out of the outbox: {error}");
+        }
     }
 }
 

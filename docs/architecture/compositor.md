@@ -169,20 +169,7 @@ when they reach the screen is Bande's own.
   `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
   settings?" with Keep and Revert and comes back by itself after 15 s, as macOS does.
 
-- **Frame pacing.** Frames are paced by a vblank clock (virtual at 120 Hz in the headless
-  backend; on DRM re-anchored to each page flip at the mode's refresh, advertised as the
-  `wl_output` mode). A commit is latched into the frame whose deadline it arrives before: the
-  vblank minus the longest time from deadline to finished render over the last 16 frames
-  (capped at one refresh, so a vblank is always reachable), minus 1 ms. The longest rather than
-  a percentile is deliberate: heavier content, such as the overview opening, then misses at
-  most one vblank instead of several while a percentile catches up, and on a loaded machine
-  wake-up jitter is what makes frames late. When a wake-up is so late that the typical render
-  time (a moving average) no longer fits before the planned vblank, the frame is drawn at once
-  for the next vblank it can reach, with animations sampled for that vblank, so it is not shown
-  one refresh stale and the scheduler does not sleep (and risk waking late) again. Frame callbacks and `wp_presentation` feedback (vblank time, refresh, sequence, `vsync`)
-  are taken when the frame is latched and sent at its vblank (on DRM, at the page-flip event
-  with its time and sequence); a superseded commit's feedback is discarded, and a render that
-  overruns its vblank is presented at the next one.
+- **Frame pacing.** Each output has its own scheduler (`clock.rs`) and measured timing (`pacing.rs`); no rate is assumed beyond the mode's. The vblank grid is estimated from page-flip times alone: phase and period follow a slow filter, an error over an eighth of a refresh is an outlier, eight in a row or a long idle re-anchor it, and it owns the sequence number. A frame starts at its slot minus a budget and a commit lead. The budget is the 95th percentile of the last 64 renders or the longest of the last 4 if that is more (so a spike is forgotten in 4 frames while heavier content is priced at once), plus the 99th percentile of how late the timer woke us, plus a pad that grows when a commit comes too late for its slot and decays while none do. The commit lead is how long before its slot a commit must return, learned from which vblank each flip really landed on: it starts at 35 % of a refresh on the first real flip, comes down until the first miss, rises when a commit with time to spare still misses (a driver like Apple's DCP drops anything under about 2.3 ms before the flip to the next refresh), and is lowered slowly afterwards to follow changes. A wake-up past the start time still goes if its typical render fits before the lead, and otherwise takes the next slot. When over 5 % of 128 frames miss, the pad rises. Without flips (headless) the lead stays 0. A timer wake dispatches every ready source first, so input right up to the latch counts, and no timer runs without a wanted frame or a frame callback. `BANDE_FRAME_TIMING=classic` restores the former rule (the longest of the last 16 frames plus 1 ms). Frame callbacks and `wp_presentation` feedback (estimated vblank time, refresh, sequence, `vsync`) are taken when the frame is latched and sent at its vblank (on DRM, at the page-flip event); a superseded commit's feedback is discarded, and a render that overruns its vblank is presented at the next one.
 - **Window motion.** Every window state change is animated by springs on x, y, width, height
   and opacity, sampled at the frame's vblank (`Compositor::animate_on`, called by each output's
   scheduler before it latches a frame). Animations are closed-form springs, so every display

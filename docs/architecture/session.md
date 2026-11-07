@@ -555,7 +555,7 @@ something to show.
 | Stage | What shows | How |
 |---|---|---|
 | bootloader, U-Boot | the mark, centred on black | the bootloader's logos; U-Boot's console is silent (`silent=1`) until an EFI program starts, or until no boot entry is found, when it lists what it scanned |
-| systemd-boot, kernel | the mark | `timeout 0`; the kernel's console logo (`logo_bande_clut224.ppm`, `fbcon=logo-pos:center`); `quiet` also silences the EFI stub |
+| systemd-boot, kernel | the mark | `timeout 0`; the kernel's console logo (`logo_bande_clut224.ppm`, `fbcon=logo-count:1 fbcon=logo-pos:center`) on the firmware framebuffer, drawn under `quiet` thanks to our kernel patch `fbcon: Draw the logo under quiet`; `quiet` also silences the EFI stub |
 | `apple-drm` binds | the mark again after the display comes up | `bande-display-keeper@<card>` draws it into the console's framebuffer (the kernel's own logo is only drawn during boot and never for a module) |
 | login window | black with the mark, cross-fading to the login window | the compositor holds frames until the greeter is mapped; the greeter draws the same mark and opens once the desktop picture is decoded |
 | session | the picture the login window ended on, then the bar and icons fade in | below |

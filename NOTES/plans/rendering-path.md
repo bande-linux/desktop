@@ -84,8 +84,9 @@ The owner's MSI G274QPX is wide gamut. EDID and DCP agree: red 0.674/0.317, gree
 
 The correct order is sRGB correct first, then tagged content, then HDR.
 
-- **Best case:** DCP does it per surface, for free, including on overlays. `dcp_surface.colorspace` has `BG_SRGB`. Whether it converts on an external display is unknown, and only a test boot can tell. The kernel comment and code disagree about it.
-- **Fallback:** a matrix from EDID primaries in the compositor's shaders. Overlays then need turning off for anything not already correct, as KWin does. The DCP CTM (Night Light uses it) is one global matrix, in an unknown space.
+- **Built:** frames go through a shader that converts sRGB to the display's primaries from EDID, as in "Colour" in `compositor.md`. It works on any GPU and kernel, and is on by default with a per-display switch. While it is on, nothing is scanned out directly on that display. Measured on the M2 through the real renderer at 2880x1800: a full frame takes 1.2 to 1.8 ms, a 1200x800 damage 0.57 to 0.76 ms, with CPU unchanged. White and greys stay exact, and pure sRGB red becomes (230, 61, 37) on the owner's primaries. Against 8.33 ms (120 Hz) and 6.94 ms (144 Hz) there is room.
+- **Optional, where the hardware offers it:** standard KMS `DEGAMMA_LUT`, `CTM` and `GAMMA_LUT` on the CRTC (amdgpu, i915) can do the same conversion with planes kept. Not built: no such hardware here to verify against black screens. It has to agree with Night Light, which uses the gamma ramp today.
+- **Optional, Apple only:** the kernel probe `appledrm.srgb_surfaces` on the kernel repo's `probe-dcp-srgb` branch would let DCP convert per surface for free. It is a test patch, not a dependency.
 - **HDR:** DCP lists PQ modes on this monitor at 120 Hz (mode 127: 12-bit YCbCr 4:4:4, BT.2020, max 409 nits, frame average 391). appledrm exposes only CTM: no `Colorspace`, no `HDR_OUTPUT_METADATA`, no `COLOR_PIPELINE`. Changing colour mode is a modeset (about 0.5 s of black in `dmesg`). So HDR means a per-display Settings toggle, as on a Mac, and a kernel project. Last.
 
 ## Variable refresh: no switch until the kernel reports it
@@ -101,18 +102,12 @@ Implementing it would be a kernel fork with black flashes, with no benefit here.
 
 | # | Stage | Gain, measured | Risk | Blocker | Size |
 |---|---|---|---|---|---|
-| 2 | Colour probe, then sRGB correct | every pixel on this monitor | low for the probe; **black screen** possible until booted | owner boot | S if DCP does it, M if shaders |
 | 5 | Sample LINEAR dmabufs, then tiled and compressed | 0.56 ms per full window, 4 bytes/px per window, 20 % on client render | medium, **tearing** | stage 6 for Firefox-grade sync | M-L |
 | 6 | Stop blocking on the GPU | compositor thread free during GPU work (0.5-8 ms a frame) | medium, **freeze** if a fence never signals | none | M |
-| 7 | `wp_color_management_v1`, P3, 10-bit | Firefox and players show P3 correctly | low to medium | stage 2; Smithay has no support, the XML is in `wayland-protocols` | M-L |
-| 8 | Windowed video on a plane | KWin's ~1 W on a laptop; not separable here | **high: firmware crash, black screen** | kernel plane change, stage 3 | M |
-| 9 | HDR | PQ on HDR monitors | high | kernel project, stage 7 | L |
+| 7 | `wp_color_management_v1`, P3, 10-bit | Firefox and players show P3 correctly | low to medium | Smithay has no support, the XML is in `wayland-protocols` | M-L |
+| 8 | Windowed video on a plane | KWin's ~1 W on a laptop; not separable here | **high: firmware crash, black screen** | none on standard KMS with an underlay-capable plane; on Apple, an optional kernel plane change | M |
+| 9 | HDR | PQ on HDR monitors | high | stage 7; standard `Colorspace` and `HDR_OUTPUT_METADATA` where the driver has them (Apple: optional kernel work) | L |
 
-2. **Colour.** First the owner step below. The kernel repo's `probe-dcp-srgb` branch has a test patch: `appledrm.srgb_surfaces`, off by default and writable at run time, tags RGB surfaces `BG_SRGB`. If DCP converts, make that the default for external displays and it costs nothing, overlays included. If it doesn't, the fallback is:
-   - Read the primaries from EDID, per display. A display whose primaries are within tolerance of sRGB, or one without colour data, gets no conversion and keeps today's path.
-   - Replace the output copy with a damage-limited draw of the composed image into the display buffer imported as a LINEAR render target (proved working). Its shader decodes sRGB, applies the 3x3 matrix to the display's primaries and encodes again. One place in the pass that writes the final target; stage 7 replaces it with per-surface colour.
-   - While converting, client buffers cannot go straight to a plane, as they would skip the shader: no direct scanout and no overlays on that display, as in KWin.
-   - Cost, from the measurements here: LINEAR target 0.51 ms for a full frame instead of the copy's 0.45 ms, plus the shader's power functions, estimated at under 1 ms and to be measured.
 5. **Direct window textures.** The trap: sampling a client's buffer means the client must not write until release, and the compositor must wait for its fence. Without that, windows tear. Closing animations and stretch-on-resize must hold the buffer. Verify `linux-drm-syncobj-v1` on Apple first. Tiled buffers cannot use a plane, so feedback must stay per surface: LINEAR for what is on a plane, compressed for the rest, or the shell loses plane 2. Firefox then gets the same import path.
 6. **Asynchronous frames.** Export a `sync_file`, wait in the event loop, record render time at fence signal. Stage 1 removes the CPU copy that today forces the wait. A fence that never signals must go through the existing GPU-loss recovery.
 7. **Tagged content.** Per-surface description, conversion in shaders or DCP's per-surface fields; 10-bit composition removes banding under Glass. DCP lists no 10-bit RGB mode for this monitor at 2560x1440@120 (only 8-bit RGB, or 12-bit YCbCr), so at 120 Hz the link stays 8-bit and the gain there needs checking.
@@ -163,10 +158,22 @@ The frame rate rose because the pacing timer now counts from the request rather 
 
 Text at 1x: the audit found it even and a little soft, not defective, and macOS also renders unhinted and greyscale (from memory). No change unless a side-by-side shows otherwise.
 
+## Portability
+
+Everything built here runs on Debian's own kernels and any GPU through atomic KMS. Apple paths are extras behind runtime checks, and every check falls back to the earlier path.
+
+- **Output copy:** any real GPU (integrated or discrete) that imports the dumb buffer as a Vulkan buffer. A refused import, a CPU renderer or a virtual GPU keeps the CPU copy. It assumes the GPU's writes reach the display without CPU-side cache maintenance, which holds for imported external memory on Mesa drivers. It was verified only on Honeykrisp; amdgpu, i915 and Xe are untested here.
+- **NV12 sampling:** needs `VK_EXT_image_drm_format_modifier`, `VK_EXT_queue_family_foreign`, and the driver reporting importable LINEAR NV12 (checked at start). The 16-byte stride rule is Honeykrisp's documented minimum. A driver needing more refuses the import, and video copies again.
+- **Screen sharing:** standard `ext-image-copy-capture` dmabufs, the render node from `VK_EXT_physical_device_drm`, `/dev/udmabuf` (Debian's kernel has it), and PipeWire. Without a render node or udmabuf it uses `wl_shm` on the same memory.
+- **Colour:** EDID and a shader, with no kernel property needed.
+- **Apple-only knowledge** stays in this plan's DCP notes and the optional probe.
+
+The frame scheduler (`rendering-hard.md` T) learns flip times, render times and commit lead per output, per machine, so it suits any driver without per-GPU constants.
+
 ## Owner steps
 
-1. **Is colour wrong today?** Toggle the monitor menu between its wide default and its sRGB mode. A clear jump in reds and skin tones means we are unmanaged. One minute.
-2. **Test boot for stage 2**, with a kernel from main: look at the desktop and a known photo against the monitor's sRGB mode.
+1. **Colour after installing.** Reds and greens will look calmer on the MSI monitor. Compare against the monitor's own sRGB mode; Settings ▸ Displays ▸ Match colours turns it off. Set the monitor back to its wide default first, or it is converted twice.
+2. **Optional DCP probe**, only if the coordinator builds a test kernel anyway: `echo 1 | sudo tee /sys/module/appledrm/parameters/srgb_surfaces`, compare, then `echo 0`.
 3. **Latency with a phone.** 240 fps slow motion, framing a key and the screen, in Terminal at 120 Hz. Ten presses; count frames from the key bottoming out to the glyph (each 4.2 ms). Add the same with a mouse button and a menu. The mouse and keyboard's own delay is included, so it compares only against the same run on a Mac. Ten minutes, before and after stage 6.
 4. **After stage 1,** drag a large window in Glass on the real display; the frame numbers need the real path.
 
@@ -174,6 +181,7 @@ Text at 1x: the audit found it even and a little soft, not defective, and macOS 
 
 - No real client ran through a private compositor per type. The headless compositor does not exercise the scanout copy, so steps were timed alone.
 - GPU clock was whatever firmware chose; other agents' small jobs ran alongside.
+- Any GPU other than the M2's: stages 1, 3, 4 and colour are untested on amdgpu, i915 and Xe.
 - Client-side copy, per-window memory in practice, DRAM bandwidth, hardware decode, windowed video on a plane, DCP's colourspace behaviour, input-to-photon latency.
 
 ## Sources

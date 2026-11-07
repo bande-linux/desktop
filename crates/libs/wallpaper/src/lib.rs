@@ -4,4 +4,4 @@ mod picture;
 
 pub use cache::render_cached;
 pub use choice::{Choice, DEFAULT_WALLPAPER, Fit, Variant, bundled, choose, follow, read, set};
-pub use picture::{Picture, RenderError, backdrop, render};
+pub use picture::{Picture, RenderError, backdrop, material, render};

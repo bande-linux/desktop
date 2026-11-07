@@ -57,7 +57,7 @@ struct App<O> {
     loop_handle: LoopHandle<'static, App<O>>,
 }
 
-struct StallSource(StallWatch);
+struct StallSource(StallWatch, Duration);
 
 impl EventSource for StallSource {
     type Event = ();
@@ -93,7 +93,7 @@ impl EventSource for StallSource {
     }
 
     fn before_handle_events(&mut self, _: EventIterator<'_>) {
-        self.0.busy();
+        self.0.busy(self.1);
     }
 }
 
@@ -845,7 +845,7 @@ where
         Ok(watch) => {
             event_loop
                 .handle()
-                .insert_source(StallSource(watch), |(), (), _| {})?;
+                .insert_source(StallSource(watch, STALL_LIMIT), |(), (), _| {})?;
         }
         Err(error) => tracing::warn!("cannot watch the event loop for stalls: {error}"),
     }

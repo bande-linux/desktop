@@ -98,7 +98,7 @@ pub use reveal::Awaited;
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
 pub use session::{
     CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, REVIEW, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE,
-    SHELL, SessionRole, SessionUpkeep,
+    SETUP, SETUP_PENDING, SHELL, SessionRole, SessionUpkeep,
 };
 pub use state::{Compositor, OutputElement, REFRESH, ScanoutDevice};
 pub use watchdog::UNRESPONSIVE_AFTER;

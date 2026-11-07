@@ -123,6 +123,7 @@ bande-sample = { path = "crates/testing/sample" }
 bande-screenshot = { path = "crates/shell/screenshot" }
 bande-secrets = { path = "crates/services/secrets" }
 bande-search = { path = "crates/libs/search" }
+bande-recovery-tools = { path = "crates/apps/recovery-tools" }
 bande-settings = { path = "crates/apps/settings" }
 bande-settings-panes = { path = "crates/libs/settings-panes" }
 bande-shell = { path = "crates/shell/shell" }

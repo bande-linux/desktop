@@ -50,8 +50,7 @@ pub use defaults::{DefaultApp, DefaultAppCommand, choose_default, default_apps};
 pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};
 pub use locale::{
-    AvailableLocale, LocaleCommand, LocaleState, assignments, locale_name, login_codes,
-    parse_assignments, supported_locales, x11_keyboard,
+    AvailableLocale, LocaleCommand, LocaleState, assignments, parse_assignments, supported_locales,
 };
 pub use login::{App, LoginCommand, LoginItems, login_items, login_matches};
 pub use night::{clock_text, night_summary};

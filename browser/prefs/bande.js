@@ -105,6 +105,7 @@ pref("media.gmp-widevinecdm.enabled", false);
 pref("media.gmp-provider.enabled", false);
 pref("media.eme.enabled", false);
 // Remote settings: nothing fetched, only the data shipped in each update
+pref("services.settings.server", "data:,", locked);
 pref("bande.services.settings.allowedCollections", "", locked);
 pref("bande.services.settings.allowedCollectionsFromDump", "security-state/*,main/content-classifier-lists,main/change-password-urls,main/webcompat-interventions,main/addons-data-leak-blocker-domains,main/mfcdm-origins-list,main/url-classifier-exceptions,main/ml-model-allow-deny-list,main/third-party-cookie-blocking-exempt-urls,main/backup-common-passwords-list,main/bounce-tracking-protection-exceptions,main/fingerprinting-protection-overrides,main/password-rules,main/websites-with-shared-credential-backends,main/password-recipes,main/partitioning-exempt-urls,blocklists/addons-bloomfilters,main/tracking-protection-lists,main/anti-tracking-url-decoration,main/hijack-blocklists,main/fxmonitor-breaches,main/language-dictionaries,blocklists/gfx,blocklists/addons,blocklists/plugins,main/moz-essential-domain-fallbacks,main/url-parser-default-unknown-schemes-interventions,main/urlbar-persisted-search-terms,main/devtools-devices,main/devtools-compatibility-browsers,main/ms-images,main/tippytop,main/search-config-icons,main/search-config-v2,main/search-config-overrides-v2,main/search-default-override-allowlist,main/translations-models-v2,main/translations-wasm-v2", locked);
 pref("security.remote_settings.crlite_filters.enabled", false);
@@ -123,6 +124,8 @@ pref("browser.safebrowsing.provider.google4.gethashURL", "", locked);
 pref("browser.safebrowsing.provider.mozilla.updateURL", "", locked);
 pref("browser.safebrowsing.provider.mozilla.gethashURL", "", locked);
 // Unsolicited network checks and speculation
+pref("dom.push.enabled", false);
+pref("dom.push.connection.enabled", false);
 pref("network.captive-portal-service.enabled", false, locked);
 pref("captivedetect.canonicalURL", "", locked);
 pref("network.connectivity-service.enabled", false, locked);
@@ -139,7 +142,11 @@ pref("network.trr.mode", 5);
 pref("network.trr.confirmationNS", "skip");
 pref("browser.send_pings", false, locked);
 // Add-on promos; add-on updates stay for what the user installs
-pref("extensions.getAddons.cache.enabled", false);
+pref("extensions.getAddons.cache.enabled", false, locked);
+pref("extensions.getAddons.get.url", "", locked);
+pref("extensions.getAddons.discovery.api_url", "", locked);
+pref("extensions.getAddons.browserMappings.url", "", locked);
+pref("extensions.getAddons.langpacks.url", "", locked);
 pref("extensions.getAddons.showPane", false, locked);
 pref("extensions.htmlaboutaddons.recommendations.enabled", false, locked);
 pref("extensions.webservice.discoverURL", "", locked);

@@ -573,7 +573,7 @@
     </event>
   </interface>
 
-  <interface name="bande_app_v1" version="9">
+  <interface name="bande_app_v1" version="10">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -748,6 +748,18 @@
         without a full-screen space of its own. It is not listed as a window
         of its own to other clients. Lasts until the window closes. Ignored
         for a toplevel of another client.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+    </request>
+
+    <request name="set_popover" since="10">
+      <description summary="make one of the app's windows a popover at the pointer">
+        Makes the toplevel a transient popover, as Look Up on a Mac: it maps
+        at the pointer, kept inside the usable area, stays in front of other
+        windows and takes the keyboard as usual. It is not listed as a window
+        of its own to other clients and is not saved for resume. Lasts until
+        the window closes. Must be sent before the first commit. Ignored for
+        a toplevel of another client.
       </description>
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
     </request>

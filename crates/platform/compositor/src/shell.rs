@@ -382,7 +382,10 @@ impl State {
                 handle.send_done();
             }
             Some(_) => {}
-            None if self.windows[index].size.is_some() && !self.windows[index].panel => {
+            None if self.windows[index].size.is_some()
+                && !self.windows[index].panel
+                && !self.windows[index].popover =>
+            {
                 let handle = self
                     .globals
                     .foreign_toplevel_state

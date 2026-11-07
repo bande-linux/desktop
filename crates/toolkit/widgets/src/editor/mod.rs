@@ -269,6 +269,11 @@ impl Editor {
         self.slice(self.selection.start(), self.selection.end())
     }
 
+    pub(crate) fn word_at(&mut self, text: &mut TextSystem, point: Point) -> String {
+        let (start, end) = self.unit_at(text, point, Unit::Word);
+        self.slice(start, end)
+    }
+
     pub(crate) fn has_selection(&self) -> bool {
         !self.selection.is_collapsed()
     }

@@ -8,6 +8,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+bande-log.workspace = true
 zbus.workspace = true
 
 [lints]

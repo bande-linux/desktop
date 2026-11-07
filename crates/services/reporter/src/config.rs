@@ -12,6 +12,7 @@ pub struct Config {
     pub ca: Option<PathBuf>,
     pub send: bool,
     pub stack_memory: bool,
+    pub signature_tag: Option<String>,
 }
 
 impl Config {
@@ -48,6 +49,7 @@ impl Config {
                 "ca" => config.ca = Some(PathBuf::from(value)),
                 "send" => config.send = value == "on",
                 "stack_memory" => config.stack_memory = value == "on",
+                "signature_tag" => config.signature_tag = Some(value.to_owned()),
                 _ => {}
             }
         }

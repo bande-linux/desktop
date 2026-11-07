@@ -9,6 +9,10 @@ pub struct Image {
     pub package: Option<String>,
 }
 
+fn readable(symbol: &str) -> String {
+    format!("{:#}", rustc_demangle::demangle(symbol))
+}
+
 pub struct ParsedFrame {
     pub symbol: Option<String>,
     pub module: String,
@@ -68,7 +72,7 @@ fn parse_coredump_frame(line: &str) -> Option<ParsedFrame> {
     let (module, offset) = place.trim_end_matches(')').split_once(" + ")?;
     let symbol = symbol.trim();
     Some(ParsedFrame {
-        symbol: (symbol != "n/a").then(|| symbol.to_owned()),
+        symbol: (symbol != "n/a").then(|| readable(symbol)),
         module: base_name(module).to_owned(),
         offset: u64::from_str_radix(offset.trim_start_matches("0x"), 16).ok()?,
     })
@@ -112,7 +116,7 @@ fn parse_eu_frame(line: &str, images: &mut Vec<Image>) -> Option<ParsedFrame> {
     if let Some(word) = words.peek()
         && *word != "-"
     {
-        symbol = Some((*word).split('+').next().unwrap_or(word).to_owned());
+        symbol = Some(readable((*word).split('+').next().unwrap_or(word)));
         words.next();
     }
     while let Some(word) = words.next() {

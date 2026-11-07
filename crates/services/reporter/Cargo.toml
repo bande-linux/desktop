@@ -12,6 +12,7 @@ bande-log.workspace = true
 flate2.workspace = true
 jiff.workspace = true
 ring.workspace = true
+rustc-demangle.workspace = true
 rustix = { workspace = true, features = ["fs", "net", "stdio"] }
 rustls.workspace = true
 serde_json.workspace = true
@@ -29,6 +30,13 @@ report waits, and waits on network changes rather than polling."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/bande-reporter", "usr/libexec/", "755"],
+    ["target/release/bande-diagnose", "usr/bin/", "755"],
+    ["data/report-failure-system.conf", "usr/lib/systemd/system/bande-.service.d/50-bande-report-failure.conf", "644"],
+    ["data/report-failure-system.conf", "usr/lib/systemd/system/greetd.service.d/50-bande-report-failure.conf", "644"],
+    ["data/report-failure-system.conf", "usr/lib/systemd/system/systemd-suspend.service.d/50-bande-report-failure.conf", "644"],
+    ["data/no-report-failure.conf", "usr/lib/systemd/system/bande-crash-reports@.service.d/50-bande-report-failure.conf", "644"],
+    ["data/report-failure-user.conf", "usr/lib/systemd/user/bande-.service.d/50-bande-report-failure.conf", "644"],
+    ["data/bande-report-failure.service", "usr/lib/systemd/user/", "644"],
     ["data/bande-reporter-send.service", "usr/lib/systemd/system/", "644"],
     ["data/bande-reporter-send.path", "usr/lib/systemd/system/", "644"],
     ["data/bande-reporter.socket", "usr/lib/systemd/system/", "644"],
@@ -36,6 +44,14 @@ assets = [
     ["data/bande-reporter-watch.service", "usr/lib/systemd/system/", "644"],
     ["data/bande-reporter.tmpfiles", "usr/lib/tmpfiles.d/bande-reporter.conf", "644"],
 ]
+
+[[bin]]
+name = "bande-reporter"
+path = "src/main.rs"
+
+[[bin]]
+name = "bande-diagnose"
+path = "src/bin/diagnose.rs"
 
 [lints]
 workspace = true

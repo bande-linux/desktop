@@ -57,7 +57,7 @@ fn invalid(message: impl Into<String>) -> io::Error {
 
 pub fn is_plain_name(name: &str) -> bool {
     !name.is_empty()
-        && name.len() <= 128
+        && name.len() <= 100
         && !name.starts_with('.')
         && name
             .bytes()
@@ -300,6 +300,7 @@ impl Spool {
                 .duration_since(report.stored_at)
                 .unwrap_or(Duration::ZERO);
             report.manifest.get("signature") == Some(signature)
+                && report.status != Status::Rejected
                 && (age < ANY_STATE_WINDOW
                     || (age < UNSENT_WINDOW && report.status == Status::Local))
         })

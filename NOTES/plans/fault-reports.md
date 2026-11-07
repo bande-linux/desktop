@@ -164,6 +164,16 @@ Kind, signature, id, time, OS and package versions, build ids, install id, arch.
 
 File contents, typed text, window titles, clipboard, stack or heap memory (unless the owner's dev config asks). Home path, username, hostname, addresses, SSIDs and serial numbers are scrubbed from every text before storing, and so are file names outside Bande's own, and quoted text in log lines other than short identifiers. Processes that hold passwords stay undumpable: panic text only. `docs/architecture/fault-reports.md` will state this in full.
 
+### Sending by hand, and after a freeze
+
+Settings ▸ General ▸ About ▸ Send Report… runs the same bundle as `bande-diagnose`, shows what will go, takes a short description and sends now or queues. With no server configured it saves a file. `bande-diagnose --send --describe TEXT` does the same from a terminal, and from Recovery as root if the service cannot be reached. The answer names the report id. The bundle always carries the previous boot's evidence: end of its journal, pstore, core dumps, hang snapshots left behind.
+
+During a total freeze nothing runs, so the record is whatever was on disk or in surviving memory before it:
+
+- The journal is fsynced every 15 s instead of 5 minutes (`SyncIntervalSec`), and at once on a critical message. An idle system logs nothing, so nothing is written.
+- The stall thread and hang capture write their first kernel-stack snapshot to the spool and fsync it before anything slower. If the machine dies mid-capture, the next boot finds the partial snapshot and adds it to the report of that boot.
+- Panics and lockups (`softlockup_panic`, `hardlockup_panic`) go to pstore. The hardware watchdog restarts a kernel that stopped scheduling, and such a restart leaves no pstore record, only the journal up to its last sync and the partial snapshots.
+
 ## Stages
 
 1. `fault-reports-reporter`: spool, sender, config, quotas, signature.

@@ -172,7 +172,9 @@ graph LR
   as in Files, `Alt+Up` and `Alt+Down` to move up and into folders, and the last folder
   remembered per app in
   `$XDG_STATE_HOME/bande/file-chooser-folders`. Choices are answered with their initial
-  values, and the dialog is not yet parented to the app window (xdg-foreign).
+  values. The dialog comes up attached to the asking window: `parent_window`'s
+  `wayland:` handle (`zxdg_exporter_v2`, which `bande-app` exports for every window) goes to
+  `xdg_toplevel` by `zxdg_importer_v2` and the dialog is modal through `xdg_dialog_v1`.
 - `org.freedesktop.impl.portal.Access`: the permission questions behind the Screenshot,
   Wallpaper, Camera, Location and Background portals (the frontend exports none of these
   without it). `bande-file-chooser --access` shows an alert with the frontend's title, subtitle
@@ -255,7 +257,7 @@ graph LR
   `ScreenCastBackend` traits. `bande-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Bande`)
   sends every interface to Bande, including `Secret`: only for calls from
   `xdg-desktop-portal` itself, it hands a sandboxed app the 64-byte key it keeps in the
-  keychain under `app_id`; no GTK or GNOME backend is used. Not implemented: Print (Bande has no print dialog), GlobalShortcuts, InputCapture,
+  keychain under `app_id`; no GTK or GNOME backend is used. `Print` (`PreparePrint` shows the Bande print dialog and remembers the choice under a token; `Print` with that token goes straight to `bande-printd`, without one it shows the dialog with the app's PDF as the preview). Not implemented: GlobalShortcuts, InputCapture,
   RemoteDesktop, Clipboard and Usb; Lockdown is the frontend's own default (nothing locked
   down).
 - **Capture lives in the screenshot tool.** The portal process has no Wayland connection: its

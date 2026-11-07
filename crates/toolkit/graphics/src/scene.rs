@@ -88,7 +88,7 @@ impl Shape {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum PathElement {
+pub enum PathElement {
     Move(Point),
     Line(Point),
     Cubic(Point, Point, Point),
@@ -103,6 +103,10 @@ pub struct Path {
 impl Path {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn elements(&self) -> &[PathElement] {
+        &self.elements
     }
 
     pub fn through(points: &[Point]) -> Self {

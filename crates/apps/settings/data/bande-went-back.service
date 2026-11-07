@@ -1,0 +1,12 @@
+[Unit]
+Description=Tell the user at sign-in that the update could not start
+After=graphical-session.target
+ConditionPathExists=/run/bande/went-back
+
+[Service]
+KillMode=process
+Type=oneshot
+ExecStart=/usr/bin/bande-settings --check-updates
+
+[Install]
+WantedBy=bande-session.target

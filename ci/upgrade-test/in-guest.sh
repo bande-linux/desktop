@@ -4,8 +4,9 @@ set -euo pipefail
 old=$1
 new=$2
 user=tester
-export DEBIAN_FRONTEND=noninteractive
+export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8 LANGUAGE=
 failures=0
+trap 'echo "FAILED: stopped at line $LINENO with status $?"' ERR
 
 say() { echo "== $*"; }
 pass() { echo "ok: $*"; }
@@ -31,7 +32,7 @@ wait_until() {
     pass "$what"
 }
 
-pid_of() { pgrep -u "$user" -x "$1" | head -n1; }
+pid_of() { pgrep -u "$user" -o -x "${1:0:15}" || true; }
 running() { [ -n "$(pid_of "$1")" ]; }
 restarted() { local now; now=$(pid_of "$1"); [ -n "$now" ] && [ "$now" != "$2" ]; }
 running_sum() { sha256sum "/proc/$1/exe" | cut -d' ' -f1; }
@@ -130,10 +131,9 @@ wait_until "the lock screen that came back is the session's own build" 5 is_buil
 check "the held lock screen keeps its process name" [ "$(cat "/proc/$(pid_of bande-lock)/comm")" = bande-lock ]
 
 say "PipeWire restarts"
-has_shell_client() { as_user pw-cli list-objects Client 2>/dev/null | grep -q 'application.process.binary = "bande-shell"'; }
+has_shell_client() { as_user pw-dump Client 2>/dev/null | grep -q '"application.process.binary": "bande-shell"'; }
 wait_until "the shell is connected to PipeWire" 30 has_shell_client
 as_user systemctl --user restart pipewire.service
-sleep 1
 wait_until "the shell reconnects to PipeWire" 30 has_shell_client
 
 say "a new app runs on the old compositor"
@@ -149,7 +149,8 @@ if journalctl --user-unit bande-compositor.service --no-pager -q | grep -E 'mess
 fi
 
 if [ "$failures" -ne 0 ]; then
-    journalctl -b --no-pager -q -n 200 | cut -c1-200
+    journalctl -b --no-pager -q | grep -E 'bande-|pipewire|update-finish' | grep -v runuser | tail -n 150 | cut -c1-200
+    cut -c1-200 "$monitor" | tail -n 40
     echo "$failures checks failed"
     exit 1
 fi

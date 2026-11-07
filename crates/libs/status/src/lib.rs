@@ -1,4 +1,5 @@
 pub mod backlight;
+pub mod brightness;
 pub mod captive;
 pub mod clock;
 pub mod clock_app;

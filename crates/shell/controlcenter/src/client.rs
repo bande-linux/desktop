@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use crate::media::{self, Command, Playback, Player, Players};
 use crate::{
     Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, L10N, PANEL_WIDTH, Status,
-    chooser_menu, hud, panel, panel_items, place_beside, scene, slide_from, stepped,
+    chooser_menu, display_title, hud, panel, panel_items, place_beside, scene, slide_from, stepped,
 };
 use accesskit::TreeUpdate;
 use bande_audio::{Audio, Level, Meter, meter_level};
@@ -18,7 +18,8 @@ use bande_inbox::{Inbox, Outbox};
 use bande_network::NetworkManager;
 use bande_notify::client::NotificationCenter;
 use bande_power::logind::own_session;
-use bande_status::backlight::{DisplayLight, KeyboardLight, SYSFS_LEDS};
+use bande_status::backlight::{KeyboardLight, SYSFS_LEDS};
+use bande_status::brightness::{DisplayLevel, LevelRequest, follow_levels, level_requests};
 use bande_status::captive::open_page;
 use bande_status::session::full_name;
 use bande_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
@@ -61,7 +62,9 @@ pub struct ControlCenter {
     bluetooth: Option<Bluetooth>,
     system: Option<Connection>,
     session: Option<Connection>,
-    backlight: Option<DisplayLight>,
+    lights: Vec<DisplayLevel>,
+    light_updates: Inbox<Vec<DisplayLevel>>,
+    light_requests: Option<Sender<LevelRequest>>,
     keyboard_light: Option<KeyboardLight>,
     players: Players,
     player_updates: Inbox<Vec<Player>>,
@@ -268,8 +271,21 @@ impl ControlCenter {
         NotificationCenter::new(self.session.as_ref()?).ok()
     }
 
-    fn brightness(&self) -> Option<f32> {
-        self.backlight.as_ref()?.level()
+    fn set_light(&mut self, connector: String, level: f32) {
+        if let Some(light) = self
+            .lights
+            .iter_mut()
+            .find(|light| light.connector == connector)
+        {
+            light.level = level;
+        }
+        self.request_light(LevelRequest::Set(connector, level));
+    }
+
+    fn request_light(&self, request: LevelRequest) {
+        if let Some(requests) = &self.light_requests {
+            let _ = requests.send(request);
+        }
     }
 
     fn status(&self) -> Status {
@@ -310,7 +326,7 @@ impl ControlCenter {
             volume: output.map(|output| output.level.volume),
             outputs,
             output: output.map(|output| output.name.clone()),
-            brightness: self.brightness(),
+            brightness: self.lights.clone(),
             keyboard_brightness: self.keyboard_light.as_ref().and_then(KeyboardLight::level),
             inputs: snapshot
                 .as_ref()
@@ -447,11 +463,7 @@ impl ControlCenter {
                     report("set the volume", audio.set_level(output, level));
                 }
             }
-            Change::Brightness(level) => {
-                if let (Some(system), Some(backlight)) = (&self.system, &self.backlight) {
-                    report("set the brightness", backlight.set_level(system, level));
-                }
-            }
+            Change::Brightness(connector, level) => self.set_light(connector, level),
             Change::KeyboardBrightness(level) => self.set_keyboard_light(level),
             Change::InputMuted(muted) => {
                 if let Some(audio) = &self.audio
@@ -691,6 +703,7 @@ impl ControlCenter {
         };
         self.listen();
         self.refresh();
+        self.request_light(LevelRequest::Refresh);
         self.shown.jump_to(0.0);
         self.reveal(window, true);
     }
@@ -721,16 +734,28 @@ impl ControlCenter {
         }
     }
 
-    fn brightness_key(&mut self, window: &mut Window, key: BrightnessKey, fine: bool) {
+    fn brightness_key(
+        &mut self,
+        window: &mut Window,
+        key: BrightnessKey,
+        fine: bool,
+        output: &str,
+    ) {
         let up = matches!(key, BrightnessKey::DisplayUp | BrightnessKey::KeyboardUp);
         let hud = match key {
             BrightnessKey::DisplayDown | BrightnessKey::DisplayUp => {
-                let Some(level) = self.brightness() else {
+                let Some(light) = self
+                    .lights
+                    .iter()
+                    .find(|light| light.connector == output)
+                    .or_else(|| self.lights.first())
+                else {
                     return;
                 };
-                let level = stepped(level, up, fine);
-                self.apply(window, Change::Brightness(level));
-                Hud::Display(level)
+                let level = stepped(light.level, up, fine);
+                let title = display_title(light, &self.lights);
+                self.set_light(light.connector.clone(), level);
+                Hud::Display(title, level)
             }
             BrightnessKey::KeyboardDown | BrightnessKey::KeyboardUp => {
                 let Some(level) = self.keyboard_light.as_ref().and_then(KeyboardLight::level)
@@ -835,7 +860,7 @@ impl App for ControlCenter {
                 let placed = place_beside(self.anchor, (width as f32, height as f32), HUD_SIZE);
                 vec![Item::Translate {
                     offset: Point::new(placed.x, placed.y),
-                    items: hud(*shown_hud, &palette, &mut self.text),
+                    items: hud(shown_hud, &palette, &mut self.text),
                 }]
             }
             Mode::Hidden => Vec::new(),
@@ -875,7 +900,9 @@ impl App for ControlCenter {
                 window.request_redraw();
             }
             WindowEvent::VolumeKey { key, fine } => self.volume_key(window, key, fine),
-            WindowEvent::BrightnessKey { key, fine } => self.brightness_key(window, key, fine),
+            WindowEvent::BrightnessKey { key, fine, output } => {
+                self.brightness_key(window, key, fine, &output);
+            }
             WindowEvent::Input(input) => self.input(window, &input),
             WindowEvent::Accessibility(request) => {
                 if let Mode::Panel { ui, .. } = &mut self.mode
@@ -943,11 +970,20 @@ impl App for ControlCenter {
             self.player_updates.fd(),
             self.connected_updates.fd(),
             self.artworks.fd(),
+            self.light_updates.fd(),
         ]
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        if index == 2 {
+        if index == 3 {
+            let Some(lights) = self.light_updates.drain().pop() else {
+                return;
+            };
+            self.lights = lights;
+            if matches!(&self.mode, Mode::Panel { ui, .. } if ui.pointer_captured()) {
+                return;
+            }
+        } else if index == 2 {
             if !self.artwork_loaded() {
                 return;
             }
@@ -1015,6 +1051,18 @@ impl ControlCenter {
     ) -> std::io::Result<Self> {
         let player_updates = Inbox::new()?;
         let connected_updates = Inbox::new()?;
+        let light_updates = Inbox::new()?;
+        let light_requests = session.and_then(|connection| {
+            let outbox = light_updates.outbox();
+            if let Err(error) = follow_levels(connection, move |levels| outbox.send(levels)) {
+                tracing::warn!("cannot follow the brightness: {error}");
+            }
+            level_requests(connection, |error| {
+                tracing::warn!("cannot set the brightness: {error}");
+            })
+            .inspect_err(|error| tracing::warn!("cannot set the brightness: {error}"))
+            .ok()
+        });
         let artworks = Inbox::new()?;
         let artwork_requests = load_artworks(artworks.outbox());
         let refresh = follow_connected(session, system, connected_updates.outbox());
@@ -1046,7 +1094,9 @@ impl ControlCenter {
             audio,
             network: system.map(NetworkManager::new),
             bluetooth: system.map(Bluetooth::new),
-            backlight: DisplayLight::find(),
+            lights: Vec::new(),
+            light_updates,
+            light_requests,
             keyboard_light: KeyboardLight::find(Path::new(SYSFS_LEDS)),
             system: system.cloned(),
             session: session.cloned(),

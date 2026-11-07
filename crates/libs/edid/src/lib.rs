@@ -87,6 +87,19 @@ pub fn identity(make: &str, model: &str, serial: &str) -> String {
         .join(" ")
 }
 
+pub fn display_name(make: &str, model: &str) -> Option<String> {
+    let make = make.trim();
+    let model = model.trim();
+    match (make.is_empty(), model.is_empty()) {
+        (_, true) => None,
+        (true, false) => Some(model.to_owned()),
+        (false, false) if model.to_lowercase().contains(&make.to_lowercase()) => {
+            Some(model.to_owned())
+        }
+        (false, false) => Some(format!("{make} {model}")),
+    }
+}
+
 pub fn distinct_identities(displays: &[(&str, String)]) -> Vec<String> {
     displays
         .iter()

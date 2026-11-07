@@ -480,9 +480,11 @@ impl Dispatch<BandeShellV1, ()> for State {
             bande_shell_v1::Event::BrightnessKey {
                 key: WEnum::Value(key),
                 fine,
+                output,
             } => state.events.push(WindowEvent::BrightnessKey {
                 key,
                 fine: fine != 0,
+                output,
             }),
             bande_shell_v1::Event::MediaKey {
                 key: WEnum::Value(key),

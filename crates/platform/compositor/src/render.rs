@@ -178,6 +178,10 @@ impl FrameOutput for Renderer {
         Ok(Submission::AtVblank)
     }
 
+    fn can_dim(&mut self, _output: &str) -> bool {
+        true
+    }
+
     fn renew_failed_renderer(&mut self) -> Result<bool, RenderError> {
         if !self.vulkan.needs_renewal() {
             return Ok(false);

@@ -142,9 +142,11 @@ writes a hex value, a corner radius or a font name of its own.
     at the window geometry (`set_window_geometry`), so every app looks alike; maximised and
     full-screen windows are square. They act on release inside. A drag on the header or
     the chassis around the sheet moves the window, a double click zooms, a right click opens
-    the window menu. A band from 8 pt outside to 3 pt inside the rounded outline resizes,
-    with corners reaching 24 pt along the edges, and the pointer shows the direction. Tiled
-    windows have the same band, maximised and full-screen windows have none, and full screen hides the header and the inset.
+    the window menu. A band from the rounded outline to 8 pt outside resizes, corner
+    cut-outs included, with corners reaching 32 pt along the edges and 16 pt out diagonally, the part
+    beyond the 8 pt margin being the compositor's, and the pointer shows the direction; nothing inside the outline resizes, so the free space around tabs moves the
+    window. Tiled windows have the same band, a side with no room outside gets its band from
+    the compositor, maximised and full-screen windows have none, and full screen hides the header and the inset.
     `Window::size` and pointer positions are in the content's coordinates: by default the
     content is the sheet and the app draws only into it (clipped to its rounded shape, on the
     `Scene`'s background). An app with a sidebar or toolbar on the frame calls

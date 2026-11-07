@@ -5,9 +5,9 @@ use std::sync::{Arc, OnceLock};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
-use crate::failure::{failed, unexpected};
+use crate::failure::{explained, failed};
 use crate::follow::{Update, Updates, spawn};
-use bande_settings_panes::SettingId;
+use bande_settings_panes::{PaneId, SettingId};
 
 const LOCALE: &str = "org.freedesktop.locale1";
 const LOCALE_PATH: &str = "/org/freedesktop/locale1";
@@ -269,7 +269,10 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             let current = match locale.locale() {
                 Ok(current) => current,
                 Err(error) => {
-                    updates.send(unexpected(error));
+                    updates.send(Update::PaneFailed(
+                        PaneId::LanguageTime,
+                        explained(&error, "service-locale", "locale-read-failed"),
+                    ));
                     continue;
                 }
             };

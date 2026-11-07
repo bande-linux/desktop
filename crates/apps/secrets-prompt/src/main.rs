@@ -399,7 +399,6 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!("{error}");
-            reply("cancel\n");
             ExitCode::FAILURE
         }
     }

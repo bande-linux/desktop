@@ -17,6 +17,7 @@ use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::L10N;
 use crate::about::{About, AboutCommand, follow_about};
+use crate::backup::{BackupCommand, BackupUpdate, follow_backup};
 use crate::battery::{BatteryCommand, BatteryState, follow_battery};
 use crate::brightness::follow_brightness;
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
@@ -72,6 +73,7 @@ pub enum Update {
     DiagnosticsReport(String, String),
     ReportCreated(String),
     ReportSaved(String),
+    Backup(BackupUpdate),
     Time(Option<TimeState>),
     Login(LoginItems),
     Battery(Option<BatteryState>),
@@ -116,6 +118,7 @@ pub enum Command {
     About(AboutCommand),
     Storage(StorageCommand),
     Diagnostics(DiagnosticsCommand),
+    Backup(BackupCommand),
     CopyText(String),
     Time(TimeCommand),
     Login(LoginCommand),
@@ -366,6 +369,7 @@ pub struct Services {
     about: Option<Sender<AboutCommand>>,
     storage: Sender<StorageCommand>,
     diagnostics: Sender<DiagnosticsCommand>,
+    backup: Option<Sender<BackupCommand>>,
     time: Option<Sender<TimeCommand>>,
     login: Sender<LoginCommand>,
     battery: Option<Sender<BatteryCommand>>,
@@ -407,6 +411,7 @@ impl Services {
             about: system.map(|system| follow_about(system, updates.clone())),
             storage: follow_storage(updates.clone()),
             diagnostics: follow_diagnostics(updates.clone()),
+            backup: system.map(|system| follow_backup(system, updates.clone())),
             time: system.map(|system| follow_time(system, updates.clone())),
             login: follow_login_items(updates.clone()),
             battery: system.map(|system| follow_battery(system, updates.clone())),
@@ -454,6 +459,10 @@ impl Services {
                 .is_some_and(|about| about.send(command).is_ok()),
             Command::Storage(command) => self.storage.send(command).is_ok(),
             Command::Diagnostics(command) => self.diagnostics.send(command).is_ok(),
+            Command::Backup(command) => self
+                .backup
+                .as_ref()
+                .is_some_and(|backup| backup.send(command).is_ok()),
             Command::Time(command) => self
                 .time
                 .as_ref()

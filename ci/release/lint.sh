@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 cargo fmt --all --check
+ci/check-l10n.py crates
 cargo clippy --workspace --all-targets --locked -- -D warnings
 
 forbid() {
@@ -23,4 +24,5 @@ if grep -rnE '\.actions\b|Desktop Action|DesktopAction' crates/apps/files/src cr
     exit 1
 fi
 ci/check-apps.sh
+ci/release/check-protocols.py
 echo "lint passed"

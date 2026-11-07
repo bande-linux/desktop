@@ -552,6 +552,63 @@ password-delete-question = Delete “{ $name }”?
 password-delete-warning = The app that saved it will ask for the password again.
 no-reports = Nothing has gone wrong
 report-title = { $program }: { $kind }
+
+backup-not-installed = Backup isn't installed.
+backup-intro = Back up this computer
+backup-intro-detail = Hourly versions, encrypted, on a disk of your choice. The oldest go when the disk fills.
+backup-no-disks = Connect an external disk to back up to.
+backup-use-disk = Use This Disk
+backup-disk-detail = { $size }, { $filesystem }
+backup-new-password = Choose a password for { $disk }
+backup-new-password-detail = Backups run without it. You need it to restore onto another computer, and it can't be recovered.
+backup-password-field = Password
+backup-repeat-password = Type the password again
+backup-repeat-password-field = Same password
+backup-passwords-differ = The passwords don't match. Try again.
+backup-existing-password = { $disk } already has this computer's backups
+backup-existing-password-detail = Enter the password you chose for them to carry on.
+backup-wrong-password = That isn't the password for these backups.
+backup-disk-gone = The disk is no longer connected.
+backup-setup-failed = The disk can't be used for backups.
+backup-preparing = Preparing the disk…
+backup-now = Back Up Now
+backup-pause = Pause
+backup-resume = Resume
+backup-last = Last backup: { $when }
+backup-never = No backup yet
+backup-running = Backing up
+backup-remaining = About { $minutes } min left
+backup-tidying = Removing old versions
+backup-verifying = Checking the backups
+backup-paused = Paused until { $when }
+backup-disk-away = { $disk } isn't connected
+backup-disk-away-detail = Backups carry on when it's back.
+backup-waiting-power = Waiting for power
+backup-waiting-power-detail = Backups carry on when the computer is plugged in.
+backup-disk-row = Backup disk
+backup-disk-free = { $disk }, { $free } free of { $total }
+backup-oldest = Oldest version: { $when }
+backup-versions = { $count ->
+    [one] 1 version kept
+   *[other] { $count } versions kept
+}
+backup-on-battery = Back up on battery
+backup-stop = Stop Using This Disk…
+backup-stop-question = Stop backing up to { $disk }?
+backup-stop-detail = The backups stay on the disk, and can still be restored with their password.
+backup-stop-confirm = Stop Backups
+backup-problem-overdue = No backup for two weeks
+backup-problem-overdue-detail = Connect the backup disk, or resume backups.
+backup-problem-disk-full = The disk is too small
+backup-problem-disk-full-detail = There's no more room, even with the oldest versions removed. Use a larger disk.
+backup-problem-damaged = Damage found on the disk
+backup-problem-damaged-detail = Some older versions were lost. Backups go on, but the disk may be failing.
+backup-problem-cannot-open = Can't open the backups
+backup-problem-cannot-open-detail = They are missing from the disk or use another password. Choose the disk again.
+backup-problem-failing = Backups keep failing
+backup-problem-failing-detail = The last few backups didn't finish. The disk may have a fault.
+backup-today-at = today at { $time }
+backup-date-at = { $date } at { $time }
 report-count = { $count ->
     [0] None
     [one] One report

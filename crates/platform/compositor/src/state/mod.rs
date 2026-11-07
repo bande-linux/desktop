@@ -363,7 +363,7 @@ impl Compositor {
             state,
             session_clients: Vec::new(),
             lock_screen: LockScreen::new(),
-            session_dialog: Summoned::new(crate::session::SHELL),
+            session_dialog: Summoned::new(std::path::Path::new(crate::session::SHELL)),
             socket_name: None,
         })
     }

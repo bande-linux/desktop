@@ -55,6 +55,7 @@ pub enum PaneId {
     SoftwareUpdate,
     Diagnostics,
     SendReport,
+    Backup,
 }
 
 impl PaneId {
@@ -93,6 +94,7 @@ impl PaneId {
         (Self::SoftwareUpdate, "software-update"),
         (Self::Diagnostics, "diagnostics"),
         (Self::SendReport, "send-report"),
+        (Self::Backup, "backup"),
     ];
 
     pub fn group(self) -> Option<Group> {
@@ -118,6 +120,7 @@ impl PaneId {
             | Self::PrivacySecurity
             | Self::Apps
             | Self::LanguageTime
+            | Self::Backup
             | Self::About => Some(Group::System),
             Self::KeyboardShortcuts
             | Self::NightLight
@@ -165,6 +168,7 @@ impl PaneId {
             Self::LanguageTime => "preferences-system-symbolic",
             Self::About => "computer-symbolic",
             Self::Storage => "drive-harddisk-symbolic",
+            Self::Backup => "document-open-recent-symbolic",
             Self::SoftwareUpdate => "view-refresh-symbolic",
             Self::Diagnostics => "dialog-warning-symbolic",
             Self::SendReport => "dialog-warning-symbolic",
@@ -299,6 +303,7 @@ pub enum SettingId {
     LidOnPower,
     AppNotifications,
     SoftwareUpdates,
+    BackupStatus,
     Ethernet,
     EthernetAddress,
     EthernetRouter,
@@ -388,6 +393,7 @@ pub enum List {
     Diagnostics,
     SendReport,
     LargeFiles,
+    Backup,
     Clock,
     TimeZones,
     LoginItems,
@@ -1556,6 +1562,13 @@ fn system_panes() -> Vec<Pane> {
         permission_pane(Permission::ScreenSharing),
         permission_pane(Permission::Location),
         language_time_pane(),
+        pane(
+            PaneId::Backup,
+            vec![section(
+                None,
+                vec![list(SettingId::BackupStatus, "backup-status", List::Backup)],
+            )],
+        ),
         about_pane(),
         pane(
             PaneId::SendReport,

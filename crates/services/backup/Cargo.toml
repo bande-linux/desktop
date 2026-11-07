@@ -1,0 +1,60 @@
+[package]
+name = "bande-backup"
+description = "Bande backups: hourly encrypted versions on an external disk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "bande-backupd"
+path = "src/main.rs"
+
+[[bin]]
+name = "bande-backup-alerts"
+path = "src/bin/alerts.rs"
+
+[[bin]]
+name = "bande-backup-restore"
+path = "src/bin/restore.rs"
+
+[dependencies]
+blocking.workspace = true
+jiff.workspace = true
+rustix = { workspace = true, features = ["fs", "process"] }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+bande-l10n.workspace = true
+bande-log.workspace = true
+bande-notify.workspace = true
+bande-volumes.workspace = true
+bande-xdg.workspace = true
+zbus.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "admin"
+depends = "$auto, restic (>= 0.18), fuse3, systemd (>= 257), dbus-system-bus | dbus, polkitd, udisks2"
+extended-description = """\
+Keeps hourly, daily and weekly versions of the whole computer on an external \
+disk, encrypted with restic, and removes the oldest when the disk fills up. \
+Settings chooses the disk; Files browses and restores past versions; the \
+recovery environment restores the whole system."""
+maintainer-scripts = "debian/"
+assets = [
+    ["target/release/bande-backupd", "usr/libexec/", "755"],
+    ["target/release/bande-backup-restore", "usr/libexec/", "755"],
+    ["target/release/bande-backup-alerts", "usr/libexec/", "755"],
+    ["data/bande-backup-alerts.service", "usr/lib/systemd/user/", "644"],
+    ["data/bande-backup.service", "usr/lib/systemd/system/", "644"],
+    ["data/bande-backup.timer", "usr/lib/systemd/system/", "644"],
+    ["data/org.bande.Backup.conf", "usr/share/dbus-1/system.d/", "644"],
+    ["data/org.bande.Backup.service", "usr/share/dbus-1/system-services/", "644"],
+    ["data/org.bande.backup.policy", "usr/share/polkit-1/actions/", "644"],
+    ["data/90-bande-backup.rules", "usr/lib/udev/rules.d/", "644"],
+]
+
+[lints]
+workspace = true

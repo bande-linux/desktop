@@ -63,8 +63,9 @@ Measured behaviours the design rests on:
   `/run/bande-backup/disk` only during work, so it never blocks eject between runs.
 - **What:** every local filesystem except caches, trash, temp and journals, one-file-system. Excludes
   `CACHEDIR.TAG` folders.
-- **Snapshots:** on btrfs, a read-only snapshot is the source, seen at the same paths, so a backup
-  is one point in time. ext4 reads live files. `fix-update-safety` owns the layout.
+- **Snapshots:** on btrfs, a read-only snapshot in `/.snapshots/home/` (the part of the layout that
+  `fix-update-safety` gives this gap) is the source, seen at the same paths in a private mount
+  namespace, so a backup is one point in time. ext4 reads live files.
 - **Integrity:** daily `check` of 1/30 of the data, so everything is read monthly. Damage: repair,
   tell the person, the next backup stores what's still on the computer again.
 - **Alerts:** `bande-backup-alerts`, a small session service, notifies when the service reports a
@@ -74,9 +75,8 @@ Measured behaviours the design rests on:
   disk, restores one onto a mounted new root, keeping the new root's fstab, crypttab and boot files.
   `fix-first-run` calls it.
 
-## Stages
-1. Service and engine, tested on a VM with real USB unplug.
-2. Settings pane and alerts.
-3. Files.
-4. Recovery restore, btrfs snapshot source.
-5. Later: network location (restic's sftp and rest), erase a blank disk.
+## Left to do
+Service, Settings, alerts, Files and the restore tool are built. Still open:
+- `fix-first-run` calls `bande-backup-restore` from Recovery and adds the package to the image.
+- A network location (restic's sftp and rest), erasing a blank disk, a list of excluded folders,
+  hourly local btrfs snapshots of home while the disk is away.

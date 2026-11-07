@@ -726,6 +726,7 @@ impl SettingsView {
             List::Diagnostics => self.diagnostics_rows(),
             List::SendReport => self.send_report_rows(),
             List::LargeFiles => self.large_file_rows(),
+            List::Backup => self.backup_rows(),
             List::Clock => self.clock_rows(),
             List::TimeZones => self.zone_rows(),
             List::LoginItems => self.login_rows(),

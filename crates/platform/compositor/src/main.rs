@@ -808,6 +808,7 @@ where
             Err(error) => tracing::warn!("the power button cannot sleep: {error}"),
         }
     }
+    let mut keyboard_watch = None;
     let (mut greeter, mut review) = match session {
         Session::User => {
             app.compositor.hold_frames_until(
@@ -820,19 +821,18 @@ where
         Session::Greeter => {
             end_greeter_when_hung(&event_loop.handle())?;
             app.compositor.apply_input_settings(InputSettings::system());
-            match bande_bus::system() {
-                Ok(system) => follow(
-                    &event_loop.handle(),
-                    "the system keyboard",
-                    |sender| {
-                        follow_system_keyboard(&system, move |settings| {
-                            sender.send(settings).is_ok()
-                        })
-                    },
-                    |app, settings| app.compositor.apply_input_settings(settings),
-                )?,
-                Err(error) => tracing::warn!("no system bus: {error}"),
-            }
+            let (sender, changes) = channel::channel();
+            event_loop
+                .handle()
+                .insert_source(changes, |event, _, app: &mut App<O>| {
+                    if let Event::Msg(settings) = event {
+                        app.compositor.apply_input_settings(settings);
+                    }
+                })
+                .map_err(|error| error.to_string())?;
+            keyboard_watch = follow_system_keyboard(move |settings| sender.send(settings).is_ok())
+                .inspect_err(|error| tracing::warn!("cannot follow the keyboard: {error}"))
+                .ok();
             app.compositor.hold_frames_until(
                 Awaited::LoginWindow,
                 app.started,
@@ -850,6 +850,7 @@ where
         Err(error) => tracing::warn!("cannot watch the event loop for stalls: {error}"),
     }
     bande_log::fault::write_session_facts(&app.compositor.session_facts());
+    let _keyboard_watch = keyboard_watch.take();
     let mut timeout = None;
     let mut recovery = FrameRecovery::default();
     let mut frame_error = None;

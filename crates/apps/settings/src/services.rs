@@ -129,6 +129,7 @@ fn run_audio(audio: &Audio, command: AudioCommand) -> Result<(), bande_audio::Er
 }
 
 struct Listening {
+    connection: u64,
     input: String,
     meter: Meter,
 }
@@ -136,7 +137,10 @@ struct Listening {
 fn listen(audio: &Audio, listening: Option<Listening>) -> Option<Listening> {
     let snapshot = audio.snapshot();
     let input = snapshot.default_input()?;
-    if let Some(listening) = listening.filter(|listening| listening.input == input.name) {
+    let current = |listening: &Listening| {
+        listening.connection == snapshot.connection && listening.input == input.name
+    };
+    if let Some(listening) = listening.filter(current) {
         return Some(listening);
     }
     let meter = audio
@@ -144,6 +148,7 @@ fn listen(audio: &Audio, listening: Option<Listening>) -> Option<Listening> {
         .inspect_err(|error| tracing::warn!("no input level: {error}"))
         .ok()?;
     Some(Listening {
+        connection: snapshot.connection,
         input: input.name.clone(),
         meter,
     })
@@ -152,7 +157,7 @@ fn listen(audio: &Audio, listening: Option<Listening>) -> Option<Listening> {
 pub fn follow_audio(updates: Updates) -> Sender<AudioCommand> {
     let (sender, receiver) = mpsc::channel::<AudioCommand>();
     spawn("audio", move || {
-        let audio = match Audio::connect() {
+        let audio = match Audio::start() {
             Ok(audio) => Arc::new(audio),
             Err(error) => {
                 tracing::warn!("no sound settings: {error}");
@@ -166,8 +171,7 @@ pub fn follow_audio(updates: Updates) -> Sender<AudioCommand> {
             loop {
                 let snapshot = watched.changed_since(generation);
                 generation = Some(snapshot.generation);
-                let connected = snapshot.connected;
-                if !feed.send(Update::Audio(Some(snapshot))) || !connected {
+                if !feed.send(Update::Audio(Some(snapshot))) {
                     break;
                 }
             }

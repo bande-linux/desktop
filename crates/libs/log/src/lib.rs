@@ -21,11 +21,20 @@ const HOLDS_PASSWORDS: [&str; 6] = [
     "bande-secrets-prompt",
 ];
 
+fn name_process(identifier: &str) {
+    if let Ok(name) = std::ffi::CString::new(identifier)
+        && let Err(error) = rustix::thread::set_name(&name)
+    {
+        eprintln!("cannot name the process {identifier}: {error}");
+    }
+}
+
 pub fn init(identifier: &str) {
     init_quieting(identifier, &[]);
 }
 
 pub fn init_quieting(identifier: &str, chatty: &[&str]) {
+    name_process(identifier);
     let filter = chatty.iter().fold(
         targets(std::env::var(FILTER_VARIABLE).ok().as_deref()),
         |filter, target| filter.with_target(*target, LevelFilter::WARN),

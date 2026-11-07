@@ -583,14 +583,6 @@
 
     <request name="destroy" type="destructor"/>
 
-    <event name="session_ending" since="9">
-      <description summary="the next quit_requested is because the session ends">
-        Sent just before quit_requested when the session is ending. The user did
-        not choose to close this app's windows, so it should keep what it needs
-        to bring them back, and should not ask about work it can keep.
-      </description>
-    </event>
-
     <event name="quit_requested">
       <description summary="the user asked to quit the app">
         Sent for the shell's Quit item, as Command-Q quits an app on a Mac. The app should
@@ -798,6 +790,14 @@
       </description>
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
       <arg name="tiled" type="uint"/>
+    </event>
+
+    <event name="session_ending" since="9">
+      <description summary="the next quit_requested is because the session ends">
+        Sent just before quit_requested when the session is ending. The user did
+        not choose to close this app's windows, so it should keep what it needs
+        to bring them back, and should not ask about work it can keep.
+      </description>
     </event>
 
     <enum name="offer" since="8">

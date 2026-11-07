@@ -1,0 +1,2 @@
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", ENV{DEVTYPE}=="partition|disk", TEST=="/var/lib/bande-backup/state.json", RUN+="/usr/bin/busctl --system --expect-reply=no call org.bande.Backup /org/bande/Backup org.bande.Backup Wake"
+ACTION=="change", SUBSYSTEM=="power_supply", ATTR{type}=="Mains|USB", ATTR{online}=="1", TEST=="/var/lib/bande-backup/state.json", RUN+="/usr/bin/busctl --system --expect-reply=no call org.bande.Backup /org/bande/Backup org.bande.Backup Wake"

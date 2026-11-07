@@ -255,6 +255,7 @@ ICONS = {
     'org.bande.DiskUtility': disk_utility,
     'org.bande.Calculator': calculator,
     'org.bande.Preview': image_viewer,
+    'org.bande.Player': video_player,
     'org.bande.Launcher': launcher,
     'org.bande.About': about,
     'org.bande.Screenshot': screenshot,

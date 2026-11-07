@@ -1,0 +1,18 @@
+[package]
+name = "bande-pdf"
+description = "Bande PDF output: toolkit scene items to paged, vector PDF with real text"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+bande-graphics.workspace = true
+krilla.workspace = true
+
+[features]
+pages = ["krilla/pdf"]
+
+[lints]
+workspace = true

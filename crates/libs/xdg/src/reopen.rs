@@ -2,12 +2,13 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::entry::{DesktopEntry, Locale, applications, current_desktops, data_dirs};
+use crate::entry::{Locale, applications, current_desktops, data_dirs};
 use crate::identity::find_app;
 
 const REOPEN_FILE: &str = "bande/reopen";
 const RUNNING_FILE: &str = "bande/running";
 const CRASHED_FILE: &str = "bande/crashed";
+const RESUME_FOLDER: &str = "bande/resume";
 
 fn state_file(name: &str) -> Option<PathBuf> {
     crate::state_home().map(|state| state.join(name))
@@ -34,57 +35,76 @@ pub fn set_aside_apps_of_unclean_end(
         return Ok(());
     }
     if reopen.exists() {
+        let _ = fs::remove_file(crashed);
         return fs::remove_file(running);
     }
     fs::rename(running, crashed)
 }
 
-pub fn write_running_apps(file: &Path, apps: &[String]) -> io::Result<()> {
+pub fn running_apps_contents(apps: &[String]) -> String {
     let mut listed = apps.join("\n");
     listed.push('\n');
-    crate::replace_file(file, &listed)
-}
-
-pub fn apps_to_reopen<'a>(entries: &'a [DesktopEntry], running: &[String]) -> Vec<&'a str> {
-    let mut apps = Vec::new();
-    for window_app in running {
-        if let Some(entry) = find_app(entries, window_app)
-            && !apps.contains(&entry.app_id())
-        {
-            apps.push(entry.app_id());
-        }
-    }
-    apps
-}
-
-pub fn remember_apps(file: &Path, apps: &[&str]) -> io::Result<()> {
-    let mut listed = apps.join("\n");
-    listed.push('\n');
-    crate::replace_file(file, listed)
+    listed
 }
 
 pub fn remember_running_apps(file: &Path, running: &[String]) {
+    if let Err(error) = crate::replace_file(file, running_apps_contents(running)) {
+        tracing::warn!("cannot remember the apps to reopen: {error}");
+    }
+}
+
+pub fn reopen_listed_apps(apps: &[String], mut reopening: impl FnMut(&str)) {
     let entries = applications(
         &data_dirs(),
         Locale::from_env().as_ref(),
         &current_desktops(),
     );
-    if let Err(error) = remember_apps(file, &apps_to_reopen(&entries, running)) {
-        tracing::warn!("cannot remember the apps to reopen: {error}");
+    let mut launched = Vec::new();
+    for app in apps {
+        let Some(entry) = find_app(&entries, app) else {
+            continue;
+        };
+        reopening(app);
+        if launched.contains(&entry.app_id()) {
+            continue;
+        }
+        launched.push(entry.app_id());
+        if let Err(error) = crate::launch(entry, None) {
+            tracing::warn!("cannot reopen {app}: {error}");
+        }
+    }
+}
+
+pub fn listed_apps(file: &Path) -> Vec<String> {
+    fs::read_to_string(file)
+        .unwrap_or_default()
+        .lines()
+        .map(str::trim)
+        .filter(|app| !app.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+pub fn forget_saved_windows(apps: &[String]) {
+    let Some(state) = crate::state_home() else {
+        return;
+    };
+    for app in apps {
+        let file = state.join(RESUME_FOLDER).join(app);
+        if let Err(error) = fs::remove_file(&file)
+            && error.kind() != io::ErrorKind::NotFound
+        {
+            tracing::warn!("cannot forget the windows of {app}: {error}");
+        }
     }
 }
 
 pub fn take_apps_to_reopen(file: &Path) -> Vec<String> {
-    let listed = fs::read_to_string(file).unwrap_or_default();
+    let listed = listed_apps(file);
     if let Err(error) = fs::remove_file(file)
         && error.kind() != io::ErrorKind::NotFound
     {
         tracing::warn!("cannot forget the apps to reopen: {error}");
     }
     listed
-        .lines()
-        .map(str::trim)
-        .filter(|app| !app.is_empty())
-        .map(str::to_owned)
-        .collect()
 }

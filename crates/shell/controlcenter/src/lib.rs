@@ -416,7 +416,7 @@ pub fn card(palette: &Palette, rect: Rect, items: &mut Vec<Item>) {
         shape,
         paint: palette.chassis.into(),
     });
-    items.extend(Item::rim(shape, palette));
+    items.push(Item::lit_edge(shape, palette));
 }
 
 pub fn panel_items(ui: &mut Ui, palette: &Palette, rect: Rect) -> Vec<Item> {

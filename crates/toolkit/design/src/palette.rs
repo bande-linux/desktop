@@ -153,6 +153,24 @@ impl Accent {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Highlight {
+    pub top: Color,
+    pub bottom: Color,
+}
+
+impl Highlight {
+    pub const WIDTH: f32 = 0.5;
+    pub const REACH: f32 = 260.0;
+
+    const fn for_scheme(scheme: Scheme) -> [f32; 2] {
+        match scheme {
+            Scheme::Light => [0.90, 0.50],
+            Scheme::Dark => [0.16, 0.05],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Palette {
     pub scheme: Scheme,
     pub chassis: Color,
@@ -162,8 +180,9 @@ pub struct Palette {
     pub field: Color,
     pub raised: Color,
     pub hairline: Color,
-    pub rim: Color,
     pub edge: Color,
+    pub highlight: Highlight,
+    pub contrast: Contrast,
     pub ink: Color,
     pub ink2: Color,
     pub ink3: Color,
@@ -195,11 +214,10 @@ impl Palette {
         let (neutrals, scrim, soft) = match scheme {
             Scheme::Light => (
                 [
-                    neutral(0.938, 0.005),
-                    neutral(0.988, 0.0025),
+                    neutral(0.955, 0.004),
+                    neutral(0.995, 0.001),
                     neutral(1.0, 0.0),
                     neutral(0.905, 0.007),
-                    neutral(0.86, 0.008),
                     neutral(0.86, 0.008),
                     neutral(if increased { 0.62 } else { 0.78 }, 0.008),
                     neutral(0.235, 0.008),
@@ -212,12 +230,11 @@ impl Palette {
             ),
             Scheme::Dark => (
                 [
-                    neutral(0.255, 0.013),
-                    neutral(0.285, 0.012),
-                    neutral(0.335, 0.011),
-                    neutral(0.325, 0.012),
-                    neutral(0.365, 0.012),
-                    neutral(0.42, 0.012),
+                    neutral(0.285, 0.008),
+                    neutral(0.245, 0.008),
+                    neutral(0.33, 0.008),
+                    neutral(0.37, 0.008),
+                    neutral(0.40, 0.008),
                     neutral(if increased { 0.58 } else { 0.47 }, 0.012),
                     neutral(if increased { 0.965 } else { 0.925 }, 0.006),
                     neutral(if increased { 0.86 } else { 0.80 }, 0.012),
@@ -234,13 +251,17 @@ impl Palette {
             overlay,
             well,
             hairline,
-            rim,
             edge,
             ink,
             ink2,
             ink3,
             deep,
         ] = neutrals;
+        let [top, bottom] = Highlight::for_scheme(scheme);
+        let highlight = Highlight {
+            top: Color::WHITE.with_opacity(top),
+            bottom: Color::WHITE.with_opacity(bottom),
+        };
         let signal = accent.color(scheme);
         let fill = accent.fill(scheme);
         let danger = DANGER.fill(scheme);
@@ -252,6 +273,7 @@ impl Palette {
         };
         Self {
             scheme,
+            contrast,
             chassis,
             sheet,
             overlay,
@@ -265,8 +287,8 @@ impl Palette {
                 Scheme::Dark => edge,
             },
             hairline,
-            rim,
             edge,
+            highlight,
             ink,
             ink2,
             ink3,

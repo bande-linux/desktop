@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use bande_graphics::{
     Color, ControlHover, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_WALL_BAND, Rect, ResizeEdge, Scene,
-    Scheme, TextAlign, TitleBar, WalledSides, WindowControl, resize_zone, title_style,
-    walled_resize_zone,
+    Scheme, TextAlign, TitleBar, WalledSides, WindowControl, WindowControls, resize_zone,
+    title_style, walled_resize_zone, window_controls_end,
 };
 use bande_render::{VulkanRenderer, VulkanTexture};
 use smithay::backend::allocator::Fourcc;
@@ -64,6 +64,8 @@ struct Look {
     zoomable: bool,
     alternate: bool,
     menu: Option<bool>,
+    height: i32,
+    over_content: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -91,7 +93,9 @@ pub(crate) struct Decorations {
 
 fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
     let bar = window.title_bar_height();
-    if bar == 0 {
+    let over_content = window.controls_over_content_height();
+    let height = bar.max(over_content);
+    if height == 0 {
         return None;
     }
     let rect = window.geometry()?;
@@ -100,9 +104,14 @@ fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
     if let Some(edge) = resize_band(window, frame, point) {
         return Some(Zone::Resize(edge));
     }
+    if !frame.contains(point) || point.y >= height as f32 {
+        return None;
+    }
     let menu = menu_address(window.surface()).is_some();
-    (frame.contains(point) && point.y < bar as f32)
-        .then(|| WindowControl::at(point, bar as f32, menu).map_or(Zone::TitleBar, Zone::Control))
+    match WindowControl::at(point, height as f32, menu) {
+        Some(control) => Some(Zone::Control(control)),
+        None => (bar > 0).then_some(Zone::TitleBar),
+    }
 }
 
 fn outer_band(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
@@ -371,10 +380,10 @@ impl State {
         }
     }
 
-    pub(crate) fn has_server_side_frames(&self) -> bool {
-        self.windows
-            .iter()
-            .any(|window| window.title_bar_height() > 0)
+    pub(crate) fn has_compositor_controls(&self) -> bool {
+        self.windows.iter().any(|window| {
+            window.title_bar_height() > 0 || window.controls_over_content_height() > 0
+        })
     }
 
     fn alternate_held(&self) -> bool {
@@ -397,13 +406,21 @@ impl State {
         let labels = self.labels.get_mut();
         for (window, scale) in self.windows.iter_mut().zip(scales) {
             let bar = window.title_bar_height();
-            let Some(rect) = window.geometry().filter(|_| bar > 0) else {
+            let height = bar.max(window.controls_over_content_height());
+            let Some(rect) = window.geometry().filter(|_| height > 0) else {
                 window.frame.painted = None;
                 continue;
             };
+            let menu = menu_address(window.surface()).map(|_| window.frame.menus_open);
+            let (title, width) = if bar > 0 {
+                (toplevel_names(window.surface()).0, rect.size.w)
+            } else {
+                let well = window_controls_end(menu.is_some()).ceil() as i32;
+                (String::new(), well.min(rect.size.w))
+            };
             let look = Look {
-                title: toplevel_names(window.surface()).0,
-                width: rect.size.w,
+                title,
+                width,
                 scale: scale.to_bits(),
                 active: key.as_ref() == Some(window.surface()),
                 scheme,
@@ -412,7 +429,9 @@ impl State {
                 zoomed: window.has_state(xdg_toplevel::State::Maximized),
                 zoomable: !window.fixed_size(),
                 alternate,
-                menu: menu_address(window.surface()).map(|_| window.frame.menus_open),
+                menu,
+                height,
+                over_content: bar == 0,
             };
             if window
                 .frame
@@ -422,7 +441,7 @@ impl State {
             {
                 continue;
             }
-            match paint_title_bar(labels, &look, bar, &palette, renderer) {
+            match paint_title_bar(labels, &look, &palette, renderer) {
                 Some(texture) => {
                     window.frame.painted = Some(Painted {
                         look,
@@ -447,36 +466,43 @@ impl Compositor {
 fn paint_title_bar(
     labels: &mut Labels,
     look: &Look,
-    bar: i32,
     palette: &Palette,
     renderer: &mut VulkanRenderer,
 ) -> Option<VulkanTexture> {
-    let title = labels.text().paragraph(
-        &look.title,
-        title_style(palette, look.active),
-        None,
-        TextAlign::Start,
-    );
+    let controls = WindowControls {
+        height: look.height as f32,
+        palette,
+        active: look.active,
+        hover: ControlHover::only(look.hovered),
+        pressed: look
+            .pressed
+            .filter(|pressed| look.hovered == Some(*pressed)),
+        zoomed: look.zoomed,
+        zoomable: look.zoomable,
+        alternate: look.alternate && look.active,
+        menu_open: look.menu,
+    };
+    let items = if look.over_content {
+        controls.items()
+    } else {
+        let title = labels.text().paragraph(
+            &look.title,
+            title_style(palette, look.active),
+            None,
+            TextAlign::Start,
+        );
+        TitleBar {
+            width: look.width as f32,
+            title,
+            controls,
+        }
+        .items()
+    };
     let scene = Scene {
         width: look.width.unsigned_abs(),
-        height: bar.unsigned_abs(),
+        height: look.height.unsigned_abs(),
         background: Color::TRANSPARENT,
-        items: TitleBar {
-            width: look.width as f32,
-            height: bar as f32,
-            title,
-            palette,
-            active: look.active,
-            hover: ControlHover::only(look.hovered),
-            pressed: look
-                .pressed
-                .filter(|pressed| look.hovered == Some(*pressed)),
-            zoomed: look.zoomed,
-            zoomable: look.zoomable,
-            alternate: look.alternate && look.active,
-            menu_open: look.menu,
-        }
-        .items(),
+        items,
     };
     let (rgba, size) = labels.rasterise(&scene, f64::from_bits(look.scale))?;
     renderer
@@ -488,17 +514,13 @@ fn paint_title_bar(
 impl Window {
     pub(crate) fn title_bar_piece(&self, scale: f64) -> Option<Piece> {
         let painted = self.frame.painted.as_ref()?;
-        let bar = self.title_bar_height();
-        if bar == 0 {
-            return None;
-        }
         let texture = (
             f64::from(painted.texture.width()),
             f64::from(painted.texture.height()),
         );
         let size = (
             bande_graphics::pixels(painted.look.width.unsigned_abs(), scale) as i32,
-            bande_graphics::pixels(bar.unsigned_abs(), scale) as i32,
+            bande_graphics::pixels(painted.look.height.unsigned_abs(), scale) as i32,
         );
         let location: Point<i32, Physical> =
             self.location.to_f64().to_physical(scale).to_i32_round();

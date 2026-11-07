@@ -164,7 +164,7 @@ fn window_scene(content: Vec<Item>, palette: &Palette) -> Scene {
             },
         ],
     });
-    items.extend(Item::rim(shape, palette));
+    items.push(Item::lit_edge(shape, palette));
     Scene {
         width: (width + 2.0 * SHADOW) as u32,
         height: (height + 2.0 * SHADOW) as u32,

@@ -18,9 +18,6 @@ Status: started, branch gap-region.
 sometimes moving windows around is hard, like the terminal with two tabs. Dont change how the windows work but the problem is that tha "arrow" to drag out and make the window larger present itself not only on the "edge" and outward but also a few pixels inward. So the little space between the actual tabs and the window edge cant be grabbed, since it will go to the window size changer. Make the size changed only show itself on the edge of the window and a few pixel outward (like today) but not inward. Also windows have rounded corners which is not taken into account making it much harder to "grab" corners to expand both x and y axis at the same time.
 Status: started, branch gap-resize-edges.
 
-In Files i want to be able to drag change coloumn order in the detailed list view. The dragging should be nice and smooth. (can we reuse such draging framework with other bande-native apps in the toolkit? are there more things we should (NOT COULD, SHOULD) share in the toolkit?)
-Status: started, branch gap-files-columns.
-
 Package Installer is stuck on "Install", no matter what i do or how many times i press nothing happens.
 Status: started. Fixed on main: the polkit agent uses polkit's socket-activated helper (Debian's helper is no longer setuid, so every password request failed with no dialog), and the installer reports refusals. Left: the owner runs a real install after the next desktop release and `installer-v0.1.1`; Software still treats `NotAuthorized` as a silent stop.
 
@@ -29,9 +26,6 @@ Status: started, branch gap-shutdown.
 
 ##CHECK THIS## cant write ~ in terminal?
 Status: started, branch gap-terminal-tilde.
-
-super+space opening search popup
-Status: started, branch gap-search-shortcut.
 
 hover over the buttons (close, minimize, maxmimize) in any bande-app only works for close, the maximize gets a weird submeny popup like right click? Review this and make sure that all bande apps are solved and using the same module in the toolkit for this. At the same time also go over the topbar of windows for the toolkit as well and improve it. For example on macos hovering buttons will get a backfill, generally they look nicer, you can grab the window by any "free space" (where there are no buttons or text)
 Status: started, branch gap-titlebar.

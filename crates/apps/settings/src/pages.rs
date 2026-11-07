@@ -1277,9 +1277,6 @@ impl SettingsView {
                 body.push(boxed(Caption::new(Text::new(error, Tone::Muted))));
             }
         }
-        if let Some(message) = &self.message {
-            body.push(boxed(Caption::new(Text::new(message, Tone::Muted))));
-        }
         page.push(boxed(Fade::new(
             boxed(Column::new(PAGE_SPACING, 0.0, body)),
             Rc::clone(&self.crossfade),
@@ -1297,7 +1294,13 @@ impl SettingsView {
         }
     }
 
-    fn page(&mut self, page: Widgets) -> Box<dyn Widget> {
+    fn page(&mut self, mut page: Widgets) -> Box<dyn Widget> {
+        if let Some(failure) = self.failure() {
+            let failure = boxed(Caption::new(
+                Text::new(failure, Tone::Danger).role(TextRole::Callout),
+            ));
+            page.insert(page.len().min(1), failure);
+        }
         let view = ScrollView::shared(
             boxed(Column::new(PAGE_SPACING, PAGE_PADDING, page)),
             Rc::clone(&self.scroll),

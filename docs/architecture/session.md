@@ -331,9 +331,11 @@ graph LR
   files are not read.
 - `libpam-bande-secrets` (`crates/services/secrets-pam`) adds `pam_bande_secrets.so` through
   the pam-auth-update profile `bande-secrets`: `auth` keeps the typed password in PAM data,
-  `session` hands it to the daemon over `/run/user/<uid>/bande-secrets/pam` (peer uid checked
-  on both ends) and waits for the answer, and `password` passes the old and new passwords so
-  `passwd` and Users & Groups re-encrypt the login keychain. The lock screen runs `auth` only,
+  `session` hands it to the daemon over `/run/user/<uid>/bande-secrets/pam` (the module checks
+  the socket belongs to the user, the daemon takes messages only from root) and waits for the
+  answer, and `password` passes the old and new passwords so
+  `passwd` and Users & Groups re-encrypt the login keychain, only when the old password opens
+  it. The lock screen runs `auth` only,
   so it unlocks nothing; as on macOS the login keychain stays unlocked while the screen is
   locked. When the login password does not open the keychain, the next unlock offers to update
   its password or start a new one (the old file is kept).

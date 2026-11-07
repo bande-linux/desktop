@@ -20,7 +20,7 @@ use crate::battery::{BatteryCommand, BatteryState, follow_battery};
 use crate::brightness::follow_brightness;
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
-use crate::failure::{sentence, unexpected};
+use crate::failure::{explained, pane_failed, sentence};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
 use crate::notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
@@ -40,7 +40,7 @@ use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
 use crate::users::{Account, PasswordOutcome, UsersCommand, follow_users};
 use bande_network::import_vpn;
-use bande_settings_panes::{SettingId, Value};
+use bande_settings_panes::{PaneId, SettingId, Value};
 use bande_watch::FolderWatch;
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
@@ -70,7 +70,8 @@ pub enum Update {
     Layouts(Layouts),
     Pointing(PointingDevices),
     InputLevel(f32),
-    Failed(Option<SettingId>, String),
+    Failed(SettingId, String),
+    PaneFailed(PaneId, String),
     Refused(Vec<Privilege>),
     DefaultApps(Vec<DefaultApp>),
     Permissions(Grants),
@@ -303,10 +304,15 @@ pub fn worker(session: &Connection, updates: Updates) -> Sender<Command> {
                     _ => (Ok(()), Vec::new()),
                 };
                 if let Err(error) = result {
-                    updates.send(Update::Failed(
-                        restore.first().copied(),
-                        sentence(&error, "service-desktop"),
-                    ));
+                    updates.send(match restore.first() {
+                        Some(setting) => {
+                            Update::Failed(*setting, sentence(&error, "service-desktop"))
+                        }
+                        None => Update::PaneFailed(
+                            PaneId::Displays,
+                            explained(&error, "service-desktop", "displays-change-failed"),
+                        ),
+                    });
                     updates.send(Update::Values(client.read(&restore)));
                     if let Ok(displays) = client.displays() {
                         updates.send(Update::Displays(displays));
@@ -445,7 +451,11 @@ impl Services {
                 let (session, updates) = (self.connection.clone(), self.updates.clone());
                 spawn("clear-clipboard", move || {
                     if let Err(error) = clear_clipboard(&session) {
-                        updates.send(unexpected(error));
+                        updates.send(pane_failed(
+                            PaneId::PrivacySecurity,
+                            "clipboard-clear-failed",
+                            error,
+                        ));
                     }
                 });
                 true
@@ -454,7 +464,7 @@ impl Services {
                 let (session, updates) = (self.connection.clone(), self.updates.clone());
                 spawn("exclude-folder", move || {
                     if let Err(error) = exclude_folder(&session) {
-                        updates.send(unexpected(error));
+                        updates.send(pane_failed(PaneId::Search, "search-exclude-failed", error));
                     }
                 });
                 true
@@ -476,7 +486,7 @@ impl Services {
                         Err(error) => Err(error.to_string()),
                     };
                     if let Err(error) = imported {
-                        updates.send(Update::Failed(None, error));
+                        updates.send(pane_failed(PaneId::Network, "vpn-import-failed", error));
                     }
                 });
                 true

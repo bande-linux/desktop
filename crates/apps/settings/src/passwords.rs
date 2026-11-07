@@ -2,11 +2,13 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::mpsc::{self, Sender};
 
+use bande_settings_panes::PaneId;
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Button, SearchField, SecureField, Stack, Widget};
 use bande_xdg::{
     DesktopEntry, Locale, app_for_identity, app_name, current_desktops, data_dirs, handlers,
 };
+use futures_lite::{StreamExt, future};
 use zbus::MatchRule;
 use zbus::blocking::{Connection, MessageIterator, Proxy};
 use zbus::message::Type;
@@ -14,7 +16,7 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 use zeroize::Zeroizing;
 
 use crate::L10N;
-use crate::failure::unexpected;
+use crate::failure::{kind, not_responding, unresponsive};
 use crate::follow::{Command, Update, Updates, spawn};
 use crate::forget::Forget;
 use crate::pages::{FIELD_SIZE, Widgets, boxed, muted_row, submit};
@@ -24,6 +26,11 @@ use crate::widgets::{Row, Text, Tone};
 const SECRETS: &str = "org.freedesktop.secrets";
 const SECRETS_PATH: &str = "/org/freedesktop/secrets";
 const SERVICE: &str = "org.freedesktop.Secret.Service";
+const EXTENSION: &str = "org.bande.Secrets";
+const SESSION_INTERFACE: &str = "org.freedesktop.Secret.Session";
+const PROMPT: &str = "org.freedesktop.Secret.Prompt";
+const BUS: &str = "org.freedesktop.DBus";
+const NO_LONGER_OPEN: [&str; 2] = ["IsLocked", "NoSession"];
 const ITEM: &str = "org.freedesktop.Secret.Item";
 const LOGIN: &str = "org.freedesktop.login1";
 const SESSION: &str = "org.freedesktop.login1.Session";
@@ -69,6 +76,18 @@ pub struct Keychain {
 }
 
 type WireSecret = (OwnedObjectPath, Vec<u8>, Vec<u8>, String);
+
+fn keychain_failure(what: &str, error: &zbus::Error) -> Update {
+    tracing::warn!("{what}: {error}");
+    let failure = if unresponsive(error) {
+        not_responding("service-keychain")
+    } else if NO_LONGER_OPEN.contains(&kind(error).as_str()) {
+        L10N.tr("passwords-locked-again")
+    } else {
+        L10N.tr(what)
+    };
+    Update::PaneFailed(PaneId::Passwords, failure)
+}
 
 fn app_of(entries: &[DesktopEntry], attributes: &HashMap<String, String>) -> String {
     if let Some(creator) = attributes.get(CREATOR) {
@@ -121,28 +140,52 @@ impl Client {
     fn reveal(&self) -> zbus::Result<bool> {
         let prompt: OwnedObjectPath = self
             .session
-            .call_method(
-                Some(SECRETS),
-                SECRETS_PATH,
-                Some("org.bande.Secrets"),
-                "Reveal",
-                &(),
-            )?
+            .call_method(Some(SECRETS), SECRETS_PATH, Some(EXTENSION), "Reveal", &())?
             .body()
             .deserialize()?;
-        let proxy = Proxy::new(
-            &self.session,
-            SECRETS,
-            prompt,
-            "org.freedesktop.Secret.Prompt",
-        )?;
-        let mut completed = proxy.receive_signal("Completed")?;
-        proxy.call_method("Prompt", &(""))?;
-        let Some(signal) = completed.next() else {
-            return Ok(false);
-        };
-        let (dismissed, _): (bool, OwnedValue) = signal.body().deserialize()?;
-        Ok(!dismissed)
+        let connection = self.session.inner();
+        zbus::block_on(async {
+            let proxy = zbus::Proxy::new(connection, SECRETS, prompt, PROMPT).await?;
+            let mut completed = proxy.receive_signal("Completed").await?;
+            let bus = zbus::fdo::DBusProxy::new(connection).await?;
+            let mut owners = bus
+                .receive_name_owner_changed_with_args(&[(0, SECRETS)])
+                .await?;
+            proxy.call_method("Prompt", &("",)).await?;
+            let finished = future::race(completed.next(), async {
+                owners.next().await;
+                None
+            })
+            .await;
+            let Some(signal) = finished else {
+                return Err(zbus::Error::Failure("the keychain stopped".to_owned()));
+            };
+            let (dismissed, result): (bool, OwnedValue) = signal.body().deserialize()?;
+            if dismissed && String::try_from(result).is_ok() {
+                return Err(zbus::Error::Failure(
+                    "the keychain prompt failed".to_owned(),
+                ));
+            }
+            Ok(!dismissed)
+        })
+    }
+
+    fn close(self) {
+        let closed = self
+            .session
+            .call_method(Some(SECRETS), SECRETS_PATH, Some(EXTENSION), "Conceal", &())
+            .and_then(|_| {
+                self.session.call_method(
+                    Some(SECRETS),
+                    self.secrets.as_str(),
+                    Some(SESSION_INTERFACE),
+                    "Close",
+                    &(),
+                )
+            });
+        if let Err(error) = closed {
+            tracing::warn!("cannot close the keychain session: {error}");
+        }
     }
 
     fn items(&self) -> zbus::Result<Vec<Saved>> {
@@ -243,6 +286,34 @@ fn follow_lock(system: &Connection, commands: Sender<PasswordCommand>) {
     });
 }
 
+fn follow_owner(session: &Connection, commands: Sender<PasswordCommand>) {
+    let session = session.clone();
+    spawn("keychain-owner", move || {
+        let follow = || -> zbus::Result<()> {
+            let rule = MatchRule::builder()
+                .msg_type(Type::Signal)
+                .sender(BUS)?
+                .interface(BUS)?
+                .member("NameOwnerChanged")?
+                .add_arg(SECRETS)?
+                .build();
+            for message in MessageIterator::for_match_rule(rule, &session, None)? {
+                let stopped = message?
+                    .body()
+                    .deserialize::<(String, String, String)>()
+                    .is_ok_and(|(_, _, owner)| owner.is_empty());
+                if stopped && commands.send(PasswordCommand::Lock).is_err() {
+                    break;
+                }
+            }
+            Ok(())
+        };
+        if let Err(error) = follow() {
+            tracing::warn!("cannot follow the keychain service: {error}");
+        }
+    });
+}
+
 fn follow_items(session: &Connection, commands: Sender<PasswordCommand>) {
     let session = session.clone();
     spawn("keychain-items", move || {
@@ -272,6 +343,7 @@ pub fn follow_passwords(
 ) -> Sender<PasswordCommand> {
     let (sender, receiver) = mpsc::channel();
     follow_items(session, sender.clone());
+    follow_owner(session, sender.clone());
     if let Some(system) = system {
         follow_lock(system, sender.clone());
     }
@@ -281,7 +353,9 @@ pub fn follow_passwords(
         let mut unlocked = false;
         while let Ok(command) = receiver.recv() {
             if command == PasswordCommand::Lock {
-                client = None;
+                if let Some(client) = client.take() {
+                    client.close();
+                }
                 unlocked = false;
                 if !updates.send(Update::Passwords(false, Vec::new())) {
                     break;
@@ -291,16 +365,25 @@ pub fn follow_passwords(
             if command == PasswordCommand::Refresh && !unlocked {
                 continue;
             }
-            let open = match client.take() {
+            let opened = match client.take() {
                 Some(open) => Ok(open),
                 None => Client::open(&session),
             };
-            let open = match open {
+            let open = match opened {
                 Ok(open) => open,
                 Err(error) => {
-                    updates.send(unexpected(error));
+                    unlocked = false;
+                    updates.send(keychain_failure("passwords-unavailable", &error));
+                    updates.send(Update::Passwords(false, Vec::new()));
                     continue;
                 }
+            };
+            let what = match &command {
+                PasswordCommand::Unlock => "passwords-unlock-failed",
+                PasswordCommand::Reveal(_) | PasswordCommand::Copy(_) => "password-read-failed",
+                PasswordCommand::Change(..) => "password-save-failed",
+                PasswordCommand::Delete(_) => "password-delete-failed",
+                PasswordCommand::Refresh | PasswordCommand::Lock => "passwords-list-failed",
             };
             let result = match command {
                 PasswordCommand::Unlock => open.reveal().map(|revealed| unlocked = revealed),
@@ -316,12 +399,16 @@ pub fn follow_passwords(
                 PasswordCommand::Delete(path) => open.delete(&path),
                 PasswordCommand::Refresh | PasswordCommand::Lock => Ok(()),
             };
-            if let Err(error) = result {
-                updates.send(unexpected(error));
+            if let Err(error) = &result {
+                updates.send(keychain_failure(what, error));
+                if NO_LONGER_OPEN.contains(&kind(error).as_str()) {
+                    unlocked = false;
+                }
             }
             let items = match unlocked {
                 true => open.items().unwrap_or_else(|error| {
-                    updates.send(unexpected(error));
+                    unlocked = false;
+                    updates.send(keychain_failure("passwords-list-failed", &error));
                     Vec::new()
                 }),
                 false => Vec::new(),

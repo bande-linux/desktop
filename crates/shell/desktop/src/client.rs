@@ -13,8 +13,8 @@ use crate::confirm::{CONFIRM_EXTENSION_FLAG, FORCE_EJECT, confirm_extension_chan
 use crate::places::{Listing, SETTINGS_FOLDER, Shown, start_lister};
 use crate::{
     Artwork, Bounds, CONFIRM_DELETE_FLAG, DesktopView, EJECT_FAILED_FLAG, Item, Kind, Layer,
-    Layouts, Luma, MenuApp, Request, Selection, WallpaperKey, command, confirm_delete,
-    desktop_menu, icon_bounds, items_menu, layouts_path, parse_layouts, save_layouts,
+    Layouts, Luma, Request, Selection, WallpaperKey, command, confirm_delete, desktop_menu,
+    icon_bounds, items_menu, layouts_path, parse_layouts, save_layouts,
 };
 use accesskit::TreeUpdate;
 use bande_config::{BUS_NAME, BarEdge, Config, OBJECT_PATH, Wallpaper, WallpaperFit};
@@ -35,9 +35,8 @@ use bande_wallpaper::{
     Choice, Fit, Picture, RenderError, Variant, choose, follow, render, render_cached,
 };
 use bande_xdg::{
-    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, OCTET_STREAM, UserDir, cache_home, config_home,
-    data_dirs, file_uri, find_icon, launch, launch_with, launch_with_arguments, path_from_file_uri,
-    user_dir,
+    Apps, DIRECTORY, DesktopEntry, ICON_THEMES, UserDir, cache_home, config_home, data_dirs,
+    file_uri, find_icon, launch, launch_with, launch_with_arguments, path_from_file_uri, user_dir,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -468,43 +467,23 @@ impl DesktopSurface {
         }
     }
 
-    fn common_mime(&self, paths: &[PathBuf]) -> String {
-        let mimes: Vec<String> = paths
-            .iter()
-            .map(
-                |path| match self.view.desktop().item(path).map(|item| item.kind) {
-                    Some(Kind::Folder | Kind::Volume) => DIRECTORY.to_owned(),
-                    _ => self.apps.borrow().mime_for(path),
-                },
-            )
-            .collect();
-        match mimes.split_first() {
-            Some((first, rest)) if rest.iter().all(|mime| mime == first) => first.clone(),
-            _ => OCTET_STREAM.to_owned(),
-        }
-    }
-
     fn context_menu(&mut self, window: &mut Window, at: Point, on_items: bool) {
         let menu = if on_items {
             let selected = self.view.desktop().selected();
-            let mime = self.common_mime(&selected);
+            let kinds = selected
+                .iter()
+                .filter_map(|path| self.view.desktop().item(path).map(|item| item.kind))
+                .collect::<Vec<_>>();
+            let apps = self.apps.borrow();
             let selection = Selection {
                 count: selected.len(),
-                kinds: selected
-                    .iter()
-                    .filter_map(|path| self.view.desktop().item(path).map(|item| item.kind))
-                    .collect(),
-                picture: mime.starts_with("image/"),
-                apps: self
-                    .apps
-                    .borrow()
-                    .apps_for(&mime)
-                    .into_iter()
-                    .map(|entry| MenuApp {
-                        id: entry.id.clone(),
-                        name: entry.name.clone(),
-                    })
-                    .collect(),
+                picture: matches!(selected.as_slice(), [path]
+                    if kinds == [Kind::File] && apps.mime_for(path).starts_with("image/")),
+                apps: match kinds.iter().all(|kind| *kind == Kind::File) {
+                    true => apps.open_with_choices(&selected),
+                    false => Vec::new(),
+                },
+                kinds,
             };
             items_menu(&selection)
         } else {
@@ -681,11 +660,10 @@ impl DesktopSurface {
                 }
                 Request::ContextMenu { at, on_items } => self.context_menu(window, at, on_items),
                 Request::OpenWith { app, paths } => {
-                    let mime = self.common_mime(&paths);
                     let app = self
                         .apps
                         .borrow()
-                        .apps_for(&mime)
+                        .apps_for_files(&paths)
                         .into_iter()
                         .find(|entry| entry.id == app)
                         .cloned();

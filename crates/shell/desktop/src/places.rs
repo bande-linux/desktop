@@ -105,7 +105,11 @@ fn read_item(
     kind_hint: Option<Kind>,
     show_extensions: bool,
 ) -> Item {
-    let metadata = fs::metadata(&path).ok();
+    let metadata =
+        match kind_hint == Some(Kind::Volume) || bande_volumes::leads_to_connected_volume(&path) {
+            true => None,
+            false => fs::metadata(&path).ok(),
+        };
     let is_dir = metadata.as_ref().is_some_and(fs::Metadata::is_dir);
     let kind = kind_hint.unwrap_or(if is_dir { Kind::Folder } else { Kind::File });
     let mime = match kind {

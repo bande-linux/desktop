@@ -1,3 +1,4 @@
+use bande_inbox::Inbox;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
@@ -26,7 +27,7 @@ use bande_volumes::{
     EjectFailure, SavedServer, mounted_volumes, on_connected_volume, quick_is_dir, volume_icon,
 };
 
-use crate::servers::ServerRequest;
+use crate::servers::{ServerDone, ServerRequest, ServersSeen};
 use crate::sidebar::with_nearby;
 use bande_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
 
@@ -69,6 +70,7 @@ enum Source {
     Loader,
     Thumbnails,
     Index,
+    ServerWork,
     Job(usize),
 }
 
@@ -175,6 +177,7 @@ const ARCHIVE_UTILITY_DESKTOP_ID: &str = "org.bande.ArchiveUtility.desktop";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
+    ForgetServer(String),
     Compose {
         app: Box<DesktopEntry>,
         arguments: Vec<String>,
@@ -262,7 +265,6 @@ pub struct FilesView {
     pub(crate) tabs: Vec<TabSlot>,
     pub(crate) active_tab: usize,
     pub(crate) strip: TabStrip,
-    pub(crate) window_active: bool,
     pub(crate) sheet_cancel: Option<WidgetId>,
     pub(crate) size: (f32, f32),
     pub(crate) quick_look: Option<QuickLookLink>,
@@ -295,7 +297,12 @@ pub struct FilesView {
     pub(crate) mounted: Vec<PathBuf>,
     media: Vec<PathBuf>,
     pub(crate) server_token: u64,
+    pub(crate) server_work: Option<Inbox<ServerDone>>,
+    pub(crate) free_on_server: Option<(PathBuf, u64)>,
+    pub(crate) next_refresh: Option<Instant>,
+    pub(crate) window_active: bool,
     nearby: Vec<(String, String)>,
+    pub(crate) unresponsive: Vec<PathBuf>,
     pub(crate) sheet_primary: Option<WidgetId>,
     pub(crate) favourites: Vec<Row>,
     watch: FolderWatch,
@@ -365,6 +372,8 @@ fn pasted_paths(text: &str) -> Vec<PathBuf> {
         .collect()
 }
 
+const UNRESPONSIVE_ICON: &str = "dialog-warning";
+
 impl FilesView {
     pub fn new(
         browser: Browser,
@@ -409,7 +418,6 @@ impl FilesView {
             tabs: vec![TabSlot::shown()],
             active_tab: 0,
             strip: TabStrip::new(),
-            window_active: true,
             sheet_cancel: None,
             size: (0.0, 0.0),
             quick_look: None,
@@ -442,7 +450,12 @@ impl FilesView {
             mounted: Vec::new(),
             media: Vec::new(),
             server_token: 0,
+            server_work: Inbox::new().ok(),
+            free_on_server: None,
+            next_refresh: None,
+            window_active: true,
             nearby: Vec::new(),
+            unresponsive: Vec::new(),
             sheet_primary: None,
             favourites: Vec::new(),
             watch: FolderWatch::new()?,
@@ -513,12 +526,18 @@ impl FilesView {
             .cloned()
             .collect::<Vec<_>>();
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-        let rows = with_volumes(sidebar, &shown, |volume| volume_icon(&mountinfo, volume));
+        let rows = with_volumes(sidebar, &shown, |volume| {
+            match self.unresponsive.iter().any(|known| known == volume) {
+                true => UNRESPONSIVE_ICON,
+                false => volume_icon(&mountinfo, volume),
+            }
+        });
         with_nearby(&rows, &self.nearby)
     }
 
-    pub fn set_nearby(&mut self, nearby: Vec<(String, String)>) {
-        self.nearby = nearby;
+    pub fn set_nearby(&mut self, seen: ServersSeen) {
+        self.nearby = seen.nearby;
+        self.unresponsive = seen.unresponsive;
         self.sidebar = self.with_volumes(&self.favourites, &self.mounted);
         self.menu_place = None;
     }
@@ -566,7 +585,7 @@ impl FilesView {
         if !active {
             self.close_quick_look();
         }
-        self.window_active = active;
+        self.server_window_active(active);
         self.ui.set_window_active(active)
     }
 
@@ -784,6 +803,11 @@ impl FilesView {
         sources.extend(self.thumbs.fd().map(|fd| (Source::Thumbnails, fd)));
         sources.extend(self.search_index_fd().map(|fd| (Source::Index, fd)));
         sources.extend(
+            self.server_work
+                .iter()
+                .map(|inbox| (Source::ServerWork, inbox.fd())),
+        );
+        sources.extend(
             self.operations
                 .fds()
                 .into_iter()
@@ -811,6 +835,7 @@ impl FilesView {
             Source::Loader => self.loaded(),
             Source::Thumbnails => self.thumbs.take(),
             Source::Index => self.search_results(),
+            Source::ServerWork => self.server_work_done(),
             Source::Job(job) => match self.operations.poll(job) {
                 Some(finished) => {
                     self.finished(finished);
@@ -867,6 +892,7 @@ impl FilesView {
             self.operations.deadline(),
             self.notice.as_ref().map(|(_, shown)| *shown + NOTICE_TIME),
             self.pending_rename.as_ref().map(|(due, _)| *due),
+            self.refresh_due(),
             self.drop
                 .as_ref()
                 .zip(self.spring_delay)
@@ -878,6 +904,7 @@ impl FilesView {
     }
 
     pub fn tick(&mut self, now: Instant) -> bool {
+        self.refresh_if_due(now);
         let changes = self.watch.take_changed(now);
         if !changes.is_empty() {
             self.apply_changes(&changes);
@@ -1018,16 +1045,21 @@ impl FilesView {
             .into_iter()
             .cloned()
             .collect::<Vec<_>>();
-        let metadata = match entries.as_slice() {
-            [entry] if entry.trashed.is_none() && !on_connected_volume(&entry.path) => {
-                std::fs::symlink_metadata(&entry.path).ok()
+        let (mode, owned) = match entries.as_slice() {
+            [entry] if entry.trashed.is_none() && on_connected_volume(&entry.path) => {
+                (entry.mode, entry.owned)
             }
-            _ => None,
+            [entry] if entry.trashed.is_none() => {
+                let metadata = std::fs::symlink_metadata(&entry.path).ok();
+                (
+                    metadata.as_ref().map(|metadata| metadata.mode()),
+                    metadata.as_ref().is_some_and(|metadata| {
+                        metadata.uid() == rustix::process::getuid().as_raw()
+                    }),
+                )
+            }
+            _ => (None, false),
         };
-        let mode = metadata.as_ref().map(|metadata| metadata.mode());
-        let owned = metadata
-            .as_ref()
-            .is_some_and(|metadata| metadata.uid() == rustix::process::getuid().as_raw());
         let previous = self.info.take();
         if previous.as_ref().is_none_or(|info| info.entries != entries) {
             self.inspector_scroll = ScrollState::default();
@@ -2056,7 +2088,15 @@ impl FilesView {
     }
 
     pub(crate) fn rename_to(&mut self, path: &Path, name: &str) {
-        match bande_fs::rename(path, name) {
+        if on_connected_volume(path) {
+            self.rename_on_server(path.to_path_buf(), name.to_owned());
+            return;
+        }
+        self.renamed(bande_fs::rename(path, name), name);
+    }
+
+    pub(crate) fn renamed(&mut self, result: Result<Option<Change>, RenameError>, name: &str) {
+        match result {
             Ok(Some(change)) => {
                 if let Change::Moved { to, .. } = &change {
                     self.reveal_after_change(std::slice::from_ref(to));
@@ -2118,18 +2158,19 @@ impl FilesView {
         let Some(template) = self.templates.as_ref().map(|folder| folder.join(name)) else {
             return;
         };
-        match bande_fs::new_document(&folder, &template) {
-            Ok(change) => {
-                if let Change::Created(path) = &change {
-                    self.reveal_after_change(std::slice::from_ref(path));
-                }
-                self.operations.record(Action::NewDocument, vec![change]);
-                self.start_rename();
-            }
-            Err(error) => self.show_notice(
-                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
-            ),
+        if on_connected_volume(&folder) {
+            self.on_server(move || {
+                ServerDone::Created(
+                    Action::NewDocument,
+                    bande_fs::new_document(&folder, &template),
+                )
+            });
+            return;
         }
+        self.created(
+            Action::NewDocument,
+            bande_fs::new_document(&folder, &template),
+        );
     }
 
     pub(crate) fn open_in_terminal(&mut self) {
@@ -2147,12 +2188,22 @@ impl FilesView {
             return;
         };
         let folder = self.browser.current_folder().unwrap_or(folder);
-        match bande_fs::new_folder(&folder) {
+        if on_connected_volume(&folder) {
+            self.on_server(move || {
+                ServerDone::Created(Action::NewFolder, bande_fs::new_folder(&folder))
+            });
+            return;
+        }
+        self.created(Action::NewFolder, bande_fs::new_folder(&folder));
+    }
+
+    pub(crate) fn created(&mut self, action: Action, result: io::Result<Change>) {
+        match result {
             Ok(change) => {
                 if let Change::Created(path) = &change {
                     self.reveal_after_change(std::slice::from_ref(path));
                 }
-                self.operations.record(Action::NewFolder, vec![change]);
+                self.operations.record(action, vec![change]);
                 self.start_rename();
             }
             Err(error) => self.show_notice(
@@ -2187,8 +2238,26 @@ impl FilesView {
         if self.browser.in_trash() {
             return;
         }
+        let selected = self.browser.selected_paths();
+        if selected.iter().any(|path| on_connected_volume(path)) {
+            self.on_server(move || {
+                let mut changes = Vec::new();
+                let mut failure = None;
+                for path in &selected {
+                    match bande_fs::make_alias(path) {
+                        Ok(change) => changes.push(change),
+                        Err(error) => {
+                            failure = Some(error);
+                            break;
+                        }
+                    }
+                }
+                ServerDone::Changed(Action::MakeAlias, changes, failure)
+            });
+            return;
+        }
         let mut changes = Vec::new();
-        for path in self.browser.selected_paths() {
+        for path in selected {
             match bande_fs::make_alias(&path) {
                 Ok(change) => changes.push(change),
                 Err(error) => {

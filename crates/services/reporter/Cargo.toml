@@ -1,0 +1,38 @@
+[package]
+name = "bande-reporter"
+description = "Bande fault reports: keeps a local report of each fault and sends it if sending is switched on"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+bande-log.workspace = true
+flate2.workspace = true
+jiff.workspace = true
+ring.workspace = true
+rustix = { workspace = true, features = ["fs", "net"] }
+rustls.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "misc"
+depends = "$auto, systemd (>= 257), init-system-helpers (>= 1.66)"
+extended-description = """\
+Keeps a small report of each fault in a root-only folder. Reports leave the \
+computer only if sending is switched on and a server is configured; nothing is \
+configured by default. Between faults no process runs: sending starts when a \
+report waits, and waits on network changes rather than polling."""
+maintainer-scripts = "debian/"
+assets = [
+    ["target/release/bande-reporter", "usr/libexec/", "755"],
+    ["data/bande-reporter-send.service", "usr/lib/systemd/system/", "644"],
+    ["data/bande-reporter-send.path", "usr/lib/systemd/system/", "644"],
+    ["data/bande-reporter.tmpfiles", "usr/lib/tmpfiles.d/bande-reporter.conf", "644"],
+]
+
+[lints]
+workspace = true

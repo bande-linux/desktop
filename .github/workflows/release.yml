@@ -102,6 +102,11 @@ jobs:
           name: bande-debs-${{ matrix.arch }}
           path: target/debian/*.deb
           if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bande-debug-symbols-${{ matrix.arch }}
+          path: target/debian-symbols/*.deb
+          if-no-files-found: error
 
   deb-all:
     runs-on: ubuntu-24.04

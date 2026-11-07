@@ -3,6 +3,8 @@ apt/restart-services usr/libexec/bande-desktop/
 apt/50bande-restart-services etc/apt/apt.conf.d/
 systemd/zram-generator.conf.d usr/lib/systemd/
 systemd/system.conf.d usr/lib/systemd/
+systemd/user.conf.d usr/lib/systemd/
+systemd/coredump.conf.d usr/lib/systemd/
 sysctl.d usr/lib/
 systemd/system/dev-zram0.device.d usr/lib/systemd/system/
 systemd/system/user.slice.d usr/lib/systemd/system/

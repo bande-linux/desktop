@@ -77,7 +77,7 @@ impl StartFolder {
         let existing = |folder: Option<&Path>| {
             Location::Folder(
                 folder
-                    .filter(|folder| folder.is_dir())
+                    .filter(|folder| bande_volumes::quick_is_dir(folder))
                     .unwrap_or(home)
                     .to_path_buf(),
             )

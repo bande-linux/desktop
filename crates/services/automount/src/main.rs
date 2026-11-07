@@ -27,6 +27,7 @@ fn main() -> ExitCode {
         let automounter = Automounter::start(&system, &session)?;
         let mounts = Mounts::start(&session)?;
         automounter.follow_devices(Devices::start(mounts.clone()));
+        mounts.follow_alerts();
         mounts.reconnect_saved();
         Ok((automounter, session))
     });

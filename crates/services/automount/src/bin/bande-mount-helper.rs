@@ -2,15 +2,20 @@ use std::fs;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, chown};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
+use std::time::{Duration, Instant};
 
 use bande_volumes::{mounted, system_mounts_root};
+use rustix::mount::{UnmountFlags, unmount};
 
 const CIFS: &str = "/usr/sbin/mount.cifs";
 const DAVFS: &str = "/usr/sbin/mount.davfs";
-const UMOUNT: &str = "/usr/bin/umount";
+const NFS: &str = "/usr/sbin/mount.nfs";
+const NFS_MOUNT: &str = "softerr,softreval,timeo=30,retrans=2,retry=0,nosuid,nodev";
 const DAVFS_CONF: &str = "/usr/share/bande/bande-davfs2.conf";
+const DETACH_LIMIT: Duration = Duration::from_secs(3);
+const DETACH_CHECK: Duration = Duration::from_millis(50);
 const SOFT_MOUNT: &str = "soft,echo_interval=5,actimeo=1";
-const UNMOUNTABLE: [&str; 3] = ["cifs", "smb3", "fuse"];
+const UNMOUNTABLE: [&str; 5] = ["cifs", "smb3", "fuse", "nfs", "nfs4"];
 
 fn fail(message: &str) -> ExitCode {
     eprintln!("{message}");
@@ -97,6 +102,27 @@ fn mount_cifs(uid: u32, gid: u32, unc: &str, point: &Path, user: &str, port: &st
     run(command, password.as_deref())
 }
 
+fn mount_nfs(source: &str, point: &Path, port: &str) -> ExitCode {
+    let port = match port.is_empty() {
+        true => String::new(),
+        false => format!(",port={port}"),
+    };
+    let attempt = |extra: &str| {
+        let mut command = Command::new(NFS);
+        command
+            .arg(source)
+            .arg(point)
+            .arg("-o")
+            .arg(format!("{NFS_MOUNT}{port},{extra}"))
+            .stdin(Stdio::null());
+        run(command, None)
+    };
+    match attempt("vers=4") {
+        ExitCode::SUCCESS => ExitCode::SUCCESS,
+        _ => attempt("vers=3,local_lock=all"),
+    }
+}
+
 fn mount_davfs(uid: u32, gid: u32, url: &str, point: &Path) -> ExitCode {
     let mut command = Command::new(DAVFS);
     command.arg(url).arg(point).arg("-o").arg(format!(
@@ -124,6 +150,9 @@ fn mount(uid: u32, arguments: &[String]) -> ExitCode {
             .strip_prefix("//")
             .and_then(|rest| rest.split_once('/'))
             .is_some_and(|(server, share)| host(server) && plain(share) && !share.contains('/')),
+        "nfs" => source.split_once(":/").is_some_and(|(server, path)| {
+            host(server) && !path.chars().any(|c| c.is_control() || c == ',')
+        }),
         "davfs" => {
             (source.starts_with("http://") || source.starts_with("https://")) && plain(source)
         }
@@ -138,12 +167,34 @@ fn mount(uid: u32, arguments: &[String]) -> ExitCode {
     };
     let code = match kind.as_str() {
         "cifs" => mount_cifs(uid, gid, source, &point, user, port),
+        "nfs" => mount_nfs(source, &point, port),
         _ => mount_davfs(uid, gid, source, &point),
     };
     if code != ExitCode::SUCCESS {
         let _ = fs::remove_dir(&point);
     }
     code
+}
+
+fn force_unmount(point: &Path) {
+    let detaching = point.to_owned();
+    let spawned = std::thread::Builder::new().spawn(move || {
+        let flags = UnmountFlags::FORCE | UnmountFlags::DETACH | UnmountFlags::NOFOLLOW;
+        if let Err(error) = unmount(&detaching, flags) {
+            eprintln!("cannot unmount {}: {error}", detaching.display());
+        }
+    });
+    if let Err(error) = spawned {
+        eprintln!("cannot unmount {}: {error}", point.display());
+        return;
+    }
+    let deadline = Instant::now() + DETACH_LIMIT;
+    while Instant::now() < deadline
+        && mounted(&fs::read_to_string("/proc/self/mountinfo").unwrap_or_default())
+            .any(|mount| mount.point == point)
+    {
+        std::thread::sleep(DETACH_CHECK);
+    }
 }
 
 fn unmount_all(uid: u32, name: Option<&str>) -> ExitCode {
@@ -156,13 +207,7 @@ fn unmount_all(uid: u32, name: Option<&str>) -> ExitCode {
         if !wanted {
             continue;
         }
-        let mut command = Command::new(UMOUNT);
-        match mount.fs_type.as_str() {
-            "fuse" => command.arg("-l"),
-            _ => command.args(["-f", "-l"]),
-        };
-        command.arg(&mount.point).stdin(Stdio::null());
-        run(command, None);
+        force_unmount(&mount.point);
         let _ = fs::remove_dir(&mount.point);
     }
     ExitCode::SUCCESS

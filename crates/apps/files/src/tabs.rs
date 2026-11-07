@@ -95,7 +95,7 @@ impl SavedTab {
 
     pub fn still_there(&self) -> bool {
         match &self.location {
-            Location::Folder(folder) => folder.is_dir(),
+            Location::Folder(folder) => bande_volumes::quick_is_dir(folder),
             Location::Trash | Location::Recents | Location::Search(_) => true,
             Location::Server(_) => false,
         }

@@ -6,6 +6,7 @@ mod brightness;
 mod client;
 mod clock;
 mod consent;
+mod crash_reports;
 mod crypt;
 mod defaults;
 mod displays;

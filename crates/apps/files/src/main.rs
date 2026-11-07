@@ -16,8 +16,8 @@ use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder}
 use bande_backup::client::{Browsing, CannotBrowse, open_browser};
 use bande_files::{
     BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, L10N, Location, Request, Row,
-    SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, SavedTab, ServerAnswer, ServerRequest, Show,
-    ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file,
+    SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, SavedTab, ServerAnswer, ServerRequest, ServersSeen,
+    Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file,
     recent_folders_file as recent_folders_file_in, rows, serve_file_manager, settings_view,
     sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks, with_place_shown,
     without_bookmark,
@@ -433,8 +433,8 @@ struct Files {
     backups: Option<Inbox<Result<Browsing, CannotBrowse>>>,
     servers: Option<Inbox<ServerAnswer>>,
     mounts: Option<Inbox<()>>,
-    nearby_inbox: Option<Inbox<Vec<(String, String)>>>,
-    nearby: Vec<(String, String)>,
+    nearby_inbox: Option<Inbox<ServersSeen>>,
+    nearby: ServersSeen,
     recent_folders: Vec<PathBuf>,
     history: Rc<RefCell<History>>,
     trash: Trash,
@@ -1156,6 +1156,27 @@ impl Files {
                     tracing::warn!("cannot show the menu: {error}");
                 }
             }
+            Request::ForgetServer(url) => {
+                let forgotten = std::thread::Builder::new()
+                    .name("forget server".to_owned())
+                    .spawn(move || {
+                        let called = Connection::session().and_then(|session| {
+                            session.call_method(
+                                Some(MOUNTS_SERVICE),
+                                MOUNTS_PATH,
+                                Some(MOUNTS_INTERFACE),
+                                "Forget",
+                                &(&url,),
+                            )
+                        });
+                        if let Err(error) = called {
+                            tracing::warn!("cannot forget {url}: {error}");
+                        }
+                    });
+                if let Err(error) = forgotten {
+                    tracing::warn!("cannot forget a server: {error}");
+                }
+            }
             Request::Compose { app, arguments } => {
                 let token = window.activation_token(app.app_id()).ok();
                 if let Err(error) = launch_with_arguments(&app, &arguments, token.as_deref()) {
@@ -1257,10 +1278,10 @@ impl Program for Files {
                 .ok(),
             mounts: mount_changes(),
             nearby_inbox: nearby_changes(),
-            nearby: Vec::new(),
             backups: Inbox::new()
                 .inspect_err(|error| tracing::warn!("cannot wait for backups: {error}"))
                 .ok(),
+            nearby: ServersSeen::default(),
             ejects: Inbox::new()
                 .inspect_err(|error| tracing::warn!("cannot report eject failures: {error}"))
                 .ok(),
@@ -1506,20 +1527,31 @@ impl Program for Files {
     }
 }
 
-fn nearby_list(session: &Connection) -> Vec<(String, String)> {
+fn mounts_answer<T: serde::de::DeserializeOwned + zbus::zvariant::Type + Default>(
+    session: &Connection,
+    method: &str,
+) -> T {
     session
         .call_method(
             Some(MOUNTS_SERVICE),
             MOUNTS_PATH,
             Some(MOUNTS_INTERFACE),
-            "Nearby",
+            method,
             &(),
         )
         .and_then(|reply| reply.body().deserialize())
         .unwrap_or_default()
 }
 
-fn follow_nearby_servers(outbox: Outbox<Vec<(String, String)>>) -> zbus::Result<()> {
+fn nearby_list(session: &Connection) -> ServersSeen {
+    let unresponsive: Vec<String> = mounts_answer(session, "Unresponsive");
+    ServersSeen {
+        nearby: mounts_answer(session, "Nearby"),
+        unresponsive: unresponsive.into_iter().map(PathBuf::from).collect(),
+    }
+}
+
+fn follow_nearby_servers(outbox: Outbox<ServersSeen>) -> zbus::Result<()> {
     let session = Connection::session()?;
     let rule = MatchRule::builder()
         .msg_type(message::Type::Signal)
@@ -1534,7 +1566,7 @@ fn follow_nearby_servers(outbox: Outbox<Vec<(String, String)>>) -> zbus::Result<
     Ok(())
 }
 
-fn nearby_changes() -> Option<Inbox<Vec<(String, String)>>> {
+fn nearby_changes() -> Option<Inbox<ServersSeen>> {
     let inbox = Inbox::new()
         .inspect_err(|error| tracing::warn!("cannot follow nearby servers: {error}"))
         .ok()?;

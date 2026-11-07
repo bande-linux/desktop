@@ -327,6 +327,9 @@ impl FilesView {
                 if kind == SearchKind::Any && recency == Recency::AnyTime {
                     return true;
                 }
+                if bande_volumes::on_connected_volume(path) {
+                    return true;
+                }
                 let Ok(metadata) = std::fs::metadata(path) else {
                     return false;
                 };

@@ -95,6 +95,11 @@ impl Worker {
 impl Drop for Worker {
     fn drop(&mut self) {
         let _ = self.child.kill();
-        let _ = self.child.wait();
+        let reaped = rustix::process::Pid::from_raw(self.child.id() as i32);
+        let _ = std::thread::Builder::new()
+            .name("reap".to_owned())
+            .spawn(move || {
+                let _ = rustix::process::waitpid(reaped, rustix::process::WaitOptions::empty());
+            });
     }
 }

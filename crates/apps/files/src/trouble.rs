@@ -39,6 +39,7 @@ pub(crate) fn failure_sentence(failure: &Failure) -> String {
         Problem::NameInvalid => L10N.tr("failure-name-invalid"),
         Problem::TooLarge => L10N.tr("failure-too-large"),
         Problem::DeviceGone => L10N.tr("failure-device-gone"),
+        Problem::ServerGone => L10N.tr("failure-server-gone"),
         Problem::DiskError => L10N.tr("failure-disk-error"),
         Problem::Missing => L10N.tr("failure-missing"),
         Problem::Other => L10N.tr_args(
@@ -49,6 +50,9 @@ pub(crate) fn failure_sentence(failure: &Failure) -> String {
 }
 
 fn mount_point(path: &Path) -> PathBuf {
+    if let Some(volume) = bande_volumes::connected_volume_of(path) {
+        return volume;
+    }
     let device = |path: &Path| std::fs::metadata(path).map(|metadata| metadata.dev()).ok();
     let own = device(path);
     path.ancestors()

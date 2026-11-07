@@ -607,6 +607,21 @@ backup-problem-failing = Backups keep failing
 backup-problem-failing-detail = The last few backups didn't finish. The disk may have a fault.
 backup-today-at = today at { $time }
 backup-date-at = { $date } at { $time }
+no-crash-reports = Nothing has crashed
+crash-report-title = { $program }: { $kind }
+crash-report-count = { $count ->
+    [0] None
+    [one] One report
+   *[other] { $count } reports
+}
+crash-report-copy = Copy
+crash-report-delete = Delete
+crash-report-delete-failed = The report could not be deleted.
+crash-kind-crash = Crash
+crash-kind-not-responding = Not responding
+crash-kind-failed = Failed to run
+crash-kind-kernel-panic = Kernel panic
+crash-kind-unexpected-restart = Restart without a clean shutdown
 sharing-remote-login = Remote Login
 sharing-remote-login-detail = Others with an account on this computer can sign in with SSH
 sharing-file-sharing = File Sharing

@@ -404,7 +404,9 @@ pub fn spawn_detached(
     if let Some(token) = activation_token {
         process.env(ACTIVATION_TOKEN, token);
     }
-    if let Some(directory) = working_directory {
+    if let Some(directory) =
+        working_directory.filter(|directory| !bande_volumes::on_connected_volume(directory))
+    {
         process.current_dir(directory);
     }
     unsafe {

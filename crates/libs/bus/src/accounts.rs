@@ -85,3 +85,56 @@ pub fn passwd_name(login: &str) -> Option<String> {
         })
         .filter(|name| !name.is_empty())
 }
+
+const LONGEST_LOGIN: usize = 32;
+
+pub fn suggested_login(full_name: &str) -> String {
+    let mut login = String::new();
+    for character in full_name.to_lowercase().chars() {
+        let folded = match character {
+            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ă' | 'ą' => "a",
+            'æ' => "ae",
+            'ç' | 'ć' | 'č' => "c",
+            'ď' | 'đ' | 'ð' => "d",
+            'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ė' | 'ę' | 'ě' => "e",
+            'ì' | 'í' | 'î' | 'ï' | 'ī' | 'į' | 'ı' => "i",
+            'ł' | 'ľ' | 'ĺ' => "l",
+            'ñ' | 'ń' | 'ň' => "n",
+            'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' | 'ō' | 'ő' => "o",
+            'œ' => "oe",
+            'ř' | 'ŕ' => "r",
+            'ś' | 'š' | 'ş' => "s",
+            'ß' => "ss",
+            'ť' | 'ţ' => "t",
+            'þ' => "th",
+            'ù' | 'ú' | 'û' | 'ü' | 'ū' | 'ů' | 'ű' | 'ų' => "u",
+            'ý' | 'ÿ' => "y",
+            'ź' | 'ż' | 'ž' => "z",
+            character if character.is_ascii_alphanumeric() => {
+                login.push(character);
+                continue;
+            }
+            _ => continue,
+        };
+        login.push_str(folded);
+    }
+    login
+        .trim_start_matches(|character: char| character.is_ascii_digit())
+        .chars()
+        .take(LONGEST_LOGIN)
+        .collect()
+}
+
+pub fn valid_login(login: &str) -> bool {
+    let mut characters = login.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_lowercase() || first == '_')
+        && characters.all(|character| {
+            character.is_ascii_lowercase()
+                || character.is_ascii_digit()
+                || character == '_'
+                || character == '-'
+        })
+        && login.len() <= LONGEST_LOGIN
+}

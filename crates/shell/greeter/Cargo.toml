@@ -16,10 +16,12 @@ serde_json.workspace = true
 tracing.workspace = true
 bande-config.workspace = true
 bande-datetime.workspace = true
+bande-inbox.workspace = true
 bande-keyboard.workspace = true
 bande-l10n.workspace = true
 bande-lock.workspace = true
 bande-log.workspace = true
+bande-network.workspace = true
 bande-status.workspace = true
 bande-toolkit.workspace = true
 zbus.workspace = true
@@ -28,7 +30,7 @@ zeroize.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter, greetd (>= 0.10.3-6), bande-compositor, kbd"
+depends = "$auto, fonts-inter, greetd (>= 0.10.3-6), bande-compositor, kbd, pkexec"
 extended-description = """\
 The login window of the Bande desktop: greetd runs it as its greeter \
 inside bande-compositor --greeter, and it lists the people who can \
@@ -39,6 +41,7 @@ another one is installed."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/bande-greeter", "usr/bin/", "755"],
+    ["target/release/bande-setup", "usr/bin/", "755"],
     ["target/release/bande-display-keeper", "usr/libexec/", "755"],
     ["data/bande-display-keeper@.service", "usr/lib/systemd/system/", "644"],
     ["data/bande-console-fallback.service", "usr/lib/systemd/system/", "644"],

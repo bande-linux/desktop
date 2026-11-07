@@ -36,9 +36,8 @@ pub use devices::Devices;
 pub use pam::{AuthError, authenticate};
 pub use user::{User, current as current_user, display_name};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-lock.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-lock")));
 
 pub const PAM_SERVICE: &str = "bande-lock";
 pub const SHAKE_DURATION: Duration = Duration::from_millis(480);

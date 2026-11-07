@@ -108,6 +108,7 @@ struct Soak {
     expected_crashes: HashSet<u32>,
     findings: Vec<String>,
     samples: Samples,
+    step_growth: BTreeMap<(String, String), (i64, i64)>,
     log: File,
     out: PathBuf,
 }
@@ -135,6 +136,20 @@ fn children_of_self() -> Vec<(String, u32)> {
             let (name, rest) = stat.split_once(" (")?.1.rsplit_once(") ")?;
             let parent: u32 = rest.split_whitespace().nth(1)?.parse().ok()?;
             (parent == own && WATCHED.contains(&name)).then(|| (name.to_owned(), pid))
+        })
+        .collect()
+}
+
+fn long_lived_counts() -> BTreeMap<String, (i64, i64)> {
+    let own = ("compositor".to_owned(), std::process::id());
+    std::iter::once(own)
+        .chain(children_of_self())
+        .filter_map(|(name, pid)| {
+            let point = point_of(pid, 0.0)?;
+            Some((
+                format!("{name}:{pid}"),
+                (point.fds as i64, point.threads as i64),
+            ))
         })
         .collect()
 }
@@ -208,6 +223,7 @@ impl Soak {
             expected_crashes: HashSet::new(),
             findings: Vec::new(),
             samples: Samples::default(),
+            step_growth: BTreeMap::new(),
             log: File::create(out.join("samples.tsv"))?,
             out,
         })
@@ -477,14 +493,26 @@ impl Soak {
         name: &str,
         run: impl FnOnce(&mut Self) -> Result<(), Box<dyn Error>>,
     ) -> Result<(), Box<dyn Error>> {
-        match run(self) {
+        let before = long_lived_counts();
+        let result = match run(self) {
             Ok(()) => Ok(()),
             Err(error) if error.downcast_ref::<RenderError>().is_some() => Err(error),
             Err(error) => {
                 self.finding(format!("{name}: {error}"));
                 Ok(())
             }
+        };
+        for (process, (fds, threads)) in long_lived_counts() {
+            if let Some((old_fds, old_threads)) = before.get(&process) {
+                let added = self
+                    .step_growth
+                    .entry((name.to_owned(), process))
+                    .or_default();
+                added.0 += fds - old_fds;
+                added.1 += threads - old_threads;
+            }
         }
+        result
     }
 
     fn sample(&mut self) -> Result<(), Box<dyn Error>> {
@@ -574,6 +602,15 @@ impl Soak {
             }
             if threads > THREAD_GROWTH_PER_HOUR {
                 self.finding(format!("{name} threads grow {threads:.1}/h"));
+            }
+        }
+        let _ = writeln!(
+            table,
+            "\nfile descriptors and threads each step added, in total:"
+        );
+        for ((step, process), (fds, threads)) in &self.step_growth {
+            if *fds > 0 || *threads > 0 {
+                let _ = writeln!(table, "{step} {process} +{fds} fds +{threads} threads");
             }
         }
         let frames = &self.samples.frame_p99_ms;

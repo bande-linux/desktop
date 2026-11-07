@@ -27,9 +27,8 @@ pub use service::{
 };
 pub use store::{ConfigStore, Loaded, ReloadError};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-config.ftl");
-
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-config")));
 
 pub const SCALE_RANGE: (f64, f64) = (1.0, 3.0);
 const REFRESH_RATE_RANGE: (f64, f64) = (60.0, 240.0);

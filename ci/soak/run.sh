@@ -14,8 +14,8 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
-if dpkg-query -W -f '${db:Status-Status}' bande-lock 2>/dev/null | grep -q '^installed$'; then
-    echo "ci/soak/run.sh is for build machines: this one has the desktop installed" >&2
+if [ ! -e "$HOME/bande-linux/builder-ok" ]; then
+    echo "ci/soak/run.sh is for build machines: it lets any password unlock bande-lock while it runs" >&2
     exit 2
 fi
 
@@ -25,6 +25,15 @@ for package in "${needed[@]}"; do
     [ "$(dpkg-query -W -f '${db:Status-Status}' "$package" 2>/dev/null)" = installed ] || missing+=("$package")
 done
 [ ${#missing[@]} -eq 0 ] || sudo -n apt-get install -y -q --no-install-recommends "${missing[@]}" || exit 2
+restore_pam() {
+    if [ -e /etc/pam.d/bande-lock.before-soak ]; then
+        sudo -n mv /etc/pam.d/bande-lock.before-soak /etc/pam.d/bande-lock
+    else
+        sudo -n rm -f /etc/pam.d/bande-lock
+    fi
+}
+[ ! -e /etc/pam.d/bande-lock ] || sudo -n cp -p /etc/pam.d/bande-lock /etc/pam.d/bande-lock.before-soak || exit 2
+trap restore_pam EXIT
 printf 'auth required pam_permit.so\naccount required pam_permit.so\n' | sudo -n tee /etc/pam.d/bande-lock > /dev/null || exit 2
 
 sudo -n prlimit --core=unlimited:unlimited --pid $$ || exit 2

@@ -1,5 +1,6 @@
 mod about;
 mod arrangement;
+mod backup;
 mod battery;
 mod brightness;
 mod client;
@@ -47,6 +48,7 @@ use std::sync::LazyLock;
 use bande_l10n::Localizer;
 
 pub use about::{About, AboutCommand, chip_name, memory_bytes, static_hostname, system_version};
+pub use backup::{BackupCommand, BackupUpdate};
 pub use bande_settings_panes::{PaneId, SettingId, Value};
 pub use battery::{BatteryCommand, BatteryState, Charge, charge_of, follow_battery};
 pub use client::{CONFIG_SETTINGS, SettingsClient};
@@ -80,7 +82,5 @@ pub use time::{
 pub use view::SettingsView;
 pub use widgets::{bucket_levels, sidebar_width};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-settings.ftl");
-
-pub const TRANSLATIONS: [(&str, &str); 1] = [("en-US", ENGLISH)];
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&TRANSLATIONS));
+pub const TRANSLATIONS: &[(&str, &str)] = bande_l10n::translations!("bande-settings");
+pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(TRANSLATIONS));

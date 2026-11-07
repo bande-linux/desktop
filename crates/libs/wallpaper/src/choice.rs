@@ -163,9 +163,26 @@ pub fn follow(choices: Outbox<Choice>) {
     }
 }
 
+fn kept_on_this_computer(path: &Path) -> std::io::Result<PathBuf> {
+    if !bande_volumes::leads_to_connected_volume(path) {
+        return Ok(path.to_path_buf());
+    }
+    let data = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".local/share")))
+        .ok_or(std::io::ErrorKind::NotFound)?;
+    let folder = data.join("bande/wallpapers");
+    std::fs::create_dir_all(&folder)?;
+    let kept = folder.join(path.file_name().unwrap_or_default());
+    std::fs::copy(path, &kept)?;
+    Ok(kept)
+}
+
 pub fn set(session: &Connection, path: &Path) -> zbus::Result<()> {
     let config = proxy(session)?;
-    let path = path.to_string_lossy();
+    let kept =
+        kept_on_this_computer(path).map_err(|error| zbus::Error::Failure(error.to_string()))?;
+    let path = kept.to_string_lossy();
     config.set_wallpaper_light(&path)?;
     config.set_wallpaper_dark(&path)
 }

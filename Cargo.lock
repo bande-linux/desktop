@@ -482,6 +482,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-backup"
+version = "0.1.7"
+dependencies = [
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-volumes",
+ "bande-xdg",
+ "blocking",
+ "jiff",
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
 name = "bande-bar"
 version = "0.1.7"
 dependencies = [
@@ -574,6 +592,7 @@ dependencies = [
  "bande-test-bus",
  "bande-test-wayland",
  "bande-wallpaper",
+ "bande-watch",
  "bande-widgets",
  "bande-xdg",
  "jiff",
@@ -728,8 +747,10 @@ dependencies = [
  "bande-app",
  "bande-app-menu",
  "bande-app-settings",
+ "bande-backup",
  "bande-config",
  "bande-content",
+ "bande-datetime",
  "bande-fs",
  "bande-inbox",
  "bande-l10n",
@@ -1255,6 +1276,7 @@ dependencies = [
  "bande-app",
  "bande-app-menu",
  "bande-audio",
+ "bande-backup",
  "bande-bluetooth",
  "bande-bus",
  "bande-config",
@@ -1273,6 +1295,7 @@ dependencies = [
  "bande-status",
  "bande-test-bus",
  "bande-toolkit",
+ "bande-volumes",
  "bande-wallpaper",
  "bande-watch",
  "bande-xdg",

@@ -119,7 +119,7 @@ fn mount_nfs(source: &str, point: &Path, port: &str) -> ExitCode {
     };
     match attempt("vers=4") {
         ExitCode::SUCCESS => ExitCode::SUCCESS,
-        _ => attempt("vers=3,local_lock=all"),
+        _ => attempt("vers=3,nolock"),
     }
 }
 
@@ -223,6 +223,12 @@ fn main() -> ExitCode {
         .and_then(|uid| uid.parse::<u32>().ok());
     match (arguments.split_first(), caller) {
         (Some((command, rest)), Some(uid)) if command == "mount" => mount(uid, rest),
+        (Some((command, [])), Some(_)) if command == "quiet-rpcbind" => {
+            let mut stop = Command::new("/usr/bin/systemctl");
+            stop.args(["disable", "--now", "rpcbind.socket", "rpcbind.service"])
+                .stdin(Stdio::null());
+            run(stop, None)
+        }
         (Some((command, [name])), Some(uid)) if command == "unmount" && volume_name(name) => {
             unmount_all(uid, Some(name))
         }

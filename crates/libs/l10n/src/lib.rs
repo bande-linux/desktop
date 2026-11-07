@@ -10,6 +10,32 @@ use unic_langid::LanguageIdentifier;
 const FALLBACK: &str = "en-US";
 const LOCALE_VARIABLES: [&str; 3] = ["LC_ALL", "LC_MESSAGES", "LANG"];
 
+#[macro_export]
+macro_rules! translations {
+    ($domain:literal) => {
+        &[
+            (
+                "en-US",
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/locales/en-US/",
+                    $domain,
+                    ".ftl"
+                )),
+            ),
+            (
+                "sv",
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/locales/sv/",
+                    $domain,
+                    ".ftl"
+                )),
+            ),
+        ]
+    };
+}
+
 pub struct Localizer {
     bundles: Vec<FluentBundle<FluentResource>>,
     reported: Mutex<HashSet<String>>,
@@ -89,6 +115,9 @@ fn bundle(language: LanguageIdentifier, source: &str) -> FluentBundle<FluentReso
         });
     let mut bundle = FluentBundle::new_concurrent(vec![language]);
     bundle.set_use_isolating(false);
+    if let Err(error) = bundle.add_builtins() {
+        tracing::warn!("cannot add the Fluent functions: {error}");
+    }
     if let Err(errors) = bundle.add_resource(resource) {
         tracing::warn!("errors in the translation: {errors:?}");
     }

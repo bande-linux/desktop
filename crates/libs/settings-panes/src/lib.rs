@@ -12,6 +12,5 @@ pub use registry::{
 };
 pub use search::{PaneHit, SettingHit, search};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-settings-panes.ftl");
-
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-settings-panes")));

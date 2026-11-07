@@ -91,9 +91,8 @@ pub type Animated = bande_spring::Animated<Instant>;
 
 use bande_l10n::Localizer;
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-widgets.ftl");
-
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-widgets")));
 
 use bande_graphics::{
     Appearance, Color, ControlSize, Item, Palette, Point, Rect, Scene, TextAlign, TextStyle,

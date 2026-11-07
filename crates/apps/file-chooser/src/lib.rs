@@ -10,6 +10,5 @@ pub use model::{
 };
 pub use view::{ChooserView, Finished, Icons};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-file-chooser.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-file-chooser")));

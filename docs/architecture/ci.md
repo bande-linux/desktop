@@ -147,8 +147,8 @@ Apps in bande-linux/apps are released the same way with `<app>-vX.Y.Z` tags in t
 `ci/soak/run.sh` (`--hours`, `--fuzz-seconds`, `--out`) is what proves stability, and runs on a build machine,
 never as a gate. `bande-soak` (`crates/testing/bench`, not a test) runs the compositor in-process on
 lavapipe with the real shell, lock screen, Files and Settings and cycles through window churn, the overview
-and launcher, a second display with scale changes, lock and unlock (the machine's PAM file for `bande-lock`
-permits any password; the script refuses a machine with the desktop installed), memory pressure and
+and launcher, a second display with scale changes, lock and unlock (for the run, the machine's PAM file for `bande-lock`
+permits any password; the script runs only on a machine with `~/bande-linux/builder-ok`), memory pressure and
 killed apps and shells. After each cycle it samples memory, file descriptors, threads, renderer memory and
 frame times, and flags growth over the second half, a stall over 5 s or a client not answering for 30 s. Lavapipe's GPU
 memory is process memory, so GPU growth shows as RSS; a leak only in Asahi's driver cannot show here. Results go

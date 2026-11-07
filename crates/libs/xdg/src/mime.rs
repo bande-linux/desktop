@@ -476,7 +476,7 @@ impl MimeDatabase {
     }
 
     pub fn for_path(&self, path: &Path) -> String {
-        if bande_volumes::on_connected_volume(path) {
+        if bande_volumes::leads_to_connected_volume(path) {
             let name = path.file_name().unwrap_or_default().to_string_lossy();
             return self.for_name(&name).unwrap_or(OCTET_STREAM).to_owned();
         }

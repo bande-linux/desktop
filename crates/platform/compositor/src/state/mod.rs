@@ -432,9 +432,9 @@ impl Compositor {
         }
     }
 
-    pub fn present_on(&mut self, output: &str, vblank: Vblank) -> io::Result<()> {
+    pub fn present_on(&mut self, output: &str, vblank: Vblank, flipped: bool) -> io::Result<()> {
         match self.state.screen_named(output) {
-            Some(screen) => self.present_screen(screen, vblank),
+            Some(screen) => self.present_screen(screen, vblank, flipped),
             None => Ok(()),
         }
     }
@@ -496,16 +496,21 @@ impl Compositor {
         }
     }
 
-    fn present_screen(&mut self, screen: usize, vblank: Vblank) -> io::Result<()> {
+    fn present_screen(&mut self, screen: usize, vblank: Vblank, flipped: bool) -> io::Result<()> {
         let presented = &mut self.state.screens[screen];
         let refresh = presented.refresh();
+        let kind = if flipped {
+            Kind::Vsync | Kind::HwCompletion
+        } else {
+            Kind::Vsync
+        };
         for feedback in presented.latched_feedback.drain(..) {
             feedback.presented(
                 &presented.output,
                 vblank.time,
                 Refresh::fixed(refresh),
                 vblank.sequence,
-                Kind::Vsync,
+                kind,
             );
         }
         presented.latched_releases.clear();

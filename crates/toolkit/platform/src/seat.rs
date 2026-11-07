@@ -16,7 +16,7 @@ use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1:
 use xkbcommon::xkb::{self, Keycode, Keysym, keysyms};
 
 use crate::compose::{Compose, Step};
-use crate::window::{State, Window, WindowEvent};
+use crate::window::{KeyDetail, State, Window, WindowEvent};
 
 const BTN_LEFT: u32 = 0x110;
 const BTN_RIGHT: u32 = 0x111;
@@ -123,6 +123,7 @@ pub(crate) struct Input {
     keyboard_here: bool,
     focused: bool,
     raw_keys: bool,
+    key_detail: bool,
     cursor_hidden: bool,
 }
 
@@ -339,6 +340,31 @@ impl Input {
         self.repeat = None;
     }
 
+    pub(crate) fn set_key_detail(&mut self, detail: bool) {
+        self.key_detail = detail;
+        self.compose.cancel();
+        self.repeat = None;
+    }
+
+    fn key_detail_event(&self, keycode: Keycode, pressed: bool, repeat: bool) -> Option<KeyDetail> {
+        let keymap = self.keymap.as_ref()?;
+        let layout = keymap.state.key_get_layout(keycode);
+        let base = keymap.keymap.key_get_syms_by_level(keycode, layout, 0);
+        let keysym = keymap.state.key_get_one_sym(keycode);
+        Some(KeyDetail {
+            code: u32::from(keycode) - EVDEV_OFFSET,
+            pressed,
+            repeat,
+            keysym: keysym.raw(),
+            base_keysym: base.first().map_or(keysym.raw(), |sym| sym.raw()),
+            text: match pressed {
+                true => keymap.state.key_get_utf8(keycode),
+                false => String::new(),
+            },
+            modifiers: self.modifiers,
+        })
+    }
+
     pub(crate) fn wl_pointer(&self) -> Option<WlPointer> {
         self.pointer.clone()
     }
@@ -374,6 +400,12 @@ impl Window {
         }
         repeat.next = now + interval;
         let keycode = repeat.keycode;
+        if input.key_detail {
+            if let Some(detail) = input.key_detail_event(keycode, true, true) {
+                self.state.events.push(WindowEvent::KeyDetail(detail));
+            }
+            return;
+        }
         if let Some(event) = input.key_event(keycode) {
             self.state.key_event(event);
         }
@@ -796,6 +828,30 @@ impl Dispatch<WlKeyboard, ()> for State {
                     return;
                 }
                 let keycode = Keycode::new(key + EVDEV_OFFSET);
+                if input.key_detail {
+                    let pressed = key_state == wl_keyboard::KeyState::Pressed;
+                    let repeats = input.repeat_interval.is_some()
+                        && input
+                            .keymap
+                            .as_ref()
+                            .is_some_and(|keymap| keymap.keymap.key_repeats(keycode));
+                    if pressed && repeats {
+                        input.repeat = Some(Repeat {
+                            keycode,
+                            next: Instant::now() + input.repeat_delay,
+                        });
+                    } else if input
+                        .repeat
+                        .as_ref()
+                        .is_some_and(|repeat| repeat.keycode == keycode)
+                    {
+                        input.repeat = None;
+                    }
+                    if let Some(detail) = input.key_detail_event(keycode, pressed, false) {
+                        state.events.push(WindowEvent::KeyDetail(detail));
+                    }
+                    return;
+                }
                 if key_state == wl_keyboard::KeyState::Pressed {
                     input.keyboard_initiated = true;
                     state.press_key(keycode);

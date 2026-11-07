@@ -294,115 +294,129 @@ fn wait(
     Ok(readiness)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wait {
+    Block,
+    Poll,
+}
+
 pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
-    loop {
-        if app.windows().is_empty() {
-            return Ok(());
-        }
-        if deliver(app)? {
-            return Ok(());
-        }
-        for index in 0..app.windows().len() {
-            let frame_drawn = app.windows()[index].wants_frame();
-            if frame_drawn {
-                set_frame_time(app.windows_mut()[index].plan_frame());
-                let scene = app.scene(index);
-                let animating = app.animating(index);
-                let window = &mut app.windows_mut()[index];
-                let path = window.draw(scene)?;
-                window.wake_ui_at(take_wake());
-                if animating {
-                    window.request_redraw();
-                }
-                if path == FramePath::Unchanged && window.wants_redraw() {
-                    window.pace();
-                }
+    while !step_surfaces(app, Wait::Block)? {}
+    Ok(())
+}
+
+pub fn step_surfaces(app: &mut impl Surfaces, blocking: Wait) -> Result<bool, WindowError> {
+    if app.windows().is_empty() {
+        return Ok(true);
+    }
+    if deliver(app)? {
+        return Ok(true);
+    }
+    for index in 0..app.windows().len() {
+        let frame_drawn = app.windows()[index].wants_frame();
+        if frame_drawn {
+            set_frame_time(app.windows_mut()[index].plan_frame());
+            let scene = app.scene(index);
+            let animating = app.animating(index);
+            let window = &mut app.windows_mut()[index];
+            let path = window.draw(scene)?;
+            window.wake_ui_at(take_wake());
+            if animating {
+                window.request_redraw();
             }
-            let area = app.text_input_area(index);
-            app.windows_mut()[index].set_text_input_area(area);
-            if app.windows()[index].accessibility.wants_tree(frame_drawn)
-                && let Some(tree) = app.accessibility(index)
-            {
-                app.windows_mut()[index].publish_accessibility(tree);
+            if path == FramePath::Unchanged && window.wants_redraw() {
+                window.pace();
             }
         }
-        app.windows_mut()[0].flush()?;
-        let mut waiting = false;
-        for window in app.windows_mut() {
-            window.dispatch_pending()?;
-            waiting |= window.has_events();
-        }
-        if waiting {
-            continue;
-        }
-        let Some(guard) = app.windows_mut()[0].queue.prepare_read() else {
-            continue;
-        };
-        let window_deadlines: Vec<Option<Instant>> =
-            app.windows().iter().map(Window::deadline).collect();
-        let app_deadline = app.deadline();
-        let deadline = earliest(
-            app.windows()
-                .iter()
-                .map(|window| window.state.input.repeat_deadline())
-                .chain(window_deadlines.iter().copied())
-                .chain([app_deadline]),
-        );
-        let readiness = wait(app, &guard, deadline)?;
-        if readiness.wayland {
-            read_events(guard)?;
-        } else {
-            drop(guard);
-        }
-        set_frame_time(app.windows()[0].frame_time());
-        for index in readiness.accessibility {
-            let Some(window) = app.windows_mut().get_mut(index) else {
-                continue;
-            };
-            let surface = window.surface.clone();
-            for request in window.accessibility.take_requests() {
-                let Some(index) = position(app, &surface) else {
-                    break;
-                };
-                if !app.windows_mut()[index].perform_window_action(&request) {
-                    app.event(index, WindowEvent::Accessibility(request));
-                }
-            }
-        }
-        if readiness.appearance {
-            let change = app
-                .windows()
-                .first()
-                .and_then(|window| window.appearance.borrow_mut().take_change());
-            if let Some(appearance) = change {
-                for surface in surfaces(app) {
-                    let Some(index) = position(app, &surface) else {
-                        continue;
-                    };
-                    app.windows_mut()[index].request_redraw();
-                    let appearance = app.windows()[index].for_role(appearance);
-                    app.event(index, WindowEvent::AppearanceChanged(appearance));
-                }
-            }
-        }
-        for (index, paste) in readiness.pastes.into_iter().rev() {
-            if let Some(window) = app.windows_mut().get_mut(index) {
-                window.read_transfer(paste);
-            }
-        }
-        for source in readiness.sources {
-            app.source_ready(source);
-        }
-        let now = Instant::now();
-        for (index, deadline) in window_deadlines.into_iter().enumerate() {
-            if deadline.is_some_and(|deadline| deadline <= now)
-                && let Some(window) = app.windows_mut().get_mut(index)
-            {
-                window.tick(now);
-            }
-        }
-        if app_deadline.is_some_and(|deadline| deadline <= now) {
-            app.tick(now);
+        let area = app.text_input_area(index);
+        app.windows_mut()[index].set_text_input_area(area);
+        if app.windows()[index].accessibility.wants_tree(frame_drawn)
+            && let Some(tree) = app.accessibility(index)
+        {
+            app.windows_mut()[index].publish_accessibility(tree);
         }
     }
+    app.windows_mut()[0].flush()?;
+    let mut waiting = false;
+    for window in app.windows_mut() {
+        window.dispatch_pending()?;
+        waiting |= window.has_events();
+    }
+    if waiting {
+        return Ok(false);
+    }
+    let Some(guard) = app.windows_mut()[0].queue.prepare_read() else {
+        return Ok(false);
+    };
+    let window_deadlines: Vec<Option<Instant>> =
+        app.windows().iter().map(Window::deadline).collect();
+    let app_deadline = app.deadline();
+    let deadline = earliest(
+        app.windows()
+            .iter()
+            .map(|window| window.state.input.repeat_deadline())
+            .chain(window_deadlines.iter().copied())
+            .chain([app_deadline]),
+    );
+    let deadline = match blocking {
+        Wait::Block => deadline,
+        Wait::Poll => Some(Instant::now()),
+    };
+    let readiness = wait(app, &guard, deadline)?;
+    if readiness.wayland {
+        read_events(guard)?;
+    } else {
+        drop(guard);
+    }
+    set_frame_time(app.windows()[0].frame_time());
+    for index in readiness.accessibility {
+        let Some(window) = app.windows_mut().get_mut(index) else {
+            continue;
+        };
+        let surface = window.surface.clone();
+        for request in window.accessibility.take_requests() {
+            let Some(index) = position(app, &surface) else {
+                break;
+            };
+            if !app.windows_mut()[index].perform_window_action(&request) {
+                app.event(index, WindowEvent::Accessibility(request));
+            }
+        }
+    }
+    if readiness.appearance {
+        let change = app
+            .windows()
+            .first()
+            .and_then(|window| window.appearance.borrow_mut().take_change());
+        if let Some(appearance) = change {
+            for surface in surfaces(app) {
+                let Some(index) = position(app, &surface) else {
+                    continue;
+                };
+                app.windows_mut()[index].request_redraw();
+                let appearance = app.windows()[index].for_role(appearance);
+                app.event(index, WindowEvent::AppearanceChanged(appearance));
+            }
+        }
+    }
+    for (index, paste) in readiness.pastes.into_iter().rev() {
+        if let Some(window) = app.windows_mut().get_mut(index) {
+            window.read_transfer(paste);
+        }
+    }
+    for source in readiness.sources {
+        app.source_ready(source);
+    }
+    let now = Instant::now();
+    for (index, deadline) in window_deadlines.into_iter().enumerate() {
+        if deadline.is_some_and(|deadline| deadline <= now)
+            && let Some(window) = app.windows_mut().get_mut(index)
+        {
+            window.tick(now);
+        }
+    }
+    if app_deadline.is_some_and(|deadline| deadline <= now) {
+        app.tick(now);
+    }
+    Ok(false)
 }

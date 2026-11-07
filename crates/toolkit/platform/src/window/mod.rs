@@ -2,6 +2,7 @@ mod decorations;
 mod dispatch;
 mod error;
 mod gpu;
+mod hosted;
 mod layer;
 mod menus;
 mod shm;
@@ -44,6 +45,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrL
 pub use self::error::WindowError;
 pub use self::gpu::RENDERER_VARIABLE;
 use self::gpu::{Gpu, start_gpu};
+use self::hosted::Backdrop;
 pub use self::layer::{Edges, KeyboardFocus, LayerKind, LayerOptions};
 use self::layer::{anchor_of, keyboard_interactivity, layer_of};
 pub(crate) use self::shm::{ShmTarget, Target};
@@ -97,11 +99,24 @@ pub enum Role {
         app_id: String,
         tag: String,
     },
+    Hosted {
+        title: String,
+        app_id: String,
+        tag: String,
+    },
     Layer(LayerOptions),
     Lock,
 }
 
 impl Role {
+    pub fn hosted(title: &str, app_id: &str) -> Self {
+        Self::Hosted {
+            title: title.to_owned(),
+            app_id: app_id.to_owned(),
+            tag: String::new(),
+        }
+    }
+
     pub fn toplevel(title: &str, app_id: &str) -> Self {
         Self::Toplevel {
             title: title.to_owned(),
@@ -136,6 +151,7 @@ impl Role {
 
     pub fn tagged(mut self, window_tag: &str) -> Self {
         if let Self::Toplevel { tag, .. }
+        | Self::Hosted { tag, .. }
         | Self::Dialog { tag, .. }
         | Self::Utility { tag, .. }
         | Self::Panel { tag, .. } = &mut self
@@ -218,8 +234,21 @@ pub enum WindowEvent {
     },
     CapsLock(bool),
     Accessibility(ActionRequest),
+    KeyDetail(KeyDetail),
+    HostedResized((u32, u32)),
 
     AppearanceChanged(Appearance),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KeyDetail {
+    pub code: u32,
+    pub pressed: bool,
+    pub repeat: bool,
+    pub keysym: u32,
+    pub base_keysym: u32,
+    pub text: String,
+    pub modifiers: bande_graphics::Modifiers,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -386,6 +415,7 @@ pub struct Window {
     planned: Option<FrameTime>,
     shown_opaque: Option<Opaque>,
     pub(crate) externals: Vec<Weak<RefCell<External>>>,
+    hosted: Option<Backdrop>,
     staged: bool,
     pub(crate) app_cursor: Cursor,
     pub(crate) accessibility: Accessibility,
@@ -417,6 +447,14 @@ impl Window {
             None,
             crate::lock::wanted_output(),
         )
+    }
+
+    pub fn open_with(
+        connection: Connection,
+        role: Role,
+        size: (u32, u32),
+    ) -> Result<Self, WindowError> {
+        Self::on(connection, role, size, None, crate::lock::wanted_output())
     }
 
     pub fn open_beside(&self, role: Role, size: (u32, u32)) -> Result<Self, WindowError> {
@@ -479,14 +517,18 @@ impl Window {
         }
         let mut chrome = None;
         let panel = matches!(role, Role::Panel { .. });
+        let hosted = matches!(role, Role::Hosted { .. });
         let (titled, fixed) = match &role {
             Role::Dialog { .. } => (false, true),
             Role::Utility { .. } => (true, true),
             Role::Panel { .. } => (false, false),
-            Role::Toplevel { .. } | Role::Layer(_) | Role::Lock => (true, false),
+            Role::Toplevel { .. } | Role::Hosted { .. } | Role::Layer(_) | Role::Lock => {
+                (true, false)
+            }
         };
         let role = match role {
             Role::Toplevel { title, app_id, tag }
+            | Role::Hosted { title, app_id, tag }
             | Role::Dialog { title, app_id, tag }
             | Role::Utility { title, app_id, tag }
             | Role::Panel { title, app_id, tag } => {
@@ -523,7 +565,9 @@ impl Window {
                     };
                     fix_size(&toplevel, (width, height));
                 }
-                chrome = Some(Chrome::new(title.to_owned(), titled, fixed));
+                if !hosted {
+                    chrome = Some(Chrome::new(title.to_owned(), titled, fixed));
+                }
                 ShellSurface::Toplevel(xdg_surface, toplevel)
             }
             Role::Layer(options) => {
@@ -586,11 +630,14 @@ impl Window {
             Some(_) => state.scaling.scale(),
             None => 1.0,
         };
-        let gpu = start_gpu(
-            &connection,
-            &surface,
-            (pixels(size.0, scale), pixels(size.1, scale)),
-        );
+        let gpu = match hosted {
+            true => Gpu::Unavailable,
+            false => start_gpu(
+                &connection,
+                &surface,
+                (pixels(size.0, scale), pixels(size.1, scale)),
+            ),
+        };
         if fresh {
             appearance.borrow_mut().wait_for_first_reading();
         }
@@ -623,6 +670,7 @@ impl Window {
             planned: None,
             shown_opaque: None,
             externals: Vec::new(),
+            hosted: hosted.then(Backdrop::default),
             staged: false,
             app_cursor: Cursor::Default,
             accessibility: Accessibility::new()?,
@@ -920,7 +968,8 @@ impl Window {
     }
 
     pub(crate) fn wants_frame(&self) -> bool {
-        self.visible
+        self.hosted.is_none()
+            && self.visible
             && !self.state.frame_pending
             && (self.needs_redraw || self.resized() || self.scale() != self.drawn_scale)
     }
@@ -993,6 +1042,7 @@ impl Window {
     }
 
     pub fn take_events(&mut self) -> Vec<WindowEvent> {
+        self.apply_hosted_configure();
         self.take_arrival();
         self.take_drop();
         self.serve_menus(self.frame_time());
@@ -1522,6 +1572,9 @@ impl Drop for Window {
         self.wait_for_gpu();
         self.gpu = Gpu::Unavailable;
         self.shm_target.destroy();
+        if let Some(backdrop) = self.hosted.take() {
+            backdrop.destroy();
+        }
         match &self.role {
             ShellSurface::Toplevel(xdg_surface, toplevel) => {
                 toplevel.destroy();

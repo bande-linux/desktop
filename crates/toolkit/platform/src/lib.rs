@@ -34,9 +34,9 @@ pub use chrome::{FrameRegions, Header, SHEET_INSET, WINDOW_HEADER_HEIGHT};
 pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer, WindowDrag};
 pub use external::{Dmabuf, DmabufPlane, ExternalSurface, ShmLayout, SurfaceBuffer};
 pub use popup::MenuPlacement;
-pub use run::{App, Surfaces, run, run_surfaces};
+pub use run::{App, Surfaces, Wait, run, run_surfaces, step_surfaces};
 pub use shell::{Anchor, AppWindow};
 pub use window::{
-    ACTIVATION_TOKEN_VARIABLE, Edges, FramePath, KeyboardFocus, LayerKind, LayerOptions,
+    ACTIVATION_TOKEN_VARIABLE, Edges, FramePath, KeyDetail, KeyboardFocus, LayerKind, LayerOptions,
     RENDERER_VARIABLE, Role, Sizing, ToplevelState, Window, WindowError, WindowEvent,
 };

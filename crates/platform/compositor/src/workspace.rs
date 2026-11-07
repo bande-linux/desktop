@@ -96,7 +96,7 @@ impl Workspaces {
         self.settle.is_none() && self.tracker.is_none()
     }
 
-    fn insert(&mut self, index: usize, home: Option<u64>) -> u64 {
+    pub(crate) fn insert(&mut self, index: usize, home: Option<u64>) -> u64 {
         let id = new_space_id();
         self.spaces.insert(index, Space { id, home });
         if index <= self.active {
@@ -451,26 +451,28 @@ impl State {
             self.announce_workspaces();
             return;
         }
-        let screen = self.screen_of(&self.windows[index]);
-        let workspaces = &self.screens[screen].workspaces;
-        let active = workspaces.active_id();
-        let owner = self.windows[index].surface().client();
-        let shares_full_screen = workspaces.is_full_screen(active)
-            && self.windows.iter().enumerate().any(|(other, window)| {
-                other != index
-                    && window.size.is_some()
-                    && window.workspace == active
-                    && window.surface().client() == owner
-            });
-        self.windows[index].workspace = if workspaces.is_full_screen(active) && !shares_full_screen
-        {
-            workspaces.spaces[workspaces.active]
-                .home
-                .filter(|home| workspaces.index_of(*home).is_some())
-                .unwrap_or_else(|| workspaces.spaces[0].id)
-        } else {
-            active
-        };
+        if self.windows[index].resumed.is_none() {
+            let screen = self.screen_of(&self.windows[index]);
+            let workspaces = &self.screens[screen].workspaces;
+            let active = workspaces.active_id();
+            let owner = self.windows[index].surface().client();
+            let shares_full_screen = workspaces.is_full_screen(active)
+                && self.windows.iter().enumerate().any(|(other, window)| {
+                    other != index
+                        && window.size.is_some()
+                        && window.workspace == active
+                        && window.surface().client() == owner
+                });
+            self.windows[index].workspace =
+                if workspaces.is_full_screen(active) && !shares_full_screen {
+                    workspaces.spaces[workspaces.active]
+                        .home
+                        .filter(|home| workspaces.index_of(*home).is_some())
+                        .unwrap_or_else(|| workspaces.spaces[0].id)
+                } else {
+                    active
+                };
+        }
         if self.windows[index].has_state(xdg_toplevel::State::Fullscreen) {
             self.enter_full_screen_space(index);
         }
@@ -548,7 +550,7 @@ impl State {
         let occupied: Vec<u64> = self
             .windows
             .iter()
-            .filter(|window| window.size.is_some())
+            .filter(|window| window.size.is_some() || window.resumed.is_some())
             .map(|window| window.workspace)
             .collect();
         let workspaces = &mut self.screens[screen].workspaces;

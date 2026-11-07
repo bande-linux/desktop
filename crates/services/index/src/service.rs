@@ -117,6 +117,7 @@ pub fn run(home: PathBuf, folder: PathBuf) -> io::Result<()> {
         watcher,
         writer: None,
         written: 0,
+        watch_failed: false,
     };
     thread::Builder::new()
         .name("index-background".to_owned())

@@ -133,3 +133,4 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 ## Printing
 - Browser: no Print yet; the web engine has no paged layout. Calendar prints the month as a list, not its grid. Multiple-copy and media choices are checked against the fake printer only until a real one has printed.
 - USB: `bande-printd` lists `ipp-usb` printers when it looks (dialog or pane opening); no prompt yet when a USB printer is plugged in, and printers that need a vendor driver need a CUPS queue set up by hand.
+- Search index: removable volumes are not indexed (Spotlight keeps an index on the volume); Files walks them for names.

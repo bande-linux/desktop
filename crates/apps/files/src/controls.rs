@@ -6,7 +6,9 @@ use std::rc::Rc;
 use std::time::{Instant, SystemTime};
 
 use accesskit::{Action, ActionRequest, TreeId};
-use bande_fs::{Entry, ExtensionChange, Sort, SortBy, format_date, format_list_date, format_size};
+use bande_fs::{
+    Entry, ExtensionChange, Sort, SortBy, format_date, format_list_date, format_size, is_hidden,
+};
 use bande_toolkit::ui::{
     Alert, Cell, Column, Event, FreeLayout, Key, Menu, MenuItem, Modifiers, Pointer, PointerButton,
     Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField, Toggle, Widget,
@@ -871,7 +873,10 @@ impl FilesView {
                 .unwrap_or_default();
             cells.insert(1, Cell::new(folder).muted());
         }
-        let row = Row::new(key_of(&entry.path), cells);
+        let row = match is_hidden(&entry.name) {
+            true => Row::new(key_of(&entry.path), cells).dimmed(),
+            false => Row::new(key_of(&entry.path), cells),
+        };
         match folder && matches!(self.browser.root(), Location::Folder(_)) {
             true => row.expandable(),
             false => row,

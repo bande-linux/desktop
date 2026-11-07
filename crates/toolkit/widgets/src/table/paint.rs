@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use bande_graphics::{
-    Color, Cut, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
-    TextSystem, shortened,
+    Color, Cut, Item, Palette, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole,
+    TextStyle, TextSystem, shortened,
 };
 
 use super::model::{Cell, Line};
@@ -48,16 +48,20 @@ impl Table {
         &self,
         cx: &Context,
         line: &Line,
+        index: usize,
         column: usize,
         lit: bool,
         widths: &[f32],
     ) -> TextKey {
         let cell = &line.cells[column];
+        let selected = self.selected.get(index).copied().unwrap_or(false);
         let color = match (lit, cell.tint, cell.label, cell.muted) {
             (true, _, _, _) => cx.palette.on_accent,
             (false, Some(tint), _, _) => tint,
             (false, None, true, _) => cx.palette.ink3,
+            (false, None, false, true) if cell.dimmed && !selected => cx.palette.ink3,
             (false, None, false, true) => cx.palette.ink2,
+            (false, None, false, false) if cell.dimmed => cx.palette.ink2,
             (false, None, false, false) => cx.palette.ink,
         };
         let indent = if column == 0 { self.indent(line) } else { 0.0 };
@@ -106,7 +110,7 @@ impl Table {
                 continue;
             };
             for column in 0..line.cells.len().min(self.columns.len()) {
-                let key = self.text_key(cx, line, column, lit, &widths);
+                let key = self.text_key(cx, line, index, column, lit, &widths);
                 if texts.contains_key(&key) {
                     continue;
                 }
@@ -214,7 +218,7 @@ impl Table {
         &self,
         cx: &Context,
         shared: (&HashMap<TextKey, Paragraph>, &[f32]),
-        line: &Line,
+        (line, index): (&Line, usize),
         column: usize,
         (x, y, lit): (f32, f32, bool),
         items: &mut Vec<Item>,
@@ -226,7 +230,7 @@ impl Table {
             text_x += self.indent(line);
         }
         if let Some(icon) = &cell.icon {
-            items.push(Item::Image {
+            let image = Item::Image {
                 rect: Rect::new(
                     text_x,
                     y + (self.row_height() - ICON_SIZE) / 2.0,
@@ -234,10 +238,17 @@ impl Table {
                     ICON_SIZE,
                 ),
                 image: icon.clone(),
+            };
+            items.push(match cell.dimmed {
+                true => Item::Opacity {
+                    alpha: Palette::DIMMED_ALPHA,
+                    items: vec![image],
+                },
+                false => image,
             });
         }
         text_x += self.icon_space(column, cell);
-        let key = self.text_key(cx, line, column, lit, widths);
+        let key = self.text_key(cx, line, index, column, lit, widths);
         let Some(paragraph) = texts.get(&key) else {
             return;
         };
@@ -299,7 +310,14 @@ impl Table {
             };
             let y = body.y + self.row_top(index) - offset;
             let lit = focused && !self.sidebar && self.lit(cx, index);
-            self.paint_cell(cx, (&texts, &widths), line, column, (x, y, lit), &mut rows);
+            self.paint_cell(
+                cx,
+                (&texts, &widths),
+                (line, index),
+                column,
+                (x, y, lit),
+                &mut rows,
+            );
         }
         floating.push(Item::Clip {
             shape: Shape::rect(Rect::new(x, body.y, width, body.height)),

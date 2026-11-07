@@ -5,10 +5,11 @@ use std::rc::Rc;
 
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use bande_files::{Place, Row as SidebarRow};
-use bande_fs::{Entry, SortBy, format_date, format_size};
+use bande_fs::{Entry, SortBy, format_date, format_size, is_hidden};
 use bande_toolkit::ui::{
-    Alert, Axis, Button, Cell, Column, Context, Cursor, Event, Key, Label, Modifiers, PopUpButton,
-    Row, Size, Sort, Stack, TEXT_FIELD_HEIGHT, Table, TextField, Ui, Widget, WidgetId,
+    Alert, Axis, Button, Cell, CheckState, Checkbox, Column, Context, Cursor, Event, Key, Label,
+    Modifiers, PopUpButton, Row, Size, Sort, Stack, TEXT_FIELD_HEIGHT, Table, TextField, Ui,
+    Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, Image, Item, Rect, Scene, Shape, TextSystem};
 use bande_xdg::{OCTET_STREAM, UserDir, config_home, find_icon, user_dir};
@@ -36,6 +37,7 @@ enum Intent {
     Name(String),
     Filter(usize),
     Sort(Sort),
+    ShowHidden(bool),
     NewFolder,
     CreateFolder(String),
     AskGoTo(String),
@@ -49,6 +51,13 @@ type Intents = Rc<RefCell<Vec<Intent>>>;
 
 fn push(intents: &Intents, intent: Intent) {
     intents.borrow_mut().push(intent);
+}
+
+fn hidden_state(show: bool) -> CheckState {
+    match show {
+        true => CheckState::On,
+        false => CheckState::Off,
+    }
 }
 
 fn label(text: &str) -> String {
@@ -433,6 +442,7 @@ pub struct ChooserView {
     icons: Icons,
     intents: Intents,
     files: WidgetId,
+    hidden_toggle: WidgetId,
     focus: WidgetId,
     selected: Vec<PathBuf>,
     back: Vec<PathBuf>,
@@ -498,6 +508,7 @@ impl ChooserView {
             icons,
             intents: Rc::new(RefCell::new(Vec::new())),
             files: WidgetId::next(),
+            hidden_toggle: WidgetId::next(),
             focus: WidgetId::next(),
             selected: Vec::new(),
             back: Vec::new(),
@@ -605,14 +616,18 @@ impl ChooserView {
             true => Cell::new("—").muted(),
             false => Cell::new(format_size(entry.size)).muted(),
         };
-        Row::new(
+        let row = Row::new(
             entry.path.to_string_lossy().into_owned(),
             vec![
                 Cell::new(self.chooser.shown_name(entry)).icon(icon),
                 Cell::new(entry.modified.map(format_date).unwrap_or_default()).muted(),
                 size,
             ],
-        )
+        );
+        match is_hidden(&entry.name) {
+            true => row.dimmed(),
+            false => row,
+        }
     }
 
     fn file_rows(&mut self) -> Vec<Row> {
@@ -648,7 +663,7 @@ impl ChooserView {
         table
     }
 
-    fn tools(&self) -> Stack {
+    fn tools(&mut self) -> Stack {
         let mut tools: Vec<Box<dyn Widget>> = Vec::new();
         let filters: Vec<String> = self
             .chooser
@@ -677,6 +692,14 @@ impl ChooserView {
                 push(&intents, Intent::NewFolder)
             })));
         }
+        let intents = Rc::clone(&self.intents);
+        let hidden = Checkbox::new(
+            &L10N.tr("show-hidden"),
+            hidden_state(self.chooser.shows_hidden()),
+            move |on| push(&intents, Intent::ShowHidden(on)),
+        );
+        self.hidden_toggle = hidden.id();
+        tools.push(Box::new(hidden));
         Stack::new(Axis::Horizontal, GAP, 0.0, tools)
     }
 
@@ -774,6 +797,26 @@ impl ChooserView {
         };
         *slot = Box::new(field);
         self.select_stem(id);
+    }
+
+    fn show_hidden(&mut self, show: bool) {
+        if let Err(error) = self.chooser.set_show_hidden(show) {
+            tracing::warn!("cannot list {}: {error}", self.chooser.folder().display());
+        }
+        let state = hidden_state(self.chooser.shows_hidden());
+        self.ui
+            .update_widget::<Checkbox>(self.hidden_toggle, |checkbox, cx| {
+                checkbox.set_state(cx, state);
+            });
+        self.selected.retain(|path| {
+            show || !path
+                .file_name()
+                .is_some_and(|name| is_hidden(&name.to_string_lossy()))
+        });
+        let rows = self.file_rows();
+        if let Some(table) = self.ui.widget_as::<Table>(self.files) {
+            table.set_rows(rows);
+        }
     }
 
     fn go(&mut self, folder: PathBuf) {
@@ -945,6 +988,7 @@ impl ChooserView {
                             table.set_rows(rows);
                         }
                     }
+                    Intent::ShowHidden(show) => self.show_hidden(show),
                     Intent::NewFolder => self.ui.present_sheet(Prompt::new_folder(&self.intents)),
                     Intent::AskGoTo(text) => {
                         self.ui.present_sheet(Prompt::go_to(&self.intents, &text));
@@ -1031,6 +1075,10 @@ impl ChooserView {
             Key::Character(letter) if control && !alt => {
                 match (letter.to_ascii_lowercase(), shift) {
                     ('l', false) => push(&self.intents, Intent::AskGoTo(self.shown_folder())),
+                    ('h', false) => push(
+                        &self.intents,
+                        Intent::ShowHidden(!self.chooser.shows_hidden()),
+                    ),
                     ('n', true) => push(&self.intents, Intent::NewFolder),
                     ('d', true) => push(
                         &self.intents,

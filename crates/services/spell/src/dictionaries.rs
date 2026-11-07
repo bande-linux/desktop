@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use spellbook::Dictionary;
 
@@ -43,6 +44,14 @@ pub(crate) fn bande_data_home() -> Option<PathBuf> {
     std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::home_dir().map(|home| home.join(".local/share")))
+}
+
+pub(crate) fn data_stamp() -> Vec<Option<SystemTime>> {
+    data_directories()
+        .iter()
+        .flat_map(|directory| [directory.join("hunspell"), directory.join("bande/text")])
+        .map(|path| fs::metadata(path).and_then(|metadata| metadata.modified()).ok())
+        .collect()
 }
 
 pub(crate) fn installed() -> BTreeMap<String, PathBuf> {

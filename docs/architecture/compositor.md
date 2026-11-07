@@ -106,9 +106,10 @@ when they reach the screen is Bande's own.
   yet verified on Apple hardware.
 - **DRM backend.** `bande-compositor` opens the first card with a connected connector (or
   `--drm-device`) through a libseat session and drives every connected connector on its own
-  CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into GBM
-  buffers that the renderer binds as dma-bufs (copied out from its own image, so lavapipe and
-  `kms_swrast` work); `--headless` keeps the offscreen output for CI and the bench. udev change
+  CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into
+  dumb buffers that the renderer binds as dma-bufs: each frame is rendered into its own image and its
+  drawn regions copied out, by the GPU when the device is a real one that can import the buffer,
+  otherwise (lavapipe and `kms_swrast`, or a refused import) through a mapping on the CPU; `--headless` keeps the offscreen output for CI and the bench. udev change
   events probe the connectors again, so plugging a display in or out takes effect without
   restarting the session. A connector that goes away is held as lost for three seconds before it
   counts as gone, so a monitor's own hotplug pulse (many pulse it about 0.6 s after waking, which
@@ -165,7 +166,7 @@ when they reach the screen is Bande's own.
   the keyboard, Space picks a display and the arrows put it on that side of the main display.
   The main display carries a white bar along its top. Each display then offers Use as (Main
   display, Extended, Mirror), Resolution (up to four sizes of its native shape), Size of text
-  and controls, Refresh rate, Rotation and Variable refresh rate. Every change is written to
+  and controls, Refresh rate and Rotation. Every change is written to
   `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
   settings?" with Keep and Revert and comes back by itself after 15 s, as macOS does.
 

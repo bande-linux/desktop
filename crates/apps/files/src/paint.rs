@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use bande_content::Preview;
-use bande_fs::{Entry, Purpose, format_date, format_size, is_hidden};
+use bande_fs::{Entry, Purpose, format_civil_date, format_date, format_size, is_hidden};
 use bande_thumbnails::ThumbnailSize;
 use bande_toolkit::ui::{
     BUTTON_HEIGHT as CONTROL_HEIGHT, CHECKBOX_SIZE, SWITCH_SIZE, Size, TEXT_FIELD_HEIGHT, WidgetId,
@@ -1076,10 +1076,7 @@ impl FilesView {
                 if let Some(item) = &entry.trashed
                     && let Some(deleted) = item.deleted
                 {
-                    facts.push((
-                        L10N.tr("info-deleted"),
-                        deleted.strftime("%-d %b %Y, %H:%M").to_string(),
-                    ));
+                    facts.push((L10N.tr("info-deleted"), format_civil_date(deleted)));
                 }
                 let editable = self
                     .inspector_controls

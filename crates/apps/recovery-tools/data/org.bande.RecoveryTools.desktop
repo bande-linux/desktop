@@ -1,7 +1,9 @@
 [Desktop Entry]
 Type=Application
 Name=Recovery
+Name[sv]=Återställning
 Comment=Reinstall, restore and repair
+Comment[sv]=Installera om, återställ och reparera
 Icon=org.bande.RecoveryTools
 Exec=bande-recovery-tools
 StartupNotify=true

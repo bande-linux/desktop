@@ -185,6 +185,7 @@ pub enum WindowEvent {
     MenuClosed,
     Pasted(String),
     PastedTransfer(Transfer),
+    ClipboardChanged,
     Drag(DragEvent),
     ShowLauncher,
     ScrimPressed,

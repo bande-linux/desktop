@@ -12,13 +12,13 @@ use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
 use crate::mounts::{ConnectRequest, Mounts, Outcome};
-use crate::server::Server;
+use crate::server::{Protocol, Server};
 
-const HEALTHY_EVERY: Duration = Duration::from_secs(10);
+const HEALTHY_EVERY: Duration = Duration::from_secs(8);
 const TROUBLE_EVERY: Duration = Duration::from_secs(5);
 const LOST_EVERY: Duration = Duration::from_secs(30);
-const ANSWER_WITHIN: Duration = Duration::from_secs(6);
-const CONNECT_WITHIN: Duration = Duration::from_secs(4);
+const ANSWER_WITHIN: Duration = Duration::from_secs(4);
+const CONNECT_WITHIN: Duration = Duration::from_secs(3);
 const MISSES_BEFORE_ALERT: u32 = 2;
 const DEAD_AFTER: Duration = Duration::from_secs(60);
 const NM: &str = "org.freedesktop.NetworkManager";
@@ -31,7 +31,7 @@ struct Watched {
     misses: u32,
     alerted_since: Option<Instant>,
     alert: Option<u32>,
-    stuck: Arc<Mutex<bool>>,
+    pending: Option<mpsc::Receiver<bool>>,
 }
 
 #[derive(Debug, Clone)]
@@ -117,27 +117,33 @@ fn reachable(host: &str, port: u16) -> bool {
     })
 }
 
-fn probe(point: &Path, server: &Server, stuck: &Arc<Mutex<bool>>) -> bool {
-    if *guard(stuck) {
-        return false;
+fn probe(point: &Path, server: &Server, entry: &mut Watched) -> bool {
+    let finished = match entry.pending.take() {
+        Some(pending) => pending,
+        None => {
+            let (done, finished) = mpsc::channel();
+            let (checked, host, port) = (point.to_owned(), server.host.clone(), server.port());
+            let spawned = thread::Builder::new()
+                .name("mount probe".to_owned())
+                .spawn(move || {
+                    let answered = reachable(&host, port) && statvfs(&checked).is_ok();
+                    let _ = done.send(answered);
+                });
+            if let Err(error) = spawned {
+                tracing::warn!("cannot probe a mount: {error}");
+                return true;
+            }
+            finished
+        }
+    };
+    match finished.recv_timeout(ANSWER_WITHIN) {
+        Ok(answered) => answered,
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            entry.pending = Some(finished);
+            false
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => false,
     }
-    *guard(stuck) = true;
-    let (done, finished) = mpsc::channel();
-    let (checked, host, port) = (point.to_owned(), server.host.clone(), server.port());
-    let held = Arc::clone(stuck);
-    let spawned = thread::Builder::new()
-        .name("mount probe".to_owned())
-        .spawn(move || {
-            let answered = reachable(&host, port) && statvfs(&checked).is_ok();
-            *guard(&held) = false;
-            let _ = done.send(answered);
-        });
-    if let Err(error) = spawned {
-        tracing::warn!("cannot probe a mount: {error}");
-        *guard(stuck) = false;
-        return true;
-    }
-    finished.recv_timeout(ANSWER_WITHIN).unwrap_or(false)
 }
 
 pub fn follow(mounts: Mounts) {
@@ -162,7 +168,7 @@ fn watch(mounts: &Mounts) {
                 continue;
             };
             let entry = watched.entry(mount.point.clone()).or_default();
-            match probe(&mount.point, &server, &entry.stuck) {
+            match probe(&mount.point, &server, entry) {
                 true => recovered(mounts, &mount.point, entry),
                 false => {
                     trouble = true;
@@ -173,6 +179,10 @@ fn watch(mounts: &Mounts) {
         let lost = !guard(&shared.lost).is_empty();
         if lost {
             mounts.try_lost();
+        }
+        let unsure = watched.values().any(|entry| entry.misses == 1);
+        if unsure {
+            continue;
         }
         let limit = match (trouble, lost, present.is_empty()) {
             (true, _, _) => Some(TROUBLE_EVERY),
@@ -207,7 +217,7 @@ fn missed(mounts: &Mounts, point: &Path, server: &Server, entry: &mut Watched) {
         entry.alert = mounts.alert_unresponsive(&name, point);
         mounts.set_unresponsive(point, true);
     }
-    if since.elapsed() >= DEAD_AFTER {
+    if since.elapsed() >= DEAD_AFTER && !matches!(server.protocol, Protocol::Dav | Protocol::Davs) {
         mounts.mark_lost(point, server, &name, entry.alert.take());
     }
 }

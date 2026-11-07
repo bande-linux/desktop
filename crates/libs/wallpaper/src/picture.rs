@@ -173,7 +173,7 @@ fn picture(image: RgbaImage) -> Picture {
 
 fn rendered(path: &Path, fit: Fit, width: u32, height: u32) -> Result<RgbaImage, RenderError> {
     let target = (width.max(1), height.max(1));
-    if bande_volumes::on_connected_volume(path) {
+    if bande_volumes::leads_to_connected_volume(path) {
         return Err(RenderError::Read(std::io::ErrorKind::Unsupported.into()));
     }
     let bytes = fs::read(path).map_err(RenderError::Read)?;

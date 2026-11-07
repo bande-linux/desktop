@@ -39,6 +39,7 @@ const CIFS: &str = "/usr/sbin/mount.cifs";
 const SMBCLIENT: &str = "/usr/bin/smbclient";
 const DAVFS: &str = "/usr/sbin/mount.davfs";
 const NFS: &str = "/usr/sbin/mount.nfs";
+const NFS_PACKAGE: &str = "nfs-common";
 const SHOWMOUNT: &str = "/usr/sbin/showmount";
 const FUSERMOUNT: &str = "/usr/bin/fusermount3";
 const KEYRING_APP: &str = "bande-automount";
@@ -652,7 +653,7 @@ impl Mounts {
 
     fn list_exports(&self, server: &Server) -> Outcome {
         if !Path::new(SHOWMOUNT).exists() {
-            return Outcome::Missing(vec!["nfs-common"]);
+            return Outcome::Missing(vec![NFS_PACKAGE]);
         }
         let mut command = Command::new(SHOWMOUNT);
         command
@@ -671,7 +672,7 @@ impl Mounts {
 
     fn mount_nfs(&self, server: &Server) -> Outcome {
         if !Path::new(NFS).exists() {
-            return Outcome::Missing(vec!["nfs-common"]);
+            return Outcome::Missing(vec![NFS_PACKAGE]);
         }
         let source = server.nfs_source();
         if let Some(point) = self.already_mounted(&source) {
@@ -957,8 +958,15 @@ impl Mounts {
         }
         client
             .install(&ids, Mode::Apply, &|_| {})
-            .map(drop)
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+        if packages.iter().any(|package| package == NFS_PACKAGE) {
+            let mut command = Command::new(PKEXEC);
+            command.args([HELPER, "quiet-rpcbind"]);
+            if let Err(error) = run_bounded(command, None, CONNECT_LIMIT) {
+                tracing::warn!("cannot stop rpcbind: {error}");
+            }
+        }
+        Ok(())
     }
 
     pub fn reconnect_saved(&self) {

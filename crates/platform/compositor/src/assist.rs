@@ -51,6 +51,25 @@ impl Assist {
     }
 }
 
+fn free_half(
+    tile: Tile,
+    tiled: Rectangle<i32, Logical>,
+    area: Rectangle<i32, Logical>,
+) -> Rectangle<i32, Logical> {
+    if tile == Tile::Left {
+        Rectangle::new(
+            (tiled.loc.x + tiled.size.w, area.loc.y).into(),
+            (
+                area.loc.x + area.size.w - tiled.loc.x - tiled.size.w,
+                area.size.h,
+            )
+                .into(),
+        )
+    } else {
+        Rectangle::new(area.loc, (tiled.loc.x - area.loc.x, area.size.h).into())
+    }
+}
+
 impl State {
     pub(crate) fn offer_other_half(&mut self, index: usize) {
         self.dismiss_assist();
@@ -58,19 +77,7 @@ impl State {
             return;
         };
         let screen = self.screen_of(&self.windows[index]);
-        let area = self.usable_area(screen);
-        let free = if tile == Tile::Left {
-            Rectangle::new(
-                (tiled.loc.x + tiled.size.w, area.loc.y).into(),
-                (
-                    area.loc.x + area.size.w - tiled.loc.x - tiled.size.w,
-                    area.size.h,
-                )
-                    .into(),
-            )
-        } else {
-            Rectangle::new(area.loc, (tiled.loc.x - area.loc.x, area.size.h).into())
-        };
+        let free = free_half(tile, tiled, self.usable_area(screen));
         let opposite = tile.opposite();
         let taken = self.windows.iter().enumerate().any(|(other, window)| {
             other != index
@@ -176,12 +183,16 @@ impl State {
         let Some(offer) = self.assist.offer.as_ref() else {
             return;
         };
-        let opposite = offer.tile.opposite();
+        let (tile, screen) = (offer.tile, offer.screen);
+        let tiled = self
+            .window_index(&offer.tiled)
+            .and_then(|index| self.windows[index].tile);
         self.dismiss_assist();
-        let Some(index) = self.window_index(&surface) else {
+        let (Some(index), Some((_, tiled))) = (self.window_index(&surface), tiled) else {
             return;
         };
-        self.tile_window(index, opposite, Spring::STANDARD);
+        let free = free_half(tile, tiled, self.usable_area(screen));
+        self.tile_window_into(index, tile.opposite(), free, Spring::STANDARD);
         self.focus(Some(surface));
     }
 

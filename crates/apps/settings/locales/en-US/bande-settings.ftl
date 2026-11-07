@@ -219,6 +219,7 @@ back-tooltip = Go back (Alt+Left)
 available-of = { $available } available of { $capacity }
 about-model = Model
 about-chip = Chip
+about-chip-cores = { $family } ({ $cores } cores)
 about-memory = Memory
 about-bande = Bande
 about-system = System

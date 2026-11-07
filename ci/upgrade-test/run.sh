@@ -6,13 +6,15 @@ old=$(realpath "$1")
 new=$(realpath "$2")
 here=$(realpath "$(dirname "$0")")
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bande-ci/upgrade-test
-scratch=$(mktemp -d)
+mkdir -p "$cache"
+scratch=$(mktemp -d -p "$cache")
 vm=
 cleanup() {
     [ -z "$vm" ] || kill "$vm" 2>/dev/null || true
     rm -rf "$scratch"
 }
 trap cleanup EXIT
+trap 'exit 143' TERM INT HUP
 
 case $(dpkg --print-architecture) in
     arm64)
@@ -29,7 +31,6 @@ case $(dpkg --print-architecture) in
     *) echo "run.sh: no image for this architecture" >&2; exit 1 ;;
 esac
 
-mkdir -p "$cache"
 [ -f "$cache/$image" ] && [ -z "$(find "$cache/$image" -mtime +7)" ] ||
     curl -fsSL --retry 3 -o "$cache/$image" "https://cloud.debian.org/images/cloud/forky/daily/latest/$image"
 ssh-keygen -q -t ed25519 -N '' -f "$scratch/key"

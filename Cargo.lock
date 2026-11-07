@@ -1474,6 +1474,7 @@ dependencies = [
  "bande-l10n",
  "bande-protocols",
  "bande-widgets",
+ "bande-xdg",
  "raw-window-handle",
  "rustix 1.1.6",
  "tracing",

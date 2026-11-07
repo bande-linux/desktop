@@ -113,7 +113,10 @@ pub fn plan_renames(
         if target == item.path {
             continue;
         }
-        if !sources.contains(target.as_path()) && target.symlink_metadata().is_ok() {
+        if !sources.contains(target.as_path())
+            && !bande_volumes::on_connected_volume(&target)
+            && target.symlink_metadata().is_ok()
+        {
             return Err(BatchProblem::Exists(name));
         }
         plan.push((item.path.clone(), target));

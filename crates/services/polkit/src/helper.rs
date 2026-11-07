@@ -1,11 +1,11 @@
 use std::io::{self, BufRead, BufReader, Write};
+use std::net::Shutdown;
+use std::os::unix::net::UnixStream;
 use std::path::Path;
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::{Arc, Mutex, PoisonError};
 
 use zeroize::Zeroizing;
 
-pub const HELPER: &str = "/usr/lib/polkit-1/polkit-agent-helper-1";
+pub const HELPER_SOCKET: &str = "/run/polkit/agent-helper.socket";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Line {
@@ -74,47 +74,36 @@ pub fn parse(line: &[u8]) -> Option<Line> {
     }
 }
 
-#[derive(Clone)]
-pub struct Canceller(Arc<Mutex<Child>>);
+pub struct Canceller(UnixStream);
 
 impl Canceller {
     pub fn cancel(&self) {
-        let _ = self.0.lock().unwrap_or_else(PoisonError::into_inner).kill();
+        if let Err(error) = self.0.shutdown(Shutdown::Both) {
+            tracing::debug!("the helper had already gone: {error}");
+        }
     }
 }
 
 pub struct HelperSession {
-    child: Arc<Mutex<Child>>,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    socket: UnixStream,
+    replies: BufReader<UnixStream>,
 }
 
 impl HelperSession {
-    pub fn start(helper: &Path, user: &str, cookie: &str) -> io::Result<Self> {
-        let mut child = Command::new(helper)
-            .arg(user)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()?;
-        let (Some(mut stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
-            let _ = child.kill();
-            return Err(io::Error::other("the helper has no pipes"));
-        };
-        stdin.write_all(format!("{cookie}\n").as_bytes())?;
-        Ok(Self {
-            child: Arc::new(Mutex::new(child)),
-            stdin,
-            stdout: BufReader::new(stdout),
-        })
+    pub fn start(helper_socket: &Path, user: &str, cookie: &str) -> io::Result<Self> {
+        let mut socket = UnixStream::connect(helper_socket)?;
+        socket.write_all(format!("{user}\n{cookie}\n").as_bytes())?;
+        let replies = BufReader::new(socket.try_clone()?);
+        Ok(Self { socket, replies })
     }
 
-    pub fn canceller(&self) -> Canceller {
-        Canceller(Arc::clone(&self.child))
+    pub fn canceller(&self) -> io::Result<Canceller> {
+        self.socket.try_clone().map(Canceller)
     }
 
     pub fn read_line(&mut self) -> io::Result<Option<Line>> {
         let mut line = Vec::new();
-        if self.stdout.read_until(b'\n', &mut line)? == 0 {
+        if self.replies.read_until(b'\n', &mut line)? == 0 {
             return Ok(None);
         }
         parse(&line)
@@ -128,16 +117,14 @@ impl HelperSession {
         if line.last() != Some(&b'\n') {
             line.push(b'\n');
         }
-        self.stdin.write_all(&line)
+        self.socket.write_all(&line)
     }
 }
 
 impl Drop for HelperSession {
     fn drop(&mut self) {
-        let mut child = self.child.lock().unwrap_or_else(PoisonError::into_inner);
-        if matches!(child.try_wait(), Ok(None)) {
-            let _ = child.kill();
+        if let Err(error) = self.socket.shutdown(Shutdown::Both) {
+            tracing::debug!("the helper had already gone: {error}");
         }
-        let _ = child.wait();
     }
 }

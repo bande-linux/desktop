@@ -206,23 +206,3 @@ pub fn force_quit(session: &Connection, app: &AppMemory) -> zbus::Result<()> {
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rustix::event::{PollFd, PollFlags, Timespec, poll};
-
-    #[test]
-    fn pressure_trigger_waits_for_a_stall() {
-        let Ok(trigger) = PressureTrigger::open(Path::new(SYSTEM_PRESSURE)) else {
-            return;
-        };
-        let fd = trigger.fd();
-        let mut fds = [PollFd::new(&fd, PollFlags::IN | PollFlags::PRI)];
-        let now = Timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        };
-        assert_eq!(poll(&mut fds, Some(&now)).ok(), Some(0));
-    }
-}

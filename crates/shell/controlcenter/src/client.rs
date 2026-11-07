@@ -25,8 +25,8 @@ use bande_status::session::full_name;
 use bande_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
 use bande_toolkit::{
     App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
-    MenuPlacement, Palette, Panel, Point, Radius, Rect, Role, Scene, SessionEnd, TextSystem, VolumeKey,
-    Window, WindowEvent,
+    MenuPlacement, Palette, Panel, Point, Radius, Rect, Role, Scene, SessionEnd, TextSystem,
+    VolumeKey, Window, WindowEvent,
 };
 use bande_xdg::{
     DesktopEntry, ICON_THEMES, applications, current_desktops, data_dirs, find_icon,

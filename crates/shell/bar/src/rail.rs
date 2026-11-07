@@ -8,8 +8,8 @@ use bande_status::status::{Battery, Capture, Sense, Status, speaker_waves, wifi_
 use bande_status::unread::ClockMark;
 use bande_toolkit::ui::PointerButton;
 use bande_toolkit::{
-    BarForm, Color, DisplayEdge, Elevation, Image, Item, MenuPlacement, Palette, Paragraph, Point,
-    Radius, Rect, Scene, Shape, TextAlign, TextSize, TextStyle, TextSystem,
+    Color, DisplayEdge, Elevation, Image, Item, MenuPlacement, Palette, Paragraph, Point, Radius,
+    Rect, Scene, Shape, TextAlign, TextSize, TextStyle, TextSystem,
 };
 use bande_xdg::{ICON_THEMES, find_icon};
 use jiff::Zoned;
@@ -68,8 +68,29 @@ pub fn bar_width(icon_size: f32) -> f32 {
     icon_size + EDGE_PADDING
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BarForm {
+    #[default]
+    Floating,
+    Attached,
+}
+
+impl BarForm {
+    pub const fn from_floating(floating: bool) -> Self {
+        if floating {
+            Self::Floating
+        } else {
+            Self::Attached
+        }
+    }
+}
+
 pub fn bar_zone(icon_size: f32, form: BarForm) -> f32 {
-    bar_width(icon_size) + cross_margin(form)
+    bar_width(icon_size) + zone_margin(form)
+}
+
+pub const fn zone_margin(form: BarForm) -> f32 {
+    2.0 * cross_margin(form)
 }
 
 pub const fn cross_margin(form: BarForm) -> f32 {

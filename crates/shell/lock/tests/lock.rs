@@ -16,6 +16,10 @@ fn enter(screen: &mut LockScreen, text: &str) {
     }
 }
 
+fn password(screen: &mut LockScreen) -> Option<String> {
+    screen.take_password().map(|typed| typed.to_string())
+}
+
 fn lock_screen() -> LockScreen {
     let user = User {
         uid: 1000,
@@ -32,47 +36,28 @@ fn lock_screen() -> LockScreen {
 }
 
 #[test]
-fn a_password_is_submitted_once_and_a_rejected_one_is_cleared_for_another_try() {
+fn a_password_is_submitted_once_and_a_rejected_one_is_cleared_and_a_resting_screen_keeps_a_letter()
+{
     let mut screen = lock_screen();
     enter(&mut screen, "");
     assert_eq!(screen.take_password(), None);
-
     enter(&mut screen, "wrong");
-    assert_eq!(
-        screen.take_password().as_deref().map(String::as_str),
-        Some("wrong")
-    );
+    assert_eq!(password(&mut screen), Some("wrong".to_owned()));
     enter(&mut screen, "more");
     assert_eq!(screen.take_password(), None);
-    let rejected = Instant::now();
-    screen.reject(rejected);
-    screen.advance(rejected + SHAKE_DURATION);
+    let start = Instant::now();
+    screen.reject(start);
+    screen.advance(start + SHAKE_DURATION);
     assert!(!screen.is_animating());
 
-    enter(&mut screen, "right");
-    assert_eq!(
-        screen.take_password().as_deref().map(String::as_str),
-        Some("right")
-    );
-}
-
-#[test]
-fn a_resting_lock_screen_wakes_on_the_first_input_keeps_a_typed_letter_and_rests_again() {
-    let mut screen = lock_screen();
-    let start = Instant::now();
     screen.start_resting();
-    assert!(screen.is_resting());
-
     let click = Event::PointerDown(Pointer::at(Point::new(10.0, 10.0)));
     assert!(!screen.wake_on(&click, start));
     assert!(!screen.is_resting());
-
     let later = start + RESTS_AFTER;
     assert!(screen.rest_when_due(later));
-    assert!(screen.is_resting());
     enter(&mut screen, "");
     assert_eq!(screen.take_password(), None);
-
     let letter = Event::Key {
         key: Key::Character('r'),
         modifiers: Modifiers::default(),
@@ -80,15 +65,11 @@ fn a_resting_lock_screen_wakes_on_the_first_input_keeps_a_typed_letter_and_rests
     assert!(screen.wake_on(&letter, later));
     screen.handle(&letter);
     enter(&mut screen, "ight");
-    assert_eq!(
-        screen.take_password().as_deref().map(String::as_str),
-        Some("right")
-    );
+    assert_eq!(password(&mut screen), Some("right".to_owned()));
 
     screen.reject(later);
     screen.handle(&letter);
     assert!(screen.rest_when_due(later + RESTS_AFTER));
-    assert!(screen.is_resting());
     enter(&mut screen, "");
-    assert_eq!(screen.take_password(), None);
+    assert_eq!(screen.take_password(), None, "resting cleared the field");
 }

@@ -184,6 +184,9 @@ fn publish_changes(
         if before.automatic_updates != after.automatic_updates {
             let _ = guard.automatic_updates_changed(emitter).await;
         }
+        if before.update_check_every != after.update_check_every {
+            let _ = guard.update_check_every_changed(emitter).await;
+        }
         if before.clock != after.clock {
             let _ = guard.clock_format_changed(emitter).await;
         }
@@ -235,6 +238,9 @@ fn publish_changes(
         }
         if before.bar.apps != after.bar.apps {
             let _ = guard.bar_apps_changed(emitter).await;
+        }
+        if before.bar.floating != after.bar.floating {
+            let _ = guard.bar_floating_changed(emitter).await;
         }
         if before.bar.auto_hide != after.bar.auto_hide {
             let _ = guard.bar_auto_hide_changed(emitter).await;
@@ -766,6 +772,16 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
+    fn bar_floating(&self) -> bool {
+        self.store.current().bar.floating
+    }
+
+    #[zbus(property)]
+    fn set_bar_floating(&self, floating: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::BarFloating(floating))
+    }
+
+    #[zbus(property)]
     fn bar_auto_hide(&self) -> bool {
         self.store.current().bar.auto_hide
     }
@@ -794,6 +810,16 @@ impl ConfigInterface {
     fn set_bar_edge(&self, value: String) -> zbus::fdo::Result<()> {
         let edge = keyword(&BarEdge::ALL, BarEdge::keyword, &value)?;
         self.write(&Setting::BarEdge(edge))
+    }
+
+    #[zbus(property)]
+    fn update_check_every(&self) -> u64 {
+        seconds_or_never(self.store.current().update_check_every)
+    }
+
+    #[zbus(property)]
+    fn set_update_check_every(&self, seconds: u64) -> zbus::fdo::Result<()> {
+        self.write(&Setting::UpdateCheckEvery(never_or_seconds(seconds)))
     }
 
     #[zbus(property)]

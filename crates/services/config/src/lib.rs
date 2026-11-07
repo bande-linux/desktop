@@ -600,6 +600,7 @@ pub struct Bar {
     pub edge: BarEdge,
     pub apps: Vec<String>,
     pub auto_hide: bool,
+    pub floating: bool,
     pub icon_size: u32,
 }
 
@@ -609,6 +610,7 @@ impl Default for Bar {
             edge: BarEdge::Left,
             apps: DEFAULT_BAR_APPS.map(str::to_owned).to_vec(),
             auto_hide: false,
+            floating: true,
             icon_size: DEFAULT_BAR_ICON_SIZE,
         }
     }
@@ -817,6 +819,7 @@ pub struct Config {
     pub reopen_apps: bool,
     pub reopen_apps_after_crash: bool,
     pub automatic_updates: bool,
+    pub update_check_every: Option<Duration>,
     pub lock_message: String,
     pub show_previews: bool,
     pub clock: ClockFormat,
@@ -855,6 +858,7 @@ impl Default for Config {
             reopen_apps: true,
             reopen_apps_after_crash: false,
             automatic_updates: false,
+            update_check_every: None,
             lock_message: String::new(),
             show_previews: true,
             clock: ClockFormat::Automatic,
@@ -1015,6 +1019,9 @@ impl Parser<'_> {
                 "automatic-updates" => self
                     .flag(node)
                     .map(|automatic| config.automatic_updates = automatic),
+                "update-check-every" => self
+                    .duration(node)
+                    .map(|every| config.update_check_every = Some(every)),
                 "accessibility" => {
                     config.accessibility = self.accessibility(node);
                     Ok(())
@@ -1221,6 +1228,7 @@ impl Parser<'_> {
                 }
                 "apps" => bar.apps = self.app_ids(child)?,
                 "auto-hide" => bar.auto_hide = self.flag(child)?,
+                "floating" => bar.floating = self.flag(child)?,
                 "size" => bar.icon_size = self.integer_in(child, BAR_ICON_SIZE_RANGE)?,
                 _ => return Err(self.unknown_child("bar", child)),
             }

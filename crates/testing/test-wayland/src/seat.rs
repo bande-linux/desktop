@@ -2,9 +2,7 @@ use wayland_client::protocol::wl_keyboard::{self, WlKeyboard};
 use wayland_client::protocol::wl_pointer::{self, WlPointer};
 use wayland_client::protocol::wl_seat::{self, WlSeat};
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, Dispatch, QueueHandle, WEnum, delegate_noop};
-use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::zwp_keyboard_shortcuts_inhibit_manager_v1::ZwpKeyboardShortcutsInhibitManagerV1;
-use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::zwp_keyboard_shortcuts_inhibitor_v1::ZwpKeyboardShortcutsInhibitorV1;
+use wayland_client::{Connection, Dispatch, QueueHandle, WEnum};
 
 use crate::{Compositor, Globals, TestClient};
 
@@ -30,15 +28,6 @@ impl TestClient {
             .expect("wl_seat is advertised");
         let seat: WlSeat = registry.bind(*name, 7, &self.queue.handle(), Devices);
         self.globals.input.seat = Some(seat);
-        self.exchange(server);
-    }
-
-    pub fn inhibit_shortcuts(&mut self, server: &mut Compositor, window: usize) {
-        let manager: ZwpKeyboardShortcutsInhibitManagerV1 =
-            self.bind("zwp_keyboard_shortcuts_inhibit_manager_v1", 1);
-        let seat = self.globals.input.seat.as_ref().expect("use_seat first");
-        let _: ZwpKeyboardShortcutsInhibitorV1 =
-            manager.inhibit_shortcuts(&self.windows[window].0, seat, &self.queue.handle(), ());
         self.exchange(server);
     }
 
@@ -127,6 +116,3 @@ impl Dispatch<WlPointer, Devices> for Globals {
         }
     }
 }
-
-delegate_noop!(Globals: ZwpKeyboardShortcutsInhibitManagerV1);
-delegate_noop!(Globals: ignore ZwpKeyboardShortcutsInhibitorV1);

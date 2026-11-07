@@ -1214,6 +1214,7 @@ dependencies = [
  "blocking",
  "image",
  "jiff",
+ "libc",
  "pipewire",
  "rustix 1.1.6",
  "tracing",

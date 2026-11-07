@@ -8,3 +8,5 @@ pos-noun = noun
 pos-verb = verb
 pos-adj = adjective
 pos-adv = adverb
+wikipedia = Wikipedia (online)
+wikipedia-attribution = Wikipedia, CC BY-SA 4.0. Looked up online.

@@ -14,6 +14,7 @@ mod run;
 mod scale;
 mod seat;
 mod shell;
+mod spelling;
 mod text_input;
 mod window;
 

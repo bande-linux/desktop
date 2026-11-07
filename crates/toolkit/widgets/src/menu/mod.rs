@@ -5,7 +5,7 @@ mod tracker;
 use accesskit::NodeId;
 use bande_graphics::{Radius, TextSize, grown_line};
 
-pub use self::model::{Menu, MenuItem, Search};
+pub use self::model::{Menu, MenuItem, Search, placement_layout};
 pub use self::panel::MenuPanel;
 pub use self::tracker::{MenuOutcome, MenuTracker};
 

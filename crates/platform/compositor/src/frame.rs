@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use bande_graphics::{
-    Color, DOUBLE_CLICK_INTERVAL, MenuButton, Palette, RESIZE_WALL_BAND, Rect, ResizeEdge, Scene,
+    Color, ControlHover, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_WALL_BAND, Rect, ResizeEdge, Scene,
     Scheme, TextAlign, TitleBar, WalledSides, WindowControl, resize_zone, title_style,
-    walled_resize_zone, window_controls_area,
+    walled_resize_zone,
 };
 use bande_render::{VulkanRenderer, VulkanTexture};
 use smithay::backend::allocator::Fourcc;
@@ -58,7 +58,7 @@ struct Look {
     scale: u64,
     active: bool,
     scheme: Scheme,
-    hovered: Option<Option<WindowControl>>,
+    hovered: Option<WindowControl>,
     pressed: Option<WindowControl>,
     zoomed: bool,
     zoomable: bool,
@@ -76,7 +76,7 @@ struct Painted {
 
 #[derive(Debug, Default)]
 pub(crate) struct Frame {
-    pub(crate) hovered: Option<Option<WindowControl>>,
+    pub(crate) hovered: Option<WindowControl>,
     pub(crate) pressed: Option<WindowControl>,
     pub(crate) menus_open: bool,
     painted: Option<Painted>,
@@ -153,19 +153,6 @@ fn protocol_edge(edge: ResizeEdge) -> xdg_toplevel::ResizeEdge {
     }
 }
 
-fn hovered_control(
-    window: &Window,
-    location: Point<f64, Logical>,
-) -> Option<Option<WindowControl>> {
-    let rect = window.geometry()?;
-    let bar = window.title_bar_height() as f32;
-    let menu = menu_address(window.surface()).is_some();
-    let point = local_point(rect, location);
-    let over = window_controls_area(bar).contains(point)
-        || (menu && WindowControl::Menu.area(bar).contains(point));
-    over.then(|| WindowControl::at(point, bar, menu))
-}
-
 pub(crate) enum Target {
     Surface(WlSurface, Point<f64, Logical>),
     Frame(WlSurface, Zone),
@@ -238,19 +225,17 @@ impl State {
 
     pub(crate) fn point_at_frame(
         &mut self,
-        location: Point<f64, Logical>,
         pointed: Option<(WlSurface, Zone)>,
         over_surface: bool,
     ) {
-        let hovered = pointed
-            .as_ref()
-            .filter(|(_, zone)| matches!(zone, Zone::Control(_) | Zone::TitleBar))
-            .map(|(surface, _)| surface.clone());
         for window in &mut self.windows {
-            let over = hovered
-                .as_ref()
-                .filter(|surface| *surface == window.surface())
-                .and_then(|_| hovered_control(window, location));
+            let over = match &pointed {
+                Some((surface, Zone::Control(control))) if surface == window.surface() => {
+                    Some(*control)
+                        .filter(|control| *control != WindowControl::Zoom || !window.fixed_size())
+                }
+                _ => None,
+            };
             if window.frame.hovered != over {
                 window.frame.hovered = over;
                 self.needs_redraw = true;
@@ -259,9 +244,7 @@ impl State {
         let on_zoom = self
             .windows
             .iter()
-            .find(|window| {
-                window.frame.hovered == Some(Some(WindowControl::Zoom)) && !window.fixed_size()
-            })
+            .find(|window| window.frame.hovered == Some(WindowControl::Zoom))
             .map(|window| window.surface().clone());
         self.rest_on_zoom(on_zoom);
         let previous = std::mem::replace(&mut self.decorations.pointed, pointed.clone());
@@ -484,31 +467,14 @@ fn paint_title_bar(
             title,
             palette,
             active: look.active,
-            hover: if look
-                .hovered
-                .is_some_and(|control| control != Some(WindowControl::Menu))
-            {
-                1.0
-            } else {
-                0.0
-            },
-            close_hover: if look.hovered == Some(Some(WindowControl::Close)) {
-                1.0
-            } else {
-                0.0
-            },
-            pressed: look.pressed,
+            hover: ControlHover::only(look.hovered),
+            pressed: look
+                .pressed
+                .filter(|pressed| look.hovered == Some(*pressed)),
             zoomed: look.zoomed,
             zoomable: look.zoomable,
             alternate: look.alternate && look.active,
-            menu: look.menu.map(|open| MenuButton {
-                hover: if look.hovered == Some(Some(WindowControl::Menu)) {
-                    1.0
-                } else {
-                    0.0
-                },
-                open,
-            }),
+            menu_open: look.menu,
         }
         .items(),
     };

@@ -57,6 +57,7 @@ pub use graph::{Band, Graph, GraphKind, Series, SeriesColor};
 pub use label::Label;
 pub use menu::{
     MENU_RADIUS, MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker, Search,
+    placement_layout,
 };
 pub use pop_up_button::PopUpButton;
 pub use progress::{LevelIndicator, PROGRESS_HEIGHT, ProgressBar, SPINNER_SIZE, Spinner};

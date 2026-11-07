@@ -2,11 +2,10 @@ use std::time::Instant;
 
 use bande_graphics::{Appearance, Event, Point, Rect, TextSystem};
 use bande_keyboard::{Action, Key, keys_for, keys_of};
-use bande_widgets::{FrameTime, Menu, MenuItem, MenuOutcome};
+use bande_widgets::{FrameTime, Menu, MenuItem, MenuOutcome, placement_layout};
 
 use super::{ShellSurface, Window, WindowError, WindowEvent};
 use crate::L10N;
-use crate::chrome::Control;
 use crate::popup::{MenuPlacement, Menus, Opening, Parent};
 
 fn menu_text(text: &mut Option<TextSystem>, appearance: Appearance) -> &mut TextSystem {
@@ -20,7 +19,7 @@ impl Window {
         let toplevel = self.state.toplevel;
         let resizable = self.is_resizable();
         let place = |key: &str| MenuItem::new(&L10N.tr(key), key);
-        let tile = |key: &str| place(key).enabled(resizable);
+        let tile = |key: &str| place(key).layout(placement_layout(key)).enabled(resizable);
         let mut items = vec![
             tile("place-left")
                 .shortcut(&keys_for(Action::TileWindow, Key::Left).unwrap_or_default()),
@@ -32,7 +31,7 @@ impl Window {
             tile("place-bottom-left"),
             tile("place-bottom-right"),
             MenuItem::separator(),
-            place("place-fill").enabled(!toplevel.maximized && resizable),
+            tile("place-fill").enabled(!toplevel.maximized && resizable),
         ];
         if self.can_place() && self.state.outputs.len() > 1 {
             items.push(
@@ -46,26 +45,6 @@ impl Window {
             place("place-restore").enabled(toplevel.tiled || toplevel.maximized),
         ]);
         items
-    }
-
-    pub(super) fn offers_tiling_menu(&self) -> bool {
-        self.can_place() && !self.state.toplevel.fullscreen && self.menus.is_none()
-    }
-
-    pub(super) fn open_tiling_menu(&mut self) -> Result<(), WindowError> {
-        let control = Control::Zoom.area(self.frame().title);
-        let offset = self.content_offset();
-        self.show_menu(
-            Menu::new(self.move_and_resize_items()),
-            MenuPlacement::Below(Rect::new(
-                control.x - offset.x,
-                control.y - offset.y,
-                control.width,
-                control.height,
-            )),
-        )?;
-        self.window_menu = true;
-        Ok(())
     }
 
     pub(super) fn open_window_menu(&mut self, at: Point) -> Result<(), WindowError> {

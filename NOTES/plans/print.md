@@ -28,4 +28,4 @@ Discovery is our own small mDNS browser (`_ipp._tcp`, `_ipps._tcp`), as `systemd
 3. `bande-printd`.
 4. The dialog; portal `Print`; `bande-app` Print; Settings pane on the service.
 5. Each app's Print command, after a desktop bump.
-6. `bande-printd` lists `ipp-usb` printers; Settings offers the install when a USB printer is plugged in.
+6. Settings offers the install when a USB printer is plugged in.

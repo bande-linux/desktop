@@ -206,6 +206,7 @@ struct Dialogue {
     printer_popup: WidgetId,
     paper_popup: WidgetId,
     sides_popup: WidgetId,
+    color_control: WidgetId,
     print_button: WidgetId,
     nav_label: WidgetId,
     message: WidgetId,
@@ -382,9 +383,16 @@ impl Dialogue {
         if let Some(popup) = self.ui.widget_as::<PopUpButton>(self.sides_popup) {
             popup.set_choices(&sides, chosen_side);
         }
-        if !self.capabilities.color {
+        let has_color = self.capabilities.color;
+        if !has_color {
             self.color = false;
         }
+        let selected_color = usize::from(!self.color);
+        self.ui
+            .update_widget::<SegmentedControl>(self.color_control, |control, cx| {
+                control.set_selected(cx, selected_color);
+                control.set_enabled(has_color);
+            });
     }
 
     fn refresh_sheet(&mut self) {
@@ -951,6 +959,7 @@ pub fn show(request: &PrintRequest) -> ExitCode {
         Some(0),
         move |index| push(&color_signals, Signal::Color(index == 0)),
     );
+    let color_id = color.id();
     let form = Form::new(
         &L10N.tr("print-options"),
         vec![
@@ -1058,6 +1067,7 @@ pub fn show(request: &PrintRequest) -> ExitCode {
         printer_popup: printer_id,
         paper_popup: paper_id,
         sides_popup: sides_id,
+        color_control: color_id,
         print_button,
         nav_label,
         message,

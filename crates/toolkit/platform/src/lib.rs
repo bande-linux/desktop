@@ -4,6 +4,7 @@ mod appearance;
 mod capture;
 mod chrome;
 mod clipboard;
+mod compose;
 mod external;
 mod lock;
 mod popup;

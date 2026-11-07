@@ -17,10 +17,12 @@ use zbus::blocking::fdo::PropertiesProxy;
 
 use crate::L10N;
 use crate::about::{About, AboutCommand, follow_about};
+use crate::backup::{BackupCommand, BackupUpdate, follow_backup};
 use crate::battery::{BatteryCommand, BatteryState, follow_battery};
 use crate::brightness::follow_brightness;
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::consent::{KeyboardAccess, follow_keyboard_access};
+use crate::crash_reports::{CrashReport, CrashReportCommand, follow_crash_reports};
 use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
 use crate::failure::{explained, pane_failed, sentence};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
@@ -67,6 +69,9 @@ pub enum Update {
     Thumbnail(Pair, bande_wallpaper::Picture),
     About(About),
     Storage(Storage),
+    Backup(BackupUpdate),
+    CrashReports(Vec<CrashReport>),
+    CrashReportsChanged,
     Time(Option<TimeState>),
     Login(LoginItems),
     Battery(Option<BatteryState>),
@@ -110,6 +115,9 @@ pub enum Command {
     Picture(PictureCommand),
     About(AboutCommand),
     Storage(StorageCommand),
+    Backup(BackupCommand),
+    CrashReports(CrashReportCommand),
+    CopyText(String),
     Time(TimeCommand),
     Login(LoginCommand),
     Battery(BatteryCommand),
@@ -358,6 +366,8 @@ pub struct Services {
     pictures: Sender<PictureCommand>,
     about: Option<Sender<AboutCommand>>,
     storage: Sender<StorageCommand>,
+    backup: Option<Sender<BackupCommand>>,
+    crash_reports: Sender<CrashReportCommand>,
     time: Option<Sender<TimeCommand>>,
     login: Sender<LoginCommand>,
     battery: Option<Sender<BatteryCommand>>,
@@ -398,6 +408,8 @@ impl Services {
             pictures: follow_pictures(session, bande_xdg::data_dirs(), updates.clone()),
             about: system.map(|system| follow_about(system, updates.clone())),
             storage: follow_storage(updates.clone()),
+            backup: system.map(|system| follow_backup(system, updates.clone())),
+            crash_reports: follow_crash_reports(updates.clone()),
             time: system.map(|system| follow_time(system, updates.clone())),
             login: follow_login_items(updates.clone()),
             battery: system.map(|system| follow_battery(system, updates.clone())),
@@ -444,6 +456,11 @@ impl Services {
                 .as_ref()
                 .is_some_and(|about| about.send(command).is_ok()),
             Command::Storage(command) => self.storage.send(command).is_ok(),
+            Command::Backup(command) => self
+                .backup
+                .as_ref()
+                .is_some_and(|backup| backup.send(command).is_ok()),
+            Command::CrashReports(command) => self.crash_reports.send(command).is_ok(),
             Command::Time(command) => self
                 .time
                 .as_ref()
@@ -476,7 +493,10 @@ impl Services {
                 .battery
                 .as_ref()
                 .is_some_and(|battery| battery.send(command).is_ok()),
-            Command::Reveal(_) | Command::EndSession(_) | Command::CopySecret(_) => false,
+            Command::Reveal(_)
+            | Command::EndSession(_)
+            | Command::CopySecret(_)
+            | Command::CopyText(_) => false,
             Command::ClearClipboard => {
                 let (session, updates) = (self.connection.clone(), self.updates.clone());
                 spawn("clear-clipboard", move || {

@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+if [ -d /run/systemd/system ] ; then
+	systemctl --system daemon-reload >/dev/null || true
+fi
+if [ "$1" = "remove" ] && [ -x "/usr/bin/deb-systemd-helper" ] ; then
+	deb-systemd-helper mask bande-reporter-send.path >/dev/null || true
+fi
+if [ "$1" = "purge" ] ; then
+	if [ -x "/usr/bin/deb-systemd-helper" ] ; then
+		deb-systemd-helper purge bande-reporter-send.path >/dev/null || true
+		deb-systemd-helper unmask bande-reporter-send.path >/dev/null || true
+	fi
+	rm -rf /var/lib/bande/reports
+fi

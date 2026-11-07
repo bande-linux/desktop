@@ -481,6 +481,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-backup"
+version = "0.1.7"
+dependencies = [
+ "bande-l10n",
+ "bande-log",
+ "bande-notify",
+ "bande-volumes",
+ "bande-xdg",
+ "blocking",
+ "jiff",
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
 name = "bande-bar"
 version = "0.1.7"
 dependencies = [
@@ -573,6 +591,7 @@ dependencies = [
  "bande-test-bus",
  "bande-test-wayland",
  "bande-wallpaper",
+ "bande-watch",
  "bande-widgets",
  "bande-xdg",
  "jiff",
@@ -638,6 +657,18 @@ dependencies = [
  "bande-xdg",
  "tracing",
  "zbus",
+]
+
+[[package]]
+name = "bande-crash-reports"
+version = "0.1.7"
+dependencies = [
+ "bande-log",
+ "jiff",
+ "rustc-demangle",
+ "rustix 1.1.6",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -715,8 +746,10 @@ dependencies = [
  "bande-app",
  "bande-app-menu",
  "bande-app-settings",
+ "bande-backup",
  "bande-config",
  "bande-content",
+ "bande-datetime",
  "bande-fs",
  "bande-inbox",
  "bande-l10n",
@@ -790,6 +823,7 @@ dependencies = [
  "bande-status",
  "bande-toolkit",
  "libc",
+ "rustix 1.1.6",
  "serde",
  "serde_json",
  "tracing",
@@ -1086,6 +1120,7 @@ name = "bande-recovery"
 version = "0.1.7"
 dependencies = [
  "bande-log",
+ "rustix 1.1.6",
  "tracing",
  "zbus",
 ]
@@ -1113,6 +1148,20 @@ dependencies = [
  "ash",
  "naga",
  "smithay",
+]
+
+[[package]]
+name = "bande-reporter"
+version = "0.1.7"
+dependencies = [
+ "bande-log",
+ "flate2",
+ "jiff",
+ "ring",
+ "rustix 1.1.6",
+ "rustls",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -1226,6 +1275,7 @@ dependencies = [
  "bande-app",
  "bande-app-menu",
  "bande-audio",
+ "bande-backup",
  "bande-bluetooth",
  "bande-bus",
  "bande-config",
@@ -1244,6 +1294,7 @@ dependencies = [
  "bande-status",
  "bande-test-bus",
  "bande-toolkit",
+ "bande-volumes",
  "bande-wallpaper",
  "bande-watch",
  "bande-xdg",
@@ -4937,6 +4988,12 @@ dependencies = [
  "serde",
  "serde_derive",
 ]
+
+[[package]]
+name = "rustc-demangle"
+version = "0.1.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb"
 
 [[package]]
 name = "rustc-hash"

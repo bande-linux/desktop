@@ -7,15 +7,20 @@ something is its own binary package, built with `cargo deb` from the crate's
 `ci/deb/version.sh`. How CI builds, checks and publishes them is in [ci.md](ci.md).
 
 Packages are built with the `dist` profile (`cargo deb --profile dist`): fat LTO, one codegen
-unit, `panic = "abort"` and stripped symbols. Every build links with packed relative relocations
+unit, `panic = "abort"`, and `ci/release/symbols.sh` splits the symbols: each binary keeps only a
+small compressed table of function names (`.gnu_debugdata`, as Fedora does), so a crash report has a
+stack trace with names on every computer and with nothing to install or fetch. The line tables go
+to `bande-debug-symbols` (paths by build id under `/usr/lib/debug`), which CI keeps as an artifact of the
+run and does not publish: it is about as big as all the packages together. Install it to have
+`coredumpctl debug` show files and lines. Every build links with packed relative relocations
 (`.cargo/config.toml`, [decision 0006](../decisions/0006-separate-gui-binaries.md)). Development and test builds keep the default
 profiles. Sizes are in [performance.md](performance.md).
 
 ## Packages
 
 - **Per crate** (`cargo deb`, one build per architecture; the list is `ci/release/packages`): `bande-compositor`, the session services
-  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-recovery`, `bande-sound`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
-  `bande-automount`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
+  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-recovery`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
+  `bande-automount`, `bande-backup`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
   `bande-settings`, `bande-file-chooser`). Package names stay `bande-*` whatever directory the crate lives in
@@ -95,6 +100,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 - `bande-player` (apps repo) is the one package linking GStreamer: its engine process plays for Player and Quick Look; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
 - `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc` and the H.264 and VP8 encoders
   for screen recording;
+- `bande-backup` depends on `restic` and `fuse3`: Debian's restic is the backup engine ([session.md](session.md#backups)).
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`;
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides

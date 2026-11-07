@@ -354,7 +354,7 @@ impl DesktopSurface {
     fn area(&self, size: (u32, u32)) -> Bounds {
         let (width, height) = (size.0 as f32, size.1 as f32);
         let (bar_edge, icon_size) = self.bar;
-        let edge = bande_bar::rail::bar_width(icon_size as f32);
+        let edge = bande_bar::rail::bar_zone(icon_size as f32);
         let (left, right, bottom, top) = match bar_edge {
             BarEdge::Left => (edge, 0.0, 0.0, 0.0),
             BarEdge::Right => (0.0, edge, 0.0, 0.0),

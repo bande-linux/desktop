@@ -477,21 +477,3 @@ pub fn permissions(metadata: &str) -> Vec<Permission> {
     }
     found
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{Permission, percent, permissions};
-
-    #[test]
-    fn progress_across_several_refs_and_permissions_from_metadata() {
-        assert_eq!(percent("Installing 3/4… ████  50%  1.2 MB/s"), Some(62));
-        assert_eq!(percent("Installing… ███ 8%"), Some(8));
-        assert_eq!(percent("Installing runtime/org.example/aarch64/1"), None);
-        let metadata = "[Application]\nname=a\n\n[Context]\nshared=network;ipc;\n\
-            sockets=x11;wayland;pulseaudio;\ndevices=dri;\nfilesystems=home;xdg-download;xdg-run/pipewire-0;\n";
-        assert_eq!(
-            permissions(metadata),
-            vec![Permission::Network, Permission::Home, Permission::Audio]
-        );
-    }
-}

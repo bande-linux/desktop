@@ -80,7 +80,7 @@ impl Labels {
             paint: fill.into(),
         });
         if look == Look::Card {
-            items.extend(Item::rim(shape, &palette));
+            items.push(Item::lit_edge(shape, &palette));
         }
         items.push(Item::Text {
             origin: Point::new(margin + padding.0, margin + padding.1),

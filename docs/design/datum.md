@@ -32,16 +32,17 @@ Bande should feel like a well-made instrument: a Braun radio or a Teenage Engine
 | `radius.s` | 6 | buttons, fields, pop-ups, steppers, list and menu selection, tooltips |
 | `radius.m` | 8 | the content sheet inside a window, segmented track, search field, sidebar groups |
 | `radius.l` | 10 | menus, popovers, the hover label |
-| `radius.xl` | 14 | windows, alerts, notifications, launcher, bar panels (Control Center, calendar) |
+| `radius.xl` | 16 | windows, alerts, notifications, launcher, bar panels (Control Center, calendar) |
 | `radius.full` | h/2 | **only** switch, slider track, badge, progress segments (1) |
 
-**Concentric rule:** `inner = max(outer − inset, 4)`. Examples: window 14 − sheet inset 6 = sheet 8; menu 10 − item inset 4 = item 6; segmented track 8 − 2 = pill 6. A child that stands alone (a button in an alert, 16 from the edge) falls back to its fixed token (6). This is Apple's own "concentric shape" concept, but our values are smaller and our corners are plain circular arcs, **not continuous squircles**. Arcs read crisper and more technical and are cheaper to draw.
+**Concentric rule:** `inner = max(outer − inset, 4)`. Examples: window 16 − sheet inset 6 = sheet 10; menu 10 − item inset 4 = item 6; segmented track 8 − 2 = pill 6. A child that stands alone (a button in an alert, 16 from the edge) falls back to its fixed token (6). This is Apple's own "concentric shape" concept, but our values are smaller and our corners are plain circular arcs, **not continuous squircles**. Arcs read crisper and more technical and are cheaper to draw.
 
-The compositor's window corners are 14. Maximised and tiled windows square their screen-touching corners (radius 0), and the sheet keeps its 8.
+The compositor's window corners are 16. Maximised and tiled windows square their screen-touching corners (radius 0), and the sheet keeps its 10.
 
 ### Hairlines
 - One hairline width: 1 device pixel at integer scales, snapped to the pixel grid at fractional scales (`width = 1/scale` logical, rounded to whole device pixels ≥ 1).
-- Allowed in five places only: window outer edge (`edge` at 55 % opacity, inside the shadow), sheet edge in dark mode (`hairline`), table header underline and status-bar top, menu separators, and field outlines (`edge`, 1 pt).
+- Allowed in three places only: table header underline and status-bar top, menu separators, and field outlines (`edge`, 1 pt).
+- **Edges are lit, not outlined.** A window has no drawn border. It has a one device pixel black line just outside it (55 % dark, 10 % light), which separates it from whatever lies behind, and a **highlight** just inside it, 0.5 pt wide, white fading downward over 260 pt (16 → 5 % dark, 90 → 50 % light). Menus, panels, cards and the Taskbar carry the same highlight. With Increase Contrast the highlight becomes a 1 pt `edge` line.
 - Never between sidebar rows or settings rows. Use spacing and tone. Never under the title bar: the frame/sheet step replaces it.
 
 ### Spacing, density, grid
@@ -61,30 +62,32 @@ Defined in **OKLCH** and generated, Linear-style, from a few inputs: a neutral h
 ### Neutrals
 | Role | Light | Dark | Use |
 |---|---|---|---|
-| `chassis` | `#ECEAE7` (L .938) | `#1F2329` (L .255) | window frame, sidebar, title bar, Taskbar |
-| `sheet` | `#FCFBF9` (L .988) | `#272A30` (L .285) | content inside windows, Settings content, document background |
-| `overlay` | `#FFFFFF` | `#34373C` (L .335) | menus, popovers, notifications, alert body |
-| `well` | `#E2DFDB` (L .905) | `#31343A` (L .325) | control fill (buttons, segmented track, window-control well, search), unfocused selection, sidebar selection |
-| `hairline` | `#D4D0CB` | `#3B3F45` (L .365) | separators, sidebar selection with keyboard focus |
-| `rim` | (= hairline) | `#494D54` (L .42) | the 1 pt edge of floating dark surfaces (sheet, menus, notifications, launcher, Control Center, labels); none in light |
-| `edge` | `#BAB7B2` | `#575B62` (L .47) | window and control outlines; raised chip in dark segmented |
+| `chassis` | `#F1F0ED` (L .955) | `#282A2E` (L .285) | window frame, sidebar, title bar, Taskbar |
+| `sheet` | `#FEFDFD` (L .995) | `#1E2124` (L .245) | content inside windows, Settings content, document background |
+| `overlay` | `#FFFFFF` | `#33353A` (L .33) | menus, popovers, notifications, alert body |
+| `well` | `#E2DFDB` (L .905) | `#3D4044` (L .37) | control fill (buttons, segmented track, window-control well, search), unfocused selection, sidebar selection |
+| `hairline` | `#D4D0CB` | `#45484C` (L .40) | separators, sidebar selection with keyboard focus |
+| `edge` | `#BAB7B2` | `#575B62` (L .47) | control outlines; raised chip in dark segmented |
 | `ink` | `#201E1A` | `#E4E6EA` (L .925) | primary text and glyphs |
 | `ink2` | `#5B5752` | `#B9BEC6` | secondary text, inactive glyphs |
 | `ink3` | `#83807A` | `#8D9198` | labels, placeholders, disabled, timestamps |
 | `deep` | `#201E1A` | `#161A21` (L .215) | dark text on light fills (Amber, Graphite, warning), the terminal's Midnight background |
 
-Light keeps the warm hue (paper and stone). Dark moved in 2026 from warm near-black (`#141210`) to a lifted "dusk slate": hue 262, between Breeze/GitHub (248–258) and GNOME (286) and next to the Ultramarine accent, with chroma .011–.013 so the tint shows without reading as blue. The base sits at L .255 like every current dark desktop, not near black. In dark, elevated is lighter: chassis < sheet < well ≤ overlay < hairline < rim < edge. Whether light moves to the same slate family is an open owner decision (plan `NOTES/plans/dark-theme.md`, milestone 6).
+Light keeps the warm hue (paper and stone). Dark is a lifted "dusk slate": hue 262, between Breeze/GitHub (248–258) and GNOME (286) and next to the Ultramarine accent, with chroma .008 so the tint is felt without reading as blue. In dark, content is recessed and what is raised is lighter: sheet < chassis < overlay < well < hairline < edge. Whether light moves to the same slate family is an open owner decision (plan `NOTES/plans/dark-theme.md`, milestone 6).
 
-### Measured contrast (WCAG 2 ratio / APCA Lc)
+### Measured contrast (WCAG 2 ratio)
 | Pair | Light | Dark |
 |---|---|---|
-| ink on sheet | 16.1 / 101 | 11.5 / −88 |
-| ink on overlay | | 9.6 / −85 |
-| ink2 on sheet | 6.9 / 83 | 7.7 / −63 |
-| ink3 on sheet | 3.8 / 64 | 4.5 / −39 |
-| ink2 on chassis | 6.0 / 73 | 8.4 / −65 |
-| accent fill vs sheet | 5.4 | 3.1 |
-| accent text tone vs overlay | | 4.35 |
+| ink on sheet | 16.4 | 12.9 |
+| ink on overlay | 16.6 | 9.8 |
+| ink on chassis | 14.6 | 11.5 |
+| ink2 on sheet | 7.1 | 8.7 |
+| ink3 on sheet | 3.9 | 5.1 |
+| ink2 on chassis | 6.3 | 7.7 |
+| ink3 on chassis | 3.5 | 4.5 |
+| accent fill vs sheet | 5.4 | 3.5 |
+| accent fill vs chassis | | 3.1 |
+| accent text tone vs overlay | | 4.47 |
 | on-accent text on accent | 5.6 (white) | 4.7 (white) |
 
 Targets: body text Lc ≥ 90 in light; in dark Lc 75–90, because APCA gives Lc 90 as the advisory maximum in dark mode, where halation, not lack of contrast, is the problem (a test fails if ink is brightened back to near white); secondary Lc ≥ 60 at 12–13 pt medium (met); `ink3` only for labels ≥ 10.5 pt semibold, placeholders and disabled (Lc ≥ 30 floor; dark `ink3` at Lc 39 is placeholder-only, and labels on dark use `ink2` when ≤ 11 pt in Increase Contrast). Non-text control boundaries: ≥ 1.9:1 default, ≥ 3:1 with Increase Contrast (`edge` darkens to L .62 light / lightens to L .58 dark). Add a test that computes these from the tokens and fails CI below target.
@@ -118,9 +121,9 @@ Targets: body text Lc ≥ 90 in light; in dark Lc 75–90, because APCA gives Lc
 | Level | Surface | Shadow (light) | Shadow (dark) |
 |---|---|---|---|
 | 0 Desktop | wallpaper | none | none |
-| 1 Frame | `chassis` + 1 pt `edge` at 55 % | key 0/1/2 α .10 + ambient 0/12/32 α .22 (active); ambient halves when inactive | key α .40 + ambient 0/14/36 α .45 |
-| 1 Sheet | `sheet`, inset in the frame | none (tonal step only) | none, plus a `rim` edge |
-| 2 Overlay | `overlay` (menus, popovers, notifications), lighter than the window in dark | 0/1/1.5 α .14 + 0/6/18 α .18 | 0/1/1.5 α .35 + 0/6/18 α .40, plus a `rim` edge |
+| 1 Frame | `chassis`, lit edge | key 0/.5/1 α .10 + ambient 0/6/12 α .14 (active); ambient halves when inactive | key 0/1/1.5 α .30 + ambient 0/8/14 α .42 |
+| 1 Sheet | `sheet`, inset in the frame | none (tonal step only) | none (tonal step only, recessed) |
+| 2 Overlay | `overlay` (menus, popovers, notifications), lighter than the window in dark, lit edge | 0/.5/.75 α .10 + 0/3/7 α .14 | 0/1/1 α .30 + 0/4/8 α .36 |
 | 3 Modal | alert/sheet card above a **scrim**: parent dims with black at 18 % (light) / 40 % (dark) | as frame | as frame |
 
 **Translucency policy:** none on windows, menus or the bar by default. Blur exists in exactly two places: (a) the scrim behind the launcher, overview and modal alerts gets a 24 pt backdrop blur at 60 % mix, so the eye is pulled forward; (b) Reduce Transparency is irrelevant because we are opaque, but an opt-in "Tinted chassis" mixes 6 % of the wallpaper's average colour into `chassis` (Mica-like, computed once per wallpaper change, no live blur). This also drops the per-frame blur work the Dock and menus do today.
@@ -201,9 +204,9 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 | Slider | 4 pt track (`well`), accent fill, and a **fader knob**: a 7×20 rounded bar, white with an edge. It reads as an instrument fader, not an iOS ball. Optional tick marks 1.5×4 `ink3` |
 | Progress | **segmented**: 24 cells of 2 gap, radius 1, accent on `well`. Indeterminate = a 4-cell block gliding (the `standard` spring) |
 | Menus | `overlay`, radius 10, 4 inset, 28 rows, highlight = accent radius 6; shortcut column right-aligned in `ink3`, written as words in GNOME order ("Shift+Ctrl+N", "Alt+Super+8"; no ⌘, ⌃, ⌥ or ⇧ symbols); submenus open on the `quick` spring; a menu never leaves the screen: it flips, then slides, then shortens to scroll between 20 pt bands with a single `ink2` chevron (behaviour: `docs/architecture/behaviour.md`, Popup placement) |
-| Alerts | card radius 14: the body on `overlay` with a 36 pt app disc, a Manrope 17 heading and body in `ink2`; a **footer tray** on `chassis` holding the buttons (default right, cancel left of it, an alternative such as "Don't Quit" as a quiet button on the far left). App-modal alerts are centred over the window with a scrim; document-modal alerts drop from under the header |
+| Alerts | card radius 16: the body on `overlay` with a 36 pt app disc, a Manrope 17 heading and body in `ink2`; a **footer tray** on `chassis` holding the buttons (default right, cancel left of it, an alternative such as "Don't Quit" as a quiet button on the far left). App-modal alerts are centred over the window with a scrim; document-modal alerts drop from under the header |
 | Tooltip | `ink` fill with `chassis` text (inverted), radius 6, 12/500; no arrow |
-| Notifications | `overlay`, radius 14, app disc 18 + LABEL-style app name + time, title 13.5/600, body 13 `ink2`; actions appear as quiet buttons on hover |
+| Notifications | `overlay`, radius 16, app disc 18 + LABEL-style app name + time, title 13.5/600, body 13 `ink2`; actions appear as quiet buttons on hover |
 | Badges | danger capsule, 11/700 white, min 18 pt |
 
 ---
@@ -243,11 +246,11 @@ A dry, short, *wooden-percussive* palette: soft-attack mallet and click tones un
 
 ## 13. The shell: the Taskbar
 
-The Taskbar is an edge-anchored bar, 64 pt at the default icon size, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
-- Bar surface = `chassis` (same tone as window frames, so the bar reads as the desktop's frame), with a 1 pt `edge` on the inner side only, square at the screen edge. It is opaque; "Tinted chassis" applies here too.
+The Taskbar is an edge-anchored bar, 64 pt at the default icon size plus its 8 pt margin, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
+- Bar surface = `chassis`, the same tone, radius (`radius.xl`), lit edge and shadow as a window, so bar and windows read as one family. It floats 8 pt from the screen edges, and the 8 pt counts as part of the bar for the pointer: a throw to the screen edge still lands on it. It is opaque; "Tinted chassis" applies here too.
 - **Active app = a `focus` frame** around its icon: 4 pt outside it, a 1.5 pt `focus` line over a `focus` plate at 14 % (22 % hovered, 30 % pressed), radius concentric with the icon. It is the one `focus` shape on the bar and glides to the next active app on `quick` (a cross-fade under Reduce Motion). **Other running apps = a 3×3 `ink2` square** on the screen-edge side (the square motif; a dot would be macOS).
-- The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 14 panels).
+- The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 16 panels).
 - The clock is Inter 15/600 tnum stacked "14 / 32".
 - The mark is a "B" knocked out of a rounded square in `ink`, stroked at the weight of the bar glyphs.
-- Bar pop-overs (Control Center, calendar, notifications) are `overlay` panels with radius 14 that slide out from the bar along its normal axis (`standard`).
+- Bar pop-overs (Control Center, calendar, notifications) are `overlay` panels with radius 16 that slide out from the bar along its normal axis (`standard`).
 - Horizontal placement uses the same rules with the square on the bottom edge.

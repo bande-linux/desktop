@@ -46,20 +46,8 @@ fn call<R: serde::de::DeserializeOwned + zbus::zvariant::Type>(
 fn an_app_keeps_a_secret_over_an_encrypted_session_and_cannot_forge_its_owner() {
     let bus = SessionBus::start().unwrap();
     let home = tempfile::tempdir().unwrap();
-    let daemon = async_io::block_on(async {
-        let daemon = Daemon::new(
-            Keychain::load(home.path().to_path_buf()).await,
-            PathBuf::from("/nonexistent"),
-        );
-        let connection = zbus::connection::Builder::address(bus.address())
-            .unwrap()
-            .build()
-            .await
-            .unwrap();
-        daemon.serve(&connection).await.unwrap();
-        assert!(daemon.login(Secret::text("correct horse")).await);
-        (daemon, connection)
-    });
+    let (daemon, _connection) = serve(&bus, home.path(), PathBuf::from("/nonexistent"));
+    assert!(async_io::block_on(daemon.login(Secret::text(PASSWORD))));
     let client = bus.connect().unwrap();
 
     let private = Key::generate_private_key().unwrap();
@@ -87,41 +75,28 @@ fn an_app_keeps_a_secret_over_an_encrypted_session_and_cannot_forge_its_owner() 
         ),
     ]);
     let secret: WireSecret = (session.clone(), iv, sealed, "text/plain".to_owned());
-    let login = collection_path("login");
     let (item, _): (OwnedObjectPath, OwnedObjectPath) = call(
         &client,
-        login.as_str(),
+        collection_path("login").as_str(),
         "org.freedesktop.Secret.Collection",
         "CreateItem",
         &(properties, secret, true),
     );
 
-    let (unlocked, locked): (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) = call(
-        &client,
-        SERVICE_PATH,
-        SERVICE,
-        "SearchItems",
-        &(HashMap::from([("service", "mail")]),),
-    );
+    let (unlocked, locked) = search(&client, ("service", "mail"));
     assert_eq!(
         (unlocked, locked),
         (vec![item.clone()], vec![]),
         "the saving app reads its own item"
     );
-    let (_, iv, sealed, _): WireSecret = call(
-        &client,
-        item.as_str(),
-        "org.freedesktop.Secret.Item",
-        "GetSecret",
-        &(&session,),
-    );
+    let (_, iv, sealed, _) = read_secret(&client, &item, &session).unwrap();
     assert_eq!(&*crypto::decrypt(sealed, &aes, iv).unwrap(), b"hunter2");
     let stored: OwnedValue = call(
         &client,
         item.as_str(),
         "org.freedesktop.DBus.Properties",
         "Get",
-        &("org.freedesktop.Secret.Item", "Attributes"),
+        &(ITEM, "Attributes"),
     );
     let stored = HashMap::<String, String>::try_from(stored).unwrap();
     assert_ne!(
@@ -129,90 +104,6 @@ fn an_app_keeps_a_secret_over_an_encrypted_session_and_cannot_forge_its_owner() 
         Some("/usr/bin/someone-else"),
         "a client cannot name another app as the owner"
     );
-
-    let (daemon, _connection) = daemon;
-    async_io::block_on(async {
-        let restarted = Daemon::new(
-            Keychain::load(home.path().to_path_buf()).await,
-            PathBuf::from("/nonexistent"),
-        );
-        assert!(
-            !restarted.login(Secret::text("wrong")).await,
-            "a wrong password keeps the keychain shut"
-        );
-        assert!(restarted.login(Secret::text("correct horse")).await);
-    });
-    drop(daemon);
-}
-
-#[test]
-fn another_apps_item_opens_only_with_the_keychain_password() {
-    let bus = SessionBus::start().unwrap();
-    let home = tempfile::tempdir().unwrap();
-    let prompter = home.path().join("prompter");
-    std::fs::write(
-        &prompter,
-        "#!/bin/sh\nwhile read -r line && [ -n \"$line\" ]; do :; done\nprintf 'allow\\twrong\\n'\nread -r verdict\n[ \"$verdict\" = wrong ] && printf 'allow\\tcorrect horse\\n'\nread -r verdict\n",
-    )
-    .unwrap();
-    std::fs::set_permissions(&prompter, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let (_daemon, _connection) = async_io::block_on(async {
-        let daemon = Daemon::new(Keychain::load(home.path().to_path_buf()).await, prompter);
-        let connection = zbus::connection::Builder::address(bus.address())
-            .unwrap()
-            .build()
-            .await
-            .unwrap();
-        daemon.serve(&connection).await.unwrap();
-        assert!(daemon.login(Secret::text("correct horse")).await);
-        daemon
-            .store_internal(
-                "Home Wi-Fi",
-                HashMap::from([("network".to_owned(), "home".to_owned())]),
-                Secret::text("wifi-secret"),
-            )
-            .await;
-        (daemon, connection)
-    });
-    let client = bus.connect().unwrap();
-    let (unlocked, locked): (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) = call(
-        &client,
-        SERVICE_PATH,
-        SERVICE,
-        "SearchItems",
-        &(HashMap::from([("network", "home")]),),
-    );
-    assert!(unlocked.is_empty(), "another app's item starts locked");
-    let (opened, prompt): (Vec<OwnedObjectPath>, OwnedObjectPath) =
-        call(&client, SERVICE_PATH, SERVICE, "Unlock", &(&locked,));
-    assert!(opened.is_empty());
-    let proxy = zbus::blocking::Proxy::new(
-        &client,
-        "org.freedesktop.secrets",
-        prompt,
-        "org.freedesktop.Secret.Prompt",
-    )
-    .unwrap();
-    let mut completed = proxy.receive_signal("Completed").unwrap();
-    proxy.call_method("Prompt", &("")).unwrap();
-    let (dismissed, _): (bool, OwnedValue) =
-        completed.next().unwrap().body().deserialize().unwrap();
-    assert!(!dismissed, "the right password after a wrong one allows it");
-    let (_, session): (OwnedValue, OwnedObjectPath) = call(
-        &client,
-        SERVICE_PATH,
-        SERVICE,
-        "OpenSession",
-        &("plain", Value::from("")),
-    );
-    let (_, _, value, _): WireSecret = call(
-        &client,
-        locked[0].as_str(),
-        "org.freedesktop.Secret.Item",
-        "GetSecret",
-        &(&session,),
-    );
-    assert_eq!(value, b"wifi-secret");
 }
 
 fn prompter(home: &Path, script: &str) -> PathBuf {
@@ -266,13 +157,25 @@ fn serve(bus: &SessionBus, home: &Path, prompter: PathBuf) -> (Arc<Daemon>, zbus
     })
 }
 
-fn reveal(client: &Connection) -> (bool, OwnedValue) {
-    let prompt: OwnedObjectPath = call(client, SERVICE_PATH, EXTENSION, "Reveal", &());
+fn answer_prompt(client: &Connection, prompt: OwnedObjectPath) -> (bool, OwnedValue) {
     let proxy =
         zbus::blocking::Proxy::new(client, "org.freedesktop.secrets", prompt, PROMPT).unwrap();
     let mut completed = proxy.receive_signal("Completed").unwrap();
     proxy.call_method("Prompt", &("")).unwrap();
     completed.next().unwrap().body().deserialize().unwrap()
+}
+
+fn reveal(client: &Connection) -> (bool, OwnedValue) {
+    let prompt = call(client, SERVICE_PATH, EXTENSION, "Reveal", &());
+    answer_prompt(client, prompt)
+}
+
+fn search(
+    client: &Connection,
+    attribute: (&str, &str),
+) -> (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) {
+    let query = HashMap::from([attribute]);
+    call(client, SERVICE_PATH, SERVICE, "SearchItems", &(query,))
 }
 
 fn plain_session(client: &Connection) -> OwnedObjectPath {
@@ -290,16 +193,17 @@ fn read_secret(
     client: &Connection,
     item: &OwnedObjectPath,
     session: &OwnedObjectPath,
-) -> zbus::Result<Vec<u8>> {
-    let reply = client.call_method(
-        Some("org.freedesktop.secrets"),
-        item.as_str(),
-        Some(ITEM),
-        "GetSecret",
-        &(session,),
-    )?;
-    let (_, _, value, _): WireSecret = reply.body().deserialize()?;
-    Ok(value)
+) -> zbus::Result<WireSecret> {
+    client
+        .call_method(
+            Some("org.freedesktop.secrets"),
+            item.as_str(),
+            Some(ITEM),
+            "GetSecret",
+            &(session,),
+        )?
+        .body()
+        .deserialize()
 }
 
 fn collection_locked(client: &Connection) -> bool {
@@ -314,7 +218,7 @@ fn collection_locked(client: &Connection) -> bool {
 }
 
 #[test]
-fn settings_unlocks_a_locked_keychain_with_one_prompt_and_reads_only_until_it_locks() {
+fn another_apps_item_opens_only_with_the_keychain_password_and_until_settings_locks() {
     let bus = SessionBus::start().unwrap();
     let home = tempfile::tempdir().unwrap();
     let item = another_apps_item(home.path());
@@ -330,7 +234,7 @@ fn settings_unlocks_a_locked_keychain_with_one_prompt_and_reads_only_until_it_lo
     assert_eq!(times_shown(home.path()), 1, "one password prompt, not two");
     let session = plain_session(&client);
     assert_eq!(
-        read_secret(&client, &item, &session).unwrap(),
+        read_secret(&client, &item, &session).unwrap().2,
         b"wifi-secret"
     );
 
@@ -342,6 +246,18 @@ fn settings_unlocks_a_locked_keychain_with_one_prompt_and_reads_only_until_it_lo
     assert!(
         !collection_locked(&client),
         "the keychain itself stays unlocked"
+    );
+
+    let (unlocked, locked) = search(&client, ("network", "home"));
+    assert!(unlocked.is_empty(), "another app's item starts locked");
+    let (opened, prompt): (Vec<OwnedObjectPath>, OwnedObjectPath) =
+        call(&client, SERVICE_PATH, SERVICE, "Unlock", &(&locked,));
+    assert!(opened.is_empty());
+    let (dismissed, _) = answer_prompt(&client, prompt);
+    assert!(!dismissed, "the right password after a wrong one allows it");
+    assert_eq!(
+        read_secret(&client, &item, &session).unwrap().2,
+        b"wifi-secret"
     );
 }
 

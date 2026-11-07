@@ -47,6 +47,7 @@ mod popup;
 mod recall;
 mod release;
 mod render;
+mod resume;
 mod reveal;
 mod scanout;
 mod scene;

@@ -12,7 +12,9 @@ accesskit.workspace = true
 accesskit_unix.workspace = true
 jiff.workspace = true
 libc.workspace = true
-rustix = { workspace = true, features = ["fs", "net", "time"] }
+rustix = { workspace = true, features = ["fs", "net", "rand", "time"] }
+serde.workspace = true
+serde_json.workspace = true
 smithay = { workspace = true, features = ["backend_drm", "backend_gbm", "backend_libinput", "backend_session_libseat", "backend_udev", "desktop"] }
 tracing.workspace = true
 bande-bus.workspace = true

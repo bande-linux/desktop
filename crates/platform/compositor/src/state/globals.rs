@@ -26,6 +26,7 @@ use smithay::reexports::wayland_protocols_misc::server_decoration::server::org_k
 use smithay::wayland::shell::kde::decoration::KdeDecorationState;
 use smithay::wayland::shell::xdg::decoration::XdgDecorationState;
 use smithay::wayland::shell::xdg::dialog::XdgDialogState;
+use smithay::wayland::xdg_foreign::XdgForeignState;
 use smithay::wayland::shm::ShmState;
 use smithay::wayland::text_input::TextInputManagerState;
 use smithay::wayland::viewporter::ViewporterState;
@@ -60,6 +61,7 @@ pub(crate) struct Globals {
     _decoration_state: XdgDecorationState,
     pub(crate) kde_decoration_state: KdeDecorationState,
     _dialog_state: XdgDialogState,
+    pub(crate) foreign_state: XdgForeignState,
     _toplevel_tag: XdgToplevelTagManager,
     _cursor_shape_state: CursorShapeManagerState,
     _pointer_gestures_state: PointerGesturesState,
@@ -123,6 +125,7 @@ impl Globals {
             _decoration_state: XdgDecorationState::new::<State>(handle),
             kde_decoration_state: KdeDecorationState::new::<State>(handle, KdeDefaultMode::Server),
             _dialog_state: XdgDialogState::new::<State>(handle),
+            foreign_state: XdgForeignState::new::<State>(handle),
             _toplevel_tag: XdgToplevelTagManager::new::<State>(handle),
             _cursor_shape_state: CursorShapeManagerState::new::<State>(handle),
             _pointer_gestures_state: PointerGesturesState::new::<State>(handle),

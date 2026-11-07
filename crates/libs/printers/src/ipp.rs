@@ -2,19 +2,22 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 
-pub(crate) const OPERATION: u8 = 0x01;
-pub(crate) const JOB: u8 = 0x02;
-pub(crate) const PRINTER: u8 = 0x04;
+pub const OPERATION: u8 = 0x01;
+pub const JOB: u8 = 0x02;
+pub const PRINTER: u8 = 0x04;
 const END: u8 = 0x03;
 const DELIMITERS_END: u8 = 0x0F;
-pub(crate) const INTEGER: u8 = 0x21;
-const BOOLEAN: u8 = 0x22;
-const ENUM: u8 = 0x23;
+pub const INTEGER: u8 = 0x21;
+pub const BOOLEAN: u8 = 0x22;
+pub const ENUM: u8 = 0x23;
+const RESOLUTION: u8 = 0x32;
+const RANGE: u8 = 0x33;
 const TEXT_WITH_LANGUAGE: u8 = 0x35;
 const NAME_WITH_LANGUAGE: u8 = 0x36;
-const NAME: u8 = 0x42;
-pub(crate) const KEYWORD: u8 = 0x44;
-pub(crate) const URI: u8 = 0x45;
+pub const NAME: u8 = 0x42;
+pub const MIME_TYPE: u8 = 0x49;
+pub const KEYWORD: u8 = 0x44;
+pub const URI: u8 = 0x45;
 const CHARSET: u8 = 0x47;
 const LANGUAGE: u8 = 0x48;
 const SUCCESS_LIMIT: u16 = 0x00FF;
@@ -27,6 +30,8 @@ pub enum Value {
     Integer(i32),
     Boolean(bool),
     Text(String),
+    Range(i32, i32),
+    Resolution(i32, i32),
     Other,
 }
 
@@ -41,11 +46,13 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Io(error) => write!(f, "cannot reach CUPS: {error}"),
-            Self::NotAllowed => f.write_str("this user may not change printers"),
+            Self::Io(error) => write!(f, "cannot reach the printer: {error}"),
+            Self::NotAllowed => f.write_str("this user may not do that"),
             Self::Refused(_, message) if !message.is_empty() => f.write_str(message),
-            Self::Refused(status, _) => write!(f, "CUPS refused the request ({status:#06x})"),
-            Self::Malformed => f.write_str("CUPS sent an answer that cannot be read"),
+            Self::Refused(status, _) => {
+                write!(f, "the printer refused the request ({status:#06x})")
+            }
+            Self::Malformed => f.write_str("the printer sent an answer that cannot be read"),
         }
     }
 }
@@ -61,33 +68,33 @@ impl From<io::Error> for Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Attribute {
+pub struct Attribute {
     pub name: String,
     pub values: Vec<Value>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Group {
+pub struct Group {
     pub tag: u8,
     pub attributes: Vec<Attribute>,
 }
 
 impl Group {
-    pub(crate) fn get(&self, name: &str) -> Option<&[Value]> {
+    pub fn get(&self, name: &str) -> Option<&[Value]> {
         self.attributes
             .iter()
             .find(|attribute| attribute.name == name)
             .map(|attribute| attribute.values.as_slice())
     }
 
-    pub(crate) fn text(&self, name: &str) -> Option<String> {
+    pub fn text(&self, name: &str) -> Option<String> {
         match self.get(name)?.first()? {
             Value::Text(text) => Some(text.clone()),
             _ => None,
         }
     }
 
-    pub(crate) fn texts(&self, name: &str) -> Vec<String> {
+    pub fn texts(&self, name: &str) -> Vec<String> {
         self.get(name)
             .unwrap_or_default()
             .iter()
@@ -98,14 +105,14 @@ impl Group {
             .collect()
     }
 
-    pub(crate) fn integer(&self, name: &str) -> Option<i32> {
+    pub fn integer(&self, name: &str) -> Option<i32> {
         match self.get(name)?.first()? {
             Value::Integer(number) => Some(*number),
             _ => None,
         }
     }
 
-    pub(crate) fn boolean(&self, name: &str) -> Option<bool> {
+    pub fn boolean(&self, name: &str) -> Option<bool> {
         match self.get(name)?.first()? {
             Value::Boolean(flag) => Some(*flag),
             _ => None,
@@ -113,12 +120,12 @@ impl Group {
     }
 }
 
-pub(crate) struct Request {
+pub struct Request {
     body: Vec<u8>,
 }
 
 impl Request {
-    pub(crate) fn new(operation: u16, user: &str) -> Self {
+    pub fn new(operation: u16, user: &str) -> Self {
         let mut request = Self {
             body: [0x02, 0x00].to_vec(),
         };
@@ -141,24 +148,58 @@ impl Request {
         self.body.extend(value);
     }
 
-    pub(crate) fn string(&mut self, tag: u8, name: &str, value: &str) -> &mut Self {
+    pub fn string(&mut self, tag: u8, name: &str, value: &str) -> &mut Self {
         self.value(tag, name, value.as_bytes());
         self
     }
 
-    pub(crate) fn strings(&mut self, tag: u8, name: &str, values: &[&str]) -> &mut Self {
+    pub fn strings(&mut self, tag: u8, name: &str, values: &[&str]) -> &mut Self {
         for (index, value) in values.iter().enumerate() {
             self.value(tag, if index == 0 { name } else { "" }, value.as_bytes());
         }
         self
     }
 
-    pub(crate) fn integer(&mut self, tag: u8, name: &str, value: i32) -> &mut Self {
+    pub fn integer(&mut self, tag: u8, name: &str, value: i32) -> &mut Self {
         self.value(tag, name, &value.to_be_bytes());
         self
     }
 
+    pub fn boolean(&mut self, name: &str, value: bool) -> &mut Self {
+        self.value(BOOLEAN, name, &[u8::from(value)]);
+        self
+    }
+
+    pub fn ranges(&mut self, name: &str, ranges: &[(i32, i32)]) -> &mut Self {
+        for (index, (first, last)) in ranges.iter().enumerate() {
+            let mut bytes = first.to_be_bytes().to_vec();
+            bytes.extend(last.to_be_bytes());
+            self.value(RANGE, if index == 0 { name } else { "" }, &bytes);
+        }
+        self
+    }
+
+    pub fn begin_group(&mut self, tag: u8) -> &mut Self {
+        self.body.push(tag);
+        self
+    }
+
+    pub fn finished(mut self) -> Vec<u8> {
+        self.body.push(END);
+        self.body
+    }
+
     pub(crate) fn send(&mut self, socket: &Path, resource: &str, user: &str) -> Result<Vec<Group>> {
+        self.send_with(socket, resource, user, &[])
+    }
+
+    pub(crate) fn send_with(
+        &mut self,
+        socket: &Path,
+        resource: &str,
+        user: &str,
+        document: &[u8],
+    ) -> Result<Vec<Group>> {
         self.body.push(END);
         let mut stream = UnixStream::connect(socket)?;
         stream.set_read_timeout(Some(TIMEOUT))?;
@@ -166,16 +207,17 @@ impl Request {
         let head = format!(
             "POST {resource} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/ipp\r\n\
              Content-Length: {}\r\nAuthorization: PeerCred {user}\r\nConnection: close\r\n\r\n",
-            self.body.len()
+            self.body.len() + document.len()
         );
         stream.write_all(head.as_bytes())?;
         stream.write_all(&self.body)?;
+        stream.write_all(document)?;
         let body = read_http(BufReader::new(stream))?;
         parse(&body)
     }
 }
 
-fn read_http(mut reader: impl BufRead) -> Result<Vec<u8>> {
+pub fn read_http(mut reader: impl BufRead) -> Result<Vec<u8>> {
     let mut line = String::new();
     reader.read_line(&mut line)?;
     let status: u16 = line
@@ -266,6 +308,20 @@ fn value(tag: u8, bytes: &[u8]) -> Value {
             .try_into()
             .map_or(Value::Other, |raw| Value::Integer(i32::from_be_bytes(raw))),
         BOOLEAN => Value::Boolean(bytes.first().is_some_and(|byte| *byte != 0)),
+        RANGE | RESOLUTION => match (
+            bytes.get(..4).and_then(|raw| <[u8; 4]>::try_from(raw).ok()),
+            bytes
+                .get(4..8)
+                .and_then(|raw| <[u8; 4]>::try_from(raw).ok()),
+        ) {
+            (Some(first), Some(second)) if tag == RANGE => {
+                Value::Range(i32::from_be_bytes(first), i32::from_be_bytes(second))
+            }
+            (Some(first), Some(second)) => {
+                Value::Resolution(i32::from_be_bytes(first), i32::from_be_bytes(second))
+            }
+            _ => Value::Other,
+        },
         TEXT_WITH_LANGUAGE | NAME_WITH_LANGUAGE => {
             let mut cursor = Cursor { bytes };
             match cursor.sized().and_then(|_| cursor.sized()) {
@@ -278,7 +334,7 @@ fn value(tag: u8, bytes: &[u8]) -> Value {
     }
 }
 
-pub(crate) fn parse(bytes: &[u8]) -> Result<Vec<Group>> {
+pub fn parse(bytes: &[u8]) -> Result<Vec<Group>> {
     let mut cursor = Cursor { bytes };
     cursor.take(2)?;
     let status = cursor.short()?;

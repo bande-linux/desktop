@@ -239,4 +239,48 @@ fn an_nv12_video_buffer_shows_its_colour() {
         .max_by_key(|pixel| pixel[0])
         .map(|pixel| pixel.to_vec());
     panic!("no red in the frame, brightest {brightest:?}");
+
+fn another_process_dialog_opens_over_the_window_it_is_attached_to() {
+    let mut server = headless(1200, 900);
+    let bytes = RED.repeat(600 * 500);
+    let mut app = TestClient::connect(&mut server);
+    app.show_window(
+        &mut server,
+        &ShmImage {
+            width: 600,
+            height: 500,
+            stride: 2400,
+            format: Format::Xrgb8888,
+            bytes: &bytes,
+        },
+    );
+    app.set_app_id(&mut server, 0, "org.example.Editor");
+    let handle = app.export_window(&mut server, 0);
+
+    let bytes = BLUE.repeat(200 * 100);
+    let mut dialogs = TestClient::connect(&mut server);
+    dialogs.show_window_attached_to(
+        &mut server,
+        &ShmImage {
+            width: 200,
+            height: 100,
+            stride: 800,
+            format: Format::Xrgb8888,
+            bytes: &bytes,
+        },
+        &handle,
+    );
+    dialogs.set_app_id(&mut server, 0, "org.bande.FileChooser");
+    roundtrip(&mut server, &mut [&mut app, &mut dialogs]);
+
+    app.minimize_window(&mut server, 0);
+    roundtrip(&mut server, &mut [&mut app, &mut dialogs]);
+    assert!(
+        server
+            .windows()
+            .iter()
+            .find(|window| window.app_id() == "org.bande.FileChooser")
+            .unwrap()
+            .is_minimized()
+    );
 }

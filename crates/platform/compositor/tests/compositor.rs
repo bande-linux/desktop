@@ -185,16 +185,29 @@ fn while_locked_a_consented_virtual_keyboard_reaches_nothing() {
 }
 
 #[test]
-fn turning_consent_off_disconnects_the_program() {
-    let (mut server, _editor) = focused_app();
+fn turning_consent_off_cuts_the_program_off_and_keys_go_to_the_app_at_once() {
+    let (mut server, mut editor) = focused_app();
     let consent = grant_consent(&mut server, "read-keys sandboxed org.example.Ime\n");
     let mut input_method = TestClient::connect_sandboxed(&mut server, "org.example.Ime");
     input_method.use_seat(&mut server);
     input_method.become_input_method(&mut server);
     assert!(!input_method.input_method_unavailable());
+    editor.enable_text_input(&mut server);
+    input_method.grab_keyboard(&mut server);
+    chord(&mut server, &[KEY_A]);
+    roundtrip(&mut server, &mut [&mut input_method, &mut editor]);
+    assert!(input_method.grabbed_keys().contains(&(KEY_A, true)));
 
-    std::fs::write(consent.path().join("consent"), "").unwrap();
-    assert!(input_method.disconnected_after_dispatch(&mut server));
+    let replacement = consent.path().join("replacement");
+    std::fs::write(&replacement, "").unwrap();
+    std::fs::rename(&replacement, consent.path().join("consent")).unwrap();
+    server.dispatch().unwrap();
+    chord(&mut server, &[KEY_Q]);
+    roundtrip(&mut server, &mut [&mut editor]);
+    input_method.read_what_arrived();
+
+    assert!(editor.keys().contains(&(KEY_Q, true)));
+    assert!(!input_method.grabbed_keys().contains(&(KEY_Q, true)));
 }
 
 #[test]

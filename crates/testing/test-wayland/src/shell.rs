@@ -17,6 +17,14 @@ impl TestClient {
         Self::from_socket(server, client_end)
     }
 
+    pub fn connect_as_lock_screen(server: &mut Compositor) -> Self {
+        let (client_end, server_end) = std::os::unix::net::UnixStream::pair().expect("socket pair");
+        server
+            .insert_session_client(server_end, SessionRole::LockScreen)
+            .expect("insert lock screen");
+        Self::from_socket(server, client_end)
+    }
+
     pub fn join_shell(&mut self, server: &mut Compositor) {
         let _: BandeShellV1 = self.bind("bande_shell_v1", 1);
         let _: ExtForeignToplevelListV1 = self.bind("ext_foreign_toplevel_list_v1", 1);

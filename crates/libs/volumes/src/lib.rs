@@ -7,6 +7,7 @@ pub use eject::{
 };
 pub use mounts::{
     Mounted, SavedServer, connected_roots, connected_volume_of, follow_mounts, is_connected,
-    load_saved_servers, media_roots, mounted, mounted_volumes, on_connected_volume, quick_is_dir,
-    store_saved_servers, system_mounts_root, user_mounts_root, volume_icon,
+    leads_to_connected_volume, load_saved_servers, media_roots, mounted, mounted_volumes,
+    on_connected_volume, quick_is_dir, store_saved_servers, system_mounts_root, user_mounts_root,
+    volume_icon,
 };

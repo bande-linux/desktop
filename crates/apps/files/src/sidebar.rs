@@ -159,7 +159,7 @@ fn defaults(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Ve
     ];
     for (dir, icon) in USER_DIRS {
         let path = user_dir(home, user_dirs, dir);
-        if path != home && path.is_dir() {
+        if path != home && bande_volumes::quick_is_dir(&path) {
             favourites.push(Place {
                 name: folder_name(&path),
                 location: Location::Folder(path),

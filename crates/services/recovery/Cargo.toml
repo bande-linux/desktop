@@ -8,6 +8,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+rustix.workspace = true
 tracing.workspace = true
 bande-log.workspace = true
 zbus.workspace = true

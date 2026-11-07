@@ -122,7 +122,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - Not built yet: user picker and accounts (no Users pane, no fast user switching), crash
   reports, tiling beyond halves and quarters, custom shortcuts, input methods as
   sources, spell checking, colour filters, on-screen keyboard, notifications on the lock screen,
-  inline reply, file content search, spring-loading, Wi-Fi hidden and Enterprise
+  inline reply, spring-loading, Wi-Fi hidden and Enterprise
   networks, more portals (GlobalShortcuts, RemoteDesktop) and portal permission review, colour
   management, battery charge limit, Do Not Disturb schedules.
 - Debian archive upload: asset provenance for the sounds and `emoji.tsv`, man pages, a
@@ -133,3 +133,4 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 ## Printing
 - Browser: no Print yet; the web engine has no paged layout. Calendar prints the month as a list, not its grid. Multiple-copy and media choices are checked against the fake printer only until a real one has printed.
 - USB: `bande-printd` lists `ipp-usb` printers when it looks (dialog or pane opening); no prompt yet when a USB printer is plugged in, and printers that need a vendor driver need a CUPS queue set up by hand.
+- Search index: removable volumes are not indexed (Spotlight keeps an index on the volume); Files walks them for names.

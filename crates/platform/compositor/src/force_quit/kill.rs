@@ -13,6 +13,10 @@ use rustix::process::{PidfdFlags, Signal, pidfd_open, pidfd_send_signal};
 const PROC: &str = "/proc";
 const CGROUPS: &str = "/sys/fs/cgroup";
 const KILL_FILE: &str = "cgroup.kill";
+const DUMP_PATIENCE: Timespec = Timespec {
+    tv_sec: 8,
+    tv_nsec: 0,
+};
 
 pub(crate) struct Process {
     pidfd: OwnedFd,
@@ -63,7 +67,7 @@ impl Process {
         (!self.has_exited() && !name.is_empty()).then_some(name)
     }
 
-    pub(crate) fn force_quit(&self, app_ids: &[String]) -> io::Result<()> {
+    pub(crate) fn force_quit(&self, app_ids: &[String], unresponsive: bool) -> io::Result<()> {
         let theirs = fs::read_to_string(Path::new(PROC).join(self.pid.to_string()).join("cgroup"))
             .unwrap_or_default();
         let own = fs::read_to_string(Path::new(PROC).join("self/cgroup")).unwrap_or_default();
@@ -71,6 +75,9 @@ impl Process {
             return Ok(());
         }
         let scope = app_scope(&theirs, &own, app_ids);
+        if unresponsive && self.dump_then_kill(scope).is_ok() {
+            return Ok(());
+        }
         match pidfd_send_signal(&self.pidfd, Signal::KILL) {
             Ok(()) | Err(Errno::SRCH) => {}
             Err(error) => return Err(error.into()),
@@ -78,6 +85,30 @@ impl Process {
         let killed = scope.map(|scope| kill_scope(Path::new(CGROUPS), scope));
         self.release_memory();
         killed.unwrap_or(Ok(()))
+    }
+
+    fn dump_then_kill(&self, scope: Option<&str>) -> io::Result<()> {
+        let pidfd = self.pidfd.as_fd().try_clone_to_owned()?;
+        let scope = scope.map(str::to_owned);
+        pidfd_send_signal(&self.pidfd, Signal::QUIT)?;
+        std::thread::Builder::new()
+            .name("stop-hung-app".to_owned())
+            .spawn(move || {
+                let mut fds = [PollFd::new(&pidfd, PollFlags::IN)];
+                if let Err(error) = poll(&mut fds, Some(&DUMP_PATIENCE)) {
+                    tracing::debug!("cannot wait for a hung app to dump: {error}");
+                }
+                match pidfd_send_signal(&pidfd, Signal::KILL) {
+                    Ok(()) | Err(Errno::SRCH) => {}
+                    Err(error) => tracing::warn!("cannot end a hung app: {error}"),
+                }
+                if let Some(scope) = scope
+                    && let Err(error) = kill_scope(Path::new(CGROUPS), &scope)
+                {
+                    tracing::debug!("cannot end the rest of a hung app: {error}");
+                }
+            })?;
+        Ok(())
     }
 
     fn release_memory(&self) {

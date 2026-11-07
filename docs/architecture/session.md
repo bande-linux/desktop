@@ -438,7 +438,7 @@ made again.
   the formats equal to `LANG`, and localed drops those. It also refuses a `LANGUAGE` holding
   a colon, so a stale list is replaced by one name.
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
-  `bande-config`, `bande-power`, `bande-sound`, `bande-tray`, `bande-automount`,
+  `bande-config`, `bande-power`, `bande-sound`, `bande-tray`, `bande-indexer`, `bande-automount`,
   `bande-polkit-agent`. `bande-notify` and
   the portal backend are started by D-Bus activation, and `bande-clipboard` and the shell
   clients by the compositor ([behaviour](behaviour.md)): `bande-shell`, one process for the
@@ -570,6 +570,23 @@ Bande uses `greetd` for the privileged part of login and keeps its own UI unpriv
 3. **Handover**: after authentication, `greetd` opens the PAM session through `pam_systemd.so`
    and starts the user's session, which runs `bande-compositor`.
 
+### First run and recovery
+
+While `/var/lib/bande/setup-pending` exists, `bande-compositor --greeter` runs `bande-setup` in place
+of `bande-greeter`, in the same role and as the same unprivileged user. It asks for language,
+keyboard, account and password (default: the same password encrypts the disk, then the recovery
+key is shown once), Wi-Fi, appearance and automatic updates, in that order so that no secret reaches
+the disk before encryption has started. The steps needing root go through `pkexec` to
+`/usr/libexec/bande-first-run` in the image, which a polkit rule allows `_greetd` only while the
+file exists. The last step removes it and signs in over greetd's IPC, so finishing goes straight to
+the desktop.
+
+Recovery boots the image's read-only system partition with `boot=bande-live`: squashfs below, tmpfs
+above. greetd there starts an ordinary session for a `recovery` user with no password, with
+`bande-recovery-tools` open; this user gets polkit's yes only while `/run/bande-live/device` exists,
+so the name means nothing on an installed system. The USB installer is this same system. See
+`images/README.md` for the image and the engine.
+
 ### From power-on to the desktop
 
 The picture never goes black between stages; each one leaves the last on screen until the next has
@@ -580,6 +597,7 @@ something to show.
 | bootloader, U-Boot | the mark, centred on black | the bootloader's logos; U-Boot's console is silent (`silent=1`) until an EFI program starts, or until no boot entry is found, when it lists what it scanned |
 | systemd-boot, kernel | the mark | `timeout 0`; the kernel's console logo (`logo_bande_clut224.ppm`, `fbcon=logo-count:1 fbcon=logo-pos:center`) on the firmware framebuffer, drawn under `quiet` thanks to our kernel patch `fbcon: Draw the logo under quiet`; `quiet` also silences the EFI stub |
 | `apple-drm` binds | the mark again after the display comes up | `bande-display-keeper@<card>` draws it into the console's framebuffer (the kernel's own logo is only drawn during boot and never for a module) |
+| disk unlock, on an encrypted disk | the mark, a password field and the layout's short name | `bande-unlock`, see below |
 | login window | black with the mark, cross-fading to the login window | the compositor holds frames until the greeter is mapped; the greeter draws the same mark and opens once the desktop picture is decoded |
 | session | the picture the login window ended on, then the bar and icons fade in | below |
 
@@ -588,6 +606,23 @@ Cairo, fontconfig and fonts into the initramfs, it needs root to quit after the 
 it would add a third owner of the display during boot. The console path needs none of this, and
 shows text by itself: the mark sits in the console's own framebuffer, so anything the kernel or
 systemd prints (a failing boot, the emergency shell) appears over it.
+
+**Disk unlock.** Root is LUKS2, opened in the initramfs by Debian's `cryptsetup-initramfs` with
+`bande-unlock-script` as its keyscript. While the image's provisional key is there the script hands it
+over and nothing is asked. Otherwise `bande-unlock`, a small program with no fonts or xkb data of its
+own, draws on `/dev/fb0` in the same place as the mark and reads evdev keyboards directly (USB
+and built-in; Bluetooth does not work this early). `bande-unlock-assets` writes
+`bande/unlock.assets` on the ESP whenever the system keyboard or language changes: a key table for
+each system layout, dead-key pairs, and the prompt's text already drawn. Control+Space switches
+layout, Tab asks for the recovery key. If there is no framebuffer, the console's `askpass` asks.
+
+`bande-disk-encryption` (in `bande-settings`, root) is the only writer: `set-passphrase` adds the
+person's slot and a recovery key, removes the provisional one and, on an image with a shared volume
+key, starts an online reencrypt that `bande-disk-encryption.service` resumes at each boot. The disk does
+not count as encrypted until that finishes, and `/run/bande-disk-encryption/status` says so to
+Privacy & Security. On a one-person computer the greeter signs in with the password the disk was
+just unlocked with (`for-login`, in RAM, readable only by the greeter, emptied on read), and PAM's
+password step keeps the disk slot in step with the login password.
 
 Diagnostics stay one key away: holding Space at power-on opens systemd-boot's menu, where each
 kernel has a "(boot messages)" entry without `quiet` (`95-bande-boot-messages.install`);
@@ -686,7 +721,7 @@ what the one before could not save. What happens for each:
 
 - **An app hangs**: Force Quit (in the compositor, opened with `Ctrl+Alt+Esc`, from the system
   menu, a Taskbar icon's menu or Search; the pointer lock of an app is released while it is open) marks it Not Responding after a 3 s
-  `xdg_wm_base` ping and kills its whole scope ([behaviour](behaviour.md)).
+  `xdg_wm_base` ping and kills its whole scope, after `SIGQUIT` if it is not responding, so its stack is kept ([behaviour](behaviour.md)).
 - **The shell crashes or hangs**: the compositor restarts the shell clients and the clipboard
   daemon it started when they exit, at most once every 10 seconds. A crash of the shell takes
   the bar, the desktop, Control Center and the launcher away for a moment but never the session
@@ -749,7 +784,20 @@ what the one before could not save. What happens for each:
   session that ended without a clean log out leaves it, and the next session asks "Reopen your
   apps?" before anything starts (`bande-shell --reopen-after-crash`, summoned by the compositor;
   the list stays until answered). An app that crashes posts "<App> quit unexpectedly"
-  ([behaviour](behaviour.md)). Core dumps go to `systemd-coredump` where it is installed.
+  ([behaviour](behaviour.md)).
+- **The record**: every failure leaves one dated text report, which stays on this computer unless [sending](fault-reports.md) is switched on, and Settings shows which applies.
+  `bande-desktop` depends on `systemd-coredump` (`coredump.conf.d/50-bande.conf`: up to 8 GB a dump,
+  2 GB in all, 4 GB of disk kept free; `DefaultLimitCORE=infinity` for both managers, since the soft limit is
+  otherwise 0 and no dump is stored; dumps go after two weeks). The programs that hold passwords
+  (`bande-lock`, `bande-greeter`, `bande-polkit`, `bande-secrets`, `bande-clipboard`) are not dumpable, so
+  only their panic text is recorded. `bande-crash-reports@.service` is a oneshot with no network, started
+  when each `systemd-coredump@` finishes, at boot and at each login, so nothing runs between failures. From a cursor into the
+  journal it writes reports of crashes (with the stack trace, panic text and the user's last log lines),
+  failed Bande services, a kernel panic that `systemd-pstore` saved and a boot that never reached
+  `shutdown.target`. They go to `/var/lib/bande/crash-reports/<uid>/`, owned by that user, or `system/` for
+  the `sudo` group, newest 200 each. Force Quit of a not-responding app and the keyboard's last resort send
+  `SIGQUIT` first and wait up to 8 s and 5 s, so a hang leaves a stack too. Settings ▸ General ▸ About ▸ Crash Reports
+  lists them, with Copy and Delete. Symbols are in [packaging](packaging.md).
 
 ## Updates
 
@@ -798,8 +846,7 @@ timer (also 3 minutes after login) reminds about it, about a prepared offline up
 notification when updates are waiting. Offline results are read once after the restart; Settings
 refreshes the cache when it is older than an hour. An apt "dpkg was interrupted" failure shows
 "Finish Installing", which runs PackageKit's `RepairSystem`. While dpkg runs, packagekitd holds
-a logind `shutdown:idle` block inhibitor (not sleep), and Settings shows only the progress. There
-is no first-run assistant yet.
+a logind `shutdown:idle` block inhibitor (not sleep), and Settings shows only the progress.
 
 Per-user Flatpak apps are a fourth class, dormant by default: no Bande package depends on or
 recommends `flatpak`, and every Flatpak path treats a missing `flatpak` command as no Flatpak

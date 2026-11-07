@@ -137,12 +137,24 @@ impl FilesView {
                     .all(|entry| entry.is_folder() && entry.trashed.is_none()),
             terminal: self.terminal_installed(),
             apps,
+            mail: only_files && !trashed && self.mail_app().is_some(),
+            places: match trashed {
+                true => Vec::new(),
+                false => self
+                    .mounted
+                    .iter()
+                    .filter(|place| !selection.iter().any(|entry| entry.path.starts_with(place)))
+                    .cloned()
+                    .collect(),
+            },
         })
     }
 
     fn single_file(&self) -> Option<PathBuf> {
         match self.browser.selected_paths().as_slice() {
-            [path] if path.is_file() => Some(path.clone()),
+            [path] if !bande_volumes::on_connected_volume(path) && path.is_file() => {
+                Some(path.clone())
+            }
             _ => None,
         }
     }
@@ -222,6 +234,8 @@ impl FilesView {
             Command::Duplicate => self.duplicate(),
             Command::MakeAlias => self.make_alias(),
             Command::Compress => self.compress(),
+            Command::ShareMail => self.share_by_mail(),
+            Command::ShareTo(place) => self.share_to(place),
             Command::Copy => self.copy_selection(false),
             Command::CopyPath => self.copy_paths(),
             Command::AddToSidebar => self.add_to_sidebar(),
@@ -328,6 +342,10 @@ impl FilesView {
         let Some(Row::Place(place)) = self.sidebar.get(index).cloned() else {
             return;
         };
+        if let Location::Server(url) = &place.location {
+            self.requests.push(Request::ForgetServer(url.clone()));
+            return;
+        }
         let mut places = self.favourite_places();
         places.retain(|known| known.location != place.location);
         let mut hidden = self.hidden_places.clone();

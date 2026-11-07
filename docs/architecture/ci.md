@@ -141,3 +141,18 @@ build-run <worktree> ci/upgrade-test/run.sh ...`); compare the new debs with the
 A published version is never moved or deleted. A bad release is fixed forward with the next
 patch version; a tag whose run failed before apt published it may be deleted and pushed again.
 Apps in bande-linux/apps are released the same way with `<app>-vX.Y.Z` tags in that repository.
+
+## Soak and fuzz
+
+`ci/soak/run.sh` (`--hours`, `--fuzz-seconds`, `--out`) is what proves stability, and runs on a build machine,
+never as a gate. `bande-soak` (`crates/testing/bench`, not a test) runs the compositor in-process on
+lavapipe with the real shell, lock screen, Files and Settings and cycles through window churn, the overview
+and launcher, a second display with scale changes, lock and unlock (the machine's PAM file for `bande-lock`
+permits any password; the script refuses a machine with the desktop installed), memory pressure and
+killed apps and shells. After each cycle it samples memory, file descriptors, threads, renderer memory and
+frame times, and flags growth over the second half, a stall over 5 s or a client not answering for 30 s. Lavapipe's GPU
+memory is process memory, so GPU growth shows as RSS; a leak only in Asahi's driver cannot show here. Results go
+to `--out` (`result.txt`, `summary.txt`, `samples.tsv`, `crashes.txt` with the stack of any crash the soak did not
+cause). The fuzzers in `fuzz/` (`cargo fuzz run --sanitizer none <target>`, outside the workspace) then run: the
+Wayland wire against the real compositor, file previews, text formats, config and `.desktop` files, and the lines privileged
+helpers read. Their corpus stays in `~/.cache/bande-fuzz` on the machine; a crash leaves its input in the results.

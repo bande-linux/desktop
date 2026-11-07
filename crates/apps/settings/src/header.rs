@@ -246,7 +246,9 @@ impl SettingsView {
                 (!parts.is_empty()).then(|| parts.join(" · "))
             }
             PaneId::About => self.about.as_ref().map(|about| about.model.clone()),
-            PaneId::Storage | PaneId::SoftwareUpdate => self.pane_summary(pane.id),
+            PaneId::Storage | PaneId::SoftwareUpdate | PaneId::CrashReports => {
+                self.pane_summary(pane.id)
+            }
             PaneId::NightLight => self.night_light_summary(),
             PaneId::Appearance
             | PaneId::Bar
@@ -263,6 +265,7 @@ impl SettingsView {
             | PaneId::Microphone
             | PaneId::Screenshots
             | PaneId::ScreenSharing
+            | PaneId::Sharing
             | PaneId::Location => None,
         };
         live.unwrap_or_else(|| pane.summary.clone())

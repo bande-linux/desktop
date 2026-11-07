@@ -1,0 +1,17 @@
+#!/bin/sh
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in
+prereqs) prereqs; exit 0 ;;
+esac
+
+grep -q '^bande-root[[:space:]]' /etc/crypttab 2>/dev/null || exit 0
+
+. /usr/share/initramfs-tools/hook-functions
+
+copy_exec /usr/libexec/bande-unlock /usr/libexec/bande-unlock
+copy_exec /usr/libexec/bande-unlock-script /usr/libexec/bande-unlock-script
+copy_exec /usr/sbin/blkid /usr/sbin/blkid
+copy_exec /usr/sbin/cryptsetup /usr/sbin/cryptsetup
+manual_add_modules evdev usbhid hid-generic hid-apple vfat nls_cp437 nls_ascii nls_iso8859-1 nls_utf8
+force_load evdev

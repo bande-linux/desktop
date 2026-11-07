@@ -66,7 +66,8 @@ echo "== the session services' user units and D-Bus activation"
 for entry in bande-config:org.bande.Config:org.bande.Config \
     bande-power:org.bande.Power:org.freedesktop.ScreenSaver \
     bande-sound:org.bande.Sound:org.bande.Sound \
-    bande-tray:org.bande.Tray:org.kde.StatusNotifierWatcher; do
+    bande-tray:org.bande.Tray:org.kde.StatusNotifierWatcher \
+    bande-indexer:org.bande.Search:org.bande.Search; do
     IFS=: read -r package file name <<< "$entry"
     root=$(extract "$package")
     service="$root/usr/share/dbus-1/services/$file.service"

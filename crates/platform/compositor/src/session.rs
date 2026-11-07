@@ -22,6 +22,7 @@ use crate::state::{ClientState, Compositor};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionRole {
     ClipboardDaemon,
+    LockScreen,
     Shell,
 }
 
@@ -30,6 +31,8 @@ pub const LOCK_SCREEN: &str = "/usr/bin/bande-lock";
 pub const SCREENSHOT: &str = "/usr/bin/bande-screenshot";
 pub const SHELL: &str = "/usr/bin/bande-shell";
 pub const GREETER: &str = "/usr/bin/bande-greeter";
+pub const SETUP: &str = "/usr/bin/bande-setup";
+pub const SETUP_PENDING: &str = "/var/lib/bande/setup-pending";
 pub const REVIEW: &str = "/usr/bin/bande-review";
 const CONFIRM_ARGUMENT: &str = "--confirm";
 const REOPEN_ARGUMENT: [&str; 1] = ["--reopen-after-crash"];
@@ -253,7 +256,7 @@ impl Compositor {
         let mut command = helper.command();
         command.env(OUTPUT_VARIABLE, self.state.main_screen().name());
         match self
-            .spawn_session_command(command, &helper.path, SessionRole::Shell)
+            .spawn_session_command(command, &helper.path, SessionRole::LockScreen)
             .map(|(child, _)| child)
         {
             Ok(child) => self.lock_screen.child = Some(child),
@@ -338,7 +341,9 @@ impl Compositor {
         command.envs(desktop_environment());
         command.envs(cursor_environment(self.cursor_theme()));
         match (&self.socket_name, role) {
-            (Some(name), SessionRole::Shell) => command.env("WAYLAND_DISPLAY", name),
+            (Some(name), SessionRole::Shell | SessionRole::LockScreen) => {
+                command.env("WAYLAND_DISPLAY", name)
+            }
             _ => command.env_remove("WAYLAND_DISPLAY"),
         };
         unsafe {

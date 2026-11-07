@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    echo "usage: bande-consent read-keys|type-keys program|sandboxed <name> on|off" >&2
+    exit 2
+}
+
+[ $# -eq 4 ] || usage
+uid=${PKEXEC_UID:?run through pkexec}
+access=$1 kind=$2 name=$3 choice=$4
+
+case $access in read-keys | type-keys) ;; *) usage ;; esac
+case $choice in on | off) ;; *) usage ;; esac
+case $kind in
+program) case $name in /usr/*) ;; *) usage ;; esac ;;
+sandboxed) ;;
+*) usage ;;
+esac
+case $name in *[!A-Za-z0-9._/+-]* | *..*) usage ;; esac
+
+directory=/var/lib/bande/consent
+file=$directory/$uid
+line="$access $kind $name"
+
+install -d -m 755 "$directory"
+exec 9>"$directory/.lock"
+flock 9
+kept=$(mktemp "$directory/.XXXXXX")
+trap 'rm -f "$kept"' EXIT
+if [ -f "$file" ]; then
+    grep -vxF "$line" "$file" >"$kept" || true
+fi
+if [ "$choice" = on ]; then
+    echo "$line" >>"$kept"
+fi
+chmod 644 "$kept"
+mv "$kept" "$file"
+trap - EXIT

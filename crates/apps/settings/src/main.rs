@@ -193,6 +193,12 @@ impl Settings {
                         tracing::warn!("cannot copy the password: {error}");
                     }
                 }
+                Command::CopyText(text) => {
+                    let copied = bande_toolkit::ui::ClipboardRequest::Copy(text);
+                    if let Err(error) = window.serve_clipboard(copied) {
+                        tracing::warn!("cannot copy the report: {error}");
+                    }
+                }
                 Command::EndSession(ending) => {
                     if let Err(error) = window.ask_to_end_session(ending) {
                         tracing::warn!("cannot ask to end the session: {error}");
@@ -308,7 +314,10 @@ impl Program for Settings {
             self.main = None;
             view.0.set_on_screen(false);
             for command in view.0.take_commands() {
-                if !matches!(command, Command::Reveal(_) | Command::CopySecret(_)) {
+                if !matches!(
+                    command,
+                    Command::Reveal(_) | Command::CopySecret(_) | Command::CopyText(_)
+                ) {
                     self.services.send(command);
                 }
             }

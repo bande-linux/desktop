@@ -54,6 +54,8 @@ pub enum Appearance {
     Automatic,
 }
 
+pub use bande_design::Style;
+
 pub const ACCENTS: [(&str, Accent); 8] = [
     ("ultramarine", Accent::Ultramarine),
     ("teal", Accent::Teal),
@@ -598,6 +600,7 @@ pub struct Bar {
     pub edge: BarEdge,
     pub apps: Vec<String>,
     pub auto_hide: bool,
+    pub floating: bool,
     pub icon_size: u32,
 }
 
@@ -607,6 +610,7 @@ impl Default for Bar {
             edge: BarEdge::Left,
             apps: DEFAULT_BAR_APPS.map(str::to_owned).to_vec(),
             auto_hide: false,
+            floating: true,
             icon_size: DEFAULT_BAR_ICON_SIZE,
         }
     }
@@ -740,10 +744,13 @@ pub enum SearchCategory {
     System,
     Calculator,
     Conversion,
+    Mail,
+    Events,
+    Contacts,
 }
 
 impl SearchCategory {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 12] = [
         Self::Applications,
         Self::RecentApps,
         Self::RecentDocuments,
@@ -753,6 +760,9 @@ impl SearchCategory {
         Self::System,
         Self::Calculator,
         Self::Conversion,
+        Self::Mail,
+        Self::Events,
+        Self::Contacts,
     ];
 
     pub fn keyword(self) -> &'static str {
@@ -766,6 +776,9 @@ impl SearchCategory {
             Self::System => "system-actions",
             Self::Calculator => "calculator",
             Self::Conversion => "conversion",
+            Self::Mail => "mail",
+            Self::Events => "events",
+            Self::Contacts => "contacts",
         }
     }
 
@@ -809,6 +822,7 @@ impl Search {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub appearance: Appearance,
+    pub style: Style,
     pub accent: Accent,
     pub tinted_frame: bool,
     pub reopen_apps: bool,
@@ -846,6 +860,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             appearance: Appearance::Dark,
+            style: Style::default(),
             accent: Accent::default(),
             tinted_frame: false,
             reopen_apps: true,
@@ -993,6 +1008,9 @@ impl Parser<'_> {
                         ],
                     )
                     .map(|appearance| config.appearance = appearance),
+                "style" => self
+                    .keyword(node, &Style::ALL.map(|style| (style.keyword(), style)))
+                    .map(|style| config.style = style),
                 "accent" => self
                     .keyword(node, &ACCENTS)
                     .map(|accent| config.accent = accent),
@@ -1214,6 +1232,7 @@ impl Parser<'_> {
                 }
                 "apps" => bar.apps = self.app_ids(child)?,
                 "auto-hide" => bar.auto_hide = self.flag(child)?,
+                "floating" => bar.floating = self.flag(child)?,
                 "size" => bar.icon_size = self.integer_in(child, BAR_ICON_SIZE_RANGE)?,
                 _ => return Err(self.unknown_child("bar", child)),
             }

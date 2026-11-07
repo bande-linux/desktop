@@ -709,6 +709,7 @@ impl SettingsView {
         match list {
             List::KnownNetworks => self.known_network_rows(),
             List::Printers => self.printer_rows(),
+            List::Sharing => self.sharing_rows(),
             List::Accounts => self.account_rows(),
             List::NearbyPrinters => self.add_printer_rows(),
             List::Networks => self.network_rows(),
@@ -722,6 +723,7 @@ impl SettingsView {
             List::Shortcuts => Vec::new(),
             List::About => self.about_rows(),
             List::Storage => self.storage_rows(),
+            List::CrashReports => self.crash_report_rows(),
             List::LargeFiles => self.large_file_rows(),
             List::Clock => self.clock_rows(),
             List::TimeZones => self.zone_rows(),
@@ -735,6 +737,8 @@ impl SettingsView {
             List::Regions => self.region_rows(),
             List::DefaultApps => self.default_app_rows(),
             List::Clipboard => self.clipboard_rows(),
+            List::KeyboardAccess => self.keyboard_access_rows(),
+            List::SecurityStatus => self.security_status_rows(),
             List::SearchExcluded => self.excluded_rows(),
             List::Permissions(permission) => self.permission_rows(permission),
             List::Passwords => self.keychain_rows(),
@@ -1230,6 +1234,11 @@ impl SettingsView {
             && let Some(network) = self.network_page()
         {
             return self.page(network);
+        }
+        if pane.id == PaneId::CrashReports
+            && let Some(report) = self.crash_report_page()
+        {
+            return self.page(report);
         }
         if pane.id == PaneId::Printers
             && let Some(printer) = self.printer_page()

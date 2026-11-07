@@ -61,6 +61,10 @@ pub trait Config {
     #[zbus(property)]
     fn set_low_power_on_battery(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn style(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_style(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
     fn lid_on_power(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_lid_on_power(&self, value: &str) -> zbus::Result<()>;
@@ -132,6 +136,10 @@ pub trait Config {
     fn bar_icon_size(&self) -> zbus::Result<u32>;
     #[zbus(property)]
     fn set_bar_icon_size(&self, size: u32) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn bar_floating(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_bar_floating(&self, floating: bool) -> zbus::Result<()>;
     #[zbus(property)]
     fn bar_auto_hide(&self) -> zbus::Result<bool>;
     #[zbus(property)]
@@ -299,8 +307,9 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 73] = [
+pub const CONFIG_SETTINGS: [SettingId; 78] = [
     SettingId::Appearance,
+    SettingId::Style,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,
     SettingId::LidOnPower,
@@ -334,6 +343,7 @@ pub const CONFIG_SETTINGS: [SettingId; 73] = [
     SettingId::WallpaperFit,
     SettingId::BarIconSize,
     SettingId::BarAutoHide,
+    SettingId::BarFloating,
     SettingId::BarEdge,
     SettingId::ScreenSaverAfter,
     SettingId::DisplayOffAfter,
@@ -372,6 +382,9 @@ pub const CONFIG_SETTINGS: [SettingId; 73] = [
     SettingId::SearchSystem,
     SettingId::SearchCalculator,
     SettingId::SearchConversion,
+    SettingId::SearchMail,
+    SettingId::SearchEvents,
+    SettingId::SearchContacts,
     SettingId::SearchExcluded,
 ];
 
@@ -386,6 +399,9 @@ fn search_category(id: SettingId) -> Option<SearchCategory> {
         SettingId::SearchSystem => SearchCategory::System,
         SettingId::SearchCalculator => SearchCategory::Calculator,
         SettingId::SearchConversion => SearchCategory::Conversion,
+        SettingId::SearchMail => SearchCategory::Mail,
+        SettingId::SearchEvents => SearchCategory::Events,
+        SettingId::SearchContacts => SearchCategory::Contacts,
         _ => return None,
     })
 }
@@ -520,6 +536,7 @@ impl SettingsClient {
             SettingId::TextSize => Value::Number(self.config.text_size()?),
             SettingId::DoNotDisturb => Value::Flag(self.notifications.do_not_disturb()?),
             SettingId::Appearance => Value::Keyword(self.config.appearance()?),
+            SettingId::Style => Value::Keyword(self.config.style()?),
             SettingId::ScreenReader => Value::Flag(self.config.screen_reader()?),
             SettingId::Zoom => Value::Flag(self.config.zoom()? > 1.0),
             SettingId::IncreaseContrast => Value::Flag(self.config.increase_contrast()?),
@@ -551,6 +568,7 @@ impl SettingsClient {
             SettingId::WallpaperFit => Value::Keyword(self.config.wallpaper_fit()?),
             SettingId::BarIconSize => Value::Number(self.config.bar_icon_size()?),
             SettingId::BarAutoHide => Value::Flag(self.config.bar_auto_hide()?),
+            SettingId::BarFloating => Value::Flag(self.config.bar_floating()?),
             SettingId::BarEdge => Value::Keyword(self.config.bar_edge()?),
             SettingId::ScreenSaverAfter => Value::Seconds(self.config.idle_screen_saver_after()?),
             SettingId::DisplayOffAfter => Value::Seconds(self.config.idle_display_off_after()?),
@@ -623,6 +641,7 @@ impl SettingsClient {
                 self.config.set_search_excluded(paths.clone())
             }
             (SettingId::Appearance, Value::Keyword(keyword)) => self.config.set_appearance(keyword),
+            (SettingId::Style, Value::Keyword(keyword)) => self.config.set_style(keyword),
             (SettingId::Accent, Value::Keyword(keyword)) => self.config.set_accent(keyword),
             (SettingId::TintedFrame, Value::Flag(tinted)) => self.config.set_tinted_frame(*tinted),
             (SettingId::ReopenApps, Value::Flag(on)) => self.config.set_reopen_apps(*on),
@@ -697,6 +716,9 @@ impl SettingsClient {
                 self.config.set_wallpaper_fit(keyword)
             }
             (SettingId::BarIconSize, Value::Number(size)) => self.config.set_bar_icon_size(*size),
+            (SettingId::BarFloating, Value::Flag(floating)) => {
+                self.config.set_bar_floating(*floating)
+            }
             (SettingId::BarAutoHide, Value::Flag(auto_hide)) => {
                 self.config.set_bar_auto_hide(*auto_hide)
             }

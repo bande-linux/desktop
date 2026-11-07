@@ -5,10 +5,14 @@ bande-config
 bande-power
 bande-printd
 bande-recovery
+bande-reporter
+bande-crash-reports
 bande-sound
 xdg-desktop-portal-bande
 bande-file-chooser
+bande-recovery-tools
 bande-tray
+bande-indexer
 bande-automount
 bande-polkit
 bande-secrets

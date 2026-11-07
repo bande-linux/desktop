@@ -5,6 +5,7 @@ use std::net::{TcpListener, TcpStream};
 use std::os::fd::OwnedFd;
 use std::path::PathBuf;
 use std::process::{Child, Command};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -173,7 +174,12 @@ fn document_bytes() -> Vec<u8> {
 
 fn document() -> OwnedFd {
     let bytes = document_bytes();
-    let path = std::env::temp_dir().join(format!("bande-print-doc-{}.pdf", std::process::id()));
+    static DOCUMENTS: AtomicU32 = AtomicU32::new(0);
+    let path = std::env::temp_dir().join(format!(
+        "bande-print-doc-{}-{}.pdf",
+        std::process::id(),
+        DOCUMENTS.fetch_add(1, Ordering::Relaxed)
+    ));
     std::fs::write(&path, bytes).unwrap();
     let file = std::fs::File::open(&path).unwrap();
     std::fs::remove_file(&path).unwrap();

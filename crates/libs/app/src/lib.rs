@@ -92,6 +92,10 @@ pub trait View {
 
     fn set_active(&mut self, _active: bool) {}
 
+    fn keys(&self) -> Option<Keys> {
+        None
+    }
+
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         Vec::new()
     }

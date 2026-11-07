@@ -3,7 +3,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use bande_render::{RenderError, VulkanRenderer};
-use smithay::backend::allocator::Fourcc;
+use smithay::backend::allocator::dmabuf::Dmabuf;
+use smithay::backend::allocator::{Buffer, Fourcc, Modifier};
 use smithay::backend::renderer::damage::OutputDamageTracker;
 use smithay::backend::renderer::element::RenderElement;
 use smithay::backend::renderer::{Bind, Color32F, Offscreen};
@@ -26,6 +27,7 @@ use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource, WEnum,
 };
 use smithay::utils::{Clock, Monotonic, Physical, Point, Rectangle, Size, Transform};
+use smithay::wayland::dmabuf::get_dmabuf;
 use smithay::wayland::foreign_toplevel_list::ForeignToplevelHandle;
 use smithay::wayland::shm::with_buffer_contents_mut;
 
@@ -76,6 +78,8 @@ pub(crate) struct FrameData {
 }
 
 type Image = Result<Vec<u8>, RenderError>;
+
+const DMABUF_FORMAT: Fourcc = Fourcc::Argb8888;
 
 impl State {
     pub(crate) fn create_capture_globals(display: &DisplayHandle) {
@@ -133,6 +137,7 @@ impl State {
 
 impl Compositor {
     pub(crate) fn copy_captures(&mut self, renderer: &mut VulkanRenderer, output: &str) {
+        self.state.render_device = renderer.device_info().render_device;
         let (pending, others): (Vec<PendingCapture>, Vec<PendingCapture>) =
             std::mem::take(&mut self.state.pending_captures)
                 .into_iter()
@@ -168,22 +173,43 @@ impl Compositor {
                 .and_then(|announced| *announced)
                 != Some(size)
             {
-                announce(&capture.session, session, size);
+                announce(&capture.session, session, size, self.state.render_device);
                 capture.frame.failed(FailureReason::BufferConstraints);
                 continue;
             }
-            let key = (session.target.clone(), session.paint_cursors);
-            let index = match images.iter().position(|(cached, _)| cached == &key) {
-                Some(index) => index,
-                None => {
-                    let image = self.capture_image(renderer, &key.0, key.1);
-                    images.push((key, image));
-                    images.len() - 1
+            let outcome = if let Ok(dmabuf) = get_dmabuf(&capture.buffer) {
+                let mut dmabuf = dmabuf.clone();
+                if dmabuf.size() != Size::from((size.w, size.h))
+                    || dmabuf.format().code != DMABUF_FORMAT
+                {
+                    Err(FailureReason::BufferConstraints)
+                } else {
+                    self.capture_image(
+                        renderer,
+                        &session.target,
+                        session.paint_cursors,
+                        Some(&mut dmabuf),
+                    )
+                    .map(drop)
+                    .map_err(|error| {
+                        tracing::warn!("cannot capture into a dmabuf: {error}");
+                        FailureReason::BufferConstraints
+                    })
                 }
-            };
-            let outcome = match &images[index].1 {
-                Ok(pixels) => write_into(&capture.buffer, size, pixels),
-                Err(_) => Err(FailureReason::Unknown),
+            } else {
+                let key = (session.target.clone(), session.paint_cursors);
+                let index = match images.iter().position(|(cached, _)| cached == &key) {
+                    Some(index) => index,
+                    None => {
+                        let image = self.capture_image(renderer, &key.0, key.1, None);
+                        images.push((key, image));
+                        images.len() - 1
+                    }
+                };
+                match &images[index].1 {
+                    Ok(pixels) => write_into(&capture.buffer, size, pixels),
+                    Err(_) => Err(FailureReason::Unknown),
+                }
             };
             match outcome {
                 Ok(()) => {
@@ -219,6 +245,7 @@ impl Compositor {
         renderer: &mut VulkanRenderer,
         target: &Target,
         paint_cursors: bool,
+        destination: Option<&mut Dmabuf>,
     ) -> Image {
         match target {
             Target::Output(name) => {
@@ -230,7 +257,15 @@ impl Compositor {
                 let (size, scale, transform) =
                     (shown.mode_size(), shown.scale(), shown.settings.transform);
                 let elements = self.scene_elements(renderer, screen, paint_cursors);
-                render_image(renderer, size, scale, transform, &elements, background())
+                render_image(
+                    renderer,
+                    size,
+                    scale,
+                    transform,
+                    &elements,
+                    background(),
+                    destination,
+                )
             }
             Target::Window(identifier) => {
                 let window = self
@@ -282,6 +317,7 @@ impl Compositor {
                     Transform::Normal,
                     &elements,
                     Color32F::TRANSPARENT,
+                    destination,
                 )
             }
             Target::Nothing => Err(RenderError::NothingRendered),
@@ -296,9 +332,17 @@ fn render_image<E: RenderElement<VulkanRenderer>>(
     transform: Transform,
     elements: &[E],
     clear: Color32F,
+    destination: Option<&mut Dmabuf>,
 ) -> Image {
-    let mut target = renderer.create_buffer(Fourcc::Argb8888, Size::from((size.w, size.h)))?;
     let mut damage = OutputDamageTracker::new(size, scale, transform);
+    if let Some(dmabuf) = destination {
+        let mut framebuffer = renderer.bind(dmabuf)?;
+        damage
+            .render_output(renderer, &mut framebuffer, 0, elements, clear)
+            .map_err(rendering_error)?;
+        return Ok(Vec::new());
+    }
+    let mut target = renderer.create_buffer(Fourcc::Argb8888, Size::from((size.w, size.h)))?;
     {
         let mut framebuffer = renderer.bind(&mut target)?;
         damage
@@ -308,13 +352,25 @@ fn render_image<E: RenderElement<VulkanRenderer>>(
     renderer.read_target(&target)
 }
 
-fn announce(session: &ExtImageCopyCaptureSessionV1, data: &SessionData, size: Size<i32, Physical>) {
+fn announce(
+    session: &ExtImageCopyCaptureSessionV1,
+    data: &SessionData,
+    size: Size<i32, Physical>,
+    render_device: Option<u64>,
+) {
     if let Ok(mut announced) = data.announced.lock() {
         *announced = Some(size);
     }
     session.buffer_size(size.w.unsigned_abs(), size.h.unsigned_abs());
     for format in SHM_FORMATS {
         session.shm_format(format);
+    }
+    if let Some(device) = render_device {
+        session.dmabuf_device(device.to_ne_bytes().to_vec());
+        session.dmabuf_format(
+            DMABUF_FORMAT as u32,
+            u64::from(Modifier::Linear).to_ne_bytes().to_vec(),
+        );
     }
     session.done();
 }
@@ -474,6 +530,7 @@ fn start_session(
     data_init: &mut DataInit<'_, State>,
 ) {
     let size = state.capture_size(&target);
+    let render_device = state.render_device;
     let data = SessionData {
         target,
         paint_cursors,
@@ -483,7 +540,7 @@ fn start_session(
     };
     let session = data_init.init(session, data);
     match (size, session.data::<SessionData>()) {
-        (Some(size), Some(data)) => announce(&session, data, size),
+        (Some(size), Some(data)) => announce(&session, data, size, render_device),
         _ => session.stopped(),
     }
 }

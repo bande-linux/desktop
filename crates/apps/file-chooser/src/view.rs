@@ -297,9 +297,12 @@ impl Prompt {
             question: question.to_owned(),
             children: vec![
                 Box::new(Label::new(question)),
-                Box::new(TextField::new("", text, move |text: &str| {
-                    *changed.borrow_mut() = text.to_owned()
-                })),
+                Box::new(
+                    TextField::new("", text, move |text: &str| {
+                        *changed.borrow_mut() = text.to_owned()
+                    })
+                    .without_text_checking(),
+                ),
                 Box::new(Stack::new(Axis::Horizontal, GAP, 0.0, buttons)),
             ],
             done,
@@ -781,6 +784,7 @@ impl ChooserView {
             &self.chooser.name,
             move |text: &str| push(&intents, Intent::Name(text.to_owned())),
         )
+        .without_text_checking()
     }
 
     fn select_stem(&mut self, field: WidgetId) {

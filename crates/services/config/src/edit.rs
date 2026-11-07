@@ -574,9 +574,9 @@ fn set_display(document: &mut KdlDocument, identity: &str, display: &DisplaySett
                 .map(|rotation| vec![pixels(rotation.degrees())]),
         ),
         (
-            "variable-refresh-rate",
+            "match-colours",
             display
-                .variable_refresh_rate
+                .match_colours
                 .map(|enabled| vec![KdlValue::Bool(enabled)]),
         ),
     ];

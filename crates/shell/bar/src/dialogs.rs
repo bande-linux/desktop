@@ -18,8 +18,9 @@ use bande_toolkit::{
     TextSystem, Window, WindowEvent,
 };
 use bande_xdg::{
-    Locale, applications, crashed_apps_file, current_desktops, data_dirs, find_app, find_icon,
-    forget_saved_windows, listed_apps, reopen_file, reopen_listed_apps, take_apps_to_reopen,
+    ICON_THEMES, Locale, applications, crashed_apps_file, current_desktops, data_dirs, find_app,
+    find_icon, forget_saved_windows, listed_apps, reopen_file, reopen_listed_apps,
+    take_apps_to_reopen,
 };
 
 pub const DIALOGS: &str = "org.bande.MenuBar";
@@ -598,7 +599,7 @@ pub fn run_about_app(app_id: &str, version: &str) -> Result<(), Box<dyn std::err
     let pixels = (f64::from(ABOUT_ICON) * window.scale().max(2.0)).round() as u32;
     let icon = entry
         .and_then(|entry| entry.icon)
-        .and_then(|icon| find_icon(&icon, pixels, &[], &directories))
+        .and_then(|icon| find_icon(&icon, pixels, &ICON_THEMES, &directories))
         .and_then(|path| Image::load(&path, pixels));
     let mut about = AppAbout {
         name,

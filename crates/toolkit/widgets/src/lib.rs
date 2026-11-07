@@ -23,6 +23,7 @@ mod segmented;
 mod sheet;
 mod shortcut;
 mod slider;
+mod spelling;
 mod stack;
 mod stepper;
 mod surface_view;
@@ -73,6 +74,7 @@ pub use sheet::Alert;
 use sheet::Sheet;
 pub use shortcut::{Shortcut, ShortcutText, parse_shortcut, shortcut_label, shortcut_pressed};
 pub use slider::{SLIDER_HEIGHT, Slider};
+pub use spelling::{SpellReply, SpellRequest, install_spelling, receive_spelling};
 pub use stack::{Axis, Stack};
 pub use stepper::{STEPPER_SIZE, Stepper};
 pub use surface_view::{RELEASE_CHORD, SurfaceInput, SurfaceView};
@@ -176,6 +178,8 @@ pub struct Context {
     start: Instant,
     animating: cell::Cell<bool>,
     wake: cell::Cell<Option<Instant>>,
+    menu_awaits_suggestions: bool,
+    link: Option<String>,
     clipboard: Option<ClipboardRequest>,
     input_method_reset: bool,
     emoji_picker: bool,
@@ -223,6 +227,8 @@ impl Context {
             start: Instant::now(),
             animating: cell::Cell::new(false),
             wake: cell::Cell::new(None),
+            menu_awaits_suggestions: false,
+            link: None,
             clipboard: None,
             input_method_reset: false,
             emoji_picker: false,
@@ -243,6 +249,10 @@ impl Context {
 
     pub fn copy(&mut self, text: &str) {
         self.clipboard = Some(ClipboardRequest::Copy(text.to_owned()));
+    }
+
+    pub fn request_paste(&mut self) {
+        self.clipboard = Some(ClipboardRequest::Paste);
     }
 
     pub fn start_text_drag(&mut self, text: String) {
@@ -335,6 +345,8 @@ pub trait Widget: Any {
         None
     }
 
+    fn spelling_answered(&mut self) {}
+
     fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
         None
     }
@@ -400,6 +412,7 @@ pub struct Ui {
     menu_owner: Option<WidgetId>,
     menu_look_up: Option<String>,
     menu_request: Option<(Menu, Point)>,
+    deferred_menu: Option<(WidgetId, Point)>,
     awaiting_paste: bool,
     sheet: Option<Sheet>,
     sheet_top: f32,
@@ -549,6 +562,7 @@ impl Ui {
             menu_owner: None,
             menu_look_up: None,
             menu_request: None,
+            deferred_menu: None,
             awaiting_paste: false,
             sheet: None,
             sheet_top: 0.0,
@@ -813,6 +827,9 @@ impl Ui {
 
     pub fn handle(&mut self, event: &Event) -> bool {
         self.sync_event_clock();
+        if matches!(event, Event::PointerDown(_) | Event::Key { .. }) {
+            self.deferred_menu = None;
+        }
         match event {
             Event::PointerDown(pointer) => {
                 let hovered = self.hover(Some(pointer));
@@ -1015,23 +1032,34 @@ impl Ui {
         point: Point,
         look_up: Option<String>,
     ) -> bool {
+        self.deferred_menu = None;
+        self.menu_look_up = look_up;
         let innermost = path.last().copied();
-        let mut found = None;
         for id in path.into_iter().rev() {
             let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id) else {
                 continue;
             };
+            self.cx.menu_awaits_suggestions = false;
             if let Some(menu) = widget.context_menu(&mut self.cx, point) {
-                found = Some((id, menu));
-                break;
+                if std::mem::take(&mut self.cx.menu_awaits_suggestions) {
+                    self.deferred_menu = Some((id, point));
+                } else {
+                    self.show_menu(id, menu, point);
+                }
+                return true;
             }
         }
-        let (owner, mut menu) = match (found, innermost, &look_up) {
-            (Some(found), _, _) => found,
-            (None, Some(innermost), Some(_)) => (innermost, Menu::new(Vec::new())),
-            _ => return false,
-        };
-        if let Some(text) = &look_up {
+        match (innermost, self.menu_look_up.is_some()) {
+            (Some(innermost), true) => {
+                self.show_menu(innermost, Menu::new(Vec::new()), point);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn show_menu(&mut self, owner: WidgetId, mut menu: Menu, point: Point) {
+        if let Some(text) = &self.menu_look_up {
             if !menu.items.is_empty() {
                 menu.items.insert(0, MenuItem::separator());
             }
@@ -1041,10 +1069,31 @@ impl Ui {
                 MenuItem::new(&title, LOOK_UP_ACTION).shortcut("Ctrl+Super+D"),
             );
         }
-        self.menu_look_up = look_up;
         self.menu_owner = Some(owner);
         self.menu_request = Some((menu, point));
-        true
+    }
+
+    pub fn spelling_answered(&mut self) {
+        if let Some(id) = self.cx.focus
+            && let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id)
+        {
+            widget.spelling_answered();
+        }
+        let Some((id, point)) = self.deferred_menu else {
+            return;
+        };
+        let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id) else {
+            self.deferred_menu = None;
+            return;
+        };
+        self.cx.menu_awaits_suggestions = false;
+        let menu = widget.context_menu(&mut self.cx, point);
+        if !std::mem::take(&mut self.cx.menu_awaits_suggestions) {
+            self.deferred_menu = None;
+            if let Some(menu) = menu {
+                self.show_menu(id, menu, point);
+            }
+        }
     }
 
     pub fn take_clipboard_request(&mut self) -> Option<ClipboardRequest> {
@@ -1162,6 +1211,10 @@ impl Ui {
 
     pub fn take_input_method_reset(&mut self) -> bool {
         std::mem::take(&mut self.cx.input_method_reset)
+    }
+
+    pub fn take_link_request(&mut self) -> Option<String> {
+        self.cx.link.take()
     }
 
     pub fn take_menu_request(&mut self) -> Option<(Menu, Point)> {

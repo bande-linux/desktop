@@ -16,8 +16,8 @@ use bande_toolkit::{
     TextSystem, Window, WindowEvent,
 };
 use bande_xdg::{
-    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_app, find_icon, launch,
-    path_from_file_uri, running_app,
+    DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_app,
+    find_icon, launch, path_from_file_uri, running_app,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
@@ -63,7 +63,7 @@ fn image_named(name: &str, directories: &[PathBuf]) -> Option<Image> {
     } else if name.starts_with("file:") {
         path_from_file_uri(name)
     } else {
-        find_icon(name, ICON_PIXELS, &[], directories)
+        find_icon(name, ICON_PIXELS, &ICON_THEMES, directories)
     };
     path.and_then(|path| Image::load(&path, ICON_PIXELS))
 }

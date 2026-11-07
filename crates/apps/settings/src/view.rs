@@ -24,8 +24,8 @@ use crate::defaults::{DefaultApp, DefaultAppCommand};
 use crate::follow::{Command, Update};
 use crate::forget::Forget;
 use crate::language::{SAME_AS_LANGUAGE, locale_matches};
-use crate::locale::{LocaleCommand, LocaleState};
-use crate::login::{LoginCommand, LoginItems, login_matches};
+use crate::locale::{DEFAULT_LOCALE, LocaleCommand, LocaleState, same_locale};
+use crate::login::{App, LoginCommand, LoginItems, app_matches, login_matches};
 use crate::night::clock_text;
 use crate::notifications::{AppNotifications, NotificationCommand};
 use crate::passwords::{Keychain, PasswordCommand};
@@ -92,6 +92,8 @@ pub(crate) enum Intent {
     Pick(Option<Picker>),
     PickQuery(String),
     Picked(String),
+    ChangeAppLanguage(String),
+    RemoveAppLanguage(String),
     RemoveLoginItem(String),
     OpenApp(String),
     SetAppRule(AppNotifications),
@@ -139,6 +141,7 @@ pub(crate) enum Intent {
     DefaultApp(&'static str, String),
     Grant(Permission, String, bool),
     KeyboardAccess(String, bool),
+    Spelling(crate::spelling::SpellingCommand),
     Passwords(PasswordCommand),
     PasswordQuery(String),
     ChangePassword(Option<String>),
@@ -151,6 +154,8 @@ pub(crate) enum Picker {
     InputSource,
     Language,
     Region,
+    LanguageApp,
+    AppLanguage,
 }
 
 impl Picker {
@@ -161,6 +166,7 @@ impl Picker {
             Self::InputSource => SettingId::InputSources,
             Self::Language => SettingId::Language,
             Self::Region => SettingId::Region,
+            Self::LanguageApp | Self::AppLanguage => SettingId::AppLanguages,
         }
     }
 }
@@ -256,6 +262,7 @@ pub struct SettingsView {
     pub(crate) time: Option<TimeState>,
     pub(crate) picking: Option<(Picker, String)>,
     pub(crate) login: Option<LoginItems>,
+    pub(crate) language_app: Option<String>,
     pub(crate) battery: Option<BatteryState>,
     pub(crate) notification_apps: Option<Vec<AppNotifications>>,
     pub(crate) detail: Option<Detail>,
@@ -291,6 +298,7 @@ pub struct SettingsView {
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
     pub(crate) permissions: Grants,
     pub(crate) keyboard_access: Vec<crate::consent::KeyboardAccess>,
+    pub(crate) spelling: crate::spelling::SpellingState,
     pub(crate) security: crate::security_status::SecurityStatus,
     pub(crate) keychain: Keychain,
     stale: bool,
@@ -356,6 +364,7 @@ impl SettingsView {
             time: None,
             picking: None,
             login: None,
+            language_app: None,
             battery: None,
             notification_apps: None,
             detail: None,
@@ -391,6 +400,7 @@ impl SettingsView {
             default_apps: None,
             permissions: Vec::new(),
             keyboard_access: Vec::new(),
+            spelling: Default::default(),
             security: crate::security_status::SecurityStatus::default(),
             keychain: Keychain::default(),
             stale: true,
@@ -817,6 +827,7 @@ impl SettingsView {
                 self.sharing = Some(state);
             }
             Update::KeyboardAccess(access) => self.keyboard_access = access,
+            Update::Spelling(state) => self.spelling = state,
             Update::Security(status) => self.security = status,
             Update::Printers(printers) => {
                 if let Some(Detail::Printer(id)) = &self.detail
@@ -1000,6 +1011,25 @@ impl SettingsView {
             (Some((Picker::Zone, query)), Some(time)) => {
                 zone_matches(&time.zones, query, PICK_RESULTS)
             }
+            (Some((Picker::AppLanguage, query)), _) => self
+                .locale
+                .as_ref()
+                .map(|locale| {
+                    let mut matches = locale_matches(&locale.available, query, PICK_RESULTS + 1);
+                    matches.retain(|code| !same_locale(code, DEFAULT_LOCALE));
+                    matches.truncate(PICK_RESULTS);
+                    matches
+                })
+                .unwrap_or_default(),
+            (Some((Picker::LanguageApp, query)), _) => self
+                .login
+                .as_ref()
+                .map(|login| {
+                    let chosen =
+                        |app: &App| login.languages.iter().any(|(known, _)| known.id == app.id);
+                    app_matches(&login.apps, chosen, query, PICK_RESULTS)
+                })
+                .unwrap_or_default(),
             (Some((Picker::LoginApp, query)), _) => self
                 .login
                 .as_ref()
@@ -1372,6 +1402,7 @@ impl SettingsView {
                 }
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
                 Intent::KeyboardAccess(line, on) => self.change_keyboard_access(line, on),
+                Intent::Spelling(command) => self.change_spelling(command),
                 Intent::Passwords(command) => self.password_command(command),
                 Intent::PasswordQuery(query) => {
                     self.keychain.query = query;
@@ -1524,6 +1555,16 @@ impl SettingsView {
                     self.focus_next = Some(Anchor::Setting(SettingId::LoginItems, None));
                     self.commands.push(Command::Login(LoginCommand::Remove(id)));
                 }
+                Intent::ChangeAppLanguage(id) => {
+                    self.language_app = Some(id);
+                    self.picking = Some((Picker::AppLanguage, String::new()));
+                    self.focus_next = Some(Anchor::Picker);
+                }
+                Intent::RemoveAppLanguage(id) => {
+                    self.focus_next = Some(Anchor::Setting(SettingId::AppLanguages, None));
+                    self.commands
+                        .push(Command::Login(LoginCommand::SetLanguage(id, None)));
+                }
                 Intent::Pick(picker) => {
                     self.focus_next = Some(match (picker, &self.picking) {
                         (Some(_), _) => Anchor::Picker,
@@ -1627,6 +1668,9 @@ impl SettingsView {
         if let Some(locale) = &mut self.locale {
             match &command {
                 LocaleCommand::Language(language) => {
+                    self.commands.push(Command::Spelling(
+                        crate::spelling::SpellingCommand::GetDictionary(language.clone()),
+                    ));
                     language.clone_into(&mut locale.language);
                     locale.pending = Some(SettingId::Language);
                 }
@@ -1635,6 +1679,7 @@ impl SettingsView {
                     locale.pending = Some(SettingId::Region);
                 }
                 LocaleCommand::LoginKeyboard(codes) => locale.login_sources.clone_from(codes),
+                LocaleCommand::Read => {}
             }
         }
         self.commands.push(Command::Locale(command));
@@ -1653,6 +1698,17 @@ impl SettingsView {
                 self.commands.push(Command::Time(TimeCommand::Zone(key)));
             }
             Picker::LoginApp => self.commands.push(Command::Login(LoginCommand::Add(key))),
+            Picker::LanguageApp => {
+                self.language_app = Some(key);
+                self.picking = Some((Picker::AppLanguage, String::new()));
+                self.focus_next = Some(Anchor::Picker);
+            }
+            Picker::AppLanguage => {
+                if let Some(app) = self.language_app.take() {
+                    self.commands
+                        .push(Command::Login(LoginCommand::SetLanguage(app, Some(key))));
+                }
+            }
             Picker::InputSource => {
                 self.focus_next = Some(Anchor::Item(key.clone()));
                 self.edit_sources(|sources| {
@@ -1738,6 +1794,7 @@ impl SettingsView {
                 self.commands
                     .push(Command::DefaultApp(DefaultAppCommand::Refresh));
             }
+            PaneId::LanguageTime => self.commands.push(Command::Login(LoginCommand::Refresh)),
             PaneId::Notifications => self
                 .commands
                 .push(Command::Notifications(NotificationCommand::Refresh)),
@@ -1789,6 +1846,7 @@ impl SettingsView {
             PaneId::Wifi | PaneId::Network => Command::Network(NetworkCommand::Watch(on)),
             PaneId::Printers => Command::Printers(PrinterCommand::Watch(on)),
             PaneId::Sharing if on => Command::Sharing(SharingCommand::Read),
+            PaneId::LanguageTime | PaneId::Keyboard if on => Command::Locale(LocaleCommand::Read),
             _ => return,
         };
         self.commands.push(command);
@@ -2194,8 +2252,8 @@ impl SettingsView {
             (SettingId::RefreshRate, Value::Number(hertz)) => {
                 display.refresh_rate = Some(f64::from(hertz));
             }
-            (SettingId::VariableRefreshRate, Value::Flag(on)) => {
-                display.variable_refresh_rate = on.then_some(true);
+            (SettingId::MatchColours, Value::Flag(on)) => {
+                display.match_colours = (!on).then_some(false);
             }
             _ => return,
         }

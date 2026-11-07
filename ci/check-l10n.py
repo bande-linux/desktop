@@ -3,7 +3,7 @@ import pathlib
 import re
 import sys
 
-ENFORCED = set()
+ENFORCED = set(pathlib.Path(__file__).with_name("l10n-complete").read_text().split())
 MESSAGE = re.compile(r"^(-?[a-zA-Z][a-zA-Z0-9_-]*) *=")
 ATTRIBUTE = re.compile(r"^\s+\.[a-zA-Z][a-zA-Z0-9_-]* *=")
 VARIABLE = re.compile(r"\{\s*\$([a-zA-Z][a-zA-Z0-9_-]*)")
@@ -36,7 +36,7 @@ def main():
     roots = sys.argv[1:] or ["."]
     for root in roots:
         for english in sorted(pathlib.Path(root).rglob("locales/en-US/*.ftl")):
-            if "target" in english.parts:
+            if "target" in english.parts or english.stem == "fixture":
                 continue
             base = parse(english, problems)
             for translated in sorted(english.parent.parent.glob(f"*/{english.name}")):
@@ -57,8 +57,9 @@ def main():
                         problems.append(f"{translated}: {name} uses unknown {sorted(extra)}")
                 for name in messages.keys() - base.keys():
                     problems.append(f"{translated}: {name} is not in English")
-            if not (english.parent.parent / "sv" / english.name).exists():
-                problems.append(f"{english}: no Swedish file")
+            for language in ENFORCED:
+                if not (english.parent.parent / language / english.name).exists():
+                    problems.append(f"{english}: no {language} file")
     for language, (done, total) in sorted(report.items()):
         print(f"{language}: {done} of {total}")
     for problem in problems:

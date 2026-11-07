@@ -65,6 +65,7 @@ open(rules, 'w').write(s)
 s = open(install).read()
 s = s.replace('debian/@browser@.desktop usr/share/applications\n', 'debian/org.bande.Browser.desktop usr/share/applications\ndebian/org.bande.Browser.metainfo.xml usr/share/metainfo\ndebian/org.bande.Browser.svg usr/share/icons/hicolor/scalable/apps\n')
 s = s.replace('debian/@browser@-symbolic.svg usr/share/icons/hicolor/symbolic/apps\n', '')
+s = s.replace('usr/lib/@browser@/pingsender\n', '')
 open(install, 'w').write(s)
 PY
 rm -f debian/google.key debian/mls.key debian/browser.desktop.in debian/browser-symbolic.svg.in

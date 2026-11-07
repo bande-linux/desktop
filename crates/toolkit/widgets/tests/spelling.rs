@@ -49,7 +49,7 @@ fn a_correction_is_applied_at_word_end_and_backspace_restores_the_original() {
     assert!(
         requests
             .borrow()
-            .contains(&SpellRequest::Correct("helo".to_owned()))
+            .contains(&SpellRequest::Correct("helo".to_owned(), true))
     );
     receive_spelling(SpellReply::Corrected("helo".to_owned(), "hello".to_owned()));
     ui.spelling_answered();

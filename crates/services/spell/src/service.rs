@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -8,7 +9,8 @@ use spellbook::Dictionary;
 use zbus::object_server::SignalEmitter;
 
 use crate::dictionaries::{
-    bande_data_home, best_for, input_source_language, installed, language_data, language_of, load,
+    bande_data_home, best_for, data_directories, input_source_language, installed, language_data,
+    language_of, load,
 };
 use crate::store::Store;
 
@@ -22,6 +24,7 @@ pub struct Engine {
     system_language: Option<String>,
     input_languages: Vec<String>,
     loaded: HashMap<String, Dictionary>,
+    common: HashMap<String, HashSet<String>>,
 }
 
 impl Engine {
@@ -91,27 +94,55 @@ impl Engine {
             .collect()
     }
 
-    pub fn correction(&mut self, word: &str) -> String {
+    fn common_words(&mut self, language: &str) -> &HashSet<String> {
+        self.common.entry(language.to_owned()).or_insert_with(|| {
+            data_directories()
+                .iter()
+                .find_map(|directory| {
+                    fs::read_to_string(directory.join(format!("bande/text/{language}.common"))).ok()
+                })
+                .unwrap_or_default()
+                .lines()
+                .map(str::to_owned)
+                .collect()
+        })
+    }
+
+    pub fn correction(&mut self, word: &str, sentence_start: bool) -> String {
+        let capitalised = word.chars().next().is_some_and(char::is_uppercase);
         if self.store.options.get("autocorrect") == Some(&false)
             || !correctable(word)
+            || (capitalised && !sentence_start)
             || self.check(&[word.to_owned()]) == [true]
         {
             return String::new();
         }
+        let typed = word.to_lowercase();
         self.dictionaries();
         let mut candidates: Vec<(String, bool)> = Vec::new();
         for name in self.active() {
+            let language = language_of(&name).to_owned();
+            let rules = language_data(&language);
+            let long_enough = rules
+                .get("autocorrect-min-length")
+                .and_then(|value| value.parse::<usize>().ok())
+                .is_some_and(|least| typed.chars().count() >= least);
+            let enabled = rules
+                .get("autocorrect")
+                .is_some_and(|value| value == "true");
+            if self.common_words(&language).contains(&typed) {
+                return String::new();
+            }
+            let common = self.common_words(&language).clone();
             let Some(dictionary) = self.loaded.get(&name) else {
                 continue;
             };
-            let allowed = language_data(language_of(&name))
-                .get("autocorrect")
-                .is_some_and(|value| value == "true");
             let mut suggestions = Vec::new();
             dictionary.suggest(word, &mut suggestions);
             for suggestion in suggestions {
                 if one_edit_apart(word, &suggestion) {
-                    candidates.push((suggestion, allowed));
+                    let strong = common.contains(&suggestion.to_lowercase());
+                    candidates.push((suggestion, enabled && long_enough && strong));
                 }
             }
         }
@@ -223,8 +254,8 @@ impl Spell {
         Ok(())
     }
 
-    fn correction(&self, word: String) -> String {
-        self.engine().correction(&word)
+    fn correction(&self, word: String, sentence_start: bool) -> String {
+        self.engine().correction(&word, sentence_start)
     }
 
     async fn learn(
@@ -359,6 +390,7 @@ impl Engine {
             system_language,
             input_languages: input_languages(&config),
             loaded: HashMap::new(),
+            common: HashMap::new(),
         })
     }
 }

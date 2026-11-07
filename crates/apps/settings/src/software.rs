@@ -25,7 +25,7 @@ use bande_notify::client::{Request, close, notify};
 
 use crate::L10N;
 use crate::client::ConfigProxyBlocking;
-use crate::failure::sentence;
+use crate::failure::explained;
 use crate::follow::{Update, Updates, spawn};
 use crate::privilege::may_update_live;
 
@@ -169,7 +169,7 @@ fn broken(during: Stage, error: &Error) -> SoftwareState {
         }
         Error::Vanished => L10N.tr("updates-service-stopped"),
         Error::Failed(failure) => explain(failure),
-        Error::Bus(error) => sentence(error, "service-updates"),
+        Error::Bus(error) => explained(error, "service-updates", "updates-service-stopped"),
     };
     SoftwareState::Failed { during, reason }
 }

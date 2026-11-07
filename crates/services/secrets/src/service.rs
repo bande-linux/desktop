@@ -23,6 +23,7 @@ pub const SERVICE_PATH: &str = "/org/freedesktop/secrets";
 const COLLECTIONS: &str = "/org/freedesktop/secrets/collection/";
 const ALIASES: &str = "/org/freedesktop/secrets/aliases/";
 const NO_PROMPT: &str = "/";
+const PROMPT_FAILED: &str = "prompt-failed";
 const ITEM_LABEL: &str = "org.freedesktop.Secret.Item.Label";
 const ITEM_ATTRIBUTES: &str = "org.freedesktop.Secret.Item.Attributes";
 const COLLECTION_LABEL: &str = "org.freedesktop.Secret.Collection.Label";
@@ -133,7 +134,34 @@ pub struct Caller {
 struct Peer {
     identity: Option<Option<String>>,
     granted: HashSet<OwnedObjectPath>,
+    revealed: bool,
     declined: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Answer {
+    Open,
+    Confirmed,
+    Declined,
+    Failed,
+}
+
+impl Answer {
+    fn open(self) -> bool {
+        matches!(self, Self::Open | Self::Confirmed)
+    }
+}
+
+enum Outcome {
+    Done(OwnedValue),
+    Dismissed,
+    Failed,
+}
+
+impl Outcome {
+    fn of(value: Option<OwnedValue>) -> Self {
+        value.map_or(Self::Dismissed, Self::Done)
+    }
 }
 
 enum Job {
@@ -245,6 +273,14 @@ impl Daemon {
             .at(
                 SERVICE_PATH,
                 ServiceObject {
+                    daemon: self.clone(),
+                },
+            )
+            .await?;
+        server
+            .at(
+                SERVICE_PATH,
+                ExtensionObject {
                     daemon: self.clone(),
                 },
             )
@@ -457,7 +493,7 @@ impl Daemon {
         open_to(item, caller.identity.as_deref())
             || guard(&self.peers)
                 .get(&caller.sender)
-                .is_some_and(|peer| peer.granted.contains(path))
+                .is_some_and(|peer| peer.revealed || peer.granted.contains(path))
     }
 
     fn grant(&self, sender: &str, paths: impl IntoIterator<Item = OwnedObjectPath>) {
@@ -471,6 +507,7 @@ impl Daemon {
     pub fn revoke_grants(&self) {
         for peer in guard(&self.peers).values_mut() {
             peer.granted.clear();
+            peer.revealed = false;
         }
     }
 
@@ -528,7 +565,12 @@ impl Daemon {
             .await
             .collection(LOGIN)
             .is_none_or(store::Collection::locked);
-        if locked && !self.login(old).await && !self.login(new.clone()).await {
+        if locked {
+            if !self.login(old).await && !self.login(new.clone()).await {
+                return false;
+            }
+        } else if let Err(error) = self.keychain.lock().await.verify(LOGIN, &old).await {
+            tracing::info!("kept the login keychain password: {error}");
             return false;
         }
         let changed = self.keychain.lock().await.change_password(LOGIN, new).await;
@@ -574,8 +616,9 @@ impl Daemon {
         if locked
             && !(interactive
                 && self
-                    .ask_unlock(&default, Some(NETWORK_MANAGER.to_owned()))
-                    .await)
+                    .ask_unlock(&default, Some(NETWORK_MANAGER.to_owned()), Kind::Unlock)
+                    .await
+                    .open())
         {
             return Vec::new();
         }
@@ -670,7 +713,7 @@ impl Daemon {
                 dialog.finish().await;
                 Some(password)
             }
-            Reply::Cancel | Reply::CreateNew => None,
+            Reply::Cancel | Reply::CreateNew | Reply::Gone => None,
         }
     }
 
@@ -685,13 +728,13 @@ impl Daemon {
         }
     }
 
-    async fn ask_unlock(self: &Arc<Self>, name: &str, app: Option<String>) -> bool {
+    async fn ask_unlock(self: &Arc<Self>, name: &str, app: Option<String>, asking: Kind) -> Answer {
         let (label, exists) = {
             let keychain = self.keychain.lock().await;
             match keychain.collection(name) {
-                Some(collection) if !collection.locked() => return true,
+                Some(collection) if !collection.locked() => return Answer::Open,
                 Some(collection) => (collection.label.clone(), keychain.exists(name)),
-                None => return false,
+                None => return Answer::Failed,
             }
         };
         let attempt = (name == LOGIN && exists)
@@ -699,7 +742,7 @@ impl Daemon {
             .flatten();
         let kind = match (&attempt, exists) {
             (Some(_), _) => Kind::UpdateLogin,
-            (None, true) => Kind::Unlock,
+            (None, true) => asking,
             (None, false) => Kind::Create,
         };
         let request = Request {
@@ -709,14 +752,15 @@ impl Daemon {
             items: Vec::new(),
         };
         let Some(mut dialog) = self.dialog(&request).await else {
-            return false;
+            return Answer::Failed;
         };
         loop {
             let password = match dialog.reply().await {
-                Reply::Cancel => return false,
+                Reply::Cancel => return Answer::Declined,
+                Reply::Gone => return Answer::Failed,
                 Reply::CreateNew => {
                     let Some(attempt) = attempt.clone() else {
-                        return false;
+                        return Answer::Declined;
                     };
                     let created = {
                         let mut keychain = self.keychain.lock().await;
@@ -727,7 +771,7 @@ impl Daemon {
                     };
                     if let Err(error) = created {
                         tracing::warn!("cannot make a new login keychain: {error}");
-                        return false;
+                        return Answer::Failed;
                     }
                     break;
                 }
@@ -751,12 +795,12 @@ impl Daemon {
                 }
                 Err(store::Error::WrongPassword) => {
                     if dialog.wrong().await.is_err() {
-                        return false;
+                        return Answer::Failed;
                     }
                 }
                 Err(error) => {
                     tracing::warn!("cannot unlock the {name} keychain: {error}");
-                    return false;
+                    return Answer::Failed;
                 }
             }
         }
@@ -766,12 +810,16 @@ impl Daemon {
         }
         self.sync().await;
         self.locked_changed(name).await;
-        true
+        if request.kind == Kind::Reveal {
+            Answer::Confirmed
+        } else {
+            Answer::Open
+        }
     }
 
-    async fn ask_allow(&self, caller: &Caller, items: Vec<(String, u64)>, kind: Kind) -> bool {
+    async fn ask_allow(&self, caller: &Caller, items: Vec<(String, u64)>, kind: Kind) -> Answer {
         let Some((name, _)) = items.first().cloned() else {
-            return true;
+            return Answer::Open;
         };
         let (label, labels) = {
             let keychain = self.keychain.lock().await;
@@ -793,11 +841,12 @@ impl Daemon {
             items: labels,
         };
         let Some(mut dialog) = self.dialog(&request).await else {
-            return false;
+            return Answer::Failed;
         };
         loop {
             let (password, always) = match dialog.reply().await {
-                Reply::Cancel | Reply::CreateNew => return false,
+                Reply::Cancel | Reply::CreateNew => return Answer::Declined,
+                Reply::Gone => return Answer::Failed,
                 Reply::Allow(password) => (password, false),
                 Reply::Always(password) => {
                     (password, kind == Kind::Allow && caller.identity.is_some())
@@ -835,16 +884,16 @@ impl Daemon {
                             .map(|(collection, id)| item_path(collection, *id)),
                     );
                     dialog.finish().await;
-                    return true;
+                    return Answer::Open;
                 }
                 Err(store::Error::WrongPassword) => {
                     if dialog.wrong().await.is_err() {
-                        return false;
+                        return Answer::Failed;
                     }
                 }
                 Err(error) => {
                     tracing::warn!("cannot check the keychain password: {error}");
-                    return false;
+                    return Answer::Failed;
                 }
             }
         }
@@ -881,7 +930,7 @@ impl Daemon {
         let mut dialog = self.dialog(&request).await?;
         let password = match dialog.reply().await {
             Reply::Allow(password) | Reply::Always(password) => password,
-            Reply::Cancel | Reply::CreateNew => return None,
+            Reply::Cancel | Reply::CreateNew | Reply::Gone => return None,
         };
         let created = {
             let mut keychain = self.keychain.lock().await;
@@ -922,7 +971,10 @@ impl Daemon {
         {
             return;
         }
-        if !self.ask_unlock(&default, caller.identity.clone()).await {
+        let answer = self
+            .ask_unlock(&default, caller.identity.clone(), Kind::Unlock)
+            .await;
+        if !answer.open() {
             guard(&self.peers)
                 .entry(caller.sender.clone())
                 .or_default()
@@ -982,7 +1034,7 @@ impl Daemon {
         Ok(path)
     }
 
-    async fn run_job(self: &Arc<Self>, owner: &str, job: Job) -> Option<OwnedValue> {
+    async fn run_job(self: &Arc<Self>, owner: &str, job: Job) -> Outcome {
         let caller = Caller {
             sender: owner.to_owned(),
             identity: guard(&self.peers)
@@ -1007,8 +1059,11 @@ impl Daemon {
                     }
                 }
                 for name in &collections {
-                    if !self.ask_unlock(name, caller.identity.clone()).await {
-                        return None;
+                    let answer = self
+                        .ask_unlock(name, caller.identity.clone(), Kind::Unlock)
+                        .await;
+                    if !answer.open() {
+                        return Outcome::Dismissed;
                     }
                 }
                 let refused = {
@@ -1025,15 +1080,22 @@ impl Daemon {
                         })
                         .collect::<Vec<_>>()
                 };
-                if !refused.is_empty() && !self.ask_allow(&caller, refused, Kind::Allow).await {
-                    return None;
+                if !refused.is_empty()
+                    && !self.ask_allow(&caller, refused, Kind::Allow).await.open()
+                {
+                    return Outcome::Dismissed;
                 }
-                Value::from(objects).try_into_owned().ok()
+                Outcome::of(Value::from(objects).try_into_owned().ok())
             }
             Job::Reveal => {
                 let default = self.keychain.lock().await.default_collection().to_owned();
-                if !self.ask_unlock(&default, caller.identity.clone()).await {
-                    return None;
+                let unlocked = self
+                    .ask_unlock(&default, caller.identity.clone(), Kind::Reveal)
+                    .await;
+                match unlocked {
+                    Answer::Open | Answer::Confirmed => {}
+                    Answer::Declined => return Outcome::Dismissed,
+                    Answer::Failed => return Outcome::Failed,
                 }
                 let items = {
                     let keychain = self.keychain.lock().await;
@@ -1048,17 +1110,28 @@ impl Daemon {
                         })
                         .collect::<Vec<_>>()
                 };
-                let paths = items
-                    .iter()
-                    .map(|(name, id)| item_path(name, *id))
-                    .collect::<Vec<_>>();
-                if !items.is_empty() && !self.ask_allow(&caller, items, Kind::Reveal).await {
-                    return None;
+                if unlocked != Answer::Confirmed {
+                    match self.ask_allow(&caller, items.clone(), Kind::Reveal).await {
+                        Answer::Open | Answer::Confirmed => {}
+                        Answer::Declined => return Outcome::Dismissed,
+                        Answer::Failed => return Outcome::Failed,
+                    }
                 }
-                Value::from(paths).try_into_owned().ok()
+                let revealing = unlocked == Answer::Confirmed || !items.is_empty();
+                guard(&self.peers)
+                    .entry(owner.to_owned())
+                    .or_default()
+                    .revealed = revealing;
+                Outcome::of(
+                    Value::from(Vec::<OwnedObjectPath>::new())
+                        .try_into_owned()
+                        .ok(),
+                )
             }
             Job::Create { label, alias } => {
-                let name = self.ask_create(&caller, &label).await?;
+                let Some(name) = self.ask_create(&caller, &label).await else {
+                    return Outcome::Dismissed;
+                };
                 if alias == store::DEFAULT {
                     let set = self.keychain.lock().await.set_default(&name);
                     if let Err(error) = set {
@@ -1068,7 +1141,7 @@ impl Daemon {
                     }
                 }
                 self.emit_collection_created(&name).await;
-                Value::from(collection_path(&name)).try_into_owned().ok()
+                Outcome::of(Value::from(collection_path(&name)).try_into_owned().ok())
             }
         }
     }
@@ -1082,7 +1155,7 @@ impl Daemon {
         }
     }
 
-    async fn complete(self: &Arc<Self>, path: &OwnedObjectPath, result: Option<OwnedValue>) {
+    async fn complete(self: &Arc<Self>, path: &OwnedObjectPath, outcome: Outcome) {
         let pending = guard(&self.prompts).remove(path);
         let Some(pending) = pending else {
             return;
@@ -1094,8 +1167,16 @@ impl Daemon {
             return;
         };
         if let Ok(emitter) = SignalEmitter::new(connection, path.as_ref()) {
-            let dismissed = result.is_none();
-            let result = result.unwrap_or(pending.refusal);
+            let (dismissed, result) = match outcome {
+                Outcome::Done(value) => (false, value),
+                Outcome::Dismissed => (true, pending.refusal),
+                Outcome::Failed => (
+                    true,
+                    Value::from(PROMPT_FAILED)
+                        .try_into_owned()
+                        .unwrap_or(pending.refusal),
+                ),
+            };
             let _ = PromptObject::completed(&emitter, dismissed, result).await;
         }
         let _ = connection
@@ -1379,6 +1460,14 @@ impl ExtensionObject {
     async fn reveal(&self, #[zbus(header)] header: Header<'_>) -> Result<OwnedObjectPath> {
         let caller = self.daemon.caller(&header).await;
         self.daemon.new_prompt(&caller.sender, Job::Reveal).await
+    }
+
+    async fn conceal(&self, #[zbus(header)] header: Header<'_>) {
+        let caller = self.daemon.caller(&header).await;
+        if let Some(peer) = guard(&self.daemon.peers).get_mut(&caller.sender) {
+            peer.granted.clear();
+            peer.revealed = false;
+        }
     }
 }
 
@@ -1865,7 +1954,7 @@ impl PromptObject {
             .connection()?
             .executor()
             .spawn(
-                async move { daemon.complete(&path, None).await },
+                async move { daemon.complete(&path, Outcome::Dismissed).await },
                 "bande-secrets dismiss",
             )
             .detach();

@@ -88,13 +88,12 @@ fn crash(entry: &Entry, spool: &Spool, config: &Config) -> Result<(), Box<dyn Er
     }
     let message = entry.field("MESSAGE").unwrap_or_default();
     let mut crashed_tid = None;
-    if let Some(mut dump) = Command::new("coredumpctl")
+    if let Ok(mut dump) = Command::new("coredumpctl")
         .args(["dump", "--quiet", &pid])
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .stdout(Stdio::piped())
         .spawn()
-        .ok()
     {
         if let Some(core) = dump.stdout.take() {
             match read_core(core, config.stack_memory) {
@@ -201,6 +200,7 @@ pub fn of_previous_boot(saved_kernel_log: &str, time: Timestamp) -> Result<(), B
         "pstore.txt",
         scrubber.text(saved_kernel_log),
     );
+    previous_boot_tail(&mut fault, &scrubber, Path::new(SPOOL));
     fault.store(&spool, &config(), Path::new(SPOOL))?;
     Ok(())
 }

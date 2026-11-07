@@ -54,6 +54,8 @@ assets = [
     ["data/bande.desktop", "usr/share/wayland-sessions/", "644"],
     ["data/session-clients", "usr/share/bande-compositor/", "644"],
     ["data/bande-consent", "usr/libexec/", "755"],
+    ["data/50-bande-ptrace.conf", "usr/lib/sysctl.d/", "644"],
+    ["data/50-bande-resolved.conf", "usr/lib/systemd/resolved.conf.d/", "644"],
     ["data/org.bande.consent.policy", "usr/share/polkit-1/actions/", "644"],
 ]
 

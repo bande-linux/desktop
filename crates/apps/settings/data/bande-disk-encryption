@@ -7,6 +7,7 @@ token_id=0
 work=/run/bande-disk-encryption
 progress=$work/progress
 stash=$work/unlocked-with
+published=$work/status
 
 device() {
     cryptsetup status "$mapper" 2>/dev/null | sed -n 's/^ *device: *//p'
@@ -54,6 +55,22 @@ status() {
     fi
 }
 
+hand_to_login() {
+    [ -s "$stash" ] || return 0
+    getent passwd _greetd >/dev/null || return 0
+    (
+        umask 077
+        cp "$stash" "$work/for-login"
+    )
+    chown _greetd "$work/for-login"
+}
+
+publish() {
+    install -d -m 755 "$work"
+    status >"$published.new"
+    mv "$published.new" "$published"
+}
+
 new_recovery_key() {
     head -c 20 /dev/urandom | basenc --base32 | tr -d '=' | cut -c1-30 | sed 's/.\{5\}/&-/g; s/-$//'
 }
@@ -76,7 +93,7 @@ set_passphrase() {
     token "$disk" | grep -q "\"$provisional\"" || { echo "the disk password is already set" >&2; exit 1; }
     token "$disk" | grep -q '"reencrypt": *true' && rewrite=yes || rewrite=no
 
-    install -d -m 700 "$work"
+    install -d -m 755 "$work"
     old=$work/provisional
     new=$work/passphrase
     recovery=$work/recovery
@@ -114,27 +131,33 @@ set_passphrase() {
     else
         cryptsetup token remove --token-id "$token_id" "$disk"
     fi
+    umask 022
+    publish
     echo "$key"
 }
 
 resume() {
+    publish
     disk=$(device)
     [ -n "$disk" ] || exit 0
     if ! reencrypt_pending "$disk"; then
         ! token "$disk" | grep -q "\"$provisional\"" || finish_rewrite "$disk"
+        publish
+        rm -f "$stash"
         exit 0
     fi
-    install -d -m 700 "$work"
+    install -d -m 755 "$work"
     cryptsetup reencrypt --resume-only --key-file "$stash" --active-name "$mapper" --batch-mode \
             --progress-json --progress-frequency 5 "$disk" >"$progress"
     rm -f "$progress" "$stash"
     finish_rewrite "$disk"
+    publish
 }
 
 change_passphrase() {
     disk=$(device)
     [ -n "$disk" ] || exit 0
-    install -d -m 700 "$work"
+    install -d -m 755 "$work"
     umask 077
     current=$work/current
     replacement=$work/replacement
@@ -148,11 +171,12 @@ change_passphrase() {
 
 case ${1:-} in
 status) status ;;
+hand-to-login) hand_to_login ;;
 set-passphrase) set_passphrase ;;
 change-passphrase) change_passphrase ;;
 resume) resume ;;
 *)
-    echo "usage: bande-disk-encryption status|set-passphrase|change-passphrase|resume" >&2
+    echo "usage: bande-disk-encryption status|set-passphrase|change-passphrase|resume|hand-to-login" >&2
     exit 2
     ;;
 esac

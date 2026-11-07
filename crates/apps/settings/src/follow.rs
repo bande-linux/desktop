@@ -33,6 +33,7 @@ use crate::pointing::{PointingDevices, UDEV_DATA, follow_pointing};
 use crate::printers::{PrinterCommand, PrintersState, follow_printers};
 use crate::privacy::clear_clipboard;
 use crate::privilege::{Privilege, follow_privileges};
+use crate::security_status::{SecurityStatus, follow_security_status};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
 };
@@ -81,6 +82,7 @@ pub enum Update {
     DefaultApps(Vec<DefaultApp>),
     Permissions(Grants),
     KeyboardAccess(Vec<KeyboardAccess>),
+    Security(SecurityStatus),
     Printers(PrintersState),
     NearbyPrinters(Vec<bande_printers::NearbyPrinter>),
     PrinterAdded(String, bool),
@@ -367,6 +369,7 @@ pub struct Services {
     printers: Option<Sender<PrinterCommand>>,
     users: Sender<UsersCommand>,
     _pointing: Option<FolderWatch>,
+    _security: Option<FolderWatch>,
 }
 
 impl Services {
@@ -400,6 +403,7 @@ impl Services {
             default_apps: follow_default_apps(updates.clone()),
             permissions: follow_permissions(session, updates.clone()),
             keyboard_access: follow_keyboard_access(updates.clone()),
+            _security: follow_security_status(system, updates.clone()),
             passwords: follow_passwords(session, system, updates.clone()),
             brightness: follow_brightness(session, updates.clone()),
             printers: system.map(|system| follow_printers(system, updates.clone())),

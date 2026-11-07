@@ -295,6 +295,7 @@ pub enum SettingId {
     ShortcutsPage,
     ClipboardHistory,
     KeyboardAccess,
+    SecurityStatus,
     DefaultApps,
     Brightness,
     NightLightPage,
@@ -373,6 +374,7 @@ pub enum List {
     DefaultApps,
     Clipboard,
     KeyboardAccess,
+    SecurityStatus,
     SearchExcluded,
     Permissions(Permission),
     Passwords,
@@ -1412,6 +1414,14 @@ fn system_panes() -> Vec<Pane> {
         pane(
             PaneId::PrivacySecurity,
             vec![
+                section(
+                    Some(L10N.tr("this-mac")),
+                    vec![list(
+                        SettingId::SecurityStatus,
+                        "this-mac",
+                        List::SecurityStatus,
+                    )],
+                ),
                 section(
                     Some(L10N.tr("app-permissions")),
                     vec![

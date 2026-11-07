@@ -67,12 +67,22 @@ impl TestClient {
     }
 
     pub fn disconnected_after_dispatch(&mut self, server: &mut Compositor) -> bool {
-        server.dispatch().expect("server dispatch");
-        server.dispatch().expect("server dispatch");
-        let _ = self.connection.flush();
-        self.connection
-            .prepare_read()
-            .is_some_and(|guard| guard.read().is_err())
+        for _ in 0..8 {
+            server.dispatch().expect("server dispatch");
+            if let Some(input_method) = &self.globals.input_method.input_method {
+                input_method.commit(0);
+            }
+            if self.connection.flush().is_err() {
+                return true;
+            }
+            if let Some(guard) = self.connection.prepare_read() {
+                let _ = guard.read();
+            }
+            if self.queue.dispatch_pending(&mut self.globals).is_err() {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn sees_global(&self, interface: &str) -> bool {

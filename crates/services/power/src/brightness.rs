@@ -338,6 +338,7 @@ impl Lamp {
                 lock(&shared.saved).get(&identity).copied().unwrap_or(1.0),
             ),
         };
+        let unapplied = !matches!(drive, Drive::Backlight(_));
         let mut lamp = Self {
             shared: Arc::clone(shared),
             mailbox: Arc::clone(mailbox),
@@ -347,7 +348,7 @@ impl Lamp {
             drive,
             level,
             dimmed: *lock(&shared.dimmed),
-            unapplied: true,
+            unapplied,
             sent_gain: None,
             sent_value: None,
             wrote_at: None,

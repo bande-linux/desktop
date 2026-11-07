@@ -609,6 +609,7 @@ impl SettingsView {
             | Update::Password(_)
             | Update::PictureChosen(..)
             | Update::AccountCreated(_) => (Some(PaneId::Users), &[SettingId::Accounts]),
+            Update::DisplayLevels(_) => (Some(PaneId::Displays), &[SettingId::Brightness]),
             Update::Passwords(..) | Update::RevealedPassword(..) => {
                 (Some(PaneId::Passwords), &[SettingId::SavedPasswords])
             }

@@ -3,18 +3,13 @@ use bande_settings_panes::SettingId;
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Button, SearchField, Stack, Widget};
 
-use crate::locale::{AvailableLocale, LocaleState};
+use crate::locale::{AvailableLocale, LocaleState, locale_label};
 use crate::pages::{Widgets, boxed, muted_row, submit};
 use crate::view::{Anchor, Intent, Picker, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
 use crate::{L10N, TRANSLATIONS};
 
 pub const SAME_AS_LANGUAGE: &str = "";
-
-fn same_locale(a: &str, b: &str) -> bool {
-    let key = |code: &str| code.to_lowercase().replace(['-', '_'], "");
-    key(a) == key(b)
-}
 
 fn sample() -> Option<jiff::Zoned> {
     jiff::civil::date(2026, 3, 14)
@@ -70,14 +65,6 @@ pub fn translated(language: &str) -> bool {
             .any(|(tag, _)| tag.split('-').next() == Some(tongue))
 }
 
-fn locale_label(locale: &LocaleState, code: &str) -> String {
-    locale
-        .available
-        .iter()
-        .find(|available| same_locale(&available.code, code))
-        .map_or_else(|| code.to_owned(), |available| available.name.clone())
-}
-
 impl SettingsView {
     fn locale_row(&mut self, id: SettingId, label: &str, shown: &str, picker: Picker) -> Widgets {
         let button = self.allowed(id).then(|| {
@@ -117,7 +104,7 @@ impl SettingsView {
             let name = if code == SAME_AS_LANGUAGE {
                 L10N.tr("same-as-language")
             } else {
-                locale_label(locale, code)
+                locale_label(&locale.available, code)
             };
             let mut choose = intent(&self.intents, Intent::Picked);
             let chosen = code.clone();
@@ -151,8 +138,8 @@ impl SettingsView {
         let mut rows = match self.picking_locale(Picker::Language) {
             Some(query) => self.locale_search(&locale, &L10N.tr("choose-language"), &query),
             None => {
-                let name = locale_label(&locale, &locale.language);
-                let shown = if locale.pending {
+                let name = locale_label(&locale.available, &locale.language);
+                let shown = if locale.pending == Some(SettingId::Language) {
                     L10N.tr_args("locale-setting-up", [("name", name.into())])
                 } else {
                     name
@@ -190,7 +177,14 @@ impl SettingsView {
             None => {
                 let shown = locale.region.as_deref().map_or_else(
                     || L10N.tr("same-as-language"),
-                    |region| locale_label(&locale, region),
+                    |region| {
+                        let name = locale_label(&locale.available, region);
+                        if locale.pending == Some(SettingId::Region) {
+                            L10N.tr_args("locale-setting-up", [("name", name.into())])
+                        } else {
+                            name
+                        }
+                    },
                 );
                 self.locale_row(
                     SettingId::Region,

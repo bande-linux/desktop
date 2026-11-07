@@ -120,7 +120,7 @@ fn a_tab_torn_off_floats_in_its_own_window_and_comes_back_over_the_toolbar() {
     };
     desk.windows(1);
     desk.settle(500);
-    let _ = chord(&mut desk.server, &[KEY_LEFTCTRL, KEY_T]);
+    chord(&mut desk.server, &[KEY_LEFTCTRL, KEY_T]);
     desk.settle(500);
 
     let tab = desk.tear_off();

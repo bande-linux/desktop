@@ -103,7 +103,6 @@ Implementing it would be a kernel fork with black flashes, with no benefit here.
 | # | Stage | Gain, measured | Risk | Blocker | Size |
 |---|---|---|---|---|---|
 | 0 | Remove the VRR switch and key | no dead control | none | none | S |
-| 1 | GPU copy to the scanout buffer | 2.0 ms to 0.45 ms per full frame, CPU part gone | low | none | S |
 | 2 | Colour probe, then sRGB correct | every pixel on this monitor | low for the probe; **black screen** possible until booted | owner boot | S if DCP does it, M if shaders |
 | 3 | Sample NV12 without copying | 0.34-0.66 ms per video frame | medium | none | S-M |
 | 4 | Screen sharing over dmabuf | up to three full-frame CPU copies to none | low | none | M |
@@ -113,13 +112,25 @@ Implementing it would be a kernel fork with black flashes, with no benefit here.
 | 8 | Windowed video on a plane | KWin's ~1 W on a laptop; not separable here | **high: firmware crash, black screen** | kernel plane change, stage 3 | M |
 | 9 | HDR | PQ on HDR monitors | high | kernel project, stage 7 | L |
 
-1. **Output copy.** On a real GPU `Bind<Dmabuf>` imports the dumb buffer as a Vulkan buffer and records one image-to-buffer copy; the mapping and memcpy stay only for lavapipe. A failed import falls back to the old path. The swapchain never writes a buffer being scanned out, so this adds no tearing. Chosen over rendering straight into the buffer: that saves only another 0.37 ms, renders slower into LINEAR, and blur needs a readable target.
 2. **Colour.** First the owner step below. One kernel commit sets `BG_SRGB` for RGB surfaces on external displays, for one test boot. If DCP converts, keep it. If not, add the shader matrix from EDID primaries, which also serves displays DCP cannot help.
 3. **NV12.** Import once per buffer, sample directly, keep the copy for the CPU renderer. Release a buffer only after the flip that replaced it. The media engine's pool must have enough buffers; today's copy hid that. Hardware decode on `fix-media` feeds this directly, and is what makes stage 8 worth measuring.
 4. **Capture.** `ext-image-copy-capture` offers dmabufs; the compositor copies with the GPU; `cast.rs` negotiates `SPA_DATA_DmaBuf` and keeps MemFd as the fallback. No display risk, since only capture changes.
 5. **Direct window textures.** The trap: sampling a client's buffer means the client must not write until release, and the compositor must wait for its fence. Without that, windows tear. Closing animations and stretch-on-resize must hold the buffer. Verify `linux-drm-syncobj-v1` on Apple first. Tiled buffers cannot use a plane, so feedback must stay per surface: LINEAR for what is on a plane, compressed for the rest, or the shell loses plane 2. Firefox then gets the same import path.
 6. **Asynchronous frames.** Export a `sync_file`, wait in the event loop, record render time at fence signal. Stage 1 removes the CPU copy that today forces the wait. A fence that never signals must go through the existing GPU-loss recovery.
 7. **Tagged content.** Per-surface description, conversion in shaders or DCP's per-surface fields; 10-bit composition removes banding under Glass. DCP lists no 10-bit RGB mode for this monitor at 2560x1440@120 (only 8-bit RGB, or 12-bit YCbCr), so at 120 Hz the link stays 8-bit and the gain there needs checking.
+
+### Done
+
+Output copy: composed frames reach the dumb buffer with one GPU copy in the frame's command buffer; the mapping and memcpy remain for CPU renderers, virtual GPUs and a refused import. Rendering straight into the buffer was not chosen: it would save only another 0.37 ms, renders slower into LINEAR, and blur needs a readable target.
+
+Measured on the M2 through the real renderer into dumb buffers, not on a display. Release builds, 120 Hz, alternating runs:
+
+| Damage | Frame median | Frame p95 | CPU | Power |
+|---|---|---|---|---|
+| 2880x1800 | 3.75 to 1.37 ms | 5.2 to 3.0 ms | 29 to 1.6 % of a core | 0.3 to 0.9 W less in each pair |
+| 1200x800 | 0.9 to 0.6 ms | 1.6 to 1.1 ms | 5 to 1.2 % | lost in noise |
+
+Pixels read back correct on the GPU path and on lavapipe.
 
 ### Left for the owner's optimisation pass
 

@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::io::{Cursor, ErrorKind};
 use std::rc::Rc;
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
@@ -62,7 +62,6 @@ pub(crate) enum Command {
         device: u32,
         profile_device: i32,
     },
-    FollowJacks,
     Stop(u64),
     Quit,
 }
@@ -114,6 +113,7 @@ pub(crate) struct App {
 #[derive(Debug, Default)]
 pub(crate) struct State {
     pub generation: u64,
+    pub connection: u64,
     pub connected: bool,
     pub nodes: HashMap<u32, NodeState>,
     pub links: HashMap<u32, (u32, u32)>,
@@ -141,6 +141,8 @@ impl State {
 pub(crate) struct Shared {
     state: Mutex<State>,
     pub changed: Condvar,
+    pub follow_jacks: AtomicBool,
+    pub stopping: AtomicBool,
 }
 
 impl Shared {
@@ -315,7 +317,6 @@ struct Graph {
     core: pw::core::CoreRc,
     running: RefCell<HashMap<u64, Running>>,
     next_effect: Cell<u64>,
-    follow_jacks: Cell<bool>,
     commands: pw::channel::Sender<Command>,
 }
 
@@ -599,7 +600,7 @@ impl Graph {
     }
 
     fn plugged(&self, device: u32, profile_device: i32) -> Result<(), Error> {
-        if !self.follow_jacks.get() {
+        if !self.shared.follow_jacks.load(Ordering::Relaxed) {
             return Ok(());
         }
         let jack = {
@@ -678,25 +679,25 @@ impl Graph {
 }
 
 pub(crate) fn run(
-    shared: Arc<Shared>,
+    shared: &Arc<Shared>,
     commands: pw::channel::Receiver<Command>,
     sender: pw::channel::Sender<Command>,
-    ready: mpsc::Sender<Result<(), Error>>,
-) {
-    if let Err(error) = serve(&shared, commands, sender, &ready) {
-        let _ = ready.send(Err(error));
-    }
+) -> Result<(), Error> {
+    let outcome = serve(shared, commands, sender);
     shared.update(|state| {
-        state.connected = false;
-        state.nodes.clear();
+        *state = State {
+            generation: state.generation,
+            connection: state.connection,
+            ..State::default()
+        };
     });
+    outcome
 }
 
 fn serve(
     shared: &Arc<Shared>,
     commands: pw::channel::Receiver<Command>,
     sender: pw::channel::Sender<Command>,
-    ready: &mpsc::Sender<Result<(), Error>>,
 ) -> Result<(), Error> {
     pw::init();
     let main_loop = pw::main_loop::MainLoopRc::new(None)?;
@@ -709,7 +710,6 @@ fn serve(
         core: core.clone(),
         running: RefCell::default(),
         next_effect: Cell::new(1 << 32),
-        follow_jacks: Cell::new(false),
         commands: sender,
     });
 
@@ -727,7 +727,6 @@ fn serve(
     let done_core = core.clone();
     let done_pending = Rc::clone(&pending);
     let done_shared = Arc::clone(shared);
-    let done_ready = ready.clone();
     let done_second = Rc::clone(&second);
     let lost_loop = main_loop.clone();
     let _core = core
@@ -739,13 +738,13 @@ fn serve(
             if seq == first {
                 match done_core.sync(0) {
                     Ok(next) => *done_second.borrow_mut() = Some(next),
-                    Err(error) => {
-                        let _ = done_ready.send(Err(error.into()));
-                    }
+                    Err(error) => tracing::warn!("PipeWire does not answer: {error}"),
                 }
             } else if Some(seq) == *done_second.borrow() {
-                done_shared.update(|state| state.connected = true);
-                let _ = done_ready.send(Ok(()));
+                done_shared.update(|state| {
+                    state.connected = true;
+                    state.connection += 1;
+                });
             }
             let mut pending = done_pending.borrow_mut();
             if let Some(position) = pending.iter().position(|(waiting, _)| *waiting == seq) {
@@ -797,10 +796,6 @@ fn serve(
                 if let Err(error) = command_graph.plugged(device, profile_device) {
                     tracing::warn!("cannot switch to the plugged-in device: {error}");
                 }
-                return;
-            }
-            Command::FollowJacks => {
-                command_graph.follow_jacks.set(true);
                 return;
             }
             Command::Stop(id) => {

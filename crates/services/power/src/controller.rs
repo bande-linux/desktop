@@ -243,6 +243,7 @@ pub fn logind_executor(
     password: PasswordPolicy,
 ) -> impl Fn(Command) + Send + Sync + 'static {
     let keyboard_lit = Mutex::new(None);
+    let virtual_machine = logind::runs_in_virtual_machine(manager.inner().connection());
     move |command| {
         let set_keyboard = |level: u32| match &keyboard {
             Some(keyboard) => session.set_brightness("leds", &keyboard.name, level),
@@ -252,6 +253,7 @@ pub fn logind_executor(
             Command::Lock => session.lock(),
             Command::IdleHint(idle) => session.set_idle_hint(idle),
             Command::RequirePassword(required) => password.require(required),
+            Command::Suspend if virtual_machine => Ok(()),
             Command::Suspend => match manager.can_suspend() {
                 Ok(answer) if answer == "yes" => manager.suspend(false),
                 Ok(_) => Ok(()),

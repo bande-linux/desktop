@@ -293,7 +293,10 @@ impl Background {
             && !self.watch_failed
         {
             self.watch_failed = true;
-            tracing::warn!("cannot watch {} and perhaps others: {error}", path.display());
+            tracing::warn!(
+                "cannot watch {} and perhaps others: {error}",
+                path.display()
+            );
         }
         let Ok(listing) = fs::read_dir(path) else {
             return Vec::new();

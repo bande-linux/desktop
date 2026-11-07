@@ -12,6 +12,7 @@ column-modified = Date Modified
 column-size = Size
 filter = Show
 new-folder = New Folder
+show-hidden = Show Hidden Files
 new-folder-prompt = Name of the new folder:
 untitled-folder = untitled folder
 save-as = Save As:

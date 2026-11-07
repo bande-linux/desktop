@@ -10,6 +10,7 @@ use serde_json::{Map, Value, json};
 use crate::scrub::Scrubber;
 
 const RING_LIMIT: u64 = 256 * 1024;
+const RING_HEADER: usize = 64;
 const SESSION_LIMIT: u64 = 64 * 1024;
 const MEMORY_FIELDS: [&str; 6] = [
     "MemTotal",
@@ -124,6 +125,24 @@ fn displays() -> Value {
     Value::Array(found)
 }
 
+pub fn boot_id() -> String {
+    read_trimmed("/proc/sys/kernel/random/boot_id")
+        .unwrap_or_default()
+        .replace('-', "")
+}
+
+pub fn boot_id_of(boot: &str) -> String {
+    let offset: i32 = boot.parse().unwrap_or(0);
+    command_text("journalctl", &["--list-boots", "--no-pager", "--no-legend"])
+        .lines()
+        .find_map(|line| {
+            let mut words = line.split_whitespace();
+            (words.next()?.parse() == Ok(offset)).then(|| words.next().map(str::to_owned))?
+        })
+        .unwrap_or_default()
+        .replace('-', "")
+}
+
 pub fn uptime_seconds() -> Option<u64> {
     let text = fs::read_to_string("/proc/uptime").ok()?;
     let seconds: f64 = text.split_whitespace().next()?.parse().ok()?;
@@ -162,7 +181,7 @@ fn runtime_dir(uid: u32) -> PathBuf {
     PathBuf::from(format!("/run/user/{uid}/bande"))
 }
 
-fn read_user_file(path: &Path, uid: u32, limit: u64) -> Option<String> {
+fn read_user_bytes(path: &Path, uid: u32, limit: u64) -> Option<Vec<u8>> {
     let file = File::options()
         .read(true)
         .custom_flags((OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC).bits() as i32)
@@ -174,12 +193,22 @@ fn read_user_file(path: &Path, uid: u32, limit: u64) -> Option<String> {
     }
     let mut bytes = Vec::new();
     file.take(limit).read_to_end(&mut bytes).ok()?;
+    Some(bytes)
+}
+
+fn read_user_file(path: &Path, uid: u32, limit: u64) -> Option<String> {
+    let bytes = read_user_bytes(path, uid, limit)?;
     Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+fn read_ring(path: &Path, uid: u32) -> Option<String> {
+    let bytes = read_user_bytes(path, uid, RING_LIMIT)?;
+    Some(String::from_utf8_lossy(bytes.get(RING_HEADER..)?).into_owned())
 }
 
 pub fn ring_lines(uid: u32, program: &str, pid: Option<&str>) -> String {
     let path = runtime_dir(uid).join("ring").join(program);
-    let Some(text) = read_user_file(&path, uid, RING_LIMIT) else {
+    let Some(text) = read_ring(&path, uid) else {
         return String::new();
     };
     let wanted = pid.map(|pid| format!("{pid} "));
@@ -212,7 +241,7 @@ pub fn session(uid: u32, facts: &mut Map<String, Value>) {
             }
         }
     }
-    if let Some(actions) = read_user_file(&runtime_dir(uid).join("ring/actions"), uid, RING_LIMIT) {
+    if let Some(actions) = read_ring(&runtime_dir(uid).join("ring/actions"), uid) {
         let mut actions: Vec<&str> = actions
             .split(['\n', '\0'])
             .filter(|line| !line.is_empty())
@@ -250,7 +279,12 @@ pub fn journal_around(boot: Option<&str>, around: Option<i64>, scrubber: &Scrubb
         arguments.push(format!("--until=@{}", second + 5));
     }
     let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
-    scrubber.text(&command_text("journalctl", &arguments))
+    let lines: Vec<String> = command_text("journalctl", &arguments)
+        .lines()
+        .filter(|line| !line.starts_with(char::is_whitespace))
+        .map(|line| scrubber.line(line))
+        .collect();
+    lines.join("\n")
 }
 
 pub fn largest_processes() -> Value {

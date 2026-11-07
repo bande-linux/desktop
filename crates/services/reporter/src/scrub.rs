@@ -101,7 +101,7 @@ fn accounts() -> Vec<String> {
 }
 
 fn is_word(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || byte == b'_'
+    byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-'
 }
 
 fn replace_words(text: &str, secret: &str) -> String {

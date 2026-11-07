@@ -114,6 +114,7 @@ fn classify(text: &str, user: &str) -> Outcome {
         "401",
         "authentication",
     ]) {
+        bande_log::fault::count("network-share-refused-password");
         return Outcome::NeedsPassword {
             user: user.to_owned(),
             refused: !user.is_empty(),
@@ -440,6 +441,7 @@ impl Mounts {
     }
 
     pub fn mark_lost(&self, point: &Path, server: &Server, name: &str, alert: Option<u32>) {
+        bande_log::fault::count("network-server-offline");
         let request = guard(&self.known).get(point).map_or_else(
             || ConnectRequest {
                 url: server.url(),

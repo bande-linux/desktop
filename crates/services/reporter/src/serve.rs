@@ -5,6 +5,7 @@ use std::os::fd::{FromRawFd, OwnedFd};
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -15,9 +16,11 @@ use serde_json::{Map, Value, json};
 
 use crate::config::{self, Config};
 use crate::counters;
+use crate::diagnose::diagnose;
 use crate::fault::{Fault, capture_hang};
 use crate::spool::{MANIFEST, STATE, Spool, Status};
 
+const COLLECTOR: &str = "bande-crash-reports@failed.service";
 const FIRST_LISTEN_FD: i32 = 3;
 const IDLE_EXIT: Duration = Duration::from_secs(30);
 const REQUEST_LIMIT: u64 = 16 * 1024;
@@ -42,7 +45,9 @@ fn is_administrator(uid: u32) -> bool {
     let passwd = fs::read_to_string("/etc/passwd").unwrap_or_default();
     let account = passwd.lines().find_map(|line| {
         let fields: Vec<&str> = line.split(':').collect();
-        (fields.get(2)?.parse() == Ok(uid)).then(|| (*fields.first()?).to_owned())
+        (fields.get(2)?.parse() == Ok(uid))
+            .then(|| fields.first().map(|name| (*name).to_owned()))
+            .flatten()
     });
     let Some(account) = account else {
         return false;
@@ -66,6 +71,19 @@ fn process_owner(pid: &str) -> Option<u32> {
 fn program_of(pid: &str) -> Option<String> {
     let path = fs::read_link(format!("/proc/{pid}/exe")).ok()?;
     path.file_name()?.to_str().map(str::to_owned)
+}
+
+fn start_collector() -> std::io::Result<()> {
+    let status = Command::new("systemctl")
+        .args(["start", "--no-block", COLLECTOR])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?;
+    if !status.success() {
+        return Err(std::io::Error::other("cannot start the collector"));
+    }
+    Ok(())
 }
 
 struct Service {
@@ -115,6 +133,7 @@ impl Service {
             }
             capture_hang(
                 &mut fault,
+                &self.spool_root,
                 &pid,
                 request.get("seconds").and_then(Value::as_u64),
             );
@@ -216,6 +235,22 @@ impl Service {
             "list" => self.list(peer),
             "read" => self.read(id, peer),
             "status" => Ok(self.status()),
+            "collect" => {
+                start_collector()?;
+                Ok(json!({}))
+            }
+            "diagnose" => {
+                let description = field(request, "description").unwrap_or_default();
+                let send = request
+                    .get("send")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let id = diagnose(&self.spool_root, &self.config(), peer, description, send)?;
+                Ok(json!({
+                    "id": id,
+                    "queued": send && self.config().server().is_some(),
+                }))
+            }
             "delete" => {
                 let (spool, _) = self.visible(id, peer)?;
                 spool.delete(id)?;

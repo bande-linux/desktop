@@ -170,6 +170,9 @@ fn run(arguments: &[String]) -> Result<(), Box<dyn Error>> {
     match rest {
         [command] if command == "send" => run_sender(&paths),
         [command] if command == "list" => list(&paths),
+        [command] if command == "collect-failures" => {
+            Ok(bande_reporter::diagnose::ask_for_collection()?)
+        }
         [command] if command == "serve" => bande_reporter::serve::run(&paths.spool, &paths.config),
         [command] if command == "watch" => bande_reporter::watch::run(&paths.spool, &paths.config),
         [command, manifest, attachments @ ..] if command == "store" => {

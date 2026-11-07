@@ -1,5 +1,5 @@
-use std::fs;
-use std::io;
+use std::fs::{self, File};
+use std::io::{self, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread::sleep;
@@ -16,6 +16,7 @@ use crate::signature::{Frame, signature};
 use crate::spool::{Attachment, Spool};
 use crate::stacks::{Stacks, parse_eu_stack};
 
+const PARTIAL: &str = "partial";
 const SNAPSHOTS: usize = 3;
 const SNAPSHOT_GAP: Duration = Duration::from_secs(1);
 const EU_STACK_PATIENCE: Duration = Duration::from_secs(8);
@@ -42,6 +43,7 @@ pub struct Fault {
     pub time: Timestamp,
     pub boot: Option<String>,
     pub attachments: Vec<Attachment>,
+    pub detail_raw_description: Option<String>,
 }
 
 impl Fault {
@@ -58,6 +60,7 @@ impl Fault {
             time: Timestamp::now(),
             boot: None,
             attachments: Vec::new(),
+            detail_raw_description: None,
         }
     }
 
@@ -84,7 +87,11 @@ impl Fault {
     ) -> io::Result<String> {
         let scrubber = Scrubber::for_this_computer();
         let mut manifest = Map::new();
-        manifest.insert("signature".to_owned(), json!(self.signature()));
+        let signature = match &config.signature_tag {
+            Some(tag) => format!("{tag}-{}", self.signature()),
+            None => self.signature(),
+        };
+        manifest.insert("signature".to_owned(), json!(signature));
         manifest.insert("kind".to_owned(), json!(self.kind));
         manifest.insert("time".to_owned(), json!(self.time.to_string()));
         manifest.insert("program".to_owned(), json!(self.program));
@@ -94,6 +101,18 @@ impl Fault {
         manifest.insert("images".to_owned(), self.stacks.images_json());
         manifest.insert("panic_location".to_owned(), json!(self.panic_location));
         manifest.insert("counters".to_owned(), facts::counters_of(spool_root));
+        let this_boot = facts::boot_id();
+        match self.boot.as_deref().map(facts::boot_id_of) {
+            Some(about) => {
+                if !about.is_empty() {
+                    manifest.insert("boot_id".to_owned(), json!(about));
+                }
+                manifest.insert("reported_from_boot_id".to_owned(), json!(this_boot));
+            }
+            None => {
+                manifest.insert("boot_id".to_owned(), json!(this_boot));
+            }
+        }
         manifest.extend(facts::machine());
         if let Some(uid) = self.owner {
             facts::session(uid, &mut manifest);
@@ -159,16 +178,18 @@ fn kernel_state(pid: &str, tid: &str) -> String {
     )
 }
 
-pub fn snapshot_threads(pid: &str) -> String {
+fn kernel_states(pid: &str) -> String {
+    thread_ids(pid)
+        .iter()
+        .map(|tid| kernel_state(pid, tid))
+        .collect()
+}
+
+fn later_snapshots(pid: &str) -> String {
     let mut text = String::new();
-    for snapshot in 0..SNAPSHOTS {
-        if snapshot > 0 {
-            sleep(SNAPSHOT_GAP);
-        }
-        text.push_str(&format!("--- snapshot {snapshot}\n"));
-        for tid in thread_ids(pid) {
-            text.push_str(&kernel_state(pid, &tid));
-        }
+    for snapshot in 1..SNAPSHOTS {
+        sleep(SNAPSHOT_GAP);
+        text.push_str(&format!("--- snapshot {snapshot}\n{}", kernel_states(pid)));
     }
     text
 }
@@ -247,8 +268,47 @@ fn first_kernel_frames(snapshot: &str) -> String {
         .join(" ")
 }
 
-pub fn capture_hang(fault: &mut Fault, pid: &str, seconds: Option<u64>) {
-    let snapshots = snapshot_threads(pid);
+fn write_partial(spool_root: &Path, name: &str, text: &str) -> io::Result<()> {
+    let folder = spool_root.join(PARTIAL);
+    fs::create_dir_all(&folder)?;
+    let mut file = File::create(folder.join(name))?;
+    file.write_all(text.as_bytes())?;
+    file.sync_all()?;
+    File::open(&folder)?.sync_all()
+}
+
+pub fn partial_snapshots(spool_root: &Path) -> Vec<(String, String)> {
+    let folder = spool_root.join(PARTIAL);
+    let Ok(entries) = fs::read_dir(&folder) else {
+        return Vec::new();
+    };
+    let found: Vec<(String, String)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            Some((
+                entry.file_name().into_string().ok()?,
+                fs::read_to_string(entry.path()).ok()?,
+            ))
+        })
+        .collect();
+    if let Err(error) = fs::remove_dir_all(&folder) {
+        tracing::debug!("cannot remove the partial snapshots: {error}");
+    }
+    found
+}
+
+pub fn capture_hang(fault: &mut Fault, spool_root: &Path, pid: &str, seconds: Option<u64>) {
+    let first = kernel_states(pid);
+    let partial = format!("{}-{pid}", fault.kind);
+    let header = format!(
+        "kind={} program={} pid={pid} stalled_seconds={seconds:?}\n{first}",
+        fault.kind,
+        fault.program.as_deref().unwrap_or("-"),
+    );
+    if let Err(error) = write_partial(spool_root, &partial, &header) {
+        tracing::debug!("cannot save the first snapshot: {error}");
+    }
+    let snapshots = format!("--- snapshot 0\n{first}{}", later_snapshots(pid));
     let eu = user_stacks(pid);
     let main_tid = pid.parse().unwrap_or(0);
     fault.stacks = parse_eu_stack(&eu, main_tid);
@@ -267,7 +327,15 @@ pub fn capture_hang(fault: &mut Fault, pid: &str, seconds: Option<u64>) {
     if fault.stacks.threads.is_empty() {
         fault.signature_text = Some(first_kernel_frames(&snapshots));
     }
+    fault.detail.insert(
+        "stuck_main_thread".to_owned(),
+        json!(snapshots.lines().nth(1)),
+    );
     push_text(&mut fault.attachments, "kernel-stacks.txt", snapshots);
+    let done = spool_root.join(PARTIAL).join(&partial);
+    if let Err(error) = fs::remove_file(done) {
+        tracing::debug!("cannot remove a finished snapshot: {error}");
+    }
 }
 
 pub fn stuck_tasks() -> String {

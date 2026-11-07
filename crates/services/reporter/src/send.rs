@@ -160,7 +160,10 @@ fn outcome_of(answer: &str) -> io::Result<Outcome> {
         .and_then(retry_after);
     Ok(match status {
         200 | 201 => Outcome::Stored,
-        400 => Outcome::BadFormat,
+        400 => {
+            tracing::warn!("the server says the report is malformed: {answer}");
+            Outcome::BadFormat
+        }
         401 | 403 => Outcome::Unauthorized,
         413 => Outcome::TooLarge,
         _ => Outcome::Later(wait),

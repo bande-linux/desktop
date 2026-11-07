@@ -89,6 +89,7 @@ impl OutputConfig {
             scale: automatic_scale(mode.size, self.physical_size_mm),
             transform: Transform::Normal,
             position: Point::default(),
+            match_colours: true,
         })
     }
 }
@@ -99,6 +100,7 @@ pub struct OutputSettings {
     pub scale: f64,
     pub transform: Transform,
     pub position: Point<i32, Logical>,
+    pub match_colours: bool,
 }
 
 impl OutputSettings {

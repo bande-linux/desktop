@@ -1,0 +1,24 @@
+Read the Tracking Protection lists from the build instead of downloading them
+
+--- a/toolkit/components/url-classifier/UrlClassifierRemoteSettingsService.sys.mjs
++++ b/toolkit/components/url-classifier/UrlClassifierRemoteSettingsService.sys.mjs
+@@ -75,7 +75,6 @@
+   async _getLists(aRequest, aListener) {
+     await this.lazyInit();
+ 
+-    let rs = lazy.RemoteSettings(COLLECTION_NAME);
+     let payload = "n:" + SBRS_UPDATE_MINIMUM_DELAY + "\n";
+ 
+     let requests = this._parseRequest(aRequest);
+@@ -96,7 +95,10 @@
+       try {
+         // SafeBrowsing maintains its own files, so we can remove the downloaded
+         // files after SafeBrowsing processes the data.
+-        let buffer = await rs.attachments.downloadAsBytes(entry);
++        let response = await fetch(
++          `resource://app/defaults/settings/main/${COLLECTION_NAME}/${entry.Name}`
++        );
++        let buffer = await response.arrayBuffer();
+         let bytes = new Uint8Array(buffer);
+         let strData = "";
+         for (let i = 0; i < bytes.length; i++) {

@@ -22,3 +22,4 @@ bande/window-drag-threshold.patch
 bande/push-for-sync.patch
 bande/translation-setting.patch
 bande/no-google.patch
+bande/ship-tracking-lists.patch

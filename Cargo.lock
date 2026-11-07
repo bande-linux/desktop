@@ -1130,6 +1130,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-reporter"
+version = "0.1.7"
+dependencies = [
+ "bande-log",
+ "flate2",
+ "jiff",
+ "ring",
+ "rustix 1.1.6",
+ "rustls",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "bande-review"
 version = "0.1.7"
 dependencies = [

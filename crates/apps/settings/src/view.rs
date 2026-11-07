@@ -2089,7 +2089,6 @@ impl SettingsView {
         {
             shown.level = level;
         }
-        self.message = None;
         self.commands
             .push(Command::Brightness(LevelRequest::Set(connector, level)));
     }

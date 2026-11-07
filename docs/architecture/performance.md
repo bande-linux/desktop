@@ -81,7 +81,10 @@ eventfds. These are the only timers left; each runs only while its condition hol
 | Activity Monitor, the low memory window | every 2 s while a window is on screen | `/proc` has no change events |
 | Settings' Sound pane | 20 times a second while on screen | the input level meter |
 | Disk space (automount) | every 10 min | free space has no kernel event |
+| Server health (automount) | every 8 s while a server is connected | a server that stops answering sends nothing |
 | Files | once a day | emptying old Trash items |
+| Files, a server folder in the active window | every 10 s | servers send no change events; re-lists the folder and reads its free space off the UI thread |
+| Quick Look and Player while playing with controls shown | twice a second | the position from the media engine |
 | Mail | IDLE renewed every 25 min; full sync every 15 min; polling every 5 min only without IDLE | servers drop IDLE after 30 min and IDLE watches only the inbox |
 | Calendar | CalDAV every 5 min, subscriptions hourly | CalDAV has no push |
 

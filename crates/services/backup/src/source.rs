@@ -69,7 +69,7 @@ pub fn sources() -> Vec<PathBuf> {
     }
 }
 
-pub fn backup_args(host: &str, sources: &[PathBuf], excluded: &[PathBuf]) -> Vec<String> {
+pub fn backup_args(host: &str, sources: &[PathBuf]) -> Vec<String> {
     let mut args = vec![
         "backup".to_owned(),
         "--json".to_owned(),
@@ -81,10 +81,6 @@ pub fn backup_args(host: &str, sources: &[PathBuf], excluded: &[PathBuf]) -> Vec
     for path in EXCLUDED {
         args.push("--exclude".to_owned());
         args.push(path.to_owned());
-    }
-    for path in excluded {
-        args.push("--exclude".to_owned());
-        args.push(path.to_string_lossy().into_owned());
     }
     args.extend(
         sources

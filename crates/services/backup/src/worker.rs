@@ -1,6 +1,6 @@
 use std::fs;
 use std::io::{self, BufRead, BufReader};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Child, Command as Process, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
@@ -767,14 +767,11 @@ impl Run<'_> {
     fn attempt(&self, reserve: u64) -> Attempt {
         self.shared.set_phase(phase::BACKING_UP);
         self.shared.change(|state| state.interrupted = true);
-        let state = self.shared.state();
         let Ok(id) = host() else {
             return Attempt::Failed;
         };
         let sources = source::sources();
-        let mut excluded = state.excluded.clone();
-        excluded.push(PathBuf::from(store::STATE_DIR).join("state.json.new"));
-        let args = source::backup_args(&id, &sources, &excluded);
+        let args = source::backup_args(&id, &sources);
         let uuid = self.disk.uuid.clone();
         let view = SnapshotView::take(&sources, self.mount_point);
         let reader = match &view {

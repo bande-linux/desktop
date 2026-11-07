@@ -33,6 +33,10 @@ trait Manager {
 
     fn get_session(&self, session_id: &str) -> zbus::Result<OwnedObjectPath>;
 
+    fn can_suspend(&self) -> zbus::Result<String>;
+
+    fn suspend(&self, interactive: bool) -> zbus::Result<()>;
+
     #[zbus(signal)]
     fn prepare_for_sleep(&self, start: bool) -> zbus::Result<()>;
 
@@ -65,6 +69,24 @@ pub fn follow_sleep(connection: &Connection, sender: Sender<Sleep>) -> zbus::Res
             };
             if sender.send(sleep).is_err() {
                 return;
+            }
+        }
+    });
+    Ok(())
+}
+
+pub fn sleep_on_request(connection: &Connection, requests: Receiver<()>) -> zbus::Result<()> {
+    let manager = ManagerProxyBlocking::new(connection)?;
+    thread::spawn(move || {
+        for () in requests {
+            let slept = manager
+                .can_suspend()
+                .and_then(|answer| match answer.as_str() {
+                    "yes" => manager.suspend(false),
+                    _ => Ok(()),
+                });
+            if let Err(error) = slept {
+                tracing::warn!("cannot sleep on the power button: {error}");
             }
         }
     });

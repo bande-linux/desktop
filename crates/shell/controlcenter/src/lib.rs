@@ -414,7 +414,7 @@ pub fn card(palette: &Palette, rect: Rect, items: &mut Vec<Item>) {
     ));
     items.push(Item::Fill {
         shape,
-        paint: palette.chassis.into(),
+        paint: palette.on_panel(palette.chassis).into(),
     });
     items.push(Item::lit_edge(shape, palette));
 }

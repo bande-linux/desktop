@@ -35,6 +35,7 @@ use crate::printers::{PrinterCommand, PrintersState};
 use crate::privacy::focus_after_asking;
 use crate::privilege::Privilege;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
+use crate::sharing::{SharingCommand, SharingState};
 use crate::software::{Need, SoftwareCommand, SoftwareState};
 use crate::state::{Answer, BluetoothState, Display, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand};
@@ -106,6 +107,7 @@ pub(crate) enum Intent {
     WifiManual(bool),
     OpenPrinter(String),
     DefaultPrinter(String),
+    Sharing(SharingCommand),
     PrinterAddress(String),
     AddPrinterAddress,
     InstallPrinting,
@@ -132,6 +134,7 @@ pub(crate) enum Intent {
     Locale(LocaleCommand),
     DefaultApp(&'static str, String),
     Grant(Permission, String, bool),
+    KeyboardAccess(String, bool),
     Passwords(PasswordCommand),
     PasswordQuery(String),
     ChangePassword(Option<String>),
@@ -253,6 +256,8 @@ pub struct SettingsView {
     pub(crate) other: Option<Other>,
     pub(crate) wifi_manual: bool,
     pub(crate) printers: Option<PrintersState>,
+    pub(crate) sharing: Option<SharingState>,
+    pub(crate) installing_samba: bool,
     pub(crate) adding_printer: bool,
     pub(crate) installing_printing: bool,
     pub(crate) printer_address: String,
@@ -279,6 +284,8 @@ pub struct SettingsView {
     pub(crate) refused: Vec<Privilege>,
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
     pub(crate) permissions: Grants,
+    pub(crate) keyboard_access: Vec<crate::consent::KeyboardAccess>,
+    pub(crate) security: crate::security_status::SecurityStatus,
     pub(crate) keychain: Keychain,
     stale: bool,
     rebuilt: bool,
@@ -348,6 +355,8 @@ impl SettingsView {
             other: None,
             wifi_manual: false,
             printers: None,
+            sharing: None,
+            installing_samba: false,
             adding_printer: false,
             installing_printing: false,
             printer_address: String::new(),
@@ -374,6 +383,8 @@ impl SettingsView {
             refused: Vec::new(),
             default_apps: None,
             permissions: Vec::new(),
+            keyboard_access: Vec::new(),
+            security: crate::security_status::SecurityStatus::default(),
             keychain: Keychain::default(),
             stale: true,
             rebuilt: false,
@@ -615,6 +626,7 @@ impl SettingsView {
                 (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates])
             }
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
+            Update::Sharing(_) => (Some(PaneId::Sharing), &[SettingId::Sharing]),
             Update::Printers(_) | Update::PrinterAdded(..) | Update::PrintingInstalled => (
                 Some(PaneId::Printers),
                 &[SettingId::Printers, SettingId::NearbyPrinters],
@@ -789,6 +801,12 @@ impl SettingsView {
             Update::Refused(refused) => self.refused = refused,
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
             Update::Permissions(permissions) => self.permissions = permissions,
+            Update::Sharing(state) => {
+                self.installing_samba = false;
+                self.sharing = Some(state);
+            }
+            Update::KeyboardAccess(access) => self.keyboard_access = access,
+            Update::Security(status) => self.security = status,
             Update::Printers(printers) => {
                 if let Some(Detail::Printer(id)) = &self.detail
                     && !printers.printers.iter().any(|printer| printer.id == *id)
@@ -909,6 +927,7 @@ impl SettingsView {
             | PaneId::ScreenSharing
             | PaneId::Apps
             | PaneId::Printers
+            | PaneId::Sharing
             | PaneId::Users
             | PaneId::Passwords
             | PaneId::Storage
@@ -1339,6 +1358,7 @@ impl SettingsView {
                     }
                 }
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
+                Intent::KeyboardAccess(line, on) => self.change_keyboard_access(line, on),
                 Intent::Passwords(command) => self.password_command(command),
                 Intent::PasswordQuery(query) => {
                     self.keychain.query = query;
@@ -1406,6 +1426,10 @@ impl SettingsView {
                 Intent::DefaultPrinter(name) => {
                     self.commands
                         .push(Command::Printers(PrinterCommand::SetDefault(name)));
+                }
+                Intent::Sharing(command) => {
+                    self.installing_samba |= command == SharingCommand::InstallSamba;
+                    self.commands.push(Command::Sharing(command));
                 }
                 Intent::InstallPrinting => {
                     self.installing_printing = true;
@@ -1739,6 +1763,7 @@ impl SettingsView {
             PaneId::Sound => Command::Audio(AudioCommand::Listen(on)),
             PaneId::Wifi | PaneId::Network => Command::Network(NetworkCommand::Watch(on)),
             PaneId::Printers => Command::Printers(PrinterCommand::Watch(on)),
+            PaneId::Sharing if on => Command::Sharing(SharingCommand::Read),
             _ => return,
         };
         self.commands.push(command);

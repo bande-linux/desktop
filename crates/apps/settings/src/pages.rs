@@ -709,6 +709,7 @@ impl SettingsView {
         match list {
             List::KnownNetworks => self.known_network_rows(),
             List::Printers => self.printer_rows(),
+            List::Sharing => self.sharing_rows(),
             List::Accounts => self.account_rows(),
             List::NearbyPrinters => self.add_printer_rows(),
             List::Networks => self.network_rows(),
@@ -736,6 +737,8 @@ impl SettingsView {
             List::Regions => self.region_rows(),
             List::DefaultApps => self.default_app_rows(),
             List::Clipboard => self.clipboard_rows(),
+            List::KeyboardAccess => self.keyboard_access_rows(),
+            List::SecurityStatus => self.security_status_rows(),
             List::SearchExcluded => self.excluded_rows(),
             List::Permissions(permission) => self.permission_rows(permission),
             List::Passwords => self.keychain_rows(),

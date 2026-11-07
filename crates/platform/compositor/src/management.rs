@@ -114,6 +114,7 @@ impl State {
     }
 
     pub(crate) fn announce_outputs(&mut self) {
+        self.refresh_materials();
         self.output_serial = self.output_serial.wrapping_add(1);
         let display = self.display_handle.clone();
         let mut managers = std::mem::take(&mut self.output_managers);
@@ -193,6 +194,10 @@ impl GlobalDispatch<ZwlrOutputManagerV1, ()> for State {
         }
         manager.resource.done(state.output_serial);
         state.output_managers.push(manager);
+    }
+
+    fn can_view(client: Client, _global_data: &()) -> bool {
+        !crate::trust::is_sandboxed(&client)
     }
 }
 

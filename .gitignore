@@ -37,3 +37,12 @@ debian/*.substvars
 
 # Review recordings
 /review-out/
+
+# Soak results
+/soak-out/
+
+# Fuzzing
+/fuzz/target/
+/fuzz/Cargo.lock
+/fuzz/corpus/
+/fuzz/artifacts/

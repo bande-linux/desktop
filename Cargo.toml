@@ -50,6 +50,7 @@ pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
 resvg = { version = "=0.49.0", default-features = false }
 roxmltree = "=0.21.2"
+rustc-demangle = "=0.1.28"
 rustix = { version = "=1.1.6", features = ["event", "param", "process"] }
 ruzstd = "=0.9.1"
 sevenz-rust2 = { version = "=0.24.2", default-features = false, features = ["aes256", "bzip2", "deflate", "ppmd"] }
@@ -115,6 +116,7 @@ bande-notifications = { path = "crates/shell/notifications" }
 bande-notify = { path = "crates/services/notify" }
 bande-polkit = { path = "crates/services/polkit" }
 bande-power = { path = "crates/services/power" }
+bande-crash-reports = { path = "crates/services/crash-reports" }
 bande-recovery = { path = "crates/services/recovery" }
 bande-protocols = { path = "crates/platform/protocols" }
 bande-render = { path = "crates/platform/render" }
@@ -150,4 +152,4 @@ inherits = "release"
 lto = "fat"
 codegen-units = 1
 panic = "abort"
-strip = true
+debug = "line-tables-only"

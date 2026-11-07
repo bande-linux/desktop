@@ -617,6 +617,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-crash-reports"
+version = "0.1.7"
+dependencies = [
+ "bande-log",
+ "jiff",
+ "rustc-demangle",
+ "rustix 1.1.6",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "bande-datetime"
 version = "0.1.7"
 dependencies = [
@@ -756,6 +768,7 @@ dependencies = [
  "bande-status",
  "bande-toolkit",
  "libc",
+ "rustix 1.1.6",
  "serde",
  "serde_json",
  "tracing",
@@ -968,6 +981,7 @@ name = "bande-recovery"
 version = "0.1.7"
 dependencies = [
  "bande-log",
+ "rustix 1.1.6",
  "tracing",
  "zbus",
 ]
@@ -4336,6 +4350,12 @@ checksum = "9da7f59328b09405b181fee1018925fad50f157afb43c0c0f5c522c256dd5907"
 dependencies = [
  "memchr",
 ]
+
+[[package]]
+name = "rustc-demangle"
+version = "0.1.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb"
 
 [[package]]
 name = "rustc-hash"

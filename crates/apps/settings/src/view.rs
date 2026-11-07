@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 use crate::L10N;
 use crate::about::{About, AboutCommand};
 use crate::battery::{BatteryCommand, BatteryState};
+use crate::crash_reports::{CrashReport, CrashReportCommand};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
 use crate::follow::{Command, Update};
 use crate::forget::Forget;
@@ -103,6 +104,9 @@ pub(crate) enum Intent {
     JoinOther(Option<String>),
     WifiManual(bool),
     OpenPrinter(String),
+    OpenCrashReport(PathBuf),
+    CopyCrashReport(String),
+    DeleteCrashReport(PathBuf),
     DefaultPrinter(String),
     AddPrinter(bande_printers::NearbyPrinter),
     PrinterAddress(String),
@@ -211,6 +215,7 @@ pub(crate) enum Detail {
     Network(Vec<u8>),
     Printer(String),
     Account(String),
+    CrashReport(PathBuf),
 }
 
 pub struct SettingsView {
@@ -236,6 +241,7 @@ pub struct SettingsView {
     pub(crate) layouts: Option<Layouts>,
     pub(crate) pointing: PointingDevices,
     pub(crate) about: Option<About>,
+    pub(crate) crash_reports: Vec<CrashReport>,
     pub(crate) storage: Option<Storage>,
     pub(crate) drafts: HashMap<SettingId, String>,
     pub(crate) confirming_empty_trash: bool,
@@ -330,6 +336,7 @@ impl SettingsView {
             layouts: None,
             pointing: PointingDevices::default(),
             about: None,
+            crash_reports: Vec::new(),
             storage: None,
             drafts: HashMap::new(),
             confirming_empty_trash: false,
@@ -763,6 +770,10 @@ impl SettingsView {
                 bande_settings_panes::without_sleep(&mut self.panes);
                 self.availability_changed();
             }
+            Update::CrashReports(reports) => self.crash_reports = reports,
+            Update::CrashReportsChanged => self
+                .commands
+                .push(Command::CrashReports(CrashReportCommand::Refresh)),
             Update::Storage(storage) => {
                 if storage.trash_items == 0 {
                     self.confirming_empty_trash = false;
@@ -916,6 +927,7 @@ impl SettingsView {
             | PaneId::Users
             | PaneId::Passwords
             | PaneId::Storage
+            | PaneId::CrashReports
             | PaneId::SoftwareUpdate => true,
             PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
             PaneId::Mouse => self.pointing.mouse,
@@ -1297,6 +1309,7 @@ impl SettingsView {
                             Detail::Network(ssid) => String::from_utf8_lossy(&ssid).into_owned(),
                             Detail::Printer(name) => format!("printer:{name}"),
                             Detail::Account(login) => format!("account:{login}"),
+                            Detail::CrashReport(path) => format!("crash:{}", path.display()),
                         }));
                         self.picture_edit = None;
                         self.deleting_account = false;
@@ -1398,6 +1411,18 @@ impl SettingsView {
                 }
                 Intent::JoinOther(password) => self.join_other(password),
                 Intent::WifiManual(manual) => self.set_wifi_manual(manual),
+                Intent::OpenCrashReport(path) => {
+                    self.detail = Some(Detail::CrashReport(path));
+                    self.clear_failure();
+                    self.focus_next = Some(Anchor::Back);
+                    *self.scroll.borrow_mut() = ScrollState::default();
+                }
+                Intent::CopyCrashReport(text) => self.commands.push(Command::CopyText(text)),
+                Intent::DeleteCrashReport(path) => {
+                    self.detail = None;
+                    self.commands
+                        .push(Command::CrashReports(CrashReportCommand::Delete(path)));
+                }
                 Intent::OpenPrinter(name) => {
                     self.detail = Some(Detail::Printer(name));
                     self.forgetting = None;

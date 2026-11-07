@@ -5,9 +5,11 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use bande_files::{Browser, FilesView, ListColumn, Location, Sheet, list_column_move_action};
+use bande_files::{
+    Browser, FilesView, ListColumn, Location, Request, Sheet, list_column_move_action,
+};
 use bande_fs::Trash;
-use bande_toolkit::ui::{Event, Key, Modifiers, Pointer};
+use bande_toolkit::ui::{Event, Key, Modifiers, Pointer, PointerButton};
 use bande_toolkit::{Palette, Point, Scheme, TextSystem};
 use bande_xdg::Apps;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
@@ -250,4 +252,62 @@ fn dragging_a_column_header_reorders_the_columns_and_the_order_is_remembered() {
     key(&mut again, Key::Character('2'), true, false);
     again.scene(1000, 600);
     assert_eq!(titles(&again), moved);
+}
+
+#[test]
+fn a_tab_is_reordered_by_dragging_torn_off_by_leaving_the_bar_and_closed_by_middle_click() {
+    let home = TempDir::new().unwrap();
+    let (a, b) = (home.path().join("a"), home.path().join("b"));
+    fs::create_dir(&a).unwrap();
+    fs::create_dir(&b).unwrap();
+    let trash = Trash::isolated(
+        home.path().join("Trash"),
+        rustix::process::getuid().as_raw(),
+    );
+    let mut view = view(Browser::open(Location::Folder(a), trash));
+    key(&mut view, Key::Character('t'), true, false);
+    view.go(Location::Folder(b));
+    view.scene(1000, 600);
+    let names = |view: &FilesView| view.tab_titles().join(" ");
+    assert_eq!(names(&view), "a b");
+    let centre = |view: &FilesView, index: usize| {
+        let tab = view.tab_layout().tabs[index];
+        Point::new(tab.x + tab.width / 2.0, tab.y + tab.height / 2.0)
+    };
+
+    let from = centre(&view, 0);
+    let to = centre(&view, 1);
+    view.handle(&Event::PointerDown(Pointer::at(from)));
+    assert_eq!(view.active_tab(), 0);
+    view.handle(&Event::PointerMove(Pointer::at(to)));
+    view.handle(&Event::PointerUp(Pointer::at(to)));
+    assert_eq!(names(&view), "b a");
+    assert_eq!(view.active_tab(), 1);
+    view.scene(1000, 600);
+
+    let from = centre(&view, 0);
+    view.handle(&Event::PointerDown(Pointer::at(from)));
+    let below = Point::new(from.x, from.y + 200.0);
+    view.handle(&Event::PointerMove(Pointer::at(below)));
+    view.handle(&Event::PointerMove(Pointer::at(below)));
+    let index = view
+        .take_requests()
+        .into_iter()
+        .find_map(|request| match request {
+            Request::DetachTab { index, .. } => Some(index),
+            _ => None,
+        });
+    assert_eq!(index, Some(0));
+    let carried = view.take_tab(0).unwrap();
+    assert_eq!(names(&view), "a");
+    assert!(!view.shows_tab_bar());
+    view.adopt_tab(carried, 1);
+    assert_eq!(names(&view), "a b");
+    assert_eq!(view.active_tab(), 1);
+    view.scene(1000, 600);
+
+    let middle = Pointer::at(centre(&view, 0)).with_button(PointerButton::Middle);
+    view.handle(&Event::PointerDown(middle));
+    view.handle(&Event::PointerUp(middle));
+    assert_eq!(names(&view), "b");
 }

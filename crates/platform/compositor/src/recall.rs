@@ -89,12 +89,7 @@ impl Recall {
         let Some(path) = &self.path else {
             return Ok(());
         };
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let staged = path.with_extension("new");
-        fs::write(&staged, format(&self.frames))?;
-        fs::rename(staged, path)
+        bande_xdg::replace_file(path, format(&self.frames))
     }
 }
 

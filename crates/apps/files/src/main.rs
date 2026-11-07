@@ -1,6 +1,6 @@
 mod menu_bar;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -8,12 +8,15 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
+use bande_app::{
+    Cx, Detached, Info, Keys, Kind, Menus, Program, Settings, TabCarry, TabDrop, TabDropTarget,
+    TabHost, View, WindowId,
+};
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_files::{
-    BookmarkEdit, Browser, FilesSettings, FilesView, L10N, Location, Request, Row, SETTINGS_SIZE,
-    SIDEBAR_FILE, SIDEBAR_WIDTH, Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory,
-    follow_search_excluded, hidden_places, list_columns_file,
+    BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, L10N, Location, Request, Row,
+    SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT,
+    ViewMemory, follow_search_excluded, hidden_places, list_columns_file,
     recent_folders_file as recent_folders_file_in, rows, serve_file_manager, settings_view,
     sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks, with_place_shown,
     without_bookmark,
@@ -25,8 +28,8 @@ use bande_search::{recently_used_path, usage_path};
 use bande_thumbnails::Thumbnails;
 use bande_toolkit::ui::{Event, frame_time};
 use bande_toolkit::{
-    Appearance, Color, DragAction, DragEvent, FrameRegions, MenuPlacement, Rect, Scene, TextSystem,
-    Transfer, Window, WindowEvent,
+    Appearance, Color, DragAction, DragEvent, FrameRegions, MenuPlacement, Point, Rect, Scene,
+    TextSystem, Transfer, Window, WindowEvent,
 };
 use bande_volumes::{EjectFailure, eject, media_roots};
 use bande_xdg::{
@@ -63,6 +66,49 @@ fn settings_window(appearance: Appearance) -> Box<dyn View> {
 struct BrowserPane {
     view: FilesView,
     title: String,
+    carrying: Rc<Cell<bool>>,
+    drop_target: TabDropTarget,
+}
+
+impl BrowserPane {
+    fn tabs_changed(&mut self, window: &mut Window) {
+        let title = self.view.title();
+        if title != self.title {
+            window.set_title(&title);
+            self.title = title;
+        }
+        window.set_cursor(self.view.cursor());
+        window.request_redraw();
+    }
+
+    fn drag(&mut self, window: &mut Window, drag: DragEvent) {
+        if self.carrying.get() {
+            let band = Some(self.view.tab_drop_height());
+            if let Some(drop) = self.drop_target.event(window, band, drag) {
+                self.view.tab_dropped(drop);
+            }
+            return;
+        }
+        match drag {
+            DragEvent::Entered { position, uris, .. } => {
+                let action = self.view.drag_entered(position, &uris);
+                window.accept_drag(action);
+            }
+            DragEvent::Moved(position) => {
+                let action = self.view.drag_moved(position);
+                window.accept_drag(action);
+            }
+            DragEvent::Left => self.view.drag_left(),
+            DragEvent::Dropped {
+                position,
+                transfer,
+                action,
+            } => {
+                self.view.dropped(position, &transfer.uris, action);
+            }
+            DragEvent::Finished(_) => self.view.drag_finished(),
+        }
+    }
 }
 
 enum Pane {
@@ -97,6 +143,43 @@ fn browser(cx: &mut Cx<Files>, id: WindowId) -> Option<(&mut Window, &mut Browse
     match cx.window(id)? {
         (window, Pane::Browser(pane)) => Some((window, pane)),
         (_, Pane::QuickLook(_)) => None,
+    }
+}
+
+impl TabHost for Pane {
+    type Tab = CarriedTab;
+
+    fn release_tab(&mut self, window: &mut Window, id: u64) -> Option<CarriedTab> {
+        let Self::Browser(pane) = self else {
+            return None;
+        };
+        let tab = pane.view.release_tab(id);
+        pane.tabs_changed(window);
+        tab
+    }
+
+    fn adopt_tab(&mut self, window: &mut Window, tab: CarriedTab, index: usize) {
+        if let Self::Browser(pane) = self {
+            pane.view.adopt_tab(tab, index);
+            pane.tabs_changed(window);
+        }
+    }
+
+    fn slide_tab_to(&mut self, window: &mut Window, id: u64, x: f32) {
+        if let Self::Browser(pane) = self {
+            pane.view.slide_tab_to(id, x);
+            window.request_redraw();
+        }
+    }
+
+    fn insertion_index(&self, x: f32) -> usize {
+        self.browser()
+            .map_or(0, |pane| pane.view.tab_layout().insertion_index(x))
+    }
+
+    fn grab_point(&self, grab: Point) -> Point {
+        self.browser()
+            .map_or(grab, |pane| pane.view.tab_grab_point(grab))
     }
 }
 
@@ -271,25 +354,7 @@ impl View for BrowserPane {
             }
             WindowEvent::MenuAction(action) => self.view.menu_action(&action),
             WindowEvent::Drag(drag) => {
-                match drag {
-                    DragEvent::Entered { position, uris, .. } => {
-                        let action = self.view.drag_entered(position, &uris);
-                        window.accept_drag(action);
-                    }
-                    DragEvent::Moved(position) => {
-                        let action = self.view.drag_moved(position);
-                        window.accept_drag(action);
-                    }
-                    DragEvent::Left => self.view.drag_left(),
-                    DragEvent::Dropped {
-                        position,
-                        transfer,
-                        action,
-                    } => {
-                        self.view.dropped(position, &transfer.uris, action);
-                    }
-                    DragEvent::Finished(_) => self.view.drag_finished(),
-                }
+                self.drag(window, drag);
                 true
             }
             WindowEvent::MenuClosed => {
@@ -351,6 +416,8 @@ struct Files {
     trash: Trash,
     quick_look: QuickLookLink,
     panel: Option<WindowId>,
+    carrying: Rc<Cell<bool>>,
+    carry: TabCarry,
 }
 
 fn bookmarks_file() -> Option<PathBuf> {
@@ -609,8 +676,49 @@ impl Files {
         if let Some(paths) = reveal {
             browser.reveal_all(&paths);
         }
+        let mut view = self.new_view(browser)?;
+        if info {
+            view.show_inspector();
+        }
+        self.open_view(cx, view, WINDOW_SIZE)
+    }
+
+    fn open_tab_holder(
+        &self,
+        cx: &mut Cx<Self>,
+        size: (u32, u32),
+    ) -> Result<WindowId, bande_app::Error> {
+        let holder = Browser::open(Location::Recents, self.trash.clone());
+        let mut view = self.new_view(holder)?;
+        view.clear_tabs();
+        self.open_view(cx, view, size)
+    }
+
+    fn open_view(
+        &self,
+        cx: &mut Cx<Self>,
+        mut view: FilesView,
+        size: (u32, u32),
+    ) -> Result<WindowId, bande_app::Error> {
+        let title = view.title();
+        let carrying = Rc::clone(&self.carrying);
+        let window = cx.open(Kind::Main, &title.clone(), size, |appearance| {
+            view.set_appearance(appearance);
+            Pane::Browser(Box::new(BrowserPane {
+                view,
+                title,
+                carrying,
+                drop_target: TabDropTarget::default(),
+            }))
+        })?;
+        Ok(window)
+    }
+
+    fn new_view(&self, browser: Browser) -> Result<FilesView, bande_app::Error> {
         let sidebar = sidebar(&self.home);
         let apps = Apps::load(data_dirs(), &config_dirs());
+        let user_dirs = config_home()
+            .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
         let thumbnails = Thumbnails::for_user(apps.data_dirs());
         let mut view = FilesView::new(
             browser,
@@ -643,17 +751,54 @@ impl Files {
             view.set_recents_sources(recently_used_path(data_home.as_deref(), &self.home), usage);
         }
         view.set_search_excluded(self.search_excluded.clone());
-        if info {
-            view.show_inspector();
-        }
         view.set_media(media_roots(&std::env::var("USER").unwrap_or_default()));
-        let title = view.title();
         view.set_quick_look(Rc::clone(&self.quick_look));
-        let window = cx.open(Kind::Main, &title.clone(), WINDOW_SIZE, |appearance| {
-            view.set_appearance(appearance);
-            Pane::Browser(Box::new(BrowserPane { view, title }))
-        })?;
-        Ok(window)
+        Ok(view)
+    }
+
+    fn detach_tab(&mut self, cx: &mut Cx<Self>, from: WindowId, index: usize, grab: Point) {
+        let Some((window, pane)) = browser(cx, from) else {
+            return;
+        };
+        let Some(title) = pane.view.tab_titles().into_iter().nth(index) else {
+            return;
+        };
+        let drag = match window.start_window_drag(Transfer::text(&title)) {
+            Ok(drag) => drag,
+            Err(error) => {
+                tracing::warn!("cannot drag the tab out: {error}");
+                return;
+            }
+        };
+        let size = window.size();
+        let Some(tab) = pane.view.take_tab(index) else {
+            return;
+        };
+        pane.tabs_changed(window);
+        let detached = Detached {
+            id: tab.id(),
+            tab,
+            index,
+            drag,
+            grab,
+            size,
+        };
+        self.carrying.set(true);
+        let mut carry = std::mem::take(&mut self.carry);
+        carry.detach(cx, from, detached, &mut |cx, size| {
+            self.open_tab_holder(cx, size)
+        });
+        self.carry = carry;
+        self.carrying.set(self.carry.is_carrying());
+    }
+
+    fn tab_drop(&mut self, cx: &mut Cx<Self>, window: WindowId, drop: TabDrop) {
+        let mut carry = std::mem::take(&mut self.carry);
+        carry.drop_event(cx, window, drop, &mut |cx, size| {
+            self.open_tab_holder(cx, size)
+        });
+        self.carry = carry;
+        self.carrying.set(self.carry.is_carrying());
     }
 
     fn show_quick_look(&mut self, cx: &mut Cx<Self>) {
@@ -717,6 +862,14 @@ impl Files {
             }
             return;
         }
+        if let Request::DetachTab { index, grab } = request {
+            self.detach_tab(cx, id, index, grab);
+            return;
+        }
+        if let Request::TabDrop(drop) = request {
+            self.tab_drop(cx, id, drop);
+            return;
+        }
         let Some((window, pane)) = browser(cx, id) else {
             return;
         };
@@ -767,7 +920,10 @@ impl Files {
             }
             Request::Eject(volume) => self.eject(volume, false),
             Request::ForceEject(volume) => self.eject(volume, true),
-            Request::NewWindow | Request::ShowQuickLook => {}
+            Request::NewWindow
+            | Request::ShowQuickLook
+            | Request::DetachTab { .. }
+            | Request::TabDrop(_) => {}
             Request::OpenTerminal(folder) => open_terminal(window, &folder),
             Request::EditSidebar(edit) => {
                 if let Err(error) = edit_sidebar(&self.home, &edit) {
@@ -843,6 +999,8 @@ impl Program for Files {
             trash,
             quick_look: QuickLookLink::default(),
             panel: None,
+            carrying: Rc::new(Cell::new(false)),
+            carry: TabCarry::default(),
         };
         match arguments.iter().any(|argument| argument == SERVICE_FLAG) {
             true => files.wait_for_show(cx),

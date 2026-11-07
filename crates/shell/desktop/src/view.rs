@@ -7,7 +7,7 @@ use bande_fs::same_volume;
 use bande_quick_look::QuickLookLink;
 use bande_toolkit::ui::{
     Animated, ClipboardRequest, Context, Event, FreeLayout, Key, Modifiers, Pointer, PointerButton,
-    Size, Spring, TextField, Ui, Widget, WidgetId,
+    Size, Spring, TextField, TypeSelect, Ui, Widget, WidgetId, past_drag_slop,
 };
 use bande_toolkit::{
     Appearance, Color, DragAction, DragIcon, Elevation, Image, Item as SceneItem, Palette,
@@ -27,8 +27,6 @@ use bande_xdg::path_from_file_uri;
 const LABEL_SIZE: f32 = 12.0;
 const LABEL_LINES: usize = 2;
 const KEEP_AT_END: usize = 8;
-const DRAG_THRESHOLD: f32 = 4.0;
-const TYPE_SELECT_PAUSE: Duration = Duration::from_secs(1);
 const EDITOR_HEIGHT: f32 = 18.0;
 const EDITOR_WIDTH: f32 = LABEL_WIDTH + 24.0;
 const SPRING_DELAY: Duration = Duration::from_millis(900);
@@ -173,8 +171,7 @@ pub struct DesktopView {
     gesture: Gesture,
     rename: Option<Rename>,
     rename_when_listed: Option<PathBuf>,
-    typed: String,
-    typed_at: Option<Instant>,
+    typed: TypeSelect,
     populated: bool,
     animating: bool,
     requests: Vec<Request>,
@@ -221,10 +218,6 @@ fn thumbnail(image: &Image, room: Rect, palette: Palette, items: &mut Vec<SceneI
         width: 1.0,
         paint: palette.edge.with_opacity(THUMBNAIL_EDGE).into(),
     });
-}
-
-fn distance(a: Point, b: Point) -> f32 {
-    (a.x - b.x).hypot(a.y - b.y)
 }
 
 pub fn fitted_label(text: &mut TextSystem, name: &str, style: TextStyle, width: f32) -> Paragraph {
@@ -287,8 +280,7 @@ impl DesktopView {
             gesture: Gesture::Idle,
             rename: None,
             rename_when_listed: None,
-            typed: String::new(),
-            typed_at: None,
+            typed: TypeSelect::default(),
             populated: false,
             animating: false,
             requests: Vec::new(),
@@ -427,8 +419,7 @@ impl DesktopView {
     }
 
     pub fn deadline(&self) -> Option<Instant> {
-        let typing = self.typed_at.map(|at| at + TYPE_SELECT_PAUSE);
-        [typing, self.spring_due()].into_iter().flatten().min()
+        self.spring_due()
     }
 
     pub fn is_animating(&self) -> bool {
@@ -451,13 +442,6 @@ impl DesktopView {
         {
             hover.sprung = true;
             self.requests.push(Request::Open(vec![folder.clone()]));
-        }
-        if self
-            .typed_at
-            .is_some_and(|at| now >= at + TYPE_SELECT_PAUSE)
-        {
-            self.typed.clear();
-            self.typed_at = None;
         }
     }
 
@@ -727,7 +711,7 @@ impl DesktopView {
         match &mut self.gesture {
             Gesture::Idle => false,
             Gesture::Pressed { at: from, hit, .. } => {
-                if hit.is_none() || distance(*from, at) < DRAG_THRESHOLD {
+                if hit.is_none() || !past_drag_slop(*from, at) {
                     return false;
                 }
                 let paths = self.desktop.selected();
@@ -1019,15 +1003,8 @@ impl DesktopView {
     }
 
     fn type_select(&mut self, text: &str, now: Instant) {
-        if self
-            .typed_at
-            .is_some_and(|at| now >= at + TYPE_SELECT_PAUSE)
-        {
-            self.typed.clear();
-        }
-        self.typed.push_str(text);
-        self.typed_at = Some(now);
-        self.desktop.select_prefix(&self.typed);
+        let typed = self.typed.push(text.chars(), now);
+        self.desktop.select_prefix(typed);
     }
 
     fn rename_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
@@ -1110,7 +1087,7 @@ impl DesktopView {
                 _ => return false,
             },
             Key::Character(letter) if !modifiers.control && !modifiers.alt => {
-                self.type_select(letter.encode_utf8(&mut [0; 4]), now);
+                self.desktop.select_prefix(self.typed.push([letter], now));
             }
             _ => return false,
         }

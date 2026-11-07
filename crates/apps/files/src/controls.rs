@@ -88,6 +88,7 @@ pub(crate) enum Press {
     },
     Dragging,
     Band,
+    Tabs,
     Place {
         index: usize,
         at: Point,
@@ -386,6 +387,7 @@ impl FilesView {
                 Some(Press::Item { at, .. }) => self.maybe_drag(at, pointer),
                 Some(Press::Band) => self.band_moved(pointer),
                 Some(Press::Place { index, at }) => self.reorder_moved(index, at, pointer),
+                Some(Press::Tabs) => self.tab_bar_moved(pointer.position),
                 Some(_) => false,
                 None => self.ui.handle(event) | self.files_hover(pointer),
             },
@@ -484,7 +486,7 @@ impl FilesView {
         if self.search_focused() {
             self.focus_content();
         }
-        self.files_pointer_down(pointer)
+        self.tab_bar_down(pointer) || self.files_pointer_down(pointer)
     }
 
     fn table_down(&mut self, event: &Event, pointer: &Pointer, table: Rect) -> bool {
@@ -559,6 +561,10 @@ impl FilesView {
             }
             Some(Press::Band) => self.end_band(),
             Some(Press::Place { .. }) => self.reorder_finished(),
+            Some(Press::Tabs) => match event {
+                Event::PointerUp(pointer) => self.tab_bar_up(pointer.position),
+                _ => false,
+            },
             Some(Press::Files | Press::Dragging) => false,
             _ => self.ui.handle(event),
         }

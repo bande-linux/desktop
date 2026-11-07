@@ -98,18 +98,13 @@ impl Usage {
         let Some(file) = &self.file else {
             return Ok(());
         };
-        if let Some(parent) = file.parent() {
-            fs::create_dir_all(parent)?;
-        }
         let mut lines: Vec<String> = self
             .records
             .iter()
             .map(|(key, record)| format!("{}\t{}\t{key}\n", record.count, record.last))
             .collect();
         lines.sort();
-        let partial = file.with_extension("partial");
-        fs::write(&partial, lines.concat())?;
-        fs::rename(partial, file)
+        bande_xdg::replace_file(file, lines.concat())
     }
 }
 

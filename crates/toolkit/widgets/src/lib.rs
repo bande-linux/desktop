@@ -32,6 +32,7 @@ mod text_field;
 mod text_view;
 mod toggle;
 mod tooltip;
+mod type_select;
 
 use std::any::Any;
 use std::cell;
@@ -81,6 +82,7 @@ pub use text_view::TextView;
 pub use toggle::{SWITCH_SIZE, Toggle};
 pub use tooltip::TOOLTIP_DELAY;
 use tooltip::Tooltips;
+pub use type_select::TypeSelect;
 
 pub type Animated = bande_spring::Animated<Instant>;
 
@@ -96,7 +98,7 @@ use bande_graphics::{
 };
 pub use bande_graphics::{
     Captured, Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase,
-    ScrollSource, SurfaceId, SurfaceScaling,
+    ScrollSource, SurfaceId, SurfaceScaling, past_drag_slop,
 };
 pub use control::{focus_ring, focus_ring_for};
 

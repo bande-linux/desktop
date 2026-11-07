@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use bande_fs::{Action, Purpose, Task, same_volume};
-use bande_toolkit::ui::Pointer;
+use bande_toolkit::ui::{Pointer, past_drag_slop};
 use bande_toolkit::{
     Color, DragAction, DragIcon, Item, Point, Radius, Rect, Scene, Shape, TextAlign, TextStyle,
 };
@@ -15,7 +15,6 @@ use crate::toolbar::TOOLBAR_HEIGHT;
 use crate::view::{FilesView, Hit, Request, SIDEBAR_WIDTH, home};
 use crate::views::ViewMode;
 
-const DRAG_THRESHOLD: f32 = 4.0;
 const GAP_REACH: f32 = 6.0;
 const EMPTY_FAVOURITES_Y: f32 = 40.0;
 const ICON: f32 = 40.0;
@@ -54,17 +53,13 @@ impl Hover {
     }
 }
 
-fn distance(a: Point, b: Point) -> f32 {
-    (a.x - b.x).hypot(a.y - b.y)
-}
-
 fn inside(folder: &Path, sources: &[PathBuf]) -> bool {
     sources.iter().any(|source| folder.starts_with(source))
 }
 
 impl FilesView {
     pub(crate) fn maybe_drag(&mut self, from: Point, pointer: &Pointer) -> bool {
-        if distance(from, pointer.position) < DRAG_THRESHOLD {
+        if !past_drag_slop(from, pointer.position) {
             return false;
         }
         self.start_drag(from)
@@ -130,7 +125,7 @@ impl FilesView {
             }
             _ => return false,
         };
-        if distance(from, pointer.position) < DRAG_THRESHOLD && self.drop.is_none() {
+        if !past_drag_slop(from, pointer.position) && self.drop.is_none() {
             return false;
         }
         self.drop = self

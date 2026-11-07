@@ -6,12 +6,11 @@ use bande_graphics::Point;
 use super::menu_node;
 use super::model::Menu;
 use super::panel::MenuPanel;
-use crate::{Key, Modifiers};
+use crate::{Key, Modifiers, TypeSelect};
 
 const SUBMENU_DELAY: Duration = Duration::from_millis(200);
 const SAFE_DELAY: Duration = Duration::from_millis(300);
 const SAFE_MARGIN: f32 = 6.0;
-const TYPE_SELECT_PAUSE: Duration = Duration::from_secs(1);
 const FLASH_STEP: Duration = Duration::from_millis(50);
 const FLASH: Duration = Duration::from_millis(100);
 const SCROLL_SPEED: f32 = 300.0;
@@ -37,8 +36,7 @@ pub(super) fn entered(mut panel: MenuPanel, from_keyboard: bool) -> MenuPanel {
 
 pub struct MenuTracker {
     panels: Vec<MenuPanel>,
-    typed: String,
-    typed_at: Option<Instant>,
+    typed: TypeSelect,
     submenu_due: Option<(usize, usize, Instant)>,
     armed: bool,
     flash: Option<(usize, Instant)>,
@@ -65,8 +63,7 @@ impl MenuTracker {
             .then(|| (root.menu().clone(), String::new()));
         Self {
             panels: vec![entered(root, from_keyboard)],
-            typed: String::new(),
-            typed_at: None,
+            typed: TypeSelect::default(),
             submenu_due: None,
             armed: false,
             flash: None,
@@ -400,19 +397,12 @@ impl MenuTracker {
     }
 
     fn type_select(&mut self, level: usize, character: char, now: Instant) -> MenuOutcome {
-        let fresh = self
-            .typed_at
-            .is_none_or(|at| now.duration_since(at) > TYPE_SELECT_PAUSE);
-        if fresh {
-            self.typed.clear();
-        }
-        self.typed.extend(character.to_lowercase());
-        self.typed_at = Some(now);
-        let typed = self.typed.clone();
-        let found =
-            self.panels[level].menu().items.iter().position(|item| {
-                item.selectable() && item.title.to_lowercase().starts_with(&typed)
-            });
+        let typed = self.typed.push([character], now);
+        let found = self.panels[level]
+            .menu()
+            .items
+            .iter()
+            .position(|item| item.selectable() && item.title.to_lowercase().starts_with(typed));
         match found {
             Some(index) => self.highlight(level, Some(index), now),
             None => MenuOutcome::Nothing,

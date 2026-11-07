@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use super::reorder::{Reorder, ReorderSlot};
-use super::{Pointer, PointerButton};
+use super::{Pointer, PointerButton, past_drag_slop};
 use bande_graphics::{
     Color, Cut, Item, Palette, Path, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
     TextSystem, shortened,
@@ -15,7 +15,6 @@ const TAB_GAP: f32 = 4.0;
 const CLOSE_SIZE: f32 = 16.0;
 const CLOSE_INSET: f32 = 6.0;
 const LABEL_INSET: f32 = 26.0;
-const DRAG_SLOP: f32 = 4.0;
 const HOVER_OPACITY: f32 = 0.5;
 const PRESSED_OPACITY: f32 = 0.12;
 const BADGE: f32 = 6.0;
@@ -34,6 +33,7 @@ pub enum TabTarget {
 pub struct TabStripLayout {
     pub tabs: Vec<Rect>,
     pub new_tab: Rect,
+    pub top: f32,
     pub height: f32,
 }
 
@@ -55,8 +55,18 @@ impl TabStripLayout {
         Self {
             tabs,
             new_tab,
+            top: 0.0,
             height,
         }
+    }
+
+    pub fn below(mut self, top: f32) -> Self {
+        for tab in &mut self.tabs {
+            tab.y += top;
+        }
+        self.new_tab.y += top;
+        self.top = top;
+        self
     }
 
     pub fn close_button(tab: Rect) -> Rect {
@@ -89,7 +99,7 @@ impl TabStripLayout {
 
     pub fn grab_point(&self, grab: Point) -> Point {
         let x = self.tabs.first().map_or(0.0, |slot| slot.x);
-        Point::new(x + grab.x, grab.y)
+        Point::new(x + grab.x, self.top + grab.y)
     }
 
     fn slots(&self) -> Vec<ReorderSlot> {
@@ -103,7 +113,7 @@ impl TabStripLayout {
     }
 
     fn contains_y(&self, y: f32) -> bool {
-        (0.0..self.height).contains(&y)
+        (0.0..self.top + self.height).contains(&y)
     }
 }
 
@@ -207,9 +217,7 @@ impl TabStrip {
         reduce_motion: bool,
     ) -> Option<TabAction> {
         match self.gesture? {
-            Gesture::Pressed(TabTarget::Select(index), from)
-                if (at.x - from.x).hypot(at.y - from.y) > DRAG_SLOP =>
-            {
+            Gesture::Pressed(TabTarget::Select(index), from) if past_drag_slop(from, at) => {
                 let grab = from.x - layout.tabs.get(index).map_or(from.x, |tab| tab.x);
                 self.reorder.lift(&layout.slots(), index, grab);
                 self.gesture = Some(Gesture::Reordering);

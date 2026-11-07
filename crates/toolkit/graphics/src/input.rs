@@ -3,6 +3,11 @@ use std::time::Duration;
 use crate::scene::Point;
 
 pub const DOUBLE_CLICK_INTERVAL: Duration = Duration::from_millis(500);
+const DRAG_SLOP: f32 = 4.0;
+
+pub fn past_drag_slop(from: Point, at: Point) -> bool {
+    (at.x - from.x).hypot(at.y - from.y) > DRAG_SLOP
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Modifiers {

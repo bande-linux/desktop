@@ -691,6 +691,8 @@ dependencies = [
  "bande-quick-look",
  "bande-search",
  "bande-sound",
+ "bande-test-bus",
+ "bande-test-wayland",
  "bande-thumbnails",
  "bande-toolkit",
  "bande-volumes",

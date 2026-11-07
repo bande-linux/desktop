@@ -21,7 +21,7 @@ pub use damage::{Region, damage};
 pub use gpu::{GpuDevice, GpuRenderer};
 pub use input::{
     Captured, Cursor, DOUBLE_CLICK_INTERVAL, Event, Key, Modifiers, Pointer, PointerButton, Scroll,
-    ScrollPhase, ScrollSource,
+    ScrollPhase, ScrollSource, past_drag_slop,
 };
 pub use parley::FontData;
 pub use render::{DrawError, Snapshot, pixels};

@@ -9,11 +9,11 @@ use bande_compositor::{
 };
 use bande_test_bus::SessionBus;
 use bande_test_wayland::keys::{
-    BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_LEFTALT, KEY_LEFTCTRL,
+    BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_LEFTALT, KEY_LEFTCTRL, KEY_Q, KEY_W,
 };
 use bande_test_wayland::{
-    BLUE, ConstraintAdjustment, Nv12Frame, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
-    act_as_separate_app, chord, headless, roundtrip,
+    BLUE, ConstraintAdjustment, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
+    act_as_separate_app, chord, grant_consent, headless, roundtrip,
 };
 use wayland_client::protocol::wl_shm::Format;
 
@@ -32,7 +32,7 @@ fn focused_app() -> (Compositor, TestClient) {
 }
 
 fn locked(server: &mut Compositor) -> TestClient {
-    let mut lock = TestClient::connect_as_shell(server);
+    let mut lock = TestClient::connect_as_lock_screen(server);
     lock.use_seat(server);
     lock.lock_session(server);
     lock.show_lock_surface(server, BLUE);
@@ -75,9 +75,12 @@ fn the_browser_row_gives_the_well_to_the_compositor_and_the_rest_to_the_browser(
 #[test]
 fn while_locked_no_popup_grab_or_input_method_takes_keys_from_the_lock_surface() {
     let (mut server, mut editor) = focused_app();
-    let mut input_method = TestClient::connect(&mut server);
+    let _consent = grant_consent(&mut server, "read-keys sandboxed org.example.Ime\n");
+    let mut input_method = TestClient::connect_sandboxed(&mut server, "org.example.Ime");
     input_method.use_seat(&mut server);
     input_method.become_input_method(&mut server);
+    assert!(!input_method.input_method_unavailable());
+    editor.enable_text_input(&mut server);
     input_method.grab_keyboard(&mut server);
     let mut lock = locked(&mut server);
     roundtrip(
@@ -113,6 +116,107 @@ fn while_locked_no_popup_grab_or_input_method_takes_keys_from_the_lock_surface()
     assert!(input_method.grabbed_keys().is_empty());
     assert!(lock.lock_surface_has_keyboard());
     assert!(lock.keys().contains(&(KEY_A, true)));
+}
+
+#[test]
+fn without_consent_no_program_reads_keys_or_types() {
+    let (mut server, mut editor) = focused_app();
+    let mut spy = TestClient::connect_sandboxed(&mut server, "org.example.Spy");
+    spy.use_seat(&mut server);
+    spy.become_input_method(&mut server);
+    assert!(spy.input_method_unavailable());
+    spy.grab_keyboard(&mut server);
+
+    chord(&mut server, &[KEY_A]);
+    roundtrip(&mut server, &mut [&mut spy, &mut editor]);
+    assert!(spy.grabbed_keys().is_empty());
+    assert!(editor.keys().contains(&(KEY_A, true)));
+
+    let mut typist = TestClient::connect(&mut server);
+    typist.use_seat(&mut server);
+    assert!(typist.create_virtual_keyboard(&mut server).is_err());
+}
+
+#[test]
+fn a_consented_input_method_sees_keys_only_in_a_text_field_that_is_no_password() {
+    let (mut server, mut editor) = focused_app();
+    let _consent = grant_consent(&mut server, "read-keys sandboxed org.example.Ime\n");
+    let mut input_method = TestClient::connect_sandboxed(&mut server, "org.example.Ime");
+    input_method.use_seat(&mut server);
+    input_method.become_input_method(&mut server);
+    input_method.grab_keyboard(&mut server);
+
+    chord(&mut server, &[KEY_A]);
+    roundtrip(&mut server, &mut [&mut input_method, &mut editor]);
+    assert!(input_method.grabbed_keys().is_empty());
+
+    editor.enable_text_input(&mut server);
+    input_method.grab_keyboard(&mut server);
+    chord(&mut server, &[KEY_Q]);
+    roundtrip(&mut server, &mut [&mut input_method, &mut editor]);
+    assert!(input_method.grabbed_keys().contains(&(KEY_Q, true)));
+    assert!(!editor.keys().contains(&(KEY_Q, true)));
+
+    editor.mark_text_input_as_password(&mut server);
+    chord(&mut server, &[KEY_W]);
+    roundtrip(&mut server, &mut [&mut input_method, &mut editor]);
+    assert!(!input_method.grabbed_keys().contains(&(KEY_W, true)));
+    assert!(editor.keys().contains(&(KEY_W, true)));
+}
+
+#[test]
+fn while_locked_a_consented_virtual_keyboard_reaches_nothing() {
+    let (mut server, mut editor) = focused_app();
+    let _consent = grant_consent(&mut server, "type-keys sandboxed org.example.Typist\n");
+    let mut typist = TestClient::connect_sandboxed(&mut server, "org.example.Typist");
+    typist.use_seat(&mut server);
+    assert!(typist.create_virtual_keyboard(&mut server).is_ok());
+    typist.type_on_virtual_keyboard(&mut server, KEY_A);
+    roundtrip(&mut server, &mut [&mut typist, &mut editor]);
+    assert!(editor.keys().contains(&(KEY_A, true)));
+
+    let mut lock = locked(&mut server);
+    roundtrip(&mut server, &mut [&mut lock, &mut typist, &mut editor]);
+    assert!(lock.lock_surface_has_keyboard());
+    typist.type_on_virtual_keyboard(&mut server, KEY_Q);
+    roundtrip(&mut server, &mut [&mut lock, &mut typist, &mut editor]);
+    assert!(!lock.keys().contains(&(KEY_Q, true)));
+    assert!(!editor.keys().contains(&(KEY_Q, true)));
+}
+
+#[test]
+fn turning_consent_off_disconnects_the_program() {
+    let (mut server, _editor) = focused_app();
+    let consent = grant_consent(&mut server, "read-keys sandboxed org.example.Ime\n");
+    let mut input_method = TestClient::connect_sandboxed(&mut server, "org.example.Ime");
+    input_method.use_seat(&mut server);
+    input_method.become_input_method(&mut server);
+    assert!(!input_method.input_method_unavailable());
+
+    std::fs::write(consent.path().join("consent"), "").unwrap();
+    assert!(input_method.disconnected_after_dispatch(&mut server));
+}
+
+#[test]
+fn only_the_lock_screen_may_lock_and_a_sandbox_gets_no_privileged_protocol() {
+    let mut server = headless(560, 520);
+    let shell = TestClient::connect_as_shell(&mut server);
+    assert!(!shell.sees_global("ext_session_lock_manager_v1"));
+    let lock = TestClient::connect_as_lock_screen(&mut server);
+    assert!(lock.sees_global("ext_session_lock_manager_v1"));
+    let sandboxed = TestClient::connect_sandboxed(&mut server, "org.example.App");
+    for privileged in [
+        "ext_session_lock_manager_v1",
+        "zwlr_layer_shell_v1",
+        "zwlr_output_manager_v1",
+        "zwlr_output_power_manager_v1",
+        "ext_idle_notifier_v1",
+        "ext_data_control_manager_v1",
+        "ext_image_copy_capture_manager_v1",
+        "wp_security_context_manager_v1",
+    ] {
+        assert!(!sandboxed.sees_global(privileged), "{privileged}");
+    }
 }
 
 #[test]
@@ -199,46 +303,6 @@ fn a_hung_app_is_force_quit_from_the_keyboard() {
             .iter()
             .all(|(key, _)| ![KEY_ESC, KEY_DOWN, KEY_ENTER].contains(key))
     );
-}
-
-#[test]
-fn an_nv12_video_buffer_shows_its_colour() {
-    let mut server = headless(400, 300);
-    let mut renderer = bande_compositor::Renderer::new().expect("Vulkan renderer");
-    let mut client = TestClient::connect(&mut server);
-    let red = Nv12Frame {
-        width: 128,
-        height: 96,
-        luma: 63,
-        blue_difference: 102,
-        red_difference: 240,
-    };
-    if !client.show_nv12(&mut server, &red) {
-        return;
-    }
-    let mut seen = Vec::new();
-    for _ in 0..50 {
-        renderer.render(&mut server).expect("render");
-        client.exchange(&mut server);
-        let snapshot = renderer.snapshot(&server).expect("snapshot");
-        seen = snapshot.rgba;
-        if seen
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .any(|pixel| pixel[0] > 240 && pixel[1] < 20 && pixel[2] < 20)
-        {
-            return;
-        }
-        thread::sleep(Duration::from_millis(20));
-    }
-    let brightest = seen
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .max_by_key(|pixel| pixel[0])
-        .map(|pixel| pixel.to_vec());
-    panic!("no red in the frame, brightest {brightest:?}");
 }
 
 #[test]

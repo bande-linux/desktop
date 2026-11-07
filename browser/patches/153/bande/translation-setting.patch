@@ -35,7 +35,15 @@ Translation is off until turned on in Settings; only then may Remote Settings fe
    get allowedCollectionsFromDump() {
 --- a/browser/components/preferences/config/languages.mjs
 +++ b/browser/components/preferences/config/languages.mjs
-@@ -811,6 +811,11 @@
+@@ -19,6 +19,7 @@
+   { id: "intl.accept_languages", type: "string" },
+   { id: "privacy.spoof_english", type: "int" },
+   { id: "layout.spellcheckDefault", type: "int" },
++  { id: "browser.translations.enable", type: "bool" },
+   { id: "browser.translations.automaticallyPopup", type: "bool" },
+ ]);
+ 
+@@ -811,6 +812,11 @@
  );
  
  Preferences.addSetting({
@@ -47,7 +55,7 @@ Translation is off until turned on in Settings; only then may Remote Settings fe
    id: "offerTranslations",
    pref: "browser.translations.automaticallyPopup",
    deps: ["aiControlDefault", "aiControlTranslations"],
-@@ -940,6 +945,10 @@
+@@ -940,6 +946,10 @@
      headingLevel: 2,
      items: [
        {

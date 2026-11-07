@@ -1,0 +1,22 @@
+Name the browser in --version
+
+--- a/toolkit/xre/nsAppRunner.cpp
++++ b/toolkit/xre/nsAppRunner.cpp
+@@ -2245,7 +2245,7 @@
+ }
+ 
+ static inline void DumpVersion() {
+-  printf("%s ", (const char*)gAppData->name);
++  printf("Bande's Browser ");
+ 
+   // Use the displayed version
+   // For example, for beta, we would display 42.0b2 instead of 42.0
+@@ -2258,7 +2258,7 @@
+ }
+ 
+ static inline void DumpFullVersion() {
+-  printf("%s ", (const char*)gAppData->name);
++  printf("Bande's Browser ");
+ 
+   // Use the displayed version
+   // For example, for beta, we would display 42.0b2 instead of 42.0

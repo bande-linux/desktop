@@ -26,6 +26,8 @@ pref("messaging-system.rsexperimentloader.enabled", false, locked);
 pref("nimbus.rollouts.enabled", false, locked);
 pref("nimbus.telemetry.targetingContextEnabled", false, locked);
 pref("browser.preferences.experimental", false, locked);
+pref("browser.preferences.experimental.hidden", true, locked);
+pref("browser.preferences.moreFromMozilla", false, locked);
 // Crash reports
 pref("breakpad.reportURL", "", locked);
 pref("browser.tabs.crashReporting.sendReport", false, locked);

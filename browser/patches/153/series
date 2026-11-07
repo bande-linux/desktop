@@ -24,3 +24,4 @@ bande/translation-setting.patch
 bande/no-google.patch
 bande/ship-tracking-lists.patch
 bande/drm-on-request.patch
+bande/version-name.patch

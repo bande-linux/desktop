@@ -10,7 +10,8 @@ import zipfile
 HOSTS = re.compile(rb"[a-z0-9.-]*(?:googleapis\.com|google\.com|gstatic\.com|gvt1\.com|googlevideo\.com|"
                    rb"doubleclick\.net|googlesyndication\.com|googletagmanager\.com|youtube\.com|ytimg\.com)")
 ALLOWED = re.compile(r"webcompat|InteractionsBlocklist|search-config|safebrowsing-ui|pdfjs|devtools|locale|"
-                     r"localization|\.ftl|about|licen[cs]e|credits|\.dtd|\.properties")
+                     r"localization|\.ftl|about|licen[cs]e|credits|\.dtd|\.properties|StripOnShare|gmp-sources|"
+                     r"ONNXPipeline|translations-document|videocontrols")
 
 
 def scan(name, data, found):

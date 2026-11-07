@@ -16,6 +16,7 @@ use bande_content::{Preview, preview};
 use bande_fs::Entry;
 use bande_inbox::Inbox;
 use bande_search::{FileIndex, RecentlyUsed, Usage, recently_used_path, usage_path};
+use bande_settings_panes::SettingId;
 use bande_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use bande_toolkit::{
     App, Color, Edges, Image, KeyboardFocus, LauncherMode, LayerKind, LayerOptions, MenuPlacement,
@@ -205,6 +206,7 @@ pub struct LauncherShell {
     index: Option<FileIndex>,
     previewer: Option<Previewer>,
     clips: Option<Clips>,
+    cannot_sleep: Option<Inbox<()>>,
     apps: Rc<RefCell<Apps>>,
     recently_used: Option<RecentlyUsed>,
     config: Option<PathBuf>,
@@ -503,6 +505,7 @@ impl App for LauncherShell {
                     .map(|previewer| previewer.results.fd()),
             )
             .chain(self.clips.iter().map(Clips::fd))
+            .chain(self.cannot_sleep.iter().map(Inbox::fd))
             .chain(self.recently_used.iter().map(RecentlyUsed::fd))
             .collect()
     }
@@ -528,6 +531,15 @@ impl App for LauncherShell {
                 Reply::Listed(clips) => self.launcher.set_clips(clips),
                 Reply::Picture(id, picture) => self.launcher.set_clip_picture(id, picture),
             }
+        }
+        if self
+            .cannot_sleep
+            .as_mut()
+            .is_some_and(|answer| !answer.drain().is_empty())
+        {
+            self.cannot_sleep = None;
+            self.launcher
+                .set_panes(settings_panes(&[SettingId::SleepAfter]));
         }
         self.sync(window);
     }
@@ -572,13 +584,29 @@ fn folder_stamps(data_dirs: &[PathBuf]) -> Vec<Option<SystemTime>> {
         .collect()
 }
 
-fn settings_panes() -> Vec<PaneInfo> {
+fn follow_sleep_availability() -> std::io::Result<Inbox<()>> {
+    let answer = Inbox::new()?;
+    let cannot_sleep = answer.outbox();
+    std::thread::Builder::new()
+        .name("can-sleep".to_owned())
+        .spawn(move || {
+            let can_sleep = zbus::blocking::Connection::system()
+                .is_ok_and(|system| bande_status::devices::can_sleep(&system));
+            if !can_sleep {
+                cannot_sleep.send(());
+            }
+        })?;
+    Ok(answer)
+}
+
+fn settings_panes(unavailable: &[SettingId]) -> Vec<PaneInfo> {
     bande_settings_panes::panes()
         .into_iter()
         .map(|pane| PaneInfo {
             keyword: pane.id.keyword().to_owned(),
             settings: pane
                 .settings()
+                .filter(|setting| !unavailable.contains(&setting.id))
                 .map(|setting| SettingInfo {
                     label: setting.label.clone(),
                     keywords: setting.keywords.clone(),
@@ -643,7 +671,7 @@ impl LauncherShell {
         }
         let mut launcher = Launcher::new(
             apps,
-            settings_panes(),
+            settings_panes(&[]),
             Box::new(library),
             home.clone(),
             usage,
@@ -664,6 +692,9 @@ impl LauncherShell {
             index: None,
             previewer,
             clips,
+            cannot_sleep: follow_sleep_availability()
+                .inspect_err(|error| tracing::warn!("cannot ask whether sleep works: {error}"))
+                .ok(),
             apps: apps_by_type,
             recently_used,
             config: config_path(

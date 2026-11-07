@@ -348,7 +348,7 @@ struct Worker {
 }
 
 fn skipped(name: &str) -> bool {
-    name.starts_with('.') || SKIPPED_FOLDERS.contains(&name)
+    bande_fs::is_hidden(name) || SKIPPED_FOLDERS.contains(&name)
 }
 
 fn file_name(path: &Path) -> Option<&str> {

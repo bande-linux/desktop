@@ -811,6 +811,14 @@ impl Model {
         }
     }
 
+    pub fn set_panes(&mut self, panes: Vec<PaneInfo>) {
+        self.panes = panes.into_iter().map(IndexedPane::new).collect();
+        if self.mode == Mode::Search {
+            let keep = self.selection().map(|hit| hit.target.clone());
+            self.rebuild(keep);
+        }
+    }
+
     pub fn set_clips(&mut self, clips: Vec<Clip>) {
         self.clips = clips;
         if self.mode == Mode::Clipboard {

@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 jiff.workspace = true
 tracing.workspace = true
+bande-fs.workspace = true
 bande-inbox.workspace = true
 bande-watch.workspace = true
 bande-xdg.workspace = true

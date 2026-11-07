@@ -212,6 +212,38 @@ def browser():
     return tile(top, bottom, body)
 
 
+def software():
+    fold = '#2A62B0'
+    body = (path('M13 18h22l-2 18a2 2 0 0 1-2 1.8H17a2 2 0 0 1-2-1.8z', '#FFFFFF')
+            + path('M19 18v-2a5 5 0 0 1 10 0v2', 'none', 'stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"')
+            + stroke('M24 22v9m-4-4 4 4 4-4', fold, 2.2))
+    return tile('#4C8DDB', fold, body)
+
+
+def mail():
+    line = '#2F7BDD'
+    body = (rect(10, 14, 28, 20, 2.5, PAPER)
+            + path('M10.9 15.3 22.3 24.4a2.7 2.7 0 0 0 3.4 0L37.1 15.3', 'none',
+                   f'stroke="{line}" stroke-opacity="0.55" stroke-width="1.4" stroke-linejoin="round"')
+            + path('M11.2 33.2 20.6 25.2M36.8 33.2 27.4 25.2', 'none',
+                   f'stroke="{line}" stroke-opacity="0.22" stroke-width="1.2"'))
+    return tile('#5FA8F2', line, body)
+
+
+def calendar():
+    red = '#D23F2C'
+    days = ((13, 22), (19, 22), (25, 22), (31, 22), (13, 27.5), (25, 27.5), (31, 27.5))
+    cells = ''.join(f'<rect x="{x}" y="{y}" width="4" height="3.4" rx="1"/>' for x, y in days)
+    cells += '<rect x="13" y="33" width="4" height="1.6" rx="0.8"/><rect x="19" y="33" width="4" height="1.6" rx="0.8"/>'
+    body = (rect(10, 12, 28, 25, 4, PAPER)
+            + path('M10 16a4 4 0 0 1 4-4h20a4 4 0 0 1 4 4v3H10Z', PAPER, 'opacity="0.55"')
+            + rect(16, 9, 2.4, 6, 1.2, PAPER)
+            + rect(29.6, 9, 2.4, 6, 1.2, PAPER)
+            + f'<g fill="{red}" opacity="0.32">{cells}</g>'
+            + rect(18.4, 26.9, 5.2, 4.6, 1.3, red))
+    return tile('#F27463', red, body)
+
+
 ICONS = {
     'org.bande.Files': files,
     'org.bande.Terminal': terminal,
@@ -234,6 +266,9 @@ ICONS = {
     'org.gnome.Calculator': calculator,
     'org.bande.Clock': clocks,
     'org.bande.Browser': browser,
+    'org.bande.Software': software,
+    'org.bande.Mail': mail,
+    'org.bande.Calendar': calendar,
 }
 
 HICOLOR = {

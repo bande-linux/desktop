@@ -10,7 +10,7 @@ use std::thread;
 use bande_app::choose_file;
 use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
 use bande_keyboard::Layouts;
-use bande_status::devices::{PowerAction, powers};
+use bande_status::devices::can_sleep;
 use bande_toolkit::SessionEnd;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -178,7 +178,7 @@ pub fn spawn(name: &str, work: impl FnOnce() + Send + 'static) {
 fn hide_sleep_if_unavailable(system: &Connection, updates: Updates) {
     let system = system.clone();
     spawn("can-sleep", move || {
-        if !powers(&system).is_ok_and(|powers| powers.contains(&PowerAction::Sleep)) {
+        if !can_sleep(&system) {
             updates.send(Update::CannotSleep);
         }
     });

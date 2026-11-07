@@ -229,7 +229,8 @@ writes a hex value, a corner radius or a font name of its own.
   glides to its new rows on `quick`. `Table::set_headings` adds group headings (semibold
   `ink` over a `hairline`, one row tall) above the rows that start each group, as Files' Use
   Groups does, and level 2 heading nodes before those rows so screen readers announce each
-  group; a selection run never spans a heading. Scroll bars are macOS overlay scrollers
+  group; a selection run never spans a heading. `Row::dimmed` tones a row down one ink step
+  with its icons at `Palette::DIMMED_ALPHA`, for normally hidden files. Scroll bars are macOS overlay scrollers
   (`Scrollbar`, also usable on its own by views that scroll themselves, such as Terminal): a
   6 pt `ink3` knob shown while scrolling or when the pointer is in the right 14 pt, widening to
   10 pt over a faint lane on hover; drag the knob, click the lane to page; it fades 0.9 s
@@ -269,7 +270,13 @@ writes a hex value, a corner radius or a font name of its own.
   edge scrolls. The context menu offers Undo, Redo, Cut, Copy, Paste and Select All. Input
   method text being composed is shown underlined in place (the clause being converted thicker)
   without entering the value, the candidate window is placed through `set_cursor_rectangle`
-  under it, and a click while composing keeps the text and resets the input method. Text is
+  under it, and a click while composing keeps the text and resets the input method. Dead keys and
+  the Compose key work in every window without an input method: the seat follows xkbcommon's
+  Compose table of the session's locale (read at the first dead key) and reports the pending accent
+  as `Event::Preedit` and the result as ordinary `Key::Character` events, so every field, password
+  entry and terminal gets it. As on macOS, a dead key and Space type the accent itself, a key that
+  cannot combine types the accent and then that key (`~` then `/` is `~/`), and Backspace or Escape
+  abandon the accent. Shortcuts with Ctrl, Alt or Super never compose. Text is
   published to screen readers as text runs with the caret and selection, which they can also
   set. `TextView` wraps, scrolls with a `ScrollState`, keeps the caret in view and can be
   read-only; revealing the caret lays out the paragraphs it scrolls to and follows again, so a

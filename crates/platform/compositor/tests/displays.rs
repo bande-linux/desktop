@@ -2,8 +2,12 @@
 
 use bande_compositor::{Compositor, OutputConfig};
 use bande_config::Config;
-use bande_test_wayland::keys::{BTN_LEFT, KEY_LEFTMETA, KEY_LEFTSHIFT, KEY_RIGHT};
+use bande_test_wayland::keys::BTN_LEFT;
 use bande_test_wayland::{TestClient, chord, headless, roundtrip};
+
+const KEY_LEFTSHIFT: u32 = 42;
+const KEY_LEFTMETA: u32 = 125;
+const KEY_RIGHT: u32 = 106;
 
 fn frame_of_only_window(
     server: &Compositor,

@@ -42,3 +42,6 @@ the app id as the bus name; `org.freedesktop.Application` (`Activate`, `Open` wi
 `activation-token` and `x-bande-directory` in the platform data) at the path the specification
 derives from the app id; `<package> --version`; the state (`$XDG_STATE_HOME/bande/`) and config
 (`$XDG_CONFIG_HOME/bande/`) paths.
+
+## Printing
+An app with a document puts `bande_app_menu::print_item(enabled)` in its File menu and handles the action `bande_app_menu::PRINT` with `bande_app::print(title, id, Document)`: `Document::Pages` lays out pages for a `PageSetup` on a worker thread (with `bande_app::flow` for flowing text, or `Page::draw` with scene items), `Document::File` prints an existing PDF. The print dialog itself is `bande-file-chooser --print`; see `behaviour.md`.

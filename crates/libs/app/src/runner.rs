@@ -474,6 +474,7 @@ impl<P: Program> Runner<P> {
         if focused {
             self.cx.focused = Some(window);
             self.cx.menus_changed = true;
+            crate::portal::remember_key_window(self.cx.windows[index].exported_handle());
         }
         self.cx.views[index].1.view().set_active(focused);
         self.cx.windows[index].request_redraw();

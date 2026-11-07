@@ -130,6 +130,7 @@ bande-polkit = { path = "crates/services/polkit" }
 bande-power = { path = "crates/services/power" }
 bande-crash-reports = { path = "crates/services/crash-reports" }
 bande-recovery = { path = "crates/services/recovery" }
+bande-reporter = { path = "crates/services/reporter" }
 bande-protocols = { path = "crates/platform/protocols" }
 bande-render = { path = "crates/platform/render" }
 bande-review = { path = "crates/testing/review" }

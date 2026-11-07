@@ -6,7 +6,7 @@ When something goes wrong, the computer keeps one small report of it, and sends 
 
 Each claim is marked with where it comes from:
 - **[apple]**: Apple's documentation, read for this plan
-- **[3rd]**: a third-party or community source, linked
+- **[3rd]**: a third-party or community source. Some were seen only as search results and not opened, and links on forum claims show where to look rather than a checked quote
 - **[memory]**: from memory, not checked. Do not treat these as fact.
 
 ### What triggers a report
@@ -61,7 +61,7 @@ All [apple]: [Examining the fields](https://developer.apple.com/documentation/xc
 ### Sending and consent
 
 All [apple] [Share analytics](https://support.apple.com/guide/mac-help/mh27990).
-- Opt-in: "sent only with your consent", asked at setup and changeable in Privacy & Security ▸ Analytics & Improvements.
+- Opt-in: "sent only with your consent" (asked at setup: [memory]), changeable in Privacy & Security ▸ Analytics & Improvements.
 - "Submitted anonymously"; personal data is left out or removed before sending, some with differential privacy.
 - Sent automatically after an unexpected quit, a force quit or a restart from a system error.
 - Console shows reports "even if you did not select to send reports automatically". Administrators see all, others only their own. This is what makes consent honest: you can read what would go.
@@ -74,7 +74,7 @@ TN2123 could not be read at Apple (the archive URL redirects). A [mirror](https:
 | macOS | Linux equivalent | Decision |
 |---|---|---|
 | `ReportCrash` on demand | `systemd-coredump`, then `bande-crash-reports` | Use. Nothing runs between crashes |
-| `threads`, `usedImages` | coredump's stack text (all threads, build ids) from `libdw`, symbols from `.gnu_debugdata` | Parse into JSON, one thread list and one image list |
+| `threads`, `usedImages` | coredump's stack text (all threads and build ids, to be checked on a real dump) from `libdw`, symbols from `.gnu_debugdata` | Parse into JSON, one thread list and one image list |
 | Registers, exception, address | `NT_PRSTATUS`, `NT_SIGINFO` in the core | Read from the core for the faulting thread |
 | Minidump-size core slice | An ELF core with notes and stack windows only | **Local and dev config only.** Stack memory can hold typed text, so it is never sent by default. macOS sends none either |
 | `asi` | Rust panic hook, `bande-log` | Panic message and location in the manifest |
@@ -85,7 +85,7 @@ TN2123 could not be read at Apple (the archive URL redirects). A [mirror](https:
 | Kill code `0x8badf00d` | `SIGQUIT` from Force Quit, `SIGABRT` from the watchdog | `termination` field: who ended it and why |
 | `.gpuRestart` | Compositor's device-lost path; `devcoredump`; kernel log | Fault from the compositor; attach `devcd` data when present |
 | Display failures | Compositor's failed-frame and restart path | Fault at the 3 s renderer reset, not per failed frame |
-| Panic through NVRAM | `pstore` (ramoops or efi-pstore), `systemd-pstore` | Use as `bande-crash-reports` does. Tested in KVM; whether the mini's boot chain keeps it is an owner check |
+| Panic through NVRAM | `pstore` (ramoops or efi-pstore), `systemd-pstore` | Use as `bande-crash-reports` does. To be tested in KVM; whether the mini's boot chain keeps it is an owner check |
 | Panic stackshot | `kdump` | Not used: reserves memory and needs a second kernel on hardware where it is unproven. Stays an option |
 | Unexplained restart | Journal `--boot=-1`, no `shutdown.target` | Use as `bande-crash-reports` does |
 | Kernel oops, hung tasks, lockups | `/dev/kmsg` watcher, `hung_task` | Small root service blocked on kmsg; wakes on kernel messages only |
@@ -117,7 +117,7 @@ TN2123 could not be read at Apple (the archive URL redirects). A [mirror](https:
 ### The experience
 
 - Nothing appears in normal use. Nothing is written in normal use.
-- Settings ▸ Privacy & Security ▸ Diagnostics lists local reports. Each can be read in full, deleted or sent now. A switch turns automatic sending on, off by default.
+- Settings ▸ Privacy & Security ▸ Diagnostics lists local reports. Each can be read in full, copied, deleted or sent now, with sending on or off. A switch turns automatic sending on, off by default.
 - With no server configured the list still works and copies stay local.
 
 ### Parts
